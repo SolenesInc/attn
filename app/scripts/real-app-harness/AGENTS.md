@@ -26,8 +26,7 @@ repository root.
   CI's Linux before the push, through the Acceptance soak workflow, or on the clone's
   [landing runner](../../../docs/internal/linux-runner.md#landing-runner). When the landing also
   changes product code, it runs the scenarios listed by each feature file the
-  landing changes in `.agents/skills/drive-attn/features/`. Neither the landing
-  nor CI runs the Tauri app's scenarios.
+  landing changes in `.agents/skills/drive-attn/features/`.
 - Hunt CI flakes with
   `gh workflow run acceptance-soak.yml --ref next -f scenarios=<ids>`.
   `scripts/ci-flake-report.sh` ranks failing tests across CI history.
@@ -57,13 +56,12 @@ repository root.
 - `profileCommand` awaits `profile_action_result`; CLI commands such as
   `terminal_move` use their CLI response contract instead.
 - Drive the app like a user, through `createWindowDriver({ appPath, client })`.
-  For the native app it returns a `NativeAppDriver`, whose input goes through
-  the app's automation server: it takes no focus and leaves the pointer alone
-  on both platforms. The driver finds, parks, places and captures the window
-  with the platform driver. Shared-Mac runs keep the parked launch and never
-  use activation or physical input; see the
+  It returns a `NativeAppDriver`, whose input goes through the app's automation
+  server: it takes no focus and leaves the pointer alone on both platforms. The
+  driver finds, parks, places and captures the window with the platform driver.
+  Shared-Mac runs keep the parked launch and never use activation or physical
+  input; see the
   [drive-attn launch rules](../../../.agents/skills/drive-attn/SKILL.md#launch).
-  Scenarios requiring real focus or system input run on a dedicated display.
 - Point every pointer action at a target, an element's key or its role and
   name: `driver.click`, `hover`, `drag` and `typeInto` take one, and `at` aims
   at a fraction of the box. The app waits for the element to show and stop
@@ -75,51 +73,10 @@ repository root.
   [Native app](../../../docs/internal/native-app.md#automation) lists the
   actions behind the driver: `waitFor`, `state`, `tree`, `atRest`, `pressKey`,
   `run` and the rest.
-- New scenarios are native ones: give the catalog entry `app: 'native'`.
-  `scenario-native-sidebar-session.mjs` is the smallest example. Entries
-  without it are the Tauri app's and run only against a rollback build
-  installed with `APP=tauri`.
-
-### The Tauri app's driver
-
-For the Tauri app, the rollback, `createWindowDriver` returns a driver that
-aims at DOM selectors. On macOS it sends input without taking focus or moving
-the pointer, except `menu`; on Linux, `xdotool` focuses the window the app
-reports through the client and moves the pointer.
-
-- Point every native pointer action at an element: `driver.click`,
-  `rightClick`, `hover`, `drag` and `typeInto` take a selector or
-  `{ selector, at, offset }` (`at` is a fraction of the box, default its
-  center; `offset` adds CSS pixels). Before measuring, the app waits for the
-  element to appear and for it and its ancestors to stop moving, and scrolls
-  it into view when its point is offscreen or covered; `typeInto` also waits
-  for the element to take focus before typing. The drivers send no input to
-  raw coordinates, so a scenario never measures geometry or waits for an
-  animation before acting. `get_pane_cell_rect` returns a terminal cell's
-  `target`; a `drag` can end `{ by: { x, y } }` CSS pixels from its start;
-  `holdDrag` presses and drags with the button still down, returns `dragTo` and
-  `release`, and lets a scenario press keys or read the screen mid-drag;
-  Quick Capture targets add `webview: 'capture'`, and its driver takes
-  `systemInput: true` to keep system-level input.
-- Native input waits for delivery. `click`, `rightClick`, `drag`, `hover`,
-  `typeInto`, `pressKey`, `pressKeyCode`, `pressEnter` and `typeText` return
-  only after the webview that should receive the input sees the trusted
-  mouseup, the trusted mousemove for `hover`, or one keyup per stroke, so the
-  next read sees the input's effect. Pointer input arms its target's webview;
-  keys arm the main webview. Pointer actions return the `receipt`;
-  `receipt.matches` says whether the event landed on the aimed selector. Input
-  that lands in a browser tile page, starts a native window drag, or replaces
-  the page receiving it has no receipt, and neither does a system-input click
-  on a macOS window that is not key: that click only makes the window key. Nor
-  do keys from a `systemInput: true` driver, which reach whichever window is
-  key and paste text as one keystroke; the driver refuses them unreceipted.
-  Pass `{ withoutReceipt: '<why>' }` in the last argument, after `modifiers`
-  for `pressKey` and `pressKeyCode`.
-- On macOS, the in-app `pressKey` hands a chord straight to the focused
-  webview and the menu, so it skips AppKit's event queue and the app's local
-  key monitor, which is where a browser tile's page keys are taken. Pass
-  `{ queued: true }` to post the key into the queue instead, as a real key
-  arrives. A queued key has no receipt, so wait for its effect.
+- `scenario-native-sidebar-session.mjs` is the smallest example.
+- A scenario that needs real focus or system input, such as Quick Capture's
+  global shortcut, takes the platform driver from `appPlatform.createWindowDriver`
+  and runs on a dedicated display.
 
 ### Agents, clocks and verdicts
 
@@ -167,14 +124,17 @@ reports through the client and moves the pointer.
 
 - The verdict is the last `ATTN_VERDICT ` stdout line (hand-run scripts may not
   print one); `summary.json` has the rest.
-- A scenario that calls `registerNativeFailureEvidence` saves what the open app
-  showed when a step failed, before cleanup closes it: `failure-native.png` and
-  `failure-evidence.json` (window and target geometry, the focused element,
-  native focus and pointer, the UI diagnostics ring).
-- Check pane text and window screenshots before diagnosing. The Tauri app's
-  WebGL terminals need native window captures.
+- A scenario saves what the open app showed when a step failed, before cleanup
+  closes it, through `runner.registerFailureEvidence`: most register
+  `driver.screenshot` as `failure-native.png` and `driver.tree()` as
+  `failure-tree.json`.
+- Check the accessibility tree and window screenshots before diagnosing.
 - Linux needs `xvfb-run`, `xdotool`, `xclip`, `sqlite3`, `fish`, `bash`, `zsh`
   and `nvim`.
+
+## Harness tests
+
+`pnpm --dir app test` runs the harness's own `*.test.mjs` with `node --test`.
 
 ## Recordings
 

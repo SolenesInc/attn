@@ -21,9 +21,9 @@ use super::marks;
 use super::passages::Passages;
 use crate::State;
 
-/// How long a change waits for the next before the draft is saved, as the Tauri reader waits.
+/// How long a change waits for the next before the draft is saved.
 const SAVE_PAUSE: f64 = 0.5;
-/// How long a failed read or save waits before it is tried again, as the Tauri reader waits.
+/// How long a failed read or save waits before it is tried again.
 const READ_RETRY: f64 = 2.0;
 const SAVE_RETRY: f64 = 5.0;
 
@@ -36,7 +36,7 @@ pub(crate) enum Source {
 }
 
 impl Source {
-    /// The document's address, the Tauri reader's `documentSource.ts` form.
+    /// The document's address.
     pub(crate) fn uri(&self) -> String {
         match self {
             Source::File { path, host: None } => format!("attn://file/{}", encode(path)),

@@ -2,7 +2,7 @@
 
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { MOCK_AGENT_MODEL, writeMockAgentFixture } from './mockAgent.mjs';
 import { createWindowDriver } from './platform.mjs';
@@ -38,7 +38,7 @@ function closeDesktopLater(desktop) {
 try {
   const checksFocus = process.platform === 'darwin';
   const frontmostBefore = checksFocus ? await driver.frontmostBundleId() : null;
-  await runner.step('launch_app', () => launchFreshNativeAppAndConnect(client, observer));
+  await runner.step('launch_app', () => launchFreshAppAndConnect(client, observer));
   await runner.step('widen_the_window', () => driver.setWindowBounds({ x: 0, y: 0, width: 1600, height: 1000 }));
 
   let source;

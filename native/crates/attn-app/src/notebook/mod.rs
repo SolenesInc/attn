@@ -35,7 +35,7 @@ use crate::shell::Layer;
 const AUTOSAVE_S: f64 = 0.7;
 /// How long "Saved" shows after a save.
 const SAVED_S: f64 = 2.5;
-/// The share of the desktop a new editor tile takes, as the Tauri app docks it.
+/// The share of the desktop a new editor tile takes.
 const TILE_SHARE: f64 = 0.4;
 
 /// The profile's notebook folder, as the daemon resolved it.
@@ -815,7 +815,7 @@ pub(crate) fn ime(state: &mut State, ime: &rune::Ime, tx: &mut Tx) -> bool {
 }
 
 /// Asks in one request whether each note the open note links to exists, once per note,
-/// after the note changes; a link to a missing note shows as broken, as the Tauri editor marks it.
+/// after the note changes; a link to a missing note shows as broken.
 fn follow_links(state: &mut State, id: &SurfaceId, tx: &mut Tx) {
     let root = state.notebook.surface(id).and_then(|s| io::root(state, s));
     let Some(model::Open {

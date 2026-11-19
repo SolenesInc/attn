@@ -1,6 +1,6 @@
-//! The unsent capture of each profile, on disk where the Tauri app keeps it, so either app
-//! picks up the other's draft: `<data dir>/quick-capture-drafts/<profile>/`, the draft as
-//! `quick-capture-draft.json` and each attached file in `capture-draft-files/<id>.file`.
+//! The unsent capture of each profile, in `<data dir>/quick-capture-drafts/<profile>/`, where the
+//! Tauri app kept it too: the draft as `quick-capture-draft.json` and each attached file in
+//! `capture-draft-files/<id>.file`.
 
 use std::fs::{self, File};
 use std::io::Write;

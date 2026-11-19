@@ -52,11 +52,6 @@ Publish clips from the host with `./scripts/pr-evidence.sh publish`. Its
 `record` command does not work in the VM, where `screencapture -v` writes an
 empty video.
 
-`APP=tauri` on `up`, `drive` and `shot` runs the Tauri app, the rollback,
-instead. `up` builds it with `DEMO=1`, and `drive` then takes the Tauri app's
-bridge actions, which `ui-automation-cli.mjs` in `app/scripts/real-app-harness`
-lists.
-
 Each agent gets its own instance by default, `vm-<worktree name>-<hash>`, even
 when agents share a checkout. `--instance NAME`, before or right after the
 command, selects another. `down` quits and cleans the instance and releases the

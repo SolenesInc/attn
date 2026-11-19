@@ -18,8 +18,8 @@ pub(crate) struct Closing {
     title: String,
 }
 
-/// Closes `desktop_id` as the Tauri app does: a desktop holding a crew member's session
-/// refuses and names them, an empty one closes at once, and one with tiles asks first.
+/// Closes `desktop_id`: a desktop holding a crew member's session refuses and names them, an
+/// empty one closes at once, and one with tiles asks first.
 pub(crate) fn request(state: &mut State, desktop_id: &str, tx: &mut Tx) {
     let Some(desktop) = state.facts.desktops.iter().find(|d| d.id == desktop_id) else {
         return;

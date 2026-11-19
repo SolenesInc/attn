@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import assert from 'node:assert/strict';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 import {
   assertProductionRunAllowed,
   bundleIdentifierForInstance,
@@ -39,7 +40,6 @@ function attnBinary() {
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
 }
 const ATTN_BIN = attnBinary();
-const describeWithBinary = ATTN_BIN ? describe : describe.skip;
 
 const originalHarnessInstance = process.env.ATTN_HARNESS_INSTANCE;
 const originalInstance = process.env.ATTN_INSTANCE;
@@ -61,95 +61,97 @@ afterEach(() => {
 
 describe('currentHarnessInstance (one-knob precedence)', () => {
   it('defaults to the safe dev sibling when neither knob is set', () => {
-    expect(currentHarnessInstance()).toBe('dev');
-    expect(defaultAppPathForInstance()).toBe(installedAppPath('attn-dev'));
-    expect(defaultDaemonPortForInstance()).toBe(29849);
+    assert.equal(currentHarnessInstance(), 'dev');
+    assert.equal(defaultAppPathForInstance(), installedAppPath('attn-dev'));
+    assert.equal(defaultDaemonPortForInstance(), 29849);
   });
 
   it('never targets production by omission (empty/default ATTN_INSTANCE ⇒ dev)', () => {
     process.env.ATTN_INSTANCE = '';
-    expect(currentHarnessInstance()).toBe('dev');
+    assert.equal(currentHarnessInstance(), 'dev');
     process.env.ATTN_INSTANCE = 'default';
-    expect(currentHarnessInstance()).toBe('dev');
+    assert.equal(currentHarnessInstance(), 'dev');
   });
 
   it('lets ATTN_HARNESS_INSTANCE override ATTN_INSTANCE', () => {
     process.env.ATTN_INSTANCE = 'agent7';
     process.env.ATTN_HARNESS_INSTANCE = 'agent9';
-    expect(currentHarnessInstance()).toBe('agent9');
+    assert.equal(currentHarnessInstance(), 'agent9');
   });
 
   it('treats an explicit empty/default ATTN_HARNESS_INSTANCE as the prod escape hatch', () => {
     process.env.ATTN_INSTANCE = 'agent7';
     process.env.ATTN_HARNESS_INSTANCE = '';
-    expect(currentHarnessInstance()).toBe('');
+    assert.equal(currentHarnessInstance(), '');
     process.env.ATTN_HARNESS_INSTANCE = 'default';
-    expect(currentHarnessInstance()).toBe('');
+    assert.equal(currentHarnessInstance(), '');
   });
 });
 
 describe('real-app harness production safety', () => {
   it('detects production from the empty instance, app path, bundle id, or websocket', () => {
-    expect(isProductionHarnessTarget({ instance: '' })).toBe(true);
-    expect(isProductionHarnessTarget({
+    assert.equal(isProductionHarnessTarget({ instance: '' }), true);
+    assert.equal(isProductionHarnessTarget({
       instance: 'dev',
       appPath: path.join(os.homedir(), 'Applications', 'attn.app'),
-    })).toBe(true);
-    expect(isProductionHarnessTarget({ instance: 'dev', bundleId: 'com.attn.manager' })).toBe(true);
-    expect(isProductionHarnessTarget({ instance: 'dev', wsUrl: 'ws://127.0.0.1:9849/ws' })).toBe(true);
-    expect(isProductionHarnessTarget({
+    }), true);
+    assert.equal(isProductionHarnessTarget({ instance: 'dev', bundleId: 'com.attn.manager' }), true);
+    assert.equal(isProductionHarnessTarget({ instance: 'dev', wsUrl: 'ws://127.0.0.1:9849/ws' }), true);
+    assert.equal(isProductionHarnessTarget({
       instance: 'dev',
       appPath: path.join(os.homedir(), 'Applications', 'attn-dev.app'),
       bundleId: 'com.attn.manager.dev',
-    })).toBe(false);
+    }), false);
   });
 
   it('treats a named instance as an isolated world, not production', () => {
-    expect(isProductionHarnessTarget({ instance: 'agent7' })).toBe(false);
-    expect(() => assertProductionRunAllowed({ instance: 'agent7' }, [])).not.toThrow();
-    expect(isProductionHarnessTarget({ instance: 'agent7', bundleId: 'com.attn.manager' })).toBe(true);
-    expect(isProductionHarnessTarget({
+    assert.equal(isProductionHarnessTarget({ instance: 'agent7' }), false);
+    assert.doesNotThrow(() => assertProductionRunAllowed({ instance: 'agent7' }, []));
+    assert.equal(isProductionHarnessTarget({ instance: 'agent7', bundleId: 'com.attn.manager' }), true);
+    assert.equal(isProductionHarnessTarget({
       instance: 'agent7',
       appPath: path.join(os.homedir(), 'Applications', 'attn.app'),
-    })).toBe(true);
+    }), true);
   });
 
   it('detects the prod app path case-insensitively (macOS filesystems)', () => {
     for (const name of ['Attn.app', 'ATTN.APP', 'attn.App']) {
       const appPath = path.join(os.homedir(), 'Applications', name);
-      expect(isProductionHarnessTarget({ instance: 'dev', appPath })).toBe(true);
-      expect(instanceForAppPath(appPath, 'dev')).toBe('');
+      assert.equal(isProductionHarnessTarget({ instance: 'dev', appPath }), true);
+      assert.equal(instanceForAppPath(appPath, 'dev'), '');
     }
   });
 
   it('detects production from a suffixless install tree too', () => {
     const treeRoot = path.join(os.homedir(), '.local', 'share');
-    expect(isProductionHarnessTarget({ instance: 'dev', appPath: path.join(treeRoot, 'attn') })).toBe(true);
-    expect(isProductionHarnessTarget({
+    assert.equal(isProductionHarnessTarget({ instance: 'dev', appPath: path.join(treeRoot, 'attn') }), true);
+    assert.equal(isProductionHarnessTarget({
       instance: 'dev',
       appPath: path.join(treeRoot, 'attn-dev'),
       bundleId: 'com.attn.manager.dev',
-    })).toBe(false);
+    }), false);
   });
 
   it('protects low-level macOS lifecycle operations', () => {
-    expect(() => new MacOSDriver({
+    assert.throws(() => new MacOSDriver({
       appPath: path.join(os.homedir(), 'Applications', 'attn.app'),
       bundleId: 'com.attn.manager',
-    })).toThrow('Refusing to run the real-app harness against production');
+    }), /Refusing to run the real-app harness against production/);
   });
 
   it('protects low-level daemon and native-window operations', async () => {
-    expect(() => new DaemonObserver({ wsUrl: 'ws://127.0.0.1:9849/ws' })).toThrow(
-      'Refusing to run the real-app harness against production',
+    assert.throws(
+      () => new DaemonObserver({ wsUrl: 'ws://127.0.0.1:9849/ws' }),
+      /Refusing to run the real-app harness against production/,
     );
-    await expect(getFrontWindowBounds('com.attn.manager')).rejects.toThrow(
-      'Refusing to run the real-app harness against production',
+    await assert.rejects(
+      getFrontWindowBounds('com.attn.manager'),
+      /Refusing to run the real-app harness against production/,
     );
   });
 });
 
-describeWithBinary('single authority (attn instance resolve)', () => {
+describe('single authority (attn instance resolve)', { skip: !ATTN_BIN }, () => {
   function resolve(instance) {
     const stdout = execFileSync(ATTN_BIN, ['instance', 'resolve', '--instance', instance, '--json'], {
       encoding: 'utf8',
@@ -161,23 +163,23 @@ describeWithBinary('single authority (attn instance resolve)', () => {
     for (const instance of ['', 'dev']) {
       const r = resolve(instance);
       const resources = resolveHarnessResources(instance);
-      expect(resources.bundleId).toBe(r.bundleId);
-      expect(resources.appName).toBe(r.appName);
-      expect(resources.appPath).toBe(r.appPath);
-      expect(resources.appExecutable).toBe(r.appExecutable);
-      expect(resources.appDaemon).toBe(r.appDaemon);
-      expect(resources.appCli).toBe(r.appCli);
-      expect(resources.appLocalDataDir).toBe(r.appLocalDataDir);
-      expect(resources.wsPort).toBe(Number(r.wsPort));
-      expect(resources.socket).toBe(r.socket);
-      expect(resources.dataDir).toBe(r.dataDir);
-      expect(resources.deepLinkScheme).toBe(r.deepLinkScheme);
-      expect(resources.mockGitHubPort).toBe(Number(r.mockGitHubPort));
-      expect(mockGitHubPortForInstance(instance)).toBe(Number(r.mockGitHubPort));
-      expect(bundleIdentifierForInstance(instance)).toBe(r.bundleId);
-      expect(defaultAppPathForInstance(instance)).toBe(r.appPath);
-      expect(defaultDaemonPortForInstance(instance)).toBe(Number(r.wsPort));
-      expect(defaultWSURLForInstance(instance)).toBe(`ws://127.0.0.1:${r.wsPort}/ws`);
+      assert.equal(resources.bundleId, r.bundleId);
+      assert.equal(resources.appName, r.appName);
+      assert.equal(resources.appPath, r.appPath);
+      assert.equal(resources.appExecutable, r.appExecutable);
+      assert.equal(resources.appDaemon, r.appDaemon);
+      assert.equal(resources.appCli, r.appCli);
+      assert.equal(resources.appLocalDataDir, r.appLocalDataDir);
+      assert.equal(resources.wsPort, Number(r.wsPort));
+      assert.equal(resources.socket, r.socket);
+      assert.equal(resources.dataDir, r.dataDir);
+      assert.equal(resources.deepLinkScheme, r.deepLinkScheme);
+      assert.equal(resources.mockGitHubPort, Number(r.mockGitHubPort));
+      assert.equal(mockGitHubPortForInstance(instance), Number(r.mockGitHubPort));
+      assert.equal(bundleIdentifierForInstance(instance), r.bundleId);
+      assert.equal(defaultAppPathForInstance(instance), r.appPath);
+      assert.equal(defaultDaemonPortForInstance(instance), Number(r.wsPort));
+      assert.equal(defaultWSURLForInstance(instance), `ws://127.0.0.1:${r.wsPort}/ws`);
     }
   });
 });
@@ -197,13 +199,12 @@ describe('instanceCliEnv', () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
     for (const key of Object.keys(routing)) delete process.env[key];
   });
 
   it('clears every inherited routing override, not just the socket four', () => {
     const env = instanceCliEnv('agent7');
-    expect(env.ATTN_INSTANCE).toBe('agent7');
-    for (const key of Object.keys(routing)) expect(env[key]).toBeUndefined();
+    assert.equal(env.ATTN_INSTANCE, 'agent7');
+    for (const key of Object.keys(routing)) assert.equal(env[key], undefined);
   });
 });

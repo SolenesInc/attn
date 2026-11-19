@@ -101,8 +101,8 @@ if I'm having a bad day, maybe banned.
 
 ## Built with
 
-[Tauri](https://tauri.app) / [React](https://react.dev) / [Go](https://go.dev) /
-[SQLite](https://sqlite.org)
+[Rust](https://www.rust-lang.org) / [Rune](https://github.com/SolenesInc/rune) /
+[Go](https://go.dev) / [SQLite](https://sqlite.org)
 
 ## License
 

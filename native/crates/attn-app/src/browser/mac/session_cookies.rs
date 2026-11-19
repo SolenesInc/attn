@@ -35,7 +35,7 @@ use serde_json::{Map, Value};
 
 const COOKIE_SIGNALS: &str = "attnSessionCookies";
 /// How often a page busy with requests has the jar saved. Each save reads the whole store on the
-/// main thread, about 1.4 ms with 300 cookies; the Tauri app saved every 2 s.
+/// main thread, about 1.4 ms with 300 cookies.
 const PAUSE_BETWEEN_SAVES_SECONDS: f64 = 1.0;
 /// The longest a quit waits for the store's cookies. A quit's save took 0.4 to 8.9 ms over 54
 /// quits of the session-cookies scenario in the macOS VM.

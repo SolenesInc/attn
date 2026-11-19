@@ -49,10 +49,6 @@ func wholeUnits(runner Runner, argv []string) bool {
 		switch {
 		case runner == RunnerGo && (flag == "skip" || flag == "run" && strings.Contains(value, "/")):
 			return false
-		case runner == RunnerVitest && (flag == "t" || flag == "testNamePattern"):
-			return false
-		case runner == RunnerPlaywright && (flag == "g" || flag == "grep" || flag == "grep-invert"):
-			return false
 		}
 	}
 	return true

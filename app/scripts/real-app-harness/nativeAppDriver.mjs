@@ -7,10 +7,6 @@ export class NativeAppDriver {
     this.window = window;
   }
 
-  get injectsInApp() {
-    return true;
-  }
-
   async #pointer(action, payload, opts) {
     const receipt = await this.client.request(action, payload);
     if (!receipt.matched && !opts.allowMiss) {

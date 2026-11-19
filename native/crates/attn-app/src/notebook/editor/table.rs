@@ -1,5 +1,5 @@
-//! A GFM table shown as a grid, as the Tauri editor's table widget shows it while the
-//! selection is outside it (tableWidget.ts): a header, aligned columns and raw cell text.
+//! A GFM table shown as a grid while the selection is outside it: a header, aligned columns and raw
+//! cell text.
 
 use std::ops::Range;
 

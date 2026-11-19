@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
@@ -79,7 +79,7 @@ try {
   await runner.step('launch_app', async () => {
     await client.quitApp();
     cli('daemon', 'stop');
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     queueDaemonSettingRestore(observer, 'sessions.filters');
   });
 

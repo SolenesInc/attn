@@ -18,7 +18,7 @@ import {
 import { formatResultTable, scenarioSkipReason, selectFailedScenarios } from './matrixDigest.mjs';
 import { ensureMockGitHubServer, stopMockGitHubServer } from './mockGitHub.mjs';
 import { resolveScenarios, scenarioCatalog, scenariosAllowingRealAgents } from './scenarioCatalog.mjs';
-import { appCliInTree, appShellInTree } from './platform.mjs';
+import { appCliInTree } from './platform.mjs';
 import { acquireScenarioLock, packagedAppScenarioLockPath } from './scenarioRunner.mjs';
 import { parseShardSelector, readRecordedDurations, selectShard } from './shardPlan.mjs';
 import {
@@ -98,7 +98,7 @@ function reportRealAgentAllowances(scenarios) {
 function printHelp() {
   console.log(`Usage:
   node scripts/real-app-harness/run-serial-matrix.mjs
-  node scripts/real-app-harness/run-serial-matrix.mjs --scenario tr201-local-claude --scenario tr301-local-claude
+  node scripts/real-app-harness/run-serial-matrix.mjs --scenario native-sidebar-session --scenario native-desktop-tiles
   node scripts/real-app-harness/run-serial-matrix.mjs --fail-fast
   node scripts/real-app-harness/run-serial-matrix.mjs --timeout-ms 180000
   node scripts/real-app-harness/run-serial-matrix.mjs --failed-only
@@ -116,7 +116,7 @@ Before the first scenario, the matrix quits the app, stops the daemon, and
   run (skipped for production targets, or entirely via --no-fresh-world).
 
 Available scenarios:
-${scenarioCatalog.filter((scenario) => !scenario.soakOnly).map((scenario) => `  - ${scenario.id}: ${scenario.label}`).join('\n')}
+${scenarioCatalog.map((scenario) => `  - ${scenario.id}: ${scenario.label}`).join('\n')}
 `);
 }
 
@@ -156,7 +156,6 @@ function writeMatrixResults({ complete }) {
     finishedAt: complete ? new Date().toISOString() : null,
     complete,
     shard: matrixRun.shard ? { index: matrixRun.shard.index, count: matrixRun.shard.count } : null,
-    app: matrixRun.app,
     results: matrixRun.results.map(matrixEntry),
   }, null, 2)}\n`;
   const targets = [path.join(harnessArtifactsRoot(), 'last-matrix.json')];
@@ -359,8 +358,7 @@ async function main() {
 
   const instance = currentHarnessInstance();
   const appPath = process.env.ATTN_REAL_APP_PATH || defaultAppPathForInstance(instance);
-  const app = appShellInTree(appPath);
-  let scenarios = resolveScenarios(scenarioIds, app);
+  let scenarios = resolveScenarios(scenarioIds);
   let shardPlan = null;
   if (shard) {
     shardPlan = selectShard(scenarios, readRecordedDurations(), shard);
@@ -409,7 +407,7 @@ async function main() {
     });
   }
   const dbPath = path.join(dataDirForInstance(instance), 'attn.db');
-  matrixRun = { shard, app, results: [], active: null };
+  matrixRun = { shard, results: [], active: null };
   const { results } = matrixRun;
   writeMatrixResults({ complete: false });
 

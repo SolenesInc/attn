@@ -1,5 +1,4 @@
-//! A styled selection as Markdown, as the Tauri terminal copies one with ⇧⌘C
-//! (`terminalMarkdown.ts`).
+//! A styled selection as Markdown, as ⇧⌘C copies one.
 
 use crate::selection::clean_lines;
 
@@ -131,7 +130,7 @@ mod tests {
     }
 
     #[test]
-    fn a_styled_selection_becomes_markdown_as_the_tauri_terminal_copies_it() {
+    fn a_styled_selection_becomes_markdown_with_its_bold_italic_and_code() {
         let bold = Look {
             bold: true,
             ..PLAIN

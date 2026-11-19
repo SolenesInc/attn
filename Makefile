@@ -1,4 +1,4 @@
-.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-chief test-scripts test-v test-watch test-frontend test-e2e ingest-clickhouse ingest-clickhouse-stop clean generate-types ensure-go-jsonschema check-types check-home-gateway-compat generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release
+.PHONY: git-hooks lint lint-go run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev test test-chief test-scripts test-v test-watch ingest-clickhouse ingest-clickhouse-stop clean generate-types ensure-go-jsonschema check-types check-home-gateway-compat generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot release
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -22,8 +22,6 @@ APP_BINARY=$(APP_BUNDLE)/Contents/MacOS/attn
 # com.attn.manager.agent7 with its own data dir + port. `make dev` ==
 # `make install INSTANCE=dev`. See docs/internal/instances.md.
 INSTANCE ?=
-# DEMO=1 builds a named instance for recordings: no instance chip, window titled attn.
-DEMO ?=
 # An explicitly empty command-line INSTANCE indicates failed shell instance selection.
 # Fail during parsing before any target can silently fall back to the prod bundle.
 ifeq ($(origin INSTANCE),command line)
@@ -51,10 +49,9 @@ RELEASE_SOURCE ?= https://github.com/victorarias/attn/releases/download
 REPOSITORY_PATH ?= $(CURDIR)
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 SOURCE_FINGERPRINT ?= $(shell bash ./scripts/source-fingerprint.sh --field fingerprint)
-SOURCE_DIRTY_PATHS_BASE64 ?= $(shell bash ./scripts/source-fingerprint.sh --field dirty_paths_base64)
 GIT_COMMIT ?= $(shell bash ./scripts/source-fingerprint.sh --field commit)
-# Identity of the terminal-snapshot wire format. The frontend computes it from
-# the same script, so a bundle's worker and app agree by construction.
+# Identity of the terminal-snapshot wire format. The PTY host computes it from
+# the same script, so a bundle's worker and host agree by construction.
 SNAPSHOT_FORMAT ?= $(shell bash ./scripts/snapshot-format.sh)
 OUTPUT ?= $(BINARY_NAME)
 DAEMON_OUTPUT ?= $(dir $(OUTPUT))$(DAEMON_BINARY_NAME)
@@ -67,7 +64,7 @@ CLI_TARGET ?=
 UNAME_S := $(shell uname -s)
 GO_LDFLAGS = -X 'github.com/victorarias/attn/internal/buildinfo.ReleaseSource=$(RELEASE_SOURCE)' -X 'github.com/victorarias/attn/internal/buildinfo.RepositoryPath=$(REPOSITORY_PATH)' -X github.com/victorarias/attn/internal/buildinfo.Version=$(VERSION) -X github.com/victorarias/attn/internal/buildinfo.Channel=$(CHANNEL) -X github.com/victorarias/attn/internal/buildinfo.BuildTime=$(BUILD_TIME) -X github.com/victorarias/attn/internal/buildinfo.SourceFingerprint=$(SOURCE_FINGERPRINT) -X github.com/victorarias/attn/internal/buildinfo.GitCommit=$(GIT_COMMIT) -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=$(SNAPSHOT_FORMAT)
 # Honor the repository's .tool-versions even when an older standalone Zig is
-# earlier on PATH (the app's WASM builder follows the same order).
+# earlier on PATH.
 ZIG ?= $(shell if command -v asdf >/dev/null 2>&1; then asdf which zig 2>/dev/null || command -v zig; else command -v zig; fi)
 # Prefer a stable local development identity so macOS privacy grants survive
 # source rebuilds. Contributors without a certificate retain the ad-hoc
@@ -163,16 +160,13 @@ GOTESTSUM=$(HOME)/go/bin/gotestsum
 $(GOTESTSUM):
 	go install gotest.tools/gotestsum@latest
 
-verify-ghostty-vt-wasm:
-	bash ./app/scripts/ensure-ghostty-vt-wasm.sh
-
 DIFF_BASE ?= origin/main
-GO_SUITE_IGNORES := ^(docs/|[^/]*\.md$$|app/src/)
-GO_SUITE_READS := ^(app/src/(hooks/useDaemonSocket\.ts$$|ghostty/testdata/)|docs/guide/(.*\.go$$|tutorials/|reference/|diagrams/.*\.txt$$))
-test: git-hooks $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
+GO_SUITE_IGNORES := ^(docs/|[^/]*\.md$$)
+GO_SUITE_READS := ^docs/guide/(.*\.go$$|tutorials/|reference/|diagrams/.*\.txt$$)
+test: git-hooks $(NATIVE_VT_DEP)
 	@changed="$$(git diff --name-only "$$(git merge-base HEAD $(DIFF_BASE))" && git ls-files --others --exclude-standard)" || changed=unknown; \
 	if [ -z "$(FORCE)" ] && ! printf '%s' "$$changed" | grep -qE '$(GO_SUITE_READS)' && ! printf '%s' "$$changed" | grep -qvE '$(GO_SUITE_IGNORES)'; then \
-		echo "make test: skipped the Go suite, only docs and app/src changed since $(DIFF_BASE). FORCE=1 runs it."; \
+		echo "make test: skipped the Go suite, only docs changed since $(DIFF_BASE). FORCE=1 runs it."; \
 	else ./scripts/test-go.sh; fi
 
 ingest-clickhouse:
@@ -186,7 +180,7 @@ test-scripts:
 	@set -e; for script_test in $(SCRIPT_TESTS); do bash "$$script_test"; done
 
 # Verbose test output (shows all test names as they run)
-test-v: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
+test-v: $(NATIVE_VT_DEP)
 	./scripts/test-go.sh -v
 
 # Watch mode - re-runs tests on file changes
@@ -195,14 +189,29 @@ test-watch: $(GOTESTSUM) $(NATIVE_VT_DEP)
 
 # Stamped because pnpm leaves the directory's mtime behind the lockfile's,
 # which would otherwise reinstall on every run.
-APP_NODE_MODULES := app/node_modules/.attn-installed
-$(APP_NODE_MODULES): app/package.json app/pnpm-lock.yaml
-	pnpm --dir app install --frozen-lockfile
-	@touch $@
-
 MOBILE_NODE_MODULES := mobile/node_modules/.attn-installed
 $(MOBILE_NODE_MODULES): mobile/package.json mobile/pnpm-lock.yaml
 	pnpm --dir mobile install --frozen-lockfile
+	@touch $@
+
+HARNESS_NODE_MODULES := app/node_modules/.attn-installed
+$(HARNESS_NODE_MODULES): app/package.json app/pnpm-lock.yaml
+	pnpm --dir app install --frozen-lockfile
+	@touch $@
+
+BROWSER_RUNTIME_NODE_MODULES := native/browser-runtime/node_modules/.attn-installed
+$(BROWSER_RUNTIME_NODE_MODULES): native/browser-runtime/package.json native/browser-runtime/pnpm-lock.yaml
+	pnpm --dir native/browser-runtime install --frozen-lockfile
+	@touch $@
+
+PROMPT_EDITOR_NODE_MODULES := cmd/prompt-editor/node_modules/.attn-installed
+$(PROMPT_EDITOR_NODE_MODULES): cmd/prompt-editor/package.json cmd/prompt-editor/pnpm-lock.yaml
+	pnpm --dir cmd/prompt-editor install --frozen-lockfile
+	@touch $@
+
+LINT_NODE_MODULES := lint/node_modules/.attn-installed
+$(LINT_NODE_MODULES): lint/package.json lint/pnpm-lock.yaml
+	pnpm --dir lint install --frozen-lockfile
 	@touch $@
 
 SCHEMA_NODE_MODULES := internal/protocol/schema/node_modules/.attn-installed
@@ -210,19 +219,15 @@ $(SCHEMA_NODE_MODULES): internal/protocol/schema/package.json internal/protocol/
 	pnpm --dir internal/protocol/schema install --frozen-lockfile
 	@touch $@
 
-test-frontend: $(APP_NODE_MODULES)
-	cd app && pnpm run test
-
-# The Chief: every Go and frontend test whose name mentions the chief
-test-chief: $(NATIVE_VT_DEP) $(APP_NODE_MODULES)
+# The Chief: every Go test whose name mentions the chief
+test-chief: $(NATIVE_VT_DEP)
 	./scripts/test-go.sh --packages -run '[Cc]hief' -count=1 ./internal/... ./cmd/attnd/...
-	cd app && pnpm run test -t '[Cc]hief'
 
-lint: lint-go lint-frontend
+lint: lint-go lint-js
 
 GO_PACKAGES ?= ./...
 
-.PHONY: compile-go check-go check-js-tools check-browser-runtime check-mobile check-native test-native test-native-wire
+.PHONY: compile-go check-go check-js-tools lint-js check-mobile check-harness check-browser-runtime check-native test-native test-native-wire
 compile-go: $(NATIVE_VT_DEP)
 	go list -test -deps -export $(GO_PACKAGES) >/dev/null
 
@@ -246,19 +251,27 @@ lint-go: $(NATIVE_VT_DEP)
 		echo "internal/sessionmonitor must not import the home's packages listed above: it reads only its Policy, View and Host" >&2; exit 1; \
 	fi
 
-lint-frontend: $(APP_NODE_MODULES)
-	cd app && pnpm run lint
-	app/node_modules/.bin/oxlint --deny-warnings cmd/prompt-editor/web cmd/prompt-editor/test
+lint-js: $(LINT_NODE_MODULES)
+	pnpm --dir lint test
+	lint/node_modules/.bin/oxlint --deny-warnings sdk cmd/prompt-editor/web cmd/prompt-editor/test app/scripts
 
-check-js-tools: check-browser-runtime
-	app/node_modules/.bin/oxlint --deny-warnings app/scripts sdk cmd/prompt-editor/web cmd/prompt-editor/test
+check-js-tools: lint-js check-harness check-browser-runtime
 
 check-mobile: $(MOBILE_NODE_MODULES)
 	cd mobile && pnpm run check
 
+check-harness: $(HARNESS_NODE_MODULES)
+	pnpm --dir app test
+
+check-browser-runtime: $(BROWSER_RUNTIME_NODE_MODULES)
+	cd native/browser-runtime && pnpm run check
+	@git diff --quiet -- native/crates/attn-app/src/browser/runtime.js || { \
+		echo "native/crates/attn-app/src/browser/runtime.js differs from a fresh build of native/browser-runtime. Commit the file this check just rebuilt." >&2; \
+		exit 1; \
+	}
+
 NATIVE_CLIPPY ?= --workspace
 check-native: $(NATIVE_VT_DEP)
-	scripts/native-parity
 	scripts/native-clippy-allows
 	scripts/native-host-reads
 	@labels=$$(git grep -nE '(Ctrl|Alt|Shift|Super|Cmd)\+|⌘|⇧|⌥|⌃' -- 'native/crates/*/tests/*' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//'); \
@@ -276,20 +289,10 @@ test-native: $(NATIVE_VT_DEP)
 test-native-wire: $(NATIVE_VT_DEP)
 	cd native && cargo test --locked -p attn-app --test wire
 
-check-browser-runtime: $(APP_NODE_MODULES)
-	cd app && pnpm run build:browser-runtime
-	@git diff --quiet -- app/src-tauri/generated/browser-runtime.js || { \
-		echo "app/src-tauri/generated/browser-runtime.js differs from a fresh build of its sources. Commit the file this check just rebuilt." >&2; \
-		exit 1; \
-	}
-
-test-e2e: $(APP_NODE_MODULES)
-	cd app && pnpm run e2e
-
 # Installing the PROD bundle while ATTN_INSTANCE is set is almost always
 # a mistake — it blows away the live install a developer is using. The
 # guard fires during Make's parse phase so we fail *before* the expensive
-# Tauri build, not after.
+# app build, not after.
 #
 # Includes the default goal (`run`, invoked as bare `make`) — without it,
 # `ATTN_INSTANCE=dev make` would silently reinstall the prod bundle.
@@ -312,14 +315,10 @@ endif
 endif
 endif
 
-# The app an instance installs: native (native/crates/attn-app), or tauri, the rollback.
-APP ?= native
-
 # LaunchServices only forwards shell overrides named with `open --env`. A named
-# instance's native app opens in the background and keeps itself from
-# activating, so agents' instances never take focus; the production app comes to
-# the front.
-MACOS_OPEN := open$(if $(and $(filter native,$(APP)),$(INSTANCE)), -g --env MAC_APP_QUIET=1,)$(if $(filter undefined,$(origin ATTN_AUTOMATION)),, --env "ATTN_AUTOMATION=$(ATTN_AUTOMATION)")
+# instance's app opens in the background and keeps itself from activating, so
+# agents' instances never take focus; the production app comes to the front.
+MACOS_OPEN := open$(if $(INSTANCE), -g --env MAC_APP_QUIET=1,)$(if $(filter undefined,$(origin ATTN_AUTOMATION)),, --env "ATTN_AUTOMATION=$(ATTN_AUTOMATION)")
 
 # Build + install + open the INSTANCE's app (bare `make` = prod). Every path is
 # derived from the single authority so a named instance opens its own bundle.
@@ -337,7 +336,7 @@ run: install
 	fi; \
 	echo "Launched $$app_path"
 
-INSTALL_APP_TREE = INSTANCE="$(INSTANCE)" APP="$(APP)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" WORKTREE="$(CURDIR)" \
+INSTALL_APP_TREE = INSTANCE="$(INSTANCE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" WORKTREE="$(CURDIR)" \
 	INSTANCE_DAEMON_UNSET="$(INSTANCE_DAEMON_UNSET)" INSTANCE_ROUTING_VARS="$(INSTANCE_ROUTING_VARS)" \
 	bash ./scripts/install-app-tree.sh
 
@@ -465,27 +464,7 @@ generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 		--capitalization ID --capitalization URL --capitalization SHA --capitalization PR --capitalization CI \
 		-o internal/protocol/generated.go \
 		internal/protocol/schema/tsp-output/json-schema/*.json
-	# The @26.0.0 pin is the guarantee: npx otherwise resolves whatever's
-	# latest on npm on every run, so an unpinned quicktype release can change
-	# generated.ts out from under everyone with no signal beyond a
-	# check-types diff (or, if flag defaults shift again, no diff at all).
-	# --no-prefer-unions/--no-prefer-unknown are a style choice pinned
-	# alongside it, and are what the rest of the app is written against: real
-	# enums (usable as values, not just string literals) and `any` index
-	# signatures. Those were quicktype's defaults until 26, which flipped both
-	# preferences on — so the flags are only redundant with the version pin
-	# for as long as both stay put. Keep them explicit.
-	# Go needs the named scalar roots; TypeScript resolves their references to strings.
-	# Passing those roots to quicktype also emits unused, unexported aliases.
-	@set --; for schema in internal/protocol/schema/tsp-output/json-schema/*.json; do \
-		case "$$schema" in */SessionID.json|*/TerminalID.json|*/PartyRef.json|*/ActorRef.json) ;; *) set -- "$$@" "$$schema" ;; esac; \
-	done; npx quicktype@26.0.0 \
-		--src "$$@" \
-		--src-lang schema --lang typescript \
-		--no-prefer-unions --no-prefer-unknown \
-		-o app/src/types/generated.ts
 	node scripts/generate-protocol-version.mjs
-	go run ./cmd/settingsgen app/src/types/settings.generated.ts
 	node scripts/generate-rust-protocol.mjs
 	go run ./cmd/cligen cli/protocol/src/go_values.rs cli/testdata cli/attn/src internal/prompts/content/skills/attn/references internal
 	rm -rf internal/protocol/schema/tsp-output-home-gateway
@@ -493,6 +472,15 @@ generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 	$(GO_JSONSCHEMA) -p homegateway --only-models --tags json --resolve-extension json --capitalization ID --capitalization API \
 		-o internal/protocol/homegateway/generated.go \
 		internal/protocol/schema/tsp-output-home-gateway/json-schema/*.json
+	# The @26.0.0 pin is the guarantee: npx otherwise resolves whatever's
+	# latest on npm on every run, so an unpinned quicktype release can change
+	# generated.ts out from under everyone with no signal beyond a
+	# check-types diff (or, if flag defaults shift again, no diff at all).
+	# --no-prefer-unions/--no-prefer-unknown are a style choice pinned
+	# alongside it: real enums (usable as values, not just string literals) and
+	# `any` index signatures. Those were quicktype's defaults until 26, which
+	# flipped both preferences on — so the flags are only redundant with the
+	# version pin for as long as both stay put. Keep them explicit.
 	npx quicktype@26.0.0 \
 		--src internal/protocol/schema/tsp-output-home-gateway/json-schema/*.json \
 		--src-lang schema --lang typescript \
@@ -507,7 +495,7 @@ generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 # diff runs and this passes silently — commit the edit if you are trying to
 # reproduce a drift failure locally.
 check-types: generate-types
-	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go app/src/types/generated.ts app/src/types/settings.generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts internal/protocol/homegateway mobile/src/homeGateway/generated.ts mobile/src/homeGateway/version.ts cli/protocol/src/generated.rs cli/protocol/src/go_values.rs cli/testdata 'cli/attn/src/commands/*/help_generated.rs' 'cli/attn/src/commands/*/table_generated.rs' cli/attn/src/commands/top_level_generated.rs internal/protocol/commands_generated.go internal/command/args_generated.go internal/daemon/agent_tools_generated.json internal/prompts/tool_families_generated.go internal/prompts/content/skills/attn/references/garden.md
+	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go internal/protocol/protocol_version.go internal/protocol/homegateway mobile/src/homeGateway/generated.ts mobile/src/homeGateway/version.ts cli/protocol/src/generated.rs cli/protocol/src/go_values.rs cli/testdata 'cli/attn/src/commands/*/help_generated.rs' 'cli/attn/src/commands/*/table_generated.rs' cli/attn/src/commands/top_level_generated.rs internal/protocol/commands_generated.go internal/command/args_generated.go internal/daemon/agent_tools_generated.json internal/prompts/tool_families_generated.go internal/prompts/content/skills/attn/references/garden.md
 
 # Refuses a Home Gateway API change that is not an addition to the schema on origin/main.
 check-home-gateway-compat:
@@ -535,29 +523,16 @@ check-schema:
 
 # Build the packaged app for $(INSTANCE) (empty = prod).
 # scripts/build-app-instance.sh takes the bundle metadata from
-# `attn instance resolve` and claims the port with `attn instance claim-port`: the
-# default build uses the committed tauri.conf.json; a named instance gets a
-# generated tauri.<name>.gen.conf.json overlay and bakes ATTN_BUILD_INSTANCE /
-# ATTN_BUILD_WS_PORT / ATTN_BUILD_BUNDLE_ID into the binary so it can never
-# point at another instance's daemon. UI automation is gated at runtime (see
-# instance::automation_enabled) — an instanced build sees its ATTN_INSTANCE and
-# enables automation for any named instance (dev, ticketqa, agent7, …); prod (the
-# empty-instance bundle) stays off unless ATTN_AUTOMATION=1.
+# `attn instance resolve`, claims the port with `attn instance claim-port`, and
+# bakes ATTN_BUILD_INSTANCE / ATTN_BUILD_WS_PORT / ATTN_BUILD_BUNDLE_ID into the
+# app so it can never point at another instance's daemon.
 build-app: ensure-codesign-identity build build-pty-host
-	@INSTANCE="$(INSTANCE)" APP="$(APP)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" \
-	ATTND_BIN="$(abspath $(DAEMON_OUTPUT))" \
+	@INSTANCE="$(INSTANCE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" \
+		ATTND_BIN="$(abspath $(DAEMON_OUTPUT))" \
 		ATTN_PTY_HOST_BIN="$(CURDIR)/$(PTY_HOST_BINARY)" \
-		VERSION='$(VERSION)' SOURCE_FINGERPRINT='$(SOURCE_FINGERPRINT)' \
-		SOURCE_DIRTY_PATHS_BASE64='$(SOURCE_DIRTY_PATHS_BASE64)' \
-		GIT_COMMIT='$(GIT_COMMIT)' BUILD_TIME='$(BUILD_TIME)' \
+		VERSION='$(VERSION)' GIT_COMMIT='$(GIT_COMMIT)' BUILD_TIME='$(BUILD_TIME)' \
 		MACOS_CODESIGN_IDENTITY='$(MACOS_CODESIGN_IDENTITY)' \
-		ATTN_BUILD_DEMO='$(DEMO)' \
 		bash ./scripts/build-app-instance.sh
-
-# A uniquely identified packaged app whose logical runtime instance is still the
-# empty/default instance. Its runtime refuses any non-owner-only or production root.
-build-default-instance-harness:
-	@env -u ATTN_INSTANCE ATTN_BUILD_DEFAULT_INSTANCE_HARNESS=1 $(MAKE) build-app INSTANCE=legacy-recovery APP=tauri
 
 ensure-codesign-identity:
 	@identity="$(MACOS_CODESIGN_IDENTITY)"; \
@@ -587,11 +562,6 @@ sign-app: ensure-codesign-identity
 		echo "sign-app is only needed on macOS"; \
 	fi
 
-# Create distributable DMG
-dist: build-app
-	cd app && VITE_INSTALL_CHANNEL=source VITE_ATTN_BUILD_VERSION='$(VERSION)' VITE_ATTN_SOURCE_FINGERPRINT='$(SOURCE_FINGERPRINT)' VITE_ATTN_SOURCE_DIRTY_PATHS_BASE64='$(SOURCE_DIRTY_PATHS_BASE64)' VITE_ATTN_GIT_COMMIT='$(GIT_COMMIT)' VITE_ATTN_BUILD_TIME='$(BUILD_TIME)' pnpm tauri build --bundles dmg
-	@echo "DMG created at app/src-tauri/target/release/bundle/dmg/"
-
 release:
 	./scripts/release.sh $(VERSION_TAG)
 
@@ -605,7 +575,7 @@ check-prompts:
 prompt-editor:
 	go run ./cmd/prompt-editor
 
-test-prompt-editor:
+test-prompt-editor: $(PROMPT_EDITOR_NODE_MODULES)
 	go test ./cmd/prompt-editor ./cmd/promptgen ./internal/prompts
 	go run ./cmd/prompt-editor check
 	node --test cmd/prompt-editor/test/compare.test.mjs

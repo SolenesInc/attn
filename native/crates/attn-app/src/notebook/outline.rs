@@ -1,4 +1,4 @@
-//! A note's outline, as the Tauri notebook reads it (outline.ts): ATX headings outside fenced
+//! A note's outline: ATX headings outside fenced
 //! code, each with the byte where it starts, so the editor can scroll to it.
 
 #[derive(Debug, PartialEq, Eq)]

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv, resolveHarnessResources } from './harnessInstance.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
@@ -135,7 +135,7 @@ try {
     try { cli('daemon', 'stop'); } catch {}
     cli('daemon', 'ensure');
     await poll(() => { try { listed(); return true; } catch { return null; } }, 'the stepped daemon');
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     await driver.click({ key: 'titlebar.automations' });
     await driver.waitFor({ key: 'automations' });
   });

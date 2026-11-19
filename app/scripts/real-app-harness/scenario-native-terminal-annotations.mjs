@@ -2,7 +2,7 @@
 
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { createWindowDriver } from './platform.mjs';
@@ -29,7 +29,7 @@ const MOD = process.platform === 'darwin' ? 'mod' : 'ctrl';
 try {
   const checksFocus = process.platform === 'darwin';
   const frontmostBefore = checksFocus ? await driver.frontmostBundleId() : null;
-  await runner.step('launch_app', () => launchFreshNativeAppAndConnect(client, observer));
+  await runner.step('launch_app', () => launchFreshAppAndConnect(client, observer));
 
   const id = crypto.randomUUID();
   const cwd = path.join(runner.sessionDir, 'agent');

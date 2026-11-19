@@ -30,7 +30,7 @@ pub(crate) use view::framed;
 
 const OUTPOSTS_ENABLED: &str = "outposts_enabled";
 /// How often the launcher redraws while it waits on an outpost's listing, so the time it has
-/// waited counts up as in the Tauri app.
+/// waited counts up.
 const ASKING_TICK: f64 = 0.1;
 /// How often the launcher redraws while a start on an outpost is under way, so a stall's
 /// seconds count up.

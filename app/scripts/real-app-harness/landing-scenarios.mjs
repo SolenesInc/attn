@@ -2,13 +2,17 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { scenarioSkipReason } from './matrixDigest.mjs';
-import { scenarioApp, scenarioCatalog } from './scenarioCatalog.mjs';
+import { scenarioCatalog } from './scenarioCatalog.mjs';
 
 const repositoryRoot = new URL('../../../', import.meta.url);
 
+function scenarioFile(scenario) {
+  return `app/${scenario.command[1]}`;
+}
+
 function changesProductCode(path) {
-  return /^(app\/src\/|app\/src-tauri\/|internal\/|cmd\/|pty-host\/|native\/)/.test(path)
-    && !/(_test\.go$|\.test\.tsx?$|\/testdata\/|\/test\/|^native\/crates\/[^/]+\/tests\/|^internal\/prompts\/content\/|\.md$|\.generated\.)/.test(path);
+  return /^(internal\/|cmd\/|pty-host\/|native\/)/.test(path)
+    && !/(_test\.go$|\/testdata\/|\/test\/|^native\/crates\/[^/]+\/tests\/|^internal\/prompts\/content\/|\.md$|\.generated\.)/.test(path);
 }
 
 function scenariosListedBy(featureFile) {
@@ -31,11 +35,8 @@ const listed = new Set(
 
 const runnable = [];
 for (const scenario of scenarioCatalog) {
+  const changed = changedFiles.has(scenarioFile(scenario));
   const recentlyFailed = recentlyFailedOnMain.delete(scenario.id);
-  if (scenarioApp(scenario) !== 'native') {
-    continue;
-  }
-  const changed = changedFiles.has(`app/${scenario.command[1]}`);
   if (!changed && !recentlyFailed && !listed.has(scenario.id)) {
     continue;
   }

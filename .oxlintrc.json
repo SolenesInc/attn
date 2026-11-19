@@ -1,68 +1,35 @@
 {
-  "$schema": "./app/node_modules/oxlint/configuration_schema.json",
+  "$schema": "./lint/node_modules/oxlint/configuration_schema.json",
   "ignorePatterns": [
     "**/node_modules/**",
-    "**/dist/**",
-    "app/src-tauri/**",
-    "app/src/types/generated.ts",
-    "app/src/types/homeGatewayGenerated.ts",
-    "app/lint/anti-slop/**"
+    "**/dist/**"
   ],
   "jsPlugins": [
     {
       "name": "anti-slop",
-      "specifier": "./app/lint/anti-slop/index.ts"
+      "specifier": "./lint/anti-slop/index.ts"
     },
     {
       "name": "attn",
-      "specifier": "./app/lint/attn/index.ts"
+      "specifier": "./lint/attn/index.ts"
     }
   ],
   "rules": {
-    "attn/no-document-body-portal": "error",
-    "attn/no-dom-instanceof": "error",
     "unicorn/no-thenable": "off",
     "no-control-regex": "off",
     "anti-slop/no-chained-type-assertions": "error",
-    "anti-slop/no-conditional-empty-object-spread": "off",
-    "anti-slop/no-known-value-widening": "off",
-    "anti-slop/no-module-mocking": "off",
-    "anti-slop/no-object-parameters": "off",
     "anti-slop/no-reflect-apply": "error",
     "anti-slop/no-reflect-get": "error",
-    "anti-slop/no-runtime-typeof": "off",
-    "anti-slop/no-shape-in-symbol-names": "off",
-    "anti-slop/no-unknown-parameters": "off",
-    "anti-slop/no-unknown-returns": "off",
     "anti-slop/no-unknown-type-aliases": "error",
-    "anti-slop/no-unsafe-dictionary-type": "off",
     "anti-slop/no-widen-then-assert": "error",
-    "anti-slop/require-safety-comment-for-type-assertion": "off",
     "anti-slop/no-reduce-accumulator-copy": "error",
-    "oxc/no-accumulating-spread": "error",
-    "anti-slop/no-array-filter-map": "off",
-    "anti-slop/require-readable-spacing": "off"
+    "oxc/no-accumulating-spread": "error"
   },
   "overrides": [
     {
       "files": [
-        "app/e2e/**"
-      ],
-      "rules": {
-        "no-restricted-properties": [
-          "error",
-          {
-            "property": "waitForTimeout",
-            "message": "A fixed pause makes a spec slow and lets it pass by luck. Wait on what the page shows (expect, expect.poll, page.waitForFunction), or install page.clock and runFor the timers the behavior depends on."
-          }
-        ]
-      }
-    },
-    {
-      "files": [
         "**/*.test.ts",
         "**/*.test.tsx",
-        "app/src/test/**",
         "sdk/*/test/**"
       ],
       "rules": {
@@ -70,42 +37,11 @@
           "error",
           {
             "allowed": {
-              "app/src/App.desktops.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
-              "app/src/application/useAppDeepLinks.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
-              "app/src/components/LocationPicker.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
-              "app/src/components/MarkdownReader/anchoring/pipelineParity.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
-              "app/src/components/MigrationPicker/MigrationPicker.flow.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
-              "app/src/components/ProfileSwitcher.keyboard.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
-              "app/src/components/SessionTerminalDesktop/DesktopDockTile.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
-              "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.rowMeasure.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
-              "app/src/components/Sidebar.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
-              "app/src/hooks/useDaemonSocket.profiles.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
-              "app/src/hooks/useDaemonSocket.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
               "sdk/plugin/test/client.test.ts": "sleeps with Bun.sleep; have the fake resolve a promise when the awaited call arrives"
             }
           }
         ],
-        "attn/no-mocking-attn-modules": [
-          "error",
-          {
-            "allowed": {
-              "app/src/App.desktops.test.tsx": "mocks 14 of attn's own modules; use the real ones",
-              "app/src/application/useAppDiagnostics.test.tsx": "mocks attn's own utils/diagnosticReport; use the real module",
-              "app/src/components/LocationPicker.test.tsx": "mocks attn's own hooks/useFilesystemSuggestions; use the real module",
-              "app/src/components/MarkdownReader/anchoring/anchoring.test.ts": "mocks attn's own rebase; use the real module",
-              "app/src/components/SessionTerminalDesktop.test.tsx": "mocks 4 of attn's own modules; use the real ones",
-              "app/src/components/SessionTerminalDesktop/DesktopDockTile.test.tsx": "mocks attn's own NotebookSurface; use the real module",
-              "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.rowMeasure.test.tsx": "mocks attn's own GhosttyTerminal; use the real module",
-              "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.paneHeader.test.tsx": "mocks attn's own GhosttyTerminal; use the real module",
-              "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.readyFocus.test.tsx": "mocks attn's own GhosttyTerminal; use the real module",
-              "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.tileLeaves.test.tsx": "mocks attn's own BrowserTileBody, GhosttyTerminal; use the real module",
-              "app/src/components/SessionTerminalDesktop/useGhosttyPaneRuntime.test.ts": "mocks attn's own pty/bridge; use the real module",
-              "app/src/components/Toast.lifecycle.test.tsx": "mocks attn's own contexts/DaemonApiContext; use the real module",
-              "app/src/store/sessions.test.ts": "mocks attn's own pty/bridge; use the real module",
-              "app/src/test/setup.ts": "stubs the terminal's WebAssembly, which jsdom cannot run"
-            }
-          }
-        ]
+        "attn/no-mocking-attn-modules": "error"
       }
     }
   ]

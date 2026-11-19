@@ -83,3 +83,18 @@ func missingReason(unit string, unitResults map[string][]Result) string {
 	}
 	return "did not report a result: renamed, removed, or not run"
 }
+
+func aggregate(finals []Outcome) Outcome {
+	outcome := Skip
+	for _, final := range finals {
+		switch {
+		case final == Fail || final == BuildFailure:
+			return Fail
+		case final == Interrupted:
+			outcome = Interrupted
+		case (final == Pass || final == ExpectedFailure) && outcome == Skip:
+			outcome = Pass
+		}
+	}
+	return outcome
+}

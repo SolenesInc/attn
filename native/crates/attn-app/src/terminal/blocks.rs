@@ -8,7 +8,7 @@ use super::{Term, Terminals};
 
 pub(super) type TermBlocks = Blocks<Mark>;
 
-/// The blue the Tauri terminal washes and outlines the selected block in.
+/// The blue the selected block is washed and outlined in.
 /// The selected block's wash, 0.08 of the blue, drawn only while its edges show.
 const BLOCK_WASH: u8 = 20;
 /// The selected block's outline, 0.9 of the blue.
@@ -141,9 +141,9 @@ impl Terminals {
         term.view.block.filter(|b| term.blocks.block(*b).is_some())
     }
 
-    /// The text of `part` of block `block` in terminal `id`, as the Tauri terminal copies it:
-    /// the command line the shell sent, and the output's rows with trailing blanks and blank
-    /// last rows dropped.
+    /// The text of `part` of block `block` in terminal `id`, as the terminal copies it: the
+    /// command line the shell sent, and the output's rows with trailing blanks and blank last
+    /// rows dropped.
     pub(crate) fn block_text(&mut self, id: &str, block: u64, part: Part) -> Option<String> {
         let term = self.panes.get_mut(id)?;
         let found = term.blocks.block(block)?;

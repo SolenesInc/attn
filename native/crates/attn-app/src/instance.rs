@@ -121,8 +121,7 @@ impl Instance {
     }
 }
 
-/// The local data folder of the app this bundle id names, which the Tauri app of the same
-/// instance shares.
+/// The local data folder of the app this bundle id names.
 pub fn app_data_dir(bundle_id: &str) -> Option<PathBuf> {
     let home = std::env::home_dir()?;
     let local = if cfg!(target_os = "macos") {
@@ -133,8 +132,8 @@ pub fn app_data_dir(bundle_id: &str) -> Option<PathBuf> {
     Some(local.join(bundle_id))
 }
 
-/// The debug folder of the app this bundle id names, the Tauri app's too: the automation
-/// manifest and the terminal incident log `attn debug incidents` reads.
+/// The debug folder of the app this bundle id names: the automation manifest and the terminal
+/// incident log `attn debug incidents` reads.
 pub fn debug_dir(bundle_id: &str) -> Option<PathBuf> {
     app_data_dir(bundle_id).map(|dir| dir.join("debug"))
 }

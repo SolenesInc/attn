@@ -15,8 +15,7 @@ pub trait Hooks<S>: Send + Sync + 'static {
     fn state(&self, state: &mut S, of: &str) -> Result<Option<Value>, String>;
 }
 
-/// One request, as the Tauri app's automation server reads it, so one Node client drives
-/// both apps.
+/// One request, as the scenario runner's Node client sends it.
 #[derive(Clone, Debug, Deserialize)]
 pub struct Request {
     #[serde(default)]

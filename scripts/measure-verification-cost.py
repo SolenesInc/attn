@@ -6,7 +6,7 @@ usage: scripts/measure-verification-cost.py [--runs N] [--keep] [--ci-run ID]...
 Baselines (all by default):
   land     one scripts/land.sh landing a one-file Go change
   lands3   three concurrent lands on one machine, each from its own worktree
-  suites   scripts/test-go.sh -count=1, then pnpm --dir app exec vitest run
+  suites   scripts/test-go.sh -count=1
   daemon   scripts/test-go.sh --packages -count=1 on ./internal/daemon, then on
            ./cmd/attnd: the two packages whose tests start daemons
   ci       ci.yml wall time, its slowest chains and the longest job queue wait
@@ -166,7 +166,6 @@ class Scratch:
         native_vt = subprocess.run(["make", "-s", "-f", "Makefile", "-f", "-", "native-vt-dep"], input="native-vt-dep:\n\t@echo $(NATIVE_VT_DEP)\n", cwd=path, env=self.env, check=True, capture_output=True, text=True).stdout.strip()
         if native_vt:
             subprocess.run(["make", "-s", native_vt], cwd=path, env=self.env, check=True, stdout=subprocess.DEVNULL)
-        subprocess.run(["make", "-s", "app/node_modules/.attn-installed"], cwd=path, env=self.env, check=True, stdout=subprocess.DEVNULL)
         return path
 
     def reset(self, run):
@@ -252,7 +251,7 @@ def measure_lands3(scratch, runs):
 
 
 def measure_suites(scratch, runs):
-    measure_commands(scratch, runs, (("go", ["scripts/test-go.sh", "-count=1"]), ("vitest", ["pnpm", "--dir", "app", "exec", "vitest", "run"])))
+    measure_commands(scratch, runs, (("go", ["scripts/test-go.sh", "-count=1"]),))
 
 
 def measure_daemon_packages(scratch, runs):
@@ -318,8 +317,8 @@ def ci_chains(run, jobs):
     named = lambda prefix: [job for job in jobs if job["name"] == prefix or job["name"].startswith(prefix + " (")]
     go_tests = named("Daemon")
     go_lint = named("Go vet and lint") or go_tests
-    shards = [job for job in jobs if job["name"].startswith("App acceptance (tauri) / App acceptance shard ")]
-    build = next((job for job in jobs if job["name"] == "App acceptance (tauri) / Build"), None)
+    shards = [job for job in jobs if job["name"].startswith("App acceptance matrix / App acceptance shard ")]
+    build = next((job for job in jobs if job["name"] == "App acceptance matrix / Build"), None)
     macos = named("App acceptance macOS")
     chain = [*go_tests, *go_lint, build, *macos, *shards]
     if not go_tests or not shards or not macos or any(job is None or job["conclusion"] != "success" for job in chain):

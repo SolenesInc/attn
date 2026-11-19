@@ -57,9 +57,8 @@ pub struct Cursor {
     pub color: Option<Rgb>,
 }
 
-/// A color laid over part of one row of the view, as the Tauri renderer's overlays: a wash
-/// over the cells' backgrounds and under their text, a line at the underline's place, or a
-/// box's edges.
+/// A color laid over part of one row of the view: a wash over the cells' backgrounds and under
+/// their text, a line at the underline's place, or a box's edges.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Overlay {
     pub row: u16,

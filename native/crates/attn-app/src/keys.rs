@@ -186,7 +186,7 @@ enum Clipboard {
     Paste,
 }
 
-/// The terminal's clipboard keys, as the Tauri terminal reads them: ⌘C, ⇧⌘C and ⌘V on macOS,
+/// The terminal's clipboard keys: ⌘C, ⇧⌘C and ⌘V on macOS,
 /// and Ctrl+Shift+C, Ctrl+Alt+C and Ctrl+Shift+V elsewhere, where plain Ctrl+C belongs to the
 /// shell.
 fn clipboard_chord(ev: &KeyEvent) -> Option<Clipboard> {
@@ -383,7 +383,7 @@ fn composed(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
 
 /// A paste into the terminal holding the keyboard: text bracketed when its program asked, or
 /// for an image the Ctrl-V byte, which tells an agent to read the image off the clipboard
-/// itself, as the Tauri terminal sends it.
+/// itself.
 pub(crate) fn on_paste(state: &mut State, content: &ClipboardContent, tx: &mut Tx) {
     if !content.text().is_empty() && crate::notebook::paste(state, content.text(), tx) {
         return;
@@ -427,9 +427,9 @@ pub(crate) fn on_paste(state: &mut State, content: &ClipboardContent, tx: &mut T
         .write_due(&state.facts, now);
 }
 
-/// A key pressed in a focused text field, before the field hears it, as the Tauri app's
-/// shortcuts run before an input does: a chord bound to an action the field does not keep runs
-/// it. A field never starts a sequence, and a modal dialog's field hears every key first.
+/// A key pressed in a focused text field, before the field hears it: a chord bound to an action the
+/// field does not keep runs it. A field never starts a sequence, and a modal dialog's field hears
+/// every key first.
 pub(crate) fn on_field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let target = Target::of(tx.focused(), true, false);
     let now = tx.clock();
@@ -452,7 +452,7 @@ pub(crate) fn on_field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> boo
     }
 }
 
-/// A modal dialog, or the snooze menu, which the Tauri app holds every shortcut under.
+/// A modal dialog, or the snooze menu, which holds every shortcut under it.
 fn modal(state: &State) -> bool {
     use crate::shell::Layer;
     state.window.snooze.is_some()

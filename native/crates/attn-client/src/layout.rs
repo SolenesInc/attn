@@ -79,7 +79,7 @@ pub enum Node {
 
 impl Node {
     /// The tree in a desktop's `tree_json`; None for an empty desktop, or a tree this app
-    /// cannot read, as the Tauri app reads it.
+    /// cannot read.
     pub fn parse(tree_json: &str) -> Option<Node> {
         if tree_json.trim().is_empty() {
             return None;
@@ -295,7 +295,7 @@ pub struct PlacedSplit {
     pub divider: [f32; 4],
 }
 
-/// Lays `tree` out in a box `size` points large, as the Tauri app does: each split gives its
+/// Lays `tree` out in a box `size` points large: each split gives its
 /// first side its ratio of the room and its second side the rest, touching, with a
 /// `divider`-point strip centred over the line between them. `ratio` is the share each split
 /// shows.

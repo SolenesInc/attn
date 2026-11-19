@@ -35,7 +35,7 @@ const MONTHS: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 const WEEKDAY_NAMES: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-/// The prompt's least height, the Tauri app's `.automation-form__textarea { min-height: 120px }`.
+/// The prompt's least height.
 const PROMPT_HEIGHT: f32 = 120.0;
 /// attn checks schedules once a minute.
 const SCHEDULER_TICK_MS: i64 = 60_000;
@@ -1473,7 +1473,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_next_run_reads_on_its_own_clock_as_the_tauri_app_writes_it() {
+    fn a_next_run_reads_as_weekday_day_month_and_time_on_its_own_clock() {
         assert_eq!(
             long_date("2026-11-17T09:00:00+01:00").as_deref(),
             Some("Tue 17 Nov at 09:00")

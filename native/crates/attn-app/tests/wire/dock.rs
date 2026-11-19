@@ -22,7 +22,7 @@ fn bounds(world: &World, key: &str) -> [f32; 4] {
 }
 
 #[test]
-fn drawers_lie_over_home_at_the_tauri_widths_and_stack_leftward_from_the_window_edge() {
+fn drawers_lie_over_home_at_their_widths_and_stack_leftward_from_the_window_edge() {
     let mut world = World::start_sized(super::palette::daemon(one_desktop(vec![]), vec![]), WINDOW);
     let sessions = bounds(&world, "home.sessions");
     let prs = bounds(&world, "home.prs");

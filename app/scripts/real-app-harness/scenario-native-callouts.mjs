@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
@@ -71,7 +71,7 @@ try {
   const frontmostBefore = checksFocus ? await driver.frontmostBundleId() : null;
 
   await runner.step('prepare_two_shells_in_queue_flow', async () => {
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     const saved = ['queue_mode_enabled', 'auto_settle_enabled'].map((key) => [key, observer.getSetting(key) ?? '']);
     runner.registerCleanup('restore_settings', async () => { for (const [key, value] of saved) observer.send({ cmd: 'set_setting', key, value }); });
     await setSetting('queue_mode_enabled', 'true');

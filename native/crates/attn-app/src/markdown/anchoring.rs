@@ -1,7 +1,6 @@
-//! Where a mark sits in a markdown document, as the Tauri reader's anchoring core
-//! (`MarkdownReader/anchoring`) keeps it, so a mark made in either app finds its passage in
-//! the other: the deepest block that holds the passage, the passage as rendered with up to 32
-//! characters on either side, and offsets into the block's rendered text, all in UTF-16 units.
+//! Where a mark sits in a markdown document, as the daemon stores it: the deepest block that
+//! holds the passage, the passage as rendered with up to 32 characters on either side, and
+//! offsets into the block's rendered text, all in UTF-16 units.
 //! When the document changed, a mark finds its passage again by its words and what surrounds
 //! them, and is saved where it was found.
 
@@ -48,7 +47,7 @@ pub(crate) enum Resolved {
     Orphan,
 }
 
-/// The FNV-1a hash of `source`'s UTF-16 units, as 8 hex digits: the Tauri app's `fnv1a32`.
+/// The FNV-1a hash of `source`'s UTF-16 units, as 8 hex digits.
 pub(crate) fn content_hash(source: &str) -> String {
     let mut hash: u32 = 0x811c_9dc5;
     for unit in source.encode_utf16() {
@@ -324,7 +323,7 @@ mod tests {
     }
 
     #[test]
-    fn the_hash_is_the_tauri_apps_fnv1a_over_utf16_units() {
+    fn the_hash_is_fnv1a_over_utf16_units() {
         let cases = [
             ("", "811c9dc5"),
             ("a", "2b24d044"),

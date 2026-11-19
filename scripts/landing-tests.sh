@@ -5,7 +5,7 @@ cd "$(git rev-parse --show-toplevel)"
 
 list=scripts/landing-tests
 groups="$(awk '$1 == "group" { print $2 }' "$list")"
-usage="usage: scripts/landing-tests.sh [--no-go-vet] <group>... | --unit '<unit>'... [--red 'vitest <file>']...; groups: $(paste -sd' ' - <<<"$groups")"
+usage="usage: scripts/landing-tests.sh [--no-go-vet] <group>... | --unit '<unit>'...; groups: $(paste -sd' ' - <<<"$groups")"
 cargo_unit_shape="'cargo .', 'cargo <package> --lib', 'cargo <package> --doc' or 'cargo <package> --test|--bin <name>'"
 go_vet_options=()
 if [ "${1:-}" = --no-go-vet ]; then
@@ -15,20 +15,14 @@ fi
 [ "$#" -gt 0 ] || { echo "$usage" >&2; exit 2; }
 requested="$*"
 
-red_vitest_files=()
 if [ "$1" = --unit ]; then
   entries=""
   while [ "$#" -gt 0 ]; do
-    if [ "$1" = --red ] && [ "$#" -ge 2 ]; then
-      red_vitest_files+=("${2#vitest }")
-      shift 2
-      continue
-    fi
     [ "$1" = --unit ] && [ "$#" -ge 2 ] || { echo "$usage" >&2; exit 2; }
     read -r -a fields <<<"$2"
     case "${fields[0]}:${#fields[@]}:${fields[2]-${fields[1]-}}" in
-      go:3:* | vitest:2:* | playwright:2:* | cargo:2:. | cargo:3:--lib | cargo:3:--doc | cargo:4:--test | cargo:4:--bin) entries+="${fields[*]}"$'\n' ;;
-      *) echo "landing tests: $2 is not a unit; units are 'go <package> <TestName>', 'vitest <file>', 'playwright <file>', $cargo_unit_shape" >&2; exit 2 ;;
+      go:3:* | cargo:2:. | cargo:3:--lib | cargo:3:--doc | cargo:4:--test | cargo:4:--bin) entries+="${fields[*]}"$'\n' ;;
+      *) echo "landing tests: $2 is not a unit; units are 'go <package> <TestName>', $cargo_unit_shape" >&2; exit 2 ;;
     esac
     shift 2
   done
@@ -40,14 +34,10 @@ else
   done
   entries="$(awk -v wanted=" $* " '
     $1 == "group" { selected = index(wanted, " " $2 " ") > 0; next }
-    selected && ($1 == "go" || $1 == "vitest" || $1 == "playwright" || $1 == "cargo") && !seen[$0]++ { print }
+    selected && ($1 == "go" || $1 == "cargo") && !seen[$0]++ { print }
   ' "$list")"
 fi
 
-vitest_suite="vitest ."
-if grep -qxF -- "$vitest_suite" <<<"$entries"; then
-  entries="$(awk -v suite="$vitest_suite" '$1 != "vitest" || $0 == suite' <<<"$entries")"
-fi
 cargo_suite="cargo ."
 if grep -qxF -- "$cargo_suite" <<<"$entries"; then
   entries="$(awk -v suite="$cargo_suite" '$1 != "cargo" || $0 == suite' <<<"$entries")"
@@ -70,13 +60,11 @@ summarize() {
     status=1
   fi
   awk '$1 != "PASS" && $1 != "SKIP"' "$lines" >"$work/unsettled"
-  if [ "$*" = "$vitest_suite" ] || [ "$*" = "$cargo_suite" ]; then
+  if [ "$*" = "$cargo_suite" ]; then
     cat "$work/unsettled" >>"$summary"
     passed="$(awk '$1 == "PASS"' "$lines" | wc -l | tr -d ' ')"
     if [ "$passed" -eq 0 ]; then
       echo "MISSING $* - the run reported nothing that passed" | tee -a "$summary" >>"$work/unsettled"
-    elif [ "$*" = "$vitest_suite" ]; then
-      echo "PASS $vitest_suite: $passed files" >>"$summary"
     else
       echo "PASS $cargo_suite: $passed test targets" >>"$summary"
     fi
@@ -198,64 +186,8 @@ if [ -n "$go_entries" ]; then
   [ -z "$ATTN_TEST_PTY_HOST_VARIANTS" ] || export ATTN_TEST_PTY_HOST_VARIANTS
 fi
 
-app_entries="$(awk '$1 == "vitest" || $1 == "playwright"' <<<"$entries")"
-if [ -z "$app_entries" ]; then
-  run_all_go_units
-  settle_all_go_units
-else
-  make -s app/node_modules/.attn-installed
-  mkdir -p "$work/data"
-  read -r daemon_port vite_port < <(node -e '
-    const net = require("net");
-    const listen = () => new Promise(done => { const s = net.createServer().listen(0, "127.0.0.1", () => done(s)); });
-    Promise.all([listen(), listen()]).then(servers => { console.log(servers.map(s => s.address().port).join(" ")); servers.forEach(s => s.close()); });')
-  run_app_unit() {
-    local run="$1" runner="$2" file="$3" status=0 command unit_options=(--unit "$runner $file")
-    case "$runner" in
-      vitest) command=(pnpm --dir app exec vitest run "$file") ;;
-      playwright) command=(pnpm --dir app exec playwright test "$file") ;;
-    esac
-    if [ "$runner $file" = "$vitest_suite" ]; then
-      unit_options=()
-      command+=(--silent=passed-only)
-    fi
-    echo "landing tests: ${command[*]}"
-    env -u ATTN_DB_PATH -u ATTN_SOCKET_PATH -u ATTN_CONFIG_PATH -u ATTN_PLUGIN_DIR \
-      ATTN_VITEST_FILES_RED_ON_MAIN="${red_vitest_files[*]-}" ATTN_INSTANCE= ATTN_DATA_DIR="$work/data" ATTN_E2E_DAEMON_PORT="$daemon_port" ATTN_E2E_VITE_PORT="$vite_port" \
-      go tool test-history capture "$runner" ${unit_options[@]+"${unit_options[@]}"} --receipt-out "$work/app-$run.json" -- "${command[@]}" || status=$?
-    echo "$status" >"$work/app-$run.status"
-  }
-  run_app_units() {
-    local runner="$1" run runner_of file
-    while read -r run runner_of file; do
-      if [ "$runner_of" = "$runner" ]; then run_app_unit "$run" "$runner_of" "$file"; fi
-    done <"$work/app-units"
-  }
-  awk '{ print NR, $1, $2 }' <<<"$app_entries" >"$work/app-units"
-  run_all_go_units &
-  go_job=$!
-  run_app_units vitest >"$work/vitest.log" 2>&1 &
-  vitest_job=$!
-  run_app_units playwright
-  wait "$vitest_job"
-  wait "$go_job"
-  settle_all_go_units
-  vitest_failed=0
-  while read -r run runner file; do
-    status="$(cat "$work/app-$run.status")"
-    if ! summarize "$work/app-$run.json" "$status" "$runner $file"; then
-      failed=1
-      case "$runner" in
-        vitest)
-          vitest_failed=1
-          awk '$1 != "PASS" && $1 != "SKIP" { print "rerun: pnpm --dir app exec vitest run " $3 }' "$work/lines" >>"$work/reruns"
-          ;;
-        playwright) echo "rerun: pnpm --dir app exec playwright test $file" >>"$work/reruns" ;;
-      esac
-    fi
-  done <"$work/app-units"
-  if [ "$vitest_failed" -eq 1 ]; then cat "$work/vitest.log" >&2; fi
-fi
+run_all_go_units
+settle_all_go_units
 
 if [ -n "$cargo_entries" ]; then
   wait

@@ -6,8 +6,8 @@ const HELP: &str = r#"attn instance — inspect and resolve attn instances
 
 An instance fully isolates attn's runtime: data dir, socket, websocket port,
 installed app (a macOS bundle, a directory tree elsewhere), the app's local data
-dir (Tauri's app_local_data_dir), and bundle identifier. ATTN_INSTANCE selects it
-for every entrypoint (CLI, daemon, e2e, real-app harness, build).
+dir, and bundle identifier. ATTN_INSTANCE selects it for every entrypoint (CLI,
+daemon, real-app harness, build).
 
 Usage:
   attn instance                 status of the active instance (ATTN_INSTANCE)
@@ -16,7 +16,6 @@ Usage:
   attn instance resolve --field wsPort      print one resolved value
   attn instance resolve --instance agent7   resolve a different instance
   attn instance claim-port      give the instance a WebSocket port no other instance holds, keep it, and print it (--instance <name> for another)
-  attn instance tauri-config    Tauri --config overlay for the instance's build (--demo: titled attn)
   attn instance register-scheme Linux only: claim <scheme>:// for this instance's app in the desktop database
   attn instance clean <name>    reap workers + plugin drivers, stop daemon, quit app, remove its app, app local data, data dir, shared Codex sockets, and scheme handler
   attn instance clean <name> --keep-app
@@ -33,7 +32,7 @@ sibling (port 29849, ~/.attn-dev). `clean` refuses the default (production)
 instance unless given --force.
 "#;
 
-const VALID_FIELDS: &str = "instance,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,appCli,appLocalDataDir,appLockPath,deepLinkScheme,desktopEntry,e2eDaemonPort,e2eVitePort,mockGitHubPort";
+const VALID_FIELDS: &str = "instance,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,appCli,appLocalDataDir,appLockPath,deepLinkScheme,desktopEntry,mockGitHubPort";
 
 fn fatal(message: &str) -> Stop {
     eprintln!("attn instance: {message}");

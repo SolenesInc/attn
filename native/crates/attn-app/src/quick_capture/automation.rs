@@ -1,5 +1,5 @@
-//! What the panel's automation server reads of it and does to it: the `capture` slice, as the
-//! Tauri app's `capture_state` names its fields where both have them, and `dismiss`.
+//! What the panel's automation server reads of it and does to it: the `capture` slice and
+//! `dismiss`.
 
 use attn_automation::Hooks;
 use rune::Tx;

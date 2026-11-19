@@ -32,7 +32,7 @@ only for the model. Attn Lens refines dictation this way.
 
 Preconditions:
 
-- A native instance (`make install INSTANCE=<name> APP=native`), launched with `bridge --launch ping`.
+- An instance (`make install INSTANCE=<name>`), launched with `bridge --launch ping`.
 - The real harnesses and headless tasks on, appended to the env file before the launch, so the daemon starts with them: `echo "export ATTN_HEADLESS_TASKS=on ATTN_CLAUDE_EXECUTABLE=$(which claude) ATTN_CODEX_EXECUTABLE=$(which codex) CODEX_HOME=$HOME/.codex" >> $DRIVE_ENV`. Each call spends real tokens; keep the text synthetic.
 - Pair: `./attn send pair --name Probe --json > $P/pair.out &`, then `bridge wait '{"target":{"key":"sender-pairing-dialog"}}'` and `bridge press '{"target":{"key":"sender-pairing.allow"}}'`. The token is `token` on the second line of `$P/pair.out`.
 - The daemon's pid is in `~/.attn-<name>/attn.pid`. The spare is its child whose command has `--input-format stream-json`.

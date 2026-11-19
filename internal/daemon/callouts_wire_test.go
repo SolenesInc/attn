@@ -50,10 +50,10 @@ func TestCalloutsReachOnlyTheTrustedAppShowingTheCallersProfile(t *testing.T) {
 	defer exitShells(app, string(session.ID))
 	profileID := app.SelectedProfile()
 	mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "name-callout-desktop", DesktopID: desktopID, Name: "Shop"}, "name-callout-desktop")
-	target := calloutAppPeer(w.World, "tauri://localhost", browserHostToken)
+	target := calloutAppPeer(w.World, "", browserHostToken)
 	selectProfile(target, profileID)
 	otherProfile := createProfile(app, "Other world")
-	newest := calloutAppPeer(w.World, "tauri://localhost", browserHostToken)
+	newest := calloutAppPeer(w.World, "", browserHostToken)
 	selectProfile(newest, otherProfile.ID)
 	mobile := calloutAppPeer(w.World, "http://localhost:3000", browserHostToken)
 	selectProfile(mobile, profileID)
@@ -109,7 +109,7 @@ func TestCalloutsStopReachingAnAppOnceItCloses(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		injectAgent(t, w, "callout-source")
-		target := calloutAppPeer(w.World, "tauri://localhost", browserHostToken)
+		target := calloutAppPeer(w.World, "", browserHostToken)
 		selectProfile(target, app.SelectedProfile())
 		target.Close()
 		synctest.Wait()
@@ -126,7 +126,7 @@ func TestCalloutsRefuseRepliesAfterTheAppSwitchesProfiles(t *testing.T) {
 	defer exitShells(app, string(session.ID))
 	profileID := app.SelectedProfile()
 	other := createProfile(app, "Other world")
-	target := calloutAppPeer(w.World, "tauri://localhost", browserHostToken)
+	target := calloutAppPeer(w.World, "", browserHostToken)
 	for _, anchors := range []bool{false, true} {
 		selectProfile(target, profileID)
 		answered := make(chan error, 1)
@@ -157,7 +157,7 @@ func TestCalloutsReportMissingAnchorsAndDisconnects(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	session, _, _ := w.RequestSpawn(app, shellHarness, w.Path("caller"))
 	defer exitShells(app, string(session.ID))
-	target := calloutAppPeer(w.World, "tauri://localhost", browserHostToken)
+	target := calloutAppPeer(w.World, "", browserHostToken)
 	selectProfile(target, app.SelectedProfile())
 	for _, disconnect := range []bool{false, true} {
 		answered := make(chan error, 1)
@@ -196,7 +196,7 @@ func TestCalloutsNameTheReplyTimeoutWhenTheAppDoesNotAnswer(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		injectAgent(t, w, "callout-source")
-		target := calloutAppPeer(w.World, "tauri://localhost", browserHostToken)
+		target := calloutAppPeer(w.World, "", browserHostToken)
 		selectProfile(target, app.SelectedProfile())
 		answered := make(chan error, 1)
 		go func() {
@@ -218,10 +218,14 @@ func calloutRefused(t *testing.T, err error, want string) {
 
 func calloutAppPeer(w *testworld.World, origin, token string) *testworld.Peer {
 	w.T.Helper()
+	header := http.Header{}
+	if origin != "" {
+		header.Set("Origin", origin)
+	}
 	p := w.Connect(protocol.ClientHelloMessage{
-		Cmd: protocol.CmdClientHello, ClientKind: "tauri-app", Version: "protocol-" + protocol.ProtocolVersion,
+		Cmd: protocol.CmdClientHello, ClientKind: protocol.ClientKindNativeApp, Version: "protocol-" + protocol.ProtocolVersion,
 		BrowserHostToken: protocol.Ptr(token), ClientToken: protocol.Ptr(config.ClientToken()),
-	}, http.Header{"Origin": []string{origin}})
+	}, header)
 	testworld.Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	return p
 }

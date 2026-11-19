@@ -1,10 +1,7 @@
 # Native app
 
 The native app is attn's desktop app, written in Rust on
-[Rune](https://github.com/anomalyco/rune). It lives in `native/`. The Tauri app
-in `app/src` and `app/src-tauri` is the rollback: `APP=tauri` still builds it,
-and nobody develops it further. Seed `s-yxa3tt` deletes it one release after
-the cut-over.
+[Rune](https://github.com/anomalyco/rune). It lives in `native/`.
 
 ## Workspace
 
@@ -39,11 +36,17 @@ app starts the `attnd` bundled beside it. A build without them, such as a bare
 
 Without an instance, `make build-app` builds the release bundle,
 `native/target/staged/attn.app`, in the `release` profile and signed with the
-hardened runtime. It keeps the bundle id and URL scheme of the Tauri releases
-before it, so it installs over them.
+hardened runtime. It keeps the bundle id and URL scheme of the Tauri app that
+attn shipped before it, so it installs over it.
 [Making a release](making-a-release.md#the-macos-app) says how a release signs
 and notarizes it. CI macOS's `Native release preflight` builds it and checks it
 with `scripts/check-macos-release-app.sh`.
+
+The in-app browser injects `attn-app/src/browser/runtime.js` into each page.
+It is built from the TypeScript in `native/browser-runtime/`, and the built file
+is committed. After you change that source, run `make check-browser-runtime`:
+it rebuilds the file, runs its tests and fails until you commit the new build.
+A landing that changes either runs it, and so does `Native / ubuntu-24.04` on CI.
 
 `native/Cargo.toml` pins one revision of `main`, the trunk of attn's Rune fork,
 and repeats Rune's `[patch.crates-io]` entries.
@@ -445,8 +448,7 @@ story and, when it keeps a rule, its test.
 Tests, scenarios, `scripts/vm drive` and drive-attn drive the native app over
 one automation protocol, `attn-automation`: newline-delimited JSON over
 loopback TCP, `{id, token, action, payload}` in and `{id, ok, result, error}`
-out. The Tauri app speaks the same envelope with its own actions, so one Node
-client connects to both apps.
+out.
 
 A target names an element by its key, `{"key": "sidebar"}`, or by its role and
 accessible name, `{"role": "group", "name": "Agent t2"}`. The role is the one
@@ -517,18 +519,13 @@ Hosts run the protocol on the app's `Runtime`:
 
 ### Scenarios and the VM
 
-A catalog entry in `app/scripts/real-app-harness/scenarioCatalog.mjs` with
-`app: 'native'` runs against the native app. Entries without it are the Tauri
-app's, and run only against a rollback build installed with `APP=tauri`. The
-install writes the app into the tree's `build-identity.json`, and the serial
-matrix leaves out the entries for the other app, or refuses when they were
-named. The acceptance soak builds and installs the app each named scenario
-needs. New scenarios are native ones.
+Each entry in `app/scripts/real-app-harness/scenarioCatalog.mjs` is a scenario
+that runs against the app.
 
 `createWindowDriver` returns a `NativeAppDriver` for a native tree. Its input
 goes through the automation server, so on both platforms it takes no focus and
 leaves the pointer alone. It finds, parks, places and captures the window with
-the platform driver, from the harness process. `launchFreshNativeAppAndConnect`
+the platform driver, from the harness process. `launchFreshAppAndConnect`
 in `common.mjs` launches the app and connects. `scenario-native-sidebar-session.mjs`
 is the smallest example.
 

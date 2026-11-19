@@ -76,7 +76,7 @@ const QUEUE_FILTER: Field = Field {
 /// arrow under modifiers. Focusing the next tile goes last: it may take the keyboard away.
 const RUN: [Action; 2] = [Action::TerminalToggleMaximize, Action::TerminalFocusRight];
 
-/// Shortcuts whose keys a field keeps, as the Tauri app leaves them to an input.
+/// Shortcuts whose keys a field keeps.
 const KEPT: [Action; 3] = [
     Action::TerminalFind,
     Action::SessionNext,

@@ -632,7 +632,7 @@ fn review() -> ReviewBundle {
     }
 }
 
-/// The daemon reads `totals.rs` whole for the file view, as the Tauri audit's walkthrough shows it.
+/// The daemon reads `totals.rs` whole for the file view.
 fn serve_totals(daemon: &Daemon) {
     daemon.on("review_file", |r: &Request| {
         let rows = vec![
@@ -1388,7 +1388,7 @@ fn garden_world_beside(
                 log_note(
                     "n-2",
                     "note",
-                    "Tauri row is 28 pt, native row is 29 pt.",
+                    "A menu row is 29 pt.",
                     "2026-11-13T09:10:00Z",
                 ),
                 log_note("n-1", "move", "tended", "2026-11-13T09:05:00Z"),
@@ -2846,9 +2846,8 @@ const SWITCHED_ON: &[(&str, &str)] = &[
     ("new_session_launcher_enabled", "true"),
 ];
 
-/// A Settings page the Tauri audit compared, with its buttons, fields and switches: the
-/// settings `settings` set and the daemon answering as `answer` scripts it, reached through the
-/// settings search for `search`.
+/// A Settings page with its buttons, fields and switches: the settings `settings` set and the
+/// daemon answering as `answer` scripts it, reached through the settings search for `search`.
 fn settings_section(
     dark: bool,
     section: &str,
@@ -4002,7 +4001,7 @@ fn settings_route_picker(dark: bool) {
     }
 }
 
-/// Every route chip's model picker, as Victor compares it with the Tauri app's: closed, open,
+/// Every route chip's model picker: closed, open,
 /// a query that matches some, an exact model id, and one that matches nothing.
 fn route_picker_callers(dark: bool) {
     let settings = |section: &'static str, search: &'static str| {
@@ -5325,7 +5324,7 @@ fn review_keys(dark: bool) {
 }
 
 /// The review shown alone on its desktop, bound to agent a's session, beside a second open
-/// document, as the Tauri audit shot it: its tabs over the tile, its header and its brief.
+/// document: its tabs over the tile, its header and its brief.
 fn review_alone(dark: bool) -> World {
     review_alone_with(dark, review())
 }

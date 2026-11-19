@@ -1,5 +1,5 @@
-//! A document's local images, read through the daemon as the Tauri reader reads them
-//! (tile_asset_read), decoded off the window's thread, and opened larger in a zoomable preview.
+//! A document's local images, read through the daemon (tile_asset_read), decoded off the
+//! window's thread, and opened larger in a zoomable preview.
 
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -579,7 +579,7 @@ fn opened(state: &mut State, source: Source, bytes: Option<Vec<u8>>) {
 }
 
 /// Opens diagram `source`, `size` points at its natural size, over the window at 100% from its
-/// start, as the Tauri reader's Focus diagram does.
+/// start.
 pub(crate) fn show_diagram(state: &mut State, source: &str, size: [f32; 2], tx: &mut Tx) {
     state.pictures.zoom.open_actual(size, state.pictures.window);
     state.pictures.shown = Some(Shown::Diagram {

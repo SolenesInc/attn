@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 output_mode="text"
 field="fingerprint"
-app="tauri"
+app=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -23,13 +23,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --app)
       app="${2:-}"
-      case "${app}" in
-        tauri|native) ;;
-        *)
-          echo "--app must be tauri or native, got: ${app}" >&2
-          exit 1
-          ;;
-      esac
+      if [[ "${app}" != native ]]; then
+        echo "--app must be native, got: ${app}" >&2
+        exit 1
+      fi
       shift 2
       ;;
     --help|-h)
@@ -40,8 +37,8 @@ Usage:
   scripts/source-fingerprint.sh --json
   scripts/source-fingerprint.sh --app native --field fingerprint
 
---app names the app the build packages: tauri (default) or native. A native
-build also covers native/.
+Without --app, the fingerprint covers the sources the daemon, CLI and PTY host
+build from. --app native also covers native/, the app's source.
 
 Fields:
   fingerprint
@@ -80,19 +77,16 @@ hash_file() {
 should_exclude_path() {
   local relative_path="$1"
   # Only app + daemon source is tracked, and the guide pages the daemon binary
-  # embeds. Everything else — other docs, tests, harness scripts, and CI
-  # config — can change without invalidating the packaged app bundle, so
-  # skipping those paths keeps iteration fast. native/ counts only for the
-  # native app's build.
+  # embeds. Everything else — other docs, tests, the scenario harness under app/,
+  # scripts, and CI config — can change without invalidating the packaged app
+  # bundle, so skipping those paths keeps iteration fast. native/ counts only
+  # for the native app's build.
   case "${relative_path}" in
     native/*) [[ "${app}" == native ]] && return 1 || return 0 ;;
     internal/prompts/content/*) return 1 ;;
     cmd/prompt-editor/*|internal/prompts/scenarios/*|.prompt-editor/*) return 0 ;;
     scripts/build-app-instance.sh) return 1 ;;
-    app/scripts/real-app-harness/*) return 0 ;;
-    app/scripts/*)                  return 0 ;;
-    app/e2e/*)                      return 0 ;;
-    app/test-harness/*)             return 0 ;;
+    app/*)                          return 0 ;;
     docs/guide/*.go|docs/guide/tutorials/*|docs/guide/reference/*|docs/guide/diagrams/*.txt) return 1 ;;
     docs/*)                         return 0 ;;
     scripts/*)                      return 0 ;;

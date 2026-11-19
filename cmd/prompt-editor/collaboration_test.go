@@ -382,7 +382,7 @@ func TestRefreshReloadsChangedGoDeclarationsWithoutRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"cmd/promptgen", "app/src/prompts"} {
+	for _, name := range []string{"cmd/promptgen", "native/crates/attn-app/prompts"} {
 		if err := os.MkdirAll(filepath.Join(e.repo, name), 0755); err != nil {
 			t.Fatal(err)
 		}

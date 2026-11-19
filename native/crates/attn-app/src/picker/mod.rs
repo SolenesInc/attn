@@ -24,7 +24,7 @@ pub(crate) use view::{
     yolo_control,
 };
 
-/// How long typing settles before the picker browses the typed folder, as in the Tauri app.
+/// How long typing settles before the picker browses the typed folder.
 const BROWSE_DELAY: f64 = 0.15;
 const MAX_RECENTS: usize = 10;
 const SAVED_AGENT: &str = "new_session_agent";

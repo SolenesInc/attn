@@ -185,7 +185,7 @@ pub enum WorktreePush<'a> {
     Swept(&'a WorktreeSweepEntry),
 }
 
-/// As many sweeps as the Tauri app keeps from pushes; a reader that missed more reads again.
+/// The sweeps kept from pushes; a reader that missed more reads again.
 pub const SWEEPS_KEPT: usize = 200;
 
 impl WorktreePushes {

@@ -13,8 +13,8 @@ scripts/vm: run this checkout's attn in a shared macOS VM.
   scripts/vm adopt                  take an instance with no owner, started by an earlier
                                     scripts/vm, when it is yours
 
-It runs the native app (native/crates/attn-app), and drive takes its automation
-actions. APP=tauri runs the Tauri app, the rollback, built with DEMO=1.
+It runs the app (native/crates/attn-app), and drive takes its automation
+actions.
 
 Each agent gets its own instance by default, vm-<worktree name>-<hash>. --instance
 NAME, before or right after the command, selects another; a name another agent is
@@ -65,12 +65,7 @@ attn instance resolve --instance "$instance" --field wsPort >/dev/null ||
     die "instance name '$instance' was refused by attn; pass another with --instance"
 
 app="attn-$instance"
-shell="${APP:-native}"
-case "$shell" in
-tauri) bundle="app/src-tauri/target/staged/$app.app" ;;
-native) bundle="native/target/staged/$app.app" ;;
-*) die "APP must be tauri or native, got: $shell" ;;
-esac
+bundle="native/target/staged/$app.app"
 guest_app="Applications/$app.app"
 guest_bin="/Users/admin/$guest_app/Contents/MacOS/attn"
 harness="h/$instance"
@@ -78,9 +73,8 @@ owner_link="vm-instance-owners/$instance"
 export MACVM_LABEL="scripts/vm $instance"
 
 bundle_fingerprint() { jq -r .sourceFingerprint "$bundle/Contents/Resources/build-identity.json" 2>/dev/null || true; }
-bundle_build() { jq -r '"\(.app) \(.sourceFingerprint)"' "$bundle/Contents/Resources/build-identity.json" 2>/dev/null || true; }
-guest_build() {
-    macvm exec cat "$guest_app/Contents/Resources/build-identity.json" 2>/dev/null | jq -r '"\(.app) \(.sourceFingerprint)"' 2>/dev/null || true
+guest_fingerprint() {
+    macvm exec cat "$guest_app/Contents/Resources/build-identity.json" 2>/dev/null | jq -r .sourceFingerprint 2>/dev/null || true
 }
 
 bridge() {
@@ -138,31 +132,21 @@ wait_ready() {
 
 cmd_up() {
     [ -e app/node_modules/ws ] || pnpm --dir app install --frozen-lockfile
-    if [ "$(bundle_fingerprint)" != "$(bash scripts/source-fingerprint.sh --app "$shell" --field fingerprint)" ]; then
-        if [ "$shell" = native ]; then
-            make build-app INSTANCE="$instance" APP=native
-        else
-            make build-app INSTANCE="$instance" APP=tauri DEMO=1
-        fi
+    if [ "$(bundle_fingerprint)" != "$(bash scripts/source-fingerprint.sh --app native --field fingerprint)" ]; then
+        make build-app INSTANCE="$instance"
     fi
     local vm
     vm="$(macvm up)"
     claim_instance
-    if [ "$(guest_build)" != "$(bundle_build)" ]; then
+    if [ "$(guest_fingerprint)" != "$(bundle_fingerprint)" ]; then
         macvm exec osascript -e "quit app \"$app\"" 2>/dev/null || true
         macvm install-app "$bundle"
     fi
     macvm exec /bin/rm -rf "$harness"
     macvm push "$harness/app/scripts" app/scripts/real-app-harness
     macvm push "$harness/app/node_modules" "$(readlink -f app/node_modules/ws)"
-    if [ "$shell" = native ]; then
-        macvm exec open -g --env MAC_APP_QUIET=1 "$guest_app"
-        wait_ready
-    else
-        macvm exec open -g "$guest_app"
-        wait_ready
-        bridge dismiss_whats_new '{}' >/dev/null
-    fi
+    macvm exec open -g --env MAC_APP_QUIET=1 "$guest_app"
+    wait_ready
     echo "scripts/vm: $app is ready in $vm. When done: scripts/vm down${instance:+ --instance $instance}"
 }
 
@@ -183,11 +167,7 @@ cmd_shot() {
     [ $# -eq 1 ] || usage
     local out="$1" guest="shots/$instance-$$.png" pulled
     macvm exec mkdir -p shots
-    if [ "$shell" = native ]; then
-        bridge shot "{\"path\":\"/Users/admin/$guest\"}" >/dev/null
-    else
-        bridge capture_native_window_screenshot "{\"path\":\"/Users/admin/$guest\"}" >/dev/null
-    fi
+    bridge shot "{\"path\":\"/Users/admin/$guest\"}" >/dev/null
     pulled="$(mktemp -d)"
     macvm pull "$guest" "$pulled"
     mkdir -p "$(dirname "$out")"

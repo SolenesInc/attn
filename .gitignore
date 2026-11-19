@@ -20,12 +20,8 @@ coverage.out
 .playwright-mcp/
 
 # Build artifacts
-app/src-tauri/binaries/
 /pty-host/target/
 /cli/target/
-app/src-tauri/app-runtime/*
-!app/src-tauri/app-runtime/.gitkeep
-dist/app-runtime/
 /dist/pty-host/
 *.tsbuildinfo
 
@@ -37,18 +33,12 @@ dist/app-runtime/
 !.claude/settings.json
 !.claude/skills/
 
-# Generated per-instance Tauri config overlays (see scripts/build-app-instance.sh)
-app/src-tauri/*.gen.conf.json
-
 # Local env files
 **/.npmrc
 
 # Native libghostty-vt build output (source of truth: scripts/build-libghostty-vt.sh)
 /third_party/
 
-# Browser ghostty-vt module: ghostty-org's build, mirrored per pin and fetched
-# by app/scripts/ensure-ghostty-vt-wasm.sh. Provenance lives in ghostty-vt-wasm.lock.
-/app/vendor/ghostty-vt/ghostty-vt.wasm
 
 # activity-bench corpus and results: real transcript excerpts, never committed
 .activity-bench/

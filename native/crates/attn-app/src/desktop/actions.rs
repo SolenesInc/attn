@@ -90,8 +90,7 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
     true
 }
 
-/// Shows the agent that dispatched the agent on screen, as the Tauri app's
-/// `handleSelectOrchestrator`.
+/// Shows the agent that dispatched the agent on screen.
 fn show_dispatcher(state: &mut State, tx: &mut Tx) {
     let facts = &state.facts;
     let Some(shown) = state.window.on_screen(facts) else {
@@ -382,7 +381,7 @@ pub(crate) fn show_unseen(state: &mut State, tx: &mut Tx) -> bool {
 }
 
 /// Shows `leaf` on `desktop` as the active tile, as the person picked it, and gives it the
-/// keyboard. The tile rings when it lands, as the Tauri app announces a show.
+/// keyboard. The tile rings when it lands.
 pub(crate) fn show_leaf(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
     show_leaf_as(state, desktop, leaf, true, tx);
 }
@@ -443,8 +442,7 @@ pub(crate) fn activate(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx
     activate_as(state, desktop, leaf, true, tx);
 }
 
-/// As `activate`, for a tile that just started: it does not ring, as the Tauri app does not
-/// announce a session it created.
+/// As `activate`, for a tile that just started: a session the app created does not ring.
 pub(crate) fn activate_started(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
     activate_as(state, desktop, leaf, false, tx);
 }
@@ -637,8 +635,7 @@ pub(super) fn split_at(
 }
 
 /// The person asked to see `leaf` alone: it takes the keyboard and becomes the active tile,
-/// shown alone, with zoom off. Showing a tile alone and returning it land at once, as in the
-/// Tauri app.
+/// shown alone, with zoom off. Showing a tile alone and returning it land at once.
 pub(super) fn focus_leaf(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
     activate(state, desktop, leaf, tx);
     state.window.desk.row_mut(desktop).view = View::Focused(leaf.to_owned());

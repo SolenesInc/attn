@@ -37,7 +37,7 @@ pub(crate) const KIND: &str = "browser";
 /// `internal/daemon/websocket.go`); a result past this says so instead of ending the connection.
 const MAX_RESULT_BYTES: usize = 24 * 1024 * 1024;
 /// How often a `wait_for` asks the page again, and how long it waits when the agent gives no
-/// timeout, as the Tauri app's host does.
+/// timeout.
 const WAIT_PROBE_SECS: f64 = 0.05;
 const WAIT_DEFAULT_MS: f64 = 5_000.0;
 const WAIT_LONGEST_MS: f64 = 120_000.0;
@@ -117,7 +117,7 @@ impl Browsers {
 }
 
 /// The browser tiles whose pages the main window keeps: those on the current desktop and the
-/// one before it, as the Tauri app keeps them, and those popped out into tile windows, each
+/// one before it, and those popped out into tile windows, each
 /// with the address its tile stores.
 fn wanted(state: &mut State) -> Vec<(TileKey, String)> {
     if state.window.tile.is_some() {
@@ -825,7 +825,7 @@ fn alerted(state: &mut State, page: &TileKey) {
     }
 }
 
-/// The name WebDriver's window handles give the page, as the Tauri app named it.
+/// The name WebDriver's window handles give the page.
 fn handle(page: &TileKey) -> String {
     let safe = |part: &str| {
         part.chars()

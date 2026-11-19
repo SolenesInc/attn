@@ -1,6 +1,6 @@
 //! What a key does in the editor: typing, Return that continues a list, motion by character,
 //! word, visual line and document, selection, the clipboard, undo, and the formatting keys
-//! ⌘B, ⌘I and ⌘E, as the Tauri editor binds them.
+//! ⌘B, ⌘I and ⌘E.
 
 use rune::{Key, KeyEvent, Tx};
 

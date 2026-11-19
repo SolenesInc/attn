@@ -124,7 +124,7 @@ fn state_meaning(status: &str) -> &'static str {
     }
 }
 
-/// The Tauri app's `--seed-state-color`: each state's hue mixed into a text color.
+/// A seed state's color: each state's hue mixed into a text color.
 pub(crate) fn state_color(status: &str, t: &Tokens) -> Color {
     let mix = attn_ui::colors::mix_srgb;
     match status {

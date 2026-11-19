@@ -8,7 +8,7 @@ import { spawn, execFile } from 'node:child_process';
 import { once } from 'node:events';
 import { promisify } from 'node:util';
 import { outpostSsh } from './outpostSsh.mjs';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -102,7 +102,7 @@ try {
   const destination = 'scenario-outpost';
   await ssh.route(destination, remoteEnv, binary);
   await run(binary, ['daemon', 'stop']);
-  await launchFreshNativeAppAndConnect(client, observer);
+  await launchFreshAppAndConnect(client, observer);
   const previousRoot = observer.getSetting('notebook.root');
   await run(binary, ['settings', 'set', 'notebook.root', homeRoot]);
   runner.registerCleanup('restore_home_root', async () => {

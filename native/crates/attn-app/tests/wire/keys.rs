@@ -702,7 +702,7 @@ fn a_rebind_arriving_from_the_daemon_applies_at_once() {
     assert!(world.runtime_is_at_rest());
 }
 
-/// `ev` as the Tauri app stores a binding in `keybindings_config`.
+/// `ev` as `keybindings_config` stores a binding.
 fn stored(ev: &KeyEvent) -> String {
     let key = match &ev.key {
         Key::Command(c) => c.to_string(),
@@ -889,7 +889,7 @@ fn every_cheat_sheet_row_shows_all_its_keys_inside_the_row() {
 }
 
 #[test]
-fn the_cheat_sheet_lists_the_tauri_rows_with_paired_keys_and_notes() {
+fn the_cheat_sheet_lists_its_rows_with_paired_keys_and_notes() {
     let mut world = World::start(Daemon::scripted().state(state(vec![], &[])));
     world.gesture(|app| app.key(chord(&Action::UiShowShortcuts)));
     let keymap = Keymap::from_setting(None, attn_testkit::platform());
@@ -1032,7 +1032,7 @@ fn every_overlay_that_captures_navigation_holds_the_app_shortcuts_but_not_quit()
 }
 
 #[test]
-fn the_palette_holds_every_app_shortcut_tauri_turns_off_under_it() {
+fn the_palette_holds_every_app_shortcut_but_the_ones_it_keeps() {
     let kept = [
         Action::AppQuit,
         Action::UiActionMenu,

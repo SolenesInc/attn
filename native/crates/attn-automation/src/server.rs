@@ -17,8 +17,7 @@ use crate::host::{Bounds, Host};
 /// answer, which names the element, arrives first.
 const WAIT: Duration = Duration::from_secs(30);
 
-/// What the scenario runner reads to find the server: the fields of the Tauri app's that the
-/// runner reads, so both shells launch and connect the same way.
+/// What the scenario runner reads to find the server.
 #[derive(Clone, Debug, Serialize)]
 pub struct Manifest {
     pub enabled: bool,

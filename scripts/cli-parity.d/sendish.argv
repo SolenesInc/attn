@@ -156,11 +156,7 @@ read instance resolve --field appLocalDataDir
 read instance resolve --field appLockPath
 read instance resolve --field deepLinkScheme
 read instance resolve --field desktopEntry
-read instance resolve --field e2eDaemonPort
-read instance resolve --field e2eVitePort
 read instance resolve --field mockGitHubPort
-read instance resolve --instance agent7 --field e2eDaemonPort
-read instance resolve --instance agent7 --field e2eVitePort
 read instance resolve --instance agent7 --field mockGitHubPort
 read instance resolve --instance agent7 --field wsPort
 write enrollment leave

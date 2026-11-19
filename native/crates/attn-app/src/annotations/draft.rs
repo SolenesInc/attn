@@ -17,8 +17,8 @@ use crate::terminal::{Anchor, Annotation, Miss, Notice, Outcome, Popup, Transcri
 
 /// How long a drag that marked nothing says why.
 const NOTICE_SECONDS: f64 = 5.0;
-/// How long typing in the note pauses before the note is saved, as the Tauri panel waits:
-/// measured to clear an ordinary gap between keystrokes, 100 to 250 ms.
+/// How long typing in the note pauses before the note is saved: measured to clear an ordinary gap
+/// between keystrokes, 100 to 250 ms.
 const NOTE_PAUSE: f64 = 0.4;
 /// How long the panel says the marks went before it closes.
 const SENT_SECONDS: f64 = 2.2;

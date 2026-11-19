@@ -1,6 +1,5 @@
-//! The links in a terminal's output, found as the Tauri terminal finds them
-//! (`terminalLinks.ts`): an OSC 8 hyperlink, a URL, or a path to a file that exists, on the
-//! line under the pointer, joined across the rows it wraps over.
+//! The links in a terminal's output: an OSC 8 hyperlink, a URL, or a path to a file that exists, on
+//! the line under the pointer, joined across the rows it wraps over.
 
 /// The rows a line may wrap over before the hover stops joining them: a path longer than this
 /// would be hundreds of characters.
@@ -523,7 +522,7 @@ mod tests {
     }
 
     #[test]
-    fn path_candidates_match_the_tauri_terminal() {
+    fn a_fragment_yields_its_path_candidates_with_line_and_column() {
         let cases: &[(&str, &[Candidate])] = &[
             (
                 "src/main.go:12:3",
@@ -679,7 +678,7 @@ mod tests {
     }
 
     #[test]
-    fn opening_routes_markdown_paths_and_file_urls_as_the_tauri_terminal_does() {
+    fn opening_routes_markdown_paths_to_the_reader_and_file_urls_as_paths() {
         let path = |p: &str| Target::Path {
             path: p.to_owned(),
             line: None,

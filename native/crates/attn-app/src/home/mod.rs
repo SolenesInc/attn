@@ -17,11 +17,11 @@ use model::{Group, Home, HomeAgent};
 pub(crate) use model::next_change;
 
 /// attn's app icon, the cat on its tile, at twice the size the header draws it.
-pub(crate) const LOGO: &[u8] = include_bytes!("../../../../../app/src/assets/icon.png");
+pub(crate) const LOGO: &[u8] = include_bytes!("../../assets/icon.png");
 const LOGO_SIDE: f32 = 64.0;
 
 /// How narrow a Home card gets before the other card moves under it, and how short it stands
-/// with nothing in it, as the Tauri app's `.dashboard-card`.
+/// with nothing in it.
 pub(crate) const CARD_LEAST: (f32, f32) = (300.0, 200.0);
 
 pub(crate) fn view(state: &State, t: &Tokens) -> El {

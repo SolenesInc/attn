@@ -1,6 +1,6 @@
 //! The pictures of the images the panel shows: each image file of the draft, read from the
 //! draft's folder, and each image a listed Recent message sent, read from the daemon a chunk at
-//! a time as the Tauri panel reads it.
+//! a time.
 
 use std::collections::HashMap;
 use std::path::PathBuf;

@@ -6,7 +6,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
@@ -68,7 +68,7 @@ try {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const at = (page) => `http://127.0.0.1:${server.address().port}/${page}`;
   const frontmostBefore = await driver.frontmostBundleId();
-  await runner.step('launch_app', () => launchFreshNativeAppAndConnect(client, observer));
+  await runner.step('launch_app', () => launchFreshAppAndConnect(client, observer));
   await runner.step('widen_the_window_for_two_tiles', () => driver.widenWindow(1600));
 
   let desktop;

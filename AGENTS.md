@@ -30,9 +30,8 @@ as a maintainer:
 
 The app is the native Rust app on Rune in `native/`. It ships for macOS only
 for now. On Linux it builds from source and runs on X11, as CI's scenarios run
-it under Xvfb, and a released Linux app is later work. The Tauri app in `app/src` and `app/src-tauri` is the
-rollback: `APP=tauri` still builds it, and nobody develops it further. The
-daemon runs on Linux, so daemon code stays portable.
+it under Xvfb, and a released Linux app is later work. The daemon runs on
+Linux, so daemon code stays portable.
 
 ## What makes attn special?
 
@@ -200,24 +199,21 @@ system.
 - `make test`: Full Go suite (`make test-v` verbose, `make test-watch` on file
   changes), for CI or diagnosing a suite-wide failure
 - `make test-native`: Every test of the native workspace; `make check-native`
-  runs its formatting, `cargo check`, clippy and parity checks
-- `make test-frontend` and `make test-e2e`: The Tauri app's Vitest and browser
-  suites, for the rollback
+  runs its formatting, `cargo check`, clippy and the UI budget
 - `make test-scripts`: Shell script tests
-- `make lint`: Overall linter
+- `make lint`: Overall linter; `make lint-js` lints the SDK, the prompt editor
+  and the harness scripts alone
 - `pnpm --dir website dev`: Runs the website; `pnpm --dir website verify` checks
   the landing page, the guide placeholder and the About page in a build, or on a
   running server with `--url <base>`
 
 Before landing or reporting done, run targeted tests for what you changed and
-check the affected surface. Do not run `make test`, `make lint`,
-`make test-frontend`, or another full suite locally: `scripts/land.sh` runs
-every native test for a change under `native/`, and CI on `main` runs the full
-suites after landing. Neither CI nor `scripts/land.sh` runs the Tauri app's
-tests.
+check the affected surface. Do not run `make test`, `make lint`, or another
+full suite locally: `scripts/land.sh` runs every native test for a change under
+`native/`, and CI on `main` runs the full suites after landing.
 
 `make test` skips the Go suite when only `docs/` (except `docs/guide`'s Go code
-and the pages it embeds), root Markdown and `app/src` changed since
+and the pages it embeds) and root Markdown changed since
 `origin/main`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares against another
 branch.
 
@@ -327,11 +323,10 @@ For command/event/message-shape changes:
 
 Edit `internal/protocol/schema/main.tsp`; run `make generate-types` and commit
 the generated files. This also writes the protocol schema hash into
-`internal/protocol/protocol_version.go` and `app/src/types/protocolVersion.ts`.
+`internal/protocol/protocol_version.go`.
 `make check-types` checks that all generated files are current.
 
-Never hand-edit `internal/protocol/generated.go`,
-`app/src/types/generated.ts`, `cli/protocol/src/generated.rs`,
+Never hand-edit `internal/protocol/generated.go`, `cli/protocol/src/generated.rs`,
 `cli/protocol/src/go_values.rs`, or `cli/testdata/`. The last two come from
 `cmd/cligen`, which reads Go constants, settings and prompts the CLI uses, so
 changing one of those also needs `make generate-types`.
@@ -430,8 +425,6 @@ entry names:
   skill (.agents/skills/drive-attn) and its feature map
 - The app in `native/`: its code, shortcuts, tests or build output =>
   docs/internal/native-app.md
-- The Tauri app, the rollback, in `app/src` and `app/src-tauri` =>
-  app/AGENTS.md
 - Packaged-app scenarios or recording/publishing evidence =>
   app/scripts/real-app-harness/AGENTS.md
 - CPU, memory, or benchmarks => docs/internal/perf-testing.md

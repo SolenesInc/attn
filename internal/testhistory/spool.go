@@ -63,7 +63,7 @@ func Decompress(data []byte) ([]byte, error) { return sharedDecoder.DecodeAll(da
 
 func resultsFile(runner Runner) string {
 	switch runner {
-	case RunnerGo, RunnerVitest:
+	case RunnerGo:
 		return string(runner) + ".jsonl"
 	case RunnerCargo:
 		return string(runner) + ".log"
@@ -151,10 +151,6 @@ func Observe(runner Runner, raw []byte, goModule string) Observed {
 	switch runner {
 	case RunnerGo:
 		return ObserveGo(raw, goModule)
-	case RunnerVitest:
-		return ObserveVitest(raw)
-	case RunnerPlaywright:
-		return ObservePlaywright(raw)
 	case RunnerCargo:
 		return ObserveCargo(raw)
 	default:

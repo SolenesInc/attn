@@ -888,9 +888,8 @@ impl World {
         serde_json::from_value(found["rect"].clone()).unwrap_or_else(|e| panic!("{key}: {e}"))
     }
 
-    /// Leaves home for the current desktop the way a person does, by its sidebar row, then
-    /// takes the pointer out of the window and lets the row's hover fade out: the app opens on
-    /// home, as the Tauri app does.
+    /// Leaves home for the current desktop the way a person does, by its sidebar row, then takes
+    /// the pointer out of the window and lets the row's hover fade out: the app opens on home.
     pub fn open_desktop(&mut self) {
         let profiles = self
             .automate("state", serde_json::json!({"of": "profiles"}))

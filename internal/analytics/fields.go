@@ -52,7 +52,6 @@ var AppFields = map[string]Fields{
 	"palette_command":  {"id": Safe},
 	"settings_section": {"section": Safe},
 	"queue_advance":    {"reason": Safe, "to": Safe},
-	"react_error":      {"kind": Safe},
 }
 
 var SampleFields = map[string]Fields{

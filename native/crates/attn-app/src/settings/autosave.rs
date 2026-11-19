@@ -5,7 +5,7 @@ use rune::{TextEdit, Tx};
 
 use crate::State;
 
-/// How long a field's Saved mark shows once its value lands, as in the Tauri app.
+/// How long a field's Saved mark shows once its value lands.
 const SAVED_MARK_SECONDS: f64 = 1.6;
 
 /// How a field reads its draft from the daemon's settings, and the value a draft saves as, or

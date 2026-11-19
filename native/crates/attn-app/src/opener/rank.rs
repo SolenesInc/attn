@@ -1,6 +1,6 @@
-//! Which files the opener lists for a query, best first, as the Tauri opener ranks them
-//! (openerRank.ts, rank.ts): recent files and the root's index in one list, each file once,
-//! scored as a subsequence of its path or name with a bonus for files opened before.
+//! Which files the opener lists for a query, best first: recent files and the root's index in one
+//! list, each file once, scored as a subsequence of its path or name with a bonus for files opened
+//! before.
 
 /// A file the opener can list: by its absolute path, labelled relative to the root when it
 /// is under it, on outpost `host` when it has one.

@@ -1,4 +1,4 @@
-//! Home's Pull Requests card, as the Tauri app's dashboard has: the user's own pull requests,
+//! Home's Pull Requests card: the user's own pull requests,
 //! then the review requests by repository, each with Approve, Merge and Mute.
 
 use std::collections::{HashMap, HashSet};
@@ -47,7 +47,7 @@ impl Act {
     }
 }
 
-/// Who a pull request wants the user as, which its row opens with, as the Tauri app's `.pr-role`.
+/// Who a pull request wants the user as, which its row opens with.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Role {
     Reviewer,
@@ -68,7 +68,7 @@ impl Role {
         }
     }
 
-    /// Drawn from the system's emoji font, as the Tauri app's are.
+    /// Drawn from the system's emoji font.
     pub fn emoji(self) -> &'static str {
         match self {
             Role::Reviewer => "👀",
@@ -650,7 +650,7 @@ fn pr_card(state: &State, t: &Tokens) -> El {
 }
 
 /// The card's refresh button: dots while the poll the user asked for runs, an error mark whose
-/// help says why it failed, as the Tauri app's `.refresh-btn`.
+/// help says why it failed.
 fn refresh_button(refresh: &Refresh, idle_help: String, t: &Tokens) -> El {
     let (glyph, ink, help) = match refresh {
         Refresh::Idle => (&icon::REFRESH, t.text_dimmed, idle_help),
@@ -677,7 +677,7 @@ fn refresh_button(refresh: &Refresh, idle_help: String, t: &Tokens) -> El {
 }
 
 /// The notice above Home's cards while GitHub holds the daemon's polls back, counting down to
-/// when they resume, as the Tauri app's `.rate-limit-banner`.
+/// when they resume.
 pub(crate) fn rate_limit_notice(state: &State, t: &Tokens) -> Option<Block> {
     let left_ms = rate_limit_left_ms(&state.facts, state.window.now_ms)?;
     let (minutes, seconds) = (left_ms / 60_000, left_ms % 60_000 / 1000);

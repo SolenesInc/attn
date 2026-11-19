@@ -28,7 +28,7 @@ func TestAnAgentPointsAtTheAppWithTheCalloutTools(t *testing.T) {
 		t.Errorf("callout_show with no app = %q, want the app_not_showing_profile refusal with its fix", text)
 	}
 
-	target := calloutAppPeer(w.World, "tauri://localhost", browserHostToken)
+	target := calloutAppPeer(w.World, "", browserHostToken)
 	selectProfile(target, app.SelectedProfile())
 	answered := make(chan *mcp.CallToolResult, 1)
 	go func() { answered <- shapes.call("callout_anchors", map[string]any{}) }()

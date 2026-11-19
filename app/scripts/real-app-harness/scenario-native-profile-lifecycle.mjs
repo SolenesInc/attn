@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -50,7 +50,7 @@ try {
   const frontmostBefore = mac ? await driver.frontmostBundleId() : null;
   let home;
   await runner.step('launch_app', async () => {
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     const state = await profiles();
     for (const leftover of state.all.filter((p) => p.name.startsWith('harness-'))) {
       await observer.profileCommand('profile_delete', { profile_id: leftover.id, expected_revision: leftover.revision }).catch(() => {});

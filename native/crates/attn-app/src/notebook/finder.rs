@@ -1,5 +1,5 @@
 //! The note finder: ⌘P inside the notebook or an editor tile finds a note of that surface's
-//! folder by name, as the Tauri notebook's finder does (NotebookFinder.tsx).
+//! folder by name.
 
 use attn_protocol::{FsIndexMessage, FsIndexResultMessage};
 use attn_ui::Tokens;
@@ -122,8 +122,8 @@ fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
-/// The finder over surface `id`, while it is open there, as the Tauri finder sits over the
-/// notebook or the tile it finds in.
+/// The finder over surface `id`, while it is open there, over the notebook or the tile it
+/// finds in.
 pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Option<El> {
     let finder = notebook.finder.as_ref().filter(|f| f.surface == *id)?;
     let rows = rows(finder);

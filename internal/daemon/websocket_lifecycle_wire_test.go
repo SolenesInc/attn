@@ -35,7 +35,7 @@ func transportDial(t *testing.T, ctx context.Context, w *world) *websocket.Conn 
 func transportHello(clientID string, capabilities ...string) protocol.ClientHelloMessage {
 	hello := protocol.ClientHelloMessage{
 		Cmd:          protocol.CmdClientHello,
-		ClientKind:   "tauri-app",
+		ClientKind:   protocol.ClientKindNativeApp,
 		Version:      "protocol-" + protocol.ProtocolVersion,
 		Capabilities: append([]string{}, capabilities...),
 		ClientToken:  protocol.Ptr(config.ClientToken()),

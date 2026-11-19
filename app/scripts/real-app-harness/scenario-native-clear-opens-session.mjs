@@ -3,7 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
@@ -40,7 +40,7 @@ const offsetInDesktop = async (sessionId, desktopId) => {
 try {
   const checksFocus = process.platform === 'darwin';
   const frontmostBefore = checksFocus ? await driver.frontmostBundleId() : null;
-  await runner.step('launch_app', () => launchFreshNativeAppAndConnect(client, observer));
+  await runner.step('launch_app', () => launchFreshAppAndConnect(client, observer));
 
   await runner.step('take_a_turn', async () => {
     const cwd = path.join(runner.sessionDir, 'shop');

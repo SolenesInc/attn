@@ -26,7 +26,7 @@ mod conversations;
 pub(crate) use conversations::{amount, date};
 mod worktrees;
 
-/// Rows per page, as the Tauri app reads them.
+/// Rows per page.
 pub const PAGE: i64 = 50;
 
 pub(crate) const LIST: &str = "ledger.list";

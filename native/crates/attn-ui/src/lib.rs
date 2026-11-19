@@ -21,8 +21,7 @@ pub use scroll_bar::{
     scroll_bar, thin_scroll_bar,
 };
 
-/// The interface's colors in one appearance, named by meaning. The surfaces, borders, text and
-/// status colors name the Tauri app's CSS variables they carry: `bg_app` is `--color-bg-app`.
+/// The interface's colors in one appearance, named by meaning.
 #[derive(Clone, Copy, Debug, Hash, PartialEq)]
 pub struct Tokens {
     pub dark: bool,
@@ -200,19 +199,18 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     kit
 }
 
-/// The Tauri app's brand-tinted control: a `brand` edge at 50% over a 12% `brand` fill.
+/// A brand-tinted control: a `brand` edge at 50% over a 12% `brand` fill.
 pub fn brand_tinted(e: rune::El, t: &Tokens) -> rune::El {
     e.fill(t.brand.alpha(BRAND_FILL)).border(1.0, brand_edge(t))
 }
 
-/// The fill of the window's standing invitation, such as New: `brand` at the Tauri app's 12%
-/// mixed into the panel the chrome stands on, opaque so its hover and pressed layers step from
-/// what is drawn.
+/// The fill of the window's standing invitation, such as New: `brand` at 12% mixed into the
+/// panel the chrome stands on, opaque so its hover and pressed layers step from what is drawn.
 pub fn brand_fill(t: &Tokens) -> Color {
     colors::mix_srgb(t.bg_panel, t.brand, BRAND_FILL)
 }
 
-/// The edge of the window's standing invitation: `brand` at the Tauri app's 50%.
+/// The edge of the window's standing invitation: `brand` at 50%.
 pub fn brand_edge(t: &Tokens) -> Color {
     t.brand.alpha(BRAND_EDGE)
 }
@@ -225,8 +223,8 @@ const SUBMIT_PRESSED: f32 = 0.20;
 const BRAND_FILL: f32 = 0.12;
 const BRAND_EDGE: f32 = 0.5;
 
-/// The ink on a brand fill: the scheme's `on_brand` where it reads there, else the Tauri app's
-/// `color-mix(in srgb, var(--color-brand) 12%, black)`.
+/// The ink on a brand fill: the scheme's `on_brand` where it reads there, else `brand` at 12%
+/// mixed into black.
 pub fn brand_ink(t: &Tokens) -> Color {
     if colors::reads_on(t.on_brand, t.brand) {
         t.on_brand
@@ -235,7 +233,7 @@ pub fn brand_ink(t: &Tokens) -> Color {
     }
 }
 
-/// The Tauri app's ink on a warning fill, `color-mix(in srgb, var(--color-warning) 10%, black)`.
+/// Ink on a warning fill: `warning` at 10% mixed into black.
 pub fn warning_ink(t: &Tokens) -> Color {
     colors::mix_srgb(t.warning, t.shadow, 0.9)
 }
@@ -254,7 +252,7 @@ fn standard_menu() -> rune_kit::StandardMenu {
     }
 }
 
-/// The Tauri app's field outline, `border: 1px solid var(--color-border)`.
+/// A field's outline: 1 point of `border`.
 fn input_ring(t: &Tokens) -> Shadow {
     Shadow {
         spread: 1.0,
@@ -275,14 +273,13 @@ pub const FONTS: &[&[u8]] = &[
     include_bytes!("../fonts/Inter-Regular.ttf"),
     include_bytes!("../fonts/Inter-Medium.ttf"),
     include_bytes!("../fonts/Inter-SemiBold.ttf"),
-    include_bytes!("../../../../app/public/fonts/SymbolsNerdFontMono-Regular.ttf"),
+    include_bytes!("../fonts/SymbolsNerdFontMono-Regular.ttf"),
 ];
 
-/// The sans and mono families, as `AppSpec::families` takes them. Mono is the Tauri app's
-/// terminal chain: the installed Iosevka, then Menlo and the other named monospaces, then
-/// whatever monospace the system has (Rune's `ui-monospace`, which loads its file, where the
-/// Tauri app's `monospace` needs none), and the bundled symbols last for icons no other face
-/// has.
+/// The sans and mono families, as `AppSpec::families` takes them. Mono is the terminal's chain:
+/// the installed Iosevka, then Menlo and the other named monospaces, then whatever monospace the
+/// system has (Rune's `ui-monospace`, which loads its file), and the bundled symbols last for
+/// icons no other face has.
 pub const FAMILIES: (&str, &str) = (
     "Inter",
     "Iosevka, Menlo, Monaco, DejaVu Sans Mono, Courier New, ui-monospace, Symbols Nerd Font Mono",

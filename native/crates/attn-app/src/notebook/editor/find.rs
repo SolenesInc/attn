@@ -1,6 +1,6 @@
 //! Find in the note: ⌘F opens a bar over the editor, every match shows, and Return, ⌘G and
 //! their Shift forms move the selection to the next or previous one, as CodeMirror's search
-//! panel does in the Tauri editor.
+//! panel does.
 
 use attn_ui::Tokens;
 use attn_ui::blocks::Inline;

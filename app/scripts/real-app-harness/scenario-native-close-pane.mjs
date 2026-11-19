@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readProcessEnvironment } from './agentTripwire.mjs';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
@@ -71,7 +71,7 @@ try {
   await runner.step('launch_app_on_a_daemon_that_runs_git_through_the_slow_wrapper', async () => {
     await client.quitApp();
     await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: instanceCliEnv(instance) });
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     await driver.setWindowBounds({ x: 0, y: 0, width: 1600, height: 1000 });
   });
   runner.registerCleanup('unregister_sessions', () => observer.unregisterMatchingSessions(inSessionDir));

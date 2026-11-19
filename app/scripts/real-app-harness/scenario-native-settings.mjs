@@ -2,7 +2,7 @@
 
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
@@ -52,7 +52,7 @@ const closed = () => driver.waitFor(DIALOG, { gone: true });
 try {
   const frontmostBefore = mac ? await driver.frontmostBundleId() : null;
   await runner.step('launch_app', async () => {
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     for (const key of ['theme', 'worktree_sweep_enabled', 'projects_directory']) queueDaemonSettingRestore(observer, key);
     await driver.waitFor({ key: 'home' });
   });

@@ -1,5 +1,4 @@
-//! What the pointer sends a program that tracks the mouse, by the rules the Tauri terminal
-//! follows (`app/src/utils/ghosttyScroll.ts`).
+//! What the pointer sends a program that tracks the mouse.
 
 /// The modes a program set that decide what the pointer reports.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

@@ -191,7 +191,7 @@ func (w *World) appHello() protocol.ClientHelloMessage {
 	}
 	return protocol.ClientHelloMessage{
 		Cmd:          protocol.CmdClientHello,
-		ClientKind:   "tauri-app",
+		ClientKind:   protocol.ClientKindNativeApp,
 		Version:      "protocol-" + protocol.ProtocolVersion,
 		Capabilities: []string{protocol.CapabilityBinaryPtyOutput, protocol.CapabilityKittyImages},
 		ClientToken:  protocol.Ptr(strings.TrimSpace(string(token))),

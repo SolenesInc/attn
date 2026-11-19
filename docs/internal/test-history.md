@@ -11,8 +11,7 @@ These commands record a receipt:
 - `scripts/test-go.sh`: one receipt per `go test` invocation. A full run records
   one per job (`packages`, `daemon-1`…, `attn-1`…), named as the
   receipt's shard.
-- `pnpm --dir app test`, `pnpm --dir app run e2e` and
-  `pnpm --dir app run real-app:serial-matrix`.
+- `pnpm --dir app run real-app:serial-matrix`.
 - `scripts/landing-tests.sh`, which also names the tests it requested, so a
   test that reported nothing shows as `MISSING`. It runs groups of
   `scripts/landing-tests`, or single tests with `--unit '<unit>'`.
@@ -20,12 +19,11 @@ These commands record a receipt:
   `native/` as the `cargo` runner. They are not the `native` runner's
   scenarios.
 
-Running `go test`, `vitest`, `playwright` or `cargo test` directly records
-nothing.
+Running `go test` or `cargo test` directly records nothing.
 
 Each of these commands runs through
 `go tool test-history capture <runner> [--unit <unit>]... [--shard <shard>] [--receipt-out <file>] -- <command>`.
-The runner is `go`, `vitest`, `playwright`, `native` or `cargo`. For `go`, the
+The runner is `go`, `native` or `cargo`. For `go`, the
 command is the arguments to `go test`: capture runs `go test -json` and prints
 the text `go test` itself prints. For `cargo`, the command is the arguments to
 `cargo test`: capture runs `cargo test --message-format=json --color=never`
@@ -155,13 +153,10 @@ A unit is what selection can schedule:
 | --- | --- |
 | Go top-level test | `go ./internal/daemon TestStateExplain` |
 | Go package binary: build, `TestMain`, overall result and time | `go ./internal/daemon` |
-| Vitest file, relative to `app/` | `vitest src/App.desktops.test.tsx` |
-| Playwright file, relative to `app/` | `playwright e2e/queue-sidebar-fit.spec.ts` |
 | Native scenario | `native agent-reload` |
 | Test target of a crate in `native/`: unit tests, doc tests, a test or a binary | `cargo attn-client --lib`, `cargo attn-client --doc`, `cargo attn-app --test wire` |
 
-A result's `case` names a Go subtest path, a Vitest test's full name, a
-Playwright `project › describe › title`, or a Rust test's path, such as
+A result's `case` names a Go subtest path or a Rust test's path, such as
 `wire::window::the_window_shows_the_placeholder`. A result without a case is the
 unit's own.
 
@@ -176,9 +171,8 @@ unit's own.
 
 A test the runner never reported has no result: absence is never a pass. A Go
 test still running when its package ended, as after a test timeout, failed. A
-test stopped by a signal was interrupted. Every retry is its own attempt.
-Vitest reports only how many retries a test needed, so the test's earlier
-attempts are recorded as failed with the detail `retried`. A Rust test binary
+test stopped by a signal was interrupted. Every retry is its own attempt. A
+Rust test binary
 that exits before it reports its result, as after an abort, failed with the
 detail `the test binary exited before reporting its result`, and its tests that
 had not reported have no result.
@@ -196,35 +190,26 @@ arguments name the groups whose path pattern matched the change. `land.sh`
 runs:
 
 - the baseline: every unit of those groups in `scripts/landing-tests`, including
-  `cargo .`, every test of the `native/` workspace in one run. A group can also
-  name `vitest .`, the whole Vitest suite in one run; none does since the Tauri
-  app's tests left the landing
+  `cargo .`, every test of the `native/` workspace in one run
 - the tests the change touches:
   - top-level Go tests whose function overlaps a changed line in a `_test.go`
     file outside `testdata`
-  - changed test files of the App acceptance harness
-    (`app/scripts/real-app-harness/*.test.{ts,mjs}`) and of the browser runtime
-    the native app embeds (`app/src/browser/*.test.{ts,mjs}`)
 - every test that failed on `main` in a lane the landing runs it in and has
   since passed there, on at least one and fewer than 30 later main revisions in
-  that lane, whatever its runner, except the Tauri app's Vitest and Playwright
-  files, which `main` no longer runs. [Clearing](#clearing) says which lanes
+  that lane, whatever its runner. [Clearing](#clearing) says which lanes
   count. A test still red on `main`, with no pass since its last failure,
   is listed as `RED` and not run. The sheriff owns it. A red test blocks no
   landing, unless the test is in the baseline or the landing changes the test.
-  `land` writes a red Vitest file as `red vitest <file>`, and `landing-tests.sh`
-  leaves it out of the whole suite through `ATTN_VITEST_FILES_RED_ON_MAIN`, which
-  `app/vite.config.ts` reads. A red `native/` test is not left out of
-  `cargo .`, so it blocks every landing that changes `native/` until it is
-  fixed.
+  A red `native/` test is not left out of `cargo .`, so it blocks every landing
+  that changes `native/` until it is fixed.
 
 `land.sh` runs the tests through `scripts/landing-tests.sh --unit`, and any
 failure stops the push. `land.sh` prints each test's result, skipped tests
-included, and the command that reruns a failed test. The whole Vitest suite prints its failures, a count of the files that passed,
-and its log only when a file failed. `cargo .` does the same and counts test
-targets. `landing-tests.sh` runs its Go, Vitest, Playwright and cargo tests at
-once, and splits `./cmd/attnd`'s tests across five `go test` runs, each with
-its own receipt. When a landing runs the Go
+included, and the command that reruns a failed test. `cargo .` prints its
+failures, a count of the test targets that passed, and its log only when a
+target failed. `landing-tests.sh` runs its Go and cargo tests at once, and
+splits `./cmd/attnd`'s tests across five `go test` runs, each with its own
+receipt. When a landing runs the Go
 checks, `land.sh` passes `--no-go-vet`, which leaves out `go test`'s own vet,
 because those checks run `go vet` on every package. Every other run keeps it,
 and only the first `./cmd/attnd` run vets that package.
@@ -304,9 +289,8 @@ unit's passes since are the main revisions after the anchor that passed in that
 lane. When the
 failure named cases, a passing revision must also pass each of them, or be a
 run of the whole unit that no longer reports the case, as after a renamed
-subtest. A run filtered to other cases (Go `-run` with a subtest or `-skip`,
-Vitest `-t`, Playwright `--grep`) does not clear the failure, and neither does
-a skip of the case.
+subtest. A run filtered to other cases (Go `-run` with a subtest or `-skip`)
+does not clear the failure, and neither does a skip of the case.
 
 Only passes in the failing lane clear a failure, so selection counts only the
 lanes a landing runs the unit in: those of the landing host's operating system,
@@ -358,9 +342,6 @@ receipts on this machine class and lane whose command exited with status 0,
 including dirty and unlanded receipts. Each figure is the median of its
 samples.
 
-- A Vitest or Playwright file costs the wall time of a command that reported
-  only that file, setup included. Pricing ignores a run filtered to some tests
-  (Vitest `-t`, Playwright `--grep`).
 - A Go selection runs as one `go test` command, and its packages run in
   parallel. The selection's price is the command setup plus the time of the
   slowest package. A package's time is its own setup and teardown plus the times

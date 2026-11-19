@@ -1,7 +1,7 @@
-//! Finds an agent's message, as the markdown it wrote, on the terminal rows its TUI drew it
-//! on, as the Tauri terminal does (`terminalMessageAlign.ts`): words are paired between the
-//! two, so a span of the markdown maps to cells and a drag over cells maps back to the markdown.
-//! Markdown offsets count UTF-16 code units, as the daemon stores them; columns count cells.
+//! Finds an agent's message, as the markdown it wrote, on the terminal rows its TUI drew it on:
+//! words are paired between the two, so a span of the markdown maps to cells and a drag over cells
+//! maps back to the markdown. Markdown offsets count UTF-16 code units, as the daemon stores them;
+//! columns count cells.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 

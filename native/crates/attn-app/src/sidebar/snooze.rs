@@ -7,7 +7,7 @@ use crate::State;
 use crate::calendar::{clock, iso};
 use crate::calendar::{local_day, local_instant, weekday};
 
-/// The hour a day-named snooze ends at, as in the Tauri app.
+/// The hour a day-named snooze ends at.
 const WAKE_HOUR: i64 = 9;
 const MINUTE_MS: i64 = 60_000;
 const HOUR_MS: i64 = 60 * MINUTE_MS;
@@ -127,7 +127,7 @@ pub struct Menu {
     pub opened_ms: i64,
 }
 
-/// Opens the menu with its first choice focused, as the Tauri app's does.
+/// Opens the menu with its first choice focused.
 pub(crate) fn open(
     state: &mut State,
     session: &str,

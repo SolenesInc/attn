@@ -2200,7 +2200,7 @@ fn a_file_copying_when_the_profile_changes_finishes_into_its_own_draft() {
     assert_eq!(
         (a["text"].as_str(), &a["files"]),
         (Some("A draft"), &json!([])),
-        "the disk names a file only once its bytes are there, as the Tauri app reads it"
+        "the disk names a file only once its bytes are there"
     );
     release(&mut world, &source, &png());
     assert_eq!(message_text(&world), "B draft");

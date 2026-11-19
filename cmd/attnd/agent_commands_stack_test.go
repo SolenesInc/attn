@@ -2,7 +2,6 @@ package main_test
 
 import (
 	"encoding/base64"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -25,12 +24,12 @@ func connectBrowserHost(t *testing.T, s *testworld.Stack) *testworld.Peer {
 	}
 	host := s.Connect(protocol.ClientHelloMessage{
 		Cmd:              protocol.CmdClientHello,
-		ClientKind:       "tauri-app",
+		ClientKind:       protocol.ClientKindNativeApp,
 		Version:          "protocol-" + protocol.ProtocolVersion,
 		Capabilities:     []string{protocol.CapabilityBinaryPtyOutput, protocol.CapabilityBrowserHost},
 		ClientToken:      protocol.Ptr(strings.TrimSpace(string(token))),
 		BrowserHostToken: protocol.Ptr(browserHostToken),
-	}, http.Header{"Origin": []string{"tauri://localhost"}})
+	}, nil)
 	testworld.Await[protocol.InitialStateMessage](host, protocol.EventInitialState, nil)
 	return host
 }

@@ -23,8 +23,8 @@ pub(crate) const fn style(kind: Type) -> TextStyle {
     }
 }
 
-/// `style` in the serif a person's own notes are set in: the Tauri editor's `ui-serif, Georgia,
-/// 'Times New Roman', serif`, with Linux's usual serifs for `serif`.
+/// `style` in the serif a person's own notes are set in: New York, Georgia or Times New Roman,
+/// with Linux's usual serifs after them.
 pub(crate) const fn serif(style: TextStyle) -> TextStyle {
     style.family(rune::Family::Named(
         "New York, Georgia, Times New Roman, Noto Serif, DejaVu Serif, Liberation Serif",
@@ -261,8 +261,7 @@ pub(crate) const WORDMARK: TextStyle = TextStyle::new(24.0, 700.0).mono();
 /// What the brand is, under its wordmark: widely spaced capitals in the interface face.
 pub(crate) const TAGLINE: TextStyle = TextStyle::new(12.0, 400.0).tracking(0.9);
 
-/// A code the person matches by eye, as the Tauri app's `.sender-pairing-code`: 40/600
-/// monospace, spaced 0.3em.
+/// A code the person matches by eye: 40/600 monospace, spaced 0.3em.
 pub(crate) const MATCH_CODE: TextStyle = TextStyle::new(40.0, 600.0).mono().tracking(12.0);
 
 /// `e` in `style`, for the text a caller outside the type roles still hands in, such as a

@@ -1,0 +1,8 @@
+{
+  "name": "attn-prompt-editor-tests",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

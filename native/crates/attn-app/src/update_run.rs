@@ -55,7 +55,7 @@ fn phase_text(phase: &str) -> &str {
     }
 }
 
-/// The step `outpost` is at in a run, in the Tauri app's words.
+/// The words for the step `outpost` is at in a run.
 pub(crate) fn outpost_step(outpost: &UpdateOutpostProgress) -> &str {
     match outpost.state.as_str() {
         "staging" => match outpost.detail.as_deref() {

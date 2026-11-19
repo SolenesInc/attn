@@ -144,7 +144,7 @@ EOF
   exit 0
 fi
 
-for command in claude pnpm cargo; do
+for command in claude; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "prepare release: ${command} is required" >&2
     exit 1
@@ -165,14 +165,10 @@ cd "$prepare"
 echo "Cutting ${release_branch} from ${main_sha}..."
 ./scripts/compile-changelog.sh
 go run ./cmd/release-train version set "$version_tag"
-(cd app && pnpm install --frozen-lockfile)
-cargo metadata --manifest-path app/src-tauri/Cargo.toml --format-version 1 >/dev/null
 go run ./cmd/release-train version check "$version_tag"
 go run ./cmd/release-train manifest write --version "$version_tag" --main "$main_sha"
 
-git add -A CHANGELOG.md .github/release-candidate.yml VERSION \
-  app/package.json app/pnpm-lock.yaml app/src-tauri/tauri.conf.json \
-  app/src-tauri/Cargo.toml app/src-tauri/Cargo.lock
+git add -A CHANGELOG.md .github/release-candidate.yml VERSION
 git commit -m "chore(release): prepare ${version_tag}"
 candidate_sha="$(git rev-parse HEAD)"
 

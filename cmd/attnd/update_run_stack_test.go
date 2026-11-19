@@ -19,11 +19,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-const updateFixtureMakefile = `STAGED = staged-$(or $(APP),tauri)
-
-build-app:
-	mkdir -p "$(STAGED)"
-	printf '{"app":"%s"}' "$(or $(APP),tauri)" > "$(STAGED)/build-identity.json"
+const updateFixtureMakefile = `build-app:
 	cp "$(TARGET_DIR)/attn" attn
 	cp "$(TARGET_DIR)/attnd" attnd
 	@if [ -n "$(TARGET_ENV)" ]; then printf '#!/bin/sh\nexec env %s "%s" "$$@"\n' "$(TARGET_ENV)" "$(TARGET_DIR)/attnd" > attnd; fi
@@ -34,10 +30,8 @@ install-staged:
 	@if [ -n "$(FAIL_INSTALL)" ]; then exit 1; fi
 	@if [ -n "$(HOLD_INSTALL)" ]; then cat "$(HOLD_INSTALL)" >/dev/null; fi
 	@if [ -n "$(RESTART_REACHED)" ]; then "$(TREE)/bin/attnd" daemon stop; echo reached > "$(RESTART_REACHED)"; cat "$(RESTART_RELEASE)" >/dev/null; fi
-	test -d "$(STAGED)"
 	rm -rf "$(TREE)"
-	mkdir -p "$(TREE)/bin" "$(TREE)/resources"
-	cp "$(STAGED)/build-identity.json" "$(TREE)/resources/build-identity.json"
+	mkdir -p "$(TREE)/bin"
 	cp attn "$(TREE)/bin/attn"
 	cp "$(or $(BROKEN),attnd)" "$(TREE)/bin/attnd"
 	"$(TREE)/bin/attnd" daemon ensure
@@ -100,7 +94,7 @@ func newSourceInstall(t *testing.T, vars ...string) *sourceInstall {
 	runGit(t, stack.Dir, "init", "--bare", "-b", "main", install.origin)
 	runGit(t, stack.Dir, "clone", install.origin, install.checkout)
 	writeFixtureFile(t, filepath.Join(install.checkout, "Makefile"), updateFixtureMakefile, 0o644)
-	writeFixtureFile(t, filepath.Join(install.checkout, ".gitignore"), "attn\nattnd\nbuild-cache\nstaged-*\n", 0o644)
+	writeFixtureFile(t, filepath.Join(install.checkout, ".gitignore"), "attn\nattnd\nbuild-cache\n", 0o644)
 	runGit(t, install.checkout, "checkout", "-B", "main")
 	runGit(t, install.checkout, "add", ".")
 	runGit(t, install.checkout, "commit", "-m", "base")
@@ -539,25 +533,6 @@ func TestARepeatUpdateReusesTheWorktree(t *testing.T) {
 	}
 	if mustRead(t, cache) != "kept" {
 		t.Fatal("the repeat run lost the build cache")
-	}
-}
-
-func TestAnUpdateKeepsTheInstalledAppShell(t *testing.T) {
-	install := newSourceInstall(t)
-	identity := filepath.Join(install.tree, "resources", "build-identity.json")
-	if err := os.MkdirAll(filepath.Dir(identity), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeFixtureFile(t, identity, `{"app":"native"}`, 0o644)
-	install.expectRestart()
-	app := install.start(t)
-	startUpdate(t, app)
-	app = install.restarted()
-	if run := finalRun(app); run.Phase != protocol.UpdatePhaseDone {
-		t.Fatalf("update: %+v", run)
-	}
-	if got := mustRead(t, identity); got != `{"app":"native"}` {
-		t.Fatalf("installed build identity after the update = %s", got)
 	}
 }
 

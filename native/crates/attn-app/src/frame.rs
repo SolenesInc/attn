@@ -50,7 +50,7 @@ pub(crate) fn restored(app: App<State>, bundle_id: &str) -> App<State> {
 
 /// Whether the packaged-app harness parks this app's windows at the screen's edge, where
 /// they float above other apps' windows so the system never counts them covered and their
-/// motion keeps running, as the Tauri app's harness windows do.
+/// motion keeps running.
 pub(crate) fn harness_keeps_on_top() -> bool {
     std::env::var("ATTN_HARNESS_ALWAYS_ON_TOP").is_ok_and(|value| value == "1")
 }

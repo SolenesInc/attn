@@ -65,7 +65,7 @@ pub(crate) fn open_session(state: &mut State, session: &str, tx: &mut Tx) {
     }
 }
 
-/// Runs `editor` on folder `cwd` through the login shell, as the Tauri app does: the setting,
+/// Runs `editor` on folder `cwd` through the login shell: the setting,
 /// else `$EDITOR`, else `$VISUAL`.
 fn launch(editor: Option<&str>, cwd: String) -> Result<(), String> {
     let editor = editor

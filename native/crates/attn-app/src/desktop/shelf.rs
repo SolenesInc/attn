@@ -27,8 +27,8 @@ const MARK: DotSize = DotSize::Small;
 const WIDTH_LABEL_SECONDS: f64 = 1.5;
 /// How long a chip flashes when its tile arrives on the shelf.
 const FLASH_SECONDS: f64 = 0.9;
-/// The Tauri app's `top: calc(100% + 4px)` between the shelf's dots and the width control,
-/// which the control's own edge spans so the pointer crosses it without leaving both.
+/// The gap between the shelf's dots and the width control, which the control's own edge spans
+/// so the pointer crosses it without leaving both.
 const WIDTH_CONTROL_GAP_PX: f32 = 4.0;
 /// How far under the title bar's controls the layers they open hang.
 const ANCHOR_GAP_PX: f32 = 4.0;
@@ -556,9 +556,8 @@ fn chip_button(
     drop_bar(chip, drop, t)
 }
 
-/// The accent ring a chip shows while its tile's arrival flashes, held and then fading, as
-/// the Tauri app's `desktop-shelf-chip-arrival`; keyed by when the flash ends, so a new flash
-/// plays from the start.
+/// The accent ring a chip shows while its tile's arrival flashes, held and then fading; keyed
+/// by when the flash ends, so a new flash plays from the start.
 fn flash_ring(chip_key: &str, until: u64, t: &Tokens) -> El {
     blocks::Shelf::flash(format!("{chip_key}.flash.{until}"), t)
         .transition(rune::Transition::none())
@@ -587,8 +586,8 @@ fn dot_px(chip: &Chip) -> f32 {
     blocks::Shelf::marks_chip_width(chip.members.len(), MARK).max(LIVE_DOT_PX)
 }
 
-/// A tile on screen's button in the shelf, as the Tauri app's `.desktop-shelf-dot`: the marks
-/// of its column's tiles, filled while it holds the active tile.
+/// A tile on screen's button in the shelf: the marks of its column's tiles, filled while it
+/// holds the active tile.
 fn dot(chip: &Chip, current: bool, desktop: &str, t: &Tokens) -> El {
     let (desktop, leaf) = (desktop.to_owned(), chip.go.clone());
     blocks::Shelf::chip(
@@ -707,9 +706,9 @@ pub(crate) struct WidthControlHover {
     control: bool,
 }
 
-/// The width control, as the Tauri app's `.desktop-shelf-stepper`: under the shelf's dots
-/// while the pointer is over them or over it, drawn over the tiles so the chips beside the dots
-/// never move. Under dots that lead the shelf it starts at their left edge.
+/// The width control: under the shelf's dots while the pointer is over them or over it, drawn
+/// over the tiles so the chips beside the dots never move. Under dots that lead the shelf it
+/// starts at their left edge.
 pub(crate) fn width_control_layer(state: &State, t: &Tokens) -> Option<El> {
     let hover = &state.window.desk.width_control;
     if !(hover.dots || hover.control) {

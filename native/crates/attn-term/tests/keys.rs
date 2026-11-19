@@ -51,7 +51,7 @@ fn sent(key: Key, held: &str, physical: Option<Code>, platform: Platform) -> Opt
 }
 
 #[test]
-fn keys_send_what_the_tauri_terminal_sends() {
+fn each_key_sends_its_terminal_bytes() {
     let cases: &[Case] = &[
         ("letter", text("a"), "", Some(Code::KeyA), MAC, Some(b"a")),
         (

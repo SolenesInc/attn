@@ -37,8 +37,7 @@ fn drawn_characters(dir: &Path, found: &mut Vec<(char, String)>) {
 }
 
 /// The annotation labels' emoji, the pull request rows' role emoji and a launching agent's
-/// session emoji are the exception: they draw from the system's emoji font, as the Tauri app's
-/// do.
+/// session emoji are the exception: they draw from the system's emoji font.
 #[test]
 fn every_character_the_app_draws_is_in_a_font_it_bundles() {
     let fonts: Vec<FontRef> = attn_ui::FONTS

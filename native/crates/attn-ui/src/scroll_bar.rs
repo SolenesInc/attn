@@ -1,7 +1,6 @@
-//! The Tauri app's scroll bars. Its styled `::-webkit-scrollbar` is a scroller WebKit never
-//! overlays, so it shows whenever the content overflows, whatever the system "Show scroll bars"
-//! setting, and takes its width from the box while it does; the Markdown reader's thin bar is the
-//! system's own, and follows that setting.
+//! attn's scroll bars. A bar never overlays its content, so it shows whenever the content
+//! overflows, whatever the system "Show scroll bars" setting, and takes its width from the box
+//! while it does; the Markdown reader's thin bar is the system's own, and follows that setting.
 
 use rune_kit::ScrollBarStyle;
 

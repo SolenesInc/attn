@@ -211,16 +211,6 @@ func (t tree) inventory() (testhistory.Inventory, error) {
 			inventory[unit] = inventory[unit] || builds[file]
 		}
 	}
-	files, err := t.files("app/")
-	if err != nil {
-		return nil, err
-	}
-	for _, file := range files {
-		if unit, ok := testhistory.AppTestUnit(file); ok {
-			inventory[unit] = true
-		}
-	}
-	inventory[testhistory.VitestSuiteUnit] = true
 	crates, err := t.files("native/crates/")
 	if err != nil {
 		return nil, err
@@ -340,15 +330,6 @@ func changesBetween(base string, head tree) (change, error) {
 		}
 		for _, name := range testsTouching(path, source, ranges) {
 			tests[goUnit(path, name)] = true
-		}
-	}
-	present, err := gitOutput(append(append([]string{"diff", "--name-only", "--diff-filter=d"}, diffArgs...), "--", "app/")...)
-	if err != nil {
-		return change{}, err
-	}
-	for _, path := range append(strings.Fields(string(present)), keys(added)...) {
-		if unit, ok := testhistory.AppTestUnit(path); ok {
-			tests[unit] = true
 		}
 	}
 	changed.tests = keys(tests)

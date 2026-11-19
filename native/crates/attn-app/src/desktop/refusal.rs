@@ -1,5 +1,5 @@
-//! What a tile shows when the daemon refuses input sent to its terminal, as the Tauri app's
-//! `desktop-pane-refusal` flash and the keys its offline strip counts.
+//! What a tile shows when the daemon refuses input sent to its terminal: a flash, and the keys
+//! its offline strip counts.
 
 use std::collections::HashMap;
 

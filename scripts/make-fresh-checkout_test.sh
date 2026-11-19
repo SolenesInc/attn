@@ -15,7 +15,6 @@ probe() {
 }
 
 fetches_vt()   { probe build-libghostty-vt.sh scripts/build-libghostty-vt.sh "$1"; }
-installs_app() { probe 'pnpm --dir app install' app/pnpm-lock.yaml "$1"; }
 
 failed=0
 fail() {
@@ -29,18 +28,11 @@ case "$(go env GOOS)_$(go env GOARCH)" in
       fetches_vt "$target" ||
         fail "make $target does not fetch the native VT archive: a fresh checkout fails on ghostty/vt.h"
     done
-    ! fetches_vt lint-frontend ||
-      fail "the -W probe claims lint-frontend needs the native VT archive, which it does not"
+    ! fetches_vt test-scripts ||
+      fail "the -W probe claims test-scripts needs the native VT archive, which it does not"
     ;;
   *) echo "native VT probes skipped: this platform compiles the pure-Go stub" ;;
 esac
-
-for target in lint lint-frontend test-frontend test-e2e; do
-  installs_app "$target" ||
-    fail "make $target does not install app/node_modules: a fresh checkout fails on a missing oxlint"
-done
-! installs_app lint-go ||
-  fail "the -W probe claims lint-go needs app/node_modules, which it does not"
 
 [[ "$failed" -eq 0 ]] || exit 1
 echo 'fresh checkout tests passed'

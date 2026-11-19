@@ -39,8 +39,8 @@ use crate::keymap::Zoom;
 
 mod session_cookies;
 
-/// The agent's page script, built from `app/src/browser/runtime.ts` for both apps.
-const RUNTIME_JS: &str = include_str!("../../../../../app/src-tauri/generated/browser-runtime.js");
+/// The agent's page script.
+const RUNTIME_JS: &str = include_str!("runtime.js");
 const CONTROL_WORLD: &str = "attn-browser-control";
 /// The Tauri app's store, so a person signed in there stays signed in here.
 const DATA_STORE_ID: [u8; 16] = *b"attn-browser-v1!";

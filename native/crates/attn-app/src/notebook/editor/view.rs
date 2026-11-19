@@ -22,7 +22,7 @@ fn estimated_row() -> f32 {
     Reading::Text.written().line_px()
 }
 
-/// An image not read yet holds this much room, as the Tauri editor estimates it.
+/// An image not read yet holds this much room.
 const IMAGE_ESTIMATE: f32 = 220.0;
 
 /// How the editor finds itself in the window's state from a handler.

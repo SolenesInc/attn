@@ -202,7 +202,7 @@ fn an_osc_8_hyperlink_underlines_its_whole_label_and_opens_its_hidden_uri() {
     assert_eq!(
         opened(&mut world),
         Vec::<String>::new(),
-        "only web, mail and phone links open, as the Tauri app's opener allows"
+        "only web, mail and phone links open"
     );
 
     output(

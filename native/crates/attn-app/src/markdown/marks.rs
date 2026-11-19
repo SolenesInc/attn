@@ -1,6 +1,5 @@
 //! A document's draft of marks as the reader keeps it against the daemon's: what changed here
-//! since the daemon last answered, and the daemon's answer with those changes on top, as the
-//! Tauri reader's `documentDraft.ts` keeps them.
+//! since the daemon last answered, and the daemon's answer with those changes on top.
 
 use attn_protocol::MarkdownAnnotation;
 

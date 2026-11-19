@@ -99,7 +99,7 @@ fn build_identity() -> Result<Value, String> {
     serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))
 }
 
-/// On for named instances, as the Tauri app's server is; `ATTN_AUTOMATION=1` forces it on
+/// On for named instances; `ATTN_AUTOMATION=1` forces it on
 /// and `0` off.
 pub fn enabled(instance: &str) -> bool {
     match std::env::var("ATTN_AUTOMATION").as_deref() {
@@ -114,8 +114,7 @@ pub fn capture_manifest_path(bundle_id: &str) -> Option<PathBuf> {
     manifest_path(bundle_id).map(|main| main.with_file_name("ui-automation-capture.json"))
 }
 
-/// Where the Tauri app writes its manifest for this bundle id, so the runner finds either
-/// shell's server in one place.
+/// Where the app's automation server writes its manifest for this bundle id.
 pub fn manifest_path(bundle_id: &str) -> Option<PathBuf> {
     crate::instance::debug_dir(bundle_id).map(|dir| dir.join("ui-automation.json"))
 }

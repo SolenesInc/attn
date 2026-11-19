@@ -21,10 +21,9 @@ struct Checkout {
     subject: String,
 }
 
-/// Starts the user's agent in a new worktree of `pr`'s branch, as the Tauri app's New worktree
-/// session does: the daemon fetches the branch name when it is not known yet, clones or fetches
-/// the repository, makes the worktree, then the agent starts in it on the current desktop. The
-/// corner prompt says how far it got.
+/// Starts the user's agent in a new worktree of `pr`'s branch: the daemon fetches the branch
+/// name when it is not known yet, clones or fetches the repository, makes the worktree, then the
+/// agent starts in it on the current desktop. The corner prompt says how far it got.
 pub(crate) fn open_in_worktree(state: &mut State, pr: &PR, tx: &mut Tx) {
     let failed = |setup: &Setup| setup.failed.is_some();
     if state
@@ -173,7 +172,7 @@ fn add_worktree(state: &mut State, checkout: Checkout, branch: String, tx: &mut 
     );
 }
 
-/// What the user can do about a git step that failed, as the Tauri app words it.
+/// What the user can do about a git step that failed.
 fn explain(repo: &str, error: String) -> String {
     if error.contains("clone failed") {
         format!(

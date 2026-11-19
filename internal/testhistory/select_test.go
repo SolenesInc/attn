@@ -41,7 +41,7 @@ func receipt(where at, results ...th.Result) th.Receipt {
 		Schema: th.Schema, InvocationID: fmt.Sprintf("%s-%s-%d", where.commit, where.lane, len(results)),
 		Revision:    th.Revision{Commit: where.commit},
 		Lane:        where.lane,
-		Runner:      th.RunnerVitest,
+		Runner:      th.RunnerCargo,
 		Diagnostics: th.Diagnostics{MachineClass: machine},
 		Results:     results,
 	}
@@ -63,7 +63,7 @@ func caseResult(unit, name string, outcome th.Outcome) th.Result {
 }
 
 func filtered(r th.Receipt) th.Receipt {
-	r.Command.Argv = []string{"vitest", "run", "-t", "scrolls"}
+	r.Command.Argv = []string{"cargo", "test", "-p", "a", "--lib", "scrolls"}
 	return r
 }
 
@@ -71,7 +71,7 @@ func cached(unit string) th.Result {
 	return th.Result{Unit: unit, Attempt: 1, Outcome: th.Pass, Cached: true}
 }
 
-const unit = "vitest src/a.test.tsx"
+const unit = "cargo a --lib"
 
 func TestStandingFollowsTheSpecification(t *testing.T) {
 	main := th.NewMainline(commits(6))
@@ -247,20 +247,20 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 	main := th.NewMainline(commits(n + 4))
 	at := func(i int) string { return fmt.Sprintf("c%02d", i) }
 	const (
-		a, b      = "vitest src/a.test.tsx", "vitest src/b.test.tsx"
-		recent    = "vitest src/recent.test.tsx"
-		red       = "vitest src/red.test.tsx"
-		cleared   = "vitest src/cleared.test.tsx"
-		changed   = "vitest src/changed.test.tsx"
-		gone      = "vitest src/gone.test.tsx"
+		a, b      = "cargo a --lib", "cargo b --lib"
+		recent    = "cargo recent --lib"
+		red       = "cargo red --lib"
+		cleared   = "cargo cleared --lib"
+		changed   = "cargo changed --lib"
+		gone      = "cargo gone --lib"
 		scenario  = "native agent-reload"
 		macOnly   = "native mac-only"
-		macTest   = "vitest src/mac-only.test.tsx"
+		macTest   = "cargo mac-only --lib"
 		elsewhere = "go ./p TestElsewhere"
-		playwrite = "playwright e2e/x.spec.ts"
+		other     = "cargo x --lib"
 	)
-	list := recipes(t, "group app ^app/\nvitest src/a.test.tsx\nvitest src/b.test.tsx\ngroup e2e ^app/e2e/\nplaywright e2e/x.spec.ts\n")
-	inventory := th.Inventory{a: true, b: true, recent: true, red: true, cleared: true, changed: true, playwrite: true, elsewhere: true, macTest: true}
+	list := recipes(t, "group native ^native/\ncargo a --lib\ncargo b --lib\ngroup other ^other/\ncargo x --lib\n")
+	inventory := th.Inventory{a: true, b: true, recent: true, red: true, cleared: true, changed: true, other: true, elsewhere: true, macTest: true}
 	history := []th.Receipt{
 		receipt(on(at(1), linux), result(cleared, th.Fail), result(scenario, th.Fail), result(gone, th.Fail)),
 		receipt(on(at(1), linux), result(elsewhere, th.Fail)),
@@ -289,7 +289,7 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 		cleared: th.Cleared, gone: th.Missing, scenario: th.Selected,
 	}
 	if got := statuses(selection); !reflect.DeepEqual(got, want) {
-		t.Fatalf("statuses = %v, want %v: the matched group's baseline, the changed test and a failure with %d of %d passes run; one still red since its last failure is listed, not run; one with %d passes has cleared; a native scenario that has passed on Linux since runs too, though no inventory lists it, and counts only its Linux failures, the lane the scenario step runs; a scenario or a test that failed only on macOS is no candidate on a Linux host; a test gone from the checkout is missing; a Go failure that has passed since joins an app-only landing", got, want, n-1, n, n)
+		t.Fatalf("statuses = %v, want %v: the matched group's baseline, the changed test and a failure with %d of %d passes run; one still red since its last failure is listed, not run; one with %d passes has cleared; a native scenario that has passed on Linux since runs too, though no inventory lists it, and counts only its Linux failures, the lane the scenario step runs; a scenario or a test that failed only on macOS is no candidate on a Linux host; a test gone from the checkout is missing; a Go failure that has passed since joins a native-only landing", got, want, n-1, n, n)
 	}
 	for _, choice := range selection.Choices {
 		if choice.Unit == recent && choice.PassesLeft() != 1 {
@@ -376,7 +376,7 @@ func otherLane(r th.Receipt) th.Receipt {
 }
 
 func TestCostIsTheMedianOfWholeUnitSamples(t *testing.T) {
-	file, other := "vitest src/a.test.tsx", "vitest src/b.test.tsx"
+	file, other := "cargo a --lib", "cargo b --lib"
 	key := th.CostKey{Lane: mac, Machine: machine}
 	samples := []th.Receipt{
 		wall(receipt(on("c00", mac), result(file, th.Pass)), 1000),
@@ -392,7 +392,7 @@ func TestCostIsTheMedianOfWholeUnitSamples(t *testing.T) {
 		t.Fatalf("cost = %d, want the median 3000 of the single-file passing runs", got)
 	}
 	if th.BuildCosts(samples[3:4], key).Priced(other) {
-		t.Fatalf("a run of two files priced one of them")
+		t.Fatalf("a run of two targets priced one of them")
 	}
 
 	withCases := wall(receipt(on("c00", mac),
@@ -409,47 +409,12 @@ func failedCommand(r th.Receipt) th.Receipt {
 	return r
 }
 
-func TestFilteredAppRunsDoNotPriceTheirFile(t *testing.T) {
-	file := "vitest src/a.test.tsx"
-	whole := wall(receipt(on("c00", mac), result(file, th.Pass)), 3000)
-	for _, argv := range [][]string{{"vitest", "run", "src/a.test.tsx", "-t", "renders"}, {"vitest", "run", "--testNamePattern=renders"}} {
-		filtered := whole
-		filtered.Command.Argv = argv
-		if th.BuildCosts([]th.Receipt{filtered}, th.CostKey{Lane: mac, Machine: machine}).Priced(file) {
-			t.Errorf("%v priced the whole file", argv)
-		}
-	}
-	if !th.BuildCosts([]th.Receipt{whole}, th.CostKey{Lane: mac, Machine: machine}).Priced(file) {
-		t.Errorf("an unfiltered run did not price the file")
-	}
-}
-
-func TestOnlyTheAcceptanceHarnessAndBrowserRuntimeTestsAreLandingAppTests(t *testing.T) {
-	for path, want := range map[string]string{
-		"app/scripts/real-app-harness/common.test.mjs":  "vitest scripts/real-app-harness/common.test.mjs",
-		"app/scripts/real-app-harness/plan.test.ts":     "vitest scripts/real-app-harness/plan.test.ts",
-		"app/src/browser/runtime.test.ts":               "vitest src/browser/runtime.test.ts",
-		"app/src/browser/runtime.ts":                    "",
-		"app/src/App.test.tsx":                          "",
-		"app/src/utils/x.test.mjs":                      "",
-		"app/lint/rule.test.ts":                         "",
-		"app/e2e/queue.spec.ts":                         "",
-		"app/scripts/demo-harness/fixtures/a/b.test.js": "",
-		"app/src/helpers.ts":                            "",
-		"internal/x_test.go":                            "",
-	} {
-		if got, _ := th.AppTestUnit(path); got != want {
-			t.Errorf("AppTestUnit(%s) = %q, want %q", path, got, want)
-		}
-	}
-}
-
 func otherMachine(r th.Receipt) th.Receipt {
 	r.Diagnostics.MachineClass = "github-hosted 4cpu/16GB"
 	return r
 }
 
-var units = []string{"vitest src/a.test.tsx", "vitest src/b.test.tsx", "vitest src/c.test.tsx", "vitest src/d.test.tsx"}
+var units = []string{"cargo a --lib", "cargo b --lib", "cargo c --lib", "cargo d --lib"}
 
 func generateHistory(t *rapid.T, main []string) []th.Receipt {
 	lanes := []th.Lane{mac, linux}
@@ -478,7 +443,7 @@ func generateHistory(t *rapid.T, main []string) []th.Receipt {
 }
 
 func propertyRequest(t *rapid.T, main th.Mainline, history []th.Receipt) th.SelectRequest {
-	list, err := th.ParseRecipeList("group app ^app/\nvitest src/a.test.tsx\nvitest src/b.test.tsx\n")
+	list, err := th.ParseRecipeList("group native ^native/\ncargo a --lib\ncargo b --lib\n")
 	if err != nil {
 		t.Fatal(err)
 	}

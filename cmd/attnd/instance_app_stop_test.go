@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/codexshared"
+	"github.com/victorarias/attn/internal/config"
 )
 
 func TestInstanceAppStopHelperProcess(t *testing.T) {
@@ -353,5 +355,30 @@ func TestCleanInstanceReleasesTheAppLockWhenItFinishes(t *testing.T) {
 	defer f.Close()
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		t.Fatalf("the app lock is still held after the clean finished: %v", err)
+	}
+}
+
+func TestStopInstanceAppQuitsTheTauriAppAnUpdateReplaces(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("the Tauri app shipped only as a macOS bundle")
+	}
+	shrinkAppStopWaits(t)
+	r := sandboxedInstance(t)
+	tauriExecutable := filepath.Join(r.AppPath, "Contents", "MacOS", "app")
+	if err := os.MkdirAll(filepath.Dir(tauriExecutable), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(os.Args[0], tauriExecutable); err != nil {
+		t.Fatal(err)
+	}
+	r.AppExecutable = config.AppExecutableInTree(r.AppPath)
+	pid := spawnStubbornApp(t)
+	writeAppPID(t, r.DataDir, pid)
+
+	if msg, err := stopInstanceApp(r); err != nil {
+		t.Fatalf("stopInstanceApp over a Tauri bundle = %v (%q), want the running Tauri app quit", err, msg)
+	}
+	if !processGone(pid) {
+		t.Fatalf("the Tauri app (pid %d) outlived stopInstanceApp", pid)
 	}
 }

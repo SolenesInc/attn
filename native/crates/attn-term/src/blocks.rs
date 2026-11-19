@@ -1,10 +1,9 @@
-//! The command blocks a shell marks with OSC 133, kept as the Tauri terminal's block store
-//! keeps them (`terminalBlocks.ts`) and the daemon's worker does: one per command, from its
-//! prompt to the row the cursor was on when it ended.
+//! The command blocks a shell marks with OSC 133, kept as the daemon's worker keeps them: one per
+//! command, from its prompt to the row the cursor was on when it ended.
 
 use crate::vt::{Mark, PromptStep};
 
-/// The newest blocks kept, as the Tauri terminal keeps them.
+/// The newest blocks kept.
 pub const MAX_BLOCKS: usize = 200;
 
 /// Where a block's step happened. The app keeps a `Mark`, so the block stays on its text as

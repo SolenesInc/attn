@@ -202,7 +202,7 @@ fn note_line(key: &str, note: Option<&Note>, t: &Tokens) -> Option<El> {
     }
 }
 
-/// A worktree's mark, as the Tauri app's `worktreeGlyph`.
+/// A worktree's mark.
 fn glyph(state: &State, w: &Worktree) -> Glyph {
     if refreshing(state, &w.path) {
         Glyph::Refreshing

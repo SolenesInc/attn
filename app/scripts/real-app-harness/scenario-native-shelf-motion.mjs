@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -46,7 +46,7 @@ async function screen() {
 
 try {
   await runner.step('launch_app', async () => {
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     queueDaemonSettingRestore(observer, 'narrowest_tile_cols');
     observer.send({ cmd: 'set_setting', key: 'narrowest_tile_cols', value: NARROWEST_COLS });
     await observer.waitFor(() => observer.getSetting('narrowest_tile_cols') === NARROWEST_COLS, `narrowest_tile_cols is ${NARROWEST_COLS}`);

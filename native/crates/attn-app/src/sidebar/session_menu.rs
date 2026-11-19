@@ -83,8 +83,8 @@ fn rename(state: &mut State, tx: &mut Tx) {
     }
 }
 
-/// A reload with no terminal of a usable size asks for this one, as the Tauri app does, since
-/// the daemon needs a size to restart an agent that has no live worker.
+/// A reload with no terminal of a usable size asks for this one, since the daemon needs a size
+/// to restart an agent that has no live worker.
 const FALLBACK_SIZE: (u16, u16) = (80, 24);
 const MIN_COLS: u16 = 20;
 const MIN_ROWS: u16 = 8;
@@ -125,7 +125,7 @@ pub(crate) fn reload_session(state: &mut State, session: &str, tx: &mut Tx) {
     );
 }
 
-/// Ends the agent's session, as the Tauri app's Close session does: a crew member is
+/// Ends the agent's session: a crew member is
 /// protected and only says so, and the queue moves on from an agent on screen.
 fn close(state: &mut State, tx: &mut Tx) {
     let Some(session) = target(state) else {

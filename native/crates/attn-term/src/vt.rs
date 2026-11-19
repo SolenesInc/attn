@@ -226,7 +226,7 @@ unsafe extern "C" {
 pub const SNAPSHOT_FORMAT: &str = env!("ATTN_SNAPSHOT_FORMAT");
 
 const BRACKETED_PASTE: u16 = 2004;
-/// How much history a terminal keeps above its screen, as the Tauri terminal keeps.
+/// How much history a terminal keeps above its screen.
 const SCROLLBACK_BYTES: usize = 8 * 1024 * 1024;
 
 /// A key as libghostty-vt's encoder takes it: a physical key, its modifiers, the text it typed
@@ -286,9 +286,9 @@ impl Vt {
         Vt::clustering(NonNull::new(raw).expect("libghostty-vt made a terminal"))
     }
 
-    /// An emoji sequence draws as one glyph only while grapheme clustering (DECSET 2027) holds
-    /// it in one cell, so every terminal keeps the mode on, as the Tauri terminal does: a
-    /// program's reset or DECRST turns it off only until the end of the write.
+    /// An emoji sequence draws as one glyph only while grapheme clustering (DECSET 2027) holds it
+    /// in one cell, so every terminal keeps the mode on: a program's reset or DECRST turns it off
+    /// only until the end of the write.
     fn clustering(raw: NonNull<AttnTerm>) -> Vt {
         let mut vt = Vt {
             raw,
@@ -782,7 +782,7 @@ impl Vt {
         }
     }
 
-    /// `text` as a paste reaches the program, as the Tauri app sends it: line breaks become
+    /// `text` as a paste reaches the program: line breaks become
     /// carriage returns, wrapped in bracketed-paste marks when the program asked for them.
     pub fn encode_paste(&mut self, text: &str) -> Vec<u8> {
         let body = text.replace("\r\n", "\r").replace('\n', "\r");

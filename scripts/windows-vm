@@ -266,9 +266,9 @@ cmd_install() {
         printf 'Provisioned after %ss\n' $((SECONDS - started))
     fi
     "${runner[@]}" sync "${target[@]}"
-    "${runner[@]}" run "${target[@]}" -- make build-app "INSTANCE=$instance" APP=native
+    "${runner[@]}" run "${target[@]}" -- make build-app "INSTANCE=$instance"
     printf 'Built after %ss\n' $((SECONDS - started))
-    "${runner[@]}" run "${target[@]}" -- make install-staged "INSTANCE=$instance" APP=native
+    "${runner[@]}" run "${target[@]}" -- make install-staged "INSTANCE=$instance"
     printf 'Installed after %ss\n' $((SECONDS - started))
 }
 

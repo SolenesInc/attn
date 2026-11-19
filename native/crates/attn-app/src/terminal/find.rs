@@ -4,7 +4,7 @@ use rune::{TextEdit, Tx};
 
 use super::{Term, Terminals};
 
-/// The yellow the Tauri terminal washes find matches in.
+/// The yellow find matches are washed in.
 /// A match's wash, 0.28 of the yellow.
 const MATCH_WASH: u8 = 71;
 /// The focused match's wash, 0.6 of the yellow.

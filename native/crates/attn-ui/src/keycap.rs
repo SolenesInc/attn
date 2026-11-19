@@ -3,10 +3,10 @@ use rune::{Color, El, Platform, Shadow, row, text};
 use crate::Tokens;
 use crate::system::{Radius, Space, Type, door, words};
 
-/// The two keycaps the Tauri app draws. `Raised` is `Keycap.css`, the shortcut sheet's and the
-/// palette's key: bold sans on a lifted chip. `Outlined` is the `kbd` hint in drawers, footers
-/// and sentences: quiet monospace in a thin frame; `Ledged` is that frame with a 2-point
-/// bottom edge, as the ledger, the analytics list and the settings notes draw it.
+/// The two keycaps. `Raised` is the shortcut sheet's and the palette's key: bold sans on a lifted
+/// chip. `Outlined` is the `kbd` hint in drawers, footers and sentences: quiet monospace in a thin
+/// frame; `Ledged` is that frame with a 2-point bottom edge, as the ledger, the analytics list and
+/// the settings notes draw it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Look {
     Raised,
@@ -117,8 +117,7 @@ pub fn giving_way(groups: impl IntoIterator<Item = El>) -> El {
     )
 }
 
-/// The Tauri app's `.keycap`: a chip lifted by a drop shadow, a faint ring and a top light,
-/// in `Keycap.css`'s literal black and white.
+/// A chip lifted by a drop shadow, a faint ring and a top light, in literal black and white.
 fn raised_cap(cap: El, fill: Color) -> El {
     door::corner(door::inset(cap, Space::S6, Space::S0), Radius::Tag)
         .min_w(18.0)

@@ -413,7 +413,7 @@ pub(super) fn selection_cell(
     metrics.cell_in(term.vt.size(), slot, scale, at)
 }
 
-/// A selection's text as the Tauri terminal copies it: each row's cells, cleaned.
+/// A selection's text as the terminal copies it: each row's cells, cleaned.
 fn text_of(term: &mut Term, selection: Selection) -> String {
     let cols = term.vt.size().0;
     let lines: Vec<String> = selection

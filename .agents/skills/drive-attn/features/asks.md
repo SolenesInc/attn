@@ -38,7 +38,7 @@ withdraw them. Asks are on by default, and an agent keeps the setting it launche
 - ⌘⇧R (`dock.asks`, `native/crates/attn-app/src/keymap.rs`) opens and closes the asks drawer. The shortcut exists only while asks are on or any ask exists.
 - Palette (`native/crates/attn-app/src/palette/commands.rs`): `asks` ("Open asks").
 - Title bar: the asks button, named "N open asks", and the Asks group on home, one row per ask (`native/crates/attn-app/src/asks/view.rs`, `native/crates/attn-app/src/home/mod.rs`).
-- In the drawer (`native/crates/attn-app/src/asks/`): the ask list, each ask's questions with single, multiple, "Other…" and text answers, links to mentioned seeds in the subject, prose, question prompt and context, the note "Anything else for <agent>?", "Accept all recommended" (shown when two or more questions have a recommendation, and on the phone as `[data-testid="ask-accept-recommended"]`), "Snooze" or, for a snoozed agent's ask, "Wake" beside "Open agent", "Open in Garden" (`asks.open-seed`), "Send", "Replied" and "Close asks". An ask's images show from the home's copy and open larger on a press. The phone opens a mentioned seed from the same text and returns to the unfinished ask. When the seed's tender closed on standby, `asks.from` names it `<label> · on standby`, `asks.resumes` says "Your answer resumes it." (or, when the resume is blocked or `garden.tender_resume` is `watches` or `off`, that the answer waits for it), and the card has no Open agent or Snooze; the Tauri app's card says "waiting for the next tender" instead. Keys: ⌘↩ sends, a accepts all recommended, j and k step through asks, r shows replied asks, o opens the asking agent, s snoozes or wakes it, g opens the seed in the Garden, Escape closes.
+- In the drawer (`native/crates/attn-app/src/asks/`): the ask list, each ask's questions with single, multiple, "Other…" and text answers, links to mentioned seeds in the subject, prose, question prompt and context, the note "Anything else for <agent>?", "Accept all recommended" (shown when two or more questions have a recommendation, and on the phone as `[data-testid="ask-accept-recommended"]`), "Snooze" or, for a snoozed agent's ask, "Wake" beside "Open agent", "Open in Garden" (`asks.open-seed`), "Send", "Replied" and "Close asks". An ask's images show from the home's copy and open larger on a press. The phone opens a mentioned seed from the same text and returns to the unfinished ask. When the seed's tender closed on standby, `asks.from` names it `<label> · on standby`, `asks.resumes` says "Your answer resumes it." (or, when the resume is blocked or `garden.tender_resume` is `watches` or `off`, that the answer waits for it), and the card has no Open agent or Snooze. Keys: ⌘↩ sends, a accepts all recommended, j and k step through asks, r shows replied asks, o opens the asking agent, s snoozes or wakes it, g opens the seed in the Garden, Escape closes.
 - On the asking agent's tile header, the chip "Open ask: <subject>" opens the drawer on the oldest ask, and hovering it shows each ask with an Answer button (`native/crates/attn-app/src/asks/view.rs`). Sidebar rows, shelf chips and rail desktops carry a marker (`native/crates/attn-app/src/asks/view.rs`, `native/crates/attn-app/src/desktop/shelf.rs`, `native/crates/attn-app/src/sidebar/chrome.rs`).
 - **Settings → Agents and models → Session defaults**: the "Asks" switch (`asks_enabled`, `native/crates/attn-app/src/settings/agents.rs`).
 - Where people see what agents do: the title bar's asks button counts open asks except a snoozed agent's, and an ask row says "Waiting on you" when its agent is also owed a turn.
@@ -116,42 +116,6 @@ The steps press the macOS chords. On Linux press `mod+alt+r` for `mod+shift+r`, 
 - **From the person's shell.** `./attn ask list --session ask-agent` prints `No open asks.` and `./attn ask list --session ask-early` prints `Asks are off for this session.`
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn agent peek ask-agent` after each ask and after each answer lands, `./attn seed notes <seed>`, and `bridge tree` after each app step. Capture `bridge shot '{"path":"<P>/asks-drawer.png"}'` with an open ask, `<P>/asks-chip.png` with the chip's preview and `<P>/asks-links.png` with the seed's links and the image, with `<P>` written out. Name each file for its way in, such as `asks-chip-seed-notes.txt`.
 
-### In the Tauri app (the rollback)
-
-Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) says, then make `P`, `A` and the agents as above. The bridge keeps the app in the background, where CSS `:focus` can match nothing even when `document.activeElement` is the answer input, so use `dom_wait` with `"focused":true`.
-
-- **Turn asks on.**
-  - Press ⌘, (`ui.openSettings`) and click `[data-testid="settings-nav-agents"]` natively.
-  - Click `[data-testid="settings-feature-asks_enabled"]` natively. Its `aria-checked` turns `true`, and `./attn settings get asks_enabled` prints `true`. Close Settings with Escape.
-- **An agent asks.** After `open an ask`, the sidebar icon's label starts with `1 open ask`: `bridge dom_wait '{"selector":"[aria-label^=\"1 open ask\"]","timeoutMs":5000}'` matches.
-- **Open the drawer with the shortcut.** Run `bridge native_key '{"key":"r","modifiers":["command","shift"]}'`. `bridge dom_wait '{"selector":"[role=\"region\"][aria-label=\"Asks\"]","timeoutMs":5000}'` matches, and `bridge dom_text '{"selector":"[data-testid=\"ask-<ask>\"]"}'` reads `Cache store`, the question, `Postgres`, `recommended` and `Redis`.
-- **Answer from the keyboard.** `bridge dom_wait '{"selector":"[data-testid=\"ask-<ask>\"] input","focused":true,"timeoutMs":5000}'` matches: the first choice has focus. Run `bridge native_key '{"key":"space"}'`, then `bridge native_key '{"key":"Enter","modifiers":["command"]}'`. The drawer shows its empty state, `.asks-empty`.
-- **Replied asks.** With the drawer open, run `bridge native_key '{"key":"r"}'`. `bridge dom_text '{"selector":".asks-list"}'` reads `Replied in the last day` and `Cache store` with `replied`. Press Escape to close the drawer.
-- **Step through asks with the drawer's keys.**
-  - Plant a second seed and run `wsctl input --id <terminal> --text "open an ask" --enter`, then `wsctl input --id <terminal> --text "ask about <seed2>" --enter`, so two asks are open.
-  - Select ask-early for setup with `bridge select_session '{"sessionId":"ask-early"}'`.
-  - Press ⌘⇧R: the first ask, `Cache store`, has focus, and `bridge dom_text '{"selector":".asks-ask .asks-ask-subject"}'` reads it.
-  - Press `j`: it reads `Release note`, and focus is in its text field.
-  - Click `.asks-ask .asks-ask-subject` natively to move focus to the drawer, then press `k`: it reads `Cache store`.
-  - Press `j`, click the subject again and press `g`: `bridge garden_get_state` shows `here` naming the seed.
-  - Press Escape, open the drawer again, click the subject and press `o`: the drawer closes and `bridge get_state` shows `activeLeaf.sessionId` `ask-agent`.
-  - Withdraw the `Release note` ask, so only `Cache store` stays open for the queue bar.
-- **The queue bar.**
-  - With an ask open, run `./attn settings set queue_mode_enabled true` and press ⌘B to collapse the sidebar. `bridge dom_text '{"selector":"[data-testid=\"title-bar-right\"] .title-bar-count-badge"}'` reads `1`.
-  - Click the asks button in `[data-testid="title-bar-right"]` natively: the drawer opens on the ask.
-  - Press Escape, run `./attn settings set queue_mode_enabled false`, and click `[aria-label="Show sidebar"]` natively. Withdraw the `Cache store` ask the same way.
-- **Snooze and wake from the drawer.**
-  - With the `Cache store` ask from ask-agent open and the sidebar label starting `1 open ask`, open the drawer, click the subject natively and press `s`. `bridge dom_wait '{"selector":"[role=\"menu\"][aria-label=\"Snooze ask-agent\"]","timeoutMs":5000}'` matches. Press Enter: the menu closes and focus is on the drawer's `Wake` button.
-  - `bridge dom_text '{"selector":".asks-list"}'` reads `Snoozed` and `until …`, `.asks-count` is gone, and the sidebar label no longer starts with `1 open ask`.
-  - Press `s` again: the ask returns above the divider, `.asks-count` reads `1`, and the label starts with `1 open ask`.
-- **Open from the palette.** Open the palette as the README says, type `Open asks` and press Enter. The `[role="region"][aria-label="Asks"]` drawer opens. Press Escape.
-- **An ask about a seed, from the tile chip.**
-  - Select ask-agent for setup with `bridge select_session '{"sessionId":"ask-agent"}'`. `[data-testid="ask-chip-ask-agent"]` carries `aria-label="Open ask: Release note"`. Click it natively: the drawer opens on that ask, and `bridge dom_text '{"selector":".asks-ask-seed"}'` names `asks-drive`. The text field has focus.
-  - Click `[data-seed-target="<seed>"]` natively. `bridge garden_get_state` shows `here` naming the seed. Press Escape to return to the ask.
-  - Run `bridge native_text '{"text":"Ship it on Friday."}'` and `bridge native_key '{"key":"Enter","modifiers":["command"]}'`. `./attn seed notes <seed>` shows the answer as a note.
-- **Images travel with the ask.** After the image ask, open the drawer with ⌘⇧R: `bridge dom_wait '{"selector":".asks-markdown img[src^=\"data:image/png\"]","timeoutMs":5000}'` matches.
-- **Proof.** Keep `bridge dom_text` of the ask before answering and of the replied list, and `bridge capture_screenshot '{"path":"<P>/tauri-asks-drawer.png"}'` with an open ask on screen. The drawer reopens in the Replied list when you last left it there, so when `.asks-list` reads `Replied in the last day`, press `r` once with focus off any text field.
-
 ## Contexts
 
 - **Durability across restarts**: open asks, answers and the answer's inbox item are the daemon's records and survive app, daemon and machine restarts. The home keeps an ask's images under `<data-dir>/asks/<ask>/` until the ask's record goes. Each time the daemon starts, it copies any image an ask shows that has no copy yet, from its file on the home; this covers asks opened before attn copied images.
@@ -168,16 +132,15 @@ Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) s
 ## Tests
 
 - Wire: `native/crates/attn-app/tests/wire/asks.rs`, `internal/daemon/asks_wire_test.go` (overseen asks: `TestAnAgentReadsAndWithdrawsTheAsksOfTheAgentsItOversees`), `internal/daemon/phone_push_wire_test.go` (no push for a snoozed asker).
-- Stack: `cmd/attnd/ask_stack_test.go`, `cmd/attnd/ask_images_stack_test.go`, and in the Tauri app (the rollback) `app/e2e/asks.spec.ts`.
+- Stack: `cmd/attnd/ask_stack_test.go`, `cmd/attnd/ask_images_stack_test.go`.
 - Kernel: `internal/ask/ask_test.go`.
-- App: the Tauri app's (the rollback) `app/src/App.asks.test.tsx`.
 
 ## Gotchas
 
 - An answer is user input, so attn types it only after 30 seconds of quiet in the agent's terminal. `wsctl input` to the asking agent restarts that wait.
 - `attn ask --seed <id>` needs the asker to tend the seed. attn refuses it from an agent that has not claimed the seed, with `nobody is tending <seed> ... tend it first`.
 - attn types a multi-line answer as one bracketed paste, so the mock sees one prompt. Keep `answered the ask` as the fixture's first turn: the mock tries turns in order, and the rest of the answer carries the user's own words, which can match a later turn.
-- The drawer's letter keys act only while focus is on the drawer itself. ⌘⇧R and `j` put focus in an answer field, and a text answer's field takes the letter as text, so press `asks.part.0` first. In the Tauri app (the rollback), click the ask's subject natively instead. With the drawer closed, the letter reaches the agent's terminal and restarts the 30-second quiet wait.
+- The drawer's letter keys act only while focus is on the drawer itself. ⌘⇧R and `j` put focus in an answer field, and a text answer's field takes the letter as text, so press `asks.part.0` first. With the drawer closed, the letter reaches the agent's terminal and restarts the 30-second quiet wait.
 - The `dock.asks` shortcut, the palette command and the sidebar icon exist only while asks are on or some ask exists. An instance with asks turned off and no asks shows none of them. Their absence there is not a missing way in.
 - Working but wrong: after sending, the drawer moves to the next open ask, or to its empty state, with no confirmation that the answer reached the agent. The proof is the agent's screen, not the drawer.
 - `bridge press` cannot press a link inside a run of text, such as a seed's link in an ask: it waits for the link "to show" because no element of its own holds the link. Reach the link with Tab and press Enter.

@@ -12,7 +12,7 @@ const usage = `usage: go tool test-history <command>
 
   capture <runner> [--unit <unit>]... [--shard <shard>] [--receipt-out <file>] -- <command>
       Run a test command and seal a receipt of what it observed into the spool.
-      Runners: go, vitest, playwright, native. For go, the command is the
+      Runners: go, native, cargo. For go, the command is the
       arguments to go test. The exit status is the command's own.
       --unit names a requested unit; one that reports nothing is MISSING.
       --shard labels the receipt; it defaults to the command's --shard.
@@ -42,8 +42,7 @@ const usage = `usage: go tool test-history <command>
       matched: their baseline units, the tests the change touches, and every
       test that failed on main and has since passed there, until it passes on
       30 later main revisions; one still red on main is listed, not run.
-      Writes the units to run, one per line, to <file>, with "red vitest <file>"
-      lines for files to leave out of the whole Vitest suite, and prints each
+      Writes the units to run, one per line, to <file>, and prints each
       added, red, missing or unavailable test with its reason. When the sync fails,
       it chooses from the history already synced; with no successful sync in
       the spool, it chooses the baseline.

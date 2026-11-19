@@ -423,8 +423,8 @@ pub(crate) fn look(t: &Tokens) -> MarkdownStyle {
     attn_ui::system::document_style(t)
 }
 
-/// An image with no picture to show, in the Tauri reader's words: for a document's local file,
-/// missing when its read `failed` and loading until then; blocked for anything else.
+/// What an image with no picture to show says: for a document's local file, missing when its
+/// read `failed` and loading until then; blocked for anything else.
 fn missing(image: &MissingImage<'_>, failed: Option<bool>, t: &Tokens) -> El {
     let named = if image.alt.is_empty() {
         image.src.rsplit('/').next().unwrap_or(image.src)
@@ -508,7 +508,7 @@ fn not_drawn(source: El, t: &Tokens) -> El {
 /// The widest a diagram's card draws in a document, the kit's default.
 const DIAGRAM_ROOM: f32 = 680.0;
 /// A diagram whose card would draw it smaller than this share of its natural size shows at its
-/// natural size instead, scrolling, as the Tauri reader's `OVERSIZED_FIT_RATIO` does.
+/// natural size instead, scrolling.
 const LEAST_FIT: f32 = 0.8;
 /// `source` at its natural size, laid out for the room a document gives it, so a diagram that
 /// turns top-down to fit that room turns here too.
@@ -516,10 +516,10 @@ pub(crate) fn natural(source: &str, t: &Tokens) -> Option<rune_kit::mermaid::Dra
     rune_kit::mermaid::drawing(source, &look(t).diagram_min_scale(1.0), DIAGRAM_ROOM)
 }
 
-/// The tallest a large diagram's scroll box grows, as the Tauri reader's `min(52vh, 410px)`.
+/// The tallest a large diagram's scroll box grows.
 const LARGE_HEIGHT: f32 = 410.0;
 
-/// A diagram as the Tauri reader frames it: a `diagram` bar over its card, and a diagram too
+/// A diagram framed: a `diagram` bar over its card, and a diagram too
 /// wide to read fitted shows at its natural size in a box that scrolls, its bar saying so and
 /// offering to focus it, which opens it over the window to zoom and pan.
 fn framed(card: El, frame: &rune_kit::DiagramFrame<'_>, bars: &str, t: &Tokens) -> El {
@@ -596,7 +596,7 @@ fn leaves_out(card: El, frame: &rune_kit::DiagramFrame<'_>, t: &Tokens) -> El {
 }
 
 /// What the tile body says in place of a document, where the document's first line would
-/// start: the Tauri tile's italic quiet note, or its error in a softened red.
+/// start: an italic quiet note, or its error in a softened red.
 fn message(t: &Tokens, message: &str, error: bool) -> El {
     let said = if error {
         set_in(text(message), Reading::Text).color(attn_ui::colors::mix_srgb(

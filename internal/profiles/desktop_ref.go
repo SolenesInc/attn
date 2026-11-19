@@ -8,7 +8,7 @@ import (
 )
 
 // DesktopLabel is the name a desktop shows; an unnamed one reads "Desktop N"
-// like the app's desktopLabel (app/src/utils/desktops.ts).
+// like the native app's desktop_title (native/crates/attn-app/src/sidebar/model.rs).
 func DesktopLabel(desktop Desktop, desktops []Desktop) string {
 	if name := strings.TrimSpace(desktop.Name); name != "" {
 		return name

@@ -60,7 +60,7 @@ fn panel(state: &mut State) -> &mut Plugins {
     &mut state.window.settings.plugins
 }
 
-/// Clears the source and reads the list, as the Tauri dialog does each time it opens.
+/// Clears the source and reads the list.
 pub(super) fn open(state: &mut State, tx: &mut Tx) {
     panel(state).source = TextEdit::default();
     refresh(state, tx);
@@ -290,7 +290,7 @@ pub(super) fn poll(state: &mut State, now: f64) -> bool {
     plugins.saved.len() != marks
 }
 
-/// The state a plugin's runtime is in, as the Tauri page words it.
+/// The state a plugin's runtime is in, in words.
 fn runtime(plugin: &PluginInfo) -> &str {
     if !plugin.runtime_state.is_empty() {
         return &plugin.runtime_state;

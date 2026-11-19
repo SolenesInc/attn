@@ -3,12 +3,9 @@ import net from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 import { agentTripwireLaunchEnv } from './agentTripwire.mjs';
 import { mockGitHubLaunchEnv } from './mockGitHub.mjs';
-import { appCliInTree, appPlatform, appShellInTree } from './platform.mjs';
+import { appPlatform } from './platform.mjs';
 import {
   assertProductionRunAllowed,
   bundleIdentifierForAppPath,
@@ -17,11 +14,6 @@ import {
   instanceForAppPath,
 } from './harnessInstance.mjs';
 
-const execFileAsync = promisify(execFile);
-const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(HARNESS_DIR, '../../..');
-const SOURCE_FINGERPRINT_SCRIPT = path.join(REPO_ROOT, 'scripts', 'source-fingerprint.sh');
-const MINIMAL_SYSTEM_PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -38,64 +30,6 @@ function isTransientManifestReadError(error) {
     return error.code === 'ENOENT';
   }
   return false;
-}
-
-function isRetryableAutomationAbsence(error) {
-  const message = error instanceof Error ? error.message : String(error || '');
-  return message.includes('Session not found') || message.includes('Pane not found');
-}
-
-const TRANSIENT_SESSION_ACTIONS = new Set([
-  'click_pane',
-  'close_pane',
-  'drag_pane_selection',
-  'focus_pane',
-  'get_pane_state',
-  'get_desktop',
-  'read_pane_text',
-  'scroll_pane_to_top',
-  'wheel_pane',
-  'select_session',
-  'split_pane',
-  'type_pane_via_ui',
-  'write_pane',
-]);
-
-function readNonEmptyString(value) {
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function normalizeBuildInfo(raw) {
-  if (!raw || typeof raw !== 'object') {
-    return {
-      version: null,
-      buildTime: null,
-      sourceFingerprint: null,
-      gitCommit: null,
-    };
-  }
-  return {
-    version: readNonEmptyString(raw.version),
-    buildTime: readNonEmptyString(raw.buildTime),
-    sourceFingerprint: readNonEmptyString(raw.sourceFingerprint),
-    gitCommit: readNonEmptyString(raw.gitCommit),
-  };
-}
-
-function isFatalFrontendResponsivenessError(error) {
-  const message = error instanceof Error ? error.message : String(error || '');
-  return (
-    message.includes('Version mismatch:') ||
-    message.includes('packaged app source mismatch:') ||
-    message.includes('daemon source mismatch:') ||
-    message.includes('packaged app did not report build identity') ||
-    message.includes('failed to read build info from') ||
-    message.includes('current source fingerprint is unavailable')
-  );
 }
 
 export class UiAutomationClient {
@@ -117,13 +51,9 @@ export class UiAutomationClient {
     this.platform = platform;
     this.artifactsDir = artifactsDir;
     this.launch = null;
-    this.currentSourceIdentityPromises = new Map();
-    this.verifiedBuildIdentityKey = null;
   }
 
   async launchApp() {
-    // Always-on-top keeps WKWebView rAF/ResizeObserver unthrottled on a window that
-    // never takes focus; focus probes set ATTN_HARNESS_ALWAYS_ON_TOP=0 to opt out.
     const alwaysOnTop = process.env.ATTN_HARNESS_ALWAYS_ON_TOP !== '0';
     const harnessDaemonEnv = { ...agentTripwireLaunchEnv(), ...mockGitHubLaunchEnv() };
     // Park the attn window off-screen by default so scenarios don't cover the
@@ -131,12 +61,7 @@ export class UiAutomationClient {
     const HARNESS_PARK_VISIBLE_PX_DEFAULT = '20';
     const parkPxStr = process.env.ATTN_HARNESS_PARK_VISIBLE_PX ?? HARNESS_PARK_VISIBLE_PX_DEFAULT;
     const effectiveLaunchEnv = alwaysOnTop
-      ? {
-          ...harnessDaemonEnv,
-          ...this.launchEnv,
-          ATTN_HARNESS_ALWAYS_ON_TOP: '1',
-          ATTN_HARNESS_PARK_VISIBLE_PX: parkPxStr,
-        }
+      ? { ...harnessDaemonEnv, ...this.launchEnv, ATTN_HARNESS_ALWAYS_ON_TOP: '1' }
       : { ...harnessDaemonEnv, ...this.launchEnv };
 
     const focusDriver = this.#focusDriver();
@@ -285,32 +210,7 @@ export class UiAutomationClient {
     return JSON.parse(fs.readFileSync(this.manifestPath, 'utf8'));
   }
 
-  async listAppPids() {
-    return this.platform.listAppPids({ appPath: this.appPath });
-  }
-
-  async request(action, payload = {}, options = {}) {
-    const timeoutMs = options.timeoutMs ?? 35_000;
-    const retryBudgetMs = Math.min(options.retrySessionAbsenceMs ?? 5_000, timeoutMs);
-    const shouldRetrySessionAbsence = options.retrySessionAbsence ?? TRANSIENT_SESSION_ACTIONS.has(action);
-    const startedAt = Date.now();
-
-    while (true) {
-      try {
-        return await this.requestOnce(action, payload, timeoutMs);
-      } catch (error) {
-        if (!shouldRetrySessionAbsence || !isRetryableAutomationAbsence(error)) {
-          throw error;
-        }
-        if (Date.now() - startedAt >= retryBudgetMs) {
-          throw error;
-        }
-        await delay(200);
-      }
-    }
-  }
-
-  async requestOnce(action, payload = {}, timeoutMs = 35_000) {
+  async request(action, payload = {}, { timeoutMs = 35_000 } = {}) {
     const requestId = `ui-automation-client-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     let manifest;
 
@@ -340,10 +240,7 @@ export class UiAutomationClient {
       let buffer = '';
       const timeout = setTimeout(() => {
         cleanup();
-        const hint = action === 'capture_screenshot_data'
-          ? ' (the window is likely occluded and rAF-throttled; harness always-on-top keeps it visible)'
-          : '';
-        reject(new Error(`Automation request timed out: ${action} (${requestId}) after ${timeoutMs}ms${hint}`));
+        reject(new Error(`Automation request timed out: ${action} (${requestId}) after ${timeoutMs}ms`));
       }, timeoutMs);
       const cleanup = () => {
         clearTimeout(timeout);
@@ -400,142 +297,7 @@ export class UiAutomationClient {
     }
 
     throw new Error(
-      `Timed out waiting for frontend automation readiness: ${lastError instanceof Error ? lastError.message : lastError || 'bridge not ready'}`
-    );
-  }
-
-  async getCurrentSourceIdentity(app = 'tauri') {
-    if (!this.currentSourceIdentityPromises.has(app)) {
-      this.currentSourceIdentityPromises.set(app, execFileAsync('bash', [SOURCE_FINGERPRINT_SCRIPT, '--app', app, '--json'], {
-        cwd: REPO_ROOT,
-      }).then(({ stdout }) => JSON.parse(stdout)));
-    }
-    return this.currentSourceIdentityPromises.get(app);
-  }
-
-  resolveDaemonBinaryPath() {
-    const bundledPath = appCliInTree(this.appPath);
-    const explicitPath = this.launchEnv && typeof this.launchEnv === 'object' && typeof this.launchEnv.ATTN_DAEMON_BINARY === 'string'
-      ? this.launchEnv.ATTN_DAEMON_BINARY.trim()
-      : (typeof process.env.ATTN_DAEMON_BINARY === 'string' ? process.env.ATTN_DAEMON_BINARY.trim() : '');
-
-    if (explicitPath) {
-      if (fs.existsSync(explicitPath)) {
-        return explicitPath;
-      }
-      throw new Error(`Explicit daemon binary override not found: ${explicitPath}`);
-    }
-
-    if (fs.existsSync(bundledPath)) {
-      return bundledPath;
-    }
-
-    throw new Error(
-      `No bundled daemon binary found for packaged app checks (looked for ${bundledPath})`
-    );
-  }
-
-  async readBinaryBuildInfo(binaryPath) {
-    try {
-      const { stdout, stderr } = await execFileAsync(binaryPath, ['--build-info-json'], {
-        env: {
-          ...process.env,
-          ATTN_INSIDE_APP: '1',
-          ATTN_AGENT: 'codex',
-          PATH: MINIMAL_SYSTEM_PATH,
-        },
-        timeout: 1_500,
-      });
-      const parsed = JSON.parse(stdout);
-      const buildInfo = normalizeBuildInfo(parsed);
-      if (!buildInfo.sourceFingerprint) {
-        throw new Error(
-          `binary ${binaryPath} did not report a source fingerprint${readNonEmptyString(stderr) ? `: ${stderr.trim()}` : ''}`
-        );
-      }
-      return buildInfo;
-    } catch (error) {
-      const stderr = readNonEmptyString(error?.stderr);
-      const stdout = readNonEmptyString(error?.stdout);
-      const detail = stderr || stdout || (error instanceof Error ? error.message : String(error || 'unknown error'));
-      throw new Error(`failed to read build info from ${binaryPath}: ${detail}`);
-    }
-  }
-
-  async ensureBuildMatchesCurrentSource(state) {
-    const currentSource = await this.getCurrentSourceIdentity();
-    const currentFingerprint = readNonEmptyString(currentSource?.fingerprint);
-    const currentAppFingerprint = readNonEmptyString((await this.getCurrentSourceIdentity(appShellInTree(this.appPath)))?.fingerprint);
-    if (!currentFingerprint || !currentAppFingerprint) {
-      throw new Error('current source fingerprint is unavailable');
-    }
-
-    const appBuild = normalizeBuildInfo(state?.appBuild);
-    if (!appBuild.sourceFingerprint) {
-      throw new Error(
-        'packaged app did not report build identity; rebuild and reinstall attn.app before running real-app scenarios'
-      );
-    }
-    if (appBuild.sourceFingerprint !== currentAppFingerprint) {
-      throw new Error(
-        `packaged app source mismatch: app reports ${appBuild.sourceFingerprint}, current source is ${currentAppFingerprint}; rebuild and reinstall attn.app`
-      );
-    }
-
-    const daemonPath = this.resolveDaemonBinaryPath();
-    const cacheKey = `${currentFingerprint}|${appBuild.sourceFingerprint}|${daemonPath}`;
-    if (this.verifiedBuildIdentityKey === cacheKey) {
-      return;
-    }
-
-    const daemonBuild = await this.readBinaryBuildInfo(daemonPath);
-    if (daemonBuild.sourceFingerprint !== currentFingerprint) {
-      throw new Error(
-        `daemon source mismatch: ${daemonPath} reports ${daemonBuild.sourceFingerprint}, current source is ${currentFingerprint}; rebuild the resolved daemon binary before running real-app scenarios`
-      );
-    }
-
-    this.verifiedBuildIdentityKey = cacheKey;
-  }
-
-  async waitForFrontendResponsive(timeoutMs = 20_000, action = 'list_sessions') {
-    if (appShellInTree(this.appPath) === 'native') {
-      return this.waitForReady(timeoutMs);
-    }
-    const startedAt = Date.now();
-    let lastError = null;
-
-    while (Date.now() - startedAt < timeoutMs) {
-      try {
-        const requestTimeoutMs = Math.min(15_000, timeoutMs);
-        const state = await this.request('get_state', {}, { timeoutMs: requestTimeoutMs });
-        if (
-          state &&
-          typeof state === 'object' &&
-          'daemonReady' in state &&
-          state.daemonReady === false
-        ) {
-          const detail = typeof state.connectionError === 'string' && state.connectionError
-            ? `: ${state.connectionError}`
-            : '';
-          throw new Error(`daemon not ready${detail}`);
-        }
-        await this.ensureBuildMatchesCurrentSource(state);
-        if (action === 'get_state') {
-          return state;
-        }
-        return await this.request(action, {}, { timeoutMs: requestTimeoutMs });
-      } catch (error) {
-        lastError = error;
-        if (isFatalFrontendResponsivenessError(error)) {
-          throw error;
-        }
-      }
-      await delay(250);
-    }
-
-    throw new Error(
-      `Timed out waiting for frontend automation responsiveness via ${action}: ${lastError instanceof Error ? lastError.message : lastError || 'unknown error'}`
+      `Timed out waiting for app automation readiness: ${lastError instanceof Error ? lastError.message : lastError || 'bridge not ready'}`
     );
   }
 }

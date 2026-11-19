@@ -94,7 +94,7 @@ git -C "$repo" switch -q -c release/v99.98.97 "$main_sha"
 marker="$(cd "$repo" && go run ./cmd/release-train notes range)"
 printf '\n## [2099-01-01]\n\nNo changes users will notice.\n\n%s\n' "$marker" >>"$repo/CHANGELOG.md"
 (cd "$repo" && go run ./cmd/release-train manifest write --version v99.98.97 --main "$main_sha")
-git -C "$repo" add .github/release-candidate.yml VERSION app CHANGELOG.md
+git -C "$repo" add .github/release-candidate.yml VERSION CHANGELOG.md
 git -C "$repo" commit -q -m 'chore(release): prepare v99.98.97'
 export FAKE_CANDIDATES_PAGE_1=$'release/v99.98.97\thttps://github.com/example/attn/pull/1\n'
 run_gate origin/main HEAD release/v99.98.97 >"$work/release.out"

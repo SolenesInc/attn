@@ -82,20 +82,6 @@ Preconditions:
 - **Guidance without tool vents, and without analytics.** Run `./attn settings set analytics.tool_vents false` and launch a third agent with an empty fixture: its launch file holds `attn vent --about attn` once and `attn vent --about tools` not at all. Run `./attn settings set analytics.enabled false` and launch a fourth: its launch file never mentions `attn vent`.
 - **Proof.** In `$P`, keep the output of each `./attn` command with its exit code, `./attn agent peek vent-agent` after each prompt, `bridge tree` of `settings.analytics.list` and of the inspector after each key, `./attn seed show <seed> --json` after the plant and the undo, and `bridge shot '{"path":"<P>/vents.png"}'` with the list open, where `<P>` is the folder's path written out. Name each file for its way in, such as `vents-agent-send-peek.txt`. The `native-analytics-settings` scenario runs review, triage and planting.
 
-### In the Tauri app (the rollback)
-
-Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) says. The agent and shell steps above read the same daemon.
-
-- **Review in the app.** Read `bridge settings_get_state`. When `open` is false, press ⌘, with `bridge native_key '{"key":",","modifiers":["command"]}'`. When the state shows a `search`, clear the search as [settings.md](settings.md)'s GitHub hosts step does. Scroll the Analytics nav button into view with `bridge dom_scroll_into_view '{"selector":"[data-testid=\"settings-nav-analytics\"]"}'` before clicking it natively. Run `bridge dom_wait '{"selector":"ol[aria-label=\"Vents\"]","textIncludes":"attn turn settle","timeoutMs":5000}'`. `bridge dom_text '{"selector":"ol[aria-label=\"Vents\"]"}'` reads `New` above the `attn turn settle` vent and the `tools` vent, and `Done` above the withdrawn one, marked `withdrawn`.
-- **Dismiss and undo with keys.** Click `ol[aria-label="Vents"] li:first-child button` natively, the `attn turn settle` vent. Run `bridge native_key '{"key":"d"}'`: `bridge dom_wait '{"selector":"[role=\"status\"]","textIncludes":"Dismissed “vent-agent”","timeoutMs":5000}'` matches and the row moves under `Done`. Run `bridge native_key '{"key":"u"}'`: `[role="status"]` reads `Undone.` and the vent is back under `New`.
-- **Move through the list.** Click the first row natively, then press `j`, `j`, `k`, `arrowdown` and `arrowup` with `bridge native_key`. After each key, `bridge dom_text '{"selector":"[data-testid=\"analytics-inspector\"]"}'` names the next or previous vent.
-- **The inspector's buttons.** Click `ol[aria-label="Vents"] li:nth-child(2) button` natively, the tool vent, the last vent under `New`: after a dismiss, the app moves the selection to the next vent under `New`. On the last vent under `New`, the selection stays in place. `[data-testid="analytics-inspector"] .analytics-actions button` holds the actions as `<key> <label>`. Click the one reading `d Dismiss` natively: `[role="status"]` reads `Dismissed “vent-agent”.` and the button reads `d Restore`. Click it again: `Restored “vent-agent”.`
-- **Plant a seed.** Click the same first row natively and run `bridge native_key '{"key":"p"}'`. `[role="status"]` reads `Planted <slug> from “vent-agent”.` `./attn seed search "turn settle"` finds the seed, titled with the vent's first line, and its body carries the vent's context. Run `bridge native_key '{"key":"u"}'`: `./attn seed show <seed>` shows `status withered`.
-- **Refile.** Click `ol[aria-label="Vents"] li:nth-child(2) button` natively, the tool vent, and run `bridge native_key '{"key":"s"}'`. `[role="status"]` reads `Filed “vent-agent” under attn.`. Press `s` again to file it back under tools.
-- **Tool vents from Machine settings.** Run `bridge native_key '{"key":"m"}'`, then click `[data-testid="analytics-machine"] .settings-row-card:nth-child(3) button` natively, the "Tool vents" row while sharing and `analytics.share_vents` are both off: `./attn settings get analytics.tool_vents` prints `false`. Click it again: `true`. Run `./attn settings set analytics.share_vents true`, select a row and press `m` again: a "Send vents" row appears above "Tool vents". Click its button natively: `./attn settings get analytics.share_vents` prints `false` and the row goes. Press `m` to close the panel.
-- **Open the session.** Closing Machine settings takes focus out of the page, so click `ol[aria-label="Vents"] li:first-child button` natively first, then run `bridge native_key '{"key":"o"}'`. The settings dialog closes (`bridge settings_get_state` shows `open: false`) and the app opens `vent-agent`, placing it on the current desktop: `bridge get_state` shows `activeLeaf.sessionId` set to `vent-agent`.
-- **Proof.** Keep `bridge dom_text` of the list and of `[data-testid="analytics-inspector"]` after each key, and `bridge capture_screenshot '{"path":"<P>/vents.png"}'` with the list open.
-
 ## Contexts
 
 - **Durability across restarts**: vents are the daemon's records and come back after any restart, and a session can still vent after a daemon restart. Dismissed and withdrawn vents are deleted after 30 days.
@@ -109,8 +95,7 @@ Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) s
 
 - Wire: `native/crates/attn-app/tests/wire/settings/analytics.rs`, `internal/daemon/vents_wire_test.go`, `internal/daemon/analytics_ship_wire_test.go`.
 - Stack: `cmd/attnd/vent_stack_test.go`.
-- Scenario: `native-analytics-settings`, and in the Tauri app (the rollback) `analytics-settings`.
-- App: the Tauri app's (the rollback) `app/src/components/Analytics/AnalyticsSettings.vents.test.tsx`.
+- Scenario: `native-analytics-settings`.
 
 ## Gotchas
 

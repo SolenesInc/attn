@@ -55,8 +55,7 @@ function appLocalDataDir(bundleId) {
 // place anywhere; deriving it from an instance would answer for another install.
 export function appExecutableInAppTree(appPath, platform = process.platform) {
   if (platform !== 'darwin') return path.join(appPath, 'bin', 'attn-app');
-  const native = path.join(appPath, 'Contents', 'MacOS', 'attn-app');
-  return fs.existsSync(native) ? native : path.join(appPath, 'Contents', 'MacOS', 'app');
+  return path.join(appPath, 'Contents', 'MacOS', 'attn-app');
 }
 
 function installedApp(appName) {
@@ -172,14 +171,6 @@ export function bundleIdentifierForAppPath(appPath, fallbackInstance = currentHa
   return bundleIdentifierForInstance(instanceForAppPath(appPath, fallbackInstance));
 }
 
-export function appExecutableForInstance(instance = currentHarnessInstance()) {
-  return resolveHarnessResources(instance).appExecutable;
-}
-
-export function appExecutableForAppPath(appPath, fallbackInstance = currentHarnessInstance()) {
-  return appExecutableForInstance(instanceForAppPath(appPath, fallbackInstance));
-}
-
 export function defaultAppPathForInstance(instance = currentHarnessInstance()) {
   return resolveHarnessResources(instance).appPath;
 }
@@ -207,17 +198,6 @@ export function clientTokenForInstance(instance = currentHarnessInstance()) {
   }
 }
 
-const PROTOCOL_VERSION_PATH = path.resolve(HARNESS_DIR, '../../src/types/protocolVersion.ts');
-
-export function readFrontendProtocolVersion() {
-  const source = fs.readFileSync(PROTOCOL_VERSION_PATH, 'utf8');
-  const match = /export const PROTOCOL_VERSION = '([^']+)'/.exec(source);
-  if (!match) {
-    throw new Error(`Could not find PROTOCOL_VERSION in ${PROTOCOL_VERSION_PATH}`);
-  }
-  return match[1];
-}
-
 export function harnessClientHello(clientKind, { version = 'real-app-harness', capabilities = [] } = {}) {
   return {
     cmd: 'client_hello',
@@ -226,10 +206,6 @@ export function harnessClientHello(clientKind, { version = 'real-app-harness', c
     capabilities,
     client_token: clientTokenForInstance(),
   };
-}
-
-export function socketPathForInstance(instance = currentHarnessInstance()) {
-  return resolveHarnessResources(instance).socket;
 }
 
 export function daemonPidFilePathForInstance(instance = currentHarnessInstance()) {
@@ -250,10 +226,6 @@ export function manifestPathForInstance(instance = currentHarnessInstance()) {
 
 export function captureManifestPathForInstance(instance = currentHarnessInstance()) {
   return path.join(appLocalDataDirForInstance(instance), 'debug', 'ui-automation-capture.json');
-}
-
-export function deepLinkSchemeForInstance(instance = currentHarnessInstance()) {
-  return resolveHarnessResources(instance).deepLinkScheme;
 }
 
 // An attn-hosted shell exports all six, and each one outranks the instance name:

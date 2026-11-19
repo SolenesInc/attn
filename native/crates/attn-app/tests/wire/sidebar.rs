@@ -1379,7 +1379,7 @@ fn an_agent_row_ends_its_marks_at_its_right_edge_and_flags_priority_ahead_of_its
 }
 
 #[test]
-fn a_launching_agent_leads_with_the_emoji_the_tauri_app_picks_for_it_until_logos_are_off() {
+fn a_launching_agent_leads_with_an_emoji_picked_by_its_id_until_logos_are_off() {
     let ids = ["l1", "38205d09-8ac6-4cec-84a3-77079b00f99c"];
     let mut world = World::start(Daemon::scripted().state(state(
         ids.iter().map(|id| session(id, "launching")).collect(),

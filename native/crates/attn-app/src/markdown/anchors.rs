@@ -1,5 +1,4 @@
-//! Heading anchors: each heading's GitHub-style slug, as the Tauri reader gives its headings ids
-//! (slugify.ts, rehypeHeadingSlugs.ts), so a `#fragment` link finds its heading.
+//! Heading anchors: each heading's GitHub-style slug, so a `#fragment` link finds its heading.
 
 use std::collections::HashMap;
 

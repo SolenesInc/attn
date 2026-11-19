@@ -46,20 +46,15 @@ FAKE
 
 cat >"$sandbox/bin/make" <<'FAKE'
 #!/usr/bin/env bash
-app=native
 for arg in "$@"; do
   case "$arg" in
   INSTANCE=*) instance="${arg#INSTANCE=}" ;;
-  APP=*) app="${arg#APP=}" ;;
   esac
 done
-case "$app" in
-native) resources="native/target/staged/attn-$instance.app/Contents/Resources" ;;
-*) resources="app/src-tauri/target/staged/attn-$instance.app/Contents/Resources" ;;
-esac
+resources="native/target/staged/attn-$instance.app/Contents/Resources"
 mkdir -p "$resources"
-printf '{"app":"%s","sourceFingerprint":"%s"}\n' "$app" "$(bash scripts/source-fingerprint.sh --app "$app")" >"$resources/build-identity.json"
-echo "$app $instance" >>"$FAKE_BUILDS"
+printf '{"sourceFingerprint":"%s"}\n' "$(bash scripts/source-fingerprint.sh --app native)" >"$resources/build-identity.json"
+echo "$instance" >>"$FAKE_BUILDS"
 FAKE
 
 cat >"$sandbox/bin/macvm" <<'FAKE'
@@ -203,31 +198,18 @@ expect "adopt names a missing instance" says "$out" "no instance 'nothing'"
 expect "adopt on a missing instance takes nothing" absent "$guest/vm-instance-owners/nothing"
 as attn-b down --instance nothing >/dev/null
 
-# Moving an instance from the Tauri app to the native app at one commit installs the native app.
-APP=tauri as attn-a up --instance switch >/dev/null
-APP=native as attn-a up --instance switch >/dev/null
-expect "APP=native up on an instance running the Tauri app installs the native app" \
-  same "$(jq -r .app "$guest/Applications/attn-switch.app/Contents/Resources/build-identity.json")" native
-APP=native as attn-a down --instance switch >/dev/null
-
-# A change under native/ alone rebuilds the native app, and only the native app.
+# A change under native/ rebuilds and reinstalls the app; an unchanged tree builds it once.
 builds_of() { grep -c "^$1$" "$FAKE_BUILDS"; }
 guest_source() { jq -r .sourceFingerprint "$guest/Applications/attn-$1.app/Contents/Resources/build-identity.json"; }
-APP=native as attn-a up --instance native >/dev/null
-APP=tauri as attn-a up --instance tauri >/dev/null
-APP=native as attn-a up --instance native >/dev/null
-APP=tauri as attn-a up --instance tauri >/dev/null
-expect "an unchanged tree builds the native app once" same "$(builds_of "native native")" 1
-expect "an unchanged tree builds the Tauri app once" same "$(builds_of "tauri tauri")" 1
-before="$(guest_source native)"
+as attn-a up --instance rebuild >/dev/null
+as attn-a up --instance rebuild >/dev/null
+expect "an unchanged tree builds the app once" same "$(builds_of rebuild)" 1
+before="$(guest_source rebuild)"
 printf 'fn main() { println!("changed"); }\n' >"$checkout/native/src/main.rs"
-APP=native as attn-a up --instance native >/dev/null
-expect "a change under native/ rebuilds the native app" same "$(builds_of "native native")" 2
-expect "a change under native/ reinstalls the native app" differ "$(guest_source native)" "$before"
-APP=tauri as attn-a up --instance tauri >/dev/null
-expect "a change under native/ does not rebuild the Tauri app" same "$(builds_of "tauri tauri")" 1
-APP=native as attn-a down --instance native >/dev/null
-APP=tauri as attn-a down --instance tauri >/dev/null
+as attn-a up --instance rebuild >/dev/null
+expect "a change under native/ rebuilds the app" same "$(builds_of rebuild)" 2
+expect "a change under native/ reinstalls the app" differ "$(guest_source rebuild)" "$before"
+as attn-a down --instance rebuild >/dev/null
 
 echo "vm_test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

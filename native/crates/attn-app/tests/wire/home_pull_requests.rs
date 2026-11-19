@@ -312,7 +312,7 @@ fn a_running_refresh_keeps_its_buttons_box_and_help_so_the_pointer_still_finds_i
 }
 
 #[test]
-fn the_refresh_dots_bounce_in_scale_and_opacity_as_the_tauri_dots_do() {
+fn the_refresh_dots_bounce_in_scale_and_opacity() {
     let mut world = start(one_desktop(vec![]), vec![]);
     press(&mut world, Action::SessionGoToDashboard);
     let refreshing = world.record(60.0, 3.0, |_, app| {

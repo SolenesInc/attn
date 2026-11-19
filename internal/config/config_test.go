@@ -127,52 +127,6 @@ func TestInstanceDerivation_DefaultAndDev(t *testing.T) {
 	}
 }
 
-func TestE2EPorts_BandsAreDisjoint(t *testing.T) {
-	if got := E2EDaemonPortForInstance(""); got != "19849" {
-		t.Errorf("E2EDaemonPortForInstance(\"\") = %q, want 19849", got)
-	}
-	if got := E2EVitePortForInstance(""); got != "1421" {
-		t.Errorf("E2EVitePortForInstance(\"\") = %q, want 1421", got)
-	}
-	for _, instance := range []string{"agent7", "alpha", "ci-2", "z"} {
-		dPort, err := strconv.Atoi(E2EDaemonPortForInstance(instance))
-		if err != nil {
-			t.Fatalf("E2EDaemonPortForInstance(%q) not numeric: %v", instance, err)
-		}
-		vPort, err := strconv.Atoi(E2EVitePortForInstance(instance))
-		if err != nil {
-			t.Fatalf("E2EVitePortForInstance(%q) not numeric: %v", instance, err)
-		}
-		if dPort < 30000 || dPort > 30999 {
-			t.Errorf("e2e daemon port for %q = %d, want [30000,30999]", instance, dPort)
-		}
-		if vPort < 31000 || vPort > 31999 {
-			t.Errorf("e2e vite port for %q = %d, want [31000,31999]", instance, vPort)
-		}
-		realPort, _ := strconv.Atoi(WSPortForInstance(instance))
-		for _, reserved := range []int{9849, 29849, 1420, 1421, 19849, realPort} {
-			if dPort == reserved || vPort == reserved {
-				t.Errorf("e2e port for %q collided with reserved %d (daemon=%d vite=%d)", instance, reserved, dPort, vPort)
-			}
-		}
-	}
-}
-
-func TestE2EPorts_NeverCollideWithRealDaemon(t *testing.T) {
-	instances := []string{"", "dev", "agent7", "agent8", "ci-1", "alpha"}
-	realPorts := map[string]string{}
-	for _, p := range instances {
-		realPorts[WSPortForInstance(p)] = p
-	}
-	for _, p := range instances {
-		for _, e2ePort := range []string{E2EDaemonPortForInstance(p), E2EVitePortForInstance(p)} {
-			if owner, taken := realPorts[e2ePort]; taken {
-				t.Errorf("e2e port %q for instance %q collides with the real daemon port of instance %q", e2ePort, p, owner)
-			}
-		}
-	}
-}
-
 func TestMockGitHubPort_HasItsOwnBand(t *testing.T) {
 	if got := MockGitHubPortForInstance(""); got != "19850" {
 		t.Errorf("MockGitHubPortForInstance(\"\") = %q, want 19850", got)
@@ -187,9 +141,7 @@ func TestMockGitHubPort_HasItsOwnBand(t *testing.T) {
 		}
 		taken := []string{
 			WSPortForInstance(instance),
-			E2EDaemonPortForInstance(instance),
-			E2EVitePortForInstance(instance),
-			"9849", "29849", "1420", "1421", "19849",
+			"9849", "29849", "19849",
 		}
 		for _, other := range taken {
 			if MockGitHubPortForInstance(instance) == other {

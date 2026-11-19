@@ -82,8 +82,7 @@ impl Row {
     }
 }
 
-/// The kind of thing a command acts on, which its row's icon shows, as the Tauri app's
-/// command icons.
+/// The kind of thing a command acts on, which its row's icon shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Icon {
     Context,
@@ -138,7 +137,7 @@ impl Icon {
     }
 }
 
-/// Where an agent row's agent stands with the user, as the Tauri app's `agentStatus`.
+/// Where an agent row's agent stands with the user.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Status {
     Unreachable,
@@ -592,9 +591,8 @@ fn record(state: &mut State, command: String, tx: &mut Tx) {
 /// The most agent rows the queue bar's peek lists.
 const PEEK_ROWS: usize = 16;
 
-/// The agents face with no query as the queue bar's peek lists it, as the Tauri app's
-/// `WaitingPeek`: no automation runs, at most `PEEK_ROWS` rows besides the dividers, and how
-/// many more there are.
+/// The agents face with no query as the queue bar's peek lists it: no automation runs, at most
+/// `PEEK_ROWS` rows besides the dividers, and how many more there are.
 pub(crate) fn peek_rows(state: &State) -> (Vec<Row>, usize) {
     let run = |row: &Row| {
         row.key.strip_prefix("agent:").is_some_and(|id| {

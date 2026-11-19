@@ -8,9 +8,9 @@ import { fileURLToPath } from 'node:url';
 import { emitVerdict, harnessArtifactsRoot, timestampSlug } from './common.mjs';
 import { instanceCliEnv } from './harnessInstance.mjs';
 import { formatShardDigest, selectFailedScenarios } from './matrixDigest.mjs';
-import { matrixScenario, resolveScenarios } from './scenarioCatalog.mjs';
+import { resolveScenario, resolveScenarios } from './scenarioCatalog.mjs';
 import { acquireScenarioLock, instanceScenarioLockPath } from './scenarioRunner.mjs';
-import { aggregateShards, matrixApp } from './shardPlan.mjs';
+import { aggregateShards } from './shardPlan.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const APP_DIR = path.resolve(HARNESS_DIR, '../..');
@@ -82,7 +82,7 @@ function parseArgs(argv) {
 
 function selectScenarioIds({ selected, failedOnly }, artifactsRoot) {
   if (!failedOnly) {
-    return selected.length > 0 ? selected.map((id) => matrixScenario(id).id) : null;
+    return selected.length > 0 ? selected.map((id) => resolveScenario(id).id) : null;
   }
   const lastMatrixPath = path.join(artifactsRoot, 'last-matrix.json');
   if (!fs.existsSync(lastMatrixPath)) {
@@ -228,7 +228,7 @@ async function main() {
   }
 
   const shardResults = workers.map(({ dir }) => readShardResult(artifactsRoot, dir)).filter(Boolean);
-  const expectedIds = scenarioIds ?? resolveScenarios([], matrixApp(shardResults)).map((scenario) => scenario.id);
+  const expectedIds = scenarioIds ?? resolveScenarios([]).map((scenario) => scenario.id);
   const aggregate = aggregateShards({ shardResults, expectedIds, shardCount: count });
   const { shardLines, digest } = formatShardDigest(shardResults, aggregate);
   console.log(`\n${shardLines.join('\n')}\n\n${digest}`);

@@ -1,9 +1,8 @@
-//! What an attach does to a terminal's stream, from `app/src/pty/attachPlanning.ts`.
+//! What an attach does to a terminal's stream.
 
 use std::collections::VecDeque;
 
-/// How the app asks the daemon to attach. A first attach is `SameAppRemount`: the Tauri app's
-/// `fresh_spawn` reaches the daemon as that.
+/// How the app asks the daemon to attach. A first attach is `SameAppRemount`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Policy {
     SameAppRemount,
@@ -27,8 +26,7 @@ impl Policy {
     }
 }
 
-/// PTY output while an attach is in flight waits here; the oldest goes first past this many,
-/// as in the Tauri app.
+/// PTY output while an attach is in flight waits here; the oldest goes first past this many.
 pub const QUEUED_OUTPUT: usize = 512;
 
 #[derive(Clone, Debug, PartialEq, Eq)]

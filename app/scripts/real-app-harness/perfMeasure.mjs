@@ -7,9 +7,7 @@ import {
   daemonPidFilePathForInstance,
   defaultAppPathForInstance,
 } from './harnessInstance.mjs';
-import { createSessionAndWaitForInitialPane } from './common.mjs';
 import { resetInstanceData } from './freshWorld.mjs';
-import { appShellInTree } from './platform.mjs';
 
 const execFileAsync = promisify(execFile);
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -72,7 +70,7 @@ export function classify(proc) {
   const command = proc.command;
   if (command.includes('pty-worker')) return 'pty_worker';
   if (/attnd? daemon/.test(command)) return 'daemon';
-  if (command.includes('/Contents/MacOS/app')) return 'app';
+  if (/\/(Contents\/MacOS|bin)\/attn-app( |$)/.test(command)) return 'app';
   if (command.includes('com.apple.WebKit.WebContent')) return 'webkit_webcontent';
   if (command.includes('com.apple.WebKit.Networking')) return 'webkit_networking';
   if (command.includes('com.apple.WebKit.GPU')) return 'webkit_gpu';
@@ -125,8 +123,6 @@ export function classRssMb(snap, label) {
 
 const REGION_SLICES = {
   graphics: ['owned unmapped (graphics)', 'VM_ALLOCATE (graphics)'],
-  webkitMalloc: ['WebKit Malloc', 'WebKit Malloc metadata'],
-  jsHeap: ['JS VM Gigacage', 'JS JIT generated code'],
   malloc: ['MALLOC_LARGE', 'MALLOC_SMALL', 'MALLOC_TINY'],
 };
 
@@ -348,11 +344,6 @@ export async function teardownInstanceState({ client, instance, wipe = true }) {
   }
 }
 
-export async function paneIdForSession(client, sessionId) {
-  const ws = await client.request('get_desktop', { sessionId }, { timeoutMs: 10_000 });
-  return ws.activePaneId || ws.panes?.[0]?.paneId || null;
-}
-
 export async function createSlottedDesktop(observer) {
   const desktop = await observer.createDesktop();
   if (!desktop.shortcut_slot) throw new Error(`desktop ${desktop.id} has no shortcut slot: all nine are taken`);
@@ -390,11 +381,6 @@ export async function showNativeDesktop(client, observer, desktop) {
 }
 
 export async function openPerfShell({ client, observer, cwd, label }) {
-  if (appShellInTree(client.appPath) !== 'native') {
-    return createSessionAndWaitForInitialPane({
-      client, observer, cwd, label, agent: 'shell', sessionWaitMs: 30_000, waitForInitialPaneVisible: true, initialPaneWaitMs: 25_000,
-    });
-  }
   const desktop = await perfDesktop(client, observer);
   const id = crypto.randomUUID();
   const spawned = observer.waitForMessage((m) => m.event === 'spawn_result' && m.id === id && m, `${label} spawned`, 30_000);
@@ -406,12 +392,8 @@ export async function openPerfShell({ client, observer, cwd, label }) {
   return id;
 }
 
-export async function closeSessions(client, ids, observer) {
+export async function closeSessions(ids, observer) {
   const closing = [...new Set(ids)];
-  if (appShellInTree(client.appPath) !== 'native') {
-    await Promise.allSettled(closing.map((sessionId) => client.request('close_session', { sessionId }, { timeoutMs: 15_000 })));
-    return;
-  }
   for (const sessionId of closing) observer.unregisterSession(sessionId);
   const desktop = perfDesktops.get(observer);
   if (!desktop) return;
@@ -432,26 +414,10 @@ async function perfDesktop(client, observer) {
   return desktop;
 }
 
-// Sequential with a per-pane settle: filling every pane at once overruns the
-// websocket's 256-message buffer (see AGENTS.md).
-export async function fillAllPanes(client, sessionIds, cmd, perPaneSettleMs, observer) {
-  let filled = 0;
+export async function fillAllPanes(sessionIds, cmd, perPaneSettleMs, observer) {
   for (const sessionId of sessionIds) {
-    if (appShellInTree(client.appPath) === 'native') {
-      observer.send({ cmd: 'pty_input', id: observer.terminalOf(sessionId), data: `${cmd}\r`, source: 'automation' });
-      filled += 1;
-      await delay(perPaneSettleMs);
-      continue;
-    }
-    const paneId = await paneIdForSession(client, sessionId);
-    if (!paneId) {
-      console.warn(`[perf] fill: no pane for session ${sessionId}`);
-      continue;
-    }
-    await client.request('write_pane', { sessionId, paneId, text: cmd }, { timeoutMs: 30_000 })
-      .catch((error) => console.warn(`[perf] fill write_pane ${sessionId} failed: ${error.message}`));
-    filled += 1;
+    observer.send({ cmd: 'pty_input', id: observer.terminalOf(sessionId), data: `${cmd}\r`, source: 'automation' });
     await delay(perPaneSettleMs);
   }
-  console.log(`[perf] filled ${filled}/${sessionIds.length} panes with \`${cmd}\``);
+  console.log(`[perf] filled ${sessionIds.length} panes with \`${cmd}\``);
 }

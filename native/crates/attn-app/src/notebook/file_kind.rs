@@ -1,4 +1,4 @@
-//! Which files the notebook opens as markdown, as plain text, or not at all (fileKind.ts). An
+//! Which files the notebook opens as markdown, as plain text, or not at all. An
 //! unknown kind stays closed, since saving an opaque file as text could change its bytes.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

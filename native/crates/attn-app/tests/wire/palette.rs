@@ -1619,10 +1619,7 @@ fn a_list_longer_than_the_palette_shows_its_scroll_bar_at_rest_and_one_that_fits
 
     let list = world.screen().bounds(Target::key("palette.list")).unwrap();
     let ([x, y, w, h], opacity) = thumb(&world, "palette.list").expect("the list draws a thumb");
-    assert_eq!(
-        opacity, 1.0,
-        "the thumb shows at rest, as the Tauri app's styled scroll bar does"
-    );
+    assert_eq!(opacity, 1.0, "the thumb shows at rest");
     assert!(
         h > 0.0 && h < list[3],
         "the thumb is shorter than the list: {h} of {}",

@@ -43,8 +43,8 @@ impl Selection {
     }
 }
 
-/// The word under column `col` of a row's `cells`, as the Tauri terminal picks it on a double
-/// click: letters, digits, `_` and `-`. A wide character's second cell is empty.
+/// The word under column `col` of a row's `cells`, as a double click picks it: letters, digits, `_`
+/// and `-`. A wide character's second cell is empty.
 pub fn word_at(cells: &[String], col: u16) -> Option<(u16, u16)> {
     let word = |i: usize| {
         cells.get(i).is_some_and(|cell| {
@@ -70,9 +70,9 @@ pub fn word_at(cells: &[String], col: u16) -> Option<(u16, u16)> {
     Some((start as u16, end as u16))
 }
 
-/// Lines copied out of a terminal, as the Tauri terminal cleans them: trailing blanks go, and
-/// the indent every line shares goes too; when the first line starts further left than the
-/// rest, the indent the rest share goes from them.
+/// Lines copied out of a terminal, cleaned: trailing blanks go, and the indent every line shares
+/// goes too; when the first line starts further left than the rest, the indent the rest share goes
+/// from them.
 pub fn clean_lines(lines: &[String]) -> Vec<String> {
     let result: Vec<&str> = lines.iter().map(|l| l.trim_end()).collect();
     let indent = |l: &&str| l.chars().take_while(|c| c.is_whitespace()).count();
@@ -106,8 +106,8 @@ pub fn clean_lines(lines: &[String]) -> Vec<String> {
     }
 }
 
-/// A selection over a program's own screen, kept by the text it covers so it follows the
-/// text when the program scrolls it: the Tauri terminal's application selection anchor.
+/// A selection over a program's own screen, kept by the text it covers so it follows the text when
+/// the program scrolls it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Anchor {
     start_col: u16,
@@ -219,7 +219,7 @@ mod tests {
     }
 
     #[test]
-    fn clean_lines_matches_the_tauri_terminal() {
+    fn clean_lines_drops_trailing_blanks_and_the_shared_indent() {
         let cases: &[(&[&str], &[&str])] = &[
             (&["  one  "], &["  one"]),
             (&["  a", "    b", "", "  c"], &["a", "  b", "", "c"]),

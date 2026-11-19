@@ -1,4 +1,4 @@
-//! The queue bar's peeks, as the Tauri app's `WaitingPeek` and `RunsPeek`: hovering the waiting
+//! The queue bar's peeks: hovering the waiting
 //! pill lists the agents under it, hovering the runs chip lists the automation runs, and a row
 //! opens its agent or tile.
 

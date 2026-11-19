@@ -20,7 +20,7 @@ const CARD_PREFIX: &str = "garden.board.card.";
 const COLUMN_PREFIX: &str = "garden.board.column.";
 const ZONE_PREFIX: &str = "garden.board.zone.";
 const MENU_PREFIX: &str = "garden.board.menu.";
-/// Points a press on a card travels before it becomes a drag, as in the Tauri board.
+/// Points a press on a card travels before it becomes a drag.
 const DRAG_THRESHOLD: f32 = 5.0;
 const CARRY_OFFSET: f32 = 16.0;
 const CARRY_WIDTH: f32 = 320.0;

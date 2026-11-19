@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/victorarias/attn/internal/config"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,11 +86,11 @@ func (w *World) TrustedApp(profileID ...string) *Peer {
 	if err != nil {
 		w.T.Fatalf("read daemon credential: %v", err)
 	}
-	hello := protocol.ClientHelloMessage{Cmd: protocol.CmdClientHello, ClientKind: "tauri-app", Version: "protocol-" + protocol.ProtocolVersion, Capabilities: []string{protocol.CapabilityBinaryPtyOutput, protocol.CapabilityKittyImages}, ClientToken: protocol.Ptr(strings.TrimSpace(string(clientToken))), BrowserHostToken: protocol.Ptr(strings.TrimSpace(string(token)))}
+	hello := protocol.ClientHelloMessage{Cmd: protocol.CmdClientHello, ClientKind: protocol.ClientKindNativeApp, Version: "protocol-" + protocol.ProtocolVersion, Capabilities: []string{protocol.CapabilityBinaryPtyOutput, protocol.CapabilityKittyImages}, ClientToken: protocol.Ptr(strings.TrimSpace(string(clientToken))), BrowserHostToken: protocol.Ptr(strings.TrimSpace(string(token)))}
 	if len(profileID) != 0 {
 		hello.ProfileID = protocol.Ptr(profileID[0])
 	}
-	p := w.Connect(hello, http.Header{"Origin": {"tauri://localhost"}})
+	p := w.Connect(hello, nil)
 	p.Initial = Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	return p
 }

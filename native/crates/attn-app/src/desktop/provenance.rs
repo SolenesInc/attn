@@ -31,7 +31,7 @@ struct Target {
     title: Option<String>,
 }
 
-/// How a pull request's status reads at a glance, as the Tauri app colors it.
+/// How a pull request's status reads at a glance.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Tone {
     Ok,

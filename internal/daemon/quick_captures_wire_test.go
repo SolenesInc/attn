@@ -256,17 +256,17 @@ func TestQuickCaptureAuthoringRequiresTheTrustedAppIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hello := protocol.ClientHelloMessage{Cmd: protocol.CmdClientHello, ClientKind: "tauri-app", Version: "protocol-" + protocol.ProtocolVersion, ClientToken: protocol.Ptr(config.ClientToken()), Capabilities: []string{}}
+	hello := protocol.ClientHelloMessage{Cmd: protocol.CmdClientHello, ClientKind: protocol.ClientKindNativeApp, Version: "protocol-" + protocol.ProtocolVersion, ClientToken: protocol.Ptr(config.ClientToken()), Capabilities: []string{}}
 	peers := []*testworld.Peer{w.App()}
-	p := w.Connect(hello, http.Header{"Origin": {"tauri://localhost"}})
+	p := w.Connect(hello, nil)
 	testworld.Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	peers = append(peers, p)
 	hello.BrowserHostToken = protocol.Ptr(string(hostToken))
-	p = w.Connect(hello, nil)
+	p = w.Connect(hello, http.Header{"Origin": {"http://localhost:5173"}})
 	testworld.Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	peers = append(peers, p)
 	hello.ClientKind = "harness-observer"
-	p = w.Connect(hello, http.Header{"Origin": {"tauri://localhost"}})
+	p = w.Connect(hello, nil)
 	testworld.Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	peers = append(peers, p)
 	send := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: toTheChief(), Content: "Only the user", AttachmentIds: []string{asset}}

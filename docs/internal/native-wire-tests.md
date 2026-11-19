@@ -2,8 +2,7 @@
 
 A native wire test runs the app's real view and real daemon link and plays
 the daemon. It is attn's app wire test, and [Testing](testing.md) is the
-strategy around it. The Tauri app, the rollback, keeps its TypeScript
-[app wire tests](app-wire-tests.md) until it is deleted. The harness is the crate `attn-testkit` in
+strategy around it. The harness is the crate `attn-testkit` in
 `native/crates/attn-testkit`. Each crate keeps its wire tests in
 `tests/wire/`, one file per feature, listed as modules in `tests/wire.rs`:
 
@@ -185,37 +184,3 @@ both sides have nothing left to do.
   allocator in `tests/wire.rs`.
 - `world.runtime().state` is the window's state, for what the screen cannot
   show.
-
-## Record what each test replaces
-
-`native/parity/wire.tsv` maps Vitest tests to the native tests that replace
-them. When a native wire test replaces a Vitest test, add a row:
-
-| Column | Holds |
-| --- | --- |
-| `vitest_file` | The Vitest file, from the repository root. |
-| `vitest_test` | The test's `describe` names and its `it` name, joined by ` > `. |
-| `native_test` | `<crate>/tests/wire/<file>.rs::<function>`, or `dropped`. |
-| `reason` | Why the test was dropped. Empty for a replaced test. |
-
-`scripts/native-parity` checks every row: the Vitest file has a test with that
-name, the native test exists, a dropped test gives a reason, and no Vitest test
-has two rows. `make check-native` and CI's native jobs run it.
-
-## Record what each checklist item rests on
-
-`native/parity/checklist.tsv` maps items of the no-regression checklist in
-`survey-prior-art.md` (on seed `s-kxncd8`) to the evidence that the native app
-keeps them. An item can have several rows, one per part of it.
-
-| Column | Holds |
-| --- | --- |
-| `item` | The checklist item's number. |
-| `statement` | What the native app does for that item, or that part of it. |
-| `native_test` | `<crate>/tests/wire/<file>.rs::<function>`, `live:<seed id>/<artifact>` for a live run's evidence attached to a seed, or empty. |
-| `reason` | Empty when `native_test` names evidence. Otherwise `n/a: <why>` when the item does not apply, or `gap: <seed id>` for the seed that will supply it. |
-
-`scripts/native-parity` checks every row: the native test exists, a live
-reference has the `live:<seed id>/<artifact>` form, and an empty `native_test`
-has a reason in one of those forms. It cannot see the Notebook from CI, so it
-does not check that the artifact is attached to the seed.

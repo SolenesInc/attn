@@ -1,11 +1,11 @@
 #!/bin/bash
 # Ensure ghostty-vt.wasm (gitignored) is present and is the module the lock
-# names, at the path given as $1 (default: the desktop app's vendor directory).
-# Runs ahead of every frontend dev/build/test.
+# names, at the path given as $1 (default: the phone app's vendor directory).
+# Runs ahead of every phone app dev, build and test.
 #
 # DOWNLOAD-AND-VERIFY, FAIL CLOSED: the binary is ghostty-org's own ReleaseFast
 # build, mirrored onto our rolling release keyed by the shared ghostty-vt.pin.
-# Nothing here builds anything — there is no zig in the frontend toolchain. A
+# Nothing here builds anything — there is no zig in the phone app's toolchain. A
 # missing or mismatched module stops the build rather than letting a stale
 # terminal core reach a bundle.
 #

@@ -3,14 +3,13 @@ use std::path::Path;
 
 use serde_json::{Map, Value, json};
 
-/// Input samples the report carries from the log, the newest, as the Tauri report keeps.
+/// Input samples the report carries from the log, the newest.
 const HISTORY_CAPACITY: usize = 256;
 const STRING_LIMIT: usize = 240;
 const ARRAY_LIMIT: usize = 400;
 const DEPTH_LIMIT: usize = 7;
 
-/// The keys a logged sample keeps, the Tauri report's allowlist: the log is the Tauri app's
-/// too, and nothing else it holds goes into a report.
+/// The keys a logged sample keeps: nothing else the log holds goes into a report.
 const ALLOWED_KEYS: &[&str] = &[
     "action",
     "active",
@@ -244,8 +243,8 @@ fn is_counter(key: &str) -> bool {
     }
 }
 
-/// Each traced input's path from the window to the daemon's write, under its trace id, as the
-/// Tauri report's `deriveInputJourneys` concludes it. The native app keeps no output timings,
+/// Each traced input's path from the window to the daemon's write, under its trace id. The app
+/// keeps no output timings,
 /// so a journey ends at the daemon's write.
 pub(super) fn journeys(frontend: &Value, daemon: Option<&Value>) -> Value {
     let events = frontend["events"]

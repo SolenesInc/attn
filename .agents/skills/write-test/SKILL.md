@@ -32,10 +32,8 @@ Read `docs/internal/testing.md`, then the page for your kind:
 | Kind | Read |
 |---|---|
 | Daemon wire | `docs/internal/daemon-wire-tests.md` |
-| App wire | `docs/internal/app-wire-tests.md` |
-| Native app wire | `docs/internal/native-wire-tests.md` |
+| App wire | `docs/internal/native-wire-tests.md` |
 | CLI stack | `docs/internal/cli-stack-tests.md` |
-| Browser end-to-end | the specs in `app/e2e` near yours |
 | Scenario | `app/scripts/real-app-harness/AGENTS.md` |
 
 ## Gotchas
@@ -48,7 +46,7 @@ Each is a habit that works elsewhere and breaks a promise-only test here.
   app test. Wait for the signal that the result happened: the event on a peer
   that connected before the call (`testworld.Await`,
   `testworld.AwaitSession`), the CLI's output, or a pipe the process opens
-  when ready. Browser end-to-end specs are the exception `testing.md` names.
+  when ready.
 - Connecting a peer after the step it then waits for. The daemon sends an
   event only to clients connected at that moment, so an update from a daemon's
   startup work is lost to a peer that connects after `w.restart()` or
@@ -80,15 +78,9 @@ Each is a habit that works elsewhere and breaks a promise-only test here.
   bug. `time.Now()` reads the bubble's clock, which moves only while every
   goroutine in the bubble waits. So a `time.Since(before) != 0` in a bubble
   means the call waited on a timer.
-- Testing Library's `waitFor` and `findBy*`, `vi.waitFor` and `expect.poll`
-  poll on an interval. Use the scripted daemon instead, which installs fake
-  timers. `gesture(daemon, action)` or `await daemon.idle()` settles the app,
-  `daemon.received(cmd)` waits for a request, and
-  `await act(() => vi.advanceTimersByTimeAsync(ms))` moves time.
 - `await new Promise((r) => setTimeout(r, ms))`, `Bun.sleep(ms)` or a
   `Date.now()` deadline loop in a plugin or SDK test. Have the fake resolve a
-  promise when the call the test waits for arrives, as `daemon.received`
-  does.
+  promise when the call the test waits for arrives.
 
 ### Internals
 
@@ -114,13 +106,6 @@ Each is a habit that works elsewhere and breaks a promise-only test here.
 - Awaiting a state that may already hold as proof that your action was
   processed. Await a receipt that only the awaited step can produce, such as
   a fresh label.
-- `vi.mock('../Component')`, or mocking any other module of attn's own. An
-  app wire test fakes the daemon, which the test scripts, and the other fakes
-  that `docs/internal/app-wire-tests.md` lists. Nothing else is faked. Render
-  the real module through `renderApp`.
-- `render(<Component …/>)` with hand-built props depends on those props,
-  which a rewrite changes. Render the app with `renderApp` and reach the
-  component the way the user does.
 
 ### Flaky tests
 

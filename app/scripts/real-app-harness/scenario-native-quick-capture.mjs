@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
-import { parseCommonArgs, launchFreshNativeAppAndConnect, printCommonHelp, queueDaemonSettingRestore } from './common.mjs';
+import { parseCommonArgs, launchFreshAppAndConnect, printCommonHelp, queueDaemonSettingRestore } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -54,7 +54,7 @@ const instance = instanceForAppPath(options.appPath);
 assert.ok(instance, 'Quick Capture scenarios require a named instance');
 const panel = new UiAutomationClient({ appPath: options.appPath, manifestPath: captureManifestPathForInstance(instance) });
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-const driver = appPlatform.createWindowDriver({ appPath: options.appPath, systemInput: true });
+const driver = appPlatform.createWindowDriver({ appPath: options.appPath });
 const fixtureId = `com.attn.capture-fixture.${runner.runId.replace(/[^a-z0-9]/gi, '').toLowerCase()}`;
 const fixture = appPlatform.createWindowDriver({ appPath: options.appPath, bundleId: fixtureId });
 const otherFixtureId = `${fixtureId}.other`;
@@ -184,7 +184,7 @@ async function clearDraftFiles() {
   }
   return left;
 }
-const DROP_KEEPS_KEYS = 'A drop from another app must leave the panel holding the keyboard, as the Tauri panel does';
+const DROP_KEEPS_KEYS = 'A drop from another app must leave the panel holding the keyboard';
 async function keysAfterDrop(dropped) {
   if (dropped.nativeFocused) return dropped;
   if (!nativeFindings.some(error => error.message === DROP_KEEPS_KEYS)) nativeFindings.push(new Error(DROP_KEEPS_KEYS));
@@ -249,7 +249,7 @@ try {
     fs.writeFileSync(path.join(home, 'CHARTER.md'), '# Capture Fixture Builder\n\nInspect synthetic messages and their copied attachments.\n');
     await client.quitApp();
     runAttn(['daemon', 'stop']);
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     queueDaemonSettingRestore(observer, 'uiScale');
     await panel.waitForManifest(20_000);
     await panel.waitForReady(20_000);

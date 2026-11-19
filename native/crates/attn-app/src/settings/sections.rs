@@ -1,7 +1,7 @@
 use attn_protocol::go_values::FEATURES;
 
-/// A page of the settings dialog. Its id is the Tauri app's section id, which the
-/// automation `state` reports and drive-attn names.
+/// A page of the settings dialog. Its id is what the automation `state` reports and drive-attn
+/// names.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub(crate) enum Section {
     General,

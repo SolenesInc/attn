@@ -673,7 +673,7 @@ fn trigger(
     Some((trigger, None))
 }
 
-/// What a route runs, as the Tauri app's `.route-badge`: a pill of the harness, the model with
+/// What a route runs: a pill of the harness, the model with
 /// its tier, and the effort when it has one.
 pub(crate) fn badge(state: &State, t: &Tokens, value: &Route) -> El {
     let rules = Rules {

@@ -53,8 +53,7 @@ Install the [build tools](#build-tools) and these packages:
 ```bash
 sudo apt install build-essential pkg-config libfontconfig1-dev \
   libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev mesa-vulkan-drivers \
-  libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
-  libssl-dev libxdo-dev desktop-file-utils xdg-utils
+  libssl-dev desktop-file-utils xdg-utils
 ```
 
 Then follow [Build from source](#build-from-source). On Linux, `make` installs

@@ -3,8 +3,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import WebSocket from 'ws';
-import { waitForFirstDesktopPane, waitForPaneVisible } from './scenarioAssertions.mjs';
-import { MOCK_AGENT_EXECUTABLE, mockPinnedAgents } from './mockAgent.mjs';
 import {
   assertProductionRunAllowed,
   currentHarnessInstance,
@@ -13,10 +11,6 @@ import {
   defaultWSURLForInstance,
   instanceForAppPath,
 } from './harnessInstance.mjs';
-
-export function shownAgentId(state) {
-  return state?.view === 'session' && state.activeLeaf?.kind === 'agent' ? state.activeLeaf.sessionId : null;
-}
 
 export function parseCommonArgs(argv) {
   const options = {
@@ -144,17 +138,6 @@ export function queryDaemonDb(dbPath, sql, { busyMs = DAEMON_DB_BUSY_MS, json = 
   return trimmed ? JSON.parse(trimmed) : [];
 }
 
-export async function captureScreenshot(driver, outputPath) {
-  try {
-    await driver.screenshot(outputPath);
-    return true;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[RealAppHarness] Screenshot skipped: ${message}`);
-    return false;
-  }
-}
-
 // Path-component-aware containment: '/a/b-old/x' is NOT under '/a/b'.
 export function isDirectoryUnderRoot(directory, roots) {
   if (!directory) return false;
@@ -193,22 +176,6 @@ export async function sweepHarnessLeftovers(observer, {
 // Restores go straight to the daemon, not through the app: by the time the
 // last scenario cleanup runs the app is usually gone.
 const pendingSettingRestores = [];
-
-// The tripwire pins the mock in the environment the daemon inherits; the app
-// sends this setting with every spawn, so both halves have to name it.
-async function pinMockAgentExecutables(client, observer, executableOverrides = {}) {
-  const writes = mockPinnedAgents().map((agent) => {
-    const key = `${agent}_executable`;
-    const executable = executableOverrides[agent] || MOCK_AGENT_EXECUTABLE;
-    const previous = observer.getSetting(key) || '';
-    return { key, executable, previous };
-  }).filter(({ executable, previous }) => previous !== executable);
-  for (const { key } of writes) queueDaemonSettingRestore(observer, key);
-  await Promise.all(writes.map(async ({ key, executable, previous }) => {
-    await client.request('set_setting', { key, value: executable });
-    console.log(`[harness] pinned ${key} at the mock agent (was ${previous || 'unconfigured'})`);
-  }));
-}
 
 // Records a setting's current value so restoreHarnessSettings puts it back on exit;
 // the beforeExit hook covers a normal run, the runner's signal path covers a kill.
@@ -295,25 +262,7 @@ export async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForInst
   }
 }
 
-export async function launchFreshAppAndConnect(client, observer, {
-  sweepStaleSessions = true,
-  agentExecutables = {},
-} = {}) {
-  await client.launchFreshApp();
-  await client.waitForManifest(20_000);
-  await client.waitForReady(20_000);
-  await client.waitForFrontendResponsive(20_000);
-  // A fresh instance's first launch shows the one-time What's New modal, which
-  // swallows native HID clicks; dismiss it so scenarios start on a clean UI.
-  await client.request('dismiss_whats_new', {}).catch(() => {});
-  await observer.connect();
-  await pinMockAgentExecutables(client, observer, agentExecutables);
-  if (sweepStaleSessions) {
-    await sweepHarnessLeftovers(observer);
-  }
-}
-
-export async function launchFreshNativeAppAndConnect(client, observer) {
+export async function launchFreshAppAndConnect(client, observer) {
   await client.launchFreshApp();
   await client.waitForManifest(20_000);
   await client.waitForReady(20_000);
@@ -324,84 +273,6 @@ export async function launchFreshNativeAppAndConnect(client, observer) {
   }
   await observer.connect();
   await sweepHarnessLeftovers(observer);
-}
-
-export async function waitForAppCurrentDesktop(client, desktopId, timeoutMs = 15_000) {
-  const startedAt = Date.now();
-  let last = null;
-  while (Date.now() - startedAt < timeoutMs) {
-    last = await client.request('get_state');
-    if (last.arrangement?.currentDesktopId === desktopId) return last;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error(`Timed out waiting for the app to show desktop ${desktopId}. Last arrangement:\n${JSON.stringify(last?.arrangement, null, 2)}`);
-}
-
-export async function openHarnessDesktop(client, observer) {
-  const desktop = await observer.createDesktop();
-  await observer.setCurrentDesktop(desktop.id);
-  await waitForAppCurrentDesktop(client, desktop.id);
-  return desktop;
-}
-
-export async function relaunchAppAndConnect(client, observer, { agentExecutables = {} } = {}) {
-  await client.quitApp();
-  // Relaunch scenarios (e.g. tr201) depend on sessions surviving the
-  // relaunch, so the stale-session sweep must not run here.
-  await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false, agentExecutables });
-}
-
-export async function createSessionAndWaitForInitialPane({
-  client,
-  observer,
-  cwd,
-  label,
-  agent,
-  sessionWaitMs = 30_000,
-  promptReadyFn = null,
-  promptReadyTimeoutMs = 45_000,
-  waitForInitialPaneVisible,
-  initialPaneWaitMs,
-  ownDesktop = true,
-}) {
-  const shouldWaitForInitialPane = waitForInitialPaneVisible ?? true;
-  if (ownDesktop) {
-    await openHarnessDesktop(client, observer);
-  }
-  const paneWaitMs = initialPaneWaitMs ?? 20_000;
-  const result = await client.request('create_session', {
-    cwd,
-    label,
-    agent,
-  });
-  await observer.waitForSession({ id: result.sessionId, timeoutMs: sessionWaitMs });
-  if (typeof promptReadyFn === 'function') {
-    await promptReadyFn(client, result.sessionId, promptReadyTimeoutMs);
-  }
-  if (shouldWaitForInitialPane) {
-    const pane = await waitForFirstDesktopPane(client, result.sessionId, 'initial desktopState pane', paneWaitMs);
-    await waitForPaneVisible(client, result.sessionId, pane.paneId, paneWaitMs);
-  }
-  return result.sessionId;
-}
-
-export async function submitPrompt(client, sessionId, paneId, text) {
-  await client.request('write_pane', { sessionId, paneId, text, submit: true });
-}
-
-// `attn ticket new` is retired; the daemon commands behind it are not, and this
-// is the only way left to a legacy ticket.
-
-export async function pressShortcutKeys(client, driver, shortcutId) {
-  const { binding } = await client.request('shortcut_binding', { shortcutId });
-  if (!binding) throw new Error(`shortcut ${shortcutId} is unbound in the app`);
-  if (binding.leader) throw new Error(`shortcut ${shortcutId} is a leader chord; pressShortcutKeys presses one combo`);
-  await driver.pressKey(binding.key, {
-    command: !!binding.meta,
-    control: !!binding.ctrl,
-    shift: !!binding.shift,
-    option: !!binding.alt,
-  });
 }
 
 export function timestampSlug() {

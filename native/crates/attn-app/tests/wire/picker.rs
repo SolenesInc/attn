@@ -782,7 +782,7 @@ fn each_harness_and_yolo_shows_its_keys_as_keycaps() {
 }
 
 #[test]
-fn many_harnesses_wrap_inside_a_dialog_as_wide_as_tauris() {
+fn many_harnesses_wrap_inside_a_760_wide_dialog() {
     let mut world = busy_desktop(&[]);
     world.daemon.on("delegation_preferences_get", |_| {
         catalog(&[
@@ -800,10 +800,7 @@ fn many_harnesses_wrap_inside_a_dialog_as_wide_as_tauris() {
 
     let screen = world.screen();
     let [dialog_x, _, dialog_w, _] = screen.bounds(Target::key("new-session")).unwrap();
-    assert_eq!(
-        dialog_w, 760.0,
-        "Tauri's dialog is 760 wide (LocationPicker.css)"
-    );
+    assert_eq!(dialog_w, 760.0, "the dialog is 760 wide");
     let options: Vec<_> = screen
         .all(Target::role("radio-button"))
         .into_iter()

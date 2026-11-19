@@ -1,8 +1,8 @@
 #!/bin/bash
-# Shared helpers for the BROWSER ghostty-vt.wasm module used by the frontend
-# terminal model (app/src/ghostty).
+# Shared helpers for the BROWSER ghostty-vt.wasm module used by the phone app's
+# terminal model (mobile/src/terminal/ghostty).
 #
-# Sourced by app/scripts/ensure-ghostty-vt-wasm.sh (consumer path) and
+# Sourced by scripts/ensure-ghostty-vt-wasm.sh (consumer path) and
 # scripts/publish-ghostty-vt-wasm.sh (maintainer mirror path). Companion of
 # scripts/lib/libghostty-vt.sh, which does the same job for the native archives;
 # both read the shared ghostty-vt.pin so the worker and the browser parse VT
@@ -21,7 +21,7 @@ vtw_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 vtw_repo_dir="$(cd "$vtw_lib_dir/../.." && pwd)"
 vtw_pin_file="$vtw_repo_dir/ghostty-vt.pin"
 vtw_lock_file="$vtw_repo_dir/ghostty-vt-wasm.lock"
-vtw_output="$vtw_repo_dir/app/vendor/ghostty-vt/ghostty-vt.wasm"
+vtw_output="$vtw_repo_dir/mobile/vendor/ghostty-vt/ghostty-vt.wasm"
 
 # Our mirror. Shares the rolling release the native prebuilts use; the asset
 # name keeps them apart.

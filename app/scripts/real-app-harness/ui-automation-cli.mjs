@@ -9,16 +9,16 @@ function printHelp() {
 Options:
   --launch         Launch the selected packaged app before connecting
   --fresh-launch   Quit and relaunch the selected packaged app before connecting
-  --wait-ready     Wait for the frontend automation hook before sending the action
-  --capture        Drive the native app's Quick Capture panel, which serves its own automation
+  --wait-ready     Wait for the app's automation server to report ready before sending the action
+  --capture        Drive the Quick Capture panel, which serves its own automation
   --run-against-prod
                    Explicitly allow targeting the production app
 
 Examples:
   pnpm exec node scripts/real-app-harness/ui-automation-cli.mjs ping
-  pnpm exec node scripts/real-app-harness/ui-automation-cli.mjs --wait-ready get_state
-  pnpm exec node scripts/real-app-harness/ui-automation-cli.mjs --wait-ready capture_screenshot_data
-  pnpm exec node scripts/real-app-harness/ui-automation-cli.mjs capture_native_window_screenshot '{"path":"/tmp/attn-native-window.png"}'
+  pnpm exec node scripts/real-app-harness/ui-automation-cli.mjs --wait-ready tree
+  pnpm exec node scripts/real-app-harness/ui-automation-cli.mjs --wait-ready state '{"of":"window"}'
+  pnpm exec node scripts/real-app-harness/ui-automation-cli.mjs shot '{"path":"/tmp/attn-window.png"}'
 `);
 }
 
@@ -68,7 +68,6 @@ async function main() {
   await client.waitForManifest(20_000);
   if (waitReady) {
     await client.waitForReady(20_000);
-    await client.waitForFrontendResponsive(20_000);
   }
   const result = await client.request(action, payload);
   console.log(JSON.stringify(result, null, 2));

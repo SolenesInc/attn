@@ -8,7 +8,7 @@ import { spawn, execFile } from 'node:child_process';
 import { once } from 'node:events';
 import { promisify } from 'node:util';
 import { outpostSsh } from './outpostSsh.mjs';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { stepClock } from './stepClock.mjs';
@@ -174,7 +174,7 @@ try {
   await ssh.route('scenario-outpost-alias', outpostEnv, binary);
   await client.quitApp();
   await run(binary, ['daemon', 'stop']);
-  await launchFreshNativeAppAndConnect(client, observer);
+  await launchFreshAppAndConnect(client, observer);
   await driver.setWindowBounds({ x: 0, y: 0, width: 1900, height: 1000 });
   await removeScenarioOutposts();
   runner.registerCleanup('remove_scenario_outposts', removeScenarioOutposts);

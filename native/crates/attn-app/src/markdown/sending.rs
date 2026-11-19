@@ -1,7 +1,6 @@
-//! A document tile's header controls for its marks, as the Tauri tile header has them: a note on
-//! the whole document, the review notes, and sending them: a file's to the session the tile is
-//! bound to or to another session on its desktop, a seed's to the session tending it or as a
-//! note on the seed.
+//! A document tile's header controls for its marks: a note on the whole document, the review
+//! notes, and sending them: a file's to the session the tile is bound to or to another session
+//! on its desktop, a seed's to the session tending it or as a note on the seed.
 
 use attn_client::Desktop;
 use attn_protocol::{DesktopUpdateTileMessage, MarkdownAnnotation, Session};
@@ -19,13 +18,12 @@ use super::drafts::{self, Sent, To};
 use crate::State;
 use crate::desktop::Room;
 
-/// How long "Sent ✓" shows before Send comes back, as the Tauri header shows it.
+/// How long "Sent ✓" shows before Send comes back.
 pub(crate) const SENT_SECONDS: f64 = 4.0;
 /// How long "Clear all" waits for its confirmation.
 const CLEAR_SECONDS: f64 = 3.0;
 const MENU_W: f32 = 260.0;
-/// The review notes' width and how far inside the reader they sit: `.md-annotations-sidebar`,
-/// whose 22rem the Tauri app draws 308 points wide.
+/// The review notes' width and how far inside the reader they sit.
 const NOTES_W: f32 = 308.0;
 const NOTES_INSET: f32 = 10.0;
 

@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createRunContext, emitVerdict, parseCommonArgs, printCommonHelp } from './common.mjs';
-import { appShellInTree } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { instanceForAppPath, assertProductionRunAllowed } from './harnessInstance.mjs';
 import { getMachineFingerprint, loadBaseline, recordOrCompareBaseline } from './machineRegistry.mjs';
@@ -53,7 +52,7 @@ async function main() {
     console.log('  --per-pane-settle-ms <n>  Settle time after writing the workload command into each pane');
     console.log('                            (default: 3000)');
     console.log('  --warmup-cycles <n>       Leading cycles dropped from the slope fit -- they include');
-    console.log('                            one-time WASM heap growth, not a leak (default: 2)');
+    console.log('                            one-time growth, not a leak (default: 2)');
     console.log('  --slope-threshold-mb <n>  Max allowed retained-RSS slope in MB/cycle before the verdict');
     console.log('                            fails (default: 5)');
     console.log('  --record-baseline         Overwrite this machine\'s leak-floor baseline with this run\'s');
@@ -92,7 +91,6 @@ async function main() {
   await client.launchFreshApp();
   await client.waitForManifest(20_000);
   await client.waitForReady(20_000);
-  if (appShellInTree(client.appPath) !== 'native') await client.waitForFrontendResponsive(20_000);
 
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   await observer.connect();
@@ -112,8 +110,8 @@ async function main() {
         sessionIds.push(sessionId);
       }
 
-      await fillAllPanes(client, sessionIds, options.workloadCmd, options.perPaneSettleMs, observer);
-      await closeSessions(client, sessionIds, observer);
+      await fillAllPanes(sessionIds, options.workloadCmd, options.perPaneSettleMs, observer);
+      await closeSessions(sessionIds, observer);
 
       // The LAST sample of the decay window, never the peak: macOS scavenges
       // freed pages lazily, so an early sample still shows the workload spike.
@@ -129,8 +127,7 @@ async function main() {
   const { slope } = fitSlope(post);
 
   const fingerprint = getMachineFingerprint();
-  const shellKey = appShellInTree(client.appPath) === 'native' ? '-native' : '';
-  const key = `${fingerprint.key}${shellKey}-leak-floor`;
+  const key = `${fingerprint.key}-leak-floor`;
   const floorEval = evaluateRssBaseline({
     totalRssMb: post[0],
     fingerprint,

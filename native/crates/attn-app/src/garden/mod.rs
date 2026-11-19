@@ -266,7 +266,7 @@ fn shown_seeds(state: &State) -> HashSet<String> {
 }
 
 /// Reads each shown seed's document whenever the seed or the garden around it changes, or an
-/// outpost's reach does, as the Tauri app reads it. Only a seed's latest read counts.
+/// outpost's reach does. Only a seed's latest read counts.
 pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
     review::follow(state, tx);
     mark_in_terminals(state);

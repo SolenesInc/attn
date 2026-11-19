@@ -163,7 +163,7 @@ expect_failure 'is not a release commit' run_gate v99.98.97
 
 (cd "$repo" && go run ./cmd/release-train version set v99.98.96 >/dev/null)
 (cd "$repo" && go run ./cmd/release-train manifest write --version v99.98.97 --main "$later_sha" >/dev/null)
-git -C "$repo" add app .github/release-candidate.yml
+git -C "$repo" add VERSION .github/release-candidate.yml
 git -C "$repo" commit -q -m 'forge release versions'
 forged_sha="$(git -C "$repo" rev-parse HEAD)"
 git -C "$repo" tag -f v99.98.97 "$forged_sha" >/dev/null

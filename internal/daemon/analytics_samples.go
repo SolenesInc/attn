@@ -65,7 +65,7 @@ func (d *Daemon) analyticsSampleHandler(ctx context.Context, _ *jobs.Job) (any, 
 	}
 	sample.Processes = d.sampleProcessMemory(ctx, apps)
 	for i, process := range sample.Processes {
-		if process.Role == diag.RoleApp && process.Shell == string(shellNative) {
+		if process.Role == diag.RoleApp && process.Shell == nativeAppShell {
 			sample.Processes[i].Performance = d.nativeAppPerformance(apps)
 		}
 	}
@@ -77,20 +77,20 @@ type connectedApps struct {
 	drawn     map[protocol.TerminalID]struct{}
 }
 
+const nativeAppShell = "native"
+
 type appProcess struct {
 	pid    int
-	shell  appShell
 	client *wsClient
 }
 
 func (d *Daemon) connectedApps() connectedApps {
 	apps := connectedApps{drawn: map[protocol.TerminalID]struct{}{}}
 	d.wsHub.ForEachClient(func(client *wsClient) {
-		shell := client.appShell()
-		if shell == shellNone {
+		if !client.isNativeApp() {
 			return
 		}
-		app := appProcess{pid: client.processID(), shell: shell, client: client}
+		app := appProcess{pid: client.processID(), client: client}
 		if app.pid > 0 && !slices.ContainsFunc(apps.processes, func(seen appProcess) bool { return seen.pid == app.pid }) {
 			apps.processes = append(apps.processes, app)
 		}
@@ -103,7 +103,7 @@ func (d *Daemon) connectedApps() connectedApps {
 
 func (d *Daemon) nativeAppPerformance(apps connectedApps) *protocol.AppPerformance {
 	for _, app := range apps.processes {
-		if app.shell != shellNative || !app.client.isTrustedAppClient() {
+		if !app.client.isTrustedAppClient() {
 			continue
 		}
 		reply, err := d.appPerformanceRequests.ask(app.client, appPerformanceReplyTimeout, func(requestID string) bool {
@@ -163,7 +163,7 @@ func (d *Daemon) sampleProcessMemory(ctx context.Context, apps connectedApps) []
 	}
 	for _, app := range apps.processes {
 		if process, ok := diag.ReadProcess(app.pid); ok {
-			roles.AddApp(string(app.shell), process)
+			roles.AddApp(nativeAppShell, process)
 		}
 		roles.AddWebKitProcesses(app.pid)
 	}

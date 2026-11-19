@@ -19,8 +19,8 @@ import (
 )
 
 type updateApply struct {
-	run, kind, dir, root, instance, app string
-	dataDir                             string
+	run, kind, dir, root, instance string
+	dataDir                        string
 }
 
 func runUpdateApply() {
@@ -31,7 +31,7 @@ func runUpdateApply() {
 	flags.StringVar(&apply.dir, "dir", "", "")
 	flags.StringVar(&apply.root, "root", "", "")
 	flags.StringVar(&apply.instance, "instance", "", "")
-	flags.StringVar(&apply.app, "app", "", "")
+	flags.String("app", "", "ignored: an older daemon still passes the installed app shell")
 	_ = flags.Parse(os.Args[2:])
 	if err := config.ValidateSessionHome(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -147,7 +147,7 @@ func (t appTree) keepOld() error {
 }
 
 func (t appTree) replace() error {
-	args := selfupdate.MakeArgs("install-staged", t.apply.instance, t.apply.app)
+	args := selfupdate.MakeArgs("install-staged", t.apply.instance)
 	err := selfupdate.LimitedStep(context.Background(), "make install-staged", func(ctx context.Context) error {
 		cmd := exec.CommandContext(ctx, "make", args...)
 		cmd.Dir = t.apply.dir

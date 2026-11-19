@@ -1,5 +1,4 @@
-//! What the user can say about a marked passage, and the feedback a batch of marks sends, as
-//! the Tauri app's `quickLabels.ts` says them.
+//! What the user can say about a marked passage, and the feedback a batch of marks sends.
 
 use serde::Serialize;
 

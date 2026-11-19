@@ -8,7 +8,6 @@ import { execFileSync, spawn } from 'node:child_process';
 import { parseCommonArgs, printCommonHelp } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { dataDirForInstance } from './harnessInstance.mjs';
-import { appShellInTree } from './platform.mjs';
 import { closeEmptiedDesktop, createSlottedDesktop, showNativeDesktop } from './perfMeasure.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -65,9 +64,8 @@ function parseArgs(argv) {
 function printHelp() {
   printCommonHelp('scripts/real-app-harness/scenario-perf-gates.mjs');
   console.log(`
-Measures the cut-over gates on the installed app, native or Tauri, whichever the
-instance's tree holds. Input reaches the shells only through the daemon, so both
-apps get the same work. Each run launches the app fresh, parks it unfocused at
+Measures the performance gates on the installed app. Input reaches the shells
+only through the daemon. Each run launches the app fresh, parks it unfocused at
 ${VIEW.width}x${VIEW.height} with ${VISIBLE_PX} px on screen, waits --settle seconds, then measures.
 CPU and footprint come from proc_pid_rusage once a second, per process role.
 
@@ -84,7 +82,7 @@ CPU and footprint come from proc_pid_rusage once a second, per process role.
   --settle S        wait after launch before measuring (default 20)
   --profile         after a painting window, an 8 s \`sample\` of the app while it still paints
 
-The native app's frame recorder writes perf.json when it quits; painting
+The app's frame recorder writes perf.json when it quits; painting
 workloads quit it while still painting and report its frame-time distribution.
 Prints one {"type":"run"} JSON line per run and a {"type":"summary"} line per
 workload with the median, min and max over runs.`);
@@ -211,10 +209,9 @@ if (help) {
   process.exit(0);
 }
 
-const shell = appShellInTree(options.appPath);
 const runner = createScenarioRunner(options, {
-  scenarioId: 'PERF-GATES', tier: 'perf', prefix: `perf-gates-${shell}`, allowRealAgents: false,
-  metadata: { focus: `The cut-over performance gates on the ${shell} app`, shell, extras },
+  scenarioId: 'PERF-GATES', tier: 'perf', prefix: 'perf-gates', allowRealAgents: false,
+  metadata: { focus: 'The performance gates on the app', extras },
 });
 const client = new UiAutomationClient({ appPath: options.appPath });
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -267,33 +264,17 @@ async function launch(desk) {
   await client.launchFreshApp();
   await client.waitForManifest(20_000);
   await client.waitForReady(20_000);
-  if (shell === 'native') {
-    await showNativeDesktop(client, observer, desk);
-  } else {
-    await client.waitForFrontendResponsive(20_000);
-    await client.request('dismiss_whats_new', {}).catch(() => {});
-    await client.request('select_desktop', { desktopId: desk.id });
-  }
+  await showNativeDesktop(client, observer, desk);
   const bounds = await client.request('set_window_bounds', { logicalBounds: { x: screenWidth() - VISIBLE_PX, y: 156, ...VIEW } });
   return { startedAt, pid: client.readManifest().pid, before, bounds };
 }
 
 async function firstDrawnTerminal(desk, startedAt) {
-  if (shell === 'native') {
-    const drawn = desk.shells.map((s) => client.request('state', { of: `terminal:${s.runtimeId}`, includes: MARK, timeout_ms: 30_000 }).then(() => performance.now()));
-    return Promise.any(drawn).then((at) => at - startedAt);
-  }
-  const ids = new Set(desk.shells.map((s) => s.sessionId));
-  for (;;) {
-    const snapshot = await client.request('capture_perf_snapshot', { settleFrames: 0, includeMemory: false });
-    if ((snapshot.terminals ?? []).some((t) => ids.has(t.sessionId) && t.renderCount > 0)) return performance.now() - startedAt;
-    if (performance.now() - startedAt > 30_000) throw new Error('no terminal drew within 30 s of launch');
-    await sleep(10);
-  }
+  const drawn = desk.shells.map((s) => client.request('state', { of: `terminal:${s.runtimeId}`, includes: MARK, timeout_ms: 30_000 }).then(() => performance.now()));
+  return Promise.any(drawn).then((at) => at - startedAt);
 }
 
 async function frameTimes() {
-  if (shell !== 'native') return null;
   await client.quitApp();
   const snapshot = JSON.parse(fs.readFileSync(perfJson, 'utf8'));
   const { frames } = snapshot;
@@ -307,7 +288,7 @@ async function runWorkload(name, desks, index) {
   for (const s of all) type(s, '\u0003');
   await sleep(300);
   for (const s of all) type(s, `${MARK_COMMAND}\r`);
-  const row = { type: 'run', shell, workload: name, run: index, load: loadAverage() };
+  const row = { type: 'run', workload: name, run: index, load: loadAverage() };
   const launched = await launch(desk);
   row.bounds = launched.bounds;
   const roles = () => processRoles(probe, launched, daemonPid());
@@ -323,7 +304,7 @@ async function runWorkload(name, desks, index) {
     for (const s of painters) type(s, `${workload.paint === 'flood' ? FLOOD_COMMAND : PAINT_COMMAND}\r`);
     await sleep(3000);
     row.window = await measureWindow(probe, roles(), extras.seconds);
-    if (extras.profile) row.profile = await sampleApp(launched.pid, 8, path.join(runner.runDir, `${name}-${shell}-${index}.sample.txt`));
+    if (extras.profile) row.profile = await sampleApp(launched.pid, 8, path.join(runner.runDir, `${name}-${index}.sample.txt`));
     row.frames = await frameTimes();
     for (const s of painters) type(s, '\u0003');
   } else if (workload.switches) {
@@ -339,7 +320,7 @@ async function runWorkload(name, desks, index) {
     row.after = await measureWindow(probe, set, 10);
     row.growthMiB = round(row.after.app.footprintMiB - row.before.app.footprintMiB);
   } else if (workload.sample) {
-    const file = await sampleApp(launched.pid, workload.sample, path.join(runner.runDir, `rest-${shell}-${index}.sample.txt`));
+    const file = await sampleApp(launched.pid, workload.sample, path.join(runner.runDir, `rest-${index}.sample.txt`));
     row.rest = { file, ...readRestSample(file) };
   }
   return row;
@@ -356,7 +337,7 @@ function summarize(name, rows) {
     return values.length ? { median: median(values), min: Math.min(...values), max: Math.max(...values), n: values.length } : null;
   };
   return {
-    type: 'summary', shell, workload: name, runs: rows.length,
+    type: 'summary', workload: name, runs: rows.length,
     cpuPct: pick((r) => r.window?.app.cpuPct),
     mInstructionsPerS: pick((r) => r.window?.app.mInstructionsPerS),
     footprintMiB: pick((r) => r.window?.app.footprintMiB),
@@ -393,7 +374,7 @@ try {
     summaries.push(summary);
   }
   out.end();
-  await runner.finishSuccess({ shell, summaries });
+  await runner.finishSuccess({ summaries });
 } catch (error) {
   await runner.finishFailure(error);
   process.exitCode = 1;

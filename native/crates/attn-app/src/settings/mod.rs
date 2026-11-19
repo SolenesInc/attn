@@ -151,8 +151,7 @@ const TEXT_FIELDS: &[(&str, bool)] = &[
     (hygiene::AUTO_SETTLE_COUNTDOWN, true),
 ];
 
-/// The dialog's page, search and edits. They outlast the dialog closing, as the Tauri app's
-/// do while it runs.
+/// The dialog's page, search and edits. They outlast the dialog closing while the app runs.
 #[derive(Default)]
 pub(crate) struct Dialog {
     pub(crate) section: Section,
@@ -427,8 +426,8 @@ pub(crate) fn dispatch(state: &mut State, action: &Action, tx: &mut Tx) -> bool 
     true
 }
 
-/// The dialog as the automation `state` reports it, in the Tauri bridge's
-/// `settings_get_state` words: whether it is open, its page and its search.
+/// The dialog as the automation `state` reports it: whether it is open, its page and its
+/// search.
 pub(crate) fn automation_state(state: &State) -> serde_json::Value {
     let dialog = &state.window.settings;
     serde_json::json!({

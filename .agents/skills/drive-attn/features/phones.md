@@ -79,14 +79,6 @@ The steps press Linux's chords. On macOS, Settings is `mod+,`.
 - **Mentioned seeds in an ask.** Open an ask that mentions a seed in its prose. Enter a note on the phone, tap the mention, then go back. The seed opens and the note is still in the ask.
 - **Proof.** In `$P`, keep each command's output, the `ss` lines, the test output, the scratch test's output, `zbarimg`'s text, and `bridge shot` of the code, the paired phone and the page with phone access off, with `<P>` written out.
 
-### In the Tauri app (the rollback)
-
-Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) says.
-
-- **The person turns it on.** Press ⌘, (`bridge native_key '{"key":",","modifiers":["command"]}'`), click `[data-testid="settings-nav-experimental"]` natively, and click `[aria-label="Phone access"]` natively after `dom_native_point` scrolls it into view. `./attn settings get phone_access_enabled` prints `true`, and the daemon holds one connection to the Cloud Relay.
-- **Pairing.** Click `[data-testid="settings-nav-phones"]` natively, then "Pair a phone" in the profile's section. Click Cancel beside the code to end it, or leave the page, which does the same.
-- **Proof.** Capture `bridge capture_native_window_screenshot '{"path":"<P>/phones.png"}'` of Settings → Phones.
-
 ## Contexts
 
 - **Profiles**: a pairing reaches only its profile. The profile comes from the pairing, never from the phone's hello. A phone pairs with each profile separately, with one QR code each. Deleting a profile removes its pairings and disconnects its phones.
@@ -115,5 +107,4 @@ Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) s
 - Wire: `internal/daemon/home_gateway_garden_wire_test.go` (listing, detail, note, park and harvest, profile scope, `seed_changed` on another actor's note and body edit).
 - Phone: `mobile/src/main.scene.test.ts` (queue, session screen, composer, closing the keyboard), `mobile/src/terminal/scroll.test.ts` (what a drag and a double tap do: pan, scrollback rows, wheel lines), `mobile/src/garden/garden.scene.test.ts` (Garden sections, seed screen, note, move, unreachable and reconnecting homes, an open seed refreshed live and after a reconnect), `mobile/src/link.test.ts` (heartbeat, terminal attach and re-attach, the garden window, the home's answer to a wake).
 - Wire: `native/crates/attn-app/tests/wire/settings/phones.rs` (the link, a code and its QR image, Cancel, leaving the page, closing Settings, another layer over it, a code that arrives after the person left, expiry, a refusal, revoke once, off, reading again after a reconnect), and the switch in `native/crates/attn-app/tests/wire/settings.rs`.
-- App, the Tauri app's (the rollback): `app/src/components/PhonesSettings.pairing.test.tsx`, `app/src/homeGateway/decode.test.ts`, and the switch in `app/src/components/SettingsModal.test.tsx`.
 - Script: `scripts/check-home-gateway-compat_test.sh`, `scripts/check-cloud-relay-privacy_test.sh`.

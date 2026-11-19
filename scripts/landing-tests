@@ -9,9 +9,6 @@
 # the tests:
 #
 #   go <package> <TestName>   a top-level Go test and its subtests
-#   vitest <file>             a Vitest file, relative to app/
-#   vitest .                  the whole Vitest suite, in one run
-#   playwright <file>         a Playwright spec, relative to app/
 #   cargo .                   the whole native/ workspace, in one run
 #   cargo <package> --lib     a native/ crate's unit tests; also --doc
 #   cargo <package> --test <name>   a native/ test target; also --bin <name>
@@ -156,19 +153,6 @@ go ./cmd/attn-ingest TestAQuarantinedInstallIsRefusedWithTheReason
 go ./cmd/attn-ingest TestTheSameBatchSentConcurrentlyIsStoredOnce
 go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes
 go ./cmd/attn-ingest TestEachRecordKindReadsBackAsTypedColumnsThroughItsView
-
-group real-app-harness ^app/scripts/real-app-harness/
-vitest scripts/real-app-harness/agentTripwire.test.mjs
-vitest scripts/real-app-harness/common.test.mjs
-vitest scripts/real-app-harness/defaultInstanceHarness.test.mjs
-vitest scripts/real-app-harness/freshWorld.test.mjs
-vitest scripts/real-app-harness/harnessInstance.test.mjs
-vitest scripts/real-app-harness/parallelMatrix.test.mjs
-vitest scripts/real-app-harness/scenarioCatalog.test.mjs
-vitest scripts/real-app-harness/workerRegistry.test.mjs
-
-group browser-runtime ^app/src/browser/
-vitest src/browser/runtime.test.ts
 
 group production-copy ^scripts/gardenpushperf/copy-production\.sh$
 go ./internal/daemon TestACopyOfProductionNeverRunsACopiedAgent

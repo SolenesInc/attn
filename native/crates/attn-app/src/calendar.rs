@@ -151,7 +151,7 @@ pub(crate) fn clock(ms: i64) -> String {
     clock_in(&LocalTime::at(ms), hour_cycle(), false)
 }
 
-/// [`clock`] with its hour in two digits, as the Tauri app's `hour: '2-digit'`: "06:05 PM" or
+/// [`clock`] with its hour in two digits: "06:05 PM" or
 /// "18:05".
 pub(crate) fn clock_two_digit(ms: i64) -> String {
     let clock = clock(ms);
@@ -161,13 +161,13 @@ pub(crate) fn clock_two_digit(ms: i64) -> String {
     }
 }
 
-/// `ms` on the user's clock as the Tauri app's `toLocaleTimeString` words it: "6:00:00 PM" or
+/// `ms` on the user's clock with seconds: "6:00:00 PM" or
 /// "18:00:00".
 pub(crate) fn time_of_day(ms: i64) -> String {
     clock_in(&LocalTime::at(ms), hour_cycle(), true)
 }
 
-/// `ms` on the user's calendar and clock as the Tauri app's `toLocaleString` words it:
+/// `ms` on the user's calendar and clock:
 /// "10/18/2026, 6:00:00 PM", or "10/18/2026, 18:00:00" on a 24-hour clock.
 pub(crate) fn date_time(ms: i64) -> String {
     let local = LocalTime::at(ms);
@@ -180,7 +180,7 @@ pub(crate) fn date_time(ms: i64) -> String {
     )
 }
 
-/// `ms` as the Tauri app sends an instant, `Date.toISOString`: UTC to the millisecond.
+/// `ms` as an ISO 8601 instant: UTC to the millisecond.
 pub(crate) fn iso(ms: i64) -> String {
     let t = LocalTime::at_offset(ms, 0);
     format!(
