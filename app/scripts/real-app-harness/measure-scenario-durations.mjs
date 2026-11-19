@@ -6,7 +6,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { scenarioSkipReason } from './matrixDigest.mjs';
 import { resolveScenarios } from './scenarioCatalog.mjs';
-import { durationsPath } from './shardPlan.mjs';
+import { durationsPath, readRecordedDurations } from './shardPlan.mjs';
 
 const JOB = 'app-acceptance-shard';
 const DEFAULT_RUNS = 50;
@@ -89,19 +89,24 @@ function main() {
     throw new Error(`The spool holds ${runs.length} CI runs of ${JOB}, fewer than the ${runCount} asked for; run go tool test-history sync`);
   }
   const samples = passingFirstAttempts(runs);
-  const ids = ['tauri', 'native'].flatMap((app) => resolveScenarios([], app))
-    .filter((scenario) => !scenarioSkipReason(scenario, 'linux', {}))
-    .map((scenario) => scenario.id)
-    .sort();
+  const catalog = ['tauri', 'native'].flatMap((app) => resolveScenarios([], app));
+  const ids = catalog.filter((scenario) => !scenarioSkipReason(scenario, 'linux', {})).map((scenario) => scenario.id);
   const unmeasured = ids.filter((id) => !samples.has(id));
   if (unmeasured.length > 0) {
     throw new Error(`No passing first attempt of ${unmeasured.join(', ')} in the newest ${runCount} CI runs of ${JOB}`);
   }
+  const handWeights = readRecordedDurations();
+  const offLinux = catalog
+    .filter((scenario) => scenarioSkipReason(scenario, 'linux', {}) && typeof handWeights[scenario.id] === 'number')
+    .map((scenario) => scenario.id);
 
-  const seconds = Object.fromEntries(ids.map((id) => [id, Math.round(median(samples.get(id)) * 10) / 10]));
+  const seconds = Object.fromEntries([
+    ...ids.map((id) => [id, Math.round(median(samples.get(id)) * 10) / 10]),
+    ...offLinux.map((id) => [id, handWeights[id]]),
+  ].sort(([a], [b]) => a.localeCompare(b)));
   const durations = {
     receipt: {
-      source: `median elapsed seconds of each scenario's passing first attempt in the test-history receipts of CI's ${JOB} job`,
+      source: `median elapsed seconds of each scenario's passing first attempt in the test-history receipts of CI's ${JOB} job; scenarios CI's Linux shards skip keep their hand weight`,
       runs: runs.map((run) => `https://github.com/SolenesInc/attn/actions/runs/${run.id}`),
       from: runs.at(-1).startedAt,
       to: runs[0].startedAt,
@@ -111,7 +116,7 @@ function main() {
     seconds,
   };
   fs.writeFileSync(durationsPath, `${JSON.stringify(durations, null, 2)}\n`);
-  console.log(`Wrote ${path.relative(process.cwd(), durationsPath)}: ${ids.length} scenarios, `
+  console.log(`Wrote ${path.relative(process.cwd(), durationsPath)}: ${Object.keys(seconds).length} scenarios, `
     + `${durations.receipt.matrixSeconds}s of work over ${runs.length} runs from ${durations.receipt.from} to ${durations.receipt.to}`);
 }
 

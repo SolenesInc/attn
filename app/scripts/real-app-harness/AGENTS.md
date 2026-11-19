@@ -43,6 +43,7 @@ repository root.
   weighs each scenario for the shard plan. Give a new scenario a weight by hand
   until CI has run it, then regenerate the file from CI's receipts:
   `go tool test-history sync && node app/scripts/real-app-harness/measure-scenario-durations.mjs`.
+  CI's shards run on Linux, so a scenario Linux skips keeps its hand weight.
 - A scenario shares its instance with the scenarios before it in the shard, and
   which ones those are changes with the recorded durations. Leave no tile behind,
   and do not drive onto a desktop the scenario did not make. Before changing a

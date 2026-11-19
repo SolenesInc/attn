@@ -1,6 +1,6 @@
 {
   "receipt": {
-    "source": "median elapsed seconds of each scenario's passing first attempt in the test-history receipts of CI's app-acceptance-shard job",
+    "source": "median elapsed seconds of each scenario's passing first attempt in the test-history receipts of CI's app-acceptance-shard job; scenarios CI's Linux shards skip keep their hand weight",
     "runs": [
       "https://github.com/SolenesInc/attn/actions/runs/44512443550",
       "https://github.com/SolenesInc/attn/actions/runs/44510517428",
@@ -55,7 +55,7 @@
     ],
     "from": "2026-11-18T08:55:39.212903569Z",
     "to": "2026-11-19T11:19:03.341823986Z",
-    "matrixSeconds": 2049.2,
+    "matrixSeconds": 2057.2,
     "regenerate": "go tool test-history sync && node app/scripts/real-app-harness/measure-scenario-durations.mjs"
   },
   "seconds": {
@@ -68,6 +68,7 @@
     "autoclose-on-exit": 21.5,
     "automation-form": 10.1,
     "automation-surface": 17.8,
+    "browser-page-keys": 8,
     "browser-wait-navigation": 9,
     "callouts": 11.9,
     "chief-slot": 6.6,
