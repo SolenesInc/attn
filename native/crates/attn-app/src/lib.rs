@@ -40,6 +40,7 @@ mod outpost;
 mod outpost_updates;
 mod palette;
 mod picker;
+mod presence;
 mod profile_switcher;
 mod prompt_dialog;
 pub mod prompts;
@@ -56,11 +57,13 @@ pub mod sidebar;
 pub mod tauri_settings;
 mod terminal;
 mod update_run;
+mod warnings;
 pub mod whats_new;
 pub mod window_host;
 
 use std::sync::Arc;
 
+pub use attn_client::WallClock;
 use attn_client::{
     Commands, Facts, Link, LinkConfig, Pulse, ReplySink, Slices, Store, Subscription, TerminalSink,
     setting,
@@ -142,6 +145,8 @@ pub struct State {
     menus: Option<Menus>,
     /// The instance the window's link serves, `default` for production.
     instance: String,
+    /// The window is off screen: minimized, hidden, or covered whole.
+    hidden: bool,
 }
 
 /// Sets the menu bar's items for a keymap.
@@ -194,40 +199,6 @@ impl AgeWake {
         let due = tx.clock() + (at_ms - now_ms).max(0) as f64 / 1000.0;
         tx.wake_at(due);
         AgeWake { at_ms, due }
-    }
-}
-
-/// Reads the wall clock in milliseconds since 1970: the system's in the app, a test's own in
-/// wire tests. Read it, never derive it from the runtime's clock, which stands still while the
-/// Mac sleeps.
-#[derive(Clone)]
-pub struct WallClock(Arc<dyn Fn() -> i64 + Send + Sync>);
-
-impl WallClock {
-    pub fn new(read: impl Fn() -> i64 + Send + Sync + 'static) -> WallClock {
-        WallClock(Arc::new(read))
-    }
-
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "the one read of the system's wall clock"
-    )]
-    pub fn system() -> WallClock {
-        WallClock::new(|| {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| d.as_millis() as i64)
-        })
-    }
-
-    pub fn now_ms(&self) -> i64 {
-        (self.0)()
-    }
-}
-
-impl Default for WallClock {
-    fn default() -> WallClock {
-        WallClock::system()
     }
 }
 
@@ -286,6 +257,7 @@ pub fn bind(
                 settings::disconnected(state);
             }
             if !was && is {
+                warnings::connected(state);
                 picker::reconnected(state, tx);
                 crew::reconnected(state, tx);
             }
@@ -328,6 +300,7 @@ pub fn bind(
             automations::follow(state, tx);
             follow_terminals(state, tx);
             annotations::draft::follow(state, tx);
+            presence::follow(state);
         }));
     })
 }
@@ -350,7 +323,6 @@ pub(crate) fn follow_terminals(state: &mut State, tx: &mut Tx) {
 pub fn connect(
     store: &Store,
     config: impl FnOnce(TerminalSink, ReplySink) -> LinkConfig,
-    wall: WallClock,
     changed: Pulse,
     wake: impl Fn() + Send + Sync + 'static,
     deliver: impl Fn(Update) + Send + Sync + 'static,
@@ -363,7 +335,7 @@ pub fn connect(
         terminals.sink(move || woken()),
         replies.sink(move || replied()),
     );
-    let instance = config.instance.clone();
+    let (instance, wall) = (config.instance.clone(), config.wall.clone());
     let link = Link::start(config, store.clone());
     let window = bind(
         store,
@@ -427,6 +399,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let automated = automations::poll(state, now, tx);
     let pointed = callouts::poll(state, tx) | desktop::header_pop::follow_rows(state);
     let reported = diagnostic_report::poll(state, now, tx);
+    presence::follow(state);
     let expired = shell::expire(state, now, tx) || expired;
     let browsed_pages = browser::follow(state, tx);
     expired
@@ -468,6 +441,8 @@ pub fn app() -> rune::App<State> {
     .on_field_key(keys::on_field_key)
     .on_open_url(open_link)
     .on_modifiers(keys::on_modifiers)
+    .on_visibility(presence::visibility)
+    .on_input(presence::input)
 }
 
 /// The app of a window that shows one popped-out tile, `size` points large;
@@ -486,6 +461,7 @@ pub fn tile_window_app(size: (f32, f32)) -> rune::App<State> {
     .on_ime(keys::on_ime)
     .on_field_key(keys::on_field_key)
     .on_modifiers(keys::on_modifiers)
+    .on_input(presence::input)
     .on_focus(desktop::window_focus)
     .on_quit(desktop::tile_window_quits)
     .on_close(desktop::tile_window_closed)

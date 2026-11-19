@@ -97,7 +97,6 @@ fn main() -> ExitCode {
     let (link, _window) = attn_app::connect(
         &store,
         |terminals, replies| launch.link_config(terminals, replies, performance),
-        wall.clone(),
         frames,
         move || waker.wake(),
         move |update| handle.update(update),

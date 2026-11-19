@@ -95,6 +95,7 @@ impl App {
                 client_id: "covered-window".into(),
                 app_pid: std::process::id(),
                 clock: Clock::system(),
+                wall: attn_app::WallClock::new(|| WALL_START_MS),
                 pulse: Pulse::default(),
                 terminals,
                 replies,
@@ -102,7 +103,6 @@ impl App {
                 migration_marker: None,
                 performance: Performance::default(),
             },
-            attn_app::WallClock::new(|| WALL_START_MS),
             host.frames.clone(),
             move || {
                 let _ = wake.send(Work::Wake);

@@ -27,8 +27,10 @@ use tokio::sync::{mpsc, watch};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::frame::Frame;
+use crate::presence::Presence;
 use crate::{
-    CLIENT_KIND, Clock, Connection, MigrationMarker, Performance, Pulse, Refusal, Store, setting,
+    CLIENT_KIND, Clock, Connection, MigrationMarker, Performance, Pulse, Refusal, Sight, Store,
+    WallClock, setting,
 };
 
 const FIRST_RETRY: Duration = Duration::from_secs(1);
@@ -60,6 +62,8 @@ pub struct LinkConfig {
     pub client_id: String,
     pub app_pid: u32,
     pub clock: Clock,
+    /// The clock the person's idle time is read on.
+    pub wall: WallClock,
     pub pulse: Pulse,
     /// What the daemon says about terminals, on the link's thread, in arrival order.
     pub terminals: TerminalSink,
@@ -117,7 +121,8 @@ pub enum TerminalEvent {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Parked {
     Busy,
-    Reading,
+    /// Reading the socket, and waking at this time, if any, to report presence again.
+    Reading(Option<Duration>),
     Until(Duration),
     Stopped,
 }
@@ -146,11 +151,14 @@ impl std::fmt::Display for NotConnected {
 struct State {
     traffic: Traffic,
     outbox: Option<mpsc::UnboundedSender<String>>,
+    presence: Presence,
 }
 
 struct Shared {
     state: Mutex<State>,
     pulse: Pulse,
+    clock: Clock,
+    wall: WallClock,
 }
 
 impl Shared {
@@ -167,6 +175,24 @@ impl Shared {
         drop(state);
         self.pulse.beat();
         Ok(())
+    }
+
+    /// Reports presence on the open connection when `news` says what changed is worth it.
+    fn report_presence(&self, news: impl FnOnce(&mut Presence, i64, Duration) -> bool) {
+        let (now_ms, now) = (self.wall.now_ms(), self.clock.now());
+        let mut state = self.state.lock().unwrap();
+        if !news(&mut state.presence, now_ms, now) || state.outbox.is_none() {
+            return;
+        }
+        let Some(report) = state.presence.report(now_ms, now) else {
+            return;
+        };
+        drop(state);
+        let _ = self.send(report);
+    }
+
+    fn presence_due(&self) -> Option<Duration> {
+        self.state.lock().unwrap().presence.due()
     }
 
     /// Opens a connection whose first command is `hello`: the outbox is handed to senders
@@ -189,7 +215,9 @@ impl Shared {
     }
 
     fn close(&self) {
-        self.state.lock().unwrap().outbox = None;
+        let mut state = self.state.lock().unwrap();
+        state.outbox = None;
+        state.presence.disconnected();
     }
 }
 
@@ -202,6 +230,21 @@ impl Commands {
     pub fn send(&self, command: &impl Serialize) -> Result<(), NotConnected> {
         let shared = self.0.as_ref().ok_or(NotConnected)?;
         shared.send(serde_json::to_string(command).expect("a protocol command serializes"))
+    }
+
+    /// Tells the daemon what the person sees of the app, now if it changed or this connection
+    /// has had no report yet, and on every heartbeat after.
+    pub fn see(&self, sight: Sight) {
+        if let Some(shared) = &self.0 {
+            shared.report_presence(|presence, _, _| presence.see(sight));
+        }
+    }
+
+    /// The person gave the app an input: the daemon's next report says they are not idle.
+    pub fn heard_input(&self) {
+        if let Some(shared) = &self.0 {
+            shared.report_presence(|presence, now_ms, now| presence.heard_input(now_ms, now));
+        }
     }
 }
 
@@ -224,8 +267,11 @@ impl Link {
                     parked: Parked::Busy,
                 },
                 outbox: None,
+                presence: Presence::default(),
             }),
             pulse: config.pulse.clone(),
+            clock: config.clock.clone(),
+            wall: config.wall.clone(),
         });
         let (stop, stopped) = watch::channel(false);
         let task = Task {
@@ -444,6 +490,13 @@ impl Task {
         self.shared.count(|t| t.parked = parked);
     }
 
+    async fn sleep_until(&self, at: Option<Duration>) {
+        match at {
+            Some(at) => self.config.clock.sleep_until(at).await,
+            None => std::future::pending().await,
+        }
+    }
+
     async fn session(&self) -> Ended {
         if let Ok(daemon) = self.health_instance().await
             && daemon != self.config.instance
@@ -465,8 +518,15 @@ impl Task {
         self.shared.open(outbox, hello);
         let mut greeted = false;
         loop {
-            self.park(Parked::Reading);
+            let heartbeat = self.shared.presence_due();
+            self.park(Parked::Reading(heartbeat));
             tokio::select! {
+                () = self.sleep_until(heartbeat) => {
+                    self.park(Parked::Busy);
+                    self.shared.report_presence(|presence, _, now| {
+                        presence.due().is_some_and(|due| due <= now)
+                    });
+                }
                 message = read.next() => {
                     self.park(Parked::Busy);
                     let refusal = match message {

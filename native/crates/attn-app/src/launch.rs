@@ -67,6 +67,7 @@ impl Launch {
             client_id: format!("native-{}-{process_nonce:016x}", std::process::id()),
             app_pid: std::process::id(),
             clock: Clock::system(),
+            wall: crate::WallClock::system(),
             pulse: Pulse::default(),
             terminals,
             replies,

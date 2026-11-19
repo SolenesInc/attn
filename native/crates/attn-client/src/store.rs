@@ -3,10 +3,10 @@ use std::sync::{Arc, Mutex, Weak};
 
 use crate::layout::{Leaf, Node};
 use attn_protocol::{
-    Ask, AuthorState, CrewMember, DesktopTileContentMessage, GardenReview, GitOperation,
-    InitialStateMessage, OutpostInfo, PR, PairedSender, PhonesUpdatedMessage, PluginInfo,
-    PluginIssue, Profile, RepoState, Seed, Session, SessionLedgerEntry, SharedCodexState,
-    UpdateRun, Vent, Worktree, WorktreeSweepEntry,
+    Ask, AuthorState, CrewMember, DaemonWarning, DesktopTileContentMessage, GardenReview,
+    GitOperation, InitialStateMessage, OutpostInfo, PR, PairedSender, PhonesUpdatedMessage,
+    PluginInfo, PluginIssue, Profile, RepoState, Seed, Session, SessionLedgerEntry,
+    SharedCodexState, UpdateRun, Vent, Worktree, WorktreeSweepEntry,
 };
 
 /// A desktop as the daemon sent it, with its layout tree read once on arrival.
@@ -98,6 +98,9 @@ pub struct Facts {
     pub garden_review: Arc<Option<GardenReview>>,
     /// The selected profile's open asks, then the ones answered in the last day.
     pub asks: Arc<Vec<Ask>>,
+    /// What the daemon warned of at the last handshake, such as terminals it could not
+    /// recover.
+    pub warnings: Arc<Vec<DaemonWarning>>,
     /// The selected profile's vents: what its agents said got in their way.
     pub vents: Arc<Vec<Vent>>,
     pub closes: Arc<Closes>,
@@ -544,6 +547,7 @@ impl Store {
             });
             facts.garden_review = Arc::default();
             facts.asks = Arc::new(state.asks.unwrap_or_default());
+            facts.warnings = Arc::new(state.warnings.unwrap_or_default());
             facts.vents = Arc::new(state.vents.unwrap_or_default());
             facts.update_run = Arc::new(state.update_run);
             facts.pull_requests = Arc::new(PullRequests {

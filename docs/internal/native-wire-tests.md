@@ -148,8 +148,10 @@ both sides have nothing left to do.
 - `reconnect()` hangs up, advances the clock to the link's next retry, and
   returns once the app has connected again and finished its handshake.
 - `world.link().traffic().parked` says where the link waits. `Parked::Until(t)`
-  means it retries when the clock reaches `t`, and `world.now()` reads the
-  clock.
+  means it retries when the clock reaches `t`. `Parked::Reading(Some(t))` means
+  it reads the socket and reports the user's presence again at `t`, the 30 s
+  heartbeat; `settle` waits for that report once the clock reaches `t`.
+  `world.now()` reads the clock.
 
 ## What to assert
 

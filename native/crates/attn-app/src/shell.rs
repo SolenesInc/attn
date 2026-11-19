@@ -93,6 +93,7 @@ pub struct Window {
     pub(crate) ledger: crate::ledger::Ledger,
     pub(crate) notifications: crate::notifications::Panel,
     pub(crate) update_run: crate::update_run::Banner,
+    pub(crate) warnings: crate::warnings::Shown,
     pub(crate) outpost_updates: crate::outpost_updates::Banner,
     pub(crate) shared_codex: crate::shared_codex::SharedCodex,
     pub(crate) settings: crate::settings::Dialog,
@@ -485,6 +486,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         connection,
         Connection::Connected | Connection::Reconnecting { .. }
     );
+    let warnings = bands.then(|| crate::warnings::banner(state, &t)).flatten();
     let update_run = bands
         .then(|| crate::update_run::banner(state, &t))
         .flatten();
@@ -503,6 +505,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         .on_paste_content(crate::keys::on_paste)
         .child(title_bar(state, cx, &t))
         .children(banner)
+        .children(warnings)
         .children(outpost_updates)
         .children(update_run)
         .children(shared_codex)

@@ -28,7 +28,6 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let (link, _window) = crate::connect(
         &store,
         link_config()?,
-        crate::WallClock::system(),
         host.frames().clone(),
         move || {
             let _ = wake.send(Work::Update(Box::new(|_, _| {})));
@@ -78,6 +77,7 @@ fn link_config() -> Result<impl FnOnce(TerminalSink, ReplySink) -> LinkConfig, S
         client_id: format!("native-headless-{}", std::process::id()),
         app_pid: std::process::id(),
         clock: Clock::system(),
+        wall: crate::WallClock::system(),
         pulse: Pulse::default(),
         terminals,
         replies,

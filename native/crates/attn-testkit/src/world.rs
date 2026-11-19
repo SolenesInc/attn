@@ -299,6 +299,7 @@ impl World {
                 client_id: "wire-client".into(),
                 app_pid: std::process::id(),
                 clock: Clock::Manual(clock.clone()),
+                wall: wall_clock(&wall_ms),
                 pulse: pulse.clone(),
                 terminals: Box::new(move |event| {
                     if let TerminalEvent::Frame(frame) = &event {
@@ -1051,9 +1052,10 @@ impl World {
     }
 
     /// Covers the window or uncovers it: a covered window, such as a parked or occluded one,
-    /// draws no terminal frames until it is uncovered.
+    /// is off screen and draws no terminal frames until it is uncovered.
     pub fn cover(&mut self, covered: bool) {
         self.covered = covered;
+        self.runtime.set_live_visible(!covered);
         self.settle();
     }
 
@@ -1195,10 +1197,11 @@ impl World {
         let link = self.link().traffic();
         let daemon = self.daemon.traffic();
         match link.parked {
-            Parked::Reading => {
+            Parked::Reading(heartbeat) => {
                 link.connection == daemon.connection as u64
                     && link.sent == daemon.received
                     && link.received == daemon.queued
+                    && heartbeat.is_none_or(|at| at > self.clock.now())
             }
             Parked::Stopped => true,
             Parked::Until(at) => at > self.clock.now(),

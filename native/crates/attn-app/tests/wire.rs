@@ -14,6 +14,7 @@ mod wire {
     mod covered;
     mod crew;
     mod crew_start;
+    mod daemon_warnings;
     mod deep_link;
     mod desktop_close;
     mod desktop_order;
@@ -40,6 +41,7 @@ mod wire {
     mod palette;
     mod performance;
     mod picker;
+    mod presence;
     mod profile;
     mod queue;
     mod quick_capture;
