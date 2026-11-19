@@ -110,9 +110,9 @@ client.driver({
 
 The folder is `$homeEnv/skills`, or `~/defaultHome/skills` when `homeEnv` is
 unset or empty. Attn reads the variable from its own environment and your
-login shell's, as it does for a server home. `defaultHome` is relative to your
-home. When a harness reads skills from several homes, such as one per model
-provider, list each one. Attn keeps attn-workflow in each folder matching its
+login shell's, as it does for a server home. `defaultHome` is absolute, or
+relative to your home. When a harness reads skills from several homes, such as
+one per model provider, list each one. Attn keeps attn-workflow in each folder matching its
 own copy: when your driver registers, when roles are added, and before each
 launch of one of its roles. A daemon released before `skillDirs` ignores it
 and keeps refusing those roles.

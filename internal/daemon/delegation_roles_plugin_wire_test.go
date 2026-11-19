@@ -76,14 +76,17 @@ func TestAnAttnRoleOnAPluginHarnessGetsTheWorkflowSkillWhereThePluginSaysItsHarn
 	t.Setenv(fakeagent.PlugAgentEnv, "house")
 	serverHome := filepath.Join(t.TempDir(), "house-home")
 	t.Setenv("HOUSE_HOME", serverHome)
+	providerHome := filepath.Join(t.TempDir(), "house-provider")
 	t.Setenv(fakeagent.PlugSkillDirsEnv, `[
 		{"home_env": "HOUSE_HOME", "default_home": ".house"},
-		{"home_env": "HOUSE_UNSET_CLAUDE_CONFIG", "default_home": ".claude"}
+		{"home_env": "HOUSE_UNSET_CLAUDE_CONFIG", "default_home": ".claude"},
+		{"default_home": "`+providerHome+`"}
 	]`)
 	w, attnRole, cwd := houseWithAttnRoles(t)
 	skills := []string{
 		filepath.Join(serverHome, "skills", "attn-workflow", "SKILL.md"),
 		filepath.Join(os.Getenv("ATTN_TOOL_HOME"), ".claude", "skills", "attn-workflow", "SKILL.md"),
+		filepath.Join(providerHome, "skills", "attn-workflow", "SKILL.md"),
 	}
 	removeSkills := func() {
 		for _, skill := range skills {

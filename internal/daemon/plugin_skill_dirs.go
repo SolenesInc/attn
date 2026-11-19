@@ -19,14 +19,17 @@ func (s pluginSkillDir) validate() error {
 	if s.HomeEnv != "" && !validEnvironmentName(s.HomeEnv) {
 		return fmt.Errorf("skill_dirs home_env %q must be a valid variable name", s.HomeEnv)
 	}
-	if s.DefaultHome == "" || !staysInside(s.DefaultHome) {
-		return fmt.Errorf("skill_dirs default_home %q must be relative to the user's home", s.DefaultHome)
+	if s.DefaultHome == "" || !filepath.IsAbs(s.DefaultHome) && !staysInside(s.DefaultHome) {
+		return fmt.Errorf("skill_dirs default_home %q must be absolute or relative to the user's home", s.DefaultHome)
 	}
 	return nil
 }
 
 func (s pluginSkillDir) resolve(env []string, homeDir string) string {
-	home := filepath.Join(homeDir, s.DefaultHome)
+	home := s.DefaultHome
+	if !filepath.IsAbs(home) {
+		home = filepath.Join(homeDir, home)
+	}
 	if s.HomeEnv != "" {
 		if value, _ := pty.LookupEnv(env, s.HomeEnv); strings.TrimSpace(value) != "" {
 			home = strings.TrimSpace(value)

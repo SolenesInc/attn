@@ -27,7 +27,7 @@ export type ServerBinding = {
  targets?: boolean;
 };
 
-/** A home whose `skills` folder the harness reads user skills from: `$homeEnv`, or `~/defaultHome` when `homeEnv` is unset. */
+/** A home whose `skills` folder the harness reads user skills from: `$homeEnv`, or else `defaultHome`, absolute or relative to the user's home. */
 export type SkillDir = {
  homeEnv?: string;
  defaultHome: string;
