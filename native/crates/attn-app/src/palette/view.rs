@@ -269,9 +269,16 @@ pub(crate) fn row_face(r: &Row, key: String, place: Place, t: &Tokens) -> El {
             age: owed,
             tag,
         } => {
-            let name = name().child(title(agent.shown_name())).children(
-                (*crew && details).then(|| muted("· crew".into()).key(format!("{key}.crew"))),
-            );
+            let name = name()
+                .children(
+                    agent
+                        .priority
+                        .then(|| crate::sidebar::priority_flag(&key, t)),
+                )
+                .child(title(agent.name.clone()))
+                .children(
+                    (*crew && details).then(|| muted("· crew".into()).key(format!("{key}.crew"))),
+                );
             let (ink, tint) = status_ink(*status, t);
             option
                 .a11y_value(status.word())

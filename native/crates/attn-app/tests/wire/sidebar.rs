@@ -691,6 +691,13 @@ fn an_agent_row_leads_with_its_harness_logo_until_the_user_turns_logos_off() {
         (node.name.unwrap_or_default(), w, h)
     };
     assert_eq!(lead(&world), ("Claude · working".into(), 14.0, 14.0));
+    let name_x = |world: &World| {
+        world
+            .screen()
+            .bounds(Target::key("sidebar.session.s1.name"))
+            .unwrap()[0]
+    };
+    let with_logo = name_x(&world);
 
     world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
         settings: Some(BTreeMap::from([(
@@ -701,6 +708,11 @@ fn an_agent_row_leads_with_its_harness_logo_until_the_user_turns_logos_off() {
     });
     world.settle();
     assert_eq!(lead(&world), ("Claude · working".into(), 8.0, 8.0));
+    assert_eq!(
+        name_x(&world),
+        with_logo,
+        "the dot sits in the logo's column, so the name stays put"
+    );
 }
 
 #[test]
@@ -1251,4 +1263,104 @@ fn rows_below_the_dock_scroll_into_view_by_the_wheel_and_by_an_automation_press(
     let shown = world.daemon.sent_of("desktop_show_session");
     assert_eq!(shown.len(), 1);
     assert_eq!(shown[0]["session_id"], "a13");
+}
+
+#[test]
+fn an_agent_row_ends_its_marks_at_its_right_edge_and_flags_priority_ahead_of_its_name() {
+    use attn_protocol::SessionDelegationRole;
+    let agent = Session {
+        priority: Some(true),
+        delegated_from_chief: Some(true),
+        dispatcher_session_id: Some("b".into()),
+        delegation_role: Some(SessionDelegationRole {
+            name: "Builder".into(),
+            ..SessionDelegationRole::default()
+        }),
+        label: "Rework the ledger's sweep across every profile".into(),
+        ..session("a", "idle")
+    };
+    let world = World::start(Daemon::scripted().state(state(
+        vec![agent, session("b", "idle")],
+        vec![desktop(
+            "d1",
+            "a",
+            "Work",
+            vec![pane("d1", "p1", "a"), pane("d1", "p2", "b")],
+        )],
+    )));
+    let screen = world.screen();
+    let bounds = |key: &str| screen.bounds(Target::key(key)).expect(key);
+    let [row_x, _, row_w, _] = bounds("sidebar.session.a");
+    let [chain_x, _, chain_w, _] = bounds("sidebar.session.a.chain");
+    let [delegated_x, _, delegated_w, _] = bounds("sidebar.session.a.delegated");
+    let [name_x, _, name_w, _] = bounds("sidebar.session.a.name");
+    let [flag_x, _, flag_w, _] = bounds("sidebar.session.a.priority");
+    assert_eq!(
+        delegated_x + delegated_w,
+        row_x + row_w - 8.0,
+        "the last mark ends at the row's padding, with nothing hidden after it"
+    );
+    assert!(
+        chain_x + chain_w <= delegated_x,
+        "the role comes before the badges"
+    );
+    assert!(
+        name_x + name_w + 7.0 >= chain_x,
+        "a long name runs up to the marks: {name_x}+{name_w} against {chain_x}"
+    );
+    assert!(flag_x + flag_w <= name_x, "the flag leads the name");
+    assert_eq!(
+        screen
+            .find(Target::key("sidebar.session.a.name"))
+            .and_then(|n| n.name),
+        Some("Rework the ledger's sweep across every profile".into()),
+        "the flag is not part of the name"
+    );
+    assert_eq!(
+        screen
+            .find(Target::key("sidebar.session.a.priority"))
+            .and_then(|n| n.name),
+        Some("Priority".into())
+    );
+    assert!(
+        screen
+            .find(Target::key("sidebar.session.b.priority"))
+            .is_none()
+    );
+
+    let mut world = world;
+    let [x, y, w, h] = world
+        .screen()
+        .bounds(Target::key("sidebar.session.b.actions"))
+        .unwrap();
+    world.gesture(|app| app.move_to((x + w / 2.0, y + h / 2.0)));
+    world.gesture(|app| app.click_at((x + w / 2.0, y + h / 2.0)));
+    assert!(
+        world
+            .screen()
+            .find(Target::role("menu").name("Actions for b"))
+            .is_some(),
+        "the actions button stays pressable beside the role"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Delegation chain"))
+            .is_none(),
+        "pressing the actions button does not pin the chain"
+    );
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        })
+    });
+    world.gesture(|app| app.click(Target::key("sidebar.session.b.chain")));
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Delegation chain"))
+            .is_some(),
+        "and so does the role"
+    );
 }

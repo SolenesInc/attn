@@ -443,11 +443,8 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
                 }
                 Line::Agent { row, .. } => {
                     let bar = settling_bar(state, &key, row, t);
-                    let more = rune::row()
-                        .key(format!("{key}.controls"))
-                        .group_opacity(0.0, 1.0)
-                        .gap(space::S1)
-                        .items_center()
+                    let right = if row.chain.is_some() { 0.0 } else { 4.0 };
+                    let controls = overlaid_controls(&key, 0.0, right, t)
                         .children(
                             row.pr
                                 .as_ref()
@@ -455,9 +452,8 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
                         )
                         .children(row.settle_run.then(|| settle_button(&key, row, t)))
                         .child(actions_button(&key, row, t));
-                    agent_row(key.clone(), row, logos, t)
+                    agent_row(key.clone(), row, logos, controls, t)
                         .hover_group()
-                        .child(more)
                         .children(bar)
                 }
                 Line::Tile(tile) => tile_row(key.clone(), tile, t),
@@ -652,9 +648,15 @@ pub(crate) fn desktop_number(number: i64, current: bool, empty: bool, t: &Tokens
 
 const NAME_MIN_W: f32 = 64.0;
 
-fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
+/// An agent's row. Its hover controls lie over its right end, or beside its role chip when it
+/// has one, so the chip and the controls both stay pressable, as the Tauri app's crew rows move
+/// theirs beside their trailing control.
+fn agent_row(key: String, agent: &AgentRow, logos: bool, controls: El, t: &Tokens) -> El {
     let id = agent.id.clone();
-    let name = agent.shown_name();
+    let (beside_marks, at_end) = match agent.chain {
+        Some(_) => (Some(controls), None),
+        None => (None, Some(controls)),
+    };
     let row = leaf_row(key.clone(), agent.selected, t)
         .role("button")
         .focusable(true)
@@ -668,15 +670,21 @@ fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
         })
         .child(lead(&key, agent, logos, t))
         .child(
-            text(name)
-                .key(format!("{key}.name"))
-                .font(type_::BODY)
-                .color(t.text_primary)
-                .single_line()
-                .truncate()
+            flagged(&key, agent, t)
                 .grow(1.0)
                 .shrink()
-                .min_w(NAME_MIN_W),
+                .min_w(NAME_MIN_W)
+                .h(LEAF_HEIGHT)
+                .child(
+                    text(agent.name.clone())
+                        .key(format!("{key}.name"))
+                        .font(type_::BODY)
+                        .color(t.text_primary)
+                        .single_line()
+                        .truncate()
+                        .shrink(),
+                )
+                .children(beside_marks),
         )
         .children(
             agent
@@ -684,33 +692,59 @@ fn agent_row(key: String, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
                 .as_ref()
                 .map(|run| crate::desktop::provenance::run_view(&key, run, t)),
         )
-        .children((agent.state == AgentState::Recoverable).then(|| {
-            text("recoverable")
-                .key(format!("{key}.recoverable"))
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary)
-        }))
-        .children(
-            agent
-                .chief
-                .then(|| mark(&key, "chief", &attn_ui::icon::CHIEF, "Chief of staff", t)),
+        .child(
+            rune::row()
+                .key(format!("{key}.trailing"))
+                .items_center()
+                .gap(6.0)
+                .children(
+                    agent
+                        .chain
+                        .as_ref()
+                        .map(|c| crate::desktop::chain::chip(&key, &agent.id, c, t)),
+                )
+                .children(crate::asks::marker(&key, agent.asks, t))
+                .children((agent.state == AgentState::Recoverable).then(|| {
+                    text("recoverable")
+                        .key(format!("{key}.recoverable"))
+                        .font(type_::MONO_CAPTION)
+                        .color(t.text_tertiary)
+                }))
+                .children(
+                    agent
+                        .chief
+                        .then(|| mark(&key, "chief", &attn_ui::icon::CHIEF, "Chief of staff", t)),
+                )
+                .children(
+                    agent
+                        .delegated
+                        .then(|| mark(&key, "delegated", "↳", "Delegated from chief of staff", t)),
+                ),
         )
-        .children(
-            agent
-                .delegated
-                .then(|| mark(&key, "delegated", "↳", "Delegated from chief of staff", t)),
-        )
-        .children(
-            agent
-                .chain
-                .as_ref()
-                .map(|c| crate::desktop::chain::chip(&key, &agent.id, c, t)),
-        )
-        .children(crate::asks::marker(&key, agent.asks, t));
+        .children(at_end);
     match &agent.chain {
         Some(_) => crate::desktop::chain::row_hovers(row, &key, &agent.id),
         None => row,
     }
+}
+
+/// The row an agent's name sits in, led by the priority flag when the agent has priority, as the
+/// Tauri app's `SessionPriority`: the `⚑` mark in the brand colour, 0.3 em before the name.
+pub(crate) fn flagged(row_key: &str, agent: &AgentRow, t: &Tokens) -> El {
+    rune::row()
+        .key(format!("{row_key}.identity"))
+        .items_center()
+        .gap(4.0)
+        .min_w(0.0)
+        .children(agent.priority.then(|| priority_flag(row_key, t)))
+}
+
+pub(crate) fn priority_flag(row_key: &str, t: &Tokens) -> El {
+    rune::icon(&attn_ui::icon::FLAG, type_::BODY.size)
+        .key(format!("{row_key}.priority"))
+        .role("img")
+        .label("Priority")
+        .color(t.brand)
 }
 
 fn rename_desktop_button(row_key: &str, desktop: &DesktopHeader, t: &Tokens) -> El {
@@ -905,9 +939,14 @@ pub(crate) fn row_fill(agent: &AgentRow, t: &Tokens) -> rune::Color {
 
 pub(crate) fn lead(row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> El {
     if !logos || agent.state == AgentState::Launching || agent.offline {
-        return state_mark(row_key, agent, MARK, t);
+        return rune::row()
+            .key(format!("{row_key}.lead"))
+            .w(LEAD)
+            .h(LEAD)
+            .center()
+            .child(state_mark(row_key, agent, MARK, t));
     }
-    rune::icon(harness_icon::of(&agent.harness), 14.0)
+    rune::icon(harness_icon::of(&agent.harness), LEAD)
         .key(format!("{row_key}.state"))
         .role("img")
         .label(agent.lead())
@@ -939,6 +978,9 @@ pub(crate) fn state_mark(row_key: &str, agent: &AgentRow, side: f32, t: &Tokens)
             .inert(),
     )
 }
+
+/// The Tauri app's `.sidebar-leaf-row` lead column.
+const LEAD: f32 = 14.0;
 
 /// `StateIndicator`'s sizes: `sm` in a tile header, `md` in lists.
 pub(crate) const MARK_SMALL: f32 = 6.0;

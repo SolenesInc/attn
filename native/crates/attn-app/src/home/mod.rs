@@ -502,7 +502,6 @@ fn session_row(a: &HomeAgent, t: &Tokens) -> El {
     let key = format!("home.session.{}", a.agent.id);
     memo(key.clone(), (a, *t), || {
         let id = a.agent.id.clone();
-        let name = a.agent.shown_name();
         let unsnooze = (!a.snoozed_until.is_empty() && !a.agent.offline).then(|| {
             let id = id.clone();
             button(
@@ -542,11 +541,14 @@ fn session_row(a: &HomeAgent, t: &Tokens) -> El {
                     .grow(1.0)
                     .min_w(0.0)
                     .child(
-                        text(name)
-                            .font(type_::BODY)
-                            .color(t.text_primary)
-                            .single_line()
-                            .truncate(),
+                        crate::sidebar::flagged(&key, &a.agent, t).child(
+                            text(a.agent.name.clone())
+                                .font(type_::BODY)
+                                .color(t.text_primary)
+                                .single_line()
+                                .truncate()
+                                .shrink(),
+                        ),
                     )
                     .children(a.activity.as_ref().map(|activity| {
                         let said = match &activity.stale_since {

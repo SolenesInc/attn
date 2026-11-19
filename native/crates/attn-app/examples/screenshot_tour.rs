@@ -232,6 +232,15 @@ fn initial(dark: bool, tile: Value, seeds: Vec<Seed>) -> InitialStateMessage {
         .enumerate()
         .map(|(n, state)| session(&format!("s{n}"), state))
         .collect();
+    let mut sessions = sessions;
+    sessions[1].priority = Some(true);
+    sessions[2].dispatcher_session_id = Some("s1".into());
+    sessions[2].delegated_from_chief = Some(true);
+    sessions[2].delegation_role = Some(attn_protocol::SessionDelegationRole {
+        name: "Builder".into(),
+        icon: Some("code".into()),
+        ..Default::default()
+    });
     let mut desktops = vec![desktop(
         DESKTOP,
         "1",

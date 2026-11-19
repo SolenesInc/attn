@@ -998,7 +998,6 @@ fn filter(state: &State, key: String, t: &Tokens) -> El {
 
 fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens) -> El {
     let id = a.agent.id.clone();
-    let name = a.agent.shown_name();
     let trailing = if a.closing {
         "closing".to_owned()
     } else if !a.age.is_empty() {
@@ -1016,12 +1015,14 @@ fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx))
         .child(badged_lead(&key, a, logos, t))
         .child(
-            text(name)
-                .font(type_::BODY)
-                .color(t.text_primary)
-                .single_line()
-                .truncate()
-                .grow(1.0),
+            super::flagged(&key, &a.agent, t).grow(1.0).shrink().child(
+                text(a.agent.name.clone())
+                    .font(type_::BODY)
+                    .color(t.text_primary)
+                    .single_line()
+                    .truncate()
+                    .shrink(),
+            ),
         )
         .children(
             a.agent
