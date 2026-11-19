@@ -686,7 +686,8 @@ fn says(does: &str, keys: Option<&String>) -> String {
     }
 }
 
-/// A section rule's line out to its key, as the Tauri app's `queue-rule-line` and `kbd`.
+/// A section rule's line out to its key, as the Tauri app's `queue-rule-line` and `kbd`. The key
+/// gives way first, so the words before it stay whole.
 fn rule_tail(keys: Option<String>, t: &Tokens) -> [El; 2] {
     [
         rune::el().grow(1.0).h(1.0).fill(t.border_subtle),
@@ -694,7 +695,10 @@ fn rule_tail(keys: Option<String>, t: &Tokens) -> [El; 2] {
             Some(keys) => text(keys)
                 .font(KEYS_TYPE)
                 .color(t.text_tertiary)
-                .single_line(),
+                .single_line()
+                .truncate()
+                .shrink()
+                .min_w(0.0),
             None => rune::el(),
         },
     ]
@@ -768,19 +772,10 @@ fn owed_words((waiting, unreachable): (usize, usize), t: &Tokens) -> El {
         parts.push(
             text(format!("{unreachable} unreachable"))
                 .font(words)
-                .color(t.text_tertiary)
-                .single_line()
-                .truncate()
-                .shrink()
-                .min_w(0.0),
+                .color(t.text_tertiary),
         );
     }
-    row()
-        .items_center()
-        .gap(4.0)
-        .shrink()
-        .min_w(0.0)
-        .children(parts)
+    row().items_center().gap(4.0).children(parts)
 }
 
 fn agents_toggle(key: String, open: bool, more: usize, keys: Option<String>, t: &Tokens) -> El {
@@ -808,14 +803,7 @@ fn agents_toggle(key: String, open: bool, more: usize, keys: Option<String>, t: 
                     .font(type_::LABEL)
                     .color(tokens.text_tertiary),
                 )
-                .child(
-                    type_::caps(&label)
-                        .color(tokens.text_tertiary)
-                        .single_line()
-                        .truncate()
-                        .shrink()
-                        .min_w(0.0),
-                )
+                .child(type_::caps(&label).color(tokens.text_tertiary))
                 .children(rule_tail(keys, &tokens))
         })
         .build(attn_ui::kit(t))

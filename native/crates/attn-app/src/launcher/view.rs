@@ -452,8 +452,7 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, look: 
                 } else {
                     look.text_quiet
                 })
-                .single_line()
-                .truncate()
+                .wrap()
                 .min_w(0.0)
                 .mx(2.0)
                 .mt(8.0)
@@ -466,8 +465,7 @@ fn section(title: &str, look: &Look) -> El {
         .font(SECTION)
         .text_case(TextCase::Uppercase)
         .color(look.text_section)
-        .single_line()
-        .truncate()
+        .wrap()
         .min_w(0.0)
         .px(10.0)
         .pt(10.0)
@@ -743,17 +741,9 @@ fn location_row(
                 .label(name.clone())
                 .description(reach_word)
                 .items_center()
-                .shrink()
-                .min_w(0.0)
                 .gap(5.0)
                 .child(machine_dot(shown, t, look))
-                .child(
-                    badge(name, look)
-                        .single_line()
-                        .truncate()
-                        .shrink()
-                        .min_w(0.0),
-                )
+                .child(badge(name, look))
         });
     let unreachable = r.kind != Kind::Machine
         && reach

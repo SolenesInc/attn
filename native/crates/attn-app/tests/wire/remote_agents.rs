@@ -42,6 +42,14 @@ fn on_studio(session: Session) -> Session {
 /// The agent `remote` on studio owes the older turn and `local` the newer, each alone on its
 /// desktop, in queue flow. Showing an agent makes its desktop current, as the daemon does.
 fn start_with(outpost: OutpostInfo, remote: Session) -> World {
+    World::start(daemon_with(outpost, remote, &[]))
+}
+
+fn daemon_with(
+    outpost: OutpostInfo,
+    remote: Session,
+    settings: &[(&str, &str)],
+) -> attn_testkit::Daemon {
     let local = turn("local", 10);
     let with_terminal = |p: attn_protocol::DesktopPane| attn_protocol::DesktopPane {
         runtime_id: format!("rt-{}", p.session_id),
@@ -68,6 +76,12 @@ fn start_with(outpost: OutpostInfo, remote: Session) -> World {
         .settings
         .get_or_insert_default()
         .insert("outposts_enabled".into(), "true".into());
+    for (key, value) in settings {
+        message
+            .settings
+            .get_or_insert_default()
+            .insert((*key).into(), (*value).into());
+    }
     message.outposts = Some(vec![outpost]);
     let daemon = super::palette::daemon(message, vec![]);
     daemon.on("desktop_show_session", move |r| {
@@ -87,7 +101,7 @@ fn start_with(outpost: OutpostInfo, remote: Session) -> World {
             ..ProfileArrangementChangedMessage::new()
         })
     });
-    World::start(daemon)
+    daemon
 }
 
 fn start(outpost: OutpostInfo) -> World {
@@ -248,6 +262,49 @@ fn the_queue_head_and_the_bar_count_unreachable_turns_apart_and_list_them_last()
     let (head, pill) = owed(&mut world);
     assert_eq!(head, "1 waiting");
     assert!(pill.starts_with("1 waiting · "), "{pill}");
+}
+
+/// The width of each piece of text in the queue's waiting head, by what it says.
+fn head_words(world: &World) -> Vec<(String, f32)> {
+    let rt = world.runtime();
+    let all = rt.elements();
+    let head = all
+        .iter()
+        .find(|e| e.key.as_deref() == Some("queue.waiting-head"))
+        .expect("the queue shows its waiting head");
+    let inside = |e: &&rune::ElementInfo| {
+        std::iter::successors(e.parent, |&p| all[p].parent).any(|p| all[p].path == head.path)
+    };
+    all.iter()
+        .filter(inside)
+        .filter_map(|e| e.text.clone().map(|said| (said, e.rect[2])))
+        .collect()
+}
+
+#[test]
+fn the_queue_head_keeps_its_counts_whole_in_the_smallest_window_and_lets_its_key_give_way() {
+    for scale in ["1", "1.5"] {
+        let words = |size: (f32, f32)| {
+            let daemon = daemon_with(lost(), on_studio(turn("remote", 60)), &[("uiScale", scale)]);
+            head_words(&World::start_sized(daemon, size))
+        };
+        let wide = words((1600.0, 900.0));
+        let small = words((800.0, 600.0));
+        for count in ["1", "waiting", "1 unreachable"] {
+            let width = |of: &[(String, f32)]| {
+                of.iter()
+                    .find(|(said, _)| said == count)
+                    .map(|&(_, w)| w)
+                    .unwrap_or_else(|| panic!("the head says no {count:?}: {of:?}"))
+            };
+            assert!(
+                width(&small) >= width(&wide) - 0.5,
+                "at {scale}x text in 800x600, {count:?} is {} wide, {} in a wide window",
+                width(&small),
+                width(&wide)
+            );
+        }
+    }
 }
 
 #[test]
