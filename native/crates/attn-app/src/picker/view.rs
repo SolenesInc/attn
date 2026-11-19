@@ -926,8 +926,10 @@ fn delete_prompt(w: &str, delete: &Delete, t: &Tokens) -> El {
 
 /// The corner prompt for an agent starting in a new worktree, and the dialog it opens when the
 /// worktree could not be made.
-pub(crate) fn worktree_setup(state: &State, t: &Tokens) -> Option<El> {
-    let setup = state.window.launching.worktree.as_ref()?;
+pub(crate) fn worktree_setup(state: &State, t: &Tokens) -> Vec<El> {
+    let Some(setup) = state.window.launching.worktree.as_ref() else {
+        return Vec::new();
+    };
     let k = attn_ui::kit(t);
     if let (Some(error), true) = (&setup.failed, setup.opened) {
         let mut layers = Vec::new();
@@ -966,13 +968,7 @@ pub(crate) fn worktree_setup(state: &State, t: &Tokens) -> Option<El> {
                 ),
         )
         .build(t, &mut layers);
-        return Some(
-            el().key("worktree-setup.layer")
-                .absolute(0.0, 0.0)
-                .w_full()
-                .h_full()
-                .children(layers),
-        );
+        return layers;
     }
     let (title, detail) = match &setup.failed {
         Some(_) => (
@@ -1017,7 +1013,7 @@ pub(crate) fn worktree_setup(state: &State, t: &Tokens) -> Option<El> {
         lines.role("status").label(name).padding(space::S2)
     };
     let corner = rune_kit::popover::raised(k, corner.key("worktree-setup"), 6.0);
-    Some(
+    vec![
         el().key("worktree-setup.corner")
             .absolute(0.0, 0.0)
             .w_full()
@@ -1031,7 +1027,7 @@ pub(crate) fn worktree_setup(state: &State, t: &Tokens) -> Option<El> {
                     .padding(space::S3)
                     .child(corner),
             ),
-    )
+    ]
 }
 
 pub(crate) fn desktop_label(state: &State, desktop: Option<&String>) -> String {
