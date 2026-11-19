@@ -31,7 +31,7 @@ const STUDIO = `harness-studio-${tag}`;
 const profiles = (includes) => driver.state('profiles', includes ? { includes, timeoutMs: 15_000 } : {});
 const named = (state, name) => state.all.find((p) => p.name === name) ?? null;
 const selectedIs = async (id) => {
-  const state = await profiles(id);
+  const state = await driver.state('profiles', { expect: { selected: id }, timeoutMs: 15_000 });
   runner.assert(state.selected === id, 'the window shows the profile', { id, state });
   return state;
 };
