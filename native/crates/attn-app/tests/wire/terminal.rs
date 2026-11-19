@@ -844,6 +844,52 @@ fn taking_the_keyboard_claims_the_ptys_size_for_this_tile() {
 }
 
 #[test]
+fn coming_back_to_the_window_claims_the_ptys_size_for_the_tile_with_the_keyboard_again() {
+    let mut world = World::start_sized(
+        Daemon::scripted().state(showing(
+            vec![pane("t1", "r1"), pane("t2", "r2")],
+            "daemon-1",
+        )),
+        (1600.0, 900.0),
+    );
+    world.open_desktop();
+    let own = world
+        .daemon
+        .sent_of("pty_resize")
+        .into_iter()
+        .rfind(|r| r["id"] == "r1")
+        .unwrap();
+    world.gesture(|app| app.runtime.window_focus(false));
+    world.daemon.emit(PtyResizedMessage {
+        id: "r1".into(),
+        cols: 200,
+        rows: 50,
+        ..PtyResizedMessage::new()
+    });
+    world.settle();
+    let (focused, resized) = (
+        world.daemon.sent_of("terminal_focus").len(),
+        world.daemon.sent_of("pty_resize").len(),
+    );
+
+    world.gesture(|app| app.runtime.window_focus(true));
+
+    let focus = world.daemon.sent_of("terminal_focus");
+    assert_eq!(focus.len(), focused + 1, "{focus:?}");
+    assert_eq!(focus[focused]["id"], "r1");
+    let resizes = world.daemon.sent_of("pty_resize");
+    assert_eq!(resizes.len(), resized + 1, "{resizes:?}");
+    assert_eq!(
+        (
+            &resizes[resized]["id"],
+            &resizes[resized]["cols"],
+            &resizes[resized]["rows"]
+        ),
+        (&own["id"], &own["cols"], &own["rows"])
+    );
+}
+
+#[test]
 fn an_attach_refused_while_the_worker_restarts_is_asked_again() {
     let daemon = one_terminal();
     let refused = AttachResultMessage {
