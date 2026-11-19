@@ -136,7 +136,7 @@ runner.registerCleanup('remove_member_homes', () => {
   if (fs.existsSync(home(history))) fs.chmodSync(home(history), 0o755);
   for (const id of [inSession, resting, history]) fs.rmSync(home(id), { recursive: true, force: true });
 });
-runner.registerCleanup('retire_crew', async () => {
+runner.registerCleanup('delete_crew', async () => {
   if (!registered) return;
   for (const id of [inSession, resting, history]) {
     const day = member(id)?.binding_session;
@@ -144,7 +144,7 @@ runner.registerCleanup('retire_crew', async () => {
       attn('handoff', '--session', day, '-m', 'Crew management scenario finished.');
       await observer.waitFor(() => !observer.getSession(day), `${id}'s session to end`, 30_000);
     }
-    attn('crew', 'retire', id);
+    attn('doc', 'delete', 'core/crew', 'members', id);
   }
 });
 runner.registerCleanup('settle_seeds', () => {
