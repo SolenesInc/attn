@@ -59,6 +59,11 @@ impl Decoders {
         held.wakes -= 1;
     }
 
+    fn handed(&self) {
+        let _held = self.state.lock().unwrap();
+        self.changed.notify_all();
+    }
+
     /// Waits while `decoding` and no wake is held or handed the panel yet, then counts a look.
     fn look(&self, decoding: bool, handed: impl Fn() -> bool) {
         let held = self.state.lock().unwrap();
@@ -155,7 +160,7 @@ impl CaptureRuntime {
                     }
                     quick_capture::Window::update(&*window, u);
                     if decoded {
-                        window.decoders.changed.notify_all();
+                        window.decoders.handed();
                     }
                 },
             )
