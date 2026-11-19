@@ -29,7 +29,7 @@ pub fn area_box(area: TextArea, disabled: bool, t: &Tokens) -> Control {
         .placeholder_ink(t.text_dimmed)
         .width(None)
         .disabled(disabled)
-        .build(kit(disabled, t));
+        .build(super::kit(t));
     Control::new(boxed(area, disabled, t), size)
 }
 
@@ -38,32 +38,17 @@ fn single_line(input: TextInput, disabled: bool, t: &Tokens) -> Control {
     let field = door::line(input, Type::Body)
         .height(size.height())
         .disabled(disabled)
-        .build(kit(disabled, t));
+        .build(super::kit(t));
     let field = door::sides(field, KIT_LINE_TO_REGULAR, size.inset());
     Control::new(boxed(field, disabled, t), size)
 }
 
-/// The kit draws an unavailable field at half strength, which no later call lifts; its edge
-/// is drawn a step stronger so it still shows at half.
-fn kit(disabled: bool, t: &Tokens) -> &'static rune_kit::Kit {
-    if disabled {
-        super::kit(&Tokens {
-            border: t.border_hover,
-            ..*t
-        })
-    } else {
-        super::kit(t)
-    }
-}
-
-/// An unavailable field drops its fill, so its value, at half strength, reads apart from a
-/// placeholder in a filled box.
+/// The kit draws an unavailable field at half strength itself, so an unavailable field
+/// keeps its rest look and only loses its hover and ring.
 fn boxed(field: El, disabled: bool, t: &Tokens) -> El {
+    let field = field.fill(t.bg_input);
     if disabled {
-        return field.fill(rune::Color::TRANSPARENT);
+        return field;
     }
-    let field = field
-        .fill(t.bg_input)
-        .hover(layers::hover_layer(t.bg_input, t));
-    focus::ring_within(field, t)
+    focus::ring_within(field.hover(layers::hover_layer(t.bg_input, t)), t)
 }

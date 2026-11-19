@@ -728,7 +728,7 @@ fn agent_head(
         .items_center()
         .px(20.0)
         .py(18.0)
-        .child(chevron(open, t))
+        .child(attn_ui::system::opens_in_place(open, t))
         .child(
             text(label.to_owned())
                 .font(AGENT_NAME)
@@ -751,16 +751,6 @@ fn agent_head(
 
 /// An agent's name in its group's head.
 const AGENT_NAME: rune::TextStyle = rune::TextStyle::new(13.0, 600.0);
-
-/// The `›` before an agent's name, turned down while its group is open.
-fn chevron(open: bool, t: &Tokens) -> El {
-    let icon = if open {
-        crate::settings::pages::kit(t).glyph.chevron_down
-    } else {
-        &attn_ui::icon::EXPAND
-    };
-    rune::icon(icon, 12.0).color(t.text_tertiary)
-}
 
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
     let agents = ordered(&state.facts.settings);

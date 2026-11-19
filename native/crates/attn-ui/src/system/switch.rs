@@ -1,6 +1,6 @@
 use rune::{Tx, el, row};
 
-use super::{Control, Radius, Size, Space, Type, door, focus, kit, layers, words};
+use super::{Control, Radius, Size, Space, Type, disabled, door, focus, kit, layers, words};
 use crate::Tokens;
 
 const TRACK: (f32, f32) = (36.0, 20.0);
@@ -18,9 +18,9 @@ pub fn switch<S: 'static>(
     toggle: impl Fn(&mut S, &mut Tx) + 'static,
 ) -> Control {
     let (track_fill, edge, knob_ink) = match (disabled, on) {
-        (true, _) => (rune::Color::TRANSPARENT, t.border, t.text_dimmed),
+        (true, true) => (t.text_tertiary, t.text_tertiary, t.bg_panel),
         (false, true) => (t.warning, t.warning, crate::warning_ink(t)),
-        (false, false) => (t.bg_button, t.border_hover, t.text_tertiary),
+        (_, false) => (t.bg_button, t.border_hover, t.text_tertiary),
     };
     let knob = door::corner(el().key("thumb").size(KNOB, KNOB), Radius::Round)
         .absolute(
@@ -40,25 +40,20 @@ pub fn switch<S: 'static>(
         .label(label.to_owned())
         .checked(on)
         .focusable(true)
-        .disabled(disabled)
         .self_start()
         .items_center();
     let state_word = show_state.then(|| {
         words(
             if on { "On" } else { "Off" },
             Type::Control,
-            if disabled {
-                t.text_dimmed
-            } else {
-                t.text_secondary
-            },
+            t.text_secondary,
         )
         .a11y_hidden()
     });
     if disabled {
         let switch = switch.child(track).children(state_word);
         return Control::new(
-            door::corner(door::gap(switch, Space::S8), Radius::Round),
+            disabled::dim(door::corner(door::gap(switch, Space::S8), Radius::Round)),
             Size::Compact,
         );
     }

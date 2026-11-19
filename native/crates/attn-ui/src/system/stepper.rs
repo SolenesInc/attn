@@ -1,6 +1,6 @@
 use rune::{El, Tx, col, row};
 
-use super::{Button, Control, Radius, Size, Space, Type, door, kit, layers, words};
+use super::{Button, Control, Radius, Size, Space, Type, disabled, door, kit, layers, words};
 use crate::Tokens;
 
 type Press<S> = Box<dyn Fn(&mut S, &mut Tx)>;
@@ -30,17 +30,17 @@ pub fn stepper<S: 'static>(
                 .label(format!("{said} {what}")),
         )
     };
-    let ink = if disabled {
-        t.text_dimmed
-    } else {
-        t.text_primary
-    };
-    let shown = words(value.clone(), Type::Name, ink)
+    let shown = words(value.clone(), Type::Name, t.text_primary)
         .key(format!("{key}.value"))
         .role("status")
         .label(value)
         .w(STEPPER_VALUE)
         .align(rune::Align::Center);
+    let shown = if disabled {
+        disabled::dim(shown)
+    } else {
+        shown
+    };
     let line = door::gap(row().key(key.to_owned()).items_center(), Space::S4)
         .child(step("down", "Decrease", "−", Box::new(down)))
         .child(shown)

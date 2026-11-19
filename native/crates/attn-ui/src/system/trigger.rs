@@ -1,6 +1,6 @@
 use rune::{Color, El, Tx, el, row};
 
-use super::{Control, Radius, Size, Space, door, focus, kit, layers};
+use super::{Control, Radius, Size, Space, disabled, door, focus, kit, layers};
 use crate::Tokens;
 
 const CHEVRON: f32 = 12.0;
@@ -17,8 +17,8 @@ pub enum TriggerLook {
 }
 
 /// The control that opens a menu or a picker and shows what is chosen in it: what it holds,
-/// then a chevron, beside its first line, that turns while the menu is open. The caller inks the content, in
-/// `text_dimmed` while the trigger is disabled.
+/// then a chevron, beside its first line, that turns while the menu is open. Disabled, it draws its
+/// rest look with what it holds at half strength.
 pub struct Trigger {
     key: String,
     label: String,
@@ -78,36 +78,31 @@ impl Trigger {
         press: impl Fn(&mut S, &mut Tx) + 'static,
     ) -> Control {
         let size = Size::Regular;
-        let (fill, edge) = match (self.disabled, self.open, self.look) {
-            (true, _, _) => (Color::TRANSPARENT, t.border),
-            (false, true, _) => (t.bg_selected, t.border_hover),
-            (false, false, _) if self.unset => (Color::TRANSPARENT, t.warning.alpha(0.45)),
-            (false, false, TriggerLook::Field) => (t.bg_input, t.border),
-            (false, false, TriggerLook::Quiet) => (Color::TRANSPARENT, Color::TRANSPARENT),
+        let open = self.open && !self.disabled;
+        let unset = self.unset && !open && !self.disabled;
+        let (fill, edge) = match (open, self.look) {
+            (true, _) => (t.bg_selected, t.border_hover),
+            (false, _) if unset => (Color::TRANSPARENT, t.warning.alpha(0.45)),
+            (false, TriggerLook::Field) => (t.bg_input, t.border),
+            (false, TriggerLook::Quiet) => (Color::TRANSPARENT, Color::TRANSPARENT),
         };
-        let glyph = if self.open {
+        let glyph = if open {
             kit(t).glyph.chevron_up
         } else {
             kit(t).glyph.chevron_down
-        };
-        let ink = if self.disabled {
-            t.text_dimmed
-        } else {
-            t.text_tertiary
         };
         let chevron = el()
             .h(size.height() - 2.0 * EDGE_TO_CONTENT.pt())
             .self_start()
             .items_center()
-            .child(rune::icon(glyph, CHEVRON).color(ink))
+            .child(rune::icon(glyph, CHEVRON).color(t.text_tertiary))
             .a11y_hidden();
         let mut trigger = row()
             .key(self.key)
             .role("button")
             .label(self.label)
-            .expanded(self.open)
+            .expanded(open)
             .focusable(true)
-            .disabled(self.disabled)
             .min_w(0.0)
             .min_h(size.height())
             .items_start()
@@ -118,7 +113,7 @@ impl Trigger {
         if let Some(value) = self.value {
             trigger = trigger.a11y_value(value);
         }
-        if self.unset && !self.open && !self.disabled {
+        if unset {
             trigger = trigger.border_dash(4.0, 3.0);
         }
         let trigger = door::gap(
@@ -127,7 +122,7 @@ impl Trigger {
         );
         let trigger = door::corner(trigger, Radius::Control);
         if self.disabled {
-            return Control::new(trigger, size);
+            return Control::new(disabled::dim(trigger), size);
         }
         let surface = if fill.a > 0.0 { fill } else { t.bg_panel };
         let trigger = layers::pressable(trigger, surface, t).on_press_tx(press);

@@ -1,7 +1,7 @@
 use rune::{Color, El, Tx, row};
 use rune_kit::{Button as KitButton, ButtonVariant};
 
-use super::{Control, Radius, Size, Space, Type, door, focus, kit, layers, words};
+use super::{Control, Radius, Size, Space, Type, disabled, door, focus, kit, layers, words};
 use crate::Tokens;
 
 /// How a button reads.
@@ -91,9 +91,11 @@ impl Button {
     }
 
     pub fn build(self, t: &Tokens) -> Control {
-        let (fill, edge, ink) = match self.look {
-            Look::Quiet if self.disabled => (Color::TRANSPARENT, Color::TRANSPARENT, t.text_dimmed),
-            _ if self.disabled => (Color::TRANSPARENT, t.border, t.text_dimmed),
+        let look = match self.look {
+            Look::Primary if self.disabled => Look::Plain,
+            look => look,
+        };
+        let (fill, edge, ink) = match look {
             Look::Plain if self.open => (t.bg_selected, t.border_hover, t.text_primary),
             Look::Quiet if self.open => (t.bg_selected, Color::TRANSPARENT, t.text_primary),
             Look::Primary => (t.warning, t.warning, crate::warning_ink(t)),
@@ -127,7 +129,7 @@ impl Button {
         let button = door::inset(button, self.size.inset(), Space::S0);
         let button = focus::ring(door::corner(button, Radius::Control), t);
         let button = if self.disabled {
-            button.disabled(true)
+            disabled::dim(button)
         } else {
             let surface = if fill.a > 0.0 { fill } else { t.bg_panel };
             layers::pressable(button, surface, t)

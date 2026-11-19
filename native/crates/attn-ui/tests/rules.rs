@@ -3,7 +3,7 @@
 
 use attn_ui::Tokens;
 use attn_ui::colors::scheme_for;
-use attn_ui::gallery::{FIELD_BOXES, SUBJECTS};
+use attn_ui::gallery::{BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
 use rune::render::Instance;
 use rune::{App, AppSpec, Cx, El, ElementInfo, Env, Runtime, el};
 
@@ -453,5 +453,221 @@ fn a_number_field_shows_a_seven_digit_value_whole() {
             needed <= room,
             "dark={dark}: 1000000 needs {needed}, the field leaves {room} beside its arrows"
         );
+    }
+}
+
+#[test]
+fn a_segmented_control_stays_inside_its_column_and_truncates_its_labels() {
+    for dark in [true, false] {
+        let rt = story(dark, "Library/Segmented", "Narrow");
+        let column = element(&rt, "segmented.column");
+        for key in ["segmented.theme", "segmented.agent", "segmented.long"] {
+            let control = element(&rt, key);
+            assert!(
+                control.rect[0] + control.rect[2] <= column.rect[0] + column.rect[2] + 0.5,
+                "dark={dark}: {key} ends at {}, past its column's {}",
+                control.rect[0] + control.rect[2],
+                column.rect[0] + column.rect[2]
+            );
+        }
+    }
+}
+
+/// Each story with a Disabled variant, and the variant it dims.
+const DISABLED: &[(&str, &str)] = &[
+    ("Library/Button", "Rest"),
+    ("Library/Switch", "Rest"),
+    ("Library/Segmented", "Rest"),
+    ("Library/Stepper", "Rest"),
+    ("Library/Expander", "Closed"),
+    ("Library/Choice", "First chosen"),
+    ("Library/Press area", "Closed"),
+    ("Library/Disclosure", "Closed"),
+    ("Library/Trigger", "Rest"),
+    ("Library/Field box", "Filled"),
+];
+
+/// The parts whose rest look is warm: disabled, they first turn neutral, so they are held to
+/// that and not to their rest colour.
+const WARM_AT_REST: &[&str] = &[
+    "button.primary.regular",
+    "button.primary.compact",
+    "switch.on",
+    "choice.0",
+];
+
+/// The half strength every unavailable control draws at.
+const STRENGTH: f32 = 0.5;
+/// Glyph atlases and 8-bit blending land within this of the exact blend.
+const BLEND: f32 = 0.02;
+
+/// A part the frame draws: an instance's fill at its centre, or its edge at the middle of its
+/// leading side.
+#[derive(Clone, Copy)]
+enum Part {
+    Fill(usize),
+    Edge(usize),
+}
+
+fn parts(rt: &Runtime<()>) -> Vec<Part> {
+    rt.instances
+        .iter()
+        .enumerate()
+        .flat_map(|(n, i)| {
+            let kind = i.params[1];
+            let fill = (kind == rune::render::KIND_RECT || kind == rune::render::KIND_GLYPH)
+                && i.fill[3] > 0.0;
+            let edge = kind == rune::render::KIND_RECT && i.params[0] > 0.0 && i.border[3] > 0.0;
+            fill.then_some(Part::Fill(n))
+                .into_iter()
+                .chain(edge.then_some(Part::Edge(n)))
+        })
+        .collect()
+}
+
+fn point_of(rt: &Runtime<()>, part: Part) -> (usize, [f32; 2], [f32; 4]) {
+    match part {
+        Part::Fill(n) => {
+            let [x, y, w, h] = rt.instances[n].rect;
+            (n, [x + w / 2.0, y + h / 2.0], rt.instances[n].fill)
+        }
+        Part::Edge(n) => {
+            let i = &rt.instances[n];
+            let [x, y, _, h] = i.rect;
+            (n, [x + i.params[0] / 2.0, y + h / 2.0], i.border)
+        }
+    }
+}
+
+/// What the frame shows at `part`, over `ground`: every rectangle under its point drawn before
+/// it, through the layers open around it, as the renderer blends them.
+fn shown(rt: &Runtime<()>, part: Part, ground: rune::Color) -> [f32; 3] {
+    let (last, [px, py], top) = point_of(rt, part);
+    let ground = [ground.r, ground.g, ground.b].map(rune::theme::srgb_encode);
+    let over4 =
+        |top: [f32; 4], below: [f32; 4]| [0, 1, 2, 3].map(|c| top[c] + below[c] * (1.0 - top[3]));
+    let mut current = [ground[0], ground[1], ground[2], 1.0];
+    let mut open: Vec<([f32; 4], f32)> = Vec::new();
+    let close = |current: [f32; 4], (below, opacity): ([f32; 4], f32)| {
+        over4(current.map(|c| c * opacity), below)
+    };
+    for (n, i) in rt.instances[..=last].iter().enumerate() {
+        let kind = i.params[1];
+        if kind == rune::render::KIND_LAYER {
+            open.push((current, i.fill[3]));
+            current = [0.0; 4];
+        } else if kind == rune::render::KIND_LAYER_END {
+            let layer = open.pop().expect("a layer ends that began");
+            current = close(current, layer);
+        } else if n == last {
+            current = over4(top, current);
+        } else if kind == rune::render::KIND_RECT {
+            let [x, y, w, h] = i.rect;
+            if px >= x && px <= x + w && py >= y && py <= y + h {
+                current = over4(i.fill, current);
+            }
+        }
+    }
+    while let Some(layer) = open.pop() {
+        current = close(current, layer);
+    }
+    [current[0], current[1], current[2]]
+}
+
+fn same_part(a: &Instance, b: &Instance, edge: bool) -> bool {
+    a.params[1] == b.params[1]
+        && a.rect.iter().zip(b.rect).all(|(a, b)| (a - b).abs() <= 0.5)
+        && (!edge || b.border[3] > 0.0)
+        && (edge || b.fill[3] > 0.0)
+}
+
+fn within(rt: &Runtime<()>, keys: &[&str], instance: &Instance) -> bool {
+    let [x, y, w, h] = instance.rect.map(|v| v / SCALE);
+    keys.iter()
+        .filter_map(|k| rt.playground_element(k))
+        .any(|e| {
+            let [ex, ey, ew, eh] = e.rect;
+            x >= ex - 1.0 && y >= ey - 1.0 && x + w <= ex + ew + 1.0 && y + h <= ey + eh + 1.0
+        })
+}
+
+/// The keys of the controls a story draws.
+fn subjects(name: &str) -> Vec<String> {
+    match name {
+        "Library/Button" => BUTTONS
+            .iter()
+            .flat_map(|(look, _)| {
+                SIZES
+                    .iter()
+                    .map(move |(size, _)| format!("button.{look}.{size}"))
+            })
+            .collect(),
+        "Library/Field box" => FIELD_BOXES.map(str::to_owned).to_vec(),
+        _ => SUBJECTS
+            .iter()
+            .find(|(story, _)| *story == name)
+            .map(|(_, keys)| keys.iter().map(|k| (*k).to_owned()).collect())
+            .unwrap_or_else(|| panic!("{name} names no subjects")),
+    }
+}
+
+#[test]
+fn disabled_draws_every_part_of_every_control_at_half_strength() {
+    for &(name, rest_variant) in DISABLED {
+        for dark in [true, false] {
+            let t = tokens(dark);
+            let rest = story(dark, name, rest_variant);
+            let disabled = story(dark, name, "Disabled");
+            let keys = subjects(name);
+            let keys: Vec<&str> = keys.iter().map(String::as_str).collect();
+            let mut checked = 0;
+            for part in parts(&disabled) {
+                let (n, _, _) = point_of(&disabled, part);
+                let instance = &disabled.instances[n];
+                if !within(&disabled, &keys, instance) {
+                    continue;
+                }
+                let edge = matches!(part, Part::Edge(_));
+                let seen = shown(&disabled, part, t.bg_panel);
+                if within(&disabled, WARM_AT_REST, instance) {
+                    let [r, g, b] = seen;
+                    assert!(
+                        r.max(g).max(b) - r.min(g).min(b) <= 0.06,
+                        "{name}, dark={dark}: a disabled warm part still reads warm, {seen:?}"
+                    );
+                    continue;
+                }
+                let Some(m) = rest
+                    .instances
+                    .iter()
+                    .position(|r| same_part(instance, r, edge))
+                else {
+                    continue;
+                };
+                let at_rest = shown(
+                    &rest,
+                    if edge { Part::Edge(m) } else { Part::Fill(m) },
+                    t.bg_panel,
+                );
+                let ground =
+                    [t.bg_panel.r, t.bg_panel.g, t.bg_panel.b].map(rune::theme::srgb_encode);
+                let expected =
+                    [0, 1, 2].map(|c| at_rest[c] * STRENGTH + ground[c] * (1.0 - STRENGTH));
+                if seen == ground && at_rest == ground {
+                    continue;
+                }
+                checked += 1;
+                assert!(
+                    (0..3).all(|c| (seen[c] - expected[c]).abs() <= BLEND),
+                    "{name}, dark={dark}: a disabled {} at {:?} shows {seen:?}; at rest it shows {at_rest:?}, so half strength is {expected:?}",
+                    if edge { "edge" } else { "fill" },
+                    instance.rect.map(|v| v / SCALE),
+                );
+            }
+            assert!(
+                checked > 0,
+                "{name}, dark={dark}: no part of the disabled story matched its rest"
+            );
+        }
     }
 }

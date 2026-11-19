@@ -210,7 +210,9 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                     s.disabled = true;
                     s.line = TextEdit::new("api-review");
                     s.number = TextEdit::new("600");
-                    s.area = TextEdit::new("Review the change against the plan.");
+                    s.area = TextEdit::new(
+                        "Review the change against the plan.\nReport P0 and P1 only.",
+                    );
                 })
                 .variant("Disabled empty", |s| s.disabled = true)
                 .variant("Selected text", |s| {
@@ -287,13 +289,12 @@ fn triggers(s: &Library, cx: &mut Cx<Library>) -> El {
         (false, true) => "claude-opus-4-5-20251101-with-a-very-long-provider-suffix",
         (false, false) => "Opus 4.5",
     };
-    let dim = |ink| if s.disabled { t.text_dimmed } else { ink };
-    let ink = dim(if s.failed { t.warning } else { t.text_primary });
+    let ink = if s.failed { t.warning } else { t.text_primary };
     let shown = |key: &str, look: TriggerLook| -> El {
         let content = door::gap(row().items_center().min_w(0.0), Space::S8)
-            .child(words("Claude", Type::Small, dim(t.text_secondary)))
+            .child(words("Claude", Type::Small, t.text_secondary))
             .child(words(model, Type::Body, ink).truncate().shrink().min_w(0.0))
-            .child(words("High", Type::Body, dim(t.accent)));
+            .child(words("High", Type::Body, t.accent));
         Trigger::new(key, "Model", content)
             .look(look)
             .value(format!("Claude, {model}, High"))
@@ -608,7 +609,7 @@ fn segmented(s: &Library, cx: &mut Cx<Library>) -> El {
         .disabled(s.disabled)
         .build(&t)
         .into();
-    let column = door::gap(col().items_start(), Space::S24)
+    let column = door::gap(col().key("segmented.column").items_start(), Space::S24)
         .w(if s.narrow { 220.0 } else { 520.0 })
         .child(track(
             "segmented.theme",
@@ -684,7 +685,9 @@ fn steppers(s: &Library, cx: &mut Cx<Library>) -> El {
                 noop,
             )
             .into(),
-            number_box(number, false, &t).key("stepper.number").into(),
+            number_box(number, s.disabled, &t)
+                .key("stepper.number")
+                .into(),
         ],
     )
 }

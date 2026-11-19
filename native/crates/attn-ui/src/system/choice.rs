@@ -1,6 +1,6 @@
 use rune::{Color, El, Tx, col, el, row};
 
-use super::{Control, Radius, Size, Space, Type, door, focus, layers, words};
+use super::{Control, Radius, Size, Space, Type, disabled, door, focus, layers, words};
 use crate::Tokens;
 
 const DOT: f32 = 14.0;
@@ -55,9 +55,10 @@ impl Choice {
         t: &Tokens,
         press: impl Fn(&mut S, &mut Tx) + 'static,
     ) -> Control {
-        let (edge, ink) = match (self.disabled, self.chosen) {
-            (true, _) => (t.border, t.text_dimmed),
-            (false, true) => (t.warning, t.text_primary),
+        let warm = self.chosen && !self.disabled;
+        let (edge, ink) = match (warm, self.chosen) {
+            (true, _) => (t.warning, t.text_primary),
+            (false, true) => (t.border_hover, t.text_primary),
             (false, false) => (t.border, t.text_secondary),
         };
         let fill = if self.chosen {
@@ -68,9 +69,9 @@ impl Choice {
         let dot = door::corner(el().size(DOT, DOT), Radius::Round)
             .border(
                 if self.chosen { 4.0 } else { 1.0 },
-                match (self.disabled, self.chosen) {
-                    (true, _) => t.border,
-                    (false, true) => t.warning,
+                match (warm, self.chosen) {
+                    (true, _) => t.warning,
+                    (false, true) => t.text_tertiary,
                     (false, false) => t.border_hover,
                 },
             )
@@ -97,8 +98,7 @@ impl Choice {
             .w_full()
             .min_h(Size::Regular.height())
             .items_center()
-            .disabled(self.disabled)
-            .fill(if self.chosen && !self.disabled {
+            .fill(if self.chosen {
                 fill
             } else {
                 Color::TRANSPARENT
@@ -110,7 +110,7 @@ impl Choice {
         let row = door::inset(door::gap(row, Space::S12), Space::S12, Space::S8);
         let row = door::corner(row, Radius::Card);
         if self.disabled {
-            return Control::new(row, Size::Regular);
+            return Control::new(disabled::dim(row), Size::Regular);
         }
         let row = layers::pressable(row, fill, t).on_press_tx(press);
         Control::new(focus::ring_on_edge(row, t), Size::Regular)

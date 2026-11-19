@@ -1,9 +1,8 @@
 use rune::{Color, El, Tx, row};
 
-use super::{Control, Radius, Size, Space, Tone, Type, door, focus, kit, layers, tag, words};
+use super::expander::opens_in_place;
+use super::{Control, Radius, Size, Space, Tone, Type, disabled, door, focus, layers, tag, words};
 use crate::Tokens;
-
-const CHEVRON: f32 = 12.0;
 
 /// The control that opens and closes a part of a page or a form: a chevron, its name, and tags
 /// that say what the closed part holds. Open, it takes the selected fill.
@@ -20,17 +19,8 @@ pub fn disclosure<S: 'static>(
 ) -> Control {
     let size = Size::Compact;
     let key = key.into();
-    let ink = match (disabled, failed) {
-        (true, _) => t.text_dimmed,
-        (false, true) => t.error,
-        (false, false) => t.text_secondary,
-    };
-    let glyph = if open {
-        kit(t).glyph.chevron_down
-    } else {
-        kit(t).glyph.caret_right
-    };
-    let fill = if open && !disabled {
+    let ink = if failed { t.error } else { t.text_secondary };
+    let fill = if open {
         t.bg_selected
     } else {
         Color::TRANSPARENT
@@ -45,18 +35,17 @@ pub fn disclosure<S: 'static>(
         .description(chips.join(", "))
         .expanded(open)
         .focusable(true)
-        .disabled(disabled)
         .self_start()
         .items_center()
         .h(size.height())
         .fill(fill)
-        .child(rune::icon(glyph, CHEVRON).color(ink).a11y_hidden())
+        .child(opens_in_place(open, t))
         .child(words(label, Type::Control, ink).a11y_hidden())
         .children(chips.iter().enumerate().map(chip));
     let line = door::gap(door::inset(line, size.inset(), Space::S0), Space::S8);
     let line = door::corner(door::hang_left(line, size.inset()), Radius::Control);
     if disabled {
-        return Control::new(line, size);
+        return Control::new(disabled::dim(line), size);
     }
     let surface = if open { fill } else { t.bg_panel };
     let line = layers::pressable(line, surface, t).on_press_tx(press);

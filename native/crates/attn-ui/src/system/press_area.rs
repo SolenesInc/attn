@@ -1,6 +1,6 @@
 use rune::{Color, El, Tx, row};
 
-use super::{Control, Radius, Size, door, focus, layers};
+use super::{Control, Radius, Size, disabled, door, focus, layers};
 use crate::Tokens;
 
 /// An area that acts as one button and grows with what it holds, such as a row's title that
@@ -16,7 +16,7 @@ pub fn press_area<S: 'static>(
     press: impl Fn(&mut S, &mut Tx) + 'static,
 ) -> Control {
     let size = Size::Compact;
-    let fill = if open && !disabled {
+    let fill = if open {
         t.bg_selected
     } else {
         Color::TRANSPARENT
@@ -27,7 +27,6 @@ pub fn press_area<S: 'static>(
         .label(label.to_owned())
         .expanded(open)
         .focusable(true)
-        .disabled(disabled)
         .w_full()
         .min_w(0.0)
         .items_center()
@@ -40,7 +39,7 @@ pub fn press_area<S: 'static>(
     );
     let area = door::corner(area, Radius::Control);
     if disabled {
-        return Control::new(area, size);
+        return Control::new(disabled::dim(area), size);
     }
     let surface = if open { fill } else { t.bg_panel };
     let area = layers::pressable(area, surface, t).on_press_tx(press);
