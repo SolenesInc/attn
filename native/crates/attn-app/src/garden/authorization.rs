@@ -29,7 +29,7 @@ impl Sheet<'_> {
                 .build(t)
                 .key(spot.key("edit"))
                 .into();
-            section = section.aside(edit);
+            section = section.control(edit);
             if !written.is_empty() {
                 let cleared = spot.clone();
                 let clear: El = quiet("Clear")
@@ -40,7 +40,7 @@ impl Sheet<'_> {
                     .build(t)
                     .key(spot.key("clear"))
                     .into();
-                section = section.aside(clear);
+                section = section.control(clear);
             }
         }
         if !written.is_empty() {

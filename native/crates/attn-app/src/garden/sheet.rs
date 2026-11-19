@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use attn_protocol::{DesktopUpdateTileMessage, Seed, SeedCheckTally, SeedDocument};
 use attn_ui::Tokens;
-use attn_ui::blocks::{Block, Entry, Facts, Head, Inline, Note, Section, Stack, entries};
+use attn_ui::blocks::{Block, Byline, Entry, Head, Inline, Note, Section, Stack, entries};
 use attn_ui::system::{FieldState, Link, Type, area_box, dot, meter, spring, words};
 use rune::{El, KeyEvent, TextEdit, Tx, col, memo};
 use rune_kit::TextArea;
@@ -93,7 +93,7 @@ impl Sheet<'_> {
     /// id, then `notes`.
     pub(super) fn head(&self, here: &Seed, aside: Vec<El>, notes: Vec<El>) -> Head {
         let t = self.t;
-        let mut facts = Facts::new().key(self.key("head.meta")).wrap().push(
+        let mut facts = Byline::new().key(self.key("head.meta")).wrap().push(
             Inline::loose()
                 .child(dot(super::view::state_color(&here.status, t)))
                 .child(said(here.status.clone(), t)),

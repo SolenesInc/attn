@@ -3,7 +3,7 @@ use std::sync::Arc;
 use attn_protocol::{Seed, SeedNoteMessage, SeedTransitionMessage, SeedTransitionResultMessage};
 use attn_ui::Tokens;
 use attn_ui::blocks::{
-    Bar, Card, Facts, Inline, Lane, Menu, Note, Stack, Standing, Trail, board as board_body, lanes,
+    Bar, Byline, Card, Inline, Lane, Menu, Note, Stack, Standing, Trail, board as board_body, lanes,
 };
 use attn_ui::system::{Link, Type, bare_field, words};
 use rune::{El, Key, KeyEvent, Phase, TextEdit, Tx, col, el, memo};
@@ -267,7 +267,7 @@ fn slot(column: Column) -> usize {
 
 fn standby_marker(standby: &model::Standby, t: &Tokens) -> El {
     let quiet = |said: String| words(said, Type::Small, t.text_secondary);
-    let line = Facts::new()
+    let line = Byline::new()
         .wrap()
         .push(words("standby", Type::Small, t.warning))
         .push_all(standby.pull_requests.iter().map(|pr| {
@@ -1041,7 +1041,7 @@ fn card_face(seed: &Arc<Seed>, look: &CardLook, t: &Tokens) -> El {
     let id = seed.id.clone();
     let pressed = seed.id.clone();
     let dragged = seed.id.clone();
-    let mut facts = Facts::new().wrap().push_all(card_meta(look, seed, t));
+    let mut facts = Byline::new().wrap().push_all(card_meta(look, seed, t));
     if let Some(tally) = model::check_tally(seed) {
         facts = facts.push(words(
             model::tally_words(&tally),
@@ -1201,7 +1201,7 @@ fn composer(compose: &Compose, written: &TextEdit, names: &SessionNames, t: &Tok
     Card::new("garden.board.compose")
         .standing(Standing::Lifted)
         .push(
-            Facts::new()
+            Byline::new()
                 .push(words(verb.label().to_lowercase(), Type::Small, t.accent))
                 .id(compose.seed.id.clone(), t.text_tertiary)
                 .build(t),

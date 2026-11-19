@@ -14,7 +14,7 @@ pub struct Section {
     blocks: Vec<Block>,
     region: bool,
     reachable: bool,
-    aside: Vec<El>,
+    controls: Vec<El>,
 }
 
 impl Section {
@@ -26,7 +26,7 @@ impl Section {
             blocks: Vec::new(),
             region: false,
             reachable: false,
-            aside: Vec::new(),
+            controls: Vec::new(),
         }
     }
 
@@ -46,7 +46,7 @@ impl Section {
     }
 
     /// The section is a landmark a reader moves between, as a part of a document is, rather
-    /// than a group of settings.
+    /// than a group of settings: its title reads as a heading.
     pub fn region(mut self) -> Self {
         self.region = true;
         self
@@ -60,21 +60,25 @@ impl Section {
     }
 
     /// A control beside the heading, such as the button that changes what the section holds.
-    pub fn aside(mut self, control: impl Into<El>) -> Self {
-        self.aside.push(control.into());
+    pub fn control(mut self, control: impl Into<El>) -> Self {
+        self.controls.push(control.into());
         self
     }
 
     pub fn build(self, t: &Tokens) -> Block {
         let heading = words(self.title.clone(), Type::Heading, t.text_primary)
-            .key(format!("{}.heading", self.key))
-            .role("heading");
+            .key(format!("{}.heading", self.key));
+        let heading = if self.region {
+            heading.role("heading")
+        } else {
+            heading
+        };
         let heading = if self.reachable {
             heading.focusable(true).tab_index(-1)
         } else {
             heading
         };
-        let heading = if self.aside.is_empty() {
+        let heading = if self.controls.is_empty() {
             heading
         } else {
             door::gaps(
@@ -83,7 +87,7 @@ impl Section {
                 Space::S8,
             )
             .child(heading)
-            .children(self.aside)
+            .children(self.controls)
         };
         let head = door::gap(col().w_full(), Space::S4)
             .child(heading)

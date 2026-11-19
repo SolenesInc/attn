@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use rune::{Color, El, GrowthSpec, col, row};
 use rune_kit::ScrollBar;
 
-use super::Facts;
+use super::Byline;
 use crate::Tokens;
 use crate::system::{Radius, Space, Type, door, dot_on_line, focus, layers};
 
@@ -19,7 +19,7 @@ pub struct ListRow {
     value: String,
     mark: Option<Color>,
     signals: Vec<El>,
-    facts: Option<Facts>,
+    facts: Option<Byline>,
     snippet: Option<El>,
     end: Option<El>,
     selected: bool,
@@ -68,7 +68,7 @@ impl ListRow {
         self
     }
 
-    pub fn facts(mut self, facts: Facts) -> Self {
+    pub fn facts(mut self, facts: Byline) -> Self {
         self.facts = Some(facts);
         self
     }

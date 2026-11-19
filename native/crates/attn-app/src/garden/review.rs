@@ -7,7 +7,7 @@ use attn_protocol::{
     SeedReviewStartMessage, SeedTransitionMessage,
 };
 use attn_ui::blocks::{
-    Actions, Bar, Block, Facts, Field, Form, Head, Inline, ListRow, Pane, Reader, Refusal, Room,
+    Actions, Bar, Block, Byline, Field, Form, Head, Inline, ListRow, Pane, Reader, Refusal, Room,
     Section, Stack, Trail, rail as on_rail, strip,
 };
 use attn_ui::system::{Button as AttnButton, Link, Look, Tone, Type, meter, tag, words};
@@ -972,7 +972,7 @@ fn rail(shown: &GardenReview, selected: &str, full: bool, t: &Tokens) -> El {
         .value(if current { "current" } else { "" })
         .mark(if current { t.brand } else { t.border_subtle })
         .facts(
-            Facts::new()
+            Byline::new()
                 .id(format!("{}", n + 1), t.text_tertiary)
                 .said(status_words(item), t),
         )
@@ -1301,7 +1301,7 @@ fn progress(state: &State, shown: &GardenReview, item: &GardenReviewItem, t: &To
     let ready = format!("Advice ready for {advised} of {total} seeds.");
     let recipe = format!("{} · {}", shown.run.recipe.agent, shown.run.recipe.model);
     let mut panel = part("garden.review.waiting", "Advisor progress")
-        .aside(
+        .control(
             words(recipe.clone(), Type::Mono, t.text_tertiary)
                 .label(recipe)
                 .truncate()

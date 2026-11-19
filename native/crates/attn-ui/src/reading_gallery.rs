@@ -5,7 +5,7 @@ use rune::{Cx, El, Playground, Story, TextEdit, Tx, col, el, row};
 
 use crate::Tokens;
 use crate::blocks::{
-    Actions, Bar, Block, Card, Entry, Facts, Field, Form, Head, Lane, ListRow, Menu, Note, Reader,
+    Actions, Bar, Block, Byline, Card, Entry, Field, Form, Head, Lane, ListRow, Menu, Note, Reader,
     Room, Section, Standing, Trail, board, entries, lanes, rail,
 };
 use crate::colors::scheme_for;
@@ -51,7 +51,7 @@ impl Width {
 pub const READING_SUBJECTS: &[(&str, &[&str], &[&str])] = &[
     ("Blocks/Bar", &["bar"], &[]),
     ("Blocks/List row", &["rows"], &[]),
-    ("Blocks/Facts", &["facts"], &[]),
+    ("Blocks/Byline", &["byline"], &[]),
     ("Blocks/Entry", &["entries"], &[]),
     ("Blocks/Reader", &["reader"], &[]),
     ("Blocks/Card", &["cards"], &[]),
@@ -84,7 +84,7 @@ fn view_of(name: &str) -> View {
     match name {
         "Blocks/Bar" => bar_story,
         "Blocks/List row" => list_rows,
-        "Blocks/Facts" => facts_story,
+        "Blocks/Byline" => facts_story,
         "Blocks/Entry" => entries_story,
         "Blocks/Reader" => reader_story,
         "Blocks/Card" => cards,
@@ -176,7 +176,7 @@ fn seed_row(key: &str, s: &Reading, t: &Tokens, selected: bool, ink: rune::Color
     .mark(ink)
     .signal(words("parked", Type::Small, t.warning))
     .facts(
-        Facts::new()
+        Byline::new()
             .id("s-c72nmn", t.text_tertiary)
             .said("Builder", t)
             .said("2h ago", t),
@@ -207,7 +207,7 @@ fn list_rows(s: &Reading, cx: &mut Cx<Reading>) -> El {
         ),
     )
     .mark(t.accent)
-    .facts(Facts::new().id("s-c72nmn", t.text_tertiary))
+    .facts(Byline::new().id("s-c72nmn", t.text_tertiary))
     .snippet(marked(
         found,
         &marks,
@@ -235,8 +235,8 @@ fn list_rows(s: &Reading, cx: &mut Cx<Reading>) -> El {
 
 fn facts_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
     let t = tokens(cx);
-    let facts = Facts::new()
-        .key("facts")
+    let facts = Byline::new()
+        .key("byline")
         .wrap()
         .push(row().items_center().child(dot(t.accent)).child(words(
             " growing",
@@ -311,7 +311,7 @@ fn reader_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
     let t = tokens(cx);
     let head = Head::new("reader.title", title(s, "Reading surfaces"))
         .note(
-            Facts::new()
+            Byline::new()
                 .wrap()
                 .push(tag("reader.state", "growing", Tone::Good, &t))
                 .said("tended by Builder", &t)
@@ -322,7 +322,8 @@ fn reader_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
             Button::new("Open as tile")
                 .size(Size::Compact)
                 .on_press_tx(noop)
-                .build(&t),
+                .build(&t)
+                .key("reader.open"),
         );
     let related = Section::new("reader.related", "Related")
         .region()
@@ -353,7 +354,7 @@ fn card(key: &str, s: &Reading, t: &Tokens, standing: Standing) -> El {
         .standing(standing)
         .push(words(title(s, "Reading surfaces"), Type::Body, t.text_primary).wrap())
         .push(
-            Facts::new()
+            Byline::new()
                 .wrap()
                 .push(words("ready", Type::Small, t.accent))
                 .id("s-c72nmn", t.text_tertiary)

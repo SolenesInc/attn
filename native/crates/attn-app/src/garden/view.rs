@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use attn_protocol::Seed;
 use attn_ui::blocks::{
-    Actions, Bar, Block, Facts, Inline, ListRow, Note, Pane, Reader, Room, Section, Surface, Trail,
-    rows,
+    Actions, Bar, Block, Byline, Inline, ListRow, Note, Pane, Reader, Room, Section, Surface,
+    Trail, rows,
 };
 use attn_ui::system::{Button, Link, Look as ButtonLook, Size, Type, bare_field, marked, words};
 use attn_ui::{GlyphButton, Tokens};
@@ -731,7 +731,7 @@ fn seed_row(spec: &RowSpec, t: &Tokens) -> El {
             row = row
                 .signal(words(marker.clone(), Type::Small, t.text_tertiary).help(sentence.clone()));
         }
-        let mut facts = Facts::new().id(
+        let mut facts = Byline::new().id(
             seed.id.clone(),
             if look.id_hit {
                 t.brand

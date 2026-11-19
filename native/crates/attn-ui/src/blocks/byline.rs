@@ -6,15 +6,15 @@ use crate::system::{Space, Type, door, words};
 /// What a row or a page says about a thing in passing, one fact after another with a dot
 /// between: its id, who tends it, how far along it is.
 #[derive(Default)]
-pub struct Facts {
+pub struct Byline {
     key: Option<String>,
     items: Vec<El>,
     wrap: bool,
 }
 
-impl Facts {
-    pub fn new() -> Facts {
-        Facts::default()
+impl Byline {
+    pub fn new() -> Byline {
+        Byline::default()
     }
 
     pub fn key(mut self, key: impl Into<String>) -> Self {

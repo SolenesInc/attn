@@ -78,7 +78,7 @@ impl Sheet<'_> {
         let t = self.t;
         let mut list = self.section("checks", "Checks").reachable();
         if let Some(tally) = model::tally_of(checks.iter().copied()) {
-            list = list.aside(
+            list = list.control(
                 words(model::tally_words(&tally), Type::Small, t.text_tertiary)
                     .key(self.key("checks.tally"))
                     .label(format!("Checks: {}", model::tally_sentence(&tally))),

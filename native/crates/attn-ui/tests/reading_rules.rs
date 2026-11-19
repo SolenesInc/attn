@@ -115,3 +115,18 @@ fn a_reading_story_draws_once_and_rests() {
         );
     }
 }
+
+#[test]
+fn a_heads_short_title_keeps_its_control_beside_it_in_a_docked_reader_and_a_long_one_wraps_it_under()
+ {
+    for (variant, beside) in [("Narrow", true), ("Narrow long", false)] {
+        let rt = story("Blocks/Reader", variant);
+        let title = element(&rt, "reader.title").rect;
+        let open = element(&rt, "reader.open").rect;
+        assert_eq!(
+            open[1] < title[1] + title[3],
+            beside,
+            "{variant}: Open as tile at {open:?}, the title at {title:?}"
+        );
+    }
+}
