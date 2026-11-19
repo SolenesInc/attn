@@ -637,7 +637,7 @@ func stillClosed(t *testing.T, cli *client.Client, delegated *protocol.DelegateR
 
 func seedPullRequestReadiness(t *testing.T, cli *client.Client, seed string) string {
 	t.Helper()
-	watched, err := cli.SeedPullRequests("sender", seed)
+	watched, err := cli.PullRequests("sender", seed)
 	if err != nil {
 		t.Fatalf("pull requests watched for %s: %v", seed, err)
 	}

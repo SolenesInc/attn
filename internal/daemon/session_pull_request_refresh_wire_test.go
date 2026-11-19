@@ -1160,3 +1160,38 @@ func TestAReviewersWatchOnAnotherAuthorsPullRequestHearsThatAuthorAndStaysQuietO
 		}
 	})
 }
+
+func TestAClosedSessionsWatchCanBeListedAndEndedByItsSessionID(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "s1")
+		watchPullRequestOn(t, cli, "s1", protocol.PullRequestWatchModeGreen)
+		w.advance(protocol.HeatHotInterval)
+		closeSession(t, cli, "s1", "work finished")
+
+		if _, readinessReads := gh.fetchesDuring(w, protocol.HeatHotInterval); readinessReads == 0 {
+			t.Errorf("after its session closed, GitHub was not asked about the watched pull request, want the watch kept")
+		}
+		listed, err := cli.PullRequests("s1", "")
+		if err != nil || len(listed) != 1 || listed[0].URL != shopPull(71) || !protocol.Deref(listed[0].Watching) {
+			t.Fatalf("the closed session lists %+v (%v), want its watched pull request", listed, err)
+		}
+		if err := cli.UnwatchSessionPullRequest("s1", "", shopPull(71)); err != nil {
+			t.Fatalf("unwatch for the closed session: %v", err)
+		}
+		if listed, err := cli.PullRequests("s1", ""); err != nil || len(listed) != 1 || protocol.Deref(listed[0].Watching) {
+			t.Errorf("after the unwatch the closed session lists %+v (%v), want its pull request unwatched", listed, err)
+		}
+		if snapshots, readinessReads := gh.fetchesDuring(w, 3*protocol.HeatColdInterval); snapshots+readinessReads != 0 {
+			t.Errorf("GitHub was asked %d times about the closed session's unwatched pull request, want none", snapshots+readinessReads)
+		}
+
+		if _, err := cli.PullRequests("never-ran", ""); err == nil || !strings.Contains(err.Error(), "unknown session never-ran") {
+			t.Errorf("listing for a session this profile never had = %v, want unknown session", err)
+		}
+		if err := cli.UnwatchSessionPullRequest("never-ran", "", shopPull(71)); err == nil || !strings.Contains(err.Error(), "unknown session never-ran") {
+			t.Errorf("unwatching for a session this profile never had = %v, want unknown session", err)
+		}
+	})
+}

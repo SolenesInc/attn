@@ -802,12 +802,16 @@ func (c *Client) UnwatchSessionPullRequest(id protocol.SessionID, seedID, url st
 	return err
 }
 
-func (c *Client) SeedPullRequests(id protocol.SessionID, seedID string) ([]protocol.SessionPullRequest, error) {
-	resp, err := c.send(protocol.PullRequestWatchListMessage{Cmd: protocol.CmdPullRequestWatchList, ID: id, SeedID: strings.TrimSpace(seedID)})
+func (c *Client) PullRequests(id protocol.SessionID, seedID string) ([]protocol.SessionPullRequest, error) {
+	msg := protocol.PullRequestListMessage{Cmd: protocol.CmdPullRequestList, ID: id}
+	if strings.TrimSpace(seedID) != "" {
+		msg.SeedID = protocol.Ptr(strings.TrimSpace(seedID))
+	}
+	resp, err := c.send(msg)
 	if err != nil {
 		return nil, err
 	}
-	return resp.SeedPullRequests, nil
+	return resp.PullRequests, nil
 }
 
 func (c *Client) StartDelegation(msg protocol.DelegateMessage) (*protocol.DelegationOperation, error) {

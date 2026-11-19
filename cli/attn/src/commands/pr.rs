@@ -1,14 +1,13 @@
 use super::support::{bool_flag, client, current_session_or_exit, parse_interspersed, string_flag};
 use super::{Run, Stop, print_json, print_stdout};
-use crate::client::{Reply, SendError};
+use crate::client::SendError;
 use attn::go::flag::{Flag, FlagDefault, FlagSet};
 use attn::go::quote::quote;
 use attn::go::tabwriter;
 use attn_protocol::{
-    PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestUnwatchMessage,
-    PullRequestWatchListMessage, PullRequestWatchMessage, QueryMessage, SessionPullRequest,
+    PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestListMessage,
+    PullRequestUnwatchMessage, PullRequestWatchMessage, SessionPullRequest,
 };
-use serde::Deserialize;
 use serde_json::value::RawValue;
 use std::ffi::OsString;
 use std::fmt::Write as _;
@@ -273,54 +272,30 @@ fn record_or_forget(run: &mut Run<'_>, verb: &str, parsed: &Parsed) -> Result<()
     Ok(())
 }
 
-#[derive(Deserialize)]
-struct SessionEntries {
-    id: String,
-    #[serde(default)]
-    pull_requests: Option<Vec<Box<RawValue>>>,
-}
-
-fn raw_entries(reply: &Reply, field: &str) -> Result<Vec<Box<RawValue>>, SendError> {
-    let entries: Option<Vec<Box<RawValue>>> = reply.value(field)?;
-    Ok(entries.unwrap_or_default())
-}
-
 fn entries_to_list(
     run: &mut Run<'_>,
     verb: &str,
     parsed: &Parsed,
 ) -> Result<(Vec<Box<RawValue>>, Owner), Stop> {
-    if !parsed.seed.is_empty() {
-        let mut message = PullRequestWatchListMessage::new();
-        message.id.clone_from(&parsed.session);
-        message.seed_id.clone_from(&parsed.seed);
-        let entries = client(run)
-            .call(&message)
-            .and_then(|reply| raw_entries(&reply, "seed_pull_requests"))
-            .map_err(|error| fail(run, verb, &error))?;
-        let owner = Owner {
+    let mut message = PullRequestListMessage::new();
+    message.id.clone_from(&parsed.session);
+    message.seed_id = optional(&parsed.seed);
+    let entries: Option<Vec<Box<RawValue>>> = client(run)
+        .call(&message)
+        .and_then(|reply| reply.value("pull_requests"))
+        .map_err(|error| fail(run, verb, &error))?;
+    let owner = if parsed.seed.is_empty() {
+        Owner {
+            kind: "session",
+            id: parsed.session.clone(),
+        }
+    } else {
+        Owner {
             kind: "seed",
             id: parsed.seed.clone(),
-        };
-        return Ok((entries, owner));
-    }
-    let sessions: Option<Vec<SessionEntries>> = client(run)
-        .call(&QueryMessage::new())
-        .and_then(|reply| reply.value("sessions"))
-        .map_err(|error| fail(run, verb, &error))?;
-    let Some(session) = sessions
-        .unwrap_or_default()
-        .into_iter()
-        .find(|session| session.id == parsed.session)
-    else {
-        eprintln!("pr {verb}: unknown session {}", parsed.session);
-        return Err(Stop(EXIT_ERROR));
+        }
     };
-    let owner = Owner {
-        kind: "session",
-        id: session.id,
-    };
-    Ok((session.pull_requests.unwrap_or_default(), owner))
+    Ok((entries.unwrap_or_default(), owner))
 }
 
 fn list(run: &mut Run<'_>, verb: &str, parsed: &Parsed) -> Result<(), Stop> {

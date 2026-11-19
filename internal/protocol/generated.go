@@ -8871,6 +8871,17 @@ type PullRequestLinkResult struct {
 	Applied bool `json:"applied"`
 }
 
+type PullRequestListMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID SessionID `json:"id"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID *string `json:"seed_id,omitempty,omitzero"`
+}
+
 type PullRequestProvenance struct {
 	// HeadSHA corresponds to the JSON schema field "head_sha".
 	HeadSHA string `json:"head_sha"`
@@ -8900,17 +8911,6 @@ type PullRequestUnwatchMessage struct {
 
 	// URL corresponds to the JSON schema field "url".
 	URL string `json:"url"`
-}
-
-type PullRequestWatchListMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID SessionID `json:"id"`
-
-	// SeedID corresponds to the JSON schema field "seed_id".
-	SeedID string `json:"seed_id"`
 }
 
 type PullRequestWatchMessage struct {
@@ -9855,6 +9855,9 @@ type Response struct {
 	// Prs corresponds to the JSON schema field "prs".
 	Prs []PR `json:"prs,omitempty,omitzero"`
 
+	// PullRequests corresponds to the JSON schema field "pull_requests".
+	PullRequests []SessionPullRequest `json:"pull_requests,omitempty,omitzero"`
+
 	// QuickCaptureResult corresponds to the JSON schema field "quick_capture_result".
 	QuickCaptureResult *QuickCaptureResult `json:"quick_capture_result,omitempty,omitzero"`
 
@@ -9907,9 +9910,6 @@ type Response struct {
 
 	// SeedPlotResult corresponds to the JSON schema field "seed_plot_result".
 	SeedPlotResult *SeedPlotResult `json:"seed_plot_result,omitempty,omitzero"`
-
-	// SeedPullRequests corresponds to the JSON schema field "seed_pull_requests".
-	SeedPullRequests []SessionPullRequest `json:"seed_pull_requests,omitempty,omitzero"`
 
 	// SeedReadyResult corresponds to the JSON schema field "seed_ready_result".
 	SeedReadyResult *SeedReadyResult `json:"seed_ready_result,omitempty,omitzero"`

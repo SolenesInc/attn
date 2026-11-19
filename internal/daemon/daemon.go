@@ -3208,8 +3208,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handlePullRequestWatch(conn, msg.(*protocol.PullRequestWatchMessage))
 	case protocol.CmdPullRequestUnwatch:
 		d.handlePullRequestUnwatch(conn, msg.(*protocol.PullRequestUnwatchMessage))
-	case protocol.CmdPullRequestWatchList:
-		d.handlePullRequestWatchList(conn, msg.(*protocol.PullRequestWatchListMessage))
+	case protocol.CmdPullRequestList:
+		d.handlePullRequestList(conn, msg.(*protocol.PullRequestListMessage))
 	case protocol.CmdQuery:
 		d.handleQuery(conn, msg.(*protocol.QueryMessage))
 	case protocol.CmdCallerSession:

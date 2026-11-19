@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "4466f875013f";
+pub const PROTOCOL_VERSION: &str = "b74958983143";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -8422,6 +8422,23 @@ pub struct PullRequestLinkResult {
     pub applied: bool,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PullRequestListMessage {
+    pub cmd: String,
+    pub id: SessionID,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed_id: Option<String>,
+}
+
+impl PullRequestListMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "pull_request_list".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PullRequestProvenance {
     pub head_sha: String,
     pub number: i64,
@@ -8444,22 +8461,6 @@ impl PullRequestUnwatchMessage {
     pub fn new() -> Self {
         Self {
             cmd: "pull_request_unwatch".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct PullRequestWatchListMessage {
-    pub cmd: String,
-    pub id: SessionID,
-    pub seed_id: String,
-}
-
-impl PullRequestWatchListMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "pull_request_watch_list".to_string(),
             ..Self::default()
         }
     }
@@ -9341,6 +9342,8 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prs: Option<Vec<PR>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pull_requests: Option<Vec<SessionPullRequest>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quick_capture_result: Option<QuickCaptureResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub record_vent_result: Option<Vent>,
@@ -9374,8 +9377,6 @@ pub struct Response {
     pub seed_plant_result: Option<SeedPlantResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_plot_result: Option<SeedPlotResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_pull_requests: Option<Vec<SessionPullRequest>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_ready_result: Option<SeedReadyResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

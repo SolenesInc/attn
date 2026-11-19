@@ -79,17 +79,33 @@ func (d *Daemon) handlePullRequestUnwatch(conn net.Conn, msg *protocol.PullReque
 	d.sendOK(conn)
 }
 
-func (d *Daemon) handlePullRequestWatchList(conn net.Conn, msg *protocol.PullRequestWatchListMessage) {
-	seed, err := d.seedOfSessionProfile(protocol.TrimID(msg.ID), msg.SeedID)
+func (d *Daemon) handlePullRequestList(conn net.Conn, msg *protocol.PullRequestListMessage) {
+	pullRequests, err := d.listPullRequests(protocol.TrimID(msg.ID), strings.TrimSpace(protocol.Deref(msg.SeedID)))
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
+	if pullRequests == nil {
+		pullRequests = []protocol.SessionPullRequest{}
+	}
+	json.NewEncoder(conn).Encode(protocol.Response{Ok: true, PullRequests: pullRequests})
+}
+
+func (d *Daemon) listPullRequests(sessionID protocol.SessionID, seedID string) ([]protocol.SessionPullRequest, error) {
+	if seedID == "" {
+		if !d.sessionKnown(sessionID) {
+			return nil, fmt.Errorf("unknown session %s", sessionID)
+		}
+		return d.sessionPullRequestsTo(sessionID, d.inboxRoleAddresses(sessionID)), nil
+	}
+	seed, err := d.seedOfSessionProfile(sessionID, seedID)
+	if err != nil {
+		return nil, err
+	}
 	address := who.ToTenderOf(seed.ID)
 	watched, err := d.store.PullRequestWatchesTo(address)
 	if err != nil {
-		d.sendError(conn, fmt.Sprintf("pull requests watched for seed %s: %v", seed.ID, err))
-		return
+		return nil, fmt.Errorf("pull requests watched for seed %s: %w", seed.ID, err)
 	}
 	records := make([]store.SessionPullRequestRecord, 0, len(watched))
 	byPR := make(map[string][]store.PullRequestWatch, len(watched))
@@ -97,11 +113,11 @@ func (d *Daemon) handlePullRequestWatchList(conn net.Conn, msg *protocol.PullReq
 		records = append(records, w.Record)
 		byPR[w.Watch.PRID] = append(byPR[w.Watch.PRID], w.Watch)
 	}
-	pullRequests := d.sessionPullRequestsForBroadcast(records, []who.Address{address}, byPR)
-	if pullRequests == nil {
-		pullRequests = []protocol.SessionPullRequest{}
-	}
-	json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SeedPullRequests: pullRequests})
+	return d.sessionPullRequestsForBroadcast(records, []who.Address{address}, byPR), nil
+}
+
+func (d *Daemon) sessionKnown(id protocol.SessionID) bool {
+	return d.store.Get(id) != nil || d.store.SessionClosed(id)
 }
 
 func (d *Daemon) seedOfSessionProfile(sessionID protocol.SessionID, seedID string) (garden.Seed, error) {
@@ -283,7 +299,7 @@ func (d *Daemon) sessionPullRequestIdentity(id protocol.SessionID, url string) (
 	if sessionID == "" {
 		return rec, fmt.Errorf("pull request report needs a session id")
 	}
-	if d.store.Get(sessionID) == nil {
+	if !d.sessionKnown(sessionID) {
 		return rec, fmt.Errorf("unknown session %s", sessionID)
 	}
 	host, owner, repository, number, err := automation.ParsePullRequestURL(url)
@@ -391,9 +407,13 @@ func (d *Daemon) sessionPullRequestsForSession(session *protocol.Session) []prot
 			addresses = append(addresses, address)
 		}
 	}
+	return d.sessionPullRequestsTo(session.ID, addresses)
+}
+
+func (d *Daemon) sessionPullRequestsTo(sessionID protocol.SessionID, addresses []who.Address) []protocol.SessionPullRequest {
 	byPR := d.pullRequestWatchesByPR()
-	bySession := d.store.SessionPullRequestsOf(withWatchHolders([]protocol.SessionID{session.ID}, byPR))
-	return d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(session.ID, addresses, bySession, byPR), addresses, byPR)
+	bySession := d.store.SessionPullRequestsOf(withWatchHolders([]protocol.SessionID{sessionID}, byPR))
+	return d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(sessionID, addresses, bySession, byPR), addresses, byPR)
 }
 
 func withWatchHolders(ids []protocol.SessionID, byPR map[string][]store.PullRequestWatch) []protocol.SessionID {

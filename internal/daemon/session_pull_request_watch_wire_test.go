@@ -95,7 +95,7 @@ func watchPullRequestAs(t *testing.T, cli *client.Client, session, seed string, 
 
 func onlySeedPullRequest(t *testing.T, cli *client.Client, session, seed string) protocol.SessionPullRequest {
 	t.Helper()
-	watched, err := cli.SeedPullRequests(protocol.SessionID(session), seed)
+	watched, err := cli.PullRequests(protocol.SessionID(session), seed)
 	if err != nil || len(watched) != 1 {
 		t.Fatalf("%s lists %+v for seed %s (%v), want exactly one", session, watched, seed, err)
 	}
@@ -183,7 +183,7 @@ func TestAPullRequestWatchedOnASeedReportsToTheSeedsNextTender(t *testing.T) {
 		if _, err := cli.SeedTransition(protocol.SessionID(next), seed, "tend", "", true, client.SeedTransitionOptions{}); err != nil {
 			t.Fatalf("%s takes over %s: %v", next, seed, err)
 		}
-		if watched, err := cli.SeedPullRequests(protocol.SessionID(next), seed); err != nil || len(watched) != 1 || watched[0].URL != watchedPullRequestURL || !protocol.Deref(watched[0].Watching) {
+		if watched, err := cli.PullRequests(protocol.SessionID(next), seed); err != nil || len(watched) != 1 || watched[0].URL != watchedPullRequestURL || !protocol.Deref(watched[0].Watching) {
 			t.Fatalf("after the handover %s lists %+v (%v), want the watch the seed kept", seed, watched, err)
 		}
 		if _, err := cli.SetSetting(client.SettingsCaller{SessionID: protocol.SessionID(next)}, "pull_requests.own_comments", "ring"); err != nil {
@@ -228,7 +228,7 @@ func TestClosingASeedStopsItsPullRequestWatchesAndWithdrawsTheirUnreadNews(t *te
 			awaitWatchedPullRequest(app, tender, func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.StatusFetchedAt) != "" })
 
 			moveDelegationSeed(t, cli, tender, seed, close.verb, close.reason)
-			if watched, err := cli.SeedPullRequests(protocol.SessionID(tender), seed); err != nil || len(watched) != 0 {
+			if watched, err := cli.PullRequests(protocol.SessionID(tender), seed); err != nil || len(watched) != 0 {
 				t.Errorf("after %s, %s lists %+v (%v), want no watches", close.verb, seed, watched, err)
 			}
 			if err := cli.WatchSessionPullRequest(protocol.SessionID(tender), seed, watchedPullRequestURL, protocol.PullRequestWatchModeGreen, ""); err == nil || !strings.Contains(err.Error(), seed) {

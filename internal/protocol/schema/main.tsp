@@ -1207,13 +1207,14 @@ model PullRequestUnwatchMessage {
   seed_id?: string;
 }
 
-// The pull requests watched for a seed's tender, in the reply's
-// seed_pull_requests. The seed must be in the session's profile.
+// The reply's pull_requests: with seed_id, the pull requests watched for that
+// seed's tender, which must be in the session's profile; without it, the
+// session's own, also after the session closed.
 @extension("x-on", #{ home: true })
-model PullRequestWatchListMessage {
-  cmd: "pull_request_watch_list";
+model PullRequestListMessage {
+  cmd: "pull_request_list";
   id: SessionID;
-  seed_id: string;
+  seed_id?: string;
 }
 
 model DelegationSelection {
@@ -7702,7 +7703,7 @@ model Response {
   delegation_preferences_history?: DelegationPreferencesHistoryResult;
   sessions?: Session[];
   caller_session_id?: SessionID;
-  seed_pull_requests?: SessionPullRequest[];
+  pull_requests?: SessionPullRequest[];
   profiles?: Profile[];
   prs?: PR[];
   repos?: RepoState[];
