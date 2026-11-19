@@ -594,18 +594,67 @@ fn draw<S: 'static>(
 }
 
 thread_local! {
-    static GPU: Gpu = Gpu::headless();
+    static GPU: Gpu = Gpu::try_with_features(
+        Gpu::instance(),
+        None,
+        Compositor::<attn_app::State>::features(&Screens::default()),
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
     static OUT: std::cell::RefCell<PathBuf> = std::cell::RefCell::default();
     static SCHEME: std::cell::RefCell<Option<String>> = std::cell::RefCell::default();
+    static ONLY: std::cell::RefCell<Vec<(String, bool)>> = std::cell::RefCell::default();
+    static SCENE: std::cell::RefCell<String> = std::cell::RefCell::default();
+}
+
+/// Whether this run draws the screen `name`: every screen, or those `--only` names. Until its
+/// picture is saved, a failure names this one.
+fn drawing(name: &str) -> bool {
+    let chosen = ONLY.with_borrow_mut(|only| {
+        let mut chosen = only.is_empty();
+        for (pattern, matched) in only.iter_mut() {
+            if glob(pattern, name) {
+                *matched = true;
+                chosen = true;
+            }
+        }
+        chosen
+    });
+    if chosen {
+        SCENE.set(name.to_owned());
+    }
+    chosen
+}
+
+/// Whether `name` matches `pattern`, where each `*` stands for any run of characters.
+fn glob(pattern: &str, name: &str) -> bool {
+    let mut parts = pattern.split('*');
+    let Some(mut rest) = name.strip_prefix(parts.next().unwrap_or_default()) else {
+        return false;
+    };
+    let parts: Vec<&str> = parts.collect();
+    let Some((last, middle)) = parts.split_last() else {
+        return rest.is_empty();
+    };
+    for part in middle {
+        let Some(at) = rest.find(part) else {
+            return false;
+        };
+        rest = &rest[at + part.len()..];
+    }
+    rest.ends_with(last)
 }
 
 fn save(name: &str, dark: bool, (w, h, rgba): (u32, u32, Vec<u8>)) {
     let appearance = if dark { "dark" } else { "light" };
     let path = OUT.with_borrow(|out| out.join(format!("{name}-{appearance}.png")));
     write_png(&path, w, h, &rgba).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    SCENE.with_borrow_mut(String::clear);
 }
 
 fn snap(world: &mut World, name: &str, dark: bool) {
+    if !drawing(name) {
+        return;
+    }
     let mut shot = None;
     let mut cost = None;
     world.gesture(|app| {
@@ -646,12 +695,18 @@ impl<S: 'static> Compositor<S> for Interface {
 }
 
 fn snap_capture(world: &mut World, name: &str, dark: bool) {
+    if !drawing(name) {
+        return;
+    }
     let mut shot = None;
     world.capture_gesture(|panel| shot = Some(pixels(panel.runtime, &mut Interface)));
     save(name, dark, shot.expect("the capture panel drew"));
 }
 
 fn snap_tile_window(world: &mut World, name: &str, dark: bool) {
+    if !drawing(name) {
+        return;
+    }
     let windows = world.tile_windows();
     let key = windows.first().expect("a tile window is open").key.clone();
     let mut shot = None;
@@ -3395,7 +3450,7 @@ fn desktop_overview(dark: bool) {
     snap(&mut world, "desktop-overview", dark);
 }
 
-fn shoot(out: PathBuf, scheme: Option<String>) {
+fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
     if let Some(id) = &scheme {
         let ids: Vec<&str> = attn_ui::colors::SCHEMES.iter().map(|s| s.id).collect();
         assert!(
@@ -3405,6 +3460,16 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
     }
     OUT.set(out);
     SCHEME.set(scheme);
+    ONLY.set(only.into_iter().map(|pattern| (pattern, false)).collect());
+    let report = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic| {
+        SCENE.with_borrow(|scene| {
+            if !scene.is_empty() {
+                eprintln!("screenshot_tour: drawing {scene} failed");
+            }
+        });
+        report(panic);
+    }));
     for dark in [true, false] {
         sidebar_and_terminal(dark);
         tile_headers(dark, false);
@@ -3532,6 +3597,16 @@ fn shoot(out: PathBuf, scheme: Option<String>) {
         shared_codex_restart(dark);
         session_not_created(dark);
     }
+    let unmatched: Vec<String> = ONLY.with_borrow(|only| {
+        only.iter()
+            .filter(|(_, matched)| !matched)
+            .map(|(pattern, _)| pattern.clone())
+            .collect()
+    });
+    for pattern in &unmatched {
+        eprintln!("screenshot_tour: --only {pattern} names no screen");
+    }
+    unmatched.is_empty()
 }
 
 fn pngs(dir: &std::path::Path) -> Vec<String> {
@@ -3643,17 +3718,33 @@ fn main() -> std::process::ExitCode {
     let args: Vec<PathBuf> = std::env::args_os().skip(1).map(PathBuf::from).collect();
     let words: Vec<&str> = args.iter().filter_map(|a| a.to_str()).collect();
     match (words.first().copied(), &args[..]) {
-        (Some("shoot"), [_, out]) => shoot(out.clone(), None),
-        (Some("shoot"), [_, out, scheme]) => shoot(out.clone(), scheme.to_str().map(str::to_owned)),
+        (Some("shoot"), [_, out, ..]) if words.len() == args.len() => {
+            let mut scheme = None;
+            let mut only = Vec::new();
+            for pair in words[2..].chunks(2) {
+                match pair {
+                    ["--scheme", id] => scheme = Some((*id).to_owned()),
+                    ["--only", pattern] => only.push((*pattern).to_owned()),
+                    _ => return usage_error(),
+                }
+            }
+            if !shoot(out.clone(), scheme, only) {
+                return std::process::ExitCode::FAILURE;
+            }
+        }
         (Some("compare"), [_, base, after, diff]) => {
             if !compare(base.clone(), after.clone(), diff.clone()) {
                 return std::process::ExitCode::FAILURE;
             }
         }
-        _ => {
-            eprintln!("usage: screenshot_tour shoot OUT [SCHEME] | compare BASE AFTER DIFF");
-            return std::process::ExitCode::from(2);
-        }
+        _ => return usage_error(),
     }
     std::process::ExitCode::SUCCESS
+}
+
+fn usage_error() -> std::process::ExitCode {
+    eprintln!(
+        "usage: screenshot_tour shoot OUT [--scheme ID] [--only PATTERN]... | compare BASE AFTER DIFF"
+    );
+    std::process::ExitCode::from(2)
 }

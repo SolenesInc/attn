@@ -133,9 +133,13 @@ scripts/native-screenshot-tour shoot /tmp/tour/base origin/main
 scripts/native-screenshot-tour shoot /tmp/tour/after
 scripts/native-screenshot-tour diff /tmp/tour/base /tmp/tour/after /tmp/tour/diff
 scripts/native-screenshot-tour shoot --scheme catppuccin /tmp/tour/catppuccin
+scripts/native-screenshot-tour shoot --only 'settings*' /tmp/tour/settings
 ```
 
-`--scheme` shoots the tour with the `color_scheme` setting at that id. `shoot`
+`--scheme` shoots the tour with the `color_scheme` setting at that id. `--only`
+shoots just the screens whose names match its pattern, where `*` stands for any
+characters; it can be given more than once, and a pattern that matches no screen
+fails the run. `shoot`
 with a revision checks it out, with this checkout's tour, in the checkout's base
 worktree, `native/target/screenshot-tour-base`. The base worktree stays between
 runs and builds in the checkout's own build directory, so a pair compiles only
@@ -147,8 +151,10 @@ A pair of the full tour, with the base already built once, takes about two
 minutes on a quiet 24-core Linux machine and about six on ai-sandbox under load,
 where the GPU is software and shooting competes for the CPU. The first pair of a
 checkout also builds the release dependencies and the base, about ten minutes
-more. Shoot every
-screen: the diff is what catches the screen a change was not expected to touch.
+more. `--only` is for looking at the screens you are changing while you work;
+shoot every screen for the pair you report, because the diff is what catches the
+screen a change was not expected to touch. Shoot both runs of a pair on the same
+machine, since two GPUs need not draw the same pixels.
 `cargo clean` removes the base worktree with the rest of `native/target`.
 
 ## Layout, type and corners
