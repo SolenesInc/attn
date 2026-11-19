@@ -16,7 +16,8 @@ pub enum TriggerLook {
 }
 
 /// The control that opens a menu or a picker and shows what is chosen in it: what it holds,
-/// then a chevron that turns while the menu is open.
+/// then a chevron that turns while the menu is open. The caller inks the content, in
+/// `text_dimmed` while the trigger is disabled.
 pub struct Trigger {
     key: String,
     label: String,

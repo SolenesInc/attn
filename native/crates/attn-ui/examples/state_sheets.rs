@@ -249,8 +249,20 @@ fn cell(dark: bool, story: &str, column: &Column, key: &str) -> Image {
     pixels(&mut rt).crop([x - MARGIN, y - MARGIN, w + 2.0 * MARGIN, h + 2.0 * MARGIN])
 }
 
-/// Tab, as a person does, until the keyboard is on `path` or inside it.
+/// Tab, as a person with keyboard navigation on does, until the keyboard is on `path` or
+/// inside it.
 fn tab_to(rt: &mut Runtime<()>, path: &str) {
+    rt.set_full_keyboard_access(true);
+    let stage = rt
+        .elements()
+        .into_iter()
+        .find(|e| path.starts_with(&e.path) && e.path.ends_with("playground-stage-1"))
+        .expect("the story has a stage");
+    let (x, y) = (stage.rect[0] + 2.0, stage.rect[1] + 2.0);
+    rt.pointer_down(x, y);
+    rt.pointer_up(x, y);
+    rt.pointer_leave();
+    rt.frame(1.0);
     for _ in 0..80 {
         rt.key(KeyEvent {
             key: Key::Tab,
