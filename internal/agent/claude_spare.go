@@ -42,7 +42,7 @@ func (c *Claude) StartSpare(ctx context.Context, executable, workDir string) (Sp
 	cmd := exec.Command(executable, claudeSpareArgs()...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Dir = workDir
-	cmd.Env = headlessEnvironment("claude")
+	cmd.Env = append(headlessEnvironment("claude"), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1")
 	var stderr boundedHeadlessOutput
 	cmd.Stderr = &stderr
 	stdin, err := cmd.StdinPipe()

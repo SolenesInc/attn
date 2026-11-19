@@ -292,7 +292,9 @@ sign-in and synthetic text, 2026-11-19 (plot `s-jhntry`, F2 to F5):
 
 - `--print` with `--input-format stream-json --output-format stream-json
   --verbose` and no prompt argument starts and waits for messages on stdin.
-  Idle, it holds 200 to 300 MB resident and uses no CPU.
+  Idle, it holds 200 to 300 MB resident. It is not quiet: on 2.1.329 one used
+  0.73 s of CPU over 3 idle minutes, and 0.19 s with
+  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, which attn sets on the spare.
 - A process started with no model and no instructions takes both afterwards:
   a `control_request` with `subtype: initialize` and `systemPrompt`, then one
   with `subtype: set_model`. Each answers a `control_response` with
