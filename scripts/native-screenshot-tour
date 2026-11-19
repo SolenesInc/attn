@@ -2,9 +2,11 @@
 # The native app's screenshot tour: native/crates/attn-app/examples/screenshot_tour.rs draws a
 # fixed set of screens offscreen, in dark and in light, one PNG each.
 #
-#   scripts/native-screenshot-tour shoot [--scheme ID] [--only PATTERN]... OUT [REV]
+#   scripts/native-screenshot-tour shoot [--scheme ID] [--only PATTERN]... [--window WxH]
+#                                        [--text SCALE] [--long] OUT [REV]
 #       the tour of this checkout, or of REV, with the color_scheme setting at ID; with --only,
-#       only the screens whose names match a PATTERN, where * stands for any characters
+#       only the screens whose names match a PATTERN, where * stands for any characters; with
+#       --window, --text or --long, in a WxH window, at SCALE text, with every name long
 #   scripts/native-screenshot-tour diff BASE AFTER DIFF
 #
 # shoot REV checks REV out in this checkout's base worktree, native/target/screenshot-tour-base,
@@ -19,7 +21,7 @@ tour="native/crates/attn-app/examples/screenshot_tour.rs"
 base="$root/native/target/screenshot-tour-base"
 
 usage() {
-  sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -67,9 +69,18 @@ run_tour() {
 
 shoot() {
   local flags=()
-  while [ "${1:-}" = --scheme ] || [ "${1:-}" = --only ]; do
-    flags+=("$1" "${2:?$1 takes a value}")
-    shift 2
+  while true; do
+    case "${1:-}" in
+    --scheme | --only | --window | --text)
+      flags+=("$1" "${2:?$1 takes a value}")
+      shift 2
+      ;;
+    --long)
+      flags+=("$1")
+      shift
+      ;;
+    *) break ;;
+    esac
   done
   [ $# -ge 1 ] || usage
   local out rev="${2:-}" checkout="$root"

@@ -140,7 +140,22 @@ scripts/native-screenshot-tour shoot --only 'settings*' /tmp/tour/settings
 `--scheme` shoots the tour with the `color_scheme` setting at that id. `--only`
 shoots just the screens whose names match its pattern, where `*` stands for any
 characters; it can be given more than once, and a pattern that matches no screen
-fails the run. `shoot`
+fails the run.
+
+`--window 800x600 --text 1.5 --long` shoots the worst case a person meets: the
+smallest window, the largest text size, and every name, label, title and host
+the daemon sends made long in Latin and in CJK, every error a long daemon
+sentence. A scene that cannot run in that window is listed in `failed.txt`
+and the rest still draw; today twelve fail at 800 × 600 and fourteen at
+150%, and no scene yet draws a Launcher row on an outpost. Every run also writes `clips.tsv`: each
+screen's count of text that a clip cuts across its line without an ellipsis,
+then each such text with the points it loses. Text in a view that scrolls
+sideways is left out. A text whose own box is as wide as its container while
+its glyphs draw past it is not seen, because the check compares boxes. Shooting
+a revision from before this run existed fails to build, since the tour uses
+the scripted daemon's rewrite.
+
+`shoot`
 with a revision checks it out, with this checkout's tour, in the checkout's base
 worktree, `native/target/screenshot-tour-base`. The base worktree stays between
 runs with its own build directory, so each run compiles only what changed since
