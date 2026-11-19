@@ -191,6 +191,10 @@ func (d *Daemon) updateGardenDispatch(
 			return garden.Execution{}, updateErr
 		}
 		next.SessionID = sessionID
+		if next.Machine == nil && d.sessionKnownHere(sessionID) {
+			next.Machine = protocol.Ptr(d.sessionHost(sessionID))
+			changed = true
+		}
 		if !changed {
 			return current, nil
 		}
@@ -341,7 +345,10 @@ func (d *Daemon) captureGardenExecutionsInDirectory(machine, path string) {
 }
 
 func pathAtOrBelow(path, root string) bool {
-	path = attngit.CanonicalizePath(path)
+	return canonicalPathAtOrBelow(attngit.CanonicalizePath(path), root)
+}
+
+func canonicalPathAtOrBelow(path, root string) bool {
 	root = attngit.CanonicalizePath(root)
 	if path == "" || root == "" {
 		return false
@@ -359,7 +366,7 @@ func (d *Daemon) gardenKeepsBranch(machine, repository, branch string) bool {
 	keeps := false
 	err := d.eachSeedExecutionOn(machine, func(seed garden.Seed, execution garden.Execution) {
 		if !keeps && !garden.Closed(seed.Status) && strings.TrimSpace(execution.Branch) == branch &&
-			attngit.CanonicalizePath(execution.RepositoryRoot) == repository {
+			execution.RepositoryRoot == repository {
 			keeps = true
 		}
 	})
@@ -488,7 +495,7 @@ func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuati
 
 func (d *Daemon) continuationOnItsMachine(seed garden.Seed) *seedContinuation {
 	execution, _, _ := d.normalizedSeedContinuation(seed)
-	host := d.sessionHost(execution.SessionID)
+	host, _ := d.executionMachine(execution)
 	if host == "" {
 		return d.continuationForSeedForeground(seed)
 	}
@@ -535,7 +542,7 @@ func (d *Daemon) continuationOnItsMachine(seed garden.Seed) *seedContinuation {
 
 func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResume func(string, string, string) conversationAvailability) *seedContinuation {
 	execution, _, _ := d.normalizedSeedContinuation(seed)
-	if host := d.sessionHost(execution.SessionID); host != "" {
+	if host, _ := d.executionMachine(execution); host != "" {
 		return d.continuationWithChecks(seed, d.uncheckedOutpost(host))
 	}
 	return d.continuationWithChecks(seed, continuationMachine{
@@ -546,7 +553,7 @@ func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResum
 
 func (d *Daemon) continuationIgnoringReach(seed garden.Seed, checkResume func(string, string, string) conversationAvailability) *seedContinuation {
 	execution, _, _ := d.normalizedSeedContinuation(seed)
-	if host := d.sessionHost(execution.SessionID); host != "" {
+	if host, _ := d.executionMachine(execution); host != "" {
 		return d.continuationWithChecks(seed, d.outpostAssumedReachable(host))
 	}
 	return d.continuationForSeedWithResumeCheck(seed, checkResume)

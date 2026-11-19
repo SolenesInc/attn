@@ -175,6 +175,7 @@ func NotesSchema() docstore.CollectionSchema {
 
 type Execution struct {
 	SessionID        protocol.SessionID `json:"session_id"`
+	Machine          *string            `json:"machine,omitempty"`
 	Crown            string             `json:"crown"`
 	Dispatcher       who.Actor          `json:"dispatcher,omitzero"`
 	Cwd              string             `json:"cwd,omitempty"`

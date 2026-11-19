@@ -530,11 +530,11 @@ func (d *Daemon) worktreeSeedOwnersHere(ctx context.Context, msg protocol.Worktr
 }
 
 func worktreeOwnsExecution(wt *store.Worktree, dispatch garden.Execution) bool {
-	if pathAtOrBelow(dispatch.Cwd, wt.Path) {
+	if canonicalPathAtOrBelow(dispatch.Cwd, wt.Path) {
 		return true
 	}
 	return wt.Branch != "" && strings.TrimSpace(dispatch.Branch) == wt.Branch &&
-		attngit.CanonicalizePath(dispatch.RepositoryRoot) == attngit.CanonicalizePath(wt.MainRepo)
+		dispatch.RepositoryRoot == attngit.CanonicalizePath(wt.MainRepo)
 }
 
 func (d *Daemon) eachSeedExecutionOn(machine string, visit func(garden.Seed, garden.Execution)) error {
@@ -553,7 +553,7 @@ func (d *Daemon) eachSeedExecutionOn(machine string, visit func(garden.Seed, gar
 		}
 		for _, doc := range read.Documents {
 			seed, err := garden.Decode(doc.Body)
-			if err != nil || protocol.TrimID(seed.LastExecutionID) == "" || d.sessionHost(protocol.TrimID(seed.LastExecutionID)) != machine {
+			if err != nil || protocol.TrimID(seed.LastExecutionID) == "" {
 				continue
 			}
 			execution, found, err := d.store.GetDocument(*dispatches, string(seed.LastExecutionID))
@@ -568,6 +568,11 @@ func (d *Daemon) eachSeedExecutionOn(machine string, visit func(garden.Seed, gar
 				d.logf("worktree sweep: seed %s has an unreadable execution: %v", seed.ID, err)
 				continue
 			}
+			if ran, known := d.executionMachine(dispatch); known && ran != machine {
+				continue
+			}
+			dispatch.Cwd = attngit.CanonicalizePath(dispatch.Cwd)
+			dispatch.RepositoryRoot = attngit.CanonicalizePath(dispatch.RepositoryRoot)
 			visit(seed, dispatch)
 		}
 		if len(read.Documents) < docstore.MaxLimit {
@@ -575,6 +580,16 @@ func (d *Daemon) eachSeedExecutionOn(machine string, visit func(garden.Seed, gar
 		}
 		after = read.Documents[len(read.Documents)-1].ID
 	}
+}
+
+func (d *Daemon) executionMachine(execution garden.Execution) (machine string, known bool) {
+	if execution.Machine != nil {
+		return *execution.Machine, true
+	}
+	if d.sessionKnownHere(execution.SessionID) {
+		return d.sessionHost(execution.SessionID), true
+	}
+	return "", false
 }
 
 func protocolSweepEntry(entry store.WorktreeSweepLogEntry) protocol.WorktreeSweepEntry {

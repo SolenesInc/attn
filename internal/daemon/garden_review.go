@@ -1202,7 +1202,7 @@ func (d *Daemon) overlayGardenReviewReach(items []garden.ReviewItem) []garden.Re
 			continue
 		}
 		execution, _, _ := d.normalizedSeedContinuation(seed)
-		host := d.sessionHost(execution.SessionID)
+		host, _ := d.executionMachine(execution)
 		if host == "" {
 			continue
 		}
