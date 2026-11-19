@@ -6,7 +6,7 @@ use crate::Tokens;
 
 /// A field that narrows a list as it is typed into, led by the search icon: compact, so it
 /// sits in a list among its rows.
-pub fn search_box(input: TextInput, t: &Tokens) -> Control {
+pub fn search_field(input: TextInput, t: &Tokens) -> Control {
     let size = Size::Compact;
     let field = door::line(input.plain(), Type::Body)
         .width(None)

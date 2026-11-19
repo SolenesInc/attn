@@ -16,6 +16,11 @@ const EDGE: f32 = 0.45;
 const WASH: f32 = 0.10;
 
 /// A small bordered label in small caps: a state or a kind.
+/// How tall a tag stands: its words and the room above and below them.
+pub(crate) fn tag_height() -> f32 {
+    door::line_height(Type::Tag) + 2.0 * Space::S2.pt()
+}
+
 pub fn tag(key: impl Into<String>, said: &str, tone: Tone, t: &Tokens) -> Control {
     let (ink, edge, fill) = match tone {
         Tone::Neutral => (t.text_secondary, t.border_hover, Color::TRANSPARENT),

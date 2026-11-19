@@ -146,11 +146,14 @@ impl IconButton {
             };
             let mark = match dot {
                 Some(dot_ink) => row().child(mark).child(
-                    super::dot(DOT + 2.0 * DOT_RING)
-                        .fill(dot_ink)
-                        .border(DOT_RING, ground)
-                        .absolute(icon.pt() - DOT, -DOT_RING)
-                        .inert(),
+                    door::corner(
+                        rune::el().size(DOT + 2.0 * DOT_RING, DOT + 2.0 * DOT_RING),
+                        Radius::Round,
+                    )
+                    .fill(dot_ink)
+                    .border(DOT_RING, ground)
+                    .absolute(icon.pt() - DOT, -DOT_RING)
+                    .inert(),
                 ),
                 None => mark,
             };

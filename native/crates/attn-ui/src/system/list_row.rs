@@ -67,6 +67,7 @@ pub struct ListRow {
     wrap: bool,
     expanded: Option<bool>,
     select: Option<(String, String, Press)>,
+    select_role: &'static str,
     surface: Option<Color>,
     tint: Option<Color>,
 }
@@ -102,6 +103,7 @@ impl ListRow {
             wrap: false,
             expanded: None,
             select: None,
+            select_role: "button",
             surface: None,
             tint: None,
         }
@@ -153,10 +155,13 @@ impl ListRow {
     /// How tall every list row of two lines stands: its title and the line under it, as far
     /// from its edges as a regular control's words.
     pub fn two_line_height() -> f32 {
-        2.0 * Space::S6.pt()
-            + door::line_height(Type::Name)
-            + Space::S2.pt()
-            + door::line_height(Type::Small)
+        2.0 * Space::S6.pt() + Self::title_band() + Space::S2.pt() + door::line_height(Type::Small)
+    }
+
+    /// The line a row of two lines sets its title on: a line of `Name`, or a tag beside it when
+    /// that is taller.
+    fn title_band() -> f32 {
+        door::line_height(Type::Name).max(super::tag::tag_height())
     }
 
     /// What leads the row, such as its kind's icon or its state's mark.
@@ -187,6 +192,12 @@ impl ListRow {
     /// backticks is set in `Mono`.
     pub fn subtitle(mut self, subtitle: impl Into<String>, t: &Tokens) -> Self {
         self.subtitle = Some(words(subtitle, Type::Small, t.text_tertiary));
+        self
+    }
+
+    /// A line under the title built by its feature, such as facts with a part marked.
+    pub fn subtitle_el(mut self, line: El) -> Self {
+        self.subtitle = Some(line);
         self
     }
 
@@ -310,6 +321,13 @@ impl ListRow {
         self
     }
 
+    /// The role of the button [`Self::select`] makes, when it is not a button, such as an item
+    /// of a menu.
+    pub fn select_role(mut self, role: &'static str) -> Self {
+        self.select_role = role;
+        self
+    }
+
     /// The row's title and the line under it wrap rather than end in an ellipsis, and the row
     /// grows to hold them; its lead, asides and controls stay on the title's first line.
     pub fn wrap(mut self) -> Self {
@@ -369,7 +387,8 @@ impl ListRow {
         let two_lines = self.subtitle.is_some();
         let wraps = self.wrap;
         let (height, band, kind) = match (two_lines, wraps) {
-            (true, _) => (
+            (true, false) => (Self::two_line_height(), Self::title_band(), Type::Name),
+            (true, true) => (
                 Self::two_line_height(),
                 door::line_height(Type::Name),
                 Type::Name,
@@ -435,7 +454,15 @@ impl ListRow {
             + Space::S2.pt() * self.hover.len().saturating_sub(1) as f32
             + FADE_ROOM.pt();
         let asides = (!self.asides.is_empty()).then(|| {
-            let asides = on_band(door::gap(row().items_center(), Space::S6).children(self.asides));
+            let asides = on_band(
+                door::gap(row().items_center(), Space::S6)
+                    .shrink()
+                    .min_w(0.0)
+                    .children(self.asides),
+            )
+            .max_w_frac(0.5)
+            .shrink()
+            .min_w(0.0);
             if hovering {
                 asides.group_opacity(1.0, 0.0)
             } else {
@@ -526,7 +553,7 @@ impl ListRow {
                 let button = attach(says_open(
                     words_part
                         .key(key)
-                        .role("button")
+                        .role(self.select_role)
                         .label(label)
                         .focusable(true),
                 ));

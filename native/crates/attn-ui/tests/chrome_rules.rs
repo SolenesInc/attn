@@ -508,3 +508,28 @@ fn a_still_row_takes_no_press_or_focus_and_a_wrapped_row_grows_with_its_lead_on_
         );
     }
 }
+
+#[test]
+fn a_tag_on_a_rows_title_line_stays_inside_the_row() {
+    for variant in ROW_VARIANTS {
+        let rt = story(true, "Chrome/List row", variant);
+        let tag = element(&rt, "row.select.tag");
+        let row = element(&rt, "row.select");
+        let (top, bottom) = (row.rect[1], row.rect[1] + row.rect[3]);
+        assert!(
+            tag.rect[1] >= top - 0.01 && tag.rect[1] + tag.rect[3] <= bottom + 0.01,
+            "{variant}: the tag runs from {} to {} past its row's {top} to {bottom}",
+            tag.rect[1],
+            tag.rect[1] + tag.rect[3]
+        );
+        let title = element(&rt, "row.select.title");
+        let (tag_mid, title_mid) = (
+            tag.rect[1] + tag.rect[3] / 2.0,
+            title.rect[1] + title.rect[3] / 2.0,
+        );
+        assert!(
+            (tag_mid - title_mid).abs() < 0.6,
+            "{variant}: the tag centres at {tag_mid}, the title at {title_mid}"
+        );
+    }
+}

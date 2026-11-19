@@ -218,8 +218,9 @@ choices once for the whole app:
   `Small`), its lead in a 16-point column, its controls shown always, faint
   until it is selected, or on hover at its end on its own ground with its
   words fading out before them, and the row on screen marked by the brand bar
-  at its start; `GroupHead`, a list group's heading; and `number_chip`,
-  `count_badge` and `keys_hint`. Each wraps rune-kit's control
+  at its start; `GroupHead`, a list group's heading; `dot`, a state's mark,
+  filled, hollow or square at 6 or 8; `keycaps` and `keys_hint`, keys drawn as
+  keys; `search_field`; and `number_chip` and `count_badge`. Each wraps rune-kit's control
   where one exists, and a view never writes a field of rune-kit's `Kit`:
   `attn-ui` sets them once. Hover and pressed lighten a dark surface and
   darken a light one, each by the step a list row takes (1.20:1 and 1.66:1

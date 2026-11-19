@@ -139,6 +139,8 @@ pub const CHROME_SHEETS: &[ChromeSheet] = &[
             "chip.wide",
             "chip.count",
             "chip.count.wide",
+            "chip.dots",
+            "chip.keys",
         ],
         columns: &[("Rest", "Rest", "", "")],
     },
@@ -228,7 +230,11 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
         ListRow::new("row.agent", format!("Open {name}"))
             .lead(dot(&t))
             .title(name)
-            .aside(crate::system::keys_hint("5m", &t))
+            .aside(crate::system::words(
+                "5m",
+                crate::system::Type::Small,
+                t.text_tertiary,
+            ))
             .badge(tag("row.agent.tag", "Builder", Tone::Neutral, &t))
             .hover_controls(row_controls("row.agent"))
             .in_view(s.lit)
@@ -357,7 +363,7 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
                 },
                 &t,
             )
-            .aside(crate::system::keys_hint("⌘D", &t))
+            .aside(crate::system::keycaps(["⌘", "D"], &t))
             .still()
             .build(&t),
         ListRow::new("row.wrap", "docs-pass")
@@ -377,7 +383,11 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
         ListRow::new("row.dimmed", "Closed session docs-pass")
             .lead(dot(&t))
             .title(if s.long { LONG_AGENT } else { "docs-pass" })
-            .aside(crate::system::keys_hint("2h", &t))
+            .aside(crate::system::words(
+                "2h",
+                crate::system::Type::Small,
+                t.text_tertiary,
+            ))
             .dimmed(true)
             .selected(s.lit)
             .build(&t)
@@ -478,6 +488,19 @@ fn group_heads(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
     stage(s, cx, &t, heads)
 }
 
+/// Every state dot: filled, hollow and square, small and regular.
+fn dots(t: &Tokens) -> El {
+    use crate::system::{DotShape, DotSize, dot};
+    door::gap(rune::row().items_center(), Space::S8).children(
+        [DotSize::Small, DotSize::Regular]
+            .into_iter()
+            .flat_map(|size| {
+                [DotShape::Filled, DotShape::Hollow, DotShape::Square]
+                    .map(|shape| dot(t.state_working, shape, size))
+            }),
+    )
+}
+
 fn chips(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
     let t = tokens(cx);
     let items = vec![
@@ -487,6 +510,8 @@ fn chips(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
         number_chip(12, false, false, &t).key("chip.wide"),
         count_badge(3, t.warning, crate::warning_ink(&t)).key("chip.count"),
         count_badge(128, t.warning, crate::warning_ink(&t)).key("chip.count.wide"),
+        dots(&t).key("chip.dots"),
+        crate::system::keys_hint(["⌘", "⇧", "K"], "Open the palette", &t).key("chip.keys"),
     ];
     stage(
         s,

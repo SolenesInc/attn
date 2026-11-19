@@ -41,9 +41,29 @@ pub fn count_badge(count: usize, fill: Color, ink: Color) -> El {
     door::corner(door::inset(badge, Space::S4, Space::S0), Radius::Round)
 }
 
-/// The keys that do something, said quietly at the end of what they do.
-pub fn keys_hint(keys: impl Into<String>, t: &Tokens) -> El {
-    words(keys, Type::Mono, t.text_dimmed)
+/// Keys drawn as keys: an outlined cap for each, in the order they are pressed together.
+pub fn keycaps(keys: impl IntoIterator<Item = impl Into<String>>, t: &Tokens) -> El {
+    door::gap(row().items_center(), Space::S2).children(keys.into_iter().map(|key| {
+        let cap =
+            row()
+                .border(1.0, t.border_subtle)
+                .child(words(key, Type::Mono, t.text_secondary));
+        door::corner(door::inset(cap, Space::S4, Space::S0), Radius::Tag)
+    }))
+}
+
+/// What the keys `keys` do, said after their caps, read as one name.
+pub fn keys_hint(
+    keys: impl IntoIterator<Item = impl Into<String>>,
+    what: impl Into<String>,
+    t: &Tokens,
+) -> El {
+    let keys: Vec<String> = keys.into_iter().map(Into::into).collect();
+    let what = what.into();
+    door::gap(row().items_center(), Space::S6)
+        .label(format!("{} {what}", keys.join(" ")))
+        .child(keycaps(keys, t).a11y_hidden())
+        .child(words(what, Type::Small, t.text_tertiary).a11y_hidden())
 }
 
 /// Which desktop a thing is on, as its slot number tucked against its mark on `ground`.

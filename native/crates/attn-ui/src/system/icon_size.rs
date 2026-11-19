@@ -40,8 +40,3 @@ pub fn glyph(glyph: impl Into<crate::Glyph>, size: IconSize, ink: Color) -> El {
             .child(door::mark_text(said, size).color(ink)),
     }
 }
-
-/// A round mark `side` across, such as an agent's state, for its caller to fill or edge.
-pub fn dot(side: f32) -> El {
-    door::corner(rune::el().size(side, side), super::Radius::Round)
-}
