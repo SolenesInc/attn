@@ -24,6 +24,10 @@ pub(crate) fn font(e: El, kind: Type) -> El {
     e.font(style(kind))
 }
 
+pub(crate) fn styled(e: El, style: TextStyle) -> El {
+    e.font(style)
+}
+
 pub(crate) fn mono_span(span: Span) -> Span {
     span.mono().size(style(Type::Mono).size)
 }

@@ -20,4 +20,10 @@ impl Surface {
             Radius::Card,
         )
     }
+
+    /// A card whose rows run to its edges, such as a listing of code: clipped at its corners
+    /// so the rows' tints follow them.
+    pub fn listing(content: El, t: &Tokens) -> El {
+        door::clip_corner(Surface::card(content, t), Radius::Card)
+    }
 }

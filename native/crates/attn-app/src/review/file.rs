@@ -401,7 +401,7 @@ fn rows_view(
     let rows_ = rows.clone();
     let widest = rows.iter().map(|r| columns(&r.text)).max().unwrap_or(0);
     let char_w = 0.6 * 13.0;
-    let row_w = super::stop::gutter(t) + (widest + 1) as f32 * char_w;
+    let row_w = super::stop::gutter() + (widest + 1) as f32 * char_w;
     let list = col()
         .key(format!("{prefix}.view.rows"))
         .w_full()

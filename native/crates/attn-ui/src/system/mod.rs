@@ -38,7 +38,7 @@ pub use link::Link;
 pub use mark::{bare_field, dot, dot_on_line, marked, meter, spring, with_command};
 pub use press_area::press_area;
 pub use radius::Radius;
-pub use reading::{Reading, document_style, note_style};
+pub use reading::{Reading, document_style, note_style, read_as};
 pub use segmented::{Segment, Segmented};
 pub use size::Size;
 pub(crate) use space::Space;

@@ -3,9 +3,9 @@
 
 use attn_protocol::{ReviewNote, ReviewRow, ReviewStop};
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::{radius, space};
-use rune::{Color, El, Span, TextStyle, col, rich, row, text};
+use attn_ui::blocks::{Bar, Inline, Note, Remark, Stack, Surface, hint};
+use attn_ui::system::{Reading, Type, read_as, words};
+use rune::{Color, El, Span, col, rich, row, text};
 use rune_kit::syntax::{Highlight, highlight, lang_for_path};
 
 use std::collections::HashMap;
@@ -71,7 +71,7 @@ pub(super) fn stop(
     t: &Tokens,
 ) -> El {
     let shown: Vec<i64> = rows.iter().filter_map(|r| r.now).collect();
-    let indent = note_indent(t);
+    let indent = note_indent();
     let unplaced = stop
         .notes
         .iter()
@@ -131,58 +131,48 @@ pub(super) fn stop(
     let opens = action("file", "↵", format!("{key}.file"), t);
     let opens = super::file_press(opens, tile, row_key(key, first));
     card(key, stop, rows, t)
-        .child(header(stop, rows, [opens], t))
+        .child(header(key, stop, rows, [opens], t))
         .children(unplaced)
         .children(lines)
-        .children(rows.is_empty().then(|| empty(t)))
+        .children(rows.is_empty().then(|| empty(key, t)))
 }
 
-/// A stop's card keyed `key`: its border and fill, its rows running to its edges and clipped
-/// at its corners, as the Tauri review draws `.review-stop`.
+/// A stop's card keyed `key`, its rows running to its edges.
 pub(super) fn card(key: &str, stop: &ReviewStop, rows: &[ReviewRow], t: &Tokens) -> El {
-    col()
-        .key(key.to_owned())
-        .role("group")
-        .label(format!("{} {}", stop.path, range(stop, rows)))
-        .w_full()
-        .radius(radius::MD)
-        .clip_rounded(radius::MD)
-        .border(1.0, t.border.alpha(0.6))
-        .fill(t.bg_tile)
+    Surface::listing(
+        col()
+            .key(key.to_owned())
+            .role("group")
+            .label(format!("{} {}", stop.path, range(stop, rows)))
+            .w_full(),
+        t,
+    )
 }
 
 /// What a stop with no rows says.
-pub(super) fn empty(t: &Tokens) -> El {
-    text("The file is gone or empty now.")
-        .font(type_::LABEL)
-        .color(t.text_secondary)
-        .px(12.0)
-        .py(6.0)
+pub(super) fn empty(key: &str, t: &Tokens) -> El {
+    Bar::new(format!("{key}.empty"))
+        .lead(
+            Note::new(
+                format!("{key}.empty.note"),
+                "The file is gone or empty now.",
+            )
+            .el(t),
+        )
+        .build(t)
 }
 
-/// A button in a stop's header, `what` and its key `key`, as the Tauri review's
-/// `.review-stop-actions` draw them.
+/// A button in a stop's header: `what`, and the key `key` that does it too.
 pub(super) fn action(what: &str, key: &str, keyed: String, t: &Tokens) -> El {
-    row()
+    hint(key, what, t)
         .key(keyed)
         .role("button")
         .label(format!("{what} {key}"))
-        .gap(4.0)
-        .items_center()
-        .child(
-            text(what.to_owned())
-                .font(TextStyle {
-                    weight: 400.0,
-                    ..type_::LABEL
-                })
-                .color(t.text_secondary)
-                .a11y_hidden(),
-        )
-        .child(attn_ui::blocks::caps(key, t).a11y_hidden())
 }
 
-/// A stop's header strip: where it is, the lines it shows, and `actions` at its right end.
+/// A stop's header: where it is, the lines it shows, and `actions` at its end.
 pub(super) fn header(
+    key: &str,
     stop: &ReviewStop,
     rows: &[ReviewRow],
     actions: impl IntoIterator<Item = El>,
@@ -193,32 +183,22 @@ pub(super) fn header(
         .rsplit_once('/')
         .map_or(("", stop.path.as_str()), |(d, n)| (d, n));
     let dir = (!dir.is_empty()).then(|| format!("{dir}/"));
-    let changed = stop.changed_since_presented.then(|| {
-        text("changed since presented")
-            .font(type_::LABEL)
-            .color(t.warning)
-    });
-    row()
-        .w_full()
-        .items_center()
-        .gap(space::S3)
-        .px(12.0)
-        .py(6.0)
-        .fill(t.bg_elevated)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border.alpha(0.5))
+    let changed = stop
+        .changed_since_presented
+        .then(|| words("changed since presented", Type::Small, t.warning));
+    let place = Inline::loose()
         .child(
             row()
-                .children(dir.map(|d| text(d).font(type_::MONO_CAPTION).color(t.text_tertiary)))
-                .child(text(name).font(type_::MONO_CAPTION).color(t.text_primary)),
+                .children(dir.map(|d| words(d, Type::Mono, t.text_tertiary)))
+                .child(words(name, Type::Mono, t.text_primary)),
         )
-        .child(
-            text(range(stop, rows))
-                .font(type_::MONO_CAPTION)
-                .color(t.text_muted),
-        )
-        .children(changed)
-        .child(col().grow(1.0))
-        .children(actions)
+        .child(words(range(stop, rows), Type::Mono, t.text_tertiary))
+        .children(changed);
+    Bar::new(format!("{key}.header"))
+        .lead(place)
+        .push_all(actions)
+        .build(t)
+        .fill(t.bg_elevated)
 }
 
 /// A stop in the Walkthrough's script: where it is and what the agent says; the code is on the
@@ -228,7 +208,7 @@ pub(super) fn script(key: &str, stop: &ReviewStop, stage: Option<Option<i64>>, t
     let line = stage.flatten();
     let at =
         |n: &ReviewNote| line.is_some_and(|l| n.now_from > 0 && l >= n.now_from && l <= n.now_to);
-    let notes = col().py(2.0).children(stop.notes.iter().map(|n| {
+    let notes = Stack::tight().children(stop.notes.iter().map(|n| {
         let el = note(n, SCRIPT_NOTE_INDENT, t);
         if at(n) {
             let tint = attn_ui::blocks::here_tint(t);
@@ -239,7 +219,7 @@ pub(super) fn script(key: &str, stop: &ReviewStop, stage: Option<Option<i64>>, t
     }));
     let el = card(key, stop, &stop.rows, t)
         .role("listitem")
-        .child(header(stop, &stop.rows, [], t))
+        .child(header(key, stop, &stop.rows, [], t))
         .children((!stop.notes.is_empty()).then_some(notes));
     if current {
         el.border_sides([1.0, 1.0, 1.0, 3.0], t.accent)
@@ -252,56 +232,19 @@ pub(super) fn script(key: &str, stop: &ReviewStop, stage: Option<Option<i64>>, t
 /// How far a note in the Walkthrough's script sits in, as the Tauri script's 0.5rem.
 const SCRIPT_NOTE_INDENT: f32 = 7.0;
 
-const WHO: TextStyle = TextStyle {
-    weight: 400.0,
-    tracking: 0.6,
-    ..type_::LABEL
-};
-
-/// An agent's note on lines, `indent` points in: a "look here" note in the warning color on
-/// its tint, any other in the quiet colors of the text around it.
+/// An agent's note on lines, `indent` points in.
 pub(super) fn note(note: &ReviewNote, indent: f32, t: &Tokens) -> El {
     let who = if note.look { "look here" } else { "agent" };
-    let (bar, label, words) = if note.look {
-        (t.warning, t.warning, t.text_primary)
-    } else {
-        (t.border, t.text_muted, t.text_secondary)
-    };
-    let el = row()
-        .role("note")
-        .label(format!("{who} {}: {}", note_range(note), note.text))
-        .mt(2.0)
-        .mb(4.0)
-        .ml(indent)
-        .gap(space::S2)
-        .px(10.0)
-        .py(4.0)
-        .border_sides([0.0, 0.0, 0.0, 2.0], bar)
-        .child(type_::upper(who, WHO).color(label))
-        .child(
-            text(note_range(note))
-                .font(type_::MONO_CAPTION)
-                .color(t.text_muted),
-        )
-        .child(
-            text(note.text.clone())
-                .font(type_::BODY)
-                .color(words)
-                .selectable(true)
-                .wrap()
-                .grow(1.0),
-        );
-    if note.look {
-        el.fill(t.warning.alpha(0.1))
-    } else {
-        el
-    }
+    Remark::new(who, note_range(note), note.text.clone())
+        .flagged(note.look)
+        .indent(indent)
+        .build(t)
 }
 
 /// Where notes under code rows start: past both line numbers and the sign, as the Tauri
 /// review's 8.25em of its code font.
-pub(super) fn note_indent(t: &Tokens) -> f32 {
-    NOTE_EM * code_font(t).size
+pub(super) fn note_indent() -> f32 {
+    NOTE_EM * Reading::Code.size()
 }
 
 /// The bar inside the sign column of a row in the stop's own lines.
@@ -315,17 +258,9 @@ const NUMBER_EM: f32 = 3.5;
 const SIGN_EM: f32 = 1.25;
 const NOTE_EM: f32 = 2.0 * NUMBER_EM + SIGN_EM;
 
-fn code_font(t: &Tokens) -> TextStyle {
-    TextStyle {
-        size: 13.0,
-        line_height: 20.0,
-        ..attn_ui::kit(t).ty.mono
-    }
-}
-
 /// The width of a code row's gutter: both line numbers and the sign.
-pub(super) fn gutter(t: &Tokens) -> f32 {
-    note_indent(t)
+pub(super) fn gutter() -> f32 {
+    note_indent()
 }
 
 /// A row of code: its line at base, its line now, its sign with `marker`'s bar inside its left
@@ -338,8 +273,7 @@ pub(super) fn code_row(
     (labels, asked): (&[super::nav::Labeled], bool),
     t: &Tokens,
 ) -> El {
-    let font = code_font(t);
-    let em = font.size;
+    let em = Reading::Code.size();
     let (shown, spans) = labelled(&r.text, spans, labels, t);
     let (sign, tint, kind) = match r.kind.as_str() {
         "+" => ("+", Some(t.success), "added"),
@@ -349,20 +283,18 @@ pub(super) fn code_row(
     let number = |n: Option<i64>| {
         row()
             .w(NUMBER_EM * em)
-            .pr(0.5 * em)
-            .justify_end()
-            .child(
-                text(n.map(|n| n.to_string()).unwrap_or_default())
-                    .font(font)
-                    .color(t.text_muted),
-            )
+            .child(row().w((NUMBER_EM - 0.5) * em).justify_end().child(read_as(
+                text(n.map(|n| n.to_string()).unwrap_or_default()).color(t.text_muted),
+                Reading::Code,
+                t,
+            )))
             .a11y_hidden()
     };
     let sign = row()
         .w(SIGN_EM * em)
         .h_full()
         .center()
-        .child(text(sign).font(font).color(t.text_muted))
+        .child(read_as(text(sign).color(t.text_muted), Reading::Code, t))
         .a11y_hidden();
     let sign = match marker {
         Some((width, color)) => sign.border_sides([0.0, 0.0, 0.0, width], color),
@@ -379,8 +311,7 @@ pub(super) fn code_row(
         .child(number(r.now))
         .child(sign)
         .child({
-            let code = rich(shown, spans)
-                .font(font)
+            let code = read_as(rich(shown, spans), Reading::Code, t)
                 .color(t.text_primary)
                 .selectable(true)
                 .a11y_hidden();
@@ -400,7 +331,7 @@ pub(super) fn code_row(
     if asked {
         el = el
             .description("asked, waiting for the answer")
-            .child(text("…").font(font).color(t.accent).a11y_hidden());
+            .child(read_as(text("…").color(t.accent), Reading::Code, t).a11y_hidden());
     }
     el
 }

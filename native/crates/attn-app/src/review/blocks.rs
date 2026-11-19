@@ -517,7 +517,7 @@ pub(super) fn view(
                 .iter()
                 .any(|b| n.now_from > 0 && within(b, n.now_to))
         })
-        .map(|n| super::stop::note(n, super::stop::note_indent(t), t));
+        .map(|n| super::stop::note(n, super::stop::note_indent(), t));
     let shown = read.blocks.iter().enumerate().flat_map(|(i, b)| {
         let keyed = super::stop::row_key(key, i);
         let before = b
@@ -578,7 +578,7 @@ pub(super) fn view(
             .notes
             .iter()
             .filter(move |n| n.now_from > 0 && within(b, n.now_to))
-            .map(|n| super::stop::note(n, super::stop::note_indent(t), t));
+            .map(|n| super::stop::note(n, super::stop::note_indent(), t));
         let marked = marks
             .iter()
             .filter(move |(at, _)| within(b, *at))
@@ -594,8 +594,8 @@ pub(super) fn view(
         .removed_after
         .as_deref()
         .map(|d| was(d, format!("{key}.removed"), file, t));
-    let empty =
-        (read.blocks.is_empty() && read.removed_after.is_none()).then(|| super::stop::empty(t));
+    let empty = (read.blocks.is_empty() && read.removed_after.is_none())
+        .then(|| super::stop::empty(key, t));
     let first = read
         .blocks
         .iter()
@@ -616,6 +616,7 @@ pub(super) fn view(
     });
     super::stop::card(key, stop, rows, t)
         .child(super::stop::header(
+            key,
             stop,
             rows,
             editor.into_iter().chain([source]),

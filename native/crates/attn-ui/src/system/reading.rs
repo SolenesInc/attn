@@ -29,9 +29,13 @@ pub enum Reading {
 }
 
 impl Reading {
-    fn style(self, t: &Tokens) -> TextStyle {
-        let kit = crate::kit(t);
-        let (size, weight, line) = match self {
+    /// How tall the role's letters are, the em a document's columns are measured in.
+    pub fn size(self) -> f32 {
+        self.metrics().0
+    }
+
+    fn metrics(self) -> (f32, f32, f32) {
+        match self {
             Reading::Text => (15.0, 400.0, 24.0),
             Reading::Title => (20.0, 700.0, 26.0),
             Reading::Heading => (17.0, 600.0, 24.0),
@@ -40,7 +44,13 @@ impl Reading {
             Reading::Code => (13.0, 400.0, 20.0),
             Reading::InlineCode => (12.0, 400.0, 16.0),
             Reading::Diagram => (16.0, 400.0, 24.0),
-        };
+        }
+    }
+
+    /// The role as a text style, to measure text set in it.
+    pub fn style(self, t: &Tokens) -> TextStyle {
+        let kit = crate::kit(t);
+        let (size, weight, line) = self.metrics();
         let face = match self {
             Reading::Code | Reading::InlineCode => kit.ty.mono,
             _ => kit.ty.body,
@@ -57,6 +67,11 @@ impl Reading {
             ..face
         }
     }
+}
+
+/// `e`, text of a document, set in `role`.
+pub fn read_as(e: rune::El, role: Reading, t: &Tokens) -> rune::El {
+    door::styled(e, role.style(t))
 }
 
 /// How a document reads: its type by [`Reading`] role, its blocks spaced on the scale, list
