@@ -1,9 +1,10 @@
-use rune::{Color, El, Tx, row};
+use rune::{Color, El, Tx, el, row};
 
 use super::{Control, Radius, Size, Space, door, focus, kit, layers};
 use crate::Tokens;
 
 const CHEVRON: f32 = 12.0;
+const EDGE_TO_CONTENT: Space = Space::S6;
 
 /// How a trigger sits on its page.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -16,7 +17,7 @@ pub enum TriggerLook {
 }
 
 /// The control that opens a menu or a picker and shows what is chosen in it: what it holds,
-/// then a chevron that turns while the menu is open. The caller inks the content, in
+/// then a chevron, beside its first line, that turns while the menu is open. The caller inks the content, in
 /// `text_dimmed` while the trigger is disabled.
 pub struct Trigger {
     key: String,
@@ -89,12 +90,16 @@ impl Trigger {
         } else {
             kit(t).glyph.chevron_down
         };
-        let chevron = rune::icon(glyph, CHEVRON)
-            .color(if self.disabled {
-                t.text_dimmed
-            } else {
-                t.text_tertiary
-            })
+        let ink = if self.disabled {
+            t.text_dimmed
+        } else {
+            t.text_tertiary
+        };
+        let chevron = el()
+            .h(size.height() - 2.0 * EDGE_TO_CONTENT.pt())
+            .self_start()
+            .items_center()
+            .child(rune::icon(glyph, CHEVRON).color(ink))
             .a11y_hidden();
         let mut trigger = row()
             .key(self.key)
@@ -105,10 +110,10 @@ impl Trigger {
             .disabled(self.disabled)
             .min_w(0.0)
             .min_h(size.height())
-            .items_center()
+            .items_start()
             .fill(fill)
             .border(1.0, edge)
-            .child(self.content.grow(1.0).min_w(0.0))
+            .child(self.content.grow(1.0).min_w(0.0).self_center())
             .child(chevron);
         if let Some(value) = self.value {
             trigger = trigger.a11y_value(value);
@@ -116,7 +121,10 @@ impl Trigger {
         if self.unset && !self.open && !self.disabled {
             trigger = trigger.border_dash(4.0, 3.0);
         }
-        let trigger = door::gap(door::inset(trigger, size.inset(), Space::S6), Space::S8);
+        let trigger = door::gap(
+            door::inset(trigger, size.inset(), EDGE_TO_CONTENT),
+            Space::S8,
+        );
         let trigger = door::corner(trigger, Radius::Control);
         if self.disabled {
             return Control::new(trigger, size);

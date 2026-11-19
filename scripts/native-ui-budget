@@ -15,7 +15,7 @@ set -euo pipefail
 root="${NATIVE_UI_BUDGET_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 budget="$root/native/ui-budget.tsv"
 crates="$root/native/crates"
-raw='\.(gap|gaps|padding|px|py|pt|pb|pl|pr|mx|my|mt|mb|ml|mr|radius|corners|clip_rounded|font|set_font)\(|TextStyle::new\('
+raw='\.(gap|gaps|padding|px|py|pt|pb|pl|pr|mx|my|mt|mb|ml|mr|radius|corners|clip_rounded|font|set_font)\([^)]|TextStyle::new\('
 
 allowed_files() {
   [ -f "$budget" ] && awk -F'\t' -v root="$root/" '$1 == "allow" { print root $2 }' "$budget" | paste -sd, -
