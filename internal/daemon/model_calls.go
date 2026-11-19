@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
@@ -158,7 +159,6 @@ func (r *modelCallsRunning) done() {
 type modelCallOutcome struct {
 	result agentdriver.ModelCallResult
 	err    error
-	spare  bool
 }
 
 func (d *Daemon) handleSenderModelCall(conn net.Conn, msg *protocol.SenderModelCallMessage) {
@@ -198,7 +198,8 @@ func (d *Daemon) handleSenderModelCall(conn net.Conn, msg *protocol.SenderModelC
 	deadline := d.clock.NewTimer(ModelCallLimitTimer, limit)
 	defer deadline.Stop()
 	answered := make(chan modelCallOutcome, 1)
-	if !d.life.Go("modelCallAnswer", func() { answered <- d.answerModelCall(ctx, target, msg) }) {
+	var bySpare atomic.Bool
+	if !d.life.Go("modelCallAnswer", func() { answered <- d.answerModelCall(ctx, target, msg, &bySpare) }) {
 		return
 	}
 	response := protocol.SenderModelCallResult{Harness: target.harness, Model: target.model}
@@ -221,14 +222,14 @@ func (d *Daemon) handleSenderModelCall(conn net.Conn, msg *protocol.SenderModelC
 	case <-ctx.Done():
 		outcome.err = errors.New("the caller closed the connection")
 	}
-	d.logModelCall(sender.Name, msg.Purpose, target, time.Since(arrived), outcome)
+	d.logModelCall(sender.Name, msg.Purpose, target, bySpare.Load(), time.Since(arrived), outcome)
 	if ctx.Err() != nil && response.LimitMs == nil {
 		return
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SenderModelCallResult: &response})
 }
 
-func (d *Daemon) answerModelCall(ctx context.Context, target modelCallTarget, msg *protocol.SenderModelCallMessage) modelCallOutcome {
+func (d *Daemon) answerModelCall(ctx context.Context, target modelCallTarget, msg *protocol.SenderModelCallMessage, bySpare *atomic.Bool) modelCallOutcome {
 	workDir, err := os.MkdirTemp("", "attn-model-call-*")
 	if err != nil {
 		return modelCallOutcome{err: fmt.Errorf("create the call's scratch directory: %w", err)}
@@ -242,10 +243,12 @@ func (d *Daemon) answerModelCall(ctx context.Context, target modelCallTarget, ms
 		WorkDir:      workDir,
 	}
 	if spare := d.modelCallSpare.take(d, target.harness); spare != nil {
+		bySpare.Store(true)
 		result, err := spare.Answer(ctx, request)
 		if !errors.Is(err, agentdriver.ErrSpareUnusable) {
-			return modelCallOutcome{result: result, err: err, spare: true}
+			return modelCallOutcome{result: result, err: err}
 		}
+		bySpare.Store(false)
 		d.logf("model call: the %s spare could not answer, so the call runs cold: %v", target.harness, err)
 	}
 	result, err := agentdriver.AnswerModelCall(ctx, target.provider, request)
@@ -255,12 +258,12 @@ func (d *Daemon) answerModelCall(ctx context.Context, target modelCallTarget, ms
 	return modelCallOutcome{result: result, err: err}
 }
 
-func (d *Daemon) logModelCall(sender, purpose string, target modelCallTarget, took time.Duration, outcome modelCallOutcome) {
+func (d *Daemon) logModelCall(sender, purpose string, target modelCallTarget, bySpare bool, took time.Duration, outcome modelCallOutcome) {
 	result := "answered"
 	if outcome.err != nil {
 		result = "failed: " + outcome.err.Error()
 	}
 	d.logf("model call: sender=%q purpose=%q harness=%s model=%s spare=%t took=%s model_ms=%d tokens_in=%d tokens_out=%d cost_usd=%.4f outcome=%s",
-		sender, purpose, target.harness, target.model, outcome.spare, took.Round(time.Millisecond), outcome.result.ModelTime.Milliseconds(),
+		sender, purpose, target.harness, target.model, bySpare, took.Round(time.Millisecond), outcome.result.ModelTime.Milliseconds(),
 		outcome.result.InputTokens, outcome.result.OutputTokens, outcome.result.CostUSD, result)
 }

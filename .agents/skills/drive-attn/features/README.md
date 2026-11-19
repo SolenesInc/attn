@@ -386,6 +386,7 @@ instance. A file whose recipe ran live says so here.
 - [Document store](doc-store.md) (agents): Collections of documents with live queries, for agents and plugins.
 - [Vents](vents.md) (agents): Agents report what got in their way, for the user to review later, like a bug report.
 - [Vision check](vision-check.md) (agents): Ask a model one question about an image.
+- [Model calls](model-calls.md) (people): A paired program calls a model through attn with its own instructions and input, answered by the model call spare while in use.
 - [Telemetry](telemetry.md) (people): What attn records about its own use, kept in an outbox and uploaded only when the user turns it on.
 - [Diagnostics and repair](diagnostics.md) (maintainers): See why attn misbehaves and repair it: logs, incidents, the event bus, database restore.
 - [Instances](instances.md) (maintainers): Separate installs of attn under a name, for developing and testing without touching production.

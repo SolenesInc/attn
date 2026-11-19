@@ -1,0 +1,66 @@
+# Model calls
+
+A paired program calls a model through attn: it sends its own instructions
+and input, and gets the model's text answer, with no tools and no memory of
+other calls. attn supplies the harness's sign-in and, for what the call leaves
+out, the harness and model the user chose. While model calls are in use, attn
+keeps one `claude` started and waiting, the model call spare, so a call waits
+only for the model. Attn Lens refines dictation this way.
+
+## Sub-features
+
+- `model-call`: `attn model call --token-stdin` reads the token, then one JSON request, and prints one JSON line with `harness`, `model`, `text` and `model_ms`.
+- `model-call-target`: a call may name a `harness`, and a `tier` or a `model`. What it leaves out comes from `model_calls.agent` (empty: `new_session_agent`) and `model_calls.model` (empty: the standard tier). A tier resolves through the harness's model tiers, with a fallback per tier when discovery fails.
+- `model-call-limit`: `limit_ms` is required. Past it, the line has `error` and `limit_ms`, and the command exits 1. Stopping the command ends the call and its process.
+- `model-call-refusals`: tier and model both named, an unknown tier, a harness that is not installed, a ninth call while eight run, headless tasks off, and a token attn does not know, each one line on stderr and exit 1.
+- `model-call-spare`: one `claude` with stream-json input and no tools, started while a sender is paired, headless tasks are on, the default harness is Claude, and the user was present or a call arrived within 4 hours. A call takes it, and attn starts the next one at once. Codex answers cold.
+- `model-call-log`: one daemon log line per call, `model call: sender=... purpose=... harness=... model=... spare=... took=... model_ms=... tokens_in=... tokens_out=... cost_usd=... outcome=...`, with no instructions, input or answer.
+
+## How to get to it
+
+### People
+
+- A program the user paired with `attn send pair` (Attn Lens, a script). Pairing needs the Tauri app's approval dialog, as [Quick capture](quick-capture.md) describes.
+- Settings: `model_calls.agent` and `model_calls.model`, through `attn settings set` or the settings dialog.
+
+### Agents
+
+- None. Agents in sessions use `attn vision-check` for their own model questions.
+
+## Driving it
+
+Preconditions:
+
+- A Tauri instance (`APP=tauri make install INSTANCE=<name>`), launched with `bridge --launch --wait-ready ping`. The native app has no pairing dialog.
+- The real harnesses and headless tasks on, appended to the env file before the launch, so the daemon starts with them: `echo "export ATTN_HEADLESS_TASKS=on ATTN_CLAUDE_EXECUTABLE=$(which claude) ATTN_CODEX_EXECUTABLE=$(which codex) CODEX_HOME=$HOME/.codex" >> $DRIVE_ENV`. Each call spends real tokens; keep the text synthetic.
+- Pair: `./attn send pair --name Probe --json > $P/pair.out &`, then `bridge dom_wait '{"selector":".sender-pairing-title","timeoutMs":15000}'`, `bridge dom_native_point '{"selector":"button.allow"}'` and `bridge native_mouse '{"action":"click","x":<x>,"y":<y>}'`. The token is `token` on the second line of `$P/pair.out`.
+- The daemon's pid is in `~/.attn-<name>/attn.pid`. The spare is its child whose command has `--input-format stream-json`.
+
+Recipes:
+
+- **The spare.** Within a few seconds of pairing, with the app open, `ps -ax -o pid=,ppid=,rss=,command=` shows a `claude --print ... --disallowedTools * ... --input-format stream-json` under the daemon, with no `--model` and no `--system-prompt`.
+- **A call on the defaults.** `{ echo "$TOKEN"; echo '{"purpose":"drive","system":"Answer with one word.","input":"What color is a clear daytime sky?","limit_ms":60000}'; } | ./attn model call --token-stdin` prints `{"harness":"claude","model":"sonnet","model_ms":<n>,"text":"Blue"}` and exits 0. `grep 'model call: sender' ~/.attn-<name>/daemon.log | tail -1` shows `spare=true` and none of the call's text. A new spare is running.
+- **Codex.** Add `"harness":"codex","tier":"light"`: the line names `codex` and `gpt-6-luna` and has no `model_ms`. The log shows `spare=false`, and the claude spare keeps running.
+- **Settings.** `./attn settings set model_calls.agent codex` ends the spare (`model call spare: ending the claude spare: codex cannot start ahead`). With `model_calls.model light`, a call naming nothing answers from codex's light model. Set both back to empty: a spare starts again.
+- **Limit.** `"system":"Write a 2000-word essay.","limit_ms":1500` prints `{"error":"the model did not answer within 1.5s","harness":"claude","limit_ms":1500,"model":"sonnet"}` and exits 1; no claude is left running for it.
+- **Refusals.** `"tier":"light","model":"opus"` gives `model call: name a tier or a model, not both`; `"harness":"gemini"` gives `model call: no harness named "gemini" is installed; installed: claude, codex`.
+- **Headless tasks off.** Replace `ATTN_HEADLESS_TASKS=on` with `off` in the env file, quit the app with `./attn instance stop-app`, stop the daemon with `"$(./attn instance resolve --field appDaemon)" daemon stop`, and launch again. The spare does not start, and a call prints `model call: ` and the headless-tasks refusal, exit 1.
+- **Proof.** Keep each command, its output and exit code, and the log lines.
+
+## Contexts
+
+- **Linux**: the daemon and CLI run there the same way; pairing still needs the Tauri app.
+- **Outposts**: model calls run on the home, where the sender is paired; an outpost's harnesses do not answer them.
+- **Performance and idle cost**: the spare holds about 200 to 300 MB and uses no CPU while it waits. It ends 4 hours after the last presence report or call, when the last sender is unpaired, when headless tasks go off, or when the default harness cannot start ahead.
+- **Harnesses**: Claude answers from the spare; Codex answers cold through `codex exec`. Plugin harnesses do not answer model calls yet.
+
+## Tests
+
+- Stack: `cmd/attnd/model_call_stack_test.go`.
+
+## Gotchas
+
+- The spare starts only after the app reports the user present, or after a call. Right after a daemon restart there is none until then; the first call runs cold.
+- `ATTN_HEADLESS_TASKS` in the daemon's environment beats the `headless_tasks.enabled` setting, so turn tasks off in the env file, not with `attn settings set`.
+- `tokens_in` counts cached input too, as Claude reports it in `usage`.
+- Working but wrong: a caller's text in the daemon log, or a spare that holds a second call's conversation. Each spare answers once and exits.

@@ -175,7 +175,7 @@ func (c *Claude) RunHeadlessTask(ctx context.Context, request HeadlessTaskReques
 	result.TotalCostUSD = meta.TotalCostUSD
 	result.NumTurns = meta.NumTurns
 	result.ModelTime = time.Duration(meta.DurationAPIMs) * time.Millisecond
-	result.InputTokens = meta.Usage.InputTokens
+	result.InputTokens = meta.Usage.allInputTokens()
 	result.OutputTokens = meta.Usage.OutputTokens
 	return result, nil
 }
@@ -208,8 +208,14 @@ type claudeResultMeta struct {
 }
 
 type claudeUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens              int `json:"input_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+}
+
+func (u claudeUsage) allInputTokens() int {
+	return u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens
 }
 
 func parseClaudeResultMeta(stdout []byte) claudeResultMeta {

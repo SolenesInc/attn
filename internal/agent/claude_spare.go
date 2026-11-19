@@ -154,7 +154,7 @@ func (s *claudeSpare) answer(ctx context.Context, request ModelCallRequest) (Mod
 		}
 		return modelCallAnswer(text, ModelCallResult{
 			ModelTime:    time.Duration(event.DurationAPIMs) * time.Millisecond,
-			InputTokens:  event.Usage.InputTokens,
+			InputTokens:  event.Usage.allInputTokens(),
 			OutputTokens: event.Usage.OutputTokens,
 			CostUSD:      event.TotalCostUSD,
 		})

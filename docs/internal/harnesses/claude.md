@@ -284,6 +284,39 @@ that the user starts by hand in a terminal running a shell keeps its agent
 view. That terminal has no
 `ATTN_TERMINAL_ID`, so the conversation carries no attn identity.
 
+## The model call spare
+
+attn answers a model call from a `claude` it started before the call
+(`internal/agent/claude_spare.go`). Measured on 2.1.328 with a subscription
+sign-in and synthetic text, 2026-11-19 (plot `s-jhntry`, F2 to F5):
+
+- `--print` with `--input-format stream-json --output-format stream-json
+  --verbose` and no prompt argument starts and waits for messages on stdin.
+  Idle, it holds 200 to 300 MB resident and uses no CPU.
+- A process started with no model and no instructions takes both afterwards:
+  a `control_request` with `subtype: initialize` and `systemPrompt`, then one
+  with `subtype: set_model`. Each answers a `control_response` with
+  `subtype: success`. The answer then carried the same 661 input tokens as
+  `--system-prompt` and the model set. Wall time was the model's time plus 83
+  to 175 ms over 4 calls; a cold `claude --print` added about 4 s. Through
+  `attn model call` on 2.1.329 (seed `s-jwy81g`, C2), 10 calls on a spare
+  took a median of 53 ms beyond the model's time, and 10 cold calls 1,227 ms.
+- Without the `initialize`, the process answers as Claude Code and tries to
+  call tools, so a spare must get its instructions before any input.
+- One process keeps its conversation: six messages to one process grew the
+  cache reads from 0 to 873 tokens, and later answers took the style of
+  earlier ones. A spare answers one call and exits.
+- `--disallowedTools '*'` keeps a call to 661 input tokens. `--allowedTools`
+  adds about 19,300 tokens of tool definitions to every call. A `jsonSchema`
+  on `initialize` returns `structured_output` only under `--allowedTools`.
+
+Probed on 2.1.329 with `--bare`, `ANTHROPIC_API_KEY` and a local fake API
+behind a recording proxy (`scripts/fakeclaudeapi`), 2026-11-19: both control
+requests succeed, and the model request carries only the call's instructions
+as `system`, the call's input, the model set, and no tools. Before it, Claude
+sends one request of its own with the Claude Code prompt and the text `Hi`,
+which carries nothing of the call.
+
 ## Auto memory
 
 The [Claude memory documentation](https://code.claude.com/docs/en/memory)
