@@ -28,6 +28,13 @@ pub fn disclosure<S: 'static>(
     let chip = |(i, said): (usize, &String)| {
         El::from(tag(format!("{key}.tag{i}"), said, Tone::Neutral, t)).a11y_hidden()
     };
+    let said = door::gaps(
+        row().shrink().flex_wrap().items_center(),
+        Space::S4,
+        Space::S8,
+    )
+    .child(words(label, Type::Control, ink).a11y_hidden())
+    .children(chips.iter().enumerate().map(chip));
     let line = row()
         .key(key.clone())
         .role("button")
@@ -37,17 +44,17 @@ pub fn disclosure<S: 'static>(
         .focusable(true)
         .self_start()
         .items_center()
-        .h(size.height())
+        .min_h(size.height())
         .fill(fill)
         .child(opens_in_place(open, t))
-        .child(words(label, Type::Control, ink).a11y_hidden())
-        .children(chips.iter().enumerate().map(chip));
-    let line = door::gap(door::inset(line, size.inset(), Space::S0), Space::S8);
+        .child(said);
+    let line = door::gap(door::inset(line, size.inset(), Space::S4), Space::S8);
     let line = door::corner(door::hang_left(line, size.inset()), Radius::Control);
-    if disabled {
-        return Control::new(disabled::dim(line), size);
-    }
-    let surface = if open { fill } else { t.bg_panel };
-    let line = layers::pressable(line, surface, t).on_press_tx(press);
-    Control::new(focus::ring(line, t), size)
+    let line = if disabled {
+        disabled::dim(line)
+    } else {
+        let surface = if open { fill } else { t.bg_panel };
+        focus::ring(layers::pressable(line, surface, t).on_press_tx(press), t)
+    };
+    Control::new(row().w_full().child(line.shrink()), size)
 }

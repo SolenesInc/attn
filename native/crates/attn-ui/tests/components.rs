@@ -163,6 +163,20 @@ fn opening_view(state: &Opening, _: &mut rune::Cx<Opening>) -> rune::El {
             )
             .into(),
         )
+        .child(
+            attn_ui::blocks::Page::new()
+                .push(
+                    attn_ui::blocks::Disclosure::new(
+                        "block",
+                        "Models",
+                        state.open,
+                        |_: &mut Opening, _| {},
+                    )
+                    .push(attn_ui::blocks::Prose::lead("block.prose", "Inside").build(&t))
+                    .build(&t),
+                )
+                .build("page", &t),
+        )
 }
 
 fn opening(mark_alone: bool, reduced_motion: bool) -> Runtime<Opening> {
@@ -207,17 +221,17 @@ fn the_opens_in_place_chevron_turns_at_once_and_asks_for_no_further_frame() {
     for reduced_motion in [false, true] {
         let mut controls = opening(false, reduced_motion);
         let mut mark = opening(true, reduced_motion);
-        assert_eq!(chevrons_pointing_right(&controls), Ok(2));
+        assert_eq!(chevrons_pointing_right(&controls), Ok(3));
         assert_eq!(chevrons_pointing_right(&mark), Ok(1));
         for open in [true, false] {
             let case = format!("open {open}, reduced motion {reduced_motion}");
             controls.update(move |state, _| state.open = open);
             controls.frame(1.0 / 60.0);
-            let right = if open { 0 } else { 2 };
+            let right = if open { 0 } else { 3 };
             assert_eq!(chevrons_pointing_right(&controls), Ok(right), "{case}");
             mark.update(move |state, _| state.open = open);
             let more = mark.frame(1.0 / 60.0);
-            assert_eq!(chevrons_pointing_right(&mark), Ok(right / 2), "{case}");
+            assert_eq!(chevrons_pointing_right(&mark), Ok(right / 3), "{case}");
             assert!(!more, "{case}: the mark repaints after its turn");
         }
     }

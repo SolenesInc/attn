@@ -9,6 +9,7 @@
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
+use attn_ui::block_gallery::BLOCK_SUBJECTS;
 use attn_ui::colors::scheme_for;
 use attn_ui::gallery::{BANNERS, BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
 use attn_ui::system::{Type, words};
@@ -16,6 +17,8 @@ use rune::render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer, write_png};
 use rune::{App, AppSpec, Compositor, Cx, El, Env, Frame, Key, KeyEvent, Mods, Runtime, col, el};
 
 const WINDOW: (f32, f32) = (1400.0, 800.0);
+/// Wide enough for a block on a page of the widest width its story draws.
+const BLOCK_WINDOW: (f32, f32) = (1500.0, 1100.0);
 const SCALE: f32 = 2.0;
 const MARGIN: f32 = 12.0;
 const ROW_LABEL_WIDTH: f32 = 170.0;
@@ -228,14 +231,19 @@ fn gallery_view(_: &(), _: &mut Cx<()>) -> El {
     el()
 }
 
-fn gallery(dark: bool) -> Runtime<()> {
+fn gallery(dark: bool, story: &str) -> Runtime<()> {
+    let window = if story.starts_with("Blocks/") {
+        BLOCK_WINDOW
+    } else {
+        WINDOW
+    };
     App::new(AppSpec {
         fonts: attn_ui::FONTS,
         families: attn_ui::FAMILIES,
-        ..AppSpec::new("gallery", WINDOW, || (), gallery_view)
+        ..AppSpec::new("gallery", window, || (), gallery_view)
     })
     .playground(attn_ui::playground::<()>().enabled(true))
-    .headless_runtime(WINDOW, Env::new(dark, SCALE))
+    .headless_runtime(window, Env::new(dark, SCALE))
 }
 
 thread_local! {
@@ -277,7 +285,7 @@ fn label(said: &str, size: (f32, f32), dark: bool) -> Image {
 /// A control in one state: its rectangle on the stage with a margin round it, so its ring and
 /// any layer outside its edge show.
 fn cell(dark: bool, story: &str, column: &Column, key: &str) -> Image {
-    let mut rt = gallery(dark);
+    let mut rt = gallery(dark, story);
     rt.frame(0.0);
     rt.open_playground(story, Some(column.variant));
     let found = rt
@@ -304,20 +312,19 @@ fn cell(dark: bool, story: &str, column: &Column, key: &str) -> Image {
             rt.pointer_up(cx, cy);
             rt.pointer_leave();
         }
-        Gesture::Tab
-            if rt
-                .elements()
-                .iter()
-                .any(|e| e.focusable && e.path.starts_with(&target.path)) =>
-        {
-            tab_to(&mut rt, &target.path)
-        }
+        Gesture::Tab if holds_tab_stop(&rt, &target.path) => tab_to(&mut rt, &target.path),
         Gesture::Tab => {}
     }
     for _ in 0..3 {
         rt.frame(1.0);
     }
     pixels(&mut rt).crop([x - MARGIN, y - MARGIN, w + 2.0 * MARGIN, h + 2.0 * MARGIN])
+}
+
+fn holds_tab_stop(rt: &Runtime<()>, path: &str) -> bool {
+    rt.elements()
+        .iter()
+        .any(|e| e.focusable && e.path.starts_with(path))
 }
 
 /// Tab, as a person with keyboard navigation on does, until the keyboard is on `path` or
@@ -502,6 +509,62 @@ fn shoot(sheet: &Sheet, dark: bool, out: &Path) {
     println!("{}", path.display());
 }
 
+/// The variants a block's sheet draws, one under another, after the block at rest with the
+/// keyboard on its first control.
+const BLOCK_VARIANTS: &[(&str, &[&str])] = &[
+    ("Blocks/Page", &["Saving", "Refused", "Off"]),
+    ("Blocks/Section", &[]),
+    ("Blocks/Setting row", &[]),
+    ("Blocks/Field", &["Failed", "Disabled"]),
+    ("Blocks/Notice and status", &[]),
+    ("Blocks/Choices", &["Second chosen", "Disabled"]),
+    ("Blocks/Disclosure", &["Open", "Failed", "Disabled"]),
+    ("Blocks/Actions", &[]),
+];
+
+/// A block's sheet: each state on a row of its own, since a block is as wide as a page.
+fn block_sheet(story: &str) -> String {
+    let name = story
+        .trim_start_matches("Blocks/")
+        .to_lowercase()
+        .replace(' ', "-");
+    format!("block-{name}")
+}
+
+fn shoot_block(story: &str, key: &str, extra: &[&'static str], dark: bool, out: &Path) {
+    let mut rows: Vec<(String, Column)> = vec![
+        ("Rest".into(), column("", "Rest", Gesture::None)),
+        ("Focus (Tab)".into(), column("", "Rest", Gesture::Tab)),
+    ];
+    rows.extend(
+        extra
+            .iter()
+            .chain(&["Long", "Narrow", "Narrow long", "Smallest long"])
+            .map(|&v| (v.to_owned(), column("", v, Gesture::None))),
+    );
+    let cells: Vec<Image> = rows
+        .iter()
+        .map(|(_, column)| cell(dark, story, column, key))
+        .collect();
+    let px = |v: f32| (v * SCALE).round() as u32;
+    let label_w = px(ROW_LABEL_WIDTH);
+    let total_w = label_w + cells.iter().map(|c| c.width).max().unwrap_or(0);
+    let total_h = cells.iter().map(|c| c.height).sum::<u32>();
+    let mut image = Image::filled(total_w, total_h, background(dark));
+    let mut y = 0;
+    for ((name, _), cell) in rows.iter().zip(&cells) {
+        let size = (ROW_LABEL_WIDTH, cell.height as f32 / SCALE);
+        image.paste(&label(name, size, dark), 0, y as i64);
+        image.paste(cell, label_w as i64, y as i64);
+        y += cell.height;
+    }
+    let appearance = if dark { "dark" } else { "light" };
+    let path = out.join(format!("{}-{appearance}.png", block_sheet(story)));
+    write_png(&path, image.width, image.height, &image.rgba)
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    println!("{}", path.display());
+}
+
 fn main() {
     let out: PathBuf = std::env::args()
         .nth(1)
@@ -509,13 +572,18 @@ fn main() {
         .into();
     std::fs::create_dir_all(&out).unwrap_or_else(|e| panic!("{}: {e}", out.display()));
     let only = std::env::args().nth(2);
-    let wanted = |sheet: &Sheet| {
-        only.as_deref()
-            .is_none_or(|name| sheet.name.starts_with(name))
-    };
-    for sheet in sheets().into_iter().filter(wanted) {
+    let wanted = |name: &str| only.as_deref().is_none_or(|only| name.starts_with(only));
+    for sheet in sheets().into_iter().filter(|sheet| wanted(sheet.name)) {
         for dark in [true, false] {
             shoot(&sheet, dark, &out);
+        }
+    }
+    for (&(story, keys), &(_, extra)) in BLOCK_SUBJECTS.iter().zip(BLOCK_VARIANTS) {
+        if !wanted(&block_sheet(story)) {
+            continue;
+        }
+        for dark in [true, false] {
+            shoot_block(story, keys[0], extra, dark, &out);
         }
     }
 }

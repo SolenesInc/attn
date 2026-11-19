@@ -160,9 +160,9 @@ machine, since two GPUs need not draw the same pixels.
 
 ## Layout, type and corners
 
-Views do not choose a gap, an inset, a font or a corner. They take attn's
-controls from `attn_ui::system`, which carry those choices once for the whole
-app:
+Views do not choose a gap, an inset, a font or a corner. They build pages
+from `attn_ui::blocks` and controls from `attn_ui::system`, which carry those
+choices once for the whole app:
 
 - **Tokens.** Spacing is a scale of nine steps, 0, 2, 4, 6, 8, 12, 16, 24 and
   32. Only `attn-ui` can name a step: no view can make one or pass one. Text is
@@ -190,17 +190,25 @@ app:
   disabled field at. A warm part first turns neutral, so no disabled control
   reads as the page's one warm action. A disabled control draws no layer and
   no ring and takes no press.
-- **The door.** `attn_ui::system::door` is the one module that calls Rune's raw
-  spacing, font and corner methods (`gap`, `padding`, `px`…, `radius`, `font`,
-  `TextStyle::new` and the rest). While views move onto the system,
-  `scripts/native-ui-budget` in `make check-native` holds each directory of
-  `attn-app/src`, and `attn-ui/src`, to its line in `native/ui-budget.tsv`:
-  a count above its line fails, and a count below it fails until the line is
-  lowered, so the count only goes down. The files its `allow` rows name, such as
-  the door, count for nothing. It also fails when a file of `native/crates`
-  outside the file's `allow` rows carries `allow(clippy::disallowed_methods)`.
-  Once every line is 0, `native/clippy.toml` rejects the raw methods for the
-  whole workspace, as it does Rune's colour constructors.
+- **Blocks.** A page is a `Page`: its `Head` (the title, its lead and an
+  aside), the line that says it is saving, then its `Block`s in order. A
+  `Block` knows what it is, and each of these builds one: `Section`,
+  `SettingRow`, `Field`, `Notice`, `Status`, `Choices`, `Disclosure`, `Actions`
+  and `Prose`. `Block::control` puts a control on a line of its own at its own
+  width, and `Block::custom` takes a piece no block fits, built from controls
+  inside the rhythms `Inline` and `Stack`. A `Refusal`, why a control's value
+  was refused, is not a block: it goes beside that control. The parent spaces
+  its blocks by what they are: 32 and a rule between sections, 12 around a
+  notice and above a status, 16 otherwise; inside a section or a disclosure, 8
+  between setting rows, 16 between fields, 12 otherwise. Reading text wraps
+  at 480 points and a field at 504. Words beside a control, in a setting row or
+  a page's head, keep 288 before the control moves under them, and then wrap to
+  whatever line is left; a notice's action moves under its words at the same
+  288. A choice's name keeps 80, the longest word of a scheme's name, before it
+  moves under its swatches. A disclosure's tags and a line of controls wrap
+  onto further lines before they cut a label short. Nothing a block draws runs
+  past its sides, down to the smallest window at 150% text, where the Settings
+  page keeps 163 points.
 - **The banner.** `attn_ui::blocks::Banner` is the bar under the title bar
   that outpost updates, an update run and shared Codex draw. A view gives its
   tone (`Warn`, `Calm`, `Good` or `Bad`), its sentence, its notes, its actions,
@@ -212,12 +220,24 @@ app:
   the app background. A failure fills the bar with the error colour, darkened until the
   app background reads on it at 4.5:1, and its controls' focus ring takes that
   colour.
+- **The door.** `attn_ui::system::door` is the one module that calls Rune's raw
+  spacing, font and corner methods (`gap`, `padding`, `px`…, `radius`, `font`,
+  `TextStyle::new` and the rest). While views move onto the system,
+  `scripts/native-ui-budget` in `make check-native` holds each directory of
+  `attn-app/src`, and `attn-ui/src`, to its line in `native/ui-budget.tsv`:
+  a count above its line fails, and a count below it fails until the line is
+  lowered, so the count only goes down. The files its `allow` rows name, such as
+  the door, count for nothing. It also fails when a file of `native/crates`
+  outside the file's `allow` rows carries `allow(clippy::disallowed_methods)`.
+  Once every line is 0, `native/clippy.toml` rejects the raw methods for the
+  whole workspace, as it does Rune's colour constructors.
 - **The gallery.** `attn_ui::gallery` has a playground story for every
   control and block, with a variant for each state it can be in. `cargo run -p
   attn-ui --example state_sheets -- OUT` draws each state sheet, every state
   side by side with a real pointer for hover and pressed and the Tab key for
   focus, in dark and in light, with no window and no VM. `-- OUT NAME` draws
-  only the sheets whose name starts with `NAME`, such as `banner`.
+  only the sheets whose name starts with `NAME`, such as `banner`, or `block`
+  for every page block.
   `attn-ui/tests/rules.rs` reads the stories' rectangles and what the frame
   draws, and holds the rules the controls keep: one text inset in every field
   box and a long value ending at it, one width for number fields that holds a
@@ -229,9 +249,14 @@ app:
   sentence, its glyph, actions and dismiss on its first line, its notes whole
   beside its actions or on a line of their own, its dismiss 12 from its edge,
   one height in every tone, and its fill, words and ring at their measured
-  contrast.
+  contrast. It holds the page blocks' rules too: one right edge on a page,
+  blocks spaced by what they are, reading text at its measure, a control moved
+  under its words starting on their edge, a page title wrapping short of its
+  aside and keeping its line, a choice's name whole, no part of a block past
+  its sides, and a control's box and ring taking in everything it draws, at
+  any width the stories draw, the smallest included.
 
-A control a view needs that the system lacks is added to `attn-ui` with its
+A control or a block a view needs that `attn-ui` lacks is added there with its
 story and, when it keeps a rule, its test.
 
 ## Automation

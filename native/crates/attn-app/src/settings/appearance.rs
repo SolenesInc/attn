@@ -2,14 +2,12 @@ use std::collections::BTreeMap;
 
 use attn_protocol::SetSettingMessage;
 use attn_ui::Tokens;
+use attn_ui::blocks::{Block, Choices, Inline, Section, SettingRow, swatches};
 use attn_ui::colors::{SCHEMES, has_overrides};
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Tx, col, el, row, text};
+use attn_ui::system::{Button, Choice, Look, stepper};
+use rune::{El, Tx};
 
-use attn_ui::system::{Button, stepper};
-
-use super::pages::{block, blocks, number_field, row_card, segmented};
+use super::pages::{number_field, segmented};
 use crate::State;
 use crate::action::Action;
 use crate::sidebar::width;
@@ -113,13 +111,7 @@ fn choose_theme(state: &mut State, theme: &'static str, _: &mut Tx) {
     store(state, THEME, theme.into());
 }
 
-const SWATCHES: usize = 7;
-
-/// A color scheme's name, as the Tauri app's `.settings-color-scheme`: native's 12 points, at
-/// its weight.
-const SCHEME_NAME: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
-
-fn swatches(t: &Tokens) -> [rune::Color; SWATCHES] {
+fn scheme_colors(t: &Tokens) -> [rune::Color; 7] {
     [
         t.bg_app,
         t.bg_panel,
@@ -131,92 +123,48 @@ fn swatches(t: &Tokens) -> [rune::Color; SWATCHES] {
     ]
 }
 
-/// The color schemes, each with a few of its colors in the current appearance, and while the
-/// `color_overrides` setting names a color, a mark that says so with Reset.
-fn color_schemes(state: &State, t: &Tokens) -> El {
-    let settings = &state.facts.settings;
-    let chosen = crate::color_scheme(settings).id;
+/// The color schemes, each marked with a few of its colors in the current appearance.
+fn color_schemes(state: &State, t: &Tokens) -> Block {
+    let chosen = crate::color_scheme(&state.facts.settings).id;
     let n = SCHEMES.len();
-    let list = col()
-        .key("settings.color-schemes")
-        .role("radiogroup")
-        .label("Color scheme")
-        .focus_group()
-        .w_full()
-        .gap(4.0)
-        .children(SCHEMES.iter().enumerate().map(|(i, scheme)| {
+    Choices::new("settings.color-schemes", "Color scheme")
+        .options(SCHEMES.iter().enumerate().map(|(i, scheme)| {
             let id = scheme.id;
-            let chosen = id == chosen;
-            let strip = row()
-                .radius(4.0)
-                .clip_rounded(4.0)
-                .border(1.0, t.border)
-                .padding(1.0)
-                .children(
-                    swatches(&scheme.colors(t.dark).ui)
-                        .map(|color| el().size(14.0, 18.0).fill(color)),
-                )
-                .a11y_hidden();
-            let (edge, ink) = if chosen {
-                (t.accent, t.text_primary)
-            } else {
-                (t.border, t.text_secondary)
-            };
-            row()
-                .key(format!("settings.color-scheme.{id}"))
-                .role("radio")
-                .label(scheme.name.clone())
-                .checked(chosen)
-                .focusable(true)
-                .focus_selected(chosen)
-                .focus_ring(2.0, 1.0, t.accent)
-                .position_in_set(i + 1, n)
-                .w_full()
-                .min_h(36.0)
-                .gap(12.0)
-                .px(12.0)
-                .items_center()
-                .radius(8.0)
-                .fill(t.bg_elevated)
-                .border(1.0, edge)
-                .child(strip)
-                .child(
-                    text(scheme.name.clone())
-                        .font(SCHEME_NAME)
-                        .color(ink)
-                        .a11y_hidden(),
-                )
-                .on_press_tx(move |state: &mut State, _: &mut Tx| choose_color_scheme(state, id))
-        }));
-    let overrides = settings.get(COLOR_OVERRIDES).map_or("", String::as_str);
-    let custom = has_overrides(overrides).then(|| {
-        row()
-            .key("settings.color-overrides")
-            .gap(space::S2)
-            .items_center()
-            .child(
-                text("Custom colors")
-                    .font(type_::LABEL)
-                    .color(t.text_secondary),
-            )
-            .child(El::from(
-                Button::new("Reset")
-                    .on_press_tx(|state: &mut State, _: &mut Tx| {
-                        store(state, COLOR_OVERRIDES, String::new())
-                    })
-                    .build(t)
-                    .key("settings.color-overrides.reset")
-                    .label("Reset"),
-            ))
-    });
-    col()
-        .w_full()
-        .mt(10.0)
-        .gap(8.0)
-        .child(list)
-        .children(custom)
+            Choice::new(format!("settings.color-scheme.{id}"), scheme.name.clone())
+                .leading(swatches(scheme_colors(&scheme.colors(t.dark).ui), t))
+                .chosen(id == chosen)
+                .build((i, n), t, move |state: &mut State, _: &mut Tx| {
+                    choose_color_scheme(state, id)
+                })
+        }))
+        .build()
 }
 
+/// While the `color_overrides` setting names a color: a row that says so, with Reset.
+fn custom_colors(state: &State, t: &Tokens) -> Option<Block> {
+    let overrides = state
+        .facts
+        .settings
+        .get(COLOR_OVERRIDES)
+        .map_or("", String::as_str);
+    has_overrides(overrides).then(|| {
+        SettingRow::new(
+            "Custom colors",
+            "Your own colors replace parts of the scheme.",
+            Button::new("Reset")
+                .on_press_tx(|state: &mut State, _: &mut Tx| {
+                    store(state, COLOR_OVERRIDES, String::new())
+                })
+                .build(t)
+                .key("settings.color-overrides.reset")
+                .label("Reset"),
+        )
+        .key("settings.color-overrides")
+        .build(t)
+    })
+}
+
+/// A size between its step buttons, then the button that puts it back when `reset` is set.
 fn scale_control(
     key: &str,
     what: &str,
@@ -226,24 +174,26 @@ fn scale_control(
     up: fn(&mut State, &mut Tx),
     reset: Option<(&'static str, Press)>,
 ) -> El {
-    El::from(stepper(
-        &format!("settings.scale.{key}"),
-        &format!("{what} font size"),
-        value,
-        false,
-        t,
-        down,
-        up,
-    ))
-    .children(reset.map(|(label, press)| {
-        El::from(
-            Button::new(label)
-                .on_press_tx(press)
-                .build(t)
-                .key(format!("settings.scale.{key}.reset"))
-                .label(label),
-        )
-    }))
+    Inline::loose()
+        .child(El::from(stepper(
+            &format!("settings.scale.{key}"),
+            &format!("{what} font size"),
+            value,
+            false,
+            t,
+            down,
+            up,
+        )))
+        .children(reset.map(|(label, press)| {
+            El::from(
+                Button::new(label)
+                    .look(Look::Quiet)
+                    .on_press_tx(press)
+                    .build(t)
+                    .key(format!("settings.scale.{key}.reset"))
+                    .label(label),
+            )
+        }))
 }
 
 type Press = fn(&mut State, &mut Tx);
@@ -262,13 +212,28 @@ fn run(state: &mut State, action: Action, tx: &mut Tx) {
     crate::dispatch(state, action, tx);
 }
 
-pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
-    let settings = &state.facts.settings;
-    let theme = match settings.get(THEME).map(String::as_str) {
+fn theme(state: &State, t: &Tokens) -> Section {
+    let theme = match state.facts.settings.get(THEME).map(String::as_str) {
         Some("light") => "light",
         Some("system") => "system",
         _ => "dark",
     };
+    Section::new("settings.block.theme", "Theme")
+        .description("Choose the appearance and the color scheme of attn and its terminals.")
+        .push(Block::control(segmented(
+            THEME,
+            "Theme preference",
+            THEMES,
+            theme,
+            t,
+            choose_theme,
+        )))
+        .push(color_schemes(state, t))
+        .push_all(custom_colors(state, t))
+}
+
+fn font_size(state: &State, t: &Tokens) -> Section {
+    let settings = &state.facts.settings;
     let scale = text_scale(settings);
     let garden = stored_scale(settings, GARDEN_SCALE);
     let keys = |action: &Action| {
@@ -283,12 +248,53 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
         keys(&Action::UiIncreaseFontSize),
         keys(&Action::UiDecreaseFontSize)
     );
-    let sidebar_width = &state.window.settings.autosave;
-    let sidebar_draft = sidebar_width.draft(width::SETTING);
+    Section::new("settings.block.font-size", "Font Size")
+        .description(
+            "Scale text across attn. The garden can use its own size, independent of the rest of the app.",
+        )
+        .push(
+            SettingRow::new(
+                "App",
+                app_copy,
+                scale_control(
+                    "app",
+                    "app",
+                    percent(scale),
+                    t,
+                    |s, tx| run(s, Action::UiDecreaseFontSize, tx),
+                    |s, tx| run(s, Action::UiIncreaseFontSize, tx),
+                    (scale != 1.0).then_some(("Reset", reset_ui_scale as Press)),
+                ),
+            )
+            .build(t),
+        )
+        .push(
+            SettingRow::new(
+                "The garden",
+                "Seeds, plots, and their logs. Matches the app size until you change it.",
+                scale_control(
+                    "garden",
+                    "garden",
+                    garden.map_or_else(|| "Match app".to_owned(), percent),
+                    t,
+                    |s, _| garden_step(s, -SCALE_STEP),
+                    |s, _| garden_step(s, SCALE_STEP),
+                    garden
+                        .is_some()
+                        .then_some(("Match app", match_app as Press)),
+                ),
+            )
+            .build(t),
+        )
+}
+
+fn layout(state: &State, t: &Tokens) -> Section {
+    let draft = state.window.settings.autosave.draft(width::SETTING);
     let default_width = (width::DEFAULT as i64).to_string();
-    let use_default = (!sidebar_draft.is_empty() && sidebar_draft != default_width).then(|| {
+    let use_default = (!draft.is_empty() && draft != default_width).then(|| {
         El::from(
             Button::new("Use default")
+                .look(Look::Quiet)
                 .on_press_tx(|state: &mut State, tx: &mut Tx| {
                     super::autosave::apply(state, width::SETTING, "", tx)
                 })
@@ -297,100 +303,51 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
                 .label("Use default"),
         )
     });
-    blocks(
-        vec![
-            block(
-                "theme",
-                "Theme",
-                "Choose the appearance and the color scheme of attn and its terminals.",
-                t,
-                vec![
-                    segmented(THEME, "Theme preference", THEMES, theme, t, choose_theme),
-                    color_schemes(state, t),
-                ],
-            ),
-            block(
-                "font-size",
-                "Font Size",
-                "Scale text across attn. The garden can use its own size, independent of the rest of the app.",
-                t,
-                vec![
-                    row_card(
-                        "App",
-                        &app_copy,
-                        t,
-                        scale_control(
-                            "app",
-                            "app",
-                            percent(scale),
-                            t,
-                            |s, tx| run(s, Action::UiDecreaseFontSize, tx),
-                            |s, tx| run(s, Action::UiIncreaseFontSize, tx),
-                            (scale != 1.0).then_some(("Reset", reset_ui_scale as Press)),
-                        ),
-                    ),
-                    row_card(
-                        "The garden",
-                        "Seeds, plots, and their logs. Matches the app size until you change it.",
-                        t,
-                        scale_control(
-                            "garden",
-                            "garden",
-                            garden.map_or_else(|| "Match app".to_owned(), percent),
-                            t,
-                            |s, _| garden_step(s, -SCALE_STEP),
-                            |s, _| garden_step(s, SCALE_STEP),
-                            garden
-                                .is_some()
-                                .then_some(("Match app", match_app as Press)),
-                        ),
-                    ),
-                ],
-            ),
-            block(
-                "layout",
-                "Layout",
-                "How wide tiles and the sidebar get.",
-                t,
-                vec![
-                    row_card(
-                        "Narrowest tile width (columns)",
-                        "A tile never gets narrower than this. A narrower width fits more tiles in the row.",
-                        t,
-                        number_field(
-                            state,
-                            NARROWEST_TILE_COLS,
-                            "Narrowest tile width (columns)",
-                            "",
-                            1.0,
-                            t,
-                        ),
-                    ),
-                    row_card(
+    Section::new("settings.block.layout", "Layout")
+        .description("How wide tiles and the sidebar get.")
+        .push(
+            SettingRow::new(
+                "Narrowest tile width (columns)",
+                "A tile never gets narrower than this. A narrower width fits more tiles in the row.",
+                number_field(
+                    state,
+                    NARROWEST_TILE_COLS,
+                    "Narrowest tile width (columns)",
+                    "",
+                    1.0,
+                    t,
+                ),
+            )
+            .build(t),
+        )
+        .push(
+            SettingRow::new(
+                "Sidebar width (pixels)",
+                format!(
+                    "The open sidebar's width, from {} to {}. Empty uses the default of {}.",
+                    width::MIN as i64,
+                    width::MAX as i64,
+                    width::DEFAULT as i64
+                ),
+                Inline::loose()
+                    .child(number_field(
+                        state,
+                        width::SETTING,
                         "Sidebar width (pixels)",
-                        &format!(
-                            "The open sidebar's width, from {} to {}. Empty uses the default of {}.",
-                            width::MIN as i64,
-                            width::MAX as i64,
-                            width::DEFAULT as i64
-                        ),
+                        &default_width,
+                        1.0,
                         t,
-                        row()
-                            .gap(space::S2)
-                            .items_center()
-                            .child(number_field(
-                                state,
-                                width::SETTING,
-                                "Sidebar width (pixels)",
-                                &default_width,
-                                1.0,
-                                t,
-                            ))
-                            .children(use_default),
-                    ),
-                ],
-            ),
-        ],
-        t,
-    )
+                    ))
+                    .children(use_default),
+            )
+            .build(t),
+        )
+}
+
+pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
+    vec![
+        theme(state, t).build(t),
+        font_size(state, t).build(t),
+        layout(state, t).build(t),
+    ]
 }

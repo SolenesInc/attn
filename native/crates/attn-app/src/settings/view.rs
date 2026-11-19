@@ -1,6 +1,7 @@
 use attn_ui::Tokens;
+use attn_ui::blocks::{Block, Head, Inline, Page};
+use attn_ui::system::{Type, words};
 use attn_ui::type_;
-use rune::tok::space;
 use rune::{Color, El, TextStyle, Tx, col, el, row, text};
 use rune_kit::{ScrollBar, TextInput};
 
@@ -223,11 +224,6 @@ fn nav(state: &State, t: &Tokens) -> El {
     .scroll_bar_styled(attn_ui::scroll_bar(t).track_offset(0.0, 1.0))
 }
 
-/// The section's title, as the Tauri app's `.settings-content-head h1`.
-const SECTION_TITLE: TextStyle = TextStyle::new(18.0, 750.0);
-/// How far the lead sits from the column's edge at most, as `.settings-lead`.
-const LEAD_WIDTH: f32 = 680.0;
-
 fn body(state: &State, t: &Tokens) -> El {
     state.window.settings.anchors.clear();
     let section = state.window.settings.section;
@@ -236,86 +232,38 @@ fn body(state: &State, t: &Tokens) -> El {
         Some(key) => pages::feature(key).summary,
         None => item.description,
     };
-    let lead = (!summary.is_empty()).then(|| {
-        text(summary)
-            .font(type_::BODY)
-            .color(t.text_secondary)
-            .wrap()
-            .max_w(LEAD_WIDTH)
-            .mt(9.0)
-    });
-    let note = item
+    let mut head = Head::new("settings.heading", item.label).lead(summary);
+    if let Some(note) = item
         .feature
         .and_then(|key| pages::feature_note(state, key, t))
-        .map(|note| note.max_w(LEAD_WIDTH).mt(6.0));
-    let head = row()
-        .w_full()
-        .gap(20.0)
-        .items_end()
-        .pb(24.0)
-        .child(
-            col()
-                .grow(1.0)
-                .min_w(0.0)
-                .child(
-                    text(item.label)
-                        .key("settings.heading")
-                        .role("heading")
-                        .label(item.label)
-                        .font(SECTION_TITLE)
-                        .color(t.text_primary),
-                )
-                .children(lead)
-                .children(note),
-        )
-        .children(
-            item.feature
-                .map(|key| pages::feature_switch(state, key, true, t)),
-        )
-        .children({
-            let pills = pills(state, section, t);
-            (!pills.is_empty()).then(|| {
-                row()
-                    .key("settings.pills")
-                    .gap(space::S2)
-                    .items_center()
-                    .children(pills)
-            })
-        });
+    {
+        head = head.note(note);
+    }
+    if let Some(key) = item.feature {
+        head = head.aside(pages::feature_switch(state, key, true, t));
+    }
+    let pills = pills(state, section, t);
+    if !pills.is_empty() {
+        head = head.aside(Inline::loose().key("settings.pills").children(pills));
+    }
     let off = item
         .feature
         .is_some_and(|key| !setting::on(&state.facts.settings, key));
-    let mut content = col()
-        .key(format!("settings.section.{}", section.id()))
-        .role("group")
-        .label(item.label)
-        .w_full()
-        .children(page(state, section, t));
-    if off {
-        content = content.opacity(0.45).inert();
-    }
-    col()
-        .key("settings.body")
-        .grow(1.0)
-        .min_w(0.0)
-        .h_full()
-        .pt(26.0)
-        .px(28.0)
-        .pb(32.0)
-        .fill(t.bg_panel)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .child(head)
-        .child(status(state, t))
-        .child(content)
-        .scroll_bar_styled(attn_ui::scroll_bar(t))
+    let blocks = page(state, section, t);
+    let (said, parts) = status(state, t);
+    Page::new()
+        .head(head)
+        .status("settings.autosave", said, parts)
+        .push_all(blocks)
+        .group(format!("settings.section.{}", section.id()), item.label)
+        .dimmed(off)
+        .build("settings.body", t)
 }
 
-/// Saving…, Saved, or the refusals no field shows beside itself.
-fn status(state: &State, t: &Tokens) -> El {
+/// Saving…, Saved, or the refusals no field shows beside itself: what the page says, and
+/// what it shows.
+fn status(state: &State, t: &Tokens) -> (&'static str, Vec<El>) {
     let saves = &state.window.settings.autosave;
-    let refusals = pages::unanchored_refusals(state, t);
     let said = if saves.saving() {
         Some("Saving…")
     } else if saves.saved() {
@@ -323,37 +271,34 @@ fn status(state: &State, t: &Tokens) -> El {
     } else {
         None
     };
-    let shown = said.is_some() || !refusals.is_empty();
-    row()
-        .key("settings.autosave")
-        .role("status")
-        .label(said.unwrap_or_default())
-        .py(if shown { 8.0 } else { 0.0 })
-        .gap(space::S2)
-        .items_center()
-        .children(said.map(|s| text(s).font(CAPTION).color(t.text_tertiary)))
-        .children(refusals)
+    let parts = said
+        .map(|s| words(s, Type::Small, t.text_tertiary))
+        .into_iter()
+        .chain(pages::unanchored_refusals(state, t))
+        .collect();
+    (said.unwrap_or_default(), parts)
 }
 
-fn page(state: &State, section: Section, t: &Tokens) -> Vec<El> {
+fn page(state: &State, section: Section, t: &Tokens) -> Vec<Block> {
+    let legacy = |els: Vec<El>| vec![Block::custom(col().w_full().children(els))];
     match section {
         Section::General => appearance::page(state, t),
-        Section::Connectivity => pages::github_hosts(state, t),
-        Section::Experimental => pages::experimental(state, t),
-        Section::BackgroundTasks => tasks::page(state, state.window.now_ms, t),
-        Section::EventBus => bus::page(state, state.window.now_ms, t),
-        Section::Analytics => analytics::page(state, t),
-        Section::BackgroundAgents => background::page(state, t),
-        Section::Delegation => delegation::page(state, t),
-        Section::Agents => agents::page(state, t),
-        Section::Models => models::page(state, t),
-        Section::Updates => updates::page(state, t),
-        Section::Desktop => desktop::page(state, t),
-        Section::Hygiene => hygiene::page(state, t),
-        Section::Plugins => plugins::page(state, t),
-        Section::Outposts => outposts::page(state, t),
-        Section::Phones => phones::page(state, t),
-        Section::Senders => senders::page(state, t),
+        Section::Connectivity => legacy(pages::github_hosts(state, t)),
+        Section::Experimental => legacy(pages::experimental(state, t)),
+        Section::BackgroundTasks => legacy(tasks::page(state, state.window.now_ms, t)),
+        Section::EventBus => legacy(bus::page(state, state.window.now_ms, t)),
+        Section::Analytics => legacy(analytics::page(state, t)),
+        Section::BackgroundAgents => legacy(background::page(state, t)),
+        Section::Delegation => legacy(delegation::page(state, t)),
+        Section::Agents => legacy(agents::page(state, t)),
+        Section::Models => legacy(models::page(state, t)),
+        Section::Updates => legacy(updates::page(state, t)),
+        Section::Desktop => legacy(desktop::page(state, t)),
+        Section::Hygiene => legacy(hygiene::page(state, t)),
+        Section::Plugins => legacy(plugins::page(state, t)),
+        Section::Outposts => legacy(outposts::page(state, t)),
+        Section::Phones => legacy(phones::page(state, t)),
+        Section::Senders => legacy(senders::page(state, t)),
     }
 }
 

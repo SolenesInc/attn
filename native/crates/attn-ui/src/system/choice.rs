@@ -5,6 +5,10 @@ use crate::Tokens;
 
 const DOT: f32 = 14.0;
 
+/// The narrowest a choice's name gets beside its mark before it takes a line of its own under
+/// it: the longest word of a colour scheme's name, "Catppuccin", measures 72.5 in `Name`.
+const NAME_FLOOR: f32 = 80.0;
+
 /// One option of a list of choices: a row with its mark, its name and a note under it.
 pub struct Choice {
     key: String,
@@ -76,7 +80,7 @@ impl Choice {
                 },
             )
             .a11y_hidden();
-        let named = door::gap(col().grow(1.0).min_w(0.0), Space::S2)
+        let named = door::gap(col().grow_from(1.0, NAME_FLOOR), Space::S2)
             .child(
                 words(self.name.clone(), Type::Name, ink)
                     .wrap()
@@ -87,6 +91,13 @@ impl Choice {
                     .wrap()
                     .a11y_hidden()
             }));
+        let said = door::gaps(
+            row().grow(1.0).flex_wrap().items_center(),
+            Space::S8,
+            Space::S12,
+        )
+        .children(self.leading)
+        .child(named);
         let row = row()
             .key(self.key)
             .role("radio")
@@ -105,8 +116,7 @@ impl Choice {
             })
             .border(1.0, edge)
             .child(dot)
-            .children(self.leading)
-            .child(named);
+            .child(said);
         let row = door::inset(door::gap(row, Space::S12), Space::S12, Space::S8);
         let row = door::corner(row, Radius::Card);
         if self.disabled {

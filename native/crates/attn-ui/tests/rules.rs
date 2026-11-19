@@ -1081,3 +1081,295 @@ fn ring_around<'a>(rt: &'a Runtime<()>, e: &ElementInfo) -> Option<&'a Instance>
             && i.params[0] > 0.0
     })
 }
+
+/// Wide enough for a block story at its widest page.
+const BLOCK_WINDOW: (f32, f32) = (1500.0, 1100.0);
+
+fn block_story(dark: bool, name: &str, variant: &str) -> Runtime<()> {
+    let mut rt = App::new(AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..AppSpec::new("rules", BLOCK_WINDOW, || (), view)
+    })
+    .playground(attn_ui::playground::<()>().enabled(true))
+    .headless_runtime(BLOCK_WINDOW, Env::new(dark, SCALE));
+    rt.frame(0.0);
+    rt.open_playground(name, Some(variant));
+    rt
+}
+
+const ROWS: [&str; 4] = ["row.stepper", "row.number", "row.switch", "row.button"];
+const PAGE_VARIANTS: [&str; 6] = [
+    "Rest",
+    "Long",
+    "Narrow",
+    "Narrow long",
+    "Smallest long",
+    "Refused",
+];
+const WIDTHS: [&str; 5] = ["Rest", "Long", "Narrow", "Narrow long", "Smallest long"];
+
+fn right(e: &ElementInfo) -> f32 {
+    e.rect[0] + e.rect[2]
+}
+
+fn bottom(e: &ElementInfo) -> f32 {
+    e.rect[1] + e.rect[3]
+}
+
+#[test]
+fn a_page_has_one_right_edge() {
+    for variant in PAGE_VARIANTS {
+        let rt = block_story(true, "Blocks/Page", variant);
+        let edge = right(&element(&rt, "page.section"));
+        for key in ["page.layout"].into_iter().chain(ROWS) {
+            let e = element(&rt, key);
+            assert!(
+                (right(&e) - edge).abs() < 0.5,
+                "{variant}: {key} ends at {}, the page at {edge}",
+                right(&e)
+            );
+        }
+        if variant.starts_with("Narrow") || variant.starts_with("Smallest") {
+            continue;
+        }
+        for (row, last) in [
+            ("row.stepper", "row.stepper.reset"),
+            ("row.switch", "row.switch.control"),
+            ("row.button", "row.button.control"),
+        ] {
+            let inside = right(&element(&rt, row)) - 16.0;
+            let end = right(&element(&rt, last));
+            assert!(
+                (end - inside).abs() < 0.5,
+                "{variant}: {last} ends at {end}, its row's inset at {inside}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_control_moved_under_its_words_starts_on_their_edge() {
+    for variant in ["Narrow", "Narrow long"] {
+        let rt = block_story(true, "Blocks/Setting row", variant);
+        let row = element(&rt, "row.stepper");
+        let down = element(&rt, "row.stepper.control.down");
+        let words_edge = row.rect[0] + 16.0;
+        assert!(
+            down.rect[1] > row.rect[1] + 40.0,
+            "{variant}: the stepper did not move under its words"
+        );
+        assert!(
+            (down.rect[0] - words_edge).abs() < 0.5,
+            "{variant}: the stepper starts at {}, its words at {words_edge}",
+            down.rect[0]
+        );
+    }
+}
+
+#[test]
+fn blocks_are_spaced_by_what_they_are() {
+    for variant in PAGE_VARIANTS {
+        let rt = block_story(true, "Blocks/Page", variant);
+        let between =
+            |above: &str, below: &str| element(&rt, below).rect[1] - bottom(&element(&rt, above));
+        let layout = element(&rt, "page.layout");
+        let all = rt.elements();
+        let heading = all
+            .iter()
+            .find(|e| e.parent.is_some_and(|p| all[p].path == layout.path))
+            .expect("a section has a head");
+        let sections = heading.rect[1] - bottom(&element(&rt, "page.section"));
+        let rule = between("page.section", "page.layout");
+        assert!(
+            (sections - 32.0).abs() < 0.5 && (rule - 16.0).abs() < 0.5,
+            "{variant}: sections are {sections} apart with the rule {rule} down, not 32 and 16"
+        );
+        let rows = between("row.switch", "row.button");
+        assert!(
+            (rows - 8.0).abs() < 0.5,
+            "{variant}: setting rows are {rows} apart, not 8"
+        );
+        let lead = between("page.prose", "page.section");
+        assert!(
+            (lead - 16.0).abs() < 0.5,
+            "{variant}: a section sits {lead} under the prose, not 16"
+        );
+    }
+}
+
+#[test]
+fn reading_text_wraps_at_the_reading_measure() {
+    for variant in ["Long", "Narrow long"] {
+        let rt = block_story(true, "Blocks/Page", variant);
+        let prose = element(&rt, "page.prose");
+        assert!(
+            prose.rect[2] <= 480.5,
+            "{variant}: prose runs {} wide",
+            prose.rect[2]
+        );
+        let row = element(&rt, "row.number");
+        assert!(row.rect[2] > 480.0 || variant.starts_with("Narrow"));
+    }
+}
+
+#[test]
+fn a_page_title_wraps_short_of_its_aside() {
+    for variant in PAGE_VARIANTS {
+        let rt = block_story(true, "Blocks/Page", variant);
+        let switch = device(inside(&rt, "page.switch", "control").rect);
+        let under = rt.instances.iter().find(|i| {
+            i.params[1] == rune::render::KIND_GLYPH
+                && i.rect[0] < switch[0] + switch[2]
+                && i.rect[0] + i.rect[2] > switch[0]
+                && i.rect[1] < switch[1] + switch[3]
+                && i.rect[1] + i.rect[3] > switch[1]
+        });
+        assert!(
+            under.is_none(),
+            "{variant}: a glyph at {:?} is drawn under the title's switch at {:?}",
+            under.map(|g| g.rect.map(|v| v / SCALE)),
+            switch.map(|v| v / SCALE)
+        );
+    }
+}
+
+fn apart(a: [f32; 4], b: [f32; 4]) -> bool {
+    a[0] + a[2] <= b[0] || b[0] + b[2] <= a[0] || a[1] + a[3] <= b[1] || b[1] + b[3] <= a[1]
+}
+
+/// Whether `inner` stays between `outer`'s sides, but for a quiet control hung left by its
+/// inset so its words line up with the text above it.
+fn holds_across(outer: [f32; 4], inner: [f32; 4]) -> bool {
+    inner[0] >= outer[0] - REGULAR_INSET - 0.5 && inner[0] + inner[2] <= outer[0] + outer[2] + 0.5
+}
+
+/// The narrowest a title gets beside the aside before the aside moves under it.
+const TITLE_FLOOR: f32 = 288.0;
+
+#[test]
+fn a_heads_aside_gives_way_to_its_title_and_stays_on_the_page() {
+    for variant in PAGE_VARIANTS {
+        let rt = block_story(true, "Blocks/Page", variant);
+        let page = element(&rt, "page.section").rect;
+        let title = element(&rt, "page.heading").rect;
+        assert!(
+            title[2] >= TITLE_FLOOR.min(page[2]) - 0.5,
+            "{variant}: the title keeps {} of the page's {}",
+            title[2],
+            page[2]
+        );
+        let aside = ["page.switch", "page.pills"]
+            .into_iter()
+            .filter(|key| rt.elements().iter().any(|e| e.key.as_deref() == Some(*key)));
+        for key in aside {
+            let e = element(&rt, key).rect;
+            assert!(
+                apart(title, e),
+                "{variant}: {key} at {e:?} covers the title at {title:?}"
+            );
+            assert!(
+                e[0] + e[2] <= page[0] + page[2] + 0.5,
+                "{variant}: {key} ends at {}, past the page's {}",
+                e[0] + e[2],
+                page[0] + page[2]
+            );
+        }
+    }
+}
+
+#[test]
+fn no_part_of_a_block_runs_past_its_sides_at_any_width() {
+    for &(story, subjects) in attn_ui::block_gallery::BLOCK_SUBJECTS {
+        for variant in WIDTHS {
+            let rt = block_story(true, story, variant);
+            for key in subjects {
+                let block = element(&rt, key);
+                for part in rt.elements().iter().filter(|e| {
+                    e.path.starts_with(&format!("{}/", block.path))
+                        && e.rect[2] > 0.0
+                        && e.rect[3] > 0.0
+                }) {
+                    assert!(
+                        holds_across(block.rect, part.rect),
+                        "{story} {variant} {key}: {} at {:?} leaves the block at {:?}",
+                        part.path,
+                        part.rect,
+                        block.rect
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// The longest word of a colour scheme's name, "Catppuccin", in `Name`.
+const LONGEST_NAME_WORD: f32 = 72.5;
+
+#[test]
+fn a_choices_name_keeps_its_longest_word_whole_at_every_width() {
+    for variant in WIDTHS {
+        let rt = block_story(true, "Blocks/Choices", variant);
+        let options: Vec<ElementInfo> = rt
+            .elements()
+            .into_iter()
+            .filter(|e| e.role == "radio")
+            .collect();
+        assert!(!options.is_empty(), "{variant}: no choices drawn");
+        for option in options {
+            let prefix = format!("{}/", option.path);
+            for text in rt
+                .elements()
+                .into_iter()
+                .filter(|e| e.path.starts_with(&prefix) && e.text.is_some())
+            {
+                assert!(
+                    text.rect[2] >= LONGEST_NAME_WORD,
+                    "{variant}: {:?} gets {} points, under a whole word's {LONGEST_NAME_WORD}",
+                    text.text,
+                    text.rect[2]
+                );
+                assert!(
+                    holds_across(option.rect, text.rect),
+                    "{variant}: {:?} at {:?} leaves its choice at {:?}",
+                    text.text,
+                    text.rect,
+                    option.rect
+                );
+            }
+        }
+    }
+}
+
+fn holds_all(outer: [f32; 4], inner: [f32; 4]) -> bool {
+    inner[0] >= outer[0] - 0.5
+        && inner[1] >= outer[1] - 0.5
+        && inner[0] + inner[2] <= outer[0] + outer[2] + 0.5
+        && inner[1] + inner[3] <= outer[1] + outer[3] + 0.5
+}
+
+#[test]
+fn a_controls_box_and_ring_take_in_everything_it_draws_at_any_width() {
+    for &(story, _) in attn_ui::block_gallery::BLOCK_SUBJECTS {
+        for variant in WIDTHS {
+            let rt = block_story(true, story, variant);
+            let elements = rt.elements();
+            for control in elements.iter().filter(|e| e.focusable) {
+                let prefix = format!("{}/", control.path);
+                for part in elements
+                    .iter()
+                    .filter(|e| e.path.starts_with(&prefix) && e.rect[2] > 0.0 && e.rect[3] > 0.0)
+                {
+                    assert!(
+                        holds_all(control.rect, part.rect),
+                        "{story} {variant}: {} at {:?} reaches outside its control {} at {:?}",
+                        part.path,
+                        part.rect,
+                        control.path,
+                        control.rect
+                    );
+                }
+            }
+        }
+    }
+}

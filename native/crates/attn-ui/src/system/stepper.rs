@@ -6,7 +6,7 @@ use crate::Tokens;
 type Press<S> = Box<dyn Fn(&mut S, &mut Tx)>;
 
 /// The width a stepper keeps for its value, so steppers in one column line up: "Match app" in
-/// `Name` measures 64.
+/// `Name` measures 64. On a line narrower than the stepper the value gives way and wraps.
 const STEPPER_VALUE: f32 = 80.0;
 
 /// A value between a step down and a step up. `key.down`, `key.value` and `key.up` name its
@@ -29,12 +29,14 @@ pub fn stepper<S: 'static>(
                 .key(format!("{key}.{dir}"))
                 .label(format!("{said} {what}")),
         )
+        .min_w(Size::Regular.height())
     };
     let shown = words(value.clone(), Type::Name, t.text_primary)
         .key(format!("{key}.value"))
         .role("status")
         .label(value)
-        .w(STEPPER_VALUE)
+        .wrap()
+        .grow_from(0.0, STEPPER_VALUE)
         .align(rune::Align::Center);
     let shown = if disabled {
         disabled::dim(shown)
@@ -42,6 +44,7 @@ pub fn stepper<S: 'static>(
         shown
     };
     let line = door::gap(row().key(key.to_owned()).items_center(), Space::S4)
+        .max_w_frac(1.0)
         .child(step("down", "Decrease", "−", Box::new(down)))
         .child(shown)
         .child(step("up", "Increase", "+", Box::new(up)));

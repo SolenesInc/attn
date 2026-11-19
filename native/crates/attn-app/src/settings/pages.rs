@@ -4,6 +4,7 @@ use std::cell::RefCell;
 
 use attn_protocol::go_values::FEATURES;
 use attn_ui::Tokens;
+use attn_ui::blocks::{Inline, Refusal, Stack, saved};
 use attn_ui::keycap;
 use attn_ui::system::{
     Button, FieldState, Segment, Segmented, arrows, line_box, number_box, switch,
@@ -150,13 +151,10 @@ pub(super) fn number_field(
         .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, key, tx))
         .on_blur(move |state: &mut State, tx: &mut Tx| autosave::commit_on_leave(state, key, tx))
         .trailing(setting_arrows(key, step, t));
-    col()
+    Stack::tight()
         .items_end()
-        .gap(space::S1)
         .child(
-            row()
-                .gap(space::S2)
-                .items_center()
+            Inline::loose()
                 .child(El::from(number_box(draft, refused, t)))
                 .children(saved_mark(state, key, t)),
         )
@@ -183,14 +181,7 @@ fn saved_mark(state: &State, key: &str, t: &Tokens) -> Option<El> {
         .settings
         .autosave
         .shows_saved_mark(key)
-        .then(|| {
-            text("Saved")
-                .key(format!("settings.saved.{key}"))
-                .role("status")
-                .label("Saved")
-                .font(CAPTION)
-                .color(t.success)
-        })
+        .then(|| saved(format!("settings.saved.{key}"), t))
 }
 
 /// `typed` stepped once by `step`, up or down: a number field's arrows. An empty or unreadable
@@ -323,14 +314,8 @@ pub(super) fn refusal_beside(state: &State, key: &str, focus: String, t: &Tokens
 
 fn refusal_row(key: String, reason: &str, t: &Tokens) -> El {
     let retried = key.clone();
-    row()
-        .key(format!("settings.refusal.{key}"))
-        .role("alert")
-        .label(reason.to_owned())
-        .gap(space::S2)
-        .items_center()
-        .child(text(reason.to_owned()).font(CAPTION).color(t.error).wrap())
-        .child(El::from(
+    Refusal::new(format!("settings.refusal.{key}"), reason)
+        .retry(
             Button::new("Retry")
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     autosave::commit(state, &retried, tx)
@@ -338,7 +323,8 @@ fn refusal_row(key: String, reason: &str, t: &Tokens) -> El {
                 .build(t)
                 .key(retry_key(&key))
                 .label("Retry"),
-        ))
+        )
+        .build(t)
 }
 
 /// The choice among `options` for the setting `key`, saved when one is picked.

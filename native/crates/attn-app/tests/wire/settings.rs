@@ -1134,3 +1134,93 @@ fn the_garden_size_holds_at_its_bounds() {
         rest(&mut world);
     }
 }
+
+fn rect_of(world: &World, key: &str) -> [f32; 4] {
+    world
+        .screen()
+        .bounds(Target::key(key))
+        .unwrap_or_else(|| panic!("{key} is not on screen"))
+}
+
+fn apart(a: [f32; 4], b: [f32; 4]) -> bool {
+    a[0] + a[2] <= b[0] || b[0] + b[2] <= a[0] || a[1] + a[3] <= b[1] || b[1] + b[3] <= a[1]
+}
+
+#[test]
+fn the_smallest_window_at_150_percent_text_keeps_a_pages_title_and_its_cards_whole() {
+    let (daemon, _) = accepting(&[
+        ("uiScale", "1.5"),
+        ("gardenScale", "1.4"),
+        (
+            "projects_directory",
+            "/home/someone/projects/社内プラットフォーム/InternationalEngineeringObservability",
+        ),
+    ]);
+    let mut world = World::start_sized(daemon, (800.0, 600.0));
+    open(&mut world);
+
+    click(&mut world, "settings.nav.desktop");
+    let title = rect_of(&world, "settings.heading");
+    let pills = rect_of(&world, "settings.pills");
+    let body = rect_of(&world, "settings.body");
+    assert!(
+        title[2] >= 150.0,
+        "the title keeps only {} points",
+        title[2]
+    );
+    assert!(
+        apart(title, pills),
+        "the pills at {pills:?} cover the title at {title:?}"
+    );
+    assert!(
+        pills[0] + pills[2] <= body[0] + body[2],
+        "the pills end at {}, past the page at {}",
+        pills[0] + pills[2],
+        body[0] + body[2]
+    );
+
+    click(&mut world, "settings.nav.general");
+    let elements = world.runtime().elements();
+    let schemes: Vec<_> = elements
+        .iter()
+        .filter(|e| {
+            e.key
+                .as_deref()
+                .is_some_and(|k| k.starts_with("settings.color-scheme."))
+        })
+        .collect();
+    assert!(!schemes.is_empty(), "no colour schemes drawn");
+    for scheme in schemes {
+        let prefix = format!("{}/", scheme.path);
+        for name in elements
+            .iter()
+            .filter(|e| e.path.starts_with(&prefix) && e.text.is_some())
+        {
+            assert!(
+                name.rect[2] >= 72.5,
+                "{:?} gets {} points, under \"Catppuccin\"'s 72.5",
+                name.text,
+                name.rect[2]
+            );
+        }
+    }
+    let card = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("settings.block.font-size"))
+        .expect("the Font Size section");
+    for part in world.runtime().elements().into_iter().filter(|e| {
+        e.path.starts_with(&format!("{}/", card.path)) && e.rect[2] > 0.0 && e.rect[3] > 0.0
+    }) {
+        let [x, _, w, _] = part.rect;
+        assert!(
+            x >= card.rect[0] - 0.5 && x + w <= card.rect[0] + card.rect[2] + 0.5,
+            "{} spans {x}..{} outside Font Size's {}..{}",
+            part.path,
+            x + w,
+            card.rect[0],
+            card.rect[0] + card.rect[2]
+        );
+    }
+}

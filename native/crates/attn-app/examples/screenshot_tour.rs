@@ -1546,6 +1546,35 @@ fn settings_bottom(dark: bool, section: &str, search: &str, settings: &[(&str, &
     snap(&mut world, &format!("settings-{section}-bottom"), dark);
 }
 
+/// Files and locations with a saved projects path, and Appearance at its top, its font sizes
+/// and its end, in
+/// the smallest window at 150% text, where the page keeps 163 points.
+fn settings_smallest(dark: bool) {
+    let settings = [
+        ("uiScale", "1.5"),
+        ("gardenScale", "1.4"),
+        (
+            "projects_directory",
+            "/home/someone/projects/社内プラットフォーム/InternationalEngineeringObservability",
+        ),
+    ];
+    for (section, search) in [("desktop", "files"), ("general", "appearance")] {
+        let mut world = settings_world(dark, section, search, &settings, |_| {}, |_| {});
+        world.resize((800.0, 600.0));
+        snap(&mut world, &format!("settings-smallest-{section}"), dark);
+        if section == "general" {
+            world.gesture(|app| {
+                app.update(|_, tx| {
+                    tx.scroll_center_in_instant("settings.body", "settings.block.font-size")
+                })
+            });
+            snap(&mut world, "settings-smallest-general-font-size", dark);
+            world.gesture(|app| app.update(|_, tx| tx.scroll_to_bottom_instant("settings.body")));
+            snap(&mut world, "settings-smallest-general-bottom", dark);
+        }
+    }
+}
+
 /// GitHub hosts with polling off, so the page shows why.
 fn settings_connectivity(dark: bool) {
     let mut world = settings_world(
@@ -3826,6 +3855,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         settings_updates(dark);
         settings_event_bus(dark);
         settings_section(dark, "desktop", "files", &[], |_| {});
+        settings_smallest(dark);
         settings_section(dark, "hygiene", "attention queue", &[], |_| {});
         settings_section(dark, "backgroundAgents", "background agents", &[], |_| {});
         settings_section(dark, "backgroundTasks", "task runner", &[], |_| {});
