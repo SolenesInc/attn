@@ -20,7 +20,7 @@ use std::rc::Rc;
 use attn_protocol::DesktopShowSessionMessage;
 use attn_ui::Tokens;
 use attn_ui::blocks::Inline;
-use attn_ui::system::{self, GroupHead, IconSize, ListRow, Tone, Type, words};
+use attn_ui::system::{self, DotShape, DotSize, GroupHead, IconSize, ListRow, Tone, Type, words};
 use rune::{El, GrowthSpec, ScrollSpec, Tx, col, el, memo, row};
 use rune_kit::ScrollBar;
 
@@ -753,7 +753,7 @@ pub(crate) fn lead(row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> 
         return rune::row()
             .key(format!("{row_key}.lead"))
             .center()
-            .child(state_mark(row_key, agent, MARK, t));
+            .child(state_mark(row_key, agent, DotSize::Regular, t));
     }
     system::icon(
         harness_icon::of(&agent.harness),
@@ -766,32 +766,28 @@ pub(crate) fn lead(row_key: &str, agent: &AgentRow, logos: bool, t: &Tokens) -> 
     .a11y_value(agent.state.wire())
 }
 
-/// The dot in each agent's colour of state, `side` across, or the ring of an offline agent at
-/// any size.
-pub(crate) fn state_mark(row_key: &str, agent: &AgentRow, side: f32, t: &Tokens) -> El {
-    let side = if agent.offline { OFFLINE_MARK } else { side };
-    let mark = system::dot(side)
+/// The dot in each agent's colour of state at `size`, or the struck-through ring of an agent
+/// whose machine is unreachable, at the regular size whatever `size` is.
+pub(crate) fn state_mark(row_key: &str, agent: &AgentRow, size: DotSize, t: &Tokens) -> El {
+    let ink = state_color(agent.state, t);
+    let mark = rune::row()
         .key(format!("{row_key}.state"))
         .role("img")
         .label(agent.lead())
         .a11y_value(agent.state.wire());
     if !agent.offline {
-        return mark.fill(state_color(agent.state, t));
+        return mark.child(system::dot(ink, DotShape::Filled, size));
     }
-    mark.border(2.0, state_color(agent.state, t)).child(
-        el().absolute(-2.0, 3.25)
-            .w(12.0)
-            .h(1.5)
-            .fill(t.text_secondary)
-            .rotate(-std::f32::consts::FRAC_PI_4)
-            .inert(),
-    )
+    mark.child(system::dot(ink, DotShape::Hollow, DotSize::Regular))
+        .child(
+            el().absolute(-2.0, 3.25)
+                .w(12.0)
+                .h(1.5)
+                .fill(t.text_secondary)
+                .rotate(-std::f32::consts::FRAC_PI_4)
+                .inert(),
+        )
 }
-
-/// `StateIndicator`'s sizes: `sm` in a tile header, `md` in lists.
-pub(crate) const MARK_SMALL: f32 = 6.0;
-pub(crate) const MARK: f32 = 8.0;
-const OFFLINE_MARK: f32 = 8.0;
 
 pub(crate) fn state_color(state: AgentState, t: &Tokens) -> rune::Color {
     match state {

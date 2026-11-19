@@ -340,7 +340,7 @@ impl Subline {
 /// button and the gaps beside it.
 const HEADLINE_CONTROLS: f32 = 2.0 * HEADLINE_PAD + 24.0 + space::S2;
 /// The state dot at the headline's start.
-const HEADLINE_DOT: f32 = crate::sidebar::MARK_SMALL;
+const HEADLINE_DOT: f32 = attn_ui::system::DotSize::Small.side();
 
 /// How much a document or browser tile's header shows, by the tile's width, as the Tauri app's
 /// container queries on `.desktop-dock-tile`: under 720 pt its overall-note button goes and its
@@ -1369,7 +1369,7 @@ fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) 
             crate::sidebar::state_mark(
                 &key,
                 &crate::sidebar::AgentRow::of(s, cx.outposts, false),
-                crate::sidebar::MARK_SMALL,
+                attn_ui::system::DotSize::Small,
                 t,
             )
         }))

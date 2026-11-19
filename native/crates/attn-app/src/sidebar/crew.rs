@@ -96,7 +96,11 @@ fn idle_lead(harness: Option<&str>, t: &Tokens) -> El {
             IconSize::Regular,
             t.state_idle,
         ),
-        None => system::dot(super::MARK).fill(t.state_idle),
+        None => system::dot(
+            t.state_idle,
+            system::DotShape::Filled,
+            system::DotSize::Regular,
+        ),
     }
 }
 

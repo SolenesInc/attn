@@ -815,7 +815,7 @@ fn filter(state: &State, key: String, t: &Tokens) -> El {
         .w_full()
         .h(ListRow::height())
         .items_center()
-        .child(El::from(system::search_box(input, t)))
+        .child(El::from(system::search_field(input, t)))
 }
 
 fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens) -> El {

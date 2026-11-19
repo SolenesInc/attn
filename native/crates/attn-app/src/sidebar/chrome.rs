@@ -368,14 +368,18 @@ fn strip_extras(extras: Extras, t: &Tokens) -> Option<El> {
 
 /// A dot over a desktop chip's corner while an agent on it wants the user.
 fn waiting_dot(t: &Tokens) -> El {
-    system::dot(super::MARK)
+    rune::row()
         .pin(None, Some(-DOT_OVERHANG), Some(-DOT_OVERHANG), None)
-        .fill(t.state_waiting)
         .inert()
+        .child(system::dot(
+            t.state_waiting,
+            system::DotShape::Filled,
+            system::DotSize::Regular,
+        ))
 }
 
 /// How far a desktop chip's waiting dot hangs past its corner: half the dot.
-const DOT_OVERHANG: f32 = super::MARK / 2.0;
+const DOT_OVERHANG: f32 = system::DotSize::Regular.side() / 2.0;
 
 /// The queue sidebar's foot: a chip per slotted desktop, the others as one, the overview's
 /// chip, and the window's desktop by name with the overview's keys.
