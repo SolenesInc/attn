@@ -461,14 +461,34 @@ pub(crate) fn reading<'a>(
     )
 }
 
-/// The body of each seed whose document the window has read, by seed.
-pub(crate) fn read_bodies(state: &State) -> Vec<(String, String)> {
+/// A read seed's body, and its files as the daemon last described them: name, size and when
+/// each last changed.
+#[derive(Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct ReadBody {
+    pub(crate) seed: String,
+    pub(crate) body: String,
+    pub(crate) files: Vec<(String, i64, String)>,
+}
+
+/// The body and files of each seed whose document the window has read.
+pub(crate) fn read_bodies(state: &State) -> Vec<ReadBody> {
     let mut bodies: Vec<_> = state
         .window
         .garden
         .readings
         .iter()
-        .filter_map(|(id, r)| Some((id.clone(), r.document.as_ref()?.seed.body.clone())))
+        .filter_map(|(id, r)| {
+            let document = r.document.as_ref()?;
+            Some(ReadBody {
+                seed: id.clone(),
+                body: document.seed.body.clone(),
+                files: document
+                    .artifacts
+                    .iter()
+                    .map(|a| (a.filename.clone(), a.size, a.modified_at.clone()))
+                    .collect(),
+            })
+        })
         .collect();
     bodies.sort();
     bodies

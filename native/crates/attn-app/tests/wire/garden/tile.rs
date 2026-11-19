@@ -7,7 +7,7 @@ use super::*;
 
 const DESKTOP: &str = "work/desktop_1";
 
-fn seed_tile(id: &str) -> Value {
+pub(super) fn seed_tile(id: &str) -> Value {
     json!({
         "type": "tile",
         "tile_id": "t",
@@ -16,7 +16,7 @@ fn seed_tile(id: &str) -> Value {
     })
 }
 
-fn desktop(tree: Value, revision: i64) -> Desktop {
+pub(super) fn desktop(tree: Value, revision: i64) -> Desktop {
     Desktop {
         id: DESKTOP.into(),
         profile_id: PROFILE.into(),
@@ -37,7 +37,7 @@ fn desktop(tree: Value, revision: i64) -> Desktop {
     }
 }
 
-fn profile() -> Profile {
+pub(super) fn profile() -> Profile {
     Profile {
         id: PROFILE.into(),
         name: "Work".into(),

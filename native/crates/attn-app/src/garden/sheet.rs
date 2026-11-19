@@ -345,7 +345,7 @@ impl Sheet<'_> {
                 (drafts, self.readings),
                 tile,
                 &here.id,
-                (&body, &view, &kept, t),
+                (&body, &view, &kept, pictured, t),
                 read,
                 &t,
             );
