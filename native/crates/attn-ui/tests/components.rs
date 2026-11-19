@@ -126,3 +126,99 @@ fn accent_badge_text_is_the_schemes_ink_on_its_accent_and_reads_at_aa_in_classic
         }
     }
 }
+
+struct Opening {
+    open: bool,
+    mark_alone: bool,
+}
+
+fn opening_view(state: &Opening, _: &mut rune::Cx<Opening>) -> rune::El {
+    let t = attn_ui::colors::scheme_for(None).colors(true).ui;
+    let panel = rune::col().token_motion(attn_ui::kit(&t).motion.overlay);
+    if state.mark_alone {
+        return panel.child(attn_ui::system::opens_in_place(state.open, &t));
+    }
+    panel
+        .child(
+            attn_ui::system::expander(
+                "expander",
+                "Models",
+                state.open,
+                false,
+                &t,
+                |_: &mut Opening, _| {},
+            )
+            .into(),
+        )
+        .child(
+            attn_ui::system::disclosure(
+                "disclosure",
+                "Agents",
+                state.open,
+                &[],
+                false,
+                false,
+                &t,
+                |_: &mut Opening, _| {},
+            )
+            .into(),
+        )
+}
+
+fn opening(mark_alone: bool, reduced_motion: bool) -> Runtime<Opening> {
+    let mut rt = rune::App::new(rune::AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..rune::AppSpec::new(
+            "opening",
+            (400.0, 200.0),
+            || Opening {
+                open: false,
+                mark_alone: false,
+            },
+            opening_view,
+        )
+    })
+    .headless_runtime((400.0, 200.0), Env::new(true, 2.0));
+    rt.update(move |state, _| state.mark_alone = mark_alone);
+    rt.set_system_reduced_motion(reduced_motion);
+    while rt.frame(1.0 / 60.0) {}
+    rt
+}
+
+fn chevrons_pointing_right(rt: &Runtime<Opening>) -> Result<usize, f32> {
+    let closed = -std::f32::consts::FRAC_PI_2;
+    let mut right = 0;
+    for instance in &rt.instances {
+        let turn = instance.params[0];
+        if instance.params[1] != rune::render::KIND_GLYPH || turn == 0.0 {
+            continue;
+        }
+        if turn != closed {
+            return Err(turn);
+        }
+        right += 1;
+    }
+    Ok(right)
+}
+
+#[test]
+fn the_opens_in_place_chevron_turns_at_once_and_asks_for_no_further_frame() {
+    for reduced_motion in [false, true] {
+        let mut controls = opening(false, reduced_motion);
+        let mut mark = opening(true, reduced_motion);
+        assert_eq!(chevrons_pointing_right(&controls), Ok(2));
+        assert_eq!(chevrons_pointing_right(&mark), Ok(1));
+        for open in [true, false] {
+            let case = format!("open {open}, reduced motion {reduced_motion}");
+            controls.update(move |state, _| state.open = open);
+            controls.frame(1.0 / 60.0);
+            let right = if open { 0 } else { 2 };
+            assert_eq!(chevrons_pointing_right(&controls), Ok(right), "{case}");
+            mark.update(move |state, _| state.open = open);
+            let more = mark.frame(1.0 / 60.0);
+            assert_eq!(chevrons_pointing_right(&mark), Ok(right / 2), "{case}");
+            assert!(!more, "{case}: the mark repaints after its turn");
+        }
+    }
+}

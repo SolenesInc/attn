@@ -1,4 +1,4 @@
-use rune::{El, Tx};
+use rune::{El, Spring, Tx};
 
 use super::{Button, Control, Look, Size, kit};
 use crate::Tokens;
@@ -36,6 +36,6 @@ pub fn opens_in_place(open: bool, t: &Tokens) -> El {
         } else {
             -std::f32::consts::FRAC_PI_2
         })
-        .motion(kit(t).motion.control)
+        .motion(Spring::NONE)
         .a11y_hidden()
 }
