@@ -2,7 +2,7 @@ use rune::{El, ScrollSpec, col, row};
 use rune_kit::ScrollBar;
 
 use crate::Tokens;
-use crate::system::{Radius, Space, Type, door, words};
+use crate::system::{Radius, Size, Space, Type, door, words};
 
 /// One of a board's columns: its name and count over a column of cards that scrolls on its own.
 pub struct Lane {
@@ -61,6 +61,7 @@ impl Lane {
 
     pub fn build(self, t: &Tokens) -> El {
         let head = door::gap(row().items_center(), Space::S8)
+            .min_h(Size::Compact.height())
             .child(
                 words(self.title.clone(), Type::Name, t.text_primary)
                     .role("heading")
@@ -78,7 +79,7 @@ impl Lane {
                 stick_bottom: false,
             })
             .child(cards)
-            .scroll_bar_styled(crate::thin_scroll_bar(t));
+            .scroll_bar_styled(crate::scroll_bar(t));
         let lane = col()
             .key(self.key)
             .role("region")

@@ -130,3 +130,24 @@ fn a_heads_short_title_keeps_its_control_beside_it_in_a_docked_reader_and_a_long
         );
     }
 }
+
+#[test]
+fn every_lanes_title_sits_on_one_line_whether_or_not_it_has_a_control_beside_it() {
+    for variant in WIDTHS {
+        let rt = story("Blocks/Lane", variant);
+        let all = rt.elements();
+        let tops: Vec<f32> = (0..3)
+            .map(|n| {
+                let lane = element(&rt, &format!("board.lane.{n}"));
+                drawn_under(&all, &lane)
+                    .find(|e| e.role == "heading")
+                    .unwrap_or_else(|| panic!("lane {n} has no title"))
+                    .rect[1]
+            })
+            .collect();
+        assert!(
+            tops.iter().all(|y| (y - tops[0]).abs() < 0.5),
+            "{variant}: lane titles at {tops:?}"
+        );
+    }
+}

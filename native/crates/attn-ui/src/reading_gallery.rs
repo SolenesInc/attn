@@ -392,17 +392,28 @@ fn cards(s: &Reading, cx: &mut Cx<Reading>) -> El {
 fn board_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
     let t = tokens(cx);
     let lane = |n: usize, name: &'static str| {
-        Lane::new(
+        let lane = Lane::new(
             format!("board.lane.{n}"),
             format!("board.body.{n}"),
             name,
             2,
-        )
-        .lit(s.lit && n == 1)
-        .faded(s.faded && n == 0)
-        .push(card(&format!("board.card.{n}.0"), s, &t, Standing::Resting))
-        .push(card(&format!("board.card.{n}.1"), s, &t, Standing::Picked))
-        .build(&t)
+        );
+        let lane = if n == 2 {
+            lane.aside(
+                Button::new("show")
+                    .look(Look::Quiet)
+                    .size(Size::Compact)
+                    .on_press_tx(noop)
+                    .build(&t),
+            )
+        } else {
+            lane
+        };
+        lane.lit(s.lit && n == 1)
+            .faded(s.faded && n == 0)
+            .push(card(&format!("board.card.{n}.0"), s, &t, Standing::Resting))
+            .push(card(&format!("board.card.{n}.1"), s, &t, Standing::Picked))
+            .build(&t)
     };
     let shown = board(
         "board",
