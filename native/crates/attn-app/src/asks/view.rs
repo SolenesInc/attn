@@ -782,7 +782,10 @@ fn choices(ask: &str, question: &AskQuestion, kind: Kind, answer: &Shown<'_>, t:
                             .child(
                                 text(choice.label.clone())
                                     .font(type_::BODY)
-                                    .color(t.text_primary),
+                                    .color(t.text_primary)
+                                    .wrap()
+                                    .shrink()
+                                    .min_w(0.0),
                             )
                             .children(recommended.then(|| recommended_tag(t))),
                     )

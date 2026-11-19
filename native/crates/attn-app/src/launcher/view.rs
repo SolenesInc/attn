@@ -434,6 +434,9 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, look: 
                 .font(TITLE)
                 .text_case(TextCase::Uppercase)
                 .color(look.accent)
+                .single_line()
+                .truncate()
+                .min_w(0.0)
                 .ml(2.0)
                 .mb(9.0),
         )
@@ -449,6 +452,9 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, look: 
                 } else {
                     look.text_quiet
                 })
+                .single_line()
+                .truncate()
+                .min_w(0.0)
                 .mx(2.0)
                 .mt(8.0)
         }))
@@ -460,6 +466,9 @@ fn section(title: &str, look: &Look) -> El {
         .font(SECTION)
         .text_case(TextCase::Uppercase)
         .color(look.text_section)
+        .single_line()
+        .truncate()
+        .min_w(0.0)
         .px(10.0)
         .pt(10.0)
         .pb(6.0)
@@ -734,9 +743,17 @@ fn location_row(
                 .label(name.clone())
                 .description(reach_word)
                 .items_center()
+                .shrink()
+                .min_w(0.0)
                 .gap(5.0)
                 .child(machine_dot(shown, t, look))
-                .child(badge(name, look))
+                .child(
+                    badge(name, look)
+                        .single_line()
+                        .truncate()
+                        .shrink()
+                        .min_w(0.0),
+                )
         });
     let unreachable = r.kind != Kind::Machine
         && reach
@@ -836,6 +853,7 @@ fn new_worktree_section(name: &str, typed: bool, look: &Look) -> El {
     row()
         .label(label)
         .items_center()
+        .min_w(0.0)
         .px(10.0)
         .pt(10.0)
         .pb(6.0)
@@ -849,7 +867,11 @@ fn new_worktree_section(name: &str, typed: bool, look: &Look) -> El {
         .child(
             text(name.to_owned())
                 .font(SECTION_NAME)
-                .color(look.worktree),
+                .color(look.worktree)
+                .single_line()
+                .truncate()
+                .shrink()
+                .min_w(0.0),
         )
         .children((!typed).then(|| {
             text(" · type to rename")

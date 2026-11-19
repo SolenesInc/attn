@@ -447,7 +447,13 @@ pub(crate) fn status_line(parts: Vec<El>, t: &Tokens) -> El {
 
 /// Status text in the status bar's face.
 pub(crate) fn status_text(words: String, ink: Color) -> El {
-    text(words).font(STATUS).color(ink).single_line()
+    text(words)
+        .font(STATUS)
+        .color(ink)
+        .single_line()
+        .truncate()
+        .shrink()
+        .min_w(0.0)
 }
 
 /// A press in the status bar, `.ledger-status-link`: its words, no frame.

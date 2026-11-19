@@ -768,10 +768,19 @@ fn owed_words((waiting, unreachable): (usize, usize), t: &Tokens) -> El {
         parts.push(
             text(format!("{unreachable} unreachable"))
                 .font(words)
-                .color(t.text_tertiary),
+                .color(t.text_tertiary)
+                .single_line()
+                .truncate()
+                .shrink()
+                .min_w(0.0),
         );
     }
-    row().items_center().gap(4.0).children(parts)
+    row()
+        .items_center()
+        .gap(4.0)
+        .shrink()
+        .min_w(0.0)
+        .children(parts)
 }
 
 fn agents_toggle(key: String, open: bool, more: usize, keys: Option<String>, t: &Tokens) -> El {
@@ -799,7 +808,14 @@ fn agents_toggle(key: String, open: bool, more: usize, keys: Option<String>, t: 
                     .font(type_::LABEL)
                     .color(tokens.text_tertiary),
                 )
-                .child(type_::caps(&label).color(tokens.text_tertiary))
+                .child(
+                    type_::caps(&label)
+                        .color(tokens.text_tertiary)
+                        .single_line()
+                        .truncate()
+                        .shrink()
+                        .min_w(0.0),
+                )
                 .children(rule_tail(keys, &tokens))
         })
         .build(attn_ui::kit(t))

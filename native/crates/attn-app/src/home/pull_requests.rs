@@ -343,12 +343,17 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
             move |font, ink| {
                 row()
                     .grow(1.0)
+                    .min_w(0.0)
                     .items_center()
                     .gap(space::S2)
                     .child(text(heading.clone()).font(font).color(ink))
                     .children(host.clone().map(|host| {
                         text(host.to_lowercase())
                             .font(TextStyle::new(12.0, 400.0).mono())
+                            .single_line()
+                            .truncate()
+                            .shrink()
+                            .min_w(0.0)
                             .color(host_ink)
                             .fill(host_fill)
                             .px(6.0)

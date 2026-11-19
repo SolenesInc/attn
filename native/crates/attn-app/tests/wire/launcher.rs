@@ -567,6 +567,52 @@ fn escape_steps_back_from_the_where_list_through_the_typed_path_and_then_closes(
 }
 
 #[test]
+fn a_long_new_worktree_name_ends_inside_the_where_list_in_the_smallest_window_at_the_largest_text()
+{
+    let mut settings = settings("main_repo");
+    settings.push(("uiScale".to_owned(), "1.5".to_owned()));
+    let mut world = World::start_sized(
+        machine(
+            &[REPO],
+            shop("origin/main"),
+            &settings,
+            vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
+        ),
+        (800.0, 600.0),
+    );
+    world.open_desktop();
+    press_action(&mut world, &Action::SessionNew);
+    open_where(&mut world);
+    type_path(
+        &mut world,
+        "new-session",
+        "account-permissions-migration-本番の権限を移行する作業ツリー-東京リージョン",
+    );
+
+    let heading = world
+        .screen()
+        .bounds(Target::key("new-session.where.new"))
+        .expect("the new worktree's heading is laid out");
+    let rt = world.runtime();
+    let [x, y, w, h] = heading.map(|v| v * rt.env.scale);
+    let past: Vec<[f32; 4]> = rt
+        .instances
+        .iter()
+        .filter(|i| i.params[1] == rune::render::KIND_GLYPH)
+        .map(|i| i.rect)
+        .filter(|g| {
+            let mid = g[1] + g[3] / 2.0;
+            mid > y && mid < y + h && g[0] + g[2] > x + w + 0.5
+        })
+        .collect();
+    assert!(
+        past.is_empty(),
+        "the heading {heading:?} draws glyphs past its right edge: {past:?}"
+    );
+    rest(&mut world);
+}
+
+#[test]
 fn a_named_worktree_starts_from_the_default_or_the_current_branch() {
     for (current, default_branch, from) in [
         (false, "origin/main", "origin/main"),
