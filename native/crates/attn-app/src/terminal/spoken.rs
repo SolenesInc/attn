@@ -112,18 +112,18 @@ impl Terminals {
         }
     }
 
-    /// An attach brought back terminal `id`'s screen, which a screen reader does not hear. A
-    /// terminal that streamed before, back from a reconnect, speaks its next output; a first
-    /// attach also keeps quiet the output that follows it before the quiet, the screen it comes
-    /// back with.
-    pub(super) fn restored(&mut self, id: &str, streamed_before: bool, tx: &mut Tx) {
+    /// An attach brought back terminal `id`'s screen, which a screen reader does not hear. When
+    /// the attach `resumes`, restoring a snapshot or continuing the stream the window drew, the
+    /// output after it is spoken; otherwise the screen comes back as the output that follows it,
+    /// kept quiet until it pauses.
+    pub(super) fn restored(&mut self, id: &str, resumes: bool, tx: &mut Tx) {
         let Some(heard) = self.heard.as_mut().filter(|h| h.terminal == id) else {
             return;
         };
         let Some(term) = self.panes.get_mut(id) else {
             return;
         };
-        if streamed_before {
+        if resumes {
             *heard = Heard::now(id, term);
         } else {
             let due = tx.clock() + QUIET_SECONDS;

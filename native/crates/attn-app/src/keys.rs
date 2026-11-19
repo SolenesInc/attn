@@ -35,7 +35,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 }
 
 /// The terminal the window's keys type into: none while an element holds the keyboard.
-fn keyboard_terminal(state: &State, tx: &Tx) -> Option<String> {
+pub(crate) fn keyboard_terminal(state: &State, tx: &Tx) -> Option<String> {
     match tx.focused() {
         None => state.window.typing_terminal(&state.facts),
         Some(_) => None,

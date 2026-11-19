@@ -1920,6 +1920,15 @@ fn a_screen_reader_does_not_hear_a_wrapped_command_line_before_enter() {
 
 #[test]
 fn a_screen_reader_does_not_hear_the_screen_a_reconnect_brings_back() {
+    hears_only_output_after_a_reconnect(false);
+}
+
+#[test]
+fn a_screen_reader_does_not_hear_the_screen_a_new_daemon_brings_back() {
+    hears_only_output_after_a_reconnect(true);
+}
+
+fn hears_only_output_after_a_reconnect(new_daemon: bool) {
     let daemon = one_terminal();
     daemon.answer_in_turn(
         "attach_session",
@@ -1942,6 +1951,11 @@ fn a_screen_reader_does_not_hear_the_screen_a_reconnect_brings_back() {
     world.listen_as_screen_reader();
     world.settle();
 
+    if new_daemon {
+        world
+            .daemon
+            .answer_hello_with(showing(vec![pane("t1", "r1")], "daemon-2"));
+    }
     world.reconnect();
     assert_eq!(world.daemon.sent_of("attach_session").len(), 2);
     assert!(drew(&mut world, "saved-while-disconnected"));
@@ -1952,7 +1966,7 @@ fn a_screen_reader_does_not_hear_the_screen_a_reconnect_brings_back() {
 }
 
 #[test]
-fn a_screen_reader_does_not_hear_a_terminal_home_hides() {
+fn a_screen_reader_does_not_hear_a_terminal_home_or_the_garden_hides() {
     let mut world = World::start(one_terminal());
     world.open_desktop();
     output(&world, 1, b"$ ");
@@ -1978,5 +1992,25 @@ fn a_screen_reader_does_not_hear_a_terminal_home_hides() {
         world.screen().announced(),
         None,
         "the terminal shown again says nothing it wrote while hidden"
+    );
+
+    output(&world, 3, b"go\r\nbehind-garden-output\r\n$ ");
+    world.settle();
+    world.gesture(|app| app.click(attn_testkit::Target::key("titlebar.garden")));
+    let expand = attn_testkit::Target::role("button").name("Expand the garden");
+    if world.screen().find(expand.clone()).is_some() {
+        world.gesture(|app| app.click(expand));
+    }
+    assert!(
+        world
+            .screen()
+            .get(attn_testkit::Target::role("dialog").name("The garden"))
+            .is("modal")
+    );
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        world.screen().announced(),
+        None,
+        "the full Garden covers the terminal, whose pending output is dropped"
     );
 }
