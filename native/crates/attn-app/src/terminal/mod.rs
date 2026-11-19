@@ -287,6 +287,8 @@ struct Term {
     /// Its machine has streamed to this tile since the tile was drawn, so its screen is one
     /// the tile has shown.
     reached: bool,
+    /// How many times the user typed or pasted into the terminal.
+    typed: u32,
 }
 
 #[derive(Debug)]
@@ -374,6 +376,7 @@ impl Term {
             synchronizing_since: None,
             marking: None,
             reached: false,
+            typed: 0,
         }
     }
 }
@@ -682,9 +685,10 @@ impl Terminals {
         }
     }
 
-    /// Takes what the link heard since the last frame. Output changes nothing in the view
-    /// beyond an open find bar's count: true when that count changed.
-    pub(crate) fn drain(&mut self, tx: &mut Tx, daemon: &Commands) -> bool {
+    /// Takes what the link heard since the last frame, `typing` being the terminal keys type
+    /// into. Output changes nothing in the view beyond an open find bar's count: true when that
+    /// count changed.
+    pub(crate) fn drain(&mut self, typing: Option<&str>, tx: &mut Tx, daemon: &Commands) -> bool {
         let events = self.inbox.take();
         let heard = !events.is_empty();
         for (received, event) in events {
@@ -717,7 +721,7 @@ impl Terminals {
                 _ => {}
             }
         }
-        self.speak_quiet_output(tx);
+        self.speak_quiet_output(typing, tx);
         recounted
     }
 
@@ -772,6 +776,7 @@ impl Terminals {
             TerminalEvent::ImageResult(result) => self.image_refused(&result),
             TerminalEvent::Attached(result) => {
                 let id = result.id.clone();
+                self.restoring(&id, tx);
                 self.attached(*result, tx, daemon);
                 self.images.unanswered(&id);
                 self.ask_images(&id, daemon);
@@ -1015,6 +1020,7 @@ impl Terminals {
                 .decide(trace, id, Decision::NoTarget, now);
             return Typed::Nowhere;
         };
+        term.typed = term.typed.wrapping_add(1);
         let outcome = match term.phase {
             Phase::Live => Decision::Sent,
             Phase::Waiting | Phase::Attaching(_) | Phase::Retrying { .. } => {

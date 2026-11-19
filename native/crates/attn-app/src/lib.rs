@@ -384,7 +384,8 @@ pub fn connect(
 }
 
 fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
-    let recounted = state.terminals.drain(tx, &state.daemon);
+    let typing = state.window.typing_terminal(&state.facts);
+    let recounted = state.terminals.drain(typing.as_deref(), tx, &state.daemon);
     let said = state.terminals.take_said();
     let told = said.is_some();
     if let Some(said) = said {

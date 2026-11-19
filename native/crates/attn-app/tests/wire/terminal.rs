@@ -1807,3 +1807,152 @@ fn a_screen_reader_does_not_hear_the_screen_a_terminal_comes_back_with() {
     world.advance(Duration::from_secs(1));
     assert_eq!(world.screen().announced().as_deref(), Some("hi"));
 }
+
+fn listening_shell(world: &mut World) {
+    world.open_desktop();
+    output(world, 1, b"\x1b]133;A\x07$ \x1b]133;B\x07");
+    world.settle();
+    world.listen_as_screen_reader();
+    world.settle();
+}
+
+#[test]
+fn a_screen_reader_hears_the_question_a_program_waits_on_and_not_the_answer_typed() {
+    let mut world = World::start(one_terminal());
+    listening_shell(&mut world);
+    let said = |world: &World| world.screen().announced();
+
+    world.gesture(|app| app.type_text("bash confirm.sh"));
+    world.gesture(|app| app.press("Enter"));
+    output(
+        &world,
+        2,
+        b"bash confirm.sh\r\n\x1b]133;C\x07Continue [y/N]? ",
+    );
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(said(&world).as_deref(), Some("Continue [y/N]?"));
+
+    world.gesture(|app| app.type_text("y"));
+    output(&world, 3, b"y");
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        said(&world).as_deref(),
+        Some("Continue [y/N]?"),
+        "the reader echoes the answer itself"
+    );
+
+    world.gesture(|app| app.press("Enter"));
+    output(&world, 4, b"\r\nworking\r\n");
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(said(&world).as_deref(), Some("working"));
+
+    output(&world, 5, b"Overwrite notes.md? ");
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        said(&world).as_deref(),
+        Some("Overwrite notes.md?"),
+        "a question asked after a pause, on the row the cursor already waited on"
+    );
+}
+
+#[test]
+fn a_screen_reader_does_not_hear_a_wrapped_command_line_before_enter() {
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
+    world.daemon.emit(PtyResizedMessage {
+        id: "r1".into(),
+        cols: 40,
+        rows: 12,
+        ..PtyResizedMessage::new()
+    });
+    output(&world, 1, b"$ ");
+    world.settle();
+    world.listen_as_screen_reader();
+    world.settle();
+    let command = format!(
+        "echo {}WRAPPED-MIDDLE-OF-COMMAND{}",
+        "x".repeat(33),
+        "y".repeat(70)
+    );
+    world.gesture(|app| app.type_text(&command));
+    output(&world, 2, command.as_bytes());
+    world.settle();
+    assert!(drew(&mut world, "WRAPPED-MIDDLE-OF-COMMAND"));
+    world.advance(Duration::from_secs(1));
+    assert_eq!(world.screen().announced(), None);
+
+    output(&world, 3, b"\r\nran\r\n$ ");
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(world.screen().announced().as_deref(), Some("ran"));
+}
+
+#[test]
+fn a_screen_reader_does_not_hear_the_screen_a_reconnect_brings_back() {
+    let daemon = one_terminal();
+    daemon.answer_in_turn(
+        "attach_session",
+        [
+            Answer::Reply(message(attached())),
+            Answer::Reply(message(AttachResultMessage {
+                snapshot: Some(snapshot_of(
+                    b"$ build\r\nsaved-while-disconnected\r\n$ ",
+                    SNAPSHOT_FORMAT,
+                )),
+                last_seq: Some(2),
+                ..attached()
+            })),
+        ],
+    );
+    let mut world = World::start(daemon);
+    world.open_desktop();
+    output(&world, 1, b"$ ");
+    world.settle();
+    world.listen_as_screen_reader();
+    world.settle();
+
+    world.reconnect();
+    assert_eq!(world.daemon.sent_of("attach_session").len(), 2);
+    assert!(drew(&mut world, "saved-while-disconnected"));
+    world.advance(Duration::from_secs(1));
+    assert_eq!(world.screen().announced(), None);
+
+    output(&world, 3, b"echo hi\r\nhi\r\n$ ");
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(world.screen().announced().as_deref(), Some("hi"));
+}
+
+#[test]
+fn a_screen_reader_does_not_hear_a_terminal_home_hides() {
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
+    output(&world, 1, b"$ ");
+    world.settle();
+    world.listen_as_screen_reader();
+    world.settle();
+
+    world.gesture(|app| app.click(attn_testkit::Target::key("sidebar.home")));
+    assert!(
+        world
+            .screen()
+            .find(attn_testkit::Target::key("terminal.r1"))
+            .is_none()
+    );
+    output(&world, 2, b"go\r\nbehind-home-output\r\n$ ");
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(world.screen().announced(), None);
+
+    world.open_desktop();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        world.screen().announced(),
+        None,
+        "the terminal shown again says nothing it wrote while hidden"
+    );
+}
