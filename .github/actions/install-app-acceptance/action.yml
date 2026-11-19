@@ -25,6 +25,13 @@ runs:
       shell: bash
       run: brew install fish neovim
 
+    # The runner's display starts at 1024x768, below the 1000-point-tall windows
+    # scenarios ask for; Linux's Xvfb screen is 1600x1000.
+    - name: Make the macOS display tall enough for the scenarios' windows
+      if: runner.os == 'macOS'
+      shell: bash
+      run: swift scripts/ci-macos-display-mode.swift 1600 1200
+
     - name: Set up Go and Node.js
       uses: ./.github/actions/setup-toolchains
       with:

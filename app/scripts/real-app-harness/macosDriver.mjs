@@ -310,7 +310,7 @@ export class MacOSDriver extends TargetedWindowDriver {
 
   async screenshot(outputPath, opts = {}) {
     const windowArgs = opts.windowId ? ['-l', String(opts.windowId)] : [];
-    await execFileAsync('/usr/sbin/screencapture', ['-x', ...windowArgs, outputPath], { timeout: 10_000 });
+    await execFileAsync('/usr/sbin/screencapture', ['-x', '-o', ...windowArgs, outputPath], { timeout: 10_000 });
   }
 
   serializeModifiers(modifiers = {}) {
