@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
-import { describe, expect, it } from 'vitest';
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
 import { TRIPWIRE_BINARIES } from './agentTripwire.mjs';
 import {
   allowRealAgentsForRunner,
@@ -15,79 +16,66 @@ import { planShards, readRecordedDurations } from './shardPlan.mjs';
 describe('scenarioCatalog agent tripwire flags', () => {
   it('names the runner id every entry arms the tripwire under', () => {
     for (const scenario of scenarioCatalog) {
-      expect(scenario, `${scenario.id} must declare runnerId (null when it has no scenario runner)`)
-        .toHaveProperty('runnerId');
+      assert.ok('runnerId' in scenario, `${scenario.id} must declare runnerId (null when it has no scenario runner)`);
     }
   });
 
   it('only allows agent binaries the tripwire knows how to shim', () => {
     for (const scenario of scenariosAllowingRealAgents()) {
       if (scenario.allowRealAgents === true) continue;
-      expect(Array.isArray(scenario.allowRealAgents)).toBe(true);
+      assert.ok(Array.isArray(scenario.allowRealAgents));
       for (const binary of scenario.allowRealAgents) {
-        expect(TRIPWIRE_BINARIES).toContain(binary);
+        assert.ok(TRIPWIRE_BINARIES.includes(binary));
       }
     }
   });
 
   it('refuses a runner outside the catalog rather than allowing every binary', () => {
-    expect(() => allowRealAgentsForRunner('SOME-UNLISTED-PROBE'))
-      .toThrow(/"SOME-UNLISTED-PROBE" has no scenarioCatalog\.mjs entry[\s\S]*allowRealAgents/);
-    expect(() => allowRealAgentsForRunner(undefined)).toThrow(/no scenarioCatalog\.mjs entry/);
+    assert.throws(
+      () => allowRealAgentsForRunner('SOME-UNLISTED-PROBE'),
+      /"SOME-UNLISTED-PROBE" has no scenarioCatalog\.mjs entry[\s\S]*allowRealAgents/,
+    );
+    assert.throws(() => allowRealAgentsForRunner(undefined), /no scenarioCatalog\.mjs entry/);
   });
-
 });
 
 describe('the Linux serial matrix', () => {
-  it('has a recorded duration for each Linux scenario of each app, so the App acceptance shards can be planned', () => {
-    for (const app of ['tauri', 'native']) {
-      expect(() => planShards(resolveScenarios([], app), readRecordedDurations(), 2, 'linux', {})).not.toThrow();
-    }
+  it('has a recorded duration for each Linux scenario, so the App acceptance shards can be planned', () => {
+    assert.doesNotThrow(() => planShards(resolveScenarios([]), readRecordedDurations(), 2, 'linux', {}));
   });
 });
 
 describe('scenarioCatalog direct selection', () => {
-
-  it('keeps hand-written soaks with unsafe teardown out of direct selection', () => {
-    for (const id of ['offset-soak', 'perf-baseline', 'perf-cold-warm']) {
-      expect(() => resolveScenario(id), id).toThrow(`Unknown scenario id: ${id}`);
+  it('keeps hand-written perf soaks out of direct selection', () => {
+    for (const id of ['perf-baseline', 'perf-cold-warm']) {
+      assert.throws(() => resolveScenario(id), new RegExp(`Unknown scenario id: ${id}`));
     }
   });
 });
 
-// A hand-rolled main() that never builds a runner arms no tripwire at all and
-// is out of this net; every createScenarioRunner caller is in it.
 describe('every catalog command', () => {
   const harnessDir = path.dirname(url.fileURLToPath(import.meta.url));
   const appDir = path.resolve(harnessDir, '../..');
-  const scripts = JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8')).scripts;
 
-  // A catalog entry pointing at a deleted file used to fail only when the matrix
-  // reached it, ~18 minutes into a Linux run.
-  function scenarioFileOf(scenario) {
-    const command = scenario.command || [];
-    let script = command.join(' ');
-    if (command[0] === 'pnpm') {
-      script = scripts[command[2]];
-      if (!script) {
-        return { broken: `no package.json script "${command[2]}"` };
-      }
-    }
-    const file = /(scripts\/real-app-harness\/[\w.-]+\.mjs)/.exec(script)?.[1];
-    return file ? { file } : { broken: `no scenario file in "${script}"` };
-  }
+  it('runs a scenario file that exists', () => {
+    const broken = scenarioCatalog
+      .filter(({ command }) => command[0] !== 'node' || !/^scripts\/real-app-harness\/[\w.-]+\.mjs$/.test(command[1] ?? '') || !fs.existsSync(path.join(appDir, command[1])))
+      .map(({ id, command }) => `${id}: ${command.join(' ')}`);
+
+    assert.deepEqual(broken, []);
+  });
 
   it('runs under the runner id the catalog names', () => {
     const mismatched = [];
     for (const scenario of scenarioCatalog.filter((entry) => entry.runnerId)) {
-      const { file } = scenarioFileOf(scenario);
-      const declared = file && /scenarioId: '([^']+)'/.exec(fs.readFileSync(path.join(appDir, file), 'utf8'))?.[1];
+      const file = scenario.command[1];
+      const declared = /scenarioId: '([^']+)'/.exec(fs.readFileSync(path.join(appDir, file), 'utf8'))?.[1];
       if (declared && declared !== scenario.runnerId) {
         mismatched.push(`${scenario.id}: catalog ${scenario.runnerId}, ${file} ${declared}`);
       }
     }
 
-    expect(mismatched, 'receipts and the real-agent policy follow the runner id').toEqual([]);
+    assert.deepEqual(mismatched, [], 'receipts and the real-agent policy follow the runner id');
   });
 });
 
@@ -114,6 +102,6 @@ describe('every scenario built on the scenario runner', () => {
       });
     }
 
-    expect(undeclared, 'add a scenarioCatalog entry or pass allowRealAgents to createScenarioRunner').toEqual([]);
+    assert.deepEqual(undeclared, [], 'add a scenarioCatalog entry or pass allowRealAgents to createScenarioRunner');
   });
 });

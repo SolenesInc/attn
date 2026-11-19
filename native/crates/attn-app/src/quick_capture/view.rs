@@ -573,7 +573,7 @@ fn sent_image(
         }))
 }
 
-/// The day a Recent message was sent, as the Tauri panel heads each day: "Today",
+/// The day a Recent message was sent, heading its day: "Today",
 /// "Yesterday", or the month and day, with the year when it is not this year's.
 fn day_label(ms: i64, today: i64) -> String {
     const MONTHS: [&str; 12] = [

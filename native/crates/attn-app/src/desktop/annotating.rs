@@ -185,7 +185,7 @@ fn popup_at(popup: &Popup, size: (f32, f32), slot: (f32, f32), room: Room) -> (f
 }
 
 /// Where a box of `size` opens for a point `at` in a slot of `slot`: centred above it, or else
-/// below it, or else beside it, kept inside the slot, as the Tauri popup places itself.
+/// below it, or else beside it, kept inside the slot.
 pub(crate) fn place(at: (f32, f32), size: (f32, f32), slot: (f32, f32)) -> (f32, f32) {
     place_in(at, size, slot, Room::Anywhere)
 }

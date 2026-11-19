@@ -7,12 +7,12 @@ use rune::{Key, KeyEvent, Mods};
 use serde::Serialize;
 use serde_json::{Value, json};
 
-/// Events the trace keeps, as the Tauri app's support trace does.
+/// Events the trace keeps.
 pub(crate) const TRACE_CAPACITY: usize = 512;
-/// Decisions each terminal's sample carries, as the Tauri app's input observer keeps.
+/// Decisions each terminal's sample carries.
 const RECENT_LIMIT: usize = 32;
 /// Seconds between a terminal's samples while nothing calls for one sooner, and between two
-/// samples for the same reason, as in the Tauri app.
+/// samples for the same reason.
 const SAMPLE_EVERY: f64 = 30.0;
 const REASON_COOLDOWN: f64 = 30.0;
 
@@ -31,8 +31,8 @@ enum Stage {
     Echo,
 }
 
-/// What became of an input at the terminal: the Tauri terminal's outcomes, and `held`,
-/// `refused` and `stopped` for the native terminal's phases.
+/// What became of an input at the terminal, with `held`, `refused` and `stopped` for the
+/// phases before the terminal takes it.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Decision {
     Sent,
@@ -90,7 +90,7 @@ impl Heard<'_> {
     }
 }
 
-/// The element that held the keyboard when the input arrived, in the Tauri app's words.
+/// The element that held the keyboard when the input arrived.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Target {
     Terminal,
@@ -160,7 +160,7 @@ struct Event {
 }
 
 impl Event {
-    /// The event as a terminal's sample lists it, in the Tauri observer's shape.
+    /// The event as a terminal's sample lists it.
     fn recent(&self) -> Value {
         let mut entry = json!({ "at": self.at_unix_ms, "event": self.event });
         let fields = [

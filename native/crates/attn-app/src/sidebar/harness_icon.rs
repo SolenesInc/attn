@@ -1,5 +1,4 @@
-//! Each harness's logo, drawn in the colour of its agent's state, as the Tauri app's
-//! `HarnessIcon` inside its `SessionLead`.
+//! Each harness's logo, drawn in the colour of its agent's state.
 
 use rune::Icon;
 

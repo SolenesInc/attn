@@ -72,7 +72,7 @@ load_recipe() {
     attn-app)
       workspace=native binary=attn-app profile=debug toolchain=native/rust-toolchain.toml
       cargo_args=(-p attn-app)
-      roots=(native cli/protocol app/public/fonts app/src/assets/icon.png app/src/prompts/catalog.generated.json app/src-tauri/generated/browser-runtime.js
+      roots=(native cli/protocol
         internal/colors/schemes ghostty-vt-native.lock ghostty-vt-wasm.lock scripts/snapshot-format.sh "$vt/lib" "$vt/include")
       ;;
     *) die "unknown recipe '$recipe'"$'\n'"$usage" ;;

@@ -156,8 +156,10 @@ func AppExecutableInTree(appPath string) string {
 	if _, err := os.Stat(native); err == nil {
 		return native
 	}
-	return filepath.Join(appPath, "Contents", "MacOS", "app")
+	return filepath.Join(appPath, "Contents", "MacOS", tauriAppExecutable)
 }
+
+const tauriAppExecutable = "app"
 
 func BuildIdentityInTree(appPath string) string {
 	if runtime.GOOS == "darwin" {
@@ -642,22 +644,6 @@ func instanceFNV(instance string) uint32 {
 	h := fnv.New32a()
 	h.Write([]byte(instance))
 	return h.Sum32()
-}
-
-func E2EDaemonPortForInstance(instance string) string {
-	p := normalizeInstanceForDerivation(instance)
-	if p == "" {
-		return "19849"
-	}
-	return fmt.Sprintf("%d", 30000+int(instanceFNV(p)%1000))
-}
-
-func E2EVitePortForInstance(instance string) string {
-	p := normalizeInstanceForDerivation(instance)
-	if p == "" {
-		return "1421"
-	}
-	return fmt.Sprintf("%d", 31000+int(instanceFNV(p)%1000))
 }
 
 func MockGitHubPortForInstance(instance string) string {

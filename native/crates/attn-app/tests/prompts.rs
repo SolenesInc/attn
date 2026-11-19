@@ -3,18 +3,15 @@ use attn_app::prompts::render;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-fn fixture(path: &str) -> Value {
-    let text = std::fs::read_to_string(format!(
-        "{}/../../../app/src/prompts/{path}",
-        env!("CARGO_MANIFEST_DIR")
-    ))
-    .expect("the fixture is in the app's prompts folder");
+fn read_json(path: &str) -> Value {
+    let text = std::fs::read_to_string(format!("{}/{path}", env!("CARGO_MANIFEST_DIR")))
+        .expect("the file is in the crate");
     serde_json::from_str(&text).expect("the fixture is JSON")
 }
 
 #[test]
-fn each_prompt_renders_the_bytes_go_and_the_tauri_app_render() {
-    let catalog = fixture("catalog.generated.json");
+fn each_prompt_renders_the_bytes_go_renders() {
+    let catalog = read_json("prompts/catalog.generated.json");
     let cases = catalog["parity"].as_array().expect("parity cases");
     assert!(!cases.is_empty());
     for (i, case) in cases.iter().enumerate() {
@@ -49,8 +46,8 @@ fn each_prompt_renders_the_bytes_go_and_the_tauri_app_render() {
 }
 
 #[test]
-fn terminal_feedback_reads_as_the_tauri_app_sends_it() {
-    for (i, case) in fixture("testdata/terminal.json")
+fn terminal_feedback_quotes_the_note_and_each_labelled_mark_in_reading_order() {
+    for (i, case) in read_json("tests/fixtures/prompts/terminal.json")
         .as_array()
         .unwrap()
         .iter()
@@ -73,9 +70,9 @@ fn terminal_feedback_reads_as_the_tauri_app_sends_it() {
 }
 
 #[test]
-fn the_quick_labels_are_the_tauri_app_labels() {
+fn the_quick_labels_keep_their_ids_emoji_text_and_colors() {
     assert_eq!(
         serde_json::to_value(labels()).unwrap(),
-        fixture("testdata/quick-labels.json")
+        read_json("tests/fixtures/prompts/quick-labels.json")
     );
 }

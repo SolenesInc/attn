@@ -71,22 +71,21 @@ name. The guest receives no host routing variables or provider credentials.
 starts from empty instance data, like CI. `test` copies the artifacts even when a scenario fails, and it exits with the failing command's exit status. Pass `--out <directory>` to choose the results directory. Without `--out`, `test` writes results under the host temporary directory in `attn-linux-artifacts/<provider>/<checkout>`.
 
 `soak --scenario <id>[,<id>...]` runs scenarios the way CI's Acceptance soak
-does: it syncs, builds each app the scenarios need (Tauri or native) once, and
-then, for each scenario in turn, empties the instance the same way, installs
-that app's built tree and runs the scenario once under Xvfb. Every scenario starts from an empty
-instance, as on CI's fresh runner per scenario, but the build is paid once: on
-the landing runner a no-op build took 31 s for Tauri and 15 s for native, and
-the clean and install together under a second. It prints
+does: it syncs and builds the app once, and then, for each scenario in turn,
+empties the instance the same way, installs the built tree and runs the scenario
+once under Xvfb. Every scenario starts from an empty instance, as on CI's fresh
+runner per scenario, but the build is paid once: on the landing runner a no-op
+build took 15 s, and the clean and install together under a second. It prints
 `Scenario <id> passed in <n>s` or `Scenario <id> failed in <n>s` for each, runs
 the rest after a failure, and exits 1 if any scenario failed. A build that fails
 stops the run before any scenario starts, with no scenario line, and exits with
 the build's status. It also runs scenarios that the serial matrix leaves to the
 soak. Like `test`, it copies the artifacts even when a scenario fails.
 
-Before they build, `test` and `soak` install the app's Node dependencies from
-`app/pnpm-lock.yaml` through `make app/node_modules/.attn-installed`, which
-installs only when `app/package.json` or the lockfile changed. The scenario
-harness needs them whichever app it drives, so a fresh `--checkout` runs
+Before they build, `test` and `soak` install the scenario harness's Node
+dependencies from `app/pnpm-lock.yaml` through
+`make app/node_modules/.attn-installed`, which installs only when
+`app/package.json` or the lockfile changed, so a fresh `--checkout` runs
 scenarios with no manual install.
 
 After its scenarios, `test` and `soak` run `scripts/native-build-clean` on the
@@ -155,8 +154,7 @@ The first landing runner is for landings. Anything else that runs there slows
 the landings queued behind it. Send diagnostic work, such as repeat runs, soaks and
 reproductions, to `attn-linux` instead, with
 `--provider ssh --target attn-linux`. On 2026-11-18, after `provision` there,
-`soak --checkout diag --scenario shelf-moves,native-sidebar-session` passed
-both, a Tauri scenario in 62 s and a native one in 10 s.
+`soak --checkout diag --scenario native-sidebar-session` passed it in 10 s.
 
 The landing prints where it keeps the log from the machine.
 [What land.sh does](trunk-based-development.md#what-landsh-does) says what

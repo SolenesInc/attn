@@ -57,7 +57,7 @@ func (w *profilesTestDaemon) connect(rememberedProfileID string) (*wsClient, pro
 	w.t.Helper()
 	client := newProtocolTestClient()
 	hello := &protocol.ClientHelloMessage{
-		ClientKind:   "tauri-app",
+		ClientKind:   protocol.ClientKindNativeApp,
 		Version:      "test",
 		Capabilities: nil,
 		ClientToken:  protocol.Ptr("the-token"),

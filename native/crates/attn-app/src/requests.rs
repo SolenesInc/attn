@@ -42,7 +42,7 @@ impl Answer {
 
 /// How the window names a refused command in its notice: `Prefixed("Could not close that tile")`
 /// shows "Could not close that tile: <reason>", `Bare` the reason alone, and `Quiet` nothing, for
-/// a command whose refusal the Tauri app does not show either.
+/// a command whose refusal is not worth showing.
 #[derive(Clone, Copy)]
 pub(crate) enum Refused {
     Prefixed(&'static str),
@@ -286,8 +286,8 @@ fn oldest_waiting<S>(requests: &Requests<S>, cmd: &str) -> Option<String> {
         .map(|(id, _)| id.clone())
 }
 
-/// What the window says about a `command_error` no request waits for, in the Tauri app's
-/// words; nothing for a command the Tauri app reports only to its console.
+/// What the window says about a `command_error` no request waits for; nothing for a command
+/// whose refusal is only logged.
 fn unasked_refusal(reply: &Reply) -> Option<String> {
     if reply.event != "command_error" {
         return None;

@@ -20,11 +20,6 @@ func newTestRepository(t *testing.T) *testRepository {
 	repo.git("config", "user.name", "Release Test")
 	repo.git("config", "user.email", "release@example.com")
 	repo.write("VERSION", "0.11.1\n")
-	repo.write("app/package.json", "{\n  \"name\": \"app\",\n  \"version\": \"0.11.1\"\n}\n")
-	repo.write("app/pnpm-lock.yaml", "lockfileVersion: '9.0'\n")
-	repo.write("app/src-tauri/tauri.conf.json", "{\n  \"productName\": \"attn\",\n  \"version\": \"0.11.1\"\n}\n")
-	repo.write("app/src-tauri/Cargo.toml", "[package]\nname = \"app\"\nversion = \"0.11.1\"\n")
-	repo.write("app/src-tauri/Cargo.lock", "version = 4\n\n[[package]]\nname = \"app\"\nversion = \"0.11.1\"\n")
 	repo.write("CHANGELOG.md", "# Changelog\n\n## [2026-08-01]\n\n- Earlier release.\n")
 	repo.commit("baseline")
 	return repo
@@ -89,7 +84,7 @@ func (repo *testRepository) squashRelease() string {
 	return repo.commit("chore(release): prepare v0.12.0")
 }
 
-func TestVersionSetUpdatesEverySource(t *testing.T) {
+func TestVersionSetWritesTheVersion(t *testing.T) {
 	repo := newTestRepository(t)
 	if err := setVersions(repo.root, "0.12.0"); err != nil {
 		t.Fatal(err)
@@ -97,24 +92,8 @@ func TestVersionSetUpdatesEverySource(t *testing.T) {
 	if err := checkVersions(repo.root, "", "0.12.0"); err != nil {
 		t.Fatal(err)
 	}
-	for _, source := range versionSources() {
-		data, err := os.ReadFile(filepath.Join(repo.root, source.path))
-		if err != nil {
-			t.Fatal(err)
-		}
-		version, err := source.read(data)
-		if err != nil || version != "0.12.0" {
-			t.Fatalf("%s version = %q, %v", source.path, version, err)
-		}
-	}
-}
-
-func TestVersionSetRefusesAnExistingDisagreement(t *testing.T) {
-	repo := newTestRepository(t)
-	repo.write("app/package.json", "{\"version\": \"9.9.9\"}\n")
-	err := setVersions(repo.root, "0.12.0")
-	if err == nil || !strings.Contains(err.Error(), "inconsistent versions") {
-		t.Fatalf("expected version disagreement, got %v", err)
+	if err := checkVersions(repo.root, "", "0.12.1"); err == nil {
+		t.Fatal("a check against another version passed")
 	}
 }
 
@@ -217,7 +196,7 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 		{
 			name: "version disagreement",
 			mutate: func(repo *testRepository, _, _ string) {
-				repo.write("app/package.json", "{\"version\": \"0.12.1\"}\n")
+				repo.write("VERSION", "0.12.1\n")
 				repo.commit("mismatch version")
 			},
 			input: func(main, _ string) candidateValidation {
@@ -341,7 +320,7 @@ func TestAcceptedMainValidationRejectsUnsafeState(t *testing.T) {
 		{
 			name: "version disagreement",
 			mutate: func(repo *testRepository) {
-				repo.write("app/package.json", "{\"version\": \"0.12.1\"}\n")
+				repo.write("VERSION", "0.12.1\n")
 			},
 			wantErr: "expected 0.12.0",
 		},

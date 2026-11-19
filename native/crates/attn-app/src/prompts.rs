@@ -1,12 +1,12 @@
-//! Renders attn's product prompts from the catalog `internal/prompts` generates, as the Tauri
-//! app's `renderer.ts` does, so both apps send an agent the same bytes.
+//! Renders attn's product prompts from the catalog `internal/prompts` generates, to the same
+//! bytes the daemon renders.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use serde::Deserialize;
 
-const CATALOG: &str = include_str!("../../../../app/src/prompts/catalog.generated.json");
+const CATALOG: &str = include_str!("../prompts/catalog.generated.json");
 
 #[derive(Deserialize)]
 struct Catalog {

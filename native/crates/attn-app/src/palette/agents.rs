@@ -131,7 +131,7 @@ fn anchored(state: &State, bands: &Bands<'_>, list: &mut List<'_>) {
     }
 }
 
-/// The automation runs as the queue bar's runs peek lists them, as the Tauri app's `RunsPeek`:
+/// The automation runs as the queue bar's runs peek lists them:
 /// each automation's name and counts, then its current runs, the one ⌘⇧J opens next tagged with
 /// its keys.
 pub(crate) fn run_rows(state: &State) -> Vec<Row> {

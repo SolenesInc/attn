@@ -365,7 +365,7 @@ fi
 setup_fixture forged-manifest
 (cd "$fixture_repo" && go run ./cmd/release-train version set v99.98.96 >/dev/null)
 (cd "$fixture_repo" && go run ./cmd/release-train manifest write --version v99.98.97 --main HEAD >/dev/null)
-git -C "$fixture_repo" add app .github/release-candidate.yml
+git -C "$fixture_repo" add VERSION .github/release-candidate.yml
 git -C "$fixture_repo" commit -q -m 'forge accepted main versions'
 git -C "$fixture_repo" push -q origin main
 set_reviewed "$(git -C "$fixture_repo" rev-parse HEAD)"

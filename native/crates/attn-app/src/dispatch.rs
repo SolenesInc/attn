@@ -33,7 +33,7 @@ pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) -> bool {
 }
 
 /// [`dispatch`] with no notice, for keys: a key whose action did not run goes on, as an
-/// unhandled key does in the Tauri app.
+/// unhandled key does.
 pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
     if state.window.tile.is_some() {
         if action == Action::FileOpen && crate::notebook::find_note(state, tx) {

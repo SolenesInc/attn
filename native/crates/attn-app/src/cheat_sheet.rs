@@ -1,4 +1,4 @@
-//! The keyboard shortcuts sheet, row for row as the Tauri app's `buildCheatsheet` lists it:
+//! The keyboard shortcuts sheet:
 //! paired actions share a row, a digit or arrow family shows its modifiers once, and some rows
 //! carry a note. The keys come from the user's keymap.
 

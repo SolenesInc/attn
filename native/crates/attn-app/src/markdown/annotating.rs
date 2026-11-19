@@ -1,6 +1,6 @@
-//! Marking a document a tile shows, as the Tauri reader marks one: a selection let go over the
-//! document brings a toolbar that strikes the passage, labels it or opens a box to comment on
-//! it; marks paint over their passages, and a press on one picks it.
+//! Marking a document a tile shows: a selection let go over the document brings a toolbar that
+//! strikes the passage, labels it or opens a box to comment on it; marks paint over their
+//! passages, and a press on one picks it.
 
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Range;
@@ -19,7 +19,7 @@ use super::marks::{self, Saying};
 use crate::State;
 use crate::annotations;
 
-/// How far above the passage the toolbar sits, as the Tauri reader places it.
+/// How far above the passage the toolbar sits.
 const TOOLBAR_ABOVE: f32 = 48.0;
 /// The comment box's widest.
 const COMPOSER_W: f32 = 384.0;
@@ -77,7 +77,7 @@ pub(crate) struct Kept {
     pub(crate) width: Option<u32>,
 }
 
-/// How long a copied code block says "Copied!", as the Tauri reader does.
+/// How long a copied code block says "Copied!".
 const COPIED_SECONDS: f64 = 2.0;
 
 /// Each document tile's reading, by tile, and the comments written and not yet saved, by the

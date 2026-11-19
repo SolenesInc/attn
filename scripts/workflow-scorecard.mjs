@@ -120,7 +120,7 @@ const ran = (name, text, pattern) => shellTools.has(name) && pattern.test(text);
 
 const looks = {
   subagent: (name, text) => ['Agent', 'Task', 'Workflow'].includes(name) || /\bspawn_agent\b/.test(text),
-  tests: (name, text) => ran(name, text, /go test|test-go\.sh|cargo (test|nextest)|vitest|pnpm [^|;&]*(test|e2e)|make (test|check)|scripts\/(vm|land_test|real-app)|wsctl|real-app-harness|playwright/),
+  tests: (name, text) => ran(name, text, /go test|test-go\.sh|cargo (test|nextest)|pnpm [^|;&]*(test|e2e)|make (test|check)|scripts\/(vm|land_test|real-app)|wsctl|real-app-harness/),
   diff: (name, text) => ran(name, text, /git (show|diff|log -p)/),
   ci: (name, text) => ran(name, text, /gh (run|pr|api)|test-history/),
   seed: (name, text) => ran(name, text, /attn seed (show|notes)|seeds\/s-/),

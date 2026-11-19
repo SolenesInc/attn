@@ -31,7 +31,7 @@ pub(crate) struct Phones {
     in_view: bool,
 }
 
-/// Modules of light margin around the symbol, as the Tauri app's `uqr` border.
+/// Modules of light margin around the symbol.
 const QR_BORDER: i32 = 2;
 /// Image pixels per module, so the image scales down to its box without blurring the modules.
 const QR_MODULE_PX: i32 = 16;

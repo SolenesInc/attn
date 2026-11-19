@@ -58,19 +58,6 @@ Preconditions:
 - **Background caps.** Open Settings, press `settings.nav.backgroundAgents`, then `settings.setting.headless_context_window_cap`. Press `mod+a`, type `500000` and press `Enter`: `./attn settings get headless_context_window_cap` prints `500000`. Run `./attn settings set headless_context_window_cap ""` to put it back.
 - **Proof.** In `$P`, keep `./attn session show usage-agent` after the turn, after pricing and after clearing the price. Also keep the badge's `bridge find` after each change, the popover's rows from `bridge tree`, the `./attn settings set` output, `./attn agent peek usage-agent` after the session cap, `./attn settings get headless_context_window_cap` after the background cap, and `bridge shot '{"path":"<P>/usage-pinned.png"}'` with the breakdown pinned. Name each file for its way in, such as `usage-palette-receipt.txt`. The `native-session-usage` scenario runs the badge, a native subagent and a partly priced model, the hover and the palette.
 
-### In the Tauri app (the rollback)
-
-Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) says, then put the agent on screen with `bridge select_session '{"sessionId":"usage-agent"}'`. Its badge is `[data-testid="session-usage-<session>"]` and its receipt `.session-usage-popover`. For pixel proof, run `bridge capture_native_window_screenshot`, which captures the main window by its window number with `screencapture -l` and does not bring the window forward.
-
-- **The badge.** `bridge dom_text '{"selector":"[data-testid=\"session-usage-usage-agent\"]"}'` reads `2.1k tokens`.
-- **The receipt from the badge.** Resolve the badge's point with `bridge dom_native_point '{"selector":"[data-testid=\"session-usage-usage-agent\"]"}'` and move the pointer there with `bridge native_mouse '{"action":"move",...}'`: `.session-usage-popover` appears and includes `2,095 tokens`. Click the badge natively to pin the receipt: `.session-usage-hint` reads `esc close`. Run `bridge native_key '{"key":"Escape"}'` to close the receipt. To pin the receipt with ↓, put keyboard focus on the badge. Only Tab reaches the badge. After that Escape, focus is on the app root, and `bridge native_key '{"key":"Tab"}'` walks the sidebar and the home screen's controls before the badge (105 presses on a baseline with the mock GitHub's cards). Re-read `bridge dom_focus_state` until `activeElement.ariaLabel` starts with `Session usage`. Focus opens the receipt. Run `bridge native_key '{"key":"ArrowDown"}'` to pin it, then press Escape twice to close it.
-- **The receipt from the palette.** Run `bridge native_key '{"key":"k","modifiers":["command","shift"]}'`, `bridge dom_wait '{"selector":"[role=\"combobox\"][aria-label=\"Commands\"]","focused":true,"timeoutMs":5000}'`, `bridge native_text '{"text":"Show usage-agent"}'` and `bridge native_key '{"key":"Enter"}'`. `bridge dom_wait '{"selector":".session-usage-popover","timeoutMs":5000}'` matches, and `bridge dom_text '{"selector":".session-usage-popover"}'` includes `2,095 tokens`, `mock-agent-1` and `No price is configured for this model.` Run `bridge native_key '{"key":"Escape"}'`: the receipt closes.
-- **The price in Settings.** After pricing from the shell, **Settings → Agents and models** shows a card for `mock-agent-1` after a native click on `details.settings-pricing summary` ("Model pricing overrides").
-- **Cap the context window.** Open the palette, type `Cap usage-agent`, and press Enter. `bridge dom_wait '{"selector":"[aria-label=\"Context window cap in tokens\"]","focused":true,"timeoutMs":5000}'` matches. Run `bridge native_text '{"text":"500000"}'` and `bridge native_key '{"key":"Enter"}'`. Open the same palette command again: the field opens selected, so `bridge native_key '{"key":"backspace"}'` empties it, and Enter clears the cap.
-- **In the ledger.** Press ⌘⇧L, click `.ledger-row[data-row-key="usage-agent"] .ledger-row-title` natively, and run `bridge dom_text '{"selector":".ledger-inspector"}'`: it shows `usage-agent` and the same `Usage 2.1k tokens`. While the ledger is open, the ledger's row badge shares the tile's `data-testid`, so read the tile's badge with the ledger closed.
-- **Background caps.** Open Settings with `bridge native_key '{"key":",","modifiers":["command"]}'` and click `[data-testid="settings-nav-backgroundAgents"]` natively. Run `bridge dom_scroll_into_view '{"selector":"[data-testid=\"settings-headless-context-cap\"]"}'` for setup, then click `[data-testid="settings-headless-context-cap"]` natively, press ⌘A with `bridge native_key '{"key":"a","modifiers":["command"]}'`, type `500000` with `bridge native_text` and press Enter. `[data-testid="settings-headless-context-cap-saved"]` appears.
-- **Proof.** `bridge dom_text` of the badge and of the receipt, and `bridge capture_native_window_screenshot '{"path":"<P>/usage-receipt.png"}'` with the receipt open.
-
 ## Contexts
 
 - **Durability across restarts**: usage is kept per session and survives every restart, and an upgrade carries over what an earlier version measured. A resumed conversation counts only the usage after the resume, so nothing is counted twice.
@@ -78,15 +65,14 @@ Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) s
 - **Profiles**: prices are settings and apply across all profiles. Each session's usage stays with it in its profile's ledger.
 - **Performance and idle cost**: `internal/sessionmonitor/cost_bench_test.go` and `internal/transcript/parser_bench_test.go` measure reading usage from transcripts.
 - **Harnesses**: attn reads Claude Code's usage from each assistant message. It reads Codex's usage from the Codex token counts together with the tier and the context length. Only Claude Code and Codex agents take a context cap. attn refuses a cap on a shell session, and it refuses a cap value outside the allowed range.
-- **Keyboard and native input**: the palette reaches the breakdown and the cap without a pointer, and Escape closes a pinned breakdown. In the Tauri app (the rollback), the badge takes focus, ↓ pins the receipt and Escape closes it (twice after a ↓ pin).
+- **Keyboard and native input**: the palette reaches the breakdown and the cap without a pointer, and Escape closes a pinned breakdown.
 - **Compatibility across versions**: an older version's single cost cursor upgrades without losing unread usage.
 
 ## Tests
 
 - Wire: `native/crates/attn-app/tests/wire/tile_header.rs` (the badge and breakdown), `native/crates/attn-app/tests/wire/palette.rs` (the context cap dialog), `native/crates/attn-app/tests/wire/settings/background.rs` (the headless cap), `internal/daemon/session_cost_wire_test.go`, `internal/daemon/session_cost_forks_wire_test.go`, `internal/daemon/session_cost_upgrade_wire_test.go`, `internal/daemon/session_usage_wire_test.go`, `internal/daemon/context_window_cap_wire_test.go`, `internal/daemon/codex_usage_wire_test.go`, `internal/daemon/codex_close_usage_wire_test.go`.
-- Scenario: `native-session-usage`, and in the Tauri app (the rollback) `session-usage`.
+- Scenario: `native-session-usage`.
 - Kernel: `internal/sessioncost/*_test.go`, `internal/transcript/usage_test.go`, `internal/transcript/usage_sources_test.go`.
-- App: the Tauri app's (the rollback) `app/src/App.sessionCostPrices.test.tsx`, `app/src/components/ledger/SessionsTab.usage.test.tsx`.
 
 ## Gotchas
 
@@ -100,4 +86,3 @@ Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) s
 - The daemon relaunches the agent as soon as you set or clear a cap.
 - The preview waits for the pointer to rest on the badge before it opens. After `bridge hover`, `bridge wait` on the popover's key waits for it.
 - Working but wrong: the badge says `2.1k tokens` and the breakdown `2,095 tokens` for the same number. A partially priced session shows a dollar amount with a `*` that only the breakdown explains.
-- In the Tauri app (the rollback), after ↓ pins the receipt from keyboard focus, the first Escape drops the pin and leaves the receipt open, and a second Escape closes it (s-psdk44). A native click on its badge pins the receipt but leaves keyboard focus on the terminal input, so ↓ after a click reaches the agent. On macOS its ⌘⇧L can go to the menu: `native_key` reports `handledBy: ["menu"]`, and the ledger stays closed. Open the ledger from the palette then, and do not count that as proof of the shortcut. A parked-window `capture_screenshot` can miss the receipt, so use `capture_native_window_screenshot`.

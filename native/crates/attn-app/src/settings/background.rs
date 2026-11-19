@@ -71,7 +71,7 @@ fn parse_advisor(raw: Option<&str>) -> Config {
     }
 }
 
-/// A route as the daemon stores it, its fields in the Tauri app's order.
+/// A route as the daemon stores it.
 #[derive(Serialize)]
 struct Stored<'a> {
     agent: &'a str,

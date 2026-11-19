@@ -1,6 +1,6 @@
-//! Kitty images as the daemon describes them, kept and placed as the Tauri terminal keeps and
-//! places them (`kittyPlacements.ts`). The daemon's worker is the only kitty parser: it sends
-//! the whole set of placements whenever one moves, and each set replaces the last.
+//! Kitty images as the daemon describes them, kept and placed. The daemon's worker is the only
+//! kitty parser: it sends the whole set of placements whenever one moves, and each set replaces the
+//! last.
 
 /// One placement as the daemon describes it, its row relative to the top of the screen.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

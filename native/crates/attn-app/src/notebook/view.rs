@@ -16,11 +16,9 @@ use super::model::{Backlinks, Doc, Draft, Listing, Open, Surface, SurfaceId};
 use super::outline::outline;
 use crate::State;
 
-/// The file tree's width: the tree of the Tauri tile, which holds a note's name of about 30
-/// letters two folders deep.
+/// The file tree's width, which holds a note's name of about 30 letters two folders deep.
 const TREE_WIDTH: f32 = 280.0;
-/// A notebook narrower than these folds its file tree and its rail, as the Tauri tile does, so
-/// the note keeps its room.
+/// A notebook narrower than these folds its file tree and its rail, so the note keeps its room.
 const TREE_FOLDS_BELOW: f32 = 620.0;
 const RAIL_FOLDS_BELOW: f32 = 900.0;
 

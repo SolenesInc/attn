@@ -77,14 +77,7 @@ printf '## [%s]\n\n### Added\n- **Fixture release.** Candidate facts compiled.\n
   "$(date +%Y-%m-%d)"
 EOF
 
-for command in pnpm cargo; do
-  cat >"$work/bin/$command" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-exit 0
-EOF
-done
-chmod +x "$work/bin/gh" "$work/bin/attn" "$work/bin/claude" "$work/bin/pnpm" "$work/bin/cargo"
+chmod +x "$work/bin/gh" "$work/bin/attn" "$work/bin/claude"
 
 setup_fixture() {
   local name="$1"

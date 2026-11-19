@@ -9,7 +9,7 @@ use rune::Tx;
 use super::previews::{self, Sent};
 use super::{Face, Message, Panel, result, view};
 
-/// Captures a page of history lists, as the Tauri app asks for.
+/// Captures a page of history lists.
 const PAGE: i64 = 4;
 
 #[derive(Default)]

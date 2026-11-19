@@ -1,6 +1,6 @@
 //! The form that creates or edits an automation in the drawer's place. A field's rule is
 //! checked when the field loses the keyboard, again on each edit once it has failed, and every
-//! rule when Save is pressed, as the Tauri app's form does.
+//! rule when Save is pressed.
 
 pub(crate) mod model;
 mod view;
@@ -95,8 +95,7 @@ pub(crate) struct Form {
     pub(crate) zone_suggestions: ZoneSuggestions,
     focused: Option<String>,
     /// The field the form put the keyboard in as it opened, until the person types or moves
-    /// on: leaving it untouched is not a visit, so its rule stays quiet, as the Tauri app's
-    /// form, which focuses nothing, stays quiet.
+    /// on: leaving it untouched is not a visit, so its rule stays quiet.
     placed: Option<String>,
     /// This opening of the form: a save or delete answered after it closed changes nothing.
     opening: u64,
@@ -104,8 +103,7 @@ pub(crate) struct Form {
     reading: u64,
 }
 
-/// The zones listed under the time zone field while the user types in it, as the Tauri form's
-/// datalist lists them.
+/// The zones listed under the time zone field while the user types in it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum ZoneSuggestions {
     #[default]
@@ -147,8 +145,8 @@ fn field_of_key(key: &str) -> Option<fn(&Field) -> bool> {
     Some(check)
 }
 
-/// The zone the user's clock keeps, by the canonical name the Tauri form gives it: the one `TZ`
-/// names, else the one /etc/localtime links to, else UTC.
+/// The zone the user's clock keeps, by its canonical IANA name: the one `TZ` names, else the one
+/// /etc/localtime links to, else UTC.
 fn local_zone() -> String {
     let named = std::env::var("TZ").ok().map(|tz| {
         let tz = tz.strip_prefix(':').unwrap_or(&tz);
@@ -177,8 +175,8 @@ fn canonical_zone(name: &str) -> Option<&'static str> {
         .map(|(zone, _)| zone.as_str())
 }
 
-/// Every IANA zone by the canonical name `Intl.supportedValuesOf` gives the Tauri form, UTC
-/// first, with each name that finds it in lower case: its own and the old ones linking to it.
+/// Every IANA zone by its canonical name, UTC first, with each name that finds it in lower case:
+/// its own and the old ones linking to it.
 fn zones() -> &'static [(String, Vec<String>)] {
     static ZONES: OnceLock<Vec<(String, Vec<String>)>> = OnceLock::new();
     ZONES.get_or_init(|| {

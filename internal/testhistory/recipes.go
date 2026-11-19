@@ -24,7 +24,7 @@ type RecipeList struct {
 	Recipes []Recipe
 }
 
-var landingRunners = map[Runner]bool{RunnerGo: true, RunnerVitest: true, RunnerPlaywright: true, RunnerCargo: true}
+var landingRunners = map[Runner]bool{RunnerGo: true, RunnerCargo: true}
 
 func ParseRecipeList(text string) (RecipeList, error) {
 	var list RecipeList
@@ -64,15 +64,13 @@ func checkLandingUnit(unit string) error {
 	runner := UnitRunner(unit)
 	switch {
 	case !landingRunners[runner]:
-		return fmt.Errorf("%q: landing tests run go, vitest, playwright and cargo units", unit)
+		return fmt.Errorf("%q: landing tests run go and cargo units", unit)
 	case runner == RunnerGo && len(fields) != 3:
 		return fmt.Errorf("%q: want \"go <package> <TestName>\"", unit)
 	case runner == RunnerCargo:
 		if _, ok := cargoTestArgs(unit); !ok {
 			return fmt.Errorf("%q: want \"cargo .\", \"cargo <package> --lib\", \"cargo <package> --doc\" or \"cargo <package> --test|--bin <name>\"", unit)
 		}
-	case runner != RunnerGo && len(fields) != 2:
-		return fmt.Errorf("%q: want \"%s <file>\"", unit, runner)
 	}
 	return nil
 }
@@ -100,17 +98,11 @@ func RecipeCommand(unit string) string {
 		return ""
 	}
 	fields := strings.Fields(unit)
-	switch UnitRunner(unit) {
-	case RunnerGo:
+	if UnitRunner(unit) == RunnerGo {
 		return fmt.Sprintf("./scripts/test-go.sh --packages -count=1 -run '^%s$' %s", fields[2], fields[1])
-	case RunnerVitest:
-		return "pnpm --dir app exec vitest run " + fields[1]
-	case RunnerCargo:
-		args, _ := cargoTestArgs(unit)
-		return "(cd native && cargo test " + strings.Join(args, " ") + ")"
-	default:
-		return "pnpm --dir app exec playwright test " + fields[1]
 	}
+	args, _ := cargoTestArgs(unit)
+	return "(cd native && cargo test " + strings.Join(args, " ") + ")"
 }
 
 func (list RecipeList) Named(names []string) ([]Group, error) {

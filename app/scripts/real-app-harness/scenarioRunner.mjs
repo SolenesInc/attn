@@ -12,7 +12,7 @@ import {
 import { assertPackagedAppBuildMatchesCurrentSource } from './buildPreflight.mjs';
 import { createRunContext, emitVerdict, FIRST_FAILURE_MAX_LENGTH, restoreHarnessSettings } from './common.mjs';
 import { ensureMockGitHubServer } from './mockGitHub.mjs';
-import { createWindowDriver } from './platform.mjs';
+import { appPlatform } from './platform.mjs';
 import { allowRealAgentsForRunner } from './scenarioCatalog.mjs';
 import { createScenarioRecorder, recordingEnabled } from './windowRecording.mjs';
 
@@ -234,33 +234,6 @@ export function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }
 
 const FAILURE_EVIDENCE_DEADLINE_MS = 15_000;
 
-export function registerNativeFailureEvidence(runner, { client, driver, selectors = () => ({}) }) {
-  const request = (action, payload) => client.request(action, payload);
-  runner.registerFailureEvidence('screenshot', async () => {
-    const windowId = await driver.mainWindowId();
-    if (!windowId) throw new Error('The app has no capturable window');
-    const file = path.join(runner.runDir, 'failure-native.png');
-    await driver.screenshot(file, { windowId });
-    return file;
-  });
-  runner.registerFailureEvidence('window', () => request('get_window_bounds'));
-  runner.registerFailureEvidence('dom', () => request('dom_focus_state', { selectors: selectors() }));
-  runner.registerFailureEvidence('uiDiagnostics', () => request('ui_diagnostics'));
-  runner.registerFailureEvidence('native', () => driver.nativeFocusState());
-}
-
-export async function closeScenarioSessions(client, sessionIds) {
-  const failures = [];
-  for (const sessionId of sessionIds) {
-    try {
-      await client.request('close_session', { sessionId });
-    } catch (error) {
-      failures.push(error);
-    }
-  }
-  if (failures.length) throw new AggregateError(failures, `Failed to close ${failures.length} scenario session(s)`);
-}
-
 export function createScenarioRunner(options, {
   scenarioId,
   tier,
@@ -275,7 +248,7 @@ export function createScenarioRunner(options, {
   ensureMockGitHub = ensureMockGitHubServer,
   readDaemonMockGitHub = readDaemonMockGitHubURL,
   createRecorder = createScenarioRecorder,
-  createRecordingDriver = (appPath) => createWindowDriver({ appPath }),
+  createRecordingDriver = (appPath) => appPlatform.createWindowDriver({ appPath }),
   emitRunnerVerdict = emitVerdict,
   isRecordingEnabled = recordingEnabled,
 } = {}) {

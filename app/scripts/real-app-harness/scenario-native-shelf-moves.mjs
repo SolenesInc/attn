@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { launchFreshNativeAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
@@ -63,7 +63,7 @@ try {
   const checksFocus = process.platform === 'darwin';
   const frontmostBefore = checksFocus ? await driver.frontmostBundleId() : null;
   await runner.step('launch_app', async () => {
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     queueDaemonSettingRestore(observer, 'narrowest_tile_cols');
     await setNarrowest(NARROWEST_COLS);
     await driver.setWindowBounds({ x: 0, y: 0, width: 1600, height: 1000 });

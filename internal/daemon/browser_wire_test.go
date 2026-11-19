@@ -47,7 +47,7 @@ func TestAttnBrowserOpenDocksBesideTheFocusedAgent(t *testing.T) {
 	t.Setenv("ATTN_BROWSER_HOST_TOKEN", browserHostToken)
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
-	host := browserHostPeer(w, "tauri://localhost", browserHostToken)
+	host := browserHostPeer(w, "", browserHostToken)
 	shop, shopDesktop, shopPane := w.RequestSpawn(app, shellHarness, w.Path("shop"))
 	focusAgent(t, w, app, string(shop.ID))
 
@@ -84,8 +84,8 @@ func TestBrowserControlIsBrokeredToTheHostThatWasAsked(t *testing.T) {
 		}
 	}
 	focusAgent(t, w, app, string(shop.ID))
-	spoof := browserHostPeer(w, "tauri://localhost", browserHostToken)
-	host := browserHostPeer(w, "http://tauri.localhost", browserHostToken)
+	spoof := browserHostPeer(w, "", browserHostToken)
+	host := browserHostPeer(w, "", browserHostToken)
 
 	answered := make(chan browserControlAnswer, 1)
 	go func() {
@@ -112,7 +112,7 @@ func TestBrowserControlIsBrokeredToTheHostThatWasAsked(t *testing.T) {
 	exitShells(app, string(shop.ID), string(docs.ID))
 }
 
-func TestOnlyTheAppsOriginWithTheHostTokenBecomesTheBrowserHost(t *testing.T) {
+func TestOnlyTheAppWithTheHostTokenAndNoWebOriginBecomesTheBrowserHost(t *testing.T) {
 	t.Setenv("ATTN_BROWSER_HOST_TOKEN", browserHostToken)
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
@@ -123,21 +123,15 @@ func TestOnlyTheAppsOriginWithTheHostTokenBecomesTheBrowserHost(t *testing.T) {
 	focusAgent(t, w, app, string(shop.ID))
 
 	for _, tc := range []struct {
-		instance, origin, token string
-		host                    bool
+		origin, token string
+		host          bool
 	}{
-		{"", "", browserHostToken, false},
-		{"", "http://localhost:3000", browserHostToken, false},
-		{"", "http://127.0.0.1:5173", browserHostToken, false},
-		{"", "http://localhost:1420", browserHostToken, false},
-		{"", "tauri://localhost", "wrong-secret", false},
-		{"dev", "http://localhost:3000", browserHostToken, false},
-		{"", "tauri://localhost", browserHostToken, true},
-		{"", "http://tauri.localhost", browserHostToken, true},
-		{"dev", "http://localhost:1420", browserHostToken, true},
+		{"http://localhost:3000", browserHostToken, false},
+		{"http://127.0.0.1:5173", browserHostToken, false},
+		{"", "wrong-secret", false},
+		{"", browserHostToken, true},
 	} {
-		t.Run(tc.instance+" "+tc.origin+" "+tc.token, func(t *testing.T) {
-			t.Setenv("ATTN_INSTANCE", tc.instance)
+		t.Run(tc.origin+" "+tc.token, func(t *testing.T) {
 			candidate := browserHostPeer(w, tc.origin, tc.token)
 			defer candidate.Close()
 			answered := make(chan browserControlAnswer, 1)
@@ -174,7 +168,7 @@ func browserHostPeer(w *world, origin, token string) *testworld.Peer {
 	}
 	p := w.Connect(protocol.ClientHelloMessage{
 		Cmd:              protocol.CmdClientHello,
-		ClientKind:       "tauri-app",
+		ClientKind:       protocol.ClientKindNativeApp,
 		Version:          "protocol-" + protocol.ProtocolVersion,
 		Capabilities:     []string{protocol.CapabilityBrowserHost},
 		ClientToken:      protocol.Ptr(config.ClientToken()),

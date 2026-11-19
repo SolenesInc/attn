@@ -174,7 +174,7 @@ fn model_row(model: &HarnessModel, entries: &[TierOverride], t: &Tokens) -> El {
         .build(t)
 }
 
-/// A model's line in its harness's list, as the Tauri app's `.model-tier-row`: no card, a
+/// A model's line in its harness's list: no card, a
 /// hairline under it.
 /// A still, wrapping row of a models list, its name keyed `{key}.name`.
 fn item(key: &str, name: &str, t: &Tokens) -> ListRow {
@@ -405,8 +405,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     out
 }
 
-/// A model action: the Tauri app's `.settings-action.quiet`, which outside Delegation draws as
-/// any other action.
+/// A quiet model action, which outside Delegation draws as any other action.
 fn quiet(
     key: String,
     label: &str,

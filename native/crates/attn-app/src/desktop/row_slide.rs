@@ -1,6 +1,5 @@
-//! The row slide of the Tauri app's `useRowMotion`: when the screen moves along the same row,
-//! tiles leaving the screen travel out with it and tiles joining it travel in, rather than
-//! shrinking and growing in place.
+//! The row slide: when the screen moves along the same row, tiles leaving the screen travel out
+//! with it and tiles joining it travel in, rather than shrinking and growing in place.
 
 use std::hash::{Hash, Hasher};
 

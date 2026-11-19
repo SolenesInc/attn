@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -137,7 +136,7 @@ func pickerAppOn(w *world, profileID string) *testworld.Peer {
 	w.T.Helper()
 	hello := protocol.ClientHelloMessage{
 		Cmd:              protocol.CmdClientHello,
-		ClientKind:       "tauri-app",
+		ClientKind:       protocol.ClientKindNativeApp,
 		Version:          "protocol-" + protocol.ProtocolVersion,
 		Capabilities:     []string{},
 		ClientToken:      protocol.Ptr(config.ClientToken()),
@@ -146,7 +145,7 @@ func pickerAppOn(w *world, profileID string) *testworld.Peer {
 	if profileID != "" {
 		hello.ProfileID = protocol.Ptr(profileID)
 	}
-	p := w.Connect(hello, http.Header{"Origin": {"tauri://localhost"}})
+	p := w.Connect(hello, nil)
 	testworld.Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	return p
 }

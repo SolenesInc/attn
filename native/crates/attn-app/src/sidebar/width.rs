@@ -127,7 +127,7 @@ mod tests {
     }
 }
 
-/// How long the width label stays after a step, as in the Tauri app.
+/// How long the width label stays after a step.
 const LABEL_SECONDS: f64 = 1.5;
 
 /// The window's part in the sidebar's width: the window's own width, a width being dragged
@@ -202,8 +202,7 @@ pub(crate) fn step_by_key(state: &mut crate::State, wider: bool, tx: &mut rune::
 }
 
 /// How wide the sidebar's edge is to grab, centred on the edge so half of it lies over the
-/// rows' end and half over the content; the Tauri app's `.sidebar-resize-handle` is 9 and
-/// starts at the edge.
+/// rows' end and half over the content.
 const GRIP: f32 = 6.0;
 /// How far the width label sits in from the content's top left corner while the edge moves.
 const LABEL_OFFSET: f32 = 8.0;

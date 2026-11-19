@@ -5,10 +5,6 @@ inputs:
   instance:
     description: Non-production instance to package
     required: true
-  app:
-    description: The app shell to build, tauri or native (native/crates/attn-app)
-    required: false
-    default: tauri
 
 outputs:
   archive:
@@ -31,14 +27,13 @@ runs:
         brew install openssl@3
         echo "$(brew --prefix openssl@3)/bin" >> "$GITHUB_PATH"
 
-    - name: Set up Go and Node.js
+    - name: Set up Go
       uses: ./.github/actions/setup-toolchains
       with:
         go: 'true'
         # setup-go's key is content-only, so every Go job shares it and the
         # first one to finish seals it. This action owns its entry below.
         go-cache: 'false'
-        node: 'true'
 
     - name: Resolve Go cache paths
       id: go-cache-paths
@@ -62,42 +57,23 @@ runs:
         toolchain: '1.95.0'
 
     - name: Install the native workspace's Rust
-      if: inputs.app == 'native'
       shell: bash
       working-directory: native
       run: rustup toolchain install "$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
 
-    - name: Install pnpm
-      uses: pnpm/action-setup@v4
-      with:
-        version: 9
-
-    - name: Read bun pin
-      id: bun
-      shell: bash
-      run: echo "version=$(awk '/^bun / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
-
-    - name: Set up bun
-      uses: oven-sh/setup-bun@v2
-      with:
-        bun-version: ${{ steps.bun.outputs.version }}
-
     - name: Ensure ghostty-vt artifacts
       uses: ./.github/actions/cache-ghostty-vt
-      with:
-        include-wasm: 'true'
 
     - name: Build each Rust workspace in its target, which the Rust cache keeps
-      if: inputs.app == 'native'
       shell: bash
       run: echo 'CARGO_BUILD_BUILD_DIR={workspace-root}/target' >> "$GITHUB_ENV"
 
     - name: Cache Rust build
       uses: Swatinem/rust-cache@v2
       with:
-        shared-key: ${{ inputs.app == 'native' && 'app-acceptance-native-fast-profile' || 'app-acceptance-fast-profile' }}
+        shared-key: app-acceptance-native-fast-profile
         workspaces: |
-          ${{ inputs.app == 'native' && 'native' || 'app/src-tauri' }}
+          native
           pty-host
 
     - name: Ensure the attn CLI
@@ -110,7 +86,7 @@ runs:
       env:
         CI: 'true'
         MACOS_CODESIGN_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
-      run: make build-app INSTANCE="${{ inputs.instance }}" APP="${{ inputs.app }}"
+      run: make build-app INSTANCE="${{ inputs.instance }}"
 
     - name: Save Go build cache
       if: steps.go-cache.outputs.cache-hit != 'true'
@@ -127,10 +103,7 @@ runs:
       shell: bash
       run: |
         app_name="$(./attn instance resolve --instance "${{ inputs.instance }}" --field appName)"
-        case "${{ inputs.app }}" in
-          native) staged=native/target/staged ;;
-          *) staged=app/src-tauri/target/staged ;;
-        esac
+        staged=native/target/staged
         case "$RUNNER_OS" in
           Linux) app_tree="$staged/linux-tree/$app_name" ;;
           macOS) app_tree="$staged/$app_name.app" ;;

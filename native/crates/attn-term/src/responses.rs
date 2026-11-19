@@ -1,4 +1,4 @@
-//! Which of the terminal's replies the app forwards, from `app/src/utils/terminalQueryResponses.ts`.
+//! Which of the terminal's replies the app forwards.
 
 const ESC: u8 = 0x1b;
 const BEL: u8 = 0x07;

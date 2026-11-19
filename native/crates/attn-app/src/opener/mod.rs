@@ -1,4 +1,4 @@
-//! The markdown opener (⌘P), as the Tauri app's (MarkdownOpener.tsx): the files opened
+//! The markdown opener (⌘P): the files opened
 //! recently and the markdown files under the folder of the agent behind the screen (else the
 //! notebook), ranked as the query is typed; a typed path browses a folder instead. A picked file
 //! opens in a tile for that agent.
@@ -20,7 +20,7 @@ pub(crate) use view::view;
 
 const EXTENSIONS: [&str; 1] = ["md"];
 const RECENTS: i64 = 50;
-/// How long typing settles before the opener browses a typed folder, as in the Tauri app.
+/// How long typing settles before the opener browses a typed folder.
 const BROWSE_DELAY: f64 = 0.15;
 pub(crate) const FIELD: &str = "opener.field";
 pub(crate) const NOTEBOOK_ROOT: &str = "notebook.root.effective";

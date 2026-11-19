@@ -1,10 +1,10 @@
 use rune::{Family, TextStyle};
 
-/// The Tauri terminal's font stack, with the Nerd Font the app registers for icon glyphs.
+/// The terminal's font stack, with the Nerd Font the app registers for icon glyphs.
 pub const FAMILY: &str = "Iosevka, Menlo, Monaco, \"DejaVu Sans Mono\", \"Courier New\", \"Symbols Nerd Font Mono\", monospace";
 pub const FONT_SIZE: f32 = 14.0;
 
-/// A terminal cell's size in points, measured as the Tauri terminal measures it: as wide as
+/// A terminal cell's size in points: as wide as
 /// `M`, rounded up, and 1.45 lines of the font size tall.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Metrics {
@@ -60,8 +60,8 @@ impl Metrics {
         ))
     }
 
-    /// The cell under `(x, y)` as a selection ends at it, when the point is in the slot: past
-    /// the last column is the column after it, as in the Tauri terminal.
+    /// The cell under `(x, y)` as a selection ends at it, when the point is in the slot: past the
+    /// last column is the column after it.
     pub fn cell_in(
         &self,
         (cols, rows): (u16, u16),
@@ -117,8 +117,8 @@ pub(crate) struct Fit {
     pub(crate) offset: [f32; 2],
 }
 
-/// How a grid sits in its slot: a PTY smaller than the slot, sized by another client, is
-/// scaled up to fit and centered, as the Tauri terminal's `scaledToFitTransform` does.
+/// How a grid sits in its slot: a PTY smaller than the slot, sized by another client, is scaled up
+/// to fit and centered.
 pub(crate) fn fit((cols, rows): (u16, u16), (cw, ch): (f32, f32), (w, h): (f32, f32)) -> Fit {
     let room = ((w / cw).floor(), (h / ch).floor());
     let (cols, rows) = (f32::from(cols), f32::from(rows));

@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, dataDirForInstance, instanceCliEnv, resolveHarnessResources } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
@@ -173,7 +173,7 @@ try {
     await client.quitApp();
     try { cli('daemon', 'stop'); } catch {}
     cli('daemon', 'ensure');
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     await setQueueMode(false);
   });
 

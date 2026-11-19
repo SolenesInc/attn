@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,9 +25,9 @@ func TestAnAgentShowsACalloutAndGetsItsRefusals(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := s.Connect(protocol.ClientHelloMessage{
-		Cmd: protocol.CmdClientHello, ClientKind: "tauri-app", Version: "protocol-" + protocol.ProtocolVersion,
+		Cmd: protocol.CmdClientHello, ClientKind: protocol.ClientKindNativeApp, Version: "protocol-" + protocol.ProtocolVersion,
 		BrowserHostToken: protocol.Ptr("callout-stack-secret"), ClientToken: protocol.Ptr(strings.TrimSpace(string(token))),
-	}, http.Header{"Origin": []string{"tauri://localhost"}})
+	}, nil)
 	testworld.Await[protocol.InitialStateMessage](host, protocol.EventInitialState, nil)
 
 	show := s.Launch(testworld.Invocation{Session: session, Args: []string{"callout", "show", "garden", "Work tracked here", "agent:" + session[:8], "Enter goes here"}})

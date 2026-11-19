@@ -18,7 +18,7 @@ const NOTEBOOK: &str = "Notebook";
 const BROWSE: &str = "Browse…";
 /// `.desktop-dock-tile-root-picker`'s `max-width`.
 const PICKER_WIDTH: f32 = 140.0;
-/// The Tauri app's `.desktop-dock-tile-root-picker { height: 24px }`.
+/// The root picker's height.
 const PICKER_HEIGHT: f32 = 24.0;
 
 fn select_key(tile: &str) -> String {

@@ -185,74 +185,6 @@ In the index, "both" means people and agents.
   step in that file. In the step, state that the harnesses cannot reach the
   way in, and make the step fail. Put the reason in that file's Gotchas.
 
-### In the Tauri app
-
-A recipe under `### In the Tauri app (the rollback)` drives the Tauri app,
-installed with `APP=tauri`, through its own bridge actions, which
-[../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) lists. In those recipes:
-
-- Wait with `bridge dom_wait`, which takes `selector` and `timeoutMs`, and
-  optionally `textIncludes`, `valueEquals` (an input's value), `absent: true`
-  and `focused: true`.
-- App proof is `get_state`, the feature's `*_get_state` or `dom_text`, and a
-  `bridge capture_native_window_screenshot`.
-- Prefer stable handles to coordinates and tab order: shortcut ids, palette
-  command ids, `aria-label` and `data-testid` values, session and seed ids.
-- Shortcuts: press the macOS binding with `bridge native_key`. The binding
-  for an id is in `app/src/shortcuts/registry.ts`, or you can read the binding
-  from the app: `bridge shortcut_binding '{"shortcutId":"<id>"}'`.
-- The palette: press ⌘⇧K (`ui.commandPalette`), wait for
-  `[role="combobox"][aria-label="Commands"]` to take focus, type the
-  command's title with `bridge native_text`, then press Enter. The map names
-  the command id, and you type its title.
-- Settings: press ⌘, (`ui.openSettings`, which closes the dialog when the
-  dialog is open), clear any `search` that `bridge settings_get_state` shows,
-  then click the section's nav button,
-  `[data-testid="settings-nav-<section>"]`, natively.
-  [settings.md](settings.md) lists the section ids and the step that clears
-  the search.
-- A native click: `bridge native_mouse` takes `x` and `y` from 0 to 1 across
-  the window. Get the coordinates for an element with `bridge dom_native_point
-  '{"selector":"..."}'`. `dom_native_point` waits for the element to appear and
-  for the element and its ancestors to stop moving. It scrolls the element
-  into view when the element's point is offscreen or covered, then returns `x`
-  and `y` for the center of the element's box, with `bounds` in page pixels.
-  Pass `at` to use another point as fractions of the box, such as
-  `{"x":0.9,"y":0.5}`, and `offset` to add page pixels to that point. A terminal
-  cell's `get_pane_cell_rect` result carries a `target` to pass as the
-  payload. `dom_native_point` refuses, and names the cause, when the element
-  has an empty box (hidden on a retained desktop, for example) or when the
-  point stays offscreen or covered after scrolling.
-- Resolve the point right before each native action, and resolve the point
-  again after anything that can move the element, because a stored point no
-  longer matches the element once the element moves.
-- `native_mouse` actions are `click`, `right_click`, `move` and `drag` (with
-  `toX` and `toY`), each with optional `modifiers`. A control that takes
-  clicks only while the pointer is over its row, such as a sidebar row's
-  buttons, counts as covered until the pointer reaches the row, so
-  `dom_native_point` refuses it. To click it, resolve the row's point and
-  `move` there, then resolve the control's point and click it.
-- Before you resolve a point, show the intended desktop and scope the
-  selector to the visible tile of that desktop, because retained desktops keep
-  hidden copies of their elements. Native input rejects coordinates outside
-  `[0,1)` and clicks in native window chrome.
-- `native_mouse` hit-tests the target window, including browser page webviews.
-  Keys and text follow the native first responder of that window. An explicit
-  `"window"` targets the named webview instead: `"window":"main"` for app
-  controls, `"window":"capture"` for quick capture, or a browser host's
-  label.
-- `native_input_state` reads real app focus, window focus, frontmost PID,
-  secure-input state and window geometry. Keep those receipts around native
-  actions. The app must remain inactive, unfocusable and parked.
-  `native_pointer_trace_start` and
-  `native_pointer_trace_read` bracket trusted mouse events and CSS hover.
-  `native_pointer_trace_read` stops the observation.
-- A drawer (asks, automations, garden) stays in the page while
-  closed, hidden with `aria-hidden="true"`. Tell open from closed by that
-  attribute, not by whether an inner selector is present.
-- DOM actions (`dom_click`, `dispatch_shortcut`, `settings_select_section`,
-  `sessions_set_filter` and the like) are for setup only.
-
 ## Proof and skip reporting
 
 Follow [Evidence](../SKILL.md#evidence) for what to capture, and add these:
@@ -299,18 +231,15 @@ Every feature file has these sections, in this order:
    commands for an action that needs setup, a native action and a read in one
    bullet. Use only the harnesses and conventions above. Cover every way in
    the file documents, and end with a **Proof.** bullet naming what to capture.
-   A recipe for the Tauri app, the rollback, goes last, under
-   `### In the Tauri app (the rollback)`, as [In the Tauri app](#in-the-tauri-app)
-   says.
 5. `## Contexts`: only the contexts below that apply, one bullet each saying
    how the feature behaves under it. A context left out does not apply.
 6. `## Tests`: pointers by kind, as paths or scenario ids, and nothing else.
    Leave out a kind with no tests.
    - Wire: a real daemon driven as a protocol client:
      `internal/daemon/*_wire_test.go`, and the other `internal/daemon` tests
-     that drive a daemon.
-   - Stack: real processes together: `*_stack_test.go` in any package, and
-     the Tauri app's `app/e2e/*.spec.ts`.
+     that drive a daemon; and the app's wire tests,
+     `native/crates/*/tests/wire/*.rs`.
+   - Stack: real processes together: `*_stack_test.go` in any package.
    - Scenario: an id in `app/scripts/real-app-harness/scenarioCatalog.mjs`,
      all on one line. A landing that changes product code and this file runs
      these scenarios before it pushes, so list the ones that prove this
@@ -318,14 +247,10 @@ Every feature file has these sections, in this order:
      after "outside the catalog".
    - Kernel: package tests that start no daemon, such as a specified
      function's tables or properties.
-   - App: the Tauri app's frontend tests under `app/src`, the app wire tests
-     `App.*.test.tsx` included. The native app's wire tests,
-     `native/crates/*/tests/wire/*.rs`, go under Wire.
    - A `scripts/verify-*` bundle sits under the kind of the tests it runs,
      and under Stack when it runs more than one kind.
 7. `## Gotchas`: traps that waste or invalidate a run, and what "working but
-   wrong" looks like for the feature. Traps only the Tauri app has go in its
-   rollback recipe, under `Gotchas in the Tauri app:`.
+   wrong" looks like for the feature.
 
 Write from the user's point of view. Name user paths, stable handles, required
 state, commands and observable results, never how the code works inside.
@@ -394,7 +319,7 @@ instance. A file whose recipe ran live says so here.
 
 ### Desktops and tiles
 
-- [Desktops and tiles](desktops.md) (both): Arrangements of tiles, like macOS Spaces: switch, split, sort, and move tiles between desktops. In the Tauri app, the row's keys, drags and settings ran live.
+- [Desktops and tiles](desktops.md) (both): Arrangements of tiles, like macOS Spaces: switch, split, sort, and move tiles between desktops.
 - [Terminals](terminals.md) (both): A real PTY in a tile: what the user types and what the program prints, with scrollback, find, links and images.
 - [Markdown tiles](markdown.md) (both): Open a markdown file in a tile, rendered and live as the file changes.
 - [Notebook](notebook.md) (both): The user's notebook and daily journal, edited in a tile or fullscreen. The chief keeps the notebook too.

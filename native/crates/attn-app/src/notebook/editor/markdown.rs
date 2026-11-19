@@ -1,5 +1,4 @@
-//! How each line of a note reads, as the Tauri notebook's live preview shows it
-//! (liveMarkdownPreview.ts, frontmatterCard.ts, imageWidget.ts): headings sized, inline styles
+//! How each line of a note reads in the live preview: headings sized, inline styles
 //! drawn without their marks, bullets and task boxes, rules and images as blocks, and the front
 //! matter as a card. A line the caret is on shows its source, still styled.
 
@@ -90,8 +89,8 @@ pub(crate) fn kinds(lines: &[String]) -> Vec<LineKind> {
     kinds
 }
 
-/// How far into a note its front matter may close, as the Tauri editor reads it: a fence that
-/// closes later is a rule, not front matter.
+/// How far into a note its front matter may close: a fence that closes later is a rule, not front
+/// matter.
 const FRONT_MATTER_SCAN: usize = 4096;
 
 /// The closing line of the front matter: line 0 is `---` and a later line is `---` or `...`.
@@ -230,8 +229,8 @@ impl Shown {
         last.max(self.text.len().min(last))
     }
 
-    /// Puts [`BROKEN`] after the link shown at `link`, as the Tauri editor marks a link to a
-    /// missing note: the text after it moves along. A link's text always ends a run, since
+    /// Puts [`BROKEN`] after the link shown at `link`, which marks a link to a missing note:
+    /// the text after it moves along. A link's text always ends a run, since
     /// its `](…)` is hidden after it.
     pub(crate) fn mark_broken(&mut self, link: Range<usize>) {
         let (at, n) = (link.end, BROKEN.len());
@@ -496,7 +495,7 @@ fn quote_prefix(line: &str) -> usize {
 mod tests {
     use super::*;
 
-    /// What each line reads as away from the caret, as the Tauri test lists it.
+    /// What each line reads as away from the caret.
     fn reads(text: &str) -> Vec<String> {
         let lines: Vec<String> = text.split('\n').map(str::to_owned).collect();
         let kinds = kinds(&lines);

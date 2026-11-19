@@ -43,7 +43,7 @@ macos_cancelled_while_running='{"name":"PTY upgrade / macos-15","status":"comple
 linux_never_started='{"name":"Frontend","status":"completed","conclusion":"cancelled","runner_name":null,"labels":["ubuntu-24.04-arm"]}'
 full_macos_failed='{"name":"Full macOS run","status":"completed","conclusion":"failure","runner_name":"GitHub Actions 4","labels":["ubuntu-24.04"]}'
 macos_jobs=(full-macos)
-macos_job_groups='{"pty-compatibility":["pty_upgrade_macos"],"native":["native_macos"],"app-acceptance-macos":["app_acceptance_tauri","app_acceptance"]}'
+macos_job_groups='{"pty-compatibility":["pty_upgrade_macos"],"native":["native_macos"],"app-acceptance-macos":["app_acceptance"]}'
 
 expect() {
   local name="$1" want_status="$2" needs="$3" jobs="$4" status=0
@@ -58,40 +58,37 @@ expect() {
   fi
 }
 
-expect linux-green 0 "{\"backend\":$ok,\"frontend\":$ok}" '{"jobs":[]}'
+expect linux-green 0 "{\"backend\":$ok,\"harness\":$ok}" '{"jobs":[]}'
 if [ -s "$FAKE_GH_LOG" ]; then
   echo "FAIL linux-green: a green run read the jobs API" >&2
   exit 1
 fi
 
-expect linux-skipped 1 "{\"backend\":$skipped,\"frontend\":$ok}" '{"jobs":[]}'
+expect linux-skipped 1 "{\"backend\":$skipped,\"harness\":$ok}" '{"jobs":[]}'
 
-job_groups='{"backend":["daemon"],"app-acceptance-native":["app_acceptance"],"gate":["app_acceptance_tauri","app_acceptance"]}'
+job_groups='{"backend":["daemon"],"app-acceptance-matrix":["app_acceptance"],"gate":["release_preflight","app_acceptance"]}'
 daemon_carried='{"daemon":{"run":"https://github.com/example/attn/actions/runs/5","commit":"2222222222222222222222222222222222222222"}}'
 JOB_GROUPS="$job_groups" CARRIED_JSON="$daemon_carried" \
-  expect carried-skipped 0 "{\"backend\":$skipped,\"frontend\":$ok}" '{"jobs":[]}'
+  expect carried-skipped 0 "{\"backend\":$skipped,\"harness\":$ok}" '{"jobs":[]}'
 grep -Fq 'daemon carried: passed with the same inputs at 2222222222222222222222222222222222222222 in https://github.com/example/attn/actions/runs/5' "$work/carried-skipped.out"
 grep -Fq -- '- daemon: 2222222222222222222222222222222222222222 in https://github.com/example/attn/actions/runs/5' "$work/carried-skipped.summary"
 
 JOB_GROUPS="$job_groups" CARRIED_JSON="$daemon_carried" \
-  expect uncarried-skipped 1 "{\"backend\":$ok,\"app-acceptance-native\":$skipped}" '{"jobs":[]}'
+  expect uncarried-skipped 1 "{\"backend\":$ok,\"app-acceptance-matrix\":$skipped}" '{"jobs":[]}'
 
 JOB_GROUPS="$job_groups" CARRIED_JSON='{"app_acceptance":{"run":"r","commit":"c"}}' \
-  expect job-skipped-with-one-of-its-groups-carried 1 "{\"app-acceptance-native\":$skipped,\"gate\":$skipped}" '{"jobs":[]}'
+  expect job-skipped-with-one-of-its-groups-carried 1 "{\"app-acceptance-matrix\":$skipped,\"gate\":$skipped}" '{"jobs":[]}'
 
 JOB_GROUPS="$job_groups" CARRIED_JSON="$daemon_carried" \
   expect carried-group-ran-red 1 "{\"backend\":$failed}" "{\"jobs\":[$acceptance,{\"name\":\"Daemon (1)\",\"status\":\"completed\",\"conclusion\":\"failure\",\"runner_name\":\"GitHub Actions 1\",\"labels\":[\"ubuntu-24.04\"]}]}"
 
-expect linux-never-started 1 "{\"frontend\":$cancelled}" \
+expect linux-never-started 1 "{\"harness\":$cancelled}" \
   "{\"jobs\":[$acceptance,$linux_never_started]}"
 
 expect macos-green 0 "{\"changes\":$ok,\"pty-compatibility\":$ok,\"app-acceptance-macos\":$ok,\"full-macos\":$ok}" '{"jobs":[]}' "${macos_jobs[@]}"
 
-JOB_GROUPS="$macos_job_groups" CARRIED_JSON='{"pty_upgrade_macos":{"run":"r","commit":"c"},"app_acceptance_tauri":{"run":"r","commit":"c"},"app_acceptance":{"run":"r","commit":"c"}}' \
+JOB_GROUPS="$macos_job_groups" CARRIED_JSON='{"pty_upgrade_macos":{"run":"r","commit":"c"},"app_acceptance":{"run":"r","commit":"c"}}' \
   expect carried-macos-skipped 0 "{\"changes\":$ok,\"pty-compatibility\":$skipped,\"native\":$ok,\"app-acceptance-macos\":$skipped,\"full-macos\":$skipped}" '{"jobs":[]}' "${macos_jobs[@]}"
-
-JOB_GROUPS="$macos_job_groups" CARRIED_JSON='{"app_acceptance_tauri":{"run":"r","commit":"c"}}' \
-  expect macos-skipped-with-one-leg-carried 1 "{\"changes\":$ok,\"app-acceptance-macos\":$skipped,\"full-macos\":$skipped}" '{"jobs":[]}' "${macos_jobs[@]}"
 
 expect macos-changes-skipped 1 "{\"changes\":$skipped,\"pty-compatibility\":$skipped}" '{"jobs":[]}' "${macos_jobs[@]}"
 

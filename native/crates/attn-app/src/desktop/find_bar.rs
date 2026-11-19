@@ -6,11 +6,11 @@ use rune_kit::TextInput;
 use crate::State;
 use crate::terminal::{Finding, Toward, find_field_key};
 
-/// The find field's width, as the Tauri terminal's.
+/// The find field's width.
 const FIELD_W: f32 = 160.0;
 
-/// Terminal `id`'s find bar over its top right corner, as the Tauri terminal floats it: the
-/// field, Match case, the count, and the keys to step through the matches or close it.
+/// Terminal `id`'s find bar floating over its top right corner: the field, Match case, the
+/// count, and the keys to step through the matches or close it.
 pub(super) fn bar(id: &str, finding: &Finding, t: &Tokens) -> El {
     let (edit, edited, keyed) = (id.to_owned(), id.to_owned(), id.to_owned());
     let field = TextInput::new(&finding.query)
@@ -70,8 +70,7 @@ pub(super) fn bar(id: &str, finding: &Finding, t: &Tokens) -> El {
     )])
 }
 
-/// Escape closes the bar; Enter steps to the older match and Shift+Enter to the newer, as in
-/// the Tauri terminal.
+/// Escape closes the bar; Enter steps to the older match and Shift+Enter to the newer.
 fn on_key(state: &mut State, id: &str, ev: &KeyEvent, tx: &mut Tx) -> bool {
     match ev.key {
         Key::Escape => state.terminals.close_find(id, tx),

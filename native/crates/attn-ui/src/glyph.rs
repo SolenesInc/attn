@@ -1,7 +1,7 @@
-//! Marks drawn as text. The first are characters the Tauri app draws in its labels' own font
-//! that a bundled font carries (the others are drawings in [`crate::icon`]); the rest are glyphs
-//! from Symbols Nerd Font Mono, which [`crate::FONTS`] carries, so each
-//! draws on every platform without relying on the system's fallback fonts.
+//! Marks drawn as text. The first are characters drawn in their labels' own font that a bundled
+//! font carries (the others are drawings in [`crate::icon`]); the rest are glyphs from Symbols
+//! Nerd Font Mono, which [`crate::FONTS`] carries, so each draws on every platform without
+//! relying on the system's fallback fonts.
 
 use rune::TextStyle;
 

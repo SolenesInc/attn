@@ -52,7 +52,7 @@ func appAt(w *world, version string) *testworld.Peer {
 	w.T.Helper()
 	app := w.Connect(protocol.ClientHelloMessage{
 		Cmd:          protocol.CmdClientHello,
-		ClientKind:   "tauri-app",
+		ClientKind:   protocol.ClientKindNativeApp,
 		Version:      "protocol-" + protocol.ProtocolVersion,
 		Capabilities: []string{},
 		ClientToken:  protocol.Ptr(config.ClientToken()),

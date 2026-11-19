@@ -1,4 +1,4 @@
-//! The Tauri app's `SessionContextCapPrompt`: the token budget an agent compacts at, which
+//! The context cap prompt: the token budget an agent compacts at, which
 //! the daemon applies by reloading the agent.
 
 use std::collections::BTreeMap;

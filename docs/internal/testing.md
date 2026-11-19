@@ -105,13 +105,11 @@ passing slowly. `make lint-go` rejects these in Go test code outside a `synctest
 `cargo` from test files and test harness packages. `scripts/testlint`
 lists the few allowed exceptions with their reasons. Clippy rejects
 `std::thread::sleep`, `Instant::now` and `SystemTime::now` anywhere in
-`native/` (`native/clippy.toml`). In plugin and SDK tests, and in the Tauri
-app's, `pnpm --dir app run lint` rejects a sleep on `setTimeout` or
-`Bun.sleep`, and a poll with Testing Library's `waitFor` or `findBy*`,
-`vi.waitFor`, or `expect.poll`. `.oxlintrc.json` lists the files still
-allowed, with their reasons. Kernel socket deadlines,
-the operating system's file events, syncthing's own timers, and the
-shared PTY host keep real time.
+`native/` (`native/clippy.toml`). In plugin and SDK tests, `make lint-js`
+rejects a sleep on `setTimeout` or `Bun.sleep`; `.oxlintrc.json` lists the
+files still allowed, with their reasons. Kernel socket deadlines, the
+operating system's file events, syncthing's own timers, and the shared PTY
+host keep real time.
 
 ### Wire
 
@@ -131,10 +129,7 @@ hooks, transcript files, and terminal output. To simulate a network failure,
 wrap the client's `net.Conn` inside a `synctest` bubble.
 
 [Daemon wire tests](daemon-wire-tests.md) and
-[Native wire tests](native-wire-tests.md) describe each form's harness. The
-Tauri app, the rollback, keeps its own app wire tests in TypeScript until it is
-deleted: [App wire tests](app-wire-tests.md). New app tests are native wire
-tests.
+[Native wire tests](native-wire-tests.md) describe each form's harness.
 
 ### Stack
 
@@ -142,8 +137,6 @@ Stack tests cover what only exists between processes: restarts, reconnects,
 signals, PTY ownership, CLI behavior, and Linux paths. A stack test that needs
 the app starts it without a window with `Stack.StartNativeApp` and drives it
 over its automation protocol, as [Native app](native-app.md#automation) says.
-The Tauri app's browser end-to-end suite in `app/e2e`, where a real daemon
-serves the Tauri frontend to a browser, stays with the rollback.
 
 [CLI stack tests](cli-stack-tests.md) describes the CLI stack harness.
 
@@ -224,9 +217,8 @@ The runner gives targeted and full test runs the
 same isolated outer data directory, and each package's `TestMain` still creates
 a fresh directory when tests run. Go can reuse successful test results when
 their flags, environment, and file inputs also match.
-`scripts/test-go.sh`, `pnpm --dir app test` and `pnpm --dir app run e2e`
-record a receipt of each run, and so do CI's `Native` jobs for `cargo test`.
-Running `vitest`, `playwright` or `cargo test` directly records none.
+`scripts/test-go.sh` records a receipt of each run, and so do CI's `Native`
+jobs for `cargo test`. Running `go test` or `cargo test` directly records none.
 See [Test history](test-history.md).
 
 The runner and Makefile also share the pinned native VT artifact between

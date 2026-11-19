@@ -80,11 +80,7 @@ for a macOS VM, see [macOS VM](macos-vm.md); for Windows through WSL, see
 An instance has one app: the native app from `native/`, with `attnd`, `attn`
 and `attn-pty-host` beside it. `make run INSTANCE=<name>` opens it in the
 background, and it does not take focus. Production's `make run` brings it to the
-front. `APP=tauri` on `make install` and `make run` builds and installs the
-Tauri app instead, the rollback, with the same programs beside it. Installing
-again without `APP=tauri` switches the instance back. Only the Tauri app builds
-`DEMO=1` apps and the default-instance harness
-(`make build-default-instance-harness`), so those need `APP=tauri`.
+front.
 
 ## GitHub polling
 

@@ -25,15 +25,14 @@ pub(crate) use items::long_ago;
 use items::{ALL, Item, SEND_QUEUED, SEND_SENT, Stored, VENT_ATTN, VENT_TOOLS, VENTS, VIEWS};
 pub(super) use view::{page, toast};
 
-/// The Tauri app's page of records per read.
+/// Records per read.
 const PAGE_SIZE: i64 = 200;
 
 pub(super) const SHARING: &str = "analytics.sharing_enabled";
 pub(super) const SEND_VENTS: &str = "analytics.share_vents";
 pub(super) const TOOL_VENTS: &str = "analytics.tool_vents";
 
-/// The page's place and what it read. Showing the page starts it afresh, as the Tauri page
-/// mounts afresh.
+/// The page's place and what it read. Showing the page starts it afresh.
 #[derive(Default)]
 pub(crate) struct Analytics {
     view: usize,
@@ -650,7 +649,7 @@ fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
-/// Saves a machine switch and reads the status again, as the Tauri page does.
+/// Saves a machine switch and reads the status again.
 fn set(state: &mut State, key: &str, on: bool, tx: &mut Tx) {
     autosave::apply(state, key, if on { "true" } else { "false" }, tx);
     read_status(state, tx);

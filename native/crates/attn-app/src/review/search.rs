@@ -56,7 +56,7 @@ impl Found {
     }
 
     /// What the result's row shows: where or what it found, then at its right end where it
-    /// is or what changed, in the colors the Tauri search gives them.
+    /// is or what changed, each in its own color.
     fn columns(&self, query: &str, t: &Tokens) -> (El, El) {
         let where_ = |w: String| words(w, Type::Mono, t.text_muted);
         match self {
@@ -417,7 +417,7 @@ fn key_line_height(tile: &str) -> f32 {
         .map_or(0.0, |(bottom, top)| (bottom - top).max(0.0))
 }
 
-/// A path with its folder quieter than its file's name, as the Tauri review's path label.
+/// A path with its folder quieter than its file's name.
 fn path_label(path: &str, t: &Tokens) -> El {
     let at = path.rfind('/').map_or(0, |i| i + 1);
     let (dir, name) = path.split_at(at);

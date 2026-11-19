@@ -37,8 +37,7 @@ pub(crate) struct Outposts {
     /// The outpost whose Remove asks to confirm closing its terminals.
     removing: Option<String>,
     terminal_error: Option<String>,
-    /// Why the daemon refused the last outpost command. It outlasts the page, as the Tauri
-    /// app keeps it with the connection.
+    /// Why the daemon refused the last outpost command. It outlasts the page.
     command_error: Option<String>,
 }
 
@@ -46,7 +45,7 @@ fn panel(state: &mut State) -> &mut Outposts {
     &mut state.window.settings.outposts
 }
 
-/// Starts the page afresh when it comes into view, as the Tauri page mounts.
+/// Starts the page afresh when it comes into view.
 pub(super) fn arrive(state: &mut State) {
     if super::is_open(state) && state.window.settings.section == super::Section::Outposts {
         let outposts = panel(state);

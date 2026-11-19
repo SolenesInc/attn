@@ -16,13 +16,11 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern=["make", ["test", "test-frontend", "test-e2e", "lint"]],
+    pattern=["make", ["test", "lint"]],
     decision="prompt",
     justification="Make accepts additional targets and recipe overrides; review the complete invocation.",
     match=[
         "make test",
-        "make test-frontend",
-        "make test-e2e",
         "make lint",
     ],
 )

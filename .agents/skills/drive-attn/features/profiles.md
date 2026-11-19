@@ -32,7 +32,7 @@ None. An agent's attn commands act in its session's profile and cannot name anot
 
 ### Triggers
 
-- The first daemon start after an upgrade from before profiles finishes the migration before any app connects (`FinishPendingProfileMigration`, `internal/store/profile_migration.go`). Each old workspace keeps its own desktop, the first nine on ⌘1–⌘9 by rank and the rest without a number, and each crew member and automation launches on a desktop of its own. A home an earlier version left waiting in the Tauri app's picker finishes the same way, keeping any arrangement the user had already made there.
+- The first daemon start after an upgrade from before profiles finishes the migration before any app connects (`FinishPendingProfileMigration`, `internal/store/profile_migration.go`). Each old workspace keeps its own desktop, the first nine on ⌘1–⌘9 by rank and the rest without a number, and each crew member and automation launches on a desktop of its own. A home an earlier version left waiting in its migration picker finishes the same way, keeping any arrangement the user had already made there.
 
 ## Driving it
 
@@ -55,27 +55,6 @@ Preconditions:
 - **An unfinished migration finishes at start.** Quit the app with `./attn instance stop-app` and stop the daemon with `./attn daemon stop`. Run `sqlite3 <data-dir>/attn.db "update profile_migration set phase='launch_required', launch_review_complete=0"`, then `./attn daemon ensure`. `sqlite3 <data-dir>/attn.db "select phase, launch_review_complete from profile_migration"` prints `complete|1`, and `sqlite3 <data-dir>/attn.db "select kind, item_id, desktop_id from launch_desktops"` gives `crew|chief` a desktop. Launch: `home` answers.
 - **Proof.** In `$P`, keep `bridge state '{"of":"profiles"}'` after each create, switch, rename and delete, each `./attn` command's output with its exit code, `bridge find` of each refusal, and `bridge shot '{"path":"<P>/profile-switcher.png"}'` with the switcher open on two profiles, `<P>` written out. The `native-profile-lifecycle` scenario runs the switcher steps, except the unfinished migration. For it, keep each `sqlite3` output and `bridge find '{"target":{"key":"home"}}'`. Name each file for its way in, such as `profiles-palette-state.json`.
 
-### In the Tauri app (the rollback)
-
-Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) says. The shell steps above are the same. `bridge get_state` prints the profile ids under `arrangement.profiles`.
-
-- **Open the switcher with the shortcut.** Press ⌘⇧U: `bridge native_key '{"key":"u","modifiers":["command","shift"]}'`, then `bridge dom_wait '{"selector":"[role=\"menu\"][aria-label=\"Switch profile\"]","focused":true,"timeoutMs":5000}'`. `bridge dom_text '{"selector":"[role=\"menu\"][aria-label=\"Switch profile\"]"}'` reads `Default` and `New profile`.
-- **Create.** Press `n` (`bridge native_key '{"key":"n"}'`): `bridge dom_wait '{"selector":"#profile-switcher-name","focused":true,"timeoutMs":5000}'` matches. Run `bridge native_text '{"text":"Drive B"}'` and `bridge native_key '{"key":"Enter"}'`. The switcher closes, `bridge get_state` lists `Default` and `Drive B` with `selectedProfileId` set to `<drive>`, and `arrangement.desktops` holds one desktop, with no tiles on it. The empty desktop shows the new agent picker with its path field focused. Send the picker no Enter. When the sidebar is collapsed (`[aria-label="Show sidebar"]` shows), click that button natively first. `bridge dom_text '{"selector":".title-bar-profile-pill"}'` names `Drive B`.
-- **Open the switcher from the palette.** Run `bridge native_key '{"key":"k","modifiers":["command","shift"]}'`, `bridge dom_wait '{"selector":"[role=\"combobox\"][aria-label=\"Commands\"]","focused":true,"timeoutMs":5000}'`, `bridge native_text '{"text":"Switch profile"}'` and `bridge native_key '{"key":"Enter"}'`. `[role="menu"][aria-label="Switch profile"]` takes focus. Press Escape.
-- **Switch from the palette.** Open the palette the same way, type `Switch to Default` with `bridge native_text` and press Enter. `bridge get_state` shows `selectedProfileId` `<default>`. Open the garden again: `bridge garden_get_state` no longer lists `<seed>`.
-- **Switch from the pill.** Resolve the point of `.title-bar-profile-pill` with `bridge dom_native_point` and click it with `bridge native_mouse`. The switcher opens on `Default`. Press ↓ (`bridge native_key '{"key":"ArrowDown"}'`) and Enter: `selectedProfileId` is `<drive>`.
-- **Rename.** Press ⌘⇧U. The switcher starts on the current profile, `<drive>` (`selectedProfileId` in `bridge get_state`). Press `r`: `#profile-switcher-name` takes focus holding `Drive B`. Press ⌘A (`bridge native_key '{"key":"a","modifiers":["command"]}'`), type `Drive C` with `bridge native_text`, and press Enter. The switcher returns to its list, and `bridge get_state` names `<drive>` `Drive C`. Press Escape.
-- **Delete is refused while the profile holds work.** Press ⌘⇧U, then Backspace (`bridge native_key '{"key":"Backspace"}'`): the switcher reads `Delete Drive C? Clean up its agents, crew, automations and tiles first.`. Press Enter. `bridge dom_text '{"selector":".profile-switcher-error"}'` names `profile "Drive C" is not empty:` and counts `1 open seeds`. Press Escape twice.
-- **Empty it, then delete with the row's button.** Run `./attn seed wither <seed> -m "profile drive done" --profile "Drive C"`. The output starts with `<seed> (profile-drive) is withered`. Press ⌘⇧U and click `[aria-label="Delete Drive C"]` natively: the switcher shows `Delete Drive C?`. Press Enter. The switcher returns to its list, `bridge get_state` lists only `Default` and selects it, and `./attn seed ls` answers without `--profile` again.
-- **The last profile stays.** With the switcher still open, press Backspace. `bridge dom_text '{"selector":".profile-switcher-error"}'` reads `Default is the last profile, and attn always keeps one.`.
-- **The list's buttons.** Click `[aria-label="Rename Default"]` natively: `#profile-switcher-name` takes focus holding `Default`. Press Escape to go back to the list. Click `.profile-switcher-actions button` ("New profile") natively: `#profile-switcher-name` takes focus, empty. Press Escape twice.
-- **Proof.** Keep `bridge get_state` after each create, switch, rename and delete, and `bridge dom_text` of the switcher's refusals. Capture `bridge capture_screenshot '{"path":"<P>/profile-switcher.png"}'` with the switcher open on two profiles.
-
-Gotchas in the Tauri app:
-
-- A row's "Rename <name>" and "Delete <name>" buttons have an empty box on rows other than the selected one. Move the pointer over the row first, or use the keys.
-- The new profile's empty desktop focuses the picker's path field. When the sidebar is collapsed (`[aria-label="Show sidebar"]` shows), click that button natively first.
-
 ## Contexts
 
 - **Durability across restarts**: profiles, their desktops and the selected profile are daemon records and come back after any restart, and the app comes back on the profile it showed last. Deleting the profile a window shows moves that window to the most recently used remaining profile.
@@ -91,9 +70,8 @@ Gotchas in the Tauri app:
 
 - Wire: `native/crates/attn-app/tests/wire/profile.rs` (the switcher), `internal/daemon/profiles_protocol_test.go`, `internal/daemon/profile_delete_crew_wire_test.go`, `internal/daemon/garden_profile*_wire_test.go`, `internal/daemon/profile_migration_wire_test.go` and `internal/daemon/launch_desktop_wire_test.go` (an upgraded home opens finished).
 - Stack: `cmd/attnd/automation_profile_stack_test.go`.
-- Scenario: `native-profile-lifecycle`; in the Tauri app (the rollback) `profile-lifecycle` and `garden-profile-scope`.
+- Scenario: `native-profile-lifecycle`.
 - Kernel: `internal/profilemigration/*_test.go`, `internal/store/profile*_test.go`.
-- App, the Tauri app's (the rollback): `app/src/components/ProfileSwitcher.keyboard.test.tsx`, `app/src/utils/selectedProfile.test.ts`, `app/src/hooks/useDaemonSocket.profiles.test.tsx`, `app/src/components/ledger/SessionsTab.profiles.test.tsx`.
 
 ## Gotchas
 
@@ -103,6 +81,5 @@ Gotchas in the Tauri app:
 - The switcher orders profiles by most recent use and starts on the current one, so the arrow presses to reach a profile depend on what was used last.
 - Delete refuses while the profile holds live agents, crew members, automations, tiles, open seeds, pending delegations or running garden reviews. Harvest or wither the profile's seeds first. A new profile's empty desktop does not count.
 - `wsctl add-session` without `--profile` lands in the daemon's selected profile, not necessarily the one the window shows.
-- The Tauri app's migration picker and the `migration_*` commands remain until the Tauri app is deleted, but no client reaches them: the daemon finishes the migration before it listens.
 - Placing the old workspaces needs a database from before profiles, which a hand-made home lacks. The daemon wire tests build one at schema 153; the live step above covers only the launch half.
 - Working but wrong: switching profile never changes the flow. A ledger request that names no profile may list every profile's sessions (glossary, Changes to make).

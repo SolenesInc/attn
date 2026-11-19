@@ -2,7 +2,7 @@
 
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { MOCK_AGENT_MODEL, writeMockAgentFixture } from './mockAgent.mjs';
@@ -60,7 +60,7 @@ const header = (pane, label, state, does) => driver.waitFor({ key: chip(pane), n
 const shot = (file) => driver.screenshot(path.join(runner.runDir, file));
 
 try {
-  await runner.step('launch_app', () => launchFreshNativeAppAndConnect(client, observer));
+  await runner.step('launch_app', () => launchFreshAppAndConnect(client, observer));
 
   let first;
   let second;

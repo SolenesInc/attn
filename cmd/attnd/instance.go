@@ -39,9 +39,6 @@ func runInstance() {
 	case "status":
 		setCommandPath("instance status")
 		runInstanceStatus()
-	case "tauri-config":
-		setCommandPath("instance tauri-config")
-		runInstanceTauriConfig(os.Args[3:])
 	case "clean":
 		setCommandPath("instance clean")
 		runInstanceClean(os.Args[3:])
@@ -87,8 +84,6 @@ type instanceResolved struct {
 	AppLock        string `json:"appLockPath"`
 	DeepLinkScheme string `json:"deepLinkScheme"`
 	DesktopEntry   string `json:"desktopEntry,omitempty"`
-	E2EDaemonPort  string `json:"e2eDaemonPort"`
-	E2EVitePort    string `json:"e2eVitePort"`
 	MockGitHubPort string `json:"mockGitHubPort"`
 }
 
@@ -114,8 +109,6 @@ func resolveInstance(instance string) instanceResolved {
 		AppLock:        config.AppLockPathForInstance(instance),
 		DeepLinkScheme: config.DeepLinkSchemeForInstance(instance),
 		DesktopEntry:   desktopEntryPath(config.AppNameForInstance(instance)),
-		E2EDaemonPort:  config.E2EDaemonPortForInstance(instance),
-		E2EVitePort:    config.E2EVitePortForInstance(instance),
 		MockGitHubPort: config.MockGitHubPortForInstance(instance),
 	}
 }
@@ -136,7 +129,6 @@ func runInstanceStatus() {
 	if r.DesktopEntry != "" {
 		fmt.Printf("  handler    %s  (%s)\n", r.DesktopEntry, ynLabel(fileExists(r.DesktopEntry), "registered", "not registered"))
 	}
-	fmt.Printf("  e2e ports  daemon %s · vite %s\n", r.E2EDaemonPort, r.E2EVitePort)
 	fmt.Printf("  mock gh    %s\n\n", r.MockGitHubPort)
 
 	if err := config.ValidateInstanceRouting(); err != nil {
@@ -146,99 +138,6 @@ func runInstanceStatus() {
 	fmt.Println("Switch:   attn instance-env <name> | source   (fish: attn instance-env --fish <name> | source)")
 	fmt.Println("Resolve:  attn instance resolve --json         (single value: --field wsPort)")
 	fmt.Println("List:     attn instance list")
-}
-
-func runInstanceTauriConfig(args []string) {
-	instance := config.Instance()
-	basePath := ""
-	demo := false
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--demo":
-			demo = true
-		case "--base":
-			if i+1 >= len(args) {
-				instanceFatal("--base requires a value")
-			}
-			i++
-			basePath = args[i]
-		case "--instance":
-			if i+1 >= len(args) {
-				instanceFatal("--instance requires a value")
-			}
-			i++
-			p, err := config.NormalizeInstanceName(args[i])
-			if err != nil {
-				instanceFatal(err.Error())
-			}
-			instance = p
-		case "-h", "--help":
-			printInstanceHelp(os.Stdout)
-			return
-		default:
-			recordUsageError("instance tauri-config", usageErrorUnknownFlag)
-			instanceFatal(fmt.Sprintf("unknown flag %q", args[i]))
-		}
-	}
-
-	window := map[string]any{}
-	if basePath != "" {
-		base, err := os.ReadFile(basePath)
-		if err != nil {
-			instanceFatal(err.Error())
-		}
-		window, err = baseMainWindow(base)
-		if err != nil {
-			instanceFatal(fmt.Sprintf("%s: %v", basePath, err))
-		}
-	}
-	b, err := json.MarshalIndent(tauriConfigOverlay(resolveInstance(instance), window, demo), "", "  ")
-	if err != nil {
-		instanceFatal(err.Error())
-	}
-	fmt.Println(string(b))
-}
-
-func tauriConfigOverlay(r instanceResolved, baseWindow map[string]any, demo bool) map[string]any {
-	window := map[string]any{}
-	for k, v := range baseWindow {
-		window[k] = v
-	}
-	window["title"] = r.AppName
-	if demo {
-		window["title"] = "attn"
-	}
-	window["backgroundThrottling"] = "disabled"
-	return map[string]any{
-		"$schema":     "https://schema.tauri.app/config/2",
-		"productName": r.AppName,
-		"identifier":  r.BundleID,
-		"app": map[string]any{
-			"windows": []any{window},
-		},
-		"plugins": map[string]any{
-			"deep-link": map[string]any{
-				"desktop": map[string]any{
-					"schemes": []string{r.DeepLinkScheme},
-				},
-			},
-		},
-	}
-}
-
-func baseMainWindow(tauriConf []byte) (map[string]any, error) {
-	var conf struct {
-		App struct {
-			Windows []map[string]any `json:"windows"`
-		} `json:"app"`
-	}
-	if err := json.Unmarshal(tauriConf, &conf); err != nil {
-		return nil, err
-	}
-	if len(conf.App.Windows) == 0 {
-		return nil, fmt.Errorf("no app.windows entry to inherit")
-	}
-	return conf.App.Windows[0], nil
 }
 
 const keepAppFlag = "--keep-app"
@@ -965,8 +864,8 @@ func printInstanceHelp(w *os.File) {
 
 An instance fully isolates attn's runtime: data dir, socket, websocket port,
 installed app (a macOS bundle, a directory tree elsewhere), the app's local data
-dir (Tauri's app_local_data_dir), and bundle identifier. ATTN_INSTANCE selects it
-for every entrypoint (CLI, daemon, e2e, real-app harness, build).
+dir, and bundle identifier. ATTN_INSTANCE selects it for every entrypoint (CLI,
+daemon, real-app harness, build).
 
 Usage:
   attn instance                 status of the active instance (ATTN_INSTANCE)
@@ -975,7 +874,6 @@ Usage:
   attn instance resolve --field wsPort      print one resolved value
   attn instance resolve --instance agent7   resolve a different instance
   attn instance claim-port      give the instance a WebSocket port no other instance holds, keep it, and print it (--instance <name> for another)
-  attn instance tauri-config    Tauri --config overlay for the instance's build (--demo: titled attn)
   attn instance register-scheme Linux only: claim <scheme>:// for this instance's app in the desktop database
   attn instance clean <name>    reap workers + plugin drivers, stop daemon, quit app, remove its app, app local data, data dir, shared Codex sockets, and scheme handler
   attn instance clean <name> --keep-app

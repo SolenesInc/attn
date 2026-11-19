@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { launchFreshNativeAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { installMockCodex } from './mockAgent.mjs';
@@ -38,7 +38,7 @@ async function setSetting(key, value) {
 
 try {
   const codex = installMockCodex(path.join(runner.sessionDir, 'codex-install'), { version: '1.0.0', latest: '1.1.0' });
-  await runner.step('launch_app', () => launchFreshNativeAppAndConnect(client, observer));
+  await runner.step('launch_app', () => launchFreshAppAndConnect(client, observer));
 
   let desktop;
   await runner.step('shared_codex_offers_the_newer_release', async () => {

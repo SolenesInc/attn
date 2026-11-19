@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { launchFreshNativeAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { MOCK_AGENT_MODEL } from './mockAgent.mjs';
@@ -59,7 +59,7 @@ async function assertFocus(key) {
 }
 
 try {
-  await runner.step('launch_app', () => launchFreshNativeAppAndConnect(client, observer));
+  await runner.step('launch_app', () => launchFreshAppAndConnect(client, observer));
 
   await runner.step('fresh_profile_opens_setup', async () => {
     for (const key of ['queue_mode_enabled', 'model_tier_overrides']) queueDaemonSettingRestore(observer, key);

@@ -117,14 +117,6 @@ export function mockTranscriptPath({ agent, cwd, id, resumable, startedAt = new 
     : codexTranscriptPath(id, startedAt, env);
 }
 
-export function mockAgentExecutableVar(agent) {
-  return `ATTN_${String(agent).toUpperCase()}_EXECUTABLE`;
-}
-
-export function mockPinnedAgents(env = process.env) {
-  return MOCK_AGENT_AGENTS.filter((agent) => env[mockAgentExecutableVar(agent)] === MOCK_AGENT_EXECUTABLE);
-}
-
 export function mockAgentFlavor(agent) {
   return MOCK_AGENT_FLAVORS[String(agent || '').trim().toLowerCase()] || MOCK_AGENT_FLAVORS.codex;
 }
@@ -212,10 +204,6 @@ export function validateMockAgentConfig(config) {
   }
   validateActions(config.defaultActions ?? [], 'mock agent defaultActions');
   return config;
-}
-
-export function selectMockAgentActions(config, input) {
-  return selectMockAgentTurn(config, input).actions;
 }
 
 export function selectMockAgentTurn(config, input) {
@@ -433,48 +421,6 @@ export function findMockTranscript({ agent, cwd, id, env = process.env }) {
   const roots = agentHomeRoots(env);
   return firstFileEndingWith(roots.claudeProjects, `${id}.jsonl`)
     || firstFileEndingWith(roots.codexSessions, `${id}.jsonl`);
-}
-
-function realPath(value) {
-  try {
-    return fs.realpathSync.native(path.resolve(String(value || '')));
-  } catch {
-    return path.resolve(String(value || ''));
-  }
-}
-
-export function latestMockCodexRollout(cwd, env = process.env) {
-  const want = realPath(cwd);
-  const stack = [agentHomeRoots(env).codexSessions];
-  let latest = null;
-  while (stack.length > 0) {
-    const dir = stack.pop();
-    let entries = [];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        stack.push(full);
-        continue;
-      }
-      if (!entry.name.startsWith('rollout-') || !entry.name.includes('-mock-') || !entry.name.endsWith('.jsonl')) continue;
-      let meta = null;
-      let mtimeMs = 0;
-      try {
-        meta = JSON.parse(fs.readFileSync(full, 'utf8').split('\n', 1)[0] || 'null')?.payload;
-        mtimeMs = fs.statSync(full).mtimeMs;
-      } catch {
-        continue;
-      }
-      if (!meta?.id || realPath(meta.cwd) !== want) continue;
-      if (!latest || mtimeMs > latest.mtimeMs) latest = { file: full, id: meta.id, mtimeMs };
-    }
-  }
-  return latest && { file: latest.file, id: latest.id };
 }
 
 // Every scenario launches the mock, most without a fixture: an absent one is a

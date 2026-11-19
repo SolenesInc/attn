@@ -36,8 +36,7 @@ pub enum Opener {
     /// A control keyed so, which the popover hangs under, its right edges lined up.
     Control(String),
     /// A command about the agent in the tile whose header is keyed so: the popover opens at
-    /// the top left corner of the tile's body, as the Tauri app opens it over the terminal the
-    /// command came from.
+    /// the top left corner of the tile's body, over the terminal the command came from.
     Tile(String),
 }
 

@@ -164,13 +164,11 @@ jobs:
         uses: ./.github/actions/build-app-acceptance
         with:
           instance: ${{ env.ATTN_INSTANCE }}
-          app: native
 
       - name: Install the App acceptance tree
         uses: ./.github/actions/install-app-acceptance
         with:
           instance: ${{ env.ATTN_INSTANCE }}
-          app: native
           archive: ${{ steps.build-app.outputs.archive }}
 
       - name: Run the macOS-only scenarios
@@ -276,7 +274,7 @@ jobs:
       - name: Build the native release app
         env:
           MACOS_CODESIGN_IDENTITY: '-'
-        run: make build-app APP=native CHANNEL=release
+        run: make build-app CHANNEL=release
 
       - name: Check the native release app
         run: |

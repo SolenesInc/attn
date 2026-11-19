@@ -19,7 +19,7 @@ pub(crate) struct Updates {
     error: Option<String>,
 }
 
-/// Forgets the last refusal when the page comes into view, as the Tauri page starts afresh.
+/// Forgets the last refusal when the page comes into view.
 pub(super) fn arrive(state: &mut State) {
     if super::is_open(state) && state.window.settings.section == super::Section::Updates {
         state.window.settings.updates.error = None;

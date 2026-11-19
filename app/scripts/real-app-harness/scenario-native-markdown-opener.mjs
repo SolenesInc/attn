@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -35,7 +35,7 @@ function markdownTiles(desktop) {
 try {
   const checksFocus = process.platform === 'darwin';
   const frontmostBefore = checksFocus ? await driver.frontmostBundleId() : null;
-  await runner.step('launch_app', () => launchFreshNativeAppAndConnect(client, observer));
+  await runner.step('launch_app', () => launchFreshAppAndConnect(client, observer));
   await runner.step('widen_the_window_for_three_tiles', () => driver.setWindowBounds({ x: 0, y: 0, width: 1900, height: 1000 }));
 
   let desktop;

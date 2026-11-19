@@ -4,14 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { openDeepLink } from './deepLink.mjs';
 import {
   assertProductionRunAllowed,
   bundleIdentifierForAppPath,
   defaultAppPathForInstance,
 } from './harnessInstance.mjs';
-import { createKeyInputGuard } from './keyInputGuard.mjs';
-import { TargetedWindowDriver } from './targetedWindowDriver.mjs';
 
 const execFileAsync = promisify(execFile);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -43,15 +40,6 @@ export function describeInputDriverFailure(stderr = '') {
   return 'macOS automation failed.';
 }
 
-// A secondary Tauri window is never enumerated by Accessibility;
-// --window-title targets it instead.
-export function withWindowTitleArgs(args, opts = {}) {
-  if (!opts.windowTitle) {
-    return args;
-  }
-  return [...args, '--window-title', opts.windowTitle];
-}
-
 function modifierNames(modifiers = {}) {
   const names = [];
   if (modifiers.command) names.push('command');
@@ -61,43 +49,15 @@ function modifierNames(modifiers = {}) {
   return names;
 }
 
-export class MacOSDriver extends TargetedWindowDriver {
+export class MacOSDriver {
   constructor({
     bundleId = null,
     appPath = defaultAppPathForInstance(),
-    keyInputGuard = null,
-    client = null,
-    systemInput = false,
   } = {}) {
-    super({ client, pointer: (gesture) => this.#pointer(gesture), keyboard: (stroke) => this.#keyboard(stroke) });
-    this.systemInput = systemInput;
     const resolvedBundleId = bundleId || bundleIdentifierForAppPath(appPath);
     assertProductionRunAllowed({ appPath, bundleId: resolvedBundleId });
     this.bundleId = resolvedBundleId;
     this.appPath = appPath;
-    this.keyInputGuard = keyInputGuard || createKeyInputGuard({ appPath });
-  }
-
-  get injectsInApp() {
-    return this.client !== null && !this.systemInput;
-  }
-
-  async #inApp(action, payload, opts = {}) {
-    if (opts.windowTitle) {
-      throw new Error(`MacOSDriver targets in-app input by window label; pass windowLabel instead of windowTitle ${JSON.stringify(opts.windowTitle)}`);
-    }
-    const target = opts.windowLabel ? { window: opts.windowLabel } : {};
-    return this.client.request(action, { ...target, ...payload });
-  }
-
-  async launchApp() {
-    await execFileAsync('open', ['-a', this.appPath]);
-    await delay(800);
-  }
-
-  async openDeepLink(url) {
-    await openDeepLink(url, { appPath: this.appPath });
-    await delay(500);
   }
 
   async activateApp() {
@@ -108,46 +68,13 @@ export class MacOSDriver extends TargetedWindowDriver {
     await this.runInputDriver(['activate_background']);
   }
 
-  async menu(pathSegments) {
-    const path = Array.isArray(pathSegments) ? pathSegments : [pathSegments];
-    if (path.length === 0) {
-      throw new Error('MacOSDriver.menu requires at least one path segment');
-    }
-    await this.runInputDriver([
-      'menu',
-      '--path',
-      path.join('>'),
-      '--prompt-accessibility',
-    ]);
-  }
-
   async frontmostBundleId() {
     return this.runInputDriverCapture(['frontmost']);
   }
 
-  async appHidden() {
-    return (await this.runInputDriverCapture(['hidden'])) === 'true';
-  }
-
-  async displayState() {
-    return JSON.parse(await this.runInputDriverCapture(['display_state']));
-  }
-
-  async nativeFocusState() {
-    const read = (fn) => fn().catch((error) => ({ error: String(error?.message || error) }));
-    const [frontmost, mainWindowId, windows] = await Promise.all([
-      read(() => this.frontmostBundleId()),
-      read(() => this.mainWindowId()),
-      read(() => this.windowList()),
-    ]);
-    return { frontmost, mainWindowId, windows };
-  }
-
-  // System Events reports 0 windows for Tauri/wry apps even when one is
-  // visible, so this reads CGWindowListCopyWindowInfo instead.
-  async mainWindowId(opts = {}) {
+  async mainWindowId() {
     try {
-      const value = await this.runInputDriverCapture(withWindowTitleArgs(['windowid'], opts));
+      const value = await this.runInputDriverCapture(['windowid']);
       const parsed = Number.parseInt(value, 10);
       return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
     } catch {
@@ -155,10 +82,10 @@ export class MacOSDriver extends TargetedWindowDriver {
     }
   }
 
-  async waitForMainWindow(timeoutMs = 10_000, pollIntervalMs = 150, opts = {}) {
+  async waitForMainWindow(timeoutMs = 10_000, pollIntervalMs = 150) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      const wid = await this.mainWindowId(opts);
+      const wid = await this.mainWindowId();
       if (wid) {
         return wid;
       }
@@ -181,140 +108,23 @@ export class MacOSDriver extends TargetedWindowDriver {
     }
   }
 
-  // Window names need Screen Recording permission; without it this only ever
-  // times out to null.
-  async waitForWindowTitled(title, { timeoutMs = 10_000, pollIntervalMs = 200 } = {}) {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      const named = (await this.windowList()).find((w) => w.name === title);
-      if (named) return named;
-      await delay(pollIntervalMs);
-    }
-    return null;
+  async pressKey(key, modifiers = {}) {
+    await this.runInputDriver(['key', '--key', key, '--modifiers', modifierNames(modifiers).join(','), '--prompt-accessibility']);
   }
 
-  get keysReachWebview() {
-    return !this.systemInput;
-  }
-
-  async #keyboard({ kind, key, keyCode, modifiers, text, queued }) {
-    if (this.injectsInApp) {
-      if (kind === 'text') {
-        await this.#inApp('native_text', { text });
-      } else {
-        await this.#inApp('native_key', { ...(kind === 'keycode' ? { keyCode } : { key }), modifiers: modifierNames(modifiers), ...(queued ? { queued } : {}) });
-      }
-      return;
-    }
-    const serialized = this.serializeModifiers(modifiers);
-    if (kind === 'text') {
-      this.keyInputGuard.assertReaches(`typeText(${JSON.stringify(text.slice(0, 20))})`);
-      await this.runInputDriver(['text', '--text', text, '--prompt-accessibility']);
-      return;
-    }
-    const [command, flag, value] = kind === 'keycode' ? ['keycode', '--key-code', String(keyCode)] : ['key', '--key', key];
-    this.keyInputGuard.assertReaches(`${kind === 'keycode' ? 'pressKeyCode' : 'pressKey'}(${value}, ${serialized || 'no modifiers'})`);
-    await this.runInputDriver([command, flag, value, '--modifiers', serialized, '--prompt-accessibility']);
-  }
-
-  async #pointer({ action, point, to, opts }) {
-    if (action === 'move') return this.#move(point.x, point.y, opts);
-    if (action === 'click' || action === 'right_click') return this.#click(action, point.x, point.y, opts);
-    if (action === 'drag') return this.#drag(point.x, point.y, to.x, to.y, opts);
-    if (action === 'press' || action === 'release') return this.#inApp('native_mouse', { action, x: point.x, y: point.y }, opts);
-    if (action === 'drag_to') return this.#inApp('native_mouse', { action, x: point.x, y: point.y, toX: to.x, toY: to.y, ...(opts.steps !== undefined ? { steps: opts.steps } : {}) }, opts);
-    throw new Error(`MacOSDriver has no pointer action ${action}`);
-  }
-
-  async #move(relativeX, relativeY, opts) {
-    if (this.injectsInApp) {
-      await this.#inApp('native_mouse', { action: 'move', x: relativeX, y: relativeY }, opts);
-    } else {
-      await this.runInputDriver(withWindowTitleArgs([
-        'move',
-        '--relative-x',
-        String(relativeX),
-        '--relative-y',
-        String(relativeY),
-        '--prompt-accessibility',
-      ], opts));
-    }
-  }
-
-  async #click(action, relativeX, relativeY, opts) {
-    if (this.injectsInApp) {
-      await this.#inApp('native_mouse', {
-        action,
-        x: relativeX,
-        y: relativeY,
-        modifiers: modifierNames(opts.modifiers),
-        ...(opts.clickCount ? { clickCount: opts.clickCount } : {}),
-      }, opts);
-    } else {
-      const args = [
-        action,
-        '--relative-x',
-        String(relativeX),
-        '--relative-y',
-        String(relativeY),
-        '--prompt-accessibility',
-      ];
-      if (opts.modifiers) {
-        args.push('--modifiers', this.serializeModifiers(opts.modifiers));
-      }
-      await this.runInputDriver(withWindowTitleArgs(args, opts));
-    }
-  }
-
-  // Interpolated leftMouseDragged events: the shape WebKit requires for text selection.
-  async #drag(relativeX, relativeY, toRelativeX, toRelativeY, opts) {
-    if (this.injectsInApp) {
-      await this.#inApp('native_mouse', {
-        action: 'drag',
-        x: relativeX,
-        y: relativeY,
-        toX: toRelativeX,
-        toY: toRelativeY,
-        modifiers: modifierNames(opts.modifiers),
-        ...(opts.steps !== undefined ? { steps: opts.steps } : {}),
-      }, opts);
-    } else {
-      const args = [
-        'drag',
-        '--relative-x',
-        String(relativeX),
-        '--relative-y',
-        String(relativeY),
-        '--to-relative-x',
-        String(toRelativeX),
-        '--to-relative-y',
-        String(toRelativeY),
-        '--prompt-accessibility',
-      ];
-      if (opts.steps !== undefined) {
-        args.push('--steps', String(opts.steps));
-      }
-      await this.runInputDriver(withWindowTitleArgs(args, opts));
-    }
-  }
-
-  async parkWindow(visiblePx, opts = {}) {
-    const stdout = await this.runInputDriverCapture(withWindowTitleArgs([
+  async parkWindow(visiblePx) {
+    const stdout = await this.runInputDriverCapture([
       'window_park',
       '--visible-px',
       String(visiblePx),
       '--prompt-accessibility',
-    ], opts));
+    ]);
     console.log(`[RealAppHarness] Parked window: ${stdout.trim()}`);
   }
 
   async screenshot(outputPath, opts = {}) {
     const windowArgs = opts.windowId ? ['-l', String(opts.windowId)] : [];
     await execFileAsync('/usr/sbin/screencapture', ['-x', '-o', ...windowArgs, outputPath], { timeout: 10_000 });
-  }
-
-  serializeModifiers(modifiers = {}) {
-    return modifierNames(modifiers).join(',');
   }
 
   async ensureInputDriver() {
@@ -388,4 +198,3 @@ export class MacOSDriver extends TargetedWindowDriver {
   }
 }
 
-export { delay };

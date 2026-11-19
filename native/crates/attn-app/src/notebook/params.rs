@@ -1,4 +1,4 @@
-//! An editor tile's params on the wire (types/desktop.ts): a JSON object with `root` and `path`
+//! An editor tile's params on the wire: a JSON object with `root` and `path`
 //! when the tile has a root, else the bare path of its open file, or nothing.
 
 use serde_json::{Value, json};

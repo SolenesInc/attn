@@ -1,5 +1,5 @@
-//! The sidebar's dock, as the Tauri app's `SidebarFooter`: chips that remind the person of the
-//! keys they chose to keep in view, from the `dock` of the shortcuts setting the two apps share.
+//! The sidebar's dock: chips that remind the person of the keys they chose to keep in view, from
+//! the `dock` of the shortcuts setting.
 //! The PRs chip also opens its drawer.
 
 use attn_ui::Tokens;

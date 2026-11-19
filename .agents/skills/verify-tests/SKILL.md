@@ -34,9 +34,8 @@ Run each new or changed Go test once with `go test -v -run`, and compare the
 time with the budgets in `docs/internal/testing.md`. Then run the test with
 `go test -race -count=10 -run`. A failure in any of those runs is a flake. Run
 each changed native wire test from `native/` with
-`cargo test -p <crate> --test wire <test name>`, and each changed test of the
-Tauri app, the rollback, with `pnpm --dir app exec vitest run <file>`. Compare
-their times with the same budgets.
+`cargo test -p <crate> --test wire <test name>`, and compare its time with the
+same budgets.
 
 When you doubt that a test can fail, break the behavior that the test guards,
 and run the test. Do that in a scratch worktree (`git worktree add --detach`,

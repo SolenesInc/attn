@@ -50,8 +50,7 @@ pub trait Host<S: 'static>: Send + Sync + 'static {
     }
 }
 
-/// A window's place on the desktop in points, as the Tauri app's `logicalBounds` names it:
-/// its outer top-left corner and its content size.
+/// A window's place on the desktop in points: its outer top-left corner and its content size.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Bounds {
     pub x: f64,
@@ -60,7 +59,7 @@ pub struct Bounds {
     pub height: f64,
 }
 
-/// What `set_window_bounds` replies, in the Tauri app's shape.
+/// What `set_window_bounds` replies.
 #[derive(Clone, Copy, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowBounds {

@@ -13,7 +13,7 @@ use super::autosave::{self, Edits, Phase, Sent, Spec};
 use super::member_ref;
 use crate::State;
 
-/// How long typing rests before the charter saves, as in the Tauri app.
+/// How long typing rests before the charter saves.
 const PAUSE_SECONDS: f64 = 0.7;
 
 pub(crate) struct Charter;

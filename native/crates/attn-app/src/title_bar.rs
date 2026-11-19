@@ -5,8 +5,8 @@ use rune::{El, Tx};
 use crate::State;
 use crate::sidebar::actions;
 
-/// The title bar's tools on the left, as the Tauri app's `.title-bar-left`: New agent,
-/// Commands, the flow switch, the sidebar toggle and the notifications bell, each framed.
+/// The title bar's tools on the left: New agent, Commands, the flow switch, the sidebar toggle
+/// and the notifications bell, each framed.
 pub(crate) fn title_tools(state: &State, t: &Tokens) -> Vec<El> {
     let queue = actions::queue_flow(state);
     let flow = if queue {
@@ -73,8 +73,8 @@ pub(crate) fn title_tools(state: &State, t: &Tokens) -> Vec<El> {
     ]
 }
 
-/// The title bar's panel buttons on the right, as the Tauri app's `.title-bar-right`: the
-/// garden, the notebook, the ledger, automations and asks, unframed.
+/// The title bar's panel buttons on the right: the garden, the notebook, the ledger,
+/// automations and asks, unframed.
 pub(crate) fn title_panels(state: &State, t: &Tokens) -> Vec<El> {
     let garden_open = crate::garden::mode(state) != crate::garden::Mode::Closed;
     let automations_open = crate::automations::is_open(state);
@@ -146,8 +146,7 @@ fn keys_of(state: &State, action: &crate::Action) -> String {
         .unwrap_or_default()
 }
 
-/// A title bar button for a panel, checked while the panel is `open`, as the Tauri app's
-/// `.title-bar-panel-button.active`.
+/// A title bar button for a panel, checked while the panel is `open`.
 pub(crate) fn opens(button: El, open: bool) -> El {
     button.checked(open)
 }

@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
@@ -81,7 +81,7 @@ function vent(session, words, about = 'attn') {
 
 try {
   await runner.step('launch_app_with_analytics', async () => {
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     queueDaemonSettingRestore(observer, 'analytics.enabled');
     queueDaemonSettingRestore(observer, 'analytics.tool_vents');
     attn('settings', 'set', 'analytics.enabled', 'true');

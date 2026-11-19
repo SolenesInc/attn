@@ -1,4 +1,4 @@
-//! Where a link in a note goes, as the Tauri notebook resolves it (linkResolver.ts). The daemon
+//! Where a link in a note goes. The daemon
 //! reads every path relative to the root, so a link relative to its note is resolved here.
 
 use percent_encoding::percent_decode_str;

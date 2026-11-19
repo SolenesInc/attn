@@ -1,35 +1,30 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
 import { assertFreshWorldTargetSafe, commandRunsExecutable, registeredPtyHostPids } from './freshWorld.mjs';
 
 describe('assertFreshWorldTargetSafe', () => {
   it('throws when instance is empty (the prod instance string)', () => {
-    expect(() => assertFreshWorldTargetSafe({ instance: '', appPath: '/Users/victor/Applications/attn-dev.app' }))
-      .toThrow(/instance/i);
+    assert.throws(() => assertFreshWorldTargetSafe({ instance: '', appPath: '/Users/victor/Applications/attn-dev.app' }), /instance/i);
   });
 
   it("throws when instance is 'default' even with a non-prod appPath", () => {
-    expect(() => assertFreshWorldTargetSafe({ instance: 'default', appPath: '/Users/victor/Applications/attn-fxm1.app' }))
-      .toThrow(/default/i);
+    assert.throws(() => assertFreshWorldTargetSafe({ instance: 'default', appPath: '/Users/victor/Applications/attn-fxm1.app' }), /default/i);
   });
 
   it('throws when appPath is missing', () => {
-    expect(() => assertFreshWorldTargetSafe({ instance: 'fxm1', appPath: '' }))
-      .toThrow(/appPath/i);
-    expect(() => assertFreshWorldTargetSafe({ instance: 'fxm1' }))
-      .toThrow(/appPath/i);
+    assert.throws(() => assertFreshWorldTargetSafe({ instance: 'fxm1', appPath: '' }), /appPath/i);
+    assert.throws(() => assertFreshWorldTargetSafe({ instance: 'fxm1' }), /appPath/i);
   });
 
   it('throws for a production-shaped target on a named instance (defense in depth)', () => {
-    expect(() => assertFreshWorldTargetSafe({ instance: 'fxm1', appPath: '/Users/victor/Applications/attn.app' }))
-      .toThrow();
+    assert.throws(() => assertFreshWorldTargetSafe({ instance: 'fxm1', appPath: '/Users/victor/Applications/attn.app' }));
   });
 
   it('does not throw for a realistic named-instance target', () => {
-    expect(() => assertFreshWorldTargetSafe({ instance: 'fxm1', appPath: '/Users/victor/Applications/attn-fxm1.app' }))
-      .not.toThrow();
+    assert.doesNotThrow(() => assertFreshWorldTargetSafe({ instance: 'fxm1', appPath: '/Users/victor/Applications/attn-fxm1.app' }));
   });
 });
 
@@ -37,14 +32,14 @@ describe('commandRunsExecutable', () => {
   const host = '/home/runner/.local/share/attn-app-acceptance/bin/attn-pty-host';
 
   it('matches the exact packaged executable with or without arguments', () => {
-    expect(commandRunsExecutable(host, host)).toBe(true);
-    expect(commandRunsExecutable(`${host} --socket /tmp/attn.sock`, host)).toBe(true);
+    assert.equal(commandRunsExecutable(host, host), true);
+    assert.equal(commandRunsExecutable(`${host} --socket /tmp/attn.sock`, host), true);
   });
 
   it('does not match another instance or an executable with the same prefix', () => {
-    expect(commandRunsExecutable('/home/runner/.local/share/attn-app-other/bin/attn-pty-host', host)).toBe(false);
-    expect(commandRunsExecutable(`${host}-debug --socket /tmp/attn.sock`, host)).toBe(false);
-    expect(commandRunsExecutable(`/bin/sh ${host}`, host)).toBe(false);
+    assert.equal(commandRunsExecutable('/home/runner/.local/share/attn-app-other/bin/attn-pty-host', host), false);
+    assert.equal(commandRunsExecutable(`${host}-debug --socket /tmp/attn.sock`, host), false);
+    assert.equal(commandRunsExecutable(`/bin/sh ${host}`, host), false);
   });
 });
 
@@ -72,7 +67,6 @@ describe('registeredPtyHostPids', () => {
       4343: '/usr/bin/sleep 100',
       4444: '',
     };
-    expect(registeredPtyHostPids({ dataDir, commandLineFor: (pid) => commands[pid] ?? '' }))
-      .toEqual([4242]);
+    assert.deepEqual(registeredPtyHostPids({ dataDir, commandLineFor: (pid) => commands[pid] ?? '' }), [4242]);
   });
 });

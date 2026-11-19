@@ -202,21 +202,6 @@ EOF
 - **Start a scheduled or review automation by hand.** Run `./attn automation run <schedule-id>` on a guarded singleton: the run is `delivered` with a `manual:` `occurrence_key` and its own session, the guard's command has not run, and `./attn automation show <schedule-id>` says nothing about a superseded session. Run `./attn automation run <review-id>`: it exits 1 naming `--pr-url`. With `--pr-url https://mock.github.local/owner/repo/pull/42` the run is `delivered`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn automation runs <id>` after each run, `./attn agent peek <session>`, `bridge state '{"of":"automations"}'` after each drawer and form action, `bridge state '{"of":"desktops"}'` after each next-run press, and `bridge tree` with the drawer and the form open. Capture `bridge shot '{"path":"<P>/automations-drawer.png"}'` and `<P>/automations-form.png`, where `<P>` is the folder's path written out. Name each file for its way in, such as `automations-drawer-run-now-state.json`.
 
-### In the Tauri app (the rollback)
-
-Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) says. Its ways in are `session.nextRun` in `app/src/shortcuts/registry.ts`, the palette in `app/src/application/useAppCommands.tsx`, the sidebar icon in `app/src/application/useAppSidebarActions.tsx`, the drawer in `app/src/components/AutomationsPanel.tsx`, and the form in `app/src/components/automations/AutomationForm.tsx`.
-
-- **Open the drawer from the palette.** Open the palette as the README says, type `Show automations` and press Enter. `bridge automations_get_state` shows `present: true` and a definition named `Drive automation` with `trigger: "Manual"`, `enabled: true` and `canRunNow: true`.
-- **Run from the drawer.** Click `[data-testid="automation-definition-select-<id>"]` natively, then `[data-testid="automation-run-now-<id>"]` natively. `bridge automations_get_state` lists the earlier runs and the new one, which is `delivered` once its agent starts its first turn. `./attn automation runs <id>` agrees.
-- **Next run needing you.** Press ⌘⇧J: `bridge native_key '{"key":"j","modifiers":["command","shift"]}'`. `bridge get_state` shows `activeLeaf.sessionId` set to the session of one run that is owed a turn. Press ⌘⇧J again: the active session moves to the next run, and the order repeats once every run has been visited. Open the palette, type `Next run`, and press Enter on "Next run needing you": the active session moves on in the same order.
-- **Open from the sidebar.** Close the drawer by clicking `[aria-label="Close automations"]` natively, then click `[aria-label="Show Automations"]` natively. `bridge dom_wait '{"selector":"[data-testid=\"automations-panel\"]","timeoutMs":5000}'` matches.
-- **Turn it off and on.** In the drawer, click `[data-testid="automation-toggle-<id>"]` natively: `bridge automations_get_state` shows `enabled: true`, and so does `./attn automation list`.
-- **Edit in the form.** Click `[data-testid="automation-edit-<id>"]` natively. `bridge automation_form_get_state` shows `present: true` and `status: "ready"`. Click `[data-testid="automation-form-name"]` natively, run `bridge native_key '{"key":"a","modifiers":["command"]}'` and `bridge native_text '{"text":"Drive automation edited"}'`, then click `[data-testid="automation-form-save"]` natively. `./attn automation show <id>` prints `name: Drive automation edited`, with the same `launch` model.
-- **Set or remove a guard in the form.** Write `exit 0` to `$R/guard.sh`. Create a scheduled automation with cron `* * * * *` and folder `$R`. The Guard input (`[data-testid="automation-form-guard"]`) appears below the next runs. Enter `sh guard.sh` natively: the Next runs label reads `Next checks`. Save, then reopen: the command is still there. Clear it and save to remove the guard. Manual and GitHub triggers hide the input and omit the guard when saved.
-- **Read the guard in the drawer.** Open the drawer from the sidebar or palette. After each check, `[data-testid="automation-guard-check-<guard-id>"]` shows `Guard: launched`, `unchanged`, `empty`, or `failed`, the check's relative time, and its count since the last run. A failed check also shows `[data-testid="automation-failure-badge-<guard-id>"]` and its reason. The time updates when the drawer refreshes, with no ticking timer. The `automation-form` scenario creates a guard through native input, reloads it, and observes empty and failed checks without any run.
-- **Delete.** Click `[data-testid="automation-edit-<id>"]` natively, then `[data-testid="automation-form-delete"]` natively: it reads `Confirm delete`. Click it again: `./attn automation list` no longer lists `<id>`.
-- **Proof.** Keep `bridge automations_get_state` after each drawer action, `bridge get_state` after each ⌘⇧J, and `bridge capture_screenshot '{"path":"<P>/automations-tauri-drawer.png"}'` with the drawer open.
-
 ## Contexts
 
 - **Durability across restarts**: definitions, occurrences and runs are the daemon's records, and runs' sessions come back like any session. After downtime, a schedule with `catch_up: latest` starts the latest missed occurrence and one with `skip` waits for the next.
@@ -234,9 +219,8 @@ Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) s
 
 - Wire: `native/crates/attn-app/tests/wire/automations.rs`, `native/crates/attn-app/tests/wire/automations/form.rs`, `native/crates/attn-app/tests/wire/automations/runs.rs`, `internal/daemon/automation_*_wire_test.go`, `internal/daemon/automation_wire_test.go`, `internal/daemon/automations_test.go`, `internal/daemon/garden_profile_automations_wire_test.go`, `internal/daemon/sigma_wire_test.go` (a Sigma run).
 - Stack: `cmd/attnd/automation_profile_stack_test.go`, `internal/daemon/automation_codex_launch_stack_test.go`.
-- Scenario: `native-automation-form`, `native-automation-surface`, and in the Tauri app (the rollback) `automation-form` and `automation-surface`.
+- Scenario: `native-automation-form`, `native-automation-surface`.
 - Kernel: `internal/automation/automation_test.go`, `internal/automation/schedule_test.go`, `internal/store/automations_test.go`.
-- App: the Tauri app's (the rollback) `app/src/App.automations.test.tsx`, `app/src/App.automationActions.test.tsx`, `app/src/App.automationForm.test.tsx`, `app/src/App.automationSelection.test.tsx`, `app/src/components/automations/automationFormModel.test.ts`, `app/src/utils/automationRuns.ordering.test.ts`.
 
 ## Gotchas
 

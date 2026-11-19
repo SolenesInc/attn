@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -408,14 +407,14 @@ func TestExplicitFsRootsAreOnlyForTheAuthenticatedAppAndNeverTheDataDir(t *testi
 
 	impostor := w.Connect(protocol.ClientHelloMessage{
 		Cmd:              protocol.CmdClientHello,
-		ClientKind:       "not-tauri-app",
+		ClientKind:       "not-the-native-app",
 		Version:          "protocol-" + protocol.ProtocolVersion,
 		Capabilities:     []string{},
 		ClientToken:      protocol.Ptr(config.ClientToken()),
 		BrowserHostToken: protocol.Ptr(config.BrowserHostToken()),
-	}, http.Header{"Origin": {"tauri://localhost"}})
+	}, nil)
 	testworld.Await[protocol.InitialStateMessage](impostor, protocol.EventInitialState, nil)
 	if listed := fsAskList(impostor, external, ""); listed.Success || !strings.Contains(protocol.Deref(listed.Error), "authenticated") {
-		t.Errorf("a client that is not the tauri app listed an explicit root: %+v (%s)", listed.Entries, protocol.Deref(listed.Error))
+		t.Errorf("a client that is not the native app listed an explicit root: %+v (%s)", listed.Entries, protocol.Deref(listed.Error))
 	}
 }

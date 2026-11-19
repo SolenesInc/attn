@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
@@ -57,7 +57,7 @@ async function ask(query) {
 }
 
 try {
-  await runner.step('launch_app', () => launchFreshNativeAppAndConnect(client, observer));
+  await runner.step('launch_app', () => launchFreshAppAndConnect(client, observer));
   await runner.step('widen_the_window_for_two_columns', () => driver.setWindowBounds({ x: 0, y: 0, width: 1600, height: 1000 }));
 
   let desktop;

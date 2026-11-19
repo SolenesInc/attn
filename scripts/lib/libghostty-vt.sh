@@ -9,8 +9,7 @@
 # is safe to source. Callers must set -euo pipefail themselves.
 #
 # PER-PLATFORM: the library links into the daemon on darwin/arm64 AND the two
-# Linux tuples (the daemon runs headless on Linux; only the Tauri app is
-# Mac-only). Every prebuilt asset, output dir, and lock sha256 is keyed by
+# Linux tuples (the daemon runs headless on Linux). Every prebuilt asset, output dir, and lock sha256 is keyed by
 # <goos>_<goarch>; the source identity `key` (sha256 of the pin) is shared
 # across platforms because the same source produces every target.
 

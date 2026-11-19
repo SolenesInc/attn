@@ -85,32 +85,6 @@ Preconditions:
 - **Settings and a new agent from home.** Run `bridge press '{"target":{"key":"home.settings"}}'` and `bridge press '{"target":{"key":"home.new"}}'`: each opens its feature, whose recipe is in its own file ([settings.md](settings.md), [agent-launch.md](agent-launch.md)).
 - **Proof.** In `$P`, keep `bridge state '{"of":"window"}'` after each way home, the `./attn` commands' output and exit codes, and `bridge tree` after each step on home. Capture `bridge shot '{"path":"<P>/home.png"}'` with the agent in a state group, `<P>/home-all-settled.png` with "All settled", `<P>/critical-strip.png` with the strip, `<P>/notifications.png` with the panel open and `<P>/whats-new.png` with the tour open, with `<P>` written out. Name each file for its way in, such as `home-key-window.json`.
 
-### In the Tauri app (the rollback)
-
-Install it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) says. Launch it fresh with `bridge --launch --wait-ready ping`. Run the first two steps before the baseline's `bridge dismiss_whats_new`, which dismisses the intro and its banner. Afterwards, the command changes nothing. The CLI, `wsctl` and plugin steps above are the same.
-
-- **What's new on a fresh app.** `bridge dom_wait '{"selector":".whats-new-modal","timeoutMs":5000}'` matches, and `bridge dom_text '{"selector":".whats-new-count"}'` reads `1 of 7`. Run `bridge native_key '{"key":"ArrowRight"}'`: it reads `2 of 7`. Run `bridge native_key '{"key":"Enter"}'`: it reads `3 of 7`. Run `bridge native_key '{"key":"ArrowLeft"}'`: it reads `2 of 7`. Run `bridge native_key '{"key":"Escape"}'`: `.whats-new-modal` is gone, and `[data-testid="intro-banner"]` shows on home.
-- **Replay and dismiss the banner.** Click `.intro-banner-replay` natively, its point from `bridge dom_native_point`: the intro opens again. Press Escape. Click `[aria-label="Dismiss the intro banner"]` natively: `bridge dom_wait '{"selector":"[data-testid=\"intro-banner\"]","absent":true,"timeoutMs":5000}'` matches.
-- **What's new from the palette.** Run `bridge native_key '{"key":"k","modifiers":["command","shift"]}'`, `bridge dom_wait '{"selector":"[role=\"combobox\"][aria-label=\"Commands\"]","focused":true,"timeoutMs":5000}'`, `bridge native_text '{"text":"whats new"}'` and `bridge native_key '{"key":"Enter"}'`. `.whats-new-modal` matches. Click `[aria-label="Close what's new"]` natively: `.whats-new-modal` is gone.
-- **Home with the key.** Select `home-a` for setup with `bridge select_session '{"sessionId":"home-a"}'`, then run `bridge native_key '{"key":"h","modifiers":["command","shift"]}'`. `bridge get_state` shows `view: "dashboard"`, and `bridge home_get_state` shows `onScreen: true`, `allSettled: false` and `home-a` in `stateGroupSessionIds`.
-- **Open an agent from home.** Click `[data-testid="session-home-a"]` natively. `bridge get_state` shows `view: "session"` and `activeLeaf.sessionId: "home-a"`.
-- **Home from the palette and the sidebar.** Open the palette as above, type `Home` and press Enter: `view` is `"dashboard"`. Click `[aria-label="Open home-a"]` in the sidebar to leave, then click `[data-testid="sidebar-home"]` natively: `view` is `"dashboard"` again. Open `home-a` the same way, press ⌘B, and click `[aria-label="Home"]` on the rail natively: `view` is `"dashboard"`. Press ⌘B to expand.
-- **Snoozed agents.** After the snooze, `bridge home_get_state` shows `snoozed.present: true` and `expanded: false`. Click `[data-testid="session-group-snoozed-header"]` natively: `expanded` is true, and `rows` holds `home-a` with its due time in `snoozedUntil` and `canUnsnooze: true`. Click `[data-testid="session-unsnooze-home-a"]` natively: `snoozed.present` is false.
-- **Your turn.** With queue flow on, `bridge dom_wait '{"selector":"[data-testid=\"session-group-turns\"] [data-testid=\"session-home-a\"]","timeoutMs":5000}'` matches.
-- **All settled, then the next turn.** Select `home-a` and press ⌘⇧E. `bridge home_get_state` shows `allSettled: true`, `detail: "Nothing is running."` and `followNextTurn: true`. After the `question` input, `bridge get_state` shows `activeLeaf.sessionId: "home-a"`. Settle again and click `[data-testid="follow-next-turn"] input` natively: `followNextTurn` is false.
-- **The notifications popover.** Click `[aria-label="Show Notifications"]` natively. `bridge notifications_get_state` shows `present: true` and, on the baseline, `empty: "No notifications."`. Open the palette, type `Hide notifications` and press Enter: `present` is false. Type `Show notifications` and press Enter: `present` is true. Clicking `[aria-label="Hide Notifications"]` natively leaves `present: true`: the open popover's full-window backdrop (`.notifications-panel-backdrop`) covers the bell. Close the popover with `Hide notifications` from the palette before checking another control, since the popover also intercepts clicks on home.
-- **Read a notification.** With `home-crash` parked, the bell shows `[aria-label="Unread notifications"]`. Open the popover: `rows` lists the notification with `unread: true`. Click its `.notification-row-head` natively: the row expands and `unread` turns false. The app also shows `button.critical-strip`, reading `Plugin stopped: home-crash`, at the top of the sidebar. Click the strip natively: the popover opens with that row. When a second row arrives unread, click `.notifications-panel-markall` natively: every row's `unread` is false and the dot is gone.
-- **A toast.** After `Sort desktops` from the palette, `bridge dom_wait '{"selector":".toast","textIncludes":"Desktops sorted","timeoutMs":5000}'` matches. Click `.toast-row button` natively: `bridge dom_text '{"selector":".toast-row button small"}'` reads `✓ Done`.
-- **Settings from home.** Go home with ⌘⇧H and click `[data-testid="settings-button"]` natively: `bridge dom_wait '{"selector":"[data-testid=\"settings-nav-general\"]","timeoutMs":5000}'` matches. Press Escape.
-- **Proof.** Keep `bridge home_get_state` after each step on home, `bridge notifications_get_state` with the popover open and `bridge get_state` after each way home. Capture `bridge capture_screenshot '{"path":"<P>/home-desktop-flow.png"}'` with the agent in a state group, `<P>/home-all-settled.png` with the banner, and `<P>/whats-new.png` with the intro open.
-
-Gotchas in the Tauri app:
-
-- A fresh app opens What's new over home, and What's new holds the palette and most keys. The baseline's `bridge dismiss_whats_new` also dismisses the replay banner, so drive the intro first or not at all on that app.
-- `bridge home_get_state` returns `shortcutFooter`, which reads a footer that home no longer has. The value is always false.
-- A toast fades six seconds after it appears unless the pointer or focus is on it. Click it right away, or read it with `bridge dom_wait` first.
-- Working but wrong: home's session rows are not buttons, so Tab never reaches them. From the keyboard, the user reaches agents with ⌘J, ⌘K or the sidebar. The state groups say "Pending approval" for needs approval, an older name.
-
 ## Contexts
 
 - **Durability across restarts**: home reads the daemon's sessions, turns and snoozes, so it shows the same after any restart. Notifications and what the user read are the daemon's records. The app remembers in its own storage that the user saw What's new and its banner. The follow checkbox is not kept. attn ticks the checkbox only when the user settles or snoozes the last turn, and clears it when the user goes anywhere.
@@ -124,9 +98,8 @@ Gotchas in the Tauri app:
 ## Tests
 
 - Wire: `native/crates/attn-app/tests/wire/home.rs`, `native/crates/attn-app/tests/wire/notifications.rs`, `native/crates/attn-app/tests/wire/whats_new.rs`, `internal/daemon/notifications_wire_test.go`; a session's failed title reaching only its profile in `internal/daemon/session_title_wire_test.go`.
-- Scenario: `native-agent-queue` (All settled and wake), `focusless-native` (parked macOS native input); in the Tauri app (the rollback) `home-dock`.
+- Scenario: `native-agent-queue` (All settled and wake).
 - Kernel: `internal/store/notifications_test.go`, `internal/daemon/notifications_render_test.go`.
-- App, the Tauri app's (the rollback): `app/src/App.dashboard.test.tsx`, `app/src/App.homeDock.test.tsx`, `app/src/App.notifications.test.tsx`, `app/src/App.criticalNotifications.test.tsx`, `app/src/App.whatsNew.test.tsx`, `app/src/components/Toast.lifecycle.test.tsx`.
 
 ## Gotchas
 

@@ -3,8 +3,8 @@ use attn_protocol::Session;
 use attn_ui::Tokens;
 use attn_ui::blocks::{Block, Notice};
 
-/// Where each session whose conversation another terminal also has open says it is open, as
-/// the Tauri app words it, from the desktop that shows the session.
+/// Where each session whose conversation another terminal also has open says it is open, from
+/// the desktop that shows the session.
 pub(super) fn notices(
     sessions: &[Session],
     desktops: &[Desktop],

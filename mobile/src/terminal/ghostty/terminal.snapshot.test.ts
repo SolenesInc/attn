@@ -1,5 +1,5 @@
 // @vitest-environment node
-// Regenerate the fixture with ATTN_UPDATE_FIXTURES=1 go test ./internal/ghosttyvt.
+// A copy of internal/ghosttyvt/testdata/native-snapshot.bin; ATTN_UPDATE_FIXTURES=1 go test ./internal/ghosttyvt regenerates that one.
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { beforeAll, describe, expect, it } from 'vitest'

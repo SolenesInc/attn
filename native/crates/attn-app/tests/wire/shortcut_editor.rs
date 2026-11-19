@@ -482,7 +482,7 @@ fn reassigning_takes_the_keys_and_unbinds_their_holder() {
     assert!(world.runtime_is_at_rest());
 }
 
-/// `chord` as the Tauri app stores a combination.
+/// `chord` as `keybindings_config` stores a combination.
 fn stored(chord: Chord) -> Value {
     let spec = chord.to_string();
     let key = spec.rsplit('+').next().unwrap();
@@ -1193,7 +1193,7 @@ fn an_emptied_dock_says_so_and_the_filter_hides_the_section() {
 }
 
 #[test]
-fn each_category_lists_its_shortcuts_in_the_tauri_apps_order() {
+fn each_category_lists_its_shortcuts_in_a_fixed_order() {
     let mut world = start(None);
     open_editor(&mut world);
     let rows = |category: &str| -> Vec<String> {

@@ -360,7 +360,7 @@ fn a_passage_selected_in_a_document_is_labelled_from_the_toolbar_and_kept_in_the
     );
 }
 
-/// The Tauri reader's content hash: FNV-1a over UTF-16 units, low byte first.
+/// A document's content hash: FNV-1a over UTF-16 units, low byte first.
 fn content_hash(source: &str) -> String {
     let mut hash: u32 = 0x811c_9dc5;
     for unit in source.encode_utf16() {
@@ -372,7 +372,7 @@ fn content_hash(source: &str) -> String {
     format!("{hash:08x}")
 }
 
-/// A mark the daemon already holds on DOC's words `exact`, as the Tauri reader anchors it.
+/// A mark the daemon already holds on DOC's words `exact`.
 fn held(id: &str, kind: &str, exact: &str, text: Option<&str>) -> Value {
     let paragraph = "Cache the tile layout before the first paint.";
     let start = paragraph.find(exact).unwrap();

@@ -31,9 +31,10 @@ decision for the user. If the request did not say, ask with `attn ask`.
 1. In the `feature(...)` entry, set `Stage: OnByDefault` and `Where` to the
    Settings page that holds the switch. The feature then leaves the
    Experimental page, and a stored `false` keeps working.
-2. Render a `FeatureSwitch` on that page, as Asks does in
-   `SettingsModalSections.tsx`. A feature with its own page in
-   `useSettingsModalState.ts` keeps that page and its switch.
+2. Name the feature on that page's entry in
+   `native/crates/attn-app/src/settings/sections.rs`, as Outposts does with
+   `feature_item`, so the page head carries its switch. A feature with its own
+   page keeps that page and its switch.
 3. Remove "experimental" and "off by default" from `Description`, `Summary` and
    the docs.
 
@@ -100,23 +101,23 @@ assumes off.
 | Surface | Where |
 |---|---|
 | Registry | `internal/setting/settings.go`; `internal/prompttest/testdata/settings-registry.json` and `settings-help.json` |
-| Generated | `make generate-types` rewrites `app/src/types/settings.generated.ts`, `cli/protocol/src/go_values.rs` and `cli/testdata/` |
+| Generated | `make generate-types` rewrites `cli/protocol/src/go_values.rs` and `cli/testdata/` |
 | Daemon | Reads in `internal/daemon` and `internal/store`, `Refusal()` errors, and the session launch environment in `cmd/attn` and `internal/config` |
-| App | `BoolSetting.<name>` and `isOn` callers, its page or nav entry in `useSettingsModalState.ts`, `SettingsModalSections.tsx`, and the palette commands that `useAppCommands.tsx` builds from `FEATURES` |
+| App | `setting::on` callers in `native/`, its page or nav entry in `native/crates/attn-app/src/settings/sections.rs` and `pages.rs`, and the palette commands that `native/crates/attn-app/src/palette/commands.rs` builds from `FEATURES` |
 | CLI | `attn settings`, including `list --features`, and any command that refuses while the feature is off |
 | Agent guidance | `FlagField` in `internal/prompts/session.go`, content under `internal/prompts/content`, and scenarios in `internal/prompts/scenarios`; then `make generate-prompts` |
 | Outposts | Home settings copy to outposts, so check for code that reads the copy or a remote that sets it |
 | Phone | `mobile/`, and the daemon's phone gateway |
 | User docs | `docs/guide/README.md`, whose rows say "Experimental:", `docs/guide/reference/`, and `website/src/content/features/` |
 | Maintainer docs | `docs/internal/`, and `.agents/skills/drive-attn/features/`, both the feature's file and its entry in `README.md` |
-| Tests | Go wire and stack tests, app tests including `SettingsModal.experimental.test.tsx`, and `app/scripts/real-app-harness` scenarios and `scenarioCatalog.mjs`, and `app/scripts/onboarding-rehearsal` |
+| Tests | Go wire and stack tests, the app's wire tests including `native/crates/attn-app/tests/wire/settings.rs`, and `app/scripts/real-app-harness` scenarios and `scenarioCatalog.mjs`, and `app/scripts/onboarding-rehearsal` |
 
 Removing a feature with its own files means deleting those files, the scenarios
 that only cover it, and its feature map file.
 
 ## Find code the removal left unused
 
-Deleting the reads strands the helpers, types, events and CSS behind them. The
+Deleting the reads strands the helpers, types, events and styles behind them. The
 compiler catches the first layer only, so keep going until a pass finds nothing:
 
 1. Save the Go report before you start, after building the native library that
@@ -130,9 +131,9 @@ compiler catches the first layer only, so keep going until a pass finds nothing:
 2. After the removal, run it again and read `comm -13` of the two reports.
    Every new line is either code to delete or something only tests call. Delete
    tests that only covered the removed path.
-3. For the app, `pnpm --dir app run typecheck` reports unused locals. Exports
-   are not covered, so search for each export of the files you changed. Also
-   search for CSS classes the removed components used.
+3. For the app, `cd native && cargo clippy --workspace --all-targets -- -D warnings`
+   reports unused code inside a crate. Public items are not covered, so search
+   for each public item of the files you changed.
 4. Check what the removal orphans outside the type system: settings read only
    by this feature, protocol fields, bus events, database tables and columns,
    and environment variables. A protocol or bus change follows `AGENTS.md`.

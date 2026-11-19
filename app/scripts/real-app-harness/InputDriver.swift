@@ -169,8 +169,8 @@ func parseOptions() throws -> Options {
               InputDriver.swift window_park --visible-px 200 [--bundle-id ...] [--window-title <substring>]
 
             --window-title matches windows owned by --bundle-id whose title CONTAINS the given
-            substring (case-insensitive). It targets secondary Tauri windows that Accessibility
-            never enumerates; without it, the largest layer-0 onscreen window is used, as before.
+            substring (case-insensitive), such as a secondary panel; without it, the largest
+            layer-0 onscreen window is used.
             """)
         default:
             throw DriverError.invalidArgument("Unknown argument: \(arg)")
@@ -389,10 +389,6 @@ func ensureAccessibility(prompt: Bool) throws {
 // contains it (case-insensitive). Among the remaining candidates, layer-0
 // windows are preferred, then the largest by area — same ordering the driver
 // has always used to pick "the" window when there is no title filter.
-//
-// AppleScript/Accessibility never enumerate attn's secondary Tauri windows at
-// all, even while they are visibly onscreen, so CGWindowList plus a title
-// filter is the only way to target them.
 func resolveWindow(bundleId: String, titleSubstring: String? = nil) throws -> (CGWindowID, CGRect) {
     let pid = try runningPID(bundleId: bundleId)
     let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
@@ -477,10 +473,7 @@ func mainWindowBounds(bundleId: String, titleSubstring: String? = nil) throws ->
 }
 
 // Return the CGWindowID of the resolved onscreen window owned by the bundle
-// (see resolveWindow). AppleScript's `count of windows of application process
-// ...` returns 0 for Tauri/wry apps even while a visible window exists, so
-// callers needing a reliable "window exists now" gate should use CGWindowList
-// instead.
+// (see resolveWindow).
 func mainWindowID(bundleId: String, titleSubstring: String? = nil) throws -> CGWindowID {
     try resolveWindow(bundleId: bundleId, titleSubstring: titleSubstring).0
 }
@@ -787,8 +780,8 @@ func postText(_ text: String) throws {
 
 // Reposition the first AX window so only `visiblePx` pixels remain on-screen at
 // the right edge of the main display; the rest extends off the right side. Used
-// by the harness to keep attn "visible" (so WKWebView keeps ticking) while
-// occupying a narrow strip instead of the full display.
+// by the harness to keep attn visible while occupying a narrow strip instead of
+// the full display.
 func windowPark(bundleId: String, visiblePx: Int, titleSubstring: String? = nil) throws {
     let (_, appElement) = try axApplication(bundleId: bundleId)
     guard let raw = axCopyAttribute(appElement, kAXWindowsAttribute as String),
@@ -798,11 +791,8 @@ func windowPark(bundleId: String, visiblePx: Int, titleSubstring: String? = nil)
         throw DriverError.eventCreationFailed("No AX windows for \(bundleId)")
     }
 
-    // Accessibility only ever exposes attn's main window (it does not
-    // enumerate secondary Tauri windows at all), so a title filter here can
-    // only narrow among what AX already sees. It exists for interface
-    // symmetry with the other commands and to fail loudly on a typo rather
-    // than silently parking the wrong window.
+    // A title filter here narrows among the windows Accessibility sees, and
+    // fails loudly on a typo rather than silently parking the wrong window.
     let window: AXUIElement
     if let titleSubstring, !titleSubstring.isEmpty {
         let needle = titleSubstring.lowercased()

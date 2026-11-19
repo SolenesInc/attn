@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { assertProductionRunAllowed, bundleIdentifierForInstance } from './harnessInstance.mjs';
-import { appPlatform, createWindowDriver } from './platform.mjs';
+import { appPlatform } from './platform.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -94,23 +94,6 @@ end tell
   return parseWindowBoundsOutput(output, bundleId);
 }
 
-// Two tiles at the 480px minimum width behind the 240px sidebar need a 1200px
-// window; this leaves room for both to be wider than that.
-export const SPLIT_FRIENDLY_WINDOW = { width: 1440, height: 900 };
-
-export async function widenWindowForSplitPanes(client, target = SPLIT_FRIENDLY_WINDOW) {
-  const current = await getFrontWindowBounds(client.bundleId, { client });
-  if ((current?.width || 0) >= target.width && (current?.height || 0) >= target.height) {
-    return current;
-  }
-  return setFrontWindowBounds({
-    x: 80,
-    y: 80,
-    width: Math.max(current?.width || 0, target.width),
-    height: Math.max(current?.height || 0, target.height),
-  }, { client });
-}
-
 export async function getFrontWindowBounds(bundleId = null, options = {}) {
   const targetBundleId = bundleId || options.client?.bundleId || bundleIdentifierForInstance();
   assertProductionRunAllowed({ bundleId: targetBundleId });
@@ -121,7 +104,7 @@ export async function getFrontWindowBounds(bundleId = null, options = {}) {
 
   if (appPlatform.os === 'linux') {
     const appPath = options.appPath || options.client?.appPath;
-    const driver = options.driver || createWindowDriver({ appPath, client: options.client });
+    const driver = options.driver || appPlatform.createWindowDriver({ appPath, client: options.client });
     return {
       ...await driver.windowGeometry(),
       processName: 'attn-app-window',
@@ -209,7 +192,7 @@ export async function setFrontWindowBounds(targetBounds, options = {}) {
 
   if (appPlatform.os === 'linux') {
     const appPath = options.appPath || options.client?.appPath;
-    const driver = options.driver || createWindowDriver({ appPath, client: options.client });
+    const driver = options.driver || appPlatform.createWindowDriver({ appPath, client: options.client });
     return {
       ...await driver.setWindowBounds(normalizedTarget),
       processName: 'attn-app-window',
@@ -344,23 +327,6 @@ async function readPngPixelDimensions(filePath) {
   return parseSipsPixelDimensions(stdout);
 }
 
-export async function captureScreenshotData(outputPath, { client, selector } = {}) {
-  if (!client || typeof client.request !== 'function') {
-    throw new Error('captureScreenshotData requires a UI automation client');
-  }
-  const result = await client.request('capture_screenshot_data', selector ? { selector } : {});
-  if (typeof result?.pngBase64 !== 'string' || result.pngBase64.length === 0) {
-    throw new Error('capture_screenshot_data returned no PNG data');
-  }
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-  fs.writeFileSync(outputPath, Buffer.from(result.pngBase64, 'base64'));
-  return {
-    source: 'dom',
-    path: outputPath,
-    ...(selector ? { selector } : {}),
-  };
-}
-
 export async function captureFrontWindowScreenshot(outputPath, options = {}) {
   const bundleId = options.bundleId || options.client?.bundleId || bundleIdentifierForInstance();
   assertProductionRunAllowed({ bundleId });
@@ -370,7 +336,7 @@ export async function captureFrontWindowScreenshot(outputPath, options = {}) {
 
   if (appPlatform.os === 'linux') {
     const appPath = options.appPath || options.client?.appPath;
-    const driver = options.driver || createWindowDriver({ appPath, client: options.client });
+    const driver = options.driver || appPlatform.createWindowDriver({ appPath, client: options.client });
     const needsTransform = Boolean(options.crop) || (options.maxDim !== undefined && options.maxDim !== null);
     const capturedPath = needsTransform ? `${outputPath}.full.png` : outputPath;
     await driver.screenshot(capturedPath);

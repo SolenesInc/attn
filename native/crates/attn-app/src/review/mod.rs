@@ -37,7 +37,7 @@ use frames::{Frame, MapPlace, Side};
 /// from the review's edges.
 const PANEL_INSET: f32 = 24.0;
 
-/// The review's card, as the Tauri review reader widens the markdown reader's.
+/// The review's card, wider than the markdown reader's.
 pub(crate) const CARD_MAX_WIDTH: f32 = 1180.0;
 /// How far the moved notes stand under the review's last part, at least.
 const MOVED_ABOVE: f32 = 21.0;
@@ -1029,7 +1029,7 @@ pub(crate) fn body(
 }
 
 /// How wide a prose part of kind `block` runs, centered in the card: the review's measure for
-/// the text blocks the Tauri review caps; a code block, table or anything else takes the card.
+/// text blocks; a code block, table or anything else takes the card.
 fn prose_width(block: document::Prose) -> f32 {
     match block {
         document::Prose::Other => f32::INFINITY,
@@ -1037,7 +1037,7 @@ fn prose_width(block: document::Prose) -> f32 {
     }
 }
 
-/// `panel` floating over the reader as the Tauri app's review sheets do: centered across,
+/// `panel` floating over the reader as a review sheet: centered across,
 /// `down` of the reader's height from its top, `share` of its width and at most `width` points.
 /// A panel that can shrink stops as far above the reader's foot.
 fn floating(panel: El, down: f32, width: f32, share: f32) -> El {

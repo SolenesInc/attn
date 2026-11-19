@@ -1230,7 +1230,7 @@ fn a_document_tiles_header_focuses_it_and_every_tiles_header_closes_it() {
     );
     assert!(
         header_label(&world, "tile.a.close").is_none(),
-        "an agent's header has no close button, as in the Tauri app"
+        "an agent's header has no close button"
     );
 
     world.gesture(|app| app.click(Target::key("tile.m.focus")));
@@ -1257,7 +1257,7 @@ fn a_document_tiles_header_focuses_it_and_every_tiles_header_closes_it() {
     );
     assert!(
         header_label(&world, "tile.w.focus").is_none(),
-        "only a document's header has a focus button, as in the Tauri app"
+        "only a document's header has a focus button"
     );
     world.gesture(|app| app.click(Target::key("tile.w.close")));
     assert_eq!(
@@ -4306,7 +4306,7 @@ fn a_column_a_divider_drag_sends_to_the_shelf_leaves_without_sliding_with_the_ro
         leaving
             .iter()
             .all(|&x| x >= leaving.first().copied().unwrap_or(0.0)),
-        "a leaves where it was, as the Tauri app never animates a divider drag: {leaving:?}"
+        "a leaves where it was, as a divider drag never animates: {leaving:?}"
     );
 }
 

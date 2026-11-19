@@ -1,5 +1,4 @@
-//! The colors of highlighted code: GitHub's Default themes, which the Tauri app's Shiki draws
-//! code in whatever the color scheme.
+//! The colors of highlighted code: GitHub's Default themes, whatever the color scheme.
 
 use rune_kit::syntax::{Syntax, SyntaxTheme};
 

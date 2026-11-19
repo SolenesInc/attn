@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::action::Action;
 
-/// The daemon setting that holds the user's rebinds and the dock, shared with the Tauri app.
+/// The daemon setting that holds the user's rebinds and the dock.
 pub const SETTING: &str = "keybindings_config";
 
 /// The keys that run an action: one chord, or a leader chord then a second key.
@@ -426,7 +426,7 @@ fn renamed(id: &str) -> String {
     }
 }
 
-/// The keys a binding stored in `keybindings_config` runs on, as the Tauri app stores it:
+/// The keys a binding stored in `keybindings_config` runs on:
 /// `{key, code?, meta?, shift?, ctrl?, alt?}`, or `{leader, then}` with one of those each.
 pub(crate) fn parse_binding(value: &Value, platform: Platform) -> Option<Binding> {
     if let (Some(leader), Some(then)) = (value.get("leader"), value.get("then")) {

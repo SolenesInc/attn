@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
@@ -93,7 +93,7 @@ try {
   await runner.step('launch_app', async () => {
     await client.quitApp();
     cli('daemon', 'stop');
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     queueDaemonSettingRestore(observer, SESSIONS_FILTERS_SETTING);
     observer.send({ cmd: 'set_setting', key: SESSIONS_FILTERS_SETTING, value: '' });
     await observer.waitFor(() => (observer.getSetting(SESSIONS_FILTERS_SETTING) ?? '') === '', 'the remembered filters cleared');

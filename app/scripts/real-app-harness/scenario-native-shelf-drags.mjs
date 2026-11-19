@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -159,7 +159,7 @@ async function stackOnTheShelf() {
 }
 
 try {
-  await runner.step('launch_app', () => launchFreshNativeAppAndConnect(client, observer));
+  await runner.step('launch_app', () => launchFreshAppAndConnect(client, observer));
   await runner.step('size_the_window_and_the_narrowest_width', async () => {
     const narrowest = observer.getSetting('narrowest_tile_cols');
     runner.registerCleanup('restore_narrowest', () => observer.send({ cmd: 'set_setting', key: 'narrowest_tile_cols', value: narrowest }));

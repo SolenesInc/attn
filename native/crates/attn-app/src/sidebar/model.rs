@@ -48,7 +48,7 @@ impl AgentState {
         }
     }
 
-    /// How the Tauri app says it after the harness's name: "Claude · waiting input".
+    /// How it reads after the harness's name: "Claude · waiting input".
     pub fn spoken(self) -> &'static str {
         match self {
             AgentState::WaitingInput => "waiting input",
@@ -206,7 +206,7 @@ pub struct TileRow {
 }
 
 impl TileRow {
-    /// The word the row shows after the title, as the Tauri app's `tileKindLabel`.
+    /// The word the row shows after the title.
     pub fn word(&self) -> &'static str {
         match self.kind.as_str() {
             "seed" => "SEED",
@@ -217,7 +217,7 @@ impl TileRow {
         }
     }
 
-    /// The icon the row leads with, as the Tauri app's `tileKindLabel`.
+    /// The icon the row leads with.
     pub fn icon(&self) -> &'static rune::Icon {
         match self.kind.as_str() {
             "seed" => &attn_ui::icon::GARDEN,
@@ -276,8 +276,7 @@ pub fn tile_title(
     }
 }
 
-/// What a review document's tab names it: its file's name, or for a seed its id, as the Tauri
-/// app's review tabs.
+/// What a review document's tab names it: its file's name, or for a seed its id.
 pub fn document_tab(kind: &str, params: &str) -> String {
     let path = if kind == "markdown" {
         path_in(params)
@@ -647,8 +646,7 @@ pub const SESSION_EMOJIS: [&str; 70] = [
     "🗻", "🏝️", "🏔️", "🛶", "🚲", "🛼",
 ];
 
-/// The emoji a launching agent leads with: the Tauri app's `pickSessionEmoji`, FNV-1a over the
-/// id's UTF-16 units.
+/// The emoji a launching agent leads with, picked by FNV-1a over the id's UTF-16 units.
 pub fn session_emoji(id: &str) -> &'static str {
     if id.is_empty() {
         return SESSION_EMOJIS[0];

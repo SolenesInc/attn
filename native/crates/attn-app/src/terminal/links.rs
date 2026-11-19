@@ -5,11 +5,10 @@ use rune::{Mods, Tx};
 
 use super::{Term, Terminals};
 
-/// The underline's opacity over the text's color, as the Tauri terminal draws it.
+/// The underline's opacity over the text's color.
 const UNDERLINE_ALPHA: u8 = 204;
 
-/// ⌘ or Ctrl, which turns a click on a link in a terminal into opening it, as the Tauri
-/// terminal reads `metaKey || ctrlKey`.
+/// ⌘ or Ctrl, which turns a click on a link in a terminal into opening it.
 pub(crate) fn accelerator(mods: Mods) -> bool {
     mods.logo || mods.ctrl
 }
@@ -145,8 +144,7 @@ impl Terminals {
         term.view.seeds = None;
     }
 
-    /// Reads each stale hover's link again where its pointer rests, as the Tauri terminal does
-    /// before it draws.
+    /// Reads each stale hover's link again where its pointer rests, before the terminal draws.
     pub(super) fn refresh_hovers(&mut self) {
         let metrics = self.metrics();
         let home = home();
@@ -185,8 +183,7 @@ impl Terminals {
     }
 }
 
-/// Opens `target` as the Tauri terminal's opener allows: a web, mail or phone link in its
-/// handler, a path with the system's opener.
+/// Opens `target`: a web, mail or phone link in its handler, a path with the system's opener.
 fn open(opening: Open, tx: &mut Tx) {
     let _ = match opening {
         Open::Url(uri) if uri.starts_with("tel:") => tx.open_uri(&uri),
@@ -206,8 +203,8 @@ fn screen_cell(term: &mut Term, metrics: &Metrics, at: (f32, f32)) -> Option<(u3
     (col < size.0).then(|| (term.vt.view_top() + u32::from(row), col))
 }
 
-/// The link over screen cell `cell`, as the Tauri terminal's hover finds it: an OSC 8
-/// hyperlink first, since its label may hold spaces, then a URL, then a path that exists.
+/// The link over screen cell `cell`: an OSC 8 hyperlink first, since its label may hold spaces,
+/// then a URL, then a path that exists.
 fn find(term: &mut Term, (row, col): (u32, u16), home: Option<&str>) -> Option<Found> {
     let (cols, rows) = term.vt.size();
     let top = term.vt.view_top();

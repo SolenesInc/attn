@@ -6,11 +6,11 @@ use rune_kit::TextInput;
 use crate::State;
 use crate::terminal::{Filtered, Filtering, filter_field_key};
 
-/// The filter field's width, as the Tauri terminal's.
+/// The filter field's width.
 const FIELD_W: f32 = 200.0;
 
-/// Terminal `id`'s block filter over its top right corner, as the Tauri terminal floats it: the
-/// field, Match case, the count and Close, and below them the output lines that hold the query,
+/// Terminal `id`'s block filter floating over its top right corner: the field, Match case, the
+/// count and Close, and below them the output lines that hold the query,
 /// each a press away from its row.
 pub(super) fn panel(id: &str, filtering: &Filtering, results_height: f32, t: &Tokens) -> El {
     let (edit, edited, keyed) = (id.to_owned(), id.to_owned(), id.to_owned());

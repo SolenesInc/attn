@@ -90,8 +90,8 @@ pub(crate) fn inline(state: &State, t: &Tokens) -> Option<El> {
 }
 
 /// How far down the window an empty desktop's launcher starts, as a share of the window's
-/// height: `.empty-desktop-launcher`'s `12vh`. The desktop starts under the title bar, so the
-/// title bar's share comes first and the desktop's share follows.
+/// height. The desktop starts under the title bar, so the title bar's share comes first and the
+/// desktop's share follows.
 const EMPTY_DESKTOP_DROP: f32 = 0.12;
 
 fn frame(state: &State, picker: &Picker, t: &Tokens) -> El {
@@ -315,8 +315,8 @@ pub(crate) fn catalog_note(state: &State, which: Which, t: &Tokens) -> Option<El
     }
 }
 
-/// The classic picker's two bars, Tauri's `.picker-agent-bar` and `.picker-chief-bar`: each
-/// names its control at the left and holds it at the right edge.
+/// The classic picker's two bars, the agent's and the chief's: each names its control at the
+/// left and holds it at the right edge.
 fn controls(state: &State, which: Which, choice: &Choice, offer: &Offer, t: &Tokens) -> El {
     let toggle = harness_toggle(state, which, agent_options(state, choice, offer), t);
     let yolo = yolo_control(which, &yolo(state, choice, offer), spoken("alt+q"), t);

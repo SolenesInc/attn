@@ -10,14 +10,12 @@ const Schema = "attn.test-receipt/v1"
 type Runner string
 
 const (
-	RunnerGo         Runner = "go"
-	RunnerVitest     Runner = "vitest"
-	RunnerPlaywright Runner = "playwright"
-	RunnerNative     Runner = "native"
-	RunnerCargo      Runner = "cargo"
+	RunnerGo     Runner = "go"
+	RunnerNative Runner = "native"
+	RunnerCargo  Runner = "cargo"
 )
 
-var runners = []Runner{RunnerGo, RunnerVitest, RunnerPlaywright, RunnerNative, RunnerCargo}
+var runners = []Runner{RunnerGo, RunnerNative, RunnerCargo}
 
 func ParseRunner(name string) (Runner, error) {
 	for _, runner := range runners {
@@ -25,7 +23,7 @@ func ParseRunner(name string) (Runner, error) {
 			return runner, nil
 		}
 	}
-	return "", fmt.Errorf("unknown runner %q; runners: go, vitest, playwright, native, cargo", name)
+	return "", fmt.Errorf("unknown runner %q; runners: go, native, cargo", name)
 }
 
 type Outcome string

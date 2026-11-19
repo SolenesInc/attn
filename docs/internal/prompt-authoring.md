@@ -129,9 +129,8 @@ when the user enables **Follow shared focus**.
 
 ## Verify
 
-CI runs the catalog and scenario checks, prompt and editor tests, and the
-`prompt-composition` delivery scenario. Locally, review the change with `compare`
-and `context`. To run the CI checks sooner, run `make check-prompts` and
+CI runs the catalog and scenario checks, and the prompt and editor tests.
+Locally, review the change with `compare` and `context`. To run the CI checks sooner, run `make check-prompts` and
 `make test-prompt-editor`. Update
 [compatibility fixtures](../../internal/prompttest/testdata/) only for
 intentional wording changes. Never regenerate them to make tests pass.

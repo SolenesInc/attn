@@ -219,7 +219,7 @@ fn row_of(tasks: &Tasks, task: &Task, now_ms: i64, t: &Tokens) -> (ListRow, Vec<
     (row, error.into_iter().chain(diagnostic).collect())
 }
 
-/// When a task next runs, said as the Tauri app says it: "now" within five seconds, else "in 3m"
+/// When a task next runs: "now" within five seconds, else "in 3m"
 /// or "40s ago"; nothing for a time that does not parse or is the zero time.
 fn next_attempt(at: &str, now_ms: i64) -> Option<String> {
     let at_ms = crate::sidebar::queue::epoch_ms(at)?;

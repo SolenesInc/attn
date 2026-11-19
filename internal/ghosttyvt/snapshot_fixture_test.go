@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-const fixturePath = "../../app/src/ghostty/testdata/native-snapshot.bin"
+const fixturePath = "testdata/native-snapshot.bin"
 
 func fixtureCorpus() []byte {
 	var b bytes.Buffer

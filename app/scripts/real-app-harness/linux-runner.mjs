@@ -8,7 +8,7 @@ import readline from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createProvider, quote, run, sshArgs } from './vm/providers.mjs';
 import { syncSource } from './vm/source.mjs';
-import { resolveScenario, scenarioApp } from './scenarioCatalog.mjs';
+import { resolveScenario } from './scenarioCatalog.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const checkoutHash = createHash('sha256').update(fs.realpathSync(repo)).digest('hex').slice(0, 10);
@@ -118,7 +118,7 @@ Actions:
   build       Sync and install the packaged app in the named guest instance
   test        Sync, reinstall a fresh guest instance and run the serial app matrix under Xvfb;
               collect artifacts even on failure
-  soak        Sync, build each app the --scenario list needs once, then run each scenario once under
+  soak        Sync, build the app once, then run each --scenario once under
               Xvfb in a freshly installed guest instance, as CI's Acceptance soak does; print a
               "Scenario <id> passed|failed in <n>s" line per scenario; collect artifacts even on failure
   artifacts   Copy the guest artifacts directory to --out
@@ -138,9 +138,9 @@ Options:
 
 Examples:
   pnpm --dir app real-app:linux provision
-  pnpm --dir app real-app:linux test -- --scenario quick-capture
+  pnpm --dir app real-app:linux test -- --scenario native-sidebar-session
   pnpm --dir app real-app:linux provision --provider ssh --target tester@linux
-  pnpm --dir app real-app:linux soak --provider ssh --target tester@linux --scenario linux-shortcuts,shelf-moves
+  pnpm --dir app real-app:linux soak --provider ssh --target tester@linux --scenario native-shelf-moves,native-desktop-tiles
 `);
     return;
   }
@@ -179,47 +179,46 @@ Examples:
     return execute(['bash', 'app/scripts/real-app-harness/vm/provision.sh']);
   }
   if (options.action === 'build') {
-    buildApp(execute, options.instance, 'tauri');
-    return installApp(execute, options.instance, 'tauri');
+    buildApp(execute, options.instance);
+    return installApp(execute, options.instance);
   }
   if (options.action === 'run') return execute(options.commandArgs);
   if (options.action === 'clean') return execute(['./attn', 'instance', 'clean', options.instance]);
   if (options.action === 'artifacts') return collect(provider, root, destination);
 }
 
-function buildApp(execute, instance, app) {
-  execute(['make', 'build-app', `INSTANCE=${instance}`, `APP=${app}`]);
+function buildApp(execute, instance) {
+  execute(['make', 'build-app', `INSTANCE=${instance}`]);
 }
 
-function installApp(execute, instance, app) {
-  execute(['make', 'install-staged', `INSTANCE=${instance}`, `APP=${app}`]);
+function installApp(execute, instance) {
+  execute(['make', 'install-staged', `INSTANCE=${instance}`]);
 }
 
-function installFresh(execute, instance, app) {
+function installFresh(execute, instance) {
   execute(['./attn', 'instance', 'clean', instance, '--keep-app']);
-  installApp(execute, instance, app);
+  installApp(execute, instance);
 }
 
 function underXvfb(args) {
-  // Window probes must not reset Xvfb while GTK connects during app startup.
   return ['xvfb-run', '-a', '-s', '-noreset -screen 0 1600x1000x24', 'pnpm', '--dir', 'app', 'run', ...args];
 }
 
 function runMatrix(options, execute) {
-  buildApp(execute, options.instance, 'tauri');
-  installFresh(execute, options.instance, 'tauri');
+  buildApp(execute, options.instance);
+  installFresh(execute, options.instance);
   execute(underXvfb(['real-app:serial-matrix', ...(options.commandArgs || [])]));
 }
 
 function runSoak(options, execute) {
   const scenarios = soakScenarios(options.scenario);
-  for (const app of new Set(scenarios.map(scenarioApp))) buildApp(execute, options.instance, app);
+  if (scenarios.length) buildApp(execute, options.instance);
   const failed = [];
   for (const scenario of scenarios) {
     const started = Date.now();
     let verdict = 'passed';
     try {
-      installFresh(execute, options.instance, scenarioApp(scenario));
+      installFresh(execute, options.instance);
       execute(underXvfb(['real-app:soak', '--', '--scenario', scenario.id, '--repeat', '1', '--failed-evidence-only']));
     } catch {
       verdict = 'failed';

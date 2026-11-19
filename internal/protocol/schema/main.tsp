@@ -587,9 +587,8 @@ model Desktop {
 //
 model ClientHelloMessage {
   cmd: "client_hello";
-  // "tauri-app" or "native-app" for attn's own app; any other kind is a plain
-  // client. The daemon trusts an app that proves browser_host_token: the Tauri
-  // app from its Tauri web origin, the native app with no web origin at all.
+  // "native-app" for attn's own app; any other kind is a plain client. The
+  // daemon trusts an app that proves browser_host_token with no web origin.
   client_kind: string;
   version: string;              // free-form, used for diagnostics
   capabilities: string[];       // see capability docstrings above
@@ -1589,8 +1588,8 @@ model FsReadMessage {
 }
 
 // Read one image file's bytes as base64, for the notebook editor to render
-// ![alt](path) images without widening Tauri's fs permissions. Only a fixed
-// allowlist of image extensions is served; anything else is an error.
+// ![alt](path) images. Only a fixed allowlist of image extensions is served;
+// anything else is an error.
 model FsReadAssetMessage {
   cmd: "fs_read_asset";
   path: string;
@@ -3088,7 +3087,7 @@ model BrowserOpenResult { url: string; }
 // Where a screenshot or PDF of the page was saved.
 model BrowserFileResult { path: string; }
 
-// Return a browser-host action result from the Tauri client to the daemon.
+// Return a browser-host action result from the app to the daemon.
 model BrowserControlResultMessage {
   cmd: "browser_control_result";
   request_id: string;

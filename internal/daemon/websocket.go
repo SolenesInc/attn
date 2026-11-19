@@ -9,7 +9,6 @@ import (
 	"maps"
 	"net"
 	"net/http"
-	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -103,16 +102,7 @@ func (c *wsClient) isTrustedAppClient() bool {
 }
 
 func (c *wsClient) trustedAppLocked() bool {
-	if !c.browserHostAuthenticated {
-		return false
-	}
-	switch appShellOf(c.clientKind) {
-	case shellTauri:
-		return isTrustedTauriOrigin(c.webOrigin)
-	case shellNative:
-		return c.webOrigin == ""
-	}
-	return false
+	return c.browserHostAuthenticated && c.clientKind == protocol.ClientKindNativeApp && c.webOrigin == ""
 }
 
 func websocketReadLimit(client *wsClient) int64 {
@@ -158,10 +148,10 @@ func (c *wsClient) processID() int {
 	return c.pid
 }
 
-func (c *wsClient) appShell() appShell {
+func (c *wsClient) isNativeApp() bool {
 	c.identityMu.RLock()
 	defer c.identityMu.RUnlock()
-	return appShellOf(c.clientKind)
+	return c.clientKind == protocol.ClientKindNativeApp
 }
 
 func (c *wsClient) attachedTerminals() []protocol.TerminalID {
@@ -504,24 +494,6 @@ var localOriginPatterns = []string{
 	"localhost:*",
 	"127.0.0.1",
 	"127.0.0.1:*",
-	"tauri.localhost",
-	"tauri.localhost:*",
-}
-
-func isTrustedTauriOrigin(origin string) bool {
-	parsed, err := url.Parse(origin)
-	if err != nil {
-		return false
-	}
-	host := normalizeWSHost(parsed.Host)
-	if (parsed.Scheme == "tauri" && host == "localhost") ||
-		(parsed.Scheme == "http" && host == "tauri.localhost") {
-		return true
-	}
-	return config.Instance() == "dev" &&
-		parsed.Scheme == "http" &&
-		strings.EqualFold(parsed.Hostname(), "localhost") &&
-		parsed.Port() == "1420"
 }
 
 func normalizeWSHost(value string) string {

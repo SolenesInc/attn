@@ -9,19 +9,18 @@ use rune_kit::{Button, ButtonVariant};
 use crate::action::Action;
 use crate::{State, connection};
 
-/// A sequence's second key must follow its leader within this long, as in the Tauri app.
+/// A sequence's second key must follow its leader within this long.
 pub(crate) const LEADER_TIMEOUT: f64 = 0.6;
-/// How long a notice stays, as the Tauri app's toast does.
+/// How long a notice stays.
 const NOTICE_SECONDS: f64 = 6.0;
 pub(crate) const TITLE_BAR_HEIGHT: f32 = 32.0;
-/// The title bar's tools, which the notifications panel hangs under, as the Tauri app's
-/// `.notifications-panel` at `left: var(--title-bar-lights)`.
+/// The title bar's tools, which the notifications panel hangs under, starting past the traffic
+/// lights.
 pub(crate) const TITLE_BAR_LEFT: &str = "titlebar.left";
-/// Where the close button sits, in points from the window's top left, as the Tauri app's overlay
-/// title bar puts it.
+/// Where the close button sits, in points from the window's top left.
 pub(crate) const TRAFFIC_LIGHTS: (f32, f32) = (9.0, 9.0);
-/// The window points `TitleBar.tsx` leaves between the traffic lights' 69 point edge and the
-/// title bar's first control, which it starts at 78 at every text size.
+/// The window points between the traffic lights' 69 point edge and the title bar's first
+/// control, which starts at 78 at every text size.
 const TITLE_BAR_GAP_PAST_LIGHTS: f32 = 9.0;
 
 /// What one window shows and where its keyboard is. Desktops, the active tile and the current
@@ -119,8 +118,8 @@ pub enum Drawer {
 }
 
 impl Drawer {
-    /// How wide the drawer lies in a window `window` points wide: the Tauri dock's
-    /// `clamp(min, share of vw, max)` for its panel.
+    /// How wide the drawer lies in a window `window` points wide: its share of the window,
+    /// clamped between its least and greatest width.
     pub(crate) fn width(self, window: f32) -> f32 {
         let (min, share, max) = match self {
             Drawer::Asks => (420.0, 0.46, 720.0),
@@ -240,10 +239,9 @@ fn banner_details(state: &State, band: Band, shown: u64, t: &Tokens, layers: &mu
 }
 
 impl Layer {
-    /// Whether the layer keeps `action`'s keys from acting while it is open, as the Tauri app's
-    /// overlays that capture navigation hold its app shortcuts. A layer keeps its own keys: the
-    /// agents key toggles the palette and its turn keys act on its highlighted agent; the keys
-    /// that open the markdown opener, the overview and the profile switcher close them; the
+    /// Whether the layer keeps `action`'s keys from acting while it is open. A layer keeps its own
+    /// keys: the agents key toggles the palette and its turn keys act on its highlighted agent; the
+    /// keys that open the markdown opener, the overview and the profile switcher close them; the
     /// notebook's file key finds a note.
     pub(crate) fn holds(self, action: &Action) -> bool {
         let captures_navigation = matches!(
@@ -315,7 +313,7 @@ pub(crate) struct Leader {
 const PALETTE_FIELD: &str = "palette.field";
 
 /// Escape closes the garden when it holds the window, else the newest drawer, whatever has
-/// focus, as the Tauri app's escape stack does.
+/// focus.
 pub(crate) fn escape_drawers(state: &mut State, tx: &mut Tx) -> bool {
     if crate::garden::mode(state) == crate::garden::Mode::Full {
         crate::garden::close(state);
@@ -346,8 +344,7 @@ impl Window {
         self.desk.awaited = None;
     }
 
-    /// Shows the current desktop. Coming from another view lands at once, as the Tauri app
-    /// shows a desktop.
+    /// Shows the current desktop. Coming from another view lands at once.
     pub(crate) fn show_desktop(&mut self, tx: &mut Tx) {
         if self.view != View::Desktop {
             tx.instant();
@@ -664,9 +661,8 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         }))
 }
 
-/// Whether something holds the window so that the title bar's controls fade, as the Tauri
-/// app's `.title-bar--covered`: every layer but the notifications panel, and the garden
-/// over the whole window.
+/// Whether something holds the window so that the title bar's controls fade: every layer but the
+/// notifications panel, and the garden over the whole window.
 fn title_bar_covered(state: &State) -> bool {
     !matches!(state.window.layer, None | Some(Layer::Notifications))
         || crate::garden::mode(state) == crate::garden::Mode::Full
@@ -694,7 +690,7 @@ fn instance_marker(state: &State, t: &Tokens) -> Option<El> {
 const INSTANCE_MARKER_MAX_W: f32 = 96.0;
 
 /// `control` in a slot keyed `key` as tall as the title bar, for a popover that hangs a set gap
-/// under the title bar, as the Tauri app's `top: calc(var(--title-bar-height) + …)` does.
+/// under the title bar.
 pub(crate) fn title_bar_slot(key: &str, control: El) -> El {
     col()
         .key(key)
@@ -703,9 +699,9 @@ pub(crate) fn title_bar_slot(key: &str, control: El) -> El {
         .child(control)
 }
 
-/// A surface that holds the window under the title bar, as the Tauri app's `.ledger-shell`,
-/// `.notebook-browser-shell` and `.garden-frame-backdrop` do: the app background over
-/// everything below the title bar, and `panel` set in from its edges.
+/// A surface that holds the window under the title bar, as the ledger, the notebook and the
+/// garden do: the app background over everything below the title bar, and `panel` set in from
+/// its edges.
 pub(crate) fn under_title_bar(key: &str, panel: El, t: &Tokens) -> El {
     attn_ui::blocks::Surface::under_bar(panel, t).key(key).pin(
         Some(0.0),
@@ -758,8 +754,7 @@ fn main_area(state: &State, t: &Tokens, scale: f32) -> Vec<El> {
 }
 
 /// The open drawers over the content, below the title bar, nothing behind them moving: the
-/// oldest against the window's right edge and each newer one to its left, as the Tauri app's
-/// dock lays its panels.
+/// oldest against the window's right edge and each newer one to its left.
 fn dock(state: &State, t: &Tokens) -> Vec<El> {
     let window = &state.window;
     let mut right = 0.0;
@@ -801,7 +796,7 @@ pub(crate) fn dock_width(state: &State) -> f32 {
     docked(state).map(|(_, width)| width).sum()
 }
 
-/// The surface every dock panel has in the Tauri app, `.side-panel`: the panel color under a
+/// The surface every dock panel has: the panel color under a
 /// faint sheen, a rule on its left, and a shadow cast over the content.
 fn drawn_as_dock_panel(content: El, t: &Tokens) -> El {
     content
@@ -933,7 +928,7 @@ fn shortcuts(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .build(t, layers);
 }
 
-/// A notice that only tells: a card at the window's bottom right, as the Tauri app's toast.
+/// A notice that only tells: a card at the window's bottom right.
 fn told(notice: &Notice, t: &Tokens) -> El {
     let said = words(notice.text.clone(), Type::Body, t.text_primary)
         .key("notice.text")
@@ -950,7 +945,7 @@ fn told(notice: &Notice, t: &Tokens) -> El {
     .inert()
 }
 
-/// A notice with its offer: one button, as the Tauri app's toast row is, that runs the offer
+/// A notice with its offer: one button that runs the offer
 /// and then says it is done. The pointer resting on it keeps it.
 fn offering(notice: &Notice, offer: &Offer, t: &Tokens) -> El {
     let said = if offer.done { "✓ Done" } else { offer.label };
@@ -986,7 +981,7 @@ fn toast_glyph(glyph: &str, ink: rune::Color, t: &Tokens) -> El {
     attn_ui::system::chip_edge(words(glyph.to_owned(), Type::Tag, ink), t).a11y_hidden()
 }
 
-/// The toast card, as wide as the Tauri app's toast.
+/// The toast card.
 fn toast_card(glyph: El, body: El, t: &Tokens) -> El {
     Frame::panel(t)
         .draw_holding(Inline::joined().w_full().child(glyph).child(body))

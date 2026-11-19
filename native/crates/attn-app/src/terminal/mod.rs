@@ -40,22 +40,19 @@ pub(crate) use links::accelerator;
 pub(crate) use seeds::SeedCard;
 pub(crate) use selection::Release;
 
-/// How often a terminal tells the daemon its new size while its tile is being resized, as in
-/// the Tauri app.
+/// How often a terminal tells the daemon its new size while its tile is being resized.
 const RESIZE_INTERVAL: f64 = 0.25;
-/// Seconds a synchronized update may hold the screen: Ghostty's renderer ends one after 1 s,
-/// and the Tauri app waits as long.
+/// Seconds a synchronized update may hold the screen, as long as Ghostty's renderer waits.
 const SYNCHRONIZED_UPDATE_LIMIT: f64 = 1.0;
-/// An agent's grid this small is a tile mid-layout, not a size the agent should draw for, as
-/// in the Tauri app.
+/// An agent's grid this small is a tile mid-layout, not a size the agent should draw for.
 const AGENT_USABLE: (u16, u16) = (21, 11);
 /// An attach the daemon refused while the terminal's worker restarts is asked again this often,
-/// for this long, as in the Tauri app.
+/// for this long.
 const ATTACH_RETRY: f64 = 0.15;
 const ATTACH_RETRY_FOR: f64 = 3.0;
 const FIRST_SIZE: (u16, u16) = (80, 24);
-/// How often pointer motion over an agent's terminal tells the daemon the user is there, as in
-/// the Tauri app: sampled well inside the daemon's five-second quiet window.
+/// How often pointer motion over an agent's terminal tells the daemon the user is there:
+/// sampled well inside the daemon's five-second quiet window.
 const POINTER_ACTIVITY_INTERVAL: f64 = 0.25;
 
 /// What the link hears about terminals, waiting for a window's next frame. The windows of one
@@ -557,8 +554,7 @@ impl Terminals {
         }
     }
 
-    /// The window came to the front: claims the PTY of the terminal with its keyboard again, as
-    /// the Tauri terminal does each time its window takes the focus.
+    /// The window came to the front: claims the PTY of the terminal with its keyboard again.
     pub(crate) fn window_activated(&mut self, daemon: &Commands) {
         let keyboard = self.focused.take();
         self.focus(keyboard, daemon);
@@ -1382,8 +1378,7 @@ fn draw_even_when_resting(tx: &mut Tx) {
     tx.wake_after(std::time::Duration::ZERO);
 }
 
-/// Puts on the clipboard what the program's clipboard writes asked for, without a gesture, as
-/// the Tauri terminal does.
+/// Puts on the clipboard what the program's clipboard writes asked for, without a gesture.
 fn copy_writes(term: &mut Term, tx: &mut Tx) {
     for text in term.vt.take_clipboard_writes() {
         tx.copy(text);
@@ -1445,7 +1440,7 @@ fn send_input(
 }
 
 /// Appends `line` to the debug log at `path`, starting it over with a marker once it would
-/// pass the Tauri app's cap.
+/// pass its cap.
 pub(crate) fn append_capped(path: &std::path::Path, line: &str, at_ms: i64) -> std::io::Result<()> {
     use std::io::Write;
     const LOG_CAP_BYTES: u64 = 8 * 1024 * 1024;
@@ -1484,7 +1479,7 @@ fn send_attach(id: &str, term: &mut Term, attaching: Attaching, daemon: &Command
 }
 
 /// Whether a resize tells the daemon the tile's pixel size. The resize that only reconciles a
-/// PTY the daemon attached at another size leaves it out, as the Tauri app does.
+/// PTY the daemon attached at another size leaves it out.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Pixels {
     Sent,
@@ -1513,7 +1508,7 @@ fn send_resize(id: &str, term: &mut Term, now: f64, pixels: Pixels, daemon: &Com
 }
 
 /// An agent's tile laid out too small to be a size the agent should draw for, while the
-/// terminal's grid is healthy and fits the tile, as the Tauri app judges it. A grid already
+/// terminal's grid is healthy and fits the tile. A grid already
 /// that small is followed as it grows; one that overflows the tile is always refit.
 fn mid_layout(size: (u16, u16), grid: (u16, u16), (w, h): (f32, f32), metrics: &Metrics) -> bool {
     let unusable = |(cols, rows): (u16, u16)| cols < AGENT_USABLE.0 || rows < AGENT_USABLE.1;
@@ -1526,7 +1521,7 @@ fn mid_layout(size: (u16, u16), grid: (u16, u16), (w, h): (f32, f32), metrics: &
     !overflows && !(unusable(grid) && !shrinks)
 }
 
-/// A refusal the daemon gives while the terminal's worker restarts, as the Tauri app tells it.
+/// A refusal the daemon gives while the terminal's worker restarts.
 fn passes(error: &str) -> bool {
     let error = error.to_lowercase();
     if error.contains("websocket not connected") || error.contains("daemon is recovering") {
@@ -1557,8 +1552,8 @@ fn save_leaving_note(marking: Option<&annotating::Marking>, daemon: &Commands) {
     }
 }
 
-/// What the terminal says when its process ends, as the Tauri app's exit notice: the daemon
-/// ends sessions with SIGHUP, SIGINT or SIGTERM, which are not crashes.
+/// What the terminal says when its process ends: the daemon ends sessions with SIGHUP, SIGINT
+/// or SIGTERM, which are not crashes.
 fn exit_notice(code: i64, signal: Option<&str>) -> String {
     let signal = signal.map(str::trim).filter(|s| !s.is_empty());
     let signal = match signal {

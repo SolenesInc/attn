@@ -99,7 +99,7 @@ fn repo_root(path: &str) -> Option<String> {
     (path == REPO || path == TREE).then(|| REPO.to_owned())
 }
 
-/// A machine as the Tauri tests serve it: recents newest first, the projects folder holding
+/// A machine with recents newest first, the projects folder holding
 /// `shop` and `never-opened`, the shop repository, worktrees made beside it and every spawn
 /// placed on the desktop it asked for.
 fn machine(
@@ -540,7 +540,7 @@ fn tab_on_a_typed_checkout_opens_its_where_list_and_backspace_returns_to_the_pat
     }
 }
 
-/// Tauri's `stepBack`: each Escape takes one step, the Where list first, then the typed text,
+/// Each Escape takes one step, the Where list first, then the typed text,
 /// and the dialog last, so a typed path takes three presses and a recent two.
 #[test]
 fn escape_steps_back_from_the_where_list_through_the_typed_path_and_then_closes() {

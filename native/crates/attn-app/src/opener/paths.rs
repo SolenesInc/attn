@@ -1,4 +1,4 @@
-//! Typed paths in the opener (pathMode.ts): a query that starts with `/`, `~`, `./` or `../`
+//! Typed paths in the opener: a query that starts with `/`, `~`, `./` or `../`
 //! browses a folder instead of searching, a relative one against the opener's root, since the
 //! daemon would resolve it against its own working folder.
 

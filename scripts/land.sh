@@ -22,9 +22,6 @@ undo_window=30
 protocol_outputs=(
   internal/protocol/generated.go
   internal/protocol/protocol_version.go
-  app/src/types/generated.ts
-  app/src/types/protocolVersion.ts
-  app/src/types/settings.generated.ts
   internal/protocol/homegateway/generated.go
   internal/protocol/homegateway/schema.json
   internal/protocol/homegateway/version.go
@@ -46,9 +43,9 @@ protocol_outputs=(
 )
 prompt_outputs=(
   internal/prompts/catalog.generated.json
-  app/src/prompts/catalog.generated.json
+  native/crates/attn-app/prompts/catalog.generated.json
 )
-native_paths='^native/|^internal/protocol/schema/|^cli/protocol/|^scripts/native-parity$'
+native_paths='^native/|^internal/protocol/schema/|^cli/protocol/'
 
 fail() {
   echo "land: $*" >&2
@@ -217,7 +214,9 @@ run_checks() {
   touches '^internal/protocol/(schema/|constants\.go)|^internal/(setting|garden|prompts|ask|inbox)/|^cmd/(settingsgen|cligen)/|^internal/catalog/|^cli/|^scripts/generate-rust-protocol\.mjs|^go\.mod$' && targets+=(check-types)
   touches '^internal/protocol/(schema/home_gateway\.tsp|homegateway/)' && targets+=(check-home-gateway-compat)
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
-  touches '^app/|^sdk/|^cmd/prompt-editor/' && targets+=(check-js-tools)
+  touches '^app/' && targets+=(check-harness)
+  touches '^app/|^sdk/|^cmd/prompt-editor/(web|test)/|^lint/|^\.oxlintrc\.json$' && targets+=(lint-js)
+  touches '^native/browser-runtime/|^native/crates/attn-app/src/browser/runtime\.js$' && targets+=(check-browser-runtime)
   touches "$native_paths" && targets+=(check-native "NATIVE_CLIPPY=$(native_clippy_scope "$changed")")
   touches '^mobile/|^internal/cloudlink/testdata/' && targets+=(check-mobile)
   script_tests="$(script_tests_for "$changed")"
@@ -303,7 +302,6 @@ run_landing_tests() {
   while IFS= read -r unit || [ -n "$unit" ]; do
     case "$unit" in
       "") ;;
-      "red "*) units+=(--red "${unit#red }") ;;
       "native "*) ;;
       *) units+=(--unit "$unit") ;;
     esac

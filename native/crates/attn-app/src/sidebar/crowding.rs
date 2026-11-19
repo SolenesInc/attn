@@ -1,9 +1,8 @@
-//! What the title bar's middle gives up while its parts would overlap, as the Tauri app's
-//! `useBarCrowded` does for the queue bar's desktop chips. The middle's content and its box are
-//! measured before the frame paints, at the text size in use, so a bar that changes shows what
-//! fits from its first frame. Each step is taken only while something would overlap, and steps
-//! back once the bar is as wide as that step's content last needed, for as long as what the bar
-//! holds is unchanged.
+//! What the title bar's middle, such as the queue bar's desktop chips, gives up while its parts
+//! would overlap. The middle's content and its box are measured before the frame paints, at the
+//! text size in use, so a bar that changes shows what fits from its first frame. Each step is
+//! taken only while something would overlap, and steps back once the bar is as wide as that
+//! step's content last needed, for as long as what the bar holds is unchanged.
 
 use rune::Tx;
 

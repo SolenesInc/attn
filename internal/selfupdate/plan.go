@@ -62,7 +62,6 @@ type Plan struct {
 	Dir        string
 	Instance   string
 	Root       string
-	App        string
 }
 
 // InstallRoot is the app tree this instance installs to, the one
@@ -108,7 +107,7 @@ func NewPlan(install Install, dataDir, originWorktree string) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	plan := Plan{Kind: install.Kind, Instance: install.Facts.Instance, Root: root, App: installedApp(root)}
+	plan := Plan{Kind: install.Kind, Instance: install.Facts.Instance, Root: root}
 	if install.Kind == NamedInstance {
 		if originWorktree == "" {
 			return Plan{}, fmt.Errorf("instance %s has no recorded origin worktree. Run make install INSTANCE=%s from its worktree", plan.Instance, plan.Instance)
@@ -174,34 +173,15 @@ func (p Plan) Build(ctx context.Context, env []string, log io.Writer) error {
 }
 
 func (p Plan) makeArgs(target string) []string {
-	return MakeArgs(target, p.Instance, p.App)
+	return MakeArgs(target, p.Instance)
 }
 
-func MakeArgs(target, instance, app string) []string {
+func MakeArgs(target, instance string) []string {
 	args := []string{target}
 	if instance != "" {
 		args = append(args, "INSTANCE="+instance)
 	}
-	if app != "" {
-		args = append(args, "APP="+app)
-	}
 	return args
-}
-
-// installedApp is the app shell the installed tree's build identity names, or
-// "" for a tree built before the identity named it.
-func installedApp(root string) string {
-	data, err := os.ReadFile(config.BuildIdentityInTree(root))
-	if err != nil {
-		return ""
-	}
-	var identity struct {
-		App string `json:"app"`
-	}
-	if json.Unmarshal(data, &identity) != nil {
-		return ""
-	}
-	return identity.App
 }
 
 func (p Plan) StagedDaemon() string {

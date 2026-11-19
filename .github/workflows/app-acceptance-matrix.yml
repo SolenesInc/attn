@@ -1,5 +1,5 @@
 name: App acceptance matrix
-run-name: App acceptance matrix ${{ inputs.app }} on ${{ inputs.os }}
+run-name: App acceptance matrix on ${{ inputs.os }}
 
 env:
   GH_TOKEN: ${{ github.token }}
@@ -8,10 +8,6 @@ env:
 on:
   workflow_call:
     inputs:
-      app:
-        description: The app shell whose catalog scenarios run, tauri or native
-        required: true
-        type: string
       shards:
         description: JSON array of the shard indexes, 1 to the shard count
         required: true
@@ -23,11 +19,6 @@ on:
         type: string
   workflow_dispatch:
     inputs:
-      app:
-        description: The app shell whose catalog scenarios run
-        required: true
-        type: choice
-        options: [native, tauri]
       shards:
         description: JSON array of the shard indexes, 1 to the shard count
         required: true
@@ -46,7 +37,7 @@ jobs:
     permissions:
       contents: read
     runs-on: ${{ inputs.os }}
-    # Tauri 183s, native 521s with a cold Rust cache, on runs 44190682619 and 44194763596. 30m is slack.
+    # 521s with a cold Rust cache on run 44194763596. 30m is slack.
     timeout-minutes: 30
     env:
       ATTN_INSTANCE: app-acceptance
@@ -63,12 +54,11 @@ jobs:
         uses: ./.github/actions/build-app-acceptance
         with:
           instance: ${{ env.ATTN_INSTANCE }}
-          app: ${{ inputs.app }}
 
       - name: Upload the app tree
         uses: actions/upload-artifact@v4
         with:
-          name: app-acceptance-tree-${{ inputs.app }}
+          name: app-acceptance-tree
           path: ${{ steps.build-app.outputs.archive }}
           retention-days: 1
           compression-level: 0
@@ -87,7 +77,7 @@ jobs:
         shard: ${{ fromJSON(inputs.shards) }}
     # No concurrency group: a shared one cancels unrelated waiting checks.
     runs-on: ${{ inputs.os }}
-    # Shard jobs took 119-249s on run 44194763596 (Tauri in 14 shards, native in 12). 40m is slack.
+    # Shard jobs took 119-249s on run 44194763596. 40m is slack.
     timeout-minutes: 40
     env:
       ATTN_INSTANCE: app-acceptance
@@ -103,14 +93,13 @@ jobs:
       - name: Download the app tree
         uses: actions/download-artifact@v4
         with:
-          name: app-acceptance-tree-${{ inputs.app }}
+          name: app-acceptance-tree
           path: ${{ runner.temp }}
 
       - name: Install the App acceptance tree
         uses: ./.github/actions/install-app-acceptance
         with:
           instance: ${{ env.ATTN_INSTANCE }}
-          app: ${{ inputs.app }}
           archive: ${{ runner.temp }}/app-tree.tar.gz
 
       - name: Run serial matrix shard
@@ -130,7 +119,7 @@ jobs:
         if: always()
         uses: ./.github/actions/upload-test-receipts
         with:
-          name: app-acceptance-${{ inputs.app }}-shard-${{ matrix.shard }}
+          name: app-acceptance-shard-${{ matrix.shard }}
 
       - name: Collect daemon and worker logs
         if: always()
@@ -162,7 +151,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: app-acceptance-evidence-${{ inputs.app }}-${{ github.run_attempt }}-shard-${{ matrix.shard }}
+          name: app-acceptance-evidence-${{ github.run_attempt }}-shard-${{ matrix.shard }}
           if-no-files-found: warn
           path: |
             ${{ runner.temp }}/attn-real-app-harness/matrix-digest.txt
@@ -181,7 +170,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: app-acceptance-result-${{ inputs.app }}-shard-${{ matrix.shard }}
+          name: app-acceptance-result-shard-${{ matrix.shard }}
           if-no-files-found: error
           path: ${{ runner.temp }}/attn-real-app-harness/last-matrix.json
           overwrite: true
@@ -198,7 +187,7 @@ jobs:
           if [ "$MATRIX_OUTCOME" = success ]; then
             exit 0
           fi
-          echo "${{ inputs.app }} shard ${{ matrix.shard }}/${{ strategy.job-total }}: the serial matrix is $MATRIX_OUTCOME;" \
+          echo "shard ${{ matrix.shard }}/${{ strategy.job-total }}: the serial matrix is $MATRIX_OUTCOME;" \
             "the Matrix job aggregates every shard's digest" >&2
           exit 1
 
@@ -226,7 +215,7 @@ jobs:
         if: needs.build.result == 'success'
         uses: actions/download-artifact@v4
         with:
-          pattern: app-acceptance-result-${{ inputs.app }}-shard-*
+          pattern: app-acceptance-result-shard-*
           path: ${{ runner.temp }}/shard-results
 
       - name: Aggregate the shard digests
@@ -244,7 +233,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: app-acceptance-digest-${{ inputs.app }}-${{ github.run_attempt }}
+          name: app-acceptance-digest-${{ github.run_attempt }}
           if-no-files-found: warn
           path: ${{ runner.temp }}/matrix-digest.txt
 
@@ -256,21 +245,20 @@ jobs:
           MATRIX_OUTCOME: ${{ steps.matrix.outcome }}
           SHARD_RESULT: ${{ needs.app-acceptance-shard.result }}
         run: |
-          app="${{ inputs.app }}"
           if [ "$MATRIX_OUTCOME" = success ] && [ "$SHARD_RESULT" = success ]; then
-            echo "app acceptance: the $app serial matrix for ${{ inputs.os }} is green for $HEAD_SHA"
+            echo "app acceptance: the serial matrix for ${{ inputs.os }} is green for $HEAD_SHA"
             exit 0
           fi
           if [ "$BUILD_RESULT" != success ]; then
-            echo "app acceptance: the $app app tree failed to build for $HEAD_SHA ($BUILD_RESULT);" \
+            echo "app acceptance: the app tree failed to build for $HEAD_SHA ($BUILD_RESULT);" \
               "no shard ran, so this is setup or build, not a scenario verdict" >&2
           elif [ -z "$MATRIX_OUTCOME" ]; then
-            echo "app acceptance: the $app aggregate never ran for $HEAD_SHA;" \
+            echo "app acceptance: the aggregate never ran for $HEAD_SHA;" \
               "this is setup, not a scenario verdict" >&2
           elif [ "$MATRIX_OUTCOME" = success ]; then
-            echo "app acceptance: every $app scenario passed for $HEAD_SHA, but a shard job ended" \
+            echo "app acceptance: every scenario passed for $HEAD_SHA, but a shard job ended" \
               "$SHARD_RESULT; open the shard jobs, this is not a scenario verdict" >&2
           else
-            echo "app acceptance: the aggregated $app serial matrix for ${{ inputs.os }} is $MATRIX_OUTCOME for $HEAD_SHA" >&2
+            echo "app acceptance: the aggregated serial matrix for ${{ inputs.os }} is $MATRIX_OUTCOME for $HEAD_SHA" >&2
           fi
           exit 1

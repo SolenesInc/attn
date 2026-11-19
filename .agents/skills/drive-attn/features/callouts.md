@@ -64,32 +64,21 @@ Preconditions:
 - **No app.** Quit the app with `./attn instance stop-app`, then run `./attn callout anchors --session co-agent`. It lists the anchors and exits 1 with `callout anchors: the attn app is not showing your profile`. `./attn callout show --session co-agent garden "x"` exits 1 with the same reason. Launch the app again as [../SKILL.md](../SKILL.md) says.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn agent peek co-agent` after each agent call, and `bridge tree` with the card open. Capture `bridge shot '{"path":"<P>/callouts-tour.png"}'` on the first step and `<P>/callouts-agent.png` with the agent ring, `<P>` written out. Name each file for its way in, such as `callouts-agent-tour-peek.txt`.
 
-### In the Tauri app (the rollback)
-
-Install it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) says. Check that `bridge --launch --wait-ready ping` answers and run `bridge dismiss_whats_new`. The card is `.callout-card` (`app/src/callouts/CalloutOverlay.tsx`), with its heading in `.callout-heading` and its ring in `.callout-ring`. In desktop flow `sidebar`, `commands` and `desktops` are on screen and `queue` is not.
-
-- **Show a tour.** Press ⌘2 (`bridge native_key '{"key":"2","modifiers":["command"]}'`) first, so `arrangement.currentDesktopId` in `bridge get_state` is not desktop 1 and the last step's jump shows. Run `wsctl input --id <agent> --text "point-tour" --enter`. `bridge dom_wait '{"selector":".callout-card","textIncludes":"Your agents live here","timeoutMs":5000}'` matches, and `bridge dom_text '{"selector":".callout-heading"}'` reads `co-agent` and `1 of 3`.
-- **Step through it.** Run `bridge native_key '{"key":"Enter"}'`: the card reads `Everything attn can do`. Run `bridge native_key '{"key":"ArrowRight"}'`: the card reads `Your first desktop`, with "↵ Go there". Run `bridge native_key '{"key":"Enter"}'`: the card is gone (`bridge dom_wait '{"selector":".callout-card","absent":true,"timeoutMs":5000}'`), and `arrangement.currentDesktopId` in `bridge get_state` is desktop 1 again.
-- **Point at an agent.** Run `wsctl input --id <agent> --text "point-agent" --enter`: `bridge dom_wait '{"selector":".callout-ring","timeoutMs":5000}'` matches over the shell's row. Run `bridge native_key '{"key":"Enter"}'`: the callout ends and `bridge get_state` shows `activeLeaf.sessionId` on `co-shell`.
-- **End it.** Show the garden callout again with `point-garden`, then run `bridge native_key '{"key":"Escape"}'`: `.callout-card` is absent. Show it again, click `[aria-label="End callout"]` natively and check that the card is absent. Show it again and open the palette with ⇧⌘K: the callout ends as the palette opens. Show it again and click outside the card natively: the callout ends. These show one step. Show a callout with several steps and open the palette: the card hides, and comes back on the same step when the palette closes. Click outside it natively: the card stays, and Enter, → and Esc go to what you clicked until you click the card.
-- **Proof.** Keep `bridge dom_text '{"selector":".callout-card"}'` at each step. Capture `bridge capture_native_window_screenshot '{"path":"<P>/callouts-tauri-tour.png"}'` on the first step, `<P>` written out. `bridge capture_screenshot` draws the page without the card or its ring, and `bridge dom_click` on the card's buttons skips native input, so drive the steps with `native_key`.
-
 ## Contexts
 
 - **Durability across restarts**: a showing callout ends when the app relaunches, and attn does not tell the agent.
 - **Linux**: `attn callout` works the same where the daemon and CLI run on Linux. It needs an app showing the profile, wherever that app runs.
 - **Profiles**: a callout reaches only an app showing the caller's profile. `agent:` and `desktop:` resolve only in that profile, so another profile's agent is refused as `is not an agent in your profile`. A profile switch ends the callout.
-- **Performance and idle cost**: an open card runs no animations once placed. The Tauri app's `callouts` scenario checks it. A browser tile's page hides while a callout shows and returns when the callout ends. In the Tauri app (the rollback), the whole browser tile hides.
+- **Performance and idle cost**: an open card runs no animations once placed. A browser tile's page hides while a callout shows and returns when the callout ends.
 - **Harnesses**: every harness points with the same `attn callout` verbs and reads the same reference.
-- **Keyboard and native input**: Enter, → and Esc drive the card, and any shortcut that opens another overlay ends a one-step callout and hides a longer one until the overlay closes. When the card ends, the app leaves nothing focused, so typing reaches the terminal that holds the keyboard. In the Tauri app (the rollback), the terminal gets focus back.
+- **Keyboard and native input**: Enter, → and Esc drive the card, and any shortcut that opens another overlay ends a one-step callout and hides a longer one until the overlay closes. When the card ends, the app leaves nothing focused, so typing reaches the terminal that holds the keyboard.
 - **Flow**: which fixed anchors are on screen follows the sidebar's shape. `queue` is there only in queue flow. With the queue bar or the collapsed sidebar, `sidebar` and `desktops` point at the strip, and an agent step reveals the agent list when it can.
 
 ## Tests
 
 - Wire: `native/crates/attn-app/tests/wire/callouts.rs`, `internal/daemon/callouts_wire_test.go`, `internal/daemon/agent_tools_callout_wire_test.go` (the tools).
 - Stack: `cmd/attnd/callout_stack_test.go`.
-- Scenario: `native-callouts`, and in the Tauri app (the rollback) `callouts`.
-- App: the Tauri app's (the rollback), `app/src/App.callouts.test.tsx`.
+- Scenario: `native-callouts`.
 
 ## Gotchas
 

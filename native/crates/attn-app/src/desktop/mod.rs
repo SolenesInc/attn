@@ -173,7 +173,7 @@ pub(crate) struct History {
     pub at: usize,
 }
 
-/// The Tauri app's bound on a window's tile history.
+/// The bound on a window's tile history.
 const HISTORY_LIMIT: usize = 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -579,8 +579,8 @@ pub(crate) fn shown_alone(state: &State) -> Option<String> {
     }
 }
 
-/// Whether the window shows an agent alone, which hides the sidebar as in the Tauri app; a
-/// document shown alone keeps it.
+/// Whether the window shows an agent alone, which hides the sidebar; a document shown alone
+/// keeps it.
 pub(crate) fn shows_an_agent_alone(state: &State) -> bool {
     let Some((desktop, leaf)) = state.facts.current_desktop().zip(shown_alone(state)) else {
         return false;
@@ -592,8 +592,8 @@ pub(crate) fn shows_an_agent_alone(state: &State) -> bool {
             .any(|p| p.pane_id == leaf && !p.session_id.is_empty())
 }
 
-/// Whether `next` changes the tiles of the desktop the window shows, which then move as the
-/// Tauri app moves them: on the same desktop, with no tile shown alone and no divider dragged.
+/// Whether `next` changes the tiles of the desktop the window shows, which then move: on the
+/// same desktop, with no tile shown alone and no divider dragged.
 pub(crate) fn moves_tiles(state: &State, next: &Facts) -> bool {
     let (Some(was), Some(is)) = (state.facts.current_desktop(), next.current_desktop()) else {
         return false;

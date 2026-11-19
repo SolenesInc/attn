@@ -10,10 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 
-	"github.com/BurntSushi/toml"
 	"gopkg.in/yaml.v3"
 )
 
@@ -22,20 +20,11 @@ const defaultManifestPath = ".github/release-candidate.yml"
 var (
 	plainVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 	commitPattern       = regexp.MustCompile(`^[0-9a-f]{40,64}$`)
-	jsonVersionPattern  = regexp.MustCompile(`(?m)("version"\s*:\s*")([^"]+)(")`)
-	cargoVersionPattern = regexp.MustCompile(`(?m)^(version\s*=\s*")([^"]+)("\s*)$`)
-	cargoLockAppPattern = regexp.MustCompile(`(?m)(\[\[package\]\]\nname = "app"\nversion = ")([^"]+)(")`)
 )
 
 type candidateManifest struct {
 	Version string `yaml:"version"`
 	MainSHA string `yaml:"main_sha"`
-}
-
-type versionSource struct {
-	path string
-	read func([]byte) (string, error)
-	set  func([]byte, string) ([]byte, error)
 }
 
 type candidateValidation struct {
@@ -127,90 +116,21 @@ func runVersion(root string, args []string, stdout io.Writer) error {
 	return err
 }
 
-func versionSources() []versionSource {
-	return []versionSource{
-		{path: "VERSION", read: readPlainVersion, set: setPlainVersion},
-		{path: "app/package.json", read: readJSONVersion, set: setJSONVersion},
-		{path: "app/src-tauri/tauri.conf.json", read: readJSONVersion, set: setJSONVersion},
-		{path: "app/src-tauri/Cargo.toml", read: readCargoVersion, set: setCargoVersion},
-		{path: "app/src-tauri/Cargo.lock", read: readCargoLockVersion, set: setCargoLockVersion},
-	}
-}
-
 func setVersions(root, version string) error {
-	versions, err := readVersions(root, "")
-	if err != nil {
-		return err
-	}
-	if err := requireAgreement(versions, ""); err != nil {
-		return fmt.Errorf("refuse to update inconsistent versions: %w", err)
-	}
-	updatedFiles := make(map[string][]byte, len(versionSources()))
-	for _, source := range versionSources() {
-		path := filepath.Join(root, source.path)
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		updated, err := source.set(data, version)
-		if err != nil {
-			return fmt.Errorf("%s: %w", source.path, err)
-		}
-		updatedFiles[path] = updated
-	}
-	for path, data := range updatedFiles {
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			return err
-		}
-	}
-	return nil
+	return os.WriteFile(filepath.Join(root, "VERSION"), []byte(version+"\n"), 0o644)
 }
 
 func checkVersions(root, ref, expected string) error {
-	versions, err := readVersions(root, ref)
+	data, err := readRepositoryFile(root, ref, "VERSION")
 	if err != nil {
-		return err
+		return fmt.Errorf("VERSION: %w", err)
 	}
-	if err := requireAgreement(versions, expected); err != nil {
-		return err
+	version := strings.TrimSpace(string(data))
+	if version == "" || strings.ContainsAny(version, " \t\n") {
+		return fmt.Errorf("VERSION: expected one version, found %q", version)
 	}
-	return nil
-}
-
-func readVersions(root, ref string) (map[string]string, error) {
-	versions := make(map[string]string, len(versionSources()))
-	for _, source := range versionSources() {
-		data, err := readRepositoryFile(root, ref, source.path)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", source.path, err)
-		}
-		version, err := source.read(data)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", source.path, err)
-		}
-		versions[source.path] = version
-	}
-	return versions, nil
-}
-
-func requireAgreement(versions map[string]string, expected string) error {
-	paths := make([]string, 0, len(versions))
-	for path := range versions {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	var first string
-	for _, path := range paths {
-		version := versions[path]
-		if first == "" {
-			first = version
-		}
-		if version != first {
-			return fmt.Errorf("version disagreement: %s has %s, expected %s", path, version, first)
-		}
-		if expected != "" && version != expected {
-			return fmt.Errorf("%s has version %s, expected %s", path, version, expected)
-		}
+	if version != expected {
+		return fmt.Errorf("VERSION has version %s, expected %s", version, expected)
 	}
 	return nil
 }
@@ -220,84 +140,6 @@ func readRepositoryFile(root, ref, path string) ([]byte, error) {
 		return os.ReadFile(filepath.Join(root, path))
 	}
 	return gitOutput(root, "show", ref+":"+path)
-}
-
-func readPlainVersion(data []byte) (string, error) {
-	version := strings.TrimSpace(string(data))
-	if version == "" || strings.ContainsAny(version, " \t\n") {
-		return "", fmt.Errorf("expected one version, found %q", version)
-	}
-	return version, nil
-}
-
-func setPlainVersion(_ []byte, version string) ([]byte, error) {
-	return []byte(version + "\n"), nil
-}
-
-func readJSONVersion(data []byte) (string, error) {
-	matches := jsonVersionPattern.FindAllSubmatch(data, -1)
-	if len(matches) != 1 {
-		return "", fmt.Errorf("expected one version field, found %d", len(matches))
-	}
-	return string(matches[0][2]), nil
-}
-
-func setJSONVersion(data []byte, version string) ([]byte, error) {
-	return replaceVersion(data, jsonVersionPattern, version)
-}
-
-func readCargoVersion(data []byte) (string, error) {
-	var manifest struct {
-		Package struct {
-			Version string
-		}
-	}
-	if _, err := toml.Decode(string(data), &manifest); err != nil {
-		return "", err
-	}
-	if manifest.Package.Version == "" {
-		return "", errors.New("package version is missing")
-	}
-	return manifest.Package.Version, nil
-}
-
-func setCargoVersion(data []byte, version string) ([]byte, error) {
-	return replaceVersion(data, cargoVersionPattern, version)
-}
-
-func readCargoLockVersion(data []byte) (string, error) {
-	var lock struct {
-		Package []struct {
-			Name    string
-			Version string
-		}
-	}
-	if _, err := toml.Decode(string(data), &lock); err != nil {
-		return "", err
-	}
-	for _, pkg := range lock.Package {
-		if pkg.Name == "app" {
-			return pkg.Version, nil
-		}
-	}
-	return "", errors.New("app package is missing")
-}
-
-func setCargoLockVersion(data []byte, version string) ([]byte, error) {
-	return replaceVersion(data, cargoLockAppPattern, version)
-}
-
-func replaceVersion(data []byte, pattern *regexp.Regexp, version string) ([]byte, error) {
-	matches := pattern.FindAllSubmatchIndex(data, -1)
-	if len(matches) != 1 {
-		return nil, fmt.Errorf("expected one version field, found %d", len(matches))
-	}
-	match := matches[0]
-	var out bytes.Buffer
-	out.Write(data[:match[4]])
-	out.WriteString(version)
-	out.Write(data[match[5]:])
-	return out.Bytes(), nil
 }
 
 func runManifest(root string, args []string, stdout io.Writer) error {
@@ -485,14 +327,9 @@ func requireReleaseOnlyChanges(root, source, head, manifestPath string) error {
 		return err
 	}
 	allowed := map[string]bool{
-		manifestPath:                    true,
-		"CHANGELOG.md":                  true,
-		"VERSION":                       true,
-		"app/package.json":              true,
-		"app/pnpm-lock.yaml":            true,
-		"app/src-tauri/tauri.conf.json": true,
-		"app/src-tauri/Cargo.toml":      true,
-		"app/src-tauri/Cargo.lock":      true,
+		manifestPath:   true,
+		"CHANGELOG.md": true,
+		"VERSION":      true,
 	}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		if line == "" {

@@ -378,7 +378,7 @@ func run() error {
 	conn.SetReadLimit(-1)
 	p := &probe{ctx: ctx, conn: conn, changed: make(chan struct{}), outputs: map[string][]byte{}, owners: map[string]string{}, sent: map[int]time.Time{}}
 	go p.read()
-	initial, err := p.request(protocol.ClientHelloMessage{Cmd: protocol.CmdClientHello, ClientKind: "tauri-app", Version: "protocol-" + protocol.ProtocolVersion, ClientToken: protocol.Ptr(strings.TrimSpace(string(token))), Capabilities: []string{protocol.CapabilityBinaryPtyOutput}}, protocol.EventInitialState, nil)
+	initial, err := p.request(protocol.ClientHelloMessage{Cmd: protocol.CmdClientHello, ClientKind: protocol.ClientKindNativeApp, Version: "protocol-" + protocol.ProtocolVersion, ClientToken: protocol.Ptr(strings.TrimSpace(string(token))), Capabilities: []string{protocol.CapabilityBinaryPtyOutput}}, protocol.EventInitialState, nil)
 	if err != nil {
 		return err
 	}

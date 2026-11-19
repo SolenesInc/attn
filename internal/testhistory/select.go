@@ -2,7 +2,6 @@ package testhistory
 
 import (
 	"fmt"
-	"slices"
 	"sort"
 	"strings"
 )
@@ -13,21 +12,6 @@ import (
 // median of 7 tests, at most 36; on a 10-core Mac the largest set took the Go
 // landing tests from 20.6s to 38.3s.
 const ClearedAfter = 30
-
-const VitestSuiteUnit = "vitest ."
-
-var appTestDirs = []string{"scripts/real-app-harness/", "src/browser/"}
-
-func AppTestUnit(repoPath string) (string, bool) {
-	file, ok := strings.CutPrefix(repoPath, "app/")
-	if !ok || !slices.ContainsFunc(appTestDirs, func(dir string) bool { return strings.HasPrefix(file, dir) }) {
-		return "", false
-	}
-	if !strings.HasSuffix(file, ".test.ts") && !strings.HasSuffix(file, ".test.mjs") {
-		return "", false
-	}
-	return "vitest " + file, true
-}
 
 func CargoTestUnits(repoPath string) []string {
 	rest, ok := strings.CutPrefix(repoPath, "native/crates/")

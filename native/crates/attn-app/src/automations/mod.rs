@@ -24,8 +24,7 @@ use crate::shell::Drawer;
 pub(crate) use drawer::drawer;
 
 pub(crate) const DRAWER: &str = "automations";
-/// How long a Run now waits for the daemon before it says the run is still in flight, as the
-/// Tauri app's automation requests do.
+/// How long a Run now waits for the daemon before it says the run is still in flight.
 const RUN_ANSWER_SECONDS: f64 = 30.0;
 pub(crate) const STILL_IN_FLIGHT: &str = "Run request is still in flight — it will appear in run history; clicking again retries the same run.";
 const MANUAL: &str = "manual:";
@@ -174,8 +173,8 @@ fn ask_in_tenure(
     );
 }
 
-/// The list goes out under a `request_id` that carries its command, as the Tauri app's does, so
-/// the daemon's log names what asked.
+/// The list goes out under a `request_id` that carries its command, so the daemon's log names
+/// what asked.
 fn list(state: &mut State, tx: &mut Tx) {
     let id = format!("automation_definitions_get:{}", state.next_request_id());
     let message = AutomationDefinitionsGetMessage {

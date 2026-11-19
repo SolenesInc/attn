@@ -119,7 +119,6 @@ async function main() {
   }
   await client.waitForManifest(20_000);
   await client.waitForReady(20_000);
-  await client.waitForFrontendResponsive(20_000);
 
   const targetPath = outputPath || '/tmp/attn-app-window.png';
   const result = await captureFrontWindowScreenshot(targetPath, { client, crop, maxDim });

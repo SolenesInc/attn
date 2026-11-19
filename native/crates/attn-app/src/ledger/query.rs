@@ -1,6 +1,5 @@
 //! What the Sessions list asks the daemon for, and how its rows read: the typed query, the date
-//! window, and the words a row shows. Ported from the Tauri app's `ledgerQuery.ts`,
-//! `ledgerTime.ts` and `sessionsLedger.ts`.
+//! window, and the words a row shows.
 
 use attn_protocol::{SessionLedgerEntry, SessionLedgerFacets, SessionListMessage, SessionReopen};
 use rune::time::LocalTime;

@@ -7,7 +7,7 @@ use super::model::Line;
 use crate::State;
 use crate::requests::Refused;
 
-/// Points the pointer travels before a press on a desktop becomes a drag, as in the Tauri app.
+/// Points the pointer travels before a press on a desktop becomes a drag.
 const THRESHOLD: f32 = 6.0;
 
 /// A desktop being dragged to a new place: the seam it would land at, counting the seam

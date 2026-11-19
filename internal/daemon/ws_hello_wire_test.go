@@ -80,10 +80,9 @@ func expectRefusalClose(t *testing.T, p *testworld.Peer) {
 	}
 }
 
-func TestOnlyAnAppHelloWithTheHostTokenAndItsOwnOriginIsTrusted(t *testing.T) {
+func TestOnlyAnAppHelloWithTheHostTokenAndNoWebOriginIsTrusted(t *testing.T) {
 	w := newFsWorld(t)
 	external := fsDir(t, "external")
-	tauriOrigin := http.Header{"Origin": {"tauri://localhost"}}
 	webPage := http.Header{"Origin": {"http://localhost:5173"}}
 	for _, c := range []struct {
 		name      string
@@ -96,10 +95,7 @@ func TestOnlyAnAppHelloWithTheHostTokenAndItsOwnOriginIsTrusted(t *testing.T) {
 		{"the native app without the host token", protocol.ClientKindNativeApp, nil, nil, false},
 		{"the native app with a wrong host token", protocol.ClientKindNativeApp, protocol.Ptr("not-the-host-token"), nil, false},
 		{"a web page claiming to be the native app", protocol.ClientKindNativeApp, protocol.Ptr(config.BrowserHostToken()), webPage, false},
-		{"the native app from the Tauri origin", protocol.ClientKindNativeApp, protocol.Ptr(config.BrowserHostToken()), tauriOrigin, false},
-		{"the Tauri app with the host token", protocol.ClientKindTauriApp, protocol.Ptr(config.BrowserHostToken()), tauriOrigin, true},
-		{"the Tauri app without the host token", protocol.ClientKindTauriApp, nil, tauriOrigin, false},
-		{"the Tauri app without its origin", protocol.ClientKindTauriApp, protocol.Ptr(config.BrowserHostToken()), nil, false},
+		{"another client kind with the host token", "harness-observer", protocol.Ptr(config.BrowserHostToken()), nil, false},
 	} {
 		hello := helloWithToken(protocol.Ptr(config.ClientToken()))
 		hello.ClientKind = c.kind

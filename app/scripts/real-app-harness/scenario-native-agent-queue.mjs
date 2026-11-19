@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -70,7 +70,7 @@ try {
   const frontmostBefore = checksFocus ? await driver.frontmostBundleId() : null;
 
   await runner.step('launch_app_with_queue_mode', async () => {
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     observer.send({ cmd: 'set_setting', key: 'queue_mode_enabled', value: 'true' });
     await driver.waitFor({ key: 'sidebar.queue' });
   });

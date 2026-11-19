@@ -135,7 +135,7 @@ pub fn participates(session: &Session, crew_in_queue: bool) -> bool {
         && (session.crew_member.as_deref().unwrap_or("").is_empty() || crew_in_queue)
 }
 
-/// The agents that want the user, in place order, as the Tauri app's `wantsAttention`: in
+/// The agents that want the user, in place order: in
 /// queue flow the queue's owed turns, in desktop flow every agent waiting for input or approval,
 /// runs and crew included. An unreachable outpost's agents want no one.
 pub fn wanting(facts: &Facts) -> Vec<&Session> {
@@ -166,7 +166,7 @@ pub fn oldest_wanted<'a>(facts: &'a Facts, except: Option<&str>) -> Option<&'a S
         .min_by(|a, b| compare_turn_order(a, b))
 }
 
-/// What the queue lets the user do to an agent, as the Tauri app's `queueActions`.
+/// What the queue lets the user do to an agent.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct QueueActions {
     pub settle: bool,
@@ -246,8 +246,7 @@ impl<'a> Places<'a> {
     }
 }
 
-/// The queue the selected profile's sessions make at `now_ms`, in the Tauri app's
-/// `buildQueueBands` order.
+/// The queue the selected profile's sessions make at `now_ms`, in band order.
 pub fn bands(facts: &Facts, now_ms: i64) -> Bands<'_> {
     let crew_in_queue = setting::on(&facts.settings, QUEUE_CREW);
     let Places { places, desktop_of } = Places::of(facts);

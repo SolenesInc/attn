@@ -229,7 +229,7 @@ pub(super) fn script(key: &str, stop: &ReviewStop, stage: Option<Option<i64>>, t
     }
 }
 
-/// How far a note in the Walkthrough's script sits in, as the Tauri script's 0.5rem.
+/// How far a note in the Walkthrough's script sits in, half a 14 point rem.
 const SCRIPT_NOTE_INDENT: f32 = 7.0;
 
 /// An agent's note on lines, `indent` points in.
@@ -241,8 +241,8 @@ pub(super) fn note(note: &ReviewNote, indent: f32, t: &Tokens) -> El {
         .build(t)
 }
 
-/// Where notes under code rows start: past both line numbers and the sign, as the Tauri
-/// review's 8.25em of its code font.
+/// Where notes under code rows start: past both line numbers and the sign, 8.25 ems of the code
+/// font.
 pub(super) fn note_indent() -> f32 {
     NOTE_EM * Reading::Code.size()
 }
@@ -252,7 +252,7 @@ pub(super) fn range_marker(t: &Tokens) -> (f32, Color) {
     (2.0, t.accent.alpha(0.5))
 }
 
-/// A code row's columns in its font's em, as the Tauri review's grid: each line number,
+/// A code row's columns in its font's em: each line number,
 /// right-aligned half an em short of its column's end, then the sign.
 const NUMBER_EM: f32 = 3.5;
 const SIGN_EM: f32 = 1.25;

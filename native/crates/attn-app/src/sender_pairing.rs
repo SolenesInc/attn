@@ -1,5 +1,5 @@
-//! The Tauri app's `SenderPairingPrompt`: a program that ran `attn send pair` waits for the
-//! user to allow or deny it, with the code it shows, over everything in the main window until
+//! The sender approval dialog: a program that ran `attn send pair` waits for the user to allow
+//! or deny it, with the code it shows, over everything in the main window until
 //! the daemon says it no longer waits.
 
 use attn_protocol::{SenderPairDecideMessage, SenderPairingRequest, SendersGetMessage};
@@ -94,7 +94,7 @@ fn decide(state: &mut State, allow: bool, tx: &mut Tx) {
     );
 }
 
-/// Return presses the focused answer, as it does in the Tauri app.
+/// Return presses the focused answer, as it does on an HTML button.
 fn press_focused(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if ev.key != Key::Enter || ev.mods != Mods::default() {
         return false;

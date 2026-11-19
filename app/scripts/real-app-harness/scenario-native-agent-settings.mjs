@@ -3,7 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
@@ -74,7 +74,7 @@ const screenshot = (name) => driver.screenshot(path.join(runner.runDir, name));
 try {
   const frontmostBefore = mac ? await driver.frontmostBundleId() : null;
   await runner.step('launch_app', async () => {
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     const baseline = new Map(SETTINGS.map((key) => [key, observer.getSetting(key)]));
     runner.registerCleanup('restore_settings', () => Promise.all([...baseline].map(([key, value]) => observer.requestResult({ cmd: 'set_setting', key, value }, 'settings_updated').catch(() => {}))));
     await driver.run('ui.openSettings');

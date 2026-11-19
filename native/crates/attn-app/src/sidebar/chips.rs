@@ -102,8 +102,7 @@ fn slotted(chips: Vec<Chip>, crowded: bool) -> (Vec<Chip>, Extras) {
     (slotted, extras)
 }
 
-/// Where a queue chip sits, which sets its look: the queue sidebar's strip, as the Tauri app's
-/// `.queue-desktop-chip`, or the queue bar, as its `.queue-bar-desktop`.
+/// Where a queue chip sits, which sets its look: the queue sidebar's strip or the queue bar.
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Look {
     Strip,
@@ -184,9 +183,8 @@ fn waiting_words(waiting: usize, look: Look) -> String {
     }
 }
 
-/// The turns waiting on a chip's desktops, over its top right corner: a dot on the strip, as
-/// the Tauri app's `.queue-desktop-chip-waiting`, their number on the bar, as its
-/// `.queue-bar-desktop-waiting`.
+/// The turns waiting on a chip's desktops, over its top right corner: a dot on the strip, their
+/// number on the bar.
 fn waiting_mark(chip: &str, waiting: usize, look: Look, t: &Tokens) -> Option<El> {
     (waiting > 0).then(|| match look {
         Look::Strip => waiting_dot(t),
@@ -443,10 +441,9 @@ fn rail_chip(chip: &Chip, t: &Tokens) -> El {
     .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &desktop, tx))
 }
 
-/// Queue flow with the sidebar collapsed: the title bar's middle as the Tauri app's `.queue-bar`,
-/// with the waiting pill, the critical notification, the tile shelf, the runs chip and the
-/// desktop chips. The pill is the Tauri app's `.queue-bar-pill`: a dot, the count, then the
-/// agents whose turns wait.
+/// Queue flow with the sidebar collapsed: the title bar's middle as the queue bar, with the
+/// waiting pill, the critical notification, the tile shelf, the runs chip and the desktop chips.
+/// The pill holds a dot, the count, then the agents whose turns wait.
 pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens) -> El {
     let owed = bands.owed();
     let crumbs: Vec<String> = bands
@@ -563,7 +560,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
     super::crowding::filled(state, bar)
 }
 
-/// The queue bar's desktop chips, as the Tauri app's `.queue-bar-desktops`.
+/// The queue bar's desktop chips.
 fn desktops(state: &State, bands: &Bands<'_>, crowded: bool, t: &Tokens) -> El {
     let (chips, extras) = slotted(chips(state, turns_on(bands)), crowded);
     Inline::joined()
@@ -642,9 +639,8 @@ fn runs_chip(state: &State, t: &Tokens) -> Option<El> {
     )
 }
 
-/// The queue bar pill's narrowest while it shows crumbs, and its widest, as the Tauri app's
-/// `.queue-bar-pill`: the crumbs cut before the pill crowds the desktops. Without crumbs it holds
-/// its dot, its count whole and its caret.
+/// The queue bar pill's narrowest while it shows crumbs, and its widest: the crumbs cut before
+/// the pill crowds the desktops. Without crumbs it holds its dot, its count whole and its caret.
 const PILL_MIN_W: f32 = 124.0;
 const PILL_MAX_W: f32 = 640.0;
 
@@ -652,13 +648,12 @@ const PILL_MAX_W: f32 = 640.0;
 /// sentence; past that it leaves the bar rather than cut its sentence to nothing.
 const CRITICAL_STRIP_MIN_W: f32 = 96.0;
 
-/// The widest the critical strip stands in the bar, as the Tauri app's `.queue-bar
-/// .critical-strip`; it shrinks with the waiting pill when the bar is tight.
+/// The widest the critical strip stands in the bar; it shrinks with the waiting pill when the
+/// bar is tight.
 const CRITICAL_STRIP_MAX_W: f32 = 260.0;
 
-/// How far the bar's waiting count hangs past its chip's corner, as the Tauri app's
-/// `.queue-bar-desktop-waiting` at -6; the bar keeps as much room after its last chip, so the
-/// count never lies over the toolbar.
+/// How far the bar's waiting count hangs past its chip's corner; the bar keeps as much room
+/// after its last chip, so the count never lies over the toolbar.
 const BADGE_OVERHANG: f32 = 6.0;
 
 /// How far the bar's waiting count rises above its chip: the room between the chip and the

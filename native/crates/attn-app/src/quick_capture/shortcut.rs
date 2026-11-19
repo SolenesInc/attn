@@ -1,7 +1,6 @@
 //! The system-wide shortcut that opens Quick Capture: bound from the daemon's `capture.shortcut`
 //! setting, and before that from the binding cached in `capture-shortcut.json`, both written
-//! as the Tauri app writes them (`Control+Alt+Super+Space`), so either app takes up the
-//! other's choice.
+//! as the Tauri app wrote them (`Control+Alt+Super+Space`), so a choice made there carries over.
 
 use std::path::{Path, PathBuf};
 

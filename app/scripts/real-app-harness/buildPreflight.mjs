@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { assertProductionRunAllowed, defaultAppPathForInstance } from './harnessInstance.mjs';
-import { appBuildIdentityInTree, appCliInTree, appShellInTree } from './platform.mjs';
+import { appBuildIdentityInTree, appCliInTree } from './platform.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HARNESS_DIR, '../../..');
@@ -35,8 +35,8 @@ function normalizeBuildInfo(raw) {
   };
 }
 
-function getCurrentSourceIdentitySync(app = 'tauri') {
-  const stdout = execFileSync('bash', [SOURCE_FINGERPRINT_SCRIPT, '--app', app, '--json'], {
+function getCurrentSourceIdentitySync(...scope) {
+  const stdout = execFileSync('bash', [SOURCE_FINGERPRINT_SCRIPT, ...scope, '--json'], {
     cwd: REPO_ROOT,
     encoding: 'utf8',
   });
@@ -121,7 +121,7 @@ export function assertPackagedAppBuildMatchesCurrentSource({
   assertProductionRunAllowed({ appPath });
   const currentSource = getCurrentSourceIdentitySync();
   const currentFingerprint = readNonEmptyString(currentSource?.fingerprint);
-  const currentAppFingerprint = readNonEmptyString(getCurrentSourceIdentitySync(appShellInTree(appPath))?.fingerprint);
+  const currentAppFingerprint = readNonEmptyString(getCurrentSourceIdentitySync('--app', 'native')?.fingerprint);
   if (!currentFingerprint || !currentAppFingerprint) {
     throw new Error('current source fingerprint is unavailable');
   }

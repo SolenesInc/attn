@@ -11,7 +11,7 @@ function delay(ms) {
 function sendClientHello(ws, trustedApp = false) {
   ws.send(
     JSON.stringify({
-      ...harnessClientHello(trustedApp ? 'tauri-app' : 'harness-observer'),
+      ...harnessClientHello(trustedApp ? 'native-app' : 'harness-observer'),
       ...(trustedApp ? { browser_host_token: fs.readFileSync(path.join(dataDirForInstance(), 'browser-host-token'), 'utf8').trim() } : {}),
     }),
   );
@@ -378,7 +378,7 @@ export class DaemonObserver {
 
   #connectOnce() {
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(this.wsUrl, this.trustedApp ? { headers: { Origin: 'tauri://localhost' } } : undefined);
+      const ws = new WebSocket(this.wsUrl);
       let settled = false;
 
       const fail = (error) => {

@@ -63,7 +63,7 @@ func fastRates(card RateCard, multiplier float64) RateCard {
 }
 
 // Codex picks the auto-review model server-side; attn assumes gpt-6-luna until the user says otherwise.
-// The settings picker lists these targets in app/src/components/SessionCostPriceSettings.tsx; keep both in step.
+// The settings picker lists these targets in native/crates/attn-app/src/settings/agents/pricing.rs; keep both in step.
 var builtInBilledAs = map[string]string{
 	"codex-auto-review": "gpt-6-luna",
 }

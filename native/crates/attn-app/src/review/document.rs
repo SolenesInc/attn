@@ -45,8 +45,8 @@ impl Part {
         )
     }
 
-    /// The space this part wants above and below it, as the Tauri reader's CSS margins at its
-    /// 14 point rem; two neighbours' margins collapse into the larger.
+    /// The space this part wants above and below it, in margins of a 14 point rem; two neighbours'
+    /// margins collapse into the larger.
     pub(crate) fn margins(&self) -> (f32, f32) {
         match self {
             Part::Prose { block, .. } => match block {

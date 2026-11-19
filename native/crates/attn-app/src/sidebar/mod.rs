@@ -860,8 +860,7 @@ pub(crate) fn open_tile(state: &mut State, desktop: &str, tile: &str, tx: &mut T
     crate::dispatch(state, action, tx);
 }
 
-/// Shows the agent where it is and gives its terminal the keyboard, as a click on its row in
-/// the Tauri app does.
+/// Shows the agent where it is and gives its terminal the keyboard.
 pub(crate) fn open_agent(state: &mut State, session: &str, tx: &mut Tx) {
     if let Some(run) = state
         .facts
@@ -955,7 +954,7 @@ fn pane_of(state: &State, session: &str) -> Option<(String, String)> {
 }
 
 /// When an agent shows alone, the sidebar it hides lets go: its agent list closes, and the
-/// keyboard it held goes to the agent, as in the Tauri app.
+/// keyboard it held goes to the agent.
 pub(crate) fn give_way_to_an_agent_alone(state: &mut State, tx: &mut Tx) {
     if !crate::desktop::shows_an_agent_alone(state) {
         return;

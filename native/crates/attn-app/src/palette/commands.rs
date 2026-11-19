@@ -17,8 +17,7 @@ fn set(key: &str, on: bool) -> Action {
     }
 }
 
-/// A command the palette offers: its id is the key the daemon keeps its history under, shared
-/// with the Tauri app.
+/// A command the palette offers: its id is the key the daemon keeps its history under.
 pub(crate) struct Command {
     id: String,
     title: String,
@@ -894,7 +893,7 @@ pub(crate) fn ranked(state: &State, query: &str, history: &[CommandUsage]) -> Ve
         .collect()
 }
 
-/// The icon the Tauri app gives command `id`.
+/// The icon of command `id`.
 fn icon_of(id: &str) -> Option<Icon> {
     let desktops = ["desktop-", "move-with-delegates-"];
     if desktops.iter().any(|p| id.starts_with(p)) {

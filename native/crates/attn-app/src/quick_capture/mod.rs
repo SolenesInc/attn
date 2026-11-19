@@ -34,7 +34,7 @@ pub(crate) use history::History;
 
 /// The mailbox a new draft goes to: the profile's chief, the roster's first entry.
 pub(crate) const CHIEF: &str = "chief";
-/// The panel's size in points, as the Tauri app's.
+/// The panel's size in points.
 pub const SIZE: (f32, f32) = (560.0, 390.0);
 /// The setting that stores the global shortcut; empty turns it off.
 pub const SHORTCUT_SETTING: &str = "capture.shortcut";

@@ -129,8 +129,8 @@ export PATH="$work/bin:$PATH"
 export LAND_CLEAN_LOG="$work/cleans"
 export LAND_CHECK_LOG="$work/checks" LAND_MOVE_MAIN="$work/move-main" LAND_OTHER="$work/other"
 export LAND_REMOTE="$work/remote" LAND_SOAK_REFS="$work/soak-refs" LAND_REJECT_MAIN="$work/reject-main"
-export selected=$'go ./internal/example TestExample\nvitest src/example.test.ts'
-selected_units="--unit go ./internal/example TestExample --unit vitest src/example.test.ts"
+export selected=$'go ./internal/example TestExample\ncargo example --lib'
+selected_units="--unit go ./internal/example TestExample --unit cargo example --lib"
 go_choice=('land --group go --group prompts' "landing-tests --no-go-vet $selected_units")
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 git init -q --bare "$work/remote"
@@ -150,7 +150,7 @@ git config user.name 'Landing Test'
 git config user.email 'landing@example.invalid'
 git config core.hooksPath /dev/null
 git switch -qc work
-mkdir -p internal/example internal/removed app/src scripts internal/protocol/schema internal/prompts
+mkdir -p internal/example internal/removed scripts internal/protocol/schema internal/prompts
 printf 'package example\n' >internal/example/example.go
 printf 'package example\n' >internal/example/other.go
 printf 'package removed\n' >internal/removed/removed.go
@@ -248,10 +248,15 @@ printf '\n' >>go.mod
 land 'Module change'
 expect_checks "${go_choice[0]}" 'check-types' 'check-go GO_PACKAGES=./...' "${go_choice[1]}" sync
 
-mkdir -p app/src
-printf 'export {};\n' >app/src/example.ts
-land 'App change'
-expect_checks check-js-tools sync
+mkdir -p app/scripts/real-app-harness
+printf 'export {};\n' >app/scripts/real-app-harness/example.mjs
+land 'Harness change'
+expect_checks 'check-harness lint-js' sync
+
+mkdir -p native/browser-runtime/src
+printf 'export {};\n' >native/browser-runtime/src/example.ts
+land 'Browser runtime change'
+expect_checks 'land --group native' 'check-browser-runtime check-native NATIVE_CLIPPY=' "landing-tests $selected_units" sync
 
 mkdir -p native/crates/demo/src
 printf '[workspace]\n' >native/Cargo.toml
@@ -268,6 +273,11 @@ mkdir -p mobile/src
 printf 'export {};\n' >mobile/src/example.ts
 land 'Mobile change'
 expect_checks check-mobile sync
+
+mkdir -p sdk/plugin/src
+printf 'export {};\n' >sdk/plugin/src/example.ts
+land 'SDK change'
+expect_checks lint-js sync
 
 mkdir -p scripts internal/protocol/schema internal/prompts
 printf 'true\n' >scripts/example.sh
@@ -350,7 +360,7 @@ printf '// changed\n' >app/scripts/real-app-harness/scenario-native-shelf-moves.
 land 'Change a scenario'
 grep -qF 'soak workflow run acceptance-soak.yml' "$LAND_CHECK_LOG" || { echo 'a changed scenario did not run before the push' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 grep -qF -- '-f scenarios=native-shelf-moves -f repeat=1' "$LAND_CHECK_LOG" || { echo 'the soak did not name the changed scenario' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
-grep -qF 'check-js-tools' "$LAND_CHECK_LOG" || { echo 'the gate did not run beside the scenarios' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+grep -qF 'check-harness' "$LAND_CHECK_LOG" || { echo 'the gate did not run beside the scenarios' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 grep -qF refs/heads/land-scenarios/ "$LAND_SOAK_REFS" || { echo 'the soak ran before its ref reached the remote' >&2; exit 1; }
 no_land_scenario_refs
 expect_output 'passed on CI'
@@ -402,7 +412,7 @@ expect_checks 'land --group go --group prompts' 'check-go GO_PACKAGES=./internal
 expect_output 'choosing landing tests failed; running the baseline groups go prompts'
 
 refuses() {
-  local before changing="${3:-app/src/example.ts}"
+  local before changing="${3:-internal/example/example.go}"
   printf '\n' >>"$changing"
   git add -A
   git commit -qm "$1"
@@ -419,11 +429,9 @@ printf '[user]\n\temail = global@example.invalid\n' >"$work/global-identity"
 refuses 'a commit whose author is not the global identity' GIT_CONFIG_GLOBAL="$work/global-identity"
 grep -qF 'landing@example.invalid' "$work/failure" && grep -qF 'global@example.invalid' "$work/failure" || { echo 'the refusal did not name both identities' >&2; cat "$work/failure" >&2; exit 1; }
 printf '[user]\n\temail = landing@example.invalid\n' >"$work/matching-identity"
-printf '\n' >>app/src/example.ts
+printf '\n' >>README.md
 land 'A commit by the global identity' GIT_CONFIG_GLOBAL="$work/matching-identity"
 
-refuses 'a failed app check' LAND_CHECK_EXIT=1
-refuses 'a failed landing test' LAND_TESTS_EXIT=1 app/scripts/real-app-harness/example.test.mjs
 refuses 'a failed Go check' LAND_CHECK_EXIT=1 internal/example/example.go
 grep -qF 'make ran: check-go' "$work/failure" || { echo 'the failed Go check left no output' >&2; cat "$work/failure" >&2; exit 1; }
 refuses 'a failed landing test beside passing Go checks' LAND_TESTS_EXIT=1 internal/example/example.go
@@ -472,7 +480,7 @@ touch "$LAND_REJECT_MAIN"
 if bash "$root/scripts/land.sh" >"$work/output" 2>&1; then echo 'main accepted a push it rejects' >&2; exit 1; fi
 if grep -qF soak "$LAND_CHECK_LOG"; then echo 'an unchanged diff ran its scenario again after a rebase' >&2; cat "$work/output" >&2; exit 1; fi
 expect_output 'scenario native-shelf-moves passed on this diff already: https://example.invalid/runs/7'
-grep -qF 'check-js-tools' "$LAND_CHECK_LOG" || { echo 'a landing with recorded scenarios skipped its gate' >&2; exit 1; }
+grep -qF 'check-harness' "$LAND_CHECK_LOG" || { echo 'a landing with recorded scenarios skipped its gate' >&2; exit 1; }
 rm "$LAND_REJECT_MAIN"
 printf 'changed diff\n' >>README.md
 git add -A
@@ -596,9 +604,9 @@ mkdir "$hold"
 mkfifo "$hold/started" "$hold/release"
 git worktree add -q -b second "$second" origin/main
 
-printf '\n' >>app/src/example.ts
+printf '\n' >>internal/example/example.go
 git add -A
-git commit -qm 'App change whose checks run beside another land'
+git commit -qm 'Go change whose checks run beside another land'
 LAND_HOLD="$hold" bash "$root/scripts/land.sh" >"$work/holder-output" 2>&1 &
 holder=$!
 read -r _ <"$hold/started"

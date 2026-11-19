@@ -1267,12 +1267,12 @@ fn focusing(focused: bool) -> Recording {
 }
 
 const ALONE: &str = "a tile is shown alone|a tile shown alone returns";
-const BY_DESIGN: &str = "showing a tile alone and returning it land at once, as in the Tauri app";
-const SIDEBAR_GOES: &str = "an agent shown alone hides the sidebar and gives the tiles its room at once, as in the Tauri app";
-const SPOTLIGHT_MARKS: &str =
-    "the spotlight's corner marks come and go at once, as in the Tauri app";
+const BY_DESIGN: &str = "showing a tile alone and returning it land at once";
+const SIDEBAR_GOES: &str =
+    "an agent shown alone hides the sidebar and gives the tiles its room at once";
+const SPOTLIGHT_MARKS: &str = "the spotlight's corner marks come and go at once";
 
-const IN_VIEW_BAR: &str = "the brand bar of the row in view comes and goes at once, as the Tauri app's `.sidebar-leaf-row.selected::before`";
+const IN_VIEW_BAR: &str = "the brand bar of the row in view comes and goes at once";
 
 const LANDS_AT_ONCE: &[AllowRow] = &[
     AllowRow::new("pop-in", ".in-view", "", IN_VIEW_BAR).max(2),
@@ -1438,7 +1438,7 @@ fn showing_a_tile_alone_and_returning_it_land_in_the_frame_of_the_key() {
     assert_eq!(
         looks_of(&alone, "a")[0].0[2],
         TWO_FIT + BESIDE_TILES,
-        "the agent alone takes the sidebar's room, edge to edge as the Tauri app's focus mode"
+        "the agent alone takes the sidebar's room, edge to edge"
     );
     assert!(sidebar_beside(&alone, "a").iter().all(|shown| !shown));
 
@@ -1532,7 +1532,7 @@ fn a_tile_opened_while_another_shows_alone_and_an_agent_opened_from_home_land_at
 }
 
 #[test]
-fn one_shell_tile_in_a_1200_by_800_window_gets_the_grid_the_tauri_app_gives_it() {
+fn one_shell_tile_in_a_1200_by_800_window_gets_a_34_by_106_grid() {
     let mut shell = desktop(1, "a", pane("a"));
     shell.panes[0].kind = "shell".into();
     let mut world = World::start_sized(daemon(None, vec![shell], &[]), (1200.0, 800.0));

@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { launchFreshNativeAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
 import { crewManagementFixture, modelAwareWrapperSource, transcriptLaunches } from './crewManagementFixture.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv, resolveHarnessResources } from './harnessInstance.mjs';
@@ -190,7 +190,7 @@ try {
       ],
     });
     process.env.ATTN_MOCK_AGENT_LAUNCH_RECEIPT = 'wake-received';
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     for (const [key, value] of [['claude_executable', wrapper], ['codex_executable', wrapper], ['queue_mode_enabled', 'true']]) {
       queueDaemonSettingRestore(observer, key);
       observer.send({ cmd: 'set_setting', key, value });

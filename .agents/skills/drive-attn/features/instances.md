@@ -33,7 +33,7 @@ with the mock agent and the mock GitHub, the doctor and the cleanup are in
 
 ### Agents
 
-- `attn instance status|resolve|list|clean|stop-app|set-origin|tauri-config|register-scheme` (`cmd/attnd/instance.go`), `attn instance env` (`cli/attn/src/commands/instance_env.rs`). `attn instance-env <name>|--unset`, with `--fish` for fish (`cli/attn/src/commands/instance_env.rs`). `attn daemon ensure|stop [--terminals]` and `attn version [--json]` (`cmd/attnd/main.go`).
+- `attn instance status|resolve|list|clean|stop-app|set-origin|register-scheme` (`cmd/attnd/instance.go`), `attn instance env` (`cli/attn/src/commands/instance_env.rs`). `attn instance-env <name>|--unset`, with `--fish` for fish (`cli/attn/src/commands/instance_env.rs`). `attn daemon ensure|stop [--terminals]` and `attn version [--json]` (`cmd/attnd/main.go`).
 - No prompt attn sends names these verbs. The agents an instance runs reach that instance with their own `attn` commands, because every terminal the instance starts carries the instance's routing: `ATTN_INSTANCE`, `ATTN_SOCKET_PATH`, `ATTN_DATA_DIR` and the rest (`internal/daemon/spawn_routing.go`).
 
 ### Triggers
@@ -48,7 +48,7 @@ Preconditions:
 - Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-instances.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 
 - **Select.** Run `./attn instance-env <name>`: it prints an `unset` line for each inherited routing variable, then `export ATTN_INSTANCE=<name>`, the lines the env file opens with. `./attn instance` prints `attn instance: <name>`, then `data dir`, `socket` with `(no daemon socket)`, `ws port`, `bundle id`, `app` with `(not installed)` and `mock gh`, and no `CONFLICT` line.
-- **Resolve.** `./attn instance resolve --field dataDir` prints the data folder. `./attn instance resolve` prints JSON with `"instance": "<name>"`, `wsPort`, `appDaemon` and `mockGitHubPort`. `./attn instance resolve --instance other --field wsPort` resolves another name without selecting it. `./attn instance tauri-config` prints the build's config overlay: `productName` and `identifier` match `appName` and `bundleId`, and the deep-link scheme is `deepLinkScheme`. `./attn instance env <name>` prints the same lines as `./attn instance-env <name>`.
+- **Resolve.** `./attn instance resolve --field dataDir` prints the data folder. `./attn instance resolve` prints JSON with `"instance": "<name>"`, `wsPort`, `appDaemon` and `mockGitHubPort`. `./attn instance resolve --instance other --field wsPort` resolves another name without selecting it. `./attn instance env <name>` prints the same lines as `./attn instance-env <name>`.
 - **Claim the port.** `./attn instance claim-port` prints a port and writes it to `ws-port` in the data folder. Run it again: the same port. `./attn instance resolve --field wsPort` then prints that port. `./attn instance claim-port --instance default` prints `9849` and writes no file. When another instance already uses `<name>`'s derived port, the claim prints the next port no other instance uses. `./attn instance clean <name> --keep-app` prints `port     kept <port> for the kept app`, and `resolve --field wsPort` still prints that port.
 - **Start and stop the daemon.** `./attn daemon ensure` prints JSON with `"status": "started"`, with the banner on stderr. Run it again: `"status": "already_running"`. `./attn instance` now shows `(daemon socket present)`. `./attn daemon stop` prints `stopped daemon (pid <n>)`, and a second stop prints `daemon not running` with the reason.
 - **Stop with the terminals.** Start the daemon, run `wsctl add-session --cwd $P --agent shell --label stop-shell --id stop-shell`, and note the shell's PID from `wsctl list`. `./attn daemon stop` prints `stopped daemon (pid <n>)` and `terminals keep running in pids [<host>]`, and `ps -p <shell-pid>` still lists the shell. `./attn daemon stop --terminals` prints `daemon not running`, then `pty hosts 1 registered (1 terminated)` or `workers  1 registered (1 removed)`; `ps -p <shell-pid>` and `ps -p <host>` list nothing.
@@ -64,26 +64,19 @@ Preconditions:
 - **Clean.** `./attn instance clean <name>` prints `>>> Cleaning instance <name>`, then a line for the app, the daemon, the workers and each removed folder. `./attn instance` shows `(no daemon socket)` and `(not installed)`. `./attn instance-env --unset` prints the same `unset` lines, then `unset ATTN_INSTANCE`. The instance shell ends when [../SKILL.md](../SKILL.md)'s Cleanup removes the env file.
 - **Proof.** In `$P`, keep each command with its stdout, stderr and exit code. Also keep `./attn instance resolve` and `./attn version --json`, and `bridge shot '{"path":"<P>/instance-marker.png"}'` with the marker in view, where `<P>` is the folder's path written out. Name each file for its way in, such as `instances-daemon-ensure.txt`.
 
-### In the Tauri app (the rollback)
-
-Install it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) says. Launch it with `bridge --launch --wait-ready ping`. The CLI steps above are the same.
-
-- **The marker.** `bridge dom_text '{"selector":"[data-testid=\"title-bar-instance-marker\"]"}'` reads `<name>`, with no session yet and after `wsctl add-session --cwd $P --agent shell --label marker-shell --id marker-shell`. In the collapsed desktop sidebar the marker can render as `dr…` even though `dom_text` returns the whole name, so expand the sidebar for instance proof: the expanded marker shows `instance <name>`. Capture it with `bridge capture_screenshot '{"path":"<P>/instance-marker.png"}'`.
-
 ## Contexts
 
 - **Durability across restarts**: an instance's sessions, garden and settings live in its data folder and survive restarts of its daemon, app and machine. `clean` removes them. The notebook folder, `~/attn-notebook-<name>`, survives `clean`, and a later instance with the same name starts with it.
 - **Linux**: the app is a directory tree instead of a macOS bundle. `attn instance register-scheme` claims the deep-link scheme in the desktop database, and `make run` starts the app in the background, logging to `<data-dir>/app.log`.
 - **Profiles**: profiles live inside an instance. A new instance starts with its own profiles and sees none of production's.
 - **Compatibility across versions**: `attn profile` and `attn profile-env` were renamed to `attn instance` and `attn instance-env`, and exit 2 naming the new command. `attn daemon ensure` restarts a daemon that does not match the binary, and the CLI warns when its release differs from the running daemon's.
-- **Flow**: the marker sits in the title bar. In the Tauri app (the rollback), an expanded sidebar shows `instance <name>` in either flow, and a collapsed sidebar in queue flow becomes the queue bar, which shows `<name>` under the same `data-testid`, so a check that reads `instance <name>` needs the sidebar expanded.
+- **Flow**: the marker sits in the title bar in either flow.
 
 ## Tests
 
 - Stack: `cmd/attnd/daemon_ensure_stack_test.go`, `cmd/attnd/daemon_stop_stack_test.go`, `cmd/attnd/daemon_stack_test.go`, `cmd/attnd/daemon_startup_stack_test.go`, `cmd/attnd/daemon_socket_stack_test.go`, `cmd/attnd/pidlock_stack_test.go`, `cmd/attnd/instance_env_stack_test.go`, `cmd/attnd/version_stack_test.go`.
 - Kernel: `cmd/attnd/instance_test.go`, `cmd/attnd/instance_origin_test.go`, `cmd/attnd/instance_pty_host_test.go`, `cmd/attnd/instance_app_stop_test.go`, `internal/daemonctl/*_test.go`, `internal/desktopentry/*_test.go`.
 - Wire: `native/crates/attn-app/tests/wire/connection.rs` (a daemon of another instance is refused).
-- App, the Tauri app's (the rollback): `app/src/App.daemonEnsure.test.tsx`, `app/src/App.instanceMismatch.test.tsx`, `app/src/App.releaseUpdates.test.tsx`.
 
 ## Gotchas
 
@@ -97,6 +90,5 @@ Install it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) says. Launch
 - `make build` replaces `./attn` for every maintainer sharing the checkout. Build in a checkout of your own when others are driving.
 - `(daemon socket present)` only means the socket file exists, and the file can outlive a daemon that just stopped. Tell a restarted daemon by the PID in `attn.pid`.
 - `attn instance list` shows other maintainers' instances too. Never stop, drive or clean an instance this run did not start.
-- An app built from this checkout never asks GitHub for a newer release, so a newer-release notice cannot show on an instance. In the Tauri app (the rollback), `app/src/App.releaseUpdates.test.tsx` covers its notice.
+- An app built from this checkout never asks GitHub for a newer release, so a newer-release notice cannot show on an instance.
 - `dev` installs the enabled workflow skill into your harness homes. A named instance does not.
-- In the Tauri app (the rollback), the instance-mismatch refusal tells the user to launch `attn.app` or `attn-dev.app`, though a named instance's app has a name of its own.

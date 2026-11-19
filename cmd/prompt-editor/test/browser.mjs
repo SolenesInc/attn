@@ -4,12 +4,10 @@ import { once } from "node:events";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { chromium, expect } from "@playwright/test";
 
 const repo = fileURLToPath(new URL("../../..", import.meta.url));
-const require = createRequire(path.join(repo, "app/package.json"));
-const { chromium, expect } = require("@playwright/test");
 const fixture = await fs.mkdtemp(path.join(os.tmpdir(), "prompt-editor-browser-"));
 const artifacts = process.env.PROMPT_EDITOR_ARTIFACTS;
 const git = (...args) => execFileSync("git", ["-C", fixture, ...args], { encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: "1" } }).trim();

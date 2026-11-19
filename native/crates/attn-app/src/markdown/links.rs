@@ -1,7 +1,6 @@
-//! Where a document's links go, and which of them the reader may follow, as the Tauri reader
-//! decides (markdownLinks.ts): a fragment scrolls the document, a web or mail link opens in its
-//! handler, a local file opens with the system's opener when its kind is safe, and a file on an
-//! outpost opens in a tile when it is markdown.
+//! Where a document's links go, and which of them the reader may follow: a fragment scrolls the
+//! document, a web or mail link opens in its handler, a local file opens with the system's
+//! opener when its kind is safe, and a file on an outpost opens in a tile when it is markdown.
 
 use std::path::Path;
 
@@ -175,8 +174,8 @@ impl Document {
     }
 }
 
-/// The file of a seed that `target` names, as the Tauri reader reads it
-/// (resolveSeedMarkdownTarget): a bare file name, never a path, a scheme or a hidden file.
+/// The file of a seed that `target` names: a bare file name, never a path, a scheme or a hidden
+/// file.
 pub(crate) fn seed_file(target: &str) -> Option<String> {
     let target = target.trim();
     if target.is_empty() || scheme(target).is_some() || target.contains(['/', '\\', '?', '#']) {

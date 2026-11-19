@@ -13,7 +13,7 @@ use rune::Tx;
 use super::draft::{Folder, StoredFile, commit};
 use super::{Busy, Draft, Message, Panel, Window, result};
 
-/// The bytes one upload request carries, as the Tauri app sends them.
+/// The bytes one upload request carries.
 const CHUNK: u64 = 524_288;
 
 /// Where an attached file's bytes come from.
@@ -36,7 +36,7 @@ pub(crate) enum Phase {
 
 /// A file being copied into the folder of the draft it was attached to, whichever profile the
 /// panel shows when the copy ends. The draft on disk names the file only once its bytes are
-/// there, as the Tauri app reads it.
+/// there.
 pub(super) struct Copy {
     profile: String,
     draft: String,

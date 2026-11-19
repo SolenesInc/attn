@@ -1,5 +1,5 @@
-//! The Tauri app's outlined icons, drawn by `rune::icon` in their element's colour. Each body is
-//! the SVG the Tauri component draws, with the stroke its CSS gives it.
+//! attn's outlined icons, drawn by `rune::icon` in their element's colour. Each body is an SVG with
+//! its stroke.
 
 use rune::Icon;
 
@@ -308,8 +308,7 @@ outline!(
 );
 outline!(WORKING, 16.0, "1.6", r#"<path d="M8 2a6 6 0 1 0 6 6"/>"#);
 
-/// The characters the Tauri app draws as text that no bundled font carries, drawn as that
-/// character looks.
+/// Characters attn shows that no bundled font carries, drawn as that character looks.
 macro_rules! mark {
     ($name:ident, $body:expr) => {
         pub static $name: Icon = Icon {
@@ -389,8 +388,7 @@ seed!(
 );
 seed!(SEED_UNKNOWN, r#"<circle cx="16" cy="16" r="8"/>"#);
 
-/// The drawing of a seed in `status`, as the Tauri app's `SeedStateIcon`, or of a plot, as its
-/// `SeedPlotIcon`.
+/// The drawing of a seed in `status`, or of a plot.
 pub fn seed(status: &str) -> &'static Icon {
     match status {
         "planted" => &SEED_PLANTED,

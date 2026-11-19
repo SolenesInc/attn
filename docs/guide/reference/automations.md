@@ -152,8 +152,7 @@ location:
 ```
 
 `launch.driver` is `claude`, `codex` or, while [Sigma](using-sigma.md) is on,
-`sigma`. The native app's form offers Sigma; in the Tauri app, define a Sigma
-automation in YAML.
+`sigma`. The app's form offers Sigma.
 
 ## Details
 

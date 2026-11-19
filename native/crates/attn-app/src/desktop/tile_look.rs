@@ -1,7 +1,7 @@
-//! How the tiles show which one the keyboard acts on, in the tile focus style the user chose,
-//! as the Tauri app draws it: a veil dims the bodies of the agents that are not active, and
-//! while the screen shows more than one tile the style marks the active one. Tiles carry no
-//! border, except the one a desktop shows alone in focus.
+//! How the tiles show which one the keyboard acts on, in the tile focus style the user chose:
+//! a veil dims the bodies of the agents that are not active, and while the screen shows more
+//! than one tile the style marks the active one. Tiles carry no border, except the one a
+//! desktop shows alone in focus.
 
 use attn_ui::Tokens;
 use rune::{Color, Curve, Easing, El, Shadow, el};
@@ -18,23 +18,23 @@ const ZOOMED_FADED: f32 = 0.72;
 const DRAGGED: f32 = 0.5;
 const FADE_SECONDS: f32 = 0.12;
 const SUBLINE_DIMMED: f32 = 0.7;
-/// The Tauri app's 13 px mark box, with its 2 px border outside it.
+/// A 13 px mark box, with its 2 px border outside it.
 const MARK_PX: f32 = 15.0;
 const MARK_LINE_PX: f32 = 2.0;
 /// The share of the primary text colour the spotlit header mixes into the elevated surface.
 const HEADER_LIFT: f32 = 0.08;
 /// An agent header's light from the top: the brand colour at its top and bottom, over a white
-/// sheen that fades out, as `.desktop-pane-header`'s two gradients.
+/// sheen that fades out.
 const HEADER_BRAND: (f32, f32) = (0.11, 0.03);
 const HEADER_SHEEN: f32 = 0.05;
 /// The light line along an agent header's top edge.
 const HEADER_TOP_LINE: f32 = 0.05;
-/// `--pane-header-fade`: the brand's share of the surface under the hover actions.
+/// The brand's share of the surface under the hover actions.
 const HEADER_FADE: f32 = 0.07;
 
-/// The app setting that keeps the chosen style, under the Tauri app's `localStorage` key.
+/// The app setting that keeps the chosen style.
 const STYLE_PREF: &str = "attn.workspace.selectionStyle";
-/// The Tauri app's 3 px rail down the active tile's left edge.
+/// The rail down the active tile's left edge.
 const RAIL_PX: f32 = 3.0;
 
 /// How the active tile stands out among several. Dim leaves it at that: only the others
@@ -174,8 +174,7 @@ impl Look {
     }
 
     /// The lines the style draws over the active tile: the rail down its left edge, or the
-    /// spotlight's corner marks, top left and bottom right. Like the Tauri app's, they come and
-    /// go at once.
+    /// spotlight's corner marks, top left and bottom right. They come and go at once.
     pub(super) fn marks(&self, key: &str, t: &Tokens) -> Vec<El> {
         let line = |name: &str, el: El| {
             el.key(format!("{key}.{name}"))
@@ -215,8 +214,7 @@ impl Look {
     }
 
     /// An agent's name reads in full while it is active; any other tile's title, such as a
-    /// document's, reads quieter, as the Tauri app's `.desktop-dock-tile-title`, unless rail or
-    /// spotlight marks the tile.
+    /// document's, reads quieter, unless rail or spotlight marks the tile.
     pub(super) fn title(&self, t: &Tokens) -> Color {
         let marked_in_full = self.marked().is_some_and(|style| style != FocusStyle::Dim);
         if marked_in_full || (self.agent && !self.dimmed()) {
@@ -230,10 +228,9 @@ impl Look {
         if self.dimmed() { SUBLINE_DIMMED } else { 1.0 }
     }
 
-    /// The header's surface, as `.desktop-pane-header` and `.desktop-dock-tile-header` draw it:
-    /// an agent's lit from the top in the brand colour under a light top edge, a document's or
-    /// browser's on the elevated surface, both lighter on the spotlit tile, and closed off from
-    /// the body by a line.
+    /// The header's surface: an agent's lit from the top in the brand colour under a light top
+    /// edge, a document's or browser's on the elevated surface, both lighter on the spotlit
+    /// tile, and closed off from the body by a line.
     pub(super) fn header(&self, header: El, t: &Tokens) -> El {
         let header = header.border_sides([0.0, 0.0, 1.0, 0.0], t.border);
         let header = match self.header_fill(t) {

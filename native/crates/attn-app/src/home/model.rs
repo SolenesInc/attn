@@ -70,7 +70,7 @@ pub struct Activity {
     pub stale_since: Option<String>,
 }
 
-/// The Sessions card as the Tauri app's Dashboard builds it: in queue flow, the owed turns
+/// The Sessions card: in queue flow, the owed turns
 /// oldest first and the rest by state under Settled; otherwise every agent by state. Snoozed
 /// agents sit apart in either.
 pub fn home(facts: &Facts, now_ms: i64) -> Home {
@@ -209,8 +209,7 @@ fn activity_at(session: &Session) -> Option<i64> {
     session.activity_at.as_deref().and_then(queue::epoch_ms)
 }
 
-/// Three times the longer of the activity generator's intervals, as the Tauri app's
-/// `activityStaleMs` reads the setting.
+/// Three times the longer of the activity generator's intervals.
 fn activity_stale_ms(facts: &Facts) -> i64 {
     let stored: Option<serde_json::Value> = facts
         .settings

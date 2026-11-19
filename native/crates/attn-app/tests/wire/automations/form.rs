@@ -506,16 +506,15 @@ const ZONE_UNDER_TEST: &str = "ATTN_TEST_EXPECTED_ZONE";
 /// The clock reads `TZ` once for the whole process, so each `TZ` runs this test again in a
 /// process of its own.
 #[test]
-fn a_new_schedule_takes_the_zone_the_clock_keeps_by_the_name_the_tauri_form_gives_it() {
+fn a_new_schedule_takes_the_clock_s_zone_by_its_canonical_name() {
     if let Ok(expected) = std::env::var(ZONE_UNDER_TEST) {
         let mut world = open_new();
         press(&mut world, "trigger-scheduled");
         assert_eq!(value(&world, "time-zone"), expected);
         return;
     }
-    let test = std::any::type_name_of_val(
-        &a_new_schedule_takes_the_zone_the_clock_keeps_by_the_name_the_tauri_form_gives_it,
-    );
+    let test =
+        std::any::type_name_of_val(&a_new_schedule_takes_the_clock_s_zone_by_its_canonical_name);
     let test = test.split_once("::").map_or(test, |(_, path)| path);
     let runs: Vec<_> = [
         ("UTC", "UTC"),

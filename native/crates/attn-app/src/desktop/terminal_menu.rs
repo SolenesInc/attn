@@ -3,9 +3,8 @@ use rune::{Platform, PopupItem, PopupMenu, Shortcut, Tx};
 use crate::State;
 use crate::terminal::Part;
 
-/// Opens the terminal's context menu at `at` in terminal `id`, as the Tauri terminal does on a
-/// right-click its program does not take: the block under the pointer, its clipboard, and its
-/// edges.
+/// Opens the terminal's context menu at `at` in terminal `id`, on a right-click its program
+/// does not take: the block under the pointer, its clipboard, and its edges.
 pub(super) fn open(state: &mut State, id: &str, at: (f32, f32), window: [f32; 2], tx: &mut Tx) {
     let Some(menu) = state.terminals.menu_at(id, at) else {
         return;

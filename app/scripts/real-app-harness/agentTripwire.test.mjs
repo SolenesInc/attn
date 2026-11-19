@@ -2,7 +2,8 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import assert from 'node:assert/strict';
+import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 import {
   agentTripwireLaunchEnv,
   applyTripwireEnv,
@@ -23,16 +24,19 @@ import { MOCK_AGENT_EXECUTABLE } from './mockAgent.mjs';
 
 let tmpDir;
 let runDir;
+let savedArtifactsDir;
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-tripwire-test-'));
   runDir = path.join(tmpDir, 'run');
   fs.mkdirSync(runDir, { recursive: true });
-  vi.stubEnv('ATTN_REAL_APP_ARTIFACTS_DIR', tmpDir);
+  savedArtifactsDir = process.env.ATTN_REAL_APP_ARTIFACTS_DIR;
+  process.env.ATTN_REAL_APP_ARTIFACTS_DIR = tmpDir;
 });
 
 afterEach(() => {
-  vi.unstubAllEnvs();
+  if (savedArtifactsDir === undefined) delete process.env.ATTN_REAL_APP_ARTIFACTS_DIR;
+  else process.env.ATTN_REAL_APP_ARTIFACTS_DIR = savedArtifactsDir;
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -47,10 +51,10 @@ describe('the shim a real agent exec lands in', () => {
 
     const result = spawnSync(path.join(tripwire.dir, 'claude'), ['--print', 'hello world'], { encoding: 'utf8' });
 
-    expect(result.status).toBe(TRIPWIRE_EXIT_CODE);
-    expect(result.stderr).toContain('NUDGE-TRIGGER');
-    expect(result.stderr).toContain(tripwire.ledgerPath);
-    expect(tripwire.read()).toEqual(['NUDGE-TRIGGER\tclaude --print hello world']);
+    assert.equal(result.status, TRIPWIRE_EXIT_CODE);
+    assert.ok(result.stderr.includes('NUDGE-TRIGGER'));
+    assert.ok(result.stderr.includes(tripwire.ledgerPath));
+    assert.deepEqual(tripwire.read(), ['NUDGE-TRIGGER\tclaude --print hello world']);
   });
 
   it('records an exec that lands between scenarios in the unattributed ledger', () => {
@@ -60,9 +64,9 @@ describe('the shim a real agent exec lands in', () => {
 
     const result = spawnSync(path.join(tripwire.dir, 'codex'), ['--version'], { encoding: 'utf8' });
 
-    expect(result.status).toBe(TRIPWIRE_EXIT_CODE);
-    expect(tripwire.read()).toEqual([]);
-    expect(readTripwireLedger(path.join(tripwire.dir, 'unattributed.ledger'))).toEqual([
+    assert.equal(result.status, TRIPWIRE_EXIT_CODE);
+    assert.deepEqual(tripwire.read(), []);
+    assert.deepEqual(readTripwireLedger(path.join(tripwire.dir, 'unattributed.ledger')), [
       'unattributed\tcodex --version',
     ]);
   });
@@ -70,15 +74,15 @@ describe('the shim a real agent exec lands in', () => {
 
 describe('what a scenario arms', () => {
   it('arms every agent binary by default', () => {
-    expect(armedBinaries(undefined)).toEqual(TRIPWIRE_BINARIES);
+    assert.deepEqual(armedBinaries(undefined), TRIPWIRE_BINARIES);
   });
 
   it('arms the binaries a scenario did not name', () => {
-    expect(armedBinaries(['codex'])).toEqual(['claude']);
+    assert.deepEqual(armedBinaries(['codex']), ['claude']);
   });
 
   it('refuses a binary name it does not shim', () => {
-    expect(() => armedBinaries(['gemini'])).toThrow('unknown agent binary "gemini"');
+    assert.throws(() => armedBinaries(['gemini']), /unknown agent binary "gemini"/);
   });
 });
 
@@ -89,19 +93,19 @@ describe('how the tripwire reaches the app, the daemon and the CLI', () => {
 
     applyTripwireEnv(env, { dir, binaries: ['claude', 'codex'] });
 
-    expect(env.PATH.split(path.delimiter)[0]).toBe(dir);
+    assert.equal(env.PATH.split(path.delimiter)[0], dir);
     // claude and codex run the mock instead of the shim, so an armed scenario
     // gets a deterministic agent; the shim still catches a name-resolved exec.
-    expect(env.ATTN_CLAUDE_EXECUTABLE).toBe(MOCK_AGENT_EXECUTABLE);
-    expect(env.ATTN_CODEX_EXECUTABLE).toBe(MOCK_AGENT_EXECUTABLE);
-    expect(env[TRIPWIRE_MARKER_VAR]).toBe(tripwireMarker({ dir, binaries: ['claude', 'codex'] }));
+    assert.equal(env.ATTN_CLAUDE_EXECUTABLE, MOCK_AGENT_EXECUTABLE);
+    assert.equal(env.ATTN_CODEX_EXECUTABLE, MOCK_AGENT_EXECUTABLE);
+    assert.equal(env[TRIPWIRE_MARKER_VAR], tripwireMarker({ dir, binaries: ['claude', 'codex'] }));
   });
 
   it('hands the app launch the PATH and pins the daemon must inherit', () => {
     const env = freshEnv();
     const tripwire = armAgentTripwire({ scenarioId: 'TR-401', runDir, env, log: () => {} });
 
-    expect(agentTripwireLaunchEnv(env)).toEqual({
+    assert.deepEqual(agentTripwireLaunchEnv(env), {
       PATH: env.PATH,
       [TRIPWIRE_MARKER_VAR]: tripwire.marker,
       [HEADLESS_TASKS_VAR]: 'off',
@@ -131,29 +135,29 @@ describe('the receipt that the switch was in force', () => {
       log: () => {},
     });
 
-    expect(tripwire.readReceipt()).toEqual({ headlessTasks: 'off', carriesMarker: true, mockGitHub: 'missing' });
+    assert.deepEqual(tripwire.readReceipt(), { headlessTasks: 'off', carriesMarker: true, mockGitHub: 'missing' });
   });
 
   it('says the daemon carries another run\'s shims when the marker differs', () => {
-    expect(readDaemonTripwireReceipt({
+    assert.deepEqual(readDaemonTripwireReceipt({
       marker: 'shims|claude',
       pidPath: pidPath(),
       readEnvironment: () => `${TRIPWIRE_MARKER_VAR}=shims|codex ${HEADLESS_TASKS_VAR}=off`,
-    })).toEqual({ headlessTasks: 'off', carriesMarker: false, mockGitHub: 'missing' });
+    }), { headlessTasks: 'off', carriesMarker: false, mockGitHub: 'missing' });
   });
 
   it('says on when the daemon never got the switch', () => {
-    expect(readDaemonHeadlessSwitch({
+    assert.equal(readDaemonHeadlessSwitch({
       pidPath: pidPath(),
       readEnvironment: () => 'PATH=/usr/bin',
-    })).toBe('on');
+    }), 'on');
   });
 
   it('says so rather than guessing when no daemon is running', () => {
-    expect(readDaemonHeadlessSwitch({
+    assert.equal(readDaemonHeadlessSwitch({
       pidPath: path.join(tmpDir, 'missing.pid'),
       readEnvironment: () => 'unused',
-    })).toBe('no daemon');
+    }), 'no daemon');
   });
 });
 
@@ -167,11 +171,11 @@ describe('the daemon a scenario inherits', () => {
   const target = { instance: 'dev', appPath: '/tmp/attn-dev.app' };
 
   function stopCalls(run) {
-    return run.mock.calls.filter(([, args]) => args[0] === 'daemon' && args[1] === 'stop');
+    return run.mock.calls.filter(({ arguments: [, args] }) => args[0] === 'daemon' && args[1] === 'stop');
   }
 
   it('leaves a daemon that already carries this scenario marker alone', () => {
-    const run = vi.fn();
+    const run = mock.fn();
     const result = ensureDaemonCarriesTripwire({
       ...target,
       marker: 'shims|claude',
@@ -181,12 +185,12 @@ describe('the daemon a scenario inherits', () => {
       log: () => {},
     });
 
-    expect(result).toEqual({ restarted: false, reason: 'daemon already armed' });
-    expect(run).not.toHaveBeenCalled();
+    assert.deepEqual(result, { restarted: false, reason: 'daemon already armed' });
+    assert.equal(run.mock.callCount(), 0);
   });
 
   it('stops a daemon carrying this marker but not the headless switch', () => {
-    const run = vi.fn(() => '');
+    const run = mock.fn(() => '');
     const result = ensureDaemonCarriesTripwire({
       ...target,
       marker: 'shims|claude',
@@ -197,12 +201,12 @@ describe('the daemon a scenario inherits', () => {
       log: () => {},
     });
 
-    expect(result).toEqual({ restarted: true, reason: 'daemon stopped' });
-    expect(stopCalls(run)).toHaveLength(1);
+    assert.deepEqual(result, { restarted: true, reason: 'daemon stopped' });
+    assert.equal(stopCalls(run).length, 1);
   });
 
   it('stops a daemon that predates the tripwire so the app brings up an armed one', () => {
-    const run = vi.fn(() => '');
+    const run = mock.fn(() => '');
     const result = ensureDaemonCarriesTripwire({
       ...target,
       marker: 'shims|claude',
@@ -212,12 +216,12 @@ describe('the daemon a scenario inherits', () => {
       log: () => {},
     });
 
-    expect(result).toEqual({ restarted: true, reason: 'daemon stopped' });
-    expect(stopCalls(run)).toHaveLength(1);
+    assert.deepEqual(result, { restarted: true, reason: 'daemon stopped' });
+    assert.equal(stopCalls(run).length, 1);
   });
 
   it('never stops a production daemon', () => {
-    const run = vi.fn();
+    const run = mock.fn();
     const result = ensureDaemonCarriesTripwire({
       instance: '',
       appPath: '/Applications/attn.app',
@@ -228,14 +232,14 @@ describe('the daemon a scenario inherits', () => {
       log: () => {},
     });
 
-    expect(result).toEqual({ restarted: false, reason: 'target refuses a daemon restart' });
-    expect(run).not.toHaveBeenCalled();
+    assert.deepEqual(result, { restarted: false, reason: 'target refuses a daemon restart' });
+    assert.equal(run.mock.callCount(), 0);
   });
 
   it('refuses an armed scenario when the daemon environment cannot be read', () => {
-    const run = vi.fn();
+    const run = mock.fn();
 
-    expect(() => ensureDaemonCarriesTripwire({
+    assert.throws(() => ensureDaemonCarriesTripwire({
       ...target,
       scenarioId: 'NUDGE-TRIGGER',
       marker: 'shims|claude',
@@ -244,14 +248,14 @@ describe('the daemon a scenario inherits', () => {
       readEnvironment: () => { throw new Error('ps: permission denied'); },
       run,
       log: () => {},
-    })).toThrow(/NUDGE-TRIGGER[\s\S]*pid \d+[\s\S]*unreadable \(ps: permission denied\)[\s\S]*ATTN_HEADLESS_TASKS=off/);
-    expect(run).not.toHaveBeenCalled();
+    }), /NUDGE-TRIGGER[\s\S]*pid \d+[\s\S]*unreadable \(ps: permission denied\)[\s\S]*ATTN_HEADLESS_TASKS=off/);
+    assert.equal(run.mock.callCount(), 0);
   });
 
   it('refuses an armed scenario rather than restarting a production daemon', () => {
-    const run = vi.fn();
+    const run = mock.fn();
 
-    expect(() => ensureDaemonCarriesTripwire({
+    assert.throws(() => ensureDaemonCarriesTripwire({
       instance: '',
       appPath: '/Applications/attn.app',
       scenarioId: 'NUDGE-TRIGGER',
@@ -261,7 +265,7 @@ describe('the daemon a scenario inherits', () => {
       readEnvironment: () => 'PATH=/usr/bin',
       run,
       log: () => {},
-    })).toThrow(/target refuses a restart[\s\S]*production/);
-    expect(run).not.toHaveBeenCalled();
+    }), /target refuses a restart[\s\S]*production/);
+    assert.equal(run.mock.callCount(), 0);
   });
 });

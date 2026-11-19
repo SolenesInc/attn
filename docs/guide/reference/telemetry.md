@@ -74,13 +74,13 @@ the build stored with its record, which an upload batch names.
 | `workload.terminals` | Terminals the daemon runs |
 | `workload.panes_drawn` | Terminals a connected app is attached to, which are the terminals it draws while the shared PTY host is on. With the host off, the app also stays attached to some terminals it hides |
 | `workload.desktops`, `workload.seeds` | Desktops, and seeds in any state, in every profile |
-| `processes[].role` | `daemon`, `pty_worker`, `pty_host`, `app`, `webkit_content`, `webkit_gpu` or `webkit_networking`. A role with no running process has no entry, so an outpost, which has no app, lists only the first three |
-| `processes[].shell` | For `app`, which app the instance runs: `native`, or `tauri` for the Tauri app, the rollback |
+| `processes[].role` | `daemon`, `pty_worker`, `pty_host`, `app`, `webkit_content`, `webkit_gpu` or `webkit_networking`. The `webkit_*` roles are the WebKit processes the app's browser tiles run. A role with no running process has no entry, so an outpost, which has no app, lists only the first three |
+| `processes[].shell` | For `app`, `native` |
 | `processes[].count` | How many processes hold the role |
 | `processes[].resident_bytes` | Their total resident memory |
 | `processes[].footprint_bytes` | Their total physical footprint, as Activity Monitor's Memory column shows it. macOS only |
 | `processes[].split` | For `webkit_content` on macOS, the part of that footprint in three of `footprint`'s categories, summed over the processes: `webkit_malloc_bytes` (WebKit malloc), `owned_graphics_bytes` (owned physical footprint, graphics) and `gigacage_bytes` (JS VM Gigacage). Each counts the category's dirty and compressed memory. It is absent when `footprint` could not measure every WebContent process |
-| `processes[].performance` | For `app` with shell `native`, what the app measured since the latest of three moments: the daemon last asked, the app connected, or `analytics.enabled` turned on. The app measures nothing while `analytics.enabled` is off. The fields are below. It is absent when the app did not answer within 10 seconds |
+| `processes[].performance` | For `app`, what the app measured since the latest of three moments: the daemon last asked, the app connected, or `analytics.enabled` turned on. The app measures nothing while `analytics.enabled` is off. The fields are below. It is absent when the app did not answer within 10 seconds |
 | `performance.period_ms` | How long the measurement covers, not counting time the machine slept. It is about 20 minutes, longer when a sample failed and shorter after analytics turned on |
 | `performance.cpu_ms` | The CPU time the app's process used, all threads, user and system |
 | `performance.frames_drawn` | Frames the main window drew |
@@ -89,16 +89,16 @@ the build stored with its record, which an upload batch names.
 | `performance.frame_ms` | For the drawn frames, the milliseconds from a frame's start until its commands went to the GPU: `p50`, `p95`, `p99` and `max`. The percentiles are within 1% of the frames' own times. Absent when no frame was drawn |
 
 The app tells the daemon its process id when it connects, and the daemon finds
-the app's WebKit processes from it. WebKit processes of other apps, and of other
-attn instances, are not counted. On macOS, the kernel ties the WebKit processes of
-an app started from a terminal to that terminal, so that app's sample has an
-`app` entry and no `webkit_*` entries. The sample reads the kernel's process
-tables and, on macOS, runs `/usr/bin/footprint` once for all WebContent
-processes, which took 30-50 ms for WebContent of 0.4 to 1.9 GB. The app
-answers the daemon's request for its performance on its connection's thread,
-so a sample never wakes its window, and it keeps no timer: between samples an
-idle app does nothing for analytics. With `analytics.enabled` off, the
-sample reads nothing.
+the WebKit processes of the app's browser tiles from it. WebKit processes of
+other apps, and of other attn instances, are not counted. On macOS, the kernel
+ties the WebKit processes of an app started from a terminal to that terminal, so
+that app's sample has an `app` entry and no `webkit_*` entries. The sample reads
+the kernel's process tables and, on macOS, runs `/usr/bin/footprint` once for
+all WebContent processes, which took 30-50 ms for WebContent of 0.4 to 1.9 GB.
+The app answers the daemon's request for its performance on its connection's
+thread, so a sample never wakes its window, and it keeps no timer: between
+samples an idle app does nothing for analytics. With `analytics.enabled` off,
+the sample reads nothing.
 
 Attn redacts records on the `bus`, `app`, `cli`, `sample` and `run` streams before
 it stores them:

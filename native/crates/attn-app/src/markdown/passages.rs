@@ -1,7 +1,6 @@
-//! A document's passages as the reader draws them and as marks anchor them: the Tauri
-//! reader's blocks (each top-level block, and each list item at any depth) made of the texts
-//! the native reader draws, so a selection becomes an anchor and an anchor becomes the source
-//! bytes to highlight.
+//! A document's passages as the reader draws them and as marks anchor them: its blocks (each
+//! top-level block, and each list item at any depth) made of the texts the reader draws, so a
+//! selection becomes an anchor and an anchor becomes the source bytes to highlight.
 
 use std::ops::Range;
 
@@ -126,9 +125,9 @@ impl Passages {
         }
     }
 
-    /// The anchor of `selection`, whose pieces' paths run through `root`, the reader's key, as
-    /// the Tauri reader takes one: the block the selection starts in owns it, an end past that
-    /// block stops at its end, and whitespace at either edge is left out.
+    /// The anchor of `selection`, whose pieces' paths run through `root`, the reader's key: the
+    /// block the selection starts in owns it, an end past that block stops at its end, and
+    /// whitespace at either edge is left out.
     ///
     /// With `part`, the reader draws only the document's source from byte `part.0` on, which
     /// is `part.1`, and the selection's pieces are found where the whole document draws them.
@@ -306,8 +305,8 @@ fn chain(blocks: &[Block], block: usize) -> Vec<usize> {
     chain
 }
 
-/// The Tauri reader's name for the element a top-level block renders as; none for front
-/// matter, which it draws outside the document.
+/// The anchor's name for the element a top-level block renders as; none for front matter,
+/// which draws outside the document.
 fn kind(parsed: &Parsed) -> Option<&'static str> {
     Some(match parsed {
         Parsed::FrontMatter(_) => return None,
@@ -373,7 +372,7 @@ mod tests {
     }
 
     #[test]
-    fn blocks_are_the_tauri_readers_top_level_blocks_and_list_items_in_document_order() {
+    fn blocks_are_the_top_level_blocks_and_list_items_in_document_order() {
         let p = read(DOC);
         let summary: Vec<(&str, i64, i64, String)> = p
             .blocks

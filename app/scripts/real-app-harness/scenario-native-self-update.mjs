@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { launchFreshNativeAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
@@ -98,7 +98,7 @@ try {
 
   await runner.step('launch', async () => {
     attn('daemon', 'stop');
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     queueDaemonSettingRestore(observer, 'self_update_enabled');
     const on = observer.waitForMessage((m) => m.event === 'settings_updated' && m.settings?.self_update_enabled === 'true' && m, 'self-update on', 15_000);
     attn('settings', 'set', 'self_update_enabled', 'true');

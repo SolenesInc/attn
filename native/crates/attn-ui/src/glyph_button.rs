@@ -41,8 +41,8 @@ impl From<String> for Glyph {
 const SIDE: f32 = 22.0;
 
 /// A button that draws a [`Glyph`] in place of its label, which names it. rune-kit's
-/// `IconButton` sizes its icon to the kit's controls; attn's buttons size each icon as the
-/// Tauri app's CSS does, so this is a `rune_kit::Button` that draws the glyph instead.
+/// `IconButton` sizes its icon to the kit's controls; attn's buttons size each icon
+/// themselves, so this is a `rune_kit::Button` that draws the glyph instead.
 pub struct GlyphButton {
     glyph: Glyph,
     button: Button,

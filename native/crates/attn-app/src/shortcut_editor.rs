@@ -1,7 +1,6 @@
 //! The editor that rebinds shortcuts: each action's keys recorded from the keyboard, as one
 //! combination or a leader and a second key, a reset to the default, an unbind, and Restore
-//! Defaults. Every change goes to the daemon's `keybindings_config` setting, shared with the
-//! Tauri app.
+//! Defaults. Every change goes to the daemon's `keybindings_config` setting.
 
 use std::collections::BTreeMap;
 
@@ -428,8 +427,8 @@ fn write(state: &mut State, value: String, tx: &mut Tx) {
     );
 }
 
-/// A recorded combination as the Tauri app stores it: the key it types under the accelerator,
-/// with its physical key as `code` where the typed key depends on the layout.
+/// A recorded combination as `keybindings_config` stores it: the key it types under the
+/// accelerator, with its physical key as `code` where the typed key depends on the layout.
 fn stored_combo(shortcut: &Shortcut) -> Value {
     let mac = Platform::current() == Platform::Mac;
     let mods = shortcut.modifiers();

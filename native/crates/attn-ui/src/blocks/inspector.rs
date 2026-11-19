@@ -4,17 +4,14 @@ use rune_kit::ScrollBar;
 use crate::Tokens;
 use crate::system::{Said, Space, Type, door, words};
 
-/// The narrowest an inspector gets: the Tauri app's `.ledger-inspector { min-width: 280px }`,
-/// which holds a session's longest field, a full stamp with its age ("Tue, Nov 17 at 09:58
-/// (2 hours ago)"), on one line.
+/// The narrowest an inspector gets, which holds a session's longest field, a full stamp with its
+/// age ("Tue, Nov 17 at 09:58 (2 hours ago)"), on one line.
 const NARROWEST: f32 = 280.0;
 
-/// The widest an inspector gets, the Tauri app's `max-width: 380px`: past it the list beside it
-/// is the one that needs the room.
+/// The widest an inspector gets: past it the list beside it is the one that needs the room.
 const WIDEST: f32 = 380.0;
 
-/// Of the room it shares with its list, the share an inspector takes, the Tauri app's
-/// `width: 30%`.
+/// Of the room it shares with its list, the share an inspector takes.
 const SHARE: f32 = 0.3;
 
 /// In a page, the width of the list beside an inspector: main's Analytics list's `min_w(300)`,

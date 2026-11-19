@@ -43,10 +43,8 @@ go test -run '^$' -bench . -benchmem ./internal/daemon/ ./internal/transcript/
 
 ## Performance gates
 
-`scenario-perf-gates` measures the performance gates the native app had to hold
-to replace the Tauri app. It runs on whichever app the instance has installed,
-so one session can measure the app against the Tauri app, the rollback. Input reaches the shells only through the daemon, so
-both apps get the same work. Each run launches the app fresh, places it
+`scenario-perf-gates` measures the app's performance gates. Input reaches the
+shells only through the daemon. Each run launches the app fresh, places it
 unfocused at 1710×956 with 20 px on screen and above every other window, so
 nothing covers it and it draws as a window in view does, waits 20 s, then samples every
 process the app is responsible for, the daemon and the PTY host once a second
@@ -72,8 +70,8 @@ ATTN_HARNESS_INSTANCE=<name> node app/scripts/real-app-harness/scenario-perf-gat
 | `launch` | launch to the first frame with terminal content, four shells |
 
 It prints one JSON line per run and a summary per workload with the median,
-minimum and maximum over runs. Painting workloads on the native app quit it
-while it still paints and add the frame-time distribution from its frame
+minimum and maximum over runs. Painting workloads quit the app while it still
+paints and add the frame-time distribution from its frame
 recorder. `--profile` adds an 8 s `sample` of the app after each painting
 window, while it still paints.
 
@@ -103,16 +101,14 @@ jq '.frames | {total, work_ms, ui_allocated_bytes}' \
 ## Real-app memory
 
 These hand-run [harness](../../app/scripts/real-app-harness/AGENTS.md) scenarios
-measure the whole attn process tree, of either app, and compare against the
-machine's own baseline for that app (`~/.attn-perf-registry/`, or
-`perf-baselines.json` for committed reference machines). A regression sets
-`ok: false` in the verdict without failing the exit code. The probes
-`--pressure`, `--dock-probe`, `--switch-probe` and `--real-cmd` read the Tauri
-app's webview, so the baseline scenario takes them only on the rollback.
+measure the whole attn process tree and compare against the machine's own
+baseline (`~/.attn-perf-registry/`, or `perf-baselines.json` for committed
+reference machines). A regression sets `ok: false` in the verdict without
+failing the exit code.
 
 | Scenario | Measures | Command |
 | --- | --- | --- |
-| Baseline | RSS with N sessions | `pnpm --dir app run real-app:scenario-perf-baseline -- --sessions 8 --stream 2` |
+| Baseline | RSS with N sessions | `pnpm --dir app run real-app:scenario-perf-baseline -- --sessions 8` |
 | Cold and warm | RSS fresh and after a workload | `ATTN_HARNESS_INSTANCE=perf pnpm --dir app run real-app:scenario-perf-cold-warm -- --sessions 8` |
 | Leak soak | Retained-RSS slope across session cycles | `ATTN_HARNESS_INSTANCE=perf pnpm --dir app run real-app:scenario-perf-leak-soak -- --cycles 12` |
 
@@ -126,18 +122,16 @@ footprint change, never to silence a regression you don't understand.
 Each `process` record in the analytics `sample` stream
 ([Telemetry](../guide/reference/telemetry.md#process-samples)) holds memory by
 process role and its workload, and is stored with the build that took it. One
-sample is weak evidence: the same 4 pane workload on a Mac ranged 440-760 MB
-depending on when JavaScriptCore collected. Compare medians per build at
-comparable workload. Builds from source between releases share a version, so
+sample is weak evidence. Compare medians per build at comparable workload. Builds from source between releases share a version, so
 group by commit as well. A new build needs a few hours of use before its median
 means anything.
 
 These queries read the home's samples. An outpost's arrive under a stream named
 for it, such as `sample_m9c1e04b7aa21`: change the stream filter to include them.
 A Mac app started from a terminal, as `bridge --launch` does, has no `webkit_*`
-entries, so to sample WebKit on an instance, start the app through launchd:
-`launchctl submit -l <label> -- <app executable>`, and `launchctl remove <label>`
-before you quit it.
+entries, so to sample its browser tiles' WebKit processes on an instance, start
+the app through launchd: `launchctl submit -l <label> -- <app executable>`, and
+`launchctl remove <label>` before you quit it.
 
 Across installs, query attn-ingest's ClickHouse, which keeps records past the
 outbox's 7 days:
@@ -193,17 +187,13 @@ SQL
 `scenario-perf-pty-stream` measures what streaming terminal output costs while
 three shells print `seq 1 400` every 20 ms, with the shared terminal host on
 unless `--shared-host false` turns it off. With it on, the app streams only the
-terminals it draws. It runs on either app. It prints one JSON line per run and a
+terminals it draws. It prints one JSON line per run and a
 summary with the median, min and max of each number: CPU as a share of a core
-for the app (and, on the Tauri app, WebContent, WebKit Networking and WebKit
-GPU), the daemon and the PTY host; events a second per terminal from the
+for the app, the daemon and the PTY host; events a second per terminal from the
 daemon; the terminals `daemon.log` shows streaming to the app; key-to-paint p50
 and p90 in a quiet shell under the load, from a key sent to the app until the
 harness sees the echo drawn; and, for `hidden`, how long the streaming panes
-take to show the daemon's screen once the user returns to them. On the Tauri
-app it also reports WebSocket messages and bytes a second, events a second per
-terminal in the app, key-to-echo (the daemon's input to the app's parse of the
-echo) and when a command typed during the switch reaches its terminal.
+take to show the daemon's screen once the user returns to them.
 
 ```bash
 ATTN_HARNESS_INSTANCE=<name> pnpm --dir app run real-app:scenario-perf-pty-stream -- \
@@ -213,7 +203,7 @@ ATTN_HARNESS_INSTANCE=<name> pnpm --dir app run real-app:scenario-perf-pty-strea
 `drawn` draws the streams as splits beside the quiet shell, `hidden` puts them
 on the previous desktop, and `unmounted` on a desktop that is neither current
 nor previous. `--profile-dir <dir>` adds `sample` profiles of the PTY host and
-of WebContent, or the native app, for each window, and `--pprof-port <port>` restarts the daemon with
+of the app for each window, and `--pprof-port <port>` restarts the daemon with
 `ATTN_PPROF` to add its CPU profile. Profiling costs CPU, so profiled runs are not baselines.
 
 ## A copy of production
@@ -266,23 +256,6 @@ reports CPU milliseconds per mutation above the idle rate.
 
 For the app's side, run the moves with the app open on the Garden and read its
 frames, as [App frames](#app-frames) says.
-
-`app-review-pull.mjs` measures the Tauri app's Garden in headless Chromium, on a
-bundle built against the instance:
-
-```bash
-VITE_CLIENT_TOKEN=$(cat <instance data dir>/client-token) VITE_DAEMON_PORT=<instance ws port> \
-  pnpm --dir app exec vite build --outDir <dir>
-pnpm --dir app exec vite preview --outDir <dir> --port <port>
-```
-
-It opens the Garden on the seed with the given title, posts notes to it, and counts the `seed_review_show`
-requests in the daemon's log, once for the opening and once for the notes. The
-notes should cost none, while the open seed's document still refetches on each:
-
-```bash
-node scripts/gardenpushperf/app-review-pull.mjs http://localhost:<port>/ <id> "<title>" 20
-```
 
 ## Garden reads
 
@@ -378,7 +351,7 @@ disconnects.
 ## Verification cost
 
 `scripts/measure-verification-cost.py` measures what checking a change costs:
-one land, three concurrent lands on one machine, the full Go and Vitest suites,
+one land, three concurrent lands on one machine, the full Go suite,
 and CI. Run it to show that a change to `scripts/land.sh`, the test runners or
 `ci.yml` makes verification cheaper, on the same machine before and after. The
 local baselines measure the checkout's committed `HEAD`:

@@ -202,7 +202,7 @@ fn name_of(world: &World, key: &str) -> Option<String> {
     world.screen().find(Target::key(key)).and_then(|n| n.name)
 }
 
-/// The tile's status strip, as the Tauri app's `desktop-pane-offline-strip` reads.
+/// The tile's status strip.
 fn strip(world: &World) -> Option<String> {
     name_of(world, "tile.r1.status")
 }

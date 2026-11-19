@@ -9,6 +9,8 @@ use std::io;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
+const TAURI_APP_EXECUTABLE: &str = "app";
+
 const INSTANCE_PATTERN_TEXT: &str = "^[a-z0-9][a-z0-9-]{0,15}$";
 
 const FNV_OFFSET: u32 = 2_166_136_261;
@@ -80,10 +82,6 @@ pub struct ResolvedInstance {
     pub deep_link_scheme: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub desktop_entry: String,
-    #[serde(rename = "e2eDaemonPort")]
-    pub e2e_daemon_port: String,
-    #[serde(rename = "e2eVitePort")]
-    pub e2e_vite_port: String,
     #[serde(rename = "mockGitHubPort")]
     pub mock_github_port: String,
 }
@@ -107,8 +105,6 @@ impl ResolvedInstance {
             "appLockPath" => &self.app_lock_path,
             "deepLinkScheme" => &self.deep_link_scheme,
             "desktopEntry" => &self.desktop_entry,
-            "e2eDaemonPort" => &self.e2e_daemon_port,
-            "e2eVitePort" => &self.e2e_vite_port,
             "mockGitHubPort" => &self.mock_github_port,
             _ => return None,
         })
@@ -305,7 +301,7 @@ impl<'a> Paths<'a> {
             app_executable: if !macos || Path::new(&bin("attn-app")).exists() {
                 bin("attn-app")
             } else {
-                bin("app")
+                bin(TAURI_APP_EXECUTABLE)
             },
             app_cli: join(&dir(&app_daemon), "attn"),
             app_daemon,
@@ -317,8 +313,6 @@ impl<'a> Paths<'a> {
             deep_link_scheme: with_suffix("attn", "-"),
             app_name,
             desktop_entry,
-            e2e_daemon_port: port(30_000, "19849"),
-            e2e_vite_port: port(31_000, "1421"),
             mock_github_port: port(32_000, "19850"),
         }
     }

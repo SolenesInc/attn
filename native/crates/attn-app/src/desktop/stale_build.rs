@@ -6,8 +6,8 @@ use rune::Tx;
 use crate::State;
 
 /// The notice over the top of a session's terminal while its terminal runs an older build than
-/// the daemon, as the Tauri app shows it: Reload session, which brings it up to date, and a
-/// dismiss that holds for the rest of the app's run.
+/// the daemon: Reload session, which brings it up to date, and a dismiss that holds for the rest
+/// of the app's run.
 pub(super) fn notice(session: &str, t: &Tokens) -> Block {
     let (reloaded, dismissed) = (session.to_owned(), session.to_owned());
     let reload = Button::new("Reload session")

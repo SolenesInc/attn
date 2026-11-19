@@ -1,6 +1,5 @@
-//! The ring a tile shows for a moment when it arrives on screen, as the Tauri app's arrival
-//! pulse: the tile a show the person asked for lands on, or a tile that joins the shown
-//! desktop while no show is on its way.
+//! The ring a tile shows for a moment when it arrives on screen: the tile a show the person
+//! asked for lands on, or a tile that joins the shown desktop while no show is on its way.
 
 use attn_client::Facts;
 use attn_ui::Tokens;
@@ -9,9 +8,9 @@ use rune::{Beat, Easing, El, Sequence, Tx, el};
 use crate::State;
 use crate::shell::View;
 
-/// How long a ring fades, as the Tauri app's `leaf-arrival-pulse`.
+/// How long a ring fades.
 const RING_SECONDS: f64 = 0.55;
-/// The ring's width and strength, as the Tauri app's inset accent shadow.
+/// The ring's width and strength, an inset accent shadow.
 const RING_PX: f32 = 1.5;
 const RING_ALPHA: f32 = 0.7;
 const FADE: &[Beat] = &[

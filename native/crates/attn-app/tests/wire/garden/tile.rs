@@ -809,7 +809,7 @@ fn a_seed_tile_centers_its_plans_prose_at_the_reading_measure_and_a_wide_table_i
     );
     assert!(
         tx - cx >= 28.0 && cx + cw - (tx + tw) >= 28.0,
-        "the table sits inside the card's padding, as the Tauri reader's card holds it: {tx}..{} in {cx}..{}",
+        "the table sits inside the card's padding: {tx}..{} in {cx}..{}",
         tx + tw,
         cx + cw
     );

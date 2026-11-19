@@ -24,7 +24,7 @@ macro_rules! actions {
     ($($variant:ident = $id:literal, $category:ident, $label:literal;)*) => {
         /// Everything a person can ask the app to do by key, menu or palette. A unit variant is
         /// one the keymap can bind: its id is the shortcut id the daemon's `keybindings_config`
-        /// setting keys rebinds by, shared with the Tauri app. A variant with data names what
+        /// setting keys rebinds by. A variant with data names what
         /// it acts on, as a palette row does, and no key binds it.
         #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub enum Action {
@@ -315,8 +315,7 @@ impl Action {
         )
     }
 
-    /// Whether an overlay that captures navigation holds the action's keys: the Tauri app's
-    /// app shortcuts, which `appOverlayPolicy` turns off under one. The palettes, Settings,
+    /// Whether an overlay that captures navigation holds the action's keys. The palettes, Settings,
     /// Keyboard shortcuts, font size, the sessions list, Quit, the sidebar's width and every
     /// pane, markdown and annotation key go on acting.
     pub fn yields_to_overlays(&self) -> bool {

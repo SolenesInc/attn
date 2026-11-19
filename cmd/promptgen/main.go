@@ -37,7 +37,7 @@ func generate(root string, check bool) error {
 	if err != nil {
 		return err
 	}
-	if err := generateCatalog(root, check, "app/src/prompts/catalog.generated.json", func(id string) bool { return id == "annotation-terminal" || id == "annotation-label" }); err != nil {
+	if err := generateCatalog(root, check, "native/crates/attn-app/prompts/catalog.generated.json", func(id string) bool { return id == "annotation-terminal" || id == "annotation-label" }); err != nil {
 		return err
 	}
 	return writeGenerated(root, check, "internal/prompts/"+prompts.ManifestPath, manifest)
@@ -67,7 +67,7 @@ func generateCatalog(root string, check bool, output string, include func(string
 	var parity []parityCase
 	for _, recipient := range recipients {
 		for _, event := range recipient.Events {
-			if err := checkTypeScriptNode(event.Body); err != nil {
+			if err := checkRendererNode(event.Body); err != nil {
 				return err
 			}
 			fields, _ := exportedCatalog.Fields(recipient.ID, event.ID)
@@ -145,17 +145,17 @@ func writeGenerated(root string, check bool, output string, data []byte) error {
 	return os.Rename(f.Name(), path)
 }
 
-func checkTypeScriptNode(n prompts.Node) error {
+func checkRendererNode(n prompts.Node) error {
 	if (n.Kind != "text" && n.Kind != "input" && n.Kind != "when" && n.Kind != "choose" && n.Kind != "join" && n.Kind != "compose" && n.Kind != "trim") || n.Verbatim || n.Quote || n.Part != nil || (n.Field != nil && n.Field.Kind != "text") || (n.Condition != nil && n.Condition.Test != "enabled" && n.Condition.Test != "present") {
-		return fmt.Errorf("TypeScript renderer does not support node %s (%s); extend it and the parity tests first", n.ID, n.Kind)
+		return fmt.Errorf("the app's prompt renderer does not support node %s (%s); extend it and the parity tests first", n.ID, n.Kind)
 	}
 	for _, binding := range n.Bindings {
-		if err := checkTypeScriptNode(binding.Node); err != nil {
+		if err := checkRendererNode(binding.Node); err != nil {
 			return err
 		}
 	}
 	for _, child := range n.Children {
-		if err := checkTypeScriptNode(child); err != nil {
+		if err := checkRendererNode(child); err != nil {
 			return err
 		}
 	}

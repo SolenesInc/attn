@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { bundleIdentifierForAppPath, currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appCliInTree } from './platform.mjs';
@@ -101,7 +101,7 @@ try {
     fs.mkdirSync(path.dirname(jar), { recursive: true });
     fs.writeFileSync(jar, JSON.stringify(tauriJar, null, 2), { mode: 0o600 });
   });
-  await runner.step('launch_app', () => launchFreshNativeAppAndConnect(client, observer));
+  await runner.step('launch_app', () => launchFreshAppAndConnect(client, observer));
 
   let desktop;
   await runner.step('make_a_desktop', async () => {

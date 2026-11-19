@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { once } from 'node:events';
 import { promisify } from 'node:util';
 import { outpostSsh } from './outpostSsh.mjs';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -84,7 +84,7 @@ try {
   target = await ssh.route('scenario-outpost', remoteEnv, binary);
   fs.unlinkSync(target);
   await run(binary, ['daemon', 'stop'], homeEnv);
-  await launchFreshNativeAppAndConnect(client, observer);
+  await launchFreshAppAndConnect(client, observer);
   runner.assert(observer.outposts.length === 0, 'starts without other outposts', observer.outposts);
   observer.ws.on('message', (raw) => {
     try {

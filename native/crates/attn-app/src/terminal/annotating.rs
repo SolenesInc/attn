@@ -9,7 +9,7 @@ use rune::TextEdit;
 
 use super::{Term, Terminals};
 
-/// The violet the Tauri terminal marks annotated text in.
+/// The violet annotated text is marked in.
 /// A mark's wash, 0.24 of the violet, and 0.42 while ⌥ holds the pointer over it.
 const WASH: u8 = 61;
 const WASH_HOVERED: u8 = 107;
@@ -17,7 +17,7 @@ const WASH_HOVERED: u8 = 107;
 const LINE: u8 = 191;
 const LINE_HOVERED: u8 = 255;
 
-/// The newest rows searched for a message not found before, as the Tauri terminal searches.
+/// The newest rows searched for a message not found before.
 const SEARCH_ROWS: u32 = 2000;
 /// The rows searched either side of where a message was last found, at the least.
 const LOCAL_MARGIN: u32 = 60;

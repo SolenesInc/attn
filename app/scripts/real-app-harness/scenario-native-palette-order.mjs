@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -72,7 +72,7 @@ async function runCommand(query, id) {
 try {
   const checksFocus = process.platform === 'darwin';
   const frontmostBefore = checksFocus ? await driver.frontmostBundleId() : null;
-  await runner.step('launch_app', () => launchFreshNativeAppAndConnect(client, observer));
+  await runner.step('launch_app', () => launchFreshAppAndConnect(client, observer));
 
   const id = crypto.randomUUID();
   const label = `palette-${runner.runId}`.slice(0, 40);

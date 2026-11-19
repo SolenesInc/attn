@@ -386,8 +386,8 @@ jobs:
     with:
       os: ubuntu-24.04
 
-  # The JavaScript that outlives the Tauri app: the browser runtime the native
-  # app embeds, the App acceptance harness, the plugin SDK and the prompt editor.
+  # The browser runtime the native app embeds, the App acceptance harness, the
+  # plugin SDK and the prompt editor.
   js-tools:
     name: JavaScript tools
     needs: changes
@@ -407,35 +407,18 @@ jobs:
         with:
           version: 9
 
-      - name: Ensure ghostty-vt artifacts
-        uses: ./.github/actions/cache-ghostty-vt
-        with:
-          include-wasm: 'true'
-
-      - name: Install dependencies
-        working-directory: app
-        run: pnpm install --frozen-lockfile
-
-      - name: Lint and check the committed browser runtime
+      - name: Lint, test the harness and the browser runtime, and check the committed runtime
         run: make check-js-tools
-
-      - name: Test the browser runtime and the App acceptance harness
-        working-directory: app
-        run: pnpm run test src/browser scripts/real-app-harness
-
-      - name: Upload test receipts
-        if: always()
-        uses: ./.github/actions/upload-test-receipts
-        with:
-          name: js-tools
 
       - name: Test prompt editor helpers
         run: node --test cmd/prompt-editor/test/compare.test.mjs
 
+      - name: Install prompt editor test dependencies
+        run: pnpm --dir cmd/prompt-editor install --frozen-lockfile
+
       - name: Get Playwright version
         id: playwright-version
-        working-directory: app
-        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(pnpm --dir cmd/prompt-editor exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
         id: playwright-cache
@@ -454,13 +437,11 @@ jobs:
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         timeout-minutes: 10
-        working-directory: app
-        run: pnpm exec playwright install chromium
+        run: pnpm --dir cmd/prompt-editor exec playwright install chromium
 
       - name: Install Playwright OS deps
         timeout-minutes: 10
-        working-directory: app
-        run: pnpm exec playwright install-deps chromium
+        run: pnpm --dir cmd/prompt-editor exec playwright install-deps chromium
 
       - name: Test prompt editor in Chromium
         run: |
@@ -524,7 +505,6 @@ jobs:
       pull-requests: read
     uses: ./.github/workflows/app-acceptance-matrix.yml
     with:
-      app: native
       shards: '[1, 2, 3, 4, 5, 6, 7, 8]'
 
   app-acceptance:

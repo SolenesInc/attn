@@ -20,7 +20,7 @@ use crate::requests::Answer;
 
 pub(crate) use view::{back_out, inspector, list, panel_key, row_menu, status, toolbar};
 
-/// As many removals as the Tauri app reads when Removed opens.
+/// How many removals Removed reads when it opens.
 const SWEEP_LOG_PAGE: i64 = 100;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

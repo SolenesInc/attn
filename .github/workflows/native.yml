@@ -58,8 +58,22 @@ jobs:
           workspaces: native
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Native parity
-        run: ../scripts/native-parity
+      - name: Set up Node.js
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/setup-toolchains
+        with:
+          node: 'true'
+
+      - name: Install pnpm
+        if: runner.os == 'Linux'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Check the browser runtime
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: make check-browser-runtime
 
       - name: Native host reads
         run: ../scripts/native-host-reads

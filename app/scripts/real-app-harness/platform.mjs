@@ -6,8 +6,6 @@ import { MacOSDriver } from './macosDriver.mjs';
 import { NativeAppDriver } from './nativeAppDriver.mjs';
 import { appExecutableInAppTree, instanceCliEnv, instanceForAppPath } from './harnessInstance.mjs';
 
-// The harness uses its own bridges; a broken desktop bus blocked WebKitGTK
-// before Tauri setup for over 45 seconds.
 const UNAVAILABLE_DESKTOP_BUS_ADDRESS = 'unix:path=/dev/null';
 
 function delay(ms) {
@@ -109,8 +107,6 @@ const darwinPlatform = {
     return new MacOSDriver(options);
   },
 
-  // The AX set-position call also nudges the WebView out of the
-  // off-screen-init throttle state it otherwise enters.
   async placeWindow(driver, { parkPx }) {
     if (Number.isInteger(parkPx) && parkPx > 0) {
       await driver.parkWindow(parkPx);
@@ -139,8 +135,7 @@ const darwinPlatform = {
   },
 
   async launchApp({ appPath, env = null, logPath }) {
-    const quiet = appShellInTree(appPath) === 'native' ? { MAC_APP_QUIET: '1' } : {};
-    return spawnDetached(this.appExecutableInTree(appPath), { ...env, ...quiet }, appPath, logPath);
+    return spawnDetached(this.appExecutableInTree(appPath), { ...env, MAC_APP_QUIET: '1' }, appPath, logPath);
   },
 
   async requestQuit({ bundleId }) {
@@ -152,9 +147,6 @@ const darwinPlatform = {
     return { pids: pid ? [pid] : [], staleManifest: Boolean(manifestPid && manifestPid !== pid) };
   },
 
-  async listAppPids() {
-    return [];
-  },
 };
 
 const linuxPlatform = {
@@ -246,11 +238,6 @@ const linuxPlatform = {
     return { pids, staleManifest: true };
   },
 
-  // A pid comes from the manifest or from spawn, never from a command-line
-  // pattern: every attn worker and agent session carries the tree path in argv.
-  async listAppPids() {
-    return [];
-  },
 };
 
 export function appPlatformFor(platform = process.platform) {
@@ -311,19 +298,8 @@ print('exited', flush=True)
   return { completed };
 }
 
-export function appShellInTree(appPath) {
-  try {
-    return JSON.parse(fs.readFileSync(appPlatform.appBuildIdentityInTree(appPath), 'utf8')).app ?? 'tauri';
-  } catch {
-    return 'tauri';
-  }
-}
-
-export function createWindowDriver(options = {}) {
-  const window = appPlatform.createWindowDriver(options);
-  return options.appPath && appShellInTree(options.appPath) === 'native'
-    ? new NativeAppDriver({ client: options.client, window })
-    : window;
+export function createWindowDriver({ appPath, client }) {
+  return new NativeAppDriver({ client, window: appPlatform.createWindowDriver({ appPath, client }) });
 }
 
 export function appExecutableInTree(appPath) {

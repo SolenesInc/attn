@@ -54,8 +54,7 @@ pub(crate) struct ShownFilter {
     results_height: u32,
 }
 
-/// The share of the terminal's height the filtered lines take at most before they scroll, as
-/// the Tauri panel caps them at 40% of the window's.
+/// The share of the terminal's height the filtered lines take at most before they scroll.
 const RESULTS_SHARE: f32 = 0.4;
 
 impl Terminals {
@@ -185,8 +184,8 @@ pub(crate) fn filter_field_key(id: &str) -> String {
     format!("terminal.{id}.filter.field")
 }
 
-/// The output lines that hold `query`, each with its matches, as the Tauri terminal filters a
-/// block: without Match case, letters match whatever their case.
+/// The output lines that hold `query`, each with its matches: without Match case, letters match
+/// whatever their case.
 fn filter_lines(output: &str, query: &str, case: bool) -> Vec<Filtered> {
     if query.is_empty() {
         return Vec::new();

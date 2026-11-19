@@ -35,8 +35,7 @@ const EDGE_LEFT: u32 = 64;
 const EDGE_RIGHT: u32 = 128;
 const BIAS: u16 = 32768;
 
-/// The Tauri renderer's rule (`terminalGlyphFont.ts`): VS16, a keycap, or an emoji base with
-/// more code points draws from the emoji font.
+/// VS16, a keycap, or an emoji base with more code points draws from the emoji font.
 fn needs_emoji(text: &str) -> bool {
     let (mut vs16, mut keycap, mut zwj, mut base, mut n) = (false, false, false, false, 0);
     for c in text.chars() {
@@ -66,8 +65,8 @@ struct Inst {
 
 const INST: u64 = std::mem::size_of::<Inst>() as u64;
 
-/// Kitty's deepest layer, as the Tauri renderer draws it: a placement below it draws under the
-/// cells' backgrounds, one from it up to zero under the text, and the rest over the text.
+/// Kitty's deepest layer: a placement below it draws under the cells' backgrounds, one from it up
+/// to zero under the text, and the rest over the text.
 const KITTY_Z_UNDER_BACKGROUND: i32 = -1_073_741_824;
 
 /// One kitty image's quad: where it draws in the grid, in device pixels, and the part of its
@@ -135,8 +134,8 @@ struct Raster {
     scale: f32,
     metrics: Metrics,
     baseline: f32,
-    /// The ink every glyph is drawn in before its cell tints it: white, as the Tauri terminal
-    /// fills its atlas, so font smoothing dilates each glyph as it does white text.
+    /// The ink every glyph is drawn in before its cell tints it: white, so font smoothing dilates
+    /// each glyph as it does white text.
     ink: SmoothingInk,
 }
 
@@ -831,10 +830,10 @@ impl Cells {
         inst
     }
 
-    /// Brings each grid's GPU copy up to date at `scale` device pixels per point, rewriting
-    /// only the rows the grid marked dirty, and forgets every mark not given. The cursor is a
-    /// block in the theme's cursor color whatever shape the program asked for, and the grid
-    /// sits on the theme's background, as the Tauri terminal draws them.
+    /// Brings each grid's GPU copy up to date at `scale` device pixels per point, rewriting only
+    /// the rows the grid marked dirty, and forgets every mark not given. The cursor is a block in
+    /// the theme's cursor color whatever shape the program asked for, and the grid sits on the
+    /// theme's background.
     #[allow(clippy::too_many_arguments)]
     pub fn prepare<'g>(
         &mut self,
@@ -1246,8 +1245,8 @@ fn image_insts(grid: &Grid, cell: (f32, f32)) -> (Vec<ImageInst>, Vec<(u64, Laye
         .unzip()
 }
 
-/// A grid's overlays as instances: the washes, with the cursor drawn again over them as the
-/// Tauri renderer draws it, and the lines.
+/// A grid's overlays as instances: the washes, with the cursor drawn again over them, and the
+/// lines.
 fn overlay_insts(grid: &Grid, theme: TerminalColors) -> (Vec<Inst>, Vec<Inst>) {
     let (mut washes, mut lines) = (Vec::new(), Vec::new());
     for o in grid.overlays() {

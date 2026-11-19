@@ -77,10 +77,6 @@ shell's environment:
 . /tmp/drive-attn-<name>.env && bridge --launch --wait-ready ping   # {"frontendReady": true, "pong": true}
 ```
 
-`make install` installs the native app. To check a rollback build, install the
-Tauri app with `make install INSTANCE=<name> APP=tauri` and drive it with the
-Tauri bridge actions, as [The Tauri app](#the-tauri-app-the-rollback) says.
-
 `--launch` starts the app with the instance shell's environment and parks
 the app window at the screen's edge. Keep that default on a shared Mac. Never
 activate or unpark the window, set the parking or always-on-top variables
@@ -177,7 +173,7 @@ panel, which serves its own actions.
 
 **Scenarios.** Read the scenario and the harness guide before running one.
 On a shared Mac, use a focus-free scenario directly, such as
-`node app/scripts/real-app-harness/scenario-focusless-native.mjs`, or the
+`node app/scripts/real-app-harness/scenario-native-sidebar-session.mjs`, or the
 serial matrix with `--scenario <id>`. Inspect other scenarios for activation
 and physical input too. Native captures and recordings need Screen Recording
 permission for the instance's app or your terminal.
@@ -242,31 +238,3 @@ feature's ways in, a recipe that drives the ways in, the contexts that apply
 to the feature, and where the feature's tests live. Drive every way in that
 the file lists before you call a change done. When you find a way in, a trap
 or a test that the file lacks, fix the file in the same change.
-
-## The Tauri app (the rollback)
-
-The Tauri app is the rollback for the native app. Seed `s-yxa3tt` deletes it
-one release after the cut-over. Drive it only to check a rollback build:
-
-1. Install it with `make install INSTANCE=<name> APP=tauri`.
-2. Launch it with `bridge --launch --wait-ready ping`. `--wait-ready` also
-   refuses a Tauri app built from other source. Then run
-   `bridge dismiss_whats_new`, unless the recipe replays What's new.
-3. Follow the `### In the Tauri app (the rollback)` recipe of the feature file.
-
-Its `bridge` actions differ from the native app's. Reads: `get_state`, the
-feature reads such as `garden_get_state`, `dom_text '{"selector":"..."}'`, and
-`dom_wait '{"selector":"...","timeoutMs":5000}'`. Input:
-`native_key '{"key":"t","modifiers":["command","shift"]}'`,
-`native_text '{"text":"..."}'`, and `native_mouse
-'{"action":"click","x":0.5,"y":0.5}'` with window-relative coordinates from
-`dom_native_point '{"selector":"..."}'`. Capture:
-`capture_native_window_screenshot '{"path":"<file>"}'`. DOM actions
-(`dom_click`, `dispatch_shortcut`, `garden_toggle_frame` and the like) skip
-native input: use them to set up, never as proof. The actions are the `case`
-labels in `app/src/hooks/useUiAutomationBridge.ts` and
-`app/src/hooks/uiAutomationDomActions.ts`, the native input ones in
-`app/src-tauri/core/src/native_input.rs` and
-`app/src-tauri/core/src/ui_automation.rs`, and quick capture's in
-`app/src/quickCapture/automationBridge.ts`. The conventions for driving it are
-in [features/README.md](features/README.md#in-the-tauri-app).

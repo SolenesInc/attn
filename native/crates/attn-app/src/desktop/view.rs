@@ -17,7 +17,7 @@ use crate::terminal::{Release, Terminals, accelerator};
 
 /// The tile area's element.
 pub(super) const TILES: &str = "tiles";
-/// The strip over the line between two tiles that drags it, as wide as the Tauri app's.
+/// The strip over the line between two tiles that drags it.
 pub(super) const DIVIDER_PX: f32 = 9.0;
 /// The rows a terminal keeps clear under the notices over it: three whole rows, main's at the
 /// smallest window with the largest text, and the one the band's foot may cut.
@@ -207,7 +207,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
 }
 
 /// A tab for each document on `desktop` while one of them is shown alone and it holds more
-/// than one, as the Tauri app's review tabs: a press shows that document alone.
+/// than one: a press shows that document alone.
 fn review_tabs(desktop: &Desktop, view: super::layout::View, t: &Tokens) -> Option<El> {
     let super::layout::View::Focused(shown) = view else {
         return None;
@@ -282,9 +282,9 @@ impl Subline {
 /// The state dot at the headline's start.
 const HEADLINE_DOT: f32 = attn_ui::system::DotSize::Small.side();
 
-/// How much a document or browser tile's header shows, by the tile's width, as the Tauri app's
-/// container queries on `.desktop-dock-tile`: under 720 pt its overall-note button goes and its
-/// Focus pill becomes an icon, and under 480 pt its notes count loses its word.
+/// How much a document or browser tile's header shows, by the tile's width: under 720 pt its
+/// overall-note button goes and its Focus pill becomes an icon, and under 480 pt its notes
+/// count loses its word.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Room {
     Narrow,
@@ -1171,7 +1171,7 @@ fn document_controls(leaf: &Leaf, cx: &TileCx) -> Option<El> {
     ))
 }
 
-/// The spring the Tauri app moves a row's tiles on.
+/// The spring a row's tiles move on.
 fn row_spring() -> rune::Spring {
     rune::Spring::from_stiffness_damping(630.0, 39.0, 1.0)
 }
@@ -1183,8 +1183,8 @@ pub(super) fn moves_with_the_row(el: El) -> El {
         .motion_intent(rune::MotionIntent::OVERSHOOT | rune::MotionIntent::IMPULSE)
 }
 
-/// How a tile joins and leaves the row, as in the Tauri app: it grows in and shrinks out,
-/// fading, and a browser tile snaps.
+/// How a tile joins and leaves the row: it grows in and shrinks out, fading, and a browser tile
+/// snaps.
 fn tile_transition(kind: &LeafKind) -> rune::Transition {
     use rune::{Spring, SpringPair, Transition};
     if !slides(kind) {
@@ -1924,9 +1924,8 @@ fn terminal_slot(
 }
 
 /// A press anywhere in `tile`, on its body or a control inside, closes the peek and makes it the
-/// desktop's active tile, holding the window's keyboard, as the Tauri app's `mousedown` on the
-/// tile does. A press on the header's own surface may start a drag, so only its click takes the
-/// tile.
+/// desktop's active tile, holding the window's keyboard. A press on the header's own surface may
+/// start a drag, so only its click takes the tile.
 fn press_tile(state: &mut State, tile: &Holder, tx: &mut Tx) {
     super::peek::dismiss(state);
     super::actions::activate_pressed(state, &tile.desktop, &tile.pane, tx);

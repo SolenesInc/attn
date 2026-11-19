@@ -5,7 +5,7 @@ use attn_ui::Tokens;
 use rune::tok::TextStyle;
 use rune::{Color, El, text};
 
-/// The Tauri scenes' `viewBox="0 0 520 250"`, which each scene is painted in.
+/// The 520 by 250 point box each scene is painted in.
 const PAINTED_WIDTH: f32 = 520.0;
 const HEIGHT: f32 = 250.0;
 

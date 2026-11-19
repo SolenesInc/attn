@@ -2,7 +2,7 @@
 
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { launchFreshNativeAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
@@ -62,7 +62,7 @@ const cheatSheetRow = async () => (await driver.waitFor({ key: `shortcut.${ID}` 
 
 try {
   await runner.step('launch_app', async () => {
-    await launchFreshNativeAppAndConnect(client, observer);
+    await launchFreshAppAndConnect(client, observer);
     const before = observer.getSetting('keybindings_config');
     runner.registerCleanup('restore_keybindings', () => observer.requestResult({ cmd: 'set_setting', key: 'keybindings_config', value: before }, 'settings_updated').catch(() => {}));
     if (before) await observer.requestResult({ cmd: 'set_setting', key: 'keybindings_config', value: '' }, 'settings_updated');

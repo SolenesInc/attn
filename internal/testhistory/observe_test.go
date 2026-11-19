@@ -76,69 +76,6 @@ func TestRunnerOutputNormalizesToReceiptResults(t *testing.T) {
 			absent: []absent{{unit: "go ./mainfail TestNeverRuns"}},
 		},
 		{
-			fixture: "vitest/mixed.jsonl", runner: RunnerVitest, finished: true,
-			expect: []expect{
-				{unit: "vitest src/mixed.test.mjs", attempt: 1, outcome: Fail},
-				{unit: "vitest src/mixed.test.mjs", test: "outer > passes", attempt: 1, outcome: Pass},
-				{unit: "vitest src/mixed.test.mjs", test: "outer > fails", attempt: 1, outcome: Fail},
-				{unit: "vitest src/mixed.test.mjs", test: "outer > is skipped", attempt: 1, outcome: Skip},
-				{unit: "vitest src/mixed.test.mjs", test: "outer > is todo", attempt: 1, outcome: Skip, detail: "todo"},
-				{unit: "vitest src/mixed.test.mjs", test: "outer > fails as expected", attempt: 1, outcome: ExpectedFailure},
-				{unit: "vitest src/mixed.test.mjs", test: "outer > passes on retry", attempt: 1, outcome: Fail, detail: "retried"},
-				{unit: "vitest src/mixed.test.mjs", test: "outer > passes on retry", attempt: 2, outcome: Pass},
-				{unit: "vitest src/allskipped.test.mjs", attempt: 1, outcome: Skip},
-				{unit: "vitest src/broken.test.mjs", attempt: 1, outcome: Fail},
-				{unit: "vitest src/good.test.mjs", attempt: 1, outcome: Pass},
-			},
-		},
-		{
-			fixture: "vitest/interrupted.jsonl", runner: RunnerVitest, finished: false,
-			expect: []expect{
-				{unit: "vitest src/slow.test.mjs", test: "finishes first", attempt: 1, outcome: Pass},
-			},
-			absent: []absent{
-				{unit: "vitest src/slow.test.mjs"},
-				{unit: "vitest src/slow.test.mjs", test: "is interrupted"},
-				{unit: "vitest src/slow.test.mjs", test: "never starts"},
-			},
-		},
-		{
-			fixture: "playwright/mixed.json", runner: RunnerPlaywright, finished: true,
-			expect: []expect{
-				{unit: "playwright e2e/good.spec.mjs", attempt: 1, outcome: Pass},
-				{unit: "playwright e2e/mixed.spec.mjs", attempt: 1, outcome: Fail},
-				{unit: "playwright e2e/mixed.spec.mjs", test: "group › passes", attempt: 1, outcome: Pass},
-				{unit: "playwright e2e/mixed.spec.mjs", test: "group › fails", attempt: 1, outcome: Fail},
-				{unit: "playwright e2e/mixed.spec.mjs", test: "group › fails", attempt: 2, outcome: Fail},
-				{unit: "playwright e2e/mixed.spec.mjs", test: "group › skips", attempt: 1, outcome: Skip, detail: "skip: needs a display"},
-				{unit: "playwright e2e/mixed.spec.mjs", test: "group › is fixme", attempt: 1, outcome: Skip, detail: "fixme:"},
-				{unit: "playwright e2e/mixed.spec.mjs", test: "group › fails as expected", attempt: 1, outcome: ExpectedFailure},
-				{unit: "playwright e2e/mixed.spec.mjs", test: "group › expected to fail but passes", attempt: 1, outcome: Fail, detail: "expected to fail but passed"},
-				{unit: "playwright e2e/mixed.spec.mjs", test: "group › flaky", attempt: 1, outcome: Fail},
-				{unit: "playwright e2e/mixed.spec.mjs", test: "group › flaky", attempt: 2, outcome: Pass},
-				{unit: "playwright e2e/mixed.spec.mjs", test: "group › times out", attempt: 2, outcome: Fail, detail: "timed out"},
-				{unit: "playwright e2e/mixed.spec.mjs", test: "group › expected to fail but times out", attempt: 1, outcome: Fail, detail: "timed out"},
-				{unit: "playwright e2e/mixed.spec.mjs", test: "group › expected to fail but times out", attempt: 2, outcome: Fail, detail: "timed out"},
-			},
-		},
-		{
-			fixture: "playwright/load-error.json", runner: RunnerPlaywright, finished: true,
-			expect: []expect{
-				{unit: "playwright e2e/broken.spec.mjs", attempt: 1, outcome: Fail, detail: "failed to load"},
-			},
-			absent: []absent{{unit: "playwright e2e/good.spec.mjs"}},
-		},
-		{
-			fixture: "playwright/interrupted.json", runner: RunnerPlaywright, finished: true,
-			expect: []expect{
-				{unit: "playwright e2e/slow.spec.mjs", attempt: 1, outcome: Interrupted},
-				{unit: "playwright e2e/slow.spec.mjs", test: "finishes first", attempt: 1, outcome: Pass},
-				{unit: "playwright e2e/slow.spec.mjs", test: "is interrupted", attempt: 1, outcome: Interrupted},
-			},
-			absent: []absent{{unit: "playwright e2e/slow.spec.mjs", test: "never starts"}},
-		},
-		{fixture: "playwright/truncated.json", runner: RunnerPlaywright, finished: false},
-		{
 			fixture: "cargo/mixed.log", runner: RunnerCargo, finished: true,
 			expect: []expect{
 				{unit: "cargo good --lib", attempt: 1, outcome: Fail},

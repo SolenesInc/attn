@@ -23,7 +23,7 @@ fn left_to_right(world: &mut World, keys: &[&str]) -> Vec<String> {
 }
 
 #[test]
-fn the_title_bar_keeps_its_tools_left_and_its_panels_right_in_the_tauri_apps_order() {
+fn the_title_bar_keeps_its_tools_left_and_its_panels_right() {
     let mut world = world();
     let tools = [
         "titlebar.new",

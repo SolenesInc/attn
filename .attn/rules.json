@@ -18,14 +18,12 @@
       ]
     },
     {
-      "pattern": ["make", ["test", "test-frontend", "test-e2e", "lint"]],
+      "pattern": ["make", ["test", "lint"]],
       "decision": "allow",
       "sandbox": "bypass",
       "justification": "Runs the repository's standard verification targets with host access.",
       "match": [
         ["make", "test"],
-        ["make", "test-frontend"],
-        ["make", "test-e2e"],
         ["make", "lint"]
       ]
     },

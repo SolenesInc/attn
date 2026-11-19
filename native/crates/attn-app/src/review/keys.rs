@@ -219,8 +219,8 @@ pub(super) fn send_label() -> String {
         .unwrap_or_default()
 }
 
-/// The keys for what the review shows in `frame` with a file open or not, as the Tauri key
-/// line lists them, with the marking keys after the moves when the file open takes marks.
+/// The keys for what the review shows in `frame` with a file open or not, with the marking keys
+/// after the moves when the file open takes marks.
 fn keys_for(
     frame: Frame,
     file_open: bool,
