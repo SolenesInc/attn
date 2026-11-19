@@ -129,7 +129,7 @@ func (d *Daemon) installAttnRoles(current, next delegationprefs.Config, install 
 		return paths, fmt.Errorf("attn-workflow installation is disabled for instance %q; saved preferences were not changed", config.InstanceLabel())
 	}
 	if len(paths) == 0 {
-		return paths, fmt.Errorf("no available harness has a supported attn-workflow skill directory")
+		return paths, fmt.Errorf("no harness is available to install attn-workflow for")
 	}
 	return paths, nil
 }
@@ -257,17 +257,14 @@ func usesDelegationPreferences(msg *protocol.DelegateMessage) bool {
 	return msg.Role != nil || msg.Choice != nil || protocol.Deref(msg.Fallback)
 }
 
-func (d *Daemon) ensureDelegationWorkflowSkill(harness string, required bool) error {
-	paths, attempted, err := agentdriver.EnsureWorkflowSkillsInstalled([]string{harness})
+func (d *Daemon) ensureDelegationWorkflowSkill(harness string) error {
+	_, attempted, err := agentdriver.EnsureWorkflowSkillsInstalled([]string{harness})
 	if err != nil {
 		return fmt.Errorf("sync attn-workflow before delegated role launch: %w", err)
 	}
 	if !attempted {
 		d.logf("skipping user-global attn-workflow skill sync for instance %q", config.InstanceLabel())
 		return nil
-	}
-	if len(paths) == 0 && required {
-		return fmt.Errorf("harness %q has no supported attn-workflow skill directory", harness)
 	}
 	return nil
 }

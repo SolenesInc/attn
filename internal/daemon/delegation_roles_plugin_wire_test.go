@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -9,7 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func TestAHarnessWithoutAWorkflowSkillDirectoryIsRefusedOnlyForAttnRoles(t *testing.T) {
+func TestAnAttnRoleOnAPluginHarnessInstallsTheWorkflowSkillInAgentsSkills(t *testing.T) {
 	t.Setenv(fakeagent.PlugAgentEnv, "house")
 	w := newWorld(t, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
@@ -37,14 +38,18 @@ func TestAHarnessWithoutAWorkflowSkillDirectoryIsRefusedOnlyForAttnRoles(t *test
 		t.Fatal(err)
 	}
 
+	skill := filepath.Join(os.Getenv("ATTN_TOOL_HOME"), ".agents", "skills", "attn-workflow", "SKILL.md")
+	if err := os.RemoveAll(filepath.Dir(skill)); err != nil {
+		t.Fatal(err)
+	}
+
 	for _, row := range []struct {
 		name, role string
 		fallback   bool
-		refusal    string
 	}{
 		{name: "the user's own role", role: "build"},
 		{name: "the fallback", fallback: true},
-		{name: "an attn role", role: attnRole.ID, refusal: `harness "house" has no supported attn-workflow skill directory`},
+		{name: "an attn role", role: attnRole.ID},
 	} {
 		request := brief(cwd, "Implement the discount field")
 		request.Label = protocol.Ptr(strings.ReplaceAll(row.name, " ", "-"))
@@ -55,11 +60,11 @@ func TestAHarnessWithoutAWorkflowSkillDirectoryIsRefusedOnlyForAttnRoles(t *test
 			request.Fallback = protocol.Ptr(true)
 		}
 		result, err := cli.Delegate(request)
-		if row.refusal == "" && err != nil {
-			t.Errorf("delegating in %s to the house plugin: %v", row.name, err)
+		if err != nil {
+			t.Errorf("delegating in %s to the house plugin = %+v, %v", row.name, result, err)
 		}
-		if row.refusal != "" && (err == nil || !strings.Contains(err.Error(), row.refusal)) {
-			t.Errorf("delegating in %s to the house plugin = %+v, %v; want the refusal %q", row.name, result, err, row.refusal)
-		}
+	}
+	if _, err := os.Stat(skill); err != nil {
+		t.Errorf("delegating to the house plugin did not leave attn-workflow in ~/.agents/skills: %v", err)
 	}
 }

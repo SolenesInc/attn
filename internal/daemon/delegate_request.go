@@ -20,7 +20,6 @@ type resolvedDelegationLaunch struct {
 	Assignment           protocol.DelegateAssignment
 	Checkout             *protocol.DelegateCheckout
 	InstallWorkflowSkill bool
-	RequireWorkflowSkill bool
 	Host                 *string
 	Inspection           protocol.CheckoutInspection
 	Cwd                  string

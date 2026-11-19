@@ -245,12 +245,11 @@ func EnsureWorkflowSkillsInstalled(harnesses []string) ([]string, bool, error) {
 	}
 	wanted := map[string]bool{}
 	for _, harness := range harnesses {
-		switch strings.TrimSpace(harness) {
-		case "claude":
-			wanted[filepath.Join(homeDir, ".claude", "skills", "attn-workflow")] = true
-		case "codex":
-			wanted[filepath.Join(homeDir, ".agents", "skills", "attn-workflow")] = true
+		skillRoot := ".agents"
+		if strings.TrimSpace(harness) == "claude" {
+			skillRoot = ".claude"
 		}
+		wanted[filepath.Join(homeDir, skillRoot, "skills", "attn-workflow")] = true
 	}
 	paths := make([]string, 0, len(wanted))
 	for target := range wanted {
