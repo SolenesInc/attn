@@ -85,7 +85,6 @@ type Command struct {
 	FinishedAt     *time.Time `json:"finished_at,omitempty"`
 	Exit           *Exit      `json:"exit,omitempty"`
 	WallMS         *int64     `json:"wall_ms,omitempty"`
-	Interrupted    string     `json:"interrupted,omitempty"`
 }
 
 type Exit struct {

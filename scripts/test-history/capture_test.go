@@ -195,8 +195,8 @@ func TestAnInterruptedGoRunKeepsTheResultsItFinished(t *testing.T) {
 	code := exitCode(cmd.Wait())
 
 	receipt := onlyReceipt(t, spool)
-	if receipt.Command.Interrupted != "SIGINT" || receipt.Command.Exit == nil || receipt.Command.Exit.Code != code {
-		t.Fatalf("receipt command = %+v, want interrupted by SIGINT with exit %d", receipt.Command, code)
+	if receipt.Command.Exit == nil || receipt.Command.Exit.Code != code {
+		t.Fatalf("receipt command = %+v, want exit %d", receipt.Command, code)
 	}
 	if got := outcomeOf(receipt, "go ./good TestPasses"); got != testhistory.Pass {
 		t.Fatalf("TestPasses = %q, want pass", got)
@@ -339,8 +339,8 @@ func TestATerminationSentToCaptureReachesTheCommand(t *testing.T) {
 		t.Fatalf("capture exited %d, want the command's death by SIGTERM", got)
 	}
 	receipt := onlyReceipt(t, spool)
-	if receipt.Command.Interrupted != "SIGTERM" || receipt.Command.Exit == nil || receipt.Command.Exit.Signal != "SIGTERM" {
-		t.Fatalf("receipt command = %+v, want interrupted by SIGTERM and ended by it", receipt.Command)
+	if receipt.Command.Exit == nil || receipt.Command.Exit.Signal != "SIGTERM" {
+		t.Fatalf("receipt command = %+v, want ended by SIGTERM", receipt.Command)
 	}
 }
 

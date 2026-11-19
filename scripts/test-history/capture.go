@@ -187,8 +187,7 @@ func run(request captureRequest, working *testhistory.Working) (testhistory.Endi
 		_ = eventsWriter.Close()
 	}
 	exited := make(chan struct{})
-	received := make(chan string, 1)
-	go relaySignals(signals, cmd.Process, received, exited)
+	go relaySignals(signals, cmd.Process, exited)
 	switch {
 	case events != nil && request.runner == testhistory.RunnerGo:
 		renderGoEvents(events, results, request.command)
@@ -198,11 +197,6 @@ func run(request captureRequest, working *testhistory.Working) (testhistory.Endi
 	waitErr := cmd.Wait()
 	close(exited)
 	ending := testhistory.Ending{FinishedAt: time.Now(), Exit: exitOf(cmd.ProcessState)}
-	select {
-	case name := <-received:
-		ending.Interrupted = name
-	default:
-	}
 	var exitErr *exec.ExitError
 	if waitErr != nil && !errors.As(waitErr, &exitErr) {
 		return ending, waitErr
@@ -210,16 +204,12 @@ func run(request captureRequest, working *testhistory.Working) (testhistory.Endi
 	return ending, nil
 }
 
-func relaySignals(signals <-chan os.Signal, command *os.Process, received chan<- string, exited <-chan struct{}) {
+func relaySignals(signals <-chan os.Signal, command *os.Process, exited <-chan struct{}) {
 	for {
 		select {
 		case <-exited:
 			return
 		case sig := <-signals:
-			select {
-			case received <- signalName(sig.(syscall.Signal)):
-			default:
-			}
 			if sig != syscall.SIGINT {
 				_ = command.Signal(sig)
 			}

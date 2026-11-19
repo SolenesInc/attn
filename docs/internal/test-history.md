@@ -144,7 +144,7 @@ version.
 - `lane`: operating system, architecture and the Go race detector.
 - `diagnostics`: machine class and tool versions, for comparing cost.
 - `command`: the argv, the requested units, start, finish, exit code or signal,
-  wall time, and the signal capture received, if any.
+  and wall time.
 - `results`: one entry per unit, case and attempt.
 - `complete`: capture saw the command exit and the runner's report reach its
   end. A complete receipt does not say that unlisted tests passed.

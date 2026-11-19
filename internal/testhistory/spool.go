@@ -106,9 +106,8 @@ func (s Spool) Begin(receipt Receipt, goModule string) (*Working, error) {
 func (w *Working) Lock() *os.File { return w.lock }
 
 type Ending struct {
-	Exit        *Exit
-	FinishedAt  time.Time
-	Interrupted string
+	Exit       *Exit
+	FinishedAt time.Time
 }
 
 func (w *Working) Seal(ending Ending) (Receipt, error) {
@@ -139,7 +138,7 @@ func (s Spool) seal(dir string, ending *Ending) (Receipt, error) {
 		finished := ending.FinishedAt.UTC()
 		wall := finished.Sub(receipt.Command.StartedAt).Milliseconds()
 		receipt.Command.FinishedAt, receipt.Command.WallMS = &finished, &wall
-		receipt.Command.Exit, receipt.Command.Interrupted = ending.Exit, ending.Interrupted
+		receipt.Command.Exit = ending.Exit
 	}
 	receipt.Complete = ending != nil && ending.Exit != nil && observed.Finished
 	if err := s.store(receipt); err != nil {
