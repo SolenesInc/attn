@@ -482,6 +482,13 @@ fn the_band_says_why_each_blocker_holds_the_restart_opens_its_tile_and_relaunche
     );
     assert_eq!(reloads(&world), ["plan-cache"]);
     assert_eq!(restarts(&world), Vec::<bool>::new());
+    assert!(
+        world
+            .screen()
+            .find(Target::key(format!("{BAND}.whole-dialog")))
+            .is_none(),
+        "Relaunch left the details open"
+    );
 }
 
 #[test]

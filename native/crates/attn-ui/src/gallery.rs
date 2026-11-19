@@ -719,7 +719,8 @@ fn banners(s: &Library, cx: &mut Cx<Library>) -> El {
                 .note_button(
                     format!("{key}.relaunch"),
                     "Relaunch waiting_input agent",
-                    Action::new("Relaunch").on_press_tx(noop),
+                    Action::new("Relaunch"),
+                    noop,
                 );
         }
         if case == BannerCase::LongLink {
@@ -738,7 +739,8 @@ fn banners(s: &Library, cx: &mut Cx<Library>) -> El {
                 .note_button(
                     format!("{key}.relaunch"),
                     format!("Relaunch {WORKTREE_BASENAME}"),
-                    Action::new("Relaunch").on_press_tx(noop),
+                    Action::new("Relaunch"),
+                    noop,
                 )
                 .link(
                     format!("{key}.go.b"),
@@ -755,9 +757,8 @@ fn banners(s: &Library, cx: &mut Cx<Library>) -> El {
         if acts {
             banner = banner.action(
                 format!("{key}.action"),
-                Action::new(action)
-                    .disabled(tone == BannerTone::Calm)
-                    .on_press_tx(noop),
+                Action::new(action).disabled(tone == BannerTone::Calm),
+                noop,
             );
         }
         let second = match case {
@@ -769,10 +770,7 @@ fn banners(s: &Library, cx: &mut Cx<Library>) -> El {
             _ => None,
         };
         if let Some(second) = second {
-            banner = banner.action(
-                format!("{key}.second"),
-                Action::new(second).on_press_tx(noop),
-            );
+            banner = banner.action(format!("{key}.second"), Action::new(second), noop);
         }
         if case == BannerCase::Countdown {
             banner = banner.countdown(format!("{key}.countdown"), 5);

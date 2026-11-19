@@ -1,3 +1,6 @@
+use std::any::Any;
+use std::rc::Rc;
+
 use rune::{Color, Cx, El, Tx, col, row};
 use rune_kit::ScrollBar;
 
@@ -22,6 +25,11 @@ pub enum BannerTone {
 
 type Attach = Box<dyn FnOnce(El) -> El>;
 type Press = Box<dyn FnOnce(Button) -> Button>;
+/// What closes the dialog a control is pressed in, over the window's state.
+type Close = Rc<dyn Fn(&mut dyn Any, &mut Tx)>;
+/// A control's press, which also closes the dialog it is drawn in, if any.
+type Acts<T> = Box<dyn FnOnce(T, Option<Close>) -> T>;
+type OnPress<S> = Box<dyn Fn(&mut S, &mut Tx)>;
 
 struct Sentence {
     key: String,
@@ -37,12 +45,13 @@ enum Note {
         key: String,
         shown: String,
         label: String,
-        press: Attach,
+        press: Acts<El>,
     },
     Button {
         key: String,
         label: String,
         button: Box<Button>,
+        press: Acts<Button>,
     },
 }
 
@@ -60,7 +69,7 @@ pub struct Banner {
     holds_more: bool,
     details: Option<Press>,
     notes: Vec<Note>,
-    actions: Vec<(String, Button)>,
+    actions: Vec<(String, Button, Acts<Button>)>,
     countdown: Option<(String, u32)>,
     dismiss: Option<(String, String, Attach)>,
     hover: Option<Attach>,
@@ -123,8 +132,8 @@ impl Banner {
     }
 
     /// Opens the dialog that holds the banner whole, offered last among the actions while the bar
-    /// may cut something short: a sentence past its lines, more than the bar names, or a note
-    /// that holds a control, whose name the bar may elide.
+    /// may cut something short: a sentence past its lines, a note wider than its line, more than
+    /// the bar names, or a note that holds a control, whose name the bar may elide.
     pub fn details<S: 'static>(mut self, open: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
         self.details = Some(Box::new(move |b: Button| b.on_press_tx(open)));
         self
@@ -153,22 +162,24 @@ impl Banner {
             key: key.into(),
             shown: shown.into(),
             label: label.into(),
-            press: Box::new(move |e: El| e.on_press_tx(press)),
+            press: acts(press, |e: El, press| e.on_press_tx(press)),
         });
         self
     }
 
     /// A button among the notes, for what one of them offers, announced as `label`.
-    pub fn note_button(
+    pub fn note_button<S: 'static>(
         mut self,
         key: impl Into<String>,
         label: impl Into<String>,
         button: Button,
+        press: impl Fn(&mut S, &mut Tx) + 'static,
     ) -> Self {
         self.notes.push(Note::Button {
             key: key.into(),
             label: label.into(),
             button: Box::new(button),
+            press: acts(press, |b: Button, press| b.on_press_tx(press)),
         });
         self
     }
@@ -176,8 +187,17 @@ impl Banner {
     /// What the banner offers, right after its sentence, in the order given: the action that
     /// moves things forward first. The first action of a banner that needs the person is
     /// primary.
-    pub fn action(mut self, key: impl Into<String>, button: Button) -> Self {
-        self.actions.push((key.into(), button));
+    pub fn action<S: 'static>(
+        mut self,
+        key: impl Into<String>,
+        button: Button,
+        press: impl Fn(&mut S, &mut Tx) + 'static,
+    ) -> Self {
+        self.actions.push((
+            key.into(),
+            button,
+            acts(press, |b: Button, press| b.on_press_tx(press)),
+        ));
         self
     }
 
@@ -241,6 +261,11 @@ impl Banner {
                 band,
             )
         });
+        cut_short |= column.is_some_and(|w| {
+            self.notes.iter().any(
+                |note| matches!(note, Note::Words { said, .. } if width_of(said, Type::Body) > w),
+            )
+        });
         let details = self.details.filter(|_| cut_short).map(|press| {
             let details = Button::new("Details").look(Look::Quiet).size(Size::Compact);
             let details = press(details).build(&paint.controls);
@@ -248,7 +273,7 @@ impl Banner {
                 .shrink()
                 .child(El::from(details.key(format!("{}.details", self.key))))
         });
-        let actions = actions(self.tone, self.actions, &paint.controls)
+        let actions = actions(self.tone, self.actions, &paint.controls, None)
             .into_iter()
             .map(|button| row().shrink().child(button));
         let countdown = self.countdown.map(|(key, seconds)| {
@@ -269,7 +294,7 @@ impl Banner {
             .children(actions);
         let notes = (!self.notes.is_empty()).then(|| {
             let words_only = self.notes.iter().all(|n| matches!(n, Note::Words { .. }));
-            let notes = self.notes.into_iter().map(|note| paint.note(note));
+            let notes = self.notes.into_iter().map(|note| paint.note(note, None));
             let between = if words_only { Space::S8 } else { Space::S4 };
             let notes = row()
                 .flex_wrap()
@@ -311,7 +336,7 @@ impl Banner {
     }
 
     /// The dialog that holds the banner whole: its sentence, every note and its actions, under
-    /// its label, closed by `close`. It is keyed `<banner>.whole`, and each part in it by its key
+    /// its label, closed by `close`, as pressing any control in it also does. It is keyed `<banner>.whole`, and each part in it by its key
     /// in the bar after `whole.`.
     pub fn build_details<S: 'static>(
         self,
@@ -320,13 +345,24 @@ impl Banner {
         layers: &mut Vec<El>,
     ) {
         let paint = Paint::within(t);
+        let closing: Close = {
+            let close = close.clone();
+            Rc::new(move |state: &mut dyn Any, tx: &mut Tx| {
+                if let Some(state) = state.downcast_mut::<S>() {
+                    close(state, tx);
+                }
+            })
+        };
         let sentence = self.sentence.map(|sentence| {
             words(sentence.said, Type::Name, paint.ink)
                 .key(whole(&sentence.key))
                 .wrap()
         });
         let notes = (!self.notes.is_empty()).then(|| {
-            let notes = self.notes.into_iter().map(|note| paint.note(note.within()));
+            let notes = self
+                .notes
+                .into_iter()
+                .map(|note| paint.note(note.within(), Some(closing.clone())));
             door::gaps(
                 row().flex_wrap().items_center().w_full(),
                 Space::S4,
@@ -354,9 +390,10 @@ impl Banner {
                 self.tone,
                 self.actions
                     .into_iter()
-                    .map(|(key, button)| (whole(&key), button))
+                    .map(|(key, button, press)| (whole(&key), button, press))
                     .collect(),
                 t,
+                Some(closing),
             ));
         let actions = door::inset(actions, Space::S24, Space::S16);
         Dialog::new(
@@ -394,21 +431,51 @@ impl Note {
                 label,
                 press,
             },
-            Note::Button { key, label, button } => Note::Button {
+            Note::Button {
+                key,
+                label,
+                button,
+                press,
+            } => Note::Button {
                 key: whole(&key),
                 label,
                 button,
+                press,
             },
         }
     }
 }
 
+/// `press`, attached by `on`, and then `close` when the control is drawn in a dialog.
+fn acts<S: 'static, T: 'static>(
+    press: impl Fn(&mut S, &mut Tx) + 'static,
+    on: fn(T, OnPress<S>) -> T,
+) -> Acts<T> {
+    Box::new(move |control: T, close: Option<Close>| {
+        on(
+            control,
+            Box::new(move |state: &mut S, tx: &mut Tx| {
+                press(state, tx);
+                if let Some(close) = &close {
+                    close(state, tx);
+                }
+            }),
+        )
+    })
+}
+
 /// A banner's actions, in the order given, the first primary when the banner needs the person.
-fn actions(tone: BannerTone, actions: Vec<(String, Button)>, t: &Tokens) -> Vec<El> {
+fn actions(
+    tone: BannerTone,
+    actions: Vec<(String, Button, Acts<Button>)>,
+    t: &Tokens,
+    close: Option<Close>,
+) -> Vec<El> {
     actions
         .into_iter()
         .enumerate()
-        .map(|(i, (key, button))| {
+        .map(|(i, (key, button, press))| {
+            let button = press(button, close.clone());
             let look = if tone == BannerTone::Warn && i == 0 {
                 Look::Primary
             } else {
@@ -521,7 +588,7 @@ impl Paint {
         }
     }
 
-    fn note(&self, note: Note) -> El {
+    fn note(&self, note: Note, close: Option<Close>) -> El {
         let t = &self.controls;
         match note {
             Note::Words { key, said } => self
@@ -541,10 +608,19 @@ impl Paint {
                     .shrink()
                     .child(self.fit(words(shown, Type::Name, self.link)).a11y_hidden());
                 let link = door::corner(link, Radius::Tag);
-                focus::ring(press(layers::pressable(link, self.fill, t)), t)
+                focus::ring(press(layers::pressable(link, self.fill, t), close), t)
             }
-            Note::Button { key, label, button } => {
-                let button = button.size(Size::Compact).build(t).key(key).label(label);
+            Note::Button {
+                key,
+                label,
+                button,
+                press,
+            } => {
+                let button = press(*button, close)
+                    .size(Size::Compact)
+                    .build(t)
+                    .key(key)
+                    .label(label);
                 row().shrink().child(El::from(button))
             }
         }

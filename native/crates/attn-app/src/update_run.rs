@@ -198,9 +198,8 @@ pub(crate) fn said(state: &State) -> Option<blocks::Banner> {
     if run.phase == "failed" {
         banner = banner.action(
             "update-run.retry",
-            Button::new("Retry")
-                .disabled(!connected)
-                .on_press_tx(|state: &mut State, tx: &mut Tx| start(state, None, tx)),
+            Button::new("Retry").disabled(!connected),
+            |state: &mut State, tx: &mut Tx| start(state, None, tx),
         );
     }
     let failed = failed_outposts(run);
@@ -212,9 +211,8 @@ pub(crate) fn said(state: &State) -> Option<blocks::Banner> {
         let ids: Vec<String> = failed.iter().map(|o| o.id.clone()).collect();
         banner = banner.action(
             "update-run.without",
-            Button::new(label).disabled(!connected).on_press_tx(
-                move |state: &mut State, tx: &mut Tx| start(state, Some(ids.clone()), tx),
-            ),
+            Button::new(label).disabled(!connected),
+            move |state: &mut State, tx: &mut Tx| start(state, Some(ids.clone()), tx),
         );
     }
     if let Some(seconds) = state.window.update_run.closing.seconds(&run.id) {

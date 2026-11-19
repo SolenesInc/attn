@@ -270,9 +270,8 @@ pub(crate) fn said(state: &State) -> Option<blocks::Banner> {
         };
         banner = banner.action(
             "outpost-updates.update",
-            Button::new(shown)
-                .disabled(!connected || busy)
-                .on_press_tx(update_all),
+            Button::new(shown).disabled(!connected || busy),
+            update_all,
         );
     }
     let countdown = state

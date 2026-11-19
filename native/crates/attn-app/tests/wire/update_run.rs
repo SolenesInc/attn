@@ -577,6 +577,11 @@ fn details_close_when_retry_from_them_starts_a_new_run() {
     click(&mut world, "update-run.details");
     click(&mut world, "whole.update-run.retry");
     assert_eq!(without_outposts(&world), vec![None]);
+    assert!(
+        !has(&world, "update-run.whole-dialog"),
+        "Retry left the details open"
+    );
+    click(&mut world, "update-run.details");
 
     change(&mut world, run("r2", "staging", vec![]));
     assert!(
@@ -594,6 +599,33 @@ fn details_close_when_retry_from_them_starts_a_new_run() {
         !has(&world, "update-run.whole-dialog"),
         "the new run's failure opened with the last one's details"
     );
+}
+
+#[test]
+fn a_staging_note_longer_than_its_line_offers_details_reading_it_whole() {
+    let name =
+        "ci-runner-07.build-and-validation.platform.example.org.eu-central-1.internal.cluster";
+    let mut world = start_sized(
+        &[("uiScale", "1.5")],
+        Some(run(
+            "r1",
+            "outposts",
+            vec![outpost("o1", name, "staging", None)],
+        )),
+        SMALLEST,
+    );
+    let note = name_of_note(&world, "update-run.outpost.o1");
+    assert!(note.starts_with(name), "{note}");
+    click(&mut world, "update-run.details");
+    assert_eq!(name_of_note(&world, "whole.update-run.outpost.o1"), note);
+    assert!(
+        world.rect("whole.update-run.outpost.o1")[3] > 16.0,
+        "Details cuts the note short to one line"
+    );
+}
+
+fn name_of_note(world: &World, key: &str) -> String {
+    name(world, key).unwrap_or_else(|| panic!("no {key}"))
 }
 
 #[test]

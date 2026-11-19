@@ -450,10 +450,7 @@ fn waiting_on(
             format!("{key}.go"),
             name.clone(),
             format!("Go to {name}"),
-            move |state: &mut State, tx: &mut Tx| {
-                crate::shell::close_details(state);
-                crate::sidebar::open_agent(state, &id, tx)
-            },
+            move |state: &mut State, tx: &mut Tx| crate::sidebar::open_agent(state, &id, tx),
         );
         let end = if i + 1 < named || more > 0 { "," } else { "." };
         banner = banner.note(
@@ -465,9 +462,10 @@ fn waiting_on(
             banner = banner.note_button(
                 format!("{key}.relaunch"),
                 format!("Relaunch {name}"),
-                Button::new("Relaunch").on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                Button::new("Relaunch"),
+                move |state: &mut State, tx: &mut Tx| {
                     crate::sidebar::session_menu::reload_session(state, &id, tx)
-                }),
+                },
             );
         }
     }
@@ -524,10 +522,7 @@ pub(crate) fn said(state: &State, whole: bool) -> Option<Banner> {
             "Codex {installed} didn’t start: {}. Still on {running}, nothing was interrupted.",
             without_final_period(codex.error.as_deref().unwrap_or_default())
         ))
-        .action(
-            format!("{BAND}.retry"),
-            Button::new("Retry").on_press_tx(retry),
-        ),
+        .action(format!("{BAND}.retry"), Button::new("Retry"), retry),
         Stage::Draining => {
             let names: Vec<String> = blockers
                 .iter()
@@ -557,8 +552,8 @@ pub(crate) fn said(state: &State, whole: bool) -> Option<Banner> {
             } else {
                 waiting_on(state, &blockers, whole, banner).action(
                     format!("{BAND}.restart"),
-                    Button::new("Restart now")
-                        .on_press(|state: &mut State| open_confirm(state, Confirm::Restart)),
+                    Button::new("Restart now"),
+                    |state: &mut State, _: &mut Tx| open_confirm(state, Confirm::Restart),
                 )
             }
         }
@@ -573,10 +568,7 @@ pub(crate) fn said(state: &State, whole: bool) -> Option<Banner> {
                 None => banner,
             };
             banner
-                .action(
-                    format!("{BAND}.install"),
-                    Button::new("Install").on_press_tx(install),
-                )
+                .action(format!("{BAND}.install"), Button::new("Install"), install)
                 .dismiss(
                     format!("{BAND}.dismiss-update"),
                     "Dismiss Codex update",
@@ -595,8 +587,8 @@ pub(crate) fn said(state: &State, whole: bool) -> Option<Banner> {
             ))
             .action(
                 format!("{BAND}.reload"),
-                Button::new("Reload tiles")
-                    .on_press(|state: &mut State| open_confirm(state, Confirm::Reload)),
+                Button::new("Reload tiles"),
+                |state: &mut State, _: &mut Tx| open_confirm(state, Confirm::Reload),
             )
             .dismiss(
                 format!("{BAND}.dismiss-old-tiles"),
