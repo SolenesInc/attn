@@ -4,13 +4,13 @@
 use rune::{Cx, El, Playground, Story};
 
 use crate::block_gallery::{Blocks, common, noop, stage, tokens};
-use crate::blocks::{Facts, Prose, Section, SettingRow};
-use crate::system::{Type, switch, words};
+use crate::blocks::{Facts, Inline, Prose, Section, SettingRow};
+use crate::system::{Button, Size, Tone, Type, switch, words};
 
 /// Every Settings block story, by name, with the keys of what it draws: what the state sheets
 /// and the rule tests read.
 pub const SETTINGS_SUBJECTS: &[(&str, &[&str])] = &[
-    ("Blocks/Facts", &["facts"]),
+    ("Blocks/Facts", &["facts", "facts.tiles"]),
     ("Blocks/Section with aside", &["aside.section"]),
 ];
 
@@ -97,6 +97,27 @@ fn facts(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
                     "Up to date"
                 },
             )
+            .item(
+                "facts.path",
+                "Log",
+                Inline::loose()
+                    .child(words(if s.long { LONG_PATH } else { "/tmp/run-1.log" }, Type::Mono, t.text_primary).wrap_anywhere().shrink())
+                    .child(Button::new("Copy").size(Size::Compact).on_press_tx(noop).build(&t).key("facts.path.copy").into()),
+            )
+            .build(&t),
+        Facts::new()
+            .key("facts.tiles")
+            .tiles()
+            .code("facts.tiles.events", "Events", if s.long { "1,048,576" } else { "1,204" })
+            .code("facts.tiles.weight", "Weight", "3.2 MB")
+            .code(
+                "facts.tiles.seq",
+                "Seq",
+                if s.long { "1,048,576–1,049,000" } else { "1–1,204" },
+            )
+            .code("facts.tiles.oldest", "Oldest", "2 days")
+            .code("facts.tiles.unreachable", "Unreachable", "1 of 3")
+            .tone(Some(Tone::Warn))
             .build(&t),
         Prose::hint("facts.hint", "Add hosts with `gh auth login --hostname <host>`.").build(&t),
     ];
