@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -112,5 +113,73 @@ func TestAPluginCannotRegisterTheSigmaHarness(t *testing.T) {
 	err := driver.call("driver.register", map[string]any{"agent": "sigma", "capabilities": map[string]bool{"server_binding": true, "resume": true}, "server": serverDriverDeclaration(w)}, &driver.registered)
 	if err == nil || !strings.Contains(err.Error(), "reserved") {
 		t.Fatalf("a plugin registering sigma = %v, want it refused as reserved by attn", err)
+	}
+}
+
+func TestASigmaSessionComesBackAfterSigmaEnabledIsTurnedOff(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app := w.App()
+	setSetting(t, app, "sigma_enabled", "true")
+	session := w.Spawn(app, fakeagent.Sigma, w.Path("shop"))
+	first := w.Launched(session)
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	setSetting(t, app, "sigma_enabled", "false")
+
+	w.restartHoldingRevives()
+	app = w.App()
+	revived := attachRevive(app, session, 101, 37)
+	if !revived.Success || !protocol.Deref(revived.Revived) {
+		t.Fatalf("attach with revive after sigma_enabled was turned off answered %+v, want the open Sigma session back", revived)
+	}
+	if again := w.Launched(session); again.ConversationID != first.ConversationID {
+		t.Fatalf("the revived Sigma TUI opened %s, want conversation %s", again.ConversationID, first.ConversationID)
+	}
+}
+
+func TestAttnRolesInstallTheWorkflowSkillWhereSigmaAndItsClaudeProvidersLook(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude, fakeagent.Sigma)
+	sigmaHome := os.Getenv("SIGMA_HOME")
+	providerHome := filepath.Join(t.TempDir(), "claude-work")
+	configureSigmaProvider := func(configDir string) {
+		if err := os.MkdirAll(sigmaHome, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		config := "[providers.work]\ndriver = \"claude\"\nconfig_dir = \"" + configDir + "\"\n"
+		if err := os.WriteFile(filepath.Join(sigmaHome, "config.toml"), []byte(config), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	configureSigmaProvider(providerHome)
+	app := w.App()
+	setSetting(t, app, "sigma_enabled", "true")
+	awaitAgentAvailable(app, "sigma")
+	preferences := *loadDelegationPreferences(app).Preferences
+	preferences.WorkflowSkillEnabled = true
+	preferences.Enabled = true
+	claudeSkill := filepath.Join(delegationWorkflowSkillIn(os.Getenv("ATTN_TOOL_HOME"), ".claude"), "SKILL.md")
+
+	added := addAttnDelegationRoles(app, preferences)
+	if !added.Success {
+		t.Fatalf("adding Attn roles: %s", protocol.Deref(added.Error))
+	}
+	for _, skill := range []string{
+		filepath.Join(sigmaHome, "skills", "attn-workflow", "SKILL.md"),
+		claudeSkill,
+		filepath.Join(providerHome, "skills", "attn-workflow", "SKILL.md"),
+	} {
+		if _, err := os.Stat(skill); err != nil {
+			t.Errorf("attn-workflow is missing where Sigma looks: %v", err)
+		}
+	}
+
+	configureSigmaProvider("claude-work")
+	if err := os.RemoveAll(filepath.Dir(claudeSkill)); err != nil {
+		t.Fatal(err)
+	}
+	if again := addAttnDelegationRoles(app, *added.Preferences); again.Success || !strings.Contains(protocol.Deref(again.Error), "relative config_dir") {
+		t.Errorf("adding Attn roles with a relative Sigma provider folder answered %q, want Sigma's refusal", protocol.Deref(again.Error))
+	}
+	if _, err := os.Stat(claudeSkill); err != nil {
+		t.Errorf("Sigma's relative provider folder kept attn-workflow from Claude: %v", err)
 	}
 }

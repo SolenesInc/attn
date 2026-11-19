@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -46,6 +47,7 @@ func (d *Daemon) workflowSkillsDirs(harnesses []string) func(homeDir string) ([]
 			return value
 		}
 		var dirs []string
+		var refusals []error
 		for _, harness := range harnesses {
 			if dir := agentdriver.HarnessSkillsDir(harness, homeDir); dir != "" {
 				dirs = append(dirs, dir)
@@ -54,7 +56,7 @@ func (d *Daemon) workflowSkillsDirs(harnesses []string) func(homeDir string) ([]
 			if resolver, ok := agentdriver.Get(harness).(agentdriver.SkillDirsResolver); ok {
 				resolved, err := resolver.SkillDirs(lookup, homeDir)
 				if err != nil {
-					return nil, err
+					refusals = append(refusals, err)
 				}
 				dirs = append(dirs, resolved...)
 				continue
@@ -64,6 +66,6 @@ func (d *Daemon) workflowSkillsDirs(harnesses []string) func(homeDir string) ([]
 				dirs = append(dirs, dir.resolve(env, homeDir))
 			}
 		}
-		return dirs, nil
+		return dirs, errors.Join(refusals...)
 	}
 }

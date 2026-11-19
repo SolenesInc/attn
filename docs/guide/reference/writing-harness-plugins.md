@@ -270,12 +270,13 @@ array. The client acknowledges each chunk with `@effect/rpc/Ack` and
 The required calls are `initialize {client, version, protocol}`,
 `conversation/submit {conversation, author, requestId, text}`, `models/list`,
 `status/watch` and `conversation/list`. An interrupting binding also supports
-`conversation/interrupt {conversation}`. A target-capable binding supports
+`conversation/interrupt {conversation, author}`. A target-capable binding supports
 `targets/list {cwd}` returning `[{id, name, available, detail}]`.
 
 `conversation/submit` takes durable custody before replying. Repeating its
 `requestId` must return the original admission without submitting twice.
-The `author` is the user's name for user input and `"attn"` for notices.
+The `author` on both calls is `{id, name}`: the user's name as both for user
+input, and `"attn"` as both for notices and interrupts.
 `models/list` returns providers with `provider` and `models`, where each model
 has `id`, `name`, `description` and `efforts`.
 

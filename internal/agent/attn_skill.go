@@ -257,10 +257,7 @@ func EnsureWorkflowSkillsInstalled(skillsDirs func(homeDir string) ([]string, er
 	if err != nil {
 		return nil, true, fmt.Errorf("resolve home directory for workflow skills: %w", err)
 	}
-	dirs, err := skillsDirs(homeDir)
-	if err != nil {
-		return nil, true, err
-	}
+	dirs, unresolved := skillsDirs(homeDir)
 	wanted := map[string]bool{}
 	for _, dir := range dirs {
 		wanted[filepath.Join(dir, "attn-workflow")] = true
@@ -275,5 +272,5 @@ func EnsureWorkflowSkillsInstalled(skillsDirs func(homeDir string) ([]string, er
 			return paths, true, fmt.Errorf("install attn-workflow at %s: %w", target, err)
 		}
 	}
-	return paths, true, nil
+	return paths, true, unresolved
 }

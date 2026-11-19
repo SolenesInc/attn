@@ -110,7 +110,7 @@ func (d *Daemon) agentAvailable(agent string) bool {
 	if _, plugin := d.ensurePluginRegistry().driver(agent); plugin {
 		return true
 	}
-	return agentdriver.Get(agent) != nil && d.agentOffered(agent)
+	return agentdriver.Get(agent) != nil
 }
 
 func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (*spawnRequest, *spawnRejection) {
@@ -120,9 +120,10 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 	}
 	pluginDriver, hasPluginDriver := d.ensurePluginRegistry().driver(requestedAgent)
 	agent := normalizeSpawnAgent(msg.Agent)
+	startsSession := policy.fromLedger || d.store.Get(msg.ID) == nil
 	if hasPluginDriver {
 		agent = pluginDriver.Agent
-	} else if requestedAgent != "" && requestedAgent != protocol.AgentShellValue && !d.agentAvailable(requestedAgent) {
+	} else if requestedAgent != "" && requestedAgent != protocol.AgentShellValue && (!d.agentAvailable(requestedAgent) || startsSession && !d.agentOffered(requestedAgent)) {
 		return nil, &spawnRejection{err: fmt.Errorf("agent %q is not available", requestedAgent)}
 	}
 	isShell := agent == protocol.AgentShellValue
@@ -142,7 +143,7 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 			return nil, &spawnRejection{err: err}
 		}
 	}
-	if !isShell && !hasPluginDriver {
+	if !isShell && !hasPluginDriver && d.agentOffered(agent) {
 		explicit := strings.TrimSpace(protocol.Deref(msg.Executable))
 		if explicit == "" {
 			explicit = legacyExecutableFromSpawnMessage(msg, agent)
