@@ -47,6 +47,99 @@ const PROFILE: &str = "work";
 const DESKTOP: &str = "work/desktop_1";
 const SIZE: (f32, f32) = (1440.0, 900.0);
 
+/// A run's window and data: the tour's own, or the worst case a person meets.
+#[derive(Clone, Copy)]
+struct Mode {
+    window: (f32, f32),
+    text: f32,
+    long: bool,
+}
+
+const TOUR: Mode = Mode {
+    window: SIZE,
+    text: 1.0,
+    long: false,
+};
+
+thread_local! {
+    static MODE: std::cell::Cell<Mode> = const { std::cell::Cell::new(TOUR) };
+    static FAILED: std::cell::RefCell<Vec<String>> = std::cell::RefCell::default();
+}
+
+fn mode() -> Mode {
+    MODE.get()
+}
+
+fn window() -> (f32, f32) {
+    mode().window
+}
+
+/// The scripted daemon every scene starts from, sending the run's text size and, in a long
+/// run, each name and error at the longest a person meets.
+fn scripted() -> Daemon {
+    let run = mode();
+    if run.text == 1.0 && !run.long {
+        return Daemon::scripted();
+    }
+    Daemon::scripted().rewriting(move |message| {
+        if run.long {
+            lengthen(message);
+        }
+        if run.text != 1.0 && message["event"] == "initial_state" {
+            message["settings"]["uiScale"] = json!(run.text.to_string());
+        }
+    })
+}
+
+/// What a long run adds to a name: a worktree's basename, in Latin and in CJK.
+const LONG_NAME: &str =
+    "build-and-release-platform-本番の権限を移行する作業ツリー-tokyo-region-primary";
+
+/// What a long run adds to an error: a daemon's failure as it reads.
+const LONG_ERROR: &str = "the app server exited with status 1 before it answered its first \
+     request, after loading a configuration it could not read from \
+     ~/.config/attn/outposts/build-and-release-platform-tokyo-region-primary.toml";
+
+/// Each name, label, title and host in `value` made long, and each error made a long sentence,
+/// the same way every time so the app and the scene agree on what it sent.
+fn lengthen(value: &mut Value) {
+    match value {
+        Value::Object(fields) => {
+            for (key, field) in fields.iter_mut() {
+                match (key.as_str(), &mut *field) {
+                    ("label" | "name" | "title" | "display_name", Value::String(said))
+                        if !said.is_empty() && !said.ends_with(LONG_NAME) =>
+                    {
+                        *said = format!("{said}-{LONG_NAME}");
+                    }
+                    ("error" | "error_message", Value::String(said))
+                        if !said.is_empty() && !said.ends_with(LONG_ERROR) =>
+                    {
+                        *said = format!("{said}: {LONG_ERROR}");
+                    }
+                    _ => lengthen(field),
+                }
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(lengthen),
+        _ => {}
+    }
+}
+
+/// Runs one scene. A tour run stops at a scene that fails; a worst-case run records it and
+/// goes on, so one scene that cannot run at that size hides no other.
+fn scene(name: &str, run: impl FnOnce()) {
+    let run = std::panic::AssertUnwindSafe(run);
+    if mode().window == SIZE && mode().text == 1.0 && !mode().long {
+        run.0();
+        return;
+    }
+    if std::panic::catch_unwind(run).is_err() {
+        FAILED.with_borrow_mut(|failed| failed.push(name.to_owned()));
+        SCENE.with_borrow_mut(String::clear);
+    }
+}
+
 const STATES: [&str; 8] = [
     "working",
     "waiting_input",
@@ -273,7 +366,7 @@ fn initial(dark: bool, tile: Value, seeds: Vec<Seed>) -> InitialStateMessage {
 }
 
 fn start(daemon: Daemon) -> World {
-    let mut world = World::start_sized(daemon, SIZE);
+    let mut world = World::start_sized(daemon, window());
     world.open_desktop();
     world
 }
@@ -658,13 +751,77 @@ fn snap(world: &mut World, name: &str, dark: bool) {
     }
     let mut shot = None;
     let mut cost = None;
+    let mut cut = Vec::new();
     world.gesture(|app| {
         shot = Some(pixels(app.runtime, &mut Screens::default()));
         cost = Some((app.runtime.elements().len(), app.runtime.instances.len()));
+        cut = cut_text(&app.runtime.elements());
     });
     save(name, dark, shot.expect("the window drew"));
     if let Some((nodes, instances)) = cost {
         record_cost(name, dark, nodes, instances);
+    }
+    record_cuts(name, dark, &cut);
+}
+
+/// Text a clip cuts across its line: what it says and how many points of it the clip hides.
+/// Text that truncates fits its box and is never cut, and text scrolled partly out of view is
+/// cut only top or bottom. Text in a view that scrolls sideways is wider on purpose: there the
+/// clipping element's child on the way to the text is wider than the clip, as a sideways
+/// viewport's content takes its natural width. This leaves those out.
+fn cut_text(elements: &[rune::ElementInfo]) -> Vec<(String, f32)> {
+    let cuts = |e: &rune::ElementInfo| {
+        let ([x, _, w, _], [vx, _, vw, _]) = (e.rect, e.visible);
+        vx - x > 0.5 || (x + w) - (vx + vw) > 0.5
+    };
+    let scrolls_sideways = |at: usize| {
+        let mut child = at;
+        while let Some(parent) = elements[child].parent {
+            if !cuts(&elements[parent]) {
+                return elements[child].rect[2] > elements[parent].rect[2] + 0.5;
+            }
+            child = parent;
+        }
+        false
+    };
+    elements
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| !e.exiting && e.opacity > 0.0)
+        .filter_map(|(at, e)| {
+            let said = e.text.as_ref()?;
+            let [x, _, w, _] = e.rect;
+            let [vx, _, vw, vh] = e.visible;
+            if said.trim().is_empty() || vw <= 0.0 || vh <= 0.0 || scrolls_sideways(at) {
+                return None;
+            }
+            let hidden = (vx - x).max(0.0) + ((x + w) - (vx + vw)).max(0.0);
+            (hidden > 0.5).then(|| (said.clone(), hidden))
+        })
+        .collect()
+}
+
+/// Each screen's cut text, beside its pictures in `clips.tsv`: one line a cut, and a screen
+/// with none still listed with a count of 0.
+fn record_cuts(name: &str, dark: bool, cut: &[(String, f32)]) {
+    use std::io::Write;
+    let appearance = if dark { "dark" } else { "light" };
+    let path = OUT.with_borrow(|out| out.join("clips.tsv"));
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let screen = format!("{name}-{appearance}");
+    let mut lines = vec![format!("{screen}\t{}\t\t", cut.len())];
+    lines.extend(cut.iter().map(|(said, hidden)| {
+        format!(
+            "{screen}\t\t{hidden:.1}\t{}",
+            said.replace(['\t', '\n'], " ")
+        )
+    }));
+    for line in lines {
+        writeln!(file, "{line}").unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     }
 }
 
@@ -718,8 +875,7 @@ fn snap_tile_window(world: &mut World, name: &str, dark: bool) {
 }
 
 fn sidebar_and_terminal(dark: bool) {
-    let daemon =
-        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
+    let daemon = scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
     let mut world = start(daemon);
     deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
     print_colors(&mut world);
@@ -736,7 +892,7 @@ fn tile_headers(dark: bool, hovered: bool) {
     if let Some(desktop) = state.desktops.iter_mut().flatten().next() {
         desktop.active_pane_id = "m".into();
     }
-    let mut world = start(Daemon::scripted().state(state));
+    let mut world = start(scripted().state(state));
     deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
     write(&mut world, BOXES);
     if hovered {
@@ -759,7 +915,7 @@ fn tile_headers(dark: bool, hovered: bool) {
 /// Agent `a` active beside a document tile, marked in each tile focus style.
 fn tile_focus(dark: bool) {
     for style in FocusStyle::ALL {
-        let mut world = start(Daemon::scripted().state(tended_agent(dark)));
+        let mut world = start(scripted().state(tended_agent(dark)));
         deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
         write(&mut world, BOXES);
         run(&mut world, Action::SetTileFocus { style });
@@ -829,7 +985,7 @@ fn shelf(dark: bool, hovered: bool) {
     if let Some(settings) = state.settings.as_mut() {
         settings.insert("narrowest_tile_cols".into(), "40".into());
     }
-    let mut world = start(Daemon::scripted().state(state));
+    let mut world = start(scripted().state(state));
     deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
     if hovered {
         world.gesture(|app| {
@@ -852,8 +1008,7 @@ fn shelf(dark: bool, hovered: bool) {
 }
 
 fn review_stop(dark: bool) {
-    let daemon =
-        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
+    let daemon = scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
     let mut world = start(daemon);
     deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
     world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
@@ -892,7 +1047,7 @@ fn garden_world(dark: bool, seeds: Vec<Seed>) -> World {
 
 /// [`garden_world`], its daemon also answering what `answers` registers.
 fn garden_world_and(dark: bool, seeds: Vec<Seed>, answers: impl FnOnce(&Daemon)) -> World {
-    let daemon = Daemon::scripted().state(initial(
+    let daemon = scripted().state(initial(
         dark,
         document_tile("m", "/repo/plan.md"),
         seeds.clone(),
@@ -1189,7 +1344,7 @@ fn terminal_overlays(dark: bool) {
     if let Some(sessions) = state.sessions.as_mut() {
         sessions[0].id = "s0".into();
     }
-    let daemon = Daemon::scripted().state(state);
+    let daemon = scripted().state(state);
     daemon
         .on("session_messages_get", |_: &Request| {
             message(SessionMessagesGetResultMessage {
@@ -1281,7 +1436,7 @@ fn tile_window(dark: bool) {
     if let Some(desktop) = state.desktops.iter_mut().flatten().next() {
         desktop.tree_json = row(vec![popped, document_tile("m", "/repo/plan.md")]).to_string();
     }
-    let mut world = start(Daemon::scripted().state(state));
+    let mut world = start(scripted().state(state));
     deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
     write(&mut world, BOXES);
     snap_tile_window(&mut world, "tile-window", dark);
@@ -1322,7 +1477,7 @@ fn launcher_daemon_with(dark: bool, empty: bool, launcher_2: bool) -> Daemon {
             settings.insert(key.into(), value.into());
         }
     }
-    let daemon = Daemon::scripted().state(state);
+    let daemon = scripted().state(state);
     daemon
         .on("delegation_preferences_get", |_: &Request| {
             message(DelegationPreferencesResultMessage {
@@ -1486,7 +1641,7 @@ fn settings_analytics(dark: bool) {
     if let Some(settings) = state.settings.as_mut() {
         settings.insert("analytics.enabled".into(), "true".into());
     }
-    let mut world = start(Daemon::scripted().state(state));
+    let mut world = start(scripted().state(state));
     press(&mut world, Action::UiOpenSettings);
     world.gesture(|app| app.click(Target::key("settings.search.field")));
     world.gesture(|app| app.type_text("analytics"));
@@ -1529,7 +1684,7 @@ fn settings_world(
         set.extend(settings.iter().map(|&(k, v)| (k.to_owned(), v.to_owned())));
     }
     change(&mut state);
-    let daemon = Daemon::scripted().state(state);
+    let daemon = scripted().state(state);
     answer(&daemon);
     let mut world = start(daemon);
     press(&mut world, Action::UiOpenSettings);
@@ -1675,7 +1830,7 @@ fn quick_capture_world(dark: bool) -> World {
         settings: settings(dark),
         ..InitialStateMessage::new()
     };
-    let mut world = World::start_sized(Daemon::scripted().state(state), SIZE);
+    let mut world = World::start_sized(scripted().state(state), window());
     run(&mut world, Action::OpenQuickCapture);
     world
 }
@@ -1709,7 +1864,7 @@ fn notebook_open(dark: bool) -> World {
             "/home/me/notebook".to_owned(),
         );
     }
-    let daemon = Daemon::scripted().state(state);
+    let daemon = scripted().state(state);
     daemon
         .on("fs_list", |_: &Request| {
             let entry = |path: &str, is_dir: bool| {
@@ -1756,7 +1911,7 @@ fn notebook_daemon(dark: bool, tile: Option<Value>) -> Daemon {
             "/home/me/notebook".to_owned(),
         );
     }
-    let daemon = Daemon::scripted().state(state);
+    let daemon = scripted().state(state);
     daemon
         .on("fs_list", |req: &Request| {
             let entry = |path: &str, is_dir: bool| {
@@ -1947,8 +2102,7 @@ fn settings_event_bus(dark: bool) {
 
 /// The ledger with nothing in it: its header's Close and its status bar's keys.
 fn ledger(dark: bool) {
-    let daemon =
-        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
+    let daemon = scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
     daemon.on("session_list", |r: &Request| {
         message(SessionListResultMessage {
             request_id: r["request_id"].as_str().unwrap().into(),
@@ -1974,7 +2128,7 @@ fn ledger_seeded(dark: bool) {
         }),
         ..seed("s-one", "Colors in one place", "growing", None)
     };
-    let daemon = Daemon::scripted().state(initial(
+    let daemon = scripted().state(initial(
         dark,
         document_tile("m", "/repo/plan.md"),
         vec![tended],
@@ -2034,8 +2188,7 @@ fn ledger_seeded(dark: bool) {
 
 /// The ledger's Worktrees list with no worktrees: its scopes, its filter and its refresh.
 fn ledger_worktrees(dark: bool) {
-    let daemon =
-        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
+    let daemon = scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
     daemon.on("session_list", |r: &Request| {
         message(SessionListResultMessage {
             request_id: r["request_id"].as_str().unwrap().into(),
@@ -2085,7 +2238,7 @@ fn chief_setup(dark: bool) {
             settings.insert(key.into(), value.into());
         }
     }
-    let daemon = Daemon::scripted().state(state);
+    let daemon = scripted().state(state);
     daemon.on("delegation_preferences_get", |r: &Request| {
         let harness = |id: &str, name: &str| Harness {
             id: id.into(),
@@ -2136,7 +2289,7 @@ fn chief_setup(dark: bool) {
             ..HarnessModelsResultMessage::new()
         })
     });
-    let mut world = World::start_sized(daemon, SIZE);
+    let mut world = World::start_sized(daemon, window());
     world.settle();
     world.gesture(|app| app.click(Target::key("chief-slot")));
     snap(&mut world, "chief-setup", dark);
@@ -2168,7 +2321,7 @@ fn asks(dark: bool) {
         ],
         ..Ask::default()
     }]);
-    let mut world = start(Daemon::scripted().state(state));
+    let mut world = start(scripted().state(state));
     press(&mut world, Action::DockAsks);
     snap(&mut world, "asks", dark);
 }
@@ -2180,7 +2333,7 @@ fn asks_empty(dark: bool) {
         .settings
         .get_or_insert_with(Default::default)
         .insert("asks_enabled".into(), "true".into());
-    let mut world = start(Daemon::scripted().state(state));
+    let mut world = start(scripted().state(state));
     press(&mut world, Action::DockAsks);
     snap(&mut world, "asks-empty", dark);
 }
@@ -2226,7 +2379,7 @@ fn asks_choices(dark: bool) {
         ],
         ..Ask::default()
     }]);
-    let mut world = start(Daemon::scripted().state(state));
+    let mut world = start(scripted().state(state));
     press(&mut world, Action::DockAsks);
     snap(&mut world, "asks-choices", dark);
 }
@@ -2249,7 +2402,7 @@ fn notebook_tree(dark: bool) {
             "/home/me/notebook".to_owned(),
         );
     }
-    let daemon = Daemon::scripted().state(state);
+    let daemon = scripted().state(state);
     daemon.on("fs_list", |req| {
         let entry = |path: &str, is_dir: bool| {
             let name = path.rsplit('/').next().unwrap_or(path);
@@ -2278,8 +2431,7 @@ fn notebook_tree(dark: bool) {
 
 /// The review's file view, opened from the brief's stop: its back bar and its keys.
 fn review_file(dark: bool) {
-    let daemon =
-        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
+    let daemon = scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
     serve_totals(&daemon);
     let mut world = start(daemon);
     deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
@@ -2290,8 +2442,7 @@ fn review_file(dark: bool) {
 }
 
 fn review_keys(dark: bool) {
-    let daemon =
-        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
+    let daemon = scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
     let mut world = start(daemon);
     deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
     world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
@@ -2309,7 +2460,7 @@ fn review_alone(dark: bool) -> World {
     if let Some(desktop) = state.desktops.as_mut().and_then(|d| d.first_mut()) {
         desktop.active_pane_id = "m".into();
     }
-    let daemon = Daemon::scripted().state(state);
+    let daemon = scripted().state(state);
     serve_totals(&daemon);
     let mut world = start(daemon);
     deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
@@ -2350,8 +2501,7 @@ fn launcher_empty_desktop(dark: bool) {
 /// A new scheduled automation's form, with nothing defined yet and the daemon previewing
 /// every schedule it is asked about.
 fn automation_form(dark: bool) -> World {
-    let daemon =
-        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
+    let daemon = scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
     daemon
         .on("automation_definitions_get", |_: &Request| {
             message(AutomationDefinitionsResultMessage {
@@ -2409,8 +2559,7 @@ fn automation_time_zones(dark: bool) {
 /// Two automations, a manual one and a scheduled one on a desktop of its own, the scheduled
 /// one with a run that failed and one delivered to its agent.
 fn automations_daemon(dark: bool, definitions: Vec<AutomationDefinitionSummary>) -> Daemon {
-    let daemon =
-        Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
+    let daemon = scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
     daemon
         .on("automation_definitions_get", move |_: &Request| {
             message(AutomationDefinitionsResultMessage {
@@ -2593,7 +2742,7 @@ fn crew() -> Vec<CrewMember> {
 fn with_crew(dark: bool) -> World {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     state.crew = Some(crew());
-    let mut world = start(Daemon::scripted().state(state));
+    let mut world = start(scripted().state(state));
     deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
     world
 }
@@ -2617,7 +2766,7 @@ fn home_empty(dark: bool) {
         ),
         ..initial(dark, pane("b"), vec![])
     };
-    let mut world = World::start_sized(Daemon::scripted().state(state), SIZE);
+    let mut world = World::start_sized(scripted().state(state), window());
     press(&mut world, Action::SessionGoToDashboard);
     snap(&mut world, "home-empty", dark);
 }
@@ -2652,7 +2801,7 @@ fn crew_page(dark: bool) -> World {
             settings.insert(key.into(), value.into());
         }
     }
-    let daemon = Daemon::scripted().state(state);
+    let daemon = scripted().state(state);
     daemon
         .on("delegation_preferences_get", |_: &Request| {
             message(DelegationPreferencesResultMessage {
@@ -2751,7 +2900,7 @@ fn queue_flow(dark: bool) -> World {
     if let Some(settings) = state.settings.as_mut() {
         settings.insert("queue_mode_enabled".to_owned(), "true".to_owned());
     }
-    let mut world = World::start_sized(Daemon::scripted().state(state), SIZE);
+    let mut world = World::start_sized(scripted().state(state), window());
     press(&mut world, Action::SessionGoToDashboard);
     world
 }
@@ -2806,7 +2955,7 @@ fn queue_seeded(dark: bool, home: bool, sidebar_hidden: bool, slots: usize) -> W
         created_at: "2026-11-17T09:00:00Z".into(),
         ..Ask::default()
     }]);
-    let mut world = World::start_sized(Daemon::scripted().state(state), SIZE);
+    let mut world = World::start_sized(scripted().state(state), window());
     press(&mut world, Action::SessionGoToDashboard);
     if !home {
         world.gesture(|app| app.click(Target::key("queue.desktop.1")));
@@ -2850,7 +2999,7 @@ fn queue_runs(dark: bool, open: bool, name: &str) {
             ..AutomationProvenance::default()
         });
     }
-    let mut world = World::start_sized(Daemon::scripted().state(state), SIZE);
+    let mut world = World::start_sized(scripted().state(state), window());
     press(&mut world, Action::SessionGoToDashboard);
     if open {
         world.gesture(|app| app.click(Target::key("queue.runs.group.1")));
@@ -2878,7 +3027,7 @@ fn queue_bar(dark: bool) {
 /// desktop's chip and the rest gathered into the extras chip.
 fn queue_bar_crowded(dark: bool) {
     let mut world = queue_seeded(dark, false, true, 11);
-    world.resize((800.0, SIZE.1));
+    world.resize((800.0, window().1));
     assert!(
         world
             .screen()
@@ -2892,7 +3041,7 @@ fn queue_bar_crowded(dark: bool) {
 /// The desktop flow with the sidebar collapsed to its rail.
 fn rail(dark: bool) {
     let mut world =
-        start(Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![])));
+        start(scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![])));
     world.gesture(|app| app.click(Target::key("titlebar.sidebar")));
     snap(&mut world, "rail", dark);
 }
@@ -2916,7 +3065,7 @@ fn session_seeds(dark: bool) {
         })
         .collect();
     let mut world =
-        start(Daemon::scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), seeds)));
+        start(scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), seeds)));
     deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
     world.gesture(|app| app.click(Target::key("tile.a.seed")));
     snap(&mut world, "session-seeds", dark);
@@ -2931,7 +3080,7 @@ fn document_alone(dark: bool, path: &str) -> World {
         first.panes.clear();
         first.active_pane_id = "m".into();
     }
-    start(Daemon::scripted().state(state))
+    start(scripted().state(state))
 }
 
 fn markdown_reader(dark: bool) {
@@ -2979,7 +3128,7 @@ fn annotated_document(dark: bool) -> World {
     if let Some(desktops) = state.desktops.as_mut() {
         desktops[0].active_pane_id = "m".into();
     }
-    let daemon = Daemon::scripted().state(state);
+    let daemon = scripted().state(state);
     let kept = std::sync::Arc::new(std::sync::Mutex::new((Vec::<Value>::new(), 0_i64)));
     let draft = |(marks, generation): &(Vec<Value>, i64), r: &Request, event: &str| {
         json!({
@@ -3080,7 +3229,7 @@ fn popover_daemon(
 ) -> Daemon {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     edit(&mut state);
-    let daemon = Daemon::scripted().state(state);
+    let daemon = scripted().state(state);
     daemon
         .on("get_command_usage", |r: &Request| {
             message(GetCommandUsageResultMessage {
@@ -3141,7 +3290,7 @@ fn snooze_menu(dark: bool) {
         },
         |_| {},
     );
-    let mut world = World::start_sized(daemon, SIZE);
+    let mut world = World::start_sized(daemon, window());
     deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
     let name = "Snooze working agent";
     world.gesture(|app| app.click(Target::role("button").name(name)));
@@ -3758,135 +3907,167 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         report(panic);
     }));
     for dark in [true, false] {
-        sidebar_and_terminal(dark);
-        tile_headers(dark, false);
-        tile_headers(dark, true);
-        tile_focus(dark);
-        shelf(dark, false);
-        shelf(dark, true);
-        review_stop(dark);
-        garden(dark);
-        garden_dock(dark);
-        garden_dock_plot(dark);
-        garden_seed(dark);
-        garden_dock_seed(dark);
-        garden_empty(dark);
-        garden_dock_empty(dark);
-        garden_review_screen(dark, true, true, "garden-review");
-        garden_review_screen(dark, false, true, "garden-review-waiting");
-        garden_review_screen(dark, true, false, "garden-review-dock");
-        settings_page(dark);
-        settings_agents(dark);
-        shortcut_editor(dark);
-        close_desktop(dark);
-        palette(dark);
-        palette_no_match(dark);
-        opener(dark);
-        context_cap(dark);
-        terminal_overlays(dark);
-        tile_window(dark);
-        launcher_dialog(dark);
-        launcher_where(dark);
-        launcher_empty_desktop(dark);
-        launcher_browse(dark);
-        automation_hour(dark);
-        automation_time_zones(dark);
-        picker_dialog(dark);
-        picker_empty_desktop(dark);
-        shortcuts(dark);
-        agent_palette(dark);
-        profile_switcher(dark);
-        whats_new(dark, 0, "whats-new");
-        whats_new(dark, 1, "whats-new-night");
-        settings_analytics(dark);
-        ledger(dark);
-        asks(dark);
-        asks_empty(dark);
-        asks_choices(dark);
-        notebook(dark);
-        notebook_tree(dark);
-        review_keys(dark);
-        review_file(dark);
-        review_focused(dark);
-        review_walkthrough(dark);
-        review_search(dark);
-        review_send_sheet(dark);
-        ledger_seeded(dark);
-        ledger_worktrees(dark);
-        chief_setup(dark);
-        home(dark);
-        home_empty(dark);
-        home_pull_requests(dark);
-        palette_chief(dark);
-        manage_crew(dark, "chief", "launch", "crew-launch");
-        manage_crew(dark, "scout", "charter", "crew-charter");
-        manage_crew(dark, "scout", "handoffs", "crew-handoffs");
-        manage_crew(dark, "scout", "seeds", "crew-seeds");
-        notifications(dark);
-        session_menu(dark);
-        queue_home(dark);
-        queue_agent_list(dark);
-        queue_seeded_home(dark);
-        queue_runs(dark, false, "queue-runs");
-        queue_runs(dark, true, "queue-runs-open");
-        queue_seeded_agent(dark);
-        queue_bar(dark);
-        queue_bar_crowded(dark);
-        rail(dark);
-        session_seeds(dark);
-        markdown_selection(dark);
-        annotation_selection(dark);
-        annotation_comment(dark);
-        annotation_saved_shot(dark);
-        annotation_notes(dark);
-        markdown_reader(dark);
-        markdown_missing(dark);
-        snooze_menu(dark);
-        rename_session(dark);
-        session_usage(dark);
-        session_seed_context(dark);
-        notifications_empty(dark);
-        desktop_overview(dark);
-        settings_delegation(dark);
-        settings_section(dark, "outposts", "outposts", SWITCHED_ON, |_| {});
-        settings_section(dark, "experimental", "experimental", SWITCHED_ON, |_| {});
-        settings_phones(dark);
-        settings_section(dark, "plugins", "plugins", &[], |_| {});
-        settings_updates(dark);
-        settings_event_bus(dark);
-        settings_section(dark, "desktop", "files", &[], |_| {});
-        settings_smallest(dark);
-        settings_section(dark, "hygiene", "attention queue", &[], |_| {});
-        settings_section(dark, "backgroundAgents", "background agents", &[], |_| {});
-        settings_section(dark, "backgroundTasks", "task runner", &[], |_| {});
-        settings_connectivity(dark);
-        settings_models(dark);
-        settings_bottom(dark, "agents", "agents", &[]);
-        settings_bottom(dark, "experimental", "experimental", SWITCHED_ON);
-        automation_new(dark);
-        automations_empty(dark);
-        automations_listed(dark);
-        automations_selected(dark);
-        automation_edit(dark);
-        automation_github(dark);
-        automation_advanced(dark);
-        diagnostic_report(dark);
-        quick_capture_empty(dark);
-        quick_capture(dark);
-        quick_capture_mailboxes(dark);
-        notebook_file(dark);
-        notebook_finder(dark);
-        notebook_note(dark);
-        notebook_tile_empty(dark);
-        notebook_tile_note(dark);
-        notebook_tile_finder(dark);
-        merge_confirmation(dark);
-        desktop_naming(dark);
-        shared_codex_restart(dark);
-        session_not_created(dark);
-        outposts_banners(dark);
-        update_banners(dark);
-        codex_banners(dark);
+        scene("sidebar_and_terminal", || sidebar_and_terminal(dark));
+        scene("tile_headers", || tile_headers(dark, false));
+        scene("tile_headers", || tile_headers(dark, true));
+        scene("tile_focus", || tile_focus(dark));
+        scene("shelf", || shelf(dark, false));
+        scene("shelf", || shelf(dark, true));
+        scene("review_stop", || review_stop(dark));
+        scene("garden", || garden(dark));
+        scene("garden_dock", || garden_dock(dark));
+        scene("garden_dock_plot", || garden_dock_plot(dark));
+        scene("garden_seed", || garden_seed(dark));
+        scene("garden_dock_seed", || garden_dock_seed(dark));
+        scene("garden_empty", || garden_empty(dark));
+        scene("garden_dock_empty", || garden_dock_empty(dark));
+        scene("garden_review_screen", || {
+            garden_review_screen(dark, true, true, "garden-review")
+        });
+        scene("garden_review_screen", || {
+            garden_review_screen(dark, false, true, "garden-review-waiting")
+        });
+        scene("garden_review_screen", || {
+            garden_review_screen(dark, true, false, "garden-review-dock")
+        });
+        scene("settings_page", || settings_page(dark));
+        scene("settings_agents", || settings_agents(dark));
+        scene("shortcut_editor", || shortcut_editor(dark));
+        scene("close_desktop", || close_desktop(dark));
+        scene("palette", || palette(dark));
+        scene("palette_no_match", || palette_no_match(dark));
+        scene("opener", || opener(dark));
+        scene("context_cap", || context_cap(dark));
+        scene("terminal_overlays", || terminal_overlays(dark));
+        scene("tile_window", || tile_window(dark));
+        scene("launcher_dialog", || launcher_dialog(dark));
+        scene("launcher_where", || launcher_where(dark));
+        scene("launcher_empty_desktop", || launcher_empty_desktop(dark));
+        scene("launcher_browse", || launcher_browse(dark));
+        scene("automation_hour", || automation_hour(dark));
+        scene("automation_time_zones", || automation_time_zones(dark));
+        scene("picker_dialog", || picker_dialog(dark));
+        scene("picker_empty_desktop", || picker_empty_desktop(dark));
+        scene("shortcuts", || shortcuts(dark));
+        scene("agent_palette", || agent_palette(dark));
+        scene("profile_switcher", || profile_switcher(dark));
+        scene("whats_new", || whats_new(dark, 0, "whats-new"));
+        scene("whats_new", || whats_new(dark, 1, "whats-new-night"));
+        scene("settings_analytics", || settings_analytics(dark));
+        scene("ledger", || ledger(dark));
+        scene("asks", || asks(dark));
+        scene("asks_empty", || asks_empty(dark));
+        scene("asks_choices", || asks_choices(dark));
+        scene("notebook", || notebook(dark));
+        scene("notebook_tree", || notebook_tree(dark));
+        scene("review_keys", || review_keys(dark));
+        scene("review_file", || review_file(dark));
+        scene("review_focused", || review_focused(dark));
+        scene("review_walkthrough", || review_walkthrough(dark));
+        scene("review_search", || review_search(dark));
+        scene("review_send_sheet", || review_send_sheet(dark));
+        scene("ledger_seeded", || ledger_seeded(dark));
+        scene("ledger_worktrees", || ledger_worktrees(dark));
+        scene("chief_setup", || chief_setup(dark));
+        scene("home", || home(dark));
+        scene("home_empty", || home_empty(dark));
+        scene("home_pull_requests", || home_pull_requests(dark));
+        scene("palette_chief", || palette_chief(dark));
+        scene("manage_crew", || {
+            manage_crew(dark, "chief", "launch", "crew-launch")
+        });
+        scene("manage_crew", || {
+            manage_crew(dark, "scout", "charter", "crew-charter")
+        });
+        scene("manage_crew", || {
+            manage_crew(dark, "scout", "handoffs", "crew-handoffs")
+        });
+        scene("manage_crew", || {
+            manage_crew(dark, "scout", "seeds", "crew-seeds")
+        });
+        scene("notifications", || notifications(dark));
+        scene("session_menu", || session_menu(dark));
+        scene("queue_home", || queue_home(dark));
+        scene("queue_agent_list", || queue_agent_list(dark));
+        scene("queue_seeded_home", || queue_seeded_home(dark));
+        scene("queue_runs", || queue_runs(dark, false, "queue-runs"));
+        scene("queue_runs", || queue_runs(dark, true, "queue-runs-open"));
+        scene("queue_seeded_agent", || queue_seeded_agent(dark));
+        scene("queue_bar", || queue_bar(dark));
+        scene("queue_bar_crowded", || queue_bar_crowded(dark));
+        scene("rail", || rail(dark));
+        scene("session_seeds", || session_seeds(dark));
+        scene("markdown_selection", || markdown_selection(dark));
+        scene("annotation_selection", || annotation_selection(dark));
+        scene("annotation_comment", || annotation_comment(dark));
+        scene("annotation_saved_shot", || annotation_saved_shot(dark));
+        scene("annotation_notes", || annotation_notes(dark));
+        scene("markdown_reader", || markdown_reader(dark));
+        scene("markdown_missing", || markdown_missing(dark));
+        scene("snooze_menu", || snooze_menu(dark));
+        scene("rename_session", || rename_session(dark));
+        scene("session_usage", || session_usage(dark));
+        scene("session_seed_context", || session_seed_context(dark));
+        scene("notifications_empty", || notifications_empty(dark));
+        scene("desktop_overview", || desktop_overview(dark));
+        scene("settings_delegation", || settings_delegation(dark));
+        scene("settings_section", || {
+            settings_section(dark, "outposts", "outposts", SWITCHED_ON, |_| {})
+        });
+        scene("settings_section", || {
+            settings_section(dark, "experimental", "experimental", SWITCHED_ON, |_| {})
+        });
+        scene("settings_phones", || settings_phones(dark));
+        scene("settings_section", || {
+            settings_section(dark, "plugins", "plugins", &[], |_| {})
+        });
+        scene("settings_updates", || settings_updates(dark));
+        scene("settings_event_bus", || settings_event_bus(dark));
+        scene("settings_section", || {
+            settings_section(dark, "desktop", "files", &[], |_| {})
+        });
+        scene("settings_smallest", || settings_smallest(dark));
+        scene("settings_section", || {
+            settings_section(dark, "hygiene", "attention queue", &[], |_| {})
+        });
+        scene("settings_section", || {
+            settings_section(dark, "backgroundAgents", "background agents", &[], |_| {})
+        });
+        scene("settings_section", || {
+            settings_section(dark, "backgroundTasks", "task runner", &[], |_| {})
+        });
+        scene("settings_connectivity", || settings_connectivity(dark));
+        scene("settings_models", || settings_models(dark));
+        scene("settings_bottom", || {
+            settings_bottom(dark, "agents", "agents", &[])
+        });
+        scene("settings_bottom", || {
+            settings_bottom(dark, "experimental", "experimental", SWITCHED_ON)
+        });
+        scene("automation_new", || automation_new(dark));
+        scene("automations_empty", || automations_empty(dark));
+        scene("automations_listed", || automations_listed(dark));
+        scene("automations_selected", || automations_selected(dark));
+        scene("automation_edit", || automation_edit(dark));
+        scene("automation_github", || automation_github(dark));
+        scene("automation_advanced", || automation_advanced(dark));
+        scene("diagnostic_report", || diagnostic_report(dark));
+        scene("quick_capture_empty", || quick_capture_empty(dark));
+        scene("quick_capture", || quick_capture(dark));
+        scene("quick_capture_mailboxes", || quick_capture_mailboxes(dark));
+        scene("notebook_file", || notebook_file(dark));
+        scene("notebook_finder", || notebook_finder(dark));
+        scene("notebook_note", || notebook_note(dark));
+        scene("notebook_tile_empty", || notebook_tile_empty(dark));
+        scene("notebook_tile_note", || notebook_tile_note(dark));
+        scene("notebook_tile_finder", || notebook_tile_finder(dark));
+        scene("merge_confirmation", || merge_confirmation(dark));
+        scene("desktop_naming", || desktop_naming(dark));
+        scene("shared_codex_restart", || shared_codex_restart(dark));
+        scene("session_not_created", || session_not_created(dark));
+        scene("outposts_banners", || outposts_banners(dark));
+        scene("update_banners", || update_banners(dark));
+        scene("codex_banners", || codex_banners(dark));
     }
     let unmatched: Vec<String> = ONLY.with_borrow(|only| {
         only.iter()
@@ -3897,6 +4078,18 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
     for pattern in &unmatched {
         eprintln!("screenshot_tour: --only {pattern} names no screen");
     }
+    FAILED.with_borrow(|failed| {
+        if !failed.is_empty() {
+            let path = OUT.with_borrow(|out| out.join("failed.txt"));
+            std::fs::write(&path, failed.join("\n") + "\n")
+                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            eprintln!(
+                "screenshot_tour: {} scenes could not run, listed in {}",
+                failed.len(),
+                path.display()
+            );
+        }
+    });
     unmatched.is_empty()
 }
 
@@ -4012,13 +4205,36 @@ fn main() -> std::process::ExitCode {
         (Some("shoot"), [_, out, ..]) if words.len() == args.len() => {
             let mut scheme = None;
             let mut only = Vec::new();
-            for pair in words[2..].chunks(2) {
-                match pair {
-                    ["--scheme", id] => scheme = Some((*id).to_owned()),
-                    ["--only", pattern] => only.push((*pattern).to_owned()),
+            let mut run = TOUR;
+            let mut rest = &words[2..];
+            while let Some((flag, after)) = rest.split_first() {
+                rest = after;
+                if *flag == "--long" {
+                    run.long = true;
+                    continue;
+                }
+                let Some((value, after)) = rest.split_first() else {
+                    return usage_error();
+                };
+                rest = after;
+                match *flag {
+                    "--scheme" => scheme = Some((*value).to_owned()),
+                    "--only" => only.push((*value).to_owned()),
+                    "--window" => match value
+                        .split_once('x')
+                        .and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)))
+                    {
+                        Some(window) => run.window = window,
+                        None => return usage_error(),
+                    },
+                    "--text" => match value.parse() {
+                        Ok(text) => run.text = text,
+                        Err(_) => return usage_error(),
+                    },
                     _ => return usage_error(),
                 }
             }
+            MODE.set(run);
             if !shoot(out.clone(), scheme, only) {
                 return std::process::ExitCode::FAILURE;
             }
@@ -4035,7 +4251,7 @@ fn main() -> std::process::ExitCode {
 
 fn usage_error() -> std::process::ExitCode {
     eprintln!(
-        "usage: screenshot_tour shoot OUT [--scheme ID] [--only PATTERN]... | compare BASE AFTER DIFF"
+        "usage: screenshot_tour shoot OUT [--scheme ID] [--only PATTERN]... [--window WxH] [--text SCALE] [--long] | compare BASE AFTER DIFF"
     );
     std::process::ExitCode::from(2)
 }

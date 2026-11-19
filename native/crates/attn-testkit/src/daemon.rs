@@ -105,10 +105,13 @@ struct Log {
     violations: Vec<String>,
 }
 
+type Rewrite = Arc<dyn Fn(&mut Value) + Send + Sync>;
+
 struct Shared {
     script: Mutex<Script>,
     log: Mutex<Log>,
     pulse: Pulse,
+    rewrite: Mutex<Option<Rewrite>>,
 }
 
 /// The `migration-failure.json` a daemon leaves when a data migration fails at start.
@@ -144,6 +147,7 @@ impl Daemon {
             }),
             log: Mutex::new(Log::default()),
             pulse: Pulse::default(),
+            rewrite: Mutex::new(None),
         });
         let listener = std::net::TcpListener::bind("127.0.0.1:0")
             .expect("a loopback port for the scripted daemon");
@@ -205,6 +209,13 @@ impl Daemon {
     /// state answers the next connection.
     pub fn answer_hello_with(&self, initial_state: InitialStateMessage) {
         self.shared.script.lock().unwrap().initial_state = initial_state;
+    }
+
+    /// Passes every message this daemon sends through `rewrite` first, as a daemon whose data
+    /// differs, such as one whose names are all long, would send it.
+    pub fn rewriting(self, rewrite: impl Fn(&mut Value) + Send + Sync + 'static) -> Daemon {
+        *self.shared.rewrite.lock().unwrap() = Some(Arc::new(rewrite));
+        self
     }
 
     /// The instance `/health` reports. The world's app belongs to `INSTANCE`.
@@ -413,6 +424,17 @@ impl Drop for Daemon {
 }
 
 fn queue(shared: &Shared, (id, to): &(usize, mpsc::UnboundedSender<Out>), out: Out) {
+    let rewrite = shared.rewrite.lock().unwrap().clone();
+    let out = match (out, rewrite) {
+        (Out::Text(text), Some(rewrite)) => match serde_json::from_str::<Value>(&text) {
+            Ok(mut message) => {
+                rewrite(&mut message);
+                Out::Text(message.to_string())
+            }
+            Err(_) => Out::Text(text),
+        },
+        (out, _) => out,
+    };
     if to.send(out).is_ok() {
         let mut log = shared.log.lock().unwrap();
         if log.traffic.connection == *id {
