@@ -232,6 +232,8 @@ type Daemon struct {
 	emptyDesktops emptyDesktopRemoval
 
 	dictationRefinements dictationRefinements
+	modelCallsRunning    modelCallsRunning
+	modelCallSpare       modelCallSpare
 
 	recoveryMu          sync.RWMutex
 	recovering          bool
@@ -3108,6 +3110,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleSenderSessions(conn, msg.(*protocol.SenderSessionsMessage))
 	case protocol.CmdSenderRefine:
 		d.handleSenderRefine(conn, msg.(*protocol.SenderRefineMessage))
+	case protocol.CmdSenderModelCall:
+		d.handleSenderModelCall(conn, msg.(*protocol.SenderModelCallMessage))
 	case protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList:
 		d.sendError(conn, "quick capture history is app-only; use the authenticated app WebSocket channel")
 	case protocol.CmdAgentInbox:

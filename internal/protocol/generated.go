@@ -9943,6 +9943,10 @@ type Response struct {
 	// SeedWatchResult corresponds to the JSON schema field "seed_watch_result".
 	SeedWatchResult *SeedWatchResult `json:"seed_watch_result,omitempty,omitzero"`
 
+	// SenderModelCallResult corresponds to the JSON schema field
+	// "sender_model_call_result".
+	SenderModelCallResult *SenderModelCallResult `json:"sender_model_call_result,omitempty,omitzero"`
+
 	// SenderPairing corresponds to the JSON schema field "sender_pairing".
 	SenderPairing *SenderPairingRequest `json:"sender_pairing,omitempty,omitzero"`
 
@@ -12447,6 +12451,55 @@ type SenderListMessage struct {
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+}
+
+type SenderModelCallMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Harness corresponds to the JSON schema field "harness".
+	Harness *string `json:"harness,omitempty,omitzero"`
+
+	// Input corresponds to the JSON schema field "input".
+	Input string `json:"input"`
+
+	// LimitMs corresponds to the JSON schema field "limit_ms".
+	LimitMs int `json:"limit_ms"`
+
+	// Model corresponds to the JSON schema field "model".
+	Model *string `json:"model,omitempty,omitzero"`
+
+	// Purpose corresponds to the JSON schema field "purpose".
+	Purpose string `json:"purpose"`
+
+	// SenderToken corresponds to the JSON schema field "sender_token".
+	SenderToken string `json:"sender_token"`
+
+	// System corresponds to the JSON schema field "system".
+	System string `json:"system"`
+
+	// Tier corresponds to the JSON schema field "tier".
+	Tier *ModelTier `json:"tier,omitempty,omitzero"`
+}
+
+type SenderModelCallResult struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Harness corresponds to the JSON schema field "harness".
+	Harness string `json:"harness"`
+
+	// LimitMs corresponds to the JSON schema field "limit_ms".
+	LimitMs *int `json:"limit_ms,omitempty,omitzero"`
+
+	// Model corresponds to the JSON schema field "model".
+	Model string `json:"model"`
+
+	// ModelMs corresponds to the JSON schema field "model_ms".
+	ModelMs *int `json:"model_ms,omitempty,omitzero"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text *string `json:"text,omitempty,omitzero"`
 }
 
 type SenderPairDecideMessage struct {

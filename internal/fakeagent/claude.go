@@ -64,6 +64,9 @@ func runClaude(cfg config) int {
 		fmt.Println(ClaudeVersion + " (Claude Code)")
 		return 0
 	}
+	if slices.Contains(os.Args[1:], "--print") && slices.Contains(os.Args[1:], "--input-format") && slices.Contains(os.Args[1:], "--disallowedTools") {
+		return claudeSpare(cfg)
+	}
 	if slices.Contains(os.Args[1:], "--print") && slices.Contains(os.Args[1:], "--input-format") {
 		return claudeModelDiscovery()
 	}

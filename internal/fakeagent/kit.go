@@ -44,6 +44,7 @@ type Kit struct {
 	servers          []*fake
 	failures         []string
 	headless         chan *HeadlessTask
+	spares           chan *Spare
 	nextBootResult   *bootingResult
 	nextLaunch       chan *Run
 	answerer         func(*HeadlessTask)
@@ -100,6 +101,7 @@ func Install(t testing.TB, dir, binary string, harnesses []Harness, wrapper stri
 		t: t, cfg: cfg, binary: binary, control: listener,
 		launches: map[string]chan *Run{},
 		headless: make(chan *HeadlessTask, headlessTaskBacklog),
+		spares:   make(chan *Spare, headlessTaskBacklog),
 	}
 	go k.accept()
 	t.Cleanup(k.verify)
@@ -302,6 +304,9 @@ func (k *Kit) accept() {
 		f.peer = newRPCPeer(conn, func(_ *rpcPeer, method string, params json.RawMessage) (any, error) {
 			if method == methodHeadless {
 				return k.receiveHeadlessTask(f, params)
+			}
+			if method == methodSpare {
+				return k.receiveSpare(f, params)
 			}
 			if method == methodBooting {
 				return k.boot(params)

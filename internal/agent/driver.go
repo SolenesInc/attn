@@ -282,6 +282,9 @@ type HeadlessTaskResult struct {
 	StructuredOutput json.RawMessage
 	TotalCostUSD     float64
 	NumTurns         int
+	ModelTime        time.Duration
+	InputTokens      int
+	OutputTokens     int
 }
 
 type HeadlessTaskProvider interface {

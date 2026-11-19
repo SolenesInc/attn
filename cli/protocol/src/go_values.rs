@@ -159,6 +159,8 @@ pub const SETTINGS: &[Setting] = &[
     Setting { key: "activity.config", machine: false, default_on: false },
     Setting { key: "garden.advisor", machine: false, default_on: false },
     Setting { key: "dictation.refinement_agent", machine: false, default_on: false },
+    Setting { key: "model_calls.agent", machine: false, default_on: false },
+    Setting { key: "model_calls.model", machine: false, default_on: false },
     Setting { key: "activity.intervals", machine: false, default_on: false },
     Setting { key: "activity.presence_idle_seconds", machine: false, default_on: false },
     Setting { key: "crew.heartbeat_enabled", machine: false, default_on: true },

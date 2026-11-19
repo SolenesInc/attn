@@ -174,6 +174,9 @@ func (c *Claude) RunHeadlessTask(ctx context.Context, request HeadlessTaskReques
 	result.StructuredOutput = meta.StructuredOutput
 	result.TotalCostUSD = meta.TotalCostUSD
 	result.NumTurns = meta.NumTurns
+	result.ModelTime = time.Duration(meta.DurationAPIMs) * time.Millisecond
+	result.InputTokens = meta.Usage.InputTokens
+	result.OutputTokens = meta.Usage.OutputTokens
 	return result, nil
 }
 
@@ -200,6 +203,13 @@ type claudeResultMeta struct {
 	StructuredOutput json.RawMessage `json:"structured_output"`
 	TotalCostUSD     float64         `json:"total_cost_usd"`
 	NumTurns         int             `json:"num_turns"`
+	DurationAPIMs    int64           `json:"duration_api_ms"`
+	Usage            claudeUsage     `json:"usage"`
+}
+
+type claudeUsage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
 }
 
 func parseClaudeResultMeta(stdout []byte) claudeResultMeta {

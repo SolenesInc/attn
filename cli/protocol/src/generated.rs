@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "b74958983143";
+pub const PROTOCOL_VERSION: &str = "03d9c68d7faf";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -9398,6 +9398,8 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_watch_result: Option<SeedWatchResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sender_model_call_result: Option<SenderModelCallResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sender_pairing: Option<SenderPairingRequest>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sender_refine_result: Option<SenderRefineResult>,
@@ -11431,6 +11433,44 @@ impl SenderListMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SenderModelCallMessage {
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub harness: Option<String>,
+    pub input: String,
+    pub limit_ms: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    pub purpose: String,
+    pub sender_token: String,
+    pub system: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tier: Option<ModelTier>,
+}
+
+impl SenderModelCallMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "sender_model_call".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SenderModelCallResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub harness: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit_ms: Option<i64>,
+    pub model: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SenderPairDecideMessage {
@@ -15043,6 +15083,9 @@ impl ResponseField for SeedTransitionResult {
 }
 impl ResponseField for SeedWatchResult {
     const FIELD: &'static str = "seed_watch_result";
+}
+impl ResponseField for SenderModelCallResult {
+    const FIELD: &'static str = "sender_model_call_result";
 }
 impl ResponseField for SenderRefineResult {
     const FIELD: &'static str = "sender_refine_result";

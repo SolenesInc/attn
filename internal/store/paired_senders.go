@@ -90,3 +90,11 @@ func (s *Store) RemovePairedSender(profileID, idOrName string) (bool, error) {
 	n, err := result.RowsAffected()
 	return n > 0, err
 }
+
+func (s *Store) HasPairedSenders() (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var exists bool
+	err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM paired_senders)`).Scan(&exists)
+	return exists, err
+}

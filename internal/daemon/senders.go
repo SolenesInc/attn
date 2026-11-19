@@ -142,6 +142,7 @@ func (d *Daemon) handleSenderPair(conn net.Conn, msg *protocol.SenderPairMessage
 			return
 		}
 		d.logf("senders: paired %q (%s) in profile %s", name, sender.ID, sender.ProfileID)
+		d.checkModelCallSpare()
 	case <-closed:
 	case <-d.life.Done():
 	}
@@ -195,6 +196,7 @@ func (d *Daemon) unpairSender(profile profiles.Profile, idOrName string) error {
 		return fmt.Errorf("profile %q has no paired sender named or with id %q; attn send senders lists them", profile.Name, idOrName)
 	}
 	d.logf("senders: unpaired %q from profile %s", idOrName, profile.ID)
+	d.checkModelCallSpare()
 	d.publishFact(FactSendersChanged, "", nil)
 	return nil
 }

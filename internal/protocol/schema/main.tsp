@@ -7753,6 +7753,7 @@ model Response {
   paired_senders?: PairedSender[];
   sender_sessions?: SenderSession[];
   sender_refine_result?: SenderRefineResult;
+  sender_model_call_result?: SenderModelCallResult;
   agent_inbox_result?: AgentPeerMessage;
   agent_inbox_item_result?: AgentInboxItem;
   agent_inbox_batch_result?: AgentInboxBatchResult;
@@ -9410,6 +9411,39 @@ model SenderRefineResult {
   profile_id: string;
   success: boolean;
   refined_text?: string;
+  error?: string;
+  limit_ms?: safeint;
+}
+
+// One tool-free model call from a paired sender: the caller's instructions
+// and input, answered by a harness's model. What the call leaves out comes
+// from model_calls.agent and model_calls.model. The daemon answers when the
+// model does, or when limit_ms passes; closing the connection ends the call.
+@extension("x-on", #{ home: true })
+model SenderModelCallMessage {
+  cmd: "sender_model_call";
+  sender_token: string;
+  // A short label for the call, such as dictation-refine.
+  purpose: string;
+  system: string;
+  input: string;
+  // How long the caller waits, counted from the call's arrival.
+  limit_ms: safeint;
+  // Absent: model_calls.agent.
+  harness?: string;
+  // At most one of tier and model; both absent: model_calls.model.
+  tier?: ModelTier;
+  `model`?: string;
+}
+
+// The answer to a sender_model_call: text and model_ms when the model
+// answered, error when the call ran and failed, and limit_ms too when it
+// passed its limit. model_ms is absent when the harness does not report it.
+model SenderModelCallResult {
+  harness: string;
+  `model`: string;
+  text?: string;
+  model_ms?: safeint;
   error?: string;
   limit_ms?: safeint;
 }

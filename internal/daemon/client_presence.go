@@ -103,6 +103,7 @@ func (d *Daemon) handleSetClientPresence(client *wsClient, msg *protocol.SetClie
 		d.presenceMu.Lock()
 		d.lastPresentAt = latest(d.lastPresentAt, now)
 		d.presenceMu.Unlock()
+		d.modelCallSpare.used(d)
 	}
 }
 

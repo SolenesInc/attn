@@ -321,6 +321,12 @@ func (w *World) NextLaunch() func() *fakeagent.Run {
 	return w.kit.NextLaunch()
 }
 
+// Spare waits for the daemon to start a stand-in claude ahead of a model call.
+func (w *World) Spare() *fakeagent.Spare {
+	w.T.Helper()
+	return w.kit.Spare()
+}
+
 func (w *World) HeadlessTask() *fakeagent.HeadlessTask {
 	w.T.Helper()
 	return w.kit.HeadlessTask()

@@ -136,6 +136,9 @@ func (d *Daemon) settingChanged(key, value string) {
 	if key == setting.HeadlessTasksEnabled.Key {
 		d.applyHeadlessTasksMode()
 	}
+	if key == setting.HeadlessTasksEnabled.Key || key == setting.ModelCallsAgent.Key || key == setting.NewSessionAgent.Key {
+		d.checkModelCallSpare()
+	}
 	if monitorPolicySetting(key) {
 		d.pushMonitorPolicies()
 	}

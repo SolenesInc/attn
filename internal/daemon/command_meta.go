@@ -203,6 +203,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdSenderList:                    commandMetadata(false, true),
 	protocol.CmdSenderSessions:                commandMetadata(false, true),
 	protocol.CmdSenderRefine:                  commandMetadata(false, true),
+	protocol.CmdSenderModelCall:               commandMetadata(false, true),
 	protocol.CmdSenderUnpair:                  commandMetadata(false, true),
 	protocol.CmdSendersGet:                    commandMetadata(false, false),
 	protocol.CmdSenderPairDecide:              commandMetadata(false, true),

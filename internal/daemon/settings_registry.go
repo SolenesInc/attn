@@ -84,6 +84,10 @@ var settingValidators = map[*setting.Setting]func(*Daemon, string, string) error
 	setting.GardenAdvisor: func(d *Daemon, key, value string) error {
 		return d.validateGardenAdvisorSetting(value)
 	},
+	setting.ModelCallsAgent: func(d *Daemon, key, value string) error {
+		return validateModelCallsAgent(value)
+	},
+	setting.ModelCallsModel: func(d *Daemon, key, value string) error { return nil },
 	setting.DictationRefinementAgent: func(d *Daemon, key, value string) error {
 		_, err := parseDictationRefinementAgent(value)
 		return err

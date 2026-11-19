@@ -136,6 +136,8 @@ var (
 	ActivityConfig               = add(&Setting{Key: "activity.config", Class: Home, Kind: Checked, Description: "Session activity tracking configuration as JSON. Empty leaves no agent selected; activity requires a selected agent."})
 	GardenAdvisor                = add(&Setting{Key: "garden.advisor", Class: Home, Kind: Checked, Description: "Garden advisor harness and model as JSON. Empty uses the default advisor."})
 	DictationRefinementAgent     = add(&Setting{Key: "dictation.refinement_agent", Class: Home, Kind: Checked, Description: "Harness whose light model cleans up dictated text: claude or codex. Empty uses claude."})
+	ModelCallsAgent              = add(&Setting{Key: "model_calls.agent", Class: Home, Kind: Checked, Description: "Harness that answers model calls from paired senders when a call names none: claude or codex. Empty uses the harness for new sessions."})
+	ModelCallsModel              = add(&Setting{Key: "model_calls.model", Class: Home, Kind: Checked, Description: "Tier or model that answers model calls when a call names neither: light, standard, deep or a model id. Empty uses standard."})
 	ActivityIntervals            = add(&Setting{Key: "activity.intervals", Class: Home, Kind: Checked, Description: "Activity sampling intervals as JSON. Empty uses defaults."})
 	ActivityPresenceIdleSeconds  = add(&Setting{Key: "activity.presence_idle_seconds", Class: Home, Kind: Checked, Description: "Seconds without input before presence becomes idle."})
 	CrewHeartbeatEnabled         = add(&Setting{Key: "crew.heartbeat_enabled", Class: Home, Kind: Bool, Default: On, Description: "Send crew heartbeats: true or false."})
