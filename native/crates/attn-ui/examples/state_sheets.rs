@@ -95,6 +95,10 @@ fn sheets() -> Vec<Sheet> {
             "disclosure",
             &["Closed", "Open", "Failed", "Focus", "Disabled"],
         ),
+        (
+            "trigger",
+            &["Rest", "Open", "Unset", "Focus", "Disabled", "Long"],
+        ),
     ];
     let still = ["tag", "icon-box"];
     let controls = SUBJECTS

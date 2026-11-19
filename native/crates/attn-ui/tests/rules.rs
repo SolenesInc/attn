@@ -218,6 +218,8 @@ const PRESSABLE: &[(&str, &str)] = &[
     ("Library/Choice", "choice.1"),
     ("Library/Press area", "press-area"),
     ("Library/Disclosure", "disclosure"),
+    ("Library/Trigger", "trigger.field"),
+    ("Library/Trigger", "trigger.quiet"),
 ];
 
 /// The steps F5 states for a list row, hover then pressed against rest, in dark and in light.

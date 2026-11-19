@@ -6,9 +6,9 @@ use rune_kit::{
 
 use crate::colors::scheme_for;
 use crate::system::{
-    Button as Action, Choice, Look, Segment, Segmented, Size, Space, Tone, Type, area_box, arrows,
-    choices, disclosure, door, expander, icon_box, line_box, number_box, press_area, stepper,
-    switch, tag, words,
+    Button as Action, Choice, Look, Segment, Segmented, Size, Space, Tone, Trigger, TriggerLook,
+    Type, area_box, arrows, choices, disclosure, door, expander, icon_box, line_box, number_box,
+    press_area, stepper, switch, tag, words,
 };
 use crate::{Dialog, DialogFrame, Tokens, kit};
 
@@ -99,6 +99,7 @@ pub const SUBJECTS: &[(&str, &[&str])] = &[
     ("Library/Choice", &["choices"]),
     ("Library/Press area", &["press-area"]),
     ("Library/Disclosure", &["disclosure"]),
+    ("Library/Trigger", &["trigger.field", "trigger.quiet"]),
 ];
 
 const LONG_NAME: &str = "Same agent, resumed when its session closed on its own";
@@ -161,6 +162,15 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Failed", |s| s.failed = true)
                 .variant("Focus", |s| s.rings = true)
                 .variant("Disabled", |s| s.disabled = true),
+        )
+        .story(
+            Story::new("Library/Trigger", Library::default, triggers)
+                .variant("Rest", |_| {})
+                .variant("Open", |s| s.open = true)
+                .variant("Unset", |s| s.failed = true)
+                .variant("Focus", |s| s.rings = true)
+                .variant("Disabled", |s| s.disabled = true)
+                .variant("Long", |s| s.long = true),
         )
         .story(
             Story::new("Library/Button", Library::default, buttons)
@@ -264,6 +274,38 @@ fn buttons(s: &Library, cx: &mut Cx<Library>) -> El {
         }))
     });
     library_stage(&t, door::gap(col(), Space::S24).children(rows))
+}
+
+fn triggers(s: &Library, cx: &mut Cx<Library>) -> El {
+    if s.rings {
+        cx.force_focus_rings();
+    }
+    let t = library_tokens(cx);
+    let model = match (s.failed, s.long) {
+        (true, _) => "Choose a model",
+        (false, true) => "claude-opus-4-5-20251101-with-a-very-long-provider-suffix",
+        (false, false) => "Opus 4.5",
+    };
+    let ink = if s.failed { t.warning } else { t.text_primary };
+    let shown = |key: &str, look: TriggerLook| -> El {
+        let content = door::gap(row().items_center().min_w(0.0), Space::S8)
+            .child(words("Claude", Type::Small, t.text_secondary))
+            .child(words(model, Type::Body, ink).truncate().shrink().min_w(0.0))
+            .child(words("High", Type::Body, t.accent));
+        Trigger::new(key, "Model", content)
+            .look(look)
+            .value(format!("Claude, {model}, High"))
+            .open(s.open)
+            .unset(s.failed)
+            .disabled(s.disabled)
+            .build(&t, |s: &mut Library, _: &mut Tx| s.open = !s.open)
+            .into()
+    };
+    let column = door::gap(col(), Space::S16)
+        .w(320.0)
+        .child(shown("trigger.field", TriggerLook::Field))
+        .child(shown("trigger.quiet", TriggerLook::Quiet));
+    library_stage(&t, column)
 }
 
 /// The narrowest column a button is drawn in: a sidebar's footer.
