@@ -194,6 +194,12 @@ impl Grid {
 
     /// The row as text, wide characters once and trailing blanks dropped.
     pub fn row_text(&self, y: usize) -> String {
+        self.row_text_keeping(y, 0)
+    }
+
+    /// The row as text, wide characters once and blanks dropped from its end, all but its first
+    /// `keep` bytes.
+    fn row_text_keeping(&self, y: usize, keep: usize) -> String {
         let mut line = String::new();
         for cell in self.row(y) {
             if cell.width == Width::Spacer {
@@ -204,12 +210,13 @@ impl Grid {
                 t => line.push_str(&t),
             }
         }
-        line.truncate(line.trim_end().len());
+        line.truncate(line.trim_end().len().max(keep));
         line
     }
 
     /// The screen as text, a line per row, and where the cursor sits in it as a byte offset:
-    /// at the end of the text while the cursor is hidden.
+    /// at the end of the text while the cursor is hidden. The cursor's row keeps its blanks up
+    /// to the cursor.
     pub fn text_and_cursor(&self) -> (String, usize) {
         let mut text = String::new();
         let mut cursor = None;
@@ -217,11 +224,15 @@ impl Grid {
             if y > 0 {
                 text.push('\n');
             }
-            let line = self.row_text(y);
-            if let Some(c) = self.cursor.as_ref().filter(|c| usize::from(c.row) == y) {
-                cursor = Some(text.len() + self.byte_of_col(y, c.col).min(line.len()));
+            let at = self
+                .cursor
+                .as_ref()
+                .filter(|c| usize::from(c.row) == y)
+                .map(|c| self.byte_of_col(y, c.col));
+            if let Some(at) = at {
+                cursor = Some(text.len() + at);
             }
-            text.push_str(&line);
+            text.push_str(&self.row_text_keeping(y, at.unwrap_or(0)));
         }
         let end = text.len();
         (text, cursor.unwrap_or(end))

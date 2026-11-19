@@ -211,6 +211,13 @@ pub fn key_event(chord: &Chord) -> KeyEvent {
     attn_automation::key_event(chord).unwrap_or_else(|why| panic!("{why}"))
 }
 
+/// An element as a screen reader heard it change: its text, and its caret as (line, character).
+#[derive(Debug)]
+pub struct Heard {
+    pub value: String,
+    pub caret: Option<(usize, usize)>,
+}
+
 impl World {
     /// Starts the app against `daemon` and returns once both are quiet: after the handshake,
     /// or after the app gave up on the daemon.
@@ -1061,15 +1068,25 @@ impl World {
         self.runtime.a11y_update();
     }
 
-    /// The value the window sent a screen reader for the element keyed `key` since the last
-    /// call: `None` when it sent nothing new for it.
-    pub fn screen_reader_heard(&mut self, key: &str) -> Option<String> {
+    /// What the window sent a screen reader for the element keyed `key` since the last call:
+    /// `None` when it sent nothing new for it.
+    pub fn screen_reader_heard(&mut self, key: &str) -> Option<Heard> {
         let update = self.runtime.a11y_update()?;
-        update
+        let (_, node) = update
             .nodes
             .iter()
-            .find(|(_, node)| node.author_id() == Some(key))
-            .and_then(|(_, node)| node.value().map(str::to_owned))
+            .find(|(_, node)| node.author_id() == Some(key))?;
+        let caret = node.text_selection().and_then(|selection| {
+            let line = node
+                .children()
+                .iter()
+                .position(|child| *child == selection.focus.node)?;
+            Some((line, selection.focus.character_index))
+        });
+        Some(Heard {
+            value: node.value().unwrap_or_default().to_owned(),
+            caret,
+        })
     }
 
     /// Terminal `id`'s `terminal-view` slice as the automation server reads it: what its screen

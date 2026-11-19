@@ -11,4 +11,4 @@ pub use daemon::{
 };
 pub use screen::{Node, Screen, Target};
 pub use tiles::TileWindowView;
-pub use world::{Driver, WALL_START_MS, World, key_event};
+pub use world::{Driver, Heard, WALL_START_MS, World, key_event};

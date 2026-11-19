@@ -1609,11 +1609,11 @@ fn a_screen_reader_reads_the_terminal_that_holds_the_keys_with_its_screen_and_cu
     assert_eq!(terminal.role, "terminal");
     assert_eq!(terminal.name.as_deref(), Some("Shell · idle"));
     let value = terminal.value.expect("the screen's text");
-    assert!(value.starts_with("$ echo hello\nhello\n$\n"), "{value:?}");
+    assert!(value.starts_with("$ echo hello\nhello\n$ \n"), "{value:?}");
     assert_eq!(
         terminal.selection,
-        Some([(2, 1), (2, 1)]),
-        "the caret at the cursor, after the trimmed prompt"
+        Some([(2, 2), (2, 2)]),
+        "the caret at the cursor, after the prompt's space"
     );
 
     world.listen_as_screen_reader();
@@ -1629,16 +1629,12 @@ fn a_screen_reader_reads_the_terminal_that_holds_the_keys_with_its_screen_and_cu
         .screen_reader_heard("terminal.r1")
         .expect("the new output is sent");
     assert!(
-        heard.starts_with("$ echo hello\nhello\n$ ls\nnotes.md\n$\n"),
+        heard
+            .value
+            .starts_with("$ echo hello\nhello\n$ ls\nnotes.md\n$ \n"),
         "{heard:?}"
     );
-    assert_eq!(
-        world
-            .screen()
-            .get(attn_testkit::Target::key("terminal.r1"))
-            .selection,
-        Some([(4, 1), (4, 1)])
-    );
+    assert_eq!(heard.caret, Some((4, 2)));
 
     let lines: String = (1..=80).map(|n| format!("line {n}\r\n")).collect();
     output(&world, 3, lines.as_bytes());
@@ -1647,7 +1643,7 @@ fn a_screen_reader_reads_the_terminal_that_holds_the_keys_with_its_screen_and_cu
         .screen_reader_heard("terminal.r1")
         .expect("the screen scrolled");
     assert!(
-        !heard.contains("line 1\n"),
+        !heard.value.contains("line 1\n"),
         "the first lines scrolled off: {heard:?}"
     );
     let (x, y) = cell(&world, 1, 0);
@@ -1661,7 +1657,40 @@ fn a_screen_reader_reads_the_terminal_that_holds_the_keys_with_its_screen_and_cu
         .screen_reader_heard("terminal.r1")
         .expect("scrolling back is sent");
     assert!(
-        heard.contains("hello\n"),
+        heard.value.contains("hello\n"),
         "the history scrolled back into view: {heard:?}"
+    );
+}
+
+#[test]
+fn a_screen_reader_hears_the_caret_move_past_a_typed_space_and_along_a_blank_row() {
+    let shell = DesktopPane {
+        session_id: "s1".into(),
+        ..pane("t1", "r1")
+    };
+    let mut world = World::start(Daemon::scripted().state(showing(vec![shell], "daemon-1")));
+    world.open_desktop();
+    output(&world, 1, b"$ ");
+    world.settle();
+    world.listen_as_screen_reader();
+
+    output(&world, 2, b" ");
+    world.settle();
+    let heard = world
+        .screen_reader_heard("terminal.r1")
+        .expect("the typed space is sent");
+    assert!(heard.value.starts_with("$  \n"), "{heard:?}");
+    assert_eq!(heard.caret, Some((0, 3)), "the caret after the space");
+
+    output(&world, 3, b"\\\r\n    ");
+    world.settle();
+    let heard = world
+        .screen_reader_heard("terminal.r1")
+        .expect("the continuation row is sent");
+    assert!(heard.value.starts_with("$  \\\n    \n"), "{heard:?}");
+    assert_eq!(
+        heard.caret,
+        Some((1, 4)),
+        "the caret where the blank row's cursor is"
     );
 }
