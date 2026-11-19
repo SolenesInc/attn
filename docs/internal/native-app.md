@@ -189,15 +189,18 @@ app:
   outside the file's `allow` rows carries `allow(clippy::disallowed_methods)`.
   Once every line is 0, `native/clippy.toml` rejects the raw methods for the
   whole workspace, as it does Rune's colour constructors.
-- **The gallery.** `attn_ui::gallery` has a playground story for every control,
-  with a variant for each state it can be in. `cargo run -p attn-ui --example
-  state_sheets -- OUT` draws each control's state sheet, every state side by
-  side with a real pointer for hover and pressed, in dark and in light, with no
-  window and no VM. `attn-ui/tests/rules.rs` reads the stories' rectangles and
-  what the frame draws, and holds the rules the controls keep: one text inset in
-  every field box, one width for number fields, a stepper's value at one width,
-  a focus ring never cut or dimmed, and hover and pressed at their measured
-  contrast.
+- **The gallery.** `attn_ui::gallery` has a playground story for every
+  control, with a variant for each state it can be in. `cargo run -p attn-ui
+  --example state_sheets -- OUT` draws each control's state sheet, every state
+  side by side with a real pointer for hover and pressed and the Tab key for
+  focus, in dark and in light, with no window and no VM.
+  `attn-ui/tests/rules.rs` reads the stories' rectangles and what the frame
+  draws, and holds the rules the controls keep: one text inset in every field
+  box and a long value ending at it, one width for number fields that holds a
+  seven-digit value, a stepper's value at one width, a segmented control
+  keeping to its own width beside words, a field's edge where every other
+  control's is, a focus ring never cut or dimmed, and hover and pressed at
+  their measured contrast.
 
 A control a view needs that the system lacks is added to `attn-ui` with its
 story and, when it keeps a rule, its test.
