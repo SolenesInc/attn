@@ -53,11 +53,10 @@ async function rows() {
   return listed;
 }
 const text = async (key) => (await under(key)).map((n) => n.name ?? '').filter(Boolean).join('\n');
-async function waitForToast(includes) {
-  await driver.waitFor({ key: 'settings.analytics.toast' });
+async function waitForToast(title, detail = '') {
+  await driver.waitFor({ key: 'settings.analytics.toast', name: title });
   const [toast] = await under('settings.analytics.toast');
-  const words = `${toast?.name ?? ''} ${toast?.description ?? ''}`;
-  runner.assert(words.includes(includes), `the page says ${JSON.stringify(includes)}`, toast);
+  runner.assert((toast?.description ?? '').includes(detail), `the ${JSON.stringify(title)} toast says ${JSON.stringify(detail)}`, toast);
 }
 async function rowWith(words) {
   const row = (await rows()).find((r) => r.name.includes(words));
@@ -124,7 +123,7 @@ try {
 
   await runner.step('dismiss_undo_with_keys', async () => {
     await driver.pressKey('d');
-    await waitForToast('Dismissed “fix garden bell staleness”');
+    await waitForToast('Dismissed', 'Dismissed “fix garden bell staleness”');
     runner.assert((await rowWith(VENTED)).group === 'Done', 'the dismissed vent moves under Done', await rows());
     await shot('02-dismissed');
     await driver.pressKey('u');
