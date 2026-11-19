@@ -1,4 +1,4 @@
-use rune::col;
+use rune::{El, col, row};
 
 use super::block::{Block, Kind, inner_gap, spaced};
 use super::measure::READING;
@@ -12,6 +12,9 @@ pub struct Section {
     title: String,
     description: String,
     blocks: Vec<Block>,
+    region: bool,
+    reachable: bool,
+    aside: Vec<El>,
 }
 
 impl Section {
@@ -21,6 +24,9 @@ impl Section {
             title: title.into(),
             description: String::new(),
             blocks: Vec::new(),
+            region: false,
+            reachable: false,
+            aside: Vec::new(),
         }
     }
 
@@ -39,9 +45,48 @@ impl Section {
         self
     }
 
+    /// The section is a landmark a reader moves between, as a part of a document is, rather
+    /// than a group of settings.
+    pub fn region(mut self) -> Self {
+        self.region = true;
+        self
+    }
+
+    /// A control elsewhere on the page goes to this section: its heading takes the keyboard
+    /// without being a stop on Tab.
+    pub fn reachable(mut self) -> Self {
+        self.reachable = true;
+        self
+    }
+
+    /// A control beside the heading, such as the button that changes what the section holds.
+    pub fn aside(mut self, control: impl Into<El>) -> Self {
+        self.aside.push(control.into());
+        self
+    }
+
     pub fn build(self, t: &Tokens) -> Block {
+        let heading = words(self.title.clone(), Type::Heading, t.text_primary)
+            .key(format!("{}.heading", self.key))
+            .role("heading");
+        let heading = if self.reachable {
+            heading.focusable(true).tab_index(-1)
+        } else {
+            heading
+        };
+        let heading = if self.aside.is_empty() {
+            heading
+        } else {
+            door::gaps(
+                row().w_full().flex_wrap().items_center(),
+                Space::S4,
+                Space::S8,
+            )
+            .child(heading)
+            .children(self.aside)
+        };
         let head = door::gap(col().w_full(), Space::S4)
-            .child(words(self.title.clone(), Type::Heading, t.text_primary))
+            .child(heading)
             .children((!self.description.is_empty()).then(|| {
                 words(self.description, Type::Small, t.text_tertiary)
                     .wrap()
@@ -49,7 +94,7 @@ impl Section {
             }));
         let section = col()
             .key(self.key)
-            .role("group")
+            .role(if self.region { "region" } else { "group" })
             .label(self.title)
             .w_full()
             .child(head)

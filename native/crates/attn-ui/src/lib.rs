@@ -5,6 +5,7 @@ use rune::{Color, Shadow};
 pub mod block_gallery;
 pub mod blocks;
 pub mod colors;
+pub mod reading_gallery;
 mod scroll_bar;
 pub mod system;
 pub mod type_;

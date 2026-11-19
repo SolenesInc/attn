@@ -785,7 +785,11 @@ fn a_seed_tile_centers_its_plans_prose_at_the_reading_measure_and_a_wide_table_i
         .unwrap();
     let [tx, _, tw, _] = screen.bounds(Target::role("table")).unwrap();
     assert!(vw > 1200.0, "the tile is wide: {vw}");
-    assert_eq!(pw, 760.0, "the plan's prose keeps the reading measure");
+    assert_eq!(
+        pw,
+        attn_ui::blocks::DOCUMENT,
+        "the plan's prose keeps the document measure"
+    );
     assert!(tw > pw, "the table takes more room than the prose: {tw}");
     let axis = vx + vw / 2.0;
     for (what, x, w) in [("prose", px, pw), ("table", tx, tw)] {

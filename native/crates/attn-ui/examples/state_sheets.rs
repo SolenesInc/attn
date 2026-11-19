@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use attn_ui::block_gallery::BLOCK_SUBJECTS;
 use attn_ui::colors::scheme_for;
 use attn_ui::gallery::{BANNERS, BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
+use attn_ui::reading_gallery::READING_SUBJECTS;
 use attn_ui::system::{Type, words};
 use rune::render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer, write_png};
 use rune::{App, AppSpec, Compositor, Cx, El, Env, Frame, Key, KeyEvent, Mods, Runtime, col, el};
@@ -578,7 +579,12 @@ fn main() {
             shoot(&sheet, dark, &out);
         }
     }
-    for (&(story, keys), &(_, extra)) in BLOCK_SUBJECTS.iter().zip(BLOCK_VARIANTS) {
+    let blocks = BLOCK_SUBJECTS
+        .iter()
+        .zip(BLOCK_VARIANTS)
+        .map(|(&(story, keys), &(_, extra))| (story, keys, extra))
+        .chain(READING_SUBJECTS.iter().copied());
+    for (story, keys, extra) in blocks {
         if !wanted(&block_sheet(story)) {
             continue;
         }

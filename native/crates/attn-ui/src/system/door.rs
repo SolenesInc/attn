@@ -106,3 +106,9 @@ pub(crate) fn line_height(kind: Type) -> f32 {
 pub(crate) fn inside_edge(e: El) -> El {
     e.padding(1.0)
 }
+
+/// `e` reaching out by `by` on both sides, so what it holds stays where it would stand without
+/// its inset.
+pub(crate) fn hang(e: El, by: Space) -> El {
+    e.ml(-by.pt()).mr(-by.pt())
+}

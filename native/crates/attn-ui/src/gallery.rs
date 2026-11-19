@@ -43,7 +43,7 @@ pub fn playground<S: 'static>() -> Playground<S> {
         Playground::new().shortcut(None).bar(false),
         |playground, &(name, view)| playground.story(Story::new(name, Showcase::default, view)),
     );
-    crate::block_gallery::stories(library(components))
+    crate::reading_gallery::stories(crate::block_gallery::stories(library(components)))
 }
 
 /// What a library story shows: the state its variant sets.

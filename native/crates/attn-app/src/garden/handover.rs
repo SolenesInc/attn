@@ -3,14 +3,14 @@ use attn_protocol::{
     Seed, SeedContinuation, SeedDocument,
 };
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, KeyEvent, TextEdit, Tx, col, row, text, text_input};
-use rune_kit::{Checkbox, RadioGroup, RadioItem};
+use attn_ui::blocks::{Actions, Block, Field as FieldBlock, Form};
+use attn_ui::system::{FieldState, Type, line_box, words};
+use rune::{El, KeyEvent, TextEdit, Tx};
+use rune_kit::{Checkbox, RadioGroup, RadioItem, TextInput};
 
-use super::sheet::{FORM_FIELD, Sheet, words_field};
+use super::sheet::{Sheet, words_field};
 use super::spot::{Sends, Spot};
-use super::view::kit_button;
+use super::view::{plain, quiet};
 use crate::State;
 use crate::requests::Answer;
 
@@ -128,20 +128,19 @@ impl Sheet<'_> {
         let spot = spot(self, seed);
         let opened = spot.clone();
         Some(
-            super::view::head_button(
-                kit_button("Handover").on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            plain("Handover")
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     let draft = Handover::suggested(Some(&continuation));
                     opened.write_with(state, "", Some(draft), tx)
-                }),
-                "Handover",
-                self.t,
-            )
-            .key(spot.key("open")),
+                })
+                .build(self.t)
+                .key(spot.key("open"))
+                .into(),
         )
     }
 
     /// The handover being written, under the seed's head.
-    pub(super) fn handover_form(&self, document: Option<&SeedDocument>) -> Option<El> {
+    pub(super) fn handover_form(&self, document: Option<&SeedDocument>) -> Option<Block> {
         let seed = &document?.seed;
         let spot = spot(self, seed);
         let shown = self.garden.shown(&spot);
@@ -149,18 +148,9 @@ impl Sheet<'_> {
         let t = self.t;
         let kit = attn_ui::kit(t);
         let field = Field { spot: &spot, t };
-        let mut form = col()
-            .key(spot.key("form"))
-            .role("form")
-            .label("Handover")
-            .w_full()
-            .gap(space::S1)
-            .padding(space::S2)
-            .radius(6.0)
-            .fill(t.bg_elevated)
-            .border(1.0, t.border)
-            .child(field.note(written))
-            .child(field.line("cwd", "Working folder", "", &draft.cwd, |h| &mut h.cwd));
+        let mut form = Form::new(spot.key("form"), "Handover")
+            .push(field.note(written))
+            .push(field.line("cwd", "Working folder", "", &draft.cwd, |h| &mut h.cwd));
         let mut choices = RadioGroup::new().label("Git checkout");
         for choice in Checkout::ALL {
             choices = choices.item(
@@ -175,12 +165,16 @@ impl Sheet<'_> {
                 }),
             );
         }
-        form = form.child(choices.build(kit).key(spot.key("checkout")));
+        form = form.push(
+            FieldBlock::new(spot.key("checkout-field"), "Git checkout")
+                .control(choices.build(kit).key(spot.key("checkout")))
+                .build(t),
+        );
         if draft.checkout != Checkout::None {
-            form = form.child(field.line("branch", "Branch", "", &draft.branch, |h| &mut h.branch));
+            form = form.push(field.line("branch", "Branch", "", &draft.branch, |h| &mut h.branch));
         }
         if draft.checkout == Checkout::NewWorktree {
-            form = form.child(field.line(
+            form = form.push(field.line(
                 "from",
                 "Start from",
                 "origin/main or a commit",
@@ -190,14 +184,14 @@ impl Sheet<'_> {
         }
         if draft.checkout.worktree() {
             form =
-                form.child(
+                form.push(
                     field.line("path", "Worktree path (optional)", "", &draft.path, |h| {
                         &mut h.path
                     }),
                 );
         }
         if draft.checkout != Checkout::None {
-            form = form.child(
+            form = form.push(Block::control(
                 Checkbox::new(draft.share)
                     .label("Allow sharing an occupied checkout")
                     .on_toggle({
@@ -211,50 +205,43 @@ impl Sheet<'_> {
                     })
                     .build(kit)
                     .key(spot.key("share")),
-            );
+            ));
         }
-        form = form.child(field.line("agent", "Agent", "codex", &draft.agent, |h| &mut h.agent));
+        form = form.push(field.line("agent", "Agent", "codex", &draft.agent, |h| &mut h.agent));
         if let Some(failure) = shown.failure {
-            form = form.child(
-                text(failure.to_owned())
-                    .key(spot.key("error"))
-                    .role("alert")
-                    .label(failure.to_owned())
-                    .font(type_::LABEL)
-                    .color(t.error)
-                    .wrap(),
-            );
+            form = form.push(Block::custom(
+                attn_ui::blocks::Refusal::new(spot.key("error"), failure.to_owned()).build(t),
+            ));
         }
         let actions = if shown.busy {
-            row().child(
-                text("Handing over…")
+            Block::custom(
+                words("Handing over…", Type::Small, t.text_secondary)
                     .role("status")
-                    .label("Handing over…")
-                    .font(type_::LABEL)
-                    .color(t.text_secondary),
+                    .label("Handing over…"),
             )
         } else {
             let (cancelled, sent) = (spot.clone(), spot.clone());
-            row()
-                .gap(space::S1)
-                .child(
-                    kit_button("Cancel")
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            cancelled.put_away(state, &cancelled.key("open"), tx)
-                        })
-                        .build(kit)
-                        .key(spot.key("cancel")),
-                )
-                .child(
-                    kit_button("Handover")
+            Actions::new()
+                .push(
+                    plain("Handover")
+                        .look(attn_ui::system::Look::Primary)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             hand_over(&sent, state, tx)
                         })
-                        .build(kit)
+                        .build(t)
                         .key(spot.key("send")),
                 )
+                .push(
+                    quiet("Cancel")
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            cancelled.put_away(state, &cancelled.key("open"), tx)
+                        })
+                        .build(t)
+                        .key(spot.key("cancel")),
+                )
+                .build()
         };
-        Some(form.child(actions))
+        Some(form.push(actions).build(t))
     }
 }
 
@@ -265,20 +252,23 @@ struct Field<'a> {
 }
 
 impl Field<'_> {
-    fn note(&self, words: &TextEdit) -> El {
+    fn note(&self, written: &TextEdit) -> Block {
         let (typed, edited) = (self.spot.clone(), self.spot.clone());
-        words_field(
-            words,
+        let label = "What should the new agent know? (optional)";
+        let area = words_field(
+            written,
             self.spot.field(),
-            "What should the new agent know? (optional)",
+            label,
             "",
-            &FORM_FIELD,
             move |state: &mut State| edited.words_mut(state),
             move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
                 keyed(&typed, state, ev, Sends::CmdReturn, tx)
             },
             self.t,
-        )
+        );
+        FieldBlock::new(self.spot.key("note"), label)
+            .control(area)
+            .build(self.t)
     }
 
     fn line(
@@ -288,29 +278,19 @@ impl Field<'_> {
         placeholder: &str,
         edit: &TextEdit,
         pick: fn(&mut Handover) -> &mut TextEdit,
-    ) -> El {
+    ) -> Block {
         let (typed, edited) = (self.spot.clone(), self.spot.clone());
-        self.boxed(
-            text_input(edit, type_::BODY)
-                .key(self.spot.key(part))
-                .single_line()
-                .label(label.to_owned())
-                .placeholder(placeholder.to_owned(), self.t.text_muted)
-                .on_edit(move |state: &mut State| pick(edited.handover_draft(state)))
-                .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-                    keyed(&typed, state, ev, Sends::Return, tx)
-                }),
-        )
-    }
-
-    fn boxed(&self, input: El) -> El {
-        input
-            .w_full()
-            .color(self.t.text_primary)
-            .fill(self.t.bg_input)
-            .border(1.0, self.t.border_focus)
-            .radius(4.0)
-            .padding(space::S1)
+        let input = TextInput::new(edit)
+            .key(self.spot.key(part))
+            .label(label.to_owned())
+            .placeholder(placeholder.to_owned())
+            .on_edit(move |state: &mut State| pick(edited.handover_draft(state)))
+            .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+                keyed(&typed, state, ev, Sends::Return, tx)
+            });
+        FieldBlock::new(self.spot.key(&format!("{part}-field")), label)
+            .control(line_box(input, FieldState::Ready, self.t))
+            .build(self.t)
     }
 }
 

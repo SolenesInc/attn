@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use attn_protocol::{Seed, Session};
 use attn_ui::Tokens;
-use rune::tok::space;
-use rune::{El, Tx, col, row};
+use attn_ui::blocks::{Reader, Room};
+use rune::{El, Tx};
 
 use super::Garden;
 use super::model::{self, Index, Relation};
@@ -63,17 +63,21 @@ pub(crate) fn body(
             (false, Some(error)) => error.to_owned(),
             (false, None) => "Loading seed…".to_owned(),
         };
-        let note = col().w_full().grow(1.0).child(sheet.note("missing", words));
+        let note = Reader::new().push(sheet.note("missing", words)).build(
+            sheet.key("page"),
+            Room::Narrow,
+            t,
+        );
         return super::zoomed(reads.zoom, note);
     };
-    let to_garden = match held {
-        Some(_) => {
-            let id = id.to_owned();
-            super::view::button(sheet.key("open-garden"), "Reveal in Garden", t)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| super::open_seed(state, &id, tx))
-        }
-        None => col(),
-    };
+    let to_garden = held.map(|_| {
+        let id = id.to_owned();
+        super::view::plain("Reveal in Garden")
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| super::open_seed(state, &id, tx))
+            .build(t)
+            .key(sheet.key("open-garden"))
+            .into()
+    });
     let children = document
         .map(|d| {
             d.children
@@ -94,40 +98,40 @@ pub(crate) fn body(
             .find(|s| s.id == parent)
             .map_or(parent, |s| s.title.as_str());
         let (go, parent) = (sheet.go.clone(), parent.to_owned());
-        super::view::button(sheet.key("back"), format!("Back to {title}"), t)
+        super::view::quiet(format!("‹ Back to {title}"))
             .on_press_tx(move |state: &mut State, tx: &mut Tx| go.to(state, &parent, tx))
+            .build(t)
+            .key(sheet.key("back"))
+            .label(format!("Back to {title}"))
     });
     let to_crew = (reads.crew_back == Some((desktop, leaf))).then(|| {
-        super::view::button(format!("tile.{leaf}.crew-back"), "Back to Crew", t)
+        super::view::quiet("‹ Back to Crew")
             .on_press_tx(|state: &mut State, tx: &mut Tx| crate::crew::go_back(state, tx))
+            .build(t)
+            .key(format!("tile.{leaf}.crew-back"))
+            .label("Back to Crew")
     });
-    let page = col()
-        .w_full()
-        .padding(space::S3)
-        .gap(space::S2)
-        .children(to_crew)
-        .children(back)
-        .child(
-            sheet.head(
-                here,
-                row()
-                    .gap(space::S1)
-                    .child(to_garden)
-                    .children(sheet.continuation(held.map(|s| s.as_ref()), document)),
-                Vec::new(),
-            ),
-        )
-        .children(sheet.handover_form(document))
-        .children(sheet.chief_form(document))
-        .children(sheet.seeds_saying("plot", "Plot", children, |seed| {
+    let mut actions: Vec<El> = to_garden.into_iter().collect();
+    actions.extend(sheet.continuation(held.map(|s| s.as_ref()), document));
+    let mut page = Reader::new();
+    for way_back in to_crew.into_iter().chain(back) {
+        page = page.above(way_back);
+    }
+    let page = page
+        .head(sheet.head(here, actions, Vec::new()))
+        .push_all(sheet.head_after(here))
+        .push_all(sheet.handover_form(document))
+        .push_all(sheet.chief_form(document))
+        .push_all(sheet.seeds_saying("plot", "Plot", children, |seed| {
             model::signal(seed, 0).map(|(words, _)| words)
         }))
-        .child(sheet.authorization(here))
-        .child(sheet.plan(here))
-        .children(sheet.checks(here, document))
-        .children(sheet.seeds("related", "Related", related))
-        .children(sheet.artifacts(document))
-        .child(sheet.log(document, error));
+        .push(sheet.authorization(here))
+        .push(sheet.plan(here))
+        .push_all(sheet.checks(here, document))
+        .push_all(sheet.seeds("related", "Related", related))
+        .push_all(sheet.artifacts(document))
+        .push(sheet.log(document, error))
+        .build(sheet.key("page"), Room::Narrow, t);
     super::zoomed(reads.zoom, super::view::scroll(&view, page, t))
 }
 

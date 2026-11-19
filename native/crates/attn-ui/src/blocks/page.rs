@@ -64,14 +64,9 @@ impl Page {
     /// The page in a column keyed `key` that scrolls, inset from its edges.
     pub fn build(self, key: impl Into<String>, t: &Tokens) -> El {
         let first = self.blocks.first().map(|b| b.kind);
-        let head = self.head.map(|head| {
-            let gap = if first == Some(Kind::Prose) {
-                Space::S8
-            } else {
-                Space::S24
-            };
-            door::below(head.build(t), gap)
-        });
+        let head = self
+            .head
+            .map(|head| door::below(head.build(t), head_gap(first)));
         let status = self.status.map(|(key, said, parts)| {
             let shown = !parts.is_empty();
             let line = door::gap(row().items_center(), Space::S8)
@@ -106,6 +101,15 @@ impl Page {
             .children(status)
             .child(body)
             .scroll_bar_styled(crate::scroll_bar(t))
+    }
+}
+
+/// The space between a page's head and its first block: a lead reads with the head.
+pub(super) fn head_gap(first: Option<Kind>) -> Space {
+    if first == Some(Kind::Prose) {
+        Space::S8
+    } else {
+        Space::S24
     }
 }
 
@@ -152,7 +156,7 @@ impl Head {
         self
     }
 
-    fn build(self, t: &Tokens) -> El {
+    pub(super) fn build(self, t: &Tokens) -> El {
         let title = words(self.title.clone(), Type::PageTitle, t.text_primary)
             .wrap()
             .key(self.key)

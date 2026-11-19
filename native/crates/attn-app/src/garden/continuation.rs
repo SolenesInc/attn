@@ -2,14 +2,14 @@ use attn_protocol::{
     KeptConversation, Seed, SeedDocument, SeedResumeMessage, SeedResumeResultMessage,
     SeedSendToChiefMessage,
 };
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, KeyEvent, Tx, col, row, text};
+use attn_ui::blocks::{Actions, Block, Field, Form, Refusal};
+use attn_ui::system::{Look, Type, words};
+use rune::{El, KeyEvent, Tx};
 
 use super::model;
-use super::sheet::{FORM_FIELD, Sheet, words_field};
+use super::sheet::{Sheet, words_field};
 use super::spot::{Sends, Spot};
-use super::view::kit_button;
+use super::view::{plain, quiet};
 use crate::State;
 use crate::requests::Refused;
 
@@ -58,13 +58,14 @@ impl Sheet<'_> {
             let outpost = continuation.outpost.as_deref();
             if continuation.resume_available || (outpost.is_some() && unreachable) {
                 let id = seed.id.clone();
-                let (button, shown) = match outpost {
+                let (named, shown) = match outpost {
                     Some(outpost) => (
-                        kit_button(format!("Resume on {outpost}")),
+                        format!("Resume on {outpost}"),
                         format!("Resume · {outpost}"),
                     ),
-                    None => (kit_button("Resume"), "Resume".to_owned()),
+                    None => ("Resume".to_owned(), "Resume".to_owned()),
                 };
+                let button = plain(shown);
                 let button = match continuation
                     .resume_reason
                     .as_deref()
@@ -74,14 +75,12 @@ impl Sheet<'_> {
                     None => button,
                 };
                 actions.push(
-                    super::view::head_button(
-                        button.on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            resume(state, &id, tx)
-                        }),
-                        shown,
-                        self.t,
-                    )
-                    .key(self.key("resume")),
+                    button
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| resume(state, &id, tx))
+                        .build(self.t)
+                        .key(self.key("resume"))
+                        .label(named)
+                        .into(),
                 );
             }
         }
@@ -93,14 +92,11 @@ impl Sheet<'_> {
         if self.chief {
             let opened = chief.clone();
             actions.push(
-                super::view::head_button(
-                    kit_button("Send to Chief").on_press_tx(
-                        move |state: &mut State, tx: &mut Tx| opened.write(state, "", tx),
-                    ),
-                    "Send to Chief",
-                    self.t,
-                )
-                .key(chief.key("open")),
+                plain("Send to Chief")
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| opened.write(state, "", tx))
+                    .build(self.t)
+                    .key(chief.key("open"))
+                    .into(),
             );
         }
         actions
@@ -126,102 +122,82 @@ impl Sheet<'_> {
         let kept = continuation
             .kept_conversation
             .as_ref()
-            .map(|kept| self.note("head.kept", format!("conversation {}", kept_words(kept))));
+            .map(|kept| self.small_note("head.kept", format!("conversation {}", kept_words(kept))));
         let reason = continuation
             .resume_reason
             .clone()
             .filter(|_| !resumes && continuation.directory_state != "unreachable")
-            .map(|reason| self.note("head.resume-reason", reason));
+            .map(|reason| self.small_note("head.resume-reason", reason));
         kept.into_iter().chain(reason).collect()
     }
 
     /// The note to the Chief being written, under the seed's head.
-    pub(super) fn chief_form(&self, document: Option<&SeedDocument>) -> Option<El> {
+    pub(super) fn chief_form(&self, document: Option<&SeedDocument>) -> Option<Block> {
         let seed = &document?.seed;
         let spot = self.chief_spot(seed);
         let shown = self.garden.shown(&spot);
         let written = shown.words.filter(|_| self.chief)?;
         let t = self.t;
-        let kit = attn_ui::kit(t);
         let rev = seed.rev;
         let (typed, edited) = (spot.clone(), spot.clone());
-        let mut form = col()
-            .key(spot.key("form"))
-            .role("form")
-            .label("Send to Chief")
-            .w_full()
-            .gap(space::S1)
-            .padding(space::S2)
-            .radius(6.0)
-            .fill(t.bg_elevated)
-            .border(1.0, t.border)
-            .child(
-                text("What should Chief know? (optional)")
-                    .font(type_::LABEL)
-                    .color(t.text_secondary)
-                    .a11y_hidden(),
-            )
-            .child(words_field(
-                written,
-                spot.field(),
-                "What should Chief know? (optional)",
-                "",
-                &FORM_FIELD,
-                move |state: &mut State| edited.words_mut(state),
-                move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-                    let home = typed.key("open");
-                    typed.field_key(
-                        state,
-                        ev,
-                        (&home, Sends::CmdReturn),
-                        |state, words, tx| send_to_chief(&typed, state, rev, words, tx),
-                        tx,
-                    )
-                },
-                t,
-            ));
+        let label = "What should Chief know? (optional)";
+        let mut form = Form::new(spot.key("form"), "Send to Chief").push(
+            Field::new(spot.key("note"), label)
+                .control(words_field(
+                    written,
+                    spot.field(),
+                    label,
+                    "",
+                    move |state: &mut State| edited.words_mut(state),
+                    move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+                        let home = typed.key("open");
+                        typed.field_key(
+                            state,
+                            ev,
+                            (&home, Sends::CmdReturn),
+                            |state, words, tx| send_to_chief(&typed, state, rev, words, tx),
+                            tx,
+                        )
+                    },
+                    t,
+                ))
+                .build(t),
+        );
         if let Some(failure) = shown.failure {
-            form = form.child(
-                text(failure.to_owned())
-                    .key(spot.key("error"))
-                    .role("alert")
-                    .label(failure.to_owned())
-                    .font(type_::LABEL)
-                    .color(t.error)
-                    .wrap(),
-            );
+            form = form.push(Block::custom(
+                Refusal::new(spot.key("error"), failure.to_owned()).build(t),
+            ));
         }
         let actions = if shown.busy {
-            row().child(
-                text("Sending to Chief…")
+            Block::custom(
+                words("Sending to Chief…", Type::Small, t.text_secondary)
                     .role("status")
-                    .label("Sending to Chief…")
-                    .font(type_::LABEL)
-                    .color(t.text_secondary),
+                    .label("Sending to Chief…"),
             )
         } else {
             let (cancelled, sent) = (spot.clone(), spot.clone());
-            row()
-                .gap(space::S1)
-                .child(
-                    kit_button("Cancel")
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            cancelled.put_away(state, &cancelled.key("open"), tx)
-                        })
-                        .build(kit)
-                        .key(spot.key("cancel")),
-                )
-                .child(
-                    kit_button("Send to Chief")
+            Actions::new()
+                .push(
+                    plain("Send to Chief")
+                        .look(Look::Primary)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             let words = sent.words(state);
                             send_to_chief(&sent, state, rev, words, tx)
                         })
-                        .build(kit)
+                        .build(t)
                         .key(spot.key("send")),
                 )
+                .push(
+                    quiet("Cancel")
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            cancelled.put_away(state, &cancelled.key("open"), tx)
+                        })
+                        .build(t)
+                        .key(spot.key("cancel")),
+                )
+                .build()
         };
-        Some(form.child(actions))
+        Some(form.push(actions).build(t))
     }
 }
 

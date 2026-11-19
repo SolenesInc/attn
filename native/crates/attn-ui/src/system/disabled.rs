@@ -10,3 +10,8 @@ pub(crate) const STRENGTH: f32 = 0.5;
 pub(crate) fn dim(e: El) -> El {
     e.disabled(true).layer_opacity(STRENGTH)
 }
+
+/// Drawn as [`dim`] draws, while it keeps its place on Tab and its accessible state.
+pub(crate) fn faded(e: El) -> El {
+    e.layer_opacity(STRENGTH)
+}

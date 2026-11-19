@@ -18,6 +18,14 @@ impl Inline {
     }
 }
 
+impl Inline {
+    /// Apart along their tops, on one line: a mark, words that wrap and take the room left, and
+    /// the controls that act on them.
+    pub fn top() -> El {
+        door::gap(row().w_full().items_start(), Space::S8)
+    }
+}
+
 /// Things one under another, for a one-off that fits no block.
 pub struct Stack;
 

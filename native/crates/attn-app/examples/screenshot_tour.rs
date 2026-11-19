@@ -994,6 +994,36 @@ fn garden_dock_plot(dark: bool) {
     snap(&mut world, "garden-dock-plot", dark);
 }
 
+/// The garden as a board of lanes, expanded.
+fn garden_board(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::BoardOpen);
+    world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
+    world.gesture(|app| app.click(Target::key("garden.view.board")));
+    snap(&mut world, "garden-board", dark);
+}
+
+/// A search in the docked garden: its answers with what matched, then a filter being typed.
+fn garden_dock_search(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::BoardOpen);
+    world.gesture(|app| app.click(Target::key("garden.search.field")));
+    world.gesture(|app| app.type_text("row"));
+    snap(&mut world, "garden-dock-search", dark);
+    world.gesture(|app| app.type_text(" is:"));
+    snap(&mut world, "garden-dock-search-filter", dark);
+}
+
+/// A seed's page opened as a tile.
+fn garden_seed_tile(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::BoardOpen);
+    world.gesture(|app| app.click(Target::key("garden.row.s-plot")));
+    world.gesture(|app| app.click(Target::key("garden.row.s-one")));
+    world.gesture(|app| app.click(Target::key("garden.open-tile")));
+    snap(&mut world, "garden-seed-tile", dark);
+}
+
 /// A garden review of two seeds, the first `s-one`, advised or with its advisor still running.
 fn garden_review(advised: bool) -> GardenReview {
     let item = |seed: &str, title: &str| GardenReviewItem {
@@ -3772,6 +3802,9 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         garden_dock_seed(dark);
         garden_empty(dark);
         garden_dock_empty(dark);
+        garden_board(dark);
+        garden_dock_search(dark);
+        garden_seed_tile(dark);
         garden_review_screen(dark, true, true, "garden-review");
         garden_review_screen(dark, false, true, "garden-review-waiting");
         garden_review_screen(dark, true, false, "garden-review-dock");

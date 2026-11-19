@@ -35,9 +35,6 @@ use frames::{Frame, MapPlace, Side};
 
 /// The review's card, as the Tauri review reader widens the markdown reader's.
 pub(crate) const CARD_MAX_WIDTH: f32 = 1180.0;
-/// The widest the review's prose and headings run, as the Tauri review reader's
-/// `--md-prose-measure` caps them.
-pub(crate) const PROSE_MEASURE: f32 = 644.0;
 /// The frames the reader draws.
 const BUILT: [Frame; 3] = [Frame::Brief, Frame::Walkthrough, Frame::Map];
 /// The Walkthrough's script column is this wide, at most this share of the tile.
@@ -1023,7 +1020,7 @@ fn spaced(parts: impl Iterator<Item = ((f32, f32), El)>) -> Vec<El> {
 fn prose_width(block: document::Prose) -> f32 {
     match block {
         document::Prose::Other => f32::INFINITY,
-        _ => PROSE_MEASURE,
+        _ => attn_ui::blocks::DOCUMENT,
     }
 }
 

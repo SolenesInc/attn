@@ -12,3 +12,7 @@ pub(crate) const FIELD: f32 = READING + 2.0 * Size::Regular.inset().pt();
 /// agent", measures 284.5 in `Name`, so no name breaks beside its control. Under it the words
 /// take the whole line, however narrow.
 pub(crate) const COPY_FLOOR: f32 = 288.0;
+
+/// The longest a line of a document runs: about 80 characters of document text, a little past
+/// the reading measure since a document is read on its own.
+pub const DOCUMENT: f32 = 640.0;

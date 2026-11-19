@@ -20,7 +20,6 @@ use attn_ui::{GlyphButton, Tokens, glyph};
 use rune::tok::{radius, space};
 use rune::{Color, El, Image, LinkPaint, ScrollSpec, Span, TextStyle, Tx, col, memo, text};
 use rune_kit::ScrollBar;
-use rune_kit::syntax::Syntax;
 use rune_kit::{CodeFrame, ImageFrame, Markdown, MarkdownStyle, MissingImage};
 
 use crate::State;
@@ -31,9 +30,9 @@ pub use images::Pictures;
 pub(crate) use images::{follow as follow_images, over as with_image_preview};
 pub(crate) use links::Document;
 
-/// The widest paragraphs, lists, quotes and headings run, as the Tauri reader's
-/// `--md-prose-measure` caps them; tables, code, diagrams and front matter take the card.
-const PROSE_MEASURE: f32 = 760.0;
+/// The widest paragraphs, lists, quotes and headings run; tables, code, diagrams and front
+/// matter take the card.
+const PROSE_MEASURE: f32 = attn_ui::blocks::DOCUMENT;
 const CARD_BORDER: f32 = 1.0;
 
 /// The Tauri reader's card padding for the room inside the tile's gutter: 1.25rem, then 2, 2.5
@@ -114,7 +113,7 @@ pub(crate) fn body(
     let marks = annotating::highlights(drafts.get(&uri), readings.tiles.get(tile), tile, t);
     let kept = readings.kept(&view);
     let (widest, measure) = if content.review.is_some() {
-        (crate::review::CARD_MAX_WIDTH, crate::review::PROSE_MEASURE)
+        (crate::review::CARD_MAX_WIDTH, PROSE_MEASURE)
     } else {
         (f32::INFINITY, PROSE_MEASURE)
     };
@@ -437,103 +436,9 @@ fn details_order(source: &str) -> Rc<dyn Fn(usize) -> usize> {
     Rc::new(move |at| starts.partition_point(|&start| start < at))
 }
 
-/// The Tauri reader's type, colours, marks and spacing (MarkdownReader.css, at its 14 point
-/// rem): 15 point paragraphs and 14 point list items at 90% of the text colour, headings
-/// stepping from the full colour down to 80%, list markers in the accent, ring checkboxes and
-/// struck finished tasks, italic quotes on an accent bar, 13 point code in GitHub's colours on
-/// a half-tinted card that scrolls sideways, tables across the text with 1 point rules, and
-/// diagrams in mermaid's 16 point labels. Blocks space by the stylesheet's margins.
+/// How the reader draws a document.
 pub(crate) fn look(t: &Tokens) -> MarkdownStyle {
-    let kit = attn_ui::kit(t);
-    let text = t.text_primary.alpha(0.9);
-    let body = font(t, None);
-    let small = TextStyle {
-        size: 14.0,
-        line_height: 22.75,
-        ..body
-    };
-    let code = attn_ui::colors::syntax(t.dark);
-    MarkdownStyle::from_kit(kit)
-        .prose_measure(PROSE_MEASURE)
-        .text(text)
-        .body_font(body)
-        .heading_font(1, font(t, Some(1)))
-        .heading_font(2, font(t, Some(2)))
-        .heading_font(3, font(t, Some(3)))
-        .heading_font(4, font(t, Some(4)))
-        .heading_text(1, t.text_primary)
-        .heading_text(2, text)
-        .heading_text(3, t.text_primary.alpha(0.8))
-        .deep_heading(t.text_primary)
-        .paragraph_margin(14.0)
-        .heading_margin(1, 21.0, 14.0)
-        .heading_margin(2, 28.0, 10.5)
-        .heading_margin(3, 21.0, 7.0)
-        .heading_margin(4, 14.0, 7.0)
-        .heading_margins_collapse(true)
-        .list_font(small)
-        .list_marker(t.accent.alpha(0.6))
-        .list(21.0, 5.25)
-        .list_margin(5.25, 5.25)
-        .list_markers_outside(true)
-        .list_marker_gap(9.0)
-        .list_tabular_figures(true)
-        .link_underline(Color::TRANSPARENT)
-        .inline_code_size(12.25)
-        .inline_code_font(1.0, 400.0)
-        .inline_code_pad(5.25)
-        .inline_code_pad_y(1.75)
-        .inline_code_bg(t.bg_elevated)
-        .code_block_font(TextStyle {
-            size: 13.0,
-            line_height: 20.0,
-            ..kit.ty.mono
-        })
-        .code_block(t.bg_elevated.alpha(0.5), t.border.alpha(0.3))
-        .code_block_padding(16.0, 12.0)
-        .code_margin(17.5, 17.5)
-        .code_block_text(code.color(Syntax::Variable))
-        .syntax_theme(code)
-        .quote(t.accent.alpha(0.5), 2.0, 14.0, t.text_secondary)
-        .quote_italic(true)
-        .quote_margin(14.0, 14.0)
-        .rule(t.border.alpha(0.3))
-        .rule_margin(28.0, 28.0)
-        .lines(1.0)
-        .table_font(TextStyle {
-            line_height: 21.0,
-            ..small
-        })
-        .table_outline(None)
-        .table_header_rule(t.border)
-        .table_rules(t.border.alpha(0.5))
-        .table_header_fill(t.bg_elevated.alpha(0.3))
-        .table_header_text(text)
-        .table_text(t.text_primary.alpha(0.8))
-        .table_header_weight(600.0)
-        .table_cell_padding(10.5, 7.0)
-        .table_margin(14.0, 14.0)
-        .table_full_width(true)
-        .table_scroll_bar(t.border, t.text_tertiary)
-        .code_scroll_bar(attn_ui::code_scroll_bar(t))
-        .diagram_font(TextStyle {
-            size: 16.0,
-            line_height: 24.0,
-            ..body
-        })
-        .task_checkbox(
-            16.0,
-            8.0,
-            8.0,
-            None,
-            Color::TRANSPARENT,
-            t.success,
-            Color::TRANSPARENT,
-            t.text_secondary.alpha(0.5),
-        )
-        .task_checked(Color::TRANSPARENT, t.success, t.success)
-        .task_ring(2.0, 11.0)
-        .task_done(t.text_secondary)
+    attn_ui::system::document_style(t)
 }
 
 /// The reader's paragraph font, or its font for headings of `level`: the `h1` set tight.

@@ -4186,7 +4186,11 @@ fn a_table_in_a_review_takes_the_cards_width_while_its_prose_keeps_the_reviews_m
     let [px, _, prose, _] = screen
         .bounds(Target::role("label").name("Add used to return its sum directly."))
         .unwrap();
-    assert_eq!(prose, 644.0, "the review's prose keeps its measure");
+    assert_eq!(
+        prose,
+        attn_ui::blocks::DOCUMENT,
+        "the review's prose keeps the document measure"
+    );
     let [tx, _, tw, _] = screen.bounds(Target::role("table")).unwrap();
     assert!(
         (px + prose / 2.0 - (tx + tw / 2.0)).abs() < 1.0,

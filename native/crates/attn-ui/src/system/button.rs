@@ -23,6 +23,7 @@ pub struct Button {
     look: Look,
     size: Size,
     disabled: bool,
+    unavailable: bool,
     open: bool,
     trailing: Option<El>,
     press: Option<Press>,
@@ -40,6 +41,7 @@ impl Button {
             look: Look::Plain,
             size: Size::Regular,
             disabled: false,
+            unavailable: false,
             open: false,
             trailing: None,
             press: None,
@@ -72,6 +74,15 @@ impl Button {
     pub fn expanded(mut self, open: bool) -> Self {
         self.open = open;
         self.button = self.button.expanded(open);
+        self
+    }
+
+    /// The button can't act now, for : drawn as disabled, it keeps its stop on Tab so
+    /// the keyboard can reach it and read why.
+    pub fn unavailable(mut self, reason: impl Into<String>) -> Self {
+        self.disabled = true;
+        self.unavailable = true;
+        self.button = self.button.unavailable(reason);
         self
     }
 
@@ -128,7 +139,9 @@ impl Button {
             .border(1.0, edge);
         let button = door::inset(button, self.size.inset(), Space::S0);
         let button = focus::ring(door::corner(button, Radius::Control), t);
-        let button = if self.disabled {
+        let button = if self.unavailable {
+            focus::ring(disabled::faded(button), t)
+        } else if self.disabled {
             disabled::dim(button)
         } else {
             let surface = if fill.a > 0.0 { fill } else { t.bg_panel };

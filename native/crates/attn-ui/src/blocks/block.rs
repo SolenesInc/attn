@@ -34,10 +34,21 @@ impl Block {
         Block::new(Kind::Control, control.into().self_start())
     }
 
+    /// Names the block as tests and assistive tools find it.
+    pub fn key(self, key: impl Into<String>) -> Block {
+        Block::new(self.kind, self.el.key(key.into()))
+    }
+
     /// A piece no block fits, built in its feature from controls inside a rhythm
     /// ([`super::Inline`], [`super::Stack`]).
     pub fn custom(el: El) -> Block {
         Block::new(Kind::Custom, el)
+    }
+
+    /// A part of the page with no heading of its own, such as a seed's plan: spaced and ruled
+    /// from the sections around it as a section is.
+    pub fn part(el: El) -> Block {
+        Block::new(Kind::Section, el)
     }
 }
 
