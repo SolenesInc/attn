@@ -4,9 +4,9 @@ use rune_kit::{TextArea, TextInput};
 use super::{Control, Size, Space, Type, door, focus, layers};
 use crate::Tokens;
 
-/// The width every number field takes: "600", the widest value a number setting holds, with
-/// the field's insets and its arrows measures 62.
-const NUMBER_WIDTH: f32 = 88.0;
+/// The width every number field takes. It holds eight digits beside the arrows: a context cap of 1,000,000 measures 54.5pt in body
+/// type, and the arrows and insets leave 66pt.
+const NUMBER_WIDTH: f32 = 112.0;
 
 /// What the kit's single-line box, which sets its words 8 in from its leading edge, needs to
 /// bring them to a regular control's inset.
