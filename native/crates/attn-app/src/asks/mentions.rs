@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use attn_client::Garden;
 use attn_protocol::{AskSeedMention, AskSeedMentionsMessage, AskSeedMentionsResultMessage};
-use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 use rune::{El, Link, Span, Tx};
 
 use crate::State;
@@ -116,37 +115,18 @@ pub(crate) fn linked(el: El, content: &str, names: &[AskSeedMention], color: run
         .on_link(|state: &mut State, seed: &str, tx: &mut Tx| super::open_seed(state, seed, tx))
 }
 
-/// `source`, an ask's markdown, with each seed its prose names as a link; code and the text of
-/// links and images stay as written.
-pub(crate) fn linked_markdown(source: &str, names: &[AskSeedMention]) -> String {
-    if names.is_empty() {
-        return source.to_owned();
+/// The seed links in a run of an ask's prose, as `Markdown::text_links` takes them: the run's
+/// text outside code and links, so a seed named inside a URL leaves the URL one link.
+pub(crate) fn seed_links(
+    names: &[AskSeedMention],
+) -> impl Fn(&str) -> Vec<(Range<usize>, String)> + 'static {
+    let names = names.to_vec();
+    move |run| {
+        found(run, &names)
+            .into_iter()
+            .map(|(at, seed)| (at, format!("{SEED_HREF}{seed}")))
+            .collect()
     }
-    let mut out = String::with_capacity(source.len());
-    let mut copied = 0;
-    let mut inside = 0usize;
-    for (event, range) in
-        Parser::new_ext(source, crate::markdown::anchors::OPTIONS).into_offset_iter()
-    {
-        match event {
-            Event::Start(
-                Tag::Link { .. } | Tag::Image { .. } | Tag::CodeBlock(_) | Tag::HtmlBlock,
-            ) => inside += 1,
-            Event::End(TagEnd::Link | TagEnd::Image | TagEnd::CodeBlock | TagEnd::HtmlBlock) => {
-                inside = inside.saturating_sub(1)
-            }
-            Event::Text(text) if inside == 0 && source.get(range.clone()) == Some(&*text) => {
-                for (at, seed) in found(&text, names) {
-                    out.push_str(&source[copied..range.start + at.start]);
-                    out.push_str(&format!("[{}]({SEED_HREF}{seed})", &text[at.clone()]));
-                    copied = range.start + at.end;
-                }
-            }
-            _ => {}
-        }
-    }
-    out.push_str(&source[copied..]);
-    out
 }
 
 /// The seed a link in an ask's markdown opens.

@@ -364,7 +364,8 @@ impl<'a> Prose<'a> {
         };
         let path = self.document.clone();
         let pictures = self.pictures.clone();
-        Markdown::new(mentions::linked_markdown(source, self.names))
+        Markdown::new(source)
+            .text_links(mentions::seed_links(self.names))
             .style(crate::markdown::look(self.t))
             .on_link_tx(move |state: &mut State, href: &str, tx: &mut Tx| {
                 match mentions::seed_of(href) {

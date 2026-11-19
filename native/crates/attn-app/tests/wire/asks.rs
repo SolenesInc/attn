@@ -1514,3 +1514,40 @@ fn a_prompt_wider_than_its_question_wraps_inside_it() {
     );
     assert!(h > 18.0, "the prompt stays one line, {h} high");
 }
+
+#[test]
+fn a_url_that_holds_a_seeds_name_stays_one_link_that_opens_the_whole_url() {
+    let url = "https://spotify.com/cache-migration/s-cache1";
+    let mut world = start_with_seeds(
+        vec![ask(
+            "a-url",
+            "api",
+            "Links",
+            30,
+            vec![prose(&format!(
+                "See {url}, [the notes]({url}) and cache-migration."
+            ))],
+        )],
+        vec![api_working()],
+        vec![migration(None)],
+    );
+    mentions_answered(
+        &world,
+        &[("s-cache1", "s-cache1"), ("cache-migration", "s-cache1")],
+    );
+    open_drawer(&mut world);
+
+    assert_eq!(
+        seed_links(&world),
+        [
+            (url.to_owned(), url.to_owned()),
+            ("the notes".to_owned(), url.to_owned()),
+            (
+                "cache-migration".to_owned(),
+                "attn-seed:s-cache1".to_owned()
+            ),
+        ]
+    );
+    world.gesture(|app| app.click(Target::key(url)));
+    assert_eq!(world.opened_links(), [url]);
+}
