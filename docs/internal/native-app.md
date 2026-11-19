@@ -211,7 +211,15 @@ choices once for the whole app:
   and two sizes, `switch`, `Segmented`, the field boxes `line_box`,
   `number_box` and `area_box`, `stepper` and the number field's `arrows`,
   `expander`, `tag`, `icon_box`, `Choice`, `press_area`, `disclosure` and
-  `Trigger`, which opens a menu or a picker. Each wraps rune-kit's control
+  `Trigger`, which opens a menu or a picker. The chrome adds `icon_button`, a
+  square as tall as its size holding an icon at an `IconSize` (14, 16 or 18),
+  which grows into an accent-tinted pill when it carries a count; `ListRow`,
+  one line of a list (32 high) or two (title in `Name` over a line in
+  `Small`), its lead in a 16-point column, its controls shown always, faint
+  until it is selected, or on hover at its end on its own ground with its
+  words fading out before them, and the row on screen marked by the brand bar
+  at its start; `GroupHead`, a list group's heading; and `number_chip`,
+  `count_badge` and `keys_hint`. Each wraps rune-kit's control
   where one exists, and a view never writes a field of rune-kit's `Kit`:
   `attn-ui` sets them once. Hover and pressed lighten a dark surface and
   darken a light one, each by the step a list row takes (1.20:1 and 1.66:1
@@ -293,7 +301,14 @@ choices once for the whole app:
   under its words starting on their edge, a page title wrapping short of its
   aside and keeping its line, a choice's name whole, no part of a block past
   its sides, and a control's box and ring taking in everything it draws, at
-  any width the stories draw, the smallest included.
+  any width the stories draw, the smallest included. `attn-ui/tests/chrome_rules.rs`
+  holds the chrome's: one height for every list row of one line and one
+  start for every title, nothing past a row's sides, a row's hover controls
+  whole on the first frame on the row's own ground with its words ending
+  before them, a two-line row's lead and
+  controls on its title's line, an icon-only button square with its icon
+  centred and its count beside it, and every chrome control's hover, pressed
+  and ring as the other controls'.
 
 A control or a block a view needs that `attn-ui` lacks is added there with its
 story and, when it keeps a rule, its test.
