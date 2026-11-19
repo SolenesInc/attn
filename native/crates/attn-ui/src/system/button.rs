@@ -24,8 +24,11 @@ pub struct Button {
     size: Size,
     disabled: bool,
     trailing: Option<El>,
+    press: Option<Press>,
     button: KitButton,
 }
+
+type Press = Box<dyn FnOnce(KitButton) -> KitButton>;
 
 impl Button {
     pub fn new(shown: impl Into<String>) -> Button {
@@ -37,6 +40,7 @@ impl Button {
             size: Size::Regular,
             disabled: false,
             trailing: None,
+            press: None,
         }
     }
 
@@ -52,7 +56,6 @@ impl Button {
 
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
-        self.button = self.button.disabled(disabled);
         self
     }
 
@@ -73,12 +76,12 @@ impl Button {
     }
 
     pub fn on_press<S: 'static>(mut self, press: impl Fn(&mut S) + 'static) -> Self {
-        self.button = self.button.on_press(press);
+        self.press = Some(Box::new(move |b: KitButton| b.on_press(press)));
         self
     }
 
     pub fn on_press_tx<S: 'static>(mut self, press: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
-        self.button = self.button.on_press_tx(press);
+        self.press = Some(Box::new(move |b: KitButton| b.on_press_tx(press)));
         self
     }
 
@@ -95,22 +98,29 @@ impl Button {
         let trailing = self.trailing;
         let label = move |_, _| {
             door::gap(row().items_center(), Space::S4)
-                .child(words(shown, Type::Control, ink))
+                .shrink()
+                .min_w(0.0)
+                .child(words(shown, Type::Control, ink).truncate())
                 .children(trailing)
         };
-        let button = self
-            .button
+        let button = match self.press {
+            Some(attach) if !self.disabled => attach(self.button),
+            _ => self.button,
+        };
+        let button = button
             .variant(ButtonVariant::Ghost)
             .label_with(label)
             .build(kit(t))
             .h(self.size.height())
+            .shrink()
+            .min_w(0.0)
             .justify_center()
             .fill(fill)
             .border(1.0, edge);
         let button = door::inset(button, self.size.inset(), Space::S0);
         let button = focus::ring(door::corner(button, Radius::Control), t);
         let button = if self.disabled {
-            button.layer_opacity(1.0)
+            button.disabled(true)
         } else {
             let surface = if fill.a > 0.0 { fill } else { t.bg_panel };
             layers::pressable(button, surface, t)

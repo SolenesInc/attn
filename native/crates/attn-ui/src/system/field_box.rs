@@ -44,12 +44,12 @@ fn single_line(input: TextInput, disabled: bool, t: &Tokens) -> Control {
     Control::new(boxed(field, disabled, t), size)
 }
 
-/// An unavailable field sets its value in the secondary ink, so it reads apart from both a
-/// value and a placeholder.
+/// The kit draws an unavailable field at half strength, which no later call lifts; its edge
+/// is drawn a step stronger so it still shows at half.
 fn kit(disabled: bool, t: &Tokens) -> &'static rune_kit::Kit {
     if disabled {
         super::kit(&Tokens {
-            text_primary: t.text_secondary,
+            border: t.border_hover,
             ..*t
         })
     } else {
@@ -57,10 +57,11 @@ fn kit(disabled: bool, t: &Tokens) -> &'static rune_kit::Kit {
     }
 }
 
-/// An unavailable field drops its fill and keeps its edge, at full strength.
+/// An unavailable field drops its fill, so its value, at half strength, reads apart from a
+/// placeholder in a filled box.
 fn boxed(field: El, disabled: bool, t: &Tokens) -> El {
     if disabled {
-        return field.fill(rune::Color::TRANSPARENT).layer_opacity(1.0);
+        return field.fill(rune::Color::TRANSPARENT);
     }
     let field = field
         .fill(t.bg_input)

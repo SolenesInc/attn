@@ -229,33 +229,32 @@ fn buttons(s: &Library, cx: &mut Cx<Library>) -> El {
     }
     let t = library_tokens(cx);
     let rows = SIZES.iter().map(|&(size_key, size)| {
-        door::gap(row().items_center(), Space::S16).children(BUTTONS.iter().map(
-            |&(look_key, look)| {
-                let shown = match (look, s.long) {
-                    (Look::Primary, false) => "Save",
-                    (Look::Plain, false) => "Browse",
-                    (Look::Quiet, false) => "Undo",
-                    (Look::Danger, false) => "Remove",
-                    (Look::Primary, true) => "Save and restart every agent",
-                    (Look::Plain, true) => "Browse for a folder to watch",
-                    (Look::Quiet, true) => "Undo the last three changes",
-                    (Look::Danger, true) => "Remove this automation for good",
-                };
-                let button: El = Action::new(shown)
-                    .look(look)
-                    .size(size)
-                    .disabled(s.disabled)
-                    .on_press_tx(|_: &mut Library, _: &mut Tx| {})
-                    .build(&t)
-                    .key(format!("button.{look_key}.{size_key}"))
-                    .into();
-                if s.narrow {
-                    el().w(NARROW_BUTTON).child(button)
-                } else {
-                    button
-                }
-            },
-        ))
+        let line = if s.long { col() } else { row().items_center() };
+        door::gap(line, Space::S16).children(BUTTONS.iter().map(|&(look_key, look)| {
+            let shown = match (look, s.long) {
+                (Look::Primary, false) => "Save",
+                (Look::Plain, false) => "Browse",
+                (Look::Quiet, false) => "Undo",
+                (Look::Danger, false) => "Remove",
+                (Look::Primary, true) => "Save and restart every agent",
+                (Look::Plain, true) => "Browse for a folder to watch",
+                (Look::Quiet, true) => "Undo the last three changes",
+                (Look::Danger, true) => "Remove this automation for good",
+            };
+            let button: El = Action::new(shown)
+                .look(look)
+                .size(size)
+                .disabled(s.disabled)
+                .on_press_tx(|_: &mut Library, _: &mut Tx| {})
+                .build(&t)
+                .key(format!("button.{look_key}.{size_key}"))
+                .into();
+            if s.narrow {
+                el().w(NARROW_BUTTON).child(button)
+            } else {
+                button
+            }
+        }))
     });
     library_stage(&t, door::gap(col(), Space::S24).children(rows))
 }
@@ -275,7 +274,7 @@ fn baseline(s: &Library, cx: &mut Cx<Library>) -> El {
         .label("Width")
         .on_edit(|s: &mut Library| &mut s.number);
     let noop = |_: &mut Library, _: &mut Tx| {};
-    let row = door::gap(row().items_center(), Space::S8)
+    let row = door::gap(row().key("baseline").items_center(), Space::S8)
         .child(
             Action::new("Save")
                 .look(Look::Primary)
