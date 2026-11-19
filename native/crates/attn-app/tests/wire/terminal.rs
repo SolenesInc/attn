@@ -1694,3 +1694,70 @@ fn a_screen_reader_hears_the_caret_move_past_a_typed_space_and_along_a_blank_row
         "the caret where the blank row's cursor is"
     );
 }
+
+#[test]
+fn a_screen_reader_hears_the_rows_new_output_wrote_once_it_pauses_and_not_what_is_typed() {
+    let mut world =
+        World::start(Daemon::scripted().state(showing(vec![pane("t1", "r1")], "daemon-1")));
+    world.open_desktop();
+    output(&world, 1, b"$ ");
+    world.settle();
+    world.listen_as_screen_reader();
+    world.settle();
+    let said = |world: &World| world.screen().announced();
+
+    output(&world, 2, b"echo hello");
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(said(&world), None, "the reader echoes typing itself");
+
+    output(&world, 3, b"\r\nhello\r\n$ ");
+    world.settle();
+    assert_eq!(said(&world), None, "output still arriving is not said yet");
+    world.advance(Duration::from_secs(1));
+    assert_eq!(said(&world).as_deref(), Some("hello"));
+
+    output(&world, 4, b"ls\r\nnotes.md\r\n$ ");
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        said(&world).as_deref(),
+        Some("notes.md"),
+        "a command typed and run before the output paused is not said again"
+    );
+
+    for chunk in 0..8 {
+        let lines: String = (1..=10)
+            .map(|n| format!("line {}\r\n", chunk * 10 + n))
+            .collect();
+        output(&world, 5 + chunk, lines.as_bytes());
+        world.settle();
+        world.advance(Duration::from_millis(20));
+        assert_eq!(
+            said(&world).as_deref(),
+            Some("notes.md"),
+            "a stream is not said line by line"
+        );
+    }
+    world.advance(Duration::from_secs(1));
+    let heard = said(&world).expect("the stream's last screen once it pauses");
+    assert!(heard.ends_with("line 79\nline 80"), "{heard:?}");
+    assert!(!heard.contains("notes.md"), "{heard:?}");
+}
+
+#[test]
+fn a_screen_reader_does_not_hear_the_screen_a_terminal_comes_back_with() {
+    let mut world =
+        World::start(Daemon::scripted().state(showing(vec![pane("t1", "r1")], "daemon-1")));
+    world.listen_as_screen_reader();
+    world.open_desktop();
+    output(&world, 1, b"$ make\r\nbuilt\r\n$ ");
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(world.screen().announced(), None);
+
+    output(&world, 2, b"echo hi\r\nhi\r\n$ ");
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    assert_eq!(world.screen().announced().as_deref(), Some("hi"));
+}

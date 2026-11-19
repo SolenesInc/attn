@@ -26,6 +26,7 @@ mod latency;
 mod links;
 mod seeds;
 mod selection;
+mod spoken;
 
 pub(crate) use annotating::{
     Anchor, Annotation, Marking, Miss, Notice, Outcome, Popup, Transcript,
@@ -244,6 +245,8 @@ pub struct Terminals {
     pub(crate) latency: latency::InputLatency,
     /// The app's input trace, which the main window hands its tile windows.
     pub(crate) trace: Arc<Mutex<InputTrace>>,
+    /// What a screen reader last heard of the terminal holding the keys, while one listens.
+    heard: Option<spoken::Heard>,
 }
 
 struct Term {
@@ -705,6 +708,7 @@ impl Terminals {
                 _ => {}
             }
         }
+        self.speak_quiet_output(tx);
         recounted
     }
 
