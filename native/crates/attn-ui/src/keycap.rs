@@ -105,20 +105,16 @@ fn cap(key: String, look: Look, colors: Option<[Color; 3]>, t: &Tokens) -> El {
 /// fit after those before it leaves, the last first, down to none.
 pub fn giving_way(groups: impl IntoIterator<Item = El>) -> El {
     let line = door::line_height(HINT_TYPE) + 2.0;
+    let line_start = door::behind_start(rune::el().w(0.0).h(line), Space::S6.pt());
     door::clip(
-        row()
+        door::gap(row(), Space::S6)
             .flex_wrap()
             .justify_end()
             .h(line)
             .shrink()
             .min_w(0.0)
-            .child(rune::el().w(0.0).h(line))
-            .children(
-                groups
-                    .into_iter()
-                    .enumerate()
-                    .map(|(n, g)| if n == 0 { g } else { g.ml(Space::S6.pt()) }),
-            ),
+            .child(line_start)
+            .children(groups),
     )
 }
 
