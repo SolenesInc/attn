@@ -1111,10 +1111,7 @@ fn focus_review(world: &mut World) {
 }
 
 fn review_stop(dark: bool) {
-    let daemon = scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
-    let mut world = start(daemon);
-    deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
-    focus_review(&mut world);
+    let mut world = review_alone(dark);
     snap(&mut world, "review-stop", dark);
 }
 
@@ -3169,21 +3166,14 @@ fn notebook_tree(dark: bool) {
 
 /// The review's file view, opened from the brief's stop: its back bar and its keys.
 fn review_file(dark: bool) {
-    let daemon = scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
-    serve_totals(&daemon);
-    let mut world = start(daemon);
-    deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
-    focus_review(&mut world);
+    let mut world = review_alone(dark);
     tap(&mut world, Key::Right);
     tap(&mut world, Key::Enter);
     snap(&mut world, "review-file", dark);
 }
 
 fn review_keys(dark: bool) {
-    let daemon = scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
-    let mut world = start(daemon);
-    deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
-    focus_review(&mut world);
+    let mut world = review_alone(dark);
     world.gesture(|app| app.type_text("?"));
     snap(&mut world, "review-keys", dark);
 }
@@ -3191,14 +3181,38 @@ fn review_keys(dark: bool) {
 /// The review shown alone on its desktop, bound to agent a's session, beside a second open
 /// document, as the Tauri audit shot it: its tabs over the tile, its header and its brief.
 fn review_alone(dark: bool) -> World {
-    let mut world = review_beside_agent(dark);
+    review_alone_with(dark, review())
+}
+
+/// [`review_alone`] showing `bundle`.
+fn review_alone_with(dark: bool, bundle: ReviewBundle) -> World {
+    let mut world = review_beside_agent_with(dark, bundle);
     world.gesture(|app| app.click(Target::key("tile.m.focus")));
     focus_review(&mut world);
     world
 }
 
+/// The review alone, its Go code with no language server to read it, and the keys that set
+/// one up beside that.
+fn review_server_missing(dark: bool) {
+    let mut bundle = review();
+    bundle.navigation = vec![attn_protocol::ReviewNavigation {
+        language: "go".into(),
+        file: "main.go".into(),
+        state: "missing".into(),
+        ..Default::default()
+    }];
+    let mut world = review_alone_with(dark, bundle);
+    snap(&mut world, "review-server-missing", dark);
+}
+
 /// The review in its tile beside the agent it reviews for, as a desktop first shows it.
 fn review_beside_agent(dark: bool) -> World {
+    review_beside_agent_with(dark, review())
+}
+
+/// [`review_beside_agent`] showing `bundle`.
+fn review_beside_agent_with(dark: bool, bundle: ReviewBundle) -> World {
     let mut bound = document_tile("m", "/repo/review.md");
     bound["tile_session_id"] = json!("s0");
     let tiles = row(vec![bound, document_tile("n", "/repo/notes.md")]);
@@ -3209,7 +3223,7 @@ fn review_beside_agent(dark: bool) -> World {
     let daemon = scripted().state(state);
     serve_totals(&daemon);
     let mut world = start(daemon);
-    deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
+    deliver(&mut world, "/repo/review.md", REVIEW, Some(bundle));
     deliver_to(&mut world, "n", "/repo/notes.md", "# Notes\n", None);
     world
 }
@@ -5343,6 +5357,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("review_focused", || review_focused(dark));
         scene("review_walkthrough", || review_walkthrough(dark));
         scene("review_beside", || review_beside(dark));
+        scene("review_server_missing", || review_server_missing(dark));
         scene("review_search", || review_search(dark));
         scene("review_send_sheet", || review_send_sheet(dark));
         scene("ledger_seeded", || ledger_seeded(dark));
