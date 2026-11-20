@@ -427,6 +427,20 @@ fn a_plugin_agent_lists_its_capabilities_without_an_executable_field() {
     assert!(groups(&world).contains(&"Snipe".to_owned()));
     open_advanced(&mut world, "snipe");
     assert_eq!(capabilities(&world, "snipe"), ["Resume Supported"]);
+    let list = world
+        .screen()
+        .get(Target::role("list").name("Capabilities"));
+    assert_eq!(
+        list.key.as_deref(),
+        Some("settings.agent.snipe.capabilities")
+    );
+    let items = world
+        .screen()
+        .children(Target::key("settings.agent.snipe.capabilities"));
+    assert!(
+        items.iter().all(|item| item.role == "list-item"),
+        "{items:?}"
+    );
     assert!(!shows(&world, &field("snipe_executable")));
     rest(&mut world);
 }

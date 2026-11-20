@@ -501,7 +501,7 @@ fn capabilities(agent: &str, caps: Option<&BTreeMap<String, bool>>, t: &Tokens) 
     known
         .chain(other)
         .fold(
-            Facts::new(format!("settings.agent.{agent}.capabilities")),
+            Facts::new(format!("settings.agent.{agent}.capabilities")).list("Capabilities"),
             |facts, cap| {
                 let supported = caps[cap];
                 facts

@@ -11,6 +11,7 @@ use crate::system::{Radius, Said, Size, Space, Tone, Type, door, words};
 pub struct Facts {
     key: String,
     tiles: bool,
+    list: Option<String>,
     facts: Vec<Fact>,
 }
 
@@ -30,6 +31,7 @@ impl Facts {
         Facts {
             key: key.into(),
             tiles: false,
+            list: None,
             facts: Vec::new(),
         }
     }
@@ -37,6 +39,12 @@ impl Facts {
     /// Lays the facts out as tiles, each keyed on its value, which it is announced as.
     pub fn tiles(mut self) -> Self {
         self.tiles = true;
+        self
+    }
+
+    /// Assistive tools find the facts as a list named `name`, each fact one of its items.
+    pub fn list(mut self, name: impl Into<String>) -> Self {
+        self.list = Some(name.into());
         self
     }
 
@@ -130,19 +138,34 @@ impl Facts {
             door::gap(col().w_full(), Space::S8)
         };
         list = list.key(self.key);
+        let items = self.list.is_some();
+        if let Some(name) = self.list {
+            list = list.role("list").label(name);
+        }
         let tiles = self.tiles;
         Block::new(
             Kind::Facts,
-            list.children(
-                self.facts
-                    .into_iter()
-                    .map(|fact| if tiles { fact.tile(t) } else { fact.line(t) }),
-            ),
+            list.children(self.facts.into_iter().map(|fact| {
+                let said = fact.said();
+                let fact = if tiles { fact.tile(t) } else { fact.line(t) };
+                if items {
+                    fact.role("listitem").label(said)
+                } else {
+                    fact
+                }
+            })),
         )
     }
 }
 
 impl Fact {
+    fn said(&self) -> String {
+        match self.shown {
+            Some(_) => self.label.text(),
+            None => format!("{} {}", self.label.text(), self.value.text()),
+        }
+    }
+
     fn ink(&self, t: &Tokens) -> Color {
         match self.tone {
             Some(Tone::Bad) => t.error,
@@ -175,14 +198,13 @@ impl Fact {
             .wrap()
             .a11y_hidden();
         let label = door::first_line_in(label, Type::Small, self.band).grow_from(0.0, FACT_LABEL);
-        let (value, said) = match self.shown {
-            Some(shown) => (shown, self.label.text()),
-            None => (
-                words(self.value.clone(), self.kind, self.ink(t))
-                    .wrap_anywhere()
-                    .a11y_hidden(),
-                format!("{} {}", self.label.text(), self.value.text()),
-            ),
+        let said = self.said();
+        let ink = self.ink(t);
+        let value = match self.shown {
+            Some(shown) => shown,
+            None => words(self.value, self.kind, ink)
+                .wrap_anywhere()
+                .a11y_hidden(),
         };
         let line = row()
             .key(self.key)

@@ -1044,6 +1044,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::facts::Facts::code(value)", true),
     ("blocks::facts::Facts::item(label)", true),
     ("blocks::facts::Facts::control(label)", true),
+    ("blocks::facts::Facts::list(name)", false),
     ("blocks::field::Field::new(label)", true),
     ("blocks::field::Field::value(value)", true),
     ("blocks::field::Field::note(note)", true),
@@ -1189,4 +1190,66 @@ fn every_public_text_input_has_a_row_saying_how_it_draws() {
             .join("\n")
     );
     assert_eq!(table.len(), found.len());
+}
+
+fn named_facts_view(_: &(), cx: &mut Cx<()>) -> El {
+    use attn_ui::blocks::{Facts, Page};
+    let t = attn_ui::colors::scheme_for(None)
+        .colors(cx.system_dark())
+        .ui;
+    let facts = |key: &str| {
+        Facts::new(key)
+            .list("Capabilities")
+            .fact(format!("{key}.resume"), "Resume", "Supported")
+            .code(format!("{key}.pin"), "Model pin", "Unavailable")
+    };
+    Page::new()
+        .push(facts("lines").build(&t))
+        .push(facts("tiles").tiles().build(&t))
+        .build("page", &t)
+}
+
+fn a11y_node<'a>(node: &'a serde_json::Value, key: &str) -> Option<&'a serde_json::Value> {
+    if node["key"].as_str() == Some(key) {
+        return Some(node);
+    }
+    node["children"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find_map(|child| a11y_node(child, key))
+}
+
+#[test]
+fn named_facts_are_a_list_of_their_facts_as_lines_and_as_tiles() {
+    let mut rt = App::new(AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..AppSpec::new("named facts", (900.0, 900.0), || (), named_facts_view)
+    })
+    .headless_runtime((900.0, 900.0), Env::new(true, SCALE));
+    while rt.frame(1.0 / 60.0) {}
+    let tree = rt.accessibility_json();
+    for arrangement in ["lines", "tiles"] {
+        let list = a11y_node(&tree, arrangement)
+            .unwrap_or_else(|| panic!("no {arrangement} facts in {tree:#}"));
+        let items: Vec<(&str, Option<&str>)> = list["children"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|item| (item["role"].as_str().unwrap_or(""), item["name"].as_str()))
+            .collect();
+        assert_eq!(
+            (list["role"].as_str(), list["name"].as_str(), items),
+            (
+                Some("list"),
+                Some("Capabilities"),
+                vec![
+                    ("list-item", Some("Resume Supported")),
+                    ("list-item", Some("Model pin Unavailable")),
+                ]
+            ),
+            "{arrangement}"
+        );
+    }
 }
