@@ -14,6 +14,7 @@ const WINDOW: (f32, f32) = (1400.0, 800.0);
 const SCALE: f32 = 2.0;
 const REGULAR_INSET: f32 = 12.0;
 const RING_REACH: f32 = 4.0;
+const LOOSE_GAP: f32 = 8.0;
 
 fn view(_: &(), _: &mut Cx<()>) -> El {
     el()
@@ -2542,6 +2543,37 @@ fn a_switched_off_table_fades_what_its_rows_say_and_draws_its_controls_whole() {
                 words > 0,
                 "{off_variant}: the Orchestrator's name draws no glyph"
             );
+        }
+    }
+}
+
+/// Each text size the app offers, 0.7 to 1.5 in tenths: the view zooms by it, which lays it out
+/// in a window `1 / size` as many points across, at `size` times the display's scale.
+fn at_text_size(rt: &mut Runtime<()>, size: f32, scale: f32) {
+    rt.set_viewport((BLOCK_WINDOW.0 / size, BLOCK_WINDOW.1 / size), scale * size);
+    rt.frame(0.0);
+}
+
+#[test]
+fn a_notices_actions_share_a_line_wherever_its_line_holds_them_at_every_text_size() {
+    for variant in ["Rest", "Narrow"] {
+        let mut rt = block_story(true, "Blocks/Notice and status", variant);
+        for scale in [1.0, 2.0] {
+            for tenths in 7..=15 {
+                let size = tenths as f32 / 10.0;
+                at_text_size(&mut rt, size, scale);
+                let notice = element(&rt, "notice.conflict").rect;
+                let reload = element(&rt, "notice.conflict.reload").rect;
+                let overwrite = element(&rt, "notice.conflict.overwrite").rect;
+                let line = notice[0] + notice[2] - REGULAR_INSET - reload[0];
+                let both = reload[2] + LOOSE_GAP + overwrite[2];
+                if both <= line {
+                    assert_eq!(
+                        reload[1], overwrite[1],
+                        "{variant} at {size} text on a {scale}x display: Overwrite anyway sits under Reload from disk though the line's {line} holds their {both}"
+                    );
+                }
+            }
         }
     }
 }

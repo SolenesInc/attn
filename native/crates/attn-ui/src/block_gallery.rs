@@ -78,7 +78,13 @@ pub const BLOCK_SUBJECTS: &[(&str, &[&str])] = &[
     ),
     (
         "Blocks/Notice and status",
-        &["notice.error", "notice.warn", "notice.info", "status"],
+        &[
+            "notice.error",
+            "notice.conflict",
+            "notice.warn",
+            "notice.info",
+            "status",
+        ],
     ),
     ("Blocks/Choices", &["choices"]),
     ("Blocks/Disclosure", &["disclosure.block.part"]),
@@ -584,10 +590,30 @@ fn notices(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
             .build(&t)
             .key(key.to_owned())
     };
+    let plain = |label: &'static str, key: &str| {
+        El::from(
+            Button::new(label)
+                .size(Size::Compact)
+                .look(Look::Plain)
+                .on_press_tx(noop)
+                .build(&t)
+                .key(key.to_owned()),
+        )
+    };
     let blocks = vec![
         Notice::error("notice.error", said("Couldn't read the roles."))
             .action(retry("notice.error.retry"))
             .build(&t),
+        Notice::warn(
+            "notice.conflict",
+            said("This file changed on disk since you opened it."),
+        )
+        .action(
+            Inline::loose()
+                .child(plain("Reload from disk", "notice.conflict.reload"))
+                .child(plain("Overwrite anyway", "notice.conflict.overwrite")),
+        )
+        .build(&t),
         Notice::warn("notice.warn", said("Two roles need a model.")).build(&t),
         Notice::info("notice.info", said("Delegation is off.")).build(&t),
         Status::new("status", said("3 roles, 2 on"), true)
