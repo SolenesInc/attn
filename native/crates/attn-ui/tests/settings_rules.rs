@@ -354,9 +354,18 @@ fn a_facts_label_sits_nearer_its_own_value_than_the_next_fact() {
     for variant in WIDTHS {
         let rt = block_story("Blocks/Facts", variant);
         let lines: Vec<[f32; 4]> = facts.iter().map(|k| rect_of(&rt, k, variant)).collect();
-        let between = lines
+        let inked: Vec<(f32, f32)> = lines
+            .iter()
+            .map(|line| {
+                let glyphs = glyphs_in(&rt, *line);
+                let top = glyphs.iter().map(|g| g[1]).fold(f32::MAX, f32::min);
+                let bottom = glyphs.iter().map(|g| g[1] + g[3]).fold(f32::MIN, f32::max);
+                (top, bottom)
+            })
+            .collect();
+        let between = inked
             .windows(2)
-            .map(|w| w[1][1] - (w[0][1] + w[0][3]))
+            .map(|w| (w[1].0 - w[0].1) / SCALE)
             .fold(f32::MAX, f32::min);
         for (key, line) in facts.iter().zip(&lines) {
             let glyphs = glyphs_in(&rt, *line);
@@ -380,7 +389,7 @@ fn a_facts_label_sits_nearer_its_own_value_than_the_next_fact() {
             let within = (value_top - label_bottom) / SCALE;
             assert!(
                 within < between,
-                "{variant} {key}: the label is {within}pt over its value, and facts sit {between}pt apart"
+                "{variant} {key}: the label's ink is {within}pt over its value's, and the facts' ink sits {between}pt apart"
             );
         }
     }
