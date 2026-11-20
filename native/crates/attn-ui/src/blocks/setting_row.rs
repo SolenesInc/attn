@@ -40,6 +40,7 @@ impl SettingRow {
     }
 
     pub fn build(self, t: &Tokens) -> Block {
+        let name = self.title.text();
         let said = door::gap(col().grow_from(1.0, COPY_FLOOR), Space::S4)
             .child(words(self.title, Type::Name, t.text_primary).wrap())
             .children(
@@ -56,7 +57,7 @@ impl SettingRow {
             .border(1.0, t.border_subtle)
             .child(said)
             .child(self.control);
-        card = card.key(self.key);
+        card = card.key(self.key).role("group").label(name);
         let card = door::gaps(
             door::inset(card, Space::S16, Space::S12),
             Space::S12,

@@ -1056,6 +1056,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::field::Field::note(note)", true),
     ("blocks::field::Field::hint(hint)", true),
     ("blocks::field::Field::error(error)", true),
+    ("blocks::group::Group::new(label)", false),
     ("blocks::inspector::Inspector::new(title)", true),
     ("blocks::inspector::Inspector::side(label)", false),
     ("blocks::inspector::value(said)", true),

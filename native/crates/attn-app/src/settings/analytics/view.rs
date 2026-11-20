@@ -305,6 +305,7 @@ fn rows(state: &State, page: &Analytics, items: &[Item], index: usize, t: &Token
             .title(title)
             .subtitle(line, t)
             .in_view(i == index)
+            .value(if i == index { "selected" } else { "" })
             .role("option")
             .unfocusable()
             .on_press_tx(move |state: &mut State, tx: &mut Tx| super::pick(state, key.clone(), tx))
