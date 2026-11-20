@@ -3,6 +3,7 @@ use rune_kit::ScrollBar;
 
 use super::actions::Actions;
 use super::block::{Block, Kind, spaced};
+use super::measure::DOCUMENT;
 use crate::system::{RING_REACH, Said, Size, Space, Type, door, words};
 use crate::{Frame, Tokens};
 
@@ -16,6 +17,7 @@ pub struct Popover {
     body: Vec<Block>,
     actions: Option<Actions>,
     focusable: bool,
+    reading: bool,
 }
 
 /// A popover's width: its harness segments and its effort segments keep one line each, and a
@@ -33,12 +35,20 @@ impl Popover {
             body: Vec::new(),
             actions: None,
             focusable: true,
+            reading: false,
         }
     }
 
     /// A control beside the title, such as the one that closes the popover.
     pub fn aside(mut self, control: impl Into<El>) -> Self {
         self.aside.push(control.into());
+        self
+    }
+
+    /// As wide as a document's line, for a popover whose body is writing, such as a comment
+    /// and the review it goes with. It never runs past the room its container gives it.
+    pub fn reading(mut self) -> Self {
+        self.reading = true;
         self
     }
 
@@ -112,6 +122,7 @@ impl Popover {
                 .role("dialog")
                 .label(self.title.text())
                 .focusable(self.focusable)
+                .tab_index(-1)
                 .no_focus_ring()
                 .shrink()
                 .min_h(0.0)
@@ -120,10 +131,13 @@ impl Popover {
                 .children(actions),
             Space::S12,
         );
-        Frame::panel(t)
-            .draw_clipped(door::inset(surface, Space::S0, INSET))
-            .w(WIDTH)
-            .min_h(0.0)
+        let panel = Frame::panel(t).draw_clipped(door::inset(surface, Space::S0, INSET));
+        let panel = if self.reading {
+            panel.max_w(DOCUMENT)
+        } else {
+            panel.w(WIDTH)
+        };
+        panel.min_h(0.0)
     }
 }
 
