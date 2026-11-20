@@ -144,16 +144,26 @@ const PLAIN_FIELD_INSET: Space = Space::S2;
 const OPTION_LINE: Space = Space::S16;
 const LIST_INSET: Space = Space::S8;
 
-/// A finder's list: it scrolls once the box reaches its height.
-pub fn list(key: impl Into<String>) -> El {
-    door::inset(
-        col().key(key).role("listbox").w_full().shrink().min_h(0.0),
-        LIST_INSET,
-        LIST_INSET,
-    )
-    .scroll(rune::ScrollSpec {
-        stick_bottom: false,
-    })
+/// A finder's list of `rows`: it scrolls once the box reaches its height.
+pub fn list(key: impl Into<String>, rows: Vec<El>) -> El {
+    scrolling(key, LIST_INSET, LIST_INSET, col().w_full().children(rows)).role("listbox")
+}
+
+/// `content` set in by `x` and `y` inside a viewport keyed `key` that scrolls once its box
+/// reaches its height. The inset scrolls with the content and is kept as the scroll margin, so
+/// scrolled to either end, by hand or by a row scrolled into view, the content keeps the room
+/// it has at rest.
+fn scrolling(key: impl Into<String>, x: Space, y: Space, content: El) -> El {
+    col()
+        .key(key)
+        .w_full()
+        .shrink()
+        .min_h(0.0)
+        .scroll(rune::ScrollSpec {
+            stick_bottom: false,
+        })
+        .scroll_margin(y.pt())
+        .child(door::inset(content, x, y))
 }
 
 /// What a list says when it lists nothing.
@@ -388,17 +398,13 @@ pub fn notices(blocks: Vec<Block>) -> El {
 /// footer under them stays whole, and a row scrolled into view at either end keeps the
 /// notices' inset between it and the edge.
 pub fn scrolling_notices(t: &Tokens, key: impl Into<String>, blocks: Vec<Block>) -> El {
-    col()
-        .key(key)
-        .w_full()
-        .shrink()
-        .min_h(0.0)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .scroll_margin(NOTICES_INSET.pt())
-        .child(notices(blocks))
-        .scroll_bar_styled(crate::scroll_bar(t))
+    scrolling(
+        key,
+        OPTION_LINE,
+        NOTICES_INSET,
+        crate::blocks::stacked(blocks),
+    )
+    .scroll_bar_styled(crate::scroll_bar(t))
 }
 
 const NOTICES_INSET: Space = Space::S12;
@@ -406,20 +412,5 @@ const NOTICES_INSET: Space = Space::S12;
 /// A finder's list of groups, each under its heading: it scrolls past `max` points, or
 /// sooner where the window is shorter.
 pub fn grouped(key: impl Into<String>, label: &str, rows: Vec<El>, max: f32) -> El {
-    door::inset(
-        col()
-            .key(key)
-            .role("listbox")
-            .label(label.to_owned())
-            .w_full()
-            .max_h(max)
-            .shrink()
-            .min_h(0.0),
-        LIST_INSET,
-        LIST_INSET,
-    )
-    .scroll(rune::ScrollSpec {
-        stick_bottom: false,
-    })
-    .children(rows)
+    list(key, rows).label(label.to_owned()).max_h(max)
 }

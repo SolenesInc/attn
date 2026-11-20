@@ -57,16 +57,17 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         };
         finder::empty(t, "palette.empty", message)
     });
-    let list = finder::list("palette.list")
-        .label(label.clone())
-        .children(
-            listing
-                .rows
-                .iter()
-                .enumerate()
-                .map(|(i, r)| option(r, at == Some(i), t)),
-        )
-        .children(empty);
+    let list = finder::list(
+        "palette.list",
+        listing
+            .rows
+            .iter()
+            .enumerate()
+            .map(|(i, r)| option(r, at == Some(i), t))
+            .chain(empty)
+            .collect(),
+    )
+    .label(label.clone());
     let hints: Vec<Hint> = match listing.mode {
         Mode::Agents => {
             let actions = super::row_actions(state, at.map(|i| &listing.rows[i]));

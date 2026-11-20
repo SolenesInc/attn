@@ -1415,7 +1415,31 @@ fn walk_the_list(world: &mut World, list: &str, rows: &str) -> String {
     assert_eq!(world.screen().scrolled(Target::key(list)), Some(0.0));
     let last = press_keeps_highlight_in_view(world, Key::Up, list, rows);
     assert_eq!(last, format!("{rows}{}", count - 1));
+    keeps_the_list_inset_under_the_last(world, list, rows, "Up onto the last");
     last
+}
+
+/// The room a launcher's list leaves under its last row at rest.
+const LIST_END_INSET: f32 = 8.0;
+
+/// Checks that the last row of `rows` shows the list's end inset between it and the bottom of
+/// `list`, as the list does at rest when it does not scroll.
+fn keeps_the_list_inset_under_the_last(world: &World, list: &str, rows: &str, how: &str) {
+    let last = format!("{rows}{}", options(world, rows).len() - 1);
+    let elements = world.runtime().elements();
+    let find = |key: &str| {
+        elements
+            .iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("{key} is drawn"))
+    };
+    let shown = find(list).visible;
+    let row = find(&last).rect;
+    let room_under = shown[1] + shown[3] - (row[1] + row[3]);
+    assert!(
+        (room_under - LIST_END_INSET).abs() < 0.5,
+        "{how}: {last} has {room_under} points under it in {list}, not the list's {LIST_END_INSET}"
+    );
 }
 
 const LOCATIONS: (&str, &str) = ("new-session.locations", "new-session.row.");
@@ -1802,6 +1826,23 @@ fn a_machine_appearing_above_the_top_row_keeps_the_highlight_on_it() {
         launched(&world),
         [(folders[0].clone(), "claude".to_owned())]
     );
+}
+
+#[test]
+fn wheeled_to_its_end_the_list_keeps_its_inset_under_the_last_row() {
+    for (list, rows) in [LOCATIONS, WHERE] {
+        let mut world = if list == WHERE.0 {
+            let mut world = small_with("1.5", &[REPO], eight_worktrees());
+            open_where(&mut world);
+            world
+        } else {
+            small_with("1.5", &PLACES, shop("origin/main"))
+        };
+        let at = middle_of(&world, list);
+        wheel_at(&mut world, at, 2000.0);
+        assert!(world.screen().scrolled(Target::key(list)) > Some(0.0));
+        keeps_the_list_inset_under_the_last(&world, list, rows, "wheeled to the end");
+    }
 }
 
 /// Scrolls the locations by hand, as `how` names: the wheel, or a drag down the scroll bar.

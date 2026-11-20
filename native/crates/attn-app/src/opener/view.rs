@@ -26,17 +26,18 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             .on_key(super::on_key),
     )
     .build(attn_ui::kit(t));
-    let list = finder::list("opener.list")
-        .label(LABEL)
-        .children(
-            rows.iter()
-                .enumerate()
-                .map(|(i, r)| option(r, at == Some(i), t)),
-        )
-        .children(
-            rows.is_empty()
-                .then(|| finder::empty(t, "opener.empty", empty)),
-        );
+    let list = finder::list(
+        "opener.list",
+        rows.iter()
+            .enumerate()
+            .map(|(i, r)| option(r, at == Some(i), t))
+            .chain(
+                rows.is_empty()
+                    .then(|| finder::empty(t, "opener.empty", empty)),
+            )
+            .collect(),
+    )
+    .label(LABEL);
     let panel = col()
         .key("opener.dialog")
         .role("dialog")

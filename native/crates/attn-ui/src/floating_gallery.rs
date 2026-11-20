@@ -400,29 +400,31 @@ fn finder_story(s: &Floating, cx: &mut Cx<Floating>) -> El {
             .on_edit(|s: &mut Floating| &mut s.field),
     )
     .build(crate::kit(&t));
-    let list = finder::list("finder.list");
-    let list = if s.case == Case::Empty {
-        list.child(finder::empty(
+    let rows = if s.case == Case::Empty {
+        vec![finder::empty(
             &t,
             "finder.empty",
             "No markdown files match “plna”",
-        ))
+        )]
     } else {
         let path = if s.long {
             "~/projects/victor/attn--ds-dialogs-palette/docs/internal/a-very-long-folder-name/plan.md"
         } else {
             "~/projects/victor/attn/docs/plan.md"
         };
-        list.children((0..3).map(|i| {
-            finder::path_option(
-                &t,
-                format!("finder.option.{i}"),
-                ["plan.md", "glossary.md", "native-app.md"][i],
-                path,
-                i == 0,
-            )
-        }))
+        (0..3)
+            .map(|i| {
+                finder::path_option(
+                    &t,
+                    format!("finder.option.{i}"),
+                    ["plan.md", "glossary.md", "native-app.md"][i],
+                    path,
+                    i == 0,
+                )
+            })
+            .collect()
     };
+    let list = finder::list("finder.list", rows);
     let footer = finder::footer(
         &t,
         "finder",

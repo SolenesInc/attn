@@ -149,17 +149,18 @@ pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Op
         None => "Loading notes…",
         Some(_) => "No notes match.",
     };
-    let list = finder::list("notebook.finder.list")
-        .label(LABEL)
-        .children(
-            rows.iter()
-                .enumerate()
-                .map(|(i, path)| option(path, i == finder.highlighted, t)),
-        )
-        .children(
-            rows.is_empty()
-                .then(|| finder::empty(t, "notebook.finder.empty", empty)),
-        );
+    let list = finder::list(
+        "notebook.finder.list",
+        rows.iter()
+            .enumerate()
+            .map(|(i, path)| option(path, i == finder.highlighted, t))
+            .chain(
+                rows.is_empty()
+                    .then(|| finder::empty(t, "notebook.finder.empty", empty)),
+            )
+            .collect(),
+    )
+    .label(LABEL);
     let panel = col()
         .key("notebook.finder")
         .role("dialog")
