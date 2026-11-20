@@ -113,7 +113,12 @@ impl Segment {
             .min_w(0.0)
             .center()
             .fill(fill)
-            .child(name.shrink().min_w(0.0).a11y_hidden())
+            .child(
+                name.help_when_truncated(self.name.text())
+                    .shrink()
+                    .min_w(0.0)
+                    .a11y_hidden(),
+            )
             .children(self.trailing);
         let option = door::inset(option, Size::Compact.inset(), Space::S4);
         let option = door::gap(door::corner(option, Radius::Control), Space::S4);

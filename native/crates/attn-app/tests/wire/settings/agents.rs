@@ -712,6 +712,20 @@ fn a_long_plugin_name_stacks_the_default_agent_in_the_smallest_window_and_down_s
                 .all(|r| r[0] == stacked[0][0] && r[2] == stacked[0][2]),
         "the default agent stacks its options at one width: {stacked:?}"
     );
+    let long = "Engineering observability staging review agent with a long name";
+    assert_eq!(node(&world, &agents[2]).name.as_deref(), Some(long));
+    let [x, y, w, h] = world.screen().bounds(Target::key(&agents[2])).unwrap();
+    world.gesture(|app| app.move_to((x + w / 2.0, y + h / 2.0)));
+    world.advance(std::time::Duration::from_secs(2));
+    assert!(
+        world
+            .screen()
+            .find(Target::role("tooltip").name(long))
+            .is_some(),
+        "the cut option says its whole name under the pointer:\n{}",
+        world.screen()
+    );
+
     tab_to(&mut world, &agents[0]);
     press(&mut world, Key::Down);
     assert!(node(&world, &agents[1]).is("checked"), "Down chooses Codex");
