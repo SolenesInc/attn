@@ -99,7 +99,6 @@ func TestAHomeRestartWhileAnOutpostSigmaSessionWorksStartsNoHomeSigmaServer(t *t
 	testworld.AwaitSessionSince(app, mark, id, func(s protocol.Session) bool {
 		return s.State == protocol.SessionStateWaitingInput && protocol.Deref(s.TurnOwed)
 	})
-	mark = app.EventCount()
 	app.TypeLine(id, "after the home restart")
 	if got := server.Prompted(conversation).Text; got != "after the home restart" {
 		t.Fatalf("the outpost's Sigma server took %q after the home restart", got)
