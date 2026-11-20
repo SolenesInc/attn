@@ -4,14 +4,12 @@ use attn_ui::Tokens;
 use attn_ui::blocks::{Inline, Rail};
 use attn_ui::system::{self, IconSize, ListRow, Type, words};
 use attn_ui::type_;
-use rune::tok::space;
 use rune::{El, Tx, el, row, text};
-use rune_kit::Button;
 use rune_kit::ScrollBar;
 
 use super::model::{desktop_number, desktop_title, ordered_desktops};
+use super::open_desktop;
 use super::queue::Bands;
-use super::{actions, open_desktop};
 use crate::State;
 use crate::desktop::DesktopMark;
 use crate::shell::View;
@@ -236,27 +234,10 @@ fn waiting_words(waiting: usize, look: Look) -> String {
 /// `.queue-bar-desktop-waiting`.
 fn waiting_mark(waiting: usize, look: Look, t: &Tokens) -> Option<El> {
     (waiting > 0).then(|| match look {
-        Look::Strip => rune::el()
-            .pin(None, Some(-3.0), Some(-3.0), None)
-            .size(6.0, 6.0)
-            .radius(3.0)
-            .fill(t.warning)
-            .border(1.0, t.bg_panel)
+        Look::Strip => waiting_dot(t),
+        Look::Bar => system::count_badge(waiting, t.warning, attn_ui::warning_ink(t))
+            .pin(None, Some(-BADGE_OVERHANG), Some(-BADGE_OVERHANG), None)
             .inert(),
-        Look::Bar => row()
-            .pin(None, Some(-6.0), Some(-6.0), None)
-            .min_w(WAITING_SIDE)
-            .h(WAITING_SIDE)
-            .px(4.0)
-            .center()
-            .radius(999.0)
-            .fill(t.warning)
-            .inert()
-            .child(
-                text(waiting.to_string())
-                    .font(COUNT_TYPE)
-                    .color(attn_ui::warning_ink(t)),
-            ),
     })
 }
 
@@ -500,162 +481,6 @@ fn rail_chip(chip: &Chip, t: &Tokens) -> El {
     .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &desktop, tx))
 }
 
-/// The title bar's tools on the left, as the Tauri app's `.title-bar-left`: New agent,
-/// Commands, the flow switch, the sidebar toggle and the notifications bell, each framed.
-pub(crate) fn title_tools(state: &State, t: &Tokens) -> Vec<El> {
-    let queue = actions::queue_flow(state);
-    let flow = if queue {
-        "Switch to desktop flow"
-    } else {
-        "Switch to queue flow"
-    };
-    let collapsed = state.window.sidebar_hidden;
-    let sidebar = if collapsed {
-        "Show sidebar"
-    } else {
-        "Collapse sidebar"
-    };
-    vec![
-        system::Button::new("New")
-            .look(system::Look::Brand)
-            .size(system::Size::Compact)
-            .on_press_tx(|state: &mut State, tx: &mut Tx| {
-                crate::dispatch(state, crate::Action::SessionNew, tx);
-            })
-            .build(t)
-            .key("titlebar.new")
-            .label("New agent")
-            .into(),
-        tool(
-            "titlebar.commands",
-            "Commands",
-            &attn_ui::icon::COMMANDS,
-            |state, tx| {
-                crate::dispatch(state, crate::Action::UiCommandPalette, tx);
-            },
-        )
-        .ink(t.brand)
-        .edged()
-        .build(t)
-        .into(),
-        tool(
-            "titlebar.flow",
-            flow,
-            if queue {
-                &attn_ui::icon::DESKTOP_FLOW
-            } else {
-                &attn_ui::icon::QUEUE_FLOW
-            },
-            actions::toggle_flow,
-        )
-        .edged()
-        .build(t)
-        .into(),
-        tool(
-            "titlebar.sidebar",
-            sidebar,
-            if collapsed {
-                &attn_ui::icon::EXPAND
-            } else {
-                &attn_ui::icon::COLLAPSE
-            },
-            |state, _| state.window.sidebar_hidden = !state.window.sidebar_hidden,
-        )
-        .edged()
-        .build(t)
-        .into(),
-        crate::notifications::title_button(state, t),
-    ]
-}
-
-/// The title bar's panel buttons on the right, as the Tauri app's `.title-bar-right`: the
-/// garden, the notebook, the ledger, automations and asks, unframed.
-pub(crate) fn title_panels(state: &State, t: &Tokens) -> Vec<El> {
-    let garden_open = crate::garden::mode(state) != crate::garden::Mode::Closed;
-    let automations_open = crate::automations::is_open(state);
-    [
-        (
-            tool(
-                "titlebar.garden",
-                if garden_open {
-                    "Hide the garden"
-                } else {
-                    "Show the garden"
-                },
-                &attn_ui::icon::GARDEN,
-                crate::garden::toggle_from_icon,
-            ),
-            garden_open,
-        ),
-        (
-            tool(
-                "titlebar.notebook",
-                &format!(
-                    "Open Notebook{}",
-                    keys_of(state, &crate::Action::NotebookOpenFullscreen)
-                ),
-                &attn_ui::icon::NOTEBOOK,
-                |state, tx| {
-                    crate::dispatch(state, crate::Action::NotebookOpenFullscreen, tx);
-                },
-            ),
-            state.window.layer == Some(crate::shell::Layer::Notebook),
-        ),
-        (
-            tool(
-                "titlebar.ledger",
-                &format!(
-                    "Open Ledger{}",
-                    keys_of(state, &crate::Action::SessionsOpen)
-                ),
-                &attn_ui::icon::LEDGER,
-                crate::ledger::open_last,
-            ),
-            crate::ledger::is_open(state),
-        ),
-        (
-            tool(
-                "titlebar.automations",
-                if automations_open {
-                    "Hide Automations"
-                } else {
-                    "Show Automations"
-                },
-                &attn_ui::icon::AUTOMATIONS,
-                crate::automations::toggle,
-            ),
-            automations_open,
-        ),
-    ]
-    .into_iter()
-    .map(|(button, open)| opens(button.selected(open).build(t).into(), open))
-    .chain(crate::asks::title_button(state, t))
-    .collect()
-}
-
-fn keys_of(state: &State, action: &crate::Action) -> String {
-    state
-        .keymap
-        .binding(action)
-        .map(|b| format!(" ({})", state.keymap.label(b)))
-        .unwrap_or_default()
-}
-
-/// A title bar button for a panel, checked while the panel is `open`, as the Tauri app's
-/// `.title-bar-panel-button.active`.
-pub(crate) fn opens(button: El, open: bool) -> El {
-    button.checked(open)
-}
-
-fn tool(
-    key: &str,
-    label: &str,
-    glyph: impl Into<attn_ui::Glyph>,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> system::IconButton {
-    system::icon_button(key, label, glyph, IconSize::Large).on_press_tx(press)
-}
-
 /// Queue flow with the sidebar collapsed: the title bar's middle as the Tauri app's `.queue-bar`,
 /// with the waiting pill, the critical notification, the tile shelf, the runs chip and the
 /// desktop chips. The pill is the Tauri app's `.queue-bar-pill`: a dot, the count, then the
@@ -818,46 +643,28 @@ fn runs_chip(state: &State, t: &Tokens) -> Option<El> {
         Some(keys) => format!("click or {keys} to walk them"),
         None => "click to walk them".into(),
     });
-    let tokens = *t;
+    let button = system::Button::new(format!("{} {runs}", attn_ui::glyph::STAR_OPEN))
+        .size(system::Size::Small)
+        .on_press_tx(|state: &mut State, tx: &mut Tx| {
+            super::bar_peek::dismiss(state);
+            crate::automations::runs::next_run(state, tx)
+        });
+    let button = match needing {
+        0 => button,
+        n => button.trailing(words(n.to_string(), Type::Tag, t.warning)),
+    };
     Some(
-        Button::new(format!("{runs} runs"))
-            .on_press_tx(|state: &mut State, tx: &mut Tx| {
-                super::bar_peek::dismiss(state);
-                crate::automations::runs::next_run(state, tx)
-            })
-            .label_with(move |_, _| {
-                row()
-                    .items_center()
-                    .gap(space::S1)
-                    .child(
-                        text(format!("{} {runs}", attn_ui::glyph::STAR_OPEN))
-                            .font(type_::LABEL)
-                            .color(tokens.text_secondary)
-                            .single_line(),
-                    )
-                    .children((needing > 0).then(|| {
-                        text(needing.to_string())
-                            .font(COUNT_TYPE)
-                            .color(tokens.warning)
-                    }))
-            })
-            .build(attn_ui::kit(t))
+        El::from(button.build(t))
             .key(super::bar_peek::RUNS)
+            .label(format!("{runs} runs"))
             .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
                 super::bar_peek::anchor_hovered(state, super::bar_peek::Anchor::Runs, inside)
             })
             .a11y_value(format!("{runs} runs, {needing} need you"))
-            .description(says.join(" · "))
-            .h(22.0)
-            .px(space::S2)
-            .radius(11.0)
-            .fill(t.bg_button)
-            .hover(t.bg_elevated),
+            .description(says.join(" · ")),
     )
 }
 
-/// The bar's waiting count: `COUNT_TYPE`'s 15-point line with the 1.5 above and below it had at
-/// 9.5 points.
-const WAITING_SIDE: f32 = 18.0;
-
-const COUNT_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0).mono();
+/// How far the bar's waiting count hangs past its chip's corner, as the Tauri app's
+/// `.queue-bar-desktop-waiting` at -6.
+const BADGE_OVERHANG: f32 = 6.0;

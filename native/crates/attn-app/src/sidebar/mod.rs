@@ -1,6 +1,6 @@
 pub(crate) mod actions;
 pub(crate) mod bar_peek;
-mod chrome;
+mod chips;
 pub(crate) mod crew;
 pub(crate) mod crowding;
 pub(crate) mod dock;
@@ -39,7 +39,6 @@ thread_local! {
     static ROWS_BUILT: Cell<usize> = const { Cell::new(0) };
 }
 
-pub(crate) use chrome::{opens, title_panels, title_tools};
 pub(crate) use queue_view::AgentLine;
 
 /// The window's sidebar for its flow: the queue sidebar in queue flow, the desktop sidebar
@@ -53,7 +52,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         (true, false) => queue_view::view(state, t),
         (true, true) => return None,
         (false, false) => desktop_sidebar(state, t),
-        (false, true) => return Some(chrome::rail(state, t)),
+        (false, true) => return Some(chips::rail(state, t)),
     };
     Some(
         row()
@@ -70,7 +69,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
 pub(crate) fn title_middle(state: &State, shelf: El, t: &Tokens) -> El {
     if actions::queue_flow(state) && state.window.sidebar_hidden {
         let bands = queue::bands(&state.facts, state.window.now_ms);
-        chrome::queue_bar(state, &bands, shelf, t)
+        chips::queue_bar(state, &bands, shelf, t)
     } else {
         shelf
     }

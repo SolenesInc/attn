@@ -55,6 +55,7 @@ pub mod sidebar;
 #[cfg(target_os = "macos")]
 pub mod tauri_settings;
 mod terminal;
+mod title_bar;
 mod update_run;
 mod warnings;
 pub mod whats_new;

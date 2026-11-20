@@ -565,7 +565,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                     .child(list)
                     .scroll_bar_styled(attn_ui::scroll_bar(&t)),
             )
-            .child(super::chrome::desktop_strip(state, &bands, &t))
+            .child(super::chips::desktop_strip(state, &bands, &t))
     })
 }
 

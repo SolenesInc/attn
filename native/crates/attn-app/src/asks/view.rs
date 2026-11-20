@@ -1021,5 +1021,5 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> Option<El> {
         .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
         .build(t),
     );
-    Some(crate::sidebar::opens(button, open).a11y_value(count.to_string()))
+    Some(crate::title_bar::opens(button, open).a11y_value(count.to_string()))
 }

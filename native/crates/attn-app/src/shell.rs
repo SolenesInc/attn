@@ -621,7 +621,7 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         })
         .children(
             connected
-                .then(|| crate::sidebar::title_tools(state, t))
+                .then(|| crate::title_bar::title_tools(state, t))
                 .into_iter()
                 .flatten(),
         );
@@ -641,7 +641,7 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         .key("titlebar.right")
         .children(
             connected
-                .then(|| crate::sidebar::title_panels(state, t))
+                .then(|| crate::title_bar::title_panels(state, t))
                 .into_iter()
                 .flatten(),
         )
