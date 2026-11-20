@@ -14,6 +14,7 @@ pub struct Group<S> {
     key: String,
     label: String,
     keys: Option<Keys<S>>,
+    active: Option<String>,
     blocks: Vec<Block>,
 }
 
@@ -24,6 +25,7 @@ impl<S: 'static> Group<S> {
             key: key.into(),
             label: label.into(),
             keys: None,
+            active: None,
             blocks: Vec::new(),
         }
     }
@@ -31,6 +33,13 @@ impl<S: 'static> Group<S> {
     /// The keys the group answers; `keys` says whether it took the key.
     pub fn keys(mut self, keys: impl Fn(&mut S, &KeyEvent, &mut Tx) -> bool + 'static) -> Self {
         self.keys = Some(Rc::new(keys));
+        self
+    }
+
+    /// The option keyed `key` is the current one while the focus rests on the group, as a list
+    /// box that keeps the keyboard reads its chosen option.
+    pub fn active(mut self, key: Option<String>) -> Self {
+        self.active = key;
         self
     }
 
@@ -53,6 +62,9 @@ impl<S: 'static> Group<S> {
             el = el
                 .focusable(true)
                 .on_key(move |s: &mut S, ev: &KeyEvent, tx: &mut Tx| keys(s, ev, tx));
+        }
+        if let Some(active) = self.active {
+            el = el.active_descendant(active);
         }
         Block::new(Kind::Custom, el)
     }

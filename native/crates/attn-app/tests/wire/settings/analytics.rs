@@ -1092,3 +1092,22 @@ fn a_vent_that_arrives_shows_at_once_without_reading_records() {
     assert!(rows(&world)[0].contains("make test ran the Go suite"));
     assert!(world.daemon.sent_of("list_analytics_records").is_empty());
 }
+
+/// The options of the list, in order, each with whether it reads as selected.
+fn selection(world: &World) -> Vec<bool> {
+    world
+        .screen()
+        .descendants(Target::key("settings.analytics.list"))
+        .into_iter()
+        .filter(|n| n.role == "list-box-option")
+        .map(|n| n.is("selected"))
+        .collect()
+}
+
+#[test]
+fn the_chosen_row_reads_as_selected_and_moves_with_the_keys() {
+    let mut world = triage();
+    assert_eq!(selection(&world), [true, false]);
+    press(&mut world, "j");
+    assert_eq!(selection(&world), [false, true]);
+}

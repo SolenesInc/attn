@@ -58,6 +58,7 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     });
     let group = Group::new(PAGE, "Analytics records and vents")
         .keys(super::key)
+        .active((!items.is_empty()).then(|| format!("item{index}")))
         .push(stats(state, page, sharing, unreachable.len(), t))
         .push(machine_toggle(page, t))
         .push_all(
@@ -305,11 +306,11 @@ fn rows(state: &State, page: &Analytics, items: &[Item], index: usize, t: &Token
             .title(title)
             .subtitle(line, t)
             .in_view(i == index)
-            .value(if i == index { "selected" } else { "" })
             .role("option")
             .unfocusable()
             .on_press_tx(move |state: &mut State, tx: &mut Tx| super::pick(state, key.clone(), tx))
             .build(t)
+            .focus_selected(i == index)
     };
     if page.view == VENTS {
         let (new, done): (Vec<_>, Vec<_>) = items
