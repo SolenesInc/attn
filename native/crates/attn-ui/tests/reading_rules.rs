@@ -384,3 +384,23 @@ fn a_toolbars_buttons_stand_on_one_line_with_a_rule_only_between_its_groups() {
         );
     }
 }
+
+#[test]
+fn a_trays_parts_line_up_with_its_panels_bar_and_its_rule_spans_the_panel() {
+    for variant in ["Rest", "Narrow", "Smallest long"] {
+        let rt = story("Blocks/Tray", variant);
+        let panel = element(&rt, "tray.panel").rect;
+        let tray = element(&rt, "tray").rect;
+        let first = element(&rt, "tray.0").rect;
+        let path = element(&rt, "tray.path").rect[0];
+        assert!(
+            (tray[0] - panel[0]).abs() < 0.5 && (tray[2] - panel[2]).abs() < 0.5,
+            "{variant}: the tray {tray:?} does not span its panel {panel:?}"
+        );
+        assert!(
+            (first[0] - path).abs() < 0.5,
+            "{variant}: the tray's first part starts at {}, its bar's at {path}",
+            first[0]
+        );
+    }
+}

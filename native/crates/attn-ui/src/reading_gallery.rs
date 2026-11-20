@@ -6,7 +6,8 @@ use rune::{Cx, El, Playground, Story, Tx, col, el, row};
 use crate::Tokens;
 use crate::blocks::{
     Bar, Block, Byline, Card, Entry, Figure, Head, Inline, KeyFit, KeyLine, Lane, Pane, Prose,
-    Reader, Remark, Room, Section, Stack, Standing, Surface, Toolbar, Trail, Voice, board, entries,
+    Reader, Remark, Room, Section, Stack, Standing, Surface, Toolbar, Trail, Tray, Voice, board,
+    entries,
     key_tab, lanes, place, rail,
 };
 use crate::colors::scheme_for;
@@ -75,6 +76,7 @@ pub const READING_SUBJECTS: &[(&str, &[&str], &[&str])] = &[
     ("Blocks/Figure", &["figure"], &[]),
     ("Blocks/Toolbar", &["toolbar"], &[]),
     ("Blocks/Split", &["split"], &["Disabled", "Disabled menu"]),
+    ("Blocks/Tray", &["tray"], &[]),
 ];
 
 const LONG_TITLE: &str = "Move the reading surfaces onto blocks so the garden, the review reader and the markdown reader share one system";
@@ -113,6 +115,7 @@ fn view_of(name: &str) -> View {
         "Blocks/Figure" => figure_story,
         "Blocks/Toolbar" => toolbar_story,
         "Blocks/Split" => split_story,
+        "Blocks/Tray" => tray_story,
         _ => board_story,
     }
 }
@@ -487,6 +490,33 @@ fn panes_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
         )
         .child(Pane::new("panes.rest", column("panes.rest.words", "Garden step")).build(&t));
     stage(s, cx, &t, panes)
+}
+
+fn tray_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
+    let t = tokens(cx);
+    let remark = |n: usize, voice: Voice, who: &'static str, said_: &'static str| {
+        Remark::new(who, "L12", said(s, said_))
+            .voice(voice)
+            .key(format!("tray.{n}"))
+            .build(&t)
+    };
+    let panel = col()
+        .key("tray.panel")
+        .w_full()
+        .child(
+            Bar::new("tray.head")
+                .lead(words("totals.rs", Type::Mono, t.text_primary).key("tray.path"))
+                .push(quiet("tray.close", "close", &t))
+                .build(&t),
+        )
+        .child(el().w_full().h(120.0))
+        .child(
+            Tray::new("tray", "Marks on this line")
+                .push(remark(0, Voice::Look, "Builder", "Look at this line."))
+                .push(remark(1, Voice::Yours, "You", "Why here?"))
+                .build(&t),
+        );
+    stage(s, cx, &t, panel)
 }
 
 fn remarks_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
