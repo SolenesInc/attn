@@ -1641,3 +1641,40 @@ fn the_list_of_asks_sets_its_words_on_the_line_of_the_ask_under_it() {
         subject[0]
     );
 }
+
+#[test]
+fn the_replied_toggle_reads_unchecked_until_it_shows_the_replied_asks() {
+    let mut world = start(
+        vec![cache_store(), release_day()],
+        vec![api_working(), web_waiting()],
+    );
+    open_drawer(&mut world);
+    let replied = |world: &World| world.screen().get(Target::key("asks.replied"));
+    assert!(
+        replied(&world).is("unchecked"),
+        "{:?}",
+        replied(&world).states
+    );
+    world.gesture(|app| app.click(Target::key("asks.replied")));
+    assert!(
+        replied(&world).is("checked"),
+        "{:?}",
+        replied(&world).states
+    );
+}
+
+#[test]
+fn the_title_bar_s_asks_button_reads_checked_while_its_drawer_is_open_as_the_other_drawers_do() {
+    let mut world = start(
+        vec![cache_store(), release_day()],
+        vec![api_working(), web_waiting()],
+    );
+    let button = |world: &World| world.screen().get(Target::key("titlebar.asks"));
+    assert!(
+        button(&world).is("unchecked"),
+        "{:?}",
+        button(&world).states
+    );
+    open_drawer(&mut world);
+    assert!(button(&world).is("checked"), "{:?}", button(&world).states);
+}

@@ -33,7 +33,7 @@ pub struct Button {
     size: Size,
     disabled: bool,
     open: bool,
-    chosen: bool,
+    chosen: Option<bool>,
     trailing: Option<El>,
     press: Option<Press>,
     button: KitButton,
@@ -61,7 +61,7 @@ impl Button {
             size: Size::Regular,
             disabled: false,
             open: false,
-            chosen: false,
+            chosen: None,
             trailing: None,
             press: None,
         }
@@ -105,10 +105,10 @@ impl Button {
         self
     }
 
-    /// The button is one of a set that is on, such as a chosen day: the selected fill a chosen
-    /// segment has, read as checked.
+    /// The button turns something on or off, such as a chosen day: on, the selected fill a chosen
+    /// segment has, read as checked; off, read as unchecked.
     pub fn chosen(mut self, chosen: bool) -> Self {
-        self.chosen = chosen;
+        self.chosen = Some(chosen);
         self
     }
 
@@ -135,10 +135,10 @@ impl Button {
 
     pub fn build(self, t: &Tokens) -> Control {
         let (fill, edge, ink) = match self.look {
-            Look::Plain if self.open || self.chosen => {
+            Look::Plain if self.open || self.chosen == Some(true) => {
                 (t.bg_selected, t.border_hover, t.text_primary)
             }
-            Look::Quiet if self.open || self.chosen => {
+            Look::Quiet if self.open || self.chosen == Some(true) => {
                 (t.bg_selected, Color::TRANSPARENT, t.text_primary)
             }
             Look::Primary if self.disabled => {
@@ -190,10 +190,9 @@ impl Button {
             let surface = if fill.a > 0.0 { fill } else { t.bg_panel };
             layers::pressable(button, surface, t)
         };
-        let button = if self.chosen {
-            button.checked(true)
-        } else {
-            button
+        let button = match self.chosen {
+            Some(on) => button.checked(on),
+            None => button,
         };
         Control::new(button, self.size)
     }

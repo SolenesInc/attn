@@ -1088,19 +1088,16 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> Option<El> {
         n => format!("{n} open asks{keys}"),
     };
     let open = state.window.shows(crate::shell::Drawer::Asks);
-    Some(
-        El::from(
-            icon_button(
-                "titlebar.asks",
-                label,
-                &attn_ui::icon::ASKS,
-                IconSize::Large,
-            )
-            .expanded(open)
-            .count((count > 0).then(|| count.to_string()))
-            .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
-            .build(t),
+    let button = El::from(
+        icon_button(
+            "titlebar.asks",
+            label,
+            &attn_ui::icon::ASKS,
+            IconSize::Large,
         )
-        .a11y_value(count.to_string()),
-    )
+        .count((count > 0).then(|| count.to_string()))
+        .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
+        .build(t),
+    );
+    Some(crate::sidebar::opens(button, open, t).a11y_value(count.to_string()))
 }
