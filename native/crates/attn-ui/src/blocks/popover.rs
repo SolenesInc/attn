@@ -84,19 +84,23 @@ impl Popover {
         let head = door::gap(row().w_full().items_start(), Space::S12)
             .child(col().grow(1.0).min_w(0.0).child(title))
             .child(beside);
-        let actions = self
-            .actions
-            .map(|actions| actions.build().el.key(format!("{}.actions", self.key)));
+        let head = door::inset(head, INSET, Space::S0);
+        let actions = self.actions.map(|actions| {
+            door::inset(
+                actions.build().el.key(format!("{}.actions", self.key)),
+                INSET,
+                Space::S0,
+            )
+        });
         let body = (!self.body.is_empty()).then(|| {
-            let viewport = door::inset(spaced(self.body, gap, None), INSET, Space::S0)
+            door::inset(spaced(self.body, gap, None), INSET, Space::S0)
                 .key(format!("{}.body", self.key))
                 .shrink()
                 .min_h(0.0)
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
-                .scroll_bar_styled(crate::scroll_bar(t));
-            door::hang(viewport, INSET)
+                .scroll_bar_styled(crate::scroll_bar(t))
         });
         let surface = door::gap(
             col()
@@ -113,14 +117,14 @@ impl Popover {
             Space::S12,
         );
         Frame::panel(t)
-            .draw_clipped(door::inset(surface, INSET, INSET))
+            .draw_clipped(door::inset(surface, Space::S0, INSET))
             .w(WIDTH)
             .min_h(0.0)
     }
 }
 
-/// The room between a popover's edge and what it holds. Its body scrolls inside that room, so
-/// its scroll bar stands in the room beside the words, never over them.
+/// The room between a popover's sides and what it holds. Its body scrolls with that room
+/// inside it, so its scroll bar stands in the room beside the words, never over them.
 const INSET: Space = Space::S12;
 
 /// A popover is small and close to what opened it: its blocks stand one step apart, closer
