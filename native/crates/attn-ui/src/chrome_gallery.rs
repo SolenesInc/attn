@@ -27,6 +27,10 @@ pub struct Chrome {
 /// its inset on both sides.
 const WIDE: f32 = 240.0 - 2.0 * 6.0;
 const NARROW: f32 = 200.0 - 2.0 * 6.0;
+/// How wide a list in the Automations drawer is, where a select row lives: the drawer at its
+/// share of a 1280-point window and at its narrowest, 420, less its body's 16 points each side.
+const DRAWER_WIDE: f32 = 1280.0 * 0.42 - 2.0 * 16.0;
+const DRAWER_NARROW: f32 = 420.0 - 2.0 * 16.0;
 
 /// The longest names a row meets: a session named after its worktree's folder, and a desktop
 /// named by a person.
@@ -313,6 +317,8 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
         ListRow::new("row.wrapped", "Open the failed run")
             .lead(dot(&t))
             .title("Run failed: connect ECONNREFUSED /tmp/attn-501/daemon.sock")
+            .tag(tag("row.wrapped.tag", "Failed", Tone::Bad, &t))
+            .subtitle("Every day at 09:00", &t)
             .hover_controls(row_controls("row.wrapped"))
             .wrap()
             .build(&t)
@@ -361,7 +367,8 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             .select("row.select.open", "Open Nightly triage", press)
             .selected(s.lit)
             .disabled(s.disabled)
-            .build(&t),
+            .build(&t)
+            .w(if s.narrow { DRAWER_NARROW } else { DRAWER_WIDE }),
         ListRow::new("row.quiet", "Session api-review")
             .title(if s.long { LONG_AGENT } else { "api-review" })
             .subtitle("`~/projects/victor/attn--api-review`", &t)

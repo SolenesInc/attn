@@ -827,3 +827,88 @@ fn a_wrapped_rows_title_keeps_its_controls_room_at_rest_and_never_fades() {
         );
     }
 }
+
+fn overlaps(a: [f32; 4], b: [f32; 4]) -> bool {
+    a[0] < b[0] + b[2] - 0.5
+        && b[0] < a[0] + a[2] - 0.5
+        && a[1] < b[1] + b[3] - 0.5
+        && b[1] < a[1] + a[3] - 0.5
+}
+
+#[test]
+fn no_drawn_part_of_a_row_lies_under_its_hover_controls_in_any_kind_or_state() {
+    let rows = [
+        "row.agent",
+        "row.tile",
+        "row.two",
+        "row.keyed",
+        "row.select",
+        "row.crew",
+        "row.wrapped",
+    ];
+    for variant in ROW_VARIANTS {
+        for key in rows {
+            for by_keyboard in [false, true] {
+                let mut rt = story(true, "Chrome/List row", variant);
+                let row = element(&rt, key);
+                if by_keyboard {
+                    let stop = if key == "row.select" {
+                        "row.select.open"
+                    } else {
+                        key
+                    };
+                    tab_to(&mut rt, stop);
+                } else {
+                    rt.pointer_move(row.rect[0] + 12.0, row.rect[1] + 12.0);
+                }
+                rt.frame(1.0 / 60.0);
+                let all = rt.elements();
+                let Some(controls) = all.iter().position(|e| {
+                    e.key.as_deref() == Some(&format!("{key}.controls.hover"))
+                        || (e.key.as_deref() == Some(&format!("{key}.controls"))
+                            && !all.iter().any(|o| {
+                                o.key.as_deref() == Some(&format!("{key}.controls.hover"))
+                            }))
+                }) else {
+                    panic!("{variant}: {key} shows no hover controls");
+                };
+                let over = all[controls].visible;
+                let row = element(&rt, key);
+                let ancestors = |i: usize| std::iter::successors(all[i].parent, |&p| all[p].parent);
+                let in_row = |i: usize| ancestors(i).any(|p| all[p].path == row.path);
+                for (i, e) in all.iter().enumerate() {
+                    if !in_row(i) || i == controls || ancestors(i).any(|p| p == controls) {
+                        continue;
+                    }
+                    let seen = e.opacity * ancestors(i).map(|p| all[p].opacity).product::<f32>();
+                    let drawn = e.text.is_some() || e.fill.a > 0.01;
+                    let ground = e.text.is_none()
+                        && e.visible[0] <= over[0] + 0.5
+                        && e.visible[0] + e.visible[2] >= over[0] + over[2] - 0.5;
+                    assert!(
+                        !(drawn && !ground && seen > 0.01 && overlaps(e.visible, over)),
+                        "{variant}, by keyboard={by_keyboard}: {} of {key} at {:?} lies under its hover controls at {over:?}",
+                        e.key.as_deref().or(e.text.as_deref()).unwrap_or(&e.path),
+                        e.visible
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn a_select_rows_title_keeps_its_floor_under_its_controls_at_its_narrowest_real_width() {
+    for variant in ROW_VARIANTS {
+        let mut rt = story(true, "Chrome/List row", variant);
+        let row = element(&rt, "row.select");
+        rt.pointer_move(row.rect[0] + 12.0, row.rect[1] + 12.0);
+        rt.frame(1.0 / 60.0);
+        let title = element(&rt, "row.select.title");
+        assert!(
+            title.visible[2] >= TITLE_FLOOR,
+            "{variant}: the select row's title shows {} points under its controls",
+            title.visible[2]
+        );
+    }
+}

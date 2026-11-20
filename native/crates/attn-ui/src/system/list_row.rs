@@ -46,6 +46,12 @@ type Press = Box<dyn FnOnce(El) -> El>;
 /// stands in one column and its title at one inset, whatever list it is in. A row of two lines
 /// sets its title in `Name` over a line in `Small`, its lead, asides and controls centred on the
 /// title's line.
+///
+/// Its width: the inset each side, its lead, the title's floor of 46 points, its always-shown
+/// controls and, while they show, its hover controls. A list narrower than their sum cuts the
+/// title under its floor. The sidebar, 188 points inside at its narrowest, holds a lead and three
+/// hover controls; the Automations drawer, 388 inside at its narrowest, holds a select row with
+/// Run now and three. A fourth hover control in the sidebar at its narrowest is a known shortfall.
 pub struct ListRow {
     key: String,
     label: String,
@@ -248,8 +254,8 @@ impl ListRow {
 
     /// Controls that show at the row's end, on its own ground, while the pointer or the keyboard
     /// is on it. Its asides and badges give way to them, its tags sit under its title, and a
-    /// one-line title ends in a fade before them; always-shown controls stay in view. Up to three
-    /// keep the title's floor at the sidebar's narrowest; a fourth there is a known shortfall.
+    /// one-line title ends in a fade before them, and a wrapping row keeps their room for all its
+    /// lines at rest too. Always-shown controls stay in view.
     pub fn hover_controls(mut self, controls: impl IntoIterator<Item = IconButton>) -> Self {
         self.hover.extend(controls);
         self
@@ -455,10 +461,14 @@ impl ListRow {
             + FADE_ROOM.pt()
             - Space::S8.pt();
         let tagged = !self.tags.is_empty();
-        let under_title = hovering && tagged && !wraps;
+        let under_title = hovering && tagged;
         let title_line = door::gap(row(), Space::S6).w_full().min_w(0.0);
         let (title_line, under) = match (wraps, tagged, under_title) {
-            (true, ..) => (
+            (true, _, true) => (
+                title_line.items_start().children(title),
+                Some(door::gap(row().items_center(), Space::S6).children(self.tags)),
+            ),
+            (true, _, false) => (
                 title_line.items_start().children(title).children(self.tags),
                 None,
             ),
@@ -503,11 +513,31 @@ impl ListRow {
                     .children(self.badges),
             ))
         });
+        let lines = |head: El, under: Option<El>, subtitle: Option<El>| {
+            door::gap(
+                col(),
+                if under.is_some() {
+                    Space::S6
+                } else {
+                    Space::S2
+                },
+            )
+            .grow(1.0)
+            .min_w(0.0)
+            .child(head)
+            .children(under)
+            .children(subtitle)
+        };
+        let (words, under, subtitle) = if wraps {
+            (lines(title_line, under, subtitle), None, None)
+        } else {
+            (title_line.grow(1.0), under, subtitle)
+        };
         let fading = door::gap(row(), Space::S8)
             .grow(1.0)
             .min_w(0.0)
             .items_start()
-            .child(title_line.grow(1.0))
+            .child(words)
             .children(asides)
             .children(badges);
         let fading = match (hovering, wraps) {
@@ -569,22 +599,30 @@ impl ListRow {
             .children(anchor)
             .children(inline);
         let lower = (under.is_some() || subtitle.is_some()).then(|| {
-            let lines = door::gap(col(), Space::S2)
-                .grow(1.0)
-                .min_w(0.0)
-                .children(under)
-                .children(subtitle);
             row()
                 .w_full()
                 .min_w(0.0)
                 .children(has_lead.then(|| row().w(LEAD + Space::S8.pt())))
-                .child(lines)
+                .child(
+                    door::gap(col(), Space::S2)
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .children(under)
+                        .children(subtitle),
+                )
         });
-        let rows = door::gap(col(), if under_title { Space::S6 } else { Space::S2 })
-            .grow(1.0)
-            .min_w(0.0)
-            .child(band_line)
-            .children(lower);
+        let rows = door::gap(
+            col(),
+            if under_title && !wraps {
+                Space::S6
+            } else {
+                Space::S2
+            },
+        )
+        .grow(1.0)
+        .min_w(0.0)
+        .child(band_line)
+        .children(lower);
         let bar = (self.mark == Mark::InView).then(|| {
             let top = (height - BAR.1) / 2.0;
             door::corner(
