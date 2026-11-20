@@ -3,17 +3,15 @@
 
 use attn_protocol::{Harness, HarnessModel};
 use attn_ui::Tokens;
-use attn_ui::blocks::{Actions, Block, Facts, Notice, Prose, Section, Status};
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Key, KeyEvent, Tx, col, row, text};
+use attn_ui::blocks::{Actions, Block, Facts, Inline, List, Notice, Prose, Section, Status};
+use attn_ui::system::{ListRow, Reveal, Segment, Segmented, Size, Type, words};
+use rune::{El, Key, KeyEvent, Tx};
 
 use super::autosave::{self, Codec};
 use super::catalogs::{self, TIER_OVERRIDES};
 use super::harnesses;
 use attn_ui::system::Button;
 
-use super::pages::CAPTION;
 use super::route::{TierInfo, TierOverride, tier_label, tier_overrides};
 use crate::State;
 
@@ -84,15 +82,6 @@ fn joined(provider: &str, model: &str) -> String {
         .join(" / ")
 }
 
-fn caption(key: String, said: String, t: &Tokens) -> El {
-    text(said.clone())
-        .key(key)
-        .label(said)
-        .font(CAPTION)
-        .color(t.text_tertiary)
-        .wrap()
-}
-
 fn model_row(model: &HarnessModel, entries: &[TierOverride], t: &Tokens) -> El {
     let own = entries
         .iter()
@@ -135,151 +124,98 @@ fn model_row(model: &HarnessModel, entries: &[TierOverride], t: &Tokens) -> El {
     if model.name != model.id {
         detail.push_str(&format!(" · {}", model.id));
     }
-    let words = col()
-        .grow(1.0)
-        .min_w(0.0)
-        .gap(4.0)
-        .child(
-            row()
-                .gap(space::S1)
-                .items_center()
-                .child(
-                    text(name.clone())
-                        .key(format!("{key}.name"))
-                        .label(name.clone())
-                        .font(type_::BODY)
-                        .color(t.text_primary),
-                )
-                .children((!mark.is_empty()).then(|| {
-                    text(mark.clone())
-                        .key(format!("{key}.tier"))
-                        .label(mark)
-                        .font(CAPTION)
-                        .color(t.warning)
-                })),
-        )
-        .child(caption(format!("{key}.detail"), detail, t));
-    let mut controls = row().gap(8.0).items_center();
-    if !alias {
+    let tiers = (!alias).then(|| {
         let reset = model.clone();
-        let mut group = row()
-            .key(format!("{key}.tiers"))
-            .role("radiogroup")
-            .label(format!("Tier for {name}"))
-            .focus_group()
-            .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-                if matches!(ev.key, Key::Delete | Key::Backspace) {
-                    set_tier(state, &reset, None, tx);
-                    return true;
-                }
-                false
-            });
-        for (i, tier) in TIERS.into_iter().enumerate() {
-            let model = model.clone();
-            group = group.child(
-                tier_option(
-                    format!("{key}.tier.{tier}"),
-                    tier,
-                    i,
-                    selected.as_deref() == Some(tier),
-                    own.is_some(),
-                    t,
-                )
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    set_tier(state, &model, Some(tier), tx)
-                }),
-            );
-        }
-        controls = controls.child(group);
-    }
-    if own.is_some() {
+        El::from(
+            Segmented::new(format!("{key}.tiers"), format!("Tier for {name}"))
+                .options(TIERS.into_iter().map(|tier| {
+                    let model = model.clone();
+                    Segment::new(format!("{key}.tier.{tier}"), tier_label(tier))
+                        .chosen(selected.as_deref() == Some(tier))
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            set_tier(state, &model, Some(tier), tx)
+                        })
+                }))
+                .build(t),
+        )
+        .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+            if matches!(ev.key, Key::Delete | Key::Backspace) {
+                set_tier(state, &reset, None, tx);
+                return true;
+            }
+            false
+        })
+    });
+    let reset = own.is_some().then(|| {
         let model = model.clone();
-        controls = controls.child(quiet(
+        quiet(
             format!("{key}.reset"),
             &format!("Reset tier for {name}"),
             "Reset",
             t,
             move |state, tx| set_tier(state, &model, None, tx),
-        ));
-    }
-    item(key, &name, t).child(words).child(controls)
-}
-
-/// One of a model's three tiers, as the Tauri app's `.model-tier-radios label`: joined to its
-/// neighbours, the chosen one filled, and drawn in `warning` when it is the user's own.
-fn tier_option(key: String, tier: &str, i: usize, chosen: bool, own: bool, t: &Tokens) -> El {
-    let label = tier_label(tier);
-    let last = i + 1 == TIERS.len();
-    let (ink, fill, edge) = match (chosen, own) {
-        (true, true) => (t.warning, t.bg_button, t.warning),
-        (true, false) => (t.text_primary, t.bg_button, t.border),
-        _ => (t.text_secondary, rune::Color::TRANSPARENT, t.border),
-    };
-    row()
-        .key(key)
-        .role("radio")
-        .label(label.clone())
-        .checked(chosen)
-        .focusable(true)
-        .focus_selected(chosen)
-        .focus_ring(2.0, -2.0, t.accent)
-        .position_in_set(i + 1, TIERS.len())
-        .px(9.0)
-        .py(5.0)
-        .fill(fill)
-        .border_sides([1.0, 1.0, 1.0, if i == 0 { 1.0 } else { 0.0 }], edge)
-        .corners(match (i == 0, last) {
-            (true, _) => [5.0, 0.0, 0.0, 5.0],
-            (_, true) => [0.0, 5.0, 5.0, 0.0],
-            _ => [0.0; 4],
-        })
-        .child(text(label).font(CAPTION).color(ink).a11y_hidden())
+        )
+    });
+    let line = Inline::tight()
+        .children((!mark.is_empty()).then(|| {
+            words(mark.clone(), Type::Small, t.warning)
+                .key(format!("{key}.tier"))
+                .label(mark)
+        }))
+        .child(
+            words(detail.clone(), Type::Small, t.text_tertiary)
+                .key(format!("{key}.detail"))
+                .label(detail)
+                .wrap(),
+        );
+    item(&key, &name, t)
+        .subtitle_el(line)
+        .controls(tiers.into_iter().chain(reset), Reveal::Always)
+        .build(t)
 }
 
 /// A model's line in its harness's list, as the Tauri app's `.model-tier-row`: no card, a
 /// hairline under it.
-fn item(key: String, name: &str, t: &Tokens) -> El {
-    row()
-        .key(key)
-        .role("group")
-        .label(name.to_owned())
-        .w_full()
-        .gap(12.0)
-        .items_center()
-        .py(11.0)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+/// A still, wrapping row of a models list, its name keyed `{key}.name`.
+fn item(key: &str, name: &str, t: &Tokens) -> ListRow {
+    ListRow::new(key.to_owned(), name.to_owned())
+        .still()
+        .wrap()
+        .title_el(
+            words(name.to_owned(), Type::Body, t.text_primary)
+                .key(format!("{key}.name"))
+                .label(name.to_owned())
+                .wrap_anywhere()
+                .w_full()
+                .min_w(0.0),
+        )
 }
 
 fn orphan_row(entry: &TierOverride, t: &Tokens) -> El {
     let name = joined(&entry.provider, &entry.model);
     let key = format!("settings.models.{}.orphan.{name}", entry.harness);
     let removed = entry.clone();
-    item(key.clone(), &name, t)
-        .child(
-            col()
-                .grow(1.0)
-                .min_w(0.0)
-                .gap(space::S1)
-                .child(
-                    text(name.clone())
-                        .key(format!("{key}.name"))
-                        .label(name)
-                        .font(type_::BODY)
-                        .color(t.text_primary),
-                )
-                .child(caption(
-                    format!("{key}.detail"),
-                    format!("Your tier: {}", entry.tier),
-                    t,
-                )),
+    let detail = format!("Your tier: {}", entry.tier);
+    item(&key, &name, t)
+        .subtitle_el(
+            Inline::tight().child(
+                words(detail.clone(), Type::Small, t.text_tertiary)
+                    .key(format!("{key}.detail"))
+                    .label(detail)
+                    .wrap(),
+            ),
         )
-        .child(quiet(
-            format!("{key}.remove"),
-            "Remove",
-            "Remove",
-            t,
-            move |state, tx| remove(state, &removed, tx),
-        ))
+        .controls(
+            [quiet(
+                format!("{key}.remove"),
+                "Remove",
+                "Remove",
+                t,
+                move |state, tx| remove(state, &removed, tx),
+            )],
+            Reveal::Always,
+        )
+        .build(t)
 }
 
 fn default_name(
@@ -362,13 +298,11 @@ fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: 
             .push(Status::new(format!("{key}.discovering"), "Discovering models…", true).build(t));
     }
     if !models.is_empty() {
-        section = section.push(Block::custom(
-            format!("{key}.models"),
-            col()
-                .w_full()
-                .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-                .children(models.iter().map(|m| model_row(m, entries, t))),
-        ));
+        section = section.push(
+            List::new(format!("{key}.models"), format!("{} models", harness.name))
+                .rows(models.iter().map(|m| model_row(m, entries, t)))
+                .build(t),
+        );
     }
     let shows_orphans = !harness.discovery
         || found.catalog.is_some()
@@ -392,12 +326,11 @@ fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: 
         };
         section = section.push(
             Section::new(format!("{key}.orphans"), title)
-                .push(Block::custom(
-                    format!("{key}.orphans.list"),
-                    col()
-                        .w_full()
-                        .children(orphans.into_iter().map(|e| orphan_row(e, t))),
-                ))
+                .push(
+                    List::new(format!("{key}.orphans.list"), title)
+                        .rows(orphans.into_iter().map(|e| orphan_row(e, t)))
+                        .build(t),
+                )
                 .build(t),
         );
     }
@@ -427,22 +360,18 @@ fn missing_harnesses(listed: &[Harness], entries: &[TierOverride], t: &Tokens) -
                 joined(&entry.provider, &entry.model)
             );
             let removed = entry.clone();
-            item(key.clone(), &said, t)
-                .child(
-                    text(said.clone())
-                        .key(format!("{key}.name"))
-                        .label(said)
-                        .font(type_::BODY)
-                        .color(t.text_primary)
-                        .grow(1.0),
+            item(&key, &said, t)
+                .controls(
+                    [quiet(
+                        format!("{key}.remove"),
+                        "Remove",
+                        "Remove",
+                        t,
+                        move |state, tx| remove(state, &removed, tx),
+                    )],
+                    Reveal::Always,
                 )
-                .child(quiet(
-                    format!("{key}.remove"),
-                    "Remove",
-                    "Remove",
-                    t,
-                    move |state, tx| remove(state, &removed, tx),
-                ))
+                .build(t)
         })
         .collect();
     Some(
@@ -450,10 +379,11 @@ fn missing_harnesses(listed: &[Harness], entries: &[TierOverride], t: &Tokens) -
             "settings.block.models-missing",
             "Harnesses no longer reported",
         )
-        .push(Block::custom(
-            "settings.models.missing",
-            col().w_full().children(rows),
-        ))
+        .push(
+            List::new("settings.models.missing", "Harnesses no longer reported")
+                .rows(rows)
+                .build(t),
+        )
         .build(t),
     )
 }
@@ -485,6 +415,7 @@ fn quiet(
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
     Button::new(shown)
+        .size(Size::Compact)
         .on_press_tx(press)
         .build(t)
         .key(key)
