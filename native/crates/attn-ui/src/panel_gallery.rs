@@ -23,6 +23,7 @@ pub struct Panels {
     pub size: Drawer,
     pub loading: bool,
     pub failed: bool,
+    pub pinned: bool,
     pub empty: bool,
     pub bare: bool,
     pub keys: bool,
@@ -65,7 +66,10 @@ pub const PANEL_SUBJECTS: &[(&str, &[&str])] = &[
 
 /// The variants each panel story has beyond the common ones, as the state sheets draw them.
 pub const PANEL_VARIANTS: &[(&str, &[&str])] = &[
-    ("Panels/Sheet", &["Loading", "Failed"]),
+    (
+        "Panels/Sheet",
+        &["Loading", "Failed", "Notice", "Smallest notice"],
+    ),
     ("Panels/List", &["Empty", "Failed", "Bare", "Keys"]),
     ("Panels/Inspector", &["Empty"]),
     ("Panels/Ask chip", &["Several"]),
@@ -77,6 +81,7 @@ const LIST_HEIGHT: f32 = 480.0;
 
 const LONG_TITLE: &str = "Review every pull request the release train touches before it leaves";
 const LONG_LINE: &str = "Scheduled — 0 9 * * 1-5 (Europe/Stockholm) · /Users/someone/projects/a-very-long-worktree-basename--with-its-branch";
+const LONG_CONFLICT: &str = "This automation changed on disk since you opened it: another window or an agent saved it while you were editing here";
 const LONG_ERROR: &str = "automation_runs_get failed: the daemon could not read the run history because the database is locked by another writer; try again in a moment";
 
 pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
@@ -84,7 +89,13 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
         .story(
             common(Story::new("Panels/Sheet", Panels::default, sheet))
                 .variant("Loading", |s| s.loading = true)
-                .variant("Failed", |s| s.failed = true),
+                .variant("Failed", |s| s.failed = true)
+                .variant("Notice", |s| s.pinned = true)
+                .variant("Smallest notice", |s| {
+                    s.size = Drawer::Smallest;
+                    s.long = true;
+                    s.pinned = true;
+                }),
         )
         .story(
             common(Story::new("Panels/Inspector", Panels::default, inspector))
@@ -172,7 +183,37 @@ fn sheet(s: &Panels, cx: &mut Cx<Panels>) -> El {
             &t,
             |s: &mut Panels, _: &mut Tx| s.on = !s.on,
         ))
-        .close(close(&t));
+        .close(close(&t))
+        .notices(s.pinned.then(|| {
+            Notice::warn(
+                "sheet.conflict",
+                if s.long {
+                    LONG_CONFLICT
+                } else {
+                    "This automation changed since you opened it."
+                },
+            )
+            .action(
+                Inline::loose()
+                    .child(El::from(
+                        Button::new("Reload")
+                            .size(Size::Compact)
+                            .look(Look::Plain)
+                            .on_press_tx(noop)
+                            .build(&t)
+                            .key("sheet.reload"),
+                    ))
+                    .child(El::from(
+                        Button::new("Overwrite anyway")
+                            .size(Size::Compact)
+                            .look(Look::Plain)
+                            .on_press_tx(noop)
+                            .build(&t)
+                            .key("sheet.overwrite"),
+                    )),
+            )
+            .build(&t)
+        }));
     let sheet = if s.loading {
         sheet.push(
             Prose::lead("sheet.loading", "Loading…")

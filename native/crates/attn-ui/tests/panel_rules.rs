@@ -93,6 +93,18 @@ fn a_sheets_title_line_and_footer_stay_in_view_whatever_its_body_holds() {
             body[1] >= bottom(header) - SLACK && body[3] > 0.0,
             "{variant}: the body at {body:?} is not under the title line at {header:?}"
         );
+        if let Some(notices) = rt.playground_element("sheet.notices") {
+            assert!(
+                notices.rect[1] >= bottom(header) - SLACK
+                    && bottom(notices.rect) <= body[1] + SLACK,
+                "{variant}: the notices at {:?} are not between the title line and the body",
+                notices.rect
+            );
+            assert!(
+                holds(notices.rect, element(&rt, "sheet.overwrite").rect),
+                "{variant}: the notice's controls leave its band"
+            );
+        }
         if let Some(footer) = rt.playground_element("sheet.actions") {
             assert!(
                 (bottom(footer.rect) - bottom(sheet)).abs() <= SLACK,

@@ -6,8 +6,8 @@ use crate::Tokens;
 use crate::system::{Radius, Said, Space, Type, door, words};
 
 /// A panel beside the content, such as a drawer or a form: its title with controls beside it
-/// and its close button, then its blocks in a column that scrolls, and a footer that stays in
-/// view under them.
+/// and its close button, then what went wrong that must stay in view, then its blocks in a
+/// column that scrolls, and a footer that stays in view under them.
 pub struct Sheet {
     key: String,
     title: Said,
@@ -16,6 +16,7 @@ pub struct Sheet {
     close: Option<El>,
     head: Option<El>,
     top: Option<El>,
+    notices: Vec<Block>,
     fill: Option<El>,
     framed: bool,
     fits: Option<f32>,
@@ -27,8 +28,8 @@ pub struct Sheet {
 }
 
 impl Sheet {
-    /// `key` names the sheet, `{key}.header` its title line, `{key}.body` the column that
-    /// scrolls and `{key}.actions` its footer.
+    /// `key` names the sheet, `{key}.header` its title line, `{key}.notices` what stays in view
+    /// over its body, `{key}.body` the column that scrolls and `{key}.actions` its footer.
     pub fn new(key: impl Into<String>, title: impl Into<Said>) -> Sheet {
         Sheet {
             key: key.into(),
@@ -38,6 +39,7 @@ impl Sheet {
             close: None,
             head: None,
             top: None,
+            notices: Vec::new(),
             fill: None,
             framed: false,
             fits: None,
@@ -123,6 +125,13 @@ impl Sheet {
         self
     }
 
+    /// What went wrong that the person must see wherever the body is scrolled, with what
+    /// recovers from it, such as a save that failed: under the top, over the body.
+    pub fn notices(mut self, blocks: impl IntoIterator<Item = Block>) -> Self {
+        self.notices.extend(blocks);
+        self
+    }
+
     pub fn push(mut self, block: Block) -> Self {
         self.blocks.push(block);
         self
@@ -170,6 +179,16 @@ impl Sheet {
             door::frame(top, Space::S4, Space::S16, Space::S4)
                 .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
                 .shrink()
+        });
+        let notices = (!self.notices.is_empty()).then(|| {
+            door::frame(
+                spaced(self.notices, inner_gap, None),
+                Space::S12,
+                Space::S16,
+                Space::S12,
+            )
+            .key(format!("{key}.notices"))
+            .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         });
         let body = match self.fill {
             Some(body) => body.key(format!("{key}.body")).grow(1.0).min_h(0.0),
@@ -219,6 +238,7 @@ impl Sheet {
         let sheet = sheet
             .child(header)
             .children(top)
+            .children(notices)
             .child(body)
             .children(footer);
         if self.framed {

@@ -2929,6 +2929,79 @@ fn notebook_note(dark: bool) {
     snap(&mut world, "notebook-note", dark);
 }
 
+/// A long note: a title, then sixty sections of a heading and a paragraph.
+fn long_note() -> String {
+    let sections: String = (1..=60)
+        .map(|i| format!("## Step {i}\n\nWhat step {i} changes, and why it comes here.\n\n"))
+        .collect();
+    format!("---\ntype: note\n---\n# The plan\n\n{sections}")
+}
+
+#[derive(Clone, Copy)]
+enum Failure {
+    Conflict,
+    WriteError,
+}
+
+/// `index.md`, a long note, in the fullscreen notebook or editor tile `n` alone, scrolled far
+/// down and typed into there, after the save of that edit found the file changed on disk or could not write it.
+fn notebook_failed_save(dark: bool, tile: bool, failure: Failure) {
+    let daemon = notebook_daemon(dark, (!tile).then(|| document_tile("m", "/repo/plan.md")));
+    daemon
+        .on("fs_read", |req: &Request| {
+            json!({ "event": "fs_read_result", "success": true,
+                "result": { "path": req["path"], "content": long_note(), "hash": "h1" } })
+        })
+        .on("fs_write", move |req: &Request| match failure {
+            Failure::Conflict => json!({ "event": "fs_write_result", "success": true,
+                "result": { "path": req["path"], "conflict": true, "current_hash": "h2" } }),
+            Failure::WriteError => json!({ "event": "fs_write_result", "success": false,
+                "error": "fs_write: no space left on device" }),
+        });
+    let mut world = start(daemon);
+    let notebook = if tile {
+        world.gesture(|app| app.press("escape"));
+        "notebook.tile.n"
+    } else {
+        world
+            .automate("run", json!({ "name": "notebook.openFullscreen" }))
+            .unwrap();
+        world.settle();
+        "notebook"
+    };
+    unfold_tree(&mut world, notebook);
+    world.gesture(|app| app.click(Target::key(format!("{notebook}.file.index.md"))));
+    let scroll = format!("{notebook}.scroll");
+    let [x, y, w, h] = world.screen().bounds(Target::key(&scroll)).unwrap();
+    world.gesture(|app| app.runtime.wheel(x + w / 2.0, y + h / 2.0, -4000.0));
+    let line = world
+        .screen()
+        .descendants(Target::key(&scroll))
+        .into_iter()
+        .filter_map(|n| n.key)
+        .filter(|k| k.starts_with(&format!("{notebook}.editor.line.")))
+        .find(|k| {
+            world
+                .screen()
+                .bounds(Target::key(k))
+                .is_some_and(|[_, top, _, _]| top > y + h / 2.0 && top < y + h - 40.0)
+        })
+        .expect("a line of the note in view");
+    world.gesture(|app| {
+        app.click(Target::key(line));
+        app.press("end");
+        app.type_text(" Typed far down.");
+    });
+    world.advance(std::time::Duration::from_millis(700));
+    let name = match (tile, failure) {
+        (false, Failure::Conflict) => "notebook-conflict",
+        (false, Failure::WriteError) => "notebook-save-error",
+        (true, Failure::Conflict) => "notebook-tile-conflict",
+        (true, Failure::WriteError) => "notebook-tile-save-error",
+    };
+    snap(&mut world, name, dark);
+}
+
 /// The notebook's finder over the open note.
 fn notebook_finder(dark: bool) {
     let mut world = notebook_open(dark);
@@ -7534,6 +7607,16 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("notebook_tile_empty", || notebook_tile_empty(dark));
         scene("notebook_tile_note", || notebook_tile_note(dark));
         scene("notebook_tile_finder", || notebook_tile_finder(dark));
+        for (tile, failure) in [
+            (false, Failure::Conflict),
+            (false, Failure::WriteError),
+            (true, Failure::Conflict),
+            (true, Failure::WriteError),
+        ] {
+            scene("notebook_failed_save", || {
+                notebook_failed_save(dark, tile, failure)
+            });
+        }
         scene("merge_confirmation", || merge_confirmation(dark));
         scene("desktop_naming", || desktop_naming(dark));
         scene("crew_smallest", || crew_smallest(dark));

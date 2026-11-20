@@ -331,3 +331,111 @@ fn a_conflicted_pop_out_draft_waiting_under_an_edited_tile_shows_there_once_that
     world.advance(Duration::from_secs(7));
     assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
 }
+
+#[derive(Clone, Copy)]
+enum Failure {
+    Conflict,
+    WriteError,
+}
+
+/// Opens the index, a long note, at its second `## Steps`, types there and lets the save fail.
+/// The failure, and each control that recovers from it, is fully inside the document and
+/// outside the part that scrolls, and the caret and the scroll stay where the typing left them.
+fn a_failed_save_far_down_a_long_note_stays_in_view(document: &str, failure: Failure) {
+    let disk = Disk::with(&[("knowledge/index.md", &twice_titled_note())]);
+    let mut world = if document == "notebook" {
+        let mut world = start(&disk);
+        open_fullscreen(&mut world);
+        world
+    } else {
+        let params = r#"{"path":"knowledge/index.md"}"#;
+        let mut world = start_with(&disk, Some(row(vec![pane("a"), editor_tile("n", params)])));
+        world.gesture(|d| d.click(Target::key(&format!("{document}.fold.tree"))));
+        world.gesture(|d| d.click(Target::key(&format!("{document}.fold.rail"))));
+        world
+    };
+    let (scroll, editor) = (format!("{document}.scroll"), format!("{document}.editor"));
+    world.gesture(|d| d.click(Target::key(&format!("{document}.outline.2"))));
+    match failure {
+        Failure::Conflict => disk.put("knowledge/index.md", "changed elsewhere\n"),
+        Failure::WriteError => {
+            world.daemon.answer_in_turn(
+                "fs_write",
+                [Answer::Reply(
+                    json!({ "event": "fs_write_result", "success": false, "error": "disk full" }),
+                )],
+            );
+        }
+    }
+    world.gesture(|d| d.type_text("Far down. "));
+    let screen = world.screen();
+    let typed = (
+        screen.get(Target::key(&editor)).selection,
+        screen.scrolled(Target::key(&scroll)),
+    );
+    assert!(typed.1.unwrap_or(0.0) > 500.0, "{typed:?}");
+
+    world.advance(Duration::from_millis(700));
+
+    let screen = world.screen();
+    let alert = match failure {
+        Failure::Conflict => format!("{document}.document.conflict"),
+        Failure::WriteError => "notebook.save-error".to_owned(),
+    };
+    let mut shown = vec![alert.clone()];
+    if let Failure::Conflict = failure {
+        shown.push(format!("{document}.document.reload"));
+        shown.push(format!("{document}.document.overwrite"));
+    }
+    assert_eq!(screen.get(Target::key(&alert)).role, "alert");
+    let [dx, dy, dw, dh] = screen
+        .bounds(Target::key(&format!("{document}.document")))
+        .unwrap();
+    let scrolled = screen.descendants(Target::key(&scroll));
+    for key in &shown {
+        let [x, y, w, h] = screen.bounds(Target::key(key)).unwrap();
+        assert!(
+            x >= dx && y >= dy && x + w <= dx + dw && y + h <= dy + dh,
+            "{key} at {:?} is not inside the document at {:?}",
+            [x, y, w, h],
+            [dx, dy, dw, dh]
+        );
+        assert!(
+            !scrolled
+                .iter()
+                .any(|n| n.key.as_deref() == Some(key.as_str())),
+            "{key} scrolls with the note"
+        );
+    }
+    assert_eq!(
+        (
+            screen.get(Target::key(&editor)).selection,
+            screen.scrolled(Target::key(&scroll)),
+        ),
+        typed
+    );
+    if let Failure::Conflict = failure {
+        world.advance(Duration::from_secs(1));
+        assert!(world.runtime_is_at_rest());
+    }
+}
+
+#[test]
+fn a_conflict_far_down_a_long_note_shows_with_its_controls_where_the_user_is() {
+    a_failed_save_far_down_a_long_note_stays_in_view("notebook", Failure::Conflict);
+}
+
+#[test]
+fn a_write_error_far_down_a_long_note_shows_where_the_user_is() {
+    a_failed_save_far_down_a_long_note_stays_in_view("notebook", Failure::WriteError);
+}
+
+#[test]
+fn a_conflict_far_down_a_long_note_in_an_editor_tile_shows_with_its_controls_where_the_user_is() {
+    a_failed_save_far_down_a_long_note_stays_in_view("notebook.tile.n", Failure::Conflict);
+}
+
+#[test]
+fn a_write_error_far_down_a_long_note_in_an_editor_tile_shows_where_the_user_is() {
+    a_failed_save_far_down_a_long_note_stays_in_view("notebook.tile.n", Failure::WriteError);
+}

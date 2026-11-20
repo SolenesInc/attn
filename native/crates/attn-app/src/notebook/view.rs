@@ -516,8 +516,8 @@ fn open_view(id: &SurfaceId, open: &Open, t: &Tokens) -> El {
         .head(head)
         .top(top)
         .article(key(id, "scroll"), title)
-        .push_all(conflict(id, open, t))
-        .push_all(save_error(open, t))
+        .notices(conflict(id, open, t))
+        .notices(save_error(open, t))
         .push(Block::custom(key(id, "editor.block"), editor))
         .build(t)
 }
