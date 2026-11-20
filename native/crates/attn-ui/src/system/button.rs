@@ -261,12 +261,13 @@ impl Button {
             door::inset(button, self.size.inset(), Space::S0)
         };
         let button = match self.joined {
-            Some(join) => door::corner_joined(button, Radius::Control, join),
-            None => door::corner(button, Radius::Control),
+            Some(join) => focus::ring_inside(door::corner_joined(button, Radius::Control, join), t),
+            None => focus::ring(door::corner(button, Radius::Control), t),
         };
-        let button = focus::ring(button, t);
         let button = if self.unavailable && self.look == Look::Primary {
             button
+        } else if self.unavailable && self.joined.is_some() {
+            focus::ring_inside(disabled::faded(button), t)
         } else if self.unavailable {
             focus::ring(disabled::faded(button), t)
         } else if self.disabled && self.look == Look::Primary {

@@ -31,3 +31,12 @@ pub(crate) fn ring_within(e: El, t: &Tokens) -> El {
 pub(crate) fn ring_on_edge(e: El, t: &Tokens) -> El {
     e.focus_ring(WIDTH, -1.0, t.warning)
 }
+
+/// The ring of a control joined to a neighbour that shares its edge, drawn just inside its own
+/// edge, where the neighbour never paints over it.
+pub(crate) fn ring_inside(e: El, t: &Tokens) -> El {
+    e.focus_ring(WIDTH, -(WIDTH + EDGE), t.warning)
+}
+
+/// A control's edge, which a joined neighbour draws over.
+const EDGE: f32 = 1.0;

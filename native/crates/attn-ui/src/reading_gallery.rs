@@ -23,6 +23,18 @@ pub struct Reading {
     pub width: Width,
     pub lit: bool,
     pub faded: bool,
+    pub off: Off,
+}
+
+/// Which of a split control's halves can't act.
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+pub enum Off {
+    #[default]
+    Neither,
+    /// The action and its menu.
+    Both,
+    /// Only the menu.
+    Menu,
 }
 
 /// How wide the story's reader is.
@@ -62,7 +74,7 @@ pub const READING_SUBJECTS: &[(&str, &[&str], &[&str])] = &[
     ("Blocks/KeyLine", &["keys"], &[]),
     ("Blocks/Figure", &["figure"], &[]),
     ("Blocks/Toolbar", &["toolbar"], &[]),
-    ("Blocks/Split", &["split"], &[]),
+    ("Blocks/Split", &["split"], &["Disabled", "Disabled menu"]),
 ];
 
 const LONG_TITLE: &str = "Move the reading surfaces onto blocks so the garden, the review reader and the markdown reader share one system";
@@ -77,6 +89,8 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
             let story = extra.iter().fold(story, |story, &variant| match variant {
                 "Lit" => story.variant("Lit", |s| s.lit = true),
                 "Faded" => story.variant("Faded", |s| s.faded = true),
+                "Disabled" => story.variant("Disabled", |s| s.off = Off::Both),
+                "Disabled menu" => story.variant("Disabled menu", |s| s.off = Off::Menu),
                 _ => story,
             });
             playground.story(story)
@@ -641,6 +655,7 @@ fn split_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
         Button::mark(crate::glyph::CARET_DOWN, IconSize::Small)
             .size(Size::Compact)
             .joined(Join::Previous)
+            .disabled(s.off != Off::Neither)
             .on_press_tx(noop)
             .build(&t)
             .key(key)
@@ -655,6 +670,7 @@ fn split_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
             "to Alder"
         })
         .joined(Join::Next)
+        .disabled(s.off == Off::Both)
         .on_press_tx(noop)
         .build(&t)
         .key("split.send")

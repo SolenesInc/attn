@@ -725,11 +725,24 @@ fn block_sheet(story: &str) -> String {
     format!("block-{name}")
 }
 
+/// The parts of a block the keyboard reaches one at a time, each focused in its own row of the
+/// block's sheet: its story, the row's name and the part's key after the block's.
+const HALVES: &[(&str, &str, &str)] = &[
+    ("Blocks/Split", "Focus action", ".send"),
+    ("Blocks/Split", "Focus menu", ".send.menu"),
+];
+
 fn shoot_block(story: &str, key: &str, extra: &[State], dark: bool, out: &Path) {
     let mut rows: Vec<(String, Column)> = vec![
         ("Rest".into(), column("", "Rest", Gesture::None)),
         ("Focus (Tab)".into(), column("", "Rest", Gesture::Tab)),
     ];
+    rows.extend(
+        HALVES
+            .iter()
+            .filter(|(of, ..)| *of == story)
+            .map(|&(_, name, aim)| (name.to_owned(), aimed("", "Rest", Gesture::Tab, aim))),
+    );
     rows.extend(extra.iter().flat_map(|&State(v, aim)| {
         [
             (v.to_owned(), column("", v, Gesture::None)),
