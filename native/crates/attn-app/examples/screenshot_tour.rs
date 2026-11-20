@@ -2969,8 +2969,15 @@ fn notebook_failed_save(dark: bool, tile: bool, failure: Failure) {
         world.settle();
         "notebook"
     };
+    let folded = world
+        .screen()
+        .find(Target::key(format!("{notebook}.files")))
+        .is_none();
     unfold_tree(&mut world, notebook);
     world.gesture(|app| app.click(Target::key(format!("{notebook}.file.index.md"))));
+    if folded {
+        world.gesture(|app| app.click(Target::key(format!("{notebook}.fold.tree"))));
+    }
     let scroll = format!("{notebook}.scroll");
     let [x, y, w, h] = world.screen().bounds(Target::key(&scroll)).unwrap();
     world.gesture(|app| app.runtime.wheel(x + w / 2.0, y + h / 2.0, -4000.0));
