@@ -326,7 +326,7 @@ pub(crate) fn chief_setup_row(
             t,
         ))
         .title(chief.name.clone())
-        .aside(words(pill, Type::Label, t.brand).key(format!("{key}.pill")))
+        .aside(system::pill(format!("{key}.pill"), pill, t))
         .disabled(chief.busy)
         .build(t)
         .a11y_value(phase);
