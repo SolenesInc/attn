@@ -2359,7 +2359,7 @@ fn a_crowded_queue_bar_keeps_the_window_s_desktop_and_gathers_the_rest_into_the_
         .bounds(Target::key("titlebar.right"))
         .unwrap();
     assert!(x + w <= toolbar, "the extras chip stays off the toolbar");
-    let [bx, _, bw, _] = world
+    let [bx, by, bw, _] = world
         .runtime()
         .elements()
         .into_iter()
@@ -2370,6 +2370,10 @@ fn a_crowded_queue_bar_keeps_the_window_s_desktop_and_gathers_the_rest_into_the_
         bx + bw <= toolbar,
         "the extras chip's count ends at {} over the toolbar at {toolbar}",
         bx + bw
+    );
+    assert!(
+        by >= 0.0,
+        "the extras chip's count rises past the bar's top edge to {by}"
     );
     let [_, _, pill, _] = world
         .screen()

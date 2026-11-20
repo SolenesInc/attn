@@ -13,7 +13,7 @@ pub enum Size {
 }
 
 impl Size {
-    pub(crate) const fn height(self) -> f32 {
+    pub const fn height(self) -> f32 {
         match self {
             Size::Regular => 32.0,
             Size::Compact => 26.0,

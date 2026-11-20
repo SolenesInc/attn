@@ -193,7 +193,7 @@ fn waiting_mark(chip: &str, waiting: usize, look: Look, t: &Tokens) -> Option<El
         Look::Bar => system::count_badge(waiting, t.warning, attn_ui::warning_ink(t))
             .key(format!("{chip}.waiting"))
             .role("none")
-            .pin(None, Some(-BADGE_OVERHANG), Some(-BADGE_OVERHANG), None)
+            .pin(None, Some(-BADGE_RISE), Some(-BADGE_OVERHANG), None)
             .inert(),
     })
 }
@@ -612,3 +612,7 @@ const CRITICAL_STRIP_MAX_W: f32 = 260.0;
 /// `.queue-bar-desktop-waiting` at -6; the bar keeps as much room after its last chip, so the
 /// count never lies over the toolbar.
 const BADGE_OVERHANG: f32 = 6.0;
+
+/// How far the bar's waiting count rises above its chip: the room between the chip and the
+/// bar's top edge, so the count is never cut by the bar.
+const BADGE_RISE: f32 = (crate::shell::TITLE_BAR_HEIGHT - system::Size::Compact.height()) / 2.0;
