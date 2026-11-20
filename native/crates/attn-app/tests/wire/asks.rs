@@ -885,6 +885,26 @@ fn an_agents_open_ask_shows_in_its_tile_header_previews_on_rest_and_opens_in_the
 }
 
 #[test]
+fn a_long_choice_wraps_inside_the_preview_in_the_smallest_window() {
+    let mut ask = cache_store();
+    let choices = &mut ask.parts[1].question.as_mut().unwrap().choices;
+    choices[0].label =
+        "Postgres-build-and-release-platform-本番の権限を移行する作業ツリー-tokyo-region-primary"
+            .into();
+    let mut world = start(vec![ask], vec![api_working()]);
+    world.resize((533.0, 400.0));
+    world.open_desktop();
+    rest_on(&mut world, "tile.p0.ask");
+    world.advance(Duration::from_millis(160));
+    let preview = world.rect("tile.p0.ask.popover");
+    let name = world.rect("asks.preview.a-cache1.q.0.choice.0.name");
+    assert!(
+        name[0] >= preview[0] && name[0] + name[2] <= preview[0] + preview[2],
+        "the choice's name {name:?} runs out of the preview {preview:?}"
+    );
+}
+
+#[test]
 fn the_preview_stays_closed_when_the_agent_asks_again_after_its_last_ask_closed_under_the_pointer()
 {
     let mut world = start(vec![cache_store()], vec![api_working()]);

@@ -425,3 +425,43 @@ fn a_scrolling_list_s_key_names_the_node_that_scrolls() {
         );
     }
 }
+
+#[test]
+fn an_ask_chip_draws_as_wide_as_it_says_with_its_mark_a_step_in_from_every_edge() {
+    use attn_ui::panel_gallery::{Drawer, Panels, ask_chip};
+    let cases = [
+        ("Rest", Drawer::Wide, false, false),
+        ("Long", Drawer::Wide, true, false),
+        ("Narrow", Drawer::Narrow, false, false),
+        ("Narrow long", Drawer::Narrow, true, false),
+        ("Smallest long", Drawer::Smallest, true, false),
+        ("Several", Drawer::Wide, false, true),
+    ];
+    for (variant, size, long, several) in cases {
+        let rt = story("Panels/Ask chip", variant);
+        let chip = element(&rt, "askchip");
+        let said = ask_chip(&Panels {
+            size,
+            long,
+            several,
+            ..Panels::default()
+        })
+        .width();
+        assert!(
+            (chip.rect[2] - said).abs() <= SLACK,
+            "{variant}: the chip draws {} wide and says {said}",
+            chip.rect[2]
+        );
+        let mark = within(&rt, &chip)
+            .into_iter()
+            .min_by(|a, b| a.rect[0].total_cmp(&b.rect[0]))
+            .expect("the chip draws its mark");
+        let start = mark.rect[0] - chip.rect[0];
+        let top = mark.rect[1] - chip.rect[1];
+        let end = bottom(chip.rect) - bottom(mark.rect);
+        assert!(
+            (start - top).abs() <= SLACK && (top - end).abs() <= SLACK,
+            "{variant}: the mark stands {start} in from the start, {top} from the top and {end} from the bottom"
+        );
+    }
+}

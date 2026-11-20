@@ -3617,13 +3617,21 @@ fn asks_empty(dark: bool) {
 /// with a description, Other and the note.
 fn asks_choices(dark: bool) {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    state.asks = Some(vec![cache_ask("s1")]);
+    let mut world = start(scripted().state(state));
+    press(&mut world, Action::DockAsks);
+    snap(&mut world, "asks-choices", dark);
+}
+
+/// The ask of a one-choice question, its choices described and one recommended, from `session`.
+fn cache_ask(session: &str) -> Ask {
     let choice = |label: &str, description: &str| AskChoice {
         label: label.into(),
         description: Some(description.into()),
     };
-    state.asks = Some(vec![Ask {
+    Ask {
         id: "a-cache".into(),
-        session_id: "s1".into(),
+        session_id: session.into(),
         subject: "Cache store".into(),
         base_dir: "/repo".into(),
         created_at: "2026-11-17T09:00:00Z".into(),
@@ -3653,10 +3661,43 @@ fn asks_choices(dark: bool) {
             },
         ],
         ..Ask::default()
-    }]);
+    }
+}
+
+/// The preview of agent `a`'s two open asks, a choice and a written answer, under the pointer
+/// resting on its tile's ask chip, which counts the second.
+fn asks_preview(dark: bool) {
+    let mut state = tended_agent(dark);
+    state.asks = Some(vec![
+        cache_ask("s0"),
+        Ask {
+            id: "a-name".into(),
+            session_id: "s0".into(),
+            subject: "Release name".into(),
+            base_dir: "/repo".into(),
+            created_at: "2026-11-17T09:05:00Z".into(),
+            parts: vec![AskPart {
+                question: Some(AskQuestion {
+                    key: "name".into(),
+                    kind: "text".into(),
+                    prompt: "What should the release be called?".into(),
+                    ..AskQuestion::default()
+                }),
+                ..AskPart::default()
+            }],
+            ..Ask::default()
+        },
+    ]);
     let mut world = start(scripted().state(state));
-    press(&mut world, Action::DockAsks);
-    snap(&mut world, "asks-choices", dark);
+    world.gesture(|app| {
+        let chip = app
+            .runtime
+            .find("tile.a.ask")
+            .expect("the ask chip is laid out");
+        app.move_to(chip);
+    });
+    world.advance(std::time::Duration::from_secs(1));
+    snap(&mut world, "asks-preview", dark);
 }
 
 fn notebook(dark: bool) {
@@ -6060,6 +6101,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("asks", || asks(dark));
         scene("asks_empty", || asks_empty(dark));
         scene("asks_choices", || asks_choices(dark));
+        scene("asks_preview", || asks_preview(dark));
         scene("notebook", || notebook(dark));
         scene("notebook_tree", || notebook_tree(dark));
         scene("review_keys", || review_keys(dark));

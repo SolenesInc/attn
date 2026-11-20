@@ -2,16 +2,14 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use attn_protocol::{Ask, AskAnswer, AskQuestion, AskSeedMention, Session};
-use attn_ui::blocks::{Block, Inline, List, Section, Sheet, Stack};
+use attn_ui::blocks::{Block, Inline, List, Popover, Section, Sheet, Stack};
 use attn_ui::system::{
-    Button, Choice, DotShape, DotSize, FieldState, IconSize, ListRow, Look, Size, Tone, Type,
-    answers, area_box, checks, count_badge, dot, icon_button, keycaps, keys_hint, line_box, tag,
-    words,
+    AskChip, Button, Choice, DotShape, DotSize, FieldState, IconSize, ListRow, Look, Size, Tone,
+    Type, answers, area_box, ask_mark, checks, count_badge, dot, icon_button, keycaps, keys_hint,
+    line_box, tag, words,
 };
-use attn_ui::type_;
 use attn_ui::{Tokens, glyph};
-use rune::tok::space;
-use rune::{El, Image, Key, KeyEvent, Side, Tx, col, row, text};
+use rune::{El, Image, Key, KeyEvent, Side, Tx, col, row};
 use rune_kit::{ImageFrame, Markdown, TextArea, TextInput};
 
 use super::{Chip, Item, Kind, Lists, mentions, questions};
@@ -847,117 +845,53 @@ pub(crate) fn marker(row_key: &str, count: usize, t: &Tokens) -> Option<El> {
         return None;
     }
     let words = format!("{count} open {}", if count == 1 { "ask" } else { "asks" });
-    let glyph = if count > 1 {
-        format!("?{count}")
-    } else {
-        "?".to_owned()
-    };
     Some(
-        ask_mark(glyph, t)
+        ask_mark(count, t)
             .key(format!("{row_key}.ask"))
             .role("img")
             .label(words),
     )
 }
 
-/// The Tauri app's `.ask-marker`: `glyph` in bold monospace on the accent pill.
-fn ask_mark(glyph: String, t: &Tokens) -> El {
-    row()
-        .h(16.0)
-        .min_w(MARK_W)
-        .px(6.0)
-        .center()
-        .radius(10.0)
-        .fill(t.accent)
-        .child(text(glyph).font(MARKER_TYPE).color(t.bg_app))
-}
-
-/// The ask mark's width: its 6-point insets round "?", which measures 7.2 in `MARKER_TYPE`.
-const MARK_W: f32 = 19.2;
-
-/// The Tauri app's `.ask-marker`: bold monospace on the accent pill.
-const MARKER_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 700.0).mono();
-
 /// The agent's open-ask chip in its tile header: the oldest ask's subject and how many more, at
 /// the level the tile's width leaves it. Resting the pointer on it previews the asks; a press
 /// opens the drawer on the oldest.
 pub(crate) fn chip(leaf: &str, session: &str, chip: &Chip, level: ChipLevel, t: &Tokens) -> El {
+    let id = chip.ask.clone();
+    let el = ask_chip(chip, level)
+        .build(t)
+        .key(chip_key(leaf))
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            header_pop::close(state);
+            super::show(state, Some(&id), tx)
+        });
+    header_pop::hovers(el, leaf, session, What::Ask)
+}
+
+fn ask_chip(chip: &Chip, level: ChipLevel) -> AskChip {
     let label = if chip.more > 0 {
         format!("Open ask: {}, and {} more", chip.subject, chip.more)
     } else {
         format!("Open ask: {}", chip.subject)
     };
-    let id = chip.ask.clone();
-    let subject = (level != ChipLevel::Icon).then(|| {
-        let el = text(chip.subject.clone())
-            .font(CHIP_TYPE)
-            .color(t.text_primary)
-            .single_line()
-            .truncate()
-            .min_w(0.0);
-        if level == ChipLevel::Short {
-            el.max_w(CHIP_SHORT)
-        } else {
-            el
-        }
-    });
-    let tertiary = t.text_tertiary;
-    let more = (chip.more > 0 && level != ChipLevel::Icon).then(|| format!("+{}", chip.more));
-    let mark = ask_mark("?".to_owned(), t);
-    let el = rune_kit::Button::new(label)
-        .label_with(move |_, _| {
-            row()
-                .items_center()
-                .gap(CHIP_GAP)
-                .min_w(0.0)
-                .child(mark)
-                .children(subject)
-                .children(more.map(|more| text(more).font(CHIP_MORE_TYPE).color(tertiary)))
-        })
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            header_pop::close(state);
-            super::show(state, Some(&id), tx)
-        })
-        .build(attn_ui::kit(t))
-        .key(chip_key(leaf))
-        .h(CHIP_H)
-        .pl(CHIP_START)
-        .pr(CHIP_END)
-        .min_w(0.0)
-        .radius(CHIP_H / 2.0)
-        .fill(t.accent.alpha(0.12))
-        .border(1.0, t.accent.alpha(0.45));
-    header_pop::hovers(el, leaf, session, What::Ask)
+    let up_to = match level {
+        ChipLevel::Full => None,
+        ChipLevel::Short => Some(CHIP_SHORT),
+        ChipLevel::Icon => return AskChip::new(label),
+    };
+    AskChip::new(label)
+        .subject(chip.subject.clone(), up_to)
+        .more(chip.more)
 }
-
-/// `.pane-ask-chip`: a pill tinted in the accent, its `?` mark close to its start.
-const CHIP_H: f32 = 22.0;
-const CHIP_GAP: f32 = 6.0;
-const CHIP_START: f32 = 3.0;
-const CHIP_END: f32 = 9.0;
-const CHIP_TYPE: rune::TextStyle = rune::TextStyle {
-    weight: 600.0,
-    ..type_::LABEL
-};
-const CHIP_MORE_TYPE: rune::TextStyle = rune::TextStyle {
-    weight: 500.0,
-    ..type_::LABEL
-};
 
 /// The chip's widths in full, with its subject cut, and as its mark alone.
 pub(crate) fn chip_widths(chip: &Chip) -> crate::desktop::Widths {
-    let w = |s: &str| crate::desktop::text_w(s, CHIP_TYPE);
-    let frame = CHIP_START + CHIP_END + 2.0 + MARK_W;
-    let more = if chip.more > 0 {
-        CHIP_GAP + crate::desktop::text_w(&format!("+{}", chip.more), CHIP_MORE_TYPE)
-    } else {
-        0.0
-    };
-    let subject = w(&chip.subject);
+    let full = ask_chip(chip, ChipLevel::Full).width();
+    let short = ask_chip(chip, ChipLevel::Short).width();
     crate::desktop::Widths {
-        full: frame + CHIP_GAP + subject + more,
-        short: (subject > CHIP_SHORT).then_some(frame + CHIP_GAP + CHIP_SHORT + more),
-        icon: Some(frame),
+        full,
+        short: (short < full).then_some(short),
+        icon: Some(ask_chip(chip, ChipLevel::Icon).width()),
     }
 }
 
@@ -982,92 +916,79 @@ pub(crate) fn preview(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     if asks.is_empty() {
         return None;
     }
-    let sections = asks.iter().map(|ask| {
-        let id = ask.id.clone();
-        let questions = questions(ask).map(|q| {
-            let lines: Vec<El> = match Kind::of(q) {
-                Kind::Text => vec![
-                    text("Written answer")
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary),
-                ],
-                _ => {
-                    q.choices
-                        .iter()
-                        .map(|c| {
-                            let recommended = q.recommended.as_deref() == Some(c.label.as_str());
-                            row()
-                                .gap(space::S1)
-                                .child(
-                                    text(c.label.clone())
-                                        .font(type_::LABEL)
-                                        .color(t.text_secondary),
-                                )
-                                .children(
-                                    c.description
-                                        .clone()
-                                        .map(|d| text(d).font(type_::LABEL).color(t.text_tertiary)),
-                                )
-                                .children(recommended.then(|| {
-                                    text("recommended").font(type_::LABEL).color(t.accent)
-                                }))
-                        })
-                        .collect()
-                }
-            };
-            col()
-                .gap(2.0)
-                .child(
-                    text(q.prompt.clone())
-                        .font(type_::BODY)
-                        .color(t.text_primary)
-                        .wrap(),
-                )
-                .children(lines)
-        });
-        col()
-            .key(format!("asks.preview.{}", ask.id))
-            .role("group")
-            .label(ask.subject.clone())
-            .gap(space::S1)
-            .child(
-                text(ask.subject.clone())
-                    .font(type_::LABEL)
-                    .color(t.text_primary),
-            )
-            .children(questions)
-            .child(
-                El::from(
-                    Button::new("Answer")
-                        .size(Size::Compact)
-                        .look(Look::Plain)
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            header_pop::close(state);
-                            super::show(state, Some(&id), tx)
-                        })
-                        .build(t)
-                        .key(format!("asks.preview.{}.answer", ask.id)),
-                )
-                .self_start(),
-            )
+    let previews = asks.iter().map(|ask| {
+        let key = format!("asks.preview.{}", ask.id);
+        Block::custom(format!("{key}.slot"), previewed(ask, &key, t))
     });
     Some(
-        col()
-            .key(pop.surface())
-            .role("dialog")
-            .label("Open asks from this agent")
-            .w(300.0)
-            .padding(space::S2)
-            .gap(space::S2)
-            .radius(6.0)
-            .fill(t.bg_elevated)
-            .border(1.0, t.border)
+        Popover::new(pop.surface(), "Open asks from this agent")
+            .push_all(previews)
+            .shown_only()
+            .build(t)
             .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
                 header_pop::hover_popover(state, inside, tx)
             })
-            .children(sections)
             .anchored_fit(pop.anchor(), Side::Bottom, rune::Align::End, 4.0),
     )
+}
+
+/// One ask as its preview shows it: its subject, each question with its choices, and Answer.
+fn previewed(ask: &Ask, key: &str, t: &Tokens) -> El {
+    let id = ask.id.clone();
+    let questions = questions(ask).enumerate().map(|(n, q)| {
+        let lines: Vec<El> = match Kind::of(q) {
+            Kind::Text => vec![words("Written answer", Type::Small, t.text_tertiary)],
+            _ => q
+                .choices
+                .iter()
+                .enumerate()
+                .map(|(i, c)| {
+                    let recommended = q.recommended.as_deref() == Some(c.label.as_str());
+                    let choice = format!("{key}.q.{n}.choice.{i}");
+                    Inline::tight()
+                        .child(
+                            words(c.label.clone(), Type::Small, t.text_secondary)
+                                .key(format!("{choice}.name"))
+                                .wrap()
+                                .min_w(0.0)
+                                .shrink(),
+                        )
+                        .children(c.description.clone().map(|d| {
+                            words(d, Type::Small, t.text_tertiary)
+                                .wrap()
+                                .min_w(0.0)
+                                .shrink()
+                        }))
+                        .children(recommended.then(|| {
+                            El::from(tag(
+                                format!("{choice}.recommended"),
+                                "Recommended",
+                                Tone::Accent,
+                                t,
+                            ))
+                        }))
+                })
+                .collect(),
+        };
+        Stack::tight()
+            .child(words(q.prompt.clone(), Type::Body, t.text_primary).wrap())
+            .children(lines)
+    });
+    let answer = Button::new("Answer")
+        .size(Size::Compact)
+        .look(Look::Plain)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            header_pop::close(state);
+            super::show(state, Some(&id), tx)
+        })
+        .build(t);
+    Stack::tight()
+        .key(key.to_owned())
+        .role("group")
+        .label(ask.subject.clone())
+        .child(words(ask.subject.clone(), Type::Name, t.text_primary).wrap())
+        .children(questions)
+        .child(El::from(answer).key(format!("{key}.answer")).self_start())
 }
 
 /// The title bar's asks button, while asks are on or any exists: it counts the open asks, but a

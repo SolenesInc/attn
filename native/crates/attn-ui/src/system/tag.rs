@@ -49,17 +49,27 @@ pub fn mark_chip(mark: impl Into<crate::Glyph>, ink: Color, t: &Tokens) -> El {
 const PILL_WASH: f32 = 0.14;
 
 pub fn tag(key: impl Into<String>, said: impl Into<Said>, tone: Tone, t: &Tokens) -> Control {
-    let (ink, fill) = match tone {
+    let (ink, fill) = inks(tone, t);
+    let tag = words(said, Type::Tag, ink)
+        .key(key.into())
+        .fill(fill)
+        .border(1.0, edge(ink));
+    let tag = door::corner(door::inset(tag, Space::S6, Space::S2), Radius::Tag);
+    Control::new(tag, Size::Compact)
+}
+
+/// The ink and the wash of a thing that reads in `tone`.
+pub(crate) fn inks(tone: Tone, t: &Tokens) -> (Color, Color) {
+    match tone {
         Tone::Neutral => (t.text_secondary, Color::TRANSPARENT),
         Tone::Warn => (t.warning, t.warning.alpha(WASH)),
         Tone::Bad => (t.error, t.error.alpha(WASH)),
         Tone::Good => (t.success, t.success.alpha(WASH)),
         Tone::Accent => (t.accent, t.accent.alpha(WASH)),
-    };
-    let tag = words(said, Type::Tag, ink)
-        .key(key.into())
-        .fill(fill)
-        .border(1.0, ink.alpha(EDGE));
-    let tag = door::corner(door::inset(tag, Space::S6, Space::S2), Radius::Tag);
-    Control::new(tag, Size::Compact)
+    }
+}
+
+/// The edge of a thing that reads in `ink`.
+pub(crate) fn edge(ink: Color) -> Color {
+    ink.alpha(EDGE)
 }

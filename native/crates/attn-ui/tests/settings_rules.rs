@@ -1110,6 +1110,8 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("keycap::Keys::raised(caps)", false),
     ("keycap::Keys::outlined(caps)", false),
     ("keycap::Keys::ledged(caps)", false),
+    ("system::ask::AskChip::new(label)", false),
+    ("system::ask::AskChip::subject(said)", false),
     ("system::attachment::file_chip(name)", true),
     ("system::attachment::file_chip(kind)", true),
     ("system::attachment::file_chip(detail)", true),

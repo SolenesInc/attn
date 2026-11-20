@@ -1,6 +1,7 @@
 //! attn's design system: the spacing scale, the type roles, the corners and the controls every
 //! view shares. Only this crate can make a step of the scale, so a view cannot invent one.
 
+mod ask;
 mod attachment;
 mod button;
 mod check;
@@ -39,6 +40,7 @@ mod tag;
 mod trigger;
 mod type_role;
 
+pub use ask::{AskChip, ask_mark};
 pub use attachment::{drop_overlay, file_chip, image_tile};
 pub use button::{Button, Look};
 pub use check::Check;

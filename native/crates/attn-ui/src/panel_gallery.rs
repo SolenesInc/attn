@@ -6,11 +6,13 @@ use rune_kit::TextInput;
 
 use crate::Tokens;
 use crate::blocks::inspector::{aside, lines, value};
-use crate::blocks::{Actions, Block, Facts, Field, Inspector, List, Notice, Prose, Refusal, Sheet};
+use crate::blocks::{
+    Actions, Block, Facts, Field, Inline, Inspector, List, Notice, Prose, Refusal, Sheet,
+};
 use crate::colors::scheme_for;
 use crate::system::{
-    Beside, Button, FieldState, IconSize, ListRow, Look, Reveal, Size, Tone, Type, icon_button,
-    line_box, press_area, switch, tag, words,
+    AskChip, Beside, Button, FieldState, IconSize, ListRow, Look, Reveal, Size, Tone, Type,
+    ask_mark, icon_button, line_box, press_area, switch, tag, words,
 };
 
 /// What a panel story shows: the state its variant sets.
@@ -25,6 +27,7 @@ pub struct Panels {
     pub bare: bool,
     pub keys: bool,
     pub on: bool,
+    pub several: bool,
     pub line: TextEdit,
 }
 
@@ -57,6 +60,7 @@ pub const PANEL_SUBJECTS: &[(&str, &[&str])] = &[
     ("Panels/Sheet", &["sheet"]),
     ("Panels/List", &["list.sheet"]),
     ("Panels/Inspector", &["inspector"]),
+    ("Panels/Ask chip", &["askchip.stage"]),
 ];
 
 /// The variants each panel story has beyond the common ones, as the state sheets draw them.
@@ -64,6 +68,7 @@ pub const PANEL_VARIANTS: &[(&str, &[&str])] = &[
     ("Panels/Sheet", &["Loading", "Failed"]),
     ("Panels/List", &["Empty", "Failed", "Bare", "Keys"]),
     ("Panels/Inspector", &["Empty"]),
+    ("Panels/Ask chip", &["Several"]),
 ];
 
 /// Room for the list's three rows, the Failed one with its error, so its sheet shows the rows and
@@ -84,6 +89,14 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
         .story(
             common(Story::new("Panels/Inspector", Panels::default, inspector))
                 .variant("Empty", |s| s.empty = true),
+        )
+        .story(
+            common(Story::new(
+                "Panels/Ask chip",
+                Panels::default,
+                ask_chip_story,
+            ))
+            .variant("Several", |s| s.several = true),
         )
         .story(
             common(Story::new("Panels/List", Panels::default, list))
@@ -413,5 +426,52 @@ fn inspector(s: &Panels, cx: &mut Cx<Panels>) -> El {
         &t,
         f32::INFINITY,
         rune::row().w_full().h_full().child(shown),
+    )
+}
+
+const ASK_SUBJECT: &str = "Cache store";
+const LONG_ASK_SUBJECT: &str =
+    "Which store should keep the cache once deploys stop emptying it on every release";
+/// The width a tile header leaves a cut subject, as the desktop gives it.
+const ASK_SUBJECT_CUT: f32 = 120.0;
+
+/// The ask chip a variant draws: its subject whole in a wide header, cut in a narrow one, and
+/// its mark alone in the smallest window.
+pub fn ask_chip(s: &Panels) -> AskChip {
+    let subject = if s.long {
+        LONG_ASK_SUBJECT
+    } else {
+        ASK_SUBJECT
+    };
+    let more = if s.several { 2 } else { 0 };
+    let chip = AskChip::new(format!("Open ask: {subject}"));
+    match s.size {
+        Drawer::Wide => chip.subject(subject, None).more(more),
+        Drawer::Narrow => chip.subject(subject, Some(ASK_SUBJECT_CUT)).more(more),
+        Drawer::Smallest => chip,
+    }
+}
+
+/// The chip in a tile header's line, and the mark an agent's row carries for one ask and for
+/// three.
+fn ask_chip_story(s: &Panels, cx: &mut Cx<Panels>) -> El {
+    let t = tokens(cx);
+    if s.rings {
+        cx.force_focus_rings();
+    }
+    let chip = ask_chip(s).build(&t).key("askchip").on_press_tx(noop);
+    let stage = Inline::loose()
+        .key("askchip.stage")
+        .child(chip)
+        .child(ask_mark(1, &t).key("askchip.mark"))
+        .child(ask_mark(if s.several { 3 } else { 12 }, &t).key("askchip.marks"));
+    el().w_full().h_full().fill(t.bg_app).child(
+        col()
+            .w(s.size.size().0)
+            .h_full()
+            .justify_center()
+            .items_center()
+            .fill(t.bg_panel)
+            .child(stage),
     )
 }

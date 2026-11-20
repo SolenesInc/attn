@@ -15,6 +15,7 @@ pub struct Popover {
     aside: Vec<El>,
     body: Vec<Block>,
     actions: Option<Actions>,
+    focusable: bool,
 }
 
 /// A popover's width: its harness segments and its effort segments keep one line each, and a
@@ -31,6 +32,7 @@ impl Popover {
             aside: Vec::new(),
             body: Vec::new(),
             actions: None,
+            focusable: true,
         }
     }
 
@@ -47,6 +49,13 @@ impl Popover {
 
     pub fn push_all(mut self, blocks: impl IntoIterator<Item = Block>) -> Self {
         self.body.extend(blocks);
+        self
+    }
+
+    /// A popover that only shows, such as a preview under the pointer: it takes no focus of
+    /// its own, so the keyboard reaches only its controls.
+    pub fn shown_only(mut self) -> Self {
+        self.focusable = false;
         self
     }
 
@@ -93,7 +102,7 @@ impl Popover {
                 .key(self.key)
                 .role("dialog")
                 .label(self.title.text())
-                .focusable(true)
+                .focusable(self.focusable)
                 .no_focus_ring()
                 .shrink()
                 .min_h(0.0)
