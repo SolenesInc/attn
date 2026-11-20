@@ -6,6 +6,9 @@ use super::notice::Notice;
 use crate::Tokens;
 use crate::system::{Radius, Said, Space, Type, door, words};
 
+const NOTICES_GAP: Space = Space::S12;
+const NOTICES_INSET_Y: Space = Space::S12;
+
 /// A panel beside the content, such as a drawer or a form: its title with controls beside it
 /// and its close button, then what went wrong that must stay in view, then its blocks in a
 /// column that scrolls, and a footer that stays in view under them.
@@ -129,7 +132,8 @@ impl Sheet {
     /// What went wrong that the person must see wherever the body is scrolled, with what
     /// recovers from it, such as a save that failed: under the title line, over the top and
     /// the body. They give way to the room the body keeps ([`Self::keeps_room`]): their
-    /// sentences scroll and their actions stay whole.
+    /// sentences scroll, down to their first line. Their actions stay whole, before that room:
+    /// the body gives up room only once the notices are at their first lines.
     pub fn notices(mut self, notices: impl IntoIterator<Item = Notice>) -> Self {
         self.notices.extend(notices);
         self
@@ -181,16 +185,19 @@ impl Sheet {
         let top = self.top.map(|top| {
             door::frame(top, Space::S4, Space::S16, Space::S4)
                 .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-                .shrink()
+                .shrink_first()
         });
         let notices = (!self.notices.is_empty()).then(|| {
-            let notices = door::gap(col().w_full(), Space::S12)
+            let floor = self.notices.iter().map(Notice::floor).sum::<f32>()
+                + NOTICES_GAP.pt() * (self.notices.len() - 1) as f32
+                + 2.0 * NOTICES_INSET_Y.pt();
+            let notices = door::gap(col().w_full(), NOTICES_GAP)
                 .children(self.notices.into_iter().map(|notice| notice.pinned(t)));
-            door::frame(notices, Space::S12, Space::S16, Space::S12)
+            door::frame(notices, NOTICES_INSET_Y, Space::S16, NOTICES_INSET_Y)
                 .key(format!("{key}.notices"))
                 .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-                .shrink()
-                .min_h(0.0)
+                .shrink_first()
+                .min_h(floor)
         });
         let body = match self.fill {
             Some(body) => body.key(format!("{key}.body")).grow(1.0).min_h(0.0),
@@ -213,7 +220,7 @@ impl Sheet {
                 let body = if self.fits.is_some() {
                     body.shrink().min_h(self.room)
                 } else {
-                    body.grow(1.0).min_h(self.room)
+                    body.grow_from(1.0, self.room).shrink().min_h(0.0)
                 };
                 body.scroll(rune::ScrollSpec {
                     stick_bottom: false,

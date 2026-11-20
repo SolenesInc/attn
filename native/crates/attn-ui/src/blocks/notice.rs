@@ -9,6 +9,7 @@ use crate::system::{Radius, Said, Size, Space, Tone, Type, door, words};
 const DOT: f32 = 6.0;
 const EDGE: f32 = 0.45;
 const WASH: f32 = 0.08;
+const NOTICE_INSET_Y: Space = Space::S8;
 
 /// A line across the page that says what is happening or what went wrong, with what to do
 /// about it.
@@ -61,9 +62,20 @@ impl Notice {
     }
 
     /// The notice in a band that gives way to what it stands over: once the band is short, the
-    /// sentence scrolls inside it and the action keeps a whole line under it.
+    /// sentence scrolls inside it down to its first line, and the action stays whole under it.
     pub(crate) fn pinned(self, t: &Tokens) -> El {
-        self.line(t, true).shrink().min_h(0.0)
+        let floor = self.floor();
+        self.line(t, true).shrink().min_h(floor)
+    }
+
+    /// How short a pinned notice goes: its sentence's first line and its action, taken to be one
+    /// line of compact buttons, inside its inset.
+    pub(crate) fn floor(&self) -> f32 {
+        let action = match self.action {
+            Some(_) => Space::S8.pt() + Size::Compact.height(),
+            None => 0.0,
+        };
+        2.0 * NOTICE_INSET_Y.pt() + Size::Regular.height() + action
     }
 
     fn line(self, t: &Tokens, pinned: bool) -> El {
@@ -132,7 +144,7 @@ impl Notice {
             return door::gap(line, Space::S8);
         }
         let line = line.fill(fill).border(1.0, edge);
-        let line = door::gap(door::inset(line, Space::S12, Space::S8), Space::S8);
+        let line = door::gap(door::inset(line, Space::S12, NOTICE_INSET_Y), Space::S8);
         door::corner(line, Radius::Card)
     }
 }

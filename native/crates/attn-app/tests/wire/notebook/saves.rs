@@ -574,13 +574,17 @@ fn a_write_error_far_down_a_long_note_in_an_editor_tile_keeps_the_caret_where_it
     );
 }
 
-/// In the smallest window at the largest text, each failure leaves three whole lines of the
-/// note in view and its actions whole, however long its sentence: one too long for its band
-/// scrolls inside it.
-fn a_failed_save_leaves_three_lines_in_the_smallest_window(
+/// In the smallest window at the largest text, each failure keeps its actions whole first, then
+/// three whole lines of the note in view, however long its sentence: one too long for its band
+/// scrolls inside it. The note gives up room only for the actions: a conflict in the fullscreen
+/// Notebook leaves it less than three lines' room, which still shows three whole lines where
+/// this note is scrolled.
+fn a_failed_save_keeps_its_actions_whole_then_three_lines_in_the_smallest_window<W>(
     document: &str,
-    world_of: fn(Window) -> Box<dyn FnOnce(&Disk) -> World>,
-) {
+    world_of: fn(Window) -> W,
+) where
+    W: FnOnce(&Disk) -> World,
+{
     for (failure, gives_way) in [
         (Failure::Conflict, false),
         (DISK_FULL, false),
@@ -652,9 +656,10 @@ fn a_failed_save_leaves_three_lines_in_the_smallest_window(
                     .bounds(Target::key(format!("{document}.{action}")))
                     .unwrap();
                 assert!(
-                    y >= by && y + h <= by + bh,
-                    "{action} at {:?} is cut",
-                    [y, h]
+                    y >= ay && y + h <= ay + ah,
+                    "{action} at {:?} runs out of its notice at {:?}",
+                    [y, h],
+                    [ay, ah]
                 );
             }
         }
@@ -662,17 +667,18 @@ fn a_failed_save_leaves_three_lines_in_the_smallest_window(
 }
 
 #[test]
-fn in_the_smallest_window_a_failed_save_leaves_the_note_three_lines() {
-    a_failed_save_leaves_three_lines_in_the_smallest_window("notebook", |w| {
-        Box::new(fullscreen(w))
-    });
+fn in_the_smallest_window_a_failed_save_keeps_its_actions_whole_then_the_note_three_lines() {
+    a_failed_save_keeps_its_actions_whole_then_three_lines_in_the_smallest_window(
+        "notebook", fullscreen,
+    );
 }
 
 #[test]
-fn in_the_smallest_window_a_failed_save_leaves_a_tiles_note_three_lines() {
-    a_failed_save_leaves_three_lines_in_the_smallest_window("notebook.tile.n", |w| {
-        Box::new(tile(w))
-    });
+fn in_the_smallest_window_a_failed_save_keeps_its_actions_whole_then_a_tiles_note_three_lines() {
+    a_failed_save_keeps_its_actions_whole_then_three_lines_in_the_smallest_window(
+        "notebook.tile.n",
+        tile,
+    );
 }
 
 /// What has the keyboard: its key, else its name, else its role.
