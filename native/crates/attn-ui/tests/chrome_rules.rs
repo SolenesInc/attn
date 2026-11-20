@@ -255,7 +255,7 @@ fn a_rows_hover_controls_show_whole_on_the_first_frame_on_its_ground_with_its_wo
  {
     for dark in [true, false] {
         for variant in ["Rest", "In view", "Long"] {
-            for key in ["row.agent", "row.tile", "row.two"] {
+            for key in ["row.agent", "row.tile", "row.two", "row.keyed"] {
                 let mut rt = story(dark, "Chrome/List row", variant);
                 let row = element(&rt, key);
                 let controls = format!("{key}.controls");

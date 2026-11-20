@@ -68,6 +68,7 @@ pub const CHROME_SHEETS: &[ChromeSheet] = &[
         story: "Chrome/List row",
         keys: &[
             "row.select",
+            "row.keyed",
             "row.quiet",
             "row.crew",
             "row.tree",
@@ -276,6 +277,19 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             .aside(tag("row.tile.tag", "Doc", Tone::Neutral, &t))
             .hover_controls(row_controls("row.tile"))
             .in_view(s.lit)
+            .build(&t)
+            .on_press_tx(press),
+        ListRow::new("row.keyed", format!("Open {name}"))
+            .lead(dot(&t))
+            .title(name)
+            .hover_controls([
+                icon_button("row.keyed.reload", "Reload", &icon::PENCIL, IconSize::Small)
+                    .keys(Some("⌘⇧R".to_owned()))
+                    .on_press_tx(press),
+                icon_button("row.keyed.asks", "Asks", &icon::ASKS, IconSize::Small)
+                    .count(Some("3".to_owned()))
+                    .on_press_tx(press),
+            ])
             .build(&t)
             .on_press_tx(press),
         ListRow::new("row.two", "Open the delegation chain")

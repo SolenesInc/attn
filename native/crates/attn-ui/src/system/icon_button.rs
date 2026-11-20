@@ -113,13 +113,32 @@ impl IconButton {
         self
     }
 
-    /// How wide the button stands: a square, or its icon and the room around it when that is
-    /// wider. A button with a count or keys is as wide as its words make it.
+    /// How wide the button stands as drawn: its mark, its count and keys after it, and the room
+    /// at its sides, or a square when that is wider.
     pub(crate) fn width(&self) -> f32 {
-        debug_assert!(self.count.is_none() && self.keys.is_none());
-        self.size
-            .height()
-            .max(self.icon.pt() + 2.0 * Space::S4.pt())
+        let mark = match &self.glyph {
+            Glyph::Icon(_) => self.icon.pt(),
+            Glyph::Text(said) => door::mark_width(said, self.icon),
+        };
+        let words = self
+            .count
+            .iter()
+            .map(|count| (count, Type::Tag))
+            .chain(self.keys.iter().map(|keys| (keys, Type::Mono)))
+            .map(|(said, kind)| Space::S4.pt() + door::width(said, kind))
+            .sum::<f32>();
+        let (inset, _) = self.frame();
+        self.size.height().max(mark + words + 2.0 * inset.pt())
+    }
+
+    /// The room at the button's sides and its corner: a counted button is a pill, a button with
+    /// keys a wider control, a bare icon a square.
+    fn frame(&self) -> (Space, Radius) {
+        match (self.count.is_some(), self.keys.is_some()) {
+            (true, _) => (Space::S8, Radius::Round),
+            (false, true) => (Space::S6, Radius::Control),
+            (false, false) => (Space::S4, Radius::Control),
+        }
     }
 
     pub fn build(self, t: &Tokens) -> Control {
@@ -134,7 +153,7 @@ impl IconButton {
             (false, false) => (Color::TRANSPARENT, t.text_secondary),
         };
         let ink = self.ink.unwrap_or(ink);
-        let worded = counted || self.keys.is_some();
+        let (inset, corner) = self.frame();
         let (glyph, icon, count, keys) = (self.glyph, self.icon, self.count, self.keys);
         let keys_ink = t.text_dimmed;
         let ground = if fill.a > 0.0 { fill } else { t.bg_panel };
@@ -177,11 +196,6 @@ impl IconButton {
             .min_w(side)
             .justify_center()
             .fill(fill);
-        let (inset, corner) = match (counted, worded) {
-            (true, _) => (Space::S8, Radius::Round),
-            (false, true) => (Space::S6, Radius::Control),
-            (false, false) => (Space::S4, Radius::Control),
-        };
         let button = door::corner(door::inset(button, inset, Space::S0), corner);
         let button = focus::ring(button, t);
         let button = if self.disabled {

@@ -124,6 +124,16 @@ pub(crate) fn inside_edge(e: El) -> El {
     e.padding(1.0)
 }
 
+/// How wide `said` stands in `kind`, as the runtime lays it out.
+pub(crate) fn width(said: &str, kind: Type) -> f32 {
+    rune::text::measure(said, &[], style(kind), None).0
+}
+
+/// How wide a mark of text stands at `size`.
+pub(crate) fn mark_width(said: &str, size: super::IconSize) -> f32 {
+    rune::text::measure(said, &[], mark(size), None).0
+}
+
 pub(crate) fn mark_text(said: String, size: super::IconSize) -> El {
     rune::text(said).font(mark(size))
 }
