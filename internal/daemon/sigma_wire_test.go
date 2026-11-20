@@ -68,7 +68,7 @@ func TestASigmaSessionRunsSigmasCommandLine(t *testing.T) {
 	}
 }
 
-func TestMessagesReachASigmaConversationWithAnIDAndNameAuthor(t *testing.T) {
+func TestMessagesAndTheCloseInterruptReachASigmaConversationWithAnIDAndNameAuthor(t *testing.T) {
 	w := newWorld(t, fakeagent.Sigma)
 	app := w.App()
 	session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
@@ -89,6 +89,11 @@ func TestMessagesReachASigmaConversationWithAnIDAndNameAuthor(t *testing.T) {
 	if got := server.Prompted(conversation); got.Author != "attn" || got.AuthorID != "attn" {
 		t.Fatalf("an agent message reached Sigma from %q (id %q), want attn", got.Author, got.AuthorID)
 	}
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	if closed := closeFromApp(app, session); !closed.Accepted {
+		t.Fatal(protocol.Deref(closed.Error))
+	}
+	server.AwaitInterrupted(conversation)
 }
 
 func TestSigmaIsUnavailableWhenItsExecutableIsMissing(t *testing.T) {

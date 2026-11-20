@@ -44,13 +44,15 @@ type appServerFlavor struct {
 	socket       func(home string) string
 	hello        map[string]any
 	completions  bool
+	authorRefs   bool
 }
 
 var appServerFlavors = map[Harness]appServerFlavor{
 	Sigma: {
 		harness: Sigma, role: "sigma-server", homeVariable: "SIGMA_HOME", homeDir: "sg", rootVariable: "SIGMA_ROOT_CONVERSATION",
-		socket: func(home string) string { return filepath.Join(home, "sigma.sock") },
-		hello:  map[string]any{"version": "fake", "protocol": 1},
+		socket:     func(home string) string { return filepath.Join(home, "sigma.sock") },
+		hello:      map[string]any{"version": "fake", "protocol": 1},
+		authorRefs: true,
 	},
 	SampleServer: {
 		harness: SampleServer, role: "sample-server-server", homeVariable: "SAMPLE_SERVER_HOME", homeDir: "ss", rootVariable: "SAMPLE_SERVER_ROOT_CONVERSATION",
@@ -122,7 +124,7 @@ func (n *serverView) begin(*terminal) error {
 }
 
 func (n *serverView) submit(prompt string) error {
-	return n.call("conversation/submit", map[string]any{"conversation": n.conversation, "requestId": uuid.NewString(), "author": ServerAuthor{ID: "you", Name: "you"}, "text": prompt})
+	return n.call("conversation/submit", map[string]any{"conversation": n.conversation, "requestId": uuid.NewString(), "author": n.flavor.wireAuthor("you"), "text": prompt})
 }
 
 func (n *serverView) reply(text string, _ bool) error {
@@ -144,6 +146,37 @@ type serverFrame struct {
 type ServerAuthor struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+}
+
+func (f appServerFlavor) wireAuthor(name string) any {
+	if f.authorRefs {
+		return ServerAuthor{ID: name, Name: name}
+	}
+	return name
+}
+
+func (f appServerFlavor) parseAuthor(method string, raw json.RawMessage) (ServerAuthor, string) {
+	if method != "conversation/submit" && method != "conversation/interrupt" {
+		return ServerAuthor{}, ""
+	}
+	if f.authorRefs {
+		var author ServerAuthor
+		if err := json.Unmarshal(raw, &author); err != nil || author.ID == "" || author.Name == "" {
+			return ServerAuthor{}, "InvalidParams: author {id, name} is required"
+		}
+		return author, ""
+	}
+	if method == "conversation/interrupt" {
+		if raw != nil {
+			return ServerAuthor{}, "InvalidParams: conversation/interrupt takes no author"
+		}
+		return ServerAuthor{}, ""
+	}
+	var name string
+	if err := json.Unmarshal(raw, &name); err != nil || name == "" {
+		return ServerAuthor{}, "InvalidParams: author must be a name"
+	}
+	return ServerAuthor{Name: name}, ""
 }
 
 type ServerSubmission struct {
@@ -348,13 +381,14 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		Conversation string           `json:"conversation"`
 		Text         string           `json:"text"`
 		RequestID    string           `json:"requestId"`
-		Author       ServerAuthor     `json:"author"`
+		Author       json.RawMessage  `json:"author"`
 		Client       string           `json:"client"`
 		After        map[string]int64 `json:"after"`
 	}
 	_ = json.Unmarshal(raw, &p)
-	if (method == "conversation/submit" || method == "conversation/interrupt") && (p.Author.ID == "" || p.Author.Name == "") {
-		return nil, "InvalidParams: author {id, name} is required"
+	author, refused := s.flavor.parseAuthor(method, p.Author)
+	if refused != "" {
+		return nil, refused
 	}
 	switch method {
 	case "initialize":
@@ -426,7 +460,7 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		}
 		s.mu.Unlock()
 		if fresh {
-			s.submissionsOf(p.Conversation) <- ServerSubmission{Conversation: p.Conversation, RequestID: p.RequestID, Author: p.Author.Name, AuthorID: p.Author.ID, Text: p.Text}
+			s.submissionsOf(p.Conversation) <- ServerSubmission{Conversation: p.Conversation, RequestID: p.RequestID, Author: author.Name, AuthorID: author.ID, Text: p.Text}
 		}
 		if lost {
 			return nil, replyLost

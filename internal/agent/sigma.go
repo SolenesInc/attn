@@ -55,6 +55,7 @@ func (s *Sigma) Server() ServerDeclaration {
 		CallerConversationEnv: "SIGMA_ROOT_CONVERSATION",
 		OnClose:               "interrupt",
 		Recovery:              "last-run",
+		AuthorRefs:            true,
 	}
 }
 
