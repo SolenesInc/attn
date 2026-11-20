@@ -370,7 +370,7 @@ fn document(
         Doc::Loading { shown: None, .. } => message("Loading…", t),
         Doc::Loading {
             shown: Some(open), ..
-        } => open_view(id, open, t),
+        } => open_view(id, open, surface.notice_actions, t),
         Doc::Failed { error, .. } => notice("File unavailable", error, None, t),
         Doc::Binary { path } => notice(
             "Preview not available",
@@ -378,7 +378,7 @@ fn document(
             Some(path),
             t,
         ),
-        Doc::Open(open) => open_view(id, open, t),
+        Doc::Open(open) => open_view(id, open, surface.notice_actions, t),
     };
     col()
         .key(key(id, "document"))
@@ -456,7 +456,7 @@ fn message(said: &str, t: &Tokens) -> El {
         .child(words(said.to_owned(), Type::Body, t.text_tertiary))
 }
 
-fn open_view(id: &SurfaceId, open: &Open, t: &Tokens) -> El {
+fn open_view(id: &SurfaceId, open: &Open, notice_actions: f32, t: &Tokens) -> El {
     let title = open.path.rsplit('/').next().unwrap_or(&open.path);
     let title = title.strip_suffix(".md").unwrap_or(title).to_owned();
     let kind = match open.kind {
@@ -517,7 +517,7 @@ fn open_view(id: &SurfaceId, open: &Open, t: &Tokens) -> El {
         .top(top)
         .article(key(id, "scroll"), title)
         .keeps_room(super::editor::room_for_whole_lines(3.0))
-        .notices(conflict(id, open, t))
+        .notices(conflict(id, open, notice_actions, t))
         .notices(save_error(open))
         .push(Block::custom(key(id, "editor.block"), editor))
         .build(t)
@@ -543,7 +543,7 @@ fn save_error(open: &Open) -> Option<Notice> {
     Some(Notice::error("notebook.save-error", error.clone()))
 }
 
-fn conflict(id: &SurfaceId, open: &Open, t: &Tokens) -> Option<Notice> {
+fn conflict(id: &SurfaceId, open: &Open, laid_out: f32, t: &Tokens) -> Option<Notice> {
     let current = open.save.conflict.as_ref()?;
     let said = if current.is_some() {
         "This file changed on disk since you opened it."
@@ -575,7 +575,19 @@ fn conflict(id: &SurfaceId, open: &Open, t: &Tokens) -> Option<Notice> {
                 .build(t)
                 .key(key(id, "document.overwrite")),
         ));
-    Some(Notice::warn(key(id, "document.conflict"), said).action(actions))
+    let measured = id.clone();
+    let actions = actions.on_measure(move |state: &mut State, r: [f32; 4]| {
+        if let Some(surface) = state.notebook.surface_mut(&measured)
+            && (surface.notice_actions - r[3]).abs() > 0.5
+        {
+            surface.notice_actions = r[3];
+        }
+    });
+    Some(
+        Notice::warn(key(id, "document.conflict"), said)
+            .action(actions)
+            .action_height(laid_out),
+    )
 }
 
 /// The `type` in a note's front matter.

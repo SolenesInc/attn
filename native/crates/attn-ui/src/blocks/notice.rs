@@ -19,6 +19,7 @@ pub struct Notice {
     tone: Tone,
     action: Option<El>,
     bare: bool,
+    action_height: Option<f32>,
 }
 
 impl Notice {
@@ -41,12 +42,21 @@ impl Notice {
             tone,
             action: None,
             bare: false,
+            action_height: None,
         }
     }
 
     /// The button that deals with it, such as Retry, at the line's end.
     pub fn action(mut self, button: impl Into<El>) -> Self {
         self.action = Some(button.into());
+        self
+    }
+
+    /// How tall the action stood as last laid out, when it can wrap onto more lines than one,
+    /// such as two buttons in a narrow pane: a pinned notice keeps room for all of it. Nothing,
+    /// or 0 before it is laid out, counts one line of compact buttons.
+    pub fn action_height(mut self, points: f32) -> Self {
+        self.action_height = Some(points).filter(|h| *h > 0.0);
         self
     }
 
@@ -68,11 +78,11 @@ impl Notice {
         self.line(t, true).shrink().min_h(floor)
     }
 
-    /// How short a pinned notice goes: its sentence's first line and its action, taken to be one
-    /// line of compact buttons, inside its inset.
+    /// How short a pinned notice goes: its sentence's first line and its action, as tall as it
+    /// was laid out or one line of compact buttons, inside its inset.
     pub(crate) fn floor(&self) -> f32 {
         let action = match self.action {
-            Some(_) => Space::S8.pt() + Size::Compact.height(),
+            Some(_) => Space::S8.pt() + self.action_height.unwrap_or(Size::Compact.height()),
             None => 0.0,
         };
         2.0 * NOTICE_INSET_Y.pt() + Size::Regular.height() + action

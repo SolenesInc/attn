@@ -772,3 +772,110 @@ fn a_conflict_over_the_caret_s_line_leaves_it_just_under_the_notice() {
         .unwrap();
     stays_where_it_shows(&world, &arrived, "notebook", &line, view_top);
 }
+
+const FILLER_LINES: usize = 40;
+
+/// A note whose one long paragraph, after a title, a blank line and [`FILLER_LINES`] short
+/// lines, wraps over many lines in the smallest window.
+fn wrapped_note() -> String {
+    let filler: String = (0..FILLER_LINES).map(|i| format!("Line {i}.\n")).collect();
+    let paragraph =
+        "A long paragraph that wraps over many lines in the smallest window. ".repeat(16);
+    format!("# Plan\n\n{filler}{paragraph}\n{filler}")
+}
+
+fn bounds(world: &World, key: &str) -> [f32; 4] {
+    world
+        .screen()
+        .bounds(Target::key(key))
+        .unwrap_or_else(|| panic!("{key} is not on screen"))
+}
+
+/// In the smallest window, the long paragraph scrolled so its first lines are above the view,
+/// the caret placed on its line at the view's top, and a letter typed there, its save held.
+fn typed_at_the_top_inside_a_wrapped_paragraph(
+    world_of: impl FnOnce(&Disk) -> World,
+    document: &str,
+) -> (Disk, World) {
+    let disk = Disk::with(&[(NOTE, &wrapped_note())]);
+    let mut world = world_of(&disk);
+    let [x, y, w, h] = bounds(&world, &format!("{document}.scroll"));
+    let paragraph = format!("{document}.editor.line.{}", FILLER_LINES + 2);
+    while world
+        .screen()
+        .bounds(Target::key(&paragraph))
+        .is_none_or(|[_, top, _, tall]| top > y - 2.0 * h / 10.0 || top + tall < y + h)
+    {
+        world.gesture(|d| d.runtime.wheel(x + w / 2.0, y + h / 2.0, -60.0));
+    }
+    world.daemon.answer_in_turn("fs_write", [Answer::Hold]);
+    world.gesture(|d| {
+        d.runtime.pointer_down(x + w / 2.0, y + 12.0);
+        d.runtime.pointer_up(x + w / 2.0, y + 12.0);
+        d.type_text("x");
+    });
+    world.advance(Duration::from_millis(700));
+    (disk, world)
+}
+
+/// A write error too long for its band, over a caret near the top of the view inside a wrapped
+/// paragraph whose first lines are scrolled away: the band takes the room the caret was in, and
+/// the caret shows whole just under it.
+fn a_long_write_error_leaves_its_caret_whole(
+    world_of: impl FnOnce(&Disk) -> World,
+    document: &str,
+) {
+    let (disk, mut world) = typed_at_the_top_inside_a_wrapped_paragraph(world_of, document);
+    let caret = format!("{document}.editor.caret");
+    let [_, was, _, _] = bounds(&world, &caret);
+    let held = world.daemon.sent_of("fs_write").pop().unwrap();
+    fail(&world.daemon, &held, &disk, &NESTED_PATH);
+    world.settle();
+    let [_, y, _, h] = bounds(&world, &format!("{document}.scroll"));
+    let [_, top, _, tall] = bounds(&world, &caret);
+    assert!(
+        top >= y - 0.5 && top + tall <= y + h + 0.5,
+        "the caret, at {was} before the error, is at {:?} in a view at {:?}",
+        [top, tall],
+        [y, h]
+    );
+}
+
+#[test]
+fn a_long_write_error_leaves_a_caret_inside_a_wrapped_paragraph_whole() {
+    a_long_write_error_leaves_its_caret_whole(fullscreen(SMALLEST), "notebook");
+}
+
+#[test]
+fn a_long_write_error_leaves_a_caret_inside_a_wrapped_paragraph_in_an_editor_tile_whole() {
+    a_long_write_error_leaves_its_caret_whole(tile(SMALLEST), "notebook.tile.n");
+}
+
+/// In the smallest window with the file tree or the context rail open beside the note, a
+/// conflict's actions wrap onto two lines and stay whole inside their notice.
+#[test]
+fn with_a_pane_open_in_the_smallest_window_a_conflict_keeps_its_wrapped_actions_whole() {
+    for pane in ["tree", "rail"] {
+        let (disk, mut world, _) = typed_far_down(fullscreen(SMALLEST), "notebook");
+        let held = world.daemon.sent_of("fs_write").pop().unwrap();
+        fail(&world.daemon, &held, &disk, &Failure::Conflict);
+        world.settle();
+        world.gesture(|d| d.click(Target::key(format!("notebook.fold.{pane}"))));
+        world.settle();
+        let [_, ay, _, ah] = bounds(&world, "notebook.document.conflict");
+        let [_, reload, _, _] = bounds(&world, "notebook.document.reload");
+        for action in ["notebook.document.reload", "notebook.document.overwrite"] {
+            let [_, y, w, h] = bounds(&world, action);
+            assert!(
+                w > 0.0 && y >= ay && y + h <= ay + ah,
+                "with the {pane} open, {action} at {:?} runs out of its notice at {:?}",
+                [y, w, h],
+                [ay, ah]
+            );
+        }
+        assert!(
+            bounds(&world, "notebook.document.overwrite")[1] > reload,
+            "with the {pane} open, the actions fit one line: widen the pane or the text so they wrap"
+        );
+    }
+}

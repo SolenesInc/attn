@@ -48,6 +48,8 @@ pub(crate) struct Surface {
     pub(crate) notebook: Option<String>,
     /// Its width in points as last laid out, which folds a narrow tile's panes.
     pub(crate) width: f32,
+    /// How tall its save notice's actions stood as last laid out: a narrow note wraps them.
+    pub(crate) notice_actions: f32,
     pub(crate) tree: Tree,
     pub(crate) doc: Doc,
     pub(crate) backlinks: Backlinks,
@@ -139,6 +141,7 @@ impl Surface {
             notebook: notebook.filter(|_| root.is_none()),
             root,
             width: 0.0,
+            notice_actions: 0.0,
             tree: Tree::default(),
             doc: Doc::Empty,
             backlinks: Backlinks::None,

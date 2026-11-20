@@ -494,14 +494,15 @@ pub(crate) fn tile_params(state: &State, tile: &str) -> Option<(String, String)>
 }
 
 /// A save's notice comes or goes over the surface's note: the note's view lands at once, and
-/// the caret's line stays where it shows.
+/// the caret stays where it shows, or its line while the note is not focused.
 fn notice_moves(state: &State, id: &SurfaceId, tx: &mut Tx) {
     let key = super::view::key(id, "editor");
     if let Some(editor) = super::editor_of(state, &key) {
-        tx.keep_on_screen(format!(
-            "{key}.line.{}",
-            editor.doc.id(editor.doc.caret.line)
-        ));
+        tx.keep_on_screen(if editor.focused {
+            format!("{key}.caret")
+        } else {
+            format!("{key}.line.{}", editor.doc.id(editor.doc.caret.line))
+        });
     }
     tx.instant();
 }
