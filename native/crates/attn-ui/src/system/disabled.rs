@@ -8,5 +8,11 @@ pub(crate) const STRENGTH: f32 = 0.5;
 /// levels between its parts stay as they were. Nothing in it takes focus, a press or the
 /// pointer, whoever attached them.
 pub(crate) fn dim(e: El) -> El {
-    e.disabled(true).inert().layer_opacity(STRENGTH)
+    unavailable(e).layer_opacity(STRENGTH)
+}
+
+/// An unavailable control that draws its own strength, such as the surface's Primary action,
+/// whose fill stands at [`STRENGTH`] and whose words keep reading on it.
+pub(crate) fn unavailable(e: El) -> El {
+    e.disabled(true).inert()
 }

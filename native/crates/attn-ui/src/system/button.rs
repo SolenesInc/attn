@@ -134,16 +134,16 @@ impl Button {
     }
 
     pub fn build(self, t: &Tokens) -> Control {
-        let look = match self.look {
-            Look::Primary if self.disabled => Look::Plain,
-            look => look,
-        };
-        let (fill, edge, ink) = match look {
+        let (fill, edge, ink) = match self.look {
             Look::Plain if self.open || self.chosen => {
                 (t.bg_selected, t.border_hover, t.text_primary)
             }
             Look::Quiet if self.open || self.chosen => {
                 (t.bg_selected, Color::TRANSPARENT, t.text_primary)
+            }
+            Look::Primary if self.disabled => {
+                let fill = t.warning.alpha(disabled::STRENGTH);
+                (fill, fill, crate::warning_ink(t))
             }
             Look::Primary => (t.warning, t.warning, crate::warning_ink(t)),
             Look::Plain => (t.bg_button, t.border_hover, t.text_primary),
@@ -182,7 +182,9 @@ impl Button {
             door::inset(button, self.size.inset(), Space::S0)
         };
         let button = focus::ring(door::corner(button, Radius::Control), t);
-        let button = if self.disabled {
+        let button = if self.disabled && self.look == Look::Primary {
+            disabled::unavailable(button)
+        } else if self.disabled {
             disabled::dim(button)
         } else {
             let surface = if fill.a > 0.0 { fill } else { t.bg_panel };

@@ -233,9 +233,11 @@ choices once for the whole app:
   points right while closed and down while open. Disabled draws a control's
   rest look at half strength, every part alike, the strength rune-kit draws a
   disabled field at. A warm part first turns neutral, so no disabled control
-  reads as the page's one warm action. A disabled control draws no layer and
-  no ring and takes no press, focus or Tab stop, whoever attached them, but
-  its tooltip still says why it is unavailable.
+  reads as the page's one warm action, except the Primary action itself: it
+  keeps its hue with its fill at half strength and its words whole on it, so a
+  person sees where the action will be before it is available. A disabled
+  control draws no layer and no ring and takes no press, focus or Tab stop,
+  whoever attached them, but its tooltip still says why it is unavailable.
 - **Blocks.** A page is a `Page`: its `Head` (the title, its lead and an
   aside), the line that says it is saving, then its `Block`s in order. A
   `Block` knows what it is, and each of these builds one: `Section`,
@@ -308,7 +310,8 @@ choices once for the whole app:
   keeping to its own width beside words and inside its column, a field's edge
   where every other control's is, a focus ring never cut or dimmed, hover and
   pressed at their measured contrast, every part of a disabled control at
-  half strength, a warm one neutral, and a banner's first action 8 after its
+  half strength, a warm one neutral but a disabled Primary in its own hue with
+  its words at 3:1 or more, and a banner's first action 8 after its
   sentence, its glyph and dismiss on its first line, its actions beside its
   sentence or under it, its sentence readable at the smallest window with
   the largest text, a long link elided inside the bar with its ring whole,

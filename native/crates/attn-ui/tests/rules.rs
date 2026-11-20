@@ -678,12 +678,11 @@ const DISABLED: &[(&str, &str)] = &[
 
 /// The parts whose rest look is warm: disabled, they first turn neutral, so they are held to
 /// that and not to their rest colour.
-const WARM_AT_REST: &[&str] = &[
-    "button.primary.regular",
-    "button.primary.compact",
-    "switch.on",
-    "choice.0",
-];
+const WARM_AT_REST: &[&str] = &["switch.on", "choice.0"];
+
+/// The surface's Primary action keeps its hue while unavailable, so a person sees where the
+/// action will be: [`a_disabled_primary_keeps_its_hue_at_half_strength_and_its_label_reads_on_it`].
+const KEEPS_ITS_HUE: &[&str] = &["button.primary.regular", "button.primary.compact"];
 
 /// The half strength every unavailable control draws at.
 const STRENGTH: f32 = 0.5;
@@ -817,7 +816,8 @@ fn disabled_draws_every_part_of_every_control_at_half_strength() {
             for part in parts(&disabled) {
                 let (n, _, _) = point_of(&disabled, part);
                 let instance = &disabled.instances[n];
-                if !within(&disabled, &keys, instance) {
+                if !within(&disabled, &keys, instance) || within(&disabled, KEEPS_ITS_HUE, instance)
+                {
                     continue;
                 }
                 let edge = matches!(part, Part::Edge(_));
@@ -1894,6 +1894,39 @@ fn an_unchosen_choices_mark_stands_a_controls_step_from_its_ground() {
             assert!(
                 apart >= CONTROL_EDGE - ROUNDING,
                 "{key}, dark={dark}: the mark's ring stands {apart:.2}:1 from its ground, under {CONTROL_EDGE}:1"
+            );
+        }
+    }
+}
+
+/// How strongly an unavailable control draws: half strength.
+const UNAVAILABLE: f32 = 0.5;
+
+#[test]
+fn a_disabled_primary_keeps_its_hue_at_half_strength_and_its_label_reads_on_it() {
+    for dark in [true, false] {
+        let t = tokens(dark);
+        let rt = story(dark, "Library/Button", "Disabled");
+        let ground = [t.bg_panel.r, t.bg_panel.g, t.bg_panel.b].map(rune::theme::srgb_encode);
+        let primary = [t.warning.r, t.warning.g, t.warning.b].map(rune::theme::srgb_encode);
+        let half = [0, 1, 2].map(|c| primary[c] * UNAVAILABLE + ground[c] * (1.0 - UNAVAILABLE));
+        for size in ["regular", "compact"] {
+            let key = format!("button.primary.{size}");
+            let button = element(&rt, &key);
+            let drawn = surface(&rt, &button, t.bg_panel);
+            assert!(
+                (0..3).all(|c| (drawn[c] - half[c]).abs() < 0.02),
+                "{key}, dark={dark}: a disabled Primary is drawn {drawn:?}, not its hue at half strength {half:?}"
+            );
+            let label = glyphs_in(&rt, &button)
+                .first()
+                .unwrap_or_else(|| panic!("{key}, dark={dark}: draws no label"))
+                .1
+                .fill;
+            let apart = contrast([label[0], label[1], label[2]], drawn);
+            assert!(
+                apart >= CONTROL_EDGE - ROUNDING,
+                "{key}, dark={dark}: the label stands {apart:.2}:1 on the fill, under {CONTROL_EDGE}:1"
             );
         }
     }
