@@ -526,6 +526,8 @@ impl ListRow {
             }
             (None, false) => (below, Color::TRANSPARENT),
         };
+        let row_key = self.key.clone();
+        let part = move |e: El, name: &str| e.key(format!("{row_key}.{name}")).role("none");
         let on_band = |e: El| row().h(band).items_center().child(e);
         let cut_middle = self.cut_middle;
         let one_line = |e: El| {
@@ -557,9 +559,12 @@ impl ListRow {
             .subtitle
             .map(|line| one_line(line.key(subtitle_key)).min_w(0.0));
         let has_lead = self.lead.is_some();
-        let lead = self
-            .lead
-            .map(|lead| on_band(row().w(LEAD).justify_center().items_center().child(lead)));
+        let lead = self.lead.map(|lead| {
+            part(
+                on_band(row().w(LEAD).justify_center().items_center().child(lead)),
+                "lead",
+            )
+        });
         let hovering = !self.hover.is_empty();
         let controls_width = self.hover.iter().map(IconButton::width).sum::<f32>();
         let over_words = if self.inline.is_empty() {
@@ -573,7 +578,10 @@ impl ListRow {
         let (title_line, under) = match (wraps, tagged, under_title) {
             (true, _, true) => (
                 title_line.items_start().children(title),
-                Some(door::gap(row().items_center(), Space::S6).children(self.tags)),
+                Some(part(
+                    door::gap(row().items_center(), Space::S6).children(self.tags),
+                    "tags",
+                )),
             ),
             (true, _, false) => (
                 title_line.items_start().children(title).children(self.tags),
@@ -581,13 +589,18 @@ impl ListRow {
             ),
             (false, true, true) => (
                 title_line.h(band).items_center().children(title),
-                Some(door::gap(row().items_center(), Space::S6).children(self.tags)),
+                Some(part(
+                    door::gap(row().items_center(), Space::S6).children(self.tags),
+                    "tags",
+                )),
             ),
             (false, true, false) => (
                 title_line
                     .flex_wrap()
                     .items_center()
-                    .children(title.map(|title| on_band(title).shrink().min_w(0.0)))
+                    .children(
+                        title.map(|title| part(on_band(title).shrink().min_w(0.0), "title-band")),
+                    )
                     .children(self.tags),
                 None,
             ),
@@ -601,7 +614,7 @@ impl ListRow {
             }
         };
         let asides = (!self.asides.is_empty()).then(|| {
-            gives_way(
+            gives_way(part(
                 on_band(
                     door::gap(row().items_center(), Space::S6)
                         .shrink()
@@ -611,13 +624,17 @@ impl ListRow {
                 .max_w_frac(0.5)
                 .shrink()
                 .min_w(0.0),
-            )
+                "asides",
+            ))
         });
         let badges = (!self.badges.is_empty()).then(|| {
-            gives_way(on_band(
-                door::gap(row().items_center(), Space::S6)
-                    .key(format!("{}.badges", self.key))
-                    .children(self.badges),
+            gives_way(part(
+                on_band(
+                    door::gap(row().items_center(), Space::S6)
+                        .key(format!("{}.badges", self.key))
+                        .children(self.badges),
+                ),
+                "badges-band",
             ))
         });
         let lines = |head: El, under: Option<El>, subtitle: Option<El>| {
@@ -631,7 +648,7 @@ impl ListRow {
             )
             .grow(1.0)
             .min_w(0.0)
-            .child(head)
+            .child(part(head, "title-line"))
             .children(under)
             .children(subtitle)
         };
@@ -640,6 +657,7 @@ impl ListRow {
         } else {
             (title_line.grow(1.0), under, subtitle)
         };
+        let words = part(words, "words");
         let fading = door::gap(row(), Space::S8)
             .grow(1.0)
             .min_w(0.0)
@@ -661,11 +679,12 @@ impl ListRow {
                     .items_center()
                     .children(self.inline),
             );
-            if self.quiet && !lit {
+            let controls = if self.quiet && !lit {
                 controls.group_opacity(QUIET, 1.0)
             } else {
                 controls
-            }
+            };
+            part(controls, "kept-band")
         });
         let over = hovering.then(|| {
             let key = if inline.is_some() {
@@ -687,22 +706,29 @@ impl ListRow {
                         .h(band)
                         .items_center()
                         .children(over.map(|over| {
-                            row()
-                                .pin(Some(0.0), Some(0.0), None, Some(0.0))
-                                .w(0.0)
-                                .child(over)
+                            part(
+                                row()
+                                    .pin(Some(0.0), Some(0.0), None, Some(0.0))
+                                    .w(0.0)
+                                    .child(over),
+                                "hover-pin",
+                            )
                         }))
                         .child(inline),
-                ),
+                )
+                .map(|kept| part(kept, "kept")),
                 None,
             ),
             (None, over) => (
                 None,
                 over.map(|over| {
-                    row()
-                        .h(band)
-                        .pin(None, Some(0.0), Some(0.0), None)
-                        .child(over)
+                    part(
+                        row()
+                            .h(band)
+                            .pin(None, Some(0.0), Some(0.0), None)
+                            .child(over),
+                        "hover-pin",
+                    )
                 }),
             ),
         };
@@ -710,21 +736,24 @@ impl ListRow {
             .w_full()
             .min_w(0.0)
             .items_start()
-            .child(fading)
+            .child(part(fading, "fading"))
             .children(anchor)
             .children(inline);
         let lower = (under.is_some() || subtitle.is_some()).then(|| {
-            row()
-                .w_full()
-                .min_w(0.0)
-                .children(has_lead.then(|| row().w(LEAD + Space::S8.pt())))
-                .child(
-                    door::gap(col(), Space::S2)
-                        .grow(1.0)
-                        .min_w(0.0)
-                        .children(under)
-                        .children(subtitle),
-                )
+            part(
+                row()
+                    .w_full()
+                    .min_w(0.0)
+                    .children(has_lead.then(|| row().w(LEAD + Space::S8.pt())))
+                    .child(
+                        door::gap(col(), Space::S2)
+                            .grow(1.0)
+                            .min_w(0.0)
+                            .children(under)
+                            .children(subtitle),
+                    ),
+                "lower",
+            )
         });
         let rows = door::gap(
             col(),
@@ -736,7 +765,7 @@ impl ListRow {
         )
         .grow(1.0)
         .min_w(0.0)
-        .child(band_line)
+        .child(part(band_line, "band"))
         .children(lower);
         let bar = (self.mark == Mark::InView).then(|| {
             let top = (height - BAR.1) / 2.0;

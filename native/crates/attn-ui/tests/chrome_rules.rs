@@ -1302,3 +1302,121 @@ fn a_hovered_rows_title_is_whole_up_to_eight_points_before_its_controls_and_neve
         }
     }
 }
+
+const COMING_AND_GOING: [&str; 3] = ["hover", "badge", "tag"];
+
+fn rows_that_change(shown: &u8, _: &mut Cx<u8>) -> El {
+    let t = tokens(true);
+    let kinds: [(&str, fn(ListRow, &Tokens) -> ListRow); 4] = [
+        ("rule.line", |row, _| row),
+        ("rule.wrap", |row, _| row.wrap()),
+        ("rule.two", |row, t| row.subtitle("Waiting since noon", t)),
+        ("rule.select", |row, _| {
+            row.select("rule.select.open", "Open shop", |_: &mut u8, _| {})
+        }),
+    ];
+    let has = |part: usize| shown & (1 << part) != 0;
+    let mut list = rune::col().w(ROW_WIDTH);
+    for (key, kind) in kinds {
+        let row = kind(
+            ListRow::new(key, "shop")
+                .lead(el().size(16.0, 16.0))
+                .title("shop"),
+            &t,
+        )
+        .controls(
+            [attn_ui::system::icon_button(
+                format!("{key}.start"),
+                "Start",
+                &attn_ui::icon::HOME,
+                attn_ui::system::IconSize::Small,
+            )
+            .build(&t)
+            .into()],
+            attn_ui::system::Reveal::Always,
+        );
+        let row = if has(0) {
+            row.hover_controls([attn_ui::system::icon_button(
+                format!("{key}.more"),
+                "Actions",
+                &attn_ui::icon::HOME,
+                attn_ui::system::IconSize::Small,
+            )])
+        } else {
+            row
+        };
+        let row = if has(1) {
+            row.badge(el().size(8.0, 8.0))
+        } else {
+            row
+        };
+        let row = if has(2) {
+            row.tag(attn_ui::system::words(
+                "Restart",
+                attn_ui::system::Type::Small,
+                t.text_tertiary,
+            ))
+        } else {
+            row
+        };
+        list = list.child(row.build(&t));
+    }
+    rune::row().child(list)
+}
+
+#[test]
+fn a_focused_kept_control_keeps_the_focus_while_its_rows_other_parts_come_and_go() {
+    let mut rt = App::new(AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..AppSpec::new("chrome-rules", WINDOW, || 0b111u8, rows_that_change)
+    })
+    .headless_runtime(WINDOW, Env::new(true, 1.0));
+    rt.set_full_keyboard_access(true);
+    rt.frame(0.0);
+    let focused = |rt: &Runtime<u8>| {
+        rt.elements()
+            .into_iter()
+            .find(|e| e.focused)
+            .and_then(|e| e.key)
+    };
+    for kind in ["rule.line", "rule.wrap", "rule.two", "rule.select"] {
+        let kept = format!("{kind}.start");
+        for from in 0..8u8 {
+            for to in 0..8u8 {
+                if from == to {
+                    continue;
+                }
+                rt.update(|s, _| *s = from);
+                rt.frame(1.0);
+                let mut tabs = 0;
+                while focused(&rt).as_deref() != Some(kept.as_str()) {
+                    assert!(tabs < 40, "Tab never reached {kept}");
+                    rt.key(KeyEvent {
+                        key: Key::Tab,
+                        mods: Mods::default(),
+                    });
+                    rt.frame(1.0);
+                    tabs += 1;
+                }
+                rt.update(|s, _| *s = to);
+                rt.frame(1.0);
+                let shown = |m: u8| {
+                    COMING_AND_GOING
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, _)| m & (1 << i) != 0)
+                        .map(|(_, p)| *p)
+                        .collect::<Vec<_>>()
+                };
+                assert_eq!(
+                    focused(&rt).as_deref(),
+                    Some(kept.as_str()),
+                    "{kept} loses the focus when its row goes from {:?} to {:?}",
+                    shown(from),
+                    shown(to)
+                );
+            }
+        }
+    }
+}

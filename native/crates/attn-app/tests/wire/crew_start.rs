@@ -404,3 +404,52 @@ fn with_crew_in_the_queue_a_member_owing_a_turn_queues_and_every_crew_row_stays(
     assert!(shows(&world, "queue-turn.sess-keel"));
     assert!(crew_lines(&world).contains(&"queue-crew.member.alder".to_owned()));
 }
+
+fn focused(world: &World) -> Option<String> {
+    world.screen().focused().and_then(|n| n.key)
+}
+
+fn tab_to(world: &mut World, key: &str) {
+    let mut seen = Vec::new();
+    while focused(world).as_deref() != Some(key) {
+        let at = focused(world);
+        assert!(
+            !seen.contains(&at),
+            "Tab never reaches {key}; it went {seen:?}"
+        );
+        seen.push(at);
+        press(world, Key::Tab);
+    }
+}
+
+fn space() -> Key {
+    Key::Text(" ".into())
+}
+
+#[test]
+fn a_keyboard_user_arms_a_start_on_it_and_confirms_or_stands_it_down_there() {
+    let start_key = sun("trellis");
+    let mut world = start(in_queue(vec![session("s1", "idle")], roster()));
+    starting(&world);
+    tab_to(&mut world, &start_key);
+    press(&mut world, space());
+    assert!(armed(&world, "trellis"), "Space arms the start");
+    assert!(starts(&world).is_empty());
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some(start_key.as_str()),
+        "arming keeps the focus on the start"
+    );
+    press(&mut world, space());
+    assert_eq!(starts(&world), [json!("member:trellis")]);
+
+    let mut world = start(in_queue(vec![session("s1", "idle")], roster()));
+    starting(&world);
+    tab_to(&mut world, &start_key);
+    press(&mut world, space());
+    assert!(armed(&world, "trellis"));
+    press(&mut world, Key::Escape);
+    assert!(!armed(&world, "trellis"), "Escape stands the start down");
+    assert_eq!(focused(&world).as_deref(), Some(start_key.as_str()));
+    assert!(starts(&world).is_empty());
+}

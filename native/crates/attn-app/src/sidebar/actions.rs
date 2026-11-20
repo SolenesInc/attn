@@ -70,11 +70,11 @@ pub(crate) fn filter_key(state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx) ->
 
 /// The queue list's keys while it holds the keyboard: Down and Up walk the rows and wrap at
 /// both ends, Return opens the row reached, a letter or digit types into the open list's
-/// filter, and Escape steps back one layer, the last of which hands the keyboard back to the
-/// agent on screen.
+/// filter, and Escape stands an armed start down or else steps back one layer, the last of
+/// which hands the keyboard back to the agent on screen.
 pub(crate) fn list_key(state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
-    if ev.key == rune::Key::Escape {
-        super::crew::disarm(state);
+    if ev.key == rune::Key::Escape && super::crew::disarm(state) {
+        return true;
     }
     if !plain(ev) {
         return false;
