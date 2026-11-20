@@ -113,7 +113,6 @@ commands:
     runs: home
     grant: own
     read_only: true
-    wrong_args: 'needs something to look for: `attn seed search <words>`'
     doc: |
       Finds seeds by words across your profile's garden, harvested and withered included: titles, bodies and log entries. Words match as stemmed prefixes; identifier parts match too. Seeds carrying some words also appear. Ranks by title coverage, word coverage, relevance and recency, with a boost for open seeds. Prints status, last active and an original matching line. Search before you plant, so a duplicate is found instead of created.
     args:
@@ -127,7 +126,6 @@ commands:
     summary: plant a seed and print its id, slug and title
     runs: home
     grant: own
-    wrong_args: 'needs exactly one title, got {count}: attn seed plant "what this is" [-m "the detail"]'
     doc: |
       Plants a seed and prints its id, slug and title. `body` takes markdown; if the seed gains children, that body is the plot's plan. `part_of` plants it under a plot. `checks` defines what the seed must prove; attn numbers each check unless C#= names the id, and prints each id. Lists up to 3 similar open seeds in your profile, leaving out that plot. Planting always proceeds. If one is the same work, wither the new seed.
     args:
@@ -136,7 +134,7 @@ commands:
       - {name: part_of, type: seed, cli: "--part-of", placeholder: "<plot>", doc: "plant under a plot"}
       - {name: discovered_from, type: seed, cli: "--discovered-from", placeholder: "<seed>", doc: "record the seed this work came from"}
       - {name: checks, type: check_definition, list: true, cli: "--check", doc: "a check the seed must prove; attn picks the id unless C#= names it; repeats"}
-    result: Seed
+    result: SeedPlantResult
     examples:
       - {title: "Retry the uploader on 503", part_of: s-p4k2m1, checks: ["A 503 is retried three times"]}
 
@@ -144,7 +142,6 @@ commands:
     summary: plant a whole plot in one move from a JSON payload
     runs: home
     grant: full
-    wrong_args: 'takes no arguments, got {first}; the plot is JSON on stdin or at -f <path>'
     doc: |
       Plants a whole plot in one move from a JSON payload, read from the `plot` file, or from stdin when the file is - or omitted: {"title": …, "body": …, "checks": [{"id": "C5", "text": …, "shared": true}], "part_of": "<plot>", "discovered_from": "<seed>", "children": [{"title": …, "body": …, "checks": […], "after": ["<sibling step slug>"]}]}.
 
@@ -152,12 +149,13 @@ commands:
     args:
       - {name: plot, type: plot, required: true, cli: "-f", file: true, doc: "the plot payload to read; - or omitted reads stdin"}
     result: SeedPlotResult
+    errors:
+      - {code: not_a_plot, fix: 'Pass a plot payload: a JSON object with title, body, checks and children, as attn seed guide describes.'}
 
   - name: seed link
     summary: relate two seeds
     runs: home
     grant: full
-    wrong_args: 'reads as a sentence: `attn seed link s-7k3f9m blocks s-2p4qxv`, where the kind is blocks or part-of or discovered-from'
     doc: |
       Relates two seeds. "a blocks b" keeps b out of ready until a closes. "a part-of b" puts a under b; b is then a plot. "a discovered-from b" records where work came from without ordering it. A structural cycle is refused, naming both seeds and the edge to remove.
     args:
@@ -172,7 +170,6 @@ commands:
     summary: remove an edge between two seeds
     runs: home
     grant: full
-    wrong_args: 'reads as a sentence: `attn seed unlink s-7k3f9m blocks s-2p4qxv`, where the kind is blocks or part-of or discovered-from'
     doc: |
       Removes the edge "a relation b". Every link has an unlink.
     args:
@@ -186,7 +183,6 @@ commands:
     runs: home
     grant: own
     read_only: true
-    wrong_args: 'takes no arguments, got {first}; scope it with --plot <plot> or --all'
     doc: |
       Lists what you can tend right now, oldest first: nothing open blocks it, nobody is holding it, and it is not a plot, because a plot's work is its children. With neither `plot` nor `all` the scope is your profile's garden, unless this session was dispatched at a plot, and then that plot; `all` steps back out to the garden.
     args:
@@ -199,7 +195,6 @@ commands:
     runs: home
     grant: own
     read_only: true
-    wrong_args: 'takes no arguments, got {first}; to read one seed use `attn seed show <id>`'
     doc: |
       Lists the garden, newest first, with children nested under their plot, without bodies or checks; `seed_show` reads one seed whole. `plot` lists every child of one plot, oldest first, harvested and withered included. `stale` narrows to open seeds whose log has not moved for `window` (default {stale_window}): a query for your judgment, never a reaper. `standby` narrows to seeds on standby, each with the pull requests it watches and their readiness, its reminder, and why a resume is blocked when one is.
     args:
@@ -209,6 +204,11 @@ commands:
       - {name: standby, type: bool, cli: "--standby", one_of: filter, doc: "only seeds on standby"}
       - {name: flat, type: bool, cli: "--flat", doc: "print a listing without nesting"}
     result: SeedListResult
+    errors:
+      - {code: window_without_stale, fix: 'Pass {window} together with {stale}, or leave it out.'}
+      - {code: plot_and_stale, usage: true, fix: 'Pass {plot} or {stale}, not both.'}
+      - {code: standby_with_scope, usage: true, fix: 'Pass {standby} alone.'}
+      - {code: bad_window, fix: 'Say the window as a duration like 72h or a number of days like 14d.'}
 
   - name: seed show
     summary: one seed, news first
@@ -216,7 +216,6 @@ commands:
     runs: home
     grant: own
     read_only: true
-    wrong_args: 'needs exactly one seed id, got {count}: attn seed show s-7k3f9m'
     doc: |
       Reads one seed, news first: its state, who tends it and a bookmark; the newest entries on its log, and where the freshest handoff is when it is older than those; every edge that touches it, with seeds discovered from it folded to a count and the open ones; the outline of the plot it is part of; a plot's open children as a board, each with what it waits for, its checks and its newest entry, closed children folded into one line; checks and artifacts; the body last.
 
@@ -226,6 +225,9 @@ commands:
       - {name: since, type: bookmark, cli: "--since", one_of: part, doc: "only the log entries saved after the bookmark an earlier read printed, on this seed and every seed below it"}
       - {name: section, type: text, cli: "--section", one_of: part, placeholder: "<heading|id>", doc: "only the body's section under this heading (exact, or its start), or the items that start with this id, like D3"}
     result: SeedShowResult
+    errors:
+      - {code: since_and_section, usage: true, fix: 'Pass {since} or {section}, not both.'}
+      - {code: bad_bookmark, usage: true, fix: 'Pass the bookmark number a read of the seed printed.'}
     examples:
       - {seed: s-7k3f9m, since: 3618073}
 
@@ -234,7 +236,6 @@ commands:
     runs: home
     grant: own
     read_only: true
-    wrong_args: 'needs exactly one seed id, got {count}: attn seed notes s-7k3f9m'
     doc: |
       Lists the whole log, newest first; `seed_show` renders the newest few and says how many more are here. The last line is a bookmark. `since` lists every entry saved after a bookmark, on this seed and every seed below it, labeled by seed. `kind` keeps one kind of entry, such as handoff or answer.
     args:
@@ -243,6 +244,8 @@ commands:
       - {name: kind, type: entry_kind, cli: "--kind", doc: "only log entries of this kind: {entry_kinds}"}
       - {name: limit, type: count, cli: "--limit", doc: "how many log entries to read"}
     result: SeedNotesResult
+    errors:
+      - {code: bad_bookmark, usage: true, fix: 'Pass the bookmark number a read of the seed printed.'}
     examples:
       - {seed: s-7k3f9m, kind: handoff}
 
@@ -251,7 +254,6 @@ commands:
     runs: home
     grant: own
     read_only: true
-    wrong_args: 'takes no arguments, got {first}'
     doc: |
       Prints the standing garden contract and this session's live garden position.
 
@@ -259,7 +261,6 @@ commands:
     summary: the craft of writing seeds
     runs: here
     grant: any
-    wrong_args: 'takes no arguments'
     doc: |
       Prints the craft: writing a body, deliverable types and what "done" is for each, a complete plot example, artifacts, and handoffs and steering.
 
@@ -267,7 +268,6 @@ commands:
     summary: claim the seed and start growing it
     runs: home
     grant: own
-    wrong_args: 'needs exactly one seed id, got {count}: attn seed tend s-7k3f9m'
     doc: |
       Claims the seed and starts growing it. The freshest handoff prints on the claim, so picking a seed up primes you. Tending your own claim again changes nothing and rings nobody. `for` assigns the seed to a crew member instead; the user never claims a seed, so a tend from outside an attn session needs it.
     args:
@@ -282,7 +282,6 @@ commands:
     core: true
     runs: home
     grant: own
-    wrong_args: 'needs exactly one seed id, got {count}: attn seed note s-7k3f9m -m "what happened"'
     doc: |
       Appends to the seed's log: what happened and what you learned, for whoever tends it next. `handoff` addresses it to your successor on this seed: `seed_tend` prints the freshest one on the claim, so it is read before any work, and `seed_show` points at it once newer entries bury it. `ring` tells current and covering plot tenders and watchers to look; ordinary notes stay quiet.
     args:
@@ -290,7 +289,7 @@ commands:
       - {name: text, type: markdown, required: true, cli: "-m", stdin: true, placeholder: '"<what happened>"', doc: "markdown, or - to read stdin; empty stdin is refused"}
       - {name: handoff, type: bool, cli: "--handoff", doc: "write a note to whoever tends the seed next"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this note lands, and print who gets it"}
-    result: SeedNote
+    result: SeedNoteResult
     examples:
       - {seed: s-7k3f9m, text: "The parser change passes focused checks. Integration verification remains."}
 
@@ -298,7 +297,6 @@ commands:
     summary: pause the seed and let go of it
     runs: home
     grant: own
-    wrong_args: 'needs exactly one seed id, got {count}: attn seed park s-7k3f9m'
     doc: |
       Pauses the seed deliberately: it is parked and lets go of its tender. An optional `reason` lands on the log in the same move. Tending it again picks it back up. Parking it again keeps the state and adds only the reason. Moves print who they rang.
     args:
@@ -311,7 +309,6 @@ commands:
     summary: put the seed back in the pool
     runs: home
     grant: full
-    wrong_args: 'needs exactly one seed id, got {count}: attn seed replant s-7k3f9m'
     doc: |
       Puts the seed back in the pool: planted, unclaimed, ready for whoever is free. Reopens a closed seed, takes a parked one off hold, and hands back one being grown. Replanting an already planted seed changes nothing and rings nobody. Moves print who they rang.
     args:
@@ -324,7 +321,6 @@ commands:
     summary: close the seed as abandoned
     runs: home
     grant: full
-    wrong_args: 'needs exactly one seed id, got {count}: attn seed wither s-7k3f9m'
     doc: |
       Closes the seed as abandoned: nobody is picking this up. Repeating it keeps the earlier reason and adds a different reason to the log. A harvested seed must be replanted first. A plot refuses while any direct child is open. Closing a plot's last child leaves a ringing note on the plot and names the plot in the output. Withering withdraws the seed's open asks from the user and names them in the output. Moves print who they rang.
     args:
@@ -337,7 +333,6 @@ commands:
     summary: give the seed to the Chief to decide its next working context
     runs: home
     grant: full
-    wrong_args: 'needs exactly one seed id, got {count}: attn seed send-to-chief s-7k3f9m'
     doc: |
       Gives this seed to the Chief to decide its next working context. The saved folder, branch and placement problem are recorded automatically; `guidance` adds an exception such as a special branch or directory.
     args:
@@ -349,7 +344,6 @@ commands:
     summary: close the seed as done
     runs: home
     grant: own
-    wrong_args: 'needs exactly one seed id, got {count}: attn seed harvest s-7k3f9m'
     doc: |
       Closes the seed as done, with a required `reason` unless `when_merged` is set. Repeating a harvest succeeds with the earlier reason; a different reason goes on its log. A withered seed must be replanted first. A plot refuses while any direct child is open. A seed with an ask the user has not answered refuses and names the ask: end your turn, harvest after you act on the answer, or withdraw the ask with `attn ask close`. Closing a plot's last child leaves a ringing note on the plot and names the plot in the output. Moves print who they rang.
 
@@ -362,6 +356,12 @@ commands:
       - {name: clear, type: bool, cli: "--clear", doc: "take back the harvest condition (with --when-merged)"}
       - {name: force, type: bool, cli: "--force", doc: "act even though somebody else holds the seed; the log records it"}
     result: SeedTransitionResult
+    errors:
+      - {code: pr_without_when_merged, usage: true, fix: 'Pass the pull request together with {when_merged}, or leave it out.'}
+      - {code: clear_without_when_merged, usage: true, fix: 'Pass {clear} together with {when_merged}.'}
+      - {code: clear_with_reason, usage: true, fix: 'Leave out the reason; write it in a seed note instead.'}
+      - {code: clear_with_pr, usage: true, fix: 'Leave out the pull request when you pass {clear}.'}
+      - {code: not_a_pr_url, usage: true, fix: 'Pass a pull request URL like https://github.com/owner/repo/pull/12.'}
     examples:
       - {seed: s-7k3f9m, when_merged: true, reason: "Retries land; the wire test covers a 503"}
       - {seed: s-7k3f9m, when_merged: true, clear: true}
@@ -370,8 +370,6 @@ commands:
     summary: define a statement the seed must prove
     runs: home
     grant: full
-    wrong_args: 'needs the seed id and one check id, got {count} arguments'
-    no_args: 'needs the seed id'
     doc: |
       Defines a statement the seed must prove and prints its id, which the body cites. attn picks the next free id in the plot tree; `id` names one instead. On a plot, `shared` puts the check on each seed below the plot that has no children, and each of those seeds proves it with its own report. Removed ids are never reused.
     args:
@@ -381,13 +379,14 @@ commands:
       - {name: shared, type: bool, cli: "--shared", doc: "each seed below this plot that has no children proves the check with its own report"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
+    errors:
+      - {code: not_a_check_id, usage: true, fix: 'Pass a check id like C3, and the statement in {statement}.'}
+      - {code: needs_statement, usage: true, fix: 'Pass the statement the seed must prove in {statement}.'}
 
   - name: seed check edit
     summary: replace the check's statement
     runs: home
     grant: full
-    wrong_args: 'needs the seed id and one check id, got {count} arguments'
-    no_args: 'needs the seed id'
     doc: |
       Replaces the check's statement.
     args:
@@ -396,13 +395,14 @@ commands:
       - {name: statement, type: text, required: true, cli: "-m", stdin: true, placeholder: '"<statement>"', doc: "what the seed must prove"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
+    errors:
+      - {code: not_a_check_id, usage: true, fix: 'Pass a check id like C3, and the statement in {statement}.'}
+      - {code: needs_statement, usage: true, fix: 'Pass the statement the seed must prove in {statement}.'}
 
   - name: seed check remove
     summary: remove a check
     runs: home
     grant: full
-    wrong_args: 'needs the seed id and one check id, got {count} arguments'
-    no_args: 'needs the seed id'
     doc: |
       Removes a check. Its id stays reserved.
     args:
@@ -416,8 +416,6 @@ commands:
     summary: bring a removed check back
     runs: home
     grant: full
-    wrong_args: 'needs the seed id and one check id, got {count} arguments'
-    no_args: 'needs the seed id'
     doc: |
       Brings a removed check back with its result.
     args:
@@ -432,8 +430,6 @@ commands:
     core: true
     runs: home
     grant: own
-    wrong_args: 'needs the seed id and one check id, got {count} arguments'
-    no_args: 'needs the seed id'
     doc: |
       Records the proof for a check in one call: `summary`, one line of at most {max_check_summary_chars} characters that `seed_show` prints, and `detail`, kept in the report's check note. Together they fit in {max_note_kib} KiB. `evidence` is a local file, an artifact on the seed, or an http(s) URL, and can repeat. A local file is copied onto the seed, replacing its file of the same name, unless it already sits in the seed's artifact folder. A refused report lists every problem it found; nothing is recorded. A new report clears the verdict. `seed_show` marks cited evidence replaced after the report. If a check doesn't apply, report that too: say why and cite what shows it. The verdict decides.
     args:
@@ -452,8 +448,6 @@ commands:
     summary: confirm the check
     runs: home
     grant: full
-    wrong_args: 'needs the seed id and one check id, got {count} arguments'
-    no_args: 'needs the seed id'
     doc: |
       Confirms the check, with or without a report.
     args:
@@ -467,8 +461,6 @@ commands:
     summary: reject the check
     runs: home
     grant: full
-    wrong_args: 'needs the seed id and one check id, got {count} arguments'
-    no_args: 'needs the seed id'
     doc: |
       Rejects the check. `proof` names what would prove it.
     args:
@@ -482,8 +474,6 @@ commands:
     summary: clear the verdict and keep the report
     runs: home
     grant: full
-    wrong_args: 'needs the seed id and one check id, got {count} arguments'
-    no_args: 'needs the seed id'
     doc: |
       Clears the verdict and keeps the report.
     args:
@@ -497,8 +487,6 @@ commands:
     summary: clear the report and verdict
     runs: home
     grant: full
-    wrong_args: 'needs the seed id and one check id, got {count} arguments'
-    no_args: 'needs the seed id'
     doc: |
       Clears the report and verdict.
     args:
@@ -512,7 +500,6 @@ commands:
     summary: watch this seed and its descendants
     runs: home
     grant: full
-    wrong_args: 'needs exactly one seed id, got {count}: attn seed watch s-7k3f9m'
     doc: |
       Subscribes this session to the seed and its descendants, including children planted later. Delegation starts the same watch on the seed it binds. Tending a plot already covers its descendants until the claim ends. A crew member's watch belongs to the member and lasts across the member's sessions. `seed_show` names the subscriptions that still cover a seed. Restarting or resuming the same delegation does not restore a removed watch.
     args:
@@ -523,7 +510,6 @@ commands:
     summary: remove this seed's subscription
     runs: home
     grant: full
-    wrong_args: 'needs exactly one seed id, got {count}: attn seed unwatch s-7k3f9m'
     doc: |
       Removes this seed's subscription. It also drops a queued update only when the session is not a current tender, not a covering tender, and not covered by another watch. Separate child watches remain, and an ancestor watch can still cover the seed. `seed_show` and this command name those subscriptions and the commands that remove them.
     args:
@@ -534,7 +520,6 @@ commands:
     summary: set a reminder that posts a message to the seed's mailbox
     runs: home
     grant: full
-    wrong_args: 'needs exactly one seed id: attn seed remind s-7k3f9m --in 20m -m "Check the rollout"'
     doc: |
       Sets a reminder: at that time attn posts `message` to the seed's mailbox, which delivers it to whoever tends the seed then. When nobody tends it, the message waits for the next tender, who reads it with `attn agent inbox`. `in` counts from now; `at` takes an RFC3339 time; one of them is required unless `clear`. attn checks once a minute, so a message can arrive up to a minute late. A seed holds one reminder, and a new one replaces it. The reminder ends when attn posts the message, when `clear` removes it, and when the seed is harvested or withered. `seed_show` and `seed_ls` print it until then. While someone tends the seed, only the tender, sessions above it in the delegation chain, the profile's chief and the user can set or clear its reminder; anyone can while nobody holds the claim, and nobody can force it.
     args:
@@ -544,6 +529,10 @@ commands:
       - {name: message, type: text, cli: "-m", stdin: true, placeholder: '"<message>"', unless: clear, doc: "the message to post; required unless --clear"}
       - {name: clear, type: bool, cli: "--clear", doc: "remove the reminder"}
     result: SeedReminderResult
+    errors:
+      - {code: clear_with_reminder, usage: true, fix: 'Pass {clear} alone.'}
+      - {code: needs_time, usage: true, fix: 'Pass one of {in} or {at}, or {clear}.'}
+      - {code: needs_message, usage: true, fix: 'Pass what the reminder says in {message}.'}
     examples:
       - {seed: s-7k3f9m, in: 20m, message: "Check the rollout of the new build"}
       - {seed: s-7k3f9m, at: "2026-11-05T09:00:00+01:00", message: "Ask for the review"}
@@ -553,7 +542,6 @@ commands:
     summary: wait for seed mail with this session closed
     runs: home
     grant: full
-    wrong_args: 'needs exactly one seed id: attn seed standby s-7k3f9m -m "what to do next"'
     doc: |
       Puts a seed you tend on standby with `next`, a note saying what to do next, and closes this session. When mail reaches the seed, attn resumes the session and delivers the note; for a crew member it starts a session. `in` and `at` also set the seed's reminder to that time, with the note as its message, as `seed_remind` does. When the session can compact, attn compacts it before closing; end your turn right after the command. `stay` keeps this session open.
 
@@ -568,6 +556,10 @@ commands:
       - {name: stay, type: bool, cli: "--stay", doc: "keep this session open on standby"}
       - {name: clear, type: bool, cli: "--clear", doc: "end standby; the reminder stays"}
     result: SeedStandbyResult
+    errors:
+      - {code: clear_with_standby, usage: true, fix: 'Pass {clear} alone.'}
+      - {code: in_and_at, usage: true, fix: 'Pass {in} or {at}, not both.'}
+      - {code: needs_next, usage: true, fix: 'Pass what to do when mail resumes you in {next}.'}
     examples:
       - {seed: s-7k3f9m, at: "2026-11-13T09:00:00+01:00", next: "The user asked to pick this up Friday: rerun the backfill, then report the counts."}
       - {seed: s-7k3f9m, next: "Review is pending on #123. When it is approved, merge (the user approved this up front), then follow the deploy."}
@@ -579,7 +571,6 @@ commands:
     runs: home
     grant: full
     read_only: true
-    wrong_args: 'needs exactly one seed id, got {count}: attn seed export s-7k3f9m'
     doc: |
       Writes the raw body with a first-line stamp naming this seed and its body hash. Edit the file with any tool, keep its first line, then submit it with `attn seed edit <id> -m - < <id>.md`. `out` - writes to stdout; the default is <id>.md in the current directory.
     args:
@@ -591,7 +582,6 @@ commands:
     summary: save an edited body
     runs: home
     grant: full
-    wrong_args: 'needs exactly one seed id, got {count}: attn seed edit s-7k3f9m -m -'
     doc: |
       Saves an exported body after editing the file with any tool. Keep the first stamp line: it names the body the edit started from. If the body changed since export, export again and reapply. Empty bodies are refused. Each edit saves a numbered version and a log entry; `note` adds what changed to that entry.
     args:
@@ -600,12 +590,13 @@ commands:
       - {name: base, type: text, required: true, cli: stamp}
       - {name: note, type: text, cli: "--note", placeholder: '"<what changed>"', doc: "what changed, saved on the edit entry"}
     result: SeedEditResult
+    errors:
+      - {code: not_exported, usage: true, fix: 'Export the seed, edit the file, and pass its whole text as {body}.'}
 
   - name: seed rollback
     summary: restore an earlier body
     runs: home
     grant: full
-    wrong_args: 'needs a seed id and optional version: attn seed rollback s-7k3f9m [<version>]'
     doc: |
       Restores the body before the newest version, or the numbered `version`. The restored body becomes a new version, so rollback can itself be rolled back. Edit entries in `seed_notes` show the versions and size changes.
     args:
@@ -617,7 +608,6 @@ commands:
     summary: set, clear or print the task's authorization
     runs: home
     grant: own
-    wrong_args: 'needs a seed id and optional words: attn seed authorization s-7k3f9m "Ask me before pushing."'
     doc: |
       Sets, clears or prints the task's authorization: the steps agents take beyond the project's guidance and the steps they stop before, written as instructions. Set only what the user allowed. Delegation openings deliver the words. When someone other than the seed's tender changes the words, attn types the change into the tender's conversation as the user's message, waiting while the tender needs approval. With neither `words` nor `clear`, prints them and the state of the last typed update. Who may change them follows seed moves: the tender, sessions above it in the delegation chain, and the profile's chief; anyone in the profile while nobody holds the seed.
     args:
@@ -625,12 +615,14 @@ commands:
       - {name: words, type: text, cli: pos, one_of: change, placeholder: '"<words>"', doc: "the instructions"}
       - {name: clear, type: bool, cli: "--clear", one_of: change, doc: "remove the authorization"}
     result: SeedAuthorizationResult
+    errors:
+      - {code: empty_words, usage: true, fix: 'Pass the words, or {clear} to remove the authorization.'}
+      - {code: words_and_clear, usage: true, fix: 'Pass the words or {clear}, not both.'}
 
   - name: seed attach
     summary: give the seed a file or a document to keep
     runs: home
     grant: full
-    wrong_args: 'needs exactly one seed id, got {count}: attn seed attach s-7k3f9m --path docs/plans/thing.md'
     doc: |
       Puts a local regular file in durable seed-owned storage, or records a document that stays where it lives. For a local file, `mode` is required: move transfers the file and leaves one editable canonical file, which is the recommended choice; copy keeps an independent source snapshot. Git-tracked files must use copy. A file the seed already has by that name is replaced, and `seed_show` marks check evidence replaced after its report; re-attaching an unchanged file changes nothing. A `path` in a `repo`, a `notebook` document and a `url` remain associations, and `note` goes on the log with them.
     args:
@@ -642,6 +634,12 @@ commands:
       - {name: repo, type: name, cli: "--repo", placeholder: "<repository>", doc: "the repository that path lives in"}
       - {name: note, type: text, cli: "-m", stdin: true, placeholder: '"<note>"', doc: "a note on the log for an association"}
     result: SeedArtifactResult
+    errors:
+      - {code: no_document, fix: 'Name one document with {path}, {notebook} or {url}.'}
+      - {code: two_documents, fix: 'Name one document per call.'}
+      - {code: transfer_with_note, fix: 'Leave out {note}; a managed transfer records its own receipt.'}
+      - {code: transfer_needs_local_path, fix: 'Pass a local {path} without {repo}, or leave out {mode}.'}
+      - {code: transfer_needs_mode, fix: 'Pass {mode}: move is recommended, copy keeps the source.'}
     examples:
       - {seed: s-7k3f9m, path: retry.log, mode: move}
       - {seed: s-7k3f9m, path: plan.md, mode: copy}
@@ -652,7 +650,6 @@ commands:
     summary: move a managed artifact back out, or drop an association
     runs: home
     grant: full
-    wrong_args: 'needs exactly one seed id, got {count}: attn seed detach s-7k3f9m --path docs/plans/thing.md'
     doc: |
       Moves a managed artifact back out of the seed to `to`, and never overwrites. `reference` removes an old linked path association instead. `repo`, `notebook` and `url` drop the association they name, and `note` goes on the log with it.
     args:
@@ -665,6 +662,13 @@ commands:
       - {name: repo, type: name, cli: "--repo", placeholder: "<repository>", doc: "the repository that path lives in"}
       - {name: note, type: text, cli: "-m", stdin: true, placeholder: '"<note>"', doc: "a note on the log for an association"}
     result: SeedArtifactResult
+    errors:
+      - {code: reference_needs_path, fix: 'Pass the linked {path} without {repo}.'}
+      - {code: no_document, fix: 'Name one document with {path}, {notebook} or {url}.'}
+      - {code: two_documents, fix: 'Name one document per call.'}
+      - {code: transfer_with_note, fix: 'Leave out {note}; a managed transfer records its own receipt.'}
+      - {code: transfer_needs_managed_path, fix: 'Pass the managed filename in {path} without {repo}, or leave out {to}.'}
+      - {code: detach_needs_to, fix: 'Pass {to} with the destination, or {reference} to remove an old linked path.'}
     examples:
       - {seed: s-7k3f9m, path: retry.log, to: ./retry.log}
       - {seed: s-7k3f9m, path: notes.md, reference: true}
@@ -673,7 +677,6 @@ commands:
     summary: start an advisory Garden review
     runs: home
     grant: full
-    wrong_args: 'takes no arguments'
     doc: |
       Starts an advisory Garden review. The review never changes a seed's state.
     result: SeedReviewResult
@@ -683,7 +686,6 @@ commands:
     runs: home
     grant: full
     read_only: true
-    wrong_args: 'takes at most one review id'
     doc: |
       Inspects the review and its progressive results. With no `review`, shows the latest review.
     args:
@@ -694,7 +696,6 @@ commands:
     summary: cancel unfinished classification
     runs: home
     grant: full
-    wrong_args: 'needs exactly one review id'
     doc: |
       Cancels unfinished classification.
     args:
@@ -705,7 +706,6 @@ commands:
     summary: retry one failed or changed review item
     runs: home
     grant: full
-    wrong_args: 'needs a review id and seed id'
     doc: |
       Retries one failed or changed review item.
     args:
@@ -717,10 +717,11 @@ commands:
     summary: keep a seed growing and review it again later
     runs: home
     grant: full
-    wrong_args: 'needs a review id and seed id'
     doc: |
       Keeps a seed growing and reviews it again after seven quiet days.
     args:
       - {name: review, type: review_id, required: true, cli: pos}
       - {name: seed, type: seed, required: true, cli: pos, placeholder: "<seed-id>"}
     result: SeedReviewResult
+    errors:
+      - {code: not_in_review, fix: 'Pass a seed the review lists; seed review show lists them.'}

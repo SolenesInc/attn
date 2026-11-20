@@ -632,8 +632,9 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		requireLines(t, "add without an id", seedAs(t, s, "", "check", "add", loose.ID, "-m", "Handles empty input"),
 			"C3 added on "+loose.ID+" (checked-seed) · checks 0 of 2 confirmed · 2 open\n")
 		requireFailure(t, s.Attn("seed", "check", "add", loose.ID, "C2", "-m", "Takes a used id"), "seed check add: ", "already defines C2", "next free one, C4")
-		refused(t, s.Attn("seed", "check", "add", loose.ID, "C4", "A positional statement"), 2, `seed check add: "A positional statement" is not a check id; the statement goes in -m`)
-		refused(t, s.Attn("seed", "check", "edit", loose.ID, "C3", "A positional statement"), 2, `seed check edit: "A positional statement" is not a check id; the statement goes in -m`)
+		refused(t, s.Attn("seed", "check", "add", loose.ID, "C4", "A positional statement"), 2, "seed check add: takes 1 or 2 arguments (seed, [id]), got 3: \""+loose.ID+"\" \"C4\" \"A positional statement\"\nusage: attn seed check add <id> [<C#>] -m \"<statement>\"")
+		refused(t, s.Attn("seed", "check", "edit", loose.ID, "C3", "A positional statement"), 2, "seed check edit: takes 2 arguments (seed, id), got 3: \""+loose.ID+"\" \"C3\" \"A positional statement\"\nusage: attn seed check edit <id> <C#> -m \"<statement>\"")
+		refused(t, s.Attn("seed", "check", "add", loose.ID, "not-an-id", "-m", "A statement"), 2, `seed check add: "not-an-id" is not a check id; the statement goes in -m`)
 		refused(t, s.Attn("seed", "check", "edit", loose.ID, "C3"), 2, "seed check edit: needs the statement in -m")
 		edited := s.Run(testworld.Invocation{Args: []string{"seed", "check", "edit", loose.ID, "C3", "-m", "-"}, Stdin: "Handles empty and blank input\n"})
 		requireLines(t, "edit from stdin", edited.Stdout, "C3 edited on "+loose.ID+" (checked-seed)")
@@ -962,7 +963,7 @@ func TestAMergePersistedBeforeACrashHarvestsItsSeedOnRestart(t *testing.T) {
 	}
 }
 
-func TestPlantAndPlotPrintSimilarSeedsAndKeepPlantJSON(t *testing.T) {
+func TestPlantAndPlotPrintSimilarSeedsAndPlantJSONStaysFlat(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
 	s.Start()
@@ -977,10 +978,15 @@ func TestPlantAndPlotPrintSimilarSeedsAndKeepPlantJSON(t *testing.T) {
 			t.Errorf("plant missing %q: %s", want, planted.Stdout)
 		}
 	}
-	var object map[string]any
+	var object struct {
+		ID      string           `json:"id"`
+		Title   string           `json:"title"`
+		Seed    any              `json:"seed"`
+		Similar []map[string]any `json:"similar"`
+	}
 	s.Attn("seed", "plant", "Callout wire races disconnect", "--json").JSON(t, &object)
-	if object["id"] == nil || object["title"] != original.Title || object["seed"] != nil || object["similar"] != nil {
-		t.Errorf("plant --json changed its shape: %+v", object)
+	if object.ID == "" || object.Title != original.Title || object.Seed != nil || !strings.Contains(fmt.Sprint(object.Similar), original.ID) {
+		t.Errorf("plant --json should print the seed's fields at the top level beside the similar seeds, naming %s: %+v", original.ID, object)
 	}
 	unrelated := s.Attn("seed", "plant", "zygomorphicquasar")
 	if unrelated.Code != 0 || strings.Contains(unrelated.Stdout, "similar") {

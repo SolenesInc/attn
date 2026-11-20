@@ -6639,9 +6639,10 @@ model SeedSimilar {
   "like": string;
 }
 
+// The planted seed, and the open seeds whose titles resemble it.
 model SeedPlantResult {
-  "seed": Seed;
-  "similar": SeedSimilar[];
+  ...Seed;
+  "similar"?: SeedSimilar[];
 }
 
 model SeedPlotResult {
@@ -7182,9 +7183,9 @@ model SeedNoteMessage {
 }
 
 model SeedNoteResult {
-  "note": SeedNote;
-  // Present when the note rang: who the ring goes to, as session ids or
-  // member names. Empty rings nobody.
+  ...SeedNote;
+  // Present when the note rang someone: who the ring goes to, as session ids
+  // or member names.
   "ring_recipients"?: string[];
 }
 

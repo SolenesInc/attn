@@ -45,7 +45,7 @@ func TestEverySeedMoveReachesTheAppAsOneGardenPush(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		seed := planted.Seed.ID
+		seed := planted.ID
 
 		var statuses []string
 		record := func(move string) protocol.Seed {
@@ -326,7 +326,7 @@ func TestEditingASeedChangesOnlyItsBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	before := lifeMove(t, cli, editor, planted.Seed.ID, "tend", "", "")
+	before := lifeMove(t, cli, editor, planted.ID, "tend", "", "")
 
 	edited, err := editSeedBody(t, cli, before.ID, "# New body\n\nStill the same seed.")
 	if err != nil {
@@ -364,11 +364,11 @@ func TestAPlantedSeedRoundTripsThroughListAndShow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	planted := result.Seed
+	planted := result
 	if err := garden.ValidateID(planted.ID); err != nil {
 		t.Fatalf("plant returned an id that is not a seed id: %v", err)
 	}
-	if planted.Status != "planted" || planted.StepSlug != "plant-see" || string(planterSessionOf(planted)) != planter {
+	if planted.Status != "planted" || planted.StepSlug != "plant-see" || string(planterSessionOf(narrowed[protocol.Seed](t, planted))) != planter {
 		t.Fatalf("the planted seed = %+v, want planted, slug plant-see, and its planter", planted)
 	}
 	sessionless := plantSeedAs(t, cli, "", "planted with no session at all")
@@ -395,7 +395,7 @@ func TestAPlantedSeedRoundTripsThroughListAndShow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if edges := found.Seed.Edges; len(edges) != 1 || edges[0].Kind != "discovered-from" || edges[0].To != planted.ID {
+	if edges := found.Edges; len(edges) != 1 || edges[0].Kind != "discovered-from" || edges[0].To != planted.ID {
 		t.Errorf("a seed planted discovered from another has edges %+v", edges)
 	}
 	_, err = cli.SeedPlant("", "must not land", "", "", "s-miss11")
@@ -465,17 +465,17 @@ func TestASeedsStateClockMovesOnlyWithItsLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		plantedAt := time.Now()
-		lifeClockAt(t, "planting", planted.Seed, plantedAt)
+		lifeClockAt(t, "planting", narrowed[protocol.Seed](t, planted), plantedAt)
 
 		w.advance(time.Second)
-		edited, err := editSeedBody(t, cli, planted.Seed.ID, "a newer body")
+		edited, err := editSeedBody(t, cli, planted.ID, "a newer body")
 		if err != nil {
 			t.Fatal(err)
 		}
 		lifeClockAt(t, "a body edit", edited.Seed, plantedAt)
 
 		w.advance(time.Second)
-		lifeClockAt(t, "tending", lifeMove(t, cli, "worker", planted.Seed.ID, "tend", "", ""), time.Now())
+		lifeClockAt(t, "tending", lifeMove(t, cli, "worker", planted.ID, "tend", "", ""), time.Now())
 	})
 }
 
@@ -837,7 +837,7 @@ func TestEveryGardenReadShowsTheWriteBeforeIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	expect("the planting", protocol.SeedPlotProgress{Total: 3, Growing: 1, Ready: 1, Blocked: 1, Checks: &protocol.SeedCheckTally{Total: 1, Reported: 1}}, func(seeds map[string]protocol.SeedRow) string {
-		if _, ok := seeds[third.Seed.ID]; !ok {
+		if _, ok := seeds[third.ID]; !ok {
 			return "the new seed is not listed"
 		}
 		return ""

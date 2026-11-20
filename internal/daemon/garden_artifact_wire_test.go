@@ -82,13 +82,13 @@ func gardenArtifactMarkdown(path string) *protocol.SeedArtifactReference {
 	return &protocol.SeedArtifactReference{Kind: garden.ArtifactMarkdownFile, Path: protocol.Ptr(path)}
 }
 
-func gardenArtifactNote(t *testing.T, cli *client.Client, session, seedID, kind, body string, artifact *protocol.SeedArtifactReference) protocol.SeedNote {
+func gardenArtifactNote(t *testing.T, cli *client.Client, session, seedID, kind, body string, artifact *protocol.SeedArtifactReference) *protocol.SeedNoteResult {
 	t.Helper()
 	result, err := cli.SeedNote(protocol.SessionID(session), seedID, body, kind, false, artifact)
 	if err != nil {
 		t.Fatalf("%s note on %s: %v", kind, seedID, err)
 	}
-	return result.Note
+	return result
 }
 
 func gardenArtifactShow(t *testing.T, cli *client.Client, session, seedID string) *protocol.SeedShowResult {

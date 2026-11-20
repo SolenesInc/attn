@@ -29,7 +29,7 @@ func plantDelegationSeed(t *testing.T, cli *client.Client, sessionID, title stri
 	if err != nil {
 		t.Fatalf("plant %q: %v", title, err)
 	}
-	return planted.Seed.ID
+	return planted.ID
 }
 
 func moveDelegationSeed(t *testing.T, cli *client.Client, sessionID, seedID, verb, reason string) {

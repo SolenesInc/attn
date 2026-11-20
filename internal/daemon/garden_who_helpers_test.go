@@ -1,10 +1,25 @@
 package daemon_test
 
 import (
+	"encoding/json"
 	"strings"
+	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
+
+func narrowed[Part any](t *testing.T, result any) Part {
+	t.Helper()
+	var part Part
+	data, err := json.Marshal(result)
+	if err == nil {
+		err = json.Unmarshal(data, &part)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return part
+}
 
 func whoID(ref, kind string) string {
 	id, _ := strings.CutPrefix(ref, kind+":")

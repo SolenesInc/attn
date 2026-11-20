@@ -209,10 +209,10 @@ func gardenReviewPlantTended(t *testing.T, cli *client.Client, session, title st
 	if err != nil {
 		t.Fatalf("plant %q: %v", title, err)
 	}
-	if _, err := cli.SeedTransition(protocol.SessionID(session), planted.Seed.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition(protocol.SessionID(session), planted.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatalf("tend %q: %v", title, err)
 	}
-	return planted.Seed.ID
+	return planted.ID
 }
 
 func gardenReviewConversationTending(t *testing.T, w *world, app *testworld.Peer, cli *client.Client, title string) string {

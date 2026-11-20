@@ -158,7 +158,7 @@ func plantPartAs(t *testing.T, cli *client.Client, sessionID, title, plot string
 	if err != nil {
 		t.Fatalf("plant %q under %s: %v", title, plot, err)
 	}
-	return planted.Seed.ID
+	return planted.ID
 }
 
 func sinceNote(t *testing.T, cli *client.Client, seedID, body string, ring bool) protocol.SeedNote {
@@ -168,7 +168,7 @@ func sinceNote(t *testing.T, cli *client.Client, seedID, body string, ring bool)
 		t.Errorf("note %q on %s: %v", body, seedID, err)
 		return protocol.SeedNote{}
 	}
-	return result.Note
+	return narrowed[protocol.SeedNote](t, result)
 }
 
 func sinceShow(t *testing.T, cli *client.Client, sessionID protocol.SessionID, seedID string, since *int) *protocol.SeedShowResult {

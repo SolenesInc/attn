@@ -30,9 +30,9 @@ func TestArmingASeedParksItOnItsPullRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		seed := planted.Seed.ID
-		if planted.Seed.HarvestWhen != nil {
-			t.Fatalf("an unarmed seed carries a condition: %+v", planted.Seed.HarvestWhen)
+		seed := planted.ID
+		if planted.HarvestWhen != nil {
+			t.Fatalf("an unarmed seed carries a condition: %+v", planted.HarvestWhen)
 		}
 		lifeMove(t, cli, "shipper", seed, "tend", "", "")
 

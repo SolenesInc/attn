@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "333f56b5edb3";
+pub const PROTOCOL_VERSION: &str = "d07ecc82e63c";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -10580,9 +10580,18 @@ impl SeedNoteMessage {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedNoteResult {
-    pub note: SeedNote,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact: Option<SeedArtifactReference>,
+    pub author: ActorView,
+    pub body: String,
+    pub created_at: String,
+    pub id: String,
+    pub kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ring_recipients: Option<Vec<String>>,
+    pub seed_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seq: Option<i64>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedNoteResultMessage {
@@ -10628,9 +10637,50 @@ pub struct SeedOutlinePart {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedPlantResult {
-    pub seed: Seed,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorization: Option<SeedAuthorization>,
+    pub body: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checks: Option<Vec<SeedCheck>>,
+    pub claimed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuation: Option<SeedContinuation>,
+    pub created_at: String,
     #[serde(deserialize_with = "null_as_default")]
-    pub similar: Vec<SeedSimilar>,
+    pub edges: Vec<SeedEdge>,
+    pub gate: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub harvest_when: Option<SeedHarvestCondition>,
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_execution_id: Option<SessionID>,
+    pub planter: ActorView,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plot_progress: Option<SeedPlotProgress>,
+    pub profile_id: String,
+    pub ready: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reminder: Option<SeedReminder>,
+    pub rev: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_checks: Option<Vec<SeedSharedCheck>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub similar: Option<Vec<SeedSimilar>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub standby: Option<SeedStandbyView>,
+    pub state_changed_at: String,
+    pub state_changed_at_exact: bool,
+    pub status: String,
+    pub step_slug: String,
+    pub template: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tender: Option<PartyView>,
+    pub title: String,
+    pub updated_at: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub vars: Vec<SeedVar>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedPlotProgress {

@@ -241,7 +241,7 @@ func TestLedgerRecreatesAnOutpostWorktreeAndContinuesItsConversationAndCost(t *t
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := home.Client().SeedTransition(protocol.SessionID(id), planted.Seed.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
+				if _, err := home.Client().SeedTransition(protocol.SessionID(id), planted.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 					t.Fatal(err)
 				}
 			}

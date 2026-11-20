@@ -388,7 +388,7 @@ func TestSendingASeedToAChiefBetweenSessionsStartsIt(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		shown, err := cli.SeedShow("", planted.Seed.ID)
+		shown, err := cli.SeedShow("", planted.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -405,8 +405,8 @@ func TestSendingASeedToAChiefBetweenSessionsStartsIt(t *testing.T) {
 			t.Errorf("a Chief woken by its seed assignment opened with %q, want today's greeting", prompt)
 		}
 		w.advance(0)
-		if items := readInbox(t, cli, day, 0).Items; len(items) != 1 || protocol.Deref(items[0].Hint) == "tended" || !strings.Contains(items[0].Content, "attn seed show "+planted.Seed.ID) {
-			t.Errorf("the woken Chief's inbox holds %q, want only the assignment pointing at %s and no tended update", inboxContents(items), planted.Seed.ID)
+		if items := readInbox(t, cli, day, 0).Items; len(items) != 1 || protocol.Deref(items[0].Hint) == "tended" || !strings.Contains(items[0].Content, "attn seed show "+planted.ID) {
+			t.Errorf("the woken Chief's inbox holds %q, want only the assignment pointing at %s and no tended update", inboxContents(items), planted.ID)
 		}
 		if home := filepath.Dir(chief.CharterPath); home != chief.HomeDir {
 			t.Fatalf("charter %s is outside home %s", chief.CharterPath, chief.HomeDir)

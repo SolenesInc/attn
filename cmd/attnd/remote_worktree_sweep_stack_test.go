@@ -47,7 +47,7 @@ func TestTheSweepOnAnOutpostKeepsWhatTheHomesOpenSeedsOwn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedTransition(protocol.SessionID(shell), planted.Seed.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition(protocol.SessionID(shell), planted.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	app.TypeLine(shell, "exit")
@@ -68,9 +68,9 @@ func TestTheSweepOnAnOutpostKeepsWhatTheHomesOpenSeedsOwn(t *testing.T) {
 	kept := testworld.Await(onTheOutpost, protocol.EventWorktreeStateChanged, func(e protocol.WebSocketEvent) bool {
 		return len(e.Worktrees) == 1 && e.Worktrees[0].Path == owned && e.Worktrees[0].SweepStatus != nil
 	}).Worktrees[0]
-	if protocol.Deref(kept.SweepStatus) != "kept_open_seed" || strings.Contains(protocol.Deref(kept.SweepReason), planted.Seed.ID) {
+	if protocol.Deref(kept.SweepStatus) != "kept_open_seed" || strings.Contains(protocol.Deref(kept.SweepReason), planted.ID) {
 		t.Errorf("the outpost's sweep decided the seed's worktree is %s (%s); want kept_open_seed, without naming %s to every profile",
-			protocol.Deref(kept.SweepStatus), protocol.Deref(kept.SweepReason), planted.Seed.ID)
+			protocol.Deref(kept.SweepStatus), protocol.Deref(kept.SweepReason), planted.ID)
 	}
 	if _, err := os.Stat(owned); err != nil {
 		t.Errorf("the sweep removed the worktree the home's open seed owns: %v", err)

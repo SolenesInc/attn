@@ -174,7 +174,7 @@ func TestGardenPushCarriesBodies(t *testing.T) {
 		t.Fatalf("initial state carries %+v, want the seed's body", app.Initial.Seeds)
 	}
 
-	if _, err := cli.SeedEdit(planted.Seed.ID, "second body", garden.BodySHA256("first body"), ""); err != nil {
+	if _, err := cli.SeedEdit(planted.ID, "second body", garden.BodySHA256("first body"), ""); err != nil {
 		t.Fatal(err)
 	}
 	changed := nextGardenChange(app)

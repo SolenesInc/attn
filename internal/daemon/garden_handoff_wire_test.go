@@ -92,13 +92,13 @@ func TestAHandoffReachesTheNextTenderAndOnlyTheTender(t *testing.T) {
 	})
 }
 
-func gardenHandoffNote(t *testing.T, cli *client.Client, session, seedID, body, kind string) protocol.SeedNote {
+func gardenHandoffNote(t *testing.T, cli *client.Client, session, seedID, body, kind string) *protocol.SeedNoteResult {
 	t.Helper()
 	result, err := cli.SeedNote(protocol.SessionID(session), seedID, body, kind, false, nil)
 	if err != nil {
 		t.Fatalf("%s notes %q on %s: %v", session, body, seedID, err)
 	}
-	return result.Note
+	return result
 }
 
 func gardenHandoffMove(t *testing.T, cli *client.Client, session, seedID, verb, reason string) *protocol.SeedTransitionResult {

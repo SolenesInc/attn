@@ -44,7 +44,12 @@ func plant(t *testing.T, d *Daemon, msg seedPlantRequest) protocol.Seed {
 	if err != nil {
 		t.Fatalf("plant %q: %v", msg.Title, err)
 	}
-	return planted.Seed
+	planted.Similar = nil
+	seed, err := widen[protocol.Seed](planted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return seed
 }
 
 func addGardenSession(t *testing.T, d *Daemon, id string) {

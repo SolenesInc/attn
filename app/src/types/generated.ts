@@ -10324,8 +10324,15 @@ export interface LegacyReferenceElement {
 }
 
 export interface SeedNoteResultObject {
-    note:             Note;
+    artifact?:        LegacyReferenceElement;
+    author:           From;
+    body:             string;
+    created_at:       string;
+    id:               string;
+    kind:             string;
     ring_recipients?: string[];
+    seed_id:          string;
+    seq?:             number;
     [property: string]: any;
 }
 
@@ -11594,8 +11601,15 @@ export enum SeedNoteMessageCmd {
 }
 
 export interface SeedNoteResult {
-    note:             Note;
+    artifact?:        LegacyReferenceElement;
+    author:           From;
+    body:             string;
+    created_at:       string;
+    id:               string;
+    kind:             string;
     ring_recipients?: string[];
+    seed_id:          string;
+    seq?:             number;
     [property: string]: any;
 }
 
@@ -11641,8 +11655,36 @@ export interface SeedOutlinePart {
 }
 
 export interface SeedPlantResult {
-    seed:    SeedElement;
-    similar: SimilarElement[];
+    authorization?:         Authorization;
+    body:                   string;
+    checks?:                CheckElement[];
+    claimed:                boolean;
+    continuation?:          Continuation;
+    created_at:             string;
+    edges:                  EdgeElement[];
+    gate:                   boolean;
+    harvest_when?:          HarvestWhen;
+    id:                     string;
+    last_execution_id?:     string;
+    planter:                From;
+    plot_progress?:         PlotProgress;
+    profile_id:             string;
+    ready:                  boolean;
+    reason?:                string;
+    reminder?:              Reminder;
+    rev:                    number;
+    shared_checks?:         SharedCheckElement[];
+    similar?:               SimilarElement[];
+    standby?:               Standby;
+    state_changed_at:       string;
+    state_changed_at_exact: boolean;
+    status:                 string;
+    step_slug:              string;
+    template:               boolean;
+    tender?:                TenderObject;
+    title:                  string;
+    updated_at:             string;
+    vars:                   VarElement[];
     [property: string]: any;
 }
 
@@ -28339,8 +28381,15 @@ const typeMap: any = {
         { json: "url", js: "url", typ: u(undefined, "") },
     ], "any"),
     "SeedNoteResultObject": o([
-        { json: "note", js: "note", typ: r("Note") },
+        { json: "artifact", js: "artifact", typ: u(undefined, r("LegacyReferenceElement")) },
+        { json: "author", js: "author", typ: r("From") },
+        { json: "body", js: "body", typ: "" },
+        { json: "created_at", js: "created_at", typ: "" },
+        { json: "id", js: "id", typ: "" },
+        { json: "kind", js: "kind", typ: "" },
         { json: "ring_recipients", js: "ring_recipients", typ: u(undefined, a("")) },
+        { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "seq", js: "seq", typ: u(undefined, 0) },
     ], "any"),
     "SeedReviewResultObject": o([
         { json: "candidate_count", js: "candidate_count", typ: 0 },
@@ -29258,8 +29307,15 @@ const typeMap: any = {
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "SeedNoteResult": o([
-        { json: "note", js: "note", typ: r("Note") },
+        { json: "artifact", js: "artifact", typ: u(undefined, r("LegacyReferenceElement")) },
+        { json: "author", js: "author", typ: r("From") },
+        { json: "body", js: "body", typ: "" },
+        { json: "created_at", js: "created_at", typ: "" },
+        { json: "id", js: "id", typ: "" },
+        { json: "kind", js: "kind", typ: "" },
         { json: "ring_recipients", js: "ring_recipients", typ: u(undefined, a("")) },
+        { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "seq", js: "seq", typ: u(undefined, 0) },
     ], "any"),
     "SeedNoteResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
@@ -29289,8 +29345,36 @@ const typeMap: any = {
         { json: "ids", js: "ids", typ: a("") },
     ], "any"),
     "SeedPlantResult": o([
-        { json: "seed", js: "seed", typ: r("SeedElement") },
-        { json: "similar", js: "similar", typ: a(r("SimilarElement")) },
+        { json: "authorization", js: "authorization", typ: u(undefined, r("Authorization")) },
+        { json: "body", js: "body", typ: "" },
+        { json: "checks", js: "checks", typ: u(undefined, a(r("CheckElement"))) },
+        { json: "claimed", js: "claimed", typ: true },
+        { json: "continuation", js: "continuation", typ: u(undefined, r("Continuation")) },
+        { json: "created_at", js: "created_at", typ: "" },
+        { json: "edges", js: "edges", typ: a(r("EdgeElement")) },
+        { json: "gate", js: "gate", typ: true },
+        { json: "harvest_when", js: "harvest_when", typ: u(undefined, r("HarvestWhen")) },
+        { json: "id", js: "id", typ: "" },
+        { json: "last_execution_id", js: "last_execution_id", typ: u(undefined, "") },
+        { json: "planter", js: "planter", typ: r("From") },
+        { json: "plot_progress", js: "plot_progress", typ: u(undefined, r("PlotProgress")) },
+        { json: "profile_id", js: "profile_id", typ: "" },
+        { json: "ready", js: "ready", typ: true },
+        { json: "reason", js: "reason", typ: u(undefined, "") },
+        { json: "reminder", js: "reminder", typ: u(undefined, r("Reminder")) },
+        { json: "rev", js: "rev", typ: 0 },
+        { json: "shared_checks", js: "shared_checks", typ: u(undefined, a(r("SharedCheckElement"))) },
+        { json: "similar", js: "similar", typ: u(undefined, a(r("SimilarElement"))) },
+        { json: "standby", js: "standby", typ: u(undefined, r("Standby")) },
+        { json: "state_changed_at", js: "state_changed_at", typ: "" },
+        { json: "state_changed_at_exact", js: "state_changed_at_exact", typ: true },
+        { json: "status", js: "status", typ: "" },
+        { json: "step_slug", js: "step_slug", typ: "" },
+        { json: "template", js: "template", typ: true },
+        { json: "tender", js: "tender", typ: u(undefined, r("TenderObject")) },
+        { json: "title", js: "title", typ: "" },
+        { json: "updated_at", js: "updated_at", typ: "" },
+        { json: "vars", js: "vars", typ: a(r("VarElement")) },
     ], "any"),
     "SimilarElement": o([
         { json: "last_active", js: "last_active", typ: "" },

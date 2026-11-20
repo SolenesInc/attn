@@ -28,7 +28,7 @@ func TestSeedSearchMatchesWordsAndIdentifiers(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			ids[row.key] = seed.Seed.ID
+			ids[row.key] = seed.ID
 		}
 		for _, tc := range []struct {
 			query string
@@ -108,7 +108,7 @@ func TestSeedSearchMatchesUnicodeWords(t *testing.T) {
 			result := gardenSearch(t, cli, "", tc.query, garden.MaxSearchResults)
 			found := false
 			for _, hit := range result.Hits {
-				if hit.Seed.ID == seed.Seed.ID {
+				if hit.Seed.ID == seed.ID {
 					found = true
 					if hit.Snippet != tc.text {
 						t.Errorf("query %q: quote %q, want original %q", tc.query, hit.Snippet, tc.text)
@@ -131,7 +131,7 @@ func TestSeedSearchRanksCoverageAndKeepsClosedSeeds(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			return seed.Seed.ID
+			return seed.ID
 		}
 		title := plant("Quartz amber", "")
 		body := plant("Body match", "Original quartz amber text")
@@ -196,7 +196,7 @@ func TestSeedSearchFollowsWritesAndRestart(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		id := seed.Seed.ID
+		id := seed.ID
 		gardenSearchNote(t, cli, "", id, "Chrysoprase is only in this note")
 		assertHit := func(query string, want bool) {
 			t.Helper()
@@ -206,7 +206,7 @@ func TestSeedSearchFollowsWritesAndRestart(t *testing.T) {
 			}
 		}
 		assertHit("chrysoprase", true)
-		if _, err := cli.SeedEdit(id, "Malachite replaces the previous body", garden.BodySHA256(seed.Seed.Body), ""); err != nil {
+		if _, err := cli.SeedEdit(id, "Malachite replaces the previous body", garden.BodySHA256(seed.Body), ""); err != nil {
 			t.Fatal(err)
 		}
 		assertHit("malachite", true)

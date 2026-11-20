@@ -663,7 +663,7 @@ func TestAStartedMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 		if err != nil {
 			t.Fatalf("plant %q: %v", title, err)
 		}
-		return planted.Seed.ID
+		return planted.ID
 	}
 	tendAs := func(seed, member string) {
 		t.Helper()

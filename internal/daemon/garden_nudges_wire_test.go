@@ -226,7 +226,7 @@ func gardenNudgePlant(t *testing.T, cli *client.Client, planter, title, partOf s
 	if err != nil {
 		t.Fatalf("plant %q under %s: %v", title, partOf, err)
 	}
-	return planted.Seed.ID
+	return planted.ID
 }
 
 func gardenNudgeWatch(t *testing.T, cli *client.Client, session, seedID string, unwatch bool) *protocol.SeedWatchResult {

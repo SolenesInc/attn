@@ -88,7 +88,7 @@ func TestDeletingAWorktreeOnAnOutpostAnswersToTheHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedTransition(protocol.SessionID(shell), planted.Seed.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition(protocol.SessionID(shell), planted.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -113,7 +113,7 @@ func TestDeletingAWorktreeOnAnOutpostAnswersToTheHome(t *testing.T) {
 	if querySessionsHas(sessions, shell) {
 		t.Errorf("the home still lists the outpost shell %s whose worktree was deleted", shell)
 	}
-	notes := home.Attn("seed", "notes", planted.Seed.ID)
+	notes := home.Attn("seed", "notes", planted.ID)
 	if notes.Code != 0 || !strings.Contains(notes.Stdout, "deleted the worktree "+worktree) {
 		t.Errorf("seed notes = %+v; want the removal of %s noted on the home's seed", notes, worktree)
 	}
@@ -189,17 +189,17 @@ func TestAStalledOutpostNeverHoldsUpTheHome(t *testing.T) {
 	resume := pair.SSH.Pause(pair.Destination)
 	tended := make(chan error, 1)
 	go func() {
-		_, err := cli.SeedTransition(protocol.SessionID(remote), planted.Seed.ID, "tend", "", false, client.SeedTransitionOptions{})
+		_, err := cli.SeedTransition(protocol.SessionID(remote), planted.ID, "tend", "", false, client.SeedTransitionOptions{})
 		tended <- err
 	}()
 	home.AwaitTimer("remote-checkout-inspect")
 	within("a home seed's tend while another tend waits on the stalled outpost", func() error {
-		_, err := cli.SeedTransition(protocol.SessionID(local), other.Seed.ID, "tend", "", false, client.SeedTransitionOptions{})
+		_, err := cli.SeedTransition(protocol.SessionID(local), other.ID, "tend", "", false, client.SeedTransitionOptions{})
 		return err
 	})
 	home.Advance(10 * time.Second)
 	within("the outpost session's tend after its checkout_inspect tripwire", func() error { return <-tended })
-	shown, err := cli.SeedShow("", planted.Seed.ID)
+	shown, err := cli.SeedShow("", planted.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

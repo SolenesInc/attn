@@ -50,17 +50,17 @@ func TestAMembersWatchRingsItsNextSessionAfterAHarnessSwitch(t *testing.T) {
 	handed := crewHandoff(t, cli, string(first), "The watched tree continues.", false)
 	next := protocol.Deref(handed.SessionID)
 	w.Launched(string(next))
-	gardenNudgeNote(t, cli, sender, child.Seed.ID, "The child changed.", true)
+	gardenNudgeNote(t, cli, sender, child.ID, "The child changed.", true)
 	items := readInbox(t, cli, string(next), 0).Items
-	if len(items) != 1 || items[0].Address != "member:keel" || !strings.Contains(items[0].Content, child.Seed.ID) {
+	if len(items) != 1 || items[0].Address != "member:keel" || !strings.Contains(items[0].Content, child.ID) {
 		t.Fatalf("the member's next session reads %+v, want the watched child's update addressed to member:keel", items)
 	}
-	gardenNudgeNote(t, cli, sender, child.Seed.ID, "Another child update.", true)
+	gardenNudgeNote(t, cli, sender, child.ID, "Another child update.", true)
 	gardenNudgeWatch(t, cli, string(next), plot, true)
 	if items := readInbox(t, cli, string(next), 0).Items; len(items) != 0 {
 		t.Fatalf("unwatching from the next session left pending updates: %+v", items)
 	}
-	gardenNudgeNote(t, cli, string(next), child.Seed.ID, "From the member.", true)
+	gardenNudgeNote(t, cli, string(next), child.ID, "From the member.", true)
 	if items := readInbox(t, cli, sender, 0).Items; len(items) != 1 || items[0].Address != "session:"+sender {
 		t.Fatalf("a plain session's watch reads %+v, want one update to its session", items)
 	}

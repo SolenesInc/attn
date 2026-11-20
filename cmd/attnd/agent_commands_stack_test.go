@@ -139,7 +139,7 @@ func TestTheCommandsAnAgentRunsFromItsSessionActOnThatSession(t *testing.T) {
 			{args: []string{readme}, tile: readme},
 			{args: []string{"--session", other, readme}, tile: readme},
 			{args: []string{relativeNotes, "--session=" + other}, tile: notes},
-			{args: []string{planted.Seed.ID, "--session", other}, tile: planted.Seed.ID},
+			{args: []string{planted.ID, "--session", other}, tile: planted.ID},
 		} {
 			got := s.Run(testworld.Invocation{Args: append([]string{"open"}, tc.args...), Session: session})
 			if got.Code != 0 || !strings.HasPrefix(got.Stdout, "opened ") {

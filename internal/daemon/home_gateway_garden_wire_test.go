@@ -159,7 +159,7 @@ func TestHomeGatewayShowsThePairedProfilesGardenAndTendsItAsTheDesktopDoes(t *te
 		if err != nil {
 			t.Fatalf("planting %s: %v", title, err)
 		}
-		return planted.Seed.ID
+		return planted.ID
 	}
 	planted, err := cli.SeedPlot("mine", client.Plot{
 		Title: "Ship the phone", Body: protocol.Ptr("# Plan\n\nThe phone reads the **Garden**."),
@@ -278,7 +278,7 @@ func TestHomeGatewaySendsASeedsNewestLogThatFitsAFrameAndSaysWhenItsBodyCannot(t
 		t.Fatal(err)
 	}
 	for i := range 6 {
-		if _, err := cli.SeedNote("mine", busy.Seed.ID, fmt.Sprintf("entry %d %s", i, strings.Repeat("x", 25_000)), "", false, nil); err != nil {
+		if _, err := cli.SeedNote("mine", busy.ID, fmt.Sprintf("entry %d %s", i, strings.Repeat("x", 25_000)), "", false, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -289,11 +289,11 @@ func TestHomeGatewaySendsASeedsNewestLogThatFitsAFrameAndSaysWhenItsBodyCannot(t
 
 	phone := connectPhone(t, w, "phone", app.SelectedProfile())
 	phone.welcomed()
-	detail, failure := phone.readSeed(busy.Seed.ID)
+	detail, failure := phone.readSeed(busy.ID)
 	if failure != "" || detail.LogTotal != 6 || len(detail.Log) != 2 || !strings.HasPrefix(detail.Log[0].Body, "entry 5 ") || !strings.HasPrefix(detail.Log[1].Body, "entry 4 ") || detail.Body != "Short body." {
 		t.Fatalf("the busy seed arrived with %d of %d entries (%s), want its body and the newest two of six 25 KB entries", len(detail.Log), detail.LogTotal, failure)
 	}
-	detail, failure = phone.readSeed(vast.Seed.ID)
+	detail, failure = phone.readSeed(vast.ID)
 	if failure != "" || detail.Body != "" || protocol.Deref(detail.BodyTooLargeBytes) != 100_000 || protocol.Deref(detail.MaxFrameBytes) != cloudlink.MaxMessageBytes {
 		t.Fatalf("the vast seed arrived as body %d bytes, too large %v of max %v (%s), want no body and both sizes", len(detail.Body), detail.BodyTooLargeBytes, detail.MaxFrameBytes, failure)
 	}
@@ -338,29 +338,29 @@ func TestHomeGatewayTellsThePhoneWhenASeedsNotesOrBodyChange(t *testing.T) {
 	}
 	phone := connectPhone(t, w, "phone", personal)
 	phone.welcomed()
-	phone.readSeed(open.Seed.ID)
+	phone.readSeed(open.ID)
 
-	if _, err := cli.SeedNote("theirs", elsewhere.Seed.ID, "Work goes on.", "", false, nil); err != nil {
+	if _, err := cli.SeedNote("theirs", elsewhere.ID, "Work goes on.", "", false, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedNote("mine", open.Seed.ID, "Handing off: read the new plan.", "handoff", false, nil); err != nil {
+	if _, err := cli.SeedNote("mine", open.ID, "Handing off: read the new plan.", "handoff", false, nil); err != nil {
 		t.Fatal(err)
 	}
-	changed := phone.seedChangesUntil(open.Seed.ID)
-	detail, _ := phone.readSeed(open.Seed.ID)
+	changed := phone.seedChangesUntil(open.ID)
+	detail, _ := phone.readSeed(open.ID)
 	if len(detail.Log) == 0 || detail.Log[0].Body != "Handing off: read the new plan." {
 		t.Fatalf("after seed_changed the seed's log reads %+v, want the handoff newest", detail.Log)
 	}
 
-	if _, err := cli.WithGardenProfile("", "mine").SeedEdit(open.Seed.ID, "The second plan.", garden.BodySHA256("The first plan."), ""); err != nil {
+	if _, err := cli.WithGardenProfile("", "mine").SeedEdit(open.ID, "The second plan.", garden.BodySHA256("The first plan."), ""); err != nil {
 		t.Fatal(err)
 	}
-	changed = append(changed, phone.seedChangesUntil(open.Seed.ID)...)
-	detail, _ = phone.readSeed(open.Seed.ID)
+	changed = append(changed, phone.seedChangesUntil(open.ID)...)
+	detail, _ = phone.readSeed(open.ID)
 	if detail.Body != "The second plan." {
 		t.Fatalf("after seed_changed the seed's body reads %q, want the edit", detail.Body)
 	}
-	if slices.Contains(changed, elsewhere.Seed.ID) {
-		t.Fatalf("the personal phone heard seed_changed for %v, which includes the work seed %s", changed, elsewhere.Seed.ID)
+	if slices.Contains(changed, elsewhere.ID) {
+		t.Fatalf("the personal phone heard seed_changed for %v, which includes the work seed %s", changed, elsewhere.ID)
 	}
 }

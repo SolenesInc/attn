@@ -90,7 +90,7 @@ func startOldPhoneConversation(t *testing.T) *oldPhoneConversation {
 	}
 	return &oldPhoneConversation{
 		t: t, phone: connectPhone(t, w, "phone", app.SelectedProfile()),
-		ids: map[string]string{"$session": session, "$terminal": app.Terminal(shell), "$ask": asked.ID, "$seed": planted.Seed.ID},
+		ids: map[string]string{"$session": session, "$terminal": app.Terminal(shell), "$ask": asked.ID, "$seed": planted.ID},
 	}
 }
 

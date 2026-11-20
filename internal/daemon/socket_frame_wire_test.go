@@ -71,7 +71,7 @@ func TestTheSynchronousClientReadsTheReplyAfterAWriteFailure(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if shown, err := w.Client().SeedShow("", planted.Seed.ID); err != nil || shown.Seed.Title != planted.Seed.Title {
+		if shown, err := w.Client().SeedShow("", planted.ID); err != nil || shown.Seed.Title != planted.Title {
 			t.Fatalf("read back planted seed: %v", err)
 		}
 	})

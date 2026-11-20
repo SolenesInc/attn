@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -606,7 +607,26 @@ func (d *Daemon) seedPlant(msg *seedPlantRequest, by who.Actor) (*protocol.SeedP
 	if err != nil {
 		d.logf("garden: similar seeds after planting %s: %v", seed.ID, err)
 	}
-	return &protocol.SeedPlantResult{Seed: seed, Similar: similarWire(read, hits, []string{seed.ID})}, nil
+	result, err := widen[protocol.SeedPlantResult](seed)
+	if err != nil {
+		return nil, err
+	}
+	result.Similar = similarWire(read, hits, []string{seed.ID})
+	return &result, nil
+}
+
+func widen[Result any](part any) (Result, error) {
+	var result Result
+	data, err := json.Marshal(part)
+	if err != nil {
+		return result, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&result); err != nil {
+		return result, fmt.Errorf("%T does not hold every field of %T: %w", result, part, err)
+	}
+	return result, nil
 }
 
 func (d *Daemon) plantSeedRequest(msg *seedPlantRequest, by who.Actor) (protocol.Seed, gardenRead, error) {
@@ -1951,14 +1971,15 @@ func (d *Daemon) notesCollection() (*docstore.CollectionSchema, error) {
 func (d *Daemon) seedNote(msg *protocol.SeedNoteMessage, by who.Actor) (*protocol.SeedNoteResult, error) {
 	authorSession := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	ring := protocol.Deref(msg.Ring)
-	result := &protocol.SeedNoteResult{}
+	var recipients []string
+	var note protocol.SeedNote
 	var err error
 	if ring {
 		d.lockGardenRoles()
-		result.RingRecipients, err = d.seedParties(strings.TrimSpace(msg.SeedID), authorSession)
+		recipients, err = d.seedParties(strings.TrimSpace(msg.SeedID), authorSession)
 	}
 	if err == nil {
-		result.Note, err = d.appendSeedNote(
+		note, err = d.appendSeedNote(
 			msg.SeedID,
 			msg.Body,
 			by,
@@ -1974,7 +1995,12 @@ func (d *Daemon) seedNote(msg *protocol.SeedNoteMessage, by who.Actor) (*protoco
 	if err != nil {
 		return nil, gardenFailure("note", err)
 	}
-	return result, nil
+	result, err := widen[protocol.SeedNoteResult](note)
+	if err != nil {
+		return nil, err
+	}
+	result.RingRecipients = recipients
+	return &result, nil
 }
 
 func resolveNoteArtifact(kind string, artifact *garden.ArtifactReference, body string) (*garden.ArtifactReference, string, error) {

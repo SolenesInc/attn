@@ -42,7 +42,7 @@ func closedOutpostSeedTender(t *testing.T, harness fakeagent.Harness) gardenOutp
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := home.Client().SeedTransition(protocol.SessionID(id), planted.Seed.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := home.Client().SeedTransition(protocol.SessionID(id), planted.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := home.Client().Unregister(protocol.SessionID(id)); err != nil {
@@ -52,7 +52,7 @@ func closedOutpostSeedTender(t *testing.T, harness fakeagent.Harness) gardenOutp
 		return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == id
 	})
 	setSetting(t, pair.App, "garden.advisor", `{"agent":"claude"}`)
-	return gardenOutpostSeed{home: home, outpost: outpost, pair: pair, session: id, seed: planted.Seed.ID, conversation: run.ConversationID, cwd: cwd}
+	return gardenOutpostSeed{home: home, outpost: outpost, pair: pair, session: id, seed: planted.ID, conversation: run.ConversationID, cwd: cwd}
 }
 
 func (w gardenOutpostSeed) card(t *testing.T) *protocol.SeedContinuation {
@@ -394,7 +394,7 @@ func TestOutpostReachLeavesAHomeSeedsReviewItemAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.home.Client().SeedTransition(protocol.SessionID(id), planted.Seed.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := w.home.Client().SeedTransition(protocol.SessionID(id), planted.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := w.home.Client().Unregister(protocol.SessionID(id)); err != nil {
@@ -426,7 +426,7 @@ func TestOutpostReachLeavesAHomeSeedsReviewItemAlone(t *testing.T) {
 			if item.Status != "ready" {
 				return false
 			}
-			if item.SeedID == planted.Seed.ID {
+			if item.SeedID == planted.ID {
 				homeBefore = item
 			}
 		}
@@ -441,7 +441,7 @@ func TestOutpostReachLeavesAHomeSeedsReviewItemAlone(t *testing.T) {
 		t.Fatalf("show: %+v, %v", shown, err)
 	}
 	for _, item := range shown.Review.Items {
-		if item.SeedID != planted.Seed.ID {
+		if item.SeedID != planted.ID {
 			continue
 		}
 		if item.EvidenceVersion != homeBefore.EvidenceVersion || !slices.Equal(item.Actions, homeBefore.Actions) || reviewEvidenceText(item) != reviewEvidenceText(homeBefore) {
@@ -449,7 +449,7 @@ func TestOutpostReachLeavesAHomeSeedsReviewItemAlone(t *testing.T) {
 		}
 		t.Logf("home item unchanged: actions=%v", item.Actions)
 	}
-	if _, err := w.home.Client().SeedReviewKeep(planted.Seed.ID, reviewReceipt(homeBefore)); err != nil {
+	if _, err := w.home.Client().SeedReviewKeep(planted.ID, reviewReceipt(homeBefore)); err != nil {
 		t.Fatalf("keep the home seed: %v", err)
 	}
 }

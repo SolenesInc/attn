@@ -74,7 +74,7 @@ func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
 		if err != nil {
 			t.Fatalf("plant into the plot: %v", err)
 		}
-		if edges := joined.Seed.Edges; len(edges) != 1 || edges[0].Kind != garden.EdgePartOf || edges[0].To != planted.Crown.ID {
+		if edges := joined.Edges; len(edges) != 1 || edges[0].Kind != garden.EdgePartOf || edges[0].To != planted.Crown.ID {
 			t.Errorf("--part-of planted with edges %+v, want it in the plot", edges)
 		}
 		total := gardenPlotList(t, cli, false, 0).Total

@@ -21,19 +21,19 @@ func TestTheSeedDocumentShowsBodyChildrenLogAndWhetherItsTenderHolds(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	child, err := cli.SeedPlant(protocol.SessionID(tender.session), "Child", "", crown.Seed.ID, "")
+	child, err := cli.SeedPlant(protocol.SessionID(tender.session), "Child", "", crown.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedPlant(protocol.SessionID(tender.session), "Grandchild", "", child.Seed.ID, ""); err != nil {
+	if _, err := cli.SeedPlant(protocol.SessionID(tender.session), "Grandchild", "", child.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedNote(protocol.SessionID(tender.session), crown.Seed.ID, "reader log entry", "", false, nil); err != nil {
+	if _, err := cli.SeedNote(protocol.SessionID(tender.session), crown.ID, "reader log entry", "", false, nil); err != nil {
 		t.Fatal(err)
 	}
-	lifeMove(t, cli, tender.session, crown.Seed.ID, "tend", "", "")
+	lifeMove(t, cli, tender.session, crown.ID, "tend", "", "")
 
-	live := seedReaderDocument(app, crown.Seed.ID)
+	live := seedReaderDocument(app, crown.ID)
 	if !live.Success || live.Document == nil {
 		t.Fatalf("reading the crown = %+v", live)
 	}
@@ -41,13 +41,13 @@ func TestTheSeedDocumentShowsBodyChildrenLogAndWhetherItsTenderHolds(t *testing.
 	if doc.Seed.Body != body {
 		t.Errorf("the document body = %q, want %q", doc.Seed.Body, body)
 	}
-	if children := lifeSeedIDs(doc.Children); !slices.Equal(children, []string{child.Seed.ID}) {
-		t.Errorf("the document children = %v, want only the immediate child %s", children, child.Seed.ID)
+	if children := lifeSeedIDs(doc.Children); !slices.Equal(children, []string{child.ID}) {
+		t.Errorf("the document children = %v, want only the immediate child %s", children, child.ID)
 	}
 	if doc.NotesTotal != len(doc.Notes) || !slices.ContainsFunc(doc.Notes, func(note protocol.SeedNote) bool {
 		return note.Kind == "note" && note.Body == "reader log entry"
 	}) || !slices.ContainsFunc(doc.Notes, func(note protocol.SeedNote) bool {
-		return note.Kind == "link" && note.Body == child.Seed.ID+" joined this plot"
+		return note.Kind == "link" && note.Body == child.ID+" joined this plot"
 	}) {
 		t.Errorf("the document log = %+v of %d, want the note and the child joining", doc.Notes, doc.NotesTotal)
 	}
@@ -56,7 +56,7 @@ func TestTheSeedDocumentShowsBodyChildrenLogAndWhetherItsTenderHolds(t *testing.
 	}
 
 	closePane(app, tender)
-	ended := seedReaderDocument(app, crown.Seed.ID)
+	ended := seedReaderDocument(app, crown.ID)
 	if !ended.Success || ended.Document == nil || ended.Document.Seed.Claimed || string(tenderSessionOf(ended.Document.Seed)) != tender.session {
 		t.Errorf("after the tender ended the document = %+v, want tender %s kept without a live hold", ended.Document, tender.session)
 	}
@@ -168,7 +168,7 @@ func TestAnnotationDraftsFollowTheirTypedDocumentSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seed := planted.Seed.ID
+	seed := planted.ID
 	uri := "attn://seed/" + seed
 	saved := testworld.Request(app, protocol.MarkdownAnnotationsSaveMessage{
 		Cmd: protocol.CmdMarkdownAnnotationsSave, RequestID: uuid.NewString(), DocumentUri: uri, SourceKind: "seed", SeedID: protocol.Ptr(seed),

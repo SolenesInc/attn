@@ -33,7 +33,7 @@ func Usage(format string, args ...any) *Refusal {
 	return &Refusal{Code: CodeUsage, Message: fmt.Sprintf(format, args...), Arguments: true}
 }
 
-func Invalid(code, format string, args ...any) *Refusal {
+func Refuse(code, format string, args ...any) *Refusal {
 	return &Refusal{Code: code, Message: fmt.Sprintf(format, args...), Arguments: true}
 }
 
@@ -55,6 +55,7 @@ func Typed[A any](run func(ctx context.Context, c Caller, args A) (any, error)) 
 
 type spec struct {
 	readOnly bool
+	fixes    map[string]string
 }
 
 type Layer struct {
@@ -91,11 +92,15 @@ func (l *Layer) Run(ctx context.Context, c Caller, name string, args json.RawMes
 		return nil, Usage("%q is not a command", name)
 	}
 	if c.Terminal != "" && (!specs[name].readOnly || c.Profile == "") {
-		return nil, Invalid("no_session", "terminal %s is not showing a session; pass --session <id> to identify the caller; --profile <name|id> selects a garden and does not identify a session", c.Terminal)
+		return nil, Refuse("no_session", "terminal %s is not showing a session; pass {session} <id> to identify the caller; {profile} <name|id> selects a garden and does not identify a session", c.Terminal)
 	}
 	result, err := handler(ctx, c, args)
 	if err != nil {
-		return nil, AsRefusal(err)
+		refusal := AsRefusal(err)
+		if refusal.Fix == "" {
+			refusal.Fix = specs[name].fixes[refusal.Code]
+		}
+		return nil, refusal
 	}
 	return result, nil
 }

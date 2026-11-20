@@ -166,7 +166,7 @@ func TestACheckIDNamesOneStatementInAPlotTree(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = cli.SeedLink(loose.Seed.ID, "part-of", plot.Crown.ID, false)
+		_, err = cli.SeedLink(loose.ID, "part-of", plot.Crown.ID, false)
 		lifeRefusal(t, "linking a seed whose check id the plot uses", err, "C2", appChild)
 
 		checkMoveOK(t, cli, checkMove(appChild, "C2", "report", "frontend test passes"))
@@ -213,7 +213,7 @@ func TestAttnPicksTheNextFreeCheckIDInThePlotTree(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := checkIDsFrom(planted.Seed.Checks); !slices.Equal(got, []string{"C41", "C40", "C42", "C5@" + plot.Crown.ID}) {
+		if got := checkIDsFrom(planted.Checks); !slices.Equal(got, []string{"C41", "C40", "C42", "C5@" + plot.Crown.ID}) {
 			t.Errorf("a plant with checks without ids = %v, want C41 and C42 above the plot's highest and the plant's own C40", got)
 		}
 		_, err = cli.SeedPlantWith("", client.Plant{
@@ -228,10 +228,10 @@ func TestAttnPicksTheNextFreeCheckIDInThePlotTree(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := checkIDsFrom(loose.Seed.Checks); !slices.Equal(got, []string{"C1", "C2"}) {
+		if got := checkIDsFrom(loose.Checks); !slices.Equal(got, []string{"C1", "C2"}) {
 			t.Errorf("a plant outside any plot numbers its checks %v, want C1 and C2", got)
 		}
-		_, err = cli.SeedLink(loose.Seed.ID, "part-of", plot.Crown.ID, false)
+		_, err = cli.SeedLink(loose.ID, "part-of", plot.Crown.ID, false)
 		lifeRefusal(t, "a link whose checks collide", err, "check C1", "next free id across both is C43")
 	})
 }
@@ -257,7 +257,7 @@ func TestSimultaneousIDIntroductionsNeverShareAnID(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			loose = append(loose, planted.Seed.ID)
+			loose = append(loose, planted.ID)
 		}
 
 		var joinedMu sync.Mutex
@@ -289,7 +289,7 @@ func TestSimultaneousIDIntroductionsNeverShareAnID(t *testing.T) {
 						Checks: []protocol.SeedCheckDefinition{{Text: "planted in"}},
 					})
 					if err == nil {
-						joined(planted.Seed.ID)
+						joined(planted.ID)
 					}
 					return err
 				},

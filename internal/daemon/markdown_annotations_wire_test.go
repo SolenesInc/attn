@@ -64,7 +64,7 @@ func TestASendKeepsWhatTwoReadersSavedBeforeItsReplyArrived(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seed := planted.Seed.ID
+	seed := planted.ID
 	doc := annotatedDocument{uri: "attn://seed/" + seed, kind: "seed", seedID: protocol.Ptr(seed)}
 	note := func(id string) protocol.MarkdownAnnotation {
 		return protocol.MarkdownAnnotation{ID: id, Type: "global", Text: protocol.Ptr(id + " note"), CreatedAt: 1}

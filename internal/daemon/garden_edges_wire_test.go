@@ -153,13 +153,13 @@ func TestADispatchedSessionIsReadyForItsPlot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	crown := plot.Seed.ID
+	crown := plot.ID
 	inside, err := cli.SeedPlant(protocol.SessionID(planner), "inside", "", crown, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	outside := plantSeedAs(t, cli, planner, "outside")
-	if got := lifeSeedIDs(edgeReady(t, cli, planner, "", false).Seeds); !slices.Equal(got, []string{inside.Seed.ID, outside}) {
+	if got := lifeSeedIDs(edgeReady(t, cli, planner, "", false).Seeds); !slices.Equal(got, []string{inside.ID, outside}) {
 		t.Fatalf("an undispatched session's ready = %v, want both leaves", got)
 	}
 
@@ -178,14 +178,14 @@ func TestADispatchedSessionIsReadyForItsPlot(t *testing.T) {
 	w.Launched(string(dispatched))
 
 	scoped := edgeReady(t, cli, string(dispatched), "", false)
-	if got := lifeSeedIDs(scoped.Seeds); !slices.Equal(got, []string{inside.Seed.ID}) || scoped.Scope != "plot" || scoped.ScopeID != crown {
+	if got := lifeSeedIDs(scoped.Seeds); !slices.Equal(got, []string{inside.ID}) || scoped.Scope != "plot" || scoped.ScopeID != crown {
 		t.Errorf("the dispatched session's ready = %v scoped to %s/%s, want the plot's child in plot %s", got, scoped.Scope, scoped.ScopeID, crown)
 	}
 	if scoped.Crown == nil || scoped.Crown.ID != crown || scoped.Crown.PlotProgress == nil {
 		t.Errorf("the plot answer carries crown %+v, want the crown with its progress", scoped.Crown)
 	}
 	whole := edgeReady(t, cli, string(dispatched), "", true)
-	if got := lifeSeedIDs(whole.Seeds); !slices.Equal(got, []string{inside.Seed.ID, outside}) || whole.Scope != "garden" {
+	if got := lifeSeedIDs(whole.Seeds); !slices.Equal(got, []string{inside.ID, outside}) || whole.Scope != "garden" {
 		t.Errorf("--all from the dispatched session = %v scoped to %s, want the whole garden", got, whole.Scope)
 	}
 }
@@ -220,8 +220,8 @@ func TestReadyScopesToAPlotAndListsPlotsBeforeLooseSeeds(t *testing.T) {
 		t.Errorf("ready --all plot headers with a nested plot = %v, want every ancestor of a ready seed %v", got, want)
 	}
 	scoped := edgeReady(t, cli, "", firstPlot.Crown.ID, false)
-	if got := lifeSeedIDs(scoped.Seeds); !slices.Equal(got, []string{deeper.Seed.ID}) || scoped.Scope != "plot" || scoped.ScopeID != firstPlot.Crown.ID {
-		t.Errorf("ready --plot = %v scoped to %s/%s, want the plot's one leaf %s", got, scoped.Scope, scoped.ScopeID, deeper.Seed.ID)
+	if got := lifeSeedIDs(scoped.Seeds); !slices.Equal(got, []string{deeper.ID}) || scoped.Scope != "plot" || scoped.ScopeID != firstPlot.Crown.ID {
+		t.Errorf("ready --plot = %v scoped to %s/%s, want the plot's one leaf %s", got, scoped.Scope, scoped.ScopeID, deeper.ID)
 	}
 	_, err = cli.SeedReady("", "s-zzzzzz", false)
 	lifeRefusal(t, "ready for an unknown plot", err, "s-zzzzzz")

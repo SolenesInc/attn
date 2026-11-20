@@ -21,7 +21,7 @@ func TestSeedBodyEditsRefuseLostWritesAndKeepRollbackHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id := planted.Seed.ID
+	id := planted.ID
 	if _, err := cli.SeedRollback(id, nil); err == nil {
 		t.Fatal("a seed with no edits offered a rollback")
 	}
@@ -114,10 +114,10 @@ func TestASeedCanStartEmptyButEditsAndRollbackCannotClearIt(t *testing.T) {
 	w := newWorld(t)
 	cli := w.Client()
 	planted, err := cli.SeedPlant("", "Start with a title", "", "", "")
-	if err != nil || planted.Seed.Body != "" {
+	if err != nil || planted.Body != "" {
 		t.Fatalf("bodyless planting: %+v, %v", planted, err)
 	}
-	id := planted.Seed.ID
+	id := planted.ID
 	edited, err := cli.SeedEdit(id, "The agreed task.", garden.BodySHA256(""), "fill in the task")
 	if err != nil || edited.BodyVersion != 2 {
 		t.Fatalf("first edit: %+v, %v", edited, err)
@@ -144,8 +144,8 @@ func TestCrewBodyEditsAndRollbacksNameTheirMember(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id := planted.Seed.ID
-	if _, err := cli.SeedEdit(id, "Second body.", garden.BodySHA256(planted.Seed.Body), "revise"); err != nil {
+	id := planted.ID
+	if _, err := cli.SeedEdit(id, "Second body.", garden.BodySHA256(planted.Body), "revise"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := cli.SeedRollback(id, nil); err != nil {
@@ -171,7 +171,7 @@ func TestBodiesWrittenByAnOlderBuildSurviveTheReturnToThisBuild(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return got.Seed.ID
+		return got.ID
 	}
 	const (
 		split      = "Text the older build could not see"
@@ -273,10 +273,10 @@ func TestAnEditOverTextMissingFromHistoryKeepsThatText(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := cli.SeedEdit(seed.Seed.ID, saved, garden.BodySHA256(first), ""); err != nil {
+		if _, err := cli.SeedEdit(seed.ID, saved, garden.BodySHA256(first), ""); err != nil {
 			t.Fatal(err)
 		}
-		return seed.Seed.ID
+		return seed.ID
 	}
 	adopted := planted("Repair replaces live text")
 	edited := planted("Edit replaces live text")

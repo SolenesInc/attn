@@ -9,8 +9,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "search",
         result: true,
-        wrong_args: "needs something to look for: `attn seed search <words>`",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "words", cli: Cli::Rest, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "limit", cli: Cli::Flag("limit"), value: Value::Int, source: Source::Given, required: false, list: false },
@@ -19,8 +18,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "plant",
         result: true,
-        wrong_args: "needs exactly one title, got {count}: attn seed plant \"what this is\" [-m \"the detail\"]",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "title", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "body", cli: Cli::Flag("m"), value: Value::Text, source: Source::Stdin, required: false, list: false },
@@ -32,8 +30,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "plot",
         result: true,
-        wrong_args: "takes no arguments, got {first}; the plot is JSON on stdin or at -f <path>",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "plot", cli: Cli::Flag("f"), value: Value::Json, source: Source::File, required: true, list: false },
         ],
@@ -41,8 +38,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "link",
         result: true,
-        wrong_args: "reads as a sentence: `attn seed link s-7k3f9m blocks s-2p4qxv`, where the kind is blocks or part-of or discovered-from",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "a", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "relation", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -52,8 +48,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "unlink",
         result: true,
-        wrong_args: "reads as a sentence: `attn seed unlink s-7k3f9m blocks s-2p4qxv`, where the kind is blocks or part-of or discovered-from",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "a", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "relation", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -63,8 +58,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "ready",
         result: true,
-        wrong_args: "takes no arguments, got {first}; scope it with --plot <plot> or --all",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "plot", cli: Cli::Flag("plot"), value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "all", cli: Cli::Flag("all"), value: Value::Bool, source: Source::Given, required: false, list: false },
@@ -73,8 +67,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "ls",
         result: true,
-        wrong_args: "takes no arguments, got {first}; to read one seed use `attn seed show <id>`",
-        no_args: "",
+        usage: &["plot_and_stale", "standby_with_scope"],
         args: &[
             Arg { name: "plot", cli: Cli::Flag("plot"), value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "stale", cli: Cli::Flag("stale"), value: Value::Bool, source: Source::Given, required: false, list: false },
@@ -86,8 +79,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "show",
         result: true,
-        wrong_args: "needs exactly one seed id, got {count}: attn seed show s-7k3f9m",
-        no_args: "",
+        usage: &["since_and_section", "bad_bookmark"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "since", cli: Cli::Flag("since"), value: Value::Int, source: Source::Given, required: false, list: false },
@@ -97,8 +89,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "notes",
         result: true,
-        wrong_args: "needs exactly one seed id, got {count}: attn seed notes s-7k3f9m",
-        no_args: "",
+        usage: &["bad_bookmark"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "since", cli: Cli::Flag("since"), value: Value::Int, source: Source::Given, required: false, list: false },
@@ -109,24 +100,21 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "prime",
         result: false,
-        wrong_args: "takes no arguments, got {first}",
-        no_args: "",
+        usage: &[],
         args: &[
         ],
     },
     Command {
         name: "guide",
         result: false,
-        wrong_args: "takes no arguments",
-        no_args: "",
+        usage: &[],
         args: &[
         ],
     },
     Command {
         name: "tend",
         result: true,
-        wrong_args: "needs exactly one seed id, got {count}: attn seed tend s-7k3f9m",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "reason", cli: Cli::Flag("m"), value: Value::Text, source: Source::Stdin, required: false, list: false },
@@ -137,8 +125,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "note",
         result: true,
-        wrong_args: "needs exactly one seed id, got {count}: attn seed note s-7k3f9m -m \"what happened\"",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "text", cli: Cli::Flag("m"), value: Value::Text, source: Source::Stdin, required: true, list: false },
@@ -149,8 +136,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "park",
         result: true,
-        wrong_args: "needs exactly one seed id, got {count}: attn seed park s-7k3f9m",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "reason", cli: Cli::Flag("m"), value: Value::Text, source: Source::Stdin, required: false, list: false },
@@ -160,8 +146,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "replant",
         result: true,
-        wrong_args: "needs exactly one seed id, got {count}: attn seed replant s-7k3f9m",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "reason", cli: Cli::Flag("m"), value: Value::Text, source: Source::Stdin, required: false, list: false },
@@ -171,8 +156,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "wither",
         result: true,
-        wrong_args: "needs exactly one seed id, got {count}: attn seed wither s-7k3f9m",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "reason", cli: Cli::Flag("m"), value: Value::Text, source: Source::Stdin, required: false, list: false },
@@ -182,8 +166,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "send-to-chief",
         result: true,
-        wrong_args: "needs exactly one seed id, got {count}: attn seed send-to-chief s-7k3f9m",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "guidance", cli: Cli::Flag("m"), value: Value::Text, source: Source::Stdin, required: false, list: false },
@@ -192,8 +175,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "harvest",
         result: true,
-        wrong_args: "needs exactly one seed id, got {count}: attn seed harvest s-7k3f9m",
-        no_args: "",
+        usage: &["pr_without_when_merged", "clear_without_when_merged", "clear_with_reason", "clear_with_pr", "not_a_pr_url"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "pr", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: false, list: false },
@@ -206,8 +188,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check add",
         result: true,
-        wrong_args: "needs the seed id and one check id, got {count} arguments",
-        no_args: "needs the seed id",
+        usage: &["not_a_check_id", "needs_statement"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: false, list: false },
@@ -219,8 +200,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check edit",
         result: true,
-        wrong_args: "needs the seed id and one check id, got {count} arguments",
-        no_args: "needs the seed id",
+        usage: &["not_a_check_id", "needs_statement"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -231,8 +211,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check remove",
         result: true,
-        wrong_args: "needs the seed id and one check id, got {count} arguments",
-        no_args: "needs the seed id",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -243,8 +222,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check restore",
         result: true,
-        wrong_args: "needs the seed id and one check id, got {count} arguments",
-        no_args: "needs the seed id",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -255,8 +233,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check report",
         result: true,
-        wrong_args: "needs the seed id and one check id, got {count} arguments",
-        no_args: "needs the seed id",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -270,8 +247,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check confirm",
         result: true,
-        wrong_args: "needs the seed id and one check id, got {count} arguments",
-        no_args: "needs the seed id",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -282,8 +258,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check reject",
         result: true,
-        wrong_args: "needs the seed id and one check id, got {count} arguments",
-        no_args: "needs the seed id",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -294,8 +269,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check uncheck",
         result: true,
-        wrong_args: "needs the seed id and one check id, got {count} arguments",
-        no_args: "needs the seed id",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -306,8 +280,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check reopen",
         result: true,
-        wrong_args: "needs the seed id and one check id, got {count} arguments",
-        no_args: "needs the seed id",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -318,8 +291,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "watch",
         result: true,
-        wrong_args: "needs exactly one seed id, got {count}: attn seed watch s-7k3f9m",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
         ],
@@ -327,8 +299,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "unwatch",
         result: true,
-        wrong_args: "needs exactly one seed id, got {count}: attn seed unwatch s-7k3f9m",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
         ],
@@ -336,8 +307,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "remind",
         result: true,
-        wrong_args: "needs exactly one seed id: attn seed remind s-7k3f9m --in 20m -m \"Check the rollout\"",
-        no_args: "",
+        usage: &["clear_with_reminder", "needs_time", "needs_message"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "in", cli: Cli::Flag("in"), value: Value::Text, source: Source::Given, required: false, list: false },
@@ -349,8 +319,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "standby",
         result: true,
-        wrong_args: "needs exactly one seed id: attn seed standby s-7k3f9m -m \"what to do next\"",
-        no_args: "",
+        usage: &["clear_with_standby", "in_and_at", "needs_next"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "next", cli: Cli::Flag("m"), value: Value::Text, source: Source::Stdin, required: false, list: false },
@@ -363,8 +332,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "export",
         result: true,
-        wrong_args: "needs exactly one seed id, got {count}: attn seed export s-7k3f9m",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "out", cli: Cli::Flag("out"), value: Value::Text, source: Source::Given, required: false, list: false },
@@ -373,8 +341,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "edit",
         result: true,
-        wrong_args: "needs exactly one seed id, got {count}: attn seed edit s-7k3f9m -m -",
-        no_args: "",
+        usage: &["not_exported"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "body", cli: Cli::Flag("m"), value: Value::Text, source: Source::Stdin, required: true, list: false },
@@ -385,8 +352,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "rollback",
         result: true,
-        wrong_args: "needs a seed id and optional version: attn seed rollback s-7k3f9m [<version>]",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "version", cli: Cli::Pos, value: Value::Int, source: Source::Given, required: false, list: false },
@@ -395,8 +361,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "authorization",
         result: true,
-        wrong_args: "needs a seed id and optional words: attn seed authorization s-7k3f9m \"Ask me before pushing.\"",
-        no_args: "",
+        usage: &["empty_words", "words_and_clear"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "words", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: false, list: false },
@@ -406,8 +371,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "attach",
         result: true,
-        wrong_args: "needs exactly one seed id, got {count}: attn seed attach s-7k3f9m --path docs/plans/thing.md",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "path", cli: Cli::Flag("path"), value: Value::Text, source: Source::Given, required: false, list: false },
@@ -421,8 +385,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "detach",
         result: true,
-        wrong_args: "needs exactly one seed id, got {count}: attn seed detach s-7k3f9m --path docs/plans/thing.md",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "path", cli: Cli::Flag("path"), value: Value::Text, source: Source::Given, required: false, list: false },
@@ -437,16 +400,14 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "review start",
         result: true,
-        wrong_args: "takes no arguments",
-        no_args: "",
+        usage: &[],
         args: &[
         ],
     },
     Command {
         name: "review show",
         result: true,
-        wrong_args: "takes at most one review id",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "review", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: false, list: false },
         ],
@@ -454,8 +415,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "review cancel",
         result: true,
-        wrong_args: "needs exactly one review id",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "review", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
         ],
@@ -463,8 +423,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "review retry",
         result: true,
-        wrong_args: "needs a review id and seed id",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "review", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -473,8 +432,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "review keep",
         result: true,
-        wrong_args: "needs a review id and seed id",
-        no_args: "",
+        usage: &[],
         args: &[
             Arg { name: "review", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },

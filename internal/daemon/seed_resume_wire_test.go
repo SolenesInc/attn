@@ -69,23 +69,23 @@ func TestResumingASeedPreservesItsConversationAndProjectAssignment(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lifeMove(t, cli, string(session), child.Seed.ID, "tend", "", "")
-	lifeMove(t, cli, string(session), child.Seed.ID, "park", "", "")
+	lifeMove(t, cli, string(session), child.ID, "tend", "", "")
+	lifeMove(t, cli, string(session), child.ID, "park", "", "")
 	closePane(app, sessionPane{session: string(session)})
-	reclaimed := seedResumeRequest(app, child.Seed.ID)
+	reclaimed := seedResumeRequest(app, child.ID)
 	if !reclaimed.Success || protocol.Deref(reclaimed.SessionID) != session {
 		t.Fatalf("resuming the parked child = %+v, want %s relaunched", reclaimed, session)
 	}
 	seedResumeContinues(t, w, first, string(session))
-	if got := lifeShow(t, cli, child.Seed.ID).Seed; got.Status != "growing" || tenderSessionOf(got) != session || protocol.Deref(got.LastExecutionID) != session {
+	if got := lifeShow(t, cli, child.ID).Seed; got.Status != "growing" || tenderSessionOf(got) != session || protocol.Deref(got.LastExecutionID) != session {
 		t.Errorf("the resumed parked child = %+v, want it growing again under %s", got, session)
 	}
 	ready, err := cli.SeedReady(session, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ready.ScopeID != seed || !slices.ContainsFunc(ready.Seeds, func(s protocol.SeedRow) bool { return s.ID == sibling.Seed.ID }) {
-		t.Errorf("ready after resuming a child = %+v, want the original project %s with sibling %s", ready, seed, sibling.Seed.ID)
+	if ready.ScopeID != seed || !slices.ContainsFunc(ready.Seeds, func(s protocol.SeedRow) bool { return s.ID == sibling.ID }) {
+		t.Errorf("ready after resuming a child = %+v, want the original project %s with sibling %s", ready, seed, sibling.ID)
 	}
 }
 

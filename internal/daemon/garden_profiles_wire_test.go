@@ -57,10 +57,10 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if a.Seed.ProfileID != original || b.Seed.ProfileID != side.ID {
-			t.Fatalf("seed ownership: alpha=%s beta=%s", a.Seed.ProfileID, b.Seed.ProfileID)
+		if a.ProfileID != original || b.ProfileID != side.ID {
+			t.Fatalf("seed ownership: alpha=%s beta=%s", a.ProfileID, b.ProfileID)
 		}
-		for _, row := range []struct{ session, seed, profile string }{{"default-worker", a.Seed.ID, original}, {"side-worker", b.Seed.ID, side.ID}} {
+		for _, row := range []struct{ session, seed, profile string }{{"default-worker", a.ID, original}, {"side-worker", b.ID, side.ID}} {
 			listed, err := cli.SeedList(protocol.SessionID(row.session), false, 0)
 			if err != nil || listed.Total != 1 || len(listed.Seeds) != 1 || listed.Seeds[0].ID != row.seed {
 				t.Fatalf("%s list: %+v, %v", row.session, listed, err)
@@ -82,36 +82,36 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 			run  func() error
 		}{
 			{"notes", func() error {
-				_, err := cross.SeedNotes("default-worker", b.Seed.ID, client.SeedNotesQuery{})
+				_, err := cross.SeedNotes("default-worker", b.ID, client.SeedNotesQuery{})
 				return err
 			}},
-			{"open", func() error { return cross.OpenSeed(b.Seed.ID, "default-worker") }},
-			{"watch", func() error { _, err := cross.SeedWatch("default-worker", b.Seed.ID, false); return err }},
-			{"show", func() error { _, err := cross.SeedShow("default-worker", b.Seed.ID); return err }},
+			{"open", func() error { return cross.OpenSeed(b.ID, "default-worker") }},
+			{"watch", func() error { _, err := cross.SeedWatch("default-worker", b.ID, false); return err }},
+			{"show", func() error { _, err := cross.SeedShow("default-worker", b.ID); return err }},
 			{"tend", func() error {
-				_, err := cross.SeedTransition("default-worker", b.Seed.ID, "tend", "", true, client.SeedTransitionOptions{})
+				_, err := cross.SeedTransition("default-worker", b.ID, "tend", "", true, client.SeedTransitionOptions{})
 				return err
 			}},
 			{"edit", func() error {
-				_, err := cross.SeedEdit(b.Seed.ID, "cross-profile edit", garden.BodySHA256(b.Seed.Body), "")
+				_, err := cross.SeedEdit(b.ID, "cross-profile edit", garden.BodySHA256(b.Body), "")
 				return err
 			}},
-			{"rollback", func() error { _, err := cross.SeedRollback(b.Seed.ID, nil); return err }},
+			{"rollback", func() error { _, err := cross.SeedRollback(b.ID, nil); return err }},
 			{"authorization", func() error {
-				_, err := cross.SeedAuthorization(b.Seed.ID, "Ask me before pushing.", false)
+				_, err := cross.SeedAuthorization(b.ID, "Ask me before pushing.", false)
 				return err
 			}},
-			{"link", func() error { _, err := cross.SeedLink(a.Seed.ID, "blocks", b.Seed.ID, false); return err }},
+			{"link", func() error { _, err := cross.SeedLink(a.ID, "blocks", b.ID, false); return err }},
 			{"note", func() error {
-				_, err := cross.SeedNote("default-worker", b.Seed.ID, "cross-profile note", "", false, nil)
+				_, err := cross.SeedNote("default-worker", b.ID, "cross-profile note", "", false, nil)
 				return err
 			}},
 			{"child", func() error {
-				_, err := cross.SeedPlant("default-worker", "cross-profile child", "", b.Seed.ID, "")
+				_, err := cross.SeedPlant("default-worker", "cross-profile child", "", b.ID, "")
 				return err
 			}},
 			{"delegate", func() error {
-				_, err := cross.StartDelegation(protocol.DelegateMessage{Cmd: protocol.CmdDelegate, RequestID: uuid.NewString(), SourceSessionID: protocol.Ptr(protocol.SessionID("default-worker")), Cwd: w.Path(), Agent: protocol.Ptr("codex"), Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(b.Seed.ID)}})
+				_, err := cross.StartDelegation(protocol.DelegateMessage{Cmd: protocol.CmdDelegate, RequestID: uuid.NewString(), SourceSessionID: protocol.Ptr(protocol.SessionID("default-worker")), Cwd: w.Path(), Agent: protocol.Ptr("codex"), Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(b.ID)}})
 				return err
 			}},
 		}
@@ -120,7 +120,7 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 				name string
 				run  func() error
 			}{verb, func() error {
-				_, err := cross.SeedTransition("default-worker", b.Seed.ID, verb, "cross-profile transition", true, client.SeedTransitionOptions{})
+				_, err := cross.SeedTransition("default-worker", b.ID, verb, "cross-profile transition", true, client.SeedTransitionOptions{})
 				return err
 			}})
 		}
@@ -133,18 +133,18 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 		if _, err := cli.SeedList("", false, 0); err == nil || !strings.Contains(err.Error(), "--profile") || !strings.Contains(err.Error(), "Default") || !strings.Contains(err.Error(), "Side") {
 			t.Fatalf("ambiguous terminal: %v", err)
 		}
-		if err := cli.OpenSeed(b.Seed.ID, ""); err == nil || !strings.Contains(err.Error(), "--profile") {
+		if err := cli.OpenSeed(b.ID, ""); err == nil || !strings.Contains(err.Error(), "--profile") {
 			t.Fatalf("ambiguous seed open: %v", err)
 		}
 		listed, err := cli.WithGardenProfile("Side", "").SeedList("", false, 0)
-		if err != nil || len(listed.Seeds) != 1 || listed.Seeds[0].ID != b.Seed.ID {
+		if err != nil || len(listed.Seeds) != 1 || listed.Seeds[0].ID != b.ID {
 			t.Fatalf("explicit profile: %+v %v", listed, err)
 		}
 		for _, row := range []struct {
 			name  string
 			query func() error
 		}{
-			{"get", func() error { _, err := cli.DocGet(garden.Namespace, garden.CollectionSeeds, b.Seed.ID); return err }},
+			{"get", func() error { _, err := cli.DocGet(garden.Namespace, garden.CollectionSeeds, b.ID); return err }},
 			{"query", func() error {
 				_, err := cli.DocQuery(protocol.DocumentQuery{Namespace: garden.Namespace, Collection: garden.CollectionSeeds})
 				return err
@@ -160,11 +160,11 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 		}
 		selectProfile(app, original)
 		snapshot := testworld.Await(app, protocol.EventGardenSeedsUpdated, func(m protocol.GardenSeedsUpdatedMessage) bool { return m.ProfileID == original && len(m.Seeds) == 1 })
-		if snapshot.Seeds[0].ID != a.Seed.ID || snapshot.Total != 1 {
+		if snapshot.Seeds[0].ID != a.ID || snapshot.Total != 1 {
 			t.Fatalf("profile switch snapshot: %+v", snapshot)
 		}
 		other := w.AppOn(side.ID)
-		if len(other.Initial.Seeds) != 1 || other.Initial.Seeds[0].ID != b.Seed.ID {
+		if len(other.Initial.Seeds) != 1 || other.Initial.Seeds[0].ID != b.ID {
 			t.Fatalf("second profile initial garden: %+v", other.Initial.Seeds)
 		}
 	})
@@ -190,7 +190,7 @@ func TestProfileDeletionKeepsSeedsInTheirOriginalProfile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		lifeMove(t, cli, "side-worker", child.Seed.ID, "harvest", "finished", "")
+		lifeMove(t, cli, "side-worker", child.ID, "harvest", "finished", "")
 		lifeMove(t, cli, "side-worker", seed, "wither", "work abandoned", "")
 		if _, err := cli.AgentClose("side-worker", "side-worker", "finished"); err != nil {
 			t.Fatal(err)
@@ -203,12 +203,12 @@ func TestProfileDeletionKeepsSeedsInTheirOriginalProfile(t *testing.T) {
 		if err != nil || archived.Seed.ProfileID != side.ID {
 			t.Fatalf("closed seed archival inspection: %+v %v", archived, err)
 		}
-		if len(archived.Relations) != 1 || archived.Relations[0].SeedID != child.Seed.ID || archived.Seed.PlotProgress == nil || archived.Seed.PlotProgress.Total != 1 || archived.Seed.PlotProgress.Done != 1 {
+		if len(archived.Relations) != 1 || archived.Relations[0].SeedID != child.ID || archived.Seed.PlotProgress == nil || archived.Seed.PlotProgress.Total != 1 || archived.Seed.PlotProgress.Done != 1 {
 			t.Fatalf("archived plot lost its relationships or progress: %+v", archived)
 		}
 		id := uuid.NewString()
 		document := testworld.Request(app, protocol.SeedDocumentGetMessage{Cmd: protocol.CmdSeedDocumentGet, RequestID: id, SeedID: seed}, protocol.EventSeedDocumentGetResult, func(result protocol.SeedDocumentGetResultMessage) bool { return result.RequestID == id })
-		if !document.Success || document.Document == nil || len(document.Document.Children) != 1 || document.Document.Children[0].ID != child.Seed.ID {
+		if !document.Success || document.Document == nil || len(document.Document.Children) != 1 || document.Document.Children[0].ID != child.ID {
 			t.Fatalf("archived document lost its child: %+v", document)
 		}
 		listed, err := cli.SeedList("", false, 0)

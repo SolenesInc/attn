@@ -117,7 +117,7 @@ func TestRemoteMonitorCommandsLeaveTheAppPumpFree(t *testing.T) {
 				t.Fatalf("ask answer prompt: %q", got)
 			}
 		}},
-		{"harvest_when_merged", protocol.SeedTransitionMessage{Cmd: protocol.CmdSeedTransition, RequestID: protocol.Ptr("arm-harvest"), SeedID: planted.Seed.ID, Verb: "harvest", SourceSessionID: &session,
+		{"harvest_when_merged", protocol.SeedTransitionMessage{Cmd: protocol.CmdSeedTransition, RequestID: protocol.Ptr("arm-harvest"), SeedID: planted.ID, Verb: "harvest", SourceSessionID: &session,
 			WhenMerged: &protocol.SeedHarvestWhenMerged{PullRequestURL: protocol.Ptr("https://github.com/example/project/pull/1")}}, func() {
 			r := testworld.Await(app, protocol.EventSeedTransitionResult, func(r protocol.SeedTransitionResultMessage) bool { return r.RequestID == "arm-harvest" })
 			if !r.Success {

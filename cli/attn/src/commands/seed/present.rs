@@ -4,9 +4,9 @@ use super::{Stop, fail, help_generated, usage_error};
 use crate::client::Reply;
 use crate::command::{self, Arg, Command, Family, Parsed};
 use crate::commands::{Run, absolute, print_json, print_stdout};
+use attn::garden::is_seed_id;
 use attn::garden::plot::{Check, parse_plot_spec, validate_body};
 use attn::garden::section::section;
-use attn::garden::{is_seed_id, valid_check_id};
 use attn::go::quote::quote;
 use attn_protocol::go_values::NOTE_KIND_HANDOFF;
 use attn_protocol::go_values::prompts::AUTHORING_AGENT_SEED_GUIDE;
@@ -139,19 +139,6 @@ impl Family for Seed {
         (cmd.name == "guide").then_some(AUTHORING_AGENT_SEED_GUIDE)
     }
 
-    fn misplaced(&self, cmd: &Command, positionals: &[String]) -> Option<String> {
-        if cmd.name != "check add" && cmd.name != "check edit" {
-            return None;
-        }
-        let last = positionals.get(1..)?.last()?;
-        (!valid_check_id(&last.to_uppercase())).then(|| {
-            format!(
-                "{} is not a check id; the statement goes in -m",
-                quote(last.as_bytes())
-            )
-        })
-    }
-
     fn decode_file(&self, _cmd: &Command, _arg: &Arg, bytes: &[u8]) -> Result<Json, String> {
         let spec = parse_plot_spec(bytes)?;
         let children: Vec<Json> = spec
@@ -231,11 +218,6 @@ impl Family for Seed {
         let out = match cmd.name {
             "standby" => return standby(run, cmd, parsed, &result),
             "export" => return export(run, cmd, parsed, &result),
-            "plant" if parsed.json => return print_field(run, cmd, &result, &["seed"]),
-            "note" if parsed.json => return print_field(run, cmd, &result, &["note"]),
-            "attach" | "detach" if parsed.json && result.present("note") => {
-                return print_field(run, cmd, &result, &["note"]);
-            }
             "prime" => render::prime(&decode::<SeedReadyResult>(run, cmd, &result)?),
             _ if parsed.json => return print_field(run, cmd, &result, &[]),
             "search" => render::search(
@@ -299,7 +281,7 @@ impl Family for Seed {
                     render::authorization_reply(&result, changing, clear)
                 )
             }
-            "attach" | "detach" if result.present("note") => {
+            "attach" | "detach" if !result.present("operation") => {
                 association(cmd, parsed, &decode(run, cmd, &result)?)
             }
             "attach" | "detach" => transfer(cmd, parsed, &decode(run, cmd, &result)?),
@@ -322,14 +304,20 @@ impl Family for Seed {
 }
 
 fn plant(result: &SeedPlantResult) -> String {
-    let seed = &result.seed;
-    let mut out = format!("{}\n", seed_line(&seed.id, &seed.step_slug, &seed.title));
-    for check in seed.checks.as_deref().unwrap_or_default() {
+    let mut out = format!(
+        "{}\n",
+        seed_line(&result.id, &result.step_slug, &result.title)
+    );
+    for check in result.checks.as_deref().unwrap_or_default() {
         if check.from.as_deref().unwrap_or_default().is_empty() {
             let _ = writeln!(out, "  {}  {}", check.id, check.text);
         }
     }
-    render::similar(&mut out, &result.similar, false);
+    render::similar(
+        &mut out,
+        result.similar.as_deref().unwrap_or_default(),
+        false,
+    );
     out
 }
 
@@ -414,20 +402,16 @@ fn notes(parsed: &Parsed, result: &SeedNotesResult) -> String {
 }
 
 fn note(parsed: &Parsed, result: &SeedNoteResult) -> String {
-    let mut out = if result.note.kind == NOTE_KIND_HANDOFF {
+    let mut out = if result.kind == NOTE_KIND_HANDOFF {
         format!(
             "handoff left on {} — whoever tends it next reads this first\n",
-            result.note.seed_id
+            result.seed_id
         )
     } else {
-        format!("noted on {}\n", result.note.seed_id)
+        format!("noted on {}\n", result.seed_id)
     };
     if parsed.on("ring") {
-        render::plural_rang(
-            &mut out,
-            &result.note.seed_id,
-            result.ring_recipients.as_deref(),
-        );
+        render::plural_rang(&mut out, &result.seed_id, result.ring_recipients.as_deref());
     }
     out
 }
@@ -570,7 +554,7 @@ fn association(cmd: &Command, parsed: &Parsed, result: &SeedNoteResult) -> Strin
         format!("{verb} {label}")
     };
     let mut out = format!("{} {moved}\n", parsed.text("seed"));
-    let body = result.note.body.trim();
+    let body = result.body.trim();
     if !body.is_empty() && body != moved {
         let _ = writeln!(out, "{body}");
     }

@@ -33,7 +33,7 @@ func TestAnOutpostSessionHoldsItsClaimWhileItsAgentRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seed := planted.Seed.ID
+	seed := planted.ID
 	if _, err := cli.SeedTransition(session, seed, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatal(err)
 	}

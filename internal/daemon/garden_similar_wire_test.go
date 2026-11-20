@@ -39,11 +39,11 @@ func TestPlantSuggestsSimilarOpenSeedsInItsProfile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(planted.Similar) != 3 || planted.Similar[0].Seed.ID != original.Seed.ID {
+		if len(planted.Similar) != 3 || planted.Similar[0].Seed.ID != original.ID {
 			t.Fatalf("similar = %+v, want the open original first of three", planted.Similar)
 		}
 		for _, hit := range planted.Similar {
-			if hit.Seed.ID == parent || hit.Seed.ID == foreign || hit.Seed.ID == planted.Seed.ID || hit.Seed.Status == "harvested" || hit.Seed.Status == "withered" || hit.Like != planted.Seed.ID {
+			if hit.Seed.ID == parent || hit.Seed.ID == foreign || hit.Seed.ID == planted.ID || hit.Seed.Status == "harvested" || hit.Seed.Status == "withered" || hit.Like != planted.ID {
 				t.Errorf("unexpected suggestion: %+v", hit)
 			}
 			if _, err := time.Parse(time.RFC3339Nano, hit.LastActive); err != nil {

@@ -779,7 +779,7 @@ func TestEnrollmentLeavesHomeJobsIdleUntilTheMachineLeaves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedTransition(protocol.SessionID(id), planted.Seed.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition(protocol.SessionID(id), planted.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := cli.Unregister(protocol.SessionID(id)); err != nil {

@@ -11499,11 +11499,32 @@ type SeedNoteMessage struct {
 }
 
 type SeedNoteResult struct {
-	// Note corresponds to the JSON schema field "note".
-	Note SeedNote `json:"note"`
+	// Artifact corresponds to the JSON schema field "artifact".
+	Artifact *SeedArtifactReference `json:"artifact,omitempty,omitzero"`
+
+	// Author corresponds to the JSON schema field "author".
+	Author ActorView `json:"author"`
+
+	// Body corresponds to the JSON schema field "body".
+	Body string `json:"body"`
+
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt string `json:"created_at"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind string `json:"kind"`
 
 	// RingRecipients corresponds to the JSON schema field "ring_recipients".
 	RingRecipients []string `json:"ring_recipients,omitempty,omitzero"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// Seq corresponds to the JSON schema field "seq".
+	Seq *int `json:"seq,omitempty,omitzero"`
 }
 
 type SeedNoteResultMessage struct {
@@ -11560,11 +11581,96 @@ type SeedOutlinePart struct {
 }
 
 type SeedPlantResult struct {
-	// Seed corresponds to the JSON schema field "seed".
-	Seed Seed `json:"seed"`
+	// Authorization corresponds to the JSON schema field "authorization".
+	Authorization *SeedAuthorization `json:"authorization,omitempty,omitzero"`
+
+	// Body corresponds to the JSON schema field "body".
+	Body string `json:"body"`
+
+	// Checks corresponds to the JSON schema field "checks".
+	Checks []SeedCheck `json:"checks,omitempty,omitzero"`
+
+	// Claimed corresponds to the JSON schema field "claimed".
+	Claimed bool `json:"claimed"`
+
+	// Continuation corresponds to the JSON schema field "continuation".
+	Continuation *SeedContinuation `json:"continuation,omitempty,omitzero"`
+
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt string `json:"created_at"`
+
+	// Edges corresponds to the JSON schema field "edges".
+	Edges []SeedEdge `json:"edges"`
+
+	// Gate corresponds to the JSON schema field "gate".
+	Gate bool `json:"gate"`
+
+	// HarvestWhen corresponds to the JSON schema field "harvest_when".
+	HarvestWhen *SeedHarvestCondition `json:"harvest_when,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// LastExecutionID corresponds to the JSON schema field "last_execution_id".
+	LastExecutionID *SessionID `json:"last_execution_id,omitempty,omitzero"`
+
+	// Planter corresponds to the JSON schema field "planter".
+	Planter ActorView `json:"planter"`
+
+	// PlotProgress corresponds to the JSON schema field "plot_progress".
+	PlotProgress *SeedPlotProgress `json:"plot_progress,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// Ready corresponds to the JSON schema field "ready".
+	Ready bool `json:"ready"`
+
+	// Reason corresponds to the JSON schema field "reason".
+	Reason *string `json:"reason,omitempty,omitzero"`
+
+	// Reminder corresponds to the JSON schema field "reminder".
+	Reminder *SeedReminder `json:"reminder,omitempty,omitzero"`
+
+	// Rev corresponds to the JSON schema field "rev".
+	Rev int `json:"rev"`
+
+	// SharedChecks corresponds to the JSON schema field "shared_checks".
+	SharedChecks []SeedSharedCheck `json:"shared_checks,omitempty,omitzero"`
 
 	// Similar corresponds to the JSON schema field "similar".
-	Similar []SeedSimilar `json:"similar"`
+	Similar []SeedSimilar `json:"similar,omitempty,omitzero"`
+
+	// Standby corresponds to the JSON schema field "standby".
+	Standby *SeedStandbyView `json:"standby,omitempty,omitzero"`
+
+	// StateChangedAt corresponds to the JSON schema field "state_changed_at".
+	StateChangedAt string `json:"state_changed_at"`
+
+	// StateChangedAtExact corresponds to the JSON schema field
+	// "state_changed_at_exact".
+	StateChangedAtExact bool `json:"state_changed_at_exact"`
+
+	// Status corresponds to the JSON schema field "status".
+	Status string `json:"status"`
+
+	// StepSlug corresponds to the JSON schema field "step_slug".
+	StepSlug string `json:"step_slug"`
+
+	// Template corresponds to the JSON schema field "template".
+	Template bool `json:"template"`
+
+	// Tender corresponds to the JSON schema field "tender".
+	Tender *PartyView `json:"tender,omitempty,omitzero"`
+
+	// Title corresponds to the JSON schema field "title".
+	Title string `json:"title"`
+
+	// UpdatedAt corresponds to the JSON schema field "updated_at".
+	UpdatedAt string `json:"updated_at"`
+
+	// Vars corresponds to the JSON schema field "vars".
+	Vars []SeedVar `json:"vars"`
 }
 
 type SeedPlotProgress struct {

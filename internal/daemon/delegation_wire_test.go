@@ -137,13 +137,13 @@ func delegateSeed(t *testing.T, app *testworld.Peer, requestID, seedID, cwd stri
 		func(m protocol.DelegateResultMessage) bool { return protocol.Deref(m.RequestID) == requestID })
 }
 
-func plantSeed(t *testing.T, w *world, title string) protocol.Seed {
+func plantSeed(t *testing.T, w *world, title string) *protocol.SeedPlantResult {
 	t.Helper()
 	planted, err := w.Client().SeedPlant("", title, "Checkout needs a field for discount codes.", "", "")
 	if err != nil {
 		t.Fatalf("plant %q: %v", title, err)
 	}
-	return planted.Seed
+	return planted
 }
 
 func TestACompletedSeedDelegationReportsItsSeedAndTheWorktreeRoot(t *testing.T) {

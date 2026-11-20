@@ -112,7 +112,7 @@ func bookmark(since *int64) (*int, error) {
 		return nil, nil
 	}
 	if *since < 0 {
-		return nil, command.Usage("--since %d is not a bookmark; pass the number a read printed on its bookmark line", *since)
+		return nil, command.Refuse("bad_bookmark", "{since} %d is not a bookmark; pass the number a read printed on its bookmark line", *since)
 	}
 	return protocol.Ptr(int(*since)), nil
 }
@@ -188,7 +188,7 @@ func decodeStrict(raw json.RawMessage, into any) error {
 func (d *Daemon) runSeedPlot(_ context.Context, c command.Caller, args command.SeedPlotArgs) (any, error) {
 	var plot plotPayload
 	if err := decodeStrict(args.Plot, &plot); err != nil {
-		return nil, command.Invalid("not_a_plot", "this is not a plot payload: %v", err)
+		return nil, command.Refuse("not_a_plot", "this is not a plot payload: %v", err)
 	}
 	msg := seedPlotRequest{
 		Cmd:            cmdSeedPlot,
@@ -227,19 +227,19 @@ func parseWindow(raw string) (time.Duration, error) {
 	if window, err := time.ParseDuration(raw); err == nil && window > 0 {
 		return window, nil
 	}
-	return 0, command.Invalid("bad_window", "%s is not a window; say it like 72h or 14d", strconv.Quote(raw))
+	return 0, command.Refuse("bad_window", "%s is not a window; say it like 72h or 14d", strconv.Quote(raw))
 }
 
 func (d *Daemon) runSeedList(_ context.Context, c command.Caller, args command.SeedLsArgs) (any, error) {
 	plot := strings.TrimSpace(args.Plot)
 	if !args.Stale && args.Window != "" {
-		return nil, command.Invalid("window_without_stale", "--window is the stale window; it only means something with --stale")
+		return nil, command.Refuse("window_without_stale", "{window} is the stale window; it only means something with {stale}")
 	}
 	if plot != "" && args.Stale {
-		return nil, command.Usage("--plot lists every child of the plot and --stale narrows the whole garden; pass one of them")
+		return nil, command.Refuse("plot_and_stale", "{plot} lists every child of the plot and {stale} narrows the whole garden; pass one of them")
 	}
 	if args.Standby && (plot != "" || args.Stale) {
-		return nil, command.Usage("--standby narrows the whole garden to seeds on standby; pass it without --plot or --stale")
+		return nil, command.Refuse("standby_with_scope", "{standby} narrows the whole garden to seeds on standby; pass it without {plot} or {stale}")
 	}
 	msg := seedListRequest{Cmd: cmdSeedList}
 	switch {
@@ -268,7 +268,7 @@ func (d *Daemon) runSeedList(_ context.Context, c command.Caller, args command.S
 
 func (d *Daemon) runSeedShow(ctx context.Context, c command.Caller, args command.SeedShowArgs) (any, error) {
 	if args.Since != nil && args.Section != "" {
-		return nil, command.Usage("--since reads log entries and --section reads the body; pass one")
+		return nil, command.Refuse("since_and_section", "{since} reads log entries and {section} reads the body; pass one")
 	}
 	since, err := bookmark(args.Since)
 	if err != nil {
@@ -390,22 +390,22 @@ func (d *Daemon) runSeedHarvest(_ context.Context, c command.Caller, args comman
 	switch {
 	case !args.WhenMerged && !args.Clear:
 		if args.PR != "" {
-			return nil, command.Usage("needs exactly one seed id, got 2: attn seed harvest s-7k3f9m")
+			return nil, command.Refuse("pr_without_when_merged", "needs exactly one seed id, got 2: attn seed harvest s-7k3f9m")
 		}
 	case !args.WhenMerged:
-		return nil, command.Usage("--clear disarms harvest-on-merge; say the whole thing: `attn seed harvest <id> --when-merged --clear`")
+		return nil, command.Refuse("clear_without_when_merged", "{clear} disarms harvest-on-merge; say the whole thing: `attn seed harvest <id> --when-merged --clear`")
 	case args.Clear:
 		if args.Reason != "" {
-			return nil, command.Usage("--clear takes no reason; put it on the log with `attn seed note <id> -m \"…\"`")
+			return nil, command.Refuse("clear_with_reason", "{clear} takes no reason; put it on the log with `attn seed note <id> -m \"…\"`")
 		}
 		if args.PR != "" {
-			return nil, command.Usage("needs exactly one seed id, got 2: attn seed harvest s-7k3f9m --when-merged --clear")
+			return nil, command.Refuse("clear_with_pr", "needs exactly one seed id, got 2: attn seed harvest s-7k3f9m --when-merged --clear")
 		}
 		msg.ClearHarvestWhen = protocol.Ptr(true)
 	default:
 		if args.PR != "" {
 			if problem := pullRequestURLProblem(args.PR); problem != "" {
-				return nil, command.Usage("%s is not a pull request url: %s", strconv.Quote(args.PR), problem)
+				return nil, command.Refuse("not_a_pr_url", "%s is not a pull request url: %s", strconv.Quote(args.PR), problem)
 			}
 		}
 		msg.WhenMerged = &protocol.SeedHarvestWhenMerged{PullRequestURL: optionalText(args.PR)}
@@ -480,7 +480,7 @@ func (d *Daemon) checkCommand(verb string) command.Handler {
 func (d *Daemon) runSeedCheck(ctx context.Context, c command.Caller, verb string, args checkArgs) (any, error) {
 	defines := verb == "add" || verb == "edit"
 	if defines && args.ID != "" && garden.ValidateCheckID(strings.ToUpper(args.ID)) != nil {
-		return nil, command.Usage("%s is not a check id; the statement goes in -m", strconv.Quote(args.ID))
+		return nil, command.Refuse("not_a_check_id", "%s is not a check id; the statement goes in {statement}", strconv.Quote(args.ID))
 	}
 	msg := protocol.SeedCheckMessage{Cmd: protocol.CmdSeedCheck, SeedID: args.Seed, Verb: verb, Shared: optionalTrue(args.Shared), Ring: optionalTrue(args.Ring)}
 	if args.ID != "" {
@@ -493,7 +493,7 @@ func (d *Daemon) runSeedCheck(ctx context.Context, c command.Caller, verb string
 	text = strings.TrimSpace(text)
 	switch {
 	case defines && text == "":
-		return nil, command.Usage("needs the statement in -m: what this seed must prove")
+		return nil, command.Refuse("needs_statement", "needs the statement in {statement}: what this seed must prove")
 	case defines:
 		msg.Text = protocol.Ptr(text)
 	case text != "":
@@ -531,11 +531,11 @@ func (d *Daemon) runSeedRemind(_ context.Context, c command.Caller, args command
 	text := strings.TrimSpace(args.Message)
 	switch {
 	case args.Clear && (args.In != "" || args.At != "" || text != ""):
-		return nil, command.Usage("--clear takes no time or message")
+		return nil, command.Refuse("clear_with_reminder", "{clear} takes no time or message")
 	case !args.Clear && (args.In == "") == (args.At == ""):
-		return nil, command.Usage("pass one of --in or --at, or --clear")
+		return nil, command.Refuse("needs_time", "pass one of {in} or {at}, or {clear}")
 	case !args.Clear && text == "":
-		return nil, command.Usage("-m names what the reminder says")
+		return nil, command.Refuse("needs_message", "{message} names what the reminder says")
 	}
 	msg := seedReminderRequest{Cmd: cmdSeedReminder, SeedID: args.Seed, In: optionalText(args.In), At: optionalText(args.At), Message: optionalText(text), Clear: optionalTrue(args.Clear)}
 	msg.SourceSessionID, msg.ProfileID = gardenScope(c)
@@ -553,11 +553,11 @@ func (d *Daemon) runSeedStandby(_ context.Context, c command.Caller, args comman
 	note := strings.TrimSpace(args.Next)
 	switch {
 	case args.Clear && (note != "" || args.Stay || args.In != "" || args.At != ""):
-		return nil, command.Usage("--clear takes no note, time or --stay")
+		return nil, command.Refuse("clear_with_standby", "{clear} takes no note, time or {stay}")
 	case args.In != "" && args.At != "":
-		return nil, command.Usage("pass --in or --at, not both")
+		return nil, command.Refuse("in_and_at", "pass {in} or {at}, not both")
 	case !args.Clear && note == "":
-		return nil, command.Usage("-m says what to do when mail resumes you")
+		return nil, command.Refuse("needs_next", "{next} says what to do when mail resumes you")
 	}
 	msg := seedStandbyRequest{Cmd: cmdSeedStandby, SeedID: args.Seed, Note: optionalText(note), In: optionalText(args.In), At: optionalText(args.At), Stay: optionalTrue(args.Stay), Clear: optionalTrue(args.Clear)}
 	msg.SourceSessionID, msg.ProfileID = gardenScope(c)
@@ -602,7 +602,7 @@ func editRecipe(id string) string {
 
 func (d *Daemon) runSeedEdit(_ context.Context, c command.Caller, args command.SeedEditArgs) (any, error) {
 	if args.Body == "" && args.Base == "" {
-		return nil, command.Usage("%s", editRecipe(args.Seed))
+		return nil, command.Refuse("not_exported", "%s", editRecipe(args.Seed))
 	}
 	msg := seedEditRequest{Cmd: cmdSeedEdit, SeedID: args.Seed, Body: args.Body, BaseBodySHA256: args.Base, Note: protocol.Ptr(args.Note)}
 	msg.SourceSessionID, msg.ProfileID = gardenScope(c)
@@ -639,10 +639,10 @@ func (d *Daemon) runSeedRollback(_ context.Context, c command.Caller, args comma
 func (d *Daemon) runSeedAuthorization(_ context.Context, c command.Caller, args command.SeedAuthorizationArgs) (any, error) {
 	words := strings.TrimSpace(args.Words)
 	if args.Words != "" && words == "" {
-		return nil, command.Usage("the words are empty; --clear removes the authorization")
+		return nil, command.Refuse("empty_words", "the words are empty; {clear} removes the authorization")
 	}
 	if words != "" && args.Clear {
-		return nil, command.Usage("pass the new words or --clear, not both")
+		return nil, command.Refuse("words_and_clear", "pass the new words or {clear}, not both")
 	}
 	msg := protocol.SeedAuthorizationMessage{Cmd: protocol.CmdSeedAuthorization, SeedID: args.Seed, Text: optionalText(words), Clear: optionalTrue(args.Clear)}
 	msg.SourceSessionID, msg.ProfileID = gardenScope(c)
@@ -670,25 +670,22 @@ func (d *Daemon) runSeedArtifact(ctx context.Context, c command.Caller, verb str
 	if managed || moved || copied || a.To != "" {
 		return d.transferArtifact(ctx, c, verb, a, plainManaged)
 	}
-	if a.Reference && verb != "detach" {
-		return nil, command.Invalid("reference_on_attach", "--reference only removes an existing linked path")
-	}
 	if a.Reference && (a.Path == "" || repo != "" || notebook != "" || url != "") {
-		return nil, command.Invalid("reference_needs_path", "--reference removes one old linked --path without --repo")
+		return nil, command.Refuse("reference_needs_path", "{reference} removes one old linked {path} without {repo}")
 	}
 	path := strings.TrimSpace(a.Path)
 	var named []string
-	for _, flag := range []struct{ name, value string }{{"--notebook", notebook}, {"--path", path}, {"--url", url}} {
+	for _, flag := range []struct{ name, value string }{{"{notebook}", notebook}, {"{path}", path}, {"{url}", url}} {
 		if flag.value != "" {
 			named = append(named, flag.name)
 		}
 	}
 	switch len(named) {
 	case 0:
-		return nil, command.Invalid("no_document", "name the document: --path <file> [--repo <repository>], --notebook <document-id>, or --url <url>")
+		return nil, command.Refuse("no_document", "name the document: {path} <file> [{repo} <repository>], {notebook} <document-id>, or {url} <url>")
 	case 1:
 	default:
-		return nil, command.Invalid("two_documents", "%s were all given and a reference names one document; run it once per document", strings.Join(named, " and "))
+		return nil, command.Refuse("two_documents", "%s were all given and a reference names one document; run it once per document", strings.Join(named, " and "))
 	}
 	reference := protocol.SeedArtifactReference{}
 	switch {
@@ -708,27 +705,23 @@ func (d *Daemon) runSeedArtifact(ctx context.Context, c command.Caller, verb str
 
 func (d *Daemon) transferArtifact(ctx context.Context, c command.Caller, verb string, a artifactArgs, plainManaged bool) (any, error) {
 	if a.Note != "" {
-		return nil, command.Invalid("transfer_with_note", "managed artifact transfers carry their own receipt; -m applies to log associations")
+		return nil, command.Refuse("transfer_with_note", "managed artifact transfers carry their own receipt; {note} applies to log associations")
 	}
 	msg := protocol.SeedArtifactTransferMessage{Cmd: protocol.CmdSeedArtifactTransfer, SeedID: a.Seed}
 	if verb == "attach" {
 		switch {
 		case !plainManaged:
-			return nil, command.Invalid("transfer_needs_local_path", "--move and --copy apply only to a local --path without --repo")
+			return nil, command.Refuse("transfer_needs_local_path", "--move and --copy apply only to a local {path} without {repo}")
 		case a.Mode == "":
-			return nil, command.Invalid("transfer_needs_mode", "local attach requires exactly one of --move or --copy; --move is recommended")
-		case a.To != "":
-			return nil, command.Invalid("to_on_attach", "--to belongs to detach")
+			return nil, command.Refuse("transfer_needs_mode", "local attach requires exactly one of {mode}; --move is recommended")
 		}
 		msg.Operation, msg.SourcePath = a.Mode, protocol.Ptr(a.Path)
 	} else {
 		switch {
 		case !plainManaged:
-			return nil, command.Invalid("transfer_needs_managed_path", "--to applies only to a managed --path without --repo")
-		case a.Mode != "":
-			return nil, command.Invalid("mode_on_detach", "detach moves the artifact out; do not pass --move or --copy")
+			return nil, command.Refuse("transfer_needs_managed_path", "{to} applies only to a managed {path} without {repo}")
 		case a.To == "":
-			return nil, command.Invalid("detach_needs_to", "managed detach requires --to <destination>; use --reference to remove an old linked path")
+			return nil, command.Refuse("detach_needs_to", "managed detach requires {to} <destination>; use {reference} to remove an old linked path")
 		}
 		msg.Operation, msg.Filename, msg.DestinationPath = "detach", protocol.Ptr(a.Path), protocol.Ptr(a.To)
 	}
@@ -826,7 +819,7 @@ func (d *Daemon) runSeedReviewKeep(_ context.Context, c command.Caller, args com
 		}
 	}
 	if receipt == nil {
-		return nil, command.Invalid("not_in_review", "seed %s is not part of Garden review %s", args.Seed, args.Review)
+		return nil, command.Refuse("not_in_review", "seed %s is not part of Garden review %s", args.Seed, args.Review)
 	}
 	msg.Review.EvidenceVersion = receipt.EvidenceVersion
 	run, items, err := d.keepGardenReviewItem(msg.Review, msg.SeedID)

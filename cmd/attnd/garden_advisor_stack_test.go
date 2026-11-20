@@ -21,7 +21,7 @@ func TestGardenAdviceInterruptedByACrashResumesWithTheReviewsFrozenRecipe(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedTransition("gardener", planted.Seed.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition("gardener", planted.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := cli.Unregister("gardener"); err != nil {
@@ -47,7 +47,7 @@ func TestGardenAdviceInterruptedByACrashResumesWithTheReviewsFrozenRecipe(t *tes
 	ready := testworld.Await(app, protocol.EventGardenReviewUpdated, func(m protocol.GardenReviewUpdatedMessage) bool {
 		return m.Review.Run.ID == started.Review.Run.ID && len(m.Review.Items) == 1 && m.Review.Items[0].Status == "ready"
 	}).Review.Items[0]
-	if ready.SeedID != planted.Seed.ID || protocol.Deref(ready.Recommendation) != "keep_growing" || protocol.Deref(ready.Error) != "" {
+	if ready.SeedID != planted.ID || protocol.Deref(ready.Recommendation) != "keep_growing" || protocol.Deref(ready.Error) != "" {
 		t.Errorf("resumed advice = %+v; want the original review's genuine advice", ready)
 	}
 }

@@ -45,5 +45,5 @@ func plantSeedAs(t *testing.T, cli *client.Client, sessionID, title string) stri
 	if err != nil {
 		t.Fatalf("plant %q: %v", title, err)
 	}
-	return planted.Seed.ID
+	return planted.ID
 }

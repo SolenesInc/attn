@@ -86,28 +86,27 @@ type Reference struct {
 }
 
 type Command struct {
-	Name      string           `yaml:"name"`
-	Summary   string           `yaml:"summary"`
-	Core      bool             `yaml:"core"`
-	Runs      Runs             `yaml:"runs"`
-	Grant     string           `yaml:"grant"`
-	MayNeed   []string         `yaml:"may_need"`
-	Doc       string           `yaml:"doc"`
-	Args      []Arg            `yaml:"args"`
-	ReadOnly  bool             `yaml:"read_only"`
-	Result    string           `yaml:"result"`
-	Errors    []Error          `yaml:"errors"`
-	Examples  []map[string]any `yaml:"examples"`
-	WrongArgs string           `yaml:"wrong_args"`
-	NoArgs    string           `yaml:"no_args"`
-	Offered   *bool            `yaml:"offered"`
-	Reason    string           `yaml:"reason"`
-	File      string           `yaml:"-"`
+	Name     string           `yaml:"name"`
+	Summary  string           `yaml:"summary"`
+	Core     bool             `yaml:"core"`
+	Runs     Runs             `yaml:"runs"`
+	Grant    string           `yaml:"grant"`
+	MayNeed  []string         `yaml:"may_need"`
+	Doc      string           `yaml:"doc"`
+	Args     []Arg            `yaml:"args"`
+	ReadOnly bool             `yaml:"read_only"`
+	Result   string           `yaml:"result"`
+	Errors   []Error          `yaml:"errors"`
+	Examples []map[string]any `yaml:"examples"`
+	Offered  *bool            `yaml:"offered"`
+	Reason   string           `yaml:"reason"`
+	File     string           `yaml:"-"`
 }
 
 type Error struct {
-	Code string `yaml:"code"`
-	Fix  string `yaml:"fix"`
+	Code  string `yaml:"code"`
+	Fix   string `yaml:"fix"`
+	Usage bool   `yaml:"usage"`
 }
 
 type Arg struct {
@@ -305,9 +304,6 @@ func (c *Catalog) check() []string {
 		}
 		if strings.TrimSpace(cmd.Doc) == "" {
 			add("%s: doc is missing", where)
-		}
-		if cmd.WrongArgs == "" && slices.ContainsFunc(cmd.Args, func(a Arg) bool { return a.CLI == "pos" || a.CLI == "rest" }) {
-			add("%s: wrong_args is missing; say what the CLI prints when the positionals do not fit", where)
 		}
 		codes := map[string]bool{}
 		for _, e := range cmd.Errors {

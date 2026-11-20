@@ -122,8 +122,8 @@ func TestEverySeedChangeWritesOneLogEntryWithOneNoteAddedEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.expect("a plant under a plot", wantEntry{plot, "link", child.Seed.ID + " joined this plot", worker})
-	if notes := lifeNoteBodies(t, cli, child.Seed.ID); len(notes) != 0 {
+	log.expect("a plant under a plot", wantEntry{plot, "link", child.ID + " joined this plot", worker})
+	if notes := lifeNoteBodies(t, cli, child.ID); len(notes) != 0 {
 		t.Errorf("the planted child's log = %q, want it empty", notes)
 	}
 

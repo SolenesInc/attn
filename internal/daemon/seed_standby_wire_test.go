@@ -962,7 +962,7 @@ func TestAClosedTenderHoldsOnlyItsSeedOnStandby(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the tender plants a second seed: %v", err)
 	}
-	other := planted.Seed.ID
+	other := planted.ID
 	lifeMove(t, cli, tender, other, "tend", "", "")
 	onStandbyAndClosed(t, w, cli, delegated, tenderRun)
 
