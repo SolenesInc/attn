@@ -309,3 +309,20 @@ fn a_key_lines_measured_widths_are_never_narrower_than_it_draws_and_within_a_poi
         );
     }
 }
+
+#[test]
+fn a_figures_node_centres_its_words_on_both_axes() {
+    for variant in WIDTHS {
+        let rt = story("Blocks/Figure", variant);
+        for n in 0..2 {
+            let node = element(&rt, &format!("figure.node.{n}")).rect;
+            let name = element(&rt, &format!("figure.node.{n}.name")).rect;
+            let centre = |r: [f32; 4]| [r[0] + r[2] / 2.0, r[1] + r[3] / 2.0];
+            let (a, b) = (centre(node), centre(name));
+            assert!(
+                (a[0] - b[0]).abs() < 0.5 && (a[1] - b[1]).abs() < 0.5,
+                "{variant}: node {n} at {node:?} holds its name at {name:?}"
+            );
+        }
+    }
+}

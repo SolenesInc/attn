@@ -3,10 +3,10 @@
 
 use attn_protocol::{ReviewBundle, ReviewFile, ReviewSearchMessage, ReviewSearchResultMessage};
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
-use rune_kit::ScrollBar;
+use attn_ui::blocks::{Inline, Notice, Status};
+use attn_ui::finder;
+use attn_ui::system::{ListRow, Type, words};
+use rune::{El, Key, KeyEvent, TextEdit, Tx, col, el, row};
 use rune_kit::TextInput;
 
 use super::file::Target;
@@ -14,6 +14,11 @@ use crate::State;
 
 pub(crate) const FIELD: &str = "review.search.field";
 const LABEL: &str = "Search the repository";
+/// As tall as the list of results gets before it scrolls: 14 one-line rows on main.
+const LIST_HEIGHT: f32 = 360.0;
+/// How many results the list keeps in view before what is under it gives way: the keyboard's
+/// row with one beside it.
+const ROWS_KEPT: usize = 2;
 
 /// What a search lists.
 #[derive(Clone, Debug)]
@@ -52,25 +57,16 @@ impl Found {
 
     /// What the result's row shows: where or what it found, then at its right end where it
     /// is or what changed, in the colors the Tauri search gives them.
-    fn columns(&self, t: &Tokens) -> (El, El) {
-        let where_ = |w: String| text(w).font(type_::MONO_CAPTION).color(t.text_muted);
+    fn columns(&self, query: &str, t: &Tokens) -> (El, El) {
+        let where_ = |w: String| words(w, Type::Mono, t.text_muted);
         match self {
             Found::Changed(f) => {
                 let stat = if f.binary {
                     where_("binary".into())
                 } else {
-                    row()
-                        .gap(4.0)
-                        .child(
-                            text(format!("+{}", f.added))
-                                .font(type_::MONO_CAPTION)
-                                .color(t.success),
-                        )
-                        .child(
-                            text(format!("−{}", f.removed))
-                                .font(type_::MONO_CAPTION)
-                                .color(t.error),
-                        )
+                    Inline::joined()
+                        .child(words(format!("+{}", f.added), Type::Mono, t.success))
+                        .child(words(format!("−{}", f.removed), Type::Mono, t.error))
                 };
                 (path_label(&f.path, t), stat)
             }
@@ -80,10 +76,11 @@ impl Found {
                 line,
                 text: hit,
             } => (
-                text(hit.trim().to_owned())
-                    .font(type_::MONO_CAPTION)
-                    .color(t.text_primary),
-                where_(format!("{path}:{line}")),
+                hit_line(hit.trim(), query, t),
+                where_(format!("{path}:{line}"))
+                    .single_line()
+                    .truncate_head()
+                    .shrink(),
             ),
         }
     }
@@ -313,98 +310,103 @@ fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 /// The search over review tile `tile`, when it is open there.
 pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: &Tokens) -> El {
     let found = search.found(query, &bundle.files);
-    let field = TextInput::new(query)
-        .key(FIELD)
-        .plain()
-        .text_style(type_::BODY)
-        .height(type_::BODY.line_px())
-        .width(None)
-        .label("Search")
-        .placeholder("Search files by name and lines by text")
-        .active_descendant((!found.is_empty()).then(|| option_key(search.selected)))
-        .on_edit(query_field)
-        .on_change(changed)
-        .on_key(on_key)
-        .build(attn_ui::kit(t));
-    let note = search.answer.as_ref().and_then(|a| {
-        a.error
-            .clone()
-            .map(|e| (e, true))
-            .or(a.problem.clone().map(|p| (p, false)))
-    });
-    let note = note.map(|(text_, alert)| {
-        text(text_)
-            .font(type_::LABEL)
-            .color(t.warning)
-            .wrap()
-            .role(if alert { "alert" } else { "status" })
-    });
+    let field = finder::field(
+        TextInput::new(query)
+            .key(FIELD)
+            .plain()
+            .width(None)
+            .label("Search")
+            .placeholder("Search files by name and lines by text")
+            .active_descendant((!found.is_empty()).then(|| option_key(search.selected)))
+            .on_edit(query_field)
+            .on_change(changed)
+            .on_key(on_key),
+    )
+    .build(attn_ui::kit(t));
+    let failed: Vec<_> = search
+        .answer
+        .iter()
+        .filter_map(|a| a.error.clone())
+        .map(|e| Notice::error("review.search.error", e).build(t))
+        .collect();
+    let limit = search
+        .answer
+        .as_ref()
+        .filter(|a| a.error.is_none())
+        .and_then(|a| a.problem.clone())
+        .map(|p| {
+            finder::scrolling_notices(
+                t,
+                "review.search.limit",
+                vec![Status::new("review.search.problem", p, false).build(t)],
+            )
+        });
     let empty = (!query.text.trim().is_empty()
         && search
             .answer
             .as_ref()
             .is_some_and(|a| a.found.is_empty() && a.error.is_none()))
     .then(|| {
-        text(format!("Nothing matches {}", query.text))
-            .font(type_::BODY)
-            .color(t.text_secondary)
-            .px(space::S2)
-            .py(space::S1)
+        finder::empty(
+            t,
+            "review.search.empty",
+            format!("Nothing matches {}", query.text),
+        )
     });
-    let list = col()
-        .key(LIST)
-        .role("listbox")
-        .label(LABEL)
-        .w_full()
-        .max_h(360.0)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .padding(space::S1)
-        .children(found.iter().enumerate().map(|(i, f)| {
+    let rows = found
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
             let on = i == search.selected;
-            let (what, where_) = f.columns(t);
-            let el = row()
-                .key(option_key(i))
+            let (what, where_) = f.columns(&query.text, t);
+            ListRow::new(option_key(i), f.label())
                 .role("option")
-                .label(f.label())
-                .w_full()
-                .h(25.0)
-                .items_center()
-                .gap(space::S3)
-                .px(space::S2)
-                .radius(4.0)
-                .child(what.min_w(0.0).a11y_hidden())
-                .child(col().grow(1.0))
-                .child(where_.a11y_hidden())
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| pick(state, i, tx));
-            if on {
-                el.fill(attn_ui::blocks::raised_here_tint(t))
-                    .focus_selected(true)
-            } else {
-                el
-            }
-        }))
-        .children(empty)
-        .scroll_bar_styled(attn_ui::scroll_bar(t));
+                .unfocusable()
+                .cursor(on)
+                .in_view(on)
+                .title_el(what.a11y_hidden())
+                .aside(where_.a11y_hidden())
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| pick(state, i, tx))
+                .build(t)
+        })
+        .chain(empty)
+        .collect();
+    let list = finder::list(LIST, rows)
+        .label(LABEL)
+        .min_h(ROWS_KEPT.min(found.len()) as f32 * ListRow::height())
+        .max_h(LIST_HEIGHT);
+    let input = col()
+        .w_full()
+        .child(finder::input_row(None, field, None))
+        .children((!failed.is_empty()).then(|| finder::notices(failed)));
     let panel = col()
         .key("review.search")
         .role("dialog")
         .label(LABEL)
         .modal_tx(true, close)
         .w_full()
-        .max_w(640.0)
-        .child(
-            col()
-                .w_full()
-                .px(space::S3)
-                .py(10.0)
-                .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
-                .child(field),
-        )
-        .children(note.map(|n| n.px(space::S3).py(6.0)))
-        .child(list);
-    rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0)
+        .shrink()
+        .min_h(0.0);
+    let panel = finder::panel(t, panel, input, list, limit)
+        .shrink()
+        .min_h(0.0);
+    col()
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .child(panel)
+        .child(el().h(key_line_height(&search.tile)))
+}
+
+/// How tall the key line along the bottom of review tile `tile` stands, which the search leaves
+/// in view under it.
+fn key_line_height(tile: &str) -> f32 {
+    let review = super::prefix(tile);
+    let bottom = rune::memo::layout_with(&review, |[_, y, _, h]| y + h);
+    let top = rune::memo::layout_with(&format!("{review}.keys"), |[_, y, _, _]| y);
+    bottom
+        .zip(top)
+        .map_or(0.0, |(bottom, top)| (bottom - top).max(0.0))
 }
 
 /// A path with its folder quieter than its file's name, as the Tauri review's path label.
@@ -412,14 +414,49 @@ fn path_label(path: &str, t: &Tokens) -> El {
     let at = path.rfind('/').map_or(0, |i| i + 1);
     let (dir, name) = path.split_at(at);
     row()
+        .shrink()
+        .min_w(0.0)
         .children((!dir.is_empty()).then(|| {
-            text(dir.to_owned())
-                .font(type_::MONO_CAPTION)
-                .color(t.text_muted)
+            words(dir.to_owned(), Type::Mono, t.text_muted)
+                .single_line()
+                .truncate()
+                .shrink()
+        }))
+        .child(words(name.to_owned(), Type::Mono, t.text_primary).single_line())
+}
+
+/// `line`, a line a search found for `query`, cut short from its start rather than its end
+/// when it does not fit, so the match stays in view.
+fn hit_line(line: &str, query: &str, t: &Tokens) -> El {
+    let (before, from) = line.split_at(match_at(line, query.trim()));
+    row()
+        .grow(1.0)
+        .shrink()
+        .min_w(0.0)
+        .children((!before.is_empty()).then(|| {
+            words(before.to_owned(), Type::Mono, t.text_primary)
+                .single_line()
+                .truncate_head()
+                .shrink()
         }))
         .child(
-            text(name.to_owned())
-                .font(type_::MONO_CAPTION)
-                .color(t.text_primary),
+            words(from.to_owned(), Type::Mono, t.text_primary)
+                .single_line()
+                .truncate()
+                .max_w_frac(1.0),
         )
+}
+
+/// Where `query` first stands in `line`, its case ignored as git grep -i ignores it, or 0.
+fn match_at(line: &str, query: &str) -> usize {
+    if query.is_empty() {
+        return 0;
+    }
+    line.char_indices()
+        .map(|(i, _)| i)
+        .find(|&i| {
+            line.get(i..i + query.len())
+                .is_some_and(|s| s.eq_ignore_ascii_case(query))
+        })
+        .unwrap_or(0)
 }

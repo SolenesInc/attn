@@ -5,8 +5,9 @@ use rune::{Cx, El, Playground, Story, Tx, col, el, row};
 
 use crate::Tokens;
 use crate::blocks::{
-    Bar, Block, Byline, Card, Entry, Head, KeyFit, KeyLine, Lane, Pane, Prose, Reader, Remark,
-    Room, Section, Standing, Surface, Trail, Voice, board, entries, key_tab, lanes, place, rail,
+    Bar, Block, Byline, Card, Entry, Figure, Head, KeyFit, KeyLine, Lane, Pane, Prose, Reader,
+    Remark, Room, Section, Standing, Surface, Trail, Voice, board, entries, key_tab, lanes, place,
+    rail,
 };
 use crate::colors::scheme_for;
 use crate::system::{
@@ -58,6 +59,7 @@ pub const READING_SUBJECTS: &[(&str, &[&str], &[&str])] = &[
     ("Blocks/Pane", &["panes"], &[]),
     ("Blocks/Remark", &["remarks"], &[]),
     ("Blocks/KeyLine", &["keys"], &[]),
+    ("Blocks/Figure", &["figure"], &[]),
 ];
 
 const LONG_TITLE: &str = "Move the reading surfaces onto blocks so the garden, the review reader and the markdown reader share one system";
@@ -91,6 +93,7 @@ fn view_of(name: &str) -> View {
         "Blocks/Pane" => panes_story,
         "Blocks/Remark" => remarks_story,
         "Blocks/KeyLine" => keys_story,
+        "Blocks/Figure" => figure_story,
         _ => board_story,
     }
 }
@@ -549,4 +552,34 @@ fn keys_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
         .end(keys_hint(["?"], "all keys", &t))
         .build(&t);
     stage(s, cx, &t, col().w_full().child(line))
+}
+
+/// A figure's parts as a sequence diagram draws them: a group's box, a participant's node and
+/// a person's, and a message's band at rest and current.
+fn figure_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
+    let t = tokens(cx);
+    let node = |n: usize, person: bool, name: &'static str| {
+        Figure::node(120.0, 30.0, person, &t)
+            .key(format!("figure.node.{n}"))
+            .child(words(name, Type::Control, t.text_primary).key(format!("figure.node.{n}.name")))
+    };
+    let band = |n: usize, current: bool, said: &'static str| {
+        Figure::band(260.0, 30.0, current, &t)
+            .key(format!("figure.band.{n}"))
+            .role("row")
+            .label(said)
+            .items_center()
+            .child(words(said, Type::Small, t.text_secondary))
+    };
+    let figure = door::gap(col(), Space::S8)
+        .key("figure")
+        .child(
+            door::gap(row(), Space::S16)
+                .child(node(0, false, "Calc"))
+                .child(node(1, true, "Reader")),
+        )
+        .child(Figure::group(260.0, 48.0, &t).key("figure.group"))
+        .child(band(0, false, "Add(a, b)"))
+        .child(band(1, true, "helper()"));
+    stage(s, cx, &t, figure)
 }

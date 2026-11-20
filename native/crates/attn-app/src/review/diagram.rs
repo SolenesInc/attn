@@ -6,20 +6,24 @@ use std::collections::HashMap;
 
 use attn_protocol::{ReviewFlow, ReviewFlowGroup, ReviewFlowMessage, ReviewFlowParticipant};
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::radius;
-use rune::{Color, El, LineCap, Shape, TextStyle, canvas, col, el, text};
+use attn_ui::blocks::{Figure, Stack};
+use attn_ui::system::{Type, words};
+use rune::{Color, El, LineCap, Shape, canvas, col, el};
 use rune_kit::ScrollBar;
 
 /// A label's and a caption's width a character at 12 points, 0.6 of their size as at 11 and 10.
 const CHAR_WIDTH: f32 = 7.2;
 const CAPTION_CHAR_WIDTH: f32 = 7.1;
+/// How a message's label and caption are set, and a block's title.
+const LABEL: Type = Type::Small;
+/// How a participant's name is set, over its second line in [`LABEL`].
+const NAME: Type = Type::Control;
 const LABEL_LIMIT: usize = 48;
 const LINE_LIMIT: usize = 26;
 const CAPTION_LIMIT: usize = 34;
 const CAPTION_LINES: usize = 3;
+/// The line [`LABEL`] stands on: 12 points at 1.25.
 const LINE_HEIGHT: f32 = 15.0;
-const CAPTION_LINE_HEIGHT: f32 = 15.5;
 const BOX_HEIGHT: f32 = 30.0;
 const TWO_LINE_BOX_HEIGHT: f32 = 42.0;
 const ROW_PAD: f32 = 16.0;
@@ -225,7 +229,7 @@ fn layout(flow: &ReviewFlow) -> Layout<'_> {
             + if caption.is_empty() {
                 0.0
             } else {
-                6.0 + caption.len() as f32 * CAPTION_LINE_HEIGHT
+                6.0 + caption.len() as f32 * LINE_HEIGHT
             }
             + ROW_PAD;
         rows.push(Row {
@@ -352,28 +356,17 @@ pub(super) fn diagram(
     t: &Tokens,
 ) -> El {
     let geometry = layout(flow);
-    let label_font = TextStyle {
-        size: 12.0,
-        line_height: LINE_HEIGHT,
-        ..type_::LABEL
-    };
-    let caption_font = TextStyle {
-        size: 12.0,
-        line_height: CAPTION_LINE_HEIGHT,
-        ..type_::BODY
-    };
     let line_color = t.text_tertiary;
     let mut shape = Shape::new();
     let mut texts: Vec<El> = Vec::new();
     let mut hits: Vec<El> = Vec::new();
     let place = |content: El, x: f32, y: f32| content.pin(Some(x), Some(y), None, None);
-    let centered = |lines: &[String], x: f32, y: f32, width: f32, font: TextStyle, color: Color| {
+    let lines = |lines: &[String], color: Color| {
+        col().children(lines.iter().map(|l| words(l.clone(), LABEL, color)))
+    };
+    let centered = |shown: &[String], x: f32, y: f32, width: f32, color: Color| {
         place(
-            col().w(width).items_center().children(
-                lines
-                    .iter()
-                    .map(|l| text(l.clone()).font(font).color(color)),
-            ),
+            lines(shown, color).w(width).items_center(),
             x - width / 2.0,
             y,
         )
@@ -381,19 +374,14 @@ pub(super) fn diagram(
 
     for b in &geometry.boxes {
         texts.push(place(
-            el().w(b.right - b.left)
-                .h(b.bottom - b.top)
-                .radius(radius::SM)
-                .border(1.0, t.border)
-                .fill(t.text_primary.alpha(0.03))
-                .a11y_hidden(),
+            Figure::group(b.right - b.left, b.bottom - b.top, t),
             b.left,
             b.top,
         ));
         let title = group_title(b.group);
         if !title.is_empty() {
             texts.push(place(
-                text(title).font(caption_font).color(t.text_secondary),
+                words(title, LABEL, t.text_secondary),
                 b.left + 6.0,
                 b.top + 3.0,
             ));
@@ -407,9 +395,7 @@ pub(super) fn diagram(
             .map_or((MARGIN, geometry.width - MARGIN), |b| (b.left, b.right));
         shape = dashed(shape, [left, d.y], [right, d.y], t.border);
         texts.push(place(
-            text(group_title(d.group))
-                .font(caption_font)
-                .color(t.text_secondary),
+            words(group_title(d.group), LABEL, t.text_secondary),
             left + 6.0,
             d.y + 3.0,
         ));
@@ -425,37 +411,19 @@ pub(super) fn diagram(
             line_color.alpha(0.5),
         );
         let (name, second) = participant_lines(participant);
-        let corner = if participant.actor {
-            geometry.box_height / 2.0
-        } else {
-            5.0
-        };
         texts.push(place(
-            col()
-                .w(width)
-                .h(geometry.box_height)
-                .center()
-                .radius(corner)
-                .border(1.0, t.border_hover)
-                .fill(t.bg_elevated)
+            Figure::node(width, geometry.box_height, participant.actor, t)
                 .role("text")
                 .label(if second.is_empty() {
                     name.clone()
                 } else {
                     format!("{name} {second}")
                 })
-                .child(
-                    text(name)
-                        .font(type_::LABEL)
-                        .color(t.text_primary)
-                        .a11y_hidden(),
-                )
-                .children((!second.is_empty()).then(|| {
-                    text(second)
-                        .font(caption_font)
-                        .color(t.text_secondary)
-                        .a11y_hidden()
-                })),
+                .child(words(name, NAME, t.text_primary).a11y_hidden())
+                .children(
+                    (!second.is_empty())
+                        .then(|| words(second, LABEL, t.text_secondary).a11y_hidden()),
+                ),
             x - width / 2.0,
             MARGIN,
         ));
@@ -504,41 +472,22 @@ pub(super) fn diagram(
         let caption_w = lines_width(&row.caption, CAPTION_CHAR_WIDTH) + 12.0;
         match text_x {
             Some(mid) => {
-                texts.push(centered(
-                    &row.label, mid, label_top, label_w, label_font, color,
-                ));
+                texts.push(centered(&row.label, mid, label_top, label_w, color));
                 if !row.caption.is_empty() {
                     texts.push(centered(
                         &row.caption,
                         mid,
                         y + 4.0,
                         caption_w,
-                        caption_font,
                         t.text_secondary,
                     ));
                 }
             }
             None => {
                 let left = x1 + SELF_LOOP + 6.0;
-                texts.push(place(
-                    col().children(
-                        row.label
-                            .iter()
-                            .map(|l| text(l.clone()).font(label_font).color(color)),
-                    ),
-                    left,
-                    label_top,
-                ));
+                texts.push(place(lines(&row.label, color), left, label_top));
                 if !row.caption.is_empty() {
-                    texts.push(place(
-                        col().children(
-                            row.caption.iter().map(|l| {
-                                text(l.clone()).font(caption_font).color(t.text_secondary)
-                            }),
-                        ),
-                        left,
-                        y + 4.0,
-                    ));
+                    texts.push(place(lines(&row.caption, t.text_secondary), left, y + 4.0));
                 }
             }
         }
@@ -546,15 +495,9 @@ pub(super) fn diagram(
             Some(note) => format!("{}: {note}", m.text),
             None => m.text.clone(),
         };
-        let mut hit = el()
+        let mut hit = Figure::band(geometry.width - 4.0, row.bottom - row.top, current, t)
             .role("row")
-            .label(name)
-            .w(geometry.width - 4.0)
-            .h(row.bottom - row.top)
-            .radius(radius::SM);
-        if current {
-            hit = hit.fill(t.accent.alpha(0.14)).focus_selected(true);
-        }
+            .label(name);
         if let Some((tile, k)) = placed {
             hit = super::place_press(hit.key(k.clone()), &tile, k);
         } else {
@@ -574,11 +517,10 @@ pub(super) fn diagram(
         )
         .children(texts)
         .children(hits);
-    col()
+    Stack::tight()
         .key(key.to_owned())
         .role("figure")
         .label("Sequence diagram")
-        .gap(4.0)
         .child(
             col()
                 .key(format!("{key}.scroll"))
@@ -587,12 +529,12 @@ pub(super) fn diagram(
                 .child(drawing)
                 .scroll_bar_styled(attn_ui::scroll_bar(t).horizontal()),
         )
-        .children(flow.note.as_deref().filter(|n| !n.is_empty()).map(|note| {
-            text(note.to_owned())
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .wrap()
-        }))
+        .children(
+            flow.note
+                .as_deref()
+                .filter(|n| !n.is_empty())
+                .map(|note| words(note.to_owned(), Type::Body, t.text_secondary).wrap()),
+        )
 }
 
 fn dashed(mut shape: Shape, a: [f32; 2], b: [f32; 2], color: Color) -> Shape {

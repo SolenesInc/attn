@@ -7077,6 +7077,176 @@ fn the_key_line_keeps_its_frame_tabs_and_all_keys_on_one_line_and_never_takes_ov
 }
 
 #[test]
+fn the_search_ends_above_the_key_line_in_the_smallest_window_with_the_largest_text() {
+    let mut world = review_in(
+        row(vec![document_tile("m", DOC, None)]),
+        (800.0, 600.0),
+        Some("1.5"),
+    );
+    world.daemon.on("review_search", |_| {
+        serde_json::to_value(ReviewSearchResultMessage {
+            success: true,
+            files: Some(vec!["calc.go".into(), "util.go".into()]),
+            hits: Some(
+                (1..=12)
+                    .map(|line| ReviewSearchHit {
+                        path: "calc.go".into(),
+                        line,
+                        text: "\treturn a + b".into(),
+                    })
+                    .collect(),
+            ),
+            problem: Some(
+                "over 200 lines match; the first 200 are shown. Search for something more specific."
+                    .into(),
+            ),
+            ..ReviewSearchResultMessage::new()
+        })
+        .unwrap()
+    });
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    type_key(&mut world, "/");
+    search(&mut world, "a");
+    world.settle();
+    let rect = |key: &str| {
+        world
+            .runtime()
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("no {key} on screen"))
+            .visible
+    };
+    let (search, keys) = (rect("review.search"), rect("tile.m.review.keys"));
+    assert!(
+        search[1] + search[3] <= keys[1] + 0.5,
+        "the search ends at {} over the key line at {}",
+        search[1] + search[3],
+        keys[1]
+    );
+}
+
+/// The review alone at 800 x 600 with 150% text, its search for `query` answered with
+/// `hits` lines of `path` reading `text` and `problem`.
+fn narrow_search(query: &str, hits: &[(&str, &str)], problem: Option<String>) -> World {
+    let mut world = review_in(
+        row(vec![document_tile("m", DOC, None)]),
+        (800.0, 600.0),
+        Some("1.5"),
+    );
+    let hits: Vec<ReviewSearchHit> = hits
+        .iter()
+        .enumerate()
+        .map(|(i, (path, text))| ReviewSearchHit {
+            path: (*path).into(),
+            line: i as i64 + 1,
+            text: (*text).into(),
+        })
+        .collect();
+    world.daemon.on("review_search", move |_| {
+        serde_json::to_value(ReviewSearchResultMessage {
+            success: true,
+            files: Some(vec![]),
+            hits: Some(hits.clone()),
+            problem: problem.clone(),
+            ..ReviewSearchResultMessage::new()
+        })
+        .unwrap()
+    });
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    type_key(&mut world, "/");
+    search(&mut world, query);
+    world.settle();
+    world
+}
+
+fn element(world: &World, found: impl Fn(&rune::ElementInfo) -> bool) -> rune::ElementInfo {
+    world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| found(e))
+        .expect("the element is on screen")
+}
+
+#[test]
+fn a_search_result_cut_short_keeps_its_match_and_its_line_number_in_view() {
+    let line = "// 合計を調べる eight-matches six-matches";
+    let path = "crates/totals/src/ledger.rs";
+    let world = narrow_search("six-matches", &[(path, line); 6], None);
+    let shown = element(&world, |e| {
+        e.path.contains("review.search.option.0")
+            && e.text
+                .as_deref()
+                .is_some_and(|t| t.starts_with("six-matches"))
+    });
+    assert!(
+        shown.visible[2] >= shown.rect[2] - 0.5,
+        "the match shows {} of its {} points",
+        shown.visible[2],
+        shown.rect[2]
+    );
+    let place = element(&world, |e| {
+        e.text.as_deref() == Some("crates/totals/src/ledger.rs:1")
+    });
+    assert!(
+        place.visible[2] >= place.rect[2] - 0.5,
+        "the place shows {} of its {} points",
+        place.visible[2],
+        place.rect[2]
+    );
+}
+
+#[test]
+fn a_long_search_limit_gives_way_before_the_results_do() {
+    let path = "crates/build-and-release-platform-本番の権限を移行する作業ツリー/src/totals.rs";
+    let crowded = [path; 4].join(", ");
+    let world = narrow_search(
+        "sum",
+        &[(path, "let total = sum_to(10);"); 20],
+        Some(format!(
+            "{crowded} match on more than 20 lines; the first 20 of each are shown. Search for something more specific."
+        )),
+    );
+    let picked = element(&world, |e| {
+        e.key.as_deref() == Some("review.search.option.0")
+    });
+    assert!(
+        picked.visible[3] >= picked.rect[3] - 0.5,
+        "the keyboard's result shows {} of its {} points",
+        picked.visible[3],
+        picked.rect[3]
+    );
+}
+
+#[test]
+fn the_keyboards_search_result_stays_marked_apart_from_a_hovered_one() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    serve_search(&world);
+    type_key(&mut world, "/");
+    search(&mut world, "calc");
+    let [x, y, w, h] = world
+        .screen()
+        .bounds(Target::key("review.search.option.0"))
+        .expect("the first result");
+    world.gesture(|app| app.runtime.pointer_move(x + w / 2.0, y + h / 2.0));
+    press(&mut world, Key::Down);
+    let marked = |n: usize| {
+        world
+            .runtime()
+            .elements()
+            .into_iter()
+            .any(|e| e.key.as_deref() == Some(&format!("review.search.option.{n}.in-view")))
+    };
+    assert!(
+        marked(1) && !marked(0),
+        "the keyboard's row 1 is marked {}, the hovered row 0 {}",
+        marked(1),
+        marked(0)
+    );
+}
+
+#[test]
 fn a_narrow_reviews_key_line_keeps_its_language_servers_and_their_setup_in_reach() {
     let narrow = || {
         let world = review_in(

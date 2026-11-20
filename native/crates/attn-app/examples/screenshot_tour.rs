@@ -28,12 +28,13 @@ use attn_protocol::{
     NotificationListResultMessage, OutpostInfo, OutpostUpdate, PR, PartyView, PathInspection,
     PhoneLink, PhonesUpdatedMessage, Profile, RateLimitedMessage, RecentFilesResultMessage,
     RecentLocation, RecentLocationsResultMessage, RecordCommandUsageResultMessage,
-    RefreshPRsResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewNotShown, ReviewNote,
-    ReviewRow, ReviewStop, Seed, SeedCheck, SeedDocument, SeedDocumentGetResultMessage, SeedEdge,
-    SeedNote, SeedPlotProgress, SeedReviewResultMessage, Session,
-    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
-    SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
-    SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState, UpdateChangedMessage,
+    RefreshPRsResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewFlow, ReviewFlowGroup,
+    ReviewFlowMessage, ReviewFlowParticipant, ReviewNotShown, ReviewNote, ReviewRow, ReviewStop,
+    Seed, SeedCheck, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote,
+    SeedPlotProgress, SeedReviewResultMessage, Session, SessionAnnotationsGetResultMessage,
+    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
+    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionUsage,
+    SessionUsageModel, SharedCodexBlocker, SharedCodexState, UpdateChangedMessage,
     UpdateOutpostProgress, UpdateRun, Worktree, WorktreeListResult, WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Metrics};
@@ -3839,6 +3840,302 @@ fn review_send_sheet(dark: bool) {
     snap(&mut world, "review-send-sheet", dark);
 }
 
+/// A path two folders deep under a worktree whose basename is long, in Latin and in CJK.
+const LONG_PATH: &str =
+    "crates/build-and-release-platform-本番の権限を移行する作業ツリー/src/totals.rs";
+
+/// The review's search for `query`, the daemon answering `answer`.
+fn review_search_for(dark: bool, query: &str, answer: Value) -> World {
+    let mut world = review_alone(dark);
+    world
+        .daemon
+        .on("review_search", move |_: &Request| answer.clone());
+    world.gesture(|app| app.type_text("/"));
+    world.gesture(|app| app.type_text(query));
+    world.settle();
+    world
+}
+
+/// What a query finds: files by name and lines by text, the longest path and line, and the
+/// limit the daemon says it reached.
+fn review_search_found(dark: bool) {
+    let mut world = review_search_for(
+        dark,
+        "sum",
+        json!({"event": "review_search_result", "success": true,
+            "files": ["totals.rs", LONG_PATH],
+            "hits": [
+                {"path": "totals.rs", "line": 3, "text": "    let total = sum_to(10);"},
+                {"path": "totals.rs", "line": 7, "text": "fn sum_to(limit: u32) -> u32 {"},
+                {"path": LONG_PATH, "line": 128, "text": "    // 合計は sum_to が上限まで数えて返す。上限は呼び出し側が名前で渡すので、範囲を二か所で書かずに済む。"},
+                {"path": "README.md", "line": 12, "text": "`sum_to(3)` returns 6."}
+            ],
+            "problem": "over 200 lines match; the first 200 are shown. Search for something more specific."}),
+    );
+    snap(&mut world, "review-search-found", dark);
+}
+
+fn review_search_nothing(dark: bool) {
+    let mut world = review_search_for(
+        dark,
+        "subtotal",
+        json!({"event": "review_search_result", "success": true, "files": [], "hits": []}),
+    );
+    snap(&mut world, "review-search-nothing", dark);
+}
+
+fn review_search_failed(dark: bool) {
+    let mut world = review_search_for(
+        dark,
+        "sum",
+        json!({"event": "review_search_result", "success": false,
+            "error": "git grep could not read the repository"}),
+    );
+    snap(&mut world, "review-search-failed", dark);
+}
+
+/// The review alone with its cursor on `let total = sum_to(10);`, whose names are labeled
+/// a, s and d, the daemon answering code navigation with `answer`.
+fn review_on_sum_to<R: attn_testkit::IntoReplies>(
+    dark: bool,
+    answer: impl Fn(&Request) -> R + Send + 'static,
+) -> World {
+    let mut world = review_alone(dark);
+    world.daemon.on("code_nav", answer);
+    tap(&mut world, Key::Right);
+    for _ in 0..4 {
+        tap(&mut world, Key::Down);
+    }
+    world
+}
+
+fn nav_place(path: &str, line: i64, text: &str) -> Value {
+    json!({"path": path, "outside": path.starts_with('/'), "line": line, "character": 4,
+        "end_line": line, "end_character": 10, "text": text})
+}
+
+/// The uses of `sum_to` listed, one outside the repository and one of a long path.
+fn review_nav_uses(dark: bool) {
+    let mut world = review_on_sum_to(dark, |_: &Request| {
+        let mut places = vec![
+            nav_place("totals.rs", 3, "    let total = sum_to(10);"),
+            nav_place(LONG_PATH, 128, "    let 合計 = sum_to(上限);"),
+            nav_place(
+                "/usr/lib/rustlib/src/rust/library/core/src/iter/traits/accum.rs",
+                149,
+                "        fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {",
+            ),
+        ];
+        places.extend((0..30).map(|i| {
+            nav_place(
+                &format!("benches/sum_{i}.rs"),
+                i + 10,
+                "    b.iter(|| sum_to(black_box(1_000)));",
+            )
+        }));
+        json!({"event": "code_nav_result", "success": true, "language": "rust", "locations": places})
+    });
+    world.gesture(|app| app.type_text("r"));
+    world.gesture(|app| app.type_text("d"));
+    snap(&mut world, "review-nav-uses", dark);
+}
+
+fn review_nav_type(dark: bool) {
+    let mut world = review_on_sum_to(dark, |_: &Request| {
+        json!({"event": "code_nav_result", "success": true, "language": "rust",
+            "text": "pub fn sum_to(limit: u32) -> u32\n\nSums the numbers from one to `limit`, both ends included. Returns 0 when `limit` is 0."})
+    });
+    world.gesture(|app| app.type_text("h"));
+    world.gesture(|app| app.type_text("d"));
+    snap(&mut world, "review-nav-type", dark);
+}
+
+/// The note line while the names on the line are labeled.
+fn review_nav_picking(dark: bool) {
+    let mut world = review_on_sum_to(dark, |_: &Request| json!({}));
+    world.gesture(|app| app.type_text("f"));
+    snap(&mut world, "review-nav-picking", dark);
+}
+
+/// The note line saying why a question got no answer.
+fn review_nav_failed(dark: bool) {
+    let mut world = review_on_sum_to(dark, |_: &Request| {
+        json!({"event": "code_nav_result", "success": false,
+            "error": "rust-analyzer stopped before it answered"})
+    });
+    world.gesture(|app| app.type_text("f"));
+    world.gesture(|app| app.type_text("d"));
+    snap(&mut world, "review-nav-failed", dark);
+}
+
+/// The note line offering an answer that arrived after the cursor moved on.
+fn review_nav_offer(dark: bool) {
+    let mut world = review_on_sum_to(dark, |_: &Request| ());
+    world.gesture(|app| app.type_text("f"));
+    world.gesture(|app| app.type_text("d"));
+    tap(&mut world, Key::Up);
+    world.advance(std::time::Duration::from_secs(2));
+    let asked = world.daemon.sent_of("code_nav")[0].clone();
+    world.daemon.reply_to(
+        &asked,
+        json!({"event": "code_nav_result", "success": true, "language": "rust",
+            "locations": [nav_place("totals.rs", 7, "fn sum_to(limit: u32) -> u32 {")]}),
+    );
+    world.settle();
+    snap(&mut world, "review-nav-offer", dark);
+}
+
+/// The review's file view with the edit box open on `let total = sum_to(10);`, the daemon
+/// answering the save with `answer`.
+fn review_editing(dark: bool, answer: Value) -> World {
+    let mut world = review_alone(dark);
+    world
+        .daemon
+        .on("review_edit", move |_: &Request| answer.clone());
+    tap(&mut world, Key::Right);
+    tap(&mut world, Key::Enter);
+    for _ in 0..4 {
+        tap(&mut world, Key::Down);
+    }
+    world.gesture(|app| app.type_text("i"));
+    world
+}
+
+fn review_edit(dark: bool) {
+    let mut world = review_editing(dark, json!({}));
+    snap(&mut world, "review-edit", dark);
+}
+
+fn review_edit_refused(dark: bool) {
+    let mut world = review_editing(
+        dark,
+        json!({"event": "review_edit_result", "success": false,
+            "error": "cannot write totals.rs: permission denied"}),
+    );
+    world.gesture(|app| app.type_text(" // named"));
+    tap(&mut world, Key::Enter);
+    snap(&mut world, "review-edit-refused", dark);
+}
+
+/// The review's document with a sequence diagram of every part the diagram draws: a person,
+/// a name on two lines, a block with a section, a caption, a call to itself, a dashed answer
+/// and a lost one, and a label long enough to wrap.
+const REVIEW_MAP: &str = "
+```mermaid after
+sequenceDiagram
+  actor you as Reader
+  participant main as main<br/>totals.rs
+  participant sum as sum_to
+  you->>main: cargo run
+  alt limit given
+  main->>sum: sum_to(10)
+  sum->>sum: (1..=limit).sum() over every number from one up to the limit
+  else no limit
+  main-xsum: sum_to()
+  end
+  sum-->>main: 55
+```
+";
+
+fn review_map_document() -> String {
+    format!("{REVIEW}{REVIEW_MAP}")
+}
+
+fn review_map_line(text: &str) -> i64 {
+    review_map_document()
+        .lines()
+        .position(|l| l.contains(text))
+        .expect("a line of the map's document") as i64
+        + 1
+}
+
+fn review_map_bundle() -> ReviewBundle {
+    let line = review_map_line;
+    let participant = |id: &str, label: &str, actor: bool| ReviewFlowParticipant {
+        id: id.into(),
+        label: label.into(),
+        actor,
+    };
+    let message = |at: &str, from: &str, to: &str, arrow: &str, text: &str, stop: Option<i64>| {
+        ReviewFlowMessage {
+            line: line(at),
+            from: from.into(),
+            to: to.into(),
+            arrow: arrow.into(),
+            text: text.into(),
+            stop_line: stop,
+            ..ReviewFlowMessage::default()
+        }
+    };
+    ReviewBundle {
+        frame: "map".into(),
+        flows: vec![ReviewFlow {
+            line: line("```mermaid after"),
+            side: Some("after".into()),
+            drawn: true,
+            participants: vec![
+                participant("you", "Reader", true),
+                participant("main", "main<br/>totals.rs", false),
+                participant("sum", "sum_to", false),
+            ],
+            note: Some("main names the limit once; sum_to owns the range.".into()),
+            messages: vec![
+                message("you->>main", "you", "main", "->>", "cargo run", None),
+                ReviewFlowMessage {
+                    note: Some(
+                        "the inline range moved into the helper, which names its limit".into(),
+                    ),
+                    ..message("main->>sum", "main", "sum", "->>", "sum_to(10)", Some(20))
+                },
+                message(
+                    "sum->>sum",
+                    "sum",
+                    "sum",
+                    "->>",
+                    "(1..=limit).sum() over every number from one up to the limit",
+                    Some(26),
+                ),
+                message("main-xsum", "main", "sum", "-x", "sum_to()", None),
+                message("sum-->>main", "sum", "main", "-->>", "55", None),
+            ],
+            groups: vec![
+                ReviewFlowGroup {
+                    line: line("alt limit given"),
+                    kind: "alt".into(),
+                    label: "limit given".into(),
+                    first_message: line("main->>sum"),
+                    last_message: line("main-xsum"),
+                    ..ReviewFlowGroup::default()
+                },
+                ReviewFlowGroup {
+                    line: line("else no limit"),
+                    kind: "else".into(),
+                    label: "no limit".into(),
+                    first_message: line("main-xsum"),
+                    last_message: line("main-xsum"),
+                    block: Some(line("alt limit given")),
+                },
+            ],
+        }],
+        ..review()
+    }
+}
+
+/// The review's Map: its sequence diagram beside the story, the cursor on an arrow.
+fn review_diagram(dark: bool) {
+    let mut world = review_beside_agent(dark);
+    deliver(
+        &mut world,
+        "/repo/review.md",
+        &review_map_document(),
+        Some(review_map_bundle()),
+    );
+    world.gesture(|app| app.click(Target::key("tile.m.focus")));
+    focus_review(&mut world);
+    tap(&mut world, Key::Right);
+    snap(&mut world, "review-diagram", dark);
+}
+
 fn launcher_empty_desktop(dark: bool) {
     let mut world = start(launcher_daemon(dark, true));
     snap(&mut world, "launcher-empty-desktop", dark);
@@ -6112,6 +6409,17 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("review_server_missing", || review_server_missing(dark));
         scene("review_search", || review_search(dark));
         scene("review_send_sheet", || review_send_sheet(dark));
+        scene("review_search_found", || review_search_found(dark));
+        scene("review_search_nothing", || review_search_nothing(dark));
+        scene("review_search_failed", || review_search_failed(dark));
+        scene("review_nav_uses", || review_nav_uses(dark));
+        scene("review_nav_type", || review_nav_type(dark));
+        scene("review_nav_picking", || review_nav_picking(dark));
+        scene("review_nav_failed", || review_nav_failed(dark));
+        scene("review_nav_offer", || review_nav_offer(dark));
+        scene("review_edit", || review_edit(dark));
+        scene("review_edit_refused", || review_edit_refused(dark));
+        scene("review_diagram", || review_diagram(dark));
         scene("ledger_seeded", || ledger_seeded(dark));
         scene("ledger_worktrees", || ledger_worktrees(dark));
         scene("ledger_smallest", || ledger_smallest(dark));
