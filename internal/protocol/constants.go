@@ -37,6 +37,7 @@ const (
 	SessionAgentClaude SessionAgent = "claude"
 	SessionAgentCodex  SessionAgent = "codex"
 	SessionAgentShell  SessionAgent = "shell"
+	SessionAgentSigma  SessionAgent = "sigma"
 )
 
 const (

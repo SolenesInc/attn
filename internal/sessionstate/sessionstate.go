@@ -112,6 +112,9 @@ func PolicyFor(agent string) Policy {
 		policy.HeartbeatTTL = claudeHeartbeatTTL
 		policy.ReviewerDwell = 0
 	}
+	if agent == string(protocol.SessionAgentSigma) {
+		policy.ReviewerDwell = 0
+	}
 	if agent == string(protocol.SessionAgentShell) {
 		policy.HeartbeatTTL = shellHeartbeatTTL
 	}
