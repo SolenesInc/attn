@@ -422,7 +422,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .role("group")
                 .label(label.to_owned())
                 .w_full()
-                .child(words(label, Type::Label, t.text_tertiary))
+                .child(words(label.to_owned(), Type::Label, t.text_tertiary))
                 .children(checks),
         ));
     }

@@ -3,7 +3,7 @@ use rune_kit::{ScrollBar, TextInput};
 
 use crate::blocks::{Block, Inline};
 use crate::keycap::Keys;
-use crate::system::{ListRow, Radius, Size, Space, Type, door, focus, words};
+use crate::system::{ListRow, Part, Radius, Said, Size, Space, Type, door, focus, words};
 use crate::{Backdrop, Frame, Tokens};
 
 /// How wide a finder is, by what its rows hold.
@@ -157,7 +157,7 @@ pub fn list(key: impl Into<String>) -> El {
 }
 
 /// What a list says when it lists nothing.
-pub fn empty(t: &Tokens, key: impl Into<String>, message: &str) -> El {
+pub fn empty(t: &Tokens, key: impl Into<String>, message: impl Into<Said>) -> El {
     door::inset(row().w_full().justify_center(), Space::S16, Space::S16).child(
         words(message, Type::Small, t.text_muted)
             .key(key)
@@ -180,33 +180,36 @@ pub fn path_option(
         .unfocusable()
         .cursor(highlighted)
         .selected(highlighted)
-        .title(title)
-        .subtitle(format!("`{path}`"), t)
+        .title(title.to_owned())
+        .subtitle(Said::parts([Part::Code(path.to_owned())]), t)
         .build(t)
 }
 
 /// One hint of a footer: words and the keys among them, and whether it sits at the
 /// footer's far end, as the hint that closes the finder does.
 pub struct Hint {
-    pieces: Vec<(String, bool)>,
+    pieces: Vec<(Said, bool)>,
     at_end: bool,
 }
 
 impl Hint {
     /// `keys` between `before` and `after`.
-    pub fn keys(before: &str, keys: &str, after: &str) -> Hint {
-        let pieces = [(before.trim(), false), (keys, true), (after.trim(), false)]
-            .into_iter()
-            .filter(|(said, _)| !said.is_empty())
-            .map(|(said, keys)| (said.to_owned(), keys))
-            .collect();
+    pub fn keys(before: impl Into<Said>, keys: &str, after: impl Into<Said>) -> Hint {
+        let pieces = [
+            (before.into().trimmed(), false),
+            (Said::from(keys.to_owned()), true),
+            (after.into().trimmed(), false),
+        ]
+        .into_iter()
+        .filter(|(said, _)| !said.is_empty())
+        .collect();
         Hint {
             pieces,
             at_end: false,
         }
     }
 
-    pub fn plain(said: impl Into<String>) -> Hint {
+    pub fn plain(said: impl Into<Said>) -> Hint {
         Hint {
             pieces: vec![(said.into(), false)],
             at_end: false,
@@ -214,11 +217,18 @@ impl Hint {
     }
 
     /// Words and keys in turn, each piece `(text, is_keys)`.
-    pub fn pieces(pieces: &[(&str, bool)]) -> Hint {
+    pub fn pieces(pieces: &[(&'static str, bool)]) -> Hint {
         Hint {
             pieces: pieces
                 .iter()
-                .map(|(said, keys)| ((*said).to_owned(), *keys))
+                .map(|(said, keys)| {
+                    let piece = if *keys {
+                        Said::from((*said).to_owned())
+                    } else {
+                        Said::from(*said)
+                    };
+                    (piece, *keys)
+                })
                 .collect(),
             at_end: false,
         }
@@ -233,7 +243,7 @@ impl Hint {
     fn said(&self) -> String {
         self.pieces
             .iter()
-            .map(|(said, _)| said.as_str())
+            .map(|(said, _)| said.text())
             .collect::<Vec<_>>()
             .join(" ")
     }
@@ -250,7 +260,7 @@ pub fn footer(t: &Tokens, finder: &str, hints: Vec<Hint>) -> El {
             .label(said)
             .children(h.pieces.into_iter().map(|(piece, keys)| {
                 if keys {
-                    Keys::outlined(&[piece]).build(t).a11y_hidden()
+                    Keys::outlined(&[piece.text()]).build(t).a11y_hidden()
                 } else {
                     words(piece, Type::Small, t.text_tertiary)
                         .single_line()
@@ -310,7 +320,7 @@ pub fn query(t: &Tokens, title: El, field: El, status: Option<El>) -> El {
 }
 
 /// A finder's title, keyed `key`, which reads as its heading.
-pub fn title(t: &Tokens, key: impl Into<String>, said: &str) -> El {
+pub fn title(t: &Tokens, key: impl Into<String>, said: impl Into<Said>) -> El {
     words(said, Type::Label, t.text_tertiary)
         .key(key.into())
         .role("heading")
@@ -360,7 +370,7 @@ pub fn ghost(key: impl Into<String>, typed: &str, rest: String, ink: rune::Color
 }
 
 /// A chip that names what a query is inside, such as the project chosen before its place.
-pub fn chip(t: &Tokens, key: impl Into<String>, said: &str) -> El {
+pub fn chip(t: &Tokens, key: impl Into<String>, said: impl Into<Said>) -> El {
     let chip = words(said, Type::Mono, t.text_secondary)
         .key(key.into())
         .fill(t.bg_elevated)

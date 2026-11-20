@@ -13,7 +13,7 @@ pub struct Disclosure<S> {
     label: Said,
     open: bool,
     beside: Option<(El, String)>,
-    tags: Vec<String>,
+    tags: Vec<Said>,
     failed: bool,
     disabled: bool,
     toggle: Press<S>,
@@ -47,8 +47,8 @@ impl<S: 'static> Disclosure<S> {
         self
     }
 
-    pub fn tags(mut self, tags: Vec<String>) -> Self {
-        self.tags = tags;
+    pub fn tags(mut self, tags: impl IntoIterator<Item = impl Into<Said>>) -> Self {
+        self.tags = tags.into_iter().map(Into::into).collect();
         self
     }
 

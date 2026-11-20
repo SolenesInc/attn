@@ -1,7 +1,7 @@
 use rune::{El, Tx, col, row};
 
 use super::{
-    Button, Control, IconSize, Radius, Size, Space, Type, disabled, door, kit, layers, words,
+    Button, Control, IconSize, Radius, Said, Size, Space, Type, disabled, door, kit, layers, words,
 };
 use crate::{Tokens, glyph};
 
@@ -16,7 +16,7 @@ const STEPPER_VALUE: f32 = 80.0;
 pub fn stepper<S: 'static>(
     key: &str,
     what: &str,
-    value: String,
+    value: impl Into<Said>,
     disabled: bool,
     t: &Tokens,
     down: impl Fn(&mut S, &mut Tx) + 'static,
@@ -32,10 +32,11 @@ pub fn stepper<S: 'static>(
                 .label(format!("{said} {what}")),
         )
     };
-    let shown = words(value.clone(), Type::Name, t.text_primary)
+    let value = value.into();
+    let shown = words(&value, Type::Name, t.text_primary)
         .key(format!("{key}.value"))
         .role("status")
-        .label(value)
+        .label(value.text())
         .wrap()
         .grow_from(0.0, STEPPER_VALUE)
         .align(rune::Align::Center);

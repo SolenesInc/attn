@@ -409,8 +409,8 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
                 .label(name)
                 .w_full()
                 .child(finder::heading(
-                    GroupHead::new(format!("{w}.{}.head", name.to_lowercase()), name)
-                        .section(name)
+                    GroupHead::new(format!("{w}.{}.head", name.to_lowercase()), name.to_owned())
+                        .section(name.to_owned())
                         .heading()
                         .build(t),
                 ))
@@ -659,8 +659,8 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
         }
     };
     let section = |key: &str, name: &str| {
-        GroupHead::new(format!("{w}.repo.{key}"), name)
-            .section(name)
+        GroupHead::new(format!("{w}.repo.{key}"), name.to_owned())
+            .section(name.to_owned())
             .heading()
             .build(t)
     };

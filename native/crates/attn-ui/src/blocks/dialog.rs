@@ -5,7 +5,7 @@ use super::actions::Actions;
 use super::block::{Block, page_gap, spaced};
 use super::measure::{PROMPT, READING};
 use crate::system::{IconSize, icon_button};
-use crate::system::{Size, Space, Type, door, words};
+use crate::system::{Said, Size, Space, Type, door, words};
 use crate::{Backdrop, Frame, Tokens, glyph};
 
 enum Height {
@@ -67,8 +67,8 @@ type Wrap = Box<dyn FnOnce(El) -> El>;
 /// outside; one without, or one whose actions do not close it, draws a × that closes it.
 pub struct Dialog {
     key: String,
-    title: String,
-    lead: Option<String>,
+    title: Said,
+    lead: Option<Said>,
     aside: Vec<El>,
     body: Vec<Block>,
     list: Option<El>,
@@ -84,7 +84,7 @@ pub struct Dialog {
 impl Dialog {
     /// `key` names the dialog: its surface is `{key}-dialog`, its backdrop `{key}-scrim`, the
     /// body that scrolls `{key}.body`.
-    pub fn new(key: impl Into<String>, title: impl Into<String>) -> Self {
+    pub fn new(key: impl Into<String>, title: impl Into<Said>) -> Self {
         Dialog {
             key: key.into(),
             title: title.into(),
@@ -104,7 +104,7 @@ impl Dialog {
 
     /// What the dialog asks or is for, under its title; it also describes the dialog. Text
     /// between backticks is set in `Mono`.
-    pub fn lead(mut self, lead: impl Into<String>) -> Self {
+    pub fn lead(mut self, lead: impl Into<Said>) -> Self {
         let lead = lead.into();
         self.lead = (!lead.is_empty()).then_some(lead);
         self
@@ -283,8 +283,8 @@ impl Dialog {
             .draw_clipped(panel)
             .key(format!("{}-dialog", self.key))
             .role("dialog")
-            .label(self.title.clone())
-            .description(self.lead.unwrap_or_default())
+            .label(self.title.text())
+            .description(self.lead.map(|lead| lead.text()).unwrap_or_default())
             .w_full()
             .max_w(self.size.width())
             .child(inside.children(body).children(foot))
@@ -313,7 +313,7 @@ impl Dialog {
 
 /// The dialog's head: its title and lead, then what goes beside the title, each centred on the
 /// title's first line.
-fn head(title: &str, lead: Option<String>, aside: Vec<El>, closer: Option<El>, t: &Tokens) -> El {
+fn head(title: &Said, lead: Option<Said>, aside: Vec<El>, closer: Option<El>, t: &Tokens) -> El {
     let band = if !aside.is_empty() {
         Some(Size::Regular)
     } else if closer.is_some() {
@@ -321,7 +321,7 @@ fn head(title: &str, lead: Option<String>, aside: Vec<El>, closer: Option<El>, t
     } else {
         None
     };
-    let title = words(title.to_owned(), Type::Heading, t.text_primary)
+    let title = words(title, Type::Heading, t.text_primary)
         .key("title")
         .role("heading")
         .wrap();

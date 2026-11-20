@@ -558,13 +558,13 @@ fn radios(group: Group, choices: &[Choice], busy: bool, t: &Tokens) -> El {
     }
 }
 
-fn field(key: &str, label: &str, control: El, t: &Tokens) -> Block {
+fn field(key: &str, label: &'static str, control: El, t: &Tokens) -> Block {
     Field::new(format!("{POP}.{key}"), label)
         .control(control)
         .build(t)
 }
 
-fn link(key: &str, label: &str, t: &Tokens, press: fn(&mut State, &mut Tx)) -> El {
+fn link(key: &str, label: &'static str, t: &Tokens, press: fn(&mut State, &mut Tx)) -> El {
     Button::new(label)
         .look(Look::Quiet)
         .size(Size::Compact)
@@ -575,7 +575,7 @@ fn link(key: &str, label: &str, t: &Tokens, press: fn(&mut State, &mut Tx)) -> E
 }
 
 fn alert(said: &str, t: &Tokens) -> Block {
-    Notice::error(format!("{POP}.alert"), said).build(t)
+    Notice::error(format!("{POP}.alert"), said.to_owned()).build(t)
 }
 
 fn open_agents_settings(state: &mut State, tx: &mut Tx) {

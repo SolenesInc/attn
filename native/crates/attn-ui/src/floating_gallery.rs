@@ -334,8 +334,8 @@ fn sheet_items(title: &str, s: &Floating, t: &Tokens) -> crate::blocks::Block {
             .key(format!("story.{title}"))
             .w_full()
             .child(
-                crate::system::GroupHead::new(format!("story.{title}.heading"), title)
-                    .section(title)
+                crate::system::GroupHead::new(format!("story.{title}.heading"), title.to_owned())
+                    .section(title.to_owned())
                     .heading()
                     .build(t),
             )
@@ -359,7 +359,7 @@ fn sheet_items(title: &str, s: &Floating, t: &Tokens) -> crate::blocks::Block {
 
 fn checks(s: &Floating, cx: &mut Cx<Floating>) -> El {
     let t = tokens(cx);
-    let check = |key: &str, name: &str, note: &str, on: bool| -> El {
+    let check = |key: &str, name: &'static str, note: &'static str, on: bool| -> El {
         Check::new(key, name)
             .note(note)
             .checked(on)

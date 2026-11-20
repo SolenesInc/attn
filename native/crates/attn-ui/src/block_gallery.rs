@@ -232,7 +232,7 @@ fn rows(s: &Blocks, t: &Tokens) -> Vec<Block> {
                     stepper(
                         "row.stepper.control",
                         "app font size",
-                        "110%".into(),
+                        "110%",
                         s.disabled,
                         t,
                         noop,

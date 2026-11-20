@@ -803,3 +803,335 @@ fn every_block_draws_and_reads_text_from_data_as_written_and_parses_its_own_copy
         );
     }
 }
+
+/// Every public text input of attn_ui, found in its source: `(path::fn(param), said)`. A
+/// parameter is text when its type names `Said`, `String` or `str`, directly or through a
+/// generic bound. Keys, ids, accessibility roles and glyph names are names, not text; colour
+/// settings and the appearance setting are parsed, not drawn.
+fn public_text_inputs() -> Vec<(String, bool)> {
+    fn files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            if path.is_dir() {
+                files(&path, out);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                out.push(path);
+            }
+        }
+    }
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut paths = Vec::new();
+    files(&src, &mut paths);
+    let mut inputs = Vec::new();
+    for path in paths {
+        let name = path.strip_prefix(&src).unwrap().with_extension("");
+        let module = name.to_string_lossy().replace('/', "::");
+        if module.contains("gallery")
+            || module == "playground"
+            || module.starts_with("colors")
+            || module == "lib"
+            || module == "icon"
+        {
+            continue;
+        }
+        let source = std::fs::read_to_string(&path).unwrap();
+        let mut owner: Option<String> = None;
+        let mut at = 0;
+        for line in source.split_inclusive('\n') {
+            let start = at;
+            at += line.len();
+            let trimmed = line.trim_start();
+            if line.starts_with('}') {
+                owner = None;
+            }
+            if line.starts_with("impl") && line.trim_end().ends_with('{') {
+                let head = line.trim_end().trim_end_matches('{');
+                let head = head.rsplit(" for ").next().unwrap();
+                let head = head.trim_start_matches("impl").trim();
+                let head = if head.starts_with('<') {
+                    &head[head.find('>').unwrap() + 1..]
+                } else {
+                    head
+                };
+                owner = Some(head.trim().split(['<', ' ']).next().unwrap().to_owned());
+                continue;
+            }
+            let Some(rest) = trimmed.strip_prefix("pub fn ") else {
+                continue;
+            };
+            let fn_name: String = rest
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            let open = start + line.len() - rest.len() + fn_name.len();
+            let bytes = source.as_bytes();
+            let mut generics = String::new();
+            let mut i = open;
+            if bytes[i] == b'<' {
+                let mut depth = 0;
+                loop {
+                    match bytes[i] {
+                        b'<' => depth += 1,
+                        b'>' => depth -= 1,
+                        _ => {}
+                    }
+                    generics.push(bytes[i] as char);
+                    i += 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+            }
+            assert_eq!(
+                bytes[i], b'(',
+                "{module}::{fn_name}: no parameters where expected"
+            );
+            let mut depth = 0;
+            let mut params = String::new();
+            loop {
+                let c = bytes[i] as char;
+                match c {
+                    '(' => depth += 1,
+                    ')' => depth -= 1,
+                    _ => {}
+                }
+                i += 1;
+                if depth == 0 {
+                    break;
+                }
+                if !(c == '(' && depth == 1) {
+                    params.push(c);
+                }
+            }
+            let mut parts = Vec::new();
+            let (mut depth, mut current) = (0, String::new());
+            for c in params.chars() {
+                match c {
+                    '<' | '(' | '[' => depth += 1,
+                    '>' | ')' | ']' => depth -= 1,
+                    _ => {}
+                }
+                if c == ',' && depth == 0 {
+                    parts.push(std::mem::take(&mut current));
+                } else {
+                    current.push(c);
+                }
+            }
+            parts.push(current);
+            for part in parts {
+                let Some((param, ty)) = part.split_once(':') else {
+                    continue;
+                };
+                let param = param.trim().trim_start_matches("mut ").trim();
+                let ty = ty.split_whitespace().collect::<Vec<_>>().join(" ");
+                if param.contains("self")
+                    || ["key", "id", "role", "select_role", "mark"].contains(&param)
+                    || param.ends_with("_key")
+                    || param.ends_with("_id")
+                    || ty.contains("Fn(")
+                    || ty.contains("Tokens")
+                {
+                    continue;
+                }
+                let inner = generics
+                    .strip_prefix('<')
+                    .and_then(|g| g.strip_suffix('>'))
+                    .unwrap_or("");
+                let bound = inner
+                    .split(',')
+                    .filter_map(|g| g.split_once(':'))
+                    .find(|(g, _)| {
+                        ty.split(|c: char| !c.is_alphanumeric())
+                            .any(|w| w == g.trim())
+                    })
+                    .map_or(String::new(), |(_, b)| b.to_owned());
+                let seen = format!("{ty} {bound}");
+                let text = ["Said", "String", "str"]
+                    .iter()
+                    .any(|w| seen.split(|c: char| !c.is_alphanumeric()).any(|x| x == *w));
+                if !text {
+                    continue;
+                }
+                let said = seen.contains("Said") || seen.contains("'static str");
+                let owner = owner.as_ref().map_or(String::new(), |o| format!("{o}::"));
+                inputs.push((format!("{module}::{owner}{fn_name}({param})"), said));
+            }
+        }
+    }
+    inputs
+}
+
+/// How each public text input draws: `Said` takes authored copy parsed and data as written;
+/// `Plain` draws whatever it is given as written. Every input whose words went through
+/// `words()` on main, and so parsed, is `Said`; keys and key labels, paths given as data and
+/// names read only by assistive tools are `Plain`.
+const TEXT_INPUTS: &[(&str, bool)] = &[
+    ("blocks::banner::Banner::new(label)", false),
+    ("blocks::banner::Banner::value(value)", false),
+    ("blocks::banner::Banner::says(sentence)", true),
+    ("blocks::banner::Banner::note(said)", true),
+    ("blocks::banner::Banner::link(shown)", true),
+    ("blocks::banner::Banner::link(label)", false),
+    ("blocks::banner::Banner::note_button(label)", false),
+    ("blocks::banner::Banner::dismiss(label)", false),
+    ("blocks::choices::Choices::new(label)", false),
+    ("blocks::dialog::Dialog::new(title)", true),
+    ("blocks::dialog::Dialog::lead(lead)", true),
+    ("blocks::disclosure::Disclosure::new(label)", true),
+    ("blocks::disclosure::Disclosure::beside(said)", false),
+    ("blocks::disclosure::Disclosure::tags(tags)", true),
+    ("blocks::facts::Facts::fact(label)", true),
+    ("blocks::facts::Facts::fact(value)", true),
+    ("blocks::facts::Facts::code(label)", true),
+    ("blocks::facts::Facts::code(value)", true),
+    ("blocks::facts::Facts::item(label)", true),
+    ("blocks::facts::Facts::control(label)", true),
+    ("blocks::field::Field::new(label)", true),
+    ("blocks::field::Field::value(value)", true),
+    ("blocks::field::Field::note(note)", true),
+    ("blocks::field::Field::hint(hint)", true),
+    ("blocks::field::Field::error(error)", true),
+    ("blocks::inspector::Inspector::new(title)", true),
+    ("blocks::inspector::Inspector::side(label)", false),
+    ("blocks::inspector::value(said)", true),
+    ("blocks::inspector::aside(said)", true),
+    ("blocks::list::List::new(label)", true),
+    ("blocks::list::List::chooser(chosen)", false),
+    ("blocks::list::List::empty(said)", true),
+    ("blocks::menu::Menu::new(label)", false),
+    ("blocks::notice::Notice::error(said)", true),
+    ("blocks::notice::Notice::warn(said)", true),
+    ("blocks::notice::Notice::info(said)", true),
+    ("blocks::notice::Status::new(said)", true),
+    ("blocks::notice::Status::aside(aside)", true),
+    ("blocks::notice::Refusal::new(reason)", true),
+    ("blocks::page::Page::status(said)", true),
+    ("blocks::page::Page::group(label)", false),
+    ("blocks::page::Head::new(title)", true),
+    ("blocks::page::Head::lead(lead)", true),
+    ("blocks::popover::Popover::new(title)", true),
+    ("blocks::prose::Prose::lead(said)", true),
+    ("blocks::prose::Prose::empty(said)", true),
+    ("blocks::prose::Prose::hint(said)", true),
+    ("blocks::prose::Prose::code(value)", false),
+    ("blocks::section::Section::new(title)", true),
+    ("blocks::section::Section::description(said)", true),
+    ("blocks::section::Section::aside(said)", true),
+    ("blocks::section::Section::region(name)", false),
+    ("blocks::setting_row::SettingRow::new(title)", true),
+    ("blocks::setting_row::SettingRow::new(copy)", true),
+    ("blocks::sheet::Sheet::new(title)", true),
+    ("blocks::sheet::Sheet::article(label)", false),
+    ("dialog::Dialog::new(title)", false),
+    ("dialog::Dialog::subtitle(subtitle)", false),
+    ("finder::empty(message)", true),
+    ("finder::path_option(title)", false),
+    ("finder::path_option(path)", false),
+    ("finder::Hint::keys(before)", true),
+    ("finder::Hint::keys(keys)", false),
+    ("finder::Hint::keys(after)", true),
+    ("finder::Hint::plain(said)", true),
+    ("finder::Hint::pieces(pieces)", true),
+    ("finder::footer(finder)", false),
+    ("finder::title(said)", true),
+    ("finder::ghost(typed)", false),
+    ("finder::ghost(rest)", false),
+    ("finder::chip(said)", true),
+    ("finder::grouped(label)", false),
+    ("glyph_button::GlyphButton::new(label)", false),
+    ("glyph_button::GlyphButton::help(help)", false),
+    ("keycap::Keys::new(caps)", false),
+    ("keycap::Keys::raised(caps)", false),
+    ("keycap::Keys::outlined(caps)", false),
+    ("keycap::Keys::ledged(caps)", false),
+    ("system::attachment::file_chip(name)", true),
+    ("system::attachment::file_chip(kind)", true),
+    ("system::attachment::file_chip(detail)", true),
+    ("system::attachment::image_tile(name)", false),
+    ("system::attachment::drop_overlay(said)", true),
+    ("system::button::Button::new(words)", true),
+    ("system::button::Button::help(help)", false),
+    ("system::button::Button::shortcut(keys)", false),
+    ("system::check::Check::new(name)", true),
+    ("system::check::Check::note(note)", true),
+    ("system::chip::keycaps(keys)", false),
+    ("system::chip::keys_hint(keys)", false),
+    ("system::chip::keys_hint(what)", true),
+    ("system::chip::slot_badge(slot)", false),
+    ("system::chip::chip_button(label)", false),
+    ("system::choice::Choice::new(name)", true),
+    ("system::choice::Choice::note(note)", true),
+    ("system::choice::checks(label)", false),
+    ("system::choice::choices(label)", false),
+    ("system::composer::composer(placeholder)", false),
+    ("system::control::Control::label(label)", false),
+    ("system::disclosure::disclosure(label)", true),
+    ("system::disclosure::disclosure(beside)", false),
+    ("system::disclosure::disclosure(chips)", true),
+    ("system::drop_zone::drop_zone(said)", true),
+    ("system::expander::expander(said)", true),
+    ("system::group_head::GroupHead::new(label)", false),
+    ("system::group_head::GroupHead::name(name)", true),
+    ("system::group_head::GroupHead::section(name)", true),
+    ("system::group_head::GroupHead::keys(keys)", false),
+    ("system::icon_button::icon_button(label)", false),
+    ("system::icon_button::IconButton::count(count)", false),
+    ("system::icon_button::IconButton::keys(keys)", false),
+    ("system::icon_button::IconButton::help(help)", false),
+    ("system::list_row::ListRow::new(label)", false),
+    ("system::list_row::ListRow::note(said)", true),
+    ("system::list_row::ListRow::title(title)", true),
+    ("system::list_row::ListRow::quiet_title(title)", true),
+    ("system::list_row::ListRow::subtitle(subtitle)", true),
+    ("system::list_row::ListRow::subtitle_keyed(subtitle)", true),
+    ("system::list_row::ListRow::keys(keys)", false),
+    ("system::list_row::ListRow::select(label)", false),
+    ("system::list_row::ListRow::value(value)", false),
+    ("system::pager::pager((key, dot))", false),
+    ("system::press_area::press_area(label)", false),
+    ("system::said::Said::then_code(code)", false),
+    ("system::segmented::Segment::new(name)", true),
+    ("system::segmented::Segment::help(help)", false),
+    ("system::segmented::Segmented::new(label)", false),
+    ("system::stepper::stepper(what)", false),
+    ("system::stepper::stepper(value)", true),
+    ("system::switch::switch(label)", false),
+    ("system::tag::pill(said)", true),
+    ("system::tag::tag(said)", true),
+    ("system::trigger::Trigger::new(label)", false),
+    ("system::trigger::Trigger::value(value)", false),
+    ("system::type_role::words(words)", true),
+    ("type_::upper(label)", false),
+    ("type_::caps(label)", false),
+    ("type_::sans_caps(label)", false),
+];
+
+#[test]
+fn every_public_text_input_has_a_row_saying_how_it_draws() {
+    let found = public_text_inputs();
+    let table: Vec<(String, bool)> = TEXT_INPUTS
+        .iter()
+        .map(|(name, said)| ((*name).to_owned(), *said))
+        .collect();
+    let missing: Vec<_> = found.iter().filter(|row| !table.contains(row)).collect();
+    let stale: Vec<_> = table.iter().filter(|row| !found.contains(row)).collect();
+    assert!(
+        missing.is_empty() && stale.is_empty(),
+        "public text inputs without their row (said = parses copy):\n{}\nrows with no such input:\n{}",
+        missing
+            .iter()
+            .map(|(n, s)| format!("    (\"{n}\", {s}),"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        stale
+            .iter()
+            .map(|(n, s)| format!("    (\"{n}\", {s}),"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+    assert_eq!(table.len(), found.len());
+}

@@ -918,7 +918,7 @@ fn steppers(s: &Library, cx: &mut Cx<Library>) -> El {
             stepper(
                 "stepper.scale",
                 "app font size",
-                "100%".into(),
+                "100%",
                 s.disabled,
                 &t,
                 noop,
@@ -928,7 +928,7 @@ fn steppers(s: &Library, cx: &mut Cx<Library>) -> El {
             stepper(
                 "stepper.match",
                 "terminal font size",
-                "Match app".into(),
+                "Match app",
                 s.disabled,
                 &t,
                 noop,
@@ -1081,7 +1081,10 @@ fn disclosures(s: &Library, cx: &mut Cx<Library>) -> El {
     let chips = if s.open {
         Vec::new()
     } else {
-        vec!["Worktree".to_owned(), "2 env".to_owned()]
+        vec![
+            crate::system::Said::from("Worktree"),
+            crate::system::Said::from("2 env"),
+        ]
     };
     stack(
         &t,

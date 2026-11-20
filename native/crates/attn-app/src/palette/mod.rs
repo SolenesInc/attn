@@ -663,7 +663,7 @@ pub(crate) fn badge(state: &State, mode: &Mode) -> Option<String> {
 pub(crate) fn action_hint(state: &State, action: &Action, word: &str) -> Hint {
     match state.keymap.binding(action) {
         Some(binding @ Binding::Chord(_)) => {
-            Hint::keys("", &state.keymap.label(binding), &format!(" {word}"))
+            Hint::keys("", &state.keymap.label(binding), format!(" {word}"))
         }
         _ => Hint::plain(format!(
             "{word} needs a single-key shortcut (chords don't work here)"

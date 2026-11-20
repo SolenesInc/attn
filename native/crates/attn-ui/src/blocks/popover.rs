@@ -3,7 +3,7 @@ use rune_kit::ScrollBar;
 
 use super::actions::Actions;
 use super::block::{Block, Kind, spaced};
-use crate::system::{Size, Space, Type, door, words};
+use crate::system::{Said, Size, Space, Type, door, words};
 use crate::{Frame, Tokens};
 
 /// A small form opened from a control and anchored beside it: its title, controls beside the
@@ -11,7 +11,7 @@ use crate::{Frame, Tokens};
 /// says what closes it.
 pub struct Popover {
     key: String,
-    title: String,
+    title: Said,
     aside: Vec<El>,
     body: Vec<Block>,
     actions: Option<Actions>,
@@ -24,7 +24,7 @@ const WIDTH: f32 = 280.0;
 impl Popover {
     /// `key` names the popover, which reads as a dialog named `title`; its title is
     /// `{key}.heading`.
-    pub fn new(key: impl Into<String>, title: impl Into<String>) -> Popover {
+    pub fn new(key: impl Into<String>, title: impl Into<Said>) -> Popover {
         Popover {
             key: key.into(),
             title: title.into(),
@@ -92,7 +92,7 @@ impl Popover {
             col()
                 .key(self.key)
                 .role("dialog")
-                .label(self.title)
+                .label(self.title.text())
                 .focusable(true)
                 .no_focus_ring()
                 .shrink()

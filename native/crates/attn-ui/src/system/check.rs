@@ -1,6 +1,6 @@
 use rune::{Color, Tx, col, el, row, text};
 
-use super::{Control, Radius, Size, Space, Type, disabled, door, focus, layers, words};
+use super::{Control, Radius, Said, Size, Space, Type, disabled, door, focus, layers, words};
 use crate::{Tokens, glyph};
 
 const BOX: f32 = 14.0;
@@ -9,14 +9,14 @@ const BOX: f32 = 14.0;
 /// box hangs out by a compact inset, so its words sit on the line of the words around it.
 pub struct Check {
     key: String,
-    name: String,
-    note: Option<String>,
+    name: Said,
+    note: Option<Said>,
     checked: bool,
     disabled: bool,
 }
 
 impl Check {
-    pub fn new(key: impl Into<String>, name: impl Into<String>) -> Check {
+    pub fn new(key: impl Into<String>, name: impl Into<Said>) -> Check {
         Check {
             key: key.into(),
             name: name.into(),
@@ -26,7 +26,7 @@ impl Check {
         }
     }
 
-    pub fn note(mut self, note: impl Into<String>) -> Self {
+    pub fn note(mut self, note: impl Into<Said>) -> Self {
         self.note = Some(note.into());
         self
     }
@@ -79,8 +79,8 @@ impl Check {
         let line = row()
             .key(self.key)
             .role("checkbox")
-            .label(self.name)
-            .description(self.note.unwrap_or_default())
+            .label(self.name.text())
+            .description(self.note.map(|note| note.text()).unwrap_or_default())
             .checked(self.checked)
             .focusable(!self.disabled)
             .w_full()

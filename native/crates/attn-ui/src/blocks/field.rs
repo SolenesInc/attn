@@ -67,8 +67,8 @@ impl Field {
         self
     }
 
-    pub fn error(mut self, error: Option<String>) -> Self {
-        self.error = error.map(Said::from);
+    pub fn error<S: Into<Said>>(mut self, error: Option<S>) -> Self {
+        self.error = error.map(Into::into);
         self
     }
 

@@ -74,6 +74,15 @@ impl Said {
         self.shown().0.into_owned()
     }
 
+    /// This text without the spaces at its ends.
+    pub fn trimmed(self) -> Said {
+        match self.0 {
+            Kind::Copy(copy) => Said(Kind::Copy(copy.trim())),
+            Kind::Data(data) => Said(Kind::Data(data.trim().to_owned())),
+            parts @ Kind::Parts(_) => Said(parts),
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.shown().0.is_empty()
     }

@@ -141,7 +141,7 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> El 
         finder::chip(
             t,
             format!("{w}.repo-chip"),
-            &format!("{} ›", paths::basename(&place.repo)),
+            format!("{} ›", paths::basename(&place.repo)),
         )
     });
     let prefix = match launcher.place {
@@ -198,7 +198,12 @@ fn header(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> El 
 
 /// A list's section heading.
 fn section(key: String, title: &str, t: &Tokens) -> El {
-    finder::heading(GroupHead::new(key, title).section(title).heading().build(t))
+    finder::heading(
+        GroupHead::new(key, title.to_owned())
+            .section(title.to_owned())
+            .heading()
+            .build(t),
+    )
 }
 
 /// A section heading in parts on one line, those marked to give way truncating first, such as

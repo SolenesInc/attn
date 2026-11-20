@@ -298,7 +298,7 @@ pub(crate) fn row_face(r: &Row, key: String, place: Place, t: &Tokens) -> El {
             )
             .tag(column(
                 KIND_W,
-                Some(tag(format!("{key}.kind"), word, Tone::Neutral, t).into()),
+                Some(tag(format!("{key}.kind"), *word, Tone::Neutral, t).into()),
             ))
             .aside(chip(slot.clone(), "slot"))
             .build(t),
@@ -310,7 +310,7 @@ pub(crate) fn row_face(r: &Row, key: String, place: Place, t: &Tokens) -> El {
     }
 }
 
-fn state(row_key: &str, word: &str, tone: Tone, t: &Tokens) -> El {
+fn state(row_key: &str, word: &'static str, tone: Tone, t: &Tokens) -> El {
     tag(format!("{row_key}.status"), word, tone, t).into()
 }
 

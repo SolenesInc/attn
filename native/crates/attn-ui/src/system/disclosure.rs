@@ -15,7 +15,7 @@ pub fn disclosure<S: 'static>(
     label: impl Into<Said>,
     open: bool,
     beside: Option<(El, String)>,
-    chips: &[String],
+    chips: &[Said],
     failed: bool,
     disabled: bool,
     t: &Tokens,
@@ -36,10 +36,10 @@ pub fn disclosure<S: 'static>(
     };
     let description = beside_said
         .into_iter()
-        .chain(chips.iter().cloned())
+        .chain(chips.iter().map(Said::text))
         .collect::<Vec<_>>()
         .join(", ");
-    let chip = |(i, said): (usize, &String)| {
+    let chip = |(i, said): (usize, &Said)| {
         El::from(tag(format!("{key}.tag{i}"), said, Tone::Neutral, t)).a11y_hidden()
     };
     let said = door::gaps(
