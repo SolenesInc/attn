@@ -16,6 +16,8 @@ pub enum Join {
 pub fn split(action: impl Into<El>, more: impl Into<El>) -> El {
     row()
         .items_center()
+        .min_w(0.0)
+        .shrink()
         .child(action.into())
         .child(door::over_previous_edge(more.into()))
 }

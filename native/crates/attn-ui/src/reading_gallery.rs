@@ -647,14 +647,13 @@ fn split_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
             .label("Change annotation destination")
             .into()
     };
-    let to = |name: &'static str| words(name, Type::Control, t.text_secondary).truncate();
     let send: El = Button::new("Send 3")
         .size(Size::Compact)
-        .trailing(to(if s.long {
+        .then_quiet(if s.long {
             "to the session with the longest name"
         } else {
             "to Alder"
-        }))
+        })
         .joined(Join::Next)
         .on_press_tx(noop)
         .build(&t)
@@ -663,13 +662,13 @@ fn split_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
     let failed: El = Button::new("Send failed")
         .size(Size::Compact)
         .leading(words("!", Type::Control, t.warning))
-        .trailing(to("to Alder"))
+        .then_quiet("to Alder")
         .joined(Join::Next)
         .on_press_tx(noop)
         .build(&t)
         .key("split.failed")
         .into();
-    let sent: El = Button::new("Sent ✓")
+    let sent: El = Button::new("Sent")
         .size(Size::Compact)
         .leading(words("✓", Type::Control, t.success))
         .on_press_tx(noop)

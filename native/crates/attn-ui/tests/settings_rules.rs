@@ -1117,6 +1117,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("system::attachment::image_tile(name)", false),
     ("system::attachment::drop_overlay(said)", true),
     ("system::button::Button::new(words)", true),
+    ("system::button::Button::then_quiet(said)", true),
     ("system::button::Button::help(help)", false),
     ("system::button::Button::shortcut(keys)", false),
     ("system::button::Button::unavailable(reason)", false),

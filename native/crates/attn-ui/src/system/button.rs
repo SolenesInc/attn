@@ -51,6 +51,7 @@ pub struct Button {
     chosen: Option<bool>,
     joined: Option<Join>,
     leading: Option<El>,
+    quiet: Option<Said>,
     trailing: Option<El>,
     whole: bool,
     press: Option<Press>,
@@ -83,6 +84,7 @@ impl Button {
             chosen: None,
             joined: None,
             leading: None,
+            quiet: None,
             trailing: None,
             whole: false,
             press: None,
@@ -131,6 +133,13 @@ impl Button {
     /// crumbs that may shrink to nothing.
     pub fn whole(mut self) -> Self {
         self.whole = true;
+        self
+    }
+
+    /// Quieter words after the button's own, such as whom it sends to: they give way first
+    /// when the button is short of room, and the button's own words stay whole.
+    pub fn then_quiet(mut self, said: impl Into<Said>) -> Self {
+        self.quiet = Some(said.into());
         self
     }
 
@@ -208,15 +217,25 @@ impl Button {
         let (leading, trailing) = (self.leading, self.trailing);
         let role = self.look.words();
         let whole = self.whole;
+        let quiet = self
+            .quiet
+            .map(|said| words(said, role, t.text_secondary).truncate());
         let label = move |_, _| match shown {
             Shown::Words(shown) => door::gap(row().items_center(), Space::S4)
                 .shrink()
                 .min_w(0.0)
                 .children(leading)
-                .child(if whole {
-                    words(shown, role, ink)
-                } else {
-                    words(shown, role, ink).truncate()
+                .child(match quiet {
+                    Some(quiet) => {
+                        let at_least = width_of(&shown, role);
+                        door::gap(row().items_center(), Space::S4)
+                            .shrink()
+                            .min_w(0.0)
+                            .child(words(shown, role, ink).min_w(at_least))
+                            .child(quiet)
+                    }
+                    None if whole => words(shown, role, ink),
+                    None => words(shown, role, ink).truncate(),
                 })
                 .children(trailing),
             Shown::Mark(mark, size) => door::control_mark(mark, size).color(ink),

@@ -261,7 +261,7 @@ pub(crate) fn controls(
             None => button,
         };
         let button = match target {
-            Some(name) => button.trailing(words_in(format!("to {name}"), t.text_secondary)),
+            Some(name) => button.then_quiet(format!("to {name}")),
             None => button,
         };
         let button = if split.is_some() {
