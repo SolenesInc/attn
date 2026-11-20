@@ -1522,7 +1522,19 @@ fn at_large_text_in_the_smallest_window_a_refusal_keeps_start_in_reach_for_the_r
         })
     });
     press_in_window(&mut world, PRIMARY);
-    assert!(shows(&world, "chief-setup.alert"), "the refusal is said");
+    let alert = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("chief-setup.alert"))
+        .expect("the refusal is said");
+    assert!(
+        (alert.visible[1] - alert.rect[1]).abs() < 0.5
+            && (alert.visible[3] - alert.rect[3]).abs() < 0.5,
+        "the refusal is scrolled into view when it arrives: {:?} shows {:?}",
+        alert.rect,
+        alert.visible
+    );
     press_in_window(&mut world, PRIMARY);
     assert_eq!(sent(&world, "crew_set").len(), 2);
 }

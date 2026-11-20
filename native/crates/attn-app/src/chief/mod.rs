@@ -347,6 +347,7 @@ pub(crate) fn set_up(
             if let Some(why) = refused {
                 if is_current(state, &key) {
                     state.window.chief.error = Some((key.clone(), why));
+                    tx.scroll_into_view(format!("{}.alert", setup::POP));
                 }
                 settle(state, &key);
                 return;

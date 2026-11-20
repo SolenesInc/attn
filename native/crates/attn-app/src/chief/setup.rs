@@ -548,6 +548,7 @@ fn radios(group: Group, choices: &[Choice], busy: bool, t: &Tokens) -> El {
             attn_ui::system::choices(&key, group.label()).children(choices.iter().enumerate().map(
                 |(i, c)| {
                     let choice = ChoiceRow::new(c.key.clone(), label(c))
+                        .compact()
                         .chosen(c.checked)
                         .disabled(busy);
                     El::from(choice.build((i, n), t, press(c)))
@@ -710,6 +711,7 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         let can_save = form.can_save;
         let button = El::from(
             Button::new(primary.clone())
+                .size(Size::Compact)
                 .look(if can_save { Look::Primary } else { Look::Plain })
                 .trailing(words("⏎", Type::Control, attn_ui::warning_ink(t)).a11y_hidden())
                 .on_press_tx(submit)
