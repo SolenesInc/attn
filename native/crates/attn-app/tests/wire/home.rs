@@ -469,3 +469,49 @@ fn the_settings_button_opens_settings() {
             .is_some()
     );
 }
+
+#[test]
+fn at_the_smallest_window_with_every_notice_up_tab_brings_new_whole_into_view() {
+    let mut message = one_desktop(vec![agent("busy", "working"), agent("later", "scheduled")]);
+    message.settings = Some(BTreeMap::from([
+        ("queue_mode_enabled".to_owned(), "true".to_owned()),
+        ("uiScale".to_owned(), "1.5".to_owned()),
+    ]));
+    let mut prefs = rune::prefs::Prefs::memory();
+    prefs
+        .set(
+            attn_app::whats_new::SEEN_PREF,
+            &attn_app::whats_new::RELEASE.to_owned(),
+        )
+        .expect("memory prefs keep every value");
+    let mut world =
+        World::start_sized_with_prefs(Daemon::scripted().state(message), (800.0, 600.0), prefs);
+    world.daemon.emit(attn_protocol::RateLimitedMessage {
+        rate_limit_resource: "core".into(),
+        rate_limit_reset_at: ago(-5),
+        ..attn_protocol::RateLimitedMessage::new()
+    });
+    world.settle();
+    for key in ["home.intro-banner", "home.all-settled", "home.rate-limit"] {
+        assert!(has(&world, key), "{key} shows");
+    }
+
+    for _ in 0..80 {
+        if world.screen().focused().and_then(|n| n.key).as_deref() == Some("home.new") {
+            break;
+        }
+        world.gesture(|app| app.key(super::queue::plain(rune::Key::Tab)));
+    }
+    let screen = world.screen();
+    assert_eq!(
+        screen.focused().and_then(|n| n.key).as_deref(),
+        Some("home.new"),
+        "Tab reaches New"
+    );
+    let new = screen.bounds(Target::key("home.new")).unwrap();
+    let view = screen.bounds(Target::key("home.cards.scroll")).unwrap();
+    assert!(
+        new[1] >= view[1] - 0.5 && new[1] + new[3] <= view[1] + view[3] + 0.5,
+        "New at {new:?} is whole in the view that scrolls it, {view:?}"
+    );
+}

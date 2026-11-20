@@ -5,11 +5,11 @@ use super::block::{Block, page_gap, spaced};
 use crate::Tokens;
 use crate::system::{Radius, Size, Space, Type, door, words};
 
-/// A page of cards, such as Home: its head and any notices, which stay where they are, then its
-/// cards side by side, wrapping onto further rows when the window is narrow and scrolling
-/// together. Keyed `key`, it reads as the window's main landmark named `label`; its cards lie
-/// in `{key}.cards`, which scrolls as `{key}.cards.scroll`, and its head's line is
-/// `{key}.header`.
+/// A page of cards, such as Home: its head and any notices, then its cards side by side,
+/// wrapping onto further rows when the window is narrow, all scrolling together, so no number of
+/// notices leaves the cards out of reach in a short window. Keyed `key`, it reads as the window's
+/// main landmark named `label`; its cards lie in `{key}.cards`, the page scrolls as
+/// `{key}.cards.scroll`, and its head's line is `{key}.header`.
 pub struct Board {
     key: String,
     label: String,
@@ -70,6 +70,9 @@ impl Board {
         let cards = door::gaps(row().w_full().flex_wrap(), Space::S16, Space::S16)
             .key(format!("{}.cards", self.key))
             .children(self.cards);
+        let content = door::frame(col().w_full(), Space::S24, Space::S32, Space::S24)
+            .child(above)
+            .child(cards);
         let scroll = col()
             .key(format!("{}.cards.scroll", self.key))
             .w_full()
@@ -78,18 +81,16 @@ impl Board {
             .scroll(ScrollSpec {
                 stick_bottom: false,
             })
-            .child(cards)
+            .child(content)
             .scroll_bar_styled(crate::scroll_bar(t));
-        let board = col()
+        col()
             .key(self.key)
             .role("main")
             .label(self.label)
             .grow(1.0)
             .h_full()
             .min_w(0.0)
-            .fill(t.bg_app);
-        door::frame(board, Space::S24, Space::S32, Space::S24)
-            .child(above)
+            .fill(t.bg_app)
             .child(scroll)
     }
 }
