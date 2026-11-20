@@ -23,6 +23,7 @@ instanceIdleTimeout=-1
 memory=${Memory}GB
 processors=$Processors
 vmIdleTimeout=-1
+nestedVirtualization=false
 "@ | Set-Content -Encoding ascii "$env:USERPROFILE\.wslconfig"
 
 cmd /c "wsl.exe -d $Distro --exec true >nul 2>&1"

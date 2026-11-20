@@ -63,18 +63,31 @@ Measured on 2026-11-19, with 12 CPUs and 24 GiB for the VM:
 | `start` from a stopped VM | 4 to 5 min |
 | `stop` | 12 s |
 
-The VM's disk holds 14 GB of the host's disk after `create` and 26 GB after one
-`install`. The ISO takes 5.1 GB more.
+The VM's disk holds 14 GB of the host's disk after `create` and 26 to 28 GB
+after one `install`. The ISO takes 5.1 GB more.
+
+On 2026-11-20, with the host's load average between 35 and 110 on 22 cores,
+provisioning took 27 min and building the native app 76 min.
 
 ## Limits
 
-- On ai-sandbox the native app does not run inside the VM. Windows runs nested
-  in KVM, and the WSL2 kernel then turns XSAVE off
-  (`XSAVE consistency problem` in `dmesg`), so WSL has no AVX. The app dies
-  with SIGILL (seed `s-xz170t`), and its shader can't build on lavapipe
-  (`s-tfke2p`). The daemon, the PTY host and shell sessions work. Seed
-  `s-cwq7g7` tracks seeing the window on a Windows whose WSL keeps AVX.
-- The VM has no GPU, so WSLg and the app draw in software.
+- Windows runs nested in KVM, and the WSL2 kernel then turns XSAVE off
+  (`XSAVE consistency problem` in `dmesg`), so WSL has no AVX. The native app
+  runs anyway. The VM has no GPU, so WSLg and the app draw in software.
+- On WSLg's default Wayland path, WSLg's compositor segfaults while the app
+  runs, and the window goes away (seed `s-2ytq9k`). Over X11 the window stays:
+  run the app as `launch` does, with `WAYLAND_DISPLAY=` instead of
+  `WAYLAND_DISPLAY=wayland-0`.
+- On ai-sandbox, WSL is three hypervisors deep, so it is far slower than on
+  real hardware. Starting a process takes about 400 ms, reading the clock about
+  200 µs, and a key takes 1.5 to 5 s to echo in the app's terminal. Don't judge
+  the app's speed here.
+- WSL runs with `nestedVirtualization=false` in `.wslconfig`. With WSL's
+  default, it can refuse to start in this VM with `wsl: Nested virtualization is
+  not supported on this machine.`
+- When the host's disk fills, QEMU pauses the VM: SSH stops answering, and
+  `{"execute":"query-status"}` on `qmp.sock` reports `io-error`. Free space,
+  then send `{"execute":"cont"}`.
 - The evaluation activates online during setup and then runs 90 days. Until it
   activates, it reports an expired license and shuts Windows down an hour after
   each boot. After 90 days, delete the VM and create it again.
