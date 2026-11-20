@@ -30,11 +30,11 @@ func TestTheGardenIsReadWholePastOnePageOfSeedsAndNotes(t *testing.T) {
 		for range docstore.MaxLimit {
 			gardenSearchNote(t, cli, "", panel, "another day of work")
 		}
-		children := make([]protocol.SeedPlotChild, docstore.MaxLimit)
+		children := make([]client.PlotChild, docstore.MaxLimit)
 		for i := range children {
 			children[i].Title = fmt.Sprintf("row %d", i)
 		}
-		page, err := cli.SeedPlot("", protocol.SeedPlotMessage{Title: "a page of seeds", Children: children})
+		page, err := cli.SeedPlot("", client.Plot{Title: "a page of seeds", Children: children})
 		if err != nil {
 			t.Fatal(err)
 		}

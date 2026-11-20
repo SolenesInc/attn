@@ -378,17 +378,6 @@ func (d *Daemon) seedArtifactReferences(seedID string) []protocol.SeedArtifactRe
 	return out
 }
 
-func (d *Daemon) handleSeedArtifactTransfer(ctx context.Context, conn net.Conn, msg *protocol.SeedArtifactTransferMessage, by who.Actor) {
-	ctx, cancel := d.connectionContext(ctx, conn)
-	defer cancel()
-	result, err := d.submitSeedArtifactTransfer(ctx, msg, by)
-	if err != nil {
-		d.sendGardenError(conn, "artifact", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedArtifactTransferResult: result})
-}
-
 func (d *Daemon) handleSeedArtifactTransferWS(client *wsClient, msg *protocol.SeedArtifactTransferMessage) {
 	requestID := protocol.Deref(msg.RequestID)
 	result, err := d.submitSeedArtifactTransfer(d.life.Context(), msg, client.caller)
@@ -1112,4 +1101,15 @@ func (d *Daemon) handleSeedArtifactTarget(client *wsClient, msg *protocol.SeedAr
 	result.Success = true
 	result.Result = target
 	d.sendToClient(client, result)
+}
+
+func (d *Daemon) handleSeedArtifactTransfer(ctx context.Context, conn net.Conn, msg *protocol.SeedArtifactTransferMessage, by who.Actor) {
+	ctx, cancel := d.connectionContext(ctx, conn)
+	defer cancel()
+	result, err := d.submitSeedArtifactTransfer(ctx, msg, by)
+	if err != nil {
+		d.sendGardenError(conn, "artifact", err)
+		return
+	}
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedArtifactTransferResult: result})
 }

@@ -263,7 +263,8 @@ Follow [Testing](docs/internal/testing.md). In short:
 - A package whose tests reach config paths needs a `TestMain` that creates a
   temp dir and calls `config.ScopeTestEnvironment(dir)` before `m.Run()`.
   `ScopeTestEnvironment` sets `ATTN_DATA_DIR`
-  and clears inherited DB/socket/config/plugin overrides. Raw `os.Setenv` is
+  and clears inherited DB/socket/config/plugin overrides and the caller's
+  terminal and session. Raw `os.Setenv` is
   insufficient. Missing `ATTN_DATA_DIR` intentionally panics under `go test`.
   `testworld.Main(m)` does this for packages that run wire or stack worlds.
 - For per-test isolation, use `t.Setenv("ATTN_DATA_DIR", t.TempDir())`.

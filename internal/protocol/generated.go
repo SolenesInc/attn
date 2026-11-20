@@ -9963,58 +9963,19 @@ type Response struct {
 	// SeedCheckResult corresponds to the JSON schema field "seed_check_result".
 	SeedCheckResult *SeedCheckResult `json:"seed_check_result,omitempty,omitzero"`
 
-	// SeedEditResult corresponds to the JSON schema field "seed_edit_result".
-	SeedEditResult *SeedEditResult `json:"seed_edit_result,omitempty,omitzero"`
-
-	// SeedLinkResult corresponds to the JSON schema field "seed_link_result".
-	SeedLinkResult *SeedLinkResult `json:"seed_link_result,omitempty,omitzero"`
-
-	// SeedListResult corresponds to the JSON schema field "seed_list_result".
-	SeedListResult *SeedListResult `json:"seed_list_result,omitempty,omitzero"`
-
 	// SeedNoteResult corresponds to the JSON schema field "seed_note_result".
 	SeedNoteResult *SeedNoteResult `json:"seed_note_result,omitempty,omitzero"`
 
-	// SeedNotesResult corresponds to the JSON schema field "seed_notes_result".
-	SeedNotesResult *SeedNotesResult `json:"seed_notes_result,omitempty,omitzero"`
-
-	// SeedPlantResult corresponds to the JSON schema field "seed_plant_result".
-	SeedPlantResult *SeedPlantResult `json:"seed_plant_result,omitempty,omitzero"`
-
-	// SeedPlotResult corresponds to the JSON schema field "seed_plot_result".
-	SeedPlotResult *SeedPlotResult `json:"seed_plot_result,omitempty,omitzero"`
-
-	// SeedReadyResult corresponds to the JSON schema field "seed_ready_result".
-	SeedReadyResult *SeedReadyResult `json:"seed_ready_result,omitempty,omitzero"`
-
-	// SeedReminderResult corresponds to the JSON schema field "seed_reminder_result".
-	SeedReminderResult *SeedReminderResult `json:"seed_reminder_result,omitempty,omitzero"`
-
 	// SeedReviewResult corresponds to the JSON schema field "seed_review_result".
 	SeedReviewResult *SeedReviewResult `json:"seed_review_result,omitempty,omitzero"`
-
-	// SeedRollbackResult corresponds to the JSON schema field "seed_rollback_result".
-	SeedRollbackResult *SeedRollbackResult `json:"seed_rollback_result,omitempty,omitzero"`
-
-	// SeedSearchResult corresponds to the JSON schema field "seed_search_result".
-	SeedSearchResult *SeedSearchResult `json:"seed_search_result,omitempty,omitzero"`
 
 	// SeedSendToChiefResult corresponds to the JSON schema field
 	// "seed_send_to_chief_result".
 	SeedSendToChiefResult *SeedSendToChiefResult `json:"seed_send_to_chief_result,omitempty,omitzero"`
 
-	// SeedShowResult corresponds to the JSON schema field "seed_show_result".
-	SeedShowResult *SeedShowResult `json:"seed_show_result,omitempty,omitzero"`
-
-	// SeedStandbyResult corresponds to the JSON schema field "seed_standby_result".
-	SeedStandbyResult *SeedStandbyResult `json:"seed_standby_result,omitempty,omitzero"`
-
 	// SeedTransitionResult corresponds to the JSON schema field
 	// "seed_transition_result".
 	SeedTransitionResult *SeedTransitionResult `json:"seed_transition_result,omitempty,omitzero"`
-
-	// SeedWatchResult corresponds to the JSON schema field "seed_watch_result".
-	SeedWatchResult *SeedWatchResult `json:"seed_watch_result,omitempty,omitzero"`
 
 	// SenderModelCallResult corresponds to the JSON schema field
 	// "sender_model_call_result".
@@ -11393,29 +11354,6 @@ type SeedEdge struct {
 	To string `json:"to"`
 }
 
-type SeedEditMessage struct {
-	// BaseBodySHA256 corresponds to the JSON schema field "base_body_sha256".
-	BaseBodySHA256 string `json:"base_body_sha256"`
-
-	// Body corresponds to the JSON schema field "body".
-	Body string `json:"body"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Note corresponds to the JSON schema field "note".
-	Note *string `json:"note,omitempty,omitzero"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// SeedID corresponds to the JSON schema field "seed_id".
-	SeedID string `json:"seed_id"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
-}
-
 type SeedEditResult struct {
 	// BodyVersion corresponds to the JSON schema field "body_version".
 	BodyVersion int `json:"body_version"`
@@ -11435,10 +11373,13 @@ type SeedExportResult struct {
 	Bytes int `json:"bytes"`
 
 	// Path corresponds to the JSON schema field "path".
-	Path string `json:"path"`
+	Path *string `json:"path,omitempty,omitzero"`
 
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text *string `json:"text,omitempty,omitzero"`
 }
 
 type SeedHandoverRequest struct {
@@ -11483,58 +11424,12 @@ type SeedHarvestWhenMerged struct {
 	PullRequestURL *string `json:"pull_request_url,omitempty,omitzero"`
 }
 
-type SeedLinkMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Kind corresponds to the JSON schema field "kind".
-	Kind string `json:"kind"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// SeedID corresponds to the JSON schema field "seed_id".
-	SeedID string `json:"seed_id"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
-
-	// ToSeedID corresponds to the JSON schema field "to_seed_id".
-	ToSeedID string `json:"to_seed_id"`
-
-	// Unlink corresponds to the JSON schema field "unlink".
-	Unlink *bool `json:"unlink,omitempty,omitzero"`
-}
-
 type SeedLinkResult struct {
 	// Changed corresponds to the JSON schema field "changed".
 	Changed bool `json:"changed"`
 
 	// Seed corresponds to the JSON schema field "seed".
 	Seed Seed `json:"seed"`
-}
-
-type SeedListMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Plot corresponds to the JSON schema field "plot".
-	Plot *string `json:"plot,omitempty,omitzero"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
-
-	// Stale corresponds to the JSON schema field "stale".
-	Stale *bool `json:"stale,omitempty,omitzero"`
-
-	// StaleWindowSeconds corresponds to the JSON schema field "stale_window_seconds".
-	StaleWindowSeconds *int `json:"stale_window_seconds,omitempty,omitzero"`
-
-	// Standby corresponds to the JSON schema field "standby".
-	Standby *bool `json:"standby,omitempty,omitzero"`
 }
 
 type SeedListResult struct {
@@ -11628,29 +11523,6 @@ type SeedNoteResultMessage struct {
 	Success bool `json:"success"`
 }
 
-type SeedNotesMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Kind corresponds to the JSON schema field "kind".
-	Kind *string `json:"kind,omitempty,omitzero"`
-
-	// Limit corresponds to the JSON schema field "limit".
-	Limit *int `json:"limit,omitempty,omitzero"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// SeedID corresponds to the JSON schema field "seed_id".
-	SeedID string `json:"seed_id"`
-
-	// Since corresponds to the JSON schema field "since".
-	Since *int `json:"since,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
-}
-
 type SeedNotesResult struct {
 	// Bookmark corresponds to the JSON schema field "bookmark".
 	Bookmark int `json:"bookmark"`
@@ -11687,81 +11559,12 @@ type SeedOutlinePart struct {
 	Ids []string `json:"ids"`
 }
 
-type SeedPlantMessage struct {
-	// Body corresponds to the JSON schema field "body".
-	Body *string `json:"body,omitempty,omitzero"`
-
-	// Checks corresponds to the JSON schema field "checks".
-	Checks []SeedCheckDefinition `json:"checks,omitempty,omitzero"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// DiscoveredFrom corresponds to the JSON schema field "discovered_from".
-	DiscoveredFrom *string `json:"discovered_from,omitempty,omitzero"`
-
-	// PartOf corresponds to the JSON schema field "part_of".
-	PartOf *string `json:"part_of,omitempty,omitzero"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
-
-	// Title corresponds to the JSON schema field "title".
-	Title string `json:"title"`
-}
-
 type SeedPlantResult struct {
 	// Seed corresponds to the JSON schema field "seed".
 	Seed Seed `json:"seed"`
 
 	// Similar corresponds to the JSON schema field "similar".
 	Similar []SeedSimilar `json:"similar"`
-}
-
-type SeedPlotChild struct {
-	// After corresponds to the JSON schema field "after".
-	After []string `json:"after,omitempty,omitzero"`
-
-	// Body corresponds to the JSON schema field "body".
-	Body *string `json:"body,omitempty,omitzero"`
-
-	// Checks corresponds to the JSON schema field "checks".
-	Checks []SeedCheckDefinition `json:"checks,omitempty,omitzero"`
-
-	// Title corresponds to the JSON schema field "title".
-	Title string `json:"title"`
-}
-
-type SeedPlotMessage struct {
-	// Body corresponds to the JSON schema field "body".
-	Body *string `json:"body,omitempty,omitzero"`
-
-	// Checks corresponds to the JSON schema field "checks".
-	Checks []SeedCheckDefinition `json:"checks,omitempty,omitzero"`
-
-	// Children corresponds to the JSON schema field "children".
-	Children []SeedPlotChild `json:"children"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// DiscoveredFrom corresponds to the JSON schema field "discovered_from".
-	DiscoveredFrom *string `json:"discovered_from,omitempty,omitzero"`
-
-	// PartOf corresponds to the JSON schema field "part_of".
-	PartOf *string `json:"part_of,omitempty,omitzero"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
-
-	// Title corresponds to the JSON schema field "title".
-	Title string `json:"title"`
 }
 
 type SeedPlotProgress struct {
@@ -11799,23 +11602,6 @@ type SeedPlotResult struct {
 
 	// Similar corresponds to the JSON schema field "similar".
 	Similar []SeedSimilar `json:"similar"`
-}
-
-type SeedReadyMessage struct {
-	// All corresponds to the JSON schema field "all".
-	All *bool `json:"all,omitempty,omitzero"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Plot corresponds to the JSON schema field "plot".
-	Plot *string `json:"plot,omitempty,omitzero"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedReadyResult struct {
@@ -11867,32 +11653,6 @@ type SeedReminder struct {
 
 	// SetBy corresponds to the JSON schema field "set_by".
 	SetBy ActorView `json:"set_by"`
-}
-
-type SeedReminderMessage struct {
-	// At corresponds to the JSON schema field "at".
-	At *string `json:"at,omitempty,omitzero"`
-
-	// Clear corresponds to the JSON schema field "clear".
-	Clear *bool `json:"clear,omitempty,omitzero"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// In corresponds to the JSON schema field "in".
-	In *string `json:"in,omitempty,omitzero"`
-
-	// Message corresponds to the JSON schema field "message".
-	Message *string `json:"message,omitempty,omitzero"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// SeedID corresponds to the JSON schema field "seed_id".
-	SeedID string `json:"seed_id"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedReminderResult struct {
@@ -12110,23 +11870,6 @@ type SeedReviewStartMessage struct {
 	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
-type SeedRollbackMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// SeedID corresponds to the JSON schema field "seed_id".
-	SeedID string `json:"seed_id"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
-
-	// Version corresponds to the JSON schema field "version".
-	Version *int `json:"version,omitempty,omitzero"`
-}
-
 type SeedRollbackResult struct {
 	// BodyVersion corresponds to the JSON schema field "body_version".
 	BodyVersion int `json:"body_version"`
@@ -12206,23 +11949,6 @@ type SeedSearchHit struct {
 
 	// Where corresponds to the JSON schema field "where".
 	Where string `json:"where"`
-}
-
-type SeedSearchMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Limit corresponds to the JSON schema field "limit".
-	Limit *int `json:"limit,omitempty,omitzero"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// Query corresponds to the JSON schema field "query".
-	Query string `json:"query"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedSearchResult struct {
@@ -12313,23 +12039,6 @@ type SeedSharedCheck struct {
 	Text string `json:"text"`
 }
 
-type SeedShowMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// SeedID corresponds to the JSON schema field "seed_id".
-	SeedID string `json:"seed_id"`
-
-	// Since corresponds to the JSON schema field "since".
-	Since *int `json:"since,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
-}
-
 type SeedShowResult struct {
 	// ArtifactDir corresponds to the JSON schema field "artifact_dir".
 	ArtifactDir *string `json:"artifact_dir,omitempty,omitzero"`
@@ -12411,35 +12120,6 @@ type SeedSinceExpired struct {
 
 	// RetentionSeconds corresponds to the JSON schema field "retention_seconds".
 	RetentionSeconds int `json:"retention_seconds"`
-}
-
-type SeedStandbyMessage struct {
-	// At corresponds to the JSON schema field "at".
-	At *string `json:"at,omitempty,omitzero"`
-
-	// Clear corresponds to the JSON schema field "clear".
-	Clear *bool `json:"clear,omitempty,omitzero"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// In corresponds to the JSON schema field "in".
-	In *string `json:"in,omitempty,omitzero"`
-
-	// Note corresponds to the JSON schema field "note".
-	Note *string `json:"note,omitempty,omitzero"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// SeedID corresponds to the JSON schema field "seed_id".
-	SeedID string `json:"seed_id"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
-
-	// Stay corresponds to the JSON schema field "stay".
-	Stay *bool `json:"stay,omitempty,omitzero"`
 }
 
 type SeedStandbyResult struct {
@@ -12578,23 +12258,6 @@ type SeedVar struct {
 
 	// Required corresponds to the JSON schema field "required".
 	Required *bool `json:"required,omitempty,omitzero"`
-}
-
-type SeedWatchMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// SeedID corresponds to the JSON schema field "seed_id".
-	SeedID string `json:"seed_id"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID SessionID `json:"source_session_id"`
-
-	// Unwatch corresponds to the JSON schema field "unwatch".
-	Unwatch *bool `json:"unwatch,omitempty,omitzero"`
 }
 
 type SeedWatchResult struct {

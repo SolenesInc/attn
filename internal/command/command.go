@@ -61,11 +61,21 @@ type Layer struct {
 	handlers map[string]Handler
 }
 
+type Then struct {
+	Result any
+	After  func()
+}
+
 func New(handlers map[string]Handler) (*Layer, error) {
 	var problems []string
 	for name := range handlers {
 		if _, ok := specs[name]; !ok {
 			problems = append(problems, fmt.Sprintf("handler for %q, which is not a catalog command", name))
+		}
+	}
+	for name := range specs {
+		if _, ok := handlers[name]; !ok {
+			problems = append(problems, fmt.Sprintf("no handler for %q", name))
 		}
 	}
 	if len(problems) > 0 {

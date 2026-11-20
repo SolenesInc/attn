@@ -46,21 +46,6 @@ fn stale_window_label(seconds: Option<i64>) -> String {
     }
 }
 
-pub fn parse_window_nanos(raw: &str) -> Result<i64, String> {
-    if let Some(days) = raw.strip_suffix('d')
-        && let Ok(hours) = duration::parse(&format!("{days}h"))
-    {
-        return Ok(hours.wrapping_mul(24));
-    }
-    match duration::parse(raw) {
-        Ok(window) if window > 0 => Ok(window),
-        _ => Err(format!(
-            "{} is not a window; say it like 72h or 14d",
-            quote(raw.as_bytes())
-        )),
-    }
-}
-
 pub fn short_stamp(stamp: &str) -> String {
     Time::parse_rfc3339(stamp).map_or_else(
         |_| stamp.to_string(),

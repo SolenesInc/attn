@@ -417,16 +417,17 @@ async function plantTestSeed(
 ): Promise<{ id: string }> {
   return new Promise((resolve, reject) => {
     const client = net.createConnection(socketPath, () => {
-      client.write(JSON.stringify({ cmd: 'seed_plant', title, body }));
+      client.write(JSON.stringify({ cmd: 'run_command', command: 'seed plant', args: { title, body } }));
     });
     client.on('data', (chunk) => {
       try {
         const response = JSON.parse(chunk.toString()) as {
           error?: string;
-          seed_plant_result?: { seed?: { id?: string } };
+          command_refusal?: { message?: string };
+          command_result?: { seed?: { id?: string } };
         };
-        const id = response.seed_plant_result?.seed?.id;
-        if (!id) throw new Error(response.error || `seed_plant returned ${chunk.toString()}`);
+        const id = response.command_result?.seed?.id;
+        if (!id) throw new Error(response.error || response.command_refusal?.message || `seed plant returned ${chunk.toString()}`);
         client.end();
         resolve({ id });
       } catch (error) {

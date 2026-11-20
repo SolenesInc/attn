@@ -41,7 +41,6 @@ pub struct Arg {
 
 pub struct Command {
     pub name: &'static str,
-    pub read_only: bool,
     pub result: bool,
     pub wrong_args: &'static str,
     pub no_args: &'static str,
@@ -58,11 +57,13 @@ pub trait Family {
         eprintln!("{} {verb}: {message}", self.group());
         Stop(1)
     }
+    fn answered_here(&self, cmd: &Command) -> Option<&'static str>;
+    fn misplaced(&self, cmd: &Command, positionals: &[String]) -> Option<String>;
     fn decode_file(&self, cmd: &Command, arg: &Arg, bytes: &[u8]) -> Result<Json, String>;
     fn read_stdin_error(&self, arg: &Arg) -> &'static str;
     fn choice_conflict(&self, cmd: &Command, arg: &Arg) -> String;
     fn stamp(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), String>;
-    fn before_send(&self, run: &mut Run<'_>, cmd: &Command, parsed: &Parsed) -> Result<(), Stop>;
+    fn before_send(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop>;
     fn present(
         &self,
         run: &mut Run<'_>,
@@ -189,7 +190,7 @@ fn parse(family: &dyn Family, cmd: &Command, argv: &[String]) -> Result<Parsed, 
     let definitions = flags_of(cmd);
     let mut fs = FlagSet::new("", &definitions);
     let positionals = split_positionals(&mut fs, argv)?;
-    let mut values = positional_values(cmd, &positionals)?;
+    let mut values = positional_values(family, cmd, &positionals)?;
     flag_values(family, cmd, &fs, &mut values)?;
     read_inputs(family, cmd, &mut values)?;
     split_text(cmd, &mut values);
@@ -223,6 +224,7 @@ fn split_positionals(fs: &mut FlagSet<'_>, argv: &[String]) -> Result<Vec<String
 }
 
 fn positional_values(
+    family: &dyn Family,
     cmd: &Command,
     positionals: &[String],
 ) -> Result<Map<String, Json>, ParseStop> {
@@ -242,7 +244,10 @@ fn positional_values(
         .collect();
     let required = pos.iter().filter(|arg| arg.required).count();
     if positionals.len() < required || positionals.len() > pos.len() {
-        return Err(ParseStop::Usage(wrong_args(cmd, positionals)));
+        let message = family
+            .misplaced(cmd, positionals)
+            .unwrap_or_else(|| wrong_args(cmd, positionals));
+        return Err(ParseStop::Usage(message));
     }
     for (arg, raw) in pos.iter().zip(positionals) {
         let value = if arg.value == Value::Int {
@@ -386,7 +391,7 @@ pub fn run(
     cmd: &Command,
     argv: &[String],
 ) -> Result<(), Stop> {
-    let parsed = match parse(family, cmd, argv) {
+    let mut parsed = match parse(family, cmd, argv) {
         Ok(parsed) => parsed,
         Err(ParseStop::Help) => {
             crate::commands::print_stdout(family.help(cmd.name));
@@ -399,11 +404,15 @@ pub fn run(
         Err(ParseStop::Usage(message)) => return Err(family.usage_error(cmd.name, &message)),
         Err(ParseStop::Fail(message)) => return Err(family.fail(cmd.name, &message)),
     };
+    if let Some(text) = family.answered_here(cmd) {
+        crate::commands::print_stdout(text);
+        return Ok(());
+    }
     if parsed.session.is_empty() && run.terminal.is_empty() {
         crate::hooks::server_caller_from_env()
             .map_err(|message| family.fail(cmd.name, &message))?;
     }
-    family.before_send(run, cmd, &parsed)?;
+    family.before_send(cmd, &mut parsed)?;
     let mut message = RunCommandMessage::new();
     message.command = format!("{} {}", family.group(), cmd.name);
     message.args = Some(parsed.args.clone().into_iter().collect());

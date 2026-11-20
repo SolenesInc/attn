@@ -8,7 +8,6 @@ use crate::command::{Arg, Cli, Command, Source, Value};
 pub const COMMANDS: &[Command] = &[
     Command {
         name: "search",
-        read_only: true,
         result: true,
         wrong_args: "needs something to look for: `attn seed search <words>`",
         no_args: "",
@@ -19,7 +18,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "plant",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one title, got {count}: attn seed plant \"what this is\" [-m \"the detail\"]",
         no_args: "",
@@ -33,7 +31,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "plot",
-        read_only: false,
         result: true,
         wrong_args: "takes no arguments, got {first}; the plot is JSON on stdin or at -f <path>",
         no_args: "",
@@ -43,7 +40,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "link",
-        read_only: false,
         result: true,
         wrong_args: "reads as a sentence: `attn seed link s-7k3f9m blocks s-2p4qxv`, where the kind is blocks or part-of or discovered-from",
         no_args: "",
@@ -55,7 +51,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "unlink",
-        read_only: false,
         result: true,
         wrong_args: "reads as a sentence: `attn seed unlink s-7k3f9m blocks s-2p4qxv`, where the kind is blocks or part-of or discovered-from",
         no_args: "",
@@ -67,7 +62,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "ready",
-        read_only: true,
         result: true,
         wrong_args: "takes no arguments, got {first}; scope it with --plot <plot> or --all",
         no_args: "",
@@ -78,7 +72,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "ls",
-        read_only: true,
         result: true,
         wrong_args: "takes no arguments, got {first}; to read one seed use `attn seed show <id>`",
         no_args: "",
@@ -92,7 +85,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "show",
-        read_only: true,
         result: true,
         wrong_args: "needs exactly one seed id, got {count}: attn seed show s-7k3f9m",
         no_args: "",
@@ -104,7 +96,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "notes",
-        read_only: true,
         result: true,
         wrong_args: "needs exactly one seed id, got {count}: attn seed notes s-7k3f9m",
         no_args: "",
@@ -117,7 +108,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "prime",
-        read_only: true,
         result: false,
         wrong_args: "takes no arguments, got {first}",
         no_args: "",
@@ -126,7 +116,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "guide",
-        read_only: false,
         result: false,
         wrong_args: "takes no arguments",
         no_args: "",
@@ -135,7 +124,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "tend",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one seed id, got {count}: attn seed tend s-7k3f9m",
         no_args: "",
@@ -148,7 +136,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "note",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one seed id, got {count}: attn seed note s-7k3f9m -m \"what happened\"",
         no_args: "",
@@ -161,7 +148,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "park",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one seed id, got {count}: attn seed park s-7k3f9m",
         no_args: "",
@@ -173,7 +159,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "replant",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one seed id, got {count}: attn seed replant s-7k3f9m",
         no_args: "",
@@ -185,7 +170,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "wither",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one seed id, got {count}: attn seed wither s-7k3f9m",
         no_args: "",
@@ -197,7 +181,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "send-to-chief",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one seed id, got {count}: attn seed send-to-chief s-7k3f9m",
         no_args: "",
@@ -208,7 +191,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "harvest",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one seed id, got {count}: attn seed harvest s-7k3f9m",
         no_args: "",
@@ -223,7 +205,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "check add",
-        read_only: false,
         result: true,
         wrong_args: "needs the seed id and one check id, got {count} arguments",
         no_args: "needs the seed id",
@@ -237,7 +218,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "check edit",
-        read_only: false,
         result: true,
         wrong_args: "needs the seed id and one check id, got {count} arguments",
         no_args: "needs the seed id",
@@ -250,7 +230,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "check remove",
-        read_only: false,
         result: true,
         wrong_args: "needs the seed id and one check id, got {count} arguments",
         no_args: "needs the seed id",
@@ -263,7 +242,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "check restore",
-        read_only: false,
         result: true,
         wrong_args: "needs the seed id and one check id, got {count} arguments",
         no_args: "needs the seed id",
@@ -276,7 +254,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "check report",
-        read_only: false,
         result: true,
         wrong_args: "needs the seed id and one check id, got {count} arguments",
         no_args: "needs the seed id",
@@ -292,7 +269,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "check confirm",
-        read_only: false,
         result: true,
         wrong_args: "needs the seed id and one check id, got {count} arguments",
         no_args: "needs the seed id",
@@ -305,7 +281,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "check reject",
-        read_only: false,
         result: true,
         wrong_args: "needs the seed id and one check id, got {count} arguments",
         no_args: "needs the seed id",
@@ -318,7 +293,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "check uncheck",
-        read_only: false,
         result: true,
         wrong_args: "needs the seed id and one check id, got {count} arguments",
         no_args: "needs the seed id",
@@ -331,7 +305,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "check reopen",
-        read_only: false,
         result: true,
         wrong_args: "needs the seed id and one check id, got {count} arguments",
         no_args: "needs the seed id",
@@ -344,7 +317,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "watch",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one seed id, got {count}: attn seed watch s-7k3f9m",
         no_args: "",
@@ -354,7 +326,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "unwatch",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one seed id, got {count}: attn seed unwatch s-7k3f9m",
         no_args: "",
@@ -364,7 +335,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "remind",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one seed id: attn seed remind s-7k3f9m --in 20m -m \"Check the rollout\"",
         no_args: "",
@@ -378,7 +348,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "standby",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one seed id: attn seed standby s-7k3f9m -m \"what to do next\"",
         no_args: "",
@@ -393,7 +362,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "export",
-        read_only: true,
         result: true,
         wrong_args: "needs exactly one seed id, got {count}: attn seed export s-7k3f9m",
         no_args: "",
@@ -404,7 +372,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "edit",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one seed id, got {count}: attn seed edit s-7k3f9m -m -",
         no_args: "",
@@ -417,7 +384,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "rollback",
-        read_only: false,
         result: true,
         wrong_args: "needs a seed id and optional version: attn seed rollback s-7k3f9m [<version>]",
         no_args: "",
@@ -428,7 +394,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "authorization",
-        read_only: false,
         result: true,
         wrong_args: "needs a seed id and optional words: attn seed authorization s-7k3f9m \"Ask me before pushing.\"",
         no_args: "",
@@ -440,7 +405,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "attach",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one seed id, got {count}: attn seed attach s-7k3f9m --path docs/plans/thing.md",
         no_args: "",
@@ -456,7 +420,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "detach",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one seed id, got {count}: attn seed detach s-7k3f9m --path docs/plans/thing.md",
         no_args: "",
@@ -473,7 +436,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "review start",
-        read_only: false,
         result: true,
         wrong_args: "takes no arguments",
         no_args: "",
@@ -482,7 +444,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "review show",
-        read_only: true,
         result: true,
         wrong_args: "takes at most one review id",
         no_args: "",
@@ -492,7 +453,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "review cancel",
-        read_only: false,
         result: true,
         wrong_args: "needs exactly one review id",
         no_args: "",
@@ -502,7 +462,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "review retry",
-        read_only: false,
         result: true,
         wrong_args: "needs a review id and seed id",
         no_args: "",
@@ -513,7 +472,6 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "review keep",
-        read_only: false,
         result: true,
         wrong_args: "needs a review id and seed id",
         no_args: "",

@@ -193,11 +193,11 @@ func TestADispatchedSessionIsReadyForItsPlot(t *testing.T) {
 func TestReadyScopesToAPlotAndListsPlotsBeforeLooseSeeds(t *testing.T) {
 	w := newWorld(t)
 	cli := w.Client()
-	firstPlot, err := cli.SeedPlot("", protocol.SeedPlotMessage{Title: "first plot", Children: []protocol.SeedPlotChild{{Title: "first child"}}})
+	firstPlot, err := cli.SeedPlot("", client.Plot{Title: "first plot", Children: []client.PlotChild{{Title: "first child"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondPlot, err := cli.SeedPlot("", protocol.SeedPlotMessage{Title: "second plot", Children: []protocol.SeedPlotChild{{Title: "second child"}}})
+	secondPlot, err := cli.SeedPlot("", client.Plot{Title: "second plot", Children: []client.PlotChild{{Title: "second child"}}})
 	if err != nil {
 		t.Fatal(err)
 	}

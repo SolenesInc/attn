@@ -59,11 +59,11 @@ func TestSocketRequestsWriteNoCLIRecordsAndRefusalsNameTheirReason(t *testing.T)
 	socketCommand(t, w, `{"cmd":"query","caller_id":"`+w.Terminal(session)+`"}`)
 	socketCommand(t, w, `{"cmd":"no_such_command"}`)
 	var refused protocol.Response
-	if err := json.Unmarshal(socketReply(t, w, `{"cmd":"seed_show","seed_id":"s-zzzzzz"}`), &refused); err != nil {
+	if err := json.Unmarshal(socketReply(t, w, `{"cmd":"run_command","command":"seed show","args":{"seed":"s-zzzzzz"}}`), &refused); err != nil {
 		t.Fatal(err)
 	}
 	if refused.Ok || protocol.Deref(refused.Refusal) != protocol.RefusalNotFound {
-		t.Fatalf("seed_show of a missing seed replied ok=%v refusal=%v error=%q, want a not_found refusal", refused.Ok, refused.Refusal, protocol.Deref(refused.Error))
+		t.Fatalf("seed show of a missing seed replied ok=%v refusal=%v error=%q, want a not_found refusal", refused.Ok, refused.Refusal, protocol.Deref(refused.Error))
 	}
 	if got := streamRecords(t, app, analytics.StreamCLI); len(got) != 0 {
 		t.Fatalf("socket requests wrote cli records %v; the CLI writes one per command", got)

@@ -3128,42 +3128,16 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleAgentInbox(conn, msg.(*protocol.AgentInboxMessage))
 	case protocol.CmdAgentMsgStatus:
 		d.handleAgentMsgStatus(conn, msg.(*protocol.AgentMsgStatusMessage))
-	case protocol.CmdSeedPlant:
-		d.handleSeedPlant(conn, msg.(*protocol.SeedPlantMessage), by.Actor())
-	case protocol.CmdSeedPlot:
-		d.handleSeedPlot(conn, msg.(*protocol.SeedPlotMessage), by.Actor())
-	case protocol.CmdSeedList:
-		d.handleSeedList(conn, msg.(*protocol.SeedListMessage))
-	case protocol.CmdSeedSearch:
-		d.handleSeedSearch(conn, msg.(*protocol.SeedSearchMessage))
-	case protocol.CmdSeedShow:
-		d.handleSeedShow(ctx, conn, msg.(*protocol.SeedShowMessage))
 	case protocol.CmdSeedArtifactTransfer:
 		d.handleSeedArtifactTransfer(ctx, conn, msg.(*protocol.SeedArtifactTransferMessage), by.Actor())
-	case protocol.CmdSeedEdit:
-		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage), by.Actor())
-	case protocol.CmdSeedRollback:
-		d.handleSeedRollback(conn, msg.(*protocol.SeedRollbackMessage), by.Actor())
 	case protocol.CmdSeedAuthorization:
 		d.handleSeedAuthorization(conn, msg.(*protocol.SeedAuthorizationMessage), by.Actor())
-	case protocol.CmdSeedReminder:
-		d.handleSeedReminder(conn, msg.(*protocol.SeedReminderMessage), by.Actor())
-	case protocol.CmdSeedStandby:
-		d.handleSeedStandby(conn, msg.(*protocol.SeedStandbyMessage), by.Actor())
 	case protocol.CmdSeedTransition:
 		d.handleSeedTransition(conn, msg.(*protocol.SeedTransitionMessage), by.Actor())
 	case protocol.CmdSeedNote:
 		d.handleSeedNote(conn, msg.(*protocol.SeedNoteMessage), by.Actor())
 	case protocol.CmdSeedCheck:
 		d.handleSeedCheck(ctx, conn, msg.(*protocol.SeedCheckMessage), by.Actor())
-	case protocol.CmdSeedNotes:
-		d.handleSeedNotes(conn, msg.(*protocol.SeedNotesMessage))
-	case protocol.CmdSeedWatch:
-		d.handleSeedWatch(conn, msg.(*protocol.SeedWatchMessage))
-	case protocol.CmdSeedLink:
-		d.handleSeedLink(conn, msg.(*protocol.SeedLinkMessage), by.Actor())
-	case protocol.CmdSeedReady:
-		d.handleSeedReady(conn, msg.(*protocol.SeedReadyMessage))
 	case protocol.CmdSeedReviewStart:
 		d.handleSeedReviewStart(conn, msg.(*protocol.SeedReviewStartMessage))
 	case protocol.CmdSeedSendToChief:

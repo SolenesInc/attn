@@ -6633,26 +6633,6 @@ model SeedCheckResultMessage {
   "check_id"?: string;
 }
 
-// Plant a seed. Planting costs one line: the daemon already knows who is
-// asking, and the garden is one space — plots are its only grouping.
-@extension("x-on", #{ home: true })
-model SeedPlantMessage {
-  "profile_id"?: string;
-
-  "cmd": "seed_plant";
-  "source_session_id"?: SessionID;
-  "title": string;
-  "body"?: string;
-  // A crown to plant under: the seed is born part of that plot. Refused when
-  // no such seed is planted.
-  "part_of"?: string;
-  // A seed this work was discovered while tending. Refused before planting
-  // when no such seed is planted.
-  "discovered_from"?: string;
-  // What the seed must prove, cited by id in its body.
-  "checks"?: SeedCheckDefinition[];
-}
-
 model SeedSimilar {
   "seed": Seed;
   "last_active": string;
@@ -6664,58 +6644,10 @@ model SeedPlantResult {
   "similar": SeedSimilar[];
 }
 
-// Plant a whole plot in one move: the crown, its children and every edge
-// between them, in one commit. A payload that cannot be a plot is refused
-// before one seed is written.
-@extension("x-on", #{ home: true })
-model SeedPlotMessage {
-  "profile_id"?: string;
-
-  "cmd": "seed_plot";
-  "source_session_id"?: SessionID;
-  "title": string;
-  "body"?: string;
-  // The crown's checks; shared ones are proven by every child below it.
-  "checks"?: SeedCheckDefinition[];
-  // The plot the crown joins, by id or slug.
-  "part_of"?: string;
-  // The seed whose work turned up this plot, by id or slug.
-  "discovered_from"?: string;
-  "children": SeedPlotChild[];
-}
-
-// One child of a plot planting. `after` names the sibling step slugs or
-// titles this child waits for; children are parallel by default.
-model SeedPlotChild {
-  "title": string;
-  "body"?: string;
-  "checks"?: SeedCheckDefinition[];
-  "after"?: string[];
-}
-
 model SeedPlotResult {
   "crown": Seed;
   "children": Seed[];
   "similar": SeedSimilar[];
-}
-
-// List the garden, newest first. One space, no scope: plots group, `show`
-// drills.
-@extension("x-on", #{ home: true })
-model SeedListMessage {
-  "profile_id"?: string;
-
-  "cmd": "seed_list";
-  "source_session_id"?: SessionID;
-  // Only the open seeds whose log has not moved for the window — a query for
-  // a person's judgment, never a reaper.
-  "stale"?: boolean;
-  // Overrides the stale window; 0 or absent takes the daemon's default.
-  "stale_window_seconds"?: int32;
-  // Only the direct children of this plot, closed ones included.
-  "plot"?: string;
-  // Only seeds on standby.
-  "standby"?: boolean;
 }
 
 model SeedListResult {
@@ -6727,20 +6659,6 @@ model SeedListResult {
   // The window a stale listing applied, echoed so the output can name the rule
   // it judged by. Absent on a plain listing.
   "stale_window_seconds"?: int32;
-}
-
-// Find seeds by stemmed word prefixes across titles, bodies and log entries,
-// including harvested and withered seeds. Identifier parts are words too.
-@extension("x-on", #{ home: true })
-model SeedSearchMessage {
-  "profile_id"?: string;
-  "cmd": "seed_search";
-  "source_session_id"?: SessionID;
-  // Words are lowercased, split at identifier boundaries, and deduplicated.
-  // A seed carrying some of the words is a partial match.
-  "query": string;
-  // How many hits to answer with; 0 or absent takes the default of 10.
-  "limit"?: int32;
 }
 
 model SeedSearchHit {
@@ -6766,25 +6684,13 @@ model SeedSearchResult {
   "searched": int32;
 }
 
-@extension("x-on", #{ home: true })
-model SeedShowMessage {
-  "profile_id"?: string;
-
-  "cmd": "seed_show";
-  // The reading session. When present, showing the seed consumes its pending
-  // bell for this reader and reports its effective watch coverage.
-  "source_session_id"?: SessionID;
-  "seed_id": string;
-  // A bookmark from an earlier read. The result's `since` then holds the log
-  // entries saved after it on this seed and every seed below it.
-  "since"?: safeint;
-}
-
-// What seed export prints when it writes the body to a file.
+// A seed's raw body under its stamp line. The command returns text; the CLI
+// writes it to a file and its --json prints the path it wrote instead.
 model SeedExportResult {
   "seed_id": string;
-  "path": string;
+  "path"?: string;
   "bytes": safeint;
+  "text"?: string;
 }
 
 model SeedShowResult {
@@ -6874,21 +6780,6 @@ model SeedClosedCount {
   "withered": int32;
 }
 
-// Replace one seed's markdown body without moving its lifecycle or claim.
-// The daemon re-reads on a revision conflict so a concurrent tend/park is
-// preserved rather than overwritten by the editor's older snapshot.
-@extension("x-on", #{ home: true })
-model SeedEditMessage {
-  "profile_id"?: string;
-  "source_session_id"?: SessionID;
-
-  "cmd": "seed_edit";
-  "seed_id": string;
-  "body": string;
-  "base_body_sha256": string;
-  "note"?: string;
-}
-
 // Set, clear or read a seed's authorization. With text it sets it, with
 // clear it removes it, and with neither it reads it. A change by someone
 // other than a live tender is typed into the tender as user input.
@@ -6901,38 +6792,6 @@ model SeedAuthorizationMessage {
   "request_id"?: string;
   "seed_id": string;
   "text"?: string;
-  "clear"?: boolean;
-}
-
-// Set or clear a seed's reminder. A new reminder replaces the one the seed
-// has. `in` is a Go duration the daemon adds to its own clock; `at` is an
-// RFC3339 time. Pass exactly one of them with message, or clear alone.
-@extension("x-on", #{ home: true })
-model SeedReminderMessage {
-  "profile_id"?: string;
-  "source_session_id"?: SessionID;
-  "cmd": "seed_reminder";
-  "seed_id": string;
-  "at"?: string;
-  "in"?: string;
-  "message"?: string;
-  "clear"?: boolean;
-}
-
-// Put a seed on standby with a note, or clear its standby. Only the seed's
-// tender sets it. Unless stay is set, the calling session then closes itself,
-// compacting first when it can. in or at also set the seed's reminder to that
-// time with the note as its message.
-@extension("x-on", #{ home: true })
-model SeedStandbyMessage {
-  "profile_id"?: string;
-  "source_session_id"?: SessionID;
-  "cmd": "seed_standby";
-  "seed_id": string;
-  "note"?: string;
-  "at"?: string;
-  "in"?: string;
-  "stay"?: boolean;
   "clear"?: boolean;
 }
 
@@ -6964,15 +6823,6 @@ model SeedEditResult {
   "body_version": int32;
   "previous_bytes": int32;
   "new_bytes": int32;
-}
-
-@extension("x-on", #{ home: true })
-model SeedRollbackMessage {
-  "profile_id"?: string;
-  "source_session_id"?: SessionID;
-  "cmd": "seed_rollback";
-  "seed_id": string;
-  "version"?: int32;
 }
 
 model SeedRollbackResult extends SeedEditResult {
@@ -7141,44 +6991,10 @@ model SeedCheckTally {
   "rejected": int32;
 }
 
-// Link or unlink two seeds. Structure lives in edges rather than in ids, so
-// re-parenting a seed never renames it. The daemon refuses what cannot be a
-// relation — an edge onto a seed that is not planted, a second crown, a cycle —
-// naming both seeds and the edge to remove.
-@extension("x-on", #{ home: true })
-model SeedLinkMessage {
-  "profile_id"?: string;
-  "source_session_id"?: SessionID;
-
-  "cmd": "seed_link";
-  "seed_id": string;
-  // blocks | part-of.
-  "kind": string;
-  // The seed at the other end: `<seed_id> blocks <to_seed_id>`.
-  "to_seed_id": string;
-  // Remove the edge instead of adding it.
-  "unlink"?: boolean;
-}
-
 model SeedLinkResult {
   "seed": Seed;
   // False when the edge was already exactly as asked, so nothing was written.
   "changed": boolean;
-}
-
-// What can be tended right now. Scope is inferred — the daemon knows who is
-// asking, so the common form takes no flags at all: the whole garden, unless
-// the calling session was dispatched at a crown, and then that plot.
-@extension("x-on", #{ home: true })
-model SeedReadyMessage {
-  "profile_id"?: string;
-
-  "cmd": "seed_ready";
-  "source_session_id"?: SessionID;
-  // A crown: the answer is that plot's seeds.
-  "plot"?: string;
-  // The whole garden, overriding a dispatched session's plot inference.
-  "all"?: boolean;
 }
 
 model SeedReadyResult {
@@ -7382,42 +7198,12 @@ model SeedNoteResultMessage {
   "note"?: SeedNote;
 }
 
-// The whole log, newest first — what `show`'s bounded list points at.
-@extension("x-on", #{ home: true })
-model SeedNotesMessage {
-  "profile_id"?: string;
-
-  "cmd": "seed_notes";
-  // Reading the log consumes this session's pending bell for the seed.
-  "source_session_id"?: SessionID;
-  "seed_id": string;
-  // Applies to a full read; a since-read returns every entry it finds.
-  "limit"?: int32;
-  // A bookmark from an earlier read: list the entries saved after it on this
-  // seed and every seed below it.
-  "since"?: safeint;
-  // Only entries of this kind. An unknown kind is refused, listing the kinds.
-  "kind"?: string;
-}
-
 model SeedNotesResult {
   "notes": SeedNote[];
   "total": int32;
   "bookmark": safeint;
   // Set when `since` is older than the event log keeps; notes is then a full read.
   "expired"?: SeedSinceExpired;
-}
-
-// Add or remove one session's ordinary watch on a seed. The watch survives
-// daemon restarts and session state changes; unwatch is the exact way out.
-@extension("x-on", #{ home: true })
-model SeedWatchMessage {
-  "profile_id"?: string;
-
-  "cmd": "seed_watch";
-  "source_session_id": SessionID;
-  "seed_id": string;
-  "unwatch"?: boolean;
 }
 
 model SeedWatchResult {
@@ -7828,25 +7614,12 @@ model Response {
   crew_move_home_result?: CrewMoveHomeResult;
   crew_prime_result?: CrewPrimeResult;
   crew_handoff_result?: CrewHandoffResult;
-  seed_plant_result?: SeedPlantResult;
-  seed_plot_result?: SeedPlotResult;
-  seed_list_result?: SeedListResult;
-  seed_search_result?: SeedSearchResult;
-  seed_show_result?: SeedShowResult;
-  seed_edit_result?: SeedEditResult;
   seed_authorization_result?: SeedAuthorizationResult;
-  seed_reminder_result?: SeedReminderResult;
-  seed_standby_result?: SeedStandbyResult;
-  seed_rollback_result?: SeedRollbackResult;
   seed_artifact_transfer_result?: SeedArtifactTransferResult;
   seed_transition_result?: SeedTransitionResult;
   seed_send_to_chief_result?: SeedSendToChiefResult;
   seed_note_result?: SeedNoteResult;
   seed_check_result?: SeedCheckResult;
-  seed_notes_result?: SeedNotesResult;
-  seed_watch_result?: SeedWatchResult;
-  seed_link_result?: SeedLinkResult;
-  seed_ready_result?: SeedReadyResult;
   seed_review_result?: SeedReviewResult;
   doc_define_result?: DocDefineResult;
   doc_undefine_result?: DocUndefineResult;

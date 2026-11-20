@@ -37,16 +37,14 @@ func newGardenDaemon(t *testing.T) *Daemon {
 	return d
 }
 
-func plant(t *testing.T, d *Daemon, msg protocol.SeedPlantMessage) protocol.Seed {
+func plant(t *testing.T, d *Daemon, msg seedPlantRequest) protocol.Seed {
 	t.Helper()
-	msg.Cmd = protocol.CmdSeedPlant
-	resp := gardenCall(t, func(c net.Conn) {
-		d.handleSeedPlant(c, &msg, d.sessionOrOwner(protocol.TrimID(protocol.Deref(msg.SourceSessionID))))
-	})
-	if !resp.Ok {
-		t.Fatalf("plant %q: %v", msg.Title, protocol.Deref(resp.Error))
+	msg.Cmd = cmdSeedPlant
+	planted, err := d.seedPlant(&msg, d.sessionOrOwner(protocol.TrimID(protocol.Deref(msg.SourceSessionID))))
+	if err != nil {
+		t.Fatalf("plant %q: %v", msg.Title, err)
 	}
-	return resp.SeedPlantResult.Seed
+	return planted.Seed
 }
 
 func addGardenSession(t *testing.T, d *Daemon, id string) {

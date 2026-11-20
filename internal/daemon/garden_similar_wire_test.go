@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"github.com/victorarias/attn/internal/client"
 	"slices"
 	"testing"
 	"time"
@@ -67,8 +68,8 @@ func TestPlotMergesSimilarSeedsByBestRankAndTitleOrder(t *testing.T) {
 		second := plantSeedAs(t, cli, planter, "cobalt worker")
 		third := plantSeedAs(t, cli, planter, "zephyr browser")
 		fourth := plantSeedAs(t, cli, planter, "quartz")
-		planted, err := cli.SeedPlot(protocol.SessionID(planter), protocol.SeedPlotMessage{
-			Title: "quartz archive", Children: []protocol.SeedPlotChild{
+		planted, err := cli.SeedPlot(protocol.SessionID(planter), client.Plot{
+			Title: "quartz archive", Children: []client.PlotChild{
 				{Title: "cobalt worker"}, {Title: "zephyr browser"}, {Title: "quartz archive followup"},
 			},
 		})
@@ -97,7 +98,7 @@ func TestPlotMergesSimilarSeedsByBestRankAndTitleOrder(t *testing.T) {
 				t.Errorf("plot suggests its own seed %s", id)
 			}
 		}
-		dedup, err := cli.SeedPlot(protocol.SessionID(planter), protocol.SeedPlotMessage{Title: "cobalt worker", Children: []protocol.SeedPlotChild{{Title: "cobalt worker followup"}}})
+		dedup, err := cli.SeedPlot(protocol.SessionID(planter), client.Plot{Title: "cobalt worker", Children: []client.PlotChild{{Title: "cobalt worker followup"}}})
 		if err != nil {
 			t.Fatal(err)
 		}

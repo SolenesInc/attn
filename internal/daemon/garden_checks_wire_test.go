@@ -132,7 +132,7 @@ func TestPlotProgressCountsEveryCheckOnceByState(t *testing.T) {
 		if progress == nil || progress.Checks == nil || *progress.Checks != want {
 			t.Errorf("plot progress = %+v, want checks %+v", progress, want)
 		}
-		plain, err := cli.SeedPlot(protocol.SessionID(sessions["planner"]), protocol.SeedPlotMessage{Title: "no checks", Children: []protocol.SeedPlotChild{{Title: "a"}}})
+		plain, err := cli.SeedPlot(protocol.SessionID(sessions["planner"]), client.Plot{Title: "no checks", Children: []client.PlotChild{{Title: "a"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -154,13 +154,13 @@ func TestACheckIDNamesOneStatementInAPlotTree(t *testing.T) {
 		_, err := cli.SeedCheck(add)
 		lifeRefusal(t, "adding an id another seed of the plot uses", err, "C1", plot.Children[0].ID)
 
-		_, err = cli.SeedPlantMessage(protocol.SeedPlantMessage{
+		_, err = cli.SeedPlantWith("", client.Plant{
 			Title: "late child", PartOf: protocol.Ptr(plot.Crown.ID),
 			Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C6"), Text: "again"}},
 		})
 		lifeRefusal(t, "planting into the plot with a used id", err, "C6", plot.Crown.ID)
 
-		loose, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
+		loose, err := cli.SeedPlantWith("", client.Plant{
 			Title: "loose seed", Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C2"), Text: "repeats the app child"}},
 		})
 		if err != nil {
@@ -206,7 +206,7 @@ func TestAttnPicksTheNextFreeCheckIDInThePlotTree(t *testing.T) {
 			t.Errorf("an add with a free explicit id = %s, want C30", explicit.CheckID)
 		}
 
-		planted, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
+		planted, err := cli.SeedPlantWith("", client.Plant{
 			Title: "late child", PartOf: protocol.Ptr(plot.Crown.ID),
 			Checks: []protocol.SeedCheckDefinition{{Text: "Proves C"}, {ID: protocol.Ptr("C40"), Text: "Proves more"}, {Text: "Proves the rest"}},
 		})
@@ -216,13 +216,13 @@ func TestAttnPicksTheNextFreeCheckIDInThePlotTree(t *testing.T) {
 		if got := checkIDsFrom(planted.Seed.Checks); !slices.Equal(got, []string{"C41", "C40", "C42", "C5@" + plot.Crown.ID}) {
 			t.Errorf("a plant with checks without ids = %v, want C41 and C42 above the plot's highest and the plant's own C40", got)
 		}
-		_, err = cli.SeedPlantMessage(protocol.SeedPlantMessage{
+		_, err = cli.SeedPlantWith("", client.Plant{
 			Title: "repeating child", PartOf: protocol.Ptr(plot.Crown.ID),
 			Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C6"), Text: "again"}},
 		})
 		lifeRefusal(t, "a plant with a used id", err, "C6 is already used by "+plot.Crown.ID, "the next free id is C43")
 
-		loose, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
+		loose, err := cli.SeedPlantWith("", client.Plant{
 			Title: "loose seed", Checks: []protocol.SeedCheckDefinition{{Text: "First"}, {Text: "Second"}},
 		})
 		if err != nil {
@@ -240,9 +240,9 @@ func TestSimultaneousIDIntroductionsNeverShareAnID(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		const rounds = 20
-		plot, err := cli.SeedPlot("", protocol.SeedPlotMessage{
+		plot, err := cli.SeedPlot("", client.Plot{
 			Title:    "racing plot",
-			Children: []protocol.SeedPlotChild{{Title: "left"}, {Title: "right"}},
+			Children: []client.PlotChild{{Title: "left"}, {Title: "right"}},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -250,7 +250,7 @@ func TestSimultaneousIDIntroductionsNeverShareAnID(t *testing.T) {
 		left, right := plot.Children[0].ID, plot.Children[1].ID
 		var loose []string
 		for i := range rounds {
-			planted, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
+			planted, err := cli.SeedPlantWith("", client.Plant{
 				Title:  fmt.Sprintf("loose %d", i),
 				Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr(fmt.Sprintf("C%d", 900+i%2)), Text: "carried in"}},
 			})
@@ -284,7 +284,7 @@ func TestSimultaneousIDIntroductionsNeverShareAnID(t *testing.T) {
 				names(left, fmt.Sprintf("C%d", 500+i), "left names"),
 				names(right, fmt.Sprintf("C%d", 500+i), "right names"),
 				func() error {
-					planted, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
+					planted, err := cli.SeedPlantWith("", client.Plant{
 						Title: fmt.Sprintf("planted %d", i), PartOf: protocol.Ptr(plot.Crown.ID),
 						Checks: []protocol.SeedCheckDefinition{{Text: "planted in"}},
 					})
@@ -642,13 +642,13 @@ func spawnCheckSessions(w *world, app *testworld.Peer, names ...string) map[stri
 
 func checksPlot(t *testing.T, cli *client.Client, planner string) *protocol.SeedPlotResult {
 	t.Helper()
-	planted, err := cli.SeedPlot(protocol.SessionID(planner), protocol.SeedPlotMessage{
+	planted, err := cli.SeedPlot(protocol.SessionID(planner), client.Plot{
 		Title: "search moves to the daemon",
 		Checks: []protocol.SeedCheckDefinition{
 			{ID: protocol.Ptr("C5"), Text: "The pull request is green on CI.", Shared: protocol.Ptr(true)},
 			{ID: protocol.Ptr("C6"), Text: "Search behaves the same in the packaged app."},
 		},
-		Children: []protocol.SeedPlotChild{
+		Children: []client.PlotChild{
 			{Title: "daemon search endpoint", Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C1"), Text: "Wire tests cover the queries."}}},
 			{Title: "app calls the endpoint", Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C2"), Text: "No stale results."}}},
 		},
@@ -743,8 +743,9 @@ func TestAnInheritedResultAnswersOnlyThePlotThatDefinedIt(t *testing.T) {
 		leaf := first.Children[1].ID
 		checkMoveOK(t, cli, checkMove(leaf, "C5", "confirm", "seen it"))
 
-		other, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
+		other, err := cli.SeedPlot("", client.Plot{
 			Title: "another plot", Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C5"), Text: "A different statement.", Shared: protocol.Ptr(true)}},
+			Children: []client.PlotChild{{Title: "another plot's own part"}},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -752,12 +753,12 @@ func TestAnInheritedResultAnswersOnlyThePlotThatDefinedIt(t *testing.T) {
 		if _, err := cli.SeedLink(leaf, "part-of", first.Crown.ID, true); err != nil {
 			t.Fatal(err)
 		}
-		edgeLink(t, cli, leaf, "part-of", other.Seed.ID)
-		if check := checkByID(checksShow(t, cli, leaf).Checks, "C5"); check.State != "open" || protocol.Deref(check.From) != other.Seed.ID {
+		edgeLink(t, cli, leaf, "part-of", other.Crown.ID)
+		if check := checkByID(checksShow(t, cli, leaf).Checks, "C5"); check.State != "open" || protocol.Deref(check.From) != other.Crown.ID {
 			t.Errorf("under a plot with a different C5 the leaf's C5 = %+v, want it open, from the new plot", check)
 		}
 
-		if _, err := cli.SeedLink(leaf, "part-of", other.Seed.ID, true); err != nil {
+		if _, err := cli.SeedLink(leaf, "part-of", other.Crown.ID, true); err != nil {
 			t.Fatal(err)
 		}
 		edgeLink(t, cli, leaf, "part-of", first.Crown.ID)

@@ -164,15 +164,6 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, profileID
 	}, nil
 }
 
-func (d *Daemon) handleSeedSendToChief(conn net.Conn, msg *protocol.SeedSendToChiefMessage, by who.Actor) {
-	result, err := d.sendSeedToChief(msg, protocol.Deref(msg.ProfileID), by)
-	if err != nil {
-		d.sendGardenError(conn, "send-to-chief", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedSendToChiefResult: result})
-}
-
 func (d *Daemon) handleSeedSendToChiefWS(client *wsClient, msg *protocol.SeedSendToChiefMessage) {
 	response := protocol.SeedSendToChiefResultMessage{
 		Event: protocol.EventSeedSendToChiefResult, RequestID: protocol.Deref(msg.RequestID),
@@ -185,4 +176,13 @@ func (d *Daemon) handleSeedSendToChiefWS(client *wsClient, msg *protocol.SeedSen
 		response.Result = result
 	}
 	d.sendToClient(client, response)
+}
+
+func (d *Daemon) handleSeedSendToChief(conn net.Conn, msg *protocol.SeedSendToChiefMessage, by who.Actor) {
+	result, err := d.sendSeedToChief(msg, protocol.Deref(msg.ProfileID), by)
+	if err != nil {
+		d.sendGardenError(conn, "send-to-chief", err)
+		return
+	}
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedSendToChiefResult: result})
 }

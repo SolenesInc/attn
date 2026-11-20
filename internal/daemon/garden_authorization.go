@@ -25,15 +25,6 @@ type authorizationChange struct {
 	withdrawn   *store.InboxKey
 }
 
-func (d *Daemon) handleSeedAuthorization(conn net.Conn, msg *protocol.SeedAuthorizationMessage, by who.Actor) {
-	result, err := d.seedAuthorizationRequest(msg, by)
-	if err != nil {
-		d.sendGardenError(conn, "authorization", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedAuthorizationResult: result})
-}
-
 func (d *Daemon) handleSeedAuthorizationWS(client *wsClient, msg *protocol.SeedAuthorizationMessage) {
 	reply := protocol.SeedAuthorizationResultMessage{
 		Event:     protocol.EventSeedAuthorizationResult,
@@ -255,4 +246,13 @@ func (d *Daemon) authorizationSetterName(a garden.Authorization) string {
 		return ""
 	}
 	return d.actorView(a.SetBy).Name
+}
+
+func (d *Daemon) handleSeedAuthorization(conn net.Conn, msg *protocol.SeedAuthorizationMessage, by who.Actor) {
+	result, err := d.seedAuthorizationRequest(msg, by)
+	if err != nil {
+		d.sendGardenError(conn, "authorization", err)
+		return
+	}
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedAuthorizationResult: result})
 }

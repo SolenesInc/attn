@@ -45,9 +45,9 @@ func TestASlugNamesASeedWhereverAnIDDoes(t *testing.T) {
 		t.Fatalf("ready --plot grow-trellis = %+v, %v; want the plot %s", ready, err, trellis)
 	}
 
-	planted, err := cli.SeedPlot(me, protocol.SeedPlotMessage{
+	planted, err := cli.SeedPlot(me, client.Plot{
 		Title: "Prune the hedge", PartOf: protocol.Ptr("grow-trellis"), DiscoveredFrom: protocol.Ptr("water-vine"),
-		Children: []protocol.SeedPlotChild{{Title: "Sharpen shears"}, {Title: "Cut back", After: []string{"sharpen-shears"}}},
+		Children: []client.PlotChild{{Title: "Sharpen shears"}, {Title: "Cut back", After: []string{"sharpen-shears"}}},
 	})
 	if err != nil {
 		t.Fatalf("plot under grow-trellis, discovered from water-vine: %v", err)

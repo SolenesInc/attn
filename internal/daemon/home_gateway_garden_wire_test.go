@@ -161,9 +161,9 @@ func TestHomeGatewayShowsThePairedProfilesGardenAndTendsItAsTheDesktopDoes(t *te
 		}
 		return planted.Seed.ID
 	}
-	planted, err := cli.SeedPlot("mine", protocol.SeedPlotMessage{
+	planted, err := cli.SeedPlot("mine", client.Plot{
 		Title: "Ship the phone", Body: protocol.Ptr("# Plan\n\nThe phone reads the **Garden**."),
-		Children: []protocol.SeedPlotChild{
+		Children: []client.PlotChild{
 			{Title: "Read seeds", Body: protocol.Ptr("List and read.")},
 			{Title: "Move seeds", Body: protocol.Ptr("Park and harvest."), After: []string{"read-seeds"}},
 		},

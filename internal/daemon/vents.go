@@ -348,7 +348,7 @@ func (d *Daemon) plantVentSeed(id, profileID string, by who.Actor) (protocol.See
 		return protocol.Seed{}, fmt.Errorf("vent %s already planted seed %s", id, vent.PlantedSeedID)
 	}
 	stored := storedVent{vent}
-	seed, _, err := d.plantSeedRequest(&protocol.SeedPlantMessage{ProfileID: &vent.ProfileID, Title: stored.seedTitle(), Body: protocol.Ptr(stored.seedBody())}, by)
+	seed, _, err := d.plantSeedRequest(&seedPlantRequest{ProfileID: &vent.ProfileID, Title: stored.seedTitle(), Body: protocol.Ptr(stored.seedBody())}, by)
 	if err != nil {
 		return protocol.Seed{}, fmt.Errorf("seed plant: %w", err)
 	}

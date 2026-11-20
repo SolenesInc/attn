@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -36,24 +35,20 @@ func TestTheSynchronousClientNamesOversizeFramesBeforeSending(t *testing.T) {
 	w := newWorld(t)
 	cli := w.Client().WithCaller("")
 	body := strings.Repeat("<", garden.MaxBodyBytes)
-	msg := protocol.SeedPlotMessage{
-		Cmd: protocol.CmdSeedPlot, Title: "oversize plot",
-		Children: []protocol.SeedPlotChild{{Title: "one", Body: &body}, {Title: "two", Body: &body}},
+	plot := client.Plot{
+		Title:    "oversize plot",
+		Children: []client.PlotChild{{Title: "one", Body: &body}, {Title: "two", Body: &body}},
 	}
-	frame, err := json.Marshal(msg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = cli.SeedPlot("", msg)
-	want := fmt.Sprintf("seed_plot request: max_socket_frame_bytes=%d, asked for %d bytes", protocol.MaxSocketFrameBytes, len(frame))
-	if err == nil || err.Error() != want {
+	_, err := cli.SeedPlot("", plot)
+	want := fmt.Sprintf("run_command request: max_socket_frame_bytes=%d, asked for ", protocol.MaxSocketFrameBytes)
+	if err == nil || !strings.HasPrefix(err.Error(), want) {
 		t.Fatalf("oversize request: %v, want %q", err, want)
 	}
 	listed, err := cli.SeedList("", false, 0)
 	if err != nil || len(listed.Seeds) != 0 {
 		t.Fatalf("refused plot planted seeds: %+v, %v", listed, err)
 	}
-	t.Log(want)
+	t.Log(err)
 }
 
 type socketWriteFailure struct{ net.Conn }
@@ -102,9 +97,9 @@ func TestTheWebSocketAcceptsTheSocketFrameBudget(t *testing.T) {
 func TestTheSynchronousClientPlantsPlotsWithinTheFrameLimit(t *testing.T) {
 	w := newWorld(t)
 	body := strings.Repeat("plan\n", 64*1024)
-	plot, err := w.Client().SeedPlot("", protocol.SeedPlotMessage{
+	plot, err := w.Client().SeedPlot("", client.Plot{
 		Title: "large plot", Body: &body,
-		Children: []protocol.SeedPlotChild{{Title: "large child", Body: &body}},
+		Children: []client.PlotChild{{Title: "large child", Body: &body}},
 	})
 	if err != nil {
 		t.Fatal(err)

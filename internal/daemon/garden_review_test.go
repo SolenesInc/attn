@@ -35,7 +35,7 @@ func TestGardenReviewOffersResumeOnlyWithUsableContinuation(t *testing.T) {
 	})
 	d.store.SetResumeSessionID("sess-a", "native-1")
 	d.store.SetLaunchIntent("sess-a", store.LaunchIntent{})
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Resumable old work"})
+	seed := plant(t, d, seedPlantRequest{Title: "Resumable old work"})
 	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
 	d.closeSession("sess-a", store.SessionClose{By: who.User()})
 	d.gardenNow = func() time.Time { return now }

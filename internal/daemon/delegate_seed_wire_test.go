@@ -135,10 +135,10 @@ func TestADelegationOpeningNamesTheSeedsChecksOrSaysItHasNone(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	cli := w.Client()
 	cwd := registerDelegationCaller(t, w, cli, "caller")
-	plot, err := cli.SeedPlot("caller", protocol.SeedPlotMessage{
+	plot, err := cli.SeedPlot("caller", client.Plot{
 		Title:  "search moves to the daemon",
 		Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C5"), Text: "Landed on main.", Shared: protocol.Ptr(true)}},
-		Children: []protocol.SeedPlotChild{{Title: "daemon search endpoint", Body: protocol.Ptr("Serve search from the daemon."),
+		Children: []client.PlotChild{{Title: "daemon search endpoint", Body: protocol.Ptr("Serve search from the daemon."),
 			Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C1"), Text: "Wire tests cover the queries."}}}},
 	})
 	if err != nil {

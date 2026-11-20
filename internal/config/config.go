@@ -239,7 +239,18 @@ func ScopeTestEnvironment(dataDir string) {
 	os.Unsetenv("ATTN_PLUGIN_DIR")
 	os.Unsetenv("ATTN_CLIENT_TOKEN")
 	os.Unsetenv(AnalyticsIngestURLEnv)
+	unsetInheritedCaller()
 	unsetInheritedGitConfig()
+}
+
+func unsetInheritedCaller() {
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		switch {
+		case name == "ATTN_TERMINAL_ID", name == "ATTN_SESSION_ID", name == "ATTN_CODEX_SHARED_PROFILE", strings.HasSuffix(name, "_ROOT_CONVERSATION"):
+			os.Unsetenv(name)
+		}
+	}
 }
 
 // Git config injected through the environment (such as url.insteadOf rewrites) changes what attn's git calls see.

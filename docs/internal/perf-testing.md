@@ -283,11 +283,12 @@ node scripts/gardenpushperf/app-review-pull.mjs http://localhost:<port>/ <id> "<
 ## Garden reads
 
 `scripts/gardenreadperf` measures what reading the garden costs on a copy. It
-sends `seed_list` and `seed_ready` with `all` straight to the daemon's socket,
-so process start and CLI decoding stay out of the number, and reports the
-median, minimum and maximum time to first byte and to the whole reply, the
-reply's bytes and its item counts. `-show <seed id>` and `-search <query>` add
-`seed_show` and `seed_search`. `-review` adds `seed_review_show`, the overview
+sends `seed ls` and `seed ready --all` as `run_command` frames straight to the
+daemon's socket, so process start and CLI decoding stay out of the number, and
+reports the median, minimum and maximum time to first byte and to the whole
+reply, the reply's bytes and its item counts. `-show <seed id>` and
+`-search <query>` add `seed show` and `seed search`. `-review` adds
+`seed_review_show`, the overview
 the Garden panel asks for, and reports its `candidate_count`:
 
 ```bash

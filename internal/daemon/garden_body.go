@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"slices"
 	"strings"
 
@@ -79,7 +78,7 @@ func (d *Daemon) adoptInlineSeedBody(seedSchema docstore.CollectionSchema, inlin
 		return err
 	}
 	if inline.Body != current && (current != "" || latest.Version > 0) {
-		_, err := d.commitSeedBodyEdit(&protocol.SeedEditMessage{
+		_, err := d.commitSeedBodyEdit(&seedEditRequest{
 			SeedID: inline.ID, Body: inline.Body, BaseBodySHA256: garden.BodySHA256(current),
 			Note: protocol.Ptr("written by an older attn build, which could not see the previous text; that text stays in the previous body version"),
 		}, who.Attn())
@@ -183,29 +182,7 @@ func (d *Daemon) latestSeedBodyVersion(id string) (garden.BodyVersion, error) {
 	return garden.DecodeBodyVersion(read.Documents[0].Body)
 }
 
-func (d *Daemon) handleSeedEdit(conn net.Conn, msg *protocol.SeedEditMessage, by who.Actor) {
-	result, err := d.applySeedBodyEdit(msg, by)
-	if err != nil {
-		var conflict seedBodyConflictError
-		if errors.As(err, &conflict) {
-			err = fmt.Errorf("%w; run attn seed export %s and reapply your change", err, msg.SeedID)
-		}
-		d.sendGardenError(conn, "edit", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedEditResult: result})
-}
-
-func (d *Daemon) handleSeedRollback(conn net.Conn, msg *protocol.SeedRollbackMessage, by who.Actor) {
-	result, err := d.rollbackSeedBody(msg, by)
-	if err != nil {
-		d.sendGardenError(conn, "rollback", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedRollbackResult: result})
-}
-
-func (d *Daemon) rollbackSeedBody(msg *protocol.SeedRollbackMessage, by who.Actor) (*protocol.SeedRollbackResult, error) {
+func (d *Daemon) rollbackSeedBody(msg *seedRollbackRequest, by who.Actor) (*protocol.SeedRollbackResult, error) {
 	seed, _, err := d.readSeed(msg.SeedID)
 	if err != nil {
 		return nil, err
@@ -245,7 +222,7 @@ func (d *Daemon) rollbackSeedBody(msg *protocol.SeedRollbackMessage, by who.Acto
 		return nil, err
 	}
 	pausepoint.At(pausepoint.SeedRollbackRead)
-	edit, err := d.applySeedBodyEdit(&protocol.SeedEditMessage{
+	edit, err := d.applySeedBodyEdit(&seedEditRequest{
 		SeedID: seed.ID, Body: target.Body, BaseBodySHA256: garden.BodySHA256(body),
 		SourceSessionID: msg.SourceSessionID, Note: protocol.Ptr(fmt.Sprintf("rollback to v%d", version)),
 	}, by)
@@ -266,7 +243,7 @@ func (d *Daemon) rollbackSeedBody(msg *protocol.SeedRollbackMessage, by who.Acto
 	}, nil
 }
 
-func (d *Daemon) applySeedBodyEdit(msg *protocol.SeedEditMessage, by who.Actor) (*protocol.SeedEditResult, error) {
+func (d *Daemon) applySeedBodyEdit(msg *seedEditRequest, by who.Actor) (*protocol.SeedEditResult, error) {
 	if err := garden.ValidateBodyEdit(msg.Body); err != nil {
 		return nil, err
 	}
@@ -279,7 +256,7 @@ func (d *Daemon) applySeedBodyEdit(msg *protocol.SeedEditMessage, by who.Actor) 
 	return result, err
 }
 
-func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage, by who.Actor) (*protocol.SeedEditResult, error) {
+func (d *Daemon) commitSeedBodyEdit(msg *seedEditRequest, by who.Actor) (*protocol.SeedEditResult, error) {
 	seedSchema, err := d.seedsCollection()
 	if err != nil {
 		return nil, err

@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"fmt"
-	"net"
 	"sort"
 	"time"
 
@@ -60,16 +59,7 @@ func (d *Daemon) gardenTenderSession(seed garden.Seed) (string, error) {
 	return "", nil
 }
 
-func (d *Daemon) handleSeedWatch(conn net.Conn, msg *protocol.SeedWatchMessage) {
-	result, err := d.seedWatch(msg)
-	if err != nil {
-		d.sendRefusal(conn, err.Error(), err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedWatchResult: result})
-}
-
-func (d *Daemon) seedWatch(msg *protocol.SeedWatchMessage) (*protocol.SeedWatchResult, error) {
+func (d *Daemon) seedWatch(msg *seedWatchRequest) (*protocol.SeedWatchResult, error) {
 	verb := "watch"
 	watching := !protocol.Deref(msg.Unwatch)
 	if !watching {

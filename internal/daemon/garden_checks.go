@@ -23,22 +23,6 @@ type seedCheckOutcome struct {
 	attached       []protocol.SeedCheckAttachment
 }
 
-func (d *Daemon) handleSeedCheck(ctx context.Context, conn net.Conn, msg *protocol.SeedCheckMessage, by who.Actor) {
-	ctx, cancel := d.connectionContext(ctx, conn)
-	defer cancel()
-	outcome, err := d.applySeedCheck(ctx, msg, by)
-	if err != nil {
-		d.sendGardenError(conn, "check", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{
-		Ok: true,
-		SeedCheckResult: &protocol.SeedCheckResult{
-			Seed: outcome.seed, CheckID: outcome.checkID, Note: outcome.note, RingRecipients: outcome.ringRecipients, Attached: outcome.attached,
-		},
-	})
-}
-
 func (d *Daemon) handleSeedCheckWS(client *wsClient, msg *protocol.SeedCheckMessage) {
 	result := protocol.SeedCheckResultMessage{
 		Event:     protocol.EventSeedCheckResult,
@@ -428,4 +412,20 @@ func checkDefinitionsFromProtocol(wire []protocol.SeedCheckDefinition) []garden.
 		})
 	}
 	return out
+}
+
+func (d *Daemon) handleSeedCheck(ctx context.Context, conn net.Conn, msg *protocol.SeedCheckMessage, by who.Actor) {
+	ctx, cancel := d.connectionContext(ctx, conn)
+	defer cancel()
+	outcome, err := d.applySeedCheck(ctx, msg, by)
+	if err != nil {
+		d.sendGardenError(conn, "check", err)
+		return
+	}
+	d.sendGardenResponse(conn, protocol.Response{
+		Ok: true,
+		SeedCheckResult: &protocol.SeedCheckResult{
+			Seed: outcome.seed, CheckID: outcome.checkID, Note: outcome.note, RingRecipients: outcome.ringRecipients, Attached: outcome.attached,
+		},
+	})
 }

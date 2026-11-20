@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"fmt"
-	"net"
 	"strings"
 	"time"
 
@@ -13,29 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-func (d *Daemon) handleSeedStandby(conn net.Conn, msg *protocol.SeedStandbyMessage, setter who.Actor) {
-	result, closeSelf, err := d.seedStandbyRequest(msg, setter)
-	if err != nil {
-		d.sendGardenError(conn, "standby", err)
-		return
-	}
-	if closeSelf == nil {
-		d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedStandbyResult: result})
-		return
-	}
-	closed, closing, refusal := d.beginAgentClose(closeSelf)
-	if refusal != nil {
-		d.replyAgentMsgError(conn, refusal.code, fmt.Sprintf("%s is on standby, but the session did not close: %s", result.Seed.ID, refusal.message))
-		return
-	}
-	result.Close = closed
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedStandbyResult: result})
-	if !protocol.Deref(closed.PendingCompact) {
-		d.finishSessionClose(closed.TargetSessionID, closing)
-	}
-}
-
-func (d *Daemon) seedStandbyRequest(msg *protocol.SeedStandbyMessage, setter who.Actor) (*protocol.SeedStandbyResult, *protocol.AgentCloseMessage, error) {
+func (d *Daemon) seedStandbyRequest(msg *seedStandbyRequest, setter who.Actor) (*protocol.SeedStandbyResult, *protocol.AgentCloseMessage, error) {
 	seedID := strings.TrimSpace(msg.SeedID)
 	callerID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	note := strings.TrimSpace(protocol.Deref(msg.Note))

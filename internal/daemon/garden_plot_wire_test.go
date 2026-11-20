@@ -21,9 +21,9 @@ func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
 		w.advance(0)
 		pushesBefore := gardenPlotPushes(app)
 
-		planted, err := cli.SeedPlot("sess-a", protocol.SeedPlotMessage{
+		planted, err := cli.SeedPlot("sess-a", client.Plot{
 			Title: "ship the thing", Body: protocol.Ptr("# the plan"),
-			Children: []protocol.SeedPlotChild{
+			Children: []client.PlotChild{
 				{Title: "first step"},
 				{Title: "second step", After: []string{"third-step"}},
 				{Title: "third step"},
@@ -81,21 +81,21 @@ func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
 		if _, err := cli.SeedPlant("sess-a", "orphan", "", "s-zzzzzz", ""); err == nil || !strings.Contains(err.Error(), "s-zzzzzz") {
 			t.Errorf("planting under a crown that is not here = %v, want a refusal naming it", err)
 		}
-		if _, err := cli.SeedPlot("sess-a", protocol.SeedPlotMessage{
-			Title: "ship it", Children: []protocol.SeedPlotChild{{Title: "a", After: []string{"nobody"}}},
+		if _, err := cli.SeedPlot("sess-a", client.Plot{
+			Title: "ship it", Children: []client.PlotChild{{Title: "a", After: []string{"nobody"}}},
 		}); err == nil || !strings.Contains(err.Error(), "nobody") {
 			t.Errorf("a plot waiting for no sibling = %v, want a refusal naming it", err)
 		}
-		if _, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
-			Cmd: protocol.CmdSeedPlant, SourceSessionID: protocol.Ptr(protocol.SessionID("sess-a")), Title: "checked part", PartOf: protocol.Ptr(planted.Crown.ID),
+		if _, err := cli.SeedPlantWith("sess-a", client.Plant{
+			Title: "checked part", PartOf: protocol.Ptr(planted.Crown.ID),
 			Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C7"), Text: "It holds."}},
 		}); err != nil {
 			t.Fatal(err)
 		}
 		total++
-		if _, err := cli.SeedPlot("sess-a", protocol.SeedPlotMessage{
+		if _, err := cli.SeedPlot("sess-a", client.Plot{
 			Title: "a plot inside", PartOf: protocol.Ptr(planted.Crown.ID),
-			Children: []protocol.SeedPlotChild{{Title: "a", Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C7"), Text: "Smooth."}}}},
+			Children: []client.PlotChild{{Title: "a", Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C7"), Text: "Smooth."}}}},
 		}); err == nil || !strings.Contains(err.Error(), "C7 is already used") || !strings.Contains(err.Error(), "number the payload's checks from C8 up") {
 			t.Errorf("a plot reusing a check id of the plot it joins = %v, want a refusal naming C7 and the next free id", err)
 		}
@@ -109,8 +109,8 @@ func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	planter := spawnPanes(w, app, w.Path("planter"))[0].session
-	planted, err := cli.SeedPlot(protocol.SessionID(planter), protocol.SeedPlotMessage{
-		Title: "ship it", Children: []protocol.SeedPlotChild{
+	planted, err := cli.SeedPlot(protocol.SessionID(planter), client.Plot{
+		Title: "ship it", Children: []client.PlotChild{
 			{Title: "a", After: []string{"b"}}, {Title: "b"},
 			{Title: "c", After: []string{"d"}}, {Title: "d"}, {Title: "e"}, {Title: "f"},
 		},
@@ -154,8 +154,8 @@ func TestEveryResultCarriesThePlotProgressShowDoes(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	planter := protocol.SessionID(spawnPanes(w, app, w.Path("planter"))[0].session)
-	planted, err := cli.SeedPlot(planter, protocol.SeedPlotMessage{
-		Title: "wandering crown", Children: []protocol.SeedPlotChild{{Title: "a", After: []string{"b"}}, {Title: "b"}},
+	planted, err := cli.SeedPlot(planter, client.Plot{
+		Title: "wandering crown", Children: []client.PlotChild{{Title: "a", After: []string{"b"}}, {Title: "b"}},
 	})
 	if err != nil {
 		t.Fatalf("plot: %v", err)
@@ -241,9 +241,9 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.SetCodexFolderTrust(cwd, "trusted")
-	planted, err := cli.SeedPlot(protocol.SessionID(planner), protocol.SeedPlotMessage{
+	planted, err := cli.SeedPlot(protocol.SessionID(planner), client.Plot{
 		Title: "ship the thing", Body: protocol.Ptr("# the plan"),
-		Children: []protocol.SeedPlotChild{
+		Children: []client.PlotChild{
 			{Title: "first step"},
 			{Title: "second step"},
 			{Title: "third step", After: []string{"first-step"}},

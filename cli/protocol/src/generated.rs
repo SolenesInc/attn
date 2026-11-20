@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "34ce8a887973";
+pub const PROTOCOL_VERSION: &str = "333f56b5edb3";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -9411,39 +9411,13 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_check_result: Option<SeedCheckResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_edit_result: Option<SeedEditResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_link_result: Option<SeedLinkResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_list_result: Option<SeedListResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_note_result: Option<SeedNoteResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_notes_result: Option<SeedNotesResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_plant_result: Option<SeedPlantResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_plot_result: Option<SeedPlotResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_ready_result: Option<SeedReadyResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_reminder_result: Option<SeedReminderResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_review_result: Option<SeedReviewResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_rollback_result: Option<SeedRollbackResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_search_result: Option<SeedSearchResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_send_to_chief_result: Option<SeedSendToChiefResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_show_result: Option<SeedShowResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_standby_result: Option<SeedStandbyResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_transition_result: Option<SeedTransitionResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_watch_result: Option<SeedWatchResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sender_model_call_result: Option<SenderModelCallResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -10508,29 +10482,6 @@ pub struct SeedEdge {
     pub to: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedEditMessage {
-    pub base_body_sha256: String,
-    pub body: String,
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    pub seed_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-}
-
-impl SeedEditMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_edit".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedEditResult {
     pub body_version: i64,
     pub new_bytes: i64,
@@ -10540,8 +10491,11 @@ pub struct SeedEditResult {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedExportResult {
     pub bytes: i64,
-    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
     pub seed_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedHandoverRequest {
@@ -10571,58 +10525,9 @@ pub struct SeedHarvestWhenMerged {
     pub pull_request_url: Option<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedLinkMessage {
-    pub cmd: String,
-    pub kind: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    pub seed_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-    pub to_seed_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub unlink: Option<bool>,
-}
-
-impl SeedLinkMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_link".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedLinkResult {
     pub changed: bool,
     pub seed: Seed,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedListMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub plot: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stale: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stale_window_seconds: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub standby: Option<bool>,
-}
-
-impl SeedListMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_list".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedListResult {
@@ -10700,31 +10605,6 @@ impl SeedNoteResultMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedNotesMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub kind: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limit: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    pub seed_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub since: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-}
-
-impl SeedNotesMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_notes".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedNotesResult {
     pub bookmark: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -10747,76 +10627,10 @@ pub struct SeedOutlinePart {
     pub ids: Vec<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedPlantMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub body: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub checks: Option<Vec<SeedCheckDefinition>>,
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub discovered_from: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub part_of: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-    pub title: String,
-}
-
-impl SeedPlantMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_plant".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedPlantResult {
     pub seed: Seed,
     #[serde(deserialize_with = "null_as_default")]
     pub similar: Vec<SeedSimilar>,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedPlotChild {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub after: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub body: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub checks: Option<Vec<SeedCheckDefinition>>,
-    pub title: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedPlotMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub body: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub checks: Option<Vec<SeedCheckDefinition>>,
-    #[serde(deserialize_with = "null_as_default")]
-    pub children: Vec<SeedPlotChild>,
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub discovered_from: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub part_of: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-    pub title: String,
-}
-
-impl SeedPlotMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_plot".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedPlotProgress {
@@ -10837,28 +10651,6 @@ pub struct SeedPlotResult {
     pub crown: Seed,
     #[serde(deserialize_with = "null_as_default")]
     pub similar: Vec<SeedSimilar>,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedReadyMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub all: Option<bool>,
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub plot: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-}
-
-impl SeedReadyMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_ready".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedReadyResult {
@@ -10888,33 +10680,6 @@ pub struct SeedReminder {
     pub message: String,
     pub set_at: String,
     pub set_by: ActorView,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedReminderMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub clear: Option<bool>,
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub r#in: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    pub seed_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-}
-
-impl SeedReminderMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_reminder".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedReminderResult {
@@ -11149,27 +10914,6 @@ impl SeedReviewStartMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedRollbackMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    pub seed_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub version: Option<i64>,
-}
-
-impl SeedRollbackMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_rollback".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedRollbackResult {
     pub body_version: i64,
     pub new_bytes: i64,
@@ -11209,27 +10953,6 @@ pub struct SeedSearchHit {
     pub seed: Seed,
     pub snippet: String,
     pub r#where: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedSearchMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limit: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    pub query: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-}
-
-impl SeedSearchMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_search".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedSearchResult {
@@ -11302,27 +11025,6 @@ pub struct SeedSharedCheck {
     pub text: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedShowMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    pub seed_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub since: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-}
-
-impl SeedShowMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_show".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedShowResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifact_dir: Option<String>,
@@ -11373,35 +11075,6 @@ pub struct SeedSince {
 pub struct SeedSinceExpired {
     pub earliest: i64,
     pub retention_seconds: i64,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedStandbyMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub clear: Option<bool>,
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub r#in: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    pub seed_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stay: Option<bool>,
-}
-
-impl SeedStandbyMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_standby".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedStandbyResult {
@@ -11511,26 +11184,6 @@ pub struct SeedVar {
     pub pattern: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required: Option<bool>,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SeedWatchMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    pub seed_id: String,
-    pub source_session_id: SessionID,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub unwatch: Option<bool>,
-}
-
-impl SeedWatchMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "seed_watch".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedWatchResult {
@@ -15162,56 +14815,17 @@ impl ResponseField for SeedAuthorizationResult {
 impl ResponseField for SeedCheckResult {
     const FIELD: &'static str = "seed_check_result";
 }
-impl ResponseField for SeedEditResult {
-    const FIELD: &'static str = "seed_edit_result";
-}
-impl ResponseField for SeedLinkResult {
-    const FIELD: &'static str = "seed_link_result";
-}
-impl ResponseField for SeedListResult {
-    const FIELD: &'static str = "seed_list_result";
-}
 impl ResponseField for SeedNoteResult {
     const FIELD: &'static str = "seed_note_result";
-}
-impl ResponseField for SeedNotesResult {
-    const FIELD: &'static str = "seed_notes_result";
-}
-impl ResponseField for SeedPlantResult {
-    const FIELD: &'static str = "seed_plant_result";
-}
-impl ResponseField for SeedPlotResult {
-    const FIELD: &'static str = "seed_plot_result";
-}
-impl ResponseField for SeedReadyResult {
-    const FIELD: &'static str = "seed_ready_result";
-}
-impl ResponseField for SeedReminderResult {
-    const FIELD: &'static str = "seed_reminder_result";
 }
 impl ResponseField for SeedReviewResult {
     const FIELD: &'static str = "seed_review_result";
 }
-impl ResponseField for SeedRollbackResult {
-    const FIELD: &'static str = "seed_rollback_result";
-}
-impl ResponseField for SeedSearchResult {
-    const FIELD: &'static str = "seed_search_result";
-}
 impl ResponseField for SeedSendToChiefResult {
     const FIELD: &'static str = "seed_send_to_chief_result";
 }
-impl ResponseField for SeedShowResult {
-    const FIELD: &'static str = "seed_show_result";
-}
-impl ResponseField for SeedStandbyResult {
-    const FIELD: &'static str = "seed_standby_result";
-}
 impl ResponseField for SeedTransitionResult {
     const FIELD: &'static str = "seed_transition_result";
-}
-impl ResponseField for SeedWatchResult {
-    const FIELD: &'static str = "seed_watch_result";
 }
 impl ResponseField for SenderModelCallResult {
     const FIELD: &'static str = "sender_model_call_result";

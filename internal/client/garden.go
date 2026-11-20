@@ -1,113 +1,12 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-func (c *Client) SeedPlant(sessionID protocol.SessionID, title string, body string, partOf string, discoveredFrom string) (*protocol.SeedPlantResult, error) {
-	msg := protocol.SeedPlantMessage{Cmd: protocol.CmdSeedPlant, Title: title}
-	if sessionID != "" {
-		msg.SourceSessionID = protocol.Ptr(sessionID)
-	}
-	if body != "" {
-		msg.Body = protocol.Ptr(body)
-	}
-	if partOf != "" {
-		msg.PartOf = protocol.Ptr(partOf)
-	}
-	if discoveredFrom != "" {
-		msg.DiscoveredFrom = protocol.Ptr(discoveredFrom)
-	}
-	return c.SeedPlantMessage(msg)
-}
-
-func (c *Client) SeedPlantMessage(msg protocol.SeedPlantMessage) (*protocol.SeedPlantResult, error) {
-	msg.Cmd = protocol.CmdSeedPlant
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.SeedPlantResult == nil {
-		return nil, fmt.Errorf("the daemon accepted the planting but returned no seed")
-	}
-	return resp.SeedPlantResult, nil
-}
-
-func (c *Client) SeedSearch(sessionID protocol.SessionID, query string, limit int) (*protocol.SeedSearchResult, error) {
-	msg := protocol.SeedSearchMessage{Cmd: protocol.CmdSeedSearch, Query: query}
-	if sessionID != "" {
-		msg.SourceSessionID = protocol.Ptr(sessionID)
-	}
-	if limit != 0 {
-		msg.Limit = protocol.Ptr(limit)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.SeedSearchResult == nil {
-		return nil, fmt.Errorf("the daemon answered without search results")
-	}
-	return resp.SeedSearchResult, nil
-}
-
-func (c *Client) SeedList(sessionID protocol.SessionID, stale bool, staleWindowSeconds int) (*protocol.SeedListResult, error) {
-	msg := protocol.SeedListMessage{Cmd: protocol.CmdSeedList}
-	if sessionID != "" {
-		msg.SourceSessionID = protocol.Ptr(sessionID)
-	}
-	if stale {
-		msg.Stale = protocol.Ptr(true)
-	}
-	if staleWindowSeconds > 0 {
-		msg.StaleWindowSeconds = protocol.Ptr(staleWindowSeconds)
-	}
-	return c.seedList(msg)
-}
-
-func (c *Client) SeedListStandby(sessionID protocol.SessionID) (*protocol.SeedListResult, error) {
-	msg := protocol.SeedListMessage{Cmd: protocol.CmdSeedList, Standby: protocol.Ptr(true)}
-	if sessionID != "" {
-		msg.SourceSessionID = protocol.Ptr(sessionID)
-	}
-	return c.seedList(msg)
-}
-
-func (c *Client) seedList(msg protocol.SeedListMessage) (*protocol.SeedListResult, error) {
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.SeedListResult == nil {
-		return nil, fmt.Errorf("the daemon answered without a seed list")
-	}
-	return resp.SeedListResult, nil
-}
-
-func (c *Client) SeedShow(sessionID protocol.SessionID, seedID string) (*protocol.SeedShowResult, error) {
-	return c.seedShow(sessionID, protocol.SeedShowMessage{Cmd: protocol.CmdSeedShow, SeedID: seedID})
-}
-
-// SeedShowSince shows the seed with the log entries saved after bookmark on it and every seed below it.
-func (c *Client) SeedShowSince(sessionID protocol.SessionID, seedID string, bookmark int) (*protocol.SeedShowResult, error) {
-	return c.seedShow(sessionID, protocol.SeedShowMessage{Cmd: protocol.CmdSeedShow, SeedID: seedID, Since: protocol.Ptr(bookmark)})
-}
-
-func (c *Client) seedShow(sessionID protocol.SessionID, msg protocol.SeedShowMessage) (*protocol.SeedShowResult, error) {
-	if sessionID != "" {
-		msg.SourceSessionID = protocol.Ptr(sessionID)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.SeedShowResult == nil {
-		return nil, fmt.Errorf("the daemon answered without a seed")
-	}
-	return resp.SeedShowResult, nil
-}
 
 func (c *Client) SeedReviewStart() (*protocol.SeedReviewResult, error) {
 	resp, err := c.send(protocol.SeedReviewStartMessage{Cmd: protocol.CmdSeedReviewStart})
@@ -226,17 +125,6 @@ func (c *Client) SeedArtifactTransfer(sessionID protocol.SessionID, seedID strin
 	return resp.SeedArtifactTransferResult, nil
 }
 
-func (c *Client) SeedEdit(seedID, body, baseBodySHA256, note string) (*protocol.SeedEditResult, error) {
-	resp, err := c.send(protocol.SeedEditMessage{Cmd: protocol.CmdSeedEdit, SeedID: seedID, Body: body, BaseBodySHA256: baseBodySHA256, Note: protocol.Ptr(note)})
-	if err != nil {
-		return nil, err
-	}
-	if resp.SeedEditResult == nil {
-		return nil, fmt.Errorf("the daemon accepted the edit but returned no seed")
-	}
-	return resp.SeedEditResult, nil
-}
-
 func (c *Client) SeedAuthorization(seedID, text string, clear bool) (*protocol.SeedAuthorizationResult, error) {
 	msg := protocol.SeedAuthorizationMessage{Cmd: protocol.CmdSeedAuthorization, SeedID: seedID}
 	if text != "" {
@@ -262,74 +150,12 @@ type SeedReminderOptions struct {
 	Clear   bool
 }
 
-func (c *Client) SeedReminder(seedID string, opts SeedReminderOptions) (*protocol.SeedReminderResult, error) {
-	msg := protocol.SeedReminderMessage{Cmd: protocol.CmdSeedReminder, SeedID: seedID}
-	if opts.In != "" {
-		msg.In = protocol.Ptr(opts.In)
-	}
-	if opts.At != "" {
-		msg.At = protocol.Ptr(opts.At)
-	}
-	if opts.Message != "" {
-		msg.Message = protocol.Ptr(opts.Message)
-	}
-	if opts.Clear {
-		msg.Clear = protocol.Ptr(true)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.SeedReminderResult == nil {
-		return nil, fmt.Errorf("the daemon accepted the reminder but returned no seed")
-	}
-	return resp.SeedReminderResult, nil
-}
-
 type SeedStandbyOptions struct {
 	Note  string
 	In    string
 	At    string
 	Stay  bool
 	Clear bool
-}
-
-func (c *Client) SeedStandby(seedID string, opts SeedStandbyOptions) (*protocol.SeedStandbyResult, error) {
-	msg := protocol.SeedStandbyMessage{Cmd: protocol.CmdSeedStandby, SeedID: seedID}
-	if opts.Note != "" {
-		msg.Note = protocol.Ptr(opts.Note)
-	}
-	if opts.Clear {
-		msg.Clear = protocol.Ptr(true)
-	}
-	if opts.In != "" {
-		msg.In = protocol.Ptr(opts.In)
-	}
-	if opts.At != "" {
-		msg.At = protocol.Ptr(opts.At)
-	}
-	if opts.Stay {
-		msg.Stay = protocol.Ptr(true)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.SeedStandbyResult == nil {
-		return nil, fmt.Errorf("the daemon accepted the standby but returned no seed")
-	}
-	return resp.SeedStandbyResult, nil
-}
-
-func (c *Client) SeedRollback(seedID string, version *int) (*protocol.SeedRollbackResult, error) {
-	resp, err := c.send(protocol.SeedRollbackMessage{Cmd: protocol.CmdSeedRollback, SeedID: seedID, Version: version})
-	if err != nil {
-		return nil, err
-	}
-	if resp.SeedRollbackResult == nil {
-		return nil, fmt.Errorf("the daemon accepted the rollback but returned no result")
-	}
-	return resp.SeedRollbackResult, nil
 }
 
 type SeedTransitionOptions struct {
@@ -410,99 +236,194 @@ func (c *Client) SeedCheck(msg protocol.SeedCheckMessage) (*protocol.SeedCheckRe
 	return resp.SeedCheckResult, nil
 }
 
-func (c *Client) SeedLink(seedID, kind, toSeedID string, unlink bool) (*protocol.SeedLinkResult, error) {
-	msg := protocol.SeedLinkMessage{
-		Cmd: protocol.CmdSeedLink, SeedID: seedID, Kind: kind, ToSeedID: toSeedID,
-	}
-	if unlink {
-		msg.Unlink = protocol.Ptr(true)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.SeedLinkResult == nil {
-		return nil, fmt.Errorf("the daemon accepted the edge but returned no seed")
-	}
-	return resp.SeedLinkResult, nil
-}
-
-func (c *Client) SeedReady(sessionID protocol.SessionID, plot string, all bool) (*protocol.SeedReadyResult, error) {
-	msg := protocol.SeedReadyMessage{Cmd: protocol.CmdSeedReady}
-	if sessionID != "" {
-		msg.SourceSessionID = protocol.Ptr(sessionID)
-	}
-	if plot != "" {
-		msg.Plot = protocol.Ptr(plot)
-	}
-	if all {
-		msg.All = protocol.Ptr(true)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.SeedReadyResult == nil {
-		return nil, fmt.Errorf("the daemon answered without a ready list")
-	}
-	return resp.SeedReadyResult, nil
-}
-
 type SeedNotesQuery struct {
 	Limit int
 	Since *int
 	Kind  string
 }
 
-func (c *Client) SeedNotes(sessionID protocol.SessionID, seedID string, query SeedNotesQuery) (*protocol.SeedNotesResult, error) {
-	msg := protocol.SeedNotesMessage{Cmd: protocol.CmdSeedNotes, SeedID: seedID, Since: query.Since}
-	if sessionID != "" {
-		msg.SourceSessionID = protocol.Ptr(sessionID)
+func (c *Client) RunCommand(name string, session protocol.SessionID, args any, out any) error {
+	raw, err := json.Marshal(args)
+	if err != nil {
+		return err
 	}
-	if query.Limit > 0 {
-		msg.Limit = protocol.Ptr(query.Limit)
+	msg := protocol.RunCommandMessage{Cmd: protocol.CmdRunCommand, Command: name}
+	if err := json.Unmarshal(raw, &msg.Args); err != nil {
+		return err
 	}
-	if query.Kind != "" {
-		msg.Kind = protocol.Ptr(query.Kind)
+	if session == "" {
+		session = c.gardenSession
+	}
+	if session != "" {
+		msg.SessionID = protocol.Ptr(session)
+	}
+	if c.gardenProfile != "" {
+		msg.ProfileID = protocol.Ptr(c.gardenProfile)
 	}
 	resp, err := c.send(msg)
 	if err != nil {
+		return err
+	}
+	if resp.CommandResult == nil {
+		return fmt.Errorf("%s: the daemon answered without a result", name)
+	}
+	raw, err = json.Marshal(resp.CommandResult)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, out)
+}
+
+func seedResult[R any](c *Client, name string, session protocol.SessionID, args any) (*R, error) {
+	var result R
+	if err := c.RunCommand(name, session, args, &result); err != nil {
 		return nil, err
 	}
-	if resp.SeedNotesResult == nil {
-		return nil, fmt.Errorf("the daemon answered without a log")
+	return &result, nil
+}
+
+type Plant struct {
+	Title          string                         `json:"title"`
+	Body           *string                        `json:"body,omitempty"`
+	PartOf         *string                        `json:"part_of,omitempty"`
+	DiscoveredFrom *string                        `json:"discovered_from,omitempty"`
+	Checks         []protocol.SeedCheckDefinition `json:"-"`
+}
+
+func (c *Client) SeedPlant(sessionID protocol.SessionID, title string, body string, partOf string, discoveredFrom string) (*protocol.SeedPlantResult, error) {
+	return c.SeedPlantWith(sessionID, Plant{Title: title, Body: optional(body), PartOf: optional(partOf), DiscoveredFrom: optional(discoveredFrom)})
+}
+
+func (c *Client) SeedPlantWith(sessionID protocol.SessionID, plant Plant) (*protocol.SeedPlantResult, error) {
+	var checks []string
+	for _, check := range plant.Checks {
+		if protocol.Deref(check.Shared) {
+			return nil, fmt.Errorf("seed plant defines no shared checks; plant a plot to share %q", check.Text)
+		}
+		if id := protocol.Deref(check.ID); id != "" {
+			checks = append(checks, id+"="+check.Text)
+		} else {
+			checks = append(checks, check.Text)
+		}
 	}
-	return resp.SeedNotesResult, nil
+	args := struct {
+		Plant
+		Checks []string `json:"checks,omitempty"`
+	}{plant, checks}
+	return seedResult[protocol.SeedPlantResult](c, "seed plant", sessionID, args)
+}
+
+type PlotChild struct {
+	Title  string                         `json:"title"`
+	Body   *string                        `json:"body,omitempty"`
+	Checks []protocol.SeedCheckDefinition `json:"checks,omitempty"`
+	After  []string                       `json:"after,omitempty"`
+}
+
+type Plot struct {
+	Title          string                         `json:"title"`
+	Body           *string                        `json:"body,omitempty"`
+	PartOf         *string                        `json:"part_of,omitempty"`
+	DiscoveredFrom *string                        `json:"discovered_from,omitempty"`
+	Checks         []protocol.SeedCheckDefinition `json:"checks,omitempty"`
+	Children       []PlotChild                    `json:"children"`
+}
+
+func (c *Client) SeedPlot(sessionID protocol.SessionID, plot Plot) (*protocol.SeedPlotResult, error) {
+	return seedResult[protocol.SeedPlotResult](c, "seed plot", sessionID, map[string]any{"plot": plot})
+}
+
+func (c *Client) SeedSearch(sessionID protocol.SessionID, query string, limit int) (*protocol.SeedSearchResult, error) {
+	args := map[string]any{"words": query}
+	if limit != 0 {
+		args["limit"] = limit
+	}
+	return seedResult[protocol.SeedSearchResult](c, "seed search", sessionID, args)
+}
+
+func (c *Client) SeedList(sessionID protocol.SessionID, stale bool, staleWindowSeconds int) (*protocol.SeedListResult, error) {
+	args := map[string]any{}
+	if stale {
+		args["stale"] = true
+	}
+	if staleWindowSeconds > 0 {
+		args["window"] = fmt.Sprintf("%ds", staleWindowSeconds)
+	}
+	return seedResult[protocol.SeedListResult](c, "seed ls", sessionID, args)
+}
+
+func (c *Client) SeedListStandby(sessionID protocol.SessionID) (*protocol.SeedListResult, error) {
+	return seedResult[protocol.SeedListResult](c, "seed ls", sessionID, map[string]any{"standby": true})
+}
+
+func (c *Client) SeedShow(sessionID protocol.SessionID, seedID string) (*protocol.SeedShowResult, error) {
+	return seedResult[protocol.SeedShowResult](c, "seed show", sessionID, map[string]any{"seed": seedID})
+}
+
+func (c *Client) SeedShowSince(sessionID protocol.SessionID, seedID string, bookmark int) (*protocol.SeedShowResult, error) {
+	return seedResult[protocol.SeedShowResult](c, "seed show", sessionID, map[string]any{"seed": seedID, "since": bookmark})
+}
+
+func (c *Client) SeedEdit(seedID, body, baseBodySHA256, note string) (*protocol.SeedEditResult, error) {
+	args := map[string]any{"seed": seedID, "body": body, "base": baseBodySHA256}
+	if note != "" {
+		args["note"] = note
+	}
+	return seedResult[protocol.SeedEditResult](c, "seed edit", "", args)
+}
+
+func (c *Client) SeedReminder(seedID string, opts SeedReminderOptions) (*protocol.SeedReminderResult, error) {
+	args := map[string]any{"seed": seedID, "in": opts.In, "at": opts.At, "message": opts.Message, "clear": opts.Clear}
+	return seedResult[protocol.SeedReminderResult](c, "seed remind", "", args)
+}
+
+func (c *Client) SeedStandby(seedID string, opts SeedStandbyOptions) (*protocol.SeedStandbyResult, error) {
+	args := map[string]any{"seed": seedID, "next": opts.Note, "in": opts.In, "at": opts.At, "stay": opts.Stay, "clear": opts.Clear}
+	return seedResult[protocol.SeedStandbyResult](c, "seed standby", "", args)
+}
+
+func (c *Client) SeedRollback(seedID string, version *int) (*protocol.SeedRollbackResult, error) {
+	args := map[string]any{"seed": seedID}
+	if version != nil {
+		args["version"] = *version
+	}
+	return seedResult[protocol.SeedRollbackResult](c, "seed rollback", "", args)
+}
+
+func (c *Client) SeedLink(seedID, kind, toSeedID string, unlink bool) (*protocol.SeedLinkResult, error) {
+	name := "seed link"
+	if unlink {
+		name = "seed unlink"
+	}
+	return seedResult[protocol.SeedLinkResult](c, name, "", map[string]any{"a": seedID, "relation": kind, "b": toSeedID})
+}
+
+func (c *Client) SeedReady(sessionID protocol.SessionID, plot string, all bool) (*protocol.SeedReadyResult, error) {
+	return seedResult[protocol.SeedReadyResult](c, "seed ready", sessionID, map[string]any{"plot": plot, "all": all})
+}
+
+func (c *Client) SeedNotes(sessionID protocol.SessionID, seedID string, query SeedNotesQuery) (*protocol.SeedNotesResult, error) {
+	args := map[string]any{"seed": seedID, "kind": query.Kind}
+	if query.Limit > 0 {
+		args["limit"] = query.Limit
+	}
+	if query.Since != nil {
+		args["since"] = *query.Since
+	}
+	return seedResult[protocol.SeedNotesResult](c, "seed notes", sessionID, args)
 }
 
 func (c *Client) SeedWatch(sessionID protocol.SessionID, seedID string, unwatch bool) (*protocol.SeedWatchResult, error) {
-	msg := protocol.SeedWatchMessage{
-		Cmd: protocol.CmdSeedWatch, SourceSessionID: sessionID, SeedID: seedID,
-	}
+	name := "seed watch"
 	if unwatch {
-		msg.Unwatch = protocol.Ptr(true)
+		name = "seed unwatch"
 	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.SeedWatchResult == nil {
-		return nil, fmt.Errorf("the daemon accepted the watch change but returned no state")
-	}
-	return resp.SeedWatchResult, nil
+	return seedResult[protocol.SeedWatchResult](c, name, sessionID, map[string]any{"seed": strings.TrimSpace(seedID)})
 }
 
-func (c *Client) SeedPlot(sessionID protocol.SessionID, spec protocol.SeedPlotMessage) (*protocol.SeedPlotResult, error) {
-	spec.Cmd = protocol.CmdSeedPlot
-	if sessionID != "" {
-		spec.SourceSessionID = protocol.Ptr(sessionID)
+func optional(value string) *string {
+	if value == "" {
+		return nil
 	}
-	resp, err := c.send(spec)
-	if err != nil {
-		return nil, err
-	}
-	if resp.SeedPlotResult == nil {
-		return nil, fmt.Errorf("the daemon accepted the plot but returned no seeds")
-	}
-	return resp.SeedPlotResult, nil
+	return &value
 }

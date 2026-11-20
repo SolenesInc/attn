@@ -436,8 +436,8 @@ func TestEverySeedASessionTendsRemembersWhereItRan(t *testing.T) {
 	cwd := w.Path("shop")
 	worker := w.Spawn(app, fakeagent.Claude, cwd)
 	w.Launched(worker)
-	plot, err := cli.SeedPlot("", protocol.SeedPlotMessage{
-		Title: "the plot", Children: []protocol.SeedPlotChild{{Title: "first"}, {Title: "second"}},
+	plot, err := cli.SeedPlot("", client.Plot{
+		Title: "the plot", Children: []client.PlotChild{{Title: "first"}, {Title: "second"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -746,8 +746,8 @@ func TestEveryGardenReadShowsTheWriteBeforeIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	planter := protocol.SessionID(spawnPanes(w, app, w.Path("planter"))[0].session)
-	planted, err := cli.SeedPlot(planter, protocol.SeedPlotMessage{
-		Title: "the plot", Children: []protocol.SeedPlotChild{{Title: "first"}, {Title: "second"}},
+	planted, err := cli.SeedPlot(planter, client.Plot{
+		Title: "the plot", Children: []client.PlotChild{{Title: "first"}, {Title: "second"}},
 	})
 	if err != nil {
 		t.Fatalf("plot: %v", err)

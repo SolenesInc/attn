@@ -103,7 +103,7 @@ func TestSeedHelpAndFlagsBelongToEachVerb(t *testing.T) {
 	}
 	for _, args := range [][]string{
 		{"plant", "Wrong file flag", "-f", "brief.md"},
-		{"ls", "--plot", "s-missing", "--stale"},
+		{"ls", "s-missing"},
 		{"edit"},
 		{"check", "report"},
 		{"review", "cancel"},
@@ -262,6 +262,8 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	s.Start()
+	app := s.App()
 	for _, row := range []struct {
 		args []string
 		want string
@@ -270,6 +272,9 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		{[]string{"seed", "harvest", "s-7k3f9m", "--when-merged", "s-2p4qxv"}, `"s-2p4qxv" is not a pull request url`, 2},
 		{[]string{"seed", "harvest", "s-7k3f9m", "--clear"}, "`attn seed harvest <id> --when-merged --clear`", 2},
 		{[]string{"seed", "park", "s-7k3f9m", "--when-merged"}, "flag provided but not defined: -when-merged", 2},
+		{[]string{"seed", "ls", "--plot", "s-7k3f9m", "--stale"}, "--plot lists every child of the plot and --stale narrows the whole garden; pass one of them", 2},
+		{[]string{"seed", "ls", "--standby", "--stale"}, "--standby narrows the whole garden to seeds on standby; pass it without --plot or --stale", 2},
+		{[]string{"seed", "ls", "--window", "3h"}, "--window is the stale window; it only means something with --stale", 1},
 		{[]string{"seed", "attach", "s-7k3f9m"}, "name the document", 1},
 		{[]string{"seed", "attach", "s-7k3f9m", "--repo", "attn"}, "name the document", 1},
 		{[]string{"seed", "attach", "s-7k3f9m", "--notebook", "nb-7", "--url", "https://example.test"}, "--notebook and --url were all given", 1},
@@ -287,8 +292,6 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		refused(t, ran, row.code, verb+": ")
 		requireLines(t, verb, ran.Stderr, row.want)
 	}
-	s.Start()
-	app := s.App()
 
 	t.Run("listings nest children under their plot and ready lists pickups", func(t *testing.T) {
 		first := plantPlot(t, s, `{"title": "First plot", "children": [{"title": "First child"}]}`)

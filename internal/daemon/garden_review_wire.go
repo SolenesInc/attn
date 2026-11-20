@@ -91,61 +91,6 @@ func gardenReviewItemToProtocol(item garden.ReviewItem) protocol.GardenReviewIte
 	return wire
 }
 
-func (d *Daemon) handleSeedReviewStart(conn net.Conn, msg *protocol.SeedReviewStartMessage) {
-	run, items, err := d.startGardenReview(context.Background(), protocol.Deref(msg.ProfileID))
-	d.sendSeedReviewResponse(conn, "start", &run, items, unresolvedGardenReviewItemCount(items), err)
-}
-
-func (d *Daemon) handleSeedReviewShow(conn net.Conn, msg *protocol.SeedReviewShowMessage) {
-	reviewID := protocol.Deref(msg.ReviewID)
-	if reviewID == "" {
-		run, items, count, err := d.gardenReviewOverview(protocol.Deref(msg.ProfileID))
-		d.sendSeedReviewResponse(conn, "show", run, items, count, err)
-		return
-	}
-	run, items, err := d.showGardenReview(reviewID, protocol.Deref(msg.ProfileID))
-	d.sendSeedReviewResponse(conn, "show", &run, items, unresolvedGardenReviewItemCount(items), err)
-}
-
-func (d *Daemon) handleSeedReviewCancel(conn net.Conn, msg *protocol.SeedReviewCancelMessage) {
-	run, items, err := d.cancelGardenReview(msg.ReviewID)
-	d.sendSeedReviewResponse(conn, "cancel", &run, items, unresolvedGardenReviewItemCount(items), err)
-}
-
-func (d *Daemon) handleSeedReviewRetry(conn net.Conn, msg *protocol.SeedReviewRetryMessage) {
-	run, _, err := d.retryGardenReviewItem(msg.ReviewID, msg.SeedID)
-	var items []garden.ReviewItem
-	if err == nil {
-		run, items, err = d.showGardenReview(run.ID)
-	}
-	d.sendSeedReviewResponse(conn, "retry", &run, items, unresolvedGardenReviewItemCount(items), err)
-}
-
-func (d *Daemon) handleSeedReviewKeep(conn net.Conn, msg *protocol.SeedReviewKeepMessage) {
-	run, items, err := d.keepGardenReviewItem(msg.Review, msg.SeedID)
-	d.sendSeedReviewResponse(conn, "keep", &run, items, unresolvedGardenReviewItemCount(items), err)
-}
-
-func (d *Daemon) sendSeedReviewResponse(
-	conn net.Conn,
-	verb string,
-	run *garden.ReviewRun,
-	items []garden.ReviewItem,
-	candidateCount int,
-	err error,
-) {
-	if err != nil {
-		d.sendGardenError(conn, "review "+verb, err)
-		return
-	}
-	result := protocol.SeedReviewResult{CandidateCount: candidateCount}
-	if run != nil {
-		review := gardenReviewToProtocol(*run, items)
-		result.Review = &review
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedReviewResult: &result})
-}
-
 func (d *Daemon) handleSeedReviewStartWS(client *wsClient, msg *protocol.SeedReviewStartMessage) {
 	ctx, cancel := context.WithTimeout(context.Background(), harnessModelDiscoveryTimeout)
 	defer cancel()
@@ -299,4 +244,59 @@ func (d *Daemon) projectGardenReviewJob(jobID string) {
 		return
 	}
 	d.projectGardenReview(payload.RunID)
+}
+
+func (d *Daemon) handleSeedReviewStart(conn net.Conn, msg *protocol.SeedReviewStartMessage) {
+	run, items, err := d.startGardenReview(context.Background(), protocol.Deref(msg.ProfileID))
+	d.sendSeedReviewResponse(conn, "start", &run, items, unresolvedGardenReviewItemCount(items), err)
+}
+
+func (d *Daemon) handleSeedReviewShow(conn net.Conn, msg *protocol.SeedReviewShowMessage) {
+	reviewID := protocol.Deref(msg.ReviewID)
+	if reviewID == "" {
+		run, items, count, err := d.gardenReviewOverview(protocol.Deref(msg.ProfileID))
+		d.sendSeedReviewResponse(conn, "show", run, items, count, err)
+		return
+	}
+	run, items, err := d.showGardenReview(reviewID, protocol.Deref(msg.ProfileID))
+	d.sendSeedReviewResponse(conn, "show", &run, items, unresolvedGardenReviewItemCount(items), err)
+}
+
+func (d *Daemon) handleSeedReviewCancel(conn net.Conn, msg *protocol.SeedReviewCancelMessage) {
+	run, items, err := d.cancelGardenReview(msg.ReviewID)
+	d.sendSeedReviewResponse(conn, "cancel", &run, items, unresolvedGardenReviewItemCount(items), err)
+}
+
+func (d *Daemon) handleSeedReviewRetry(conn net.Conn, msg *protocol.SeedReviewRetryMessage) {
+	run, _, err := d.retryGardenReviewItem(msg.ReviewID, msg.SeedID)
+	var items []garden.ReviewItem
+	if err == nil {
+		run, items, err = d.showGardenReview(run.ID)
+	}
+	d.sendSeedReviewResponse(conn, "retry", &run, items, unresolvedGardenReviewItemCount(items), err)
+}
+
+func (d *Daemon) handleSeedReviewKeep(conn net.Conn, msg *protocol.SeedReviewKeepMessage) {
+	run, items, err := d.keepGardenReviewItem(msg.Review, msg.SeedID)
+	d.sendSeedReviewResponse(conn, "keep", &run, items, unresolvedGardenReviewItemCount(items), err)
+}
+
+func (d *Daemon) sendSeedReviewResponse(
+	conn net.Conn,
+	verb string,
+	run *garden.ReviewRun,
+	items []garden.ReviewItem,
+	candidateCount int,
+	err error,
+) {
+	if err != nil {
+		d.sendGardenError(conn, "review "+verb, err)
+		return
+	}
+	result := protocol.SeedReviewResult{CandidateCount: candidateCount}
+	if run != nil {
+		review := gardenReviewToProtocol(*run, items)
+		result.Review = &review
+	}
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedReviewResult: &result})
 }

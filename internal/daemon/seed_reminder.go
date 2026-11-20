@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"net"
 	"strings"
 	"time"
 
@@ -35,16 +34,7 @@ func (d *Daemon) registerSeedReminderCron(runner *jobs.Runner) {
 	}
 }
 
-func (d *Daemon) handleSeedReminder(conn net.Conn, msg *protocol.SeedReminderMessage, setter who.Actor) {
-	result, err := d.seedReminderRequest(msg, setter)
-	if err != nil {
-		d.sendGardenError(conn, "remind", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedReminderResult: result})
-}
-
-func (d *Daemon) seedReminderRequest(msg *protocol.SeedReminderMessage, setter who.Actor) (*protocol.SeedReminderResult, error) {
+func (d *Daemon) seedReminderRequest(msg *seedReminderRequest, setter who.Actor) (*protocol.SeedReminderResult, error) {
 	seedID := strings.TrimSpace(msg.SeedID)
 	if protocol.Deref(msg.Clear) {
 		if msg.At != nil || msg.In != nil || msg.Message != nil {

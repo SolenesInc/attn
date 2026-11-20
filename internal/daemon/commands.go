@@ -28,9 +28,14 @@ func (d *Daemon) serveRunCommand(ctx context.Context, conn net.Conn, msg *protoc
 		d.sendError(conn, err.Error())
 		return
 	}
-	reply := d.runCommand(ctx, d.callerFromFrame(ctx, msg), msg.Command, args)
+	ctx, cancel := d.connectionContext(ctx, conn)
+	defer cancel()
+	reply, after := d.runCommand(ctx, d.callerFromFrame(ctx, msg), msg.Command, args)
 	if err := json.NewEncoder(conn).Encode(reply); err != nil {
 		d.logf("run_command %s: writing response: %v", msg.Command, err)
+	}
+	if after != nil {
+		after()
 	}
 }
 
@@ -52,9 +57,12 @@ func (d *Daemon) callerFromFrame(ctx context.Context, msg *protocol.RunCommandMe
 	return command.Caller{Profile: profile, Terminal: terminal}
 }
 
-func (d *Daemon) runCommand(ctx context.Context, c command.Caller, name string, args json.RawMessage) protocol.Response {
+func (d *Daemon) runCommand(ctx context.Context, c command.Caller, name string, args json.RawMessage) (protocol.Response, func()) {
 	result, refusal := d.commandLayer().Run(ctx, c, name, args)
-	return commandResponse(result, refusal)
+	if then, ok := result.(command.Then); ok {
+		return commandResponse(then.Result, nil), then.After
+	}
+	return commandResponse(result, refusal), nil
 }
 
 func commandResponse(result any, refusal *command.Refusal) protocol.Response {

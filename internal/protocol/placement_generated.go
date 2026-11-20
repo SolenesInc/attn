@@ -187,27 +187,14 @@ var Placements = map[string][]Placement{
 	"seed_artifact_transfer_here":      {Placement{LocatorMachine, "host"}},
 	"seed_authorization":               {Placement{LocatorHome, ""}},
 	"seed_check":                       {Placement{LocatorHome, ""}},
-	"seed_edit":                        {Placement{LocatorHome, ""}},
-	"seed_link":                        {Placement{LocatorHome, ""}},
-	"seed_list":                        {Placement{LocatorHome, ""}},
 	"seed_note":                        {Placement{LocatorHome, ""}},
-	"seed_notes":                       {Placement{LocatorHome, ""}},
-	"seed_plant":                       {Placement{LocatorHome, ""}},
-	"seed_plot":                        {Placement{LocatorHome, ""}},
-	"seed_ready":                       {Placement{LocatorHome, ""}},
-	"seed_reminder":                    {Placement{LocatorHome, ""}},
 	"seed_review_cancel":               {Placement{LocatorHome, ""}},
 	"seed_review_keep":                 {Placement{LocatorHome, ""}},
 	"seed_review_retry":                {Placement{LocatorHome, ""}},
 	"seed_review_show":                 {Placement{LocatorHome, ""}},
 	"seed_review_start":                {Placement{LocatorHome, ""}},
-	"seed_rollback":                    {Placement{LocatorHome, ""}},
-	"seed_search":                      {Placement{LocatorHome, ""}},
 	"seed_send_to_chief":               {Placement{LocatorHome, ""}},
-	"seed_show":                        {Placement{LocatorHome, ""}},
-	"seed_standby":                     {Placement{LocatorHome, ""}},
 	"seed_transition":                  {Placement{LocatorHome, ""}},
-	"seed_watch":                       {Placement{LocatorHome, ""}},
 	"sender_list":                      {Placement{LocatorHome, ""}},
 	"sender_model_call":                {Placement{LocatorHome, ""}},
 	"sender_pair":                      {Placement{LocatorHome, ""}},
@@ -2283,42 +2270,6 @@ func (m SeedCheckMessage) Locate() string {
 	return ""
 }
 
-func (SeedEditMessage) CommandName() string {
-	return "seed_edit"
-}
-
-func (m SeedEditMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedEditMessage) Locate() string {
-	return ""
-}
-
-func (SeedLinkMessage) CommandName() string {
-	return "seed_link"
-}
-
-func (m SeedLinkMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedLinkMessage) Locate() string {
-	return ""
-}
-
-func (SeedListMessage) CommandName() string {
-	return "seed_list"
-}
-
-func (m SeedListMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedListMessage) Locate() string {
-	return ""
-}
-
 func (SeedNoteMessage) CommandName() string {
 	return "seed_note"
 }
@@ -2328,66 +2279,6 @@ func (m SeedNoteMessage) Placement() Placement {
 }
 
 func (m SeedNoteMessage) Locate() string {
-	return ""
-}
-
-func (SeedNotesMessage) CommandName() string {
-	return "seed_notes"
-}
-
-func (m SeedNotesMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedNotesMessage) Locate() string {
-	return ""
-}
-
-func (SeedPlantMessage) CommandName() string {
-	return "seed_plant"
-}
-
-func (m SeedPlantMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedPlantMessage) Locate() string {
-	return ""
-}
-
-func (SeedPlotMessage) CommandName() string {
-	return "seed_plot"
-}
-
-func (m SeedPlotMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedPlotMessage) Locate() string {
-	return ""
-}
-
-func (SeedReadyMessage) CommandName() string {
-	return "seed_ready"
-}
-
-func (m SeedReadyMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedReadyMessage) Locate() string {
-	return ""
-}
-
-func (SeedReminderMessage) CommandName() string {
-	return "seed_reminder"
-}
-
-func (m SeedReminderMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedReminderMessage) Locate() string {
 	return ""
 }
 
@@ -2451,30 +2342,6 @@ func (m SeedReviewStartMessage) Locate() string {
 	return ""
 }
 
-func (SeedRollbackMessage) CommandName() string {
-	return "seed_rollback"
-}
-
-func (m SeedRollbackMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedRollbackMessage) Locate() string {
-	return ""
-}
-
-func (SeedSearchMessage) CommandName() string {
-	return "seed_search"
-}
-
-func (m SeedSearchMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedSearchMessage) Locate() string {
-	return ""
-}
-
 func (SeedSendToChiefMessage) CommandName() string {
 	return "seed_send_to_chief"
 }
@@ -2487,30 +2354,6 @@ func (m SeedSendToChiefMessage) Locate() string {
 	return ""
 }
 
-func (SeedShowMessage) CommandName() string {
-	return "seed_show"
-}
-
-func (m SeedShowMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedShowMessage) Locate() string {
-	return ""
-}
-
-func (SeedStandbyMessage) CommandName() string {
-	return "seed_standby"
-}
-
-func (m SeedStandbyMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedStandbyMessage) Locate() string {
-	return ""
-}
-
 func (SeedTransitionMessage) CommandName() string {
 	return "seed_transition"
 }
@@ -2520,18 +2363,6 @@ func (m SeedTransitionMessage) Placement() Placement {
 }
 
 func (m SeedTransitionMessage) Locate() string {
-	return ""
-}
-
-func (SeedWatchMessage) CommandName() string {
-	return "seed_watch"
-}
-
-func (m SeedWatchMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SeedWatchMessage) Locate() string {
 	return ""
 }
 

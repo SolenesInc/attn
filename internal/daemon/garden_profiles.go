@@ -108,7 +108,7 @@ func (d *Daemon) scopeGardenRequest(cmd string, msg any, selected string) error 
 		}
 		return protocol.Refuse(protocol.RefusalInvalidInput, "source session belongs to profile %q; app belongs to profile %q", profile.Name, owner.Name)
 	}
-	archive := cmd == protocol.CmdSeedShow || cmd == protocol.CmdSeedNotes || cmd == protocol.CmdSeedDocumentGet || cmd == protocol.CmdSeedArtifactTarget
+	archive := cmd == cmdSeedShow || cmd == cmdSeedNotes || cmd == protocol.CmdSeedDocumentGet || cmd == protocol.CmdSeedArtifactTarget
 	resolved := map[string]string{"profile_id": profile.ID}
 	for _, ref := range []struct {
 		field string

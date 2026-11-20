@@ -1,23 +1,12 @@
 package daemon
 
 import (
-	"net"
-
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) handleSeedSearch(conn net.Conn, msg *protocol.SeedSearchMessage) {
-	result, err := d.seedSearch(msg)
-	if err != nil {
-		d.sendRefusal(conn, err.Error(), err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedSearchResult: result})
-}
-
-func (d *Daemon) seedSearch(msg *protocol.SeedSearchMessage) (*protocol.SeedSearchResult, error) {
+func (d *Daemon) seedSearch(msg *seedSearchRequest) (*protocol.SeedSearchResult, error) {
 	words, err := garden.SearchWords(msg.Query)
 	if err != nil {
 		return nil, gardenFailure("search", err)

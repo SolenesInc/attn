@@ -127,9 +127,9 @@ func TestEverySeedChangeWritesOneLogEntryWithOneNoteAddedEvent(t *testing.T) {
 		t.Errorf("the planted child's log = %q, want it empty", notes)
 	}
 
-	fresh, err := cli.SeedPlot(protocol.SessionID(worker), protocol.SeedPlotMessage{
+	fresh, err := cli.SeedPlot(protocol.SessionID(worker), client.Plot{
 		Title: "a fresh plot", PartOf: protocol.Ptr(plot), DiscoveredFrom: protocol.Ptr(origin),
-		Children: []protocol.SeedPlotChild{{Title: "first step"}, {Title: "second step", After: []string{"first step"}}},
+		Children: []client.PlotChild{{Title: "first step"}, {Title: "second step", After: []string{"first step"}}},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -1,18 +1,16 @@
-use super::Session;
 use super::render::{self, actor_label, plural_rang};
-use super::{Stop, usage_error};
+use crate::command::Parsed;
 use crate::commands::support::or_dash;
-use attn::garden::valid_check_id;
 use attn::go::quote::quote;
 use attn::go::time::Time;
 use attn_protocol::go_values::{
-    CHECK_CONFIRMED, CHECK_OPEN, CHECK_REJECTED, CHECK_REPORTED, CHECK_VERB_ADD, CHECK_VERB_EDIT,
-    CHECK_VERB_REPORT, CHECK_VERBS, MAX_CHECK_SUMMARY_CHARS, MAX_NOTE_BYTES,
+    CHECK_CONFIRMED, CHECK_OPEN, CHECK_REJECTED, CHECK_REPORTED, MAX_CHECK_SUMMARY_CHARS,
+    MAX_NOTE_BYTES,
 };
 use attn_protocol::{
-    Seed, SeedCheck, SeedCheckDefinition, SeedCheckMessage, SeedCheckReport, SeedCheckResult,
-    SeedCheckTally, SeedSharedCheck,
+    Seed, SeedCheck, SeedCheckReport, SeedCheckResult, SeedCheckTally, SeedSharedCheck,
 };
+use serde_json::Value as Json;
 use std::fmt::Write as _;
 use std::fs;
 use std::io::ErrorKind;
@@ -21,104 +19,6 @@ use std::process::Command;
 
 const CHECK_WRAP_WIDTH: usize = 80;
 const NOTE_SEPARATOR: &str = ": ";
-
-pub(super) fn run(run: &mut super::Run<'_>, args: &[String]) -> Result<(), Stop> {
-    let first = args.first();
-    if first.is_none_or(|arg| arg.starts_with('-')) {
-        Session::new(run, "check").parse(args)?;
-        return Err(usage_error(
-            "check",
-            &format!("needs a move: {}", CHECK_VERBS.join(", ")),
-        ));
-    }
-    let raw = first.expect("checked above");
-    let verb = raw.trim().to_lowercase();
-    if !CHECK_VERBS.contains(&verb.as_str()) {
-        return Err(usage_error(
-            "check",
-            &format!(
-                "{} is not something a check does; the moves are {}",
-                quote(raw.as_bytes()),
-                CHECK_VERBS.join(", ")
-            ),
-        ));
-    }
-    let name = format!("check {verb}");
-    run.path = format!("seed {name}");
-    let mut session = Session::new(run, &name);
-    let positionals = session.parse(&args[1..])?;
-    let message = message(&mut session, &verb, &positionals)?;
-    let json = session.flags.on("json");
-    let ring = session.flags.on("ring");
-    let reply = session.call(
-        &message,
-        "seed_check_result",
-        "the daemon accepted the check move but returned nothing",
-    )?;
-    if json {
-        return session.print_json(&reply, &["seed_check_result"]);
-    }
-    let result: SeedCheckResult = session.read_field(&reply, "seed_check_result")?;
-    super::super::print_stdout(&render_move(&result, ring));
-    Ok(())
-}
-
-fn message(
-    session: &mut Session<'_, '_>,
-    verb: &str,
-    positionals: &[String],
-) -> Result<SeedCheckMessage, Stop> {
-    let defines = verb == CHECK_VERB_ADD || verb == CHECK_VERB_EDIT;
-    let Some(seed_id) = positionals.first() else {
-        return Err(session.usage("needs the seed id"));
-    };
-    let mut message = SeedCheckMessage::new();
-    message.seed_id.clone_from(seed_id);
-    message.verb = verb.to_string();
-    let ids = &positionals[1..];
-    if defines
-        && let Some(last) = ids.last()
-        && !valid_check_id(&last.to_uppercase())
-    {
-        return Err(session.usage(&format!(
-            "{} is not a check id; the statement goes in -m",
-            quote(last.as_bytes())
-        )));
-    }
-    match ids {
-        [only] => message.check_id = Some(only.to_uppercase()),
-        [] if verb == CHECK_VERB_ADD => {}
-        _ => {
-            return Err(session.usage(&format!(
-                "needs the seed id and one check id, got {} arguments",
-                positionals.len()
-            )));
-        }
-    }
-    let source = session.session_id()?;
-    if !source.is_empty() {
-        message.source_session_id = Some(source);
-    }
-    let text = session.text()?.trim().to_string();
-    if defines && text.is_empty() {
-        return Err(session.usage("needs the statement in -m: what this seed must prove"));
-    }
-    if defines {
-        message.text = Some(text);
-    } else if !text.is_empty() {
-        message.summary = Some(text);
-    }
-    if session.flags.on("shared") {
-        message.shared = Some(true);
-    }
-    if verb == CHECK_VERB_REPORT {
-        add_report_evidence(session, &mut message)?;
-    }
-    if session.flags.on("ring") {
-        message.ring = Some(true);
-    }
-    Ok(message)
-}
 
 fn limit(value: i64) -> usize {
     usize::try_from(value).unwrap_or(usize::MAX)
@@ -210,25 +110,38 @@ fn local_evidence_file(value: &str) -> Result<Evidence, String> {
         .map_err(|error| crate::paths::os_error_text(&error))
 }
 
-fn add_report_evidence(
-    session: &mut Session<'_, '_>,
-    message: &mut SeedCheckMessage,
-) -> Result<(), Stop> {
+pub(super) fn report_evidence(parsed: &mut Parsed) -> Result<(), String> {
+    let mut text = parsed.text("summary").to_string();
+    if parsed.has("detail") {
+        text = format!("{text}\n{}", parsed.text("detail"));
+    }
     let mut problems = Vec::new();
-    if let Some(problem) = message.summary.as_deref().and_then(report_text_problem) {
+    if let Some(problem) = report_text_problem(text.trim()) {
         problems.push(problem);
     }
-    let commit = session.flags.string("commit").trim().to_string();
+    let commit = parsed.text("commit").trim().to_string();
     if !commit.is_empty() {
         match resolve_commit(&commit) {
-            Ok(full) => message.commit = Some(full),
+            Ok(full) => {
+                parsed.args.insert("commit".to_string(), Json::from(full));
+            }
             Err(problem) => problems.push(problem),
         }
     }
+    let given: Vec<String> = parsed
+        .args
+        .get("evidence")
+        .and_then(Json::as_array)
+        .map(|list| {
+            list.iter()
+                .filter_map(Json::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
     let mut files: Vec<(String, String)> = Vec::new();
     let mut evidence = Vec::new();
-    let mut evidence_files = Vec::new();
-    for raw in session.flags.repeated("evidence").to_vec() {
+    for raw in given {
         let value = raw.trim().to_string();
         match local_evidence_file(&value) {
             Err(problem) => problems.push(problem),
@@ -241,7 +154,7 @@ fn add_report_evidence(
                 match files.iter().find(|(name, _)| *name == base) {
                     None => {
                         files.push((base, path.clone()));
-                        evidence_files.push(path);
+                        evidence.push(path);
                     }
                     Some((_, held)) if *held == path => {}
                     Some((_, held)) => problems.push(format!(
@@ -251,22 +164,21 @@ fn add_report_evidence(
             }
         }
     }
-    if !evidence.is_empty() {
-        message.evidence = Some(evidence);
-    }
-    if !evidence_files.is_empty() {
-        message.evidence_files = Some(evidence_files);
+    if parsed.has("evidence") {
+        parsed
+            .args
+            .insert("evidence".to_string(), Json::from(evidence));
     }
     match problems.as_slice() {
         [] => Ok(()),
-        [only] => Err(session.usage(only)),
+        [only] => Err(only.clone()),
         many => {
             let lines: Vec<String> = many.iter().map(|p| format!("  - {p}")).collect();
-            Err(session.usage(&format!(
+            Err(format!(
                 "{} problems; fix each and run the same command again:\n{}",
                 many.len(),
                 lines.join("\n")
-            )))
+            ))
         }
     }
 }
@@ -276,7 +188,7 @@ fn note_headline(body: &str) -> &str {
     headline.split_once(", ").map_or(headline, |(m, _)| m)
 }
 
-fn render_move(result: &SeedCheckResult, rang: bool) -> String {
+pub(super) fn render_move(result: &SeedCheckResult, rang: bool) -> String {
     let mut line = format!(
         "{} on {}",
         note_headline(&result.note.body),
@@ -587,23 +499,4 @@ fn wrap_words(text: &str, width: i64) -> Vec<String> {
         lines.push(line);
     }
     lines
-}
-
-pub fn parse_plant_checks(raw: &[String]) -> Vec<SeedCheckDefinition> {
-    raw.iter()
-        .map(|entry| {
-            let mut definition = SeedCheckDefinition {
-                text: entry.trim().to_string(),
-                ..SeedCheckDefinition::default()
-            };
-            if let Some((id, text)) = entry.split_once('=') {
-                let id = id.trim().to_uppercase();
-                if valid_check_id(&id) {
-                    definition.id = Some(id);
-                    definition.text = text.trim().to_string();
-                }
-            }
-            definition
-        })
-        .collect()
 }

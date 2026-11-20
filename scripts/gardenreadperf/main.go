@@ -32,8 +32,8 @@ func (b *binaries) Set(v string) error { *b = append(*b, v); return nil }
 func main() {
 	profile := flag.String("profile", "", "garden profile id every request reads")
 	runs := flag.Int("n", 10, "runs per command")
-	show := flag.String("show", "", "also send seed_show for this seed id")
-	search := flag.String("search", "", "also send seed_search for this query")
+	show := flag.String("show", "", "also run seed show for this seed id")
+	search := flag.String("search", "", "also run seed search for this query")
 	review := flag.Bool("review", false, "also send seed_review_show, the request the Garden panel sends")
 	vars := flag.String("vars", "", "report daemon CPU per request above idle from this /debug/vars URL")
 	var clis binaries
@@ -56,14 +56,14 @@ func main() {
 	}
 
 	requests := []request{
-		{"ls", map[string]any{"cmd": "seed_list"}, []string{"seed", "ls"}},
-		{"ready --all", map[string]any{"cmd": "seed_ready", "all": true}, []string{"seed", "ready", "--all"}},
+		{"ls", map[string]any{"cmd": "run_command", "command": "seed ls"}, []string{"seed", "ls"}},
+		{"ready --all", map[string]any{"cmd": "run_command", "command": "seed ready", "args": map[string]any{"all": true}}, []string{"seed", "ready", "--all"}},
 	}
 	if *show != "" {
-		requests = append(requests, request{"show", map[string]any{"cmd": "seed_show", "seed_id": *show}, nil})
+		requests = append(requests, request{"show", map[string]any{"cmd": "run_command", "command": "seed show", "args": map[string]any{"seed": *show}}, nil})
 	}
 	if *search != "" {
-		requests = append(requests, request{"search", map[string]any{"cmd": "seed_search", "query": *search}, nil})
+		requests = append(requests, request{"search", map[string]any{"cmd": "run_command", "command": "seed search", "args": map[string]any{"words": *search}}, nil})
 	}
 	if *review {
 		requests = append(requests, request{"review", map[string]any{"cmd": "seed_review_show"}, nil})

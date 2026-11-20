@@ -151,8 +151,8 @@ func (g *generator) rustTable(group string) (string, error) {
 				return "", fmt.Errorf("catalog: %s: %s: arg %q maps %d flags to %d values", cmd.File, cmd.Name, a.Name, len(strings.Split(a.CLI, "|")), len(a.Values))
 			}
 		}
-		fmt.Fprintf(&out, "    Command {\n        name: %s,\n        read_only: %v,\n        result: %v,\n        wrong_args: %s,\n        no_args: %s,\n        args: &[\n",
-			rustString(strings.TrimPrefix(cmd.Name, group+" ")), cmd.ReadOnly, cmd.Result != "", rustString(cmd.WrongArgs), rustString(cmd.NoArgs))
+		fmt.Fprintf(&out, "    Command {\n        name: %s,\n        result: %v,\n        wrong_args: %s,\n        no_args: %s,\n        args: &[\n",
+			rustString(strings.TrimPrefix(cmd.Name, group+" ")), cmd.Result != "", rustString(cmd.WrongArgs), rustString(cmd.NoArgs))
 		for _, a := range cmd.Args {
 			source := "Source::Given"
 			switch {

@@ -1,16 +1,27 @@
-use super::render;
+use super::checks::{render_move, report_evidence};
+use super::render::{self, ListView, seed_line};
 use super::{Stop, fail, help_generated, usage_error};
 use crate::client::Reply;
 use crate::command::{self, Arg, Command, Family, Parsed};
-use crate::commands::{Run, print_json, print_stdout};
+use crate::commands::{Run, absolute, print_json, print_stdout};
+use attn::garden::plot::{Check, parse_plot_spec, validate_body};
 use attn::garden::section::section;
+use attn::garden::{is_seed_id, valid_check_id};
+use attn::go::quote::quote;
 use attn_protocol::go_values::NOTE_KIND_HANDOFF;
-use attn_protocol::{SeedNoteResult, SeedNotesResult, SeedReadyResult, SeedShowResult};
+use attn_protocol::go_values::prompts::AUTHORING_AGENT_SEED_GUIDE;
+use attn_protocol::{
+    SeedArtifactTransferResult, SeedAuthorizationResult, SeedCheckResult, SeedEditResult,
+    SeedExportResult, SeedLinkResult, SeedListResult, SeedNoteResult, SeedNotesResult,
+    SeedPlantResult, SeedPlotResult, SeedReadyResult, SeedReminderResult, SeedReviewResult,
+    SeedRollbackResult, SeedSearchResult, SeedSendToChiefResult, SeedShowResult, SeedStandbyResult,
+    SeedTransitionResult, SeedWatchResult,
+};
+use serde::Serialize;
 use serde::de::DeserializeOwned;
-use serde_json::Value as Json;
+use serde_json::{Value as Json, json};
 use std::fmt::Write as _;
-
-pub const MOVED: &[&str] = &["show", "notes", "note", "ready", "prime"];
+use std::path::Path;
 
 pub struct Seed;
 
@@ -37,6 +48,76 @@ fn print_field(
     Ok(())
 }
 
+fn checks_json(checks: &[Check]) -> Json {
+    Json::from(
+        checks
+            .iter()
+            .map(|check| {
+                let mut definition = json!({"id": check.id, "text": check.text});
+                if check.shared {
+                    definition["shared"] = Json::from(true);
+                }
+                definition
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
+fn edit_recipe(id: &str) -> String {
+    format!(
+        "edit takes an exported file; run attn seed export {id}, edit it, then attn seed edit {id} -m - < {id}.md"
+    )
+}
+
+fn parse_stamped(id: &str, text: &str) -> Result<(String, String), String> {
+    let recipe = || edit_recipe(id);
+    let Some((line, body)) = text.split_once('\n') else {
+        return Err(recipe());
+    };
+    let line = line.strip_suffix('\r').unwrap_or(line);
+    let inner = line
+        .strip_prefix("<!-- attn-seed ")
+        .and_then(|rest| rest.strip_suffix(" -->"))
+        .ok_or_else(recipe)?;
+    let (stamped, hash) = inner.split_once(" body-sha256 ").ok_or_else(recipe)?;
+    let hash_is_hex = hash.len() == 64
+        && hash
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
+    if stamped.is_empty() || stamped.contains([' ', '\t']) || !hash_is_hex {
+        return Err(recipe());
+    }
+    if is_seed_id(id) && stamped != id {
+        return Err(format!(
+            "this export belongs to {stamped}, not {id}; {}",
+            recipe()
+        ));
+    }
+    if body.trim().is_empty() {
+        return Err(
+            "a body edit needs nonempty text; empty or whitespace-only bodies are refused"
+                .to_string(),
+        );
+    }
+    validate_body(body)?;
+    Ok((body.to_string(), hash.to_string()))
+}
+
+fn outlive_close_of_own_session() {
+    unsafe {
+        libc::signal(libc::SIGTERM, libc::SIG_IGN);
+        libc::signal(libc::SIGHUP, libc::SIG_IGN);
+    }
+}
+
+fn resolve(parsed: &mut Parsed, name: &str, label: &str) -> Result<(), String> {
+    let value = parsed.text(name).to_string();
+    let resolved = absolute(&value)
+        .map_err(|error| format!("{label}: {}", crate::paths::os_error_text(&error)))?;
+    parsed.args.insert(name.to_string(), Json::from(resolved));
+    Ok(())
+}
+
 impl Family for Seed {
     fn group(&self) -> &'static str {
         "seed"
@@ -54,29 +135,89 @@ impl Family for Seed {
         fail(verb, message)
     }
 
-    fn decode_file(&self, _cmd: &Command, _arg: &Arg, _bytes: &[u8]) -> Result<Json, String> {
-        unreachable!("no moved seed command reads a file yet")
+    fn answered_here(&self, cmd: &Command) -> Option<&'static str> {
+        (cmd.name == "guide").then_some(AUTHORING_AGENT_SEED_GUIDE)
+    }
+
+    fn misplaced(&self, cmd: &Command, positionals: &[String]) -> Option<String> {
+        if cmd.name != "check add" && cmd.name != "check edit" {
+            return None;
+        }
+        let last = positionals.get(1..)?.last()?;
+        (!valid_check_id(&last.to_uppercase())).then(|| {
+            format!(
+                "{} is not a check id; the statement goes in -m",
+                quote(last.as_bytes())
+            )
+        })
+    }
+
+    fn decode_file(&self, _cmd: &Command, _arg: &Arg, bytes: &[u8]) -> Result<Json, String> {
+        let spec = parse_plot_spec(bytes)?;
+        let children: Vec<Json> = spec
+            .children
+            .iter()
+            .map(|child| {
+                json!({"title": child.title, "body": child.body, "checks": checks_json(&child.checks), "after": child.after})
+            })
+            .collect();
+        Ok(json!({
+            "title": spec.title,
+            "body": spec.body,
+            "part_of": spec.part_of,
+            "discovered_from": spec.discovered_from,
+            "checks": checks_json(&spec.checks),
+            "children": children,
+        }))
     }
 
     fn read_stdin_error(&self, _arg: &Arg) -> &'static str {
-        "reading stdin"
+        "read the plot from stdin"
     }
 
     fn choice_conflict(&self, _cmd: &Command, _arg: &Arg) -> String {
-        unreachable!("no moved seed command takes a choice yet")
+        "local attach requires exactly one of --move or --copy; --move is recommended".to_string()
     }
 
-    fn stamp(&self, _cmd: &Command, _parsed: &mut Parsed) -> Result<(), String> {
+    fn stamp(&self, _cmd: &Command, parsed: &mut Parsed) -> Result<(), String> {
+        if !parsed.has("body") {
+            return Ok(());
+        }
+        let (body, base) = parse_stamped(parsed.text("seed"), parsed.text("body"))?;
+        parsed.args.insert("body".to_string(), Json::from(body));
+        parsed.args.insert("base".to_string(), Json::from(base));
         Ok(())
     }
 
-    fn before_send(
-        &self,
-        _run: &mut Run<'_>,
-        _cmd: &Command,
-        _parsed: &Parsed,
-    ) -> Result<(), Stop> {
-        Ok(())
+    fn before_send(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop> {
+        match cmd.name {
+            "check report" => {
+                report_evidence(parsed).map_err(|message| usage_error(cmd.name, &message))
+            }
+            "standby" => {
+                if !parsed.on("clear") && !parsed.on("stay") {
+                    outlive_close_of_own_session();
+                }
+                Ok(())
+            }
+            "attach" => {
+                let managed = parsed.has("mode")
+                    && !parsed.text("path").is_empty()
+                    && parsed.text("repo").trim().is_empty()
+                    && parsed.text("notebook").trim().is_empty()
+                    && parsed.text("url").trim().is_empty();
+                if managed {
+                    resolve(parsed, "path", "resolve source path")
+                        .map_err(|message| fail(cmd.name, &message))?;
+                }
+                Ok(())
+            }
+            "detach" if !parsed.text("to").is_empty() => {
+                resolve(parsed, "to", "resolve detach destination")
+                    .map_err(|message| fail(cmd.name, &message))
+            }
+            _ => Ok(()),
+        }
     }
 
     fn present(
@@ -87,35 +228,140 @@ impl Family for Seed {
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
-        match cmd.name {
-            "note" if parsed.json => print_field(run, cmd, &result, &["note"]),
-            "prime" => {
-                let ready: SeedReadyResult = decode(run, cmd, &result)?;
-                print_stdout(&render::prime(&ready));
-                Ok(())
+        let out = match cmd.name {
+            "standby" => return standby(run, cmd, parsed, &result),
+            "export" => return export(run, cmd, parsed, &result),
+            "plant" if parsed.json => return print_field(run, cmd, &result, &["seed"]),
+            "note" if parsed.json => return print_field(run, cmd, &result, &["note"]),
+            "attach" | "detach" if parsed.json && result.present("note") => {
+                return print_field(run, cmd, &result, &["note"]);
             }
-            _ if parsed.json => print_field(run, cmd, &result, &[]),
-            "show" => show(run, cmd, parsed, &result),
-            "notes" => notes(run, cmd, parsed, &result),
-            "note" => note(run, cmd, parsed, &result),
-            "ready" => {
-                let ready: SeedReadyResult = decode(run, cmd, &result)?;
-                print_stdout(&render::ready(&ready));
-                Ok(())
+            "prime" => render::prime(&decode::<SeedReadyResult>(run, cmd, &result)?),
+            _ if parsed.json => return print_field(run, cmd, &result, &[]),
+            "search" => render::search(
+                parsed.text("words"),
+                &decode::<SeedSearchResult>(run, cmd, &result)?,
+            ),
+            "plant" => plant(&decode(run, cmd, &result)?),
+            "plot" => plot(&decode(run, cmd, &result)?),
+            "link" | "unlink" => link(cmd, parsed, &decode(run, cmd, &result)?),
+            "ready" => render::ready(&decode(run, cmd, &result)?),
+            "ls" => render::list(
+                &decode::<SeedListResult>(run, cmd, &result)?,
+                &ListView {
+                    plot_id: parsed.text("plot").trim().to_string(),
+                    flat: parsed.on("flat"),
+                    stale: parsed.on("stale"),
+                    standby: parsed.on("standby"),
+                },
+            ),
+            "show" => show(parsed, &decode(run, cmd, &result)?)?,
+            "notes" => notes(parsed, &decode(run, cmd, &result)?),
+            "note" => note(parsed, &decode(run, cmd, &result)?),
+            "tend" | "park" | "replant" | "wither" | "harvest" => render::transition(
+                &decode::<SeedTransitionResult>(run, cmd, &result)?,
+                parsed.on("when_merged") && parsed.on("clear"),
+            ),
+            "send-to-chief" => format!(
+                "{} sent to Chief ({})\n",
+                parsed.text("seed").trim(),
+                decode::<SeedSendToChiefResult>(run, cmd, &result)?.detail
+            ),
+            "watch" | "unwatch" => render::watch_result(
+                &decode::<SeedWatchResult>(run, cmd, &result)?,
+                cmd.name == "unwatch",
+            ),
+            "remind" => remind(&decode(run, cmd, &result)?),
+            "edit" => {
+                let result: SeedEditResult = decode(run, cmd, &result)?;
+                format!(
+                    "updated {}: body v{}, {} → {} bytes\n",
+                    result.seed.id, result.body_version, result.previous_bytes, result.new_bytes
+                )
+            }
+            "rollback" => {
+                let result: SeedRollbackResult = decode(run, cmd, &result)?;
+                format!(
+                    "rolled {} back to v{} as v{}: {} → {} bytes\n",
+                    result.seed.id,
+                    result.restored_version,
+                    result.body_version,
+                    result.previous_bytes,
+                    result.new_bytes
+                )
+            }
+            "authorization" => {
+                let result: SeedAuthorizationResult = decode(run, cmd, &result)?;
+                let clear = parsed.on("clear");
+                let changing = !parsed.text("words").trim().is_empty() || clear;
+                format!(
+                    "{}\n",
+                    render::authorization_reply(&result, changing, clear)
+                )
+            }
+            "attach" | "detach" if result.present("note") => {
+                association(cmd, parsed, &decode(run, cmd, &result)?)
+            }
+            "attach" | "detach" => transfer(cmd, parsed, &decode(run, cmd, &result)?),
+            name if name.starts_with("check ") => render_move(
+                &decode::<SeedCheckResult>(run, cmd, &result)?,
+                parsed.on("ring"),
+            ),
+            name if name.starts_with("review ") => {
+                let result: SeedReviewResult = decode(run, cmd, &result)?;
+                match &result.review {
+                    None => format!("{} seeds need review\n", result.candidate_count),
+                    Some(review) => render::review(review, name == "review show"),
+                }
             }
             other => unreachable!("seed {other} has no renderer"),
-        }
+        };
+        print_stdout(&out);
+        Ok(())
     }
 }
 
-fn show(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed, result: &Reply) -> Result<(), Stop> {
-    let result: SeedShowResult = decode(run, cmd, result)?;
+fn plant(result: &SeedPlantResult) -> String {
+    let seed = &result.seed;
+    let mut out = format!("{}\n", seed_line(&seed.id, &seed.step_slug, &seed.title));
+    for check in seed.checks.as_deref().unwrap_or_default() {
+        if check.from.as_deref().unwrap_or_default().is_empty() {
+            let _ = writeln!(out, "  {}  {}", check.id, check.text);
+        }
+    }
+    render::similar(&mut out, &result.similar, false);
+    out
+}
+
+fn plot(result: &SeedPlotResult) -> String {
+    let crown = &result.crown;
+    let mut out = format!("{}\n", seed_line(&crown.id, &crown.step_slug, &crown.title));
+    let mut rows = String::new();
+    for child in &result.children {
+        let _ = writeln!(rows, "  {}\t{}\t{}", child.id, child.step_slug, child.title);
+    }
+    out.push_str(&attn::go::tabwriter::format(&rows));
+    render::similar(&mut out, &result.similar, true);
+    out
+}
+
+fn link(cmd: &Command, parsed: &Parsed, result: &SeedLinkResult) -> String {
+    let (seed, kind, to) = (parsed.text("a"), parsed.text("relation"), parsed.text("b"));
+    if cmd.name == "unlink" {
+        format!("{seed} no longer {kind} {to}\n")
+    } else if !result.changed {
+        format!("{seed} already {kind} {to}\n")
+    } else {
+        format!("{seed} {kind} {to}\n")
+    }
+}
+
+fn show(parsed: &Parsed, result: &SeedShowResult) -> Result<String, Stop> {
     let seed = &result.seed;
     if parsed.has("section") {
         let part = section(&seed.body, parsed.text("section"))
             .map_err(|error| fail("show", &format!("{}: {error}", seed.id)))?;
-        print_stdout(&format!("{}  {}\n\n{part}\n", seed.id, seed.title));
-        return Ok(());
+        return Ok(format!("{}  {}\n\n{part}\n", seed.id, seed.title));
     }
     let mut out = String::new();
     if let Some(window) = &result.since {
@@ -123,19 +369,16 @@ fn show(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed, result: &Reply) -> Re
             None => {
                 render::since(&mut out, window.after, &window.entries);
                 render::bookmark_line(&mut out, "show", &seed.id, result.bookmark, "");
-                print_stdout(&out);
-                return Ok(());
+                return Ok(out);
             }
             Some(expired) => render::expired_bookmark(&mut out, window.after, expired),
         }
     }
-    out.push_str(&render::show(&result, result.bookmark));
-    print_stdout(&out);
-    Ok(())
+    out.push_str(&render::show(result, result.bookmark));
+    Ok(out)
 }
 
-fn notes(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed, result: &Reply) -> Result<(), Stop> {
-    let result: SeedNotesResult = decode(run, cmd, result)?;
+fn notes(parsed: &Parsed, result: &SeedNotesResult) -> String {
     let id = parsed.text("seed");
     let kind = parsed.text("kind").trim();
     let since = parsed.int("since");
@@ -145,8 +388,7 @@ fn notes(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed, result: &Reply) -> R
     {
         render::since(&mut out, after, &result.notes);
         render::bookmark_line(&mut out, "notes", id, result.bookmark, kind);
-        print_stdout(&out);
-        return Ok(());
+        return out;
     }
     if let Some(expired) = &result.expired {
         render::expired_bookmark(&mut out, since.unwrap_or_default(), expired);
@@ -168,12 +410,10 @@ fn notes(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed, result: &Reply) -> R
     }
     out.push('\n');
     render::bookmark_line(&mut out, "notes", id, result.bookmark, kind);
-    print_stdout(&out);
-    Ok(())
+    out
 }
 
-fn note(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed, result: &Reply) -> Result<(), Stop> {
-    let result: SeedNoteResult = decode(run, cmd, result)?;
+fn note(parsed: &Parsed, result: &SeedNoteResult) -> String {
     let mut out = if result.note.kind == NOTE_KIND_HANDOFF {
         format!(
             "handoff left on {} — whoever tends it next reads this first\n",
@@ -189,6 +429,172 @@ fn note(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed, result: &Reply) -> Re
             result.ring_recipients.as_deref(),
         );
     }
+    out
+}
+
+fn remind(result: &SeedReminderResult) -> String {
+    let line = if let Some(reminder) = &result.seed.reminder {
+        format!(
+            "{} reminder {}",
+            result.seed.id,
+            render::reminder_line(reminder)
+        )
+    } else if result.changed {
+        format!("{} reminder cleared.", result.seed.id)
+    } else {
+        format!("{} has no reminder.", result.seed.id)
+    };
+    format!("{line}\n")
+}
+
+fn standby(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed, result: &Reply) -> Result<(), Stop> {
+    let raw: SeedStandbyResult = decode(run, cmd, result)?;
+    if let Some(close) = raw
+        .close
+        .as_ref()
+        .filter(|c| c.pending_compact != Some(true))
+    {
+        run.closed_session = Some(close.target_session_id.clone());
+    }
+    if parsed.json {
+        return print_field(run, cmd, result, &[]);
+    }
+    let mut out = String::new();
+    if let Some(standby) = &raw.seed.standby {
+        let _ = writeln!(
+            out,
+            "{} on standby: {}",
+            raw.seed.id,
+            quote(standby.note.as_bytes())
+        );
+    } else if raw.changed {
+        let _ = writeln!(out, "{} is off standby.", raw.seed.id);
+    } else {
+        let _ = writeln!(out, "{} was not on standby.", raw.seed.id);
+    }
+    let timed = parsed.has("in") || parsed.has("at");
+    if let Some(reminder) = raw.seed.reminder.as_ref().filter(|_| timed) {
+        let _ = writeln!(
+            out,
+            "{} reminder {}",
+            raw.seed.id,
+            render::reminder_line(reminder)
+        );
+    }
+    if let Some(close) = &raw.close {
+        render::agent_close(&mut out, close);
+    }
     print_stdout(&out);
     Ok(())
+}
+
+#[derive(Serialize)]
+struct ExportedFile<'a> {
+    seed_id: &'a str,
+    path: &'a str,
+    bytes: i64,
+}
+
+fn write_file(path: &str, contents: &[u8]) -> std::io::Result<()> {
+    use std::io::Write as _;
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o644)
+        .open(path)?;
+    file.write_all(contents)
+}
+
+fn export(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed, result: &Reply) -> Result<(), Stop> {
+    let exported: SeedExportResult = decode(run, cmd, result)?;
+    let text = exported.text.unwrap_or_default();
+    let out = parsed.text("out").trim().to_string();
+    if out == "-" {
+        print_stdout(&text);
+        return Ok(());
+    }
+    let path = if out.is_empty() {
+        format!("{}.md", exported.seed_id)
+    } else {
+        out
+    };
+    if let Err(error) = write_file(&path, text.as_bytes()) {
+        return Err(fail(
+            "export",
+            &format!(
+                "writing {path}: open {path}: {}",
+                crate::paths::os_error_text(&error)
+            ),
+        ));
+    }
+    let resolved = absolute(&path).unwrap_or_else(|_| path.clone());
+    if parsed.json {
+        let encoded = attn::go::json::encode(&ExportedFile {
+            seed_id: &exported.seed_id,
+            path: &resolved,
+            bytes: exported.bytes,
+        })
+        .expect("a plain struct always encodes");
+        print_json(&encoded);
+        return Ok(());
+    }
+    print_stdout(&format!(
+        "wrote {resolved}; edit it with any tool, keep its first line, then: attn seed edit {} -m - < {resolved}\n",
+        exported.seed_id
+    ));
+    Ok(())
+}
+
+fn association(cmd: &Command, parsed: &Parsed, result: &SeedNoteResult) -> String {
+    let verb = if cmd.name == "detach" {
+        "detached"
+    } else {
+        "attached"
+    };
+    let path = parsed.text("path").trim();
+    let repo = parsed.text("repo").trim();
+    let label = [
+        path,
+        parsed.text("notebook").trim(),
+        parsed.text("url").trim(),
+        repo,
+    ]
+    .into_iter()
+    .find(|value| !value.is_empty())
+    .unwrap_or_default();
+    let moved = if !repo.is_empty() && !path.is_empty() {
+        format!("{verb} {path} ({repo})")
+    } else {
+        format!("{verb} {label}")
+    };
+    let mut out = format!("{} {moved}\n", parsed.text("seed"));
+    let body = result.note.body.trim();
+    if !body.is_empty() && body != moved {
+        let _ = writeln!(out, "{body}");
+    }
+    out
+}
+
+fn transfer(cmd: &Command, parsed: &Parsed, result: &SeedArtifactTransferResult) -> String {
+    let operation = if cmd.name == "detach" {
+        "detach"
+    } else {
+        parsed.text("mode")
+    };
+    let mut out = format!(
+        "{operation} {}\nto {}\n",
+        result.source_path, result.destination_path
+    );
+    if result.replaced == Some(true) {
+        let base = Path::new(&result.destination_path)
+            .file_name()
+            .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+        let _ = writeln!(out, "replaced the seed's earlier {base}");
+    }
+    if operation != "detach" {
+        let _ = writeln!(out, "markdown target {}", result.relative_target);
+    }
+    out
 }

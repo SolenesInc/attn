@@ -297,11 +297,15 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 
 	noteReply(resp.Ok, resp.Refusal)
 	if !resp.Ok {
-		return nil, &DaemonError{
+		refused := &DaemonError{
 			Code:     protocol.Deref(resp.ErrorCode),
 			Message:  protocol.Deref(resp.Error),
 			Conflict: resp.ErrorConflict,
 		}
+		if refusal := resp.CommandRefusal; refusal != nil && refused.Message == "" {
+			refused.Code, refused.Message = refusal.Code, refusal.Message
+		}
+		return nil, refused
 	}
 
 	return &resp, nil

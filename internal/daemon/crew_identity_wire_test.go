@@ -274,7 +274,7 @@ func TestAPlotKeepsItsPlanterAcrossCrewRenames(t *testing.T) {
 	}
 	day := startCrew(t, cli, "Alfred", "").SessionID
 	w.Launched(string(day))
-	plot, err := cli.SeedPlot(day, protocol.SeedPlotMessage{Title: "renamed planter", Children: []protocol.SeedPlotChild{{Title: "its child"}}})
+	plot, err := cli.SeedPlot(day, client.Plot{Title: "renamed planter", Children: []client.PlotChild{{Title: "its child"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
