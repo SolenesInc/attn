@@ -275,8 +275,7 @@ fn a_key_lines_tabs_are_set_off_only_from_hints_on_their_own_line() {
             .unwrap_or_else(|| panic!("{variant}: no tabs"));
         let last = all
             .iter()
-            .filter(|e| e.role == "tab")
-            .last()
+            .rfind(|e| e.role == "tab")
             .unwrap_or_else(|| panic!("{variant}: no tab"));
         let room = (tabs.rect[0] + tabs.rect[2]) - (last.rect[0] + last.rect[2]);
         assert_eq!(
