@@ -192,7 +192,7 @@ pub(crate) fn said(state: &State) -> Option<blocks::Banner> {
         .on_hover(hold);
     if open {
         for (id, note) in outpost_notes(&run.outposts) {
-            banner = banner.note(format!("update-run.outpost.{id}"), note);
+            banner = banner.item().note(format!("update-run.outpost.{id}"), note);
         }
     }
     if run.phase == "failed" {

@@ -260,20 +260,22 @@ choices once for the whole app:
   tone (`Warn`, `Calm`, `Good` or `Bad`), its sentence, its notes, its actions,
   a countdown and dismiss, and the block draws the rest: the tone's glyph, the
   sentence in `Name`, the actions right beside it, the notes after them or,
-  when they do not fit there, together on a line of their own under the
+  when they do not fit there, together on lines of their own under the
   sentence, and dismiss alone at the far edge. The glyph and dismiss sit on
   the sentence's first line, and so do the actions unless they would leave
   the sentence narrower than 250 points or longer than four lines; then they
-  take a line of their own under it. The bar never grows past that: a sentence
-  longer than four lines ends in an ellipsis, and Details, last among the
-  actions, opens the banner whole in a dialog, its sentence, every note and its
-  actions, built by `Banner::build_details` from the same banner. Details also
-  stands whenever a note is wider than its line or holds a link or a button,
-  whose name the bar may elide, and when the view names less in the bar than in
-  the dialog, as shared Codex does its blockers, with `holds_more`. The banner
-  owns its controls' presses, so pressing one in the dialog also closes it. The
-  dialog belongs to the message it opened for, and closes once the banner says
-  another. Only the dialog scrolls. A link
+  take a line of their own under it. A view groups its notes into items with
+  `Banner::item`, such as one outpost's step or one blocker with its reason
+  and Relaunch. The bar never grows past that: a sentence longer than four
+  lines ends in an ellipsis, the notes take at most three lines, holding the
+  items that fit whole, the first at least in part, and then "and N more."
+  for the rest, and Details, last among the actions, opens the banner whole in
+  a dialog, its sentence, every note and its actions, built by
+  `Banner::build_details` from the same banner. Details also stands whenever a
+  note is wider than its line or holds a link or a button, whose name the bar
+  may elide. The banner owns its controls' presses, so pressing one in the
+  dialog also closes it. The dialog belongs to the message it opened for, and
+  closes once the banner says another. Only the dialog scrolls. A link
   or button in the notes longer than its line ends in an ellipsis and keeps its
   whole name for a screen reader. Its fill is 18% of the tone over
   the app background. A failure fills the bar with the error colour, darkened until the

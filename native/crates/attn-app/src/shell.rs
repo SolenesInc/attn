@@ -228,7 +228,7 @@ fn banner_details(state: &State, band: Band, shown: u64, t: &Tokens, layers: &mu
     let banner = match band {
         Band::UpdateRun => crate::update_run::said(state),
         Band::OutpostUpdates => crate::outpost_updates::said(state),
-        Band::SharedCodex => crate::shared_codex::said(state, true),
+        Band::SharedCodex => crate::shared_codex::said(state),
         Band::Warnings => crate::warnings::said(state),
     };
     if let Some(banner) = banner {

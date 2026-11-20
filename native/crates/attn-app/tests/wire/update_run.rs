@@ -481,6 +481,83 @@ fn twelve_hosts() -> Vec<String> {
         .collect()
 }
 
+/// The floor of the work area under every banner, as the shell holds it.
+const WORK_AREA_FLOOR: f64 = 125.0;
+
+/// How much of the work area shows inside the window.
+fn work_shown(world: &mut World) -> f64 {
+    let work = world.rect("regions");
+    let window = world.rect("window");
+    (work[1] + work[3]).min(window[1] + window[3]) - work[1]
+}
+
+fn distinct_errors(count: usize) -> UpdateRun {
+    let outposts = (1..=count)
+        .map(|n| {
+            let detail = format!(
+                "ssh: connect to host ci-runner-{n:02}.example.org port 22: Connection timed out"
+            );
+            outpost(
+                &format!("o{n}"),
+                &format!("ci-runner-{n:02}.build-and-validation.platform.example.org"),
+                "failed",
+                Some(&detail),
+            )
+        })
+        .collect();
+    run("r1", "outposts", outposts)
+}
+
+fn staging_update() -> UpdateRun {
+    let steps = [
+        "connecting",
+        "building",
+        "downloading",
+        "sending",
+        "verifying",
+    ];
+    let outposts = steps
+        .iter()
+        .enumerate()
+        .map(|(i, step)| {
+            outpost(
+                &format!("o{i}"),
+                &format!("ci-runner-{i:02}.build-and-validation.platform.example.org"),
+                "staging",
+                Some(step),
+            )
+        })
+        .collect();
+    run("r1", "staging", outposts)
+}
+
+#[test]
+fn no_count_of_outposts_grows_the_bar_past_its_bound_or_the_work_area_past_its_floor() {
+    let mut heights = Vec::new();
+    for (what, update) in [
+        ("1 error", distinct_errors(1)),
+        ("12 errors", distinct_errors(12)),
+        ("18 errors", distinct_errors(18)),
+        ("100 errors", distinct_errors(100)),
+        ("staging", staging_update()),
+    ] {
+        let mut world = start_sized(&[("uiScale", "1.5")], Some(update), SMALLEST);
+        let band = world.rect(BANNER);
+        let work = work_shown(&mut world);
+        assert!(
+            work >= WORK_AREA_FLOOR,
+            "{what}: the bar takes {} and leaves {work} of the work area in the window",
+            band[3]
+        );
+        heights.push(band[3]);
+    }
+    assert_eq!(
+        heights[1..4],
+        [heights[1]; 3],
+        "more errors than the bar names add no line to it"
+    );
+}
+
 #[test]
 fn details_opens_a_failure_cut_short_whole_in_a_dialog_that_closes_back_to_the_bar() {
     let failed = could_not_stage(&[

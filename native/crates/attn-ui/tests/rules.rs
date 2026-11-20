@@ -1143,7 +1143,19 @@ const NAME: rune::TextStyle = rune::TextStyle::new(13.0, 600.0);
 fn a_long_link_elides_inside_its_bar_with_its_ring_whole_and_its_name_whole() {
     for dark in [true, false] {
         for (tone, _) in BANNERS {
-            for link in ["go.a", "go.b"] {
+            let rt = story(dark, "Library/Banner", LONG_LINK);
+            let more = rt
+                .elements()
+                .into_iter()
+                .find(|e| e.key.as_deref() == Some(&format!("banner.{tone}.more")))
+                .and_then(|e| e.text);
+            assert_eq!(
+                more.as_deref(),
+                Some("and 1 more."),
+                "dark={dark}: the bar counts the blocker it leaves to Details"
+            );
+            {
+                let link = "go.a";
                 let mut rt = story(dark, "Library/Banner", LONG_LINK);
                 let key = format!("banner.{tone}.{link}");
                 let focused = tab_to(&mut rt, &key);

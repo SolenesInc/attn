@@ -87,8 +87,8 @@ installed Codex is not the Codex the app-server runs, Attn restarts the
 app-server on the installed Codex. Attn waits to restart until no conversation
 is running a turn, including a turn that waits on an approval or on your answer
 to a question, and every shared terminal has finished starting. The banner names
-the session Attn waits on, and you can jump to it. When it waits on more than
-one, the banner counts the rest, and **Details** names each of them.
+the sessions Attn waits on, and you can jump to each. When they take more room
+than the banner has, it counts the rest, and **Details** names each of them.
 
 - First Attn starts the installed Codex separately for a moment. If that Codex
   refuses to start, for example over a setting in your Codex config that the new

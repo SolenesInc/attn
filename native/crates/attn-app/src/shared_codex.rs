@@ -422,27 +422,14 @@ pub(crate) fn commands(state: &State) -> Vec<crate::palette::commands::Command> 
     commands
 }
 
-/// The blockers the bar names. At the smallest window, 800 x 600 at 150%, one blocker
-/// named by an 86-character worktree, still starting, leaves 252 of the 368 points under the
-/// title bar to work in; a second leaves 202, under the two thirds a banner may take.
-const NAMED_CLOSED: usize = 1;
-
-/// The blockers the restart waits on, each opening its tile, and a Relaunch for one still
-/// starting. The bar names the first few and counts the rest; its details name them all.
-fn waiting_on(
-    state: &State,
-    blockers: &[SharedCodexBlocker],
-    whole: bool,
-    banner: Banner,
-) -> Banner {
+/// The blockers the restart waits on, one item each, opening its tile, and a Relaunch for one
+/// still starting.
+fn waiting_on(state: &State, blockers: &[SharedCodexBlocker], banner: Banner) -> Banner {
     let mut banner = banner.note(format!("{BAND}.waiting"), "Waiting on");
-    let named = if whole {
-        blockers.len()
-    } else {
-        blockers.len().min(NAMED_CLOSED)
-    };
-    let more = blockers.len() - named;
-    for (i, blocker) in blockers[..named].iter().enumerate() {
+    for (i, blocker) in blockers.iter().enumerate() {
+        if i > 0 {
+            banner = banner.item();
+        }
         let (name, _) = name_of(state, &blocker.session_id);
         let id = blocker.session_id.clone();
         let key = format!("{BAND}.blocker.{id}");
@@ -452,7 +439,7 @@ fn waiting_on(
             format!("Go to {name}"),
             move |state: &mut State, tx: &mut Tx| crate::sidebar::open_agent(state, &id, tx),
         );
-        let end = if i + 1 < named || more > 0 { "," } else { "." };
+        let end = if i + 1 < blockers.len() { "," } else { "." };
         banner = banner.note(
             format!("{key}.reason"),
             format!("({}){end}", blocker_reason(blocker)),
@@ -469,19 +456,11 @@ fn waiting_on(
             );
         }
     }
-    if more > 0 {
-        banner = banner.note(format!("{BAND}.more"), format!("and {more} more."));
-    }
-    if blockers.len() > NAMED_CLOSED {
-        banner.holds_more()
-    } else {
-        banner
-    }
+    banner
 }
 
 pub(crate) fn banner(state: &State, t: &Tokens, cx: &Cx<State>) -> Option<El> {
-    let banner =
-        said(state, false)?.details(crate::shell::opens_details(crate::shell::Band::SharedCodex));
+    let banner = said(state)?.details(crate::shell::opens_details(crate::shell::Band::SharedCodex));
     Some(banner.build(t, cx))
 }
 
@@ -495,8 +474,7 @@ pub(crate) fn identity(state: &State) -> Option<String> {
     ))
 }
 
-/// The banner, naming every blocker when `whole`.
-pub(crate) fn said(state: &State, whole: bool) -> Option<Banner> {
+pub(crate) fn said(state: &State) -> Option<Banner> {
     let codex = current(state)?;
     let stage = stage(state, codex)?;
     let version = |v: &Option<String>| v.clone().unwrap_or_default();
@@ -550,7 +528,7 @@ pub(crate) fn said(state: &State, whole: bool) -> Option<Banner> {
             if blockers.is_empty() {
                 banner
             } else {
-                waiting_on(state, &blockers, whole, banner).action(
+                waiting_on(state, &blockers, banner).action(
                     format!("{BAND}.restart"),
                     Button::new("Restart now"),
                     |state: &mut State, _: &mut Tx| open_confirm(state, Confirm::Restart),

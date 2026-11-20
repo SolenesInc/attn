@@ -66,9 +66,8 @@ pub struct Banner {
     tone: BannerTone,
     value: Option<String>,
     sentence: Option<Sentence>,
-    holds_more: bool,
     details: Option<Press>,
-    notes: Vec<Note>,
+    items: Vec<Vec<Note>>,
     actions: Vec<(String, Button, Acts<Button>)>,
     countdown: Option<(String, u32)>,
     dismiss: Option<(String, String, Attach)>,
@@ -90,6 +89,12 @@ const READABLE: f32 = 250.0;
 /// a self-update that could not stage one outpost with its log's path, which takes 3 lines at
 /// the smallest window, 800 x 600 at 150%.
 const LINES: usize = 4;
+/// The most lines a closed bar gives its notes: the fewest that hold whole one blocker of the
+/// shared Codex restart, named by an 86-character worktree and still starting ("Waiting on" and
+/// its name, its reason, Relaunch), at the smallest window, 800 x 600 at 150%. Its bar leaves
+/// 252 of the 368 points under the title bar to work in, and so does a bar of twelve such
+/// blockers; with two lines the bar dropped the blocker's name.
+const NOTE_LINES: usize = 3;
 
 impl Banner {
     pub fn new(key: impl Into<String>, label: impl Into<String>, tone: BannerTone) -> Banner {
@@ -99,9 +104,8 @@ impl Banner {
             tone,
             value: None,
             sentence: None,
-            holds_more: false,
             details: None,
-            notes: Vec::new(),
+            items: Vec::new(),
             actions: Vec::new(),
             countdown: None,
             dismiss: None,
@@ -124,26 +128,36 @@ impl Banner {
         self
     }
 
-    /// The owner shows more in the dialog than in the bar, as a list it cuts short there, so
-    /// Details stands even when the sentence fits its lines.
-    pub fn holds_more(mut self) -> Self {
-        self.holds_more = true;
-        self
-    }
-
     /// Opens the dialog that holds the banner whole, offered last among the actions while the bar
-    /// may cut something short: a sentence past its lines, a note wider than its line, more than
-    /// the bar names, or a note that holds a control, whose name the bar may elide.
+    /// may cut something short: a sentence past its lines, a note wider than its line, items past
+    /// the bar's lines, or a note that holds a control, whose name the bar may elide.
     pub fn details<S: 'static>(mut self, open: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
         self.details = Some(Box::new(move |b: Button| b.on_press_tx(open)));
         self
     }
 
+    /// Starts the next item: the notes after it read as one, which the bar names whole or counts
+    /// among those it leaves to Details. Notes before any item are the first.
+    pub fn item(mut self) -> Self {
+        if self.items.last().is_none_or(|item| !item.is_empty()) {
+            self.items.push(Vec::new());
+        }
+        self
+    }
+
+    fn push(&mut self, note: Note) {
+        match self.items.last_mut() {
+            Some(item) => item.push(note),
+            None => self.items.push(vec![note]),
+        }
+    }
+
     /// Quieter words after the sentence and its actions. Notes that do not fit there move
-    /// together to a line of their own under the sentence, and a note longer than that line
-    /// ends in an ellipsis.
+    /// together to lines of their own under the sentence, and a note longer than a line ends
+    /// in an ellipsis. The bar names the items that fit its lines, the first at least in part,
+    /// and counts the rest.
     pub fn note(mut self, key: impl Into<String>, said: impl Into<String>) -> Self {
-        self.notes.push(Note::Words {
+        self.push(Note::Words {
             key: key.into(),
             said: said.into(),
         });
@@ -158,7 +172,7 @@ impl Banner {
         label: impl Into<String>,
         press: impl Fn(&mut S, &mut Tx) + 'static,
     ) -> Self {
-        self.notes.push(Note::Link {
+        self.push(Note::Link {
             key: key.into(),
             shown: shown.into(),
             label: label.into(),
@@ -175,7 +189,7 @@ impl Banner {
         button: Button,
         press: impl Fn(&mut S, &mut Tx) + 'static,
     ) -> Self {
-        self.notes.push(Note::Button {
+        self.push(Note::Button {
             key: key.into(),
             label: label.into(),
             button: Box::new(button),
@@ -239,11 +253,23 @@ impl Banner {
             .child(door::icon(glyph(self.tone), IconSize::Regular).color(paint.glyph));
         let column_key = format!("{}.said", self.key);
         let column = cx.layout_with(&column_key, |r| r[2]);
-        let mut cut_short = self.holds_more
-            || self
-                .notes
-                .iter()
-                .any(|note| !matches!(note, Note::Words { .. }));
+        let between = if self
+            .items
+            .iter()
+            .flatten()
+            .all(|n| matches!(n, Note::Words { .. }))
+        {
+            Space::S8
+        } else {
+            Space::S4
+        };
+        let (notes, more, cut) = named(
+            self.items,
+            column.unwrap_or(READABLE),
+            between.pt(),
+            &self.key,
+        );
+        let mut cut_short = cut || notes.iter().any(|note| !matches!(note, Note::Words { .. }));
         let sentence = self.sentence.map(|sentence| {
             let natural = width_of(&sentence.said, Type::Name);
             let least = match column {
@@ -262,7 +288,7 @@ impl Banner {
             )
         });
         cut_short |= column.is_some_and(|w| {
-            self.notes.iter().any(
+            notes.iter().any(
                 |note| matches!(note, Note::Words { said, .. } if width_of(said, Type::Body) > w),
             )
         });
@@ -292,10 +318,11 @@ impl Banner {
             .shrink()
             .children(sentence)
             .children(actions);
-        let notes = (!self.notes.is_empty()).then(|| {
-            let words_only = self.notes.iter().all(|n| matches!(n, Note::Words { .. }));
-            let notes = self.notes.into_iter().map(|note| paint.note(note, None));
-            let between = if words_only { Space::S8 } else { Space::S4 };
+        let notes = (!notes.is_empty() || more.is_some()).then(|| {
+            let notes = notes
+                .into_iter()
+                .chain(more)
+                .map(|note| paint.note(note, None));
             let notes = row()
                 .flex_wrap()
                 .items_center()
@@ -358,10 +385,11 @@ impl Banner {
                 .key(whole(&sentence.key))
                 .wrap()
         });
-        let notes = (!self.notes.is_empty()).then(|| {
+        let notes = (!self.items.is_empty()).then(|| {
             let notes = self
-                .notes
+                .items
                 .into_iter()
+                .flatten()
                 .map(|note| paint.note(note.within(), Some(closing.clone())));
             door::gaps(
                 row().flex_wrap().items_center().w_full(),
@@ -413,7 +441,81 @@ fn whole(key: &str) -> String {
     format!("whole.{key}")
 }
 
+/// The notes the bar names within its lines at `width`: the items that fit whole, the first
+/// item's leading notes when it alone is longer, a note counting the items left to Details,
+/// and whether it left anything out.
+fn named(
+    items: Vec<Vec<Note>>,
+    width: f32,
+    gap: f32,
+    key: &str,
+) -> (Vec<Note>, Option<Note>, bool) {
+    let widths: Vec<Vec<f32>> = items
+        .iter()
+        .map(|item| item.iter().map(|note| note.width().min(width)).collect())
+        .collect();
+    let fits = |shown: &[f32]| lines_of(shown, width, gap) <= NOTE_LINES;
+    let whole_items = |k: usize| widths[..k].concat();
+    let mut k = 0;
+    while k < items.len() && fits(&whole_items(k + 1)) {
+        k += 1;
+    }
+    if k == items.len() {
+        return (items.into_iter().flatten().collect(), None, false);
+    }
+    let counted = |left: usize| width_of(&counting(left), Type::Body).min(width);
+    while k > 0 && !fits(&[whole_items(k), vec![counted(items.len() - k)]].concat()) {
+        k -= 1;
+    }
+    let mut items = items.into_iter();
+    let mut shown: Vec<Note> = items.by_ref().take(k).flatten().collect();
+    let mut named = k;
+    if k == 0 {
+        let first = items.next().unwrap_or_default();
+        let left = (widths.len() > 1).then(|| counted(widths.len() - 1));
+        let leading = (0..=first.len())
+            .rev()
+            .find(|&m| fits(&[&widths[0][..m], left.as_slice()].concat()))
+            .unwrap_or(0);
+        shown.extend(first.into_iter().take(leading));
+        named = 1;
+    }
+    let left = widths.len() - named;
+    let more = (left > 0).then(|| Note::Words {
+        key: format!("{key}.more"),
+        said: counting(left),
+    });
+    (shown, more, true)
+}
+
+fn counting(left: usize) -> String {
+    format!("and {left} more.")
+}
+
+/// How many lines notes as wide as `widths` wrap to across `width`, `gap` apart.
+fn lines_of(widths: &[f32], width: f32, gap: f32) -> usize {
+    let mut lines = 0;
+    let mut x = 0.0;
+    for &w in widths {
+        if lines == 0 || x + gap + w > width + 0.5 {
+            lines += 1;
+            x = w;
+        } else {
+            x += gap + w;
+        }
+    }
+    lines
+}
+
 impl Note {
+    fn width(&self) -> f32 {
+        match self {
+            Note::Words { said, .. } => width_of(said, Type::Body),
+            Note::Link { shown, .. } => width_of(shown, Type::Name),
+            Note::Button { button, .. } => button.natural_width(Size::Compact),
+        }
+    }
+
     fn within(self) -> Note {
         match self {
             Note::Words { key, said } => Note::Words {
@@ -446,7 +548,8 @@ impl Note {
     }
 }
 
-/// `press`, attached by `on`, and then `close` when the control is drawn in a dialog.
+/// `press`, attached by `on`, after `close` when the control is drawn in a dialog, so focus the
+/// press moves stays where it put it.
 fn acts<S: 'static, T: 'static>(
     press: impl Fn(&mut S, &mut Tx) + 'static,
     on: fn(T, OnPress<S>) -> T,
@@ -455,10 +558,10 @@ fn acts<S: 'static, T: 'static>(
         on(
             control,
             Box::new(move |state: &mut S, tx: &mut Tx| {
-                press(state, tx);
                 if let Some(close) = &close {
                     close(state, tx);
                 }
+                press(state, tx);
             }),
         )
     })

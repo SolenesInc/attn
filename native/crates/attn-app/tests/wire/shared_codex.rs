@@ -418,7 +418,9 @@ fn the_band_says_why_each_blocker_holds_the_restart_opens_its_tile_and_relaunche
     assert_eq!(
         banner(&world).unwrap(),
         "Codex 0.163.0 installed. Restarts when agents are idle. [Restart now] [Details] Waiting on \
-         [Go to fix-auth] (working), and 3 more."
+         [Go to fix-auth] (working), [Go to docs-sweep] (waiting on an approval), [Go to \
+         nightly-triage] (asking a question), [Go to plan-cache] (still starting or asking whether \
+         to trust its folder). [Relaunch plan-cache]"
     );
     let details = |world: &mut World| {
         click(world, &format!("{BAND}.details"));
@@ -506,6 +508,52 @@ fn details_open_when_its_banner_goes_away_leave_the_next_banner_closed() {
         world.screen().find(Target::key(&dialog)).is_none(),
         "the next banner opened with the last one's details"
     );
+}
+
+#[test]
+fn go_to_from_details_the_keyboard_opened_gives_the_keyboard_to_the_blockers_terminal() {
+    let mut state = initial(Some(every_blocker()));
+    let mut work = super::sidebar::desktop(
+        "d1",
+        "a",
+        "Work",
+        vec![super::sidebar::pane("d1", "p0", "fix-auth")],
+    );
+    work.profile_id = "work".into();
+    work.panes[0].runtime_id = "r-fix-auth".into();
+    work.active_pane_id = "p0".into();
+    state.desktops = Some(vec![work, desktop("s1", "side")]);
+    let dir = tempfile::tempdir().unwrap();
+    let mut world = launch(scripted_from(state), &dir.path().join("prefs.json"));
+    world.gesture(|app| app.runtime.set_full_keyboard_access(true));
+    let details = format!("{BAND}.details");
+    for _ in 0..40 {
+        if world.screen().focused().and_then(|n| n.key) == Some(details.clone()) {
+            break;
+        }
+        press(&mut world, Key::Tab);
+    }
+    press(&mut world, Key::Text(" ".into()));
+    assert!(
+        world
+            .screen()
+            .find(Target::key(format!("{BAND}.whole-dialog")))
+            .is_some(),
+        "Details opens"
+    );
+    click_button_in(
+        &mut world,
+        &format!("{BAND}.whole-dialog"),
+        "Go to fix-auth",
+    );
+    world.gesture(|app| app.type_text("x"));
+    let typed: Vec<String> = world
+        .daemon
+        .sent_of("pty_input")
+        .iter()
+        .map(|m| m["id"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(typed, ["r-fix-auth"]);
 }
 
 #[test]
@@ -916,6 +964,37 @@ fn long_blockers(count: usize) -> (World, Vec<String>, tempfile::TempDir) {
     prefs.set(SEEN_PREF, &RELEASE.to_owned()).unwrap();
     let world = World::start_sized_with_prefs(scripted_from(state), (800.0, 600.0), prefs);
     (world, names, dir)
+}
+
+#[test]
+fn twelve_long_blockers_keep_the_bar_to_its_lines_and_count_those_it_does_not_name() {
+    let heights: Vec<f64> = [1, 12]
+        .into_iter()
+        .map(|count| {
+            let (mut world, _, _dir) = long_blockers(count);
+            let band = world.rect(BAND);
+            let work = world.rect("regions");
+            let window = world.rect("window");
+            let shown = (work[1] + work[3]).min(window[1] + window[3]) - work[1];
+            assert!(
+                shown >= 125.0,
+                "{count} blockers: the bar takes {} and leaves {shown} of the work area in the window",
+                band[3]
+            );
+            if count > 1 {
+                assert_eq!(
+                    world
+                        .screen()
+                        .find(Target::key(format!("{BAND}.more")))
+                        .and_then(|n| n.name)
+                        .as_deref(),
+                    Some("and 11 more.")
+                );
+            }
+            band[3]
+        })
+        .collect();
+    assert_eq!(heights[1], heights[0], "eleven more blockers add no line");
 }
 
 #[test]

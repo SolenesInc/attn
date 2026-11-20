@@ -337,6 +337,43 @@ fn a_command_picked_by_enter_or_by_pointer_counts_once_and_runs() {
 }
 
 #[test]
+fn an_agent_picked_in_a_palette_opened_from_a_focused_button_takes_the_keys() {
+    let mut work = super::sidebar::desktop(
+        "d1",
+        "a",
+        "Work",
+        vec![super::sidebar::pane("d1", "p0", "api")],
+    );
+    work.profile_id = "work".into();
+    work.panes[0].runtime_id = "rt-api".into();
+    work.active_pane_id = "p0".into();
+    let mut world = World::start(daemon(
+        initial(vec![work], vec![session("api"), session("web")]),
+        vec![],
+    ));
+    world.gesture(|app| app.runtime.set_full_keyboard_access(true));
+    for _ in 0..20 {
+        if world.screen().focused().and_then(|n| n.key).as_deref() == Some("titlebar.commands") {
+            break;
+        }
+        press(&mut world, Key::Tab);
+    }
+    open_agents(&mut world);
+    world.gesture(|app| app.type_text("api"));
+    press(&mut world, Key::Enter);
+    assert!(world.screen().find(Target::key("palette")).is_none());
+
+    world.gesture(|app| app.type_text("x"));
+    let typed: Vec<Value> = world
+        .daemon
+        .sent_of("pty_input")
+        .iter()
+        .map(|m| m["id"].clone())
+        .collect();
+    assert_eq!(typed, ["rt-api"]);
+}
+
+#[test]
 fn the_title_bars_commands_and_new_agent_buttons_open_the_command_palette_and_the_picker() {
     let mut state = initial(two_desktops(), vec![]);
     state.settings = Some(BTreeMap::from([(

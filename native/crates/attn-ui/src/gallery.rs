@@ -699,6 +699,7 @@ fn banners(s: &Library, cx: &mut Cx<Library>) -> El {
                     noop,
                 )
                 .note(format!("{key}.reason.a"), "(working),")
+                .item()
                 .link(
                     format!("{key}.go.b"),
                     "docs-sweep",
@@ -706,6 +707,7 @@ fn banners(s: &Library, cx: &mut Cx<Library>) -> El {
                     noop,
                 )
                 .note(format!("{key}.reason.b"), "(waiting on an approval),")
+                .item()
                 .link(
                     format!("{key}.go.c"),
                     "plan-cache",
@@ -742,6 +744,7 @@ fn banners(s: &Library, cx: &mut Cx<Library>) -> El {
                     Action::new("Relaunch"),
                     noop,
                 )
+                .item()
                 .link(
                     format!("{key}.go.b"),
                     LONG_RENAME,

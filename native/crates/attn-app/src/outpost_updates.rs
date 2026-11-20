@@ -255,11 +255,13 @@ pub(crate) fn said(state: &State) -> Option<blocks::Banner> {
         });
     if !updates.done {
         for (id, said) in notes(&updates) {
-            banner = banner.note(format!("outpost-updates.note.{id}"), said);
+            banner = banner
+                .item()
+                .note(format!("outpost-updates.note.{id}"), said);
         }
     }
     if let Some(error) = crate::settings::outposts::command_error(state) {
-        banner = banner.note("outpost-updates.error", error);
+        banner = banner.item().note("outpost-updates.error", error);
     }
     if !updates.different.is_empty() {
         let busy = updates.busy();

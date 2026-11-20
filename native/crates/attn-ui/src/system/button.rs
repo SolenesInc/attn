@@ -2,7 +2,8 @@ use rune::{Color, El, Tx, row};
 use rune_kit::{Button as KitButton, ButtonVariant};
 
 use super::{
-    Control, IconSize, Radius, Size, Space, Type, disabled, door, focus, kit, layers, words,
+    Control, IconSize, Radius, Size, Space, Type, disabled, door, focus, kit, layers, width_of,
+    words,
 };
 use crate::Tokens;
 
@@ -67,6 +68,15 @@ impl Button {
     pub fn look(mut self, look: Look) -> Self {
         self.look = look;
         self
+    }
+
+    /// How wide the button stands at `size` with nothing shrinking it: its words, its inset on
+    /// each side and its edge, or its height when it shows a mark.
+    pub(crate) fn natural_width(&self, size: Size) -> f32 {
+        match &self.shown {
+            Shown::Words(words) => width_of(words, Type::Control) + 2.0 * (size.inset().pt() + 1.0),
+            Shown::Mark(..) => size.height(),
+        }
     }
 
     pub fn size(mut self, size: Size) -> Self {
