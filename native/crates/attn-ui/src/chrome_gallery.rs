@@ -330,6 +330,22 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             .wrap()
             .build(&t)
             .on_press_tx(press),
+        ListRow::new("row.kept", "Open the failed task")
+            .lead(dot(&t))
+            .title("cargo test -p attn-app --test wire settings::outposts")
+            .tag(tag("row.kept.tag", "Failed", Tone::Bad, &t))
+            .controls(
+                [crate::system::Button::new("Retry")
+                    .size(Size::Compact)
+                    .on_press_tx(press)
+                    .build(&t)
+                    .key("row.kept.retry")
+                    .into()],
+                Reveal::Always,
+            )
+            .wrap()
+            .build(&t)
+            .on_press_tx(press),
         ListRow::new("row.two", "Open the delegation chain")
             .lead(dot(&t))
             .title(if s.long { LONG_AGENT } else { "chrome" })

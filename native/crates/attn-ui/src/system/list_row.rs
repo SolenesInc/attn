@@ -544,7 +544,7 @@ impl ListRow {
             + Space::S2.pt() * self.hover.len().saturating_sub(1) as f32
             + FADE_ROOM.pt();
         let tagged = !self.tags.is_empty();
-        let under_title = hovering && tagged;
+        let under_title = tagged && (hovering || (wraps && !self.inline.is_empty()));
         let title_line = door::gap(row(), Space::S6).w_full().min_w(0.0);
         let (title_line, under) = match (wraps, tagged, under_title) {
             (true, _, true) => (

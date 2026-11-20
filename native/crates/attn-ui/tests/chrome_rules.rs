@@ -8,8 +8,8 @@ use attn_ui::system::ListRow;
 use rune::render::Instance;
 use rune::{App, AppSpec, Cx, El, ElementInfo, Env, Key, KeyEvent, Mods, Runtime, el};
 
-/// Tall enough for the List row stage at its narrowest, which stands 836 points.
-const WINDOW: (f32, f32) = (1400.0, 900.0);
+/// Tall enough for the List row stage at its narrowest, which stands 1034 points.
+const WINDOW: (f32, f32) = (1400.0, 1100.0);
 const SCALE: f32 = 2.0;
 const RING_REACH: f32 = 4.0;
 const ROWS: [&str; 4] = ["row.agent", "row.nav", "row.tile", "row.two"];
@@ -1213,5 +1213,27 @@ fn a_select_rows_button_is_checked_or_unchecked_only_when_told_and_says_what_it_
                 "{key}, focused={focused}: the select button's description"
             );
         }
+    }
+}
+
+#[test]
+fn a_wrapping_rows_tag_keeps_clear_of_its_kept_controls() {
+    for variant in ROW_VARIANTS {
+        let rt = story(true, "Chrome/List row", variant);
+        let tag = element(&rt, "row.kept.tag");
+        let retry = element(&rt, "row.kept.retry");
+        let title = element(&rt, "row.kept.title");
+        assert!(
+            !overlaps(tag.visible, retry.visible),
+            "{variant}: the tag {:?} lies under the kept control {:?}",
+            tag.visible,
+            retry.visible
+        );
+        assert!(
+            tag.rect[2] >= 40.0 && tag.rect[1] >= title.rect[1] + title.rect[3] - 0.5,
+            "{variant}: the tag {:?} is squeezed beside the title {:?} instead of under it",
+            tag.rect,
+            title.rect
+        );
     }
 }
