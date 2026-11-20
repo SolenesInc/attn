@@ -684,6 +684,177 @@ fn a_missing_agent_says_why_under_the_pointer_and_takes_no_press_or_tab_stop() {
 }
 
 #[test]
+fn a_long_plugin_name_stacks_the_default_agent_in_the_smallest_window_and_down_still_chooses() {
+    let mut world = on_agents(&both(&[
+        ("uiScale", "1.5"),
+        ("new_session_agent", "claude"),
+        ("snipe_available", "true"),
+        (
+            "snipe_display_name",
+            "Engineering observability staging review agent with a long name",
+        ),
+    ]));
+    let agents = ["claude", "codex", "snipe"].map(|a| format!("settings.default-agent.{a}"));
+    let bounds = |world: &World| {
+        agents
+            .iter()
+            .map(|key| world.screen().bounds(Target::key(key)).unwrap())
+            .collect::<Vec<_>>()
+    };
+    let one_line = |b: &[[f32; 4]]| b.iter().all(|r| r[1] == b[0][1]);
+
+    world.resize((800.0, 600.0));
+    let stacked = bounds(&world);
+    assert!(
+        !one_line(&stacked)
+            && stacked
+                .iter()
+                .all(|r| r[0] == stacked[0][0] && r[2] == stacked[0][2]),
+        "the default agent stacks its options at one width: {stacked:?}"
+    );
+    tab_to(&mut world, &agents[0]);
+    press(&mut world, Key::Down);
+    assert!(node(&world, &agents[1]).is("checked"), "Down chooses Codex");
+
+    world.resize((1600.0, 1000.0));
+    assert!(
+        one_line(&bounds(&world)),
+        "a wide window puts them back on one line"
+    );
+    rest(&mut world);
+}
+
+const LONG_PLUGIN: &[(&str, &str)] = &[
+    ("uiScale", "1.5"),
+    ("claude_available", "true"),
+    ("codex_available", "true"),
+    ("new_session_agent", "claude"),
+    ("snipe_available", "true"),
+    (
+        "snipe_display_name",
+        "Engineering observability staging review agent with a long name",
+    ),
+];
+
+const DEFAULT_AGENTS: [&str; 3] = [
+    "settings.default-agent.claude",
+    "settings.default-agent.codex",
+    "settings.default-agent.snipe",
+];
+
+/// Whether the default agent's options stood stacked on one frame: each on its own line, all
+/// at one left edge and one width.
+fn stacked(rects: &[[f32; 4]]) -> bool {
+    rects.windows(2).all(|w| w[1][1] > w[0][1])
+        && rects
+            .iter()
+            .all(|r| r[0] == rects[0][0] && r[2] == rects[0][2])
+}
+
+fn one_line(rects: &[[f32; 4]]) -> bool {
+    rects.iter().all(|r| r[1] == rects[0][1])
+}
+
+/// The default agent's options on each frame of `rec` that drew all of them.
+fn options_by_frame(rec: &rune::motion_gate::Recording) -> Vec<Vec<[f32; 4]>> {
+    let tracks: Vec<_> = DEFAULT_AGENTS
+        .iter()
+        .map(|key| {
+            rec.tracks
+                .iter()
+                .find(|t| t.path.ends_with(&format!("/{key}")))
+                .unwrap_or_else(|| panic!("{key} is never drawn"))
+        })
+        .collect();
+    (0..rec.frames)
+        .filter_map(|k| {
+            tracks
+                .iter()
+                .map(|t| t.frames.iter().find(|(i, _)| *i == k).map(|(_, s)| s.rect))
+                .collect()
+        })
+        .collect()
+}
+
+#[test]
+fn the_default_agent_is_stacked_from_the_first_frame_the_smallest_window_draws_it() {
+    let (daemon, stored) = accepting(LONG_PLUGIN);
+    serve(&daemon, &stored, harnesses());
+    let mut world = World::start_sized(daemon, (800.0, 600.0));
+    open(&mut world);
+    let rec = world.record(60.0, 0.5, |_, app| {
+        app.click(Target::key("settings.nav.agents"))
+    });
+    let frames = options_by_frame(&rec);
+    assert!(!frames.is_empty(), "the default agent is never drawn");
+    for (k, rects) in frames.iter().enumerate() {
+        assert!(
+            stacked(rects),
+            "frame {k} after opening the page draws the options as {rects:?}"
+        );
+    }
+    rest(&mut world);
+}
+
+#[test]
+fn the_default_agent_switches_once_at_one_width_and_holds_still_either_side() {
+    let at_full_text: Vec<_> = LONG_PLUGIN
+        .iter()
+        .copied()
+        .filter(|(k, _)| *k != "uiScale")
+        .collect();
+    let (daemon, stored) = accepting(&at_full_text);
+    serve(&daemon, &stored, harnesses());
+    let mut world = World::start_sized(daemon, (800.0, 600.0));
+    open(&mut world);
+    click(&mut world, "settings.nav.agents");
+    let widths: Vec<f32> = (0..=120).map(|i| 800.0 + 4.0 * i as f32).collect();
+    let sweep = |world: &mut World, widths: &mut dyn Iterator<Item = &f32>| {
+        widths
+            .map(|&w| {
+                world.resize((w, 600.0));
+                let rec = world.record(60.0, 0.25, |_, _| {});
+                let frames = options_by_frame(&rec);
+                assert!(
+                    frames.windows(2).all(|f| f[0] == f[1]),
+                    "at {w} wide the options move between frames: {frames:?}"
+                );
+                assert!(
+                    rec.awake.iter().skip(1).all(|a| !a),
+                    "at {w} wide the window keeps drawing: {:?}",
+                    rec.awake
+                );
+                assert!(
+                    world.runtime_is_at_rest(),
+                    "at {w} wide the window is not at rest"
+                );
+                let rects = &frames[0];
+                assert!(
+                    stacked(rects) || one_line(rects),
+                    "at {w} wide the options stand neither stacked nor on one line: {rects:?}"
+                );
+                (w, stacked(rects))
+            })
+            .collect::<Vec<_>>()
+    };
+    let widening = sweep(&mut world, &mut widths.iter());
+    let mut narrowing = sweep(&mut world, &mut widths.iter().rev());
+    narrowing.reverse();
+    assert_eq!(
+        widening, narrowing,
+        "the options take the same form at each width, widening or narrowing"
+    );
+    let switches = widening.windows(2).filter(|p| p[0].1 != p[1].1).count();
+    assert!(
+        widening.first().is_some_and(|f| f.1)
+            && widening.last().is_some_and(|l| !l.1)
+            && switches == 1,
+        "the options stack below one width and stand on one line above it: {widening:?}"
+    );
+    rest(&mut world);
+}
+
+#[test]
 fn a_plugin_agent_shows_its_declared_name() {
     let mut world = on_agents(&[
         ("snipe_available", "true"),
