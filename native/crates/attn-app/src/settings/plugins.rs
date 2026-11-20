@@ -264,7 +264,7 @@ fn health_tone(health: &str) -> Tone {
 }
 
 /// A plugin's row, and what is under it: what went wrong, where it lives and its priority.
-fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> (El, Vec<Block>) {
+fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> (ListRow, Vec<Block>) {
     let plugins = &state.window.settings.plugins;
     let name = plugin.name.clone();
     let busy = plugins.busy.is_some();
@@ -378,8 +378,7 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> (El, Vec<Block>) {
                 .key(id("remove"))
                 .into()],
             Reveal::Always,
-        )
-        .build(t);
+        );
     (row, under)
 }
 

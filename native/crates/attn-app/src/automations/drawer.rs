@@ -109,7 +109,7 @@ fn definition_row(
     automations: &Automations,
     definition: &AutomationDefinitionSummary,
     t: &Tokens,
-) -> (El, Vec<Block>) {
+) -> (ListRow, Vec<Block>) {
     let id = definition.id;
     let latest = definition.last_run.as_ref();
     let guard = definition.guard_check.as_ref();
@@ -226,7 +226,7 @@ fn definition_row(
             );
         }
     }
-    (row.build(t), under)
+    (row, under)
 }
 
 fn pull_request_url(state: &mut State) -> &mut TextEdit {
@@ -334,7 +334,7 @@ fn runs(automations: &Automations, definition: &AutomationDefinitionSummary, t: 
         .build(t)
 }
 
-fn run_row(run: &AutomationRunSummary, t: &Tokens) -> (El, Vec<Block>) {
+fn run_row(run: &AutomationRunSummary, t: &Tokens) -> (ListRow, Vec<Block>) {
     let when = crate::calendar::ms_of_rfc3339(&run.created_at)
         .map_or_else(|| run.created_at.clone(), crate::calendar::date_time);
     let mut words = vec![run.state.clone(), when.clone()];
@@ -387,5 +387,5 @@ fn run_row(run: &AutomationRunSummary, t: &Tokens) -> (El, Vec<Block>) {
         .map(|error| refusal(format!("automations.run-error-text.{}", run.id), error, t))
         .into_iter()
         .collect();
-    (row.build(t), under)
+    (row, under)
 }

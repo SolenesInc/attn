@@ -311,7 +311,7 @@ fn list(state: &State, rows: &[Row<'_>], selected: Option<&Row<'_>>, t: &Tokens)
         .scrolling(t)
 }
 
-fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> (El, Vec<Block>) {
+fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> (ListRow, Vec<Block>) {
     let ledger = &state.window.ledger;
     let entry = r.entry;
     let closed = is_closed(entry);
@@ -360,8 +360,7 @@ fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> (El, Vec<
         .in_view(selected)
         .role("option")
         .unfocusable()
-        .build(t)
-        .a11y_value(if selected { "selected" } else { "" })
+        .value(if selected { "selected" } else { "" })
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             super::select(state, &id);
             tx.focus(LIST, false);

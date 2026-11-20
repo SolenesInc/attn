@@ -79,6 +79,8 @@ pub struct ListRow {
     wrap: bool,
     expanded: Option<bool>,
     select: Option<(String, String, Press)>,
+    press: Option<Press>,
+    item_value: Option<String>,
     select_role: &'static str,
     surface: Option<Color>,
     tint: Option<Color>,
@@ -117,6 +119,8 @@ impl ListRow {
             wrap: false,
             expanded: None,
             select: None,
+            press: None,
+            item_value: None,
             select_role: "button",
             surface: None,
             tint: None,
@@ -378,6 +382,12 @@ impl ListRow {
         self
     }
 
+    /// What pressing the row does, for a row that is one button or option.
+    pub fn on_press_tx<S: 'static>(mut self, press: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
+        self.press = Some(Box::new(move |e: El| e.on_press_tx(press)));
+        self
+    }
+
     /// The row is an item of a list, and its lead and words are its own button, keyed `key`
     /// and read as `label`, beside its controls rather than holding them.
     pub fn select<S: 'static>(
@@ -390,6 +400,13 @@ impl ListRow {
         self.focusable = false;
         let attach: Press = Box::new(move |e: El| e.on_press_tx(press));
         self.select = Some((key.into(), label.into(), attach));
+        self
+    }
+
+    /// What the row's list item says it is, beside its name, such as its severity and whether it
+    /// is unread, on the item that holds the row and what lies under it.
+    pub fn item_value(mut self, value: impl Into<String>) -> Self {
+        self.item_value = Some(value.into());
         self
     }
 
@@ -412,6 +429,16 @@ impl ListRow {
     }
 
     pub fn build(self, t: &Tokens) -> El {
+        self.build_with(None, t)
+    }
+
+    /// The row as a list item that also holds `under`, what belongs to the row below it: the
+    /// item keeps the row's key, role and name, and the row's own line gives them up.
+    pub(crate) fn build_holding(self, under: El, t: &Tokens) -> El {
+        self.build_with(Some(under), t)
+    }
+
+    fn build_with(self, holding: Option<El>, t: &Tokens) -> El {
         let size = Size::Compact;
         let two_lines = self.subtitle.is_some();
         let wraps = self.wrap;
@@ -665,14 +692,23 @@ impl ListRow {
             .select
             .is_some()
             .then(|| (self.key.clone(), self.role, self.label.clone()));
+        let lifted = holding.is_some() && item.is_none() && self.role == "listitem";
         let (key, role, label, focusable, attach) = match self.select {
             Some((key, label, attach)) => (key, self.select_role, label, true, Some(attach)),
-            None => (self.key, self.role, self.label, self.focusable, None),
+            None => (self.key, self.role, self.label, self.focusable, self.press),
         };
-        let line = row()
-            .key(key)
-            .role(role)
-            .label(label)
+        let item_role = if role == "option" {
+            "group"
+        } else {
+            "listitem"
+        };
+        let named = label.clone();
+        let (line, held) = if lifted {
+            (row(), Some((key, role, label)))
+        } else {
+            (row().key(key).role(role).label(label), None)
+        };
+        let line = line
             .focusable(focusable)
             .w_full()
             .min_w(0.0)
@@ -688,6 +724,10 @@ impl ListRow {
         let line = match self.value {
             Some(value) => line.a11y_value(value),
             None => line,
+        };
+        let (line, value) = match (item.is_none() && held.is_none(), self.item_value) {
+            (true, Some(value)) => (line.a11y_value(value), None),
+            (_, value) => (line, value),
         };
         let line = match (wraps || tagged, two_lines) {
             (false, _) => line.h(height),
@@ -716,15 +756,30 @@ impl ListRow {
             (false, false, true, false) => focus::ring_on_edge(layers::pressable(line, rest, t), t),
             (false, false, false, false) => layers::pressable(line, rest, t),
         };
-        match item {
-            Some((key, role, label)) => row()
+        let valued = |e: El| match &value {
+            Some(value) => e.a11y_value(value.clone()),
+            None => e,
+        };
+        match (item.or(held), holding) {
+            (Some((key, role, label)), None) => valued(row())
                 .key(key)
                 .role(role)
                 .label(label)
                 .w_full()
                 .min_w(0.0)
                 .child(line),
-            None => line,
+            (Some((key, role, label)), Some(held_under)) => valued(col())
+                .key(key)
+                .role(role)
+                .label(label)
+                .child(line)
+                .child(held_under),
+            (None, Some(held_under)) => valued(col())
+                .role(item_role)
+                .label(named)
+                .child(line)
+                .child(held_under),
+            (None, None) => line,
         }
     }
 }

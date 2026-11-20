@@ -591,8 +591,8 @@ fn a_tag_that_drops_under_a_long_title_adds_only_its_height_and_one_inner_gap_to
     ]);
     open(&mut world);
     expand(&mut world, "n1");
-    let dropped = world.rect(&row("n1"));
-    let one_line = world.rect(&row("n2"));
+    let dropped = world.rect(&format!("{}.head", row("n1")));
+    let one_line = world.rect(&format!("{}.head", row("n2")));
     let title = world.rect(&format!("{}.title", row("n1")));
     let tag = world.rect(&format!("{}.severity", row("n1")));
     assert!(

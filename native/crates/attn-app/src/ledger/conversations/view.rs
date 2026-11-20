@@ -71,7 +71,7 @@ fn list_row(
     r: &KeptConversationRow,
     selected: bool,
     t: &Tokens,
-) -> (El, Vec<Block>) {
+) -> (ListRow, Vec<Block>) {
     let kept = &state.window.ledger.conversations;
     let k = key(r);
     let note = kept.note(&k);
@@ -145,8 +145,7 @@ fn list_row(
         .in_view(selected)
         .role("option")
         .unfocusable()
-        .build(t)
-        .a11y_value(if selected { "selected" } else { "" })
+        .value(if selected { "selected" } else { "" })
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             super::select(state, &chosen);
             tx.focus(LIST, false);

@@ -152,7 +152,7 @@ fn body(state: &State, t: &Tokens) -> Block {
                 let (row, under) = notification(state, n, t);
                 match under {
                     Some((key, under)) => shown.row_with_keyed(row, key, under),
-                    None => shown.row(row),
+                    None => shown.row(row.build(t)),
                 }
             },
         )
@@ -160,7 +160,11 @@ fn body(state: &State, t: &Tokens) -> Block {
         .build(t)
 }
 
-fn notification(state: &State, n: &Notification, t: &Tokens) -> (El, Option<(String, Vec<Block>)>) {
+fn notification(
+    state: &State,
+    n: &Notification,
+    t: &Tokens,
+) -> (ListRow, Option<(String, Vec<Block>)>) {
     let panel = &state.window.notifications;
     let key = format!("notifications.row.{}", n.id);
     let expanded = panel.expanded.as_deref() == Some(n.id.as_str());
@@ -199,7 +203,7 @@ fn notification(state: &State, n: &Notification, t: &Tokens) -> (El, Option<(Str
     } else {
         row.quiet_title(n.title.clone())
     };
-    let row = row.build(t).a11y_value(value);
+    let row = row.item_value(value);
     let under = if expanded {
         Some((format!("{key}.detail"), detail(state, n, &key, t)))
     } else {

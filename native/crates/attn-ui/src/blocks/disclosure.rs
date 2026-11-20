@@ -19,6 +19,7 @@ pub struct Disclosure<S> {
     failed: bool,
     disabled: bool,
     toggle: Press<S>,
+    region: Option<String>,
     blocks: Vec<Block>,
 }
 
@@ -38,6 +39,7 @@ impl<S: 'static> Disclosure<S> {
             failed: false,
             disabled: false,
             toggle: Rc::new(toggle),
+            region: None,
             blocks: Vec::new(),
         }
     }
@@ -62,6 +64,12 @@ impl<S: 'static> Disclosure<S> {
 
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    /// Assistive tools find what the part holds, while open, as a landmark named `name`.
+    pub fn region(mut self, name: impl Into<String>) -> Self {
+        self.region = Some(name.into());
         self
     }
 
@@ -99,6 +107,10 @@ impl<S: 'static> Disclosure<S> {
             door::sides(spaced(self.blocks, inner_gap, None), Space::S16, Space::S0)
                 .key(body_key)
                 .border_sides([0.0, 0.0, 0.0, 1.0], t.border)
+        });
+        let body = body.map(|body| match self.region {
+            Some(name) => body.role("region").label(name),
+            None => body,
         });
         let el = col()
             .key(part)

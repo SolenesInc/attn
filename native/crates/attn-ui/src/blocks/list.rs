@@ -3,7 +3,14 @@ use rune_kit::ScrollBar;
 
 use super::block::{Block, Kind, inner_gap, spaced};
 use crate::Tokens;
-use crate::system::{Radius, Said, Size, Space, Type, door, words};
+use crate::system::{ListRow, Radius, Said, Size, Space, Type, door, words};
+
+/// One thing a list holds: a row as built, or a row with what sits under it, which the row's
+/// item holds too.
+enum Item {
+    Built(El),
+    Holding(Box<ListRow>, Option<String>, Vec<Block>),
+}
 
 /// A list of things, one [`crate::system::ListRow`] each with what it says under it, set apart
 /// by rules, bare on its surface or on a card; or what to say when there are none. Bare, a row's
@@ -20,7 +27,7 @@ pub struct List {
     failed: bool,
     keys: Option<Box<dyn FnOnce(El) -> El>>,
     find: Option<El>,
-    items: Vec<(El, Option<String>, Vec<Block>)>,
+    items: Vec<Item>,
     empty: Option<(String, Said, Option<El>)>,
 }
 
@@ -107,31 +114,32 @@ impl List {
     }
 
     pub fn row(mut self, row: impl Into<El>) -> Self {
-        self.items.push((row.into(), None, Vec::new()));
+        self.items.push(Item::Built(row.into()));
         self
     }
 
     pub fn rows(mut self, rows: impl IntoIterator<Item = El>) -> Self {
-        self.items
-            .extend(rows.into_iter().map(|row| (row, None, Vec::new())));
+        self.items.extend(rows.into_iter().map(Item::Built));
         self
     }
 
     /// A row with blocks under it that belong to it, such as what went wrong with it, starting
-    /// where its words start.
-    pub fn row_with(mut self, row: impl Into<El>, under: Vec<Block>) -> Self {
-        self.items.push((row.into(), None, under));
+    /// where its words start. The row's list item holds them, so assistive tools find each
+    /// control under the row inside the item the row names.
+    pub fn row_with(mut self, row: ListRow, under: Vec<Block>) -> Self {
+        self.items.push(Item::Holding(Box::new(row), None, under));
         self
     }
 
     /// [`List::row_with`], with what is under the row keyed `key`, as one part a reader finds.
     pub fn row_with_keyed(
         mut self,
-        row: impl Into<El>,
+        row: ListRow,
         key: impl Into<String>,
         under: Vec<Block>,
     ) -> Self {
-        self.items.push((row.into(), Some(key.into()), under));
+        self.items
+            .push(Item::Holding(Box::new(row), Some(key.into()), under));
         self
     }
 
@@ -214,35 +222,39 @@ impl List {
         };
         let last = self.items.len().saturating_sub(1);
         let hangs = !self.card;
-        let items = self
-            .items
-            .into_iter()
-            .enumerate()
-            .map(|(at, (row, key, under))| {
-                let under = (!under.is_empty()).then(|| {
-                    let under = door::frame(
-                        spaced(under, inner_gap, None),
-                        Space::S4,
-                        Space::S8,
-                        Space::S12,
-                    );
-                    match key {
-                        Some(key) => under.key(key),
-                        None => under,
+        let items = self.items.into_iter().enumerate().map(|(at, item)| {
+            let item = match item {
+                Item::Built(row) => col().child(row),
+                Item::Holding(row, key, under) => {
+                    let under = (!under.is_empty()).then(|| {
+                        let under = door::frame(
+                            spaced(under, inner_gap, None),
+                            Space::S4,
+                            Space::S8,
+                            Space::S12,
+                        );
+                        match key {
+                            Some(key) => under.key(key),
+                            None => under,
+                        }
+                    });
+                    match under {
+                        Some(under) => row.build_holding(under, t),
+                        None => col().child(row.build(t)),
                     }
-                });
-                let item = col().child(row).children(under);
-                let item = if hangs {
-                    door::hang(item, Size::Compact.inset())
-                } else {
-                    item.w_full()
-                };
-                if at < last {
-                    item.border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-                } else {
-                    item
                 }
-            });
+            };
+            let item = if hangs {
+                door::hang(item, Size::Compact.inset())
+            } else {
+                item.w_full()
+            };
+            if at < last {
+                item.border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+            } else {
+                item
+            }
+        });
         let count_key = format!("{}.count", self.key);
         let heading = self.heading.then(|| {
             let line = door::gap(row().w_full().items_center(), Space::S8)

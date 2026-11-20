@@ -224,7 +224,7 @@ fn glyph(state: &State, w: &Worktree) -> Glyph {
     }
 }
 
-fn worktree_row(state: &State, w: &Worktree, selected: bool, t: &Tokens) -> (El, Vec<Block>) {
+fn worktree_row(state: &State, w: &Worktree, selected: bool, t: &Tokens) -> (ListRow, Vec<Block>) {
     let ledger = &state.window.ledger.worktrees;
     let path = w.path.clone();
     let note = ledger.note(&path);
@@ -267,8 +267,7 @@ fn worktree_row(state: &State, w: &Worktree, selected: bool, t: &Tokens) -> (El,
         .in_view(selected)
         .role("option")
         .unfocusable()
-        .build(t)
-        .a11y_value(if selected { "selected" } else { "" })
+        .value(if selected { "selected" } else { "" })
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             super::select(state, &chosen);
             tx.focus(LIST, false);

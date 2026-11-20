@@ -240,7 +240,7 @@ fn sheet(s: &Panels, cx: &mut Cx<Panels>) -> El {
     stage(s, cx, &t, f32::INFINITY, panel)
 }
 
-fn row(s: &Panels, t: &Tokens, i: usize, name: &str, selected: bool) -> (El, Vec<Block>) {
+fn row(s: &Panels, t: &Tokens, i: usize, name: &str, selected: bool) -> (ListRow, Vec<Block>) {
     let title = if s.long { LONG_TITLE } else { name };
     let controls: Vec<El> = vec![
         switch(
@@ -298,7 +298,7 @@ fn row(s: &Panels, t: &Tokens, i: usize, name: &str, selected: bool) -> (El, Vec
             .wrap(),
         ));
     }
-    (row.build(t), under)
+    (row, under)
 }
 
 fn list(s: &Panels, cx: &mut Cx<Panels>) -> El {

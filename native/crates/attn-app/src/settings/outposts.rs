@@ -11,7 +11,9 @@ use attn_ui::Tokens;
 use rune::{El, TextEdit, Tx};
 use rune_kit::TextInput;
 
-use attn_ui::blocks::{Actions, Block, Facts, Field, Inline, List, Notice, Prose, Section, Status};
+use attn_ui::blocks::{
+    Actions, Block, Facts, Field, Inline, List, Notice, Prose, Section, Stack, Status,
+};
 use attn_ui::system::{Button, FieldState, ListRow, Look, Size, Tone, Type, line_box, tag, words};
 
 use crate::State;
@@ -272,35 +274,43 @@ fn notebook_text(notebook: &OutpostNotebook) -> String {
 }
 
 /// What an outpost's Notebook is doing, and what it kept aside, as lines under its row.
-fn notebook(key: &str, notebook: &OutpostNotebook, t: &Tokens) -> Vec<Block> {
+fn notebook(key: &str, notebook: &OutpostNotebook, t: &Tokens) -> Block {
     let said = notebook_text(notebook);
-    let state_key = format!("{key}.notebook.state");
-    let state = if notebook.state == "error" {
-        Notice::warn(state_key, said).build(t)
-    } else {
-        Status::new(state_key, said, false).build(t)
+    let line = |key: String, said: String, alert: bool| {
+        let ink = if alert { t.warning } else { t.text_tertiary };
+        let line = words(said.clone(), Type::Small, ink)
+            .key(key)
+            .label(said)
+            .wrap();
+        if alert { line.role("alert") } else { line }
     };
     let conflicts = notebook.conflicts.unwrap_or(0);
-    let conflicts = (conflicts > 0).then(|| {
-        let copies = if conflicts == 1 { "copy" } else { "copies" };
-        Notice::warn(
-            format!("{key}.notebook.conflicts"),
-            format!("{conflicts} conflict {copies}"),
-        )
-        .build(t)
-    });
-    let previous = notebook.previous_root.as_ref().map(|root| {
-        Prose::hint(
-            format!("{key}.notebook.previous"),
-            format!("Previous folder saved at {root}"),
-        )
-        .build(t)
-    });
-    [state]
-        .into_iter()
-        .chain(conflicts)
-        .chain(previous)
-        .collect()
+    Block::custom(
+        format!("{key}.notebook.block"),
+        Stack::tight()
+            .key(format!("{key}.notebook"))
+            .role("status")
+            .child(line(
+                format!("{key}.notebook.state"),
+                said,
+                notebook.state == "error",
+            ))
+            .children((conflicts > 0).then(|| {
+                let copies = if conflicts == 1 { "copy" } else { "copies" };
+                line(
+                    format!("{key}.notebook.conflicts"),
+                    format!("{conflicts} conflict {copies}"),
+                    true,
+                )
+            }))
+            .children(notebook.previous_root.as_ref().map(|root| {
+                line(
+                    format!("{key}.notebook.previous"),
+                    format!("Previous folder saved at {root}"),
+                    false,
+                )
+            })),
+    )
 }
 
 fn action(
@@ -320,7 +330,7 @@ fn action(
 }
 
 /// An outpost's row, and what is under it: its details, its trouble and what can be done.
-fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> (El, Vec<Block>) {
+fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> (ListRow, Vec<Block>) {
     let page = &state.window.settings.outposts;
     let online = connected(state);
     let id = outpost.id.clone();
@@ -365,7 +375,7 @@ fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> (El, Vec<Block>) {
         );
     }
     if let Some(nb) = &outpost.notebook {
-        under.extend(notebook(&key, nb, t));
+        under.push(notebook(&key, nb, t));
     }
     if let Some(said) = crate::outpost::update_text(outpost) {
         under.push(Status::new(part("update"), said, false).build(t));
@@ -504,8 +514,7 @@ fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> (El, Vec<Block>) {
                         .shrink()
                         .min_w(0.0),
                 ),
-        )
-        .build(t);
+        );
     (row, under)
 }
 

@@ -135,7 +135,7 @@ fn tone_of(state: &str) -> Tone {
 }
 
 /// A task's row, with what went wrong and its diagnostic output under it.
-fn row_of(tasks: &Tasks, task: &Task, now_ms: i64, t: &Tokens) -> (El, Vec<Block>) {
+fn row_of(tasks: &Tasks, task: &Task, now_ms: i64, t: &Tokens) -> (ListRow, Vec<Block>) {
     let key = format!("settings.task.{}", task.id);
     let subject = format!("{}:{}", task.kind, task.subject);
     let retrying = tasks.retrying.contains(&task.id);
@@ -183,8 +183,7 @@ fn row_of(tasks: &Tasks, task: &Task, now_ms: i64, t: &Tokens) -> (El, Vec<Block
                     .into()
             }),
             Reveal::Always,
-        )
-        .build(t);
+        );
     let error = task
         .last_error
         .as_deref()
@@ -207,6 +206,7 @@ fn row_of(tasks: &Tasks, task: &Task, now_ms: i64, t: &Tokens) -> (El, Vec<Block
                     }
                 },
             )
+            .region("Diagnostic output")
             .push(Block::custom(
                 format!("{key}.diagnostic.block"),
                 words(d.to_owned(), Type::Mono, t.text_secondary)
