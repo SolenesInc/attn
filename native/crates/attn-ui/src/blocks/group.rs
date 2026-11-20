@@ -14,7 +14,7 @@ pub struct Group<S> {
     key: String,
     label: String,
     keys: Option<Keys<S>>,
-    active: Option<String>,
+    roving: bool,
     blocks: Vec<Block>,
 }
 
@@ -25,7 +25,7 @@ impl<S: 'static> Group<S> {
             key: key.into(),
             label: label.into(),
             keys: None,
-            active: None,
+            roving: false,
             blocks: Vec::new(),
         }
     }
@@ -36,10 +36,11 @@ impl<S: 'static> Group<S> {
         self
     }
 
-    /// The group is one stop of Tab that holds the options in it, the one keyed `key` read as
-    /// the current one, as a list box that keeps the keyboard reads its chosen option.
-    pub fn active(mut self, key: Option<String>) -> Self {
-        self.active = key;
+    /// The options in the group are one stop of Tab, the chosen one taking it, and the arrows
+    /// move among them, choosing the one they reach, as a list box does. The page reveals the
+    /// option that takes the focus, however far down the list it is.
+    pub fn roving(mut self) -> Self {
+        self.roving = true;
         self
     }
 
@@ -63,8 +64,8 @@ impl<S: 'static> Group<S> {
                 .focusable(true)
                 .on_key(move |s: &mut S, ev: &KeyEvent, tx: &mut Tx| keys(s, ev, tx));
         }
-        if let Some(active) = self.active {
-            el = el.focusable(true).focus_group().active_descendant(active);
+        if self.roving {
+            el = el.focus_group().focus_follows();
         }
         Block::new(Kind::Custom, el)
     }

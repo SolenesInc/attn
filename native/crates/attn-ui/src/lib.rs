@@ -17,8 +17,8 @@ pub mod tile_gallery;
 pub mod type_;
 
 pub use scroll_bar::{
-    asks_scroll_bar, code_scroll_bar, dialog_scroll_bar, document_scroll_bar, scroll_bar,
-    thin_scroll_bar,
+    asks_scroll_bar, code_scroll_bar, dialog_scroll_bar, document_scroll_bar, page_scroll_bar,
+    scroll_bar, thin_scroll_bar,
 };
 
 /// The interface's colors in one appearance, named by meaning. The surfaces, borders, text and

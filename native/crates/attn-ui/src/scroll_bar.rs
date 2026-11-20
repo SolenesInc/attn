@@ -19,6 +19,15 @@ pub fn scroll_bar(t: &Tokens) -> ScrollBarStyle {
         .room()
 }
 
+/// A page's bar: the 8 point bar drawn over the page's side inset rather than in room taken
+/// from it, so the page keeps its width as its content starts or stops overflowing and nothing
+/// on it moves sideways when a part opens.
+pub fn page_scroll_bar(t: &Tokens) -> ScrollBarStyle {
+    ScrollBarStyle::native(t.scrollbar_thumb, t.scrollbar_hover)
+        .webkit_parts(8.0, 0.0, 0.0)
+        .always()
+}
+
 /// A dialog list's bar, `.shortcuts-body` and `.shortcut-editor-body`: the 8 point bar with its
 /// thumb drawn 2 points in from every side, `border`, `border_hover` under the pointer.
 pub fn dialog_scroll_bar(t: &Tokens) -> ScrollBarStyle {

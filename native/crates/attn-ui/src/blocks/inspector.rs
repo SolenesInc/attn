@@ -17,6 +17,12 @@ const WIDEST: f32 = 380.0;
 /// `width: 30%`.
 const SHARE: f32 = 0.3;
 
+/// In a page, of the room a list and its inspector share past their floors, the parts each
+/// takes: the inspector three to the list's one, the split main's Analytics page drew at 1380
+/// points (a 395 point list beside a 623 point inspector).
+const LIST_PARTS: f32 = 1.0;
+const INSPECTOR_PARTS: f32 = 3.0;
+
 /// The column beside a list that reads its chosen row: the row's name, a line under it that
 /// says what it is, then the facts known about it and what acts on it, in a column that scrolls.
 pub struct Inspector {
@@ -98,7 +104,7 @@ impl Inspector {
             .key(key)
             .role("complementary")
             .label(label)
-            .grow_from(1.0, NARROWEST)
+            .grow_from(INSPECTOR_PARTS, NARROWEST)
             .border_sides([0.0, 0.0, 0.0, 1.0], t.border_subtle)
             .child(column)
     }
@@ -148,7 +154,9 @@ pub fn beside(list: El, inspector: El) -> El {
 
 /// A list built as a block, such as one that holds more than one list, with its inspector
 /// beside it in a page that scrolls: the two share the row while both fit, neither narrower
-/// than an inspector gets, and the inspector goes under the list where they don't. Give it an
+/// than an inspector gets and the inspector taking the larger part, and the inspector goes
+/// under the list where they don't. Their widths come from the page, never from what they
+/// hold, so a part opening in either moves nothing sideways. Give it an
 /// inspector built [`Inspector::in_page`], so the page is the one thing that scrolls.
 pub fn beside_list(list: super::Block, inspector: El) -> super::Block {
     super::Block::new(
@@ -157,7 +165,7 @@ pub fn beside_list(list: super::Block, inspector: El) -> super::Block {
             .w_full()
             .flex_wrap()
             .items_start()
-            .child(list.el.grow_from(1.0, NARROWEST))
+            .child(list.el.grow_from(LIST_PARTS, NARROWEST))
             .child(inspector),
     )
 }

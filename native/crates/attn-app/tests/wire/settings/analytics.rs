@@ -1130,7 +1130,7 @@ fn the_chosen_row_reads_as_selected_and_moves_with_the_keys() {
 }
 
 #[test]
-fn tab_from_the_view_tabs_stops_on_the_list_before_what_the_chosen_row_holds() {
+fn tab_from_the_view_tabs_stops_on_the_chosen_option_before_what_it_holds() {
     let mut world = triage();
     let tab = "settings.analytics.views.vents";
     for _ in 0..40 {
@@ -1149,12 +1149,138 @@ fn tab_from_the_view_tabs_stops_on_the_list_before_what_the_chosen_row_holds() {
         tab_once(&mut world);
         order.extend(focused(&world));
     }
-    let list = order.iter().position(|k| k == "settings.analytics.list");
+    let list = order.iter().position(|k| k == "item0");
     let inspector = order
         .iter()
         .position(|k| k.starts_with("settings.analytics.vent."));
     assert!(
         list.is_some_and(|l| inspector.is_none_or(|i| l < i)),
-        "Tab stops on the list before the chosen row's actions: {order:?}"
+        "Tab stops on the chosen option before what it holds: {order:?}"
     );
+}
+
+/// `count` vents in the review's mix: tool vents with a long English text and attn vents with a
+/// long Japanese one, the last fifth done, at `scale` with sharing refused.
+fn dense(count: usize, scale: &str) -> World {
+    let vents = (0..count)
+        .map(|i| {
+            let mut v = vent(&format!("v-{i:02}"));
+            v.kind = if i % 2 == 0 { "tools" } else { "attn" }.into();
+            v.created_at = format!("2026-11-12T08:59:{:02}Z", 59 - i);
+            v.context.session_label = if i % 2 == 0 {
+                "attn--settings-analytics-migration-keyboard-navigation-and-accessibility-review"
+                    .into()
+            } else {
+                "分析と設定の表示を検証するための長い作業ツリーの名前とエラー報告".repeat(3)
+            };
+            v.text = format!(
+                "Vent {i:02} {}",
+                if i % 2 == 0 {
+                    "The daemon refused to write the settings after the user opened Analytics while its outpost was unreachable. ".repeat(6)
+                } else {
+                    "設定を保存できません。変更内容を確認し、接続が復旧してから再試行してください。".repeat(14)
+                }
+            );
+            if i >= count * 4 / 5 && i > 1 {
+                v.dismissed_at = Some("2026-11-12T09:00:00Z".into());
+            }
+            v
+        })
+        .collect();
+    let mut refused = status();
+    refused.last_refusal = Some(
+        "Analytics upload returned 413: this outpost exceeded the server's request size limit. 接続設定を確認してから同期を再試行してください。".into(),
+    );
+    sharing(
+        &[
+            ("uiScale", scale),
+            ("analytics.sharing_enabled", "true"),
+            ("analytics.share_vents", "true"),
+        ],
+        refused,
+        vents,
+    )
+}
+
+/// Whether the element keyed `key` lies whole inside the page's view.
+fn in_view(world: &World, key: &str) -> bool {
+    let body = super::rect_of(world, "settings.body");
+    let shown = super::rect_of(world, key);
+    shown[3] > 0.0 && shown[1] >= body[1] - 0.5 && shown[1] + shown[3] <= body[1] + body[3] + 0.5
+}
+
+#[test]
+fn tab_into_a_long_list_shows_its_chosen_option() {
+    let mut world = dense(36, "1.5");
+    world.resize((800.0, 600.0));
+    for _ in 0..20 {
+        press(&mut world, "j");
+    }
+    super::tab_to(&mut world, "settings.analytics.views.vents");
+    tab_once(&mut world);
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("item20"),
+        "Tab lands on the chosen option"
+    );
+    assert!(
+        in_view(&world, "item20"),
+        "the chosen option at {:?} shows in the page's view {:?}",
+        super::rect_of(&world, "item20"),
+        super::rect_of(&world, "settings.body")
+    );
+}
+
+#[test]
+fn a_long_japanese_vent_with_a_refusal_keeps_send_in_view_at_the_regular_size() {
+    let mut world = dense(4, "1");
+    world.resize((1380.0, 900.0));
+    press(&mut world, "j");
+    assert!(
+        named(&world, "settings.analytics.vent.text").starts_with("Vent 01 "),
+        "the Japanese vent is chosen"
+    );
+    assert!(
+        in_view(&world, "settings.analytics.vent.action.x"),
+        "Send at {:?} shows whole in the page's view {:?} before any Tab",
+        super::rect_of(&world, "settings.analytics.vent.action.x"),
+        super::rect_of(&world, "settings.body")
+    );
+}
+
+#[test]
+fn show_all_moves_neither_column_sideways() {
+    // 900 points high, the review's window; 840, where the vent opening first makes the page
+    // overflow, so a scroll bar that took its room would narrow both columns.
+    for high in [900.0, 840.0] {
+        let mut world = dense(4, "1");
+        world.resize((1380.0, high));
+        assert!(
+            shows(&world, "settings.analytics.vent.more"),
+            "the long vent offers Show all"
+        );
+        let recording = world.record(60.0, 0.5, |_, app| {
+            app.click(Target::key("settings.analytics.vent.more"))
+        });
+        assert!(
+            !shows(&world, "settings.analytics.vent.more"),
+            "Show all opened the vent"
+        );
+        for column in ["settings.analytics.inspector", "settings.analytics.list"] {
+            let track = recording
+                .tracks
+                .iter()
+                .find(|t| t.path.rsplit('/').next() == Some(column))
+                .unwrap_or_else(|| panic!("{column} was recorded"));
+            let across: Vec<(f32, f32)> = track
+                .frames
+                .iter()
+                .map(|(_, state)| (state.rect[0], state.rect[2]))
+                .collect();
+            assert!(
+                across.windows(2).all(|w| w[0] == w[1]),
+                "{high}: {column} keeps its x and width on every frame across Show all: {across:?}"
+            );
+        }
+    }
 }

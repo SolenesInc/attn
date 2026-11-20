@@ -108,7 +108,7 @@ impl Page {
             })
             .scroll_margin(crate::system::RING_REACH)
             .child(content)
-            .scroll_bar_styled(crate::scroll_bar(t))
+            .scroll_bar_styled(crate::page_scroll_bar(t))
     }
 }
 

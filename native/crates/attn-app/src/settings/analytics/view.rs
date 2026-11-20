@@ -315,7 +315,6 @@ fn rows(state: &State, page: &Analytics, items: &[Item], index: usize, t: &Token
             .subtitle(line, t)
             .in_view(i == index)
             .role("option")
-            .unfocusable()
             .on_press_tx(move |state: &mut State, tx: &mut Tx| super::pick(state, key.clone(), tx))
             .build(t)
             .focus_selected(i == index)
@@ -335,7 +334,7 @@ fn rows(state: &State, page: &Analytics, items: &[Item], index: usize, t: &Token
             })
         };
         return Group::<State>::new(LIST, name)
-            .active((!items.is_empty()).then(|| format!("item{index}")))
+            .roving()
             .push_all(part("new", "New", new))
             .push_all(part("done", "Done", done))
             .build(t);
@@ -346,7 +345,7 @@ fn rows(state: &State, page: &Analytics, items: &[Item], index: usize, t: &Token
         _ => "Reading the record…",
     };
     Group::<State>::new(LIST, name)
-        .active((!items.is_empty()).then(|| format!("item{index}")))
+        .roving()
         .push(
             List::new(format!("{LIST}.rows"), name)
                 .listbox()
