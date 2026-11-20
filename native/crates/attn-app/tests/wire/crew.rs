@@ -2971,3 +2971,29 @@ fn an_assistive_scroll_moves_the_crew_roster_when_its_members_overflow_as_on_mai
         );
     });
 }
+
+#[test]
+fn rename_in_the_smallest_window_shows_its_focused_field_whole() {
+    let mut world = World::start(daemon(
+        vec![member("fern", 1)],
+        vec![session("s1", "claude")],
+        Vec::new(),
+    ));
+    world.resize((533.0, 400.0));
+    open(&mut world);
+    click(&mut world, "crew.rename");
+    assert!(
+        world
+            .screen()
+            .focused()
+            .and_then(|n| n.key)
+            .is_some_and(|k| k.starts_with("crew.rename.field"))
+    );
+    if let Err(why) = super::reach::focus_shows_whole(
+        &world,
+        "crew.page",
+        super::reach::Ring::Drawn { dark: true },
+    ) {
+        panic!("{why}");
+    }
+}

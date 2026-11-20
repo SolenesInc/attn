@@ -4560,6 +4560,49 @@ fn asks(dark: bool) {
     snap(&mut world, "asks", dark);
 }
 
+/// The asks drawer reopened on a written draft after the window shrank to the smallest at the
+/// largest text: the answer that takes the keyboard shows with its ring.
+fn asks_reopened(dark: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    if let Some(settings) = state.settings.as_mut() {
+        settings.insert("uiScale".into(), "1.5".into());
+    }
+    state.asks = Some(vec![Ask {
+        id: "a-text".into(),
+        session_id: "s1".into(),
+        subject: "Release announcement".into(),
+        base_dir: "/repo".into(),
+        created_at: "2026-11-17T09:00:00Z".into(),
+        parts: vec![
+            AskPart {
+                markdown: Some(
+                    "The nightly export has finished. We can send the report after the follow-up check."
+                        .into(),
+                ),
+                ..AskPart::default()
+            },
+            AskPart {
+                question: Some(AskQuestion {
+                    key: "q1".into(),
+                    kind: "text".into(),
+                    prompt: "What should the release announcement say?".into(),
+                    ..AskQuestion::default()
+                }),
+                ..AskPart::default()
+            },
+        ],
+        ..Ask::default()
+    }]);
+    let mut world = World::start_sized(scripted().state(state), (1050.0, 780.0));
+    world.open_desktop();
+    press(&mut world, Action::DockAsks);
+    world.gesture(|app| app.type_text("Response text."));
+    world.gesture(|app| app.press("escape"));
+    world.resize((800.0, 600.0));
+    press(&mut world, Action::DockAsks);
+    snap(&mut world, "asks-reopened", dark);
+}
+
 /// The asks drawer with nothing open, under the asks setting.
 fn asks_empty(dark: bool) {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
@@ -7474,6 +7517,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         });
         scene("ledger", || ledger(dark));
         scene("asks", || asks(dark));
+        scene("asks_reopened", || asks_reopened(dark));
         scene("asks_empty", || asks_empty(dark));
         scene("asks_choices", || asks_choices(dark));
         scene("asks_preview", || asks_preview(dark));

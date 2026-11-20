@@ -2784,3 +2784,25 @@ fn start_from_holds_its_form_and_place_while_the_arrows_move_through_long_branch
         }
     }
 }
+
+#[test]
+fn tab_shows_every_control_whole_in_the_smallest_window() {
+    const RECENTS: &[&str] = &[
+        "/home/me/src/repo00",
+        "/home/me/src/repo01",
+        "/home/me/src/repo02",
+        "/home/me/src/repo03",
+        "/home/me/src/repo04",
+        "/home/me/src/repo05",
+        "/home/me/src/repo06",
+        "/home/me/src/repo07",
+        "/home/me/src/repo08",
+        "/home/me/src/repo09",
+        "/home/me/src/repo10",
+        "/home/me/src/repo11",
+    ];
+    let mut world = busy_desktop(RECENTS);
+    world.resize((533.0, 400.0));
+    open_dialog(&mut world);
+    super::reach::tab_round_shows_whole(&mut world, "").unwrap_or_else(|why| panic!("{why}"));
+}

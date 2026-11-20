@@ -1723,3 +1723,13 @@ fn reads_the_seeds_document_and_opens_a_linked_markdown_file_from_it() {
     );
     assert!(sleeps_once_its_timers_run(&mut world));
 }
+
+#[test]
+fn tab_shows_every_row_whole_in_the_smallest_window() {
+    let seeds = (0..16)
+        .map(|i| seed(&format!("s-row{i:03}"), &format!("Seed number {i}")))
+        .collect();
+    let mut world = open_garden_sized(daemon(seeds, Vec::new()), (533.0, 400.0));
+    super::reach::tab_round_shows_whole(&mut world, "garden.")
+        .unwrap_or_else(|why| panic!("{why}"));
+}

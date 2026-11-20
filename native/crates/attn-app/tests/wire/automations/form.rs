@@ -1344,3 +1344,22 @@ fn the_title_bar_closes_the_drawer_while_a_form_field_holds_the_keyboard() {
     assert!(!has(&world, FORM));
     assert!(!has(&world, "automations.list"));
 }
+
+#[test]
+fn a_new_automation_in_the_smallest_window_shows_its_focused_name_whole() {
+    let stored = Stored::of(definition(1, "PR reviewer"), manual_spec("PR reviewer"));
+    let mut world = open_scene(&stored, |_| {});
+    world.resize((533.0, 400.0));
+    click(&mut world, "automations.new");
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key),
+        Some(key("name"))
+    );
+    if let Err(why) = super::super::reach::focus_shows_whole(
+        &world,
+        &key("body"),
+        super::super::reach::Ring::Drawn { dark: true },
+    ) {
+        panic!("{why}");
+    }
+}

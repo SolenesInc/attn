@@ -515,3 +515,58 @@ fn at_the_smallest_window_with_every_notice_up_tab_brings_new_whole_into_view() 
         "New at {new:?} is whole in the view that scrolls it, {view:?}"
     );
 }
+
+#[test]
+fn shift_tab_back_to_settings_after_wheeling_the_head_away_shows_its_whole_ring() {
+    let message = one_desktop(
+        (0..40)
+            .map(|n| agent(&format!("s{n}"), "working"))
+            .collect(),
+    );
+    let mut world = World::start_sized(Daemon::scripted().state(message), (800.0, 600.0));
+    for _ in 0..400 {
+        if world.screen().focused().and_then(|n| n.key).as_deref() == Some("home.new") {
+            break;
+        }
+        world.gesture(|app| app.key(super::queue::plain(rune::Key::Tab)));
+    }
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some("home.new"),
+        "Tab reaches New"
+    );
+    let cards = Target::key("home.cards.scroll");
+    let [x, y, w, h] = world.screen().bounds(cards.clone()).unwrap();
+    world.gesture(|app| app.runtime.wheel(x + w / 2.0, y + h / 2.0, -4000.0));
+    world.settle();
+    let settings = world.screen().bounds(Target::key("home.settings")).unwrap();
+    assert!(
+        settings[1] + settings[3] < y,
+        "the wheel takes Settings above the cards: {settings:?}"
+    );
+    for _ in 0..80 {
+        if world.screen().focused().and_then(|n| n.key).as_deref() == Some("home.settings") {
+            break;
+        }
+        world.gesture(|app| {
+            app.key(rune::KeyEvent {
+                key: rune::Key::Tab,
+                mods: rune::Mods {
+                    shift: true,
+                    ..rune::Mods::default()
+                },
+            })
+        });
+    }
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some("home.settings"),
+        "Tab back reaches Settings"
+    );
+    super::reach::focus_shows_whole(
+        &world,
+        "home.cards.scroll",
+        super::reach::Ring::Drawn { dark: true },
+    )
+    .unwrap();
+}

@@ -2165,3 +2165,10 @@ fn an_answer_that_moves_no_row_keeps_the_highlight_whole_and_the_launcher_at_res
     let row = highlighted_key(&world, LOCATIONS.1);
     assert!(whole_in(&world, &row, LOCATIONS.0));
 }
+
+#[test]
+fn tab_shows_every_control_whole_in_the_smallest_window() {
+    let mut world = open("main_repo");
+    world.resize((533.0, 400.0));
+    super::reach::tab_round_shows_whole(&mut world, "").unwrap_or_else(|why| panic!("{why}"));
+}

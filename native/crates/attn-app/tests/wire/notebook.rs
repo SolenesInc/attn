@@ -3140,3 +3140,25 @@ fn the_file_tree_is_the_notebook_files_landmark_that_scrolls() {
         "the landmark is what scrolls"
     );
 }
+
+#[test]
+fn the_finder_in_the_smallest_window_shows_its_focused_field_whole() {
+    let disk = Disk::with(&[("knowledge/index.md", INDEX)]);
+    let mut world = start(&disk);
+    serve_index(&world);
+    world.resize((533.0, 400.0));
+    open_fullscreen(&mut world);
+    world
+        .automate("run", json!({ "name": "file.open" }))
+        .unwrap();
+    world.settle();
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some("notebook.finder.field")
+    );
+    if let Err(why) =
+        super::reach::focus_shows_whole(&world, "notebook.finder", super::reach::Ring::None)
+    {
+        panic!("{why}");
+    }
+}

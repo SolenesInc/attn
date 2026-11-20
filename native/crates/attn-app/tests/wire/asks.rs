@@ -1920,3 +1920,85 @@ fn the_other_answer_sits_in_its_question_s_group_of_answers_as_on_main() {
         "the Other field is outside the question's answers"
     );
 }
+
+fn release_announcement() -> Ask {
+    ask(
+        "a-text",
+        "web",
+        "Release announcement",
+        45,
+        vec![
+            prose(
+                "The nightly export has finished. We can send the report after the follow-up check.",
+            ),
+            question(
+                "q1",
+                "text",
+                "What should the release announcement say?",
+                &[],
+            ),
+        ],
+    )
+}
+
+fn start_large_text(size: (f32, f32), theme: &str) -> World {
+    let mut state = one_desktop(vec![web_waiting()]);
+    state.asks = Some(vec![release_announcement()]);
+    state.settings = Some(BTreeMap::from([
+        ("uiScale".to_owned(), "1.5".to_owned()),
+        ("theme".to_owned(), theme.to_owned()),
+    ]));
+    World::start_sized(super::palette::daemon(state, vec![]), size)
+}
+
+/// The focused answer's whole line and its painted ring are inside the ask's view.
+fn assert_focused_answer_in_view(world: &World, case: &str) {
+    assert_eq!(
+        focused(world).as_deref(),
+        Some("asks.q.q1.text.field"),
+        "{case}"
+    );
+    if let Err(why) = super::reach::focus_shows_whole(
+        world,
+        "asks.ask",
+        super::reach::Ring::Drawn {
+            dark: !case.contains("light"),
+        },
+    ) {
+        panic!("{case}: {why}");
+    }
+}
+
+const SMALLEST: (f32, f32) = (800.0, 600.0);
+
+#[test]
+fn reopened_on_a_draft_after_the_window_shrank_the_focused_answer_shows_whole() {
+    for theme in ["dark", "light"] {
+        let mut world = start_large_text((1050.0, 780.0), theme);
+        open_drawer(&mut world);
+        assert_eq!(focused(&world).as_deref(), Some("asks.q.q1.text.field"));
+        world.gesture(|app| app.type_text("Response text."));
+        plain(&mut world, Key::Escape);
+        assert!(world.screen().find(Target::key("asks.drawer")).is_none());
+        world.resize(SMALLEST);
+        open_drawer(&mut world);
+        assert_eq!(
+            world
+                .screen()
+                .get(Target::key("asks.q.q1.text.field"))
+                .value
+                .as_deref(),
+            Some("Response text.")
+        );
+        assert_focused_answer_in_view(&world, &format!("reopened, {theme}"));
+    }
+}
+
+#[test]
+fn opened_in_the_smallest_window_at_large_text_the_focused_answer_shows_whole() {
+    for theme in ["dark", "light"] {
+        let mut world = start_large_text(SMALLEST, theme);
+        open_drawer(&mut world);
+        assert_focused_answer_in_view(&world, &format!("opened, {theme}"));
+    }
+}

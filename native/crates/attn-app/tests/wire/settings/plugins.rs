@@ -451,3 +451,23 @@ fn a_list_the_daemon_never_answers_shows_loading_and_the_link_dropping_says_why(
         Some("the daemon did not answer")
     );
 }
+
+#[test]
+fn tab_shows_every_plugin_whole_in_the_smallest_window() {
+    let plugins = (0..12)
+        .map(|i| PluginInfo {
+            name: format!("plugin-{i:02}"),
+            dir: format!("/tmp/plugin-{i:02}"),
+            ..installed()
+        })
+        .collect();
+    let mut world = World::start(serving(plugins));
+    world.resize((533.0, 400.0));
+    on_plugins(&mut world);
+    let reached = super::super::reach::tab_round_shows_whole(&mut world, "settings.")
+        .unwrap_or_else(|why| panic!("{why}"));
+    assert!(
+        reached.iter().any(|k| k.contains("plugin-11")),
+        "Tab never reached the last plugin: {reached:?}"
+    );
+}
