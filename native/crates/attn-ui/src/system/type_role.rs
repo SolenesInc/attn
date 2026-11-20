@@ -54,7 +54,7 @@ pub fn words(words: impl Into<Said>, kind: Type, ink: Color) -> El {
 }
 
 /// How wide `words` set as `kind` stand on one line, as [`words`] draws them.
-pub(crate) fn width_of(words: impl Into<Said>, kind: Type) -> f32 {
+pub fn width_of(words: impl Into<Said>, kind: Type) -> f32 {
     measured(&words.into(), kind, None).0
 }
 

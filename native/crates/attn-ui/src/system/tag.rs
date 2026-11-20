@@ -48,6 +48,11 @@ pub fn mark_chip(mark: impl Into<crate::Glyph>, ink: Color, t: &Tokens) -> El {
 
 const PILL_WASH: f32 = 0.14;
 
+/// How wide [`tag`] draws `said`: its capitals, its inset on each side and its edge.
+pub fn tag_width(said: &'static str) -> f32 {
+    super::width_of(said, Type::Tag) + 2.0 * (Space::S6.pt() + 1.0)
+}
+
 pub fn tag(key: impl Into<String>, said: impl Into<Said>, tone: Tone, t: &Tokens) -> Control {
     let (ink, fill) = inks(tone, t);
     let tag = words(said, Type::Tag, ink)

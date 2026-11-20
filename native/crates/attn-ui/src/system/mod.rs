@@ -76,10 +76,10 @@ pub use size::Size;
 pub(crate) use space::Space;
 pub use stepper::{arrows, stepper};
 pub use switch::{Beside, switch};
-pub use tag::{Tone, mark_chip, pill, tag};
+pub use tag::{Tone, mark_chip, pill, tag, tag_width};
 pub use trigger::{Trigger, TriggerLook};
-pub use type_role::{Type, words};
-pub(crate) use type_role::{lines_at, width_of};
+pub(crate) use type_role::lines_at;
+pub use type_role::{Type, width_of, words};
 
 use crate::Tokens;
 

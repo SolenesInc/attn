@@ -444,6 +444,78 @@ fn hovering_the_waiting_pill_peeks_at_the_agents_and_a_row_opens_its_agent() {
 }
 
 #[test]
+fn the_waiting_peeks_columns_keep_clear_of_each_other_in_the_smallest_window_at_every_text_size() {
+    let member = |id: &str, chief: bool| attn_protocol::CrewMember {
+        id: id.into(),
+        name: id.into(),
+        chief: Some(chief),
+        profile_id: "work".into(),
+        revision: 1,
+        resolved_agent: "claude".into(),
+        ..attn_protocol::CrewMember::default()
+    };
+    for scale in ["1", "1.5"] {
+        let mut state = queue(one_desktop(vec![
+            turn("a-long-waiting-agent-name", 50),
+            turn("b", 40),
+        ]));
+        state
+            .settings
+            .get_or_insert_default()
+            .insert("uiScale".to_owned(), scale.to_owned());
+        state.crew = Some(vec![member("chief", true), member("scout", false)]);
+        let mut world = World::start_sized(Daemon::scripted().state(state), (800.0, 600.0));
+        world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+        let [x, y, w, h] = world
+            .screen()
+            .bounds(Target::key("queue-bar.pill"))
+            .expect("the pill shows");
+        world.gesture(|app| app.move_to((x + w / 2.0, y + h / 2.0)));
+        let screen = world.screen();
+        let rows = [
+            "queue-bar.peek.member:chief",
+            "queue-bar.peek.member:scout",
+            "queue-bar.peek.agent:a-long-waiting-agent-name",
+        ];
+        assert_eq!(
+            screen
+                .find(Target::key("queue-bar.peek.member:chief.status"))
+                .and_then(|n| n.name)
+                .as_deref(),
+            Some("not set up"),
+            "{scale}"
+        );
+        assert!(
+            screen
+                .find(Target::key(
+                    "queue-bar.peek.agent:a-long-waiting-agent-name.tag"
+                ))
+                .is_some(),
+            "{scale}: the head of the queue shows its keys"
+        );
+        for row in rows {
+            let mut parts: Vec<(&str, [f32; 4])> = ["slot", "tag", "status", "age"]
+                .into_iter()
+                .filter_map(|part| {
+                    screen
+                        .bounds(Target::key(format!("{row}.{part}")))
+                        .map(|b| (part, b))
+                })
+                .collect();
+            parts.sort_by(|a, b| a.1[0].total_cmp(&b.1[0]));
+            for pair in parts.windows(2) {
+                let ((before, [bx, _, bw, _]), (after, [ax, ..])) = (pair[0], pair[1]);
+                assert!(
+                    bx + bw <= ax,
+                    "{scale}: {row}'s {before} ends at {} past where its {after} starts at {ax}",
+                    bx + bw
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn collapsing_the_desktop_sidebar_leaves_the_rail_with_home_and_every_desktop_by_its_number() {
     let mut message = one_desktop(vec![turn("t1", 5)]);
     message.desktops.as_mut().unwrap().extend([

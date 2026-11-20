@@ -2,7 +2,9 @@ use attn_ui::Tokens;
 use attn_ui::blocks::{Inline, Stack};
 use attn_ui::finder::{self, FinderSize, Hint};
 use attn_ui::keycap;
-use attn_ui::system::{DotShape, DotSize, IconSize, ListRow, Tone, Type, dot, glyph, tag, words};
+use attn_ui::system::{
+    DotShape, DotSize, IconSize, ListRow, Tone, Type, dot, glyph, tag, tag_width, width_of, words,
+};
 use rune::{El, Tx, col, row};
 use rune_kit::TextInput;
 
@@ -140,12 +142,38 @@ pub(crate) enum Place {
     Peek,
 }
 
-/// The state column: "UNREACHABLE", the longest state, in `Tag` with its insets.
-const STATE_W: f32 = 104.0;
-/// The age column: "12d", the longest age, in `Mono`.
-const AGE_W: f32 = 36.0;
-/// The keys column: one outlined key.
-const KEYS_W: f32 = 34.0;
+/// The longest age an agent row shows.
+const LONGEST_AGE: &str = "12d";
+/// What a crew member is, in the state column, and what pressing its row does, in the age
+/// column: not set up, then set up; between sessions, then start.
+const MEMBER_UNSET: (&str, &str) = ("not set up", "set up");
+const MEMBER_RESTING: (&str, &str) = ("between sessions", "start");
+
+/// The state column: as wide as the widest word it shows as a tag.
+fn state_w() -> f32 {
+    [
+        Status::Unreachable,
+        Status::Chief,
+        Status::Snoozed,
+        Status::Approval,
+        Status::Waiting,
+        Status::Working,
+        Status::Idle,
+    ]
+    .map(Status::word)
+    .into_iter()
+    .chain([MEMBER_UNSET.0, MEMBER_RESTING.0])
+    .map(tag_width)
+    .fold(0.0, f32::max)
+}
+
+/// The age column: as wide as the longest age or a crew member's action, in `Mono`.
+fn age_w() -> f32 {
+    [LONGEST_AGE, MEMBER_UNSET.1, MEMBER_RESTING.1]
+        .map(|said| width_of(said, Type::Mono))
+        .into_iter()
+        .fold(0.0, f32::max)
+}
 /// The kind column of a tile: "NOTE", the longest kind, in `Tag` with its insets.
 const KIND_W: f32 = 56.0;
 
@@ -166,7 +194,7 @@ pub(crate) fn row_face(r: &Row, key: String, place: Place, t: &Tokens) -> El {
     let column = |width: f32, e: Option<El>| row().w(width).justify_end().children(e);
     let age = |s: String, part: &str| {
         column(
-            AGE_W,
+            age_w(),
             Some(
                 words(s, Type::Mono, t.text_tertiary)
                     .key(format!("{key}.{part}"))
@@ -250,15 +278,17 @@ pub(crate) fn row_face(r: &Row, key: String, place: Place, t: &Tokens) -> El {
                 row = row
                     .tag(words("· crew", Type::Body, t.text_tertiary).key(format!("{key}.crew")));
             }
-            row.aside(chip(slot.clone(), "slot"))
-                .aside(column(
-                    STATE_W,
-                    Some(state(&key, status.word(), status_tone(*status), t)),
-                ))
-                .aside(age(owed.clone(), "age"))
-                .aside(column(KEYS_W, tag.clone().map(|tag| chip(tag, "tag"))))
-                .build(t)
-                .a11y_value(status.word())
+            row = row.aside(chip(slot.clone(), "slot"));
+            if let Some(keys) = tag {
+                row = row.aside(chip(keys.clone(), "tag"));
+            }
+            row.aside(column(
+                state_w(),
+                Some(state(&key, status.word(), status_tone(*status), t)),
+            ))
+            .aside(age(owed.clone(), "age"))
+            .build(t)
+            .a11y_value(status.word())
         }
         Look::Member {
             chief,
@@ -266,9 +296,9 @@ pub(crate) fn row_face(r: &Row, key: String, place: Place, t: &Tokens) -> El {
             desk,
         } => {
             let (word, hint) = if *unconfigured {
-                ("not set up", "set up")
+                MEMBER_UNSET
             } else {
-                ("between sessions", "start")
+                MEMBER_RESTING
             };
             let role = match (chief, details, desk) {
                 (true, _, _) => Some("· chief".to_owned()),
@@ -285,9 +315,8 @@ pub(crate) fn row_face(r: &Row, key: String, place: Place, t: &Tokens) -> El {
             if let Some(role) = role {
                 row = row.tag(words(role, Type::Body, t.text_tertiary).key(format!("{key}.crew")));
             }
-            row.aside(column(STATE_W, Some(state(&key, word, Tone::Neutral, t))))
+            row.aside(column(state_w(), Some(state(&key, word, Tone::Neutral, t))))
                 .aside(age(hint.into(), "age"))
-                .aside(column(KEYS_W, None))
                 .build(t)
                 .a11y_value(word)
         }
