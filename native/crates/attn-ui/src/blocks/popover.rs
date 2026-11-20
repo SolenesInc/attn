@@ -88,14 +88,15 @@ impl Popover {
             .actions
             .map(|actions| actions.build().el.key(format!("{}.actions", self.key)));
         let body = (!self.body.is_empty()).then(|| {
-            spaced(self.body, gap, None)
+            let viewport = door::inset(spaced(self.body, gap, None), INSET, Space::S0)
                 .key(format!("{}.body", self.key))
                 .shrink()
                 .min_h(0.0)
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
-                .scroll_bar_styled(crate::scroll_bar(t))
+                .scroll_bar_styled(crate::scroll_bar(t));
+            door::hang(viewport, INSET)
         });
         let surface = door::gap(
             col()
@@ -112,11 +113,15 @@ impl Popover {
             Space::S12,
         );
         Frame::panel(t)
-            .draw_clipped(door::inset(surface, Space::S12, Space::S12))
+            .draw_clipped(door::inset(surface, INSET, INSET))
             .w(WIDTH)
             .min_h(0.0)
     }
 }
+
+/// The room between a popover's edge and what it holds. Its body scrolls inside that room, so
+/// its scroll bar stands in the room beside the words, never over them.
+const INSET: Space = Space::S12;
 
 /// A popover is small and close to what opened it: its blocks stand one step apart, closer
 /// than a page's or a form's.

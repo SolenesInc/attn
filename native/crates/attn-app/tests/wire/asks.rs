@@ -885,23 +885,82 @@ fn an_agents_open_ask_shows_in_its_tile_header_previews_on_rest_and_opens_in_the
 }
 
 #[test]
-fn a_long_choice_wraps_inside_the_preview_in_the_smallest_window() {
-    let mut ask = cache_store();
-    let choices = &mut ask.parts[1].question.as_mut().unwrap().choices;
+fn a_long_choice_wraps_inside_the_preview_clear_of_its_scroll_bar_in_the_smallest_window() {
+    let mut first = cache_store();
+    let choices = &mut first.parts[1].question.as_mut().unwrap().choices;
     choices[0].label =
         "Postgres-build-and-release-platform-本番の権限を移行する作業ツリー-tokyo-region-primary"
             .into();
-    let mut world = start(vec![ask], vec![api_working()]);
+    let more = |id: &str, minutes: i64| Ask {
+        id: id.into(),
+        created_at: ago(minutes),
+        ..cache_store()
+    };
+    let mut world = start(
+        vec![first, more("a-cache2", 20), more("a-cache3", 10)],
+        vec![api_working()],
+    );
     world.resize((533.0, 400.0));
     world.open_desktop();
     rest_on(&mut world, "tile.p0.ask");
     world.advance(Duration::from_millis(160));
     let preview = world.rect("tile.p0.ask.popover");
     let name = world.rect("asks.preview.a-cache1.q.0.choice.0.name");
+    let bar = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| {
+            e.path
+                .ends_with("tile.p0.ask.popover.body-scroll-area/scroll-bar")
+        })
+        .expect("three asks overflow the preview, which shows its scroll bar")
+        .rect;
     assert!(
-        name[0] >= preview[0] && name[0] + name[2] <= preview[0] + preview[2],
-        "the choice's name {name:?} runs out of the preview {preview:?}"
+        name[0] >= preview[0] && name[0] + name[2] <= f64::from(bar[0]),
+        "the choice's name {name:?} runs past the preview {preview:?} or under its bar {bar:?}"
     );
+}
+
+#[test]
+fn the_wheel_scrolls_a_preview_that_overflows_to_its_last_answer_which_opens_that_ask() {
+    let more = |id: &str, subject: &str, minutes: i64| Ask {
+        id: id.into(),
+        subject: subject.into(),
+        created_at: ago(minutes),
+        ..cache_store()
+    };
+    let mut world = start(
+        vec![
+            cache_store(),
+            more("a-cache2", "Cache size", 20),
+            more("a-cache3", "Cache region", 10),
+        ],
+        vec![api_working()],
+    );
+    world.resize((533.0, 400.0));
+    world.open_desktop();
+    rest_on(&mut world, "tile.p0.ask");
+    world.advance(Duration::from_millis(160));
+    rest_on(&mut world, "tile.p0.ask.popover.body");
+    let [x, y, w, h] = world.rect("tile.p0.ask.popover.body");
+    let (x, y, w, h) = (x as f32, y as f32, w as f32, h as f32);
+    assert!(
+        world.rect("asks.preview.a-cache3.answer")[1] >= f64::from(y + h),
+        "the last Answer starts out of view"
+    );
+    world.gesture(|app| app.runtime.wheel(x + w / 2.0, y + h / 2.0, -2000.0));
+    world.settle();
+
+    let answer = world.rect("asks.preview.a-cache3.answer");
+    assert!(
+        answer[1] + answer[3] <= f64::from(y + h) + 0.5,
+        "the last Answer at {answer:?} stays below the preview's body ending at {}",
+        y + h
+    );
+    click(&mut world, "asks.preview.a-cache3.answer");
+    assert_eq!(shown(&world).as_deref(), Some("Cache region"));
+    assert!(!has(&world, "tile.p0.ask.popover"));
 }
 
 #[test]

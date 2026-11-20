@@ -465,3 +465,39 @@ fn an_ask_chip_draws_as_wide_as_it_says_with_its_mark_a_step_in_from_every_edge(
         );
     }
 }
+
+#[test]
+fn a_scroll_bar_never_lies_over_what_it_scrolls() {
+    let mut bars = 0;
+    for &(story_name, _) in PANEL_SUBJECTS {
+        for variant in variants(story_name) {
+            let rt = story(story_name, variant);
+            let elements = rt.elements();
+            for bar in elements
+                .iter()
+                .filter(|e| e.path.ends_with("/scroll-bar") && e.rect[2] > 0.0)
+            {
+                bars += 1;
+                let area = bar.path.trim_end_matches("/scroll-bar");
+                for part in elements.iter().filter(|e| {
+                    e.path.starts_with(&format!("{area}/"))
+                        && !e.path.starts_with(&bar.path)
+                        && e.role == "text"
+                        && e.rect[2] > 0.0
+                }) {
+                    assert!(
+                        right(part.rect) <= bar.rect[0] + SLACK,
+                        "{story_name} {variant}: {} at {:?} lies under its scroll bar at {:?}",
+                        part.path,
+                        part.rect,
+                        bar.rect
+                    );
+                }
+            }
+        }
+    }
+    assert!(
+        bars > 0,
+        "no panel story shows a scroll bar to hold this to"
+    );
+}
