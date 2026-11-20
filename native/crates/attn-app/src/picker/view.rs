@@ -619,7 +619,6 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
         .child(
             Segmented::new(format!("{w}.repo.start"), "Start from")
                 .without_tab_stops()
-                .stacked()
                 .option(start(
                     Start::Default,
                     format!("Start from {}", chooser.info.default_branch),

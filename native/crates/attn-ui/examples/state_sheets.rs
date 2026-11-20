@@ -59,6 +59,8 @@ enum Aim {
     Suffix(&'static str),
     /// The part with this key, anywhere in the story.
     Key(&'static str),
+    /// The part with this key inside the row, where the story repeats it in other rows.
+    Inside(&'static str),
 }
 
 struct Sheet {
@@ -88,6 +90,20 @@ const fn aimed(
         variant,
         gesture,
         aim: Aim::Suffix(aim),
+    }
+}
+
+const fn inside(
+    label: &'static str,
+    variant: &'static str,
+    gesture: Gesture,
+    part: &'static str,
+) -> Column {
+    Column {
+        label,
+        variant,
+        gesture,
+        aim: Aim::Inside(part),
     }
 }
 
@@ -167,6 +183,14 @@ fn sheets() -> Vec<Sheet> {
                 "Focus" => column("Focus", variants[0], Gesture::Tab),
                 v => column(v, v, Gesture::None),
             }));
+            if name == "segmented" {
+                columns.extend([
+                    inside("Narrow hover", "Narrow", Gesture::Hover, "segment1"),
+                    inside("Narrow pressed", "Narrow", Gesture::Press, "segment1"),
+                    column("Narrow focus", "Narrow", Gesture::Tab),
+                    column("Narrow disabled", "Narrow disabled", Gesture::None),
+                ]);
+            }
             Sheet {
                 name,
                 story,
@@ -398,15 +422,23 @@ fn cell(dark: bool, story: &str, column: &Column, key: &str) -> (Image, bool) {
         .unwrap_or_else(|| panic!("{story} {} has no {key}", column.variant));
     let [x, y, w, h] = found.rect;
     let aimed_at = match column.aim {
-        Aim::Row => None,
+        Aim::Row | Aim::Inside(_) => None,
         Aim::Suffix(suffix) => Some(format!("{key}{suffix}")),
         Aim::Key(key) => Some(key.to_owned()),
     };
-    let target = match aimed_at {
-        Some(aimed_at) => rt
+    let inside = match column.aim {
+        Aim::Inside(part) => rt
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(part) && e.path.starts_with(&found.path)),
+        _ => None,
+    };
+    let target = match (aimed_at, inside) {
+        (_, Some(part)) => part,
+        (Some(aimed_at), None) => rt
             .playground_element(&aimed_at)
             .unwrap_or_else(|| panic!("{story} {} has no {aimed_at}", column.variant)),
-        None => found.clone(),
+        (None, None) => found.clone(),
     };
     let [tx, ty, tw, th] = target.rect;
     let (cx, cy) = (tx + tw / 2.0, ty + th / 2.0);

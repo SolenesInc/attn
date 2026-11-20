@@ -145,7 +145,11 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Second chosen", |s| s.chosen = 1)
                 .variant("Focus", |s| s.rings = true)
                 .variant("Disabled", |s| s.disabled = true)
-                .variant("Narrow", |s| s.narrow = true),
+                .variant("Narrow", |s| s.narrow = true)
+                .variant("Narrow disabled", |s| {
+                    s.narrow = true;
+                    s.disabled = true;
+                }),
         )
         .story(
             Story::new("Library/Stepper", Library::default, steppers)
@@ -857,6 +861,10 @@ fn switches(s: &Library, cx: &mut Cx<Library>) -> El {
     )
 }
 
+/// The column the smallest Settings page keeps: 800×600 at 150% text leaves its page 163
+/// points (`settings_smallest` in the screenshot tour).
+const SMALLEST_PAGE: f32 = 163.0;
+
 fn segmented(s: &Library, cx: &mut Cx<Library>) -> El {
     if s.rings {
         cx.force_focus_rings();
@@ -905,7 +913,7 @@ fn segmented(s: &Library, cx: &mut Cx<Library>) -> El {
         .build(&t)
         .into();
     let column = door::gap(col().key("segmented.column").items_start(), Space::S24)
-        .w(if s.narrow { 220.0 } else { 520.0 })
+        .w(if s.narrow { SMALLEST_PAGE } else { 520.0 })
         .child(track(
             "segmented.theme",
             "Theme",
@@ -919,7 +927,6 @@ fn segmented(s: &Library, cx: &mut Cx<Library>) -> El {
         ))
         .child(
             Segmented::new("segmented.start", "Start from")
-                .stacked()
                 .options(START_POINTS.iter().enumerate().map(|(i, name)| {
                     Segment::new(format!("segment{i}"), *name)
                         .cut_middle()

@@ -669,6 +669,124 @@ fn a_number_field_shows_a_seven_digit_value_whole() {
     }
 }
 
+/// The segments of the track keyed `track`, in order, each with its words.
+fn segments(rt: &Runtime<()>, track: &str) -> Vec<(ElementInfo, ElementInfo)> {
+    let all = rt.elements();
+    let outer = element(rt, track);
+    all.iter()
+        .filter(|e| e.role == "radio" && e.parent.is_some_and(|p| all[p].path == outer.path))
+        .map(|segment| {
+            let words = all
+                .iter()
+                .find(|w| w.text.is_some() && w.parent.is_some_and(|p| all[p].path == segment.path))
+                .cloned()
+                .unwrap_or_else(|| panic!("{track}: a segment draws no words"));
+            (segment.clone(), words)
+        })
+        .collect()
+}
+
+/// How a segment sets its words: `Type::Control`, 12/600.
+const CONTROL: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
+
+/// Whether text `e`, as wide as its box, shows its whole first word, or all of it when short.
+fn reads_its_first_word(rt: &mut Runtime<()>, e: &ElementInfo) -> bool {
+    let all = e.text.clone().unwrap_or_default();
+    let first = all.split_whitespace().next().unwrap_or_default();
+    let shown = |rt: &mut Runtime<()>, words: &str| rt.text.measure(words, CONTROL, SCALE).0;
+    let room = e.rect[2] + 0.25;
+    shown(rt, &all) <= room || shown(rt, &format!("{first}…")) <= room
+}
+
+#[test]
+fn a_segmented_control_stacks_its_segments_where_one_line_would_cut_their_words() {
+    for dark in [true, false] {
+        let mut rt = story(dark, "Library/Segmented", "Narrow");
+        let column = element(&rt, "segmented.column");
+        for key in ["segmented.theme", "segmented.agent", "segmented.long"] {
+            let track = element(&rt, key);
+            let parts = segments(&rt, key);
+            for (_, words) in &parts {
+                assert!(
+                    reads_its_first_word(&mut rt, words),
+                    "dark={dark}: {key} cuts {:?} to {} points, short of its first word",
+                    words.text,
+                    words.rect[2]
+                );
+            }
+            let one_line = parts.iter().all(|(s, _)| s.rect[1] == parts[0].0.rect[1]);
+            if key == "segmented.theme" {
+                assert!(
+                    one_line,
+                    "dark={dark}: {key} fits its column and still stacks"
+                );
+                continue;
+            }
+            assert!(
+                !one_line,
+                "dark={dark}: {key} keeps one line in a {}-point column",
+                column.rect[2]
+            );
+            for (segment, _) in &parts {
+                assert!(
+                    (segment.rect[2] - parts[0].0.rect[2]).abs() < 0.5
+                        && segment.rect[0] == parts[0].0.rect[0],
+                    "dark={dark}: {key}'s stacked segments stand at {:?}",
+                    parts.iter().map(|(s, _)| s.rect).collect::<Vec<_>>()
+                );
+            }
+            assert!(
+                track.rect[2] <= column.rect[2] + 0.5,
+                "dark={dark}: stacked {key} is {} wide, past its column's {}",
+                track.rect[2],
+                column.rect[2]
+            );
+        }
+    }
+}
+
+#[test]
+fn a_stacked_segmented_control_moves_its_choice_with_every_arrow() {
+    for dark in [true, false] {
+        let mut rt = story(dark, "Library/Segmented", "Narrow");
+        let first = tab_to(&mut rt, "segment0");
+        assert!(
+            first.path.contains("segmented.theme"),
+            "Tab lands on {}",
+            first.path
+        );
+        let chosen = |rt: &Runtime<()>| {
+            segments(rt, "segmented.long")
+                .iter()
+                .position(|(s, _)| s.focused)
+        };
+        while chosen(&rt).is_none() {
+            rt.key(KeyEvent {
+                key: Key::Tab,
+                mods: Mods::default(),
+            });
+            rt.frame(0.1);
+        }
+        for (arrow, to) in [
+            (Key::Down, Some(1)),
+            (Key::Up, Some(0)),
+            (Key::Right, Some(1)),
+            (Key::Left, Some(0)),
+        ] {
+            rt.key(KeyEvent {
+                key: arrow.clone(),
+                mods: Mods::default(),
+            });
+            rt.frame(0.1);
+            assert_eq!(
+                chosen(&rt),
+                to,
+                "dark={dark}: {arrow:?} on the stacked track"
+            );
+        }
+    }
+}
+
 #[test]
 fn a_segmented_control_stays_inside_its_column() {
     for dark in [true, false] {
