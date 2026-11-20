@@ -541,8 +541,7 @@ impl ListRow {
         let hovering = !self.hover.is_empty();
         let reach = self.hover.iter().map(IconButton::width).sum::<f32>()
             + Space::S2.pt() * self.hover.len().saturating_sub(1) as f32
-            + FADE_ROOM.pt()
-            - Space::S8.pt();
+            + FADE_ROOM.pt();
         let tagged = !self.tags.is_empty();
         let under_title = hovering && tagged;
         let title_line = door::gap(row(), Space::S6).w_full().min_w(0.0);
@@ -672,7 +671,15 @@ impl ListRow {
                 ),
                 None,
             ),
-            (None, over) => (None, over.map(|over| row().w(0.0).h(band).child(over))),
+            (None, over) => (
+                None,
+                over.map(|over| {
+                    row()
+                        .h(band)
+                        .pin(None, Some(0.0), Some(0.0), None)
+                        .child(over)
+                }),
+            ),
         };
         let band_line = door::gap(row(), Space::S8)
             .w_full()
