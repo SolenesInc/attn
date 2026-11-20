@@ -218,12 +218,6 @@ func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginD
 	if err != nil {
 		return err
 	}
-	for _, dir := range params.SkillDirs {
-		if err := dir.validate(); err != nil {
-			return err
-		}
-	}
-
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.plugins[plugin.name] != plugin {
@@ -370,9 +364,6 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		}
 		d.logf("plugin driver registered plugin=%s agent=%s", plugin.name, normalizePluginAgent(params.Agent))
 		d.resolvePluginDriverRoutes(plugin.name, normalizePluginAgent(params.Agent))
-		if len(params.SkillDirs) > 0 {
-			d.ensureEnabledWorkflowSkillsFor([]string{normalizePluginAgent(params.Agent)})
-		}
 		if l := d.serverLinkFor(normalizePluginAgent(params.Agent)); l != nil && l.b.plugin == plugin.name {
 			l.recoverProcesses(d.life.Context())
 			l.recoverViews(d.life.Context())

@@ -62,10 +62,22 @@ func (d *Daemon) workflowSkillsDirs(harnesses []string) func(homeDir string) ([]
 				continue
 			}
 			driver, _ := d.ensurePluginRegistry().driver(harness)
-			for _, dir := range driver.SkillDirs {
-				dirs = append(dirs, dir.resolve(env, homeDir))
-			}
+			dirs = append(dirs, resolvePluginSkillsDirs(driver.SkillDirs, env, homeDir)...)
 		}
 		return dirs, errors.Join(refusals...)
 	}
+}
+
+func (d *Daemon) pluginSkillsDirs(skillDirs []pluginSkillDir) func(homeDir string) ([]string, error) {
+	return func(homeDir string) ([]string, error) {
+		return resolvePluginSkillsDirs(skillDirs, pty.MergeEnvironment(os.Environ(), d.latestLoginEnv()), homeDir), nil
+	}
+}
+
+func resolvePluginSkillsDirs(skillDirs []pluginSkillDir, env []string, homeDir string) []string {
+	dirs := make([]string, 0, len(skillDirs))
+	for _, dir := range skillDirs {
+		dirs = append(dirs, dir.resolve(env, homeDir))
+	}
+	return dirs
 }

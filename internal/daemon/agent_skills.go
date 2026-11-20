@@ -29,11 +29,15 @@ func (d *Daemon) ensureEnabledWorkflowSkills() {
 }
 
 func (d *Daemon) ensureEnabledWorkflowSkillsFor(harnesses []string) {
+	d.ensureEnabledWorkflowSkillsIn(d.workflowSkillsDirs(harnesses))
+}
+
+func (d *Daemon) ensureEnabledWorkflowSkillsIn(skillsDirs func(homeDir string) ([]string, error)) {
 	cfg, err := d.store.GetDelegationPreferences()
 	if err != nil || !cfg.WorkflowSkillEnabled {
 		return
 	}
-	if _, synced, err := agentdriver.EnsureWorkflowSkillsInstalled(d.workflowSkillsDirs(harnesses)); err != nil {
+	if _, synced, err := agentdriver.EnsureWorkflowSkillsInstalled(skillsDirs); err != nil {
 		d.logf("failed to ensure attn-workflow skill: %v", err)
 	} else if !synced {
 		d.logf("skipping user-global attn-workflow skill sync for instance %q", config.InstanceLabel())

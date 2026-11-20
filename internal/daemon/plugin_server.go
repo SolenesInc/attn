@@ -49,9 +49,17 @@ func (d *Daemon) registerPluginDriver(plugin *pluginConnection, params pluginDri
 	if _, err := validatePluginDriverCapabilities(params.Capabilities); err != nil {
 		return err
 	}
+	for _, dir := range params.SkillDirs {
+		if err := dir.validate(); err != nil {
+			return err
+		}
+	}
 	registry := d.ensurePluginRegistry()
 	if registry.get(plugin.name) != plugin {
 		return fmt.Errorf("plugin %q is not connected", plugin.name)
+	}
+	if len(params.SkillDirs) > 0 {
+		d.ensureEnabledWorkflowSkillsIn(d.pluginSkillsDirs(params.SkillDirs))
 	}
 	d.serverLinksMu.Lock()
 	defer d.serverLinksMu.Unlock()

@@ -106,13 +106,17 @@ func TestAnAttnRoleOnAPluginHarnessGetsTheWorkflowSkillWhereThePluginSaysItsHarn
 	removeSkills()
 	request := brief(cwd, "Implement the discount field")
 	request.Role = protocol.Ptr(attnRole.ID)
-	if result, err := w.Client().Delegate(request); err != nil {
+	result, err := w.Client().Delegate(request)
+	if err != nil {
 		t.Fatalf("delegating in an attn role to the house plugin = %+v, %v", result, err)
 	}
+	w.Launched(string(result.SessionID))
 	expectSkills("after the attn role launched")
 
 	removeSkills()
+	revived := w.NextLaunch()
 	w.restart()
 	pluginDriverSettings(w.App(), "house")
 	expectSkills("after the daemon restarted and the plugin registered again")
+	revived()
 }
