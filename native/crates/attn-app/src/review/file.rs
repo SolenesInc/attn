@@ -6,9 +6,10 @@ use std::rc::Rc;
 
 use attn_protocol::{ReviewFileMessage, ReviewFileResultMessage, ReviewNote, ReviewRow};
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::{radius, space};
-use rune::{Color, El, GrowthSpec, Live, ScrollPos, ScrollSpec, TextStyle, Tx, col, row, text};
+use attn_ui::blocks::{Bar, Inline, Pane, Stack, Tray, key_choice};
+use attn_ui::system::{Type, words};
+use rune::tok::space;
+use rune::{El, GrowthSpec, Live, ScrollPos, ScrollSpec, Tx, col};
 use rune_kit::ScrollBar;
 
 use super::stop::{Colors, code_row};
@@ -241,82 +242,62 @@ pub(super) fn view(
     t: &Tokens,
 ) -> El {
     let can_go_back = depth > 1;
-    let back = row()
+    let back = key_choice("⌃o", "back", false, t)
         .role("button")
         .label(if can_go_back {
             "← back ⌃o"
         } else {
             "← back"
         })
-        .key(format!("{prefix}.view.back"))
-        .gap(4.0)
-        .items_center()
-        .child(
-            text("← back")
-                .font(type_::LABEL)
-                .color(t.text_muted)
-                .a11y_hidden(),
-        )
-        .child(attn_ui::system::keycaps(["⌃o"], t).a11y_hidden());
+        .key(format!("{prefix}.view.back"));
     let back = super::file_view_press(back, tile, stage, false);
     let lines = file
         .rows
         .as_ref()
         .map(|rows| format!("{} lines", rows.iter().filter(|r| r.now.is_some()).count()));
-    let header = row()
-        .w_full()
-        .items_center()
-        .gap(space::S3)
-        .px(space::S3)
-        .py(space::S1)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border.alpha(0.5))
-        .child(back)
-        .child(
-            text(file.target.path.clone())
-                .font(
-                    TextStyle {
-                        weight: 400.0,
-                        ..type_::LABEL
-                    }
-                    .mono(),
-                )
-                .color(t.text_primary),
-        )
-        .children(file.target.outside.then(|| {
-            text("outside the repository · read-only")
-                .font(type_::LABEL)
-                .color(t.warning)
-        }))
-        .children(lines.map(|l| text(l).font(type_::LABEL).color(t.text_muted)))
-        .child(col().grow(1.0))
-        .children((!stage).then(|| {
-            let close = row()
-                .role("button")
-                .label("close esc")
-                .key(format!("{prefix}.view.close"))
-                .gap(4.0)
-                .items_center()
-                .child(
-                    text("close")
-                        .font(type_::LABEL)
-                        .color(t.text_muted)
-                        .a11y_hidden(),
-                )
-                .child(attn_ui::system::keycaps(["esc"], t).a11y_hidden());
-            super::file_view_press(close, tile, stage, true)
-        }));
-    let problem = file.problem.clone().map(|p| {
-        text(p)
-            .font(type_::LABEL)
-            .color(t.warning)
-            .wrap()
-            .role("status")
+    let outside = file
+        .target
+        .outside
+        .then(|| words("outside the repository · read-only", Type::Small, t.warning).truncate());
+    let facts = (lines.is_some() || outside.is_some()).then(|| {
+        Inline::line()
+            .children(lines.map(|l| words(l, Type::Small, t.text_muted).truncate()))
+            .children(outside)
     });
+    let place = Stack::tight()
+        .min_w(0.0)
+        .child(words(file.target.path.clone(), Type::Mono, t.text_primary).truncate_middle())
+        .children(facts)
+        .children(
+            file.problem
+                .clone()
+                .map(|p| words(p, Type::Small, t.warning).wrap().role("status")),
+        );
+    let close = (!stage).then(|| {
+        let close = key_choice("esc", "close", false, t)
+            .role("button")
+            .label("close esc")
+            .key(format!("{prefix}.view.close"));
+        super::file_view_press(close, tile, stage, true)
+    });
+    let header = Bar::new(format!("{prefix}.view.head"))
+        .start(back)
+        .lead(place)
+        .push_all(close)
+        .build(t);
     let body = match (&file.rows, &file.error) {
-        (_, Some(error)) => message(error, t.error, t).role("alert"),
+        (_, Some(error)) => message(
+            prefix,
+            words(error.clone(), Type::Body, t.error).role("alert"),
+            t,
+        ),
         (None, None) => message(
-            &format!("Reading {}…", file.target.path),
-            t.text_tertiary,
+            prefix,
+            words(
+                format!("Reading {}…", file.target.path),
+                Type::Body,
+                t.text_tertiary,
+            ),
             t,
         ),
         (Some(rows), None) => rows_view(
@@ -345,15 +326,9 @@ pub(super) fn view(
         .chain(marks)
         .collect();
     let strip = (!strip.is_empty()).then(|| {
-        col()
-            .key(format!("{prefix}.view.marks"))
-            .role("region")
-            .label("Marks on this line")
-            .w_full()
-            .padding(space::S2)
-            .gap(space::S1)
-            .border_sides([1.0, 0.0, 0.0, 0.0], t.border.alpha(0.5))
-            .children(strip)
+        Tray::new(format!("{prefix}.view.marks"), "Marks on this line")
+            .push_all(strip)
+            .build(t)
     });
     col()
         .key(format!("{prefix}.view"))
@@ -363,18 +338,12 @@ pub(super) fn view(
         .fill(t.bg_tile)
         .border_sides([0.0, 0.0, 0.0, 1.0], t.border)
         .child(header)
-        .children(problem)
         .child(body)
         .children(strip)
 }
 
-fn message(text_: &str, color: Color, t: &Tokens) -> El {
-    let _ = t;
-    col()
-        .w_full()
-        .grow(1.0)
-        .padding(space::S3)
-        .child(text(text_.to_owned()).font(type_::BODY).color(color).wrap())
+fn message(prefix: &str, said: El, t: &Tokens) -> El {
+    Pane::new(format!("{prefix}.view.message"), said.wrap()).build(t)
 }
 
 fn rows_view(
@@ -455,7 +424,6 @@ fn rows_view(
             stick_bottom: false,
         })
         .scroll_xy()
-        .radius(radius::SM)
         .child(rune::el().w(row_w).h(0.0))
         .child(list)
 }
