@@ -5,7 +5,7 @@ use rune::{Cx, El, Playground, Story};
 
 use crate::block_gallery::{Blocks, common, noop, stage, tokens};
 use crate::blocks::{Facts, Inline, Prose, Section, SettingRow};
-use crate::system::{Button, Size, Tone, Type, switch, words};
+use crate::system::{Button, Look, Size, Tone, Type, switch, words};
 
 /// Every Settings block story, by name, with the keys of what it draws: what the state sheets
 /// and the rule tests read.
@@ -102,6 +102,12 @@ fn facts(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
                 Inline::loose()
                     .child(words(if s.long { LONG_PATH } else { "/tmp/run-1.log" }, Type::Mono, t.text_primary).wrap_anywhere().shrink())
                     .child(Button::new("Copy").size(Size::Compact).on_press_tx(noop).build(&t).key("facts.path.copy").into()),
+            )
+            .control(
+                "facts.folder",
+                "Folder",
+                Inline::loose()
+                    .child(Button::new("~/projects/reviewer").look(Look::Quiet).on_press_tx(noop).build(&t).key("facts.folder.copy").into()),
             )
             .build(&t),
         Facts::new("facts.tiles")

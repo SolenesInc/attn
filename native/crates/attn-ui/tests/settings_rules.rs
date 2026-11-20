@@ -289,6 +289,94 @@ fn a_switch_moves_its_thumb_and_colours_in_step_and_comes_to_rest() {
     }
 }
 
+fn glyphs_in(rt: &Runtime<()>, rect: [f32; 4]) -> Vec<[f32; 4]> {
+    let [x, y, w, h] = rect.map(|v| v * SCALE);
+    rt.instances
+        .iter()
+        .filter(|i| i.params[1] == KIND_GLYPH)
+        .map(|i| i.rect)
+        .filter(|g| {
+            g[0] >= x && g[0] + g[2] <= x + w + 1.0 && g[1] >= y && g[1] + g[3] <= y + h + 1.0
+        })
+        .collect()
+}
+
+fn rect_of(rt: &Runtime<()>, key: &str, variant: &str) -> [f32; 4] {
+    rt.playground_element(key)
+        .unwrap_or_else(|| panic!("{variant}: no {key} on the stage"))
+        .rect
+}
+
+#[test]
+fn a_facts_label_sits_nearer_its_own_value_than_the_next_fact() {
+    let facts = [
+        "facts.install",
+        "facts.build",
+        "facts.host",
+        "facts.available",
+        "facts.path",
+        "facts.folder",
+    ];
+    for variant in WIDTHS {
+        let rt = block_story("Blocks/Facts", variant);
+        let lines: Vec<[f32; 4]> = facts.iter().map(|k| rect_of(&rt, k, variant)).collect();
+        let between = lines
+            .windows(2)
+            .map(|w| w[1][1] - (w[0][1] + w[0][3]))
+            .fold(f32::MAX, f32::min);
+        for (key, line) in facts.iter().zip(&lines) {
+            let glyphs = glyphs_in(&rt, *line);
+            let first_top = glyphs.iter().map(|g| g[1]).fold(f32::MAX, f32::min);
+            let label_bottom = glyphs
+                .iter()
+                .filter(|g| g[1] < first_top + 4.0)
+                .map(|g| g[1] + g[3])
+                .fold(f32::MIN, f32::max);
+            let stacked = glyphs
+                .iter()
+                .any(|g| g[0] < glyphs[0][0] + 1.0 && g[1] > label_bottom);
+            if !stacked {
+                continue;
+            }
+            let value_top = glyphs
+                .iter()
+                .filter(|g| g[1] > label_bottom)
+                .map(|g| g[1])
+                .fold(f32::MAX, f32::min);
+            let within = (value_top - label_bottom) / SCALE;
+            assert!(
+                within < between,
+                "{variant} {key}: the label is {within}pt over its value, and facts sit {between}pt apart"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_facts_label_lines_up_with_the_words_of_a_control_beside_it() {
+    for variant in ["Rest", "Long"] {
+        let rt = block_story("Blocks/Facts", variant);
+        let control = rect_of(&rt, "facts.folder.copy", variant);
+        let line = rect_of(&rt, "facts.folder", variant);
+        let label = glyphs_in(&rt, [line[0], line[1], control[0] - line[0], line[3]]);
+        let words = glyphs_in(&rt, control);
+        let middle = |g: &[[f32; 4]]| {
+            let top = g.iter().map(|g| g[1]).fold(f32::MAX, f32::min);
+            let bottom = g.iter().map(|g| g[1] + g[3]).fold(f32::MIN, f32::max);
+            (top + bottom) / 2.0 / SCALE
+        };
+        assert!(
+            !label.is_empty() && !words.is_empty(),
+            "{variant}: no label or no words beside it"
+        );
+        let off = (middle(&label) - middle(&words)).abs();
+        assert!(
+            off <= 2.0,
+            "{variant}: the label's middle is {off}pt off the control's words"
+        );
+    }
+}
+
 fn sections_view(_: &(), cx: &mut Cx<()>) -> El {
     use attn_ui::blocks::{Page, Section};
     let t = attn_ui::colors::scheme_for(None)

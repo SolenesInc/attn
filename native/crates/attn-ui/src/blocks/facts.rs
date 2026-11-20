@@ -3,7 +3,7 @@ use rune::{Color, El, col, row};
 use super::block::{Block, Kind};
 use super::measure::{FACT_LABEL, FACT_TILE_FLOOR, FACT_VALUE_FLOOR};
 use crate::Tokens;
-use crate::system::{Radius, Space, Tone, Type, door, words};
+use crate::system::{Radius, Size, Space, Tone, Type, door, words};
 
 /// What something is, read and not changed here: names, each with its value. As a list, each
 /// value sits beside its name and moves under it where it would get narrower than it reads. As
@@ -19,6 +19,7 @@ struct Fact {
     label: String,
     value: String,
     kind: Type,
+    band: f32,
     tone: Option<Tone>,
     shown: Option<El>,
 }
@@ -79,6 +80,7 @@ impl Facts {
             label: label.into(),
             value: value.into(),
             kind,
+            band: door::line_height(kind),
             tone: None,
             shown: None,
         });
@@ -88,12 +90,29 @@ impl Facts {
     /// A fact whose value is not plain words, such as a link, a value with a quiet line under it,
     /// a list, or a path with its copy button. The fact is keyed `key` and named by its label;
     /// `value` is read as it is.
-    pub fn item(mut self, key: impl Into<String>, label: impl Into<String>, value: El) -> Self {
+    pub fn item(self, key: impl Into<String>, label: impl Into<String>, value: El) -> Self {
+        self.shown(key, label, value, door::line_height(Type::Body))
+    }
+
+    /// A fact whose value starts with a control of the regular size, such as a path pressed to
+    /// copy it. Its label lines up with the control's words.
+    pub fn control(self, key: impl Into<String>, label: impl Into<String>, value: El) -> Self {
+        self.shown(key, label, value, Size::Regular.height())
+    }
+
+    fn shown(
+        mut self,
+        key: impl Into<String>,
+        label: impl Into<String>,
+        value: El,
+        band: f32,
+    ) -> Self {
         self.facts.push(Fact {
             key: key.into(),
             label: label.into(),
             value: String::new(),
             kind: Type::Body,
+            band,
             tone: None,
             shown: Some(value),
         });
@@ -108,7 +127,7 @@ impl Facts {
                 Space::S8,
             )
         } else {
-            door::gap(col().w_full(), Space::S4)
+            door::gap(col().w_full(), Space::S8)
         };
         list = list.key(self.key);
         let tiles = self.tiles;
@@ -155,8 +174,7 @@ impl Fact {
         let label = words(self.label.clone(), Type::Small, t.text_tertiary)
             .wrap()
             .a11y_hidden();
-        let label = door::first_line_in(label, Type::Small, door::line_height(self.kind))
-            .grow_from(0.0, FACT_LABEL);
+        let label = door::first_line_in(label, Type::Small, self.band).grow_from(0.0, FACT_LABEL);
         let (value, said) = match self.shown {
             Some(shown) => (shown, self.label),
             None => (
