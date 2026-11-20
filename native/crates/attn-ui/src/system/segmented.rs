@@ -114,7 +114,7 @@ impl Segment {
             .center()
             .fill(fill)
             .child(
-                name.help_when_truncated(self.name.text())
+                cut_name_help(name, &self.name, self.help.as_deref())
                     .shrink()
                     .min_w(0.0)
                     .a11y_hidden(),
@@ -143,6 +143,16 @@ impl Segment {
             Some(press) => press(option),
             None => option,
         }
+    }
+}
+
+/// While the name is cut short, it says the whole name under the pointer, and then why the
+/// option is the way it is, so the reason the option's own tooltip gives is never hidden.
+fn cut_name_help(name: El, said: &Said, help: Option<&str>) -> El {
+    let name = name.help_when_truncated(said.text());
+    match help {
+        Some(help) => name.help_row(help),
+        None => name,
     }
 }
 

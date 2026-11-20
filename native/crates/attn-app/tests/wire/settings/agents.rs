@@ -791,6 +791,36 @@ fn options_by_frame(rec: &rune::motion_gate::Recording) -> Vec<Vec<[f32; 4]>> {
 }
 
 #[test]
+fn a_cut_missing_agent_says_its_whole_name_and_why_it_is_off_in_one_tooltip() {
+    let long = "Engineering observability staging review agent with a long name";
+    let mut world = on_agents(&both(&[
+        ("uiScale", "1.5"),
+        ("new_session_agent", "claude"),
+        ("snipe_available", "false"),
+        ("snipe_display_name", long),
+    ]));
+    world.resize((800.0, 600.0));
+    let snipe = "settings.default-agent.snipe";
+    assert!(node(&world, snipe).is("disabled"));
+    let [x, y, w, h] = world.screen().bounds(Target::key(snipe)).unwrap();
+    world.gesture(|app| app.move_to((x + w / 2.0, y + h / 2.0)));
+    world.advance(std::time::Duration::from_secs(2));
+    let tips: Vec<String> = world
+        .screen()
+        .find(Target::role("tooltip"))
+        .and_then(|n| n.name)
+        .into_iter()
+        .collect();
+    let reason = format!("{long} CLI not found in PATH");
+    assert!(
+        tips.iter()
+            .any(|t| t.contains(long) && t.contains(&reason) && t.find(long) < t.rfind(&reason)),
+        "one tooltip says the whole name, then why it is off: {tips:?}"
+    );
+    rest(&mut world);
+}
+
+#[test]
 fn the_default_agent_is_stacked_from_the_first_frame_the_smallest_window_draws_it() {
     let (daemon, stored) = accepting(LONG_PLUGIN);
     serve(&daemon, &stored, harnesses());
