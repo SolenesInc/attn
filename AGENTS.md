@@ -54,9 +54,12 @@ Nothing wrong with IKEA; it just doesn't spark passion in me.
 - Never kill by name, pattern, or worktree path. Kill only a PID you captured
   when you started the process, or the owner of a port or socket once you have
   confirmed its working directory.
-- Production ~/.attn is read-only. Copy data out; never run a test daemon
-  against it, open it read-write, or clean it.
-- You may use the attn CLI to work with ~/.attn.
+- Production ~/.attn's files are read-only to you. Copy data out; never run a
+  test daemon against them, open the database or files read-write, or clean
+  them.
+- The attn CLI talking to the production daemon over its socket is normal use,
+  not a write to those files. Run it freely, writes included: seed notes, check
+  reports, attachments, harvests, asks, messages and delegations.
 - Inside a session, only the binary its daemon runs from may start or replace a
   daemon on that home. Select an instance to test any other build. An inherited
   `ATTN_DB_PATH` or `ATTN_SOCKET_PATH` beats `ATTN_DATA_DIR`, so a bare
