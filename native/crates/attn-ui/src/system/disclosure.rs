@@ -4,13 +4,15 @@ use super::expander::opens_in_place;
 use super::{Control, Radius, Size, Space, Tone, Type, disabled, door, focus, layers, tag, words};
 use crate::Tokens;
 
-/// The control that opens and closes a part of a page or a form: a chevron, its name, and tags
-/// that say what the closed part holds. Open, it takes the selected fill.
+/// The control that opens and closes a part of a page or a form: a chevron, its name, what
+/// follows its name such as a value it sums up to (drawn, and what it says), and tags that say
+/// what the closed part holds. Open, it takes the selected fill.
 #[allow(clippy::too_many_arguments)]
 pub fn disclosure<S: 'static>(
     key: impl Into<String>,
     label: &str,
     open: bool,
+    beside: Option<(El, String)>,
     chips: &[String],
     failed: bool,
     disabled: bool,
@@ -25,6 +27,15 @@ pub fn disclosure<S: 'static>(
     } else {
         Color::TRANSPARENT
     };
+    let (beside_el, beside_said) = match beside {
+        Some((el, said)) => (Some(el.a11y_hidden()), Some(said)),
+        None => (None, None),
+    };
+    let description = beside_said
+        .into_iter()
+        .chain(chips.iter().cloned())
+        .collect::<Vec<_>>()
+        .join(", ");
     let chip = |(i, said): (usize, &String)| {
         El::from(tag(format!("{key}.tag{i}"), said, Tone::Neutral, t)).a11y_hidden()
     };
@@ -34,12 +45,13 @@ pub fn disclosure<S: 'static>(
         Space::S8,
     )
     .child(words(label, Type::Control, ink).a11y_hidden())
+    .children(beside_el)
     .children(chips.iter().enumerate().map(chip));
     let line = row()
         .key(key.clone())
         .role("button")
         .label(label.to_owned())
-        .description(chips.join(", "))
+        .description(description)
         .expanded(open)
         .focusable(true)
         .self_start()

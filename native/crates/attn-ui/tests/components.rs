@@ -155,6 +155,7 @@ fn opening_view(state: &Opening, _: &mut rune::Cx<Opening>) -> rune::El {
                 "disclosure",
                 "Agents",
                 state.open,
+                None,
                 &[],
                 false,
                 false,

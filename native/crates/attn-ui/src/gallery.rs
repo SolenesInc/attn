@@ -1120,6 +1120,7 @@ fn disclosures(s: &Library, cx: &mut Cx<Library>) -> El {
             "disclosure",
             "Advanced",
             s.open,
+            None,
             &chips,
             s.failed,
             s.disabled,

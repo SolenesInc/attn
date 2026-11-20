@@ -10,7 +10,9 @@ use attn_ui::Tokens;
 use attn_ui::blocks::{
     Block, Disclosure, Facts, Inline, Notice, Prose, Section, SettingRow, Stack,
 };
-use attn_ui::system::{Control, Segment, Segmented, Tone, Type, switch, tag, words};
+use attn_ui::system::{
+    Control, DotShape, DotSize, Segment, Segmented, Tone, Type, dot, switch, tag, words,
+};
 use rune::{El, Tx, text};
 
 use super::autosave::{self, Codec, PLAIN, TRIMMED};
@@ -418,6 +420,32 @@ fn seeds_on_standby(state: &State, t: &Tokens) -> Block {
         .build(t)
 }
 
+/// What an agent's head shows after its name: its route as the app draws a route, then
+/// whether it is there, quiet while it is and marked when it is not.
+fn head_summary(state: &State, agent: &str, status: Availability, t: &Tokens) -> El {
+    let settings = &state.facts.settings;
+    let value = Route::stored(
+        agent,
+        settings.get(&model_key(agent)).map_or("", String::as_str),
+        settings.get(&effort_key(agent)).map_or("", String::as_str),
+    );
+    let word = availability_word(status);
+    let key = format!("settings.agent.{agent}.availability");
+    let availability = match status {
+        Availability::Available => {
+            words(format!("· {word}"), Type::Small, t.text_secondary).key(key)
+        }
+        Availability::Unavailable => El::from(tag(key, word, Tone::Warn, t)),
+        Availability::Checking => Inline::tight()
+            .key(key)
+            .child(dot(t.text_dimmed, DotShape::Hollow, DotSize::Small))
+            .child(words(word, Type::Small, t.text_secondary)),
+    };
+    Inline::tight()
+        .child(route::badge(state, t, &value))
+        .child(availability)
+}
+
 fn availability_word(status: Availability) -> &'static str {
     match status {
         Availability::Available => "Available",
@@ -565,10 +593,14 @@ fn agent_group(state: &State, agent: &str, t: &Tokens) -> Block {
                 .insert(toggled.clone(), !was);
         },
     )
-    .tags(vec![
-        route_badge(state, agent),
-        availability_word(status).to_owned(),
-    ]);
+    .beside(
+        head_summary(state, agent, status, t),
+        format!(
+            "{}, {}",
+            route_badge(state, agent),
+            availability_word(status)
+        ),
+    );
     group = if overrides {
         group.push(Block::custom(
             format!("settings.agent.{agent}.route.block"),

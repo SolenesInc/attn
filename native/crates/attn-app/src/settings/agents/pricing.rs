@@ -512,6 +512,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> El {
                 "settings.pricing",
                 "Model pricing overrides",
                 pricing.open,
+                None,
                 &[],
                 false,
                 false,

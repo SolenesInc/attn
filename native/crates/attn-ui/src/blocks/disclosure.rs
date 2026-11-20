@@ -12,6 +12,7 @@ pub struct Disclosure<S> {
     key: String,
     label: String,
     open: bool,
+    beside: Option<(El, String)>,
     tags: Vec<String>,
     failed: bool,
     disabled: bool,
@@ -30,12 +31,20 @@ impl<S: 'static> Disclosure<S> {
             key: key.into(),
             label: label.into(),
             open,
+            beside: None,
             tags: Vec::new(),
             failed: false,
             disabled: false,
             toggle: Rc::new(toggle),
             blocks: Vec::new(),
         }
+    }
+
+    /// What follows the part's name on its control, such as the value the part sums up to,
+    /// drawn as `shown` and said as `said`.
+    pub fn beside(mut self, shown: El, said: impl Into<String>) -> Self {
+        self.beside = Some((shown, said.into()));
+        self
     }
 
     pub fn tags(mut self, tags: Vec<String>) -> Self {
@@ -67,6 +76,7 @@ impl<S: 'static> Disclosure<S> {
             self.key,
             &self.label,
             self.open,
+            self.beside,
             &self.tags,
             self.failed,
             self.disabled,
