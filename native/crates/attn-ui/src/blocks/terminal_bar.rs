@@ -11,6 +11,8 @@ const FROM_SCROLL_BAR: f32 = 14.0;
 /// The widest the bars and their list stand, so a found line on a wide terminal stays a line a
 /// person reads.
 const MEASURE: f32 = 640.0;
+/// The narrowest a bar's field gets, room for a short query, before the count gives way.
+const FIELD_FLOOR: f32 = 80.0;
 
 /// A bar over a terminal's top right corner that finds or filters what the terminal shows: its
 /// field, its toggles and buttons, and how many things it found.
@@ -37,7 +39,7 @@ impl TerminalBar {
             .width(None)
             .build(crate::system::kit(t))
             .w_full();
-        self.field = Some(row().w(width).shrink().min_w(0.0).child(field));
+        self.field = Some(row().w(width).shrink().min_w(FIELD_FLOOR).child(field));
         self
     }
 
@@ -52,7 +54,10 @@ impl TerminalBar {
         self.items.push(
             words(said.into(), Type::Mono, t.text_secondary)
                 .key(key.into())
-                .single_line(),
+                .single_line()
+                .truncate()
+                .shrink()
+                .min_w(0.0),
         );
         self
     }
@@ -123,6 +128,7 @@ impl TerminalBar {
             .label_with(move |_, _| {
                 words(said, Type::Mono, ink)
                     .single_line()
+                    .truncate()
                     .spans(spans)
                     .w_full()
             })

@@ -94,7 +94,7 @@ fn nothing_drawn_over_a_terminal_runs_past_its_sides_down_to_the_smallest_window
 }
 
 #[test]
-fn a_terminal_bar_keeps_clear_of_the_scroll_bar_and_centres_its_parts_on_one_line() {
+fn a_terminal_bar_keeps_clear_of_the_scroll_bar_keeps_its_field_usable_and_centres_its_parts() {
     for variant in ["Rest", "Case on", "Long", "Smallest long"] {
         let rt = story("Tiles/Find bar", variant);
         let tile = element(&rt, "story.tile");
@@ -105,7 +105,13 @@ fn a_terminal_bar_keeps_clear_of_the_scroll_bar_and_centres_its_parts_on_one_lin
             right(&bar),
             right(&tile) - SCROLL_BAR_ROOM
         );
-        let line = middle(&element(&rt, "story.tile.find.field"));
+        let field = element(&rt, "story.tile.find.field");
+        assert!(
+            field.rect[2] >= 70.0,
+            "{variant}: the field shrinks to {} wide, too narrow to type a query in",
+            field.rect[2]
+        );
+        let line = middle(&field);
         for part in ["case", "count", "prev", "next", "close"] {
             let at = middle(&element(&rt, &format!("story.tile.find.{part}")));
             assert!(
