@@ -507,6 +507,91 @@ fn a_selection_across_blocks_keeps_to_the_block_it_starts_in() {
     );
 }
 
+/// Drags across the line `line` of a code block from its start to past its end, scrolling the
+/// document until the line is in view.
+fn select_code_line(world: &mut World, line: &str) {
+    let row = |world: &World| {
+        let text = world
+            .screen()
+            .all(Target::role("label"))
+            .into_iter()
+            .find(|n| {
+                n.name
+                    .as_deref()
+                    .is_some_and(|t| t.lines().any(|l| l == line))
+            })
+            .unwrap_or_else(|| panic!("no code text holds {line:?}:\n{}", world.screen()));
+        let name = text.name.clone().unwrap();
+        let n = name.lines().position(|l| l == line).unwrap();
+        let [x, y, w, h] = world
+            .screen()
+            .bounds(Target::role("label").name(name.clone()))
+            .unwrap();
+        let pitch = h / name.lines().count() as f32;
+        (x, y + pitch * (n as f32 + 0.5), w)
+    };
+    let view = 120.0..850.0;
+    for _ in 0..100 {
+        let (x, y, _) = row(world);
+        if view.contains(&y) {
+            break;
+        }
+        let dy = if y < view.start { 120.0 } else { -120.0 };
+        world.gesture(|app| app.runtime.wheel(x + 4.0, 450.0, dy));
+        world.settle();
+        if row(world).1 == y {
+            break;
+        }
+    }
+    let (x, y, w) = row(world);
+    assert!(view.contains(&y), "{line:?} at {y} scrolled into view");
+    world.gesture(|app| {
+        app.drag_from((x + 1.0, y), (x + w - 2.0, y));
+        app.release((x + w - 2.0, y));
+    });
+    world.settle();
+}
+
+#[test]
+fn a_line_selected_deep_in_long_code_blocks_anchors_to_that_line() {
+    let lines =
+        |name: &str, n: usize| -> String { (1..=n).map(|i| format!("{name}_{i:02}\n")).collect() };
+    let (first, second) = (lines("alpha", 40), lines("beta", 70));
+    let doc = format!("# Plan\n\n```text\n{first}```\n\n```text\n{second}```\n");
+    let (mut world, kept) = start_with(&doc, Kept::default());
+    let picks = [
+        ("alpha_33", "b1-code", &first),
+        ("alpha_02", "b1-code", &first),
+        ("beta_66", "b2-code", &second),
+        ("beta_40", "b2-code", &second),
+    ];
+    for (line, _, _) in picks {
+        select_code_line(&mut world, line);
+        click(&mut world, "toolbar.label.this-is-wrong");
+        pause(&mut world);
+    }
+    let marks = marks(&kept);
+    let anchors: Vec<_> = marks
+        .iter()
+        .map(|m| {
+            let a = &m["anchor"];
+            (
+                a["block_id"].as_str().unwrap().to_owned(),
+                a["exact"].as_str().unwrap().to_owned(),
+                a["start"].as_i64().unwrap(),
+            )
+        })
+        .collect();
+    let expected: Vec<_> = picks
+        .iter()
+        .map(|(line, block, code)| {
+            let at = code.find(&format!("{line}\n")).unwrap();
+            ((*block).to_owned(), (*line).to_owned(), at as i64)
+        })
+        .collect();
+    assert_eq!(anchors, expected);
+}
+
 #[test]
 fn the_picker_numbers_the_other_labels_and_digits_or_alt_digits_pick_them() {
     let (mut world, kept) = start();
