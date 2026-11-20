@@ -2,17 +2,21 @@
 
 use attn_protocol::{GetAnalyticsStatusResultMessage, Seed, Vent};
 use attn_ui::Tokens;
+use attn_ui::blocks::{
+    Actions, Block, Facts, Group, Inline, Inspector, List, Notice, Prose, Section, SettingRow,
+    inspector,
+};
 use attn_ui::keycap;
-use attn_ui::system::{self, Look};
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Tx, col, el, row, text};
-use rune_kit::{Badge, BadgeVariant, Kit, List, ListItem, Toast, ToastRegion};
+use attn_ui::system::{
+    self, DotShape, DotSize, ListRow, Look, Tone, Type, chip_button, count_badge, dot, keys_hint,
+    tag, words,
+};
+use rune::{El, Tx, el};
+use rune_kit::{Toast, ToastRegion};
 
 use super::items::{self, Item, SEND_SENT, VENT_TOOLS, VENTS, VIEWS};
 use super::{Analytics, Confirm, Records, SEND_VENTS, TOOL_VENTS};
 use crate::State;
-use crate::settings::pages::{CAPTION, S4};
 
 pub(super) const PAGE: &str = "settings.analytics";
 pub(super) const LIST: &str = "settings.analytics.list";
@@ -20,8 +24,7 @@ pub(super) const LIST: &str = "settings.analytics.list";
 /// A vent longer than this shows its start until asked for all of it.
 const LONG_VENT_CHARS: usize = 420;
 
-pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<El> {
-    let k = crate::settings::pages::kit(t);
+pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let page = &state.window.settings.analytics;
     let sharing = super::sharing(state);
     let items = super::listed(state);
@@ -38,72 +41,37 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<El> {
     let warning = status
         .filter(|_| sharing)
         .and_then(|s| s.ingest_off_reason.as_deref().or(s.last_refusal.as_deref()));
-    let root = col()
-        .key(PAGE)
-        .role("group")
-        .label("Analytics records and vents")
-        .focusable(true)
-        .on_key(super::key)
-        .w_full()
-        .gap(space::S3)
-        .child(strip(state, page, sharing, unreachable.len(), t))
-        .children(warning.map(|w| {
-            text(w.to_owned())
-                .key("settings.analytics.refusal")
-                .font(CAPTION)
-                .color(t.warning)
-                .wrap()
-        }))
-        .children((!unreachable.is_empty()).then(|| {
-            let held = if unreachable.len() == 1 {
-                "it holds"
-            } else {
-                "they hold"
-            };
-            text(format!(
+    let outposts_note = (!unreachable.is_empty()).then(|| {
+        let held = if unreachable.len() == 1 {
+            "it holds"
+        } else {
+            "they hold"
+        };
+        Prose::hint(
+            "settings.analytics.outposts",
+            format!(
                 "{}: unreachable, so what {held} isn't shown here.",
                 unreachable.join(", ")
-            ))
-            .key("settings.analytics.outposts")
-            .font(CAPTION)
-            .color(t.text_tertiary)
-            .wrap()
-        }))
-        .children(page.machine.then(|| machine(state, page, sharing, t)))
-        .child(views(state, page.view, t))
-        .child(
-            row()
-                .w_full()
-                .gap(14.0)
-                .items_start()
-                .child(
-                    col()
-                        .grow(0.9)
-                        .w(0.0)
-                        .min_w(300.0)
-                        .gap(6.0)
-                        .child(list(state, page, &items, index, t, k))
-                        .children((page.view != VENTS).then(|| footer(page, &items, t))),
-                )
-                .child(
-                    col()
-                        .key("settings.analytics.inspector")
-                        .role("group")
-                        .label("Selected")
-                        .grow(1.4)
-                        .w(0.0)
-                        .min_w(0.0)
-                        .gap(12.0)
-                        .py(14.0)
-                        .px(16.0)
-                        .radius(7.0)
-                        .fill(t.bg_elevated)
-                        .border(1.0, t.border)
-                        .children(inspector(state, page, current, sharing, t, k)),
-                ),
+            ),
         )
-        .child(hints(page.view, sharing, t));
-    vec![root]
+        .build(t)
+    });
+    let group = Group::new(PAGE, "Analytics records and vents")
+        .keys(super::key)
+        .push(stats(state, page, sharing, unreachable.len(), t))
+        .push(machine_toggle(page, t))
+        .push_all(
+            warning.map(|w| Notice::warn("settings.analytics.refusal", w.to_owned()).build(t)),
+        )
+        .push_all(outposts_note)
+        .push_all(page.machine.then(|| machine(state, page, sharing, t)))
+        .push(views(state, page.view, t))
+        .push(inspector::beside_list(
+            rows(state, page, &items, index, t),
+            selected(state, page, current, sharing, t),
+        ))
+        .push(hints(page.view, sharing, t));
+    vec![group.build(t)]
 }
 
 /// The last action's outcome over the dialog, with Undo when it can be taken back.
@@ -118,7 +86,7 @@ pub(in crate::settings) fn toast(state: &State, t: &Tokens) -> Option<El> {
         toast = toast.description(detail.clone());
     }
     if said.failed {
-        toast = toast.lead(text("!").font(type_::LABEL).color(t.error));
+        toast = toast.lead(words("!", Type::Name, t.error));
     }
     if said.undo.is_some() {
         toast = toast.action(k, "Undo", false, |state: &mut State, tx: &mut Tx| {
@@ -128,19 +96,8 @@ pub(in crate::settings) fn toast(state: &State, t: &Tokens) -> Option<El> {
     Some(ToastRegion::new().toast(toast.build(k)).build(k))
 }
 
-fn stat(id: &str, label: &str, value: String, tone: Option<rune::Color>, t: &Tokens) -> El {
-    crate::settings::bus::stat_tile(
-        format!("settings.analytics.stat.{id}"),
-        label,
-        value,
-        tone.unwrap_or(t.text_primary),
-        t,
-    )
-    .grow(1.0)
-    .w(0.0)
-}
-
-fn strip(state: &State, page: &Analytics, sharing: bool, unreachable: usize, t: &Tokens) -> El {
+/// Sharing, the vents, what is kept here and the outposts, as tiles.
+fn stats(state: &State, page: &Analytics, sharing: bool, unreachable: usize, t: &Tokens) -> Block {
     let status = page.status.as_ref();
     let vents = &state.facts.vents;
     let sent = vents
@@ -158,50 +115,41 @@ fn strip(state: &State, page: &Analytics, sharing: bool, unreachable: usize, t: 
         None => "7 days".to_owned(),
     };
     let outposts = state.facts.outposts.len();
-    row()
-        .w_full()
-        .gap(8.0)
-        .items_stretch()
-        .child(stat(
-            "sharing",
-            "Sharing",
-            sharing_stat(sharing, status),
-            if refused {
-                Some(t.warning)
-            } else {
-                (!sharing).then_some(t.text_tertiary)
-            },
-            t,
-        ))
-        .child(stat(
-            "vents",
-            "Vents",
-            vents_value,
-            vents.is_empty().then_some(t.text_tertiary),
-            t,
-        ))
-        .child(stat("kept", "Kept here", kept, None, t))
-        .children((outposts > 0).then(|| {
-            let value = if unreachable > 0 {
-                format!("{unreachable} of {outposts} unreachable")
-            } else {
-                "Up to 5 min behind".to_owned()
-            };
-            stat(
-                "outposts",
-                "Outposts",
-                value,
-                (unreachable > 0).then_some(t.warning),
-                t,
-            )
-        }))
-        .child({
-            let word = if page.machine {
-                "Done"
-            } else {
-                "Machine settings"
-            };
-            let button = El::from(
+    let key = |id: &str| format!("settings.analytics.stat.{id}");
+    let mut facts = Facts::new("settings.analytics.stats")
+        .tiles()
+        .code(key("sharing"), "Sharing", sharing_stat(sharing, status))
+        .tone(if refused {
+            Some(Tone::Warn)
+        } else {
+            (!sharing).then_some(Tone::Neutral)
+        })
+        .code(key("vents"), "Vents", vents_value)
+        .tone(vents.is_empty().then_some(Tone::Neutral))
+        .code(key("kept"), "Kept here", kept);
+    if outposts > 0 {
+        let value = if unreachable > 0 {
+            format!("{unreachable} of {outposts} unreachable")
+        } else {
+            "Up to 5 min behind".to_owned()
+        };
+        facts = facts
+            .code(key("outposts"), "Outposts", value)
+            .tone((unreachable > 0).then_some(Tone::Warn));
+    }
+    facts.build(t)
+}
+
+/// The button that opens the machine settings and closes them again.
+fn machine_toggle(page: &Analytics, t: &Tokens) -> Block {
+    let word = if page.machine {
+        "Done"
+    } else {
+        "Machine settings"
+    };
+    Actions::new("settings.analytics.actions")
+        .push(
+            El::from(
                 system::Button::new(word)
                     .expanded(page.machine)
                     .trailing(keycap::Keys::ledged(&["m"]).build(t).a11y_hidden())
@@ -210,15 +158,9 @@ fn strip(state: &State, page: &Analytics, sharing: bool, unreachable: usize, t: 
                     .key("settings.analytics.machine-toggle"),
             )
             .help(shortcut_tip(word, "m"))
-            .shortcut_hint("M")
-            .self_stretch()
-            .min_h(38.0);
-            if outposts > 0 {
-                button
-            } else {
-                button.grow(1.0).w(0.0)
-            }
-        })
+            .shortcut_hint("M"),
+        )
+        .build()
 }
 
 fn sharing_stat(sharing: bool, status: Option<&GetAnalyticsStatusResultMessage>) -> String {
@@ -234,61 +176,6 @@ fn sharing_stat(sharing: bool, status: Option<&GetAnalyticsStatusResultMessage>)
         ),
     }
 }
-
-fn views(state: &State, view: usize, t: &Tokens) -> El {
-    let fresh = state
-        .facts
-        .vents
-        .iter()
-        .filter(|v| !items::is_done(v))
-        .count();
-    row()
-        .key("settings.analytics.views")
-        .role("tablist")
-        .label("Show")
-        .focus_group()
-        .gap(6.0)
-        .flex_wrap()
-        .children(VIEWS.iter().enumerate().map(|(i, (id, name))| {
-            let on = i == view;
-            let count = (i == VENTS && fresh > 0).then(|| fresh.to_string());
-            row()
-                .key(format!("settings.analytics.views.{id}"))
-                .role("tab")
-                .label(match &count {
-                    Some(count) => format!("{name} {count}"),
-                    None => (*name).to_owned(),
-                })
-                .focusable(true)
-                .focus_selected(on)
-                .preserve_focus_on_press(true)
-                .gap(6.0)
-                .items_center()
-                .px(10.0)
-                .py(3.0)
-                .radius(999.0)
-                .fill(if on { t.bg_selected } else { t.bg_elevated })
-                .border(1.0, if on { t.border_focus } else { t.border })
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| super::switch_view(state, i, tx))
-                .child(text(*name).font(CAPTION).color(if on {
-                    t.text_primary
-                } else {
-                    t.text_secondary
-                }))
-                .children(count.map(|count| {
-                    text(count)
-                        .font(COUNT)
-                        .color(attn_ui::colors::mix_srgb(rune::Color::BLACK, t.brand, 0.11))
-                        .px(7.0)
-                        .py(1.0)
-                        .radius(9.0)
-                        .fill(t.brand)
-                }))
-        }))
-}
-
-/// The count of new vents on the Vents tab, as the Tauri app's `.analytics-count`.
-const COUNT: rune::TextStyle = rune::TextStyle::new(12.0, 700.0).mono();
 
 fn slug(seeds: &[std::sync::Arc<Seed>], id: &str) -> String {
     seeds
@@ -331,132 +218,225 @@ fn row_label(state: &State, item: &Item) -> String {
     }
 }
 
-fn list(state: &State, page: &Analytics, items: &[Item], index: usize, t: &Tokens, k: &Kit) -> El {
-    let name = VIEWS[page.view].1;
-    if items.is_empty() {
-        if page.view == VENTS {
-            return el().key(LIST);
-        }
-        let said = {
-            match &page.records {
-                Some(r) if !r.loading && r.error.is_none() => "Nothing recorded yet.",
-                Some(r) if !r.loading => "",
-                _ => "Reading the record…",
-            }
-        };
-        return text(said)
-            .key(LIST)
-            .font(CAPTION)
-            .color(t.text_tertiary)
-            .wrap();
-    }
-    let mut list = List::new().active(Some(index));
-    for item in items {
-        let key = item.key();
-        let mut row = ListItem::new(row_label(state, item))
-            .on_select(move |state: &mut State, tx: &mut Tx| super::pick(state, key.clone(), tx));
-        if let Item::Vent { done, .. } = item {
-            row = row.group(if *done { "Done" } else { "New" });
-        }
-        list = list.item(row);
-    }
-    list.build(k).key(LIST).role("group").label(name)
+fn shortcut_tip(label: &str, key: &str) -> String {
+    format!("{label}  {}", key.to_uppercase())
 }
 
-fn footer(page: &Analytics, items: &[Item], t: &Tokens) -> El {
+/// The lists to show, as tabs: Vents, All records and each kind of record.
+fn views(state: &State, view: usize, t: &Tokens) -> Block {
+    let fresh = state
+        .facts
+        .vents
+        .iter()
+        .filter(|v| !items::is_done(v))
+        .count();
+    let tabs = VIEWS.iter().enumerate().map(|(i, (id, name))| {
+        let on = i == view;
+        let count = (i == VENTS && fresh > 0).then_some(fresh);
+        let face = Inline::tight()
+            .child(words(
+                *name,
+                Type::Small,
+                if on { t.text_primary } else { t.text_secondary },
+            ))
+            .children(count.map(|count| {
+                count_badge(
+                    count,
+                    t.brand,
+                    attn_ui::colors::mix_srgb(rune::Color::BLACK, t.brand, 0.11),
+                )
+            }));
+        let label = match count {
+            Some(count) => format!("{name} {count}"),
+            None => (*name).to_owned(),
+        };
+        chip_button(format!("settings.analytics.views.{id}"), label, face, on, t)
+            .role("tab")
+            .focus_selected(on)
+            .preserve_focus_on_press(true)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| super::switch_view(state, i, tx))
+    });
+    Block::control(
+        "settings.analytics.views.slot",
+        Inline::loose()
+            .key("settings.analytics.views")
+            .role("tablist")
+            .label("Show")
+            .focus_group()
+            .children(tabs),
+    )
+}
+
+/// The rows of the shown list; the vents fall under New and Done.
+fn rows(state: &State, page: &Analytics, items: &[Item], index: usize, t: &Tokens) -> Block {
+    let name = VIEWS[page.view].1;
+    let row = |i: usize, item: &Item| {
+        let key = item.key();
+        let (title, line) = match item {
+            Item::Vent { vent, done } => {
+                let mut line = vec![vent.context.session_label.clone()];
+                if vent.kind == VENT_TOOLS {
+                    line.push("tools".into());
+                }
+                if *done {
+                    line.push(match (&vent.planted_seed_id, &vent.withdrawn_at) {
+                        (_, Some(_)) => "withdrawn".to_owned(),
+                        (Some(seed), None) => slug(crate::garden::seeds(state), seed),
+                        (None, None) => "dismissed".to_owned(),
+                    });
+                }
+                line.push(items::age(&vent.created_at, state.window.now_ms));
+                (vent.text.clone(), line.join(" · "))
+            }
+            Item::Record(record) => (
+                record.name.clone(),
+                format!("{} · {}", items::clock_time(&record.at), record.stream),
+            ),
+            Item::Burst(records) => (
+                format!("{} ×{}", records[0].name, records.len()),
+                format!(
+                    "{} · {}",
+                    items::clock_time(&records[0].at),
+                    records[0].stream
+                ),
+            ),
+        };
+        ListRow::new(format!("item{i}"), row_label(state, item))
+            .title(title)
+            .subtitle(line, t)
+            .in_view(i == index)
+            .role("option")
+            .unfocusable()
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| super::pick(state, key.clone(), tx))
+            .build(t)
+    };
+    if page.view == VENTS {
+        let (new, done): (Vec<_>, Vec<_>) = items
+            .iter()
+            .enumerate()
+            .partition(|(_, item)| !matches!(item, Item::Vent { done: true, .. }));
+        let part = |key: &str, label: &'static str, rows: Vec<(usize, &Item)>| {
+            (!rows.is_empty()).then(|| {
+                List::new(format!("{LIST}.{key}"), label)
+                    .heading()
+                    .listbox()
+                    .rows(rows.into_iter().map(|(i, item)| row(i, item)))
+                    .build(t)
+            })
+        };
+        return Group::<State>::new(LIST, name)
+            .push_all(part("new", "New", new))
+            .push_all(part("done", "Done", done))
+            .build(t);
+    }
+    let said = match &page.records {
+        Some(r) if !r.loading && r.error.is_none() => "Nothing recorded yet.",
+        Some(r) if !r.loading => "",
+        _ => "Reading the record…",
+    };
+    Group::<State>::new(LIST, name)
+        .push(
+            List::new(format!("{LIST}.rows"), name)
+                .listbox()
+                .rows(items.iter().enumerate().map(|(i, item)| row(i, item)))
+                .empty(format!("{LIST}.empty"), said, None)
+                .build(t),
+        )
+        .push_all(footer(page, items, t))
+        .build(t)
+}
+
+/// What the record list holds and the buttons that read more of it.
+fn footer(page: &Analytics, items: &[Item], t: &Tokens) -> Vec<Block> {
     let records = page.records.as_ref();
     let loading = records.is_none_or(|r| r.loading);
     let summary = match records {
         Some(Records {
             error: Some(error), ..
-        }) => text(error.clone()).font(CAPTION).color(t.warning).wrap(),
-        Some(r) if !items.is_empty() => text(format!(
-            "{} newest first",
-            items::count(r.list.len() as i64)
-        ))
-        .font(CAPTION)
-        .color(t.text_tertiary),
-        _ => el(),
+        }) => Some(Notice::warn("settings.analytics.footer.error", error.clone()).build(t)),
+        Some(r) if !items.is_empty() => Some(
+            Prose::hint(
+                "settings.analytics.footer.count",
+                format!("{} newest first", items::count(r.list.len() as i64)),
+            )
+            .build(t),
+        ),
+        _ => None,
     };
-    row()
-        .key("settings.analytics.footer")
-        .w_full()
-        .gap(space::S2)
-        .items_center()
-        .child(summary.grow(1.0).min_w(0.0))
-        .children(records.filter(|r| r.more).map(|_| {
-            El::from(
-                system::Button::new("Older")
-                    .look(Look::Quiet)
-                    .size(system::Size::Compact)
-                    .disabled(loading)
-                    .on_press_tx(super::older)
-                    .build(t)
-                    .key("settings.analytics.older"),
-            )
-        }))
-        .child(
-            El::from(
-                system::Button::new("Refresh")
-                    .look(Look::Quiet)
-                    .size(system::Size::Compact)
-                    .disabled(loading)
-                    .on_press_tx(super::refresh)
-                    .build(t)
-                    .key("settings.analytics.refresh"),
-            )
-            .help(shortcut_tip("Refresh", "r"))
-            .shortcut_hint("R"),
+    let mut actions = Actions::new("settings.analytics.footer");
+    if records.is_some_and(|r| r.more) {
+        actions = actions.push(El::from(
+            system::Button::new("Older")
+                .look(Look::Quiet)
+                .size(system::Size::Compact)
+                .disabled(loading)
+                .on_press_tx(super::older)
+                .build(t)
+                .key("settings.analytics.older"),
+        ));
+    }
+    actions = actions.push(
+        El::from(
+            system::Button::new("Refresh")
+                .look(Look::Quiet)
+                .size(system::Size::Compact)
+                .disabled(loading)
+                .on_press_tx(super::refresh)
+                .build(t)
+                .key("settings.analytics.refresh"),
         )
+        .help(shortcut_tip("Refresh", "r"))
+        .shortcut_hint("R"),
+    );
+    summary.into_iter().chain([actions.build()]).collect()
 }
 
-fn inspector(
+/// What the selected row holds, in the column beside the list.
+fn selected(
     state: &State,
     page: &Analytics,
     current: Option<&Item>,
     sharing: bool,
     t: &Tokens,
-    k: &Kit,
-) -> Vec<El> {
+) -> El {
+    let column = Inspector::side("settings.analytics.inspector", "Selected");
     match current {
-        Some(Item::Vent { vent, .. }) => vent_detail(state, page, vent, sharing, t, k),
-        Some(Item::Record(record)) => record_detail(std::slice::from_ref(*record), false, t),
-        Some(Item::Burst(records)) => record_detail(records, true, t),
-        None if page.view == VENTS => vec![
-            text("No vents yet")
-                .font(type_::LABEL)
-                .color(t.text_primary),
-            text("Agents launched since you turned this on can send one.")
-                .font(CAPTION)
-                .color(t.text_tertiary)
+        Some(Item::Vent { vent, .. }) => vent_detail(state, page, vent, sharing, column, t),
+        Some(Item::Record(record)) => {
+            record_detail(std::slice::from_ref(*record), false, column, t)
+        }
+        Some(Item::Burst(records)) => record_detail(records, true, column, t),
+        None if page.view == VENTS => column
+            .push(words("No vents yet", Type::Name, t.text_primary))
+            .push(
+                words(
+                    "Agents launched since you turned this on can send one.",
+                    Type::Small,
+                    t.text_tertiary,
+                )
                 .wrap(),
-        ],
-        None => Vec::new(),
+            ),
+        None => column,
     }
+    .build(t)
 }
 
-fn context_row(key: &str, label: &str, value: String, t: &Tokens) -> El {
-    row()
-        .w_full()
-        .gap(space::S3)
-        .child(
-            text(label.to_owned())
-                .font(CAPTION)
-                .color(t.text_tertiary)
-                .w(96.0),
-        )
-        .child(
-            text(value)
-                .key(format!("settings.analytics.{key}"))
-                .font(CAPTION)
-                .color(t.text_primary)
-                .wrap()
-                .grow(1.0)
-                .min_w(0.0),
-        )
+/// A fact of the selected row: its label, and its value keyed `key` as the value alone.
+fn fact(facts: Facts, key: &str, label: &'static str, value: String, t: &Tokens) -> Facts {
+    let key = format!("settings.analytics.{key}");
+    facts.item(
+        format!("{key}.fact"),
+        label,
+        inspector::value(value, t).key(key),
+    )
 }
 
-fn record_detail(records: &[items::Stored], burst: bool, t: &Tokens) -> Vec<El> {
+fn record_detail(
+    records: &[items::Stored],
+    burst: bool,
+    column: Inspector,
+    t: &Tokens,
+) -> Inspector {
     let first = &records[0];
     let last = &records[records.len() - 1];
     let heading = if burst {
@@ -469,28 +449,28 @@ fn record_detail(records: &[items::Stored], burst: bool, t: &Tokens) -> Vec<El> 
     } else {
         first.seq.to_string()
     };
-    vec![
-        text(heading)
-            .key("settings.analytics.record.heading")
-            .font(type_::LABEL)
-            .color(t.text_primary),
-        context_row("record.stream", "Stream", first.stream.clone(), t),
-        context_row("record.seq", "Seq", seq, t),
-        context_row("record.at", "At", items::when(&first.at), t),
-        text("Exactly as stored")
-            .font(type_::LABEL)
-            .color(t.text_primary)
-            .pt(space::S2),
-        col()
-            .key("settings.analytics.record.raw")
-            .gap(space::S1)
-            .children(records.iter().map(|r| {
-                text(r.raw.clone())
-                    .font(type_::MONO_CAPTION)
-                    .color(t.text_secondary)
-                    .wrap()
-            })),
-    ]
+    let facts = Facts::new("settings.analytics.record.facts");
+    let facts = fact(facts, "record.stream", "Stream", first.stream.clone(), t);
+    let facts = fact(facts, "record.seq", "Seq", seq, t);
+    let facts = fact(facts, "record.at", "At", items::when(&first.at), t);
+    column
+        .push(
+            words(heading.clone(), Type::Name, t.text_primary)
+                .key("settings.analytics.record.heading")
+                .role("heading")
+                .label(heading),
+        )
+        .block(facts.build(t))
+        .push(words("Exactly as stored", Type::Name, t.text_primary))
+        .push(
+            Inline::tight()
+                .key("settings.analytics.record.raw")
+                .children(
+                    records.iter().map(|r| {
+                        words(r.raw.clone(), Type::Mono, t.text_secondary).wrap_anywhere()
+                    }),
+                ),
+        )
 }
 
 fn vent_detail(
@@ -498,38 +478,38 @@ fn vent_detail(
     page: &Analytics,
     vent: &Vent,
     sharing: bool,
+    column: Inspector,
     t: &Tokens,
-    k: &Kit,
-) -> Vec<El> {
+) -> Inspector {
     let seeds = crate::garden::seeds(state);
     let withdrawn = vent.withdrawn_at.is_some();
     let outcome = if withdrawn {
-        Some(("Withdrawn by agent".to_owned(), BadgeVariant::Subtle))
+        Some(("Withdrawn by agent".to_owned(), Tone::Neutral))
     } else if let Some(seed) = &vent.planted_seed_id {
-        Some((
-            format!("Planted · {}", slug(seeds, seed)),
-            BadgeVariant::Accent,
-        ))
+        Some((format!("Planted · {}", slug(seeds, seed)), Tone::Good))
     } else if vent.dismissed_at.is_some() {
-        Some(("Dismissed".to_owned(), BadgeVariant::Subtle))
+        Some(("Dismissed".to_owned(), Tone::Neutral))
     } else {
         None
     };
-    let head = row()
-        .gap(space::S2)
-        .items_center()
-        .child(
-            text(vent.context.session_label.clone())
-                .font(type_::LABEL)
-                .color(t.text_primary),
-        )
-        .children((vent.kind == VENT_TOOLS).then(|| Badge::new("Tools").build(k)))
-        .children(outcome.map(|(label, variant)| {
-            Badge::new(label)
-                .variant(variant)
-                .build(k)
-                .key("settings.analytics.vent.outcome")
-        }));
+    let head =
+        Inline::tight()
+            .child(words(
+                vent.context.session_label.clone(),
+                Type::Name,
+                t.text_primary,
+            ))
+            .children((vent.kind == VENT_TOOLS).then(|| {
+                El::from(tag(
+                    "settings.analytics.vent.tools",
+                    "Tools",
+                    Tone::Neutral,
+                    t,
+                ))
+            }))
+            .children(outcome.map(|(label, tone)| {
+                El::from(tag("settings.analytics.vent.outcome", label, tone, t))
+            }));
     let chars = vent.text.chars().count();
     let clamped = chars > LONG_VENT_CHARS && !page.expanded.contains(&vent.id);
     let shown: String = if clamped {
@@ -541,15 +521,17 @@ fn vent_detail(
     } else {
         vent.text.clone()
     };
-    let body = text(shown)
-        .key("settings.analytics.vent.text")
-        .font(type_::BODY)
-        .color(if withdrawn {
+    let body = words(
+        shown,
+        Type::Body,
+        if withdrawn {
             t.text_muted
         } else {
             t.text_primary
-        })
-        .wrap();
+        },
+    )
+    .key("settings.analytics.vent.text")
+    .wrap_anywhere();
     let more = clamped.then(|| {
         let id = vent.id.clone();
         El::from(
@@ -594,28 +576,36 @@ fn vent_detail(
         items::when(&vent.created_at),
         items::long_ago(&vent.created_at, state.window.now_ms)
     );
-    let mut detail = vec![head, body];
-    detail.extend(more);
-    detail.extend([
-        context_row("vent.when", "When", when, t),
-        context_row("vent.agent", "Agent", agent, t),
-        context_row(
-            "vent.seed",
-            "Stake seed",
-            context
-                .seed_id
-                .as_deref()
-                .map_or_else(|| "none".to_owned(), |id| slug(seeds, id)),
-            t,
-        ),
-        context_row("vent.build", "Build", items::build_label(&context.build), t),
-        context_row("vent.experimental", "Experimental", experimental, t),
-    ]);
-    if !withdrawn {
-        detail.push(vent_actions(state, vent, t));
+    let facts = Facts::new("settings.analytics.vent.facts");
+    let facts = fact(facts, "vent.when", "When", when, t);
+    let facts = fact(facts, "vent.agent", "Agent", agent, t);
+    let facts = fact(
+        facts,
+        "vent.seed",
+        "Stake seed",
+        context
+            .seed_id
+            .as_deref()
+            .map_or_else(|| "none".to_owned(), |id| slug(seeds, id)),
+        t,
+    );
+    let facts = fact(
+        facts,
+        "vent.build",
+        "Build",
+        items::build_label(&context.build),
+        t,
+    );
+    let facts = fact(facts, "vent.experimental", "Experimental", experimental, t);
+    let mut column = column.push(head).push(body);
+    if let Some(more) = more {
+        column = column.push(more);
     }
-    detail.push(vent_where(vent, sharing, t));
-    detail
+    column = column.block(facts.build(t));
+    if !withdrawn {
+        column = column.block(vent_actions(state, vent, t));
+    }
+    column.push(vent_where(vent, sharing, t))
 }
 
 fn action(label: &'static str, key: &'static str, t: &Tokens) -> El {
@@ -632,11 +622,7 @@ fn action(label: &'static str, key: &'static str, t: &Tokens) -> El {
     .shortcut_hint(key.to_uppercase())
 }
 
-fn shortcut_tip(label: &str, key: &str) -> String {
-    format!("{label}  {}", key.to_uppercase())
-}
-
-fn vent_actions(state: &State, vent: &Vent, t: &Tokens) -> El {
+fn vent_actions(state: &State, vent: &Vent, t: &Tokens) -> Block {
     let file = if vent.kind == VENT_TOOLS {
         "File under attn"
     } else {
@@ -666,36 +652,34 @@ fn vent_actions(state: &State, vent: &Vent, t: &Tokens) -> El {
         )),
         (vent.send.as_deref() != Some(SEND_SENT)).then(|| action(file, "s", t)),
     ];
-    row()
-        .key("settings.analytics.vent.actions")
-        .gap(space::S2)
-        .flex_wrap()
-        .children(actions.into_iter().flatten())
+    actions
+        .into_iter()
+        .flatten()
+        .fold(
+            Actions::new("settings.analytics.vent.actions"),
+            Actions::push,
+        )
+        .build()
 }
 
 fn vent_where(vent: &Vent, sharing: bool, t: &Tokens) -> El {
     let to = items::destination(vent, sharing);
-    row()
+    Inline::tight()
         .key("settings.analytics.vent.where")
-        .gap(space::S2)
-        .items_center()
         .child(
-            el().size(8.0, 8.0)
-                .radius(4.0)
-                .fill(if to.leaving { t.success } else { t.text_muted })
-                .a11y_hidden(),
+            dot(
+                if to.leaving { t.success } else { t.text_muted },
+                DotShape::Filled,
+                DotSize::Regular,
+            )
+            .a11y_hidden(),
         )
         .child(
-            text(to.label)
-                .key("settings.analytics.vent.destination")
-                .font(type_::LABEL)
-                .color(t.text_primary),
+            words(to.label, Type::Name, t.text_primary).key("settings.analytics.vent.destination"),
         )
         .children((!to.note.is_empty()).then(|| {
-            text(format!("· {}", to.note))
+            words(format!("· {}", to.note), Type::Small, t.text_tertiary)
                 .key("settings.analytics.vent.destination-note")
-                .font(CAPTION)
-                .color(t.text_tertiary)
         }))
         .children(to.movable.then(|| {
             action(
@@ -710,44 +694,30 @@ fn vent_where(vent: &Vent, sharing: bool, t: &Tokens) -> El {
         }))
 }
 
-fn machine_row(key: &str, title: &str, copy: Option<El>, control: Option<El>, t: &Tokens) -> El {
-    row()
-        .key(format!("settings.analytics.machine.{key}"))
-        .role("group")
-        .label(title.to_owned())
-        .w_full()
-        .gap(S4)
-        .items_center()
-        .padding(space::S3)
-        .radius(6.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
-        .child(
-            col()
-                .grow(1.0)
-                .min_w(0.0)
-                .gap(space::S1)
-                .child(
-                    text(title.to_owned())
-                        .font(type_::LABEL)
-                        .color(t.text_primary),
-                )
-                .children(copy.map(|c| c.key(format!("settings.analytics.machine.{key}.copy")))),
+/// A machine setting: its title, what it says keyed `{key}.copy` (in the warning ink when it
+/// warns), and its control.
+fn machine_row(
+    key: &str,
+    title: &'static str,
+    copy: Option<(String, bool)>,
+    control: El,
+    t: &Tokens,
+) -> Block {
+    let key = format!("settings.analytics.machine.{key}");
+    let copy = copy.map(|(said, warns)| {
+        words(
+            said,
+            Type::Small,
+            if warns { t.warning } else { t.text_secondary },
         )
-        .children(control)
-}
-
-fn copy(said: String, t: &Tokens) -> El {
-    text(said).font(CAPTION).color(t.text_tertiary).wrap()
-}
-
-fn warning(said: &str, t: &Tokens) -> El {
-    text(said.to_owned()).font(CAPTION).color(t.warning).wrap()
+        .key(format!("{key}.copy"))
+        .wrap()
+    });
+    SettingRow::new(key, title, "", control).note(copy).build(t)
 }
 
 fn confirming(yes: &'static str, on_yes: fn(&mut State, &mut Tx), t: &Tokens) -> El {
-    row()
-        .gap(space::S2)
+    Inline::tight()
         .child(
             system::Button::new(yes)
                 .look(Look::Danger)
@@ -773,7 +743,7 @@ fn asking(label: &'static str, confirm: Confirm, t: &Tokens) -> El {
         .into()
 }
 
-fn setting_switch(state: &State, key: &'static str, label: &str, t: &Tokens) -> El {
+fn setting_switch(state: &State, key: &'static str, label: &'static str, t: &Tokens) -> El {
     let on = crate::setting::on(&state.facts.settings, key);
     system::switch(
         format!("settings.analytics.switch.{key}"),
@@ -787,26 +757,26 @@ fn setting_switch(state: &State, key: &'static str, label: &str, t: &Tokens) -> 
     .into()
 }
 
-fn machine(state: &State, page: &Analytics, sharing: bool, t: &Tokens) -> El {
+fn machine(state: &State, page: &Analytics, sharing: bool, t: &Tokens) -> Block {
     let status = page.status.as_ref();
     let send_vents = crate::setting::on(&state.facts.settings, SEND_VENTS);
     let tool_vents = crate::setting::on(&state.facts.settings, TOOL_VENTS);
     let offering_delete = page.confirm == Some(Confirm::DeleteServerCopy);
     let share_copy = if offering_delete {
-        Some(copy(
-            "Sharing is off. Delete what the server already holds?".into(),
-            t,
+        Some((
+            "Sharing is off. Delete what the server already holds?".to_owned(),
+            false,
         ))
     } else if let Some(reason) = status.and_then(|s| s.ingest_off_reason.as_deref()) {
-        Some(warning(reason, t))
+        Some((reason.to_owned(), true))
     } else if let Some(refusal) = status
         .filter(|_| sharing)
         .and_then(|s| s.last_refusal.as_deref())
     {
-        Some(warning(refusal, t))
+        Some((refusal.to_owned(), true))
     } else {
         status.map(|s| {
-            copy(
+            (
                 if sharing {
                     format!(
                         "{} · uploads go to {}",
@@ -820,7 +790,7 @@ fn machine(state: &State, page: &Analytics, sharing: bool, t: &Tokens) -> El {
                         s.ingest_url
                     )
                 },
-                t,
+                false,
             )
         })
     };
@@ -869,73 +839,64 @@ fn machine(state: &State, page: &Analytics, sharing: bool, t: &Tokens) -> El {
     } else {
         asking("Clear…", Confirm::Clear, t).key("settings.analytics.clear")
     };
-    col()
-        .key("settings.analytics.machine")
-        .role("group")
-        .label("Machine settings")
-        .w_full()
-        .gap(space::S2)
-        .child(machine_row(
+    Section::new("settings.analytics.machine", "Machine settings")
+        .push(machine_row(
             "share",
             "Share with attn's maintainers",
             share_copy,
-            Some(share_control),
+            share_control,
             t,
         ))
-        .children((sharing || send_vents).then(|| {
+        .push_all((sharing || send_vents).then(|| {
             machine_row(
                 "send-vents",
                 "Send vents",
-                Some(copy(
+                Some((
                     if send_vents {
                         "New attn vents are sent with their text."
                     } else {
                         "Vents stay here unless you send one."
                     }
-                    .into(),
-                    t,
+                    .to_owned(),
+                    false,
                 )),
-                Some(setting_switch(state, SEND_VENTS, "Send vents", t)),
+                setting_switch(state, SEND_VENTS, "Send vents", t),
                 t,
             )
         }))
-        .child(machine_row(
+        .push(machine_row(
             "tool-vents",
             "Tool vents",
-            Some(copy(
+            Some((
                 if tool_vents {
                     "New sessions also vent about their other tools: skills, other CLIs, harness permissions. These never leave this machine."
                 } else {
                     "Agents vent only about attn. Turn on to also hear about their other tools (skills, other CLIs, harness permissions), kept on this machine."
                 }
-                .into(),
-                t,
+                .to_owned(),
+                false,
             )),
-            Some(setting_switch(state, TOOL_VENTS, "Tool vents", t)),
+            setting_switch(state, TOOL_VENTS, "Tool vents", t),
             t,
         ))
-        .child(machine_row("kept", "Kept for 7 days", Some(copy(kept, t)), None, t))
-        .child(machine_row(
+        .push(machine_row("kept", "Kept for 7 days", Some((kept, false)), el(), t))
+        .push(machine_row(
             "forget",
             "Forget this install",
-            Some(copy(
-                "Deletes this install's data on the server and starts a new install id.".into(),
-                t,
+            Some((
+                "Deletes this install's data on the server and starts a new install id.".to_owned(),
+                false,
             )),
-            Some(forget),
+            forget,
             t,
         ))
-        .child(machine_row(
-            "clear",
-            "Clear the local record",
-            Some(copy(clear_copy, t)),
-            Some(clear),
-            t,
-        ))
+        .push(machine_row("clear", "Clear the local record", Some((clear_copy, false)), clear, t))
+        .build(t)
 }
 
-fn hints(view: usize, sharing: bool, t: &Tokens) -> El {
-    let mut keys: Vec<(&[&str], &str)> = vec![(&["j", "k"], "move"), (&["[", "]"], "switch list")];
+fn hints(view: usize, sharing: bool, t: &Tokens) -> Block {
+    let mut keys: Vec<(&[&str], &'static str)> =
+        vec![(&["j", "k"], "move"), (&["[", "]"], "switch list")];
     if view != VENTS {
         keys.extend([
             (&["↵"][..], "expand a burst"),
@@ -957,20 +918,15 @@ fn hints(view: usize, sharing: bool, t: &Tokens) -> El {
         }
     }
     keys.push((&["m"], "machine settings"));
-    row()
-        .key("settings.analytics.keys")
-        .role("group")
-        .label("Keys")
-        .w_full()
-        .gap(14.0)
-        .pt(10.0)
-        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-        .flex_wrap()
-        .children(keys.into_iter().map(|(keys, label)| {
-            row()
-                .gap(space::S1)
-                .items_center()
-                .child(keycap::Keys::ledged(keys).build(t))
-                .child(text(label).font(CAPTION).color(t.text_muted))
-        }))
+    Block::custom(
+        "settings.analytics.keys.block",
+        Inline::loose()
+            .key("settings.analytics.keys")
+            .role("group")
+            .label("Keys")
+            .children(
+                keys.into_iter()
+                    .map(|(keys, what)| keys_hint(keys.iter().copied(), what, t)),
+            ),
+    )
 }

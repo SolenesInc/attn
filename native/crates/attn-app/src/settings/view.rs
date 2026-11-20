@@ -306,7 +306,7 @@ fn page(state: &State, section: Section, t: &Tokens) -> Vec<Block> {
         Section::Experimental => experimental::page(state, t),
         Section::BackgroundTasks => tasks::page(state, state.window.now_ms, t),
         Section::EventBus => bus::page(state, state.window.now_ms, t),
-        Section::Analytics => legacy(analytics::page(state, t)),
+        Section::Analytics => analytics::page(state, t),
         Section::BackgroundAgents => background::page(state, t),
         Section::Delegation => delegation::page(state, t),
         Section::Agents => agents::page(state, t),

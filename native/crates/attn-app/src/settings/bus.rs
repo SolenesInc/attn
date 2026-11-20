@@ -237,33 +237,6 @@ fn summary(status: &BusStatusResultMessage, now_ms: i64, t: &Tokens) -> Block {
 /// A stat tile's name, as the Tauri app's `.bus-stat-label`: uppercase, spaced .06em.
 pub(super) const STAT_LABEL: rune::TextStyle = rune::TextStyle::new(12.0, 400.0).tracking(0.72);
 
-/// One headline number in its bordered tile, as the Tauri app's `.bus-stat`: its name over its
-/// value, keyed `key`, in `ink`.
-pub(super) fn stat_tile(
-    key: String,
-    label: &str,
-    value: String,
-    ink: rune::Color,
-    t: &Tokens,
-) -> El {
-    col()
-        .min_w(0.0)
-        .gap(2.0)
-        .py(8.0)
-        .px(10.0)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border_subtle)
-        .child(type_::upper(label, STAT_LABEL).color(t.text_tertiary))
-        .child(
-            text(value)
-                .key(key)
-                .font(type_::MONO_CAPTION)
-                .color(ink)
-                .truncate(),
-        )
-}
-
 fn section_head(title: &str, hint: String, t: &Tokens) -> El {
     col()
         .gap(space::S1)

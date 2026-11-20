@@ -382,7 +382,7 @@ fn machine(world: &World) -> String {
     reads_as(world, "settings.analytics.machine")
 }
 
-/// The rows of the shown list, each with the group it sits in.
+/// The rows of the shown list, each with the group or list it sits in.
 fn rows(world: &World) -> Vec<String> {
     let mut group = String::new();
     let mut rows = Vec::new();
@@ -391,7 +391,11 @@ fn rows(world: &World) -> Vec<String> {
         .descendants(Target::key("settings.analytics.list"))
     {
         match node.role.as_str() {
-            "group" => group = node.name.unwrap_or_default(),
+            "group" | "list-box" => {
+                if let Some(name) = node.name {
+                    group = name;
+                }
+            }
             "list-box-option" => rows.push(format!("{group}: {}", node.name.unwrap_or_default())),
             _ => {}
         }
