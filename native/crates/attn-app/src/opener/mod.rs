@@ -245,12 +245,16 @@ pub(crate) fn highlighted(opener: &Opener, rows: &[Row]) -> Option<usize> {
         .or((!rows.is_empty()).then_some(0))
 }
 
-pub(crate) fn edited(state: &mut State, tx: &mut Tx) {
+fn reveal(state: &State, tx: &mut Tx) {
     let (rows, _) = rows(state);
     let row = highlighted(&state.opener, &rows)
         .filter(|&at| at > 0)
         .map(|at| view::row_key(&rows[at]));
     attn_ui::finder::reveal(tx, view::LIST, row);
+}
+
+pub(crate) fn edited(state: &mut State, tx: &mut Tx) {
+    reveal(state, tx);
     let browsing = paths::is_path(&state.opener.query.text);
     if !browsing {
         state.opener.browse = Browse::default();
@@ -285,7 +289,7 @@ pub(crate) fn browse_due(state: &mut State, tx: &mut Tx) -> bool {
             request_id: Some(id),
             ..BrowseDirectoryMessage::new()
         },
-        move |state, answer, _| {
+        move |state, answer, tx| {
             let opener = &mut state.opener;
             if opener.opening != opening
                 || paths::browse_input(&opener.query.text, opener.root.as_deref()).as_ref()
@@ -315,6 +319,7 @@ pub(crate) fn browse_due(state: &mut State, tx: &mut Tx) -> bool {
                     .collect(),
                 ..Browse::default()
             };
+            reveal(state, tx);
         },
         tx,
     );

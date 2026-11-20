@@ -371,6 +371,60 @@ fn arrows_show_each_file_whole_in_the_smallest_window_at_the_largest_text_and_en
 }
 
 #[test]
+fn editing_the_path_to_another_folder_shows_its_listing_from_the_top_with_its_first_row_highlighted()
+ {
+    let mut world = start(Setup {
+        small: true,
+        ..Setup::default()
+    });
+    world.daemon.on("browse_directory", |r| {
+        let input = r["input_path"].as_str().unwrap_or_default().to_owned();
+        let folder = input
+            .trim_start_matches("~/")
+            .trim_end_matches('/')
+            .to_owned();
+        message(BrowseDirectoryResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            success: true,
+            input_path: input,
+            directory: format!("/home/victor/{folder}"),
+            home_path: Some("/home/victor".into()),
+            entries: (1..=30)
+                .map(|i| DirectoryEntry {
+                    name: format!("{folder}-{i:02}.md"),
+                    path: format!("/home/victor/{folder}/{folder}-{i:02}.md"),
+                    is_dir: false,
+                    ..DirectoryEntry::default()
+                })
+                .collect(),
+            ..BrowseDirectoryResultMessage::new()
+        })
+    });
+    search(&mut world, "~/one/");
+    for _ in 0..29 {
+        press(&mut world, "down");
+    }
+    let scrolled = |world: &World| world.screen().scrolled(Target::key("opener.list"));
+    assert!(scrolled(&world) > Some(0.0), "the arrows scrolled the list");
+
+    search(&mut world, "~/two/");
+    assert_eq!(
+        world
+            .screen()
+            .active_option()
+            .and_then(|n| n.key)
+            .as_deref(),
+        Some("opener.row./home/victor/two/two-01.md")
+    );
+    assert_eq!(scrolled(&world), Some(0.0), "the new listing shows its top");
+    press(&mut world, "enter");
+    assert_eq!(
+        sent(&world, "open_markdown")[0]["path"],
+        "/home/victor/two/two-01.md"
+    );
+}
+
+#[test]
 fn an_outposts_recent_file_shows_its_machine_apart_from_the_same_path_here_and_opens_there() {
     let mut world = start(Setup {
         recents: vec![
