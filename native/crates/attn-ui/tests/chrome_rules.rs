@@ -1105,3 +1105,113 @@ fn a_one_line_row_with_a_tag_stands_as_tall_as_one_without() {
     };
     assert_eq!(height("rule.tagged"), height("rule.plain"));
 }
+
+const SELECT_ROWS: [(bool, Option<bool>); 6] = [
+    (false, None),
+    (true, None),
+    (false, Some(false)),
+    (true, Some(false)),
+    (false, Some(true)),
+    (true, Some(true)),
+];
+
+fn select_key(selected: bool, checked: Option<bool>) -> String {
+    format!("rule.select.{selected}.{checked:?}")
+}
+
+fn select_rows(_: &(), _: &mut Cx<()>) -> El {
+    let t = tokens(true);
+    rune::col()
+        .w(ROW_WIDTH)
+        .children(SELECT_ROWS.map(|(selected, checked)| {
+            let key = select_key(selected, checked);
+            let row = ListRow::new(format!("{key}.row"), "Nightly triage")
+                .title("Nightly triage")
+                .subtitle("Every day at 09:00", &t)
+                .description("Every day at 09:00")
+                .selected(selected)
+                .select(key, "Nightly triage", |_: &mut (), _: &mut rune::Tx| {});
+            match checked {
+                Some(on) => row.checked(on),
+                None => row,
+            }
+            .build(&t)
+        }))
+}
+
+fn accessible(node: &serde_json::Value, key: &str) -> Option<serde_json::Value> {
+    if node["key"].as_str() == Some(key) {
+        return Some(node.clone());
+    }
+    node["children"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find_map(|child| accessible(child, key))
+}
+
+#[test]
+fn a_select_rows_button_is_checked_or_unchecked_only_when_told_and_says_what_it_is_in_every_state()
+{
+    let mut rt = App::new(AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..AppSpec::new("chrome-rules", WINDOW, || (), select_rows)
+    })
+    .headless_runtime(WINDOW, Env::new(true, 1.0));
+    rt.set_full_keyboard_access(true);
+    rt.frame(0.0);
+    for focused in [false, true] {
+        for (selected, checked) in SELECT_ROWS {
+            let key = select_key(selected, checked);
+            if focused {
+                for _ in 0..SELECT_ROWS.len() {
+                    if rt
+                        .elements()
+                        .iter()
+                        .any(|e| e.focused && e.key.as_deref() == Some(&key))
+                    {
+                        break;
+                    }
+                    rt.key(KeyEvent {
+                        key: Key::Tab,
+                        mods: Mods::default(),
+                    });
+                    rt.frame(1.0);
+                }
+            }
+            let node = accessible(&rt.accessibility_json(), &key)
+                .unwrap_or_else(|| panic!("{key}: no select button in the tree"));
+            let states: Vec<&str> = node["states"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|s| s.as_str())
+                .collect();
+            let toggled: Vec<&str> = states
+                .iter()
+                .copied()
+                .filter(|s| ["checked", "unchecked"].contains(s))
+                .collect();
+            let told: Vec<&str> = match checked {
+                Some(true) => vec!["checked"],
+                Some(false) => vec!["unchecked"],
+                None => vec![],
+            };
+            assert_eq!(
+                toggled, told,
+                "{key}, focused={focused}: the select button is {states:?}"
+            );
+            assert_eq!(
+                states.contains(&"focused"),
+                focused,
+                "{key}: focus is {states:?}"
+            );
+            assert_eq!(
+                node["description"].as_str(),
+                Some("Every day at 09:00"),
+                "{key}, focused={focused}: the select button's description"
+            );
+        }
+    }
+}

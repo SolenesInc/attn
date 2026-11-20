@@ -29,22 +29,48 @@ jobs:
   changes:
     name: Changes
     permissions:
+      actions: read
       contents: read
+      pull-requests: read
     runs-on: ubuntu-24.04
     outputs:
       full: ${{ steps.full.outputs.macos }}
-      carried: ${{ steps.select.outputs.carried }}
-      cli: ${{ steps.select.outputs.cli }}
-      tauri: ${{ steps.select.outputs.tauri }}
-      native_macos: ${{ steps.select.outputs.native_macos }}
-      pty_upgrade_macos: ${{ steps.select.outputs.pty_upgrade_macos }}
-      app_acceptance_tauri: ${{ steps.select.outputs.app_acceptance_tauri }}
-      app_acceptance: ${{ steps.select.outputs.app_acceptance }}
-      native_release: ${{ steps.select.outputs.native_release }}
+      cli: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.cli == 'true' }}
+      pty_upgrade: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.pty_upgrade == 'true' }}
+      tauri: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.tauri == 'true' }}
+      native: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.native_macos == 'true' }}
+      app_acceptance: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.app_acceptance == 'true' }}
+      native_release: ${{ steps.full.outputs.macos == 'true' || steps.filter.outputs.native_release == 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Find the commit main's last green run tested
+        id: base
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          sha="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci-macos.yml/runs?branch=main&event=push&status=completed&per_page=50" \
+            --jq "[.workflow_runs[] | select(.id < $GITHUB_RUN_ID and .conclusion == \"success\")][0].head_sha // empty")" || sha=""
+          if [ -n "$sha" ] && git merge-base --is-ancestor "$sha" "$GITHUB_SHA"; then
+            echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=$BEFORE" >> "$GITHUB_OUTPUT"
+          fi
+          echo "paths changed since $(sed -n 's/^sha=//p' "$GITHUB_OUTPUT")"
+
+      - name: Classify changed paths
+        id: filter
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          base: ${{ steps.base.outputs.sha }}
+          # PR API quota is shared by the installation. Full history lets the
+          # action use git instead, so an unrelated busy repo cannot break CI.
+          token: ''
+          filters: .github/path-filters.yml
 
       - name: Decide whether every macOS job runs
         id: full
@@ -58,75 +84,11 @@ jobs:
             macos=true
           fi
           echo "macos=$macos" >> "$GITHUB_OUTPUT"
-          echo "full run: $macos"
-
-      - name: Compute inputs keys
-        id: keys
-        if: steps.full.outputs.macos != 'true'
-        run: |
-          if keys="$(scripts/ci-pass-records keys)"; then
-            tr ' ' '=' <<<"$keys" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning title=Pass records unread::No inputs key could be computed, so every macOS job runs."
-          fi
-
-      - name: Look up cli's macOS pass record
-        if: steps.keys.outputs.cli
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: cli
-          key: macos-${{ steps.keys.outputs.cli }}
-
-      - name: Look up tauri's macOS pass record
-        if: steps.keys.outputs.tauri
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: tauri
-          key: macos-${{ steps.keys.outputs.tauri }}
-
-      - name: Look up native_macos's macOS pass record
-        if: steps.keys.outputs.native_macos
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: native_macos
-          key: macos-${{ steps.keys.outputs.native_macos }}
-
-      - name: Look up pty_upgrade_macos's macOS pass record
-        if: steps.keys.outputs.pty_upgrade_macos
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: pty_upgrade_macos
-          key: macos-${{ steps.keys.outputs.pty_upgrade_macos }}
-
-      - name: Look up app_acceptance_tauri's macOS pass record
-        if: steps.keys.outputs.app_acceptance_tauri
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: app_acceptance_tauri
-          key: macos-${{ steps.keys.outputs.app_acceptance_tauri }}
-
-      - name: Look up app_acceptance's macOS pass record
-        if: steps.keys.outputs.app_acceptance
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: app_acceptance
-          key: macos-${{ steps.keys.outputs.app_acceptance }}
-
-      - name: Look up native_release's macOS pass record
-        if: steps.keys.outputs.native_release
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: native_release
-          key: macos-${{ steps.keys.outputs.native_release }}
-
-      - name: Select the groups that run
-        id: select
-        run: scripts/ci-pass-records carried "$RUNNER_TEMP/ci-pass-records" >> "$GITHUB_OUTPUT"
 
   pty-compatibility:
     name: PTY upgrade
     needs: changes
-    if: needs.changes.outputs.pty_upgrade_macos != 'carried'
+    if: needs.changes.outputs.pty_upgrade == 'true'
     uses: ./.github/workflows/pty-upgrade.yml
     with:
       os: macos-15
@@ -134,7 +96,7 @@ jobs:
   rust:
     name: Tauri
     needs: changes
-    if: needs.changes.outputs.tauri != 'carried'
+    if: needs.changes.outputs.tauri == 'true'
     uses: ./.github/workflows/tauri.yml
     with:
       os: macos-15
@@ -142,7 +104,7 @@ jobs:
   native:
     name: Native
     needs: changes
-    if: needs.changes.outputs.native_macos != 'carried'
+    if: needs.changes.outputs.native == 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/native.yml
@@ -152,7 +114,7 @@ jobs:
   attn-cli:
     name: CLI
     needs: changes
-    if: needs.changes.outputs.cli != 'carried'
+    if: needs.changes.outputs.cli == 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/attn-cli.yml
@@ -162,7 +124,7 @@ jobs:
   app-acceptance-macos:
     name: App acceptance macOS (${{ matrix.app }})
     needs: changes
-    if: needs.changes.outputs.app_acceptance_tauri != 'carried' || needs.changes.outputs.app_acceptance != 'carried'
+    if: needs.changes.outputs.app_acceptance == 'true'
     permissions:
       contents: read
     runs-on: macos-15
@@ -170,15 +132,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [tauri, native]
-        exclude:
-          - app: ${{ needs.changes.outputs.app_acceptance_tauri == 'carried' && 'tauri' || 'none' }}
-          - app: ${{ needs.changes.outputs.app_acceptance == 'carried' && 'native' || 'none' }}
+        include:
+          - app: tauri
+            scenarios: terminal-block-copy terminal-input quick-capture
+          - app: native
+            scenarios: native-terminal-core native-quick-capture native-browser
     env:
       ATTN_INSTANCE: app-acceptance
       ATTN_HARNESS_INSTANCE: app-acceptance
       ATTN_HARNESS_PARK_VISIBLE_PX: '0'
-      SCENARIOS: ${{ matrix.app == 'tauri' && 'terminal-block-copy terminal-input quick-capture' || 'native-terminal-core native-quick-capture native-browser' }}
+      SCENARIOS: ${{ matrix.scenarios }}
     steps:
       - name: Configure artifact directory
         run: echo "ATTN_REAL_APP_ARTIFACTS_DIR=$RUNNER_TEMP/attn-real-app-harness" >> "$GITHUB_ENV"
@@ -268,7 +231,7 @@ jobs:
   native-release-preflight:
     name: Native release preflight
     needs: changes
-    if: needs.changes.outputs.native_release != 'carried'
+    if: needs.changes.outputs.native_release == 'true'
     permissions:
       contents: read
     runs-on: macos-15
@@ -346,83 +309,13 @@ jobs:
       actions: read
       contents: read
     runs-on: ubuntu-24.04
-    env:
-      NEEDS_JSON: ${{ toJSON(needs) }}
-      JOB_GROUPS: >-
-        {"attn-cli": ["cli"],
-        "rust": ["tauri"],
-        "native": ["native_macos"],
-        "pty-compatibility": ["pty_upgrade_macos"],
-        "app-acceptance-macos": ["app_acceptance_tauri", "app_acceptance"],
-        "native-release-preflight": ["native_release"]}
     steps:
       - uses: actions/checkout@v4
 
       - name: Aggregate exact-SHA macOS acceptance
         env:
-          CARRIED_JSON: ${{ needs.changes.outputs.carried }}
-        run: ./scripts/ci-acceptance.sh full-macos
-
-      - name: Choose the pass records to write
-        id: passed
-        if: '!cancelled()'
-        run: scripts/ci-pass-records passed | tr ' ' '=' >> "$GITHUB_OUTPUT"
-
-      - name: Record cli's macOS pass
-        if: '!cancelled() && steps.passed.outputs.cli'
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: cli
-          key: macos-${{ steps.passed.outputs.cli }}
-          write: 'true'
-
-      - name: Record tauri's macOS pass
-        if: '!cancelled() && steps.passed.outputs.tauri'
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: tauri
-          key: macos-${{ steps.passed.outputs.tauri }}
-          write: 'true'
-
-      - name: Record native_macos's macOS pass
-        if: '!cancelled() && steps.passed.outputs.native_macos'
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: native_macos
-          key: macos-${{ steps.passed.outputs.native_macos }}
-          write: 'true'
-
-      - name: Record pty_upgrade_macos's macOS pass
-        if: '!cancelled() && steps.passed.outputs.pty_upgrade_macos'
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: pty_upgrade_macos
-          key: macos-${{ steps.passed.outputs.pty_upgrade_macos }}
-          write: 'true'
-
-      - name: Record app_acceptance_tauri's macOS pass
-        if: '!cancelled() && steps.passed.outputs.app_acceptance_tauri'
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: app_acceptance_tauri
-          key: macos-${{ steps.passed.outputs.app_acceptance_tauri }}
-          write: 'true'
-
-      - name: Record app_acceptance's macOS pass
-        if: '!cancelled() && steps.passed.outputs.app_acceptance'
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: app_acceptance
-          key: macos-${{ steps.passed.outputs.app_acceptance }}
-          write: 'true'
-
-      - name: Record native_release's macOS pass
-        if: '!cancelled() && steps.passed.outputs.native_release'
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: native_release
-          key: macos-${{ steps.passed.outputs.native_release }}
-          write: 'true'
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: ./scripts/ci-acceptance.sh pty-compatibility rust native attn-cli app-acceptance-macos native-release-preflight full-macos
 
   branch-health:
     name: Report branch health

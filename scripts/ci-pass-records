@@ -4,15 +4,11 @@ set -euo pipefail
 usage() {
   cat >&2 <<'EOF'
 usage: ci-pass-records keys
-       ci-pass-records carried <records dir>
        ci-pass-records passed
 
 keys    prints "<group> <inputs key>" for each group in .github/ci-inputs.yml.
         The key hashes the index entries (mode, blob, path) of every tracked
         file except those the group and every_group leave out.
-carried prints, as GitHub step outputs, "<group>=carried" for each pass record
-        restored under <records dir>/<group>/record, then "carried=" and a JSON
-        object naming each carried group's run and commit.
 passed  prints "<group> <inputs key>" for each group whose CI jobs all
         succeeded. NEEDS_JSON is the Acceptance job's needs; JOB_GROUPS maps
         each gated job to the groups that gate it.
@@ -63,21 +59,6 @@ keys() {
   done
 }
 
-carried() {
-  local dir="${1:?ci-pass-records: carried needs the records directory}"
-  local carried='{}' record group run commit
-  for record in "$dir"/*/record; do
-    [ -f "$record" ] || continue
-    group="$(basename "$(dirname "$record")")"
-    read -r run commit <"$record"
-    echo "$group=carried"
-    echo "$group carried: passed at $commit in $run" >&2
-    carried="$(jq -c --arg group "$group" --arg run "$run" --arg commit "$commit" \
-      '. + {($group): {run: $run, commit: $commit}}' <<<"$carried")"
-  done
-  echo "carried=$carried"
-}
-
 passed() {
   : "${NEEDS_JSON:?ci-pass-records: NEEDS_JSON is required}"
   : "${JOB_GROUPS:?ci-pass-records: JOB_GROUPS is required}"
@@ -95,7 +76,6 @@ passed() {
 
 case "${1:-}" in
   keys) keys ;;
-  carried) carried "${2:-}" ;;
   passed) passed ;;
   *) usage ;;
 esac

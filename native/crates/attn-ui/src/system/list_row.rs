@@ -78,6 +78,8 @@ pub struct ListRow {
     still: bool,
     wrap: bool,
     expanded: Option<bool>,
+    checked: Option<bool>,
+    description: Option<String>,
     select: Option<(String, String, Press)>,
     press: Option<Press>,
     item_value: Option<String>,
@@ -118,6 +120,8 @@ impl ListRow {
             still: false,
             wrap: false,
             expanded: None,
+            checked: None,
+            description: None,
             select: None,
             press: None,
             item_value: None,
@@ -366,6 +370,20 @@ impl ListRow {
     /// button when it has [`Self::select`].
     pub fn expanded(mut self, open: bool) -> Self {
         self.expanded = Some(open);
+        self
+    }
+
+    /// What the row's press turns on is on, or off, such as the automation whose runs show:
+    /// said on the row, or on its words' button when it has [`Self::select`].
+    pub fn checked(mut self, on: bool) -> Self {
+        self.checked = Some(on);
+        self
+    }
+
+    /// What the row is beyond its name, such as what starts an automation: read after the name
+    /// on the row, or on its words' button when it has [`Self::select`].
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
         self
     }
 
@@ -728,6 +746,14 @@ impl ListRow {
         let (line, value) = match (item.is_none() && held.is_none(), self.item_value) {
             (true, Some(value)) => (line.a11y_value(value), None),
             (_, value) => (line, value),
+        };
+        let line = match self.description {
+            Some(description) => line.description(description),
+            None => line,
+        };
+        let line = match self.checked {
+            Some(on) => line.checked(on),
+            None => line,
         };
         let line = match (wraps || tagged, two_lines) {
             (false, _) => line.h(height),

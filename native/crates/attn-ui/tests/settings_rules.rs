@@ -1147,6 +1147,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("system::list_row::ListRow::select(label)", false),
     ("system::list_row::ListRow::item_value(value)", false),
     ("system::list_row::ListRow::value(value)", false),
+    ("system::list_row::ListRow::description(description)", false),
     ("system::pager::pager((key, dot))", false),
     ("system::press_area::press_area(label)", false),
     ("system::said::Said::then_code(code)", false),

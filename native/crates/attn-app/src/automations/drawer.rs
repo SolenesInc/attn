@@ -156,7 +156,9 @@ fn definition_row(
     let mut row = ListRow::new(format!("automations.row.{id}"), definition.name.clone())
         .title(definition.name.clone())
         .subtitle(line, t)
+        .description(super::trigger_label(definition))
         .selected(selected)
+        .checked(selected)
         .select(
             format!("automations.select.{id}"),
             definition.name.clone(),
@@ -164,8 +166,8 @@ fn definition_row(
         )
         .controls(controls, Reveal::Always);
     if failed {
-        row = row
-            .tag(tag(format!("automations.failure.{id}"), "Failed", Tone::Bad, t).label("Failed"));
+        let failure = tag(format!("automations.failure.{id}"), "Failed", Tone::Bad, t);
+        row = row.tag(El::from(failure).role("status").label("Failed"));
     }
     let mut under = Vec::new();
     if let Some(prompt) = automations

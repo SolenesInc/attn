@@ -371,7 +371,9 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             )
             .hover_controls(row_controls("row.select"))
             .select("row.select.open", "Open Nightly triage", press)
+            .description("Every day at 09:00")
             .selected(s.lit)
+            .checked(s.lit)
             .disabled(s.disabled)
             .build(&t)
             .w(if s.narrow { DRAWER_NARROW } else { DRAWER_WIDE }),

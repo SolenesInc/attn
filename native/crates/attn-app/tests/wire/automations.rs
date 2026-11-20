@@ -286,6 +286,13 @@ fn a_failed_last_run_marks_its_definition_with_the_reason() {
         Some("Failed")
     );
     assert_eq!(
+        world
+            .screen()
+            .get(Target::key("automations.failure.1"))
+            .role,
+        "status"
+    );
+    assert_eq!(
         name(&world, "automations.last-error.1").as_deref(),
         Some("boom")
     );
@@ -351,6 +358,49 @@ fn a_superseded_run_says_so_and_a_run_opens_the_session_it_started() {
     click(&mut world, "automations.run-open.old");
     let shown = world.daemon.sent_of("desktop_show_session");
     assert_eq!(shown.last().unwrap()["session_id"], "s2");
+}
+
+#[test]
+fn space_on_a_focused_definition_says_its_runs_are_open_and_what_triggers_it() {
+    let scheduled = AutomationDefinitionSummary {
+        trigger_type: "scheduled".into(),
+        schedule_cron: Some("0 9 * * *".into()),
+        schedule_time_zone: Some("UTC".into()),
+        ..definition(1, "Nightly digest")
+    };
+    let scene = Scene::of(vec![scheduled, definition(2, "PR reviewer")]).with_runs(vec![run("r1")]);
+    let mut world = opened(&scene);
+    let key = "automations.select.1";
+    for _ in 0..16 {
+        if focused(&world).as_deref() == Some(key) {
+            break;
+        }
+        world.gesture(|app| app.press("tab"));
+    }
+    assert_eq!(focused(&world).as_deref(), Some(key));
+    let trigger = Some("Scheduled — 0 9 * * * (UTC)".to_owned());
+
+    let closed = world.screen().get(Target::key(key));
+    assert!(closed.is("unchecked"), "before Space: {closed:?}");
+    assert_eq!(closed.description, trigger);
+
+    world.gesture(|app| app.type_text(" "));
+    assert!(has(&world, "automations.run.r1"));
+    let open = world
+        .screen()
+        .focused()
+        .expect("the definition keeps focus");
+    assert_eq!(open.key.as_deref(), Some(key));
+    assert!(open.is("checked"), "after Space: {open:?}");
+    assert_eq!(open.description, trigger);
+
+    world.gesture(|app| app.type_text(" "));
+    assert!(!has(&world, "automations.run.r1"));
+    assert!(is(&world, key, "unchecked"));
+}
+
+fn focused(world: &World) -> Option<String> {
+    world.screen().focused().and_then(|node| node.key)
 }
 
 #[test]

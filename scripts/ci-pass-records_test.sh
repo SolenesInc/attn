@@ -110,36 +110,28 @@ go $(key go)" ] || fail "passed left out a group whose jobs all succeeded"
 [ -z "$(passed '{"view":{"result":"skipped"},"view-e2e":{"result":"skipped"},"vet":{"result":"success"},"gate":{"result":"failure"}}')" ] ||
   fail "passed recorded a carried group or one whose shared gate failed"
 
-records="$work/records"
-mkdir -p "$records/app" "$records/go"
-echo 'https://example.invalid/runs/1 aaa' >"$records/app/record"
-[ "$("$script" carried "$records" 2>/dev/null)" = 'app=carried
-carried={"app":{"run":"https://example.invalid/runs/1","commit":"aaa"}}' ] || fail "carried did not name exactly the groups with a record"
-[ "$("$script" carried "$work/none" 2>/dev/null)" = 'carried={}' ] || fail "carried named a group when no record was restored"
-
 cd "$root"
-for workflow in .github/workflows/ci.yml .github/workflows/ci-macos.yml; do
-  gated="$(awk '
-    /^  [a-z0-9-]+:$/ { job = substr($1, 1, length($1) - 1) }
-    /^    if: needs\.changes\.outputs\.[a-z_]+ != .carried.$/ {
-      match($0, /outputs\.[a-z_]+/); print job, substr($0, RSTART + 8, RLENGTH - 8)
-    }
-    /needs\.changes\.outputs\.[a-z_]+ != .carried. \|\|/ {
-      line = $0
-      while (match(line, /outputs\.[a-z_]+ != /)) { print job, substr(line, RSTART + 8, RLENGTH - 12); line = substr(line, RSTART + RLENGTH) }
-    }
-  ' "$workflow" | sort)"
-  declared="$(awk '/JOB_GROUPS: >-/ { on = 1; next } on && !/^        / { on = 0 } on' "$workflow" |
-    jq -r 'to_entries[] | .key + " " + .value[]' | sort)"
-  [ -n "$gated" ] || fail "found no job in $workflow gated on a carried group"
-  [ "$gated" = "$declared" ] || {
-    diff <(echo "$gated") <(echo "$declared") >&2 || true
-    fail "Acceptance's JOB_GROUPS in $workflow differs from the groups the jobs' if: lines name (left: if:, right: JOB_GROUPS)"
+workflow=.github/workflows/ci.yml
+gated="$(awk '
+  /^  [a-z0-9-]+:$/ { job = substr($1, 1, length($1) - 1) }
+  /^    if: needs\.changes\.outputs\.[a-z_]+ != .carried.$/ {
+    match($0, /outputs\.[a-z_]+/); print job, substr($0, RSTART + 8, RLENGTH - 8)
   }
-  for group in $(cut -d' ' -f2 <<<"$declared" | sort -u); do
-    grep -Fq "group: $group" "$workflow" || fail "$workflow never reads or writes $group's pass record"
-    [ "$(grep -c "^          group: $group\$" "$workflow")" = 2 ] || fail "$workflow does not both read and write $group's pass record"
-  done
+  /needs\.changes\.outputs\.[a-z_]+ != .carried. \|\|/ {
+    line = $0
+    while (match(line, /outputs\.[a-z_]+ != /)) { print job, substr(line, RSTART + 8, RLENGTH - 12); line = substr(line, RSTART + RLENGTH) }
+  }
+' "$workflow" | sort)"
+declared="$(awk '/JOB_GROUPS: >-/ { on = 1; next } on && !/^        / { on = 0 } on' "$workflow" |
+  jq -r 'to_entries[] | .key + " " + .value[]' | sort)"
+[ -n "$gated" ] || fail "found no job in $workflow gated on a carried group"
+[ "$gated" = "$declared" ] || {
+  diff <(echo "$gated") <(echo "$declared") >&2 || true
+  fail "Acceptance's JOB_GROUPS in $workflow differs from the groups the jobs' if: lines name (left: if:, right: JOB_GROUPS)"
+}
+for group in $(cut -d' ' -f2 <<<"$declared" | sort -u); do
+  grep -Fq "group: $group" "$workflow" || fail "$workflow never reads or writes $group's pass record"
+  [ "$(grep -c "^          group: $group\$" "$workflow")" = 2 ] || fail "$workflow does not both read and write $group's pass record"
 done
 "$script" keys >/dev/null || fail "keys cannot read .github/ci-inputs.yml"
 

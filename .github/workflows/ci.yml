@@ -151,7 +151,18 @@ jobs:
 
       - name: Select the groups that run
         id: select
-        run: scripts/ci-pass-records carried "$RUNNER_TEMP/ci-pass-records" >> "$GITHUB_OUTPUT"
+        run: |
+          carried='{}'
+          for record in "$RUNNER_TEMP"/ci-pass-records/*/record; do
+            [ -f "$record" ] || continue
+            group="$(basename "$(dirname "$record")")"
+            read -r run commit <"$record"
+            echo "$group=carried" >> "$GITHUB_OUTPUT"
+            echo "$group carried: passed at $commit in $run"
+            carried="$(jq -c --arg group "$group" --arg run "$run" --arg commit "$commit" \
+              '. + {($group): {run: $run, commit: $commit}}' <<<"$carried")"
+          done
+          echo "carried=$carried" >> "$GITHUB_OUTPUT"
 
   release-candidate:
     name: Release candidate
