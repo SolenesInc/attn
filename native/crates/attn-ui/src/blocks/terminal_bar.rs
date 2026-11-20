@@ -90,14 +90,14 @@ impl TerminalBar {
     /// away from where it stands.
     pub fn list(key: impl Into<String>, max_height: f32, lines: Vec<El>, t: &Tokens) -> El {
         let list = col()
+            .key(key.into())
             .max_h(max_height)
             .scroll(rune::ScrollSpec {
                 stick_bottom: false,
             })
             .children(lines)
             .scroll_bar_styled(crate::scroll_bar(t));
-        let framed = col().key(key.into()).child(list);
-        Frame::terminal_bar(t).draw(door::inset(framed, Space::S4, Space::S4))
+        Frame::terminal_bar(t).draw(door::inset(col().child(list), Space::S4, Space::S4))
     }
 
     /// What the list says when nothing matched.

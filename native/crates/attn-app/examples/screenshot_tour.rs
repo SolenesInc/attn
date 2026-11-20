@@ -3775,13 +3775,6 @@ fn review_beside(dark: bool) {
     snap(&mut world, "review-beside", dark);
 }
 
-/// The review shown alone while a second document shares its desktop: the tabs over it.
-fn review_tabs(dark: bool) {
-    let mut world = review_beside_agent(dark);
-    world.gesture(|app| app.click(Target::key("tile.m.focus")));
-    snap(&mut world, "review-tabs", dark);
-}
-
 fn review_focused(dark: bool) {
     let mut world = review_alone(dark);
     snap(&mut world, "review-focused", dark);
@@ -6041,7 +6034,6 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("terminal_overlays", || terminal_overlays(dark));
         scene("terminal_filter", || terminal_filter(dark));
         scene("tile_notices", || tile_notices(dark));
-        scene("review_tabs", || review_tabs(dark));
         scene("tile_window", || tile_window(dark));
         scene("launcher_dialog", || launcher_dialog(dark));
         scene("launcher_dialog_last", || launcher_dialog_last(dark));

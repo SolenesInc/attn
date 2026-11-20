@@ -51,6 +51,16 @@ fn middle(e: &ElementInfo) -> f32 {
     e.rect[1] + e.rect[3] / 2.0
 }
 
+/// The surface that frames `e`: the nearest element holding it whose box is larger than its own.
+fn framing(rt: &Runtime<()>, e: &ElementInfo) -> ElementInfo {
+    rt.elements()
+        .into_iter()
+        .filter(|outer| e.path.starts_with(&outer.path) && outer.path != e.path)
+        .filter(|outer| outer.rect[2] > e.rect[2] + 0.5)
+        .max_by_key(|outer| outer.path.len())
+        .expect("a surface frames the list")
+}
+
 fn within(rt: &Runtime<()>, outer: &ElementInfo) -> Vec<ElementInfo> {
     rt.elements()
         .into_iter()
@@ -135,7 +145,8 @@ fn a_filters_list_stands_under_its_bar_and_ends_on_its_edge() {
             field.rect[2]
         );
         let bar = element(&rt, "story.tile.filter");
-        let list = element(&rt, "story.tile.filter.results");
+        let results = element(&rt, "story.tile.filter.results");
+        let list = framing(&rt, &results);
         assert!(
             top(&list) > bottom(&bar),
             "{variant}: the list starts at {}, over its bar's foot at {}",
