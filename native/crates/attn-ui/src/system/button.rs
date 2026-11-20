@@ -18,6 +18,8 @@ pub enum Look {
     Quiet,
     /// Removes something or turns it off.
     Danger,
+    /// Makes something of the app's own, such as a new agent: brand words on a brand tint.
+    Brand,
 }
 
 /// What a button shows: words, or one mark of [`crate::glyph`].
@@ -160,6 +162,15 @@ impl Button {
             Look::Plain => (t.bg_button, t.border_hover, t.text_primary),
             Look::Quiet => (Color::TRANSPARENT, Color::TRANSPARENT, t.text_secondary),
             Look::Danger => (t.bg_button, t.error.alpha(0.45), t.error),
+            Look::Brand => (
+                crate::colors::mix_srgb(t.bg_panel, t.brand, BRAND_TINT),
+                t.brand.alpha(BRAND_EDGE),
+                crate::colors::moved_until_it_reads(
+                    t.brand,
+                    t.text_primary,
+                    crate::colors::mix_srgb(t.bg_panel, t.brand, BRAND_TINT),
+                ),
+            ),
         };
         let square = matches!(self.shown, Shown::Mark(..));
         let shown = self.shown;
@@ -212,3 +223,8 @@ impl Button {
         Control::new(button, self.size)
     }
 }
+
+/// How much brand the brand look mixes into the panel, and how strong its edge is, as the
+/// Tauri app's title-bar New.
+const BRAND_TINT: f32 = 0.12;
+const BRAND_EDGE: f32 = 0.5;

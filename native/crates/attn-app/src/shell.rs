@@ -27,7 +27,7 @@ pub(crate) const TRAFFIC_LIGHTS: (f32, f32) = (9.0, 9.0);
 /// title bar's first control, which it starts at 78 at every text size.
 const TITLE_BAR_GAP_PAST_LIGHTS: f32 = 9.0;
 /// Where the title bar's first control starts when the window shows no traffic lights (full
-/// screen, Linux), as `TitleBar.tsx` pads it.
+/// screen, Linux), and where its last control ends, as `TitleBar.tsx` pads it.
 const TITLE_BAR_START_WITHOUT_LIGHTS: f32 = 8.0;
 
 /// What one window shows and where its keyboard is. Desktops, the active tile and the current
@@ -612,10 +612,8 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
     };
     let beside_sidebar =
         !state.window.sidebar_hidden && !crate::desktop::shows_an_agent_alone(state);
-    let left = row()
+    let left = attn_ui::blocks::Inline::joined()
         .key(TITLE_BAR_LEFT)
-        .items_center()
-        .gap(4.0)
         .min_w(if beside_sidebar {
             (crate::sidebar::width::of(state) - lights).max(0.0)
         } else {
@@ -633,17 +631,14 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         .grow(1.0)
         .min_w(0.0)
         .h_full()
-        .px(6.0)
         .items_center()
         .child(if connected {
             crate::sidebar::title_middle(state, shelf, t)
         } else {
             shelf
         });
-    let right = row()
+    let right = attn_ui::blocks::Inline::joined()
         .key("titlebar.right")
-        .items_center()
-        .gap(4.0)
         .children(
             connected
                 .then(|| crate::sidebar::title_panels(state, t))
@@ -654,14 +649,14 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         .children(connected.then(|| crate::profile_switcher::pill(state, t)));
     let parts = [left, middle, right];
     let covered = title_bar_covered(state);
-    row()
+    attn_ui::blocks::Inline::joined()
         .key("titlebar")
         .role("banner")
         .label("Title bar")
         .w_full()
         .h(TITLE_BAR_HEIGHT)
         .pl(lights)
-        .pr(8.0)
+        .pr(TITLE_BAR_START_WITHOUT_LIGHTS)
         .fill(t.bg_panel)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
         .items_center()
@@ -696,20 +691,16 @@ const COVERED_OPACITY: f32 = 0.45;
 fn instance_marker(state: &State, t: &Tokens) -> Option<El> {
     let name = state.instance.as_str();
     (name != "default" && !name.is_empty()).then(|| {
-        text(name.to_owned())
+        attn_ui::system::words(name.to_owned(), attn_ui::system::Type::Mono, t.warning)
             .key("titlebar.instance")
             .role("note")
             .label(name.to_owned())
             .description(format!("Instance: {name}"))
-            .font(INSTANCE_TYPE)
-            .color(t.warning)
             .single_line()
             .truncate()
             .max_w(96.0)
     })
 }
-
-const INSTANCE_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0).mono();
 
 /// `control` in a slot keyed `key` as tall as the title bar, for a popover that hangs a set gap
 /// under the title bar, as the Tauri app's `top: calc(var(--title-bar-height) + …)` does.

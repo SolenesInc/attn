@@ -51,18 +51,21 @@ fn the_title_bar_keeps_its_tools_left_and_its_panels_right_in_the_tauri_apps_ord
         tools_end[0] + tools_end[2] < window[2] / 2.0 && panels_start[0] > window[2] / 2.0,
         "the tools sit at the window's left and the panels at its right"
     );
-    assert!(
-        window[2] - (pill[0] + pill[2]) <= 8.0,
+    let right = world.rect("titlebar.right");
+    assert_eq!(
+        pill[0] + pill[2],
+        right[0] + right[2],
         "the profile pill ends the title bar"
     );
 }
 
 #[test]
-fn the_first_title_bar_control_starts_at_tauris_78_window_points_past_the_lights_at_every_text_size()
+fn the_first_title_bar_control_stands_one_gap_past_the_lights_at_every_text_size_and_the_bar_is_even_without_them()
  {
     let mut world = world();
-    world.window_controls_take(69.0);
-    assert_eq!(world.rect("titlebar.new")[0], 78.0);
+    let lights: f32 = 69.0;
+    world.window_controls_take(lights);
+    let mut gaps = Vec::new();
     for tenths in 7..=15 {
         let scale = format!("{}", f64::from(tenths) / 10.0);
         world.daemon.emit(SettingsUpdatedMessage {
@@ -72,10 +75,17 @@ fn the_first_title_bar_control_starts_at_tauris_78_window_points_past_the_lights
         world.settle();
         let zoom = f64::from(world.runtime().zoom());
         assert!((zoom - f64::from(tenths) / 10.0).abs() < 1e-6, "{scale}");
-        let new_in_window_points = world.rect("titlebar.new")[0] * zoom;
+        gaps.push((
+            scale,
+            world.rect("titlebar.new")[0] * zoom - f64::from(lights),
+        ));
+    }
+    let first = gaps[0].1;
+    assert!(first > 0.0, "New starts under the lights: {gaps:?}");
+    for (scale, gap) in &gaps {
         assert!(
-            (new_in_window_points - 78.0).abs() < 0.05,
-            "at {scale} New starts {new_in_window_points} window points in, not Tauri's 78"
+            (gap - first).abs() < 0.05,
+            "at {scale} New stands {gap} window points past the lights, not {first}: {gaps:?}"
         );
     }
 
@@ -85,5 +95,11 @@ fn the_first_title_bar_control_starts_at_tauris_78_window_points_past_the_lights
         ..SettingsUpdatedMessage::new()
     });
     world.settle();
-    assert_eq!(world.rect("titlebar.new")[0], 8.0);
+    let window = world.rect("window");
+    let pill = world.rect("titlebar.profile");
+    assert_eq!(
+        world.rect("titlebar.new")[0],
+        window[2] - (pill[0] + pill[2]),
+        "without the lights New starts as far in as the profile pill ends"
+    );
 }

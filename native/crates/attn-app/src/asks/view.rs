@@ -1017,8 +1017,9 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> Option<El> {
             IconSize::Large,
         )
         .count((count > 0).then(|| count.to_string()))
+        .selected(open)
         .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
         .build(t),
     );
-    Some(crate::sidebar::opens(button, open, t).a11y_value(count.to_string()))
+    Some(crate::sidebar::opens(button, open).a11y_value(count.to_string()))
 }

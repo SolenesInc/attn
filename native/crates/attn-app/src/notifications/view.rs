@@ -38,11 +38,12 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> El {
         icon_button(BELL, label, &icon::BELL, IconSize::Large)
             .expanded(open)
             .dot(unread)
+            .edged()
             .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
             .build(t),
     )
     .a11y_value(counts.unread.to_string());
-    crate::shell::title_bar_slot(BELL_SLOT, crate::sidebar::framed(bell, t))
+    crate::shell::title_bar_slot(BELL_SLOT, bell)
 }
 
 /// The strip that names the newest unread critical notification above the sidebar's rows,

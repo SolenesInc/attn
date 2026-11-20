@@ -28,6 +28,7 @@ pub struct IconButton {
     keys: Option<String>,
     dot: Option<Color>,
     busy: bool,
+    edged: bool,
     button: KitButton,
 }
 
@@ -50,6 +51,7 @@ pub fn icon_button(
         keys: None,
         dot: None,
         busy: false,
+        edged: false,
         button: KitButton::new(label),
     }
 }
@@ -70,6 +72,12 @@ impl IconButton {
     pub fn expanded(mut self, open: bool) -> Self {
         self.open = open;
         self.button = self.button.expanded(open);
+        self
+    }
+
+    /// The button keeps an edge at rest, for a control that stands alone in a bar.
+    pub fn edged(mut self) -> Self {
+        self.edged = true;
         self
     }
 
@@ -211,6 +219,11 @@ impl IconButton {
             .min_w(side)
             .justify_center()
             .fill(fill);
+        let button = if self.edged {
+            button.border(1.0, t.border)
+        } else {
+            button
+        };
         let button = door::corner(door::inset(button, inset, Space::S0), corner);
         let button = focus::ring(button, t);
         let button = if self.disabled {

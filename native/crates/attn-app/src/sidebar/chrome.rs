@@ -1,13 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
+use attn_ui::Tokens;
 use attn_ui::blocks::{Inline, Rail};
 use attn_ui::system::{self, IconSize, ListRow, Type, words};
 use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens};
 use rune::tok::space;
 use rune::{El, Tx, el, row, text};
+use rune_kit::Button;
 use rune_kit::ScrollBar;
-use rune_kit::{Button, ButtonVariant};
 
 use super::model::{desktop_number, desktop_title, ordered_desktops};
 use super::queue::Bands;
@@ -516,61 +516,54 @@ pub(crate) fn title_tools(state: &State, t: &Tokens) -> Vec<El> {
         "Collapse sidebar"
     };
     vec![
-        attn_ui::brand_tinted(
-            framed(
-                tool_button(
-                    "titlebar.new",
-                    GlyphButton::new("New", "New agent")
-                        .variant(ButtonVariant::Ghost)
-                        .font(type_::CAPTION),
-                    t,
-                    |state, tx| {
-                        crate::dispatch(state, crate::Action::SessionNew, tx);
-                    },
-                ),
-                t,
-            ),
-            t,
-        ),
-        framed(
-            tool_button(
-                "titlebar.commands",
-                GlyphButton::new(&attn_ui::icon::COMMANDS, "Commands").color(t.brand),
-                t,
-                |state, tx| {
-                    crate::dispatch(state, crate::Action::UiCommandPalette, tx);
-                },
-            ),
-            t,
-        ),
-        framed(
-            tool(
-                "titlebar.flow",
-                flow,
-                if queue {
-                    &attn_ui::icon::DESKTOP_FLOW
-                } else {
-                    &attn_ui::icon::QUEUE_FLOW
-                },
-                t,
-                actions::toggle_flow,
-            ),
-            t,
-        ),
-        framed(
-            tool(
-                "titlebar.sidebar",
-                sidebar,
-                if collapsed {
-                    &attn_ui::icon::EXPAND
-                } else {
-                    &attn_ui::icon::COLLAPSE
-                },
-                t,
-                |state, _| state.window.sidebar_hidden = !state.window.sidebar_hidden,
-            ),
-            t,
-        ),
+        system::Button::new("New")
+            .look(system::Look::Brand)
+            .size(system::Size::Compact)
+            .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                crate::dispatch(state, crate::Action::SessionNew, tx);
+            })
+            .build(t)
+            .key("titlebar.new")
+            .label("New agent")
+            .into(),
+        tool(
+            "titlebar.commands",
+            "Commands",
+            &attn_ui::icon::COMMANDS,
+            |state, tx| {
+                crate::dispatch(state, crate::Action::UiCommandPalette, tx);
+            },
+        )
+        .ink(t.brand)
+        .edged()
+        .build(t)
+        .into(),
+        tool(
+            "titlebar.flow",
+            flow,
+            if queue {
+                &attn_ui::icon::DESKTOP_FLOW
+            } else {
+                &attn_ui::icon::QUEUE_FLOW
+            },
+            actions::toggle_flow,
+        )
+        .edged()
+        .build(t)
+        .into(),
+        tool(
+            "titlebar.sidebar",
+            sidebar,
+            if collapsed {
+                &attn_ui::icon::EXPAND
+            } else {
+                &attn_ui::icon::COLLAPSE
+            },
+            |state, _| state.window.sidebar_hidden = !state.window.sidebar_hidden,
+        )
+        .edged()
+        .build(t)
+        .into(),
         crate::notifications::title_button(state, t),
     ]
 }
@@ -579,8 +572,9 @@ pub(crate) fn title_tools(state: &State, t: &Tokens) -> Vec<El> {
 /// garden, the notebook, the ledger, automations and asks, unframed.
 pub(crate) fn title_panels(state: &State, t: &Tokens) -> Vec<El> {
     let garden_open = crate::garden::mode(state) != crate::garden::Mode::Closed;
-    vec![
-        opens(
+    let automations_open = crate::automations::is_open(state);
+    [
+        (
             tool(
                 "titlebar.garden",
                 if garden_open {
@@ -589,13 +583,11 @@ pub(crate) fn title_panels(state: &State, t: &Tokens) -> Vec<El> {
                     "Show the garden"
                 },
                 &attn_ui::icon::GARDEN,
-                t,
                 crate::garden::toggle_from_icon,
             ),
             garden_open,
-            t,
         ),
-        opens(
+        (
             tool(
                 "titlebar.notebook",
                 &format!(
@@ -603,15 +595,13 @@ pub(crate) fn title_panels(state: &State, t: &Tokens) -> Vec<El> {
                     keys_of(state, &crate::Action::NotebookOpenFullscreen)
                 ),
                 &attn_ui::icon::NOTEBOOK,
-                t,
                 |state, tx| {
                     crate::dispatch(state, crate::Action::NotebookOpenFullscreen, tx);
                 },
             ),
             state.window.layer == Some(crate::shell::Layer::Notebook),
-            t,
         ),
-        opens(
+        (
             tool(
                 "titlebar.ledger",
                 &format!(
@@ -619,29 +609,26 @@ pub(crate) fn title_panels(state: &State, t: &Tokens) -> Vec<El> {
                     keys_of(state, &crate::Action::SessionsOpen)
                 ),
                 &attn_ui::icon::LEDGER,
-                t,
                 crate::ledger::open_last,
             ),
             crate::ledger::is_open(state),
-            t,
         ),
-        opens(
+        (
             tool(
                 "titlebar.automations",
-                if crate::automations::is_open(state) {
+                if automations_open {
                     "Hide Automations"
                 } else {
                     "Show Automations"
                 },
                 &attn_ui::icon::AUTOMATIONS,
-                t,
                 crate::automations::toggle,
             ),
-            crate::automations::is_open(state),
-            t,
+            automations_open,
         ),
     ]
     .into_iter()
+    .map(|(button, open)| opens(button.selected(open).build(t).into(), open))
     .chain(crate::asks::title_button(state, t))
     .collect()
 }
@@ -654,56 +641,19 @@ fn keys_of(state: &State, action: &crate::Action) -> String {
         .unwrap_or_default()
 }
 
-/// A title bar button for a panel, filled while the panel `open`s, as the Tauri app's
+/// A title bar button for a panel, checked while the panel is `open`, as the Tauri app's
 /// `.title-bar-panel-button.active`.
-pub(crate) fn opens(button: El, open: bool, t: &Tokens) -> El {
-    let button = button.checked(open);
-    if open {
-        button.fill(t.bg_elevated)
-    } else {
-        button
-    }
-}
-
-/// A left title bar button's frame, as the Tauri app's `.title-bar-tool`.
-pub(crate) fn framed(button: El, t: &Tokens) -> El {
-    button.px(5.0).border(1.0, t.border)
+pub(crate) fn opens(button: El, open: bool) -> El {
+    button.checked(open)
 }
 
 fn tool(
     key: &str,
     label: &str,
     glyph: impl Into<attn_ui::Glyph>,
-    t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    tool_button(key, GlyphButton::new(glyph, label), t, press)
-}
-
-fn tool_button(
-    key: &str,
-    button: GlyphButton,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    title_button(
-        button.icon_size(13.0).side(TITLE_BUTTON).on_press_tx(press),
-        t,
-    )
-    .key(key.to_owned())
-}
-
-/// The side of a title bar button, as the Tauri app's `.title-bar-tool` and
-/// `.title-bar-panel-button`.
-pub(crate) const TITLE_BUTTON: f32 = 24.0;
-
-/// A title bar button's shape, as the Tauri app's `.title-bar-tool` and
-/// `.title-bar-panel-button`, before its frame.
-fn title_button(button: GlyphButton, t: &Tokens) -> El {
-    button
-        .build(attn_ui::kit(t))
-        .radius(6.0)
-        .hover(t.bg_elevated)
+) -> system::IconButton {
+    system::icon_button(key, label, glyph, IconSize::Large).on_press_tx(press)
 }
 
 /// Queue flow with the sidebar collapsed: the title bar's middle as the Tauri app's `.queue-bar`,
