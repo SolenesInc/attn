@@ -6,7 +6,7 @@
 use attn_client::Desktop;
 use attn_protocol::{DesktopUpdateTileMessage, MarkdownAnnotation, Session};
 use attn_ui::Tokens;
-use attn_ui::blocks::{Block, Card, Inline, Sheet, Stack, Standing};
+use attn_ui::blocks::{Actions, Block, Card, Inline, Sheet, Stack, Standing};
 use attn_ui::system::{
     Button as UiButton, IconSize, Join, Look, Said, Size, Tone, Type, count_badge, icon_button,
     tag, words as words_of,
@@ -743,13 +743,13 @@ fn notes(
             Stack::tight()
                 .child(words_of(
                     "No annotations yet.",
-                    Type::Label,
+                    Type::Small,
                     t.text_secondary,
                 ))
                 .child(
                     words_of(
                         "Select text in the document to comment, redline, or quick-label it.",
-                        Type::Label,
+                        Type::Small,
                         t.text_tertiary,
                     )
                     .wrap(),
@@ -767,17 +767,18 @@ fn notes(
         });
         Block::custom(key(tile, "notes.cards"), Stack::tight().children(cards))
     };
+    let actions = Actions::new(key(tile, "notes.actions")).push(overall_note);
+    let actions = match clear {
+        Some(clear) => actions.then_end().push(clear),
+        None => actions,
+    };
     let sheet = Sheet::new(key(tile, "notes.dialog"), "Review notes")
         .badge(count_badge(count, t.bg_button, t.text_secondary))
-        .aside(overall_note)
         .close(close)
         .body_key(key(tile, "notes.list"))
         .framed()
-        .push(body);
-    let sheet = match clear {
-        Some(clear) => sheet.aside(clear),
-        None => sheet,
-    };
+        .push(body)
+        .footer(actions.build());
     sheet
         .build(t)
         .role("dialog")
@@ -835,7 +836,7 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
             badge_tone(mark),
             t,
         )))
-        .children(orphan.then(|| words_of("⚠ moved", Type::Label, t.warning)))
+        .children(orphan.then(|| words_of("⚠ moved", Type::Small, t.warning)))
         .child(el().grow(1.0))
         .child(remove_button.group_opacity(0.0, 1.0));
     let card = Card::new(key(tile, &format!("notes.card.{}", mark.id)))
@@ -847,7 +848,7 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
         })
         .push(head)
         .push_all(quote.map(|q| words_of(q, Type::Mono, t.text_secondary).truncate()))
-        .push_all(line.map(|l| words_of(l, Type::Label, t.warning)))
+        .push_all(line.map(|l| words_of(l, Type::Small, t.warning)))
         .push_all(
             mark.text
                 .clone()

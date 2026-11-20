@@ -724,7 +724,7 @@ fn composer_box(
     let quote = composer.about.is_some().then(|| {
         Block::custom(
             key(tile, "composer.quote"),
-            words(heading, Type::Label, t.text_muted).truncate(),
+            words(heading, Type::Small, t.text_muted).truncate(),
         )
     });
     let popover = Popover::new(
