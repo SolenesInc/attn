@@ -1240,6 +1240,11 @@ impl Terminals {
         Some((FONT_SIZE * h / metrics.cell_h, h))
     }
 
+    /// How tall a terminal's row stands at rest, in points, whatever grid a resize still waits on.
+    pub(crate) fn row_height(&self) -> Option<f32> {
+        self.metrics.map(|metrics| metrics.cell_h)
+    }
+
     /// Whether this window shows terminal `id`.
     pub(crate) fn shows(&self, id: &str) -> bool {
         self.panes.contains_key(id)

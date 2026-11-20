@@ -969,11 +969,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 slot
             } else {
                 let (_, slot_h) = cx.terminals.slot_size(&pane.runtime_id).unwrap_or_default();
-                let row = cx
-                    .terminals
-                    .cell_font(&pane.runtime_id)
-                    .map_or(0.0, |(_, h)| h);
-                let rows = ROWS_UNDER_NOTICES * row;
+                let rows = ROWS_UNDER_NOTICES * cx.terminals.row_height().unwrap_or_default();
                 slot.child(attn_ui::blocks::terminal_notices(
                     format!("terminal.{}.notices", pane.runtime_id),
                     notices,

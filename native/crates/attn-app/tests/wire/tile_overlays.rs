@@ -133,3 +133,91 @@ fn find_keeps_close_and_its_ring_whole_in_the_smallest_popped_out_tile() {
         x + w + ring
     );
 }
+
+/// Terminals r1 over r2 on desktop 1, r1's conversation also open on a second desktop and its
+/// build older than the daemon's, at 150% text in a window `size`.
+fn stacked(size: (f32, f32)) -> World {
+    let mut state = showing(
+        vec![
+            attn_protocol::DesktopPane {
+                session_id: "s1".into(),
+                ..pane("t1", "r1")
+            },
+            attn_protocol::DesktopPane {
+                session_id: "s3".into(),
+                ..pane("t3", "r3")
+            },
+        ],
+        "daemon-1",
+    );
+    let mut desktop = state.desktops.as_mut().unwrap().pop().unwrap();
+    desktop.tree_json = tree::below(tree::pane("t1"), tree::pane("t3")).to_string();
+    let mut peer = desktop.clone();
+    peer.id = "d2".into();
+    peer.name = LONG_DESKTOP.into();
+    peer.order_key = "2".into();
+    peer.panes = vec![attn_protocol::DesktopPane {
+        desktop_id: "d2".into(),
+        session_id: "s2".into(),
+        ..pane("t2", "r2")
+    }];
+    peer.tree_json = tree::row([tree::pane("t2")]).to_string();
+    state.desktops = Some(vec![desktop, peer]);
+    state.sessions = Some(vec![
+        agent(true, true),
+        Session {
+            label: LONG_DESKTOP.into(),
+            ..session("s2", "working")
+        },
+        session("s3", "working"),
+    ]);
+    state.settings = Some(BTreeMap::from([("uiScale".into(), "1.5".into())]));
+    let mut world = World::start_sized(Daemon::scripted().state(state), size);
+    world.open_desktop();
+    world
+}
+
+#[test]
+fn notices_take_the_room_a_grown_terminal_has_once_its_new_grid_arrives_after_layout() {
+    let large = (1440.0, 900.0);
+    let mut grown = stacked((800.0, 600.0));
+    grown.daemon.on("pty_resize", |request| {
+        (request["id"] != "r1").then(|| {
+            json!({
+                "event": "pty_resized",
+                "id": request["id"],
+                "cols": request["cols"],
+                "rows": request["rows"],
+            })
+        })
+    });
+    grown.resize(large);
+    grown.settle();
+    let asked = grown
+        .daemon
+        .sent_of("pty_resize")
+        .into_iter()
+        .rfind(|r| r["id"] == "r1")
+        .expect("the grown terminal asks for a larger grid");
+    let (cols, rows) = (
+        asked["cols"].as_i64().unwrap(),
+        asked["rows"].as_i64().unwrap(),
+    );
+    grown.daemon.emit(attn_protocol::PtyResizedMessage {
+        id: "r1".into(),
+        cols,
+        rows,
+        ..attn_protocol::PtyResizedMessage::new()
+    });
+    grown.settle();
+    assert_eq!(grown.terminal_size("r1"), (cols as u16, rows as u16));
+    let mut opened = stacked(large);
+    let band = grown.rect("terminal.r1.notices");
+    let fresh = opened.rect("terminal.r1.notices");
+    assert!(
+        (band[3] - fresh[3]).abs() < 0.5,
+        "the notices stand {} high once the grid arrives, {} in a window opened at that size",
+        band[3],
+        fresh[3]
+    );
+}
