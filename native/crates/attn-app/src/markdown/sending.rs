@@ -8,8 +8,8 @@ use attn_protocol::{DesktopUpdateTileMessage, MarkdownAnnotation, Session};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Actions, Block, Card, Inline, Sheet, Stack, Standing};
 use attn_ui::system::{
-    Button as UiButton, IconSize, Join, Look, Said, Size, Tone, Type, count_badge, icon_button,
-    tag, words as words_of,
+    Button as UiButton, IconSize, Join, Look, Said, Size, Tone, Type, count_badge, icon,
+    icon_button, tag, words as words_of,
 };
 use rune::{Cx, El, Tx, el};
 use rune_kit::{Menu, MenuItem, Placement};
@@ -88,6 +88,16 @@ impl Kind {
     }
 }
 
+/// How long the destination session's name may run on the header's picker in `room`, so the
+/// picker gives way before the document's title, as the reader before this one measured them.
+fn name_at_most(room: Room) -> f32 {
+    match room {
+        Room::Wide => 82.0,
+        Room::Medium => 64.0,
+        Room::Narrow => 48.0,
+    }
+}
+
 /// The header controls of document tile `tile` on `desktop` for its marks of document `uri`,
 /// going where `kind` says; `send_key` names the send key.
 #[allow(clippy::too_many_arguments)]
@@ -130,17 +140,18 @@ pub(crate) fn controls(
     }
     let open_notes_here = move |state: &mut State, tx: &mut Tx| open_notes(state, &notes_tile, tx);
     parts.push(match room {
-        Room::Narrow => icon_button(
-            key(tile, "notes"),
-            format!("Notes {count}"),
-            &attn_ui::icon::REVIEW_NOTES,
-            IconSize::Small,
-        )
-        .count(Some(count.to_string()))
-        .help("Show review notes")
-        .on_press_tx(open_notes_here)
-        .build(t)
-        .into(),
+        Room::Narrow => quiet(count.to_string())
+            .leading(icon(
+                &attn_ui::icon::REVIEW_NOTES,
+                IconSize::Small,
+                t.text_secondary,
+            ))
+            .help("Show review notes")
+            .on_press_tx(open_notes_here)
+            .build(t)
+            .key(key(tile, "notes"))
+            .label(format!("Notes {count}"))
+            .into(),
         Room::Medium | Room::Wide => quiet(format!("Notes {count}"))
             .help("Show review notes")
             .on_press_tx(open_notes_here)
@@ -172,14 +183,17 @@ pub(crate) fn controls(
     let idle = count == 0 && sent.is_none() && !review;
     if idle && matches!(kind, Kind::File { .. }) {
         let tile_menu = tile.to_owned();
-        let words = if room == Room::Narrow {
-            name.clone()
-        } else {
-            format!("To {name}")
+        let to = (room != Room::Narrow)
+            .then(|| attn_ui::system::words("To", Type::Control, t.text_secondary));
+        let picker = UiButton::new(name.clone())
+            .size(Size::Compact)
+            .words_at_most(name_at_most(room));
+        let picker = match to {
+            Some(to) => picker.leading(to),
+            None => picker,
         };
         parts.push(
-            UiButton::new(words)
-                .size(Size::Compact)
+            picker
                 .trailing(words_in(attn_ui::glyph::CARET_DOWN, t.text_secondary))
                 .help(format!("Annotations will be sent to {name}"))
                 .disabled(!any)

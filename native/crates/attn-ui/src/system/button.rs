@@ -52,6 +52,7 @@ pub struct Button {
     joined: Option<Join>,
     leading: Option<El>,
     quiet: Option<Said>,
+    at_most: Option<f32>,
     trailing: Option<El>,
     whole: bool,
     press: Option<Press>,
@@ -85,6 +86,7 @@ impl Button {
             joined: None,
             leading: None,
             quiet: None,
+            at_most: None,
             trailing: None,
             whole: false,
             press: None,
@@ -140,6 +142,13 @@ impl Button {
     /// when the button is short of room, and the button's own words stay whole.
     pub fn then_quiet(mut self, said: impl Into<Said>) -> Self {
         self.quiet = Some(said.into());
+        self
+    }
+
+    /// Its words stand at most `width` wide and are cut short past it, such as a session's name
+    /// on a picker, so the button gives way before what stands beside it.
+    pub fn words_at_most(mut self, width: f32) -> Self {
+        self.at_most = Some(width);
         self
     }
 
@@ -220,6 +229,7 @@ impl Button {
         let quiet = self
             .quiet
             .map(|said| words(said, role, t.text_secondary).truncate());
+        let at_most = self.at_most;
         let label = move |_, _| match shown {
             Shown::Words(shown) => door::gap(row().items_center(), Space::S4)
                 .shrink()
@@ -235,7 +245,13 @@ impl Button {
                             .child(quiet)
                     }
                     None if whole => words(shown, role, ink),
-                    None => words(shown, role, ink).truncate(),
+                    None => {
+                        let shown = words(shown, role, ink).truncate();
+                        match at_most {
+                            Some(width) => shown.max_w(width),
+                            None => shown,
+                        }
+                    }
                 })
                 .children(trailing),
             Shown::Mark(mark, size) => door::control_mark(mark, size).color(ink),
