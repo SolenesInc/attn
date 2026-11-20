@@ -126,6 +126,14 @@ fn a_terminal_bar_keeps_clear_of_the_scroll_bar_keeps_its_field_usable_and_centr
 fn a_filters_list_stands_under_its_bar_and_ends_on_its_edge() {
     for variant in ["Rest", "Empty", "Long", "Smallest long"] {
         let rt = story("Tiles/Filter", variant);
+        let count = element(&rt, "story.tile.filter.count");
+        let field = element(&rt, "story.tile.filter.field");
+        assert!(
+            right(&count) - left(&count) >= 50.0 || field.rect[2] <= 81.0,
+            "{variant}: the count is cut to {} while the field still stands {} wide",
+            count.rect[2],
+            field.rect[2]
+        );
         let bar = element(&rt, "story.tile.filter");
         let list = element(&rt, "story.tile.filter.results");
         assert!(

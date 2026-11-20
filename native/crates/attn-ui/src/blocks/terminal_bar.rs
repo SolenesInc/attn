@@ -13,6 +13,9 @@ const FROM_SCROLL_BAR: f32 = 14.0;
 const MEASURE: f32 = 640.0;
 /// The narrowest a bar's field gets, room for a short query, before the count gives way.
 const FIELD_FLOOR: f32 = 80.0;
+/// How much of its count a bar keeps whole while the field gives way: "11 lines" and "3 of 12"
+/// whole, a count of thousands cut short.
+const COUNT_KEEPS: f32 = 64.0;
 
 /// A bar over a terminal's top right corner that finds or filters what the terminal shows: its
 /// field, its toggles and buttons, and how many things it found.
@@ -51,13 +54,15 @@ impl TerminalBar {
 
     /// How many things the bar found, as "3 of 12".
     pub fn count(mut self, key: impl Into<String>, said: impl Into<String>, t: &Tokens) -> Self {
+        let said = said.into();
+        let keeps = crate::system::width_of(said.clone(), Type::Mono).min(COUNT_KEEPS);
         self.items.push(
-            words(said.into(), Type::Mono, t.text_secondary)
+            words(said, Type::Mono, t.text_secondary)
                 .key(key.into())
                 .single_line()
                 .truncate()
                 .shrink()
-                .min_w(0.0),
+                .min_w(keeps),
         );
         self
     }
