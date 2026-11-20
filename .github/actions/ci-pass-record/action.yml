@@ -10,7 +10,9 @@ inputs:
     description: The job group, as named in .github/ci-inputs.yml.
     required: true
   key:
-    description: The group's inputs key, from scripts/ci-pass-records.
+    description: >-
+      The group's inputs key, from scripts/ci-pass-records. CI macOS prefixes it
+      with macos-, so its records stay apart from Linux's.
     required: true
   write:
     description: "'true' writes this run's pass; otherwise the record is read."

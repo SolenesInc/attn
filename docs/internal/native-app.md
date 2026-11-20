@@ -74,9 +74,10 @@ or behaves differently on macOS for any other reason, such as windows, the
 browser's WebKit view and Quick Capture, keeps its `cfg(target_os = "macos")`.
 
 CI macOS's `Native / macos-15` runs the checks nightly, on a release commit, and
-when a path in `native_macos` in `.github/path-filters.yml` changes. Those paths
-cover the code that has such a `cfg`, the Rune pin and the VT library. Add a
-file there when it gains a `cfg(target_os = "macos")`.
+when a file its `native_macos` group in `.github/ci-inputs.yml` keeps changes.
+Those files cover the code that has such a `cfg`, the Rune pin and the VT
+library. Keep a file there with a `'!'` entry when it gains a
+`cfg(target_os = "macos")`.
 
 ## Colors
 
