@@ -2862,3 +2862,24 @@ fn the_tree_says_it_is_loading_on_the_line_of_the_notebook_s_title() {
         title[0]
     );
 }
+
+#[test]
+fn the_fullscreen_notebook_in_the_smallest_window_folds_its_tree_and_rail_so_the_note_keeps_its_room()
+ {
+    let disk = Disk::with(&[("knowledge/index.md", INDEX)]);
+    let mut world = start(&disk);
+    world.resize((533.0, 400.0));
+    open_fullscreen(&mut world);
+    let screen = world.screen();
+    assert!(
+        screen.find(Target::key("notebook.files")).is_none(),
+        "the tree stays open"
+    );
+    let note = world.rect("notebook.scroll");
+    const ROOM_FOR_A_NOTE: f64 = 400.0;
+    assert!(
+        note[2] >= ROOM_FOR_A_NOTE,
+        "the note has {} points of a 533-point window",
+        note[2]
+    );
+}

@@ -19,7 +19,8 @@ use crate::State;
 /// The file tree's width: the tree of the Tauri tile, which holds a note's name of about 30
 /// letters two folders deep.
 const TREE_WIDTH: f32 = 280.0;
-/// A tile narrower than these folds its file tree and its rail, as the Tauri tile does.
+/// A notebook narrower than these folds its file tree and its rail, as the Tauri tile does, so
+/// the note keeps its room.
 const TREE_FOLDS_BELOW: f32 = 620.0;
 const RAIL_FOLDS_BELOW: f32 = 900.0;
 const SHELL_INSET: f32 = 12.0;
@@ -156,7 +157,7 @@ fn surface_view(
     find: Option<String>,
     t: &Tokens,
 ) -> El {
-    let (tree_fits, rail_fits) = fits(id, surface.width);
+    let (tree_fits, rail_fits) = fits(surface.width);
     let tree_open = surface.folds.tree.unwrap_or(tree_fits);
     let rail = rail(id, surface, t);
     let rail_open = surface.folds.rail.unwrap_or(rail_fits);
@@ -190,10 +191,10 @@ fn surface_view(
         .children(super::finder::view(notebook, id, t))
 }
 
-/// Whether a tile this wide has room for its file tree and its rail; the fullscreen notebook
-/// and a tile not laid out yet always have.
-fn fits(id: &SurfaceId, width: f32) -> (bool, bool) {
-    let roomy = matches!(id, SurfaceId::Fullscreen) || width <= 0.0;
+/// Whether a notebook this wide has room for its file tree and its rail; one not laid out yet
+/// has.
+fn fits(width: f32) -> (bool, bool) {
+    let roomy = width <= 0.0;
     (
         roomy || width >= TREE_FOLDS_BELOW,
         roomy || width >= RAIL_FOLDS_BELOW,
