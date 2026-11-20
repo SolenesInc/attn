@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"testing"
 	"time"
 )
@@ -79,6 +80,10 @@ func claudeSpare(cfg config) int {
 		fmt.Fprintf(os.Stderr, "fake claude spare: %v\n", err)
 		return 1
 	}
+	if err := reportSessionStarted(); err != nil {
+		fmt.Fprintf(os.Stderr, "fake claude spare: %v\n", err)
+		return 1
+	}
 	asked := headlessTask{Harness: Claude, launchedAs: started}
 	instructed := false
 	input := bufio.NewReader(os.Stdin)
@@ -140,4 +145,12 @@ func claudeSpare(cfg config) int {
 			return 0
 		}
 	}
+}
+
+func reportSessionStarted() error {
+	path := os.Getenv("ATTN_MODEL_CALL_SPARE_STARTED")
+	if path == "" || !slices.Contains(os.Args, "--plugin-dir") {
+		return nil
+	}
+	return os.WriteFile(path, []byte("started\n"), 0o600)
 }

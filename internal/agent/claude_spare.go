@@ -6,19 +6,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/headless"
+)
+
+const (
+	ClaudeSpareStartedEnv  = "ATTN_MODEL_CALL_SPARE_STARTED"
+	claudeSpareStartedLine = "started\n"
+	claudeSpareExitedLine  = "exited\n"
 )
 
 var _ SpareStarter = (*Claude)(nil)
 
-func claudeSpareArgs() []string {
-	args := []string{"--print"}
+func claudeSpareArgs(modDir string) []string {
+	args := []string{"--print", "--plugin-dir", modDir}
 	args = append(args, claudeHeadlessIsolationArgs()...)
 	return append(args,
 		"--strict-mcp-config",
@@ -34,32 +43,55 @@ func claudeSpareArgs() []string {
 }
 
 // StartSpare starts claude with no model, instructions or input; it waits on
-// stdin until Answer gives it all three (F2, F4 of seed s-jhntry).
+// stdin until Answer gives it all three (F2, F4 of seed s-jhntry). Once attn's
+// mod reports the session started, the spare is stopped until Answer.
 func (c *Claude) StartSpare(ctx context.Context, executable, workDir string) (Spare, error) {
 	if !headless.Enabled() {
 		return nil, headless.Refusal("claude spare")
 	}
-	cmd := exec.Command(executable, claudeSpareArgs()...)
+	modDir := filepath.Join(workDir, "claude-mod")
+	if err := claudemod.Install(modDir); err != nil {
+		return nil, fmt.Errorf("install attn's claude mod for the spare: %w", err)
+	}
+	startedPath := filepath.Join(workDir, "started")
+	if err := syscall.Mkfifo(startedPath, 0o600); err != nil {
+		return nil, fmt.Errorf("make the spare's started pipe: %w", err)
+	}
+	started, err := os.OpenFile(startedPath, os.O_RDWR, 0)
+	if err != nil {
+		return nil, fmt.Errorf("open the spare's started pipe: %w", err)
+	}
+	cmd := exec.Command(executable, claudeSpareArgs(modDir)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Dir = workDir
-	cmd.Env = append(headlessEnvironment("claude"), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1")
+	cmd.Env = append(headlessEnvironment("claude"), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", ClaudeSpareStartedEnv+"="+startedPath)
 	var stderr boundedHeadlessOutput
 	cmd.Stderr = &stderr
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
+		started.Close()
 		return nil, err
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		started.Close()
 		return nil, err
 	}
 	if err := cmd.Start(); err != nil {
+		started.Close()
 		return nil, fmt.Errorf("start claude spare: %w", err)
 	}
 	spare := &claudeSpare{cmd: cmd, stdin: stdin, stdout: bufio.NewReader(stdout), stderr: &stderr, exited: make(chan struct{})}
 	go func() {
 		_ = cmd.Wait()
 		close(spare.exited)
+		_, _ = started.WriteString(claudeSpareExitedLine)
+	}()
+	go func() {
+		defer started.Close()
+		if line, _ := bufio.NewReader(started).ReadString('\n'); line == claudeSpareStartedLine {
+			spare.stopUntilTaken()
+		}
 	}()
 	go func() {
 		select {
@@ -79,14 +111,42 @@ type claudeSpare struct {
 	exited chan struct{}
 	used   sync.Once
 	closed sync.Once
+
+	mu      sync.Mutex
+	taken   bool
+	stopped bool
+}
+
+func (s *claudeSpare) stopUntilTaken() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.taken && s.running() {
+		s.stopped = syscall.Kill(-s.cmd.Process.Pid, syscall.SIGSTOP) == nil
+	}
+}
+
+func (s *claudeSpare) running() bool {
+	select {
+	case <-s.exited:
+		return false
+	default:
+		return true
+	}
+}
+
+func (s *claudeSpare) take() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.taken = true
+	if s.stopped && s.running() {
+		_ = syscall.Kill(-s.cmd.Process.Pid, syscall.SIGCONT)
+	}
 }
 
 func (s *claudeSpare) Close() {
 	s.closed.Do(func() {
 		_ = s.stdin.Close()
-		select {
-		case <-s.exited:
-		default:
+		if s.running() {
 			_ = syscall.Kill(-s.cmd.Process.Pid, syscall.SIGKILL)
 		}
 	})
@@ -102,6 +162,7 @@ func (s *claudeSpare) Answer(ctx context.Context, request ModelCallRequest) (Mod
 	err := spareUnusable("the spare already answered a call")
 	s.used.Do(func() {
 		answered = true
+		s.take()
 		result, err = s.answer(ctx, request)
 	})
 	if answered {

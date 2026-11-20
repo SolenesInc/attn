@@ -224,6 +224,11 @@ async function submitLeftOver($: EngineInterface, messages: Message[]): Promise<
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
+    const spareStarted = await $.env.get('ATTN_MODEL_CALL_SPARE_STARTED')
+    if (spareStarted) {
+      await $.fs.write(spareStarted, 'started\n')
+      return started
+    }
     link = {
       terminal: (await $.env.get('ATTN_TERMINAL_ID')) ?? '',
       socketPath: (await $.env.get('ATTN_CLAUDE_MOD_SOCKET')) ?? '',

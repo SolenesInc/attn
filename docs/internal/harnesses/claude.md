@@ -295,6 +295,23 @@ sign-in and synthetic text, 2026-11-19 (plot `s-jhntry`, F2 to F5):
   Idle, it holds 200 to 300 MB resident. It is not quiet: on 2.1.329 one used
   0.73 s of CPU over 3 idle minutes, and 0.19 s with
   `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, which attn sets on the spare.
+  Under attn, the spare used 1.6 to 1.9 s over 10 idle minutes either way.
+- A mod loaded with `--plugin-dir` runs its `session.start` hook 0.4 to 1.3 s
+  after the process starts, before any input arrives (2.1.329). Claude keeps
+  working for a few seconds after that: one spare used another 0.4 s of CPU in
+  the next 5 s. In a worker-hosted module `$.env.get` returns a promise; a
+  `$.fs.write` given the promise as its path throws "arguments are not plain
+  data". `$.fs.write` to a FIFO writes into it and leaves the FIFO in place.
+- A spare stopped with SIGSTOP from `session.start` uses no CPU: 0.00 s over
+  30 s, 60 s and 2 minutes. After SIGCONT it answered with 50 to 177 ms beyond
+  the model's time over 3 calls, against 35 to 76 ms for one never stopped.
+  attn's mod writes `started` to the FIFO that `ATTN_MODEL_CALL_SPARE_STARTED`
+  names, and attn stops the spare's process group until a call takes it.
+  Through `attn model call` (seed `s-jwy81g`, C2), 10 calls on a stopped spare
+  took a median of 190 ms beyond the model's time (109 to 365 ms), and the
+  spare used 0.00 s of CPU over 10 idle minutes. When its daemon was killed
+  with SIGKILL, the stopped spare was gone within 200 ms: its process group
+  is orphaned with a stopped member, so the kernel sends SIGHUP and SIGCONT.
 - A process started with no model and no instructions takes both afterwards:
   a `control_request` with `subtype: initialize` and `systemPrompt`, then one
   with `subtype: set_model`. Each answers a `control_response` with
