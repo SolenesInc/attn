@@ -373,6 +373,69 @@ fn an_agent_picked_in_a_palette_opened_from_a_focused_button_takes_the_keys() {
     assert_eq!(typed, ["rt-api"]);
 }
 
+type OpenDialog = fn(&mut World);
+
+#[test]
+fn a_dialog_opened_from_the_palette_or_its_keys_returns_focus_to_the_control_focused_before() {
+    let routes: [(&str, OpenDialog); 4] = [
+        ("the palette's Settings", |world| {
+            run_command(world, "Settings")
+        }),
+        ("the palette's New agent", |world| {
+            run_command(world, "New agent")
+        }),
+        ("the palette's sessions list", |world| {
+            run_command(world, "Open the sessions list")
+        }),
+        ("the Settings keys", |world| {
+            press_action(world, Action::UiOpenSettings)
+        }),
+    ];
+    for (route, open) in routes {
+        let mut world = World::start(daemon(initial(vec![], vec![]), vec![]));
+        world.gesture(|app| app.runtime.set_full_keyboard_access(true));
+        let focused = |world: &World| world.screen().focused().and_then(|n| n.key);
+        for _ in 0..30 {
+            if focused(&world).as_deref() == Some("home.settings") {
+                break;
+            }
+            press(&mut world, Key::Tab);
+        }
+        assert_eq!(focused(&world).as_deref(), Some("home.settings"));
+        press(&mut world, Key::Tab);
+        let after_it = focused(&world);
+        world.gesture(|app| {
+            app.key(KeyEvent {
+                key: Key::Tab,
+                mods: Mods {
+                    shift: true,
+                    ..Mods::default()
+                },
+            })
+        });
+        assert_eq!(focused(&world).as_deref(), Some("home.settings"));
+
+        open(&mut world);
+        assert!(
+            world.screen().find(Target::key("palette")).is_none(),
+            "{route}"
+        );
+        let inside = focused(&world);
+        assert!(
+            inside.as_deref().is_some_and(|k| !k.starts_with("home.")),
+            "{route} focuses its dialog, not {inside:?}"
+        );
+        press(&mut world, Key::Escape);
+        assert_eq!(focused(&world).as_deref(), Some("home.settings"), "{route}");
+        press(&mut world, Key::Tab);
+        assert_eq!(
+            focused(&world),
+            after_it,
+            "Tab continues from the control after {route}"
+        );
+    }
+}
+
 #[test]
 fn the_title_bars_commands_and_new_agent_buttons_open_the_command_palette_and_the_picker() {
     let mut state = initial(two_desktops(), vec![]);

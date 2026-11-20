@@ -288,7 +288,6 @@ pub(crate) fn open(state: &mut State, section: Section, tx: &mut Tx) {
     state.window.settings.after_flush = None;
     hygiene::forget(state);
     state.window.layer = Some(Layer::Settings);
-    tx.blur();
     plugins::open(state, tx);
     arrive(state, tx);
 }
