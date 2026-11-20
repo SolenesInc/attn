@@ -5,12 +5,14 @@
 
 use attn_client::Desktop;
 use attn_protocol::{DesktopUpdateTileMessage, MarkdownAnnotation, Session};
-use attn_ui::blocks::Inline;
-use attn_ui::system::{Button as UiButton, IconSize, Join, Look, Said, Size, Type, icon_button};
-use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens};
-use rune::{Cx, El, Tx, col, el, row, text};
-use rune_kit::{Button, ButtonVariant, Menu, MenuItem, Placement, ScrollBar};
+use attn_ui::Tokens;
+use attn_ui::blocks::{Block, Card, Inline, Sheet, Stack, Standing};
+use attn_ui::system::{
+    Button as UiButton, IconSize, Join, Look, Said, Size, Tone, Type, count_badge, icon_button,
+    tag, words as words_of,
+};
+use rune::{Cx, El, Tx, el};
+use rune_kit::{Menu, MenuItem, Placement};
 
 use super::drafts::{self, Sent, To};
 
@@ -702,169 +704,93 @@ fn notes(
     let count = marks.len();
     let (closed, overall, cleared) = (tile.to_owned(), tile.to_owned(), tile.to_owned());
     let arming = reading.clearing.is_some();
-    let quiet = t.text_secondary;
-    let head = row()
-        .items_center()
-        .gap(6.0)
-        .pt(4.0)
-        .px(2.0)
-        .pb(10.0)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border.alpha(0.5))
-        .child(type_::upper("Review notes", TITLE).color(t.text_secondary))
-        .child(
-            Button::new("Close review notes")
-                .variant(ButtonVariant::GhostMuted)
-                .label_with(move |_, _| text(count.to_string()).font(COUNT).color(quiet))
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| open_notes(state, &closed, tx))
-                .build(attn_ui::kit(t))
-                .key(key(tile, "notes.close"))
-                .h(COUNT.line_px() + 2.0)
-                .px(8.0)
-                .radius(999.0)
-                .fill(t.bg_button),
-        )
-        .child(el().grow(1.0))
-        .child(panel_button(
-            tile,
-            "notes.overall",
-            ("+ Overall note", "+ Overall note".to_owned()),
-            t.text_muted,
-            t,
-            move |state: &mut State, tx: &mut Tx| {
-                if let Some(r) = state.readings.tiles.get_mut(&overall) {
-                    r.notes = false;
-                }
-                if let Some(uri) = tile_of(state, &overall).map(|d| d.uri) {
-                    super::annotating::compose_overall(state, &overall, &uri, tx);
-                }
-            },
-        ))
-        .children((count > 0).then(|| {
-            let words = if arming { "Confirm?" } else { "Clear all" };
-            let danger = attn_ui::colors::mix_srgb(t.error, rune::Color::WHITE, 0.24);
-            let button = panel_button(
-                tile,
-                "notes.clear",
-                (words, words.to_owned()),
-                if arming { danger } else { t.text_muted },
-                t,
-                move |state: &mut State, tx: &mut Tx| clear_all(state, &cleared, tx),
-            );
-            if arming {
-                button.fill(t.error.alpha(0.12))
-            } else {
-                button
+    let quiet = |words: &'static str| UiButton::new(words).look(Look::Quiet).size(Size::Compact);
+    let overall_note = quiet("+ Overall note")
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            if let Some(r) = state.readings.tiles.get_mut(&overall) {
+                r.notes = false;
             }
-        }));
-    let body: Vec<El> = if marks.is_empty() {
-        vec![
-            text("No annotations yet.")
-                .font(type_::LABEL)
-                .color(t.text_secondary),
-            text("Select text in the document to comment, redline, or quick-label it.")
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-                .wrap(),
-        ]
+            if let Some(uri) = tile_of(state, &overall).map(|d| d.uri) {
+                super::annotating::compose_overall(state, &overall, &uri, tx);
+            }
+        })
+        .build(t)
+        .key(key(tile, "notes.overall"));
+    let clear = (count > 0).then(|| {
+        let button = if arming {
+            UiButton::new("Confirm?")
+                .look(Look::Danger)
+                .size(Size::Compact)
+        } else {
+            quiet("Clear all")
+        };
+        button
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| clear_all(state, &cleared, tx))
+            .build(t)
+            .key(key(tile, "notes.clear"))
+    });
+    let close = icon_button(
+        key(tile, "notes.close"),
+        "Close review notes",
+        attn_ui::glyph::TIMES,
+        IconSize::Regular,
+    )
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| open_notes(state, &closed, tx))
+    .build(t);
+    let body = if marks.is_empty() {
+        Block::custom(
+            key(tile, "notes.empty"),
+            Stack::tight()
+                .child(words_of(
+                    "No annotations yet.",
+                    Type::Label,
+                    t.text_secondary,
+                ))
+                .child(
+                    words_of(
+                        "Select text in the document to comment, redline, or quick-label it.",
+                        Type::Label,
+                        t.text_tertiary,
+                    )
+                    .wrap(),
+                ),
+        )
     } else {
-        marks
-            .iter()
-            .map(|m| {
-                card(
-                    tile,
-                    m,
-                    orphans.contains(&m.id),
-                    reading.selected.as_deref() == Some(&m.id),
-                    t,
-                )
-            })
-            .collect()
+        let cards = marks.iter().map(|m| {
+            card(
+                tile,
+                m,
+                orphans.contains(&m.id),
+                reading.selected.as_deref() == Some(&m.id),
+                t,
+            )
+        });
+        Block::custom(key(tile, "notes.cards"), Stack::tight().children(cards))
     };
-    let surface = col()
-        .key(key(tile, "notes.dialog"))
+    let sheet = Sheet::new(key(tile, "notes.dialog"), "Review notes")
+        .badge(count_badge(count, t.bg_button, t.text_secondary))
+        .aside(overall_note)
+        .close(close)
+        .body_key(key(tile, "notes.list"))
+        .framed()
+        .push(body);
+    let sheet = match clear {
+        Some(clear) => sheet.aside(clear),
+        None => sheet,
+    };
+    sheet
+        .build(t)
         .role("dialog")
         .label("Review notes")
-        .gap(8.0)
-        .padding(10.0)
         .on_press(|_: &mut State| {})
-        .child(head)
-        .child(
-            col()
-                .key(key(tile, "notes.list"))
-                .grow(1.0)
-                .min_h(0.0)
-                .gap(6.0)
-                .scroll(rune::ScrollSpec {
-                    stick_bottom: false,
-                })
-                .children(body)
-                .scroll_bar_styled(attn_ui::document_scroll_bar(t)),
-        );
-    rune_kit::popover::raised(attn_ui::kit(t), surface, super::annotating::SURFACE_RADIUS)
 }
 
-/// A text button in the review notes' head: `label` names it, `face` shows in `ink`.
-fn panel_button(
-    tile: &str,
-    part: &str,
-    (label, face): (&str, String),
-    ink: rune::Color,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    Button::new(label)
-        .variant(ButtonVariant::GhostMuted)
-        .label_with(move |_, _| text(face).font(QUIET).color(ink))
-        .on_press_tx(press)
-        .build(attn_ui::kit(t))
-        .key(key(tile, part))
-        .h(QUIET.line_px() + 4.0)
-        .px(6.0)
-        .radius(5.0)
-}
-
-const TITLE: rune::TextStyle = rune::TextStyle {
-    weight: 600.0,
-    tracking: 0.5,
-    ..type_::LABEL
-};
-
-/// The review notes' quiet actions and the note under a passage, in the interface face at
-/// regular weight, as the Tauri app's `.md-sidebar-action` and `.md-card-text`.
-const QUIET: rune::TextStyle = rune::TextStyle {
-    weight: 400.0,
-    ..type_::LABEL
-};
-
-/// The notes' count beside the title, as the Tauri app's `.md-sidebar-count` pill.
-const COUNT: rune::TextStyle = rune::TextStyle {
-    weight: 600.0,
-    ..type_::LABEL
-};
-
-const BADGE: rune::TextStyle = rune::TextStyle {
-    weight: 700.0,
-    tracking: 0.6,
-    ..type_::LABEL
-};
-
-/// A note's kind, or its quick label, on a tint of the kind's color, as the Tauri app's
-/// `.md-card-badge`.
-fn kind_badge(words: &str, tone: rune::Color) -> El {
-    type_::upper(words, BADGE)
-        .color(tone)
-        .px(6.0)
-        .py(1.0)
-        .radius(4.0)
-        .fill(tone.alpha(0.18))
-}
-
-fn badge_tone(mark: &MarkdownAnnotation, t: &Tokens) -> rune::Color {
+fn badge_tone(mark: &MarkdownAnnotation) -> Tone {
     match mark.r#type.as_str() {
-        _ if mark.quick_label_id.is_some() => t.warning,
-        "deletion" => t.error,
-        "global" => t.accent,
-        _ => t.warning,
+        _ if mark.quick_label_id.is_some() => Tone::Warn,
+        "deletion" => Tone::Bad,
+        "global" => Tone::Accent,
+        _ => Tone::Warn,
     }
 }
 
@@ -890,88 +816,62 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
         mark.id.clone(),
     );
     let answer = mark.answer.clone().filter(|a| !a.is_empty());
-    let card = col()
-        .key(key(tile, &format!("notes.card.{}", mark.id)))
-        .role("button")
-        .label(quote.clone().unwrap_or_else(|| badge.clone()));
+    let remove_button: El = icon_button(
+        key(tile, &format!("notes.remove.{}", mark.id)),
+        "Remove annotation",
+        &attn_ui::icon::ANNOTATION_CANCEL,
+        IconSize::Small,
+    )
+    .size(Size::Small)
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+        remove(state, &removed, std::slice::from_ref(&gone), tx)
+    })
+    .build(t)
+    .into();
+    let head = Inline::line()
+        .child(El::from(tag(
+            key(tile, &format!("notes.kind.{}", mark.id)),
+            badge.clone(),
+            badge_tone(mark),
+            t,
+        )))
+        .children(orphan.then(|| words_of("⚠ moved", Type::Label, t.warning)))
+        .child(el().grow(1.0))
+        .child(remove_button.group_opacity(0.0, 1.0));
+    let card = Card::new(key(tile, &format!("notes.card.{}", mark.id)))
+        .control("button", quote.clone().unwrap_or_else(|| badge.clone()))
+        .standing(if selected {
+            Standing::Picked
+        } else {
+            Standing::Resting
+        })
+        .push(head)
+        .push_all(quote.map(|q| words_of(q, Type::Mono, t.text_secondary).truncate()))
+        .push_all(line.map(|l| words_of(l, Type::Label, t.warning)))
+        .push_all(
+            mark.text
+                .clone()
+                .filter(|s| !s.is_empty())
+                .map(|c| words_of(c, Type::Body, t.text_primary).wrap()),
+        )
+        .push_all(
+            answer
+                .clone()
+                .map(|a| words_of(format!("answer: {a}"), Type::Small, t.text_secondary).wrap()),
+        )
+        .build(t);
     let card = match &answer {
         Some(a) => card.description(format!("answer: {a}")),
         None => card,
     };
     card.checked(selected)
         .hover_group()
-        .gap(4.0)
-        .padding(8.0)
-        .radius(6.0)
-        .fill(if selected {
-            t.accent.alpha(0.12)
-        } else {
-            t.bg_panel
-        })
-        .border(1.0, t.border)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             if let Some(r) = state.readings.tiles.get_mut(&opened) {
                 r.notes = false;
             }
             super::annotating::focus(state, &opened, &id, tx);
         })
-        .child(
-            row()
-                .items_center()
-                .gap(6.0)
-                .child(kind_badge(&badge, badge_tone(mark, t)))
-                .children(orphan.then(|| text("⚠ moved").font(type_::LABEL).color(t.warning)))
-                .child(el().grow(1.0))
-                .child(
-                    GlyphButton::new(&attn_ui::icon::ANNOTATION_CANCEL, "Remove annotation")
-                        .icon_size(14.0)
-                        .side(20.0)
-                        .color(t.text_muted)
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            remove(state, &removed, std::slice::from_ref(&gone), tx)
-                        })
-                        .build(attn_ui::kit(t))
-                        .key(key(tile, &format!("notes.remove.{}", mark.id)))
-                        .w(20.0)
-                        .radius(4.0)
-                        .group_opacity(0.0, 1.0),
-                ),
-        )
-        .children(quote.map(|q| {
-            text(q)
-                .font(type_::MONO_CAPTION)
-                .color(t.text_secondary)
-                .single_line()
-                .truncate()
-                .px(8.0)
-                .py(6.0)
-                .radius(6.0)
-                .fill(t.bg_app)
-        }))
-        .children(line.map(|l| text(l).font(type_::LABEL).color(t.warning)))
-        .children(
-            mark.text
-                .clone()
-                .filter(|s| !s.is_empty())
-                .map(|c| noted(text(c).font(QUIET).color(t.text_primary).wrap(), t.accent)),
-        )
-        .children(answer.map(|a| {
-            noted(
-                text(format!("answer: {a}"))
-                    .font(QUIET)
-                    .color(t.text_secondary)
-                    .wrap(),
-                t.text_muted,
-            )
-        }))
-}
-
-/// A note's words or its answer under the passage, set off by a bar in `bar` on the left.
-fn noted(words: El, bar: rune::Color) -> El {
-    words
-        .pl(8.0)
-        .border_sides([0.0, 0.0, 0.0, 2.0], bar)
-        .mt(2.0)
 }
 
 /// Takes marks `ids` off tile `tile`'s document.
