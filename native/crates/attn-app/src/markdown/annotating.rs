@@ -21,9 +21,13 @@ use crate::annotations;
 
 /// How far above the passage the toolbar sits, as the Tauri reader places it.
 const TOOLBAR_ABOVE: f32 = 48.0;
-/// The comment box's widest, and the room below a passage it needs to open there.
+/// The comment box's widest.
 const COMPOSER_W: f32 = 384.0;
-const COMPOSER_ROOM: f32 = 280.0;
+/// The room the comment box stands in whole at 150% text, 305.8 measured: with that room under
+/// its passage it opens there, and with less on both sides its field gives way.
+const COMPOSER_ROOM: f32 = 306.0;
+/// Between the comment box and its passage.
+const COMPOSER_GAP: f32 = 8.0;
 const EDGE: f32 = 16.0;
 /// How long a mark brought into view glows.
 const FOCUS_SECONDS: f64 = 2.0;
@@ -500,7 +504,8 @@ pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
     };
     let window = cx.layout("window").unwrap_or([0.0, 0.0, 1200.0, 800.0]);
     let around = cx.layout(&key(&tile, "overall"));
-    vec![composer_box(&tile, composer, around, window, t)]
+    let seen = [window[1], window[1] + window[3]];
+    vec![composer_box(&tile, composer, around, window, seen, t)]
 }
 
 /// The toolbar, or the comment box on a passage, of tile `tile`, placed beside their passage in
@@ -531,7 +536,12 @@ pub(crate) fn in_document(
     ];
     let frame = [0.0, 0.0, reader[2] + 2.0 * inset, reader[3] + 2.0 * inset];
     if let Some(composer) = &reading.composer {
-        return vec![composer_box(tile, composer, Some(around), frame, t)];
+        let seen =
+            rune::memo::layout(&format!("tile.{tile}.document")).map_or([0.0, frame[3]], |view| {
+                let top = view[1] - reader[1] + inset;
+                [top, top + view[3]]
+            });
+        return vec![composer_box(tile, composer, Some(around), frame, seen, t)];
     }
     let size = rune::memo::layout(&key(tile, "toolbar")).unwrap_or([0.0, 0.0, 260.0, 36.0]);
     let left = (around[0] + around[2] / 2.0 - size[2] / 2.0)
@@ -639,18 +649,21 @@ fn composer_box(
     composer: &Composer,
     around: Option<[f32; 4]>,
     window: [f32; 4],
+    [seen_top, seen_bottom]: [f32; 2],
     t: &Tokens,
 ) -> El {
     let width = COMPOSER_W.min(window[2] - 2.0 * EDGE);
     let around = around.unwrap_or([window[2] / 2.0, window[3] / 3.0, 0.0, 0.0]);
     let left =
         (around[0] + (around[2] - width) / 2.0).clamp(EDGE, (window[2] - width - EDGE).max(EDGE));
-    let below = around[1] + around[3] + 8.0;
-    let above = around[1] - COMPOSER_ROOM;
-    let top = if window[3] - below < COMPOSER_ROOM && above >= EDGE {
-        above
+    let below = around[1] + around[3] + COMPOSER_GAP;
+    let room_below = seen_bottom - EDGE - below;
+    let room_above = around[1] - COMPOSER_GAP - (seen_top + EDGE);
+    let (top, room) = if room_below < COMPOSER_ROOM && room_above > room_below {
+        let room = room_above.min(COMPOSER_ROOM);
+        (around[1] - COMPOSER_GAP - room, room)
     } else {
-        below
+        (below, room_below)
     };
     let heading = match &composer.about {
         Some(p) => {
@@ -747,6 +760,7 @@ fn composer_box(
     .build(t);
     popover
         .w(width)
+        .max_h(room.max(0.0))
         .on_press(|_: &mut State| {})
         .modal_tx(true, move |state: &mut State, tx: &mut Tx| {
             close_if_empty(state, &outside, tx)

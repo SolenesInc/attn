@@ -32,6 +32,8 @@ struct Kept {
     seed: Option<Option<&'static str>>,
     /// The window is narrow enough that the tile's header has no room for an overall note.
     narrow: bool,
+    /// The smallest window attn supports, 800 by 600 at 150% text.
+    smallest: bool,
 }
 
 type Shared = Arc<Mutex<Kept>>;
@@ -65,10 +67,10 @@ fn start_with(doc: &str, kept: Kept) -> (World, Shared) {
             .to_vec(),
         ),
         desktops: Some(vec![desktop(
-            row(vec![
-                pane("a"),
-                pane("b"),
-                match kept.seed {
+            row([pane("a"), pane("b")]
+                .into_iter()
+                .filter(|_| !kept.smallest)
+                .chain([match kept.seed {
                     Some(_) => json!({
                         "type": "tile",
                         "tile_id": "m",
@@ -83,11 +85,14 @@ fn start_with(doc: &str, kept: Kept) -> (World, Shared) {
                         "tile_session_id": kept.bound.unwrap_or("s-a"),
                         "window": kept.popped.then(|| json!({"x": 60.0, "y": 60.0, "width": 900.0, "height": 700.0})),
                     }),
-                },
-            ]),
+                }])
+                .collect::<Vec<_>>()),
             1,
         )]),
         seeds: kept.seed.map(|tender| vec![plan_seed(doc, tender)]),
+        settings: kept
+            .smallest
+            .then(|| [("uiScale".to_owned(), "1.5".to_owned())].into()),
         ..InitialStateMessage::new()
     });
     if kept.seed.is_some() {
@@ -174,10 +179,10 @@ fn start_with(doc: &str, kept: Kept) -> (World, Shared) {
         json!({ "event": "desktop_update_tile_result", "request_id": r["request_id"], "success": r["tile_session_id"] != "s-refused" })
     });
     let seed = kept.lock().unwrap().seed.is_some();
-    let size = if kept.lock().unwrap().narrow {
-        (2100.0, 900.0)
-    } else {
-        (2600.0, 900.0)
+    let size = match *kept.lock().unwrap() {
+        Kept { smallest: true, .. } => (800.0, 600.0),
+        Kept { narrow: true, .. } => (2100.0, 900.0),
+        _ => (2600.0, 900.0),
     };
     let mut world = World::start_sized(daemon, size);
     world.open_desktop();
@@ -1508,6 +1513,38 @@ fn the_comment_box_leaves_its_passage_in_view_in_a_short_document() {
         top + h,
         line_top + line_h
     );
+}
+
+#[test]
+fn the_comment_box_stands_whole_inside_its_document_in_the_smallest_window() {
+    let (mut world, _) = start_with(
+        "# Plan\n\nThe reader keeps its place.\n\nIt paints once.\n\nCache the tile layout before the first paint.\n",
+        Kept {
+            smallest: true,
+            ..Kept::default()
+        },
+    );
+    select_in_paragraph(&mut world, 0.2, 0.5);
+    click(&mut world, "toolbar.comment");
+    let long =
+        "Name the blocks it skips, and say why each one is left out of the count. ".repeat(6);
+    world.gesture(|app| app.type_text(&long));
+    world.settle();
+    let screen = world.screen();
+    let [vx, vy, vw, vh] = screen
+        .bounds(Target::key("tile.m.document"))
+        .unwrap_or_else(|| panic!("no document:\n{screen}"));
+    for part in ["composer", "composer.heading", "composer.save"] {
+        let [x, y, w, h] = screen
+            .bounds(Target::key(format!("tile.m.document.{part}")))
+            .unwrap_or_else(|| panic!("no {part}:\n{screen}"));
+        assert!(
+            x >= vx && y >= vy && x + w <= vx + vw && y + h <= vy + vh,
+            "{part} at {:?} runs out of the document at {:?}",
+            [x, y, w, h],
+            [vx, vy, vw, vh]
+        );
+    }
 }
 
 #[test]
