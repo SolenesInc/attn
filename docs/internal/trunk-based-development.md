@@ -202,10 +202,12 @@ run that passed it. Pull requests read `main`'s pass records and write none.
 CI runs every job nightly, on dispatch, on a release commit and on a
 `release/v*` pull request, so a group carried past a file it does read fails
 within a day. The macOS jobs run in their own workflow, `CI macOS`, so
-waiting for a macOS runner never holds up Linux's Acceptance. `CI macOS` runs
-each macOS job on a push only when the commits since its last green push run
-change paths that can break it, so a failed job runs again on every push until
-it passes. It runs every macOS job nightly and on a release commit. When no runner picks up
+waiting for a macOS runner never holds up Linux's Acceptance. `CI macOS`
+carries its groups the same way, with pass records of its own, because a Linux
+pass does not prove macOS. Two of its groups, `native_macos` and
+`pty_upgrade_macos`, also leave out paths that behave the same on Linux, where
+`CI` proves them. `CI macOS` runs every macOS job nightly and on a release
+commit. When no runner picks up
 a macOS job of a push run, `macOS acceptance` passes with a warning that names
 the job, and the nightly run covers the gap. A macOS job that ran and failed
 still turns `macOS acceptance` red.

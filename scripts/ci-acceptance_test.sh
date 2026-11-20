@@ -42,7 +42,8 @@ macos_failed='{"name":"PTY upgrade / macos-15","status":"completed","conclusion"
 macos_cancelled_while_running='{"name":"PTY upgrade / macos-15","status":"completed","conclusion":"cancelled","runner_name":"GitHub Actions 2","labels":["macos-15"]}'
 linux_never_started='{"name":"Frontend","status":"completed","conclusion":"cancelled","runner_name":null,"labels":["ubuntu-24.04-arm"]}'
 full_macos_failed='{"name":"Full macOS run","status":"completed","conclusion":"failure","runner_name":"GitHub Actions 4","labels":["ubuntu-24.04"]}'
-macos_jobs=(pty-compatibility rust native attn-cli app-acceptance-macos native-release-preflight full-macos)
+macos_jobs=(full-macos)
+macos_job_groups='{"pty-compatibility":["pty_upgrade_macos"],"native":["native_macos"],"app-acceptance-macos":["app_acceptance_tauri","app_acceptance"]}'
 
 expect() {
   local name="$1" want_status="$2" needs="$3" jobs="$4" status=0
@@ -86,7 +87,11 @@ expect linux-never-started 1 "{\"frontend\":$cancelled}" \
 
 expect macos-green 0 "{\"changes\":$ok,\"pty-compatibility\":$ok,\"app-acceptance-macos\":$ok,\"full-macos\":$ok}" '{"jobs":[]}' "${macos_jobs[@]}"
 
-expect gated-macos-skipped 0 "{\"changes\":$ok,\"pty-compatibility\":$skipped,\"native\":$ok,\"app-acceptance-macos\":$skipped,\"full-macos\":$skipped}" '{"jobs":[]}' "${macos_jobs[@]}"
+JOB_GROUPS="$macos_job_groups" CARRIED_JSON='{"pty_upgrade_macos":{"run":"r","commit":"c"},"app_acceptance_tauri":{"run":"r","commit":"c"},"app_acceptance":{"run":"r","commit":"c"}}' \
+  expect carried-macos-skipped 0 "{\"changes\":$ok,\"pty-compatibility\":$skipped,\"native\":$ok,\"app-acceptance-macos\":$skipped,\"full-macos\":$skipped}" '{"jobs":[]}' "${macos_jobs[@]}"
+
+JOB_GROUPS="$macos_job_groups" CARRIED_JSON='{"app_acceptance_tauri":{"run":"r","commit":"c"}}' \
+  expect macos-skipped-with-one-leg-carried 1 "{\"changes\":$ok,\"app-acceptance-macos\":$skipped,\"full-macos\":$skipped}" '{"jobs":[]}' "${macos_jobs[@]}"
 
 expect macos-changes-skipped 1 "{\"changes\":$skipped,\"pty-compatibility\":$skipped}" '{"jobs":[]}' "${macos_jobs[@]}"
 
