@@ -121,7 +121,8 @@ notebook empty, with a folder opened in its tree, with a note open, with its
 finder over the note and with a note that links to a missing one, an editor tile
 empty, with that note open and with its finder over it, a popped-out tile window, the classic new-session picker in its
 dialog and on an empty desktop, Launcher 2.0 in its dialog, browsing a folder with a completion
-ghosted, its Where list and on an empty desktop, the automations drawer empty,
+ghosted, its Where list and on an empty desktop, and with recents on two outposts, one lost, in
+its dialog, on an empty desktop and browsing a folder on an outpost, the automations drawer empty,
 listing two automations and with one selected over its runs, a new automation's form on
 its schedule, on a pull request trigger and with Advanced open, an automation's edit form,
 the form's hour picker and suggested time zones, each with a row reached by an arrow key, Home
@@ -141,11 +142,14 @@ renderer, so it needs no window and no VM, and two runs of the same source match
 pixel for pixel. Each shot uploads every glyph it draws, so a second shot of one
 world draws its text too. Beside the pictures, `cost.tsv` lists each screen's
 layout nodes and draw instances, so a change reports what a screen costs before
-and after, and `clips.tsv` lists each screen's count of text that a clip cuts
-across its line without an ellipsis, then each such text with the points it
-loses. Text in a view that scrolls sideways is left out, and a text whose own
-box is as wide as its container while its glyphs draw past it is not seen,
-because the check compares boxes.
+and after, `clips.tsv` lists each screen's count of text that a clip cuts
+across its line without an ellipsis or whose glyphs run past its own box, then
+each such text with the points it loses or spills. Text in a view that scrolls
+sideways is left out, and so is text under a modal, which counts on the screens
+where it is in front. `overlaps.tsv` lists each screen's count of texts drawn
+over one another, then each pair: two texts whose boxes cross with nothing
+filled or blurred between them, so a sheet or popover over the window pairs with
+nothing beneath it. A field and the completion drawn inside it do not pair.
 
 ```sh
 scripts/native-screenshot-tour shoot /tmp/tour/base origin/main
@@ -161,21 +165,24 @@ characters; it can be given more than once, and a pattern that matches no screen
 fails the run.
 
 `--window 800x600 --text 1.5 --long` shoots the worst case a person meets: the
-smallest window, the largest text size, and every name, label and title the
-daemon sends made long in Latin and in CJK, every error a long daemon
-sentence. A scene that cannot run in that window is listed in `failed.txt`
-and the rest still draw; today twelve fail at 800 × 600 and fourteen at
-150%. A scene that finds something by its name fails there too in a long run,
-which says nothing about layout. No scene yet draws a Launcher row on an
-outpost.
+smallest window, the largest text size, and every name, label, title, branch
+and machine the daemon sends made long in Latin and in CJK, the last folder of
+every repository and worktree path made long the same way, and every error and
+message a long daemon sentence. Every scene runs there, at 100% and at 150%
+text. A worst-case run lists a scene that fails in `failed.txt` and still draws
+the rest. In every run a scene clicks where a person would: it scrolls a target
+the window shows only in part into view and points at it before it presses, so
+a control that shows on hover is there. When the target's middle still shows
+something else, the scene fails instead of drawing a state it did not reach.
 
 `shoot`
 with a revision checks it out, with this checkout's tour, in the checkout's base
-worktree, `native/target/screenshot-tour-base`; a revision from before the
-worst-case run fails to build with this tour. The base worktree stays between
+worktree, `native/target/screenshot-tour-base`; a revision that pins a Rune without
+`ElementInfo::text_overflow` fails to build with this tour. The base worktree stays between
 runs with its own build directory, so each run compiles only what changed since
 the last. `diff` writes an image of each changed screen, with
-the changed pixels in red, and fails when any pixel differs. Both build in
+the changed pixels in red, and fails when any pixel differs or when the after
+run's `clips.tsv` or `overlaps.tsv` lists text the base run's does not. Both build in
 release; a debug tour draws the same pixels several times slower.
 
 A pair of the full tour, with the base already built once, takes about two

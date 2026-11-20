@@ -10,10 +10,11 @@
 #   scripts/native-screenshot-tour diff BASE AFTER DIFF
 #
 # shoot REV checks REV out in this checkout's base worktree, native/target/screenshot-tour-base,
-# with this checkout's tour; a revision from before the worst-case run fails to build with it. The
-# base worktree stays between runs with its own build directory, so a run compiles only what
-# changed since the last. diff writes one image per changed screen to DIFF, each changed pixel
-# in red, and exits 1 when any pixel differs. Both build in release.
+# with this checkout's tour; a revision that pins a Rune without ElementInfo::text_overflow fails
+# to build with it. The base worktree stays between runs with its own build directory, so a run
+# compiles only what changed since the last. diff writes one image per changed screen to DIFF,
+# each changed pixel in red, and exits 1 when any pixel differs or AFTER's clips.tsv or
+# overlaps.tsv lists text BASE's does not. Both build in release.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -91,7 +92,7 @@ shoot() {
   fi
   make -C "$checkout" -s "$(vt_archive)"
   find "$out" -name '*.png' -delete
-  rm -f "$out/cost.tsv" "$out/clips.tsv" "$out/failed.txt"
+  rm -f "$out/cost.tsv" "$out/clips.tsv" "$out/overlaps.tsv" "$out/failed.txt"
   run_tour "$checkout" shoot "$out" ${flags[@]+"${flags[@]}"}
   echo "native-screenshot-tour: wrote $(find "$out" -name '*.png' | wc -l | tr -d ' ') screens to $out"
 }

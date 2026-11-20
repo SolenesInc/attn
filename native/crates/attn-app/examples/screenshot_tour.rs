@@ -94,7 +94,8 @@ fn scripted() -> Daemon {
     })
 }
 
-/// What a long run adds to a name: a worktree's basename, in Latin and in CJK.
+/// What a long run adds to a name, a branch, a machine or a folder: a worktree's basename, in
+/// Latin and in CJK.
 const LONG_NAME: &str =
     "build-and-release-platform-本番の権限を移行する作業ツリー-tokyo-region-primary";
 
@@ -103,24 +104,39 @@ const LONG_ERROR: &str = "the app server exited with status 1 before it answered
      request, after loading a configuration it could not read from \
      ~/.config/attn/outposts/build-and-release-platform-tokyo-region-primary.toml";
 
-/// Each name, label and title in `value` made long, and each error made a long sentence,
-/// the same way every time so the app and the scene agree on what it sent.
+/// Each name, label, title, machine and branch in `value` made long, each repository and
+/// worktree path given a long last folder, and each error and message made a long sentence, the
+/// same way every time so the app and the scene agree on what it sent.
 fn lengthen(value: &mut Value) {
     match value {
         Value::Object(fields) => {
             for (key, field) in fields.iter_mut() {
-                match (key.as_str(), &mut *field) {
-                    ("label" | "name" | "title" | "display_name", Value::String(said))
-                        if !said.is_empty() && !said.ends_with(LONG_NAME) =>
+                let Value::String(said) = &mut *field else {
+                    lengthen(field);
+                    continue;
+                };
+                if said.is_empty() || said.ends_with(LONG_NAME) || said.ends_with(LONG_ERROR) {
+                    continue;
+                }
+                match key.as_str() {
+                    "label" | "name" | "title" | "display_name" | "profile_name"
+                    | "desktop_name" | "definition_name" | "subject" | "destination"
+                    | "host_name" | "branch" | "current_branch" | "default_branch" => {
+                        *said = format!("{said}-{LONG_NAME}");
+                    }
+                    "path" | "cwd" | "repo" | "main_repo" | "repo_root" | "worktree_path"
+                        if said.starts_with('/')
+                            && said
+                                .rsplit('/')
+                                .next()
+                                .is_some_and(|last| !last.is_empty() && !last.contains('.')) =>
                     {
                         *said = format!("{said}-{LONG_NAME}");
                     }
-                    ("error" | "error_message", Value::String(said))
-                        if !said.is_empty() && !said.ends_with(LONG_ERROR) =>
-                    {
+                    "error" | "error_message" | "message" | "detail" => {
                         *said = format!("{said}: {LONG_ERROR}");
                     }
-                    _ => lengthen(field),
+                    _ => {}
                 }
             }
         }
@@ -658,7 +674,7 @@ fn draw<S: 'static>(
     compositor: &mut impl Compositor<S>,
 ) -> (u32, u32, Vec<u8>) {
     let (w, h) = rt.window_viewport();
-    let scale = rt.env.scale;
+    let scale = rt.window_scale();
     let size = ((w * scale).round() as u32, (h * scale).round() as u32);
     let format = if rt.srgb_blend() {
         OFFSCREEN_FORMAT.remove_srgb_suffix()
@@ -757,13 +773,18 @@ fn snap(world: &mut World, name: &str, dark: bool) {
     }
     let mut shot = None;
     let mut cost = None;
+    let tree: Value =
+        serde_json::from_str(&world.screen().to_string()).unwrap_or_else(|e| panic!("{name}: {e}"));
+    let sideways = sideways_views(&tree);
     let mut cut = Vec::new();
+    let mut overprinted = Vec::new();
     let mut reach = None;
     world.gesture(|app| {
         shot = Some(pixels(app.runtime, &mut Screens::default()));
         let elements = app.runtime.elements();
         cost = Some((elements.len(), app.runtime.instances.len()));
-        cut = cut_text(&elements);
+        cut = cut_text(&elements, &sideways);
+        overprinted = overprinted_text(&elements);
         reach = Some(reach_of(&elements));
     });
     save(name, dark, shot.expect("the window drew"));
@@ -771,6 +792,7 @@ fn snap(world: &mut World, name: &str, dark: bool) {
         record_cost(name, dark, nodes, instances);
     }
     record_cuts(name, dark, &cut);
+    record_overprints(name, dark, &overprinted);
     if dark && let Some(reach) = reach {
         record_reach(name, &reach);
         record_a11y(name, &world.screen().to_string());
@@ -834,41 +856,68 @@ fn record_a11y(name: &str, tree: &str) {
         .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
 }
 
-/// Text a clip cuts across its line: what it says and how many points of it the clip hides.
-/// Text that truncates fits its box and is never cut, and text scrolled partly out of view is
-/// cut only top or bottom. Text in a view that scrolls sideways is wider on purpose: there the
-/// clipping element's child on the way to the text is wider than the clip, as a sideways
-/// viewport's content takes its natural width. This leaves those out.
-fn cut_text(elements: &[rune::ElementInfo]) -> Vec<(String, f32)> {
-    let cuts = |e: &rune::ElementInfo| {
-        let ([x, _, w, _], [vx, _, vw, _]) = (e.rect, e.visible);
-        vx - x > 0.5 || (x + w) - (vx + vw) > 0.5
+/// Text a clip cuts across its line, or whose glyphs run past its own box: what it says and how
+/// many points of it the clip hides or its glyphs spill. Text that truncates fits its box and is
+/// never cut, and text scrolled partly out of view is cut only top or bottom. Text under a modal
+/// is left out, as it is judged where it is in front. Text inside a view
+/// that scrolls sideways is wider on purpose, and is left out: a scroll view with room to scroll
+/// sideways, which `sideways` lists by key and box, as accessibility offers it scrolling left.
+fn cut_text(elements: &[rune::ElementInfo], sideways: &[(String, [f32; 4])]) -> Vec<(String, f32)> {
+    let is_sideways = |e: &rune::ElementInfo| {
+        let near = |a: [f32; 4], b: [f32; 4]| (0..4).all(|i| (a[i] - b[i]).abs() < 0.5);
+        sideways.iter().any(|(key, bounds)| {
+            e.key.as_deref() == Some(key.as_str())
+                && (near(e.rect, *bounds) || near(e.visible, *bounds))
+        })
     };
-    let scrolls_sideways = |at: usize| {
-        let mut child = at;
-        while let Some(parent) = elements[child].parent {
-            if !cuts(&elements[parent]) {
-                return elements[child].rect[2] > elements[parent].rect[2] + 0.5;
+    let scrolls_sideways = |mut at: usize| {
+        while let Some(parent) = elements[at].parent {
+            if is_sideways(&elements[parent]) {
+                return true;
             }
-            child = parent;
+            at = parent;
         }
         false
     };
     elements
         .iter()
         .enumerate()
-        .filter(|(_, e)| !e.exiting && e.opacity > 0.0)
+        .filter(|(_, e)| !e.inert && e.opacity > 0.0)
         .filter_map(|(at, e)| {
             let said = e.text.as_ref()?;
             let [x, _, w, _] = e.rect;
             let [vx, _, vw, vh] = e.visible;
-            if said.trim().is_empty() || vw <= 0.0 || vh <= 0.0 || scrolls_sideways(at) {
+            if said.trim().is_empty() || vw <= 0.0 || vh <= 0.0 {
                 return None;
             }
-            let hidden = (vx - x).max(0.0) + ((x + w) - (vx + vw)).max(0.0);
+            if scrolls_sideways(at) {
+                return None;
+            }
+            let hidden = (vx - x).max(0.0) + ((x + w) - (vx + vw)).max(0.0) + e.text_overflow;
             (hidden > 0.5).then(|| (said.clone(), hidden))
         })
         .collect()
+}
+
+/// The scroll views of an accessibility tree with room to scroll sideways, by key and box.
+fn sideways_views(tree: &Value) -> Vec<(String, [f32; 4])> {
+    let mut found = Vec::new();
+    let mut stack = vec![tree];
+    while let Some(node) = stack.pop() {
+        let offers_left = node["actions"]
+            .as_array()
+            .is_some_and(|actions| actions.iter().any(|a| a == "scroll-left"));
+        if let (true, Some(key), Some(bounds)) =
+            (offers_left, node["key"].as_str(), node["bounds"].as_array())
+        {
+            let at = |i: usize| bounds.get(i).and_then(Value::as_f64).unwrap_or_default() as f32;
+            found.push((key.to_owned(), [at(0), at(1), at(2), at(3)]));
+        }
+        if let Some(children) = node["children"].as_array() {
+            stack.extend(children);
+        }
+    }
+    found
 }
 
 /// Each screen's cut text, beside its pictures in `clips.tsv`: one line a cut, and a screen
@@ -890,6 +939,91 @@ fn record_cuts(name: &str, dark: bool, cut: &[(String, f32)]) {
             said.replace(['\t', '\n'], " ")
         )
     }));
+    for line in lines {
+        writeln!(file, "{line}").unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    }
+}
+
+/// Pairs of texts drawn over one another: two texts whose visible boxes cross with nothing
+/// between them. An element that holds the later text but not the earlier, and fills or blurs
+/// what is behind it across where they cross, as a sheet, a popover or a panel does, hides the
+/// earlier one, so that pair is not listed. A field's box is the field, which a completion draws
+/// inside on purpose, and a link's or a highlight's box lies over its own text, so neither pairs.
+fn overprinted_text(elements: &[rune::ElementInfo]) -> Vec<(String, String)> {
+    let holders = |mut at: usize| {
+        let mut up = vec![at];
+        while let Some(parent) = elements[at].parent {
+            up.push(parent);
+            at = parent;
+        }
+        up
+    };
+    let hides = |e: &rune::ElementInfo, [x, y, w, h]: [f32; 4]| {
+        let [vx, vy, vw, vh] = e.visible;
+        (e.fill.a > 0.99 || e.backdrop_blur > 0.0)
+            && vx <= x + 0.5
+            && vy <= y + 0.5
+            && vx + vw + 0.5 >= x + w
+            && vy + vh + 0.5 >= y + h
+    };
+    let texts: Vec<usize> = elements
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| !e.exiting && e.opacity > 0.0 && e.visible[2] > 0.0 && e.visible[3] > 0.0)
+        .filter(|(_, e)| e.text.as_ref().is_some_and(|t| !t.trim().is_empty()))
+        .filter(|(_, e)| {
+            !e.path.contains("#link-")
+                && !e.path.contains("#mark-")
+                && !matches!(e.role, "textbox" | "searchbox")
+        })
+        .map(|(at, _)| at)
+        .collect();
+    let mut pairs = Vec::new();
+    for (n, &a) in texts.iter().enumerate() {
+        let under = holders(a);
+        for &b in &texts[n + 1..] {
+            let ([ax, ay, aw, ah], [bx, by, bw, bh]) = (elements[a].visible, elements[b].visible);
+            let (x, y) = (ax.max(bx), ay.max(by));
+            let crossed = [x, y, (ax + aw).min(bx + bw) - x, (ay + ah).min(by + bh) - y];
+            if crossed[2] <= 0.5 || crossed[3] <= 0.5 || under.contains(&b) {
+                continue;
+            }
+            let over = holders(b);
+            if over.contains(&a) {
+                continue;
+            }
+            let covered = over
+                .iter()
+                .filter(|at| !under.contains(at))
+                .any(|&at| hides(&elements[at], crossed));
+            if !covered {
+                let said = |at: usize| elements[at].text.clone().unwrap_or_default();
+                pairs.push((said(a), said(b)));
+            }
+        }
+    }
+    pairs
+}
+
+/// Each screen's overprinted text, beside its pictures in `overlaps.tsv`, as `clips.tsv` lists
+/// cut text: one line a pair, and a screen with none still listed with a count of 0.
+fn record_overprints(name: &str, dark: bool, pairs: &[(String, String)]) {
+    use std::io::Write;
+    let appearance = if dark { "dark" } else { "light" };
+    let path = OUT.with_borrow(|out| out.join("overlaps.tsv"));
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let screen = format!("{name}-{appearance}");
+    let flat = |said: &str| said.replace(['\t', '\n'], " ");
+    let mut lines = vec![format!("{screen}\t{}\t\t", pairs.len())];
+    lines.extend(
+        pairs
+            .iter()
+            .map(|(a, b)| format!("{screen}\t\t{}\t{}", flat(a), flat(b))),
+    );
     for line in lines {
         writeln!(file, "{line}").unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     }
@@ -1212,8 +1346,8 @@ fn garden_world_beside(
 fn garden(dark: bool) {
     let mut world = with_document(dark);
     press(&mut world, Action::BoardOpen);
-    world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
-    world.gesture(|app| app.click(Target::key("garden.row.s-plot")));
+    click(&mut world, Target::role("button").name("Expand the garden"));
+    click(&mut world, Target::key("garden.row.s-plot"));
     snap(&mut world, "garden", dark);
 }
 
@@ -1227,24 +1361,24 @@ fn garden_dock(dark: bool) {
 fn garden_seed(dark: bool) {
     let mut world = with_document(dark);
     press(&mut world, Action::BoardOpen);
-    world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
-    world.gesture(|app| app.click(Target::key("garden.row.s-plot")));
-    world.gesture(|app| app.click(Target::key("garden.row.s-one")));
+    click(&mut world, Target::role("button").name("Expand the garden"));
+    click(&mut world, Target::key("garden.row.s-plot"));
+    click(&mut world, Target::key("garden.row.s-one"));
     snap(&mut world, "garden-seed", dark);
 }
 
 fn garden_dock_seed(dark: bool) {
     let mut world = with_document(dark);
     press(&mut world, Action::BoardOpen);
-    world.gesture(|app| app.click(Target::key("garden.row.s-plot")));
-    world.gesture(|app| app.click(Target::key("garden.row.s-one")));
+    click(&mut world, Target::key("garden.row.s-plot"));
+    click(&mut world, Target::key("garden.row.s-one"));
     snap(&mut world, "garden-dock-seed", dark);
 }
 
 fn garden_empty(dark: bool) {
     let mut world = garden_world(dark, Vec::new());
     press(&mut world, Action::BoardOpen);
-    world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
+    click(&mut world, Target::role("button").name("Expand the garden"));
     snap(&mut world, "garden-empty", dark);
 }
 
@@ -1257,7 +1391,7 @@ fn garden_dock_empty(dark: bool) {
 fn garden_dock_plot(dark: bool) {
     let mut world = with_document(dark);
     press(&mut world, Action::BoardOpen);
-    world.gesture(|app| app.click(Target::key("garden.row.s-plot")));
+    click(&mut world, Target::key("garden.row.s-plot"));
     snap(&mut world, "garden-dock-plot", dark);
 }
 
@@ -1265,8 +1399,8 @@ fn garden_dock_plot(dark: bool) {
 fn garden_board(dark: bool) {
     let mut world = with_document(dark);
     press(&mut world, Action::BoardOpen);
-    world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
-    world.gesture(|app| app.click(Target::key("garden.view.board")));
+    click(&mut world, Target::role("button").name("Expand the garden"));
+    click(&mut world, Target::key("garden.view.board"));
     snap(&mut world, "garden-board", dark);
 }
 
@@ -1274,9 +1408,9 @@ fn garden_board(dark: bool) {
 fn garden_board_menu(dark: bool) {
     let mut world = with_document(dark);
     press(&mut world, Action::BoardOpen);
-    world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
-    world.gesture(|app| app.click(Target::key("garden.view.board")));
-    world.gesture(|app| app.click(Target::key("garden.board.card.s-loose")));
+    click(&mut world, Target::role("button").name("Expand the garden"));
+    click(&mut world, Target::key("garden.view.board"));
+    click(&mut world, Target::key("garden.board.card.s-loose"));
     snap(&mut world, "garden-board-menu", dark);
 }
 
@@ -1294,7 +1428,7 @@ fn garden_dock_search_full(dark: bool) {
         .collect();
     let mut world = garden_world(dark, many);
     press(&mut world, Action::BoardOpen);
-    world.gesture(|app| app.click(Target::key("garden.search.field")));
+    click(&mut world, Target::key("garden.search.field"));
     world.gesture(|app| app.type_text("row"));
     snap(&mut world, "garden-dock-search-full", dark);
 }
@@ -1303,7 +1437,7 @@ fn garden_dock_search_full(dark: bool) {
 fn garden_dock_search(dark: bool) {
     let mut world = with_document(dark);
     press(&mut world, Action::BoardOpen);
-    world.gesture(|app| app.click(Target::key("garden.search.field")));
+    click(&mut world, Target::key("garden.search.field"));
     world.gesture(|app| app.type_text("row"));
     snap(&mut world, "garden-dock-search", dark);
     world.gesture(|app| app.type_text(" is:"));
@@ -1375,9 +1509,9 @@ fn garden_search_body(dark: bool, expanded: bool) {
     let mut world = garden_world(dark, body_answers());
     press(&mut world, Action::BoardOpen);
     if expanded {
-        world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
+        click(&mut world, Target::role("button").name("Expand the garden"));
     }
-    world.gesture(|app| app.click(Target::key("garden.search.field")));
+    click(&mut world, Target::key("garden.search.field"));
     world.gesture(|app| app.type_text("smoke"));
     snap(
         &mut world,
@@ -1481,16 +1615,16 @@ fn garden_review_screen(dark: bool, advised: bool, full: bool, name: &str) {
     });
     press(&mut world, Action::BoardOpen);
     if full {
-        world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
+        click(&mut world, Target::role("button").name("Expand the garden"));
     }
-    world.gesture(|app| app.click(Target::role("button").name("Continue review")));
+    click(&mut world, Target::role("button").name("Continue review"));
     snap(&mut world, name, dark);
 }
 
 fn settings_page(dark: bool) {
     let mut world = with_document(dark);
     press(&mut world, Action::UiOpenSettings);
-    world.gesture(|app| app.click(Target::role("button").name("Appearance")));
+    click(&mut world, Target::role("button").name("Appearance"));
     snap(&mut world, "settings", dark);
 }
 
@@ -1498,7 +1632,7 @@ fn settings_page(dark: bool) {
 fn settings_agents(dark: bool) {
     let mut world = with_document(dark);
     press(&mut world, Action::UiOpenSettings);
-    world.gesture(|app| app.click(Target::key("settings.nav.agents")));
+    click(&mut world, Target::key("settings.nav.agents"));
     snap(&mut world, "settings-agents", dark);
 }
 
@@ -2017,6 +2151,96 @@ fn launcher_missing_harness(dark: bool) {
     snap(&mut world, "launcher-missing-harness", dark);
 }
 
+/// What the app shows for `name` the daemon sent: the name itself, or in a long run the name
+/// made long.
+fn shown(name: &str) -> String {
+    if mode().long {
+        format!("{name}-{LONG_NAME}")
+    } else {
+        name.to_owned()
+    }
+}
+
+/// Launcher 2.0 with two outposts, ai-sandbox connected and field-lab lost, and recents on
+/// both and on this machine, in its dialog or, when `inline`, on an empty desktop. With `typed`,
+/// browsing that folder on ai-sandbox.
+fn launcher_outposts(dark: bool, inline: bool, typed: Option<&str>) {
+    let outpost = |id: &str, name: &str, state: &str, reach: &str| OutpostInfo {
+        id: id.into(),
+        name: name.into(),
+        destination: format!("{name}:2200"),
+        state: state.into(),
+        reach: reach.into(),
+        state_since: "2026-11-13T08:00:00Z".into(),
+        ..OutpostInfo::default()
+    };
+    let mut state = launcher_state(dark, inline, true);
+    state.outposts = Some(vec![
+        outpost("outpost-ai", "ai-sandbox", "connected", "reachable"),
+        outpost("outpost-field", "field-lab", "lost", "unreachable"),
+    ]);
+    if let Some(settings) = state.settings.as_mut() {
+        settings.insert("outposts_enabled".into(), "true".into());
+    }
+    let daemon = launcher_serving(state);
+    daemon
+        .on("get_recent_locations", |_: &Request| {
+            let recent = |host: Option<&str>, path: &str, repo: bool| RecentLocation {
+                host: host.map(str::to_owned),
+                path: path.into(),
+                repo_root: repo.then(|| path.into()),
+                last_seen: "2026-11-13T08:00:00Z".into(),
+                use_count: 1,
+            };
+            message(RecentLocationsResultMessage {
+                success: true,
+                home_path: Some("/home/me".into()),
+                recent_locations: vec![
+                    recent(Some("outpost-ai"), SHOP, true),
+                    recent(None, SHOP, true),
+                    recent(Some("outpost-field"), "/home/me/sensor-data", false),
+                    recent(None, "/home/me/notes", false),
+                ],
+                ..RecentLocationsResultMessage::new()
+            })
+        })
+        .on("agent_catalog", |r: &Request| {
+            let machine = r["host"].as_str().unwrap_or_default().to_owned();
+            message(AgentCatalogResultMessage {
+                success: true,
+                host: machine.clone(),
+                catalog: Some(AgentCatalogResult {
+                    machine,
+                    harnesses: ["claude", "codex"]
+                        .iter()
+                        .map(|id| Harness {
+                            id: (*id).into(),
+                            name: (*id).into(),
+                            available: true,
+                            ..Harness::default()
+                        })
+                        .collect(),
+                    ..AgentCatalogResult::default()
+                }),
+                ..AgentCatalogResultMessage::new()
+            })
+        });
+    let mut world = start(daemon);
+    if !inline {
+        press(&mut world, Action::SessionNew);
+    }
+    let name = match typed {
+        Some(folder) => {
+            world.gesture(|app| app.type_text(&format!("{}:{folder}", shown("ai-sandbox"))));
+            world.advance(std::time::Duration::from_millis(200));
+            "launcher-outposts-browse"
+        }
+        None if inline => "launcher-outposts-inline",
+        None => "launcher-outposts",
+    };
+    snap(&mut world, name, dark);
+}
+
 /// The classic picker's new worktree in a repository whose default and current branches differ
 /// only at their ends; with `worktrees` to open, scrolled down to the last of them.
 fn picker_start_from(dark: bool, worktrees: usize) {
@@ -2135,9 +2359,9 @@ fn settings_analytics(dark: bool) {
     }
     let mut world = start(scripted().state(state));
     press(&mut world, Action::UiOpenSettings);
-    world.gesture(|app| app.click(Target::key("settings.search.field")));
+    click(&mut world, Target::key("settings.search.field"));
     world.gesture(|app| app.type_text("analytics"));
-    world.gesture(|app| app.click(Target::key("settings.nav.analytics")));
+    click(&mut world, Target::key("settings.nav.analytics"));
     snap(&mut world, "settings-analytics", dark);
 }
 
@@ -2180,9 +2404,9 @@ fn settings_world(
     answer(&daemon);
     let mut world = start(daemon);
     press(&mut world, Action::UiOpenSettings);
-    world.gesture(|app| app.click(Target::key("settings.search.field")));
+    click(&mut world, Target::key("settings.search.field"));
     world.gesture(|app| app.type_text(search));
-    world.gesture(|app| app.click(Target::key(format!("settings.nav.{section}"))));
+    click(&mut world, Target::key(format!("settings.nav.{section}")));
     world
 }
 
@@ -2375,7 +2599,7 @@ fn notebook_open(dark: bool) -> World {
         .unwrap();
     world.settle();
     unfold_tree(&mut world, "notebook");
-    world.gesture(|app| app.click(Target::key("notebook.file.todo.md")));
+    click(&mut world, Target::key("notebook.file.todo.md"));
     world
 }
 
@@ -2462,7 +2686,7 @@ fn notebook_tile_open(dark: bool) -> World {
     let mut world = start(notebook_daemon(dark, None));
     world.gesture(|app| app.press("escape"));
     unfold_tree(&mut world, "notebook.tile.n");
-    world.gesture(|app| app.click(Target::key("notebook.tile.n.file.index.md")));
+    click(&mut world, Target::key("notebook.tile.n.file.index.md"));
     world
 }
 
@@ -2489,7 +2713,7 @@ fn notebook_note(dark: bool) {
         .unwrap();
     world.settle();
     unfold_tree(&mut world, "notebook");
-    world.gesture(|app| app.click(Target::key("notebook.file.index.md")));
+    click(&mut world, Target::key("notebook.file.index.md"));
     snap(&mut world, "notebook-note", dark);
 }
 
@@ -2858,7 +3082,7 @@ fn settings_refused(dark: bool, section: &str, search: &str, setting: &str, type
         world.gesture(|app| {
             app.update(|_, tx| tx.scroll_center_in_instant("settings.body", &field))
         });
-        world.gesture(|app| app.click(Target::key(field.clone())));
+        click(&mut world, Target::key(field.clone()));
         world.gesture(|app| app.type_text(typed));
         tap(&mut world, Key::Enter);
         world.gesture(|app| {
@@ -3085,7 +3309,7 @@ fn settings_page_states(dark: bool) {
             });
         },
     );
-    world.gesture(|app| app.click(Target::key("settings.updates.start")));
+    click(&mut world, Target::key("settings.updates.start"));
     snap(&mut world, "settings-updates-refused", dark);
     settings_section(
         dark,
@@ -3488,10 +3712,10 @@ fn ledger(dark: bool) {
 fn ledger_seeded(dark: bool) {
     let mut world = ledger_seeded_world(dark, false);
     snap(&mut world, "ledger-seeded", dark);
-    world.gesture(|app| app.click(Target::key("ledger.row.s1.more")));
+    click(&mut world, Target::key("ledger.row.s1.more"));
     snap(&mut world, "ledger-menu", dark);
     world.gesture(|app| app.press("escape"));
-    world.gesture(|app| app.click(Target::key("ledger.keys")));
+    click(&mut world, Target::key("ledger.keys"));
     snap(&mut world, "ledger-keys", dark);
 }
 
@@ -3590,7 +3814,7 @@ fn ledger_seeded_world(dark: bool, smallest: bool) -> World {
         world.resize((800.0, 600.0));
     }
     press(&mut world, Action::SessionsOpen);
-    world.gesture(|app| app.click(Target::key("ledger.row.s1")));
+    click(&mut world, Target::key("ledger.row.s1"));
     world
 }
 
@@ -3615,7 +3839,7 @@ fn ledger_worktrees(dark: bool) {
     });
     let mut world = start(daemon);
     press(&mut world, Action::SessionsOpen);
-    world.gesture(|app| app.click(Target::key("ledger.tab.worktrees")));
+    click(&mut world, Target::key("ledger.tab.worktrees"));
     snap(&mut world, "ledger-worktrees", dark);
 }
 
@@ -3699,7 +3923,7 @@ fn chief_setup(dark: bool) {
     });
     let mut world = World::start_sized(daemon, window());
     world.settle();
-    world.gesture(|app| app.click(Target::key("chief-slot")));
+    click(&mut world, Target::key("chief-slot"));
     snap(&mut world, "chief-setup", dark);
 }
 
@@ -3875,7 +4099,7 @@ fn notebook_tree(dark: bool) {
         .unwrap();
     world.settle();
     unfold_tree(&mut world, "notebook");
-    world.gesture(|app| app.click(Target::key("notebook.file.knowledge")));
+    click(&mut world, Target::key("notebook.file.knowledge"));
     snap(&mut world, "notebook-tree", dark);
 }
 
@@ -3902,7 +4126,7 @@ fn review_alone(dark: bool) -> World {
 /// [`review_alone`] showing `bundle`.
 fn review_alone_with(dark: bool, bundle: ReviewBundle) -> World {
     let mut world = review_beside_agent_with(dark, bundle);
-    world.gesture(|app| app.click(Target::key("tile.m.focus")));
+    click(&mut world, Target::key("tile.m.focus"));
     focus_review(&mut world);
     world
 }
@@ -4298,7 +4522,7 @@ fn automation_form(dark: bool) -> World {
         "automations.new",
         "automations.form.trigger-scheduled",
     ] {
-        world.gesture(|app| app.click(Target::key(key)));
+        click(&mut world, Target::key(key));
     }
     world
 }
@@ -4312,7 +4536,10 @@ fn automation_new(dark: bool) {
 /// The hour picker opened from the keyboard on its hour, with Up on the one before.
 fn automation_hour(dark: bool) {
     let mut world = automation_form(dark);
-    world.gesture(|app| app.click(Target::key("automations.form.schedule-days-hour-trigger")));
+    click(
+        &mut world,
+        Target::key("automations.form.schedule-days-hour-trigger"),
+    );
     world.gesture(|app| app.press("escape"));
     world.gesture(|app| app.press("down"));
     world.gesture(|app| app.press("up"));
@@ -4322,8 +4549,8 @@ fn automation_hour(dark: bool) {
 /// The zones that match what is typed, with Down on the first.
 fn automation_time_zones(dark: bool) {
     let mut world = automation_form(dark);
+    click(&mut world, Target::key("automations.form.time-zone"));
     world.gesture(|app| {
-        app.click(Target::key("automations.form.time-zone"));
         app.press("mod+a");
         app.type_text("america/n");
         app.press("down");
@@ -4449,7 +4676,7 @@ fn automations() -> Vec<AutomationDefinitionSummary> {
 
 fn automations_open(dark: bool, definitions: Vec<AutomationDefinitionSummary>) -> World {
     let mut world = start(automations_daemon(dark, definitions));
-    world.gesture(|app| app.click(Target::key("titlebar.automations")));
+    click(&mut world, Target::key("titlebar.automations"));
     world
 }
 
@@ -4468,14 +4695,14 @@ fn automations_listed(dark: bool) {
 /// The scheduled automation selected, with its runs under the list.
 fn automations_selected(dark: bool) {
     let mut world = automations_open(dark, automations());
-    world.gesture(|app| app.click(Target::key("automations.select.2")));
+    click(&mut world, Target::key("automations.select.2"));
     snap(&mut world, "automations-selected", dark);
 }
 
 /// The scheduled automation's form, read from the daemon.
 fn automation_edit(dark: bool) {
     let mut world = automations_open(dark, automations());
-    world.gesture(|app| app.click(Target::key("automations.edit.2")));
+    click(&mut world, Target::key("automations.edit.2"));
     snap(&mut world, "automation-edit", dark);
 }
 
@@ -4483,7 +4710,7 @@ fn automation_edit(dark: bool) {
 fn automation_github(dark: bool) {
     let mut world = automations_open(dark, Vec::new());
     for key in ["automations.new", "automations.form.trigger-github"] {
-        world.gesture(|app| app.click(Target::key(key)));
+        click(&mut world, Target::key(key));
     }
     snap(&mut world, "automation-github", dark);
 }
@@ -4492,7 +4719,7 @@ fn automation_github(dark: bool) {
 fn automation_advanced(dark: bool) {
     let mut world = automations_open(dark, Vec::new());
     for key in ["automations.new", "automations.form.advanced"] {
-        world.gesture(|app| app.click(Target::key(key)));
+        click(&mut world, Target::key(key));
     }
     snap(&mut world, "automation-advanced", dark);
 }
@@ -4540,7 +4767,7 @@ fn troubled_automations() -> Vec<AutomationDefinitionSummary> {
 /// The drawer's rows in trouble, with Run now's pull request prompt refused for want of a URL.
 fn automations_troubled(world: &mut World, name: &str, dark: bool) {
     for key in ["automations.run-now.1", "automations.pr-run.1"] {
-        world.gesture(|app| app.click(Target::key(key)));
+        click(world, Target::key(key));
     }
     snap(world, name, dark);
 }
@@ -4563,10 +4790,10 @@ fn automations_smallest(dark: bool) {
     });
     let mut world = start(daemon);
     world.resize((800.0, 600.0));
-    world.gesture(|app| app.click(Target::key("titlebar.automations")));
+    click(&mut world, Target::key("titlebar.automations"));
     automations_troubled(&mut world, "automations-smallest", dark);
     for key in ["automations.new", "automations.form.trigger-scheduled"] {
-        world.gesture(|app| app.click(Target::key(key)));
+        click(&mut world, Target::key(key));
     }
     snap(&mut world, "automation-smallest", dark);
 }
@@ -4582,7 +4809,7 @@ fn automations_failed(dark: bool) {
         })
     });
     let mut world = start(daemon);
-    world.gesture(|app| app.click(Target::key("titlebar.automations")));
+    click(&mut world, Target::key("titlebar.automations"));
     snap(&mut world, "automations-failed", dark);
 }
 
@@ -4597,8 +4824,8 @@ fn automation_load_failed(dark: bool) {
         })
     });
     let mut world = start(daemon);
-    world.gesture(|app| app.click(Target::key("titlebar.automations")));
-    world.gesture(|app| app.click(Target::key("automations.edit.2")));
+    click(&mut world, Target::key("titlebar.automations"));
+    click(&mut world, Target::key("automations.edit.2"));
     snap(&mut world, "automation-load-failed", dark);
 }
 
@@ -4784,8 +5011,8 @@ fn home_whats_new(dark: bool) {
 /// Code and Codex, and holds an empty charter and no handoffs.
 fn manage_crew(dark: bool, member: &str, tab: &str, name: &str) {
     let mut world = crew_page(dark);
-    world.gesture(|app| app.click(Target::key(format!("crew.roster.{member}"))));
-    world.gesture(|app| app.click(Target::key(format!("crew.tab.{tab}"))));
+    click(&mut world, Target::key(format!("crew.roster.{member}")));
+    click(&mut world, Target::key(format!("crew.tab.{tab}")));
     snap(&mut world, name, dark);
 }
 
@@ -4798,7 +5025,7 @@ fn crew_page(dark: bool) -> World {
 fn crew_smallest(dark: bool) {
     let mut world = crew_page_with(dark, true);
     snap(&mut world, "crew-smallest", dark);
-    world.gesture(|app| app.click(Target::key("crew.rename")));
+    click(&mut world, Target::key("crew.rename"));
     snap(&mut world, "crew-renaming", dark);
 }
 
@@ -4891,8 +5118,8 @@ fn crew_page_with(dark: bool, smallest: bool) -> World {
 /// Naming the new desktop the Chief launches on, from its Desktop list.
 fn desktop_naming(dark: bool) {
     let mut world = crew_page(dark);
-    world.gesture(|app| app.click(Target::key("crew.tab.launch")));
-    world.gesture(|app| app.click(Target::key("crew.launch.chief.desktop-trigger")));
+    click(&mut world, Target::key("crew.tab.launch"));
+    click(&mut world, Target::key("crew.launch.chief.desktop-trigger"));
     world
         .automate(
             "press",
@@ -4911,13 +5138,13 @@ fn palette_chief(dark: bool) {
 
 fn notifications(dark: bool) {
     let mut world = with_document(dark);
-    world.gesture(|app| app.click(Target::key("titlebar.notifications")));
+    click(&mut world, Target::key("titlebar.notifications"));
     snap(&mut world, "notifications", dark);
 }
 
 fn session_menu(dark: bool) {
     let mut world = with_document(dark);
-    world.gesture(|app| app.click(Target::key("sidebar.session.s0.actions")));
+    click(&mut world, Target::key("sidebar.session.s0.actions"));
     snap(&mut world, "session-menu", dark);
 }
 
@@ -4941,7 +5168,7 @@ fn queue_home(dark: bool) {
 /// The queue flow's agent list, opened.
 fn queue_agent_list(dark: bool) {
     let mut world = queue_flow(dark);
-    world.gesture(|app| app.click(Target::key("queue.agents-toggle")));
+    click(&mut world, Target::key("queue.agents-toggle"));
     snap(&mut world, "queue-agent-list", dark);
 }
 
@@ -4985,11 +5212,11 @@ fn queue_seeded(dark: bool, home: bool, sidebar_hidden: bool, slots: usize) -> W
     let mut world = World::start_sized(scripted().state(state), window());
     press(&mut world, Action::SessionGoToDashboard);
     if !home {
-        world.gesture(|app| app.click(Target::key("queue.desktop.1")));
+        click(&mut world, Target::key("queue.desktop.1"));
         world.gesture(|app| app.move_to((1100.0, 700.0)));
     }
     if sidebar_hidden {
-        world.gesture(|app| app.click(Target::key("titlebar.sidebar")));
+        click(&mut world, Target::key("titlebar.sidebar"));
     }
     world
 }
@@ -5029,7 +5256,7 @@ fn queue_runs(dark: bool, open: bool, name: &str) {
     let mut world = World::start_sized(scripted().state(state), window());
     press(&mut world, Action::SessionGoToDashboard);
     if open {
-        world.gesture(|app| app.click(Target::key("queue.runs.group.1")));
+        click(&mut world, Target::key("queue.runs.group.1"));
         world.gesture(|app| {
             let run = app.runtime.find("queue-run.s1").expect("the run is listed");
             app.move_to(run);
@@ -5044,7 +5271,8 @@ fn queue_seeded_agent(dark: bool) {
     snap(&mut world, "queue-seeded-agent", dark);
 }
 
-/// The queue bar's runs peek over an automation whose name is longer than its row.
+/// The queue bar's runs peek over an automation whose name is longer than its row. A bar too
+/// crowded for the runs chip leaves it out, and then shows no peek.
 fn queue_bar_runs_peek(dark: bool) {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     if let Some(settings) = state.settings.as_mut() {
@@ -5063,13 +5291,11 @@ fn queue_bar_runs_peek(dark: bool) {
         });
     }
     let mut world = World::start_sized(scripted().state(state), window());
-    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+    click(&mut world, Target::role("button").name("Collapse sidebar"));
     world.gesture(|app| {
-        let chip = app
-            .runtime
-            .find("queue-bar.runs")
-            .expect("the runs chip shows");
-        app.move_to(chip);
+        if let Some(chip) = app.runtime.find("queue-bar.runs") {
+            app.move_to(chip);
+        }
     });
     snap(&mut world, "queue-bar-runs-peek", dark);
 }
@@ -5142,7 +5368,7 @@ fn chrome_smallest(dark: bool) {
 fn rail(dark: bool) {
     let mut world =
         start(scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![])));
-    world.gesture(|app| app.click(Target::key("titlebar.sidebar")));
+    click(&mut world, Target::key("titlebar.sidebar"));
     snap(&mut world, "rail", dark);
 }
 
@@ -5167,7 +5393,7 @@ fn session_seeds(dark: bool) {
     let mut world =
         start(scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), seeds)));
     deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
-    world.gesture(|app| app.click(Target::key("tile.a.seed")));
+    click(&mut world, Target::key("tile.a.seed"));
     snap(&mut world, "session-seeds", dark);
 }
 
@@ -5272,7 +5498,7 @@ fn annotation_selected(dark: bool) -> World {
 
 fn annotation_composing(dark: bool) -> World {
     let mut world = annotation_selected(dark);
-    world.gesture(|app| app.click(Target::key("tile.m.document.toolbar.comment")));
+    click(&mut world, Target::key("tile.m.document.toolbar.comment"));
     world.gesture(|app| app.type_text("Name the blocks it skips."));
     world.settle();
     world
@@ -5311,7 +5537,7 @@ fn annotation_saved_shot(dark: bool) {
 
 fn annotation_notes(dark: bool) {
     let mut world = annotation_saved(dark);
-    world.gesture(|app| app.click(Target::key("tile.m.document.notes")));
+    click(&mut world, Target::key("tile.m.document.notes"));
     world.settle();
     snap(&mut world, "annotation-notes-list", dark);
 }
@@ -5392,14 +5618,13 @@ fn snooze_menu(dark: bool) {
     );
     let mut world = World::start_sized(daemon, window());
     deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
-    let name = "Snooze working agent";
-    world.gesture(|app| app.click(Target::role("button").name(name)));
+    click(&mut world, Target::key("queue-turn.s0.snooze"));
     snap(&mut world, "snooze-menu", dark);
 }
 
 fn rename_session(dark: bool) {
     let mut world = plain(dark);
-    world.gesture(|app| app.click(Target::key("tile.a.rename")));
+    click(&mut world, Target::key("tile.a.rename"));
     snap(&mut world, "rename-session", dark);
 }
 
@@ -5452,7 +5677,7 @@ fn usage() -> SessionUsage {
 /// The delegation chain pinned beside the sidebar by the Builder's role on its row.
 fn session_chain_row(dark: bool) {
     let mut world = plain(dark);
-    world.gesture(|app| app.click(Target::key("sidebar.session.s2.chain")));
+    click(&mut world, Target::key("sidebar.session.s2.chain"));
     snap(&mut world, "session-chain-row", dark);
 }
 
@@ -5462,7 +5687,7 @@ fn session_usage(dark: bool) {
         |state| first_session(state).usage = Some(usage()),
         |_| {},
     );
-    world.gesture(|app| app.click(Target::key("tile.a.usage")));
+    click(&mut world, Target::key("tile.a.usage"));
     snap(&mut world, "session-usage", dark);
 }
 
@@ -5566,9 +5791,9 @@ fn notifications_listed(dark: bool) {
             });
         },
     );
-    world.gesture(|app| app.click(Target::key("titlebar.notifications")));
+    click(&mut world, Target::key("titlebar.notifications"));
     snap(&mut world, "notifications-listed", dark);
-    world.gesture(|app| app.click(Target::key("notifications.row.failed.head")));
+    click(&mut world, Target::key("notifications.row.failed.head"));
     snap(&mut world, "notifications-open", dark);
 }
 
@@ -5588,7 +5813,7 @@ fn notifications_failed(dark: bool) {
             });
         },
     );
-    world.gesture(|app| app.click(Target::key("titlebar.notifications")));
+    click(&mut world, Target::key("titlebar.notifications"));
     snap(&mut world, "notifications-failed", dark);
 }
 
@@ -5607,7 +5832,7 @@ fn notifications_empty(dark: bool) {
             });
         },
     );
-    world.gesture(|app| app.click(Target::key("titlebar.notifications")));
+    click(&mut world, Target::key("titlebar.notifications"));
     snap(&mut world, "notifications-empty", dark);
 }
 
@@ -5633,7 +5858,7 @@ fn merge_confirmation(dark: bool) {
         |_| {},
     );
     press(&mut world, Action::SessionGoToDashboard);
-    world.gesture(|app| app.click(Target::key("home.pr.a1.merge")));
+    click(&mut world, Target::key("home.pr.a1.merge"));
     snap(&mut world, "merge-confirmation", dark);
 }
 
@@ -5717,7 +5942,7 @@ fn home_pull_requests(dark: bool) {
         rate_limit_reset_at: "2026-11-12T09:12:30Z".into(),
         ..RateLimitedMessage::new()
     });
-    world.gesture(|app| app.click(Target::key("home.prs.refresh")));
+    click(&mut world, Target::key("home.prs.refresh"));
     snap(&mut world, "home-pull-requests", dark);
 }
 
@@ -5745,7 +5970,7 @@ fn shared_codex_restart(dark: bool) {
         },
         |_| {},
     );
-    world.gesture(|app| app.click(Target::role("button").name("Restart now")));
+    click(&mut world, Target::role("button").name("Restart now"));
     snap(&mut world, "shared-codex-restart", dark);
 }
 
@@ -5808,7 +6033,7 @@ fn dialogs_smallest(dark: bool) {
         |_| {},
     );
     world.resize((800.0, 600.0));
-    world.gesture(|app| app.click(Target::role("button").name("Restart now")));
+    click(&mut world, Target::role("button").name("Restart now"));
     snap(&mut world, "shared-codex-restart-smallest", dark);
 
     let mut world = popover_world(
@@ -6003,7 +6228,7 @@ fn could_not_stage(hosts: &[&str]) -> UpdateRun {
 /// Presses `key` when the window shows it, as a revision without that control leaves it out.
 fn press_if_shown(world: &mut World, key: &str) {
     if world.screen().find(Target::key(key)).is_some() {
-        world.gesture(|app| app.click(Target::key(key)));
+        click(world, Target::key(key));
     }
 }
 
@@ -6286,7 +6511,7 @@ fn codex_banners(dark: bool) {
         ..codex("none")
     };
     let install = |world: &mut World| {
-        world.gesture(|app| app.click(Target::key("codex-updates.install")));
+        click(world, Target::key("codex-updates.install"));
     };
     codex_banner(
         dark,
@@ -6411,7 +6636,7 @@ fn session_not_created(dark: bool) {
     tap(&mut world, Key::Enter);
     world.gesture(|app| app.type_text("taken"));
     tap(&mut world, Key::Enter);
-    world.gesture(|app| app.click(Target::key("worktree-setup")));
+    click(&mut world, Target::key("worktree-setup"));
     snap(&mut world, "session-not-created", dark);
 }
 
@@ -6518,6 +6743,13 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("launcher_yolo_caption", || launcher_yolo_caption(dark));
         scene("launcher_missing_harness", || {
             launcher_missing_harness(dark)
+        });
+        scene("launcher_outposts", || launcher_outposts(dark, false, None));
+        scene("launcher_outposts_inline", || {
+            launcher_outposts(dark, true, None)
+        });
+        scene("launcher_outposts_browse", || {
+            launcher_outposts(dark, false, Some("~/projects/"))
         });
         scene("picker_empty_desktop", || picker_empty_desktop(dark));
         scene("shortcuts", || shortcuts(dark));
@@ -6782,7 +7014,36 @@ fn compare(base: PathBuf, after: PathBuf, diff: PathBuf) -> bool {
     for change in &changed {
         eprintln!("{change}");
     }
-    changed.is_empty()
+    let added: Vec<String> = ["clips.tsv", "overlaps.tsv"]
+        .iter()
+        .flat_map(|list| added_findings(&base, &after, list))
+        .collect();
+    for finding in &added {
+        eprintln!("{finding}");
+    }
+    changed.is_empty() && added.is_empty()
+}
+
+/// The findings `list` holds in AFTER that it does not hold in BASE: each text `clips.tsv` lists
+/// as cut, without the points it loses, and each pair `overlaps.tsv` lists as overprinted.
+fn added_findings(base: &std::path::Path, after: &std::path::Path, list: &str) -> Vec<String> {
+    let findings = |dir: &std::path::Path| -> std::collections::BTreeSet<String> {
+        let lines = std::fs::read_to_string(dir.join(list)).unwrap_or_default();
+        lines
+            .lines()
+            .filter_map(|line| match line.split('\t').collect::<Vec<_>>()[..] {
+                [screen, "", _hidden, said] if list == "clips.tsv" => {
+                    Some(format!("{list}: {screen}: {said}"))
+                }
+                [screen, "", a, b] => Some(format!("{list}: {screen}: {a} / {b}")),
+                _ => None,
+            })
+            .collect()
+    };
+    findings(after)
+        .difference(&findings(base))
+        .map(|finding| format!("{finding} is new"))
+        .collect()
 }
 
 /// The number of pixels that differ, with an image of them in DIFF, or how the size changed.
@@ -6869,6 +7130,52 @@ fn usage_error() -> std::process::ExitCode {
     std::process::ExitCode::from(2)
 }
 
+/// Clicks `target` where a person would: scrolled into view when the window shows it only in
+/// part, and pointed at before the press, so a control that shows on hover is there. Its middle
+/// must then show the target itself or what it holds; a target still hidden or covered fails the
+/// scene instead of clicking what lies there.
+fn click(world: &mut World, target: Target) {
+    let key = world
+        .screen()
+        .get(target.clone())
+        .key
+        .unwrap_or_else(|| panic!("{target:?} has no key to click by"));
+    let seen = |app: &mut attn_testkit::Driver| {
+        app.runtime
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(key.as_str()) && !e.exiting)
+            .unwrap_or_else(|| panic!("{key} is not laid out"))
+    };
+    let mut middle = (0.0, 0.0);
+    world.gesture(|app| {
+        let it = seen(app);
+        if it.visible != it.rect {
+            app.update(|_, tx| tx.scroll_into_view(key.clone()));
+        }
+    });
+    world.gesture(|app| {
+        let [x, y, w, h] = seen(app).visible;
+        middle = (x + w / 2.0, y + h / 2.0);
+        app.move_to(middle);
+    });
+    world.gesture(|app| {
+        let it = seen(app);
+        let hit = app.runtime.element_at(middle.0, middle.1);
+        assert!(
+            it.visible[2] > 0.0
+                && it.visible[3] > 0.0
+                && hit
+                    .as_ref()
+                    .is_some_and(|hit| hit.path() == it.path
+                        || hit.path().starts_with(&format!("{}/", it.path))),
+            "{key} is out of view: a click at its middle lands on {:?}",
+            hit.as_ref().map(|hit| hit.path().to_owned())
+        );
+        app.click_at(middle);
+    });
+}
+
 /// Shows the notebook's file tree where its width has folded it away, as a person presses the
 /// fold handle, so a scene can pick from the tree at any window size.
 fn unfold_tree(world: &mut World, notebook: &str) {
@@ -6878,6 +7185,6 @@ fn unfold_tree(world: &mut World, notebook: &str) {
         .is_none()
     {
         let fold = format!("{notebook}.fold.tree");
-        world.gesture(|app| app.click(Target::key(fold)));
+        click(world, Target::key(fold));
     }
 }
