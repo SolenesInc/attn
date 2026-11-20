@@ -156,7 +156,11 @@ impl ListRow {
         let keys_key = format!("{key}.keys");
         door::gap(
             door::sides(
-                row().key(key).label(said.text()).items_center(),
+                row()
+                    .key(key)
+                    .role("label")
+                    .label(said.text())
+                    .items_center(),
                 Size::Compact.inset(),
                 Size::Compact.inset(),
             ),

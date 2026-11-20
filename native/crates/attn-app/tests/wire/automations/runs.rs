@@ -83,6 +83,22 @@ fn the_runs_that_need_you_take_their_own_line_under_the_automations_heading() {
     let [x, y, w, _] = world.rect("queue.runs.needing");
     assert_eq!((x, w), (hx, hw));
     assert!(y > hy, "the button shares the heading's line");
+
+    let heading = world.screen().get(Target::key("queue.runs"));
+    assert_eq!(
+        (
+            heading.role.as_str(),
+            heading.name.as_deref(),
+            heading.value.as_deref(),
+            heading.description.as_deref()
+        ),
+        (
+            "heading",
+            Some("Automations"),
+            Some("2 runs"),
+            Some("Automation runs never join the queue")
+        )
+    );
 }
 
 #[test]

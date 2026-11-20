@@ -754,15 +754,19 @@ fn runs_head(key: String, runs: usize, needing: usize, keys: Option<String>, t: 
             })
     });
     col()
+        .key(key.clone())
+        .role("heading")
+        .label("Automations")
+        .a11y_value(plural(runs, "run"))
+        .help("Automation runs never join the queue")
         .w_full()
         .child(
-            GroupHead::new(key, "Automations")
+            GroupHead::new(format!("{key}.head"), "Automations")
                 .heading()
                 .section("Automations")
                 .aside(words(plural(runs, "run"), Type::Small, t.text_muted))
                 .build(t)
-                .a11y_value(plural(runs, "run"))
-                .help("Automation runs never join the queue"),
+                .a11y_hidden(),
         )
         .children(walk)
 }
