@@ -14,7 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
-	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -298,13 +297,21 @@ func (l *serverLink) unseen(sessionID protocol.SessionID, ended *serverEnded) *s
 	return nil
 }
 
-func (l *serverLink) observe(sessionID protocol.SessionID, status string, ended *serverEnded) {
+func (l *serverLink) observeQuiet(sessionID protocol.SessionID, ended *serverEnded) {
+	if ended != nil {
+		l.observe(sessionID, sessionmonitor.StateSourceServerReport, "idle", ended)
+		return
+	}
+	l.observe(sessionID, sessionmonitor.StateSourceServerQuiet, "idle", nil)
+}
+
+func (l *serverLink) observe(sessionID protocol.SessionID, source, status string, ended *serverEnded) {
 	monitor := l.d.sessionMonitor(sessionID)
 	if monitor == nil {
 		return
 	}
 	now := time.Now()
-	l.d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: string(sessionstate.SourceAppServer), ObservedAt: now}, status)
+	l.d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: source, ObservedAt: now}, status)
 	evidence, _ := monitor.Evidence()
 	switch status {
 	case "working":

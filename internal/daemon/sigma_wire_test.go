@@ -219,4 +219,7 @@ location: {type: directory, path: %q}
 	if started.Approvals != "auto" || started.Provider != "openai" || started.Model != "gpt-5.5" || started.Effort != "high" {
 		t.Errorf("the automation's conversation started with approvals %q and %s/%s at %s, want approvals auto and openai/gpt-5.5 at high", started.Approvals, started.Provider, started.Model, started.Effort)
 	}
+	if delivered := awaitRunState(t, w, app, run.Run.ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" }); delivered.State != "delivered" {
+		t.Errorf("after Sigma's server reported the run working the run is %s with %q, want delivered", delivered.State, protocol.Deref(delivered.LastError))
+	}
 }

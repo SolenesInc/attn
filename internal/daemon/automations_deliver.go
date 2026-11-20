@@ -728,7 +728,7 @@ func (d *Daemon) ensureAutomationSession(req automation.WorkRequest, run *store.
 		return nil, err
 	}
 	opening := d.automationSessionOpens(continuationRun, req.IDs.SessionID)
-	if opening && req.Launch.Agent == string(protocol.SessionAgentCodex) {
+	if opening && d.confirmsFirstTurn(req.Launch.Agent) {
 		return d.ensureConfirmedAutomationSession(req, run, directory, inputPath)
 	}
 	if run.LaunchedAt != nil || d.automationSessionIsLive(req.IDs.SessionID) {
@@ -766,8 +766,16 @@ func (d *Daemon) ensureConfirmedAutomationSession(req automation.WorkRequest, ru
 	return launch, nil
 }
 
+func (d *Daemon) confirmsFirstTurn(agent string) bool {
+	return agent == string(protocol.SessionAgentCodex) || d.serverLinkFor(agent) != nil
+}
+
 func (d *Daemon) launchReported(sessionID protocol.SessionID) bool {
-	return !d.sessionMonitor(sessionID).Snapshot().FirstReportAt.V.IsZero() || strings.TrimSpace(d.store.GetResumeSessionID(sessionID)) != ""
+	if !d.sessionMonitor(sessionID).Snapshot().FirstReportAt.V.IsZero() {
+		return true
+	}
+	conversation := strings.TrimSpace(d.store.GetResumeSessionID(sessionID))
+	return conversation != "" && !d.launchedHere(sessionID, conversation)
 }
 
 func (d *Daemon) reopenAutomationSession(req automation.WorkRequest, directory string) error {

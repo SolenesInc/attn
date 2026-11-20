@@ -384,3 +384,27 @@ func registerSampleServerDriver(t *testing.T, w *world, app *testworld.Peer) {
 	}
 	awaitDriverAvailable(app, "sample-server")
 }
+
+func TestADelegationToAnAppServerHarnessConfirmsItsFirstTurnOnceTheServerReportsWorking(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		offerAppServer(t, w, w.App(), h)
+		cwd := w.Path("api")
+		if err := os.MkdirAll(cwd, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		request := brief(cwd, "Fix the flaky checkout test")
+		request.Agent = protocol.Ptr(string(h))
+		result, err := w.Client().Delegate(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if unconfirmed := protocol.Deref(result.FirstTurnUnconfirmed); unconfirmed != "" || result.FirstTurnAt == nil {
+			t.Errorf("the delegation answered first turn at %v with %q unconfirmed, want its first turn confirmed", protocol.Deref(result.FirstTurnAt), unconfirmed)
+		}
+		view := w.Launched(string(result.SessionID))
+		if prompted := w.AppServer(h).Prompted(view.ConversationID); !strings.Contains(prompted.Text, "Fix the flaky checkout test") {
+			t.Errorf("the server was prompted %q, want the brief", prompted.Text)
+		}
+	})
+}

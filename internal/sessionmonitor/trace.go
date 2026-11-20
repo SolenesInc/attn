@@ -14,6 +14,8 @@ const (
 	StateSourceTranscript      = "transcript_watcher"
 	StateSourcePluginDriver    = "plugin_driver"
 	StateSourceLink            = "link"
+	StateSourceServerReport    = "server_report"
+	StateSourceServerQuiet     = "server_quiet"
 	StateSourceHookNotify      = "hook_notify"
 	StateSourceHookStopFailure = "hook_stop_failure"
 	StateSourceHookCompaction  = "hook_compaction"
@@ -24,7 +26,7 @@ const (
 func HarnessReportedState(source string) bool {
 	switch source {
 	case StateSourceHook, StateSourceStopHook, StateSourceHookNotify, StateSourceHookStopFailure,
-		StateSourceHookCompaction, StateSourceTranscript, StateSourcePluginDriver, StateSourceLink:
+		StateSourceHookCompaction, StateSourceTranscript, StateSourcePluginDriver, StateSourceLink, StateSourceServerReport:
 		return true
 	}
 	return false

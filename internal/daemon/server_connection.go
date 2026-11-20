@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
 type serverConnection struct {
@@ -269,7 +270,7 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 		for id, l := range p.sessions() {
 			conversation := p.d.linkConversation(id)
 			if status, ok := p.busy[conversation]; ok {
-				l.observe(id, status, nil)
+				l.observe(id, sessionmonitor.StateSourceServerReport, status, nil)
 				continue
 			}
 			if !l.settlesOnServer(id) {
@@ -278,7 +279,7 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 			if last == nil {
 				last = l.lastRuns(c)
 			}
-			l.observe(id, "idle", l.unseen(id, last[conversation]))
+			l.observeQuiet(id, l.unseen(id, last[conversation]))
 		}
 		return
 	}
@@ -309,7 +310,7 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 		if ended != nil && tree.Status == "idle" {
 			p.d.sessionMonitor(id).RecordRunAnswer(ended.Said)
 		}
-		l.observe(id, tree.Status, ended)
+		l.observe(id, sessionmonitor.StateSourceServerReport, tree.Status, ended)
 	}
 }
 
@@ -333,7 +334,7 @@ func (p *serverConnection) reconcile(l *serverLink, ids []protocol.SessionID) {
 		for _, id := range ids {
 			conversation := p.d.linkConversation(id)
 			if status, busy := p.busy[conversation]; busy {
-				l.observe(id, status, nil)
+				l.observe(id, sessionmonitor.StateSourceServerReport, status, nil)
 				continue
 			}
 			if last == nil {
@@ -341,7 +342,7 @@ func (p *serverConnection) reconcile(l *serverLink, ids []protocol.SessionID) {
 			}
 			ended := l.unseen(id, last[conversation])
 			if ended != nil || !l.remembersItsLastRun(id) {
-				l.observe(id, "idle", ended)
+				l.observeQuiet(id, ended)
 			}
 		}
 	})
