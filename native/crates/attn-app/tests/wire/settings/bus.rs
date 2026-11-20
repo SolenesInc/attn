@@ -367,3 +367,15 @@ fn a_bus_that_cannot_be_read_offers_try_again() {
 
     assert!(shows(&world, "settings.bus.producers"));
 }
+
+#[test]
+fn a_tables_head_is_a_row_read_as_columns() {
+    let world = bus(status());
+    let head = world
+        .screen()
+        .get(Target::key("settings.bus.producers.head"));
+    assert_eq!(
+        (head.role.as_str(), head.name.as_deref()),
+        ("row", Some("Columns"))
+    );
+}

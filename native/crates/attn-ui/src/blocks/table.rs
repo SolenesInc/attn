@@ -101,7 +101,7 @@ impl<S: 'static> Table<S> {
     }
 
     /// Assistive tools find the table as a table read as `label`, as one whose rows only show
-    /// their numbers is read.
+    /// their numbers is read, its head a row read as "Columns".
     pub fn named(mut self, label: impl Into<String>) -> Self {
         self.named = Some(label.into());
         self
@@ -147,7 +147,10 @@ impl<S: 'static> Table<S> {
             dimmed: self.dimmed,
             compact: self.compact,
         };
-        let head = grid.dim(grid.head(&self.key, t).key(format!("{}.head", self.key)));
+        let mut head = grid.dim(grid.head(&self.key, t).key(format!("{}.head", self.key)));
+        if self.named.is_some() {
+            head = head.role("row").label("Columns");
+        }
         let n = self.rows.len();
         let footed = self.footer.is_some();
         let rows = self
