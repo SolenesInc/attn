@@ -27,6 +27,7 @@ pub struct List {
     failed: bool,
     keys: Option<Box<dyn FnOnce(El) -> El>>,
     find: Option<El>,
+    led: bool,
     items: Vec<Item>,
     empty: Option<(String, Said, Option<El>)>,
 }
@@ -46,6 +47,7 @@ impl List {
             failed: false,
             keys: None,
             find: None,
+            led: false,
             items: Vec::new(),
             empty: None,
         }
@@ -91,6 +93,13 @@ impl List {
         keys: impl Fn(&mut S, &KeyEvent, &mut Tx) -> bool + 'static,
     ) -> Self {
         self.keys = Some(Box::new(move |list: El| list.focusable(true).on_key(keys)));
+        self
+    }
+
+    /// Its rows lead with a mark, such as a folder's chevron, so what it says when it has none
+    /// starts where their words do.
+    pub fn led(mut self) -> Self {
+        self.led = true;
         self
     }
 
@@ -210,14 +219,17 @@ impl List {
                 } else {
                     ("note", t.text_tertiary)
                 };
-                Some(
-                    door::gap(col().w_full().items_start(), Space::S12)
-                        .key(key)
-                        .role(role)
-                        .label(said.text())
-                        .child(words(said, Type::Body, ink).wrap().a11y_hidden())
-                        .children(action),
-                )
+                let said = door::gap(col().w_full().items_start(), Space::S12)
+                    .key(key)
+                    .role(role)
+                    .label(said.text())
+                    .child(words(said, Type::Body, ink).wrap().a11y_hidden())
+                    .children(action);
+                Some(if self.led {
+                    door::inset_start(col().w_full().child(said), ListRow::lead_room())
+                } else {
+                    said
+                })
             }
             _ => None,
         };

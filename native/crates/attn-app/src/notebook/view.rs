@@ -49,8 +49,13 @@ pub(crate) fn fullscreen(state: &State, t: &Tokens) -> El {
         }
         None => col(),
     };
-    let head = Inline::joined()
-        .child(icon(&attn_ui::icon::NOTEBOOK, IconSize::Large, t.brand))
+    let head = row()
+        .items_center()
+        .child(ListRow::lead_slot(icon(
+            &attn_ui::icon::NOTEBOOK,
+            IconSize::Large,
+            t.brand,
+        )))
         .child(
             Stack::tight()
                 .child(words("Knowledge base", Type::Label, t.brand))
@@ -216,7 +221,6 @@ fn fold_button(id: &SurfaceId, pane: Pane, open: bool, t: &Tokens) -> El {
     let id = id.clone();
     let button = icon_button(key(&id, part), label, glyph, IconSize::Small)
         .help(label)
-        .expanded(open)
         .on_press(move |state: &mut State| {
             if let Some(surface) = state.notebook.surface_mut(&id) {
                 let fold = match pane {
@@ -234,11 +238,11 @@ fn fold_button(id: &SurfaceId, pane: Pane, open: bool, t: &Tokens) -> El {
     col()
         .pin(left, Some(0.0), right, Some(0.0))
         .justify_center()
-        .child(El::from(button))
+        .child(El::from(button).expanded(open))
 }
 
 fn tree(id: &SurfaceId, surface: &Surface, t: &Tokens) -> El {
-    let mut list = List::new(key(id, "files"), "Files");
+    let mut list = List::new(key(id, "files"), "Files").led();
     match surface.tree.folders.get("") {
         None | Some(Listing::Loading) => {
             list = list.empty(key(id, "files.loading"), "Loading…", None);

@@ -44,7 +44,7 @@ pub fn count_badge(count: usize, fill: Color, ink: Color) -> El {
 /// Keys drawn as keys: an outlined cap for each, in the order they are pressed together.
 pub fn keycaps(keys: impl IntoIterator<Item = impl Into<String>>, t: &Tokens) -> El {
     door::gap(row().items_center(), Space::S2).children(keys.into_iter().map(|key| {
-        let cap = row().border(1.0, t.border_subtle).child(words(
+        let cap = row().fill(t.bg_app).border(1.0, t.border).child(words(
             key.into(),
             Type::Mono,
             t.text_secondary,

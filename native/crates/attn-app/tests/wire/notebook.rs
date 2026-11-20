@@ -2846,3 +2846,19 @@ fn the_title_bars_notebook_button_opens_the_notebook_over_the_window() {
         Some("Notebook")
     );
 }
+
+#[test]
+fn the_tree_says_it_is_loading_on_the_line_of_the_notebook_s_title() {
+    let disk = Disk::with(&[("knowledge/index.md", INDEX)]);
+    let mut world = start(&disk);
+    world.daemon.answer_in_turn("fs_list", [Answer::Hold]);
+    open_fullscreen(&mut world);
+    let title = world.rect("notebook.title");
+    let loading = world.rect("notebook.files.loading");
+    assert!(
+        (loading[0] - title[0]).abs() <= 0.5,
+        "the tree says Loading… at {}, the title starts at {}",
+        loading[0],
+        title[0]
+    );
+}

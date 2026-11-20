@@ -161,6 +161,11 @@ pub(crate) fn styled(e: El, style: TextStyle) -> El {
     e.font(style)
 }
 
+/// `e` with its content `points` in from its start.
+pub(crate) fn inset_start(e: El, points: f32) -> El {
+    e.pl(points)
+}
+
 /// `e` with `points` of empty room after it, which its line keeps or breaks before.
 pub(crate) fn room_after(e: El, points: f32) -> El {
     e.mr(points)

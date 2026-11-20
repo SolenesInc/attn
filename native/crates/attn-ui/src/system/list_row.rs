@@ -176,6 +176,17 @@ impl ListRow {
 
     /// How tall every list row of two lines stands: its title and the line under it, as far
     /// from its edges as a regular control's words.
+    /// How far a row's words stand in from its line when it leads with a mark.
+    pub(crate) fn lead_room() -> f32 {
+        LEAD + Space::S8.pt()
+    }
+
+    /// `mark` in a row's lead room, so the words after it start where a led row's do, as a
+    /// panel's header over a tree of rows.
+    pub fn lead_slot(mark: El) -> El {
+        row().w(Self::lead_room()).items_center().child(mark)
+    }
+
     pub fn two_line_height() -> f32 {
         2.0 * Space::S6.pt() + Self::title_band() + Space::S2.pt() + door::line_height(Type::Small)
     }
