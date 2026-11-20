@@ -25,17 +25,18 @@ use attn_protocol::{
     GardenReviewRun, GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness, HarnessModel,
     HarnessModelsResultMessage, InitialStateMessage, InspectPathResultMessage,
     InstallCodexUpdateResultMessage, LaunchDesktopResultMessage, LaunchDesktopSetting,
-    NotificationListResultMessage, OutpostInfo, OutpostUpdate, PR, PartyView, PathInspection,
-    PhoneLink, PhonesUpdatedMessage, Profile, RateLimitedMessage, RecentFilesResultMessage,
-    RecentLocation, RecentLocationsResultMessage, RecordCommandUsageResultMessage,
-    RefreshPRsResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewFlow, ReviewFlowGroup,
-    ReviewFlowMessage, ReviewFlowParticipant, ReviewNotShown, ReviewNote, ReviewRow, ReviewStop,
-    Seed, SeedCheck, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote,
-    SeedPlotProgress, SeedReviewResultMessage, Session, SessionAnnotationsGetResultMessage,
-    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
-    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionPullRequest,
-    SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState, UpdateChangedMessage,
-    UpdateOutpostProgress, UpdateRun, Worktree, WorktreeListResult, WorktreeListResultEvent,
+    Notification, NotificationListResultMessage, OutpostInfo, OutpostUpdate, PR, PartyView,
+    PathInspection, PhoneLink, PhonesUpdatedMessage, Profile, RateLimitedMessage,
+    RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage,
+    RecordCommandUsageResultMessage, RefreshPRsResultMessage, RepoInfo, ReviewBundle, ReviewFile,
+    ReviewFlow, ReviewFlowGroup, ReviewFlowMessage, ReviewFlowParticipant, ReviewNotShown,
+    ReviewNote, ReviewRow, ReviewStop, Seed, SeedCheck, SeedDocument, SeedDocumentGetResultMessage,
+    SeedEdge, SeedNote, SeedPlotProgress, SeedReviewResultMessage, Session,
+    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
+    SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
+    SessionPullRequest, SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState,
+    UpdateChangedMessage, UpdateOutpostProgress, UpdateRun, Worktree, WorktreeListResult,
+    WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Metrics};
 use attn_testkit::tree::{pane, row};
@@ -5922,6 +5923,17 @@ fn queue_agent_list(dark: bool) {
 /// The queue flow with turns owed, as the audit seeded it: two agents waiting, the first with
 /// an open ask, the first three desktops on shortcut slots, and the crew.
 fn queue_seeded(dark: bool, home: bool, sidebar_hidden: bool, slots: usize) -> World {
+    queue_seeded_and(dark, home, sidebar_hidden, slots, |_| {})
+}
+
+/// [`queue_seeded`], its daemon also answering what `answers` registers.
+fn queue_seeded_and(
+    dark: bool,
+    home: bool,
+    sidebar_hidden: bool,
+    slots: usize,
+    answers: impl FnOnce(&Daemon),
+) -> World {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     state.crew = Some(crew());
     if let Some(settings) = state.settings.as_mut() {
@@ -5956,7 +5968,9 @@ fn queue_seeded(dark: bool, home: bool, sidebar_hidden: bool, slots: usize) -> W
         created_at: "2026-11-17T09:00:00Z".into(),
         ..Ask::default()
     }]);
-    let mut world = World::start_sized(scripted().state(state), window());
+    let daemon = scripted().state(state);
+    answers(&daemon);
+    let mut world = World::start_sized(daemon, window());
     press(&mut world, Action::SessionGoToDashboard);
     if !home {
         click(&mut world, Target::key("queue.desktop.1"));
@@ -6069,6 +6083,59 @@ fn queue_bar_peek(dark: bool) {
         "the peek opens"
     );
     snap(&mut world, "queue-bar-peek", dark);
+}
+
+/// The seeded queue with an unread critical notification whose title runs long and an unread
+/// warning: the bell's dot, and the critical strip in the queue bar with the sidebar collapsed or
+/// above the sidebar's rows.
+fn title_bar_critical(dark: bool, sidebar_hidden: bool) {
+    let feed = vec![
+        Notification {
+            id: "n1".into(),
+            kind: "task_failed".into(),
+            severity: "critical".into(),
+            title: "The nightly review automation failed three times in a row and stopped retrying"
+                .into(),
+            body: "exit status 1".into(),
+            created_at: "2026-11-12T08:00:00Z".into(),
+            ..Notification::default()
+        },
+        Notification {
+            id: "n2".into(),
+            kind: "task_failed".into(),
+            severity: "warning".into(),
+            title: "A delegate's worktree could not be cleaned".into(),
+            body: "busy".into(),
+            created_at: "2026-11-12T07:00:00Z".into(),
+            ..Notification::default()
+        },
+    ];
+    let mut world = queue_seeded_and(dark, false, sidebar_hidden, 3, move |daemon| {
+        daemon.on("notification_list", move |r: &Request| {
+            message(NotificationListResultMessage {
+                request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                success: true,
+                notifications: Some(feed.clone()),
+                unread_count: 2,
+                unread_critical_count: 1,
+                critical_title: Some(feed[0].title.clone()),
+                ..NotificationListResultMessage::new()
+            })
+        });
+    });
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.critical"))
+            .is_some(),
+        "the critical strip shows"
+    );
+    let name = if sidebar_hidden {
+        "title-bar-critical-bar"
+    } else {
+        "title-bar-critical-sidebar"
+    };
+    snap(&mut world, name, dark);
 }
 
 /// The queue bar in the narrowest window, too narrow for a chip per desktop: the window's
@@ -7664,6 +7731,10 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("queue_bar_runs_peek", || queue_bar_runs_peek(dark));
         scene("queue_bar_crowded", || queue_bar_crowded(dark));
         scene("queue_bar_peek", || queue_bar_peek(dark));
+        scene("title_bar_critical_bar", || title_bar_critical(dark, true));
+        scene("title_bar_critical_sidebar", || {
+            title_bar_critical(dark, false)
+        });
         scene("rail", || rail(dark));
         scene("chrome_smallest", || chrome_smallest(dark));
         scene("session_seeds", || session_seeds(dark));

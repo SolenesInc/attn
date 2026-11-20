@@ -698,9 +698,13 @@ fn instance_marker(state: &State, t: &Tokens) -> Option<El> {
             .description(format!("Instance: {name}"))
             .single_line()
             .truncate()
-            .max_w(96.0)
+            .max_w(INSTANCE_MARKER_MAX_W)
     })
 }
+
+/// The widest an instance's name stands before it truncates: about thirteen characters of
+/// `Mono`, so a long name never pushes the title bar's tools aside.
+const INSTANCE_MARKER_MAX_W: f32 = 96.0;
 
 /// `control` in a slot keyed `key` as tall as the title bar, for a popover that hangs a set gap
 /// under the title bar, as the Tauri app's `top: calc(var(--title-bar-height) + …)` does.
