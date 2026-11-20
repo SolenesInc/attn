@@ -4,7 +4,7 @@ Outposts are experimental. An outpost is another computer running Attn, such as
 a Linux machine or a cloud VM, that your home connects to. Your home is the Attn
 on the Mac where you use the app. One home can connect to several outposts.
 
-Claude, Codex and shells on an outpost appear in terminal tiles beside your
+Agents and shells on an outpost appear in terminal tiles beside your
 local terminals. The tile header shows the outpost's name under the title.
 Input, screen updates and terminal commands pass through your home. Agents
 run on the outpost. The agents' state, turns, cost and PR links reach the Mac.
@@ -164,7 +164,14 @@ front, the editor tile and the file opener (Cmd+P) start at your notebook root.
 
 ## Run agents on an outpost
 
-Install and log in to Claude Code or Codex on the outpost. Each machine uses its own harness executable and credentials, because harness executables are machine settings. See [Read and change settings](#read-and-change-settings).
+Install and log in to Claude Code, Codex or Sigma on the outpost. Each machine uses its own harness executable and credentials, because harness executables are machine settings. See [Read and change settings](#read-and-change-settings).
+
+Attn starts a harness on an outpost when that outpost offers it, and refuses
+the start, naming the outpost, when it doesn't. An outpost offers the harnesses
+it finds, the same way the home does. A plugin harness also needs its plugin at
+the home, because the home builds every launch. A Sigma session on an outpost
+uses that outpost's Sigma server, which the outpost starts in its own terminal,
+and its model list comes from that server.
 
 An agent starts on an outpost once the first sync of its profile's Notebook
 folder finishes. Attn refuses an earlier start and names the folder and the
@@ -209,7 +216,7 @@ same way and keeps its advice, and its other actions work either way. **Handover
 asks where the new agent should work and starts it on the home.
 
 The Chief and the rest of the crew run only at the home. Attn refuses to start
-or hand off a crew member on an outpost, and the refusal names that limit. Plugin harnesses also run only at the home.
+or hand off a crew member on an outpost, and the refusal names that limit.
 
 Outpost conversations have no kept copy at the home. If the harness deleted the conversation, Attn says the conversation is no longer in storage when you resume it. Files sent by an outpost agent enter no recent-file list. Transcript
 reads go to the outpost, so they need its connection.

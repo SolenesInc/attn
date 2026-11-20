@@ -192,16 +192,20 @@ func (l *serverLink) targets(ctx context.Context, cwd string) ([]protocol.Execut
 func (l *serverLink) sessions() []protocol.SessionID {
 	var open []protocol.SessionID
 	for _, session := range l.d.store.List("") {
-		if l.d.store.SessionLink(session.ID) == l.b.kind {
+		if l.runsHere(session.ID) {
 			open = append(open, session.ID)
 		}
 	}
 	return open
 }
 
+func (l *serverLink) runsHere(sessionID protocol.SessionID) bool {
+	return l.d.store.SessionLink(sessionID) == l.b.kind && l.d.sessionHost(sessionID) == ""
+}
+
 func (l *serverLink) holder(conversation string) protocol.SessionID {
 	for _, sessionID := range l.d.store.OpenSessionsHolding(conversation) {
-		if l.d.store.SessionLink(sessionID) == l.b.kind {
+		if l.runsHere(sessionID) {
 			return sessionID
 		}
 	}

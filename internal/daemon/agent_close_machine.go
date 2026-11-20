@@ -53,25 +53,10 @@ func (d *Daemon) closeAgentMachine(_ context.Context, msg protocol.AgentLaunchCl
 		result.View = protocol.Ptr(string(raw))
 		pausepoint.At(pausepoint.AgentCloseDrained)
 	case "committed":
-		if msg.Profile == nil {
-			d.forgetMonitor(msg.SessionID)
-		} else {
-			r := d.codexShared()
-			profile := *msg.Profile
-			r.mu.Lock()
-			r.archivingAfterClose[profile]++
-			r.mu.Unlock()
-			defer func() {
-				r.mu.Lock()
-				if r.archivingAfterClose[profile]--; r.archivingAfterClose[profile] == 0 {
-					delete(r.archivingAfterClose, profile)
-				}
-				r.mu.Unlock()
-				r.profileReleased(profile)
-			}()
-			if protocol.Deref(msg.Archive) {
-				r.archiveConversation(profile, msg.SessionID, protocol.Deref(msg.Conversation))
-			}
+		d.forgetMonitor(msg.SessionID)
+	case "released":
+		if l := d.linkNamed(protocol.Deref(msg.Link)); l != nil {
+			l.sessionClosed(msg.SessionID, protocol.Deref(msg.Profile), protocol.Deref(msg.Conversation))
 		}
 	case "notify":
 		var driver sessionmonitor.DriverMetadata

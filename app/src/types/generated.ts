@@ -1217,10 +1217,10 @@ export enum AgentInboxMessageCmd {
 }
 
 export interface AgentLaunchCloseMessage {
-    archive?:      boolean;
     cmd:           AgentLaunchCloseMessageCmd;
     conversation?: string;
     driver?:       string;
+    link?:         string;
     phase:         Phase;
     profile?:      string;
     session_id:    string;
@@ -1239,6 +1239,7 @@ export enum Phase {
     Drain = "drain",
     Notify = "notify",
     Prepare = "prepare",
+    Released = "released",
 }
 
 export interface AgentLaunchCloseResult {
@@ -23128,10 +23129,10 @@ const typeMap: any = {
         { json: "recipient_session_id", js: "recipient_session_id", typ: "" },
     ], "any"),
     "AgentLaunchCloseMessage": o([
-        { json: "archive", js: "archive", typ: u(undefined, true) },
         { json: "cmd", js: "cmd", typ: r("AgentLaunchCloseMessageCmd") },
         { json: "conversation", js: "conversation", typ: u(undefined, "") },
         { json: "driver", js: "driver", typ: u(undefined, "") },
+        { json: "link", js: "link", typ: u(undefined, "") },
         { json: "phase", js: "phase", typ: r("Phase") },
         { json: "profile", js: "profile", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: "" },
@@ -31908,6 +31909,7 @@ const typeMap: any = {
         "drain",
         "notify",
         "prepare",
+        "released",
     ],
     "AgentMsgMessageCmd": [
         "agent_msg",

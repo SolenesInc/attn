@@ -87,14 +87,10 @@ func (p *serverConnection) peers() []*serverLink {
 }
 
 func (p *serverConnection) sessions() map[protocol.SessionID]*serverLink {
-	peers := make(map[string]*serverLink)
-	for _, l := range p.peers() {
-		peers[l.b.kind] = l
-	}
 	sessions := make(map[protocol.SessionID]*serverLink)
-	for _, s := range p.d.store.List("") {
-		if l := peers[p.d.store.SessionLink(s.ID)]; l != nil {
-			sessions[s.ID] = l
+	for _, l := range p.peers() {
+		for _, id := range l.sessions() {
+			sessions[id] = l
 		}
 	}
 	return sessions

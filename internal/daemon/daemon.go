@@ -2256,7 +2256,9 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 			if len(d.store.OpenSessionsHolding(released)) > 0 {
 				released = ""
 			}
-			link.sessionClosed(sessionID, profile, released)
+			if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "released", Link: protocol.Ptr(link.kind()), Profile: protocol.Ptr(profile), Conversation: protocol.Ptr(released)}); err != nil {
+				d.logf("machine close release: %v", err)
+			}
 			pausepoint.At(pausepoint.SessionCloseReleased)
 		})
 	}

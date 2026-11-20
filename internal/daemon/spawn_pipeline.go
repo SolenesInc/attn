@@ -115,9 +115,6 @@ func (d *Daemon) agentAvailable(agent string) bool {
 
 func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (*spawnRequest, *spawnRejection) {
 	requestedAgent := strings.TrimSpace(strings.ToLower(msg.Agent))
-	if host := protocol.Deref(msg.Host); host != "" && requestedAgent != "" && requestedAgent != protocol.AgentShellValue && requestedAgent != "claude" && requestedAgent != "codex" {
-		return nil, &spawnRejection{err: fmt.Errorf("outpost limit: plugin harness %s runs only at the home, not on %s", requestedAgent, host)}
-	}
 	pluginDriver, hasPluginDriver := d.ensurePluginRegistry().driver(requestedAgent)
 	agent := normalizeSpawnAgent(msg.Agent)
 	startsSession := policy.fromLedger || d.store.Get(msg.ID) == nil
@@ -143,7 +140,7 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 			return nil, &spawnRejection{err: err}
 		}
 	}
-	if !isShell && !hasPluginDriver && d.agentOffered(agent) {
+	if !isShell && (protocol.Deref(msg.Host) != "" || !hasPluginDriver && d.agentOffered(agent)) {
 		explicit := strings.TrimSpace(protocol.Deref(msg.Executable))
 		if explicit == "" {
 			explicit = legacyExecutableFromSpawnMessage(msg, agent)

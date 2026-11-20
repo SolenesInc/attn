@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "cbfc1fe60e2b";
+pub const PROTOCOL_VERSION: &str = "34ce8a887973";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -204,13 +204,13 @@ impl AgentInboxMessage {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentLaunchCloseMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub archive: Option<bool>,
     pub cmd: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub driver: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
     pub phase: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,

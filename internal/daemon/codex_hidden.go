@@ -326,8 +326,19 @@ func (r *codexShared) archiveConversation(profile string, closed protocol.Sessio
 }
 
 func (r *codexShared) sessionClosed(sessionID protocol.SessionID, profile, released string) {
-	if _, err := r.d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed", Profile: protocol.Ptr(profile), Conversation: protocol.Ptr(released), Archive: protocol.Ptr(released != "")}); err != nil {
-		r.d.logf("machine close archive: %v", err)
+	r.mu.Lock()
+	r.archivingAfterClose[profile]++
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		if r.archivingAfterClose[profile]--; r.archivingAfterClose[profile] == 0 {
+			delete(r.archivingAfterClose, profile)
+		}
+		r.mu.Unlock()
+		r.profileReleased(profile)
+	}()
+	if released != "" {
+		r.archiveConversation(profile, sessionID, released)
 	}
 }
 

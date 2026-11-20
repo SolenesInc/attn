@@ -379,7 +379,7 @@ func TestAClosedOutpostConversationResumesWithItsOwnCostAfterAnOutpostRestart(t 
 	t.Logf("closed %s at %d tokens; outpost restart and /resume continue at %d", id, closed.Usage.TotalTokens, resumed.Usage.TotalTokens)
 }
 
-func TestOutpostAgentLaunchNamesItsFirstSyncAndHarnessLimits(t *testing.T) {
+func TestOutpostAgentLaunchNamesItsFirstSync(t *testing.T) {
 	home := testworld.NewStack(t)
 	syncing := home.PauseAt(pausepoint.NotebookStreamOpen)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
@@ -398,15 +398,11 @@ func TestOutpostAgentLaunchNamesItsFirstSyncAndHarnessLimits(t *testing.T) {
 		}
 	}
 	t.Logf("first sync gate: %s", protocol.Deref(early.Error))
-	denied, _, _ := home.RequestSpawn(pair.App, fakeagent.Harness("plug"), outpost.Path("agent"), withHost)
-	if want := "plugin harness plug runs only at the home"; denied.Success || !strings.Contains(protocol.Deref(denied.Error), want) {
-		t.Fatalf("limit %s: %+v", want, denied)
-	}
 	syncing.Release()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	id := home.Spawn(pair.App, fakeagent.Claude, outpost.Path("agent"), withHost)
 	outpost.LaunchedCarrying(pair.App.Terminal(id))
-	t.Log("the plugin launch limit named; the profile folder's first-sync completion permits Claude")
+	t.Log("the profile folder's first-sync completion permits Claude")
 }
 
 func TestAnOutpostReplaysItsPendingConversationAfterRestart(t *testing.T) {

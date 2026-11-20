@@ -3593,13 +3593,13 @@ model CheckoutInspection {
 model AgentLaunchCloseMessage {
   cmd: "agent_launch_close";
   session_id: SessionID;
-  phase: "prepare" | "cancel" | "drain" | "committed" | "notify";
+  phase: "prepare" | "cancel" | "drain" | "committed" | "released" | "notify";
   driver?: string;
   terminal_id?: TerminalID;
   signal?: string;
+  link?: string;
   profile?: string;
   conversation?: string;
-  archive?: boolean;
 }
 model AgentLaunchCloseResult {
   driver?: string;

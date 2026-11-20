@@ -219,9 +219,6 @@ type AgentInboxMessage struct {
 }
 
 type AgentLaunchCloseMessage struct {
-	// Archive corresponds to the JSON schema field "archive".
-	Archive *bool `json:"archive,omitempty,omitzero"`
-
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
@@ -230,6 +227,9 @@ type AgentLaunchCloseMessage struct {
 
 	// Driver corresponds to the JSON schema field "driver".
 	Driver *string `json:"driver,omitempty,omitzero"`
+
+	// Link corresponds to the JSON schema field "link".
+	Link *string `json:"link,omitempty,omitzero"`
 
 	// Phase corresponds to the JSON schema field "phase".
 	Phase interface{} `json:"phase"`
