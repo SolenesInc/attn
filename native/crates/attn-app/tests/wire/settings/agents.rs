@@ -81,10 +81,20 @@ fn verdicts(world: &World) -> Vec<String> {
 fn groups(world: &World) -> Vec<String> {
     world
         .screen()
-        .children(Target::key("settings.agents.list"))
+        .all(Target::role("group"))
         .into_iter()
+        .filter(|n| {
+            n.key
+                .as_deref()
+                .is_some_and(|k| k.starts_with("settings.agent.") && k.ends_with(".toggle.part"))
+        })
         .filter_map(|n| n.name)
         .collect()
+}
+
+/// What an agent group's head says beside its name: its route, then whether it is available.
+fn said_with(world: &World, key: &str) -> String {
+    node(world, key).description.unwrap_or_default()
 }
 
 fn open_group(world: &mut World, agent: &str) {
@@ -416,7 +426,7 @@ fn a_plugin_agent_lists_its_capabilities_without_an_executable_field() {
     let mut world = on_agents(&[("snipe_available", "true"), ("snipe_cap_resume", "true")]);
     assert!(groups(&world).contains(&"Snipe".to_owned()));
     open_advanced(&mut world, "snipe");
-    assert_eq!(capabilities(&world, "snipe"), ["Resume: Supported"]);
+    assert_eq!(capabilities(&world, "snipe"), ["Resume Supported"]);
     assert!(!shows(&world, &field("snipe_executable")));
     rest(&mut world);
 }
@@ -557,7 +567,7 @@ fn an_agent_being_checked_reads_checking_until_the_daemon_knows() {
         ("codex_available", "checking"),
     ]);
     let claude = "settings.default-agent.claude";
-    assert!(value(&world, "settings.agent.claude.toggle").ends_with(" · Checking"));
+    assert!(said_with(&world, "settings.agent.claude.toggle").ends_with(", Checking"));
     assert!(!node(&world, claude).is("disabled"));
     assert!(node(&world, claude).is("checked"));
     assert_eq!(
@@ -579,7 +589,7 @@ fn an_agent_being_checked_reads_checking_until_the_daemon_knows() {
         ..SettingsUpdatedMessage::new()
     });
     world.settle();
-    assert!(value(&world, "settings.agent.claude.toggle").ends_with(" · Available"));
+    assert!(said_with(&world, "settings.agent.claude.toggle").ends_with(", Available"));
     assert!(
         node(&world, claude)
             .description
@@ -683,10 +693,10 @@ fn the_preferred_agent_comes_first_with_what_each_agent_supports() {
     for agent in ["plug", "codex", "claude", "mistral"] {
         open_advanced(&mut world, agent);
     }
-    assert_eq!(capabilities(&world, "plug"), ["custom cap: Supported"]);
+    assert_eq!(capabilities(&world, "plug"), ["custom cap Supported"]);
     assert_eq!(
         capabilities(&world, "codex"),
-        ["Transcript watch: Supported", "Classifier: Unavailable"]
+        ["Transcript watch Supported", "Classifier Unavailable"]
     );
     assert!(capabilities(&world, "claude").is_empty());
     assert!(capabilities(&world, "mistral").is_empty());

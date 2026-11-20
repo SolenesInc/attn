@@ -7,7 +7,7 @@ use crate::Tokens;
 use crate::system::{Space, disclosure, door};
 
 /// A part of a page that opens and closes, with tags that say what it holds while closed. `key`
-/// names its control; `{key}.part` names the whole part.
+/// names its control; `{key}.part` names the whole part, a group read as its label.
 pub struct Disclosure<S> {
     key: String,
     label: String,
@@ -62,6 +62,7 @@ impl<S: 'static> Disclosure<S> {
     pub fn build(self, t: &Tokens) -> Block {
         let toggle = self.toggle;
         let part = format!("{}.part", self.key);
+        let label = self.label.clone();
         let control = disclosure(
             self.key,
             &self.label,
@@ -78,6 +79,8 @@ impl<S: 'static> Disclosure<S> {
         });
         let el = col()
             .key(part)
+            .role("group")
+            .label(label)
             .w_full()
             .child(El::from(control))
             .children(body);

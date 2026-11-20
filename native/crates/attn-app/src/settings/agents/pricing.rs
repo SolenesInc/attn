@@ -11,7 +11,6 @@ use rune_kit::{Select, SelectAppearance, TextInput};
 use super::super::autosave::{self, Codec, PLAIN};
 use super::super::controls::refusal_beside;
 use super::super::pages::{CAPTION, S4};
-use super::hint;
 use crate::State;
 
 const PRICE_PREFIX: &str = "session_cost.price.";
@@ -336,7 +335,7 @@ fn existing(state: &State, model: &str, raw: &str, t: &Tokens) -> El {
                 ),
         )
         .children(parse_card(raw).is_none().then(|| {
-            super::warning(
+            warning(
                 &format!("settings.price.{model}.invalid"),
                 "This saved override is invalid. Complete every rate to repair it, or remove it.",
                 t,
@@ -449,7 +448,7 @@ fn new_form(state: &State, t: &Tokens) -> El {
         )
         .child(row().gap(space::S2).wrap().children(rates))
         .children(exists.then(|| {
-            super::warning(
+            warning(
                 "settings.price-new.exists",
                 "That model already has an override above.",
                 t,
@@ -525,4 +524,20 @@ pub(super) fn page(state: &State, t: &Tokens) -> El {
             .into(),
         )
         .children(pricing.open.then_some(body))
+}
+
+fn warning(key: &str, said: &str, t: &Tokens) -> El {
+    text(said.to_owned())
+        .key(key.to_owned())
+        .label(said.to_owned())
+        .font(CAPTION)
+        .color(t.warning)
+        .wrap()
+}
+
+fn hint(said: &str, t: &Tokens) -> El {
+    text(said.to_owned())
+        .font(CAPTION)
+        .color(t.text_tertiary)
+        .wrap()
 }
