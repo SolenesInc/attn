@@ -446,19 +446,13 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
     if more > 0 {
         said.push_str(&format!(" +{more}"));
     }
-    let sep = |glyph: &str| words(glyph.to_owned(), Type::Label, t.text_dimmed);
-    let mut trail = Vec::new();
-    for (n, crumb) in crumbs.into_iter().enumerate() {
-        trail.push(sep(if n == 0 { "·" } else { "›" }));
-        trail.push(
-            words(crumb, Type::Label, t.text_secondary)
-                .single_line()
-                .truncate()
-                .shrink(),
-        );
+    let mut trail = String::new();
+    for (n, crumb) in crumbs.iter().enumerate() {
+        trail.push_str(if n == 0 { "· " } else { " › " });
+        trail.push_str(crumb);
     }
     if more > 0 {
-        trail.push(words(format!("+{more}"), Type::Label, t.text_tertiary));
+        trail.push_str(&format!(" +{more}"));
     }
     let waiting = system::dot(
         if owed.0 > 0 { t.warning } else { t.text_dimmed },
@@ -468,7 +462,12 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
     let content = Inline::line()
         .child(waiting)
         .child(words(count, Type::Name, t.text_primary).single_line())
-        .children(trail);
+        .children((!trail.is_empty()).then(|| {
+            words(trail, Type::Small, t.text_secondary)
+                .single_line()
+                .truncate()
+                .shrink()
+        }));
     let pill = El::from(
         system::Trigger::new("queue-bar.pill", said, content)
             .compact()
