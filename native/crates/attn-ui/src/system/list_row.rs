@@ -4,6 +4,7 @@ use super::{IconButton, Radius, Said, Size, Space, Type, door, focus, layers, wo
 use crate::Tokens;
 
 /// The column a row's lead stands in: a regular icon, the size beside `Body` text.
+const LINE_GAP: Space = Space::S8;
 const LEAD: f32 = 16.0;
 /// The brand bar down the start of the row in view, as long as a regular icon.
 const BAR: (f32, f32) = (2.0, 16.0);
@@ -11,8 +12,6 @@ const BAR: (f32, f32) = (2.0, 16.0);
 const QUIET: f32 = 0.5;
 /// How long the fade is that ends a row's words before its hover controls, and the room left
 /// between the fade's end and them.
-const FADE: Space = Space::S16;
-const FADE_ROOM: Space = Space::S4;
 /// The narrowest a title gets before what follows it on its line gives way: "Nightly" in `Name`,
 /// 46 points as the review of landing 1 measured it, so a name keeps its first word in the
 /// sidebar at its narrowest.
@@ -540,9 +539,13 @@ impl ListRow {
             .lead
             .map(|lead| on_band(row().w(LEAD).justify_center().items_center().child(lead)));
         let hovering = !self.hover.is_empty();
-        let reach = self.hover.iter().map(IconButton::width).sum::<f32>()
-            + Space::S2.pt() * self.hover.len().saturating_sub(1) as f32
-            + FADE_ROOM.pt();
+        let controls_width = self.hover.iter().map(IconButton::width).sum::<f32>()
+            + Space::S2.pt() * self.hover.len().saturating_sub(1) as f32;
+        let over_words = if self.inline.is_empty() {
+            controls_width
+        } else {
+            (controls_width - LINE_GAP.pt()).max(0.0)
+        };
         let tagged = !self.tags.is_empty();
         let under_title = tagged && (hovering || (wraps && !self.inline.is_empty()));
         let title_line = door::gap(row(), Space::S6).w_full().min_w(0.0);
@@ -625,8 +628,8 @@ impl ListRow {
             .children(asides)
             .children(badges);
         let fading = match (hovering, wraps) {
-            (true, false) => door::fade_before_hover(fading, FADE, reach),
-            (true, true) => door::room_after(fading, reach),
+            (true, false) => door::fade_before_hover(fading, over_words),
+            (true, true) => door::room_before_hover(fading, over_words),
             (false, _) => fading,
         };
         let controls_key = format!("{}.controls", self.key);
@@ -682,7 +685,7 @@ impl ListRow {
                 }),
             ),
         };
-        let band_line = door::gap(row(), Space::S8)
+        let band_line = door::gap(row(), LINE_GAP)
             .w_full()
             .min_w(0.0)
             .items_start()

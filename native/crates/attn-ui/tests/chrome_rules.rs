@@ -1237,3 +1237,54 @@ fn a_wrapping_rows_tag_keeps_clear_of_its_kept_controls() {
         );
     }
 }
+
+#[test]
+fn a_hovered_rows_title_is_whole_up_to_eight_points_before_its_controls_and_never_under_them() {
+    for variant in ROW_VARIANTS {
+        for key in ["row.agent", "row.tile", "row.two", "row.keyed", "row.crew"] {
+            let mut rt = story(true, "Chrome/List row", variant);
+            let row = element(&rt, key);
+            rt.pointer_move(row.rect[0] + 12.0, row.rect[1] + 12.0);
+            rt.frame(1.0 / 60.0);
+            let title = device(element(&rt, &format!("{key}.title")).rect);
+            let all = rt.elements();
+            let first = all
+                .iter()
+                .filter(|e| {
+                    e.role == "button"
+                        && e.key
+                            .as_deref()
+                            .is_some_and(|k| k.starts_with(&format!("{key}.")))
+                })
+                .map(|e| e.rect[0])
+                .fold(f32::INFINITY, f32::min)
+                * SCALE;
+            let glyphs = rt.instances.iter().filter(|i| {
+                i.uv != [0.0; 4]
+                    && rune::render::unpack_fade(i.fade).0[2] != 0.0
+                    && i.rect[0] >= title[0] - 1.0
+                    && i.rect[1] >= title[1] - 1.0
+                    && i.rect[1] + i.rect[3] <= title[1] + title[3] + 1.0
+            });
+            for glyph in glyphs {
+                let end = glyph.rect[0] + glyph.rect[2];
+                let (widths, _) = rune::render::unpack_fade(glyph.fade);
+                let whole_until = glyph.clip[2] - widths[2].abs();
+                assert!(
+                    glyph.clip[2] <= first + 0.5,
+                    "{variant}: {key}'s title draws to {} under its first control at {first}",
+                    glyph.clip[2]
+                );
+                if end <= first - 8.0 * SCALE {
+                    assert!(
+                        end <= whole_until + 0.5,
+                        "{variant}: {key}'s glyph ending {}pt before its controls fades from {} over {:?}",
+                        (first - end) / SCALE,
+                        whole_until / SCALE,
+                        widths
+                    );
+                }
+            }
+        }
+    }
+}

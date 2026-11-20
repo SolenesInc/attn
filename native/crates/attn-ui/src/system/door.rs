@@ -192,12 +192,22 @@ pub(crate) fn indented(e: El, inset: Space, step: Space, depth: u8) -> El {
 
 /// `e` whole at rest, and while its hover group is hovered ending `reach` points before its end
 /// in a fade `fade` wide, for what the hover shows over its end.
-pub(crate) fn fade_before_hover(e: El, fade: Space, reach: f32) -> El {
-    let fade = fade.pt();
+pub(crate) fn fade_before_hover(e: El, controls: f32) -> El {
+    let fade = HOVER_FADE.pt();
     e.clip_fade(0.0, 0.0, fade, 0.0)
         .clip_outset(0.0, 0.0, fade, 0.0)
-        .group_clip([0.0; 4], [0.0, 0.0, fade + reach, 0.0])
+        .group_clip(
+            [0.0; 4],
+            [0.0, 0.0, fade + controls + HOVER_FADE_ROOM.pt(), 0.0],
+        )
 }
+
+pub(crate) fn room_before_hover(e: El, controls: f32) -> El {
+    room_after(e, controls + HOVER_FADE_ROOM.pt())
+}
+
+const HOVER_FADE: Space = Space::S6;
+const HOVER_FADE_ROOM: Space = Space::S2;
 
 pub(crate) fn rows(e: El, top: Space, bottom: Space) -> El {
     e.pt(top.pt()).pb(bottom.pt())

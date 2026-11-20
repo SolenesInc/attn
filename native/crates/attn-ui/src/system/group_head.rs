@@ -118,9 +118,8 @@ impl GroupHead {
     pub fn build(self, t: &Tokens) -> El {
         debug_assert!(self.controls.is_empty() || self.trailing.is_empty());
         let keys_key = format!("{}.keys", self.key);
-        let reach = self.controls.iter().map(IconButton::width).sum::<f32>()
-            + Space::S2.pt() * self.controls.len().saturating_sub(1) as f32
-            + Space::S4.pt();
+        let controls_width = self.controls.iter().map(IconButton::width).sum::<f32>()
+            + Space::S2.pt() * self.controls.len().saturating_sub(1) as f32;
         let hovering = !self.controls.is_empty();
         let controls = hovering.then(|| {
             let controls = door::gap(row(), Space::S2)
@@ -163,7 +162,7 @@ impl GroupHead {
             }));
         let content = door::gap(content, Space::S6);
         let content = if hovering {
-            door::fade_before_hover(content, Space::S16, reach)
+            door::fade_before_hover(content, controls_width)
         } else {
             content
         };
