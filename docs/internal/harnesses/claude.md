@@ -287,42 +287,40 @@ view. That terminal has no
 ## The model call spare
 
 attn answers a model call from a `claude` it started before the call
-(`internal/agent/claude_spare.go`). Measured on 2.1.328 with a subscription
-sign-in and synthetic text, 2026-11-19 (plot `s-jhntry`, F2 to F5):
+(`internal/agent/claude_spare.go`). Measured with a subscription sign-in and
+synthetic text on 2.1.328, 2026-11-19 (plot `s-jhntry`, F2 to F5), and on
+2.1.329, 2026-11-20 (seed `s-63n4ng`), unless a bullet says otherwise:
 
 - `--print` with `--input-format stream-json --output-format stream-json
   --verbose` and no prompt argument starts and waits for messages on stdin.
   Idle, it holds 200 to 300 MB resident. It is not quiet: on 2.1.329 one used
   0.73 s of CPU over 3 idle minutes, and 0.19 s with
   `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, which attn sets on the spare.
-  Under attn, the spare used 1.6 to 1.9 s over 10 idle minutes either way.
-- Before its first input the process writes nothing on stdout, with or
-  without `--bare`. It answers a `control_request` with `subtype: mcp_status`
-  once its session has started: 24 ms after a mod's `session.start` hook ran
+  Under attn, before it was stopped, the spare used 1.6 to 1.9 s over 10 idle
+  minutes either way.
+- Until a message reaches its stdin, the process writes nothing on stdout,
+  with or without `--bare`. A `control_request` with `subtype: mcp_status` is
+  answered once the session has started: 24 ms after a mod's `session.start` hook ran
   (1.3 s after launch) without `--bare`, and 0.6 to 1.1 s after launch under
   `--bare`, where Claude loads no plugins and a mod's hooks never run.
   `get_settings` is answered earlier, before `session.start`. The probe leaves
   the call unchanged: with and without it, the model request carried the same
-  `system` and no tools (2.1.329, a fake API behind a recording proxy,
-  2026-11-20, seed `s-63n4ng`). attn writes `mcp_status` as the spare starts
+  `system` and no tools (a fake API behind a recording proxy). attn writes `mcp_status` as the spare starts
   and stops the spare's process group with SIGSTOP when the answer arrives.
 - A stopped spare uses no CPU. Through `agent.StartSpare` on 2.1.329, it used
   0 clock ticks over 10 idle minutes, under `--bare` with
   `ANTHROPIC_API_KEY` and under `--setting-sources ''`, and then answered the
-  call (seed `s-63n4ng`, C14). Stopped from a mod's `session.start` instead,
-  a spare answered after SIGCONT with 50 to 177 ms beyond the model's time
-  over 3 calls, against 35 to 76 ms for one never stopped. When its daemon
-  was killed with SIGKILL, the stopped spare was gone within 200 ms: its
+  call (C14). A spare that a mod's `session.start` hook stopped answered
+  after SIGCONT with 50 to 177 ms beyond the model's time over 3 calls,
+  against 35 to 76 ms for one never stopped (2.1.328). When the daemon was
+  killed with SIGKILL, a stopped spare was gone within 200 ms: its
   process group is orphaned with a stopped member, so the kernel sends SIGHUP
   and SIGCONT.
-- In a worker-hosted mod module `$.env.get` returns a promise; a `$.fs.write`
-  given the promise as its path throws "arguments are not plain data".
-  `$.fs.write` to a FIFO writes into it and leaves the FIFO in place.
 - A spare still answers after 2 hours idle (2.1.329, seed `s-jwy81g`). Left
   running, one took its instructions and model and answered in 1,241 ms,
   1,121 ms of it the model's, having used 15.6 s of CPU in those 2 hours.
-  Stopped with SIGSTOP from `session.start`, one used 0.00 s of CPU in 2 hours and, after
-  SIGCONT, answered with 52 ms beyond the model's time.
+  Stopped with SIGSTOP from a mod's `session.start`, one used 0.00 s of CPU in
+  2 hours and, after SIGCONT, answered with 52 ms beyond the model's time.
 - A process started with no model and no instructions takes both afterwards:
   a `control_request` with `subtype: initialize` and `systemPrompt`, then one
   with `subtype: set_model`. Each answers a `control_response` with
@@ -331,6 +329,10 @@ sign-in and synthetic text, 2026-11-19 (plot `s-jhntry`, F2 to F5):
   to 175 ms over 4 calls; a cold `claude --print` added about 4 s. Through
   `attn model call` on 2.1.329 (seed `s-jwy81g`, C2), 10 calls on a spare
   took a median of 53 ms beyond the model's time, and 10 cold calls 1,227 ms.
+  On a host at load average 40 (seed `s-63n4ng`, C15), 10 calls on a spare
+  stopped by `mcp_status` took a median of 400 ms beyond the model's time,
+  against 342 ms for one stopped by a mod in interleaved calls; 10 cold calls
+  took 1,739 ms, and a call after 10 idle minutes 1,009 ms.
 - Without the `initialize`, the process answers as Claude Code and tries to
   call tools, so a spare must get its instructions before any input.
 - One process keeps its conversation: six messages to one process grew the
@@ -340,16 +342,16 @@ sign-in and synthetic text, 2026-11-19 (plot `s-jhntry`, F2 to F5):
   adds about 19,300 tokens of tool definitions to every call. A `jsonSchema`
   on `initialize` returns `structured_output` only under `--allowedTools`.
 
-A cold call runs `claude --print` with no prompt argument, and Claude reads the
-prompt from stdin. On 2.1.329 a 1,048,576-byte input reached the model request
-whole as the user message, with and without `--bare` (seed `s-63n4ng`).
-
 Probed on 2.1.329 with `--bare`, `ANTHROPIC_API_KEY` and a local fake API
 behind a recording proxy (`scripts/fakeclaudeapi`), 2026-11-19: both control
 requests succeed, and the model request carries only the call's instructions
 as `system`, the call's input, the model set, and no tools. Before it, Claude
 sends one request of its own with the Claude Code prompt and the text `Hi`,
 which carries nothing of the call.
+A cold call, which no spare answers, runs `claude --print` with no prompt
+argument, and Claude reads the prompt from stdin. On 2.1.329 a 1,048,576-byte
+input reached the model request whole as the user message, with and without
+`--bare` (seed `s-63n4ng`).
 
 ## Auto memory
 
@@ -462,7 +464,10 @@ Probed on 2.1.317 the same way, in auto, default and bypass permission modes:
   `$.ui.log(text)` draws a transcript line as `<plugin>: <text>`, which the
   model never reads. On 2.1.319 it stores and draws U+FFFD in place of each
   newline, so it cannot show more than one line.
-- `$.env.get(name)` reads the `claude` process's environment.
+- `$.env.get(name)` reads the `claude` process's environment. In a
+  worker-hosted module it returns a promise, and a `$.fs.write` given the
+  promise as its path throws "arguments are not plain data". `$.fs.write` to a
+  FIFO writes into it and leaves the FIFO in place.
 - A loop started from `session.start` can call `$.http.fetch` with
   `socketPath` on a Unix socket. A call with no complete answer after 30 s
   rejects: "aborted: no complete answer within 30000ms". A reload aborts the

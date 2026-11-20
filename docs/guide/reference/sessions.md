@@ -193,10 +193,10 @@ The command prints one JSON line with `text`, `harness`, `model` and
 `model`. What it leaves out comes from two settings: `model_calls.agent`, the
 harness (empty uses the harness for new sessions), and `model_calls.model`, a
 tier or a model id (empty uses `standard`). A tier picks that harness's model
-for the tier, as the `model_tier_overrides` setting adjusts. When the call fails or passes `limit_ms`,
-the line has `error` instead of `text`, and the command exits 1. Stopping the
-command ends the call. Headless tasks must be on. Codex takes an input of at
-most 1,048,576 characters.
+for the tier, as the `model_tier_overrides` setting adjusts. Codex takes an
+`input` of at most 1,048,576 characters. When the call fails or passes
+`limit_ms`, the line has `error` instead of `text`, and the command exits 1.
+Stopping the command ends the call. Headless tasks must be on.
 
 While a paired program exists and you used Attn or made a model call in the
 last 4 hours, Attn keeps one Claude process started and waiting, so a call

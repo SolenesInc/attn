@@ -12,8 +12,10 @@ harness.
 ## Where each harness is described
 
 - [Claude Code](harnesses/claude.md): hooks, conversation ids, idle compaction,
-  composer suggestions, the agent view, auto memory, OSC 7501 and mods.
-- [Codex](harnesses/codex.md): plain Codex, local memories and updates.
+  composer suggestions, the agent view, auto memory, OSC 7501, mods and the
+  model call spare.
+- [Codex](harnesses/codex.md): plain Codex, local memories, updates and
+  headless runs.
 - [Codex app-server and `--remote`](harnesses/codex-app-server.md): the shared
   app-server that shared Codex runs on.
 - [Sigma](harnesses/sigma.md): the Sigma server, named Nisse until 2026-11-14.
