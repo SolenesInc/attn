@@ -352,7 +352,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		return nil, err
 	}
 	if agentdriver.Get(agent) != nil {
-		if err := d.requireCatalogAgent(protocol.Deref(msg.Host), agent, ""); err != nil {
+		if err := d.requireCatalogAgent(protocol.Deref(msg.Host), agent, "", true); err != nil {
 			return nil, err
 		}
 	}

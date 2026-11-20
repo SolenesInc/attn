@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -330,15 +331,14 @@ func (d *Daemon) handleAgentCatalogWS(client *wsClient, msg *protocol.AgentCatal
 	})
 }
 
-func (d *Daemon) requireCatalogAgent(host, agent, explicit string) error {
+func (d *Daemon) requireCatalogAgent(host, agent, explicit string, startsSession bool) error {
 	catalog, err := Call[protocol.AgentCatalogResult](context.Background(), d.router(), protocol.AgentCatalogMessage{Cmd: protocol.CmdAgentCatalog, Host: host})
 	if err != nil {
 		return err
 	}
-	for _, h := range catalog.Harnesses {
-		if h.ID == agent && (h.Available || explicit != "") {
-			return nil
-		}
+	i := slices.IndexFunc(catalog.Harnesses, func(h protocol.Harness) bool { return h.ID == agent })
+	if listed := i >= 0; listed && (catalog.Harnesses[i].Available || explicit != "") || !listed && !startsSession {
+		return nil
 	}
 	return fmt.Errorf("agent %q is not available on %s", agent, catalog.Machine)
 }

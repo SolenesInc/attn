@@ -140,12 +140,12 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 			return nil, &spawnRejection{err: err}
 		}
 	}
-	if !isShell && (protocol.Deref(msg.Host) != "" || !hasPluginDriver && d.agentOffered(agent)) {
+	if !isShell && (protocol.Deref(msg.Host) != "" || !hasPluginDriver) {
 		explicit := strings.TrimSpace(protocol.Deref(msg.Executable))
 		if explicit == "" {
 			explicit = legacyExecutableFromSpawnMessage(msg, agent)
 		}
-		if err := d.requireCatalogAgent(protocol.Deref(msg.Host), agent, explicit); err != nil {
+		if err := d.requireCatalogAgent(protocol.Deref(msg.Host), agent, explicit, startsSession); err != nil {
 			return nil, &spawnRejection{err: err}
 		}
 	}

@@ -181,3 +181,34 @@ func TestAHarnessIsRefusedOnAnOutpostOnlyWhenTheOutpostsCatalogLacksIt(t *testin
 	outpost.LaunchedCarrying(pair.App.Terminal(id))
 	t.Logf("refused by the outpost's catalog: %s; Claude, which the outpost offers, launches there", protocol.Deref(denied.Error))
 }
+
+func TestAnOpenOutpostSigmaSessionRevivesAfterSigmaIsTurnedOffWhileANewOneIsRefused(t *testing.T) {
+	pair := sigmaOutpostPair(t)
+	app := pair.App
+	id := spawnOnOutpost(pair, fakeagent.Sigma)
+	terminal := app.Terminal(id)
+	tui := pair.Outpost.LaunchedCarrying(terminal)
+	outpostApp := pair.Outpost.App()
+	mark := outpostApp.EventCount()
+	requireStdout(t, pair.Home.Attn("settings", "set", "sigma_enabled", "false"), "false")
+	testworld.AwaitSince(outpostApp, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["sigma_enabled"] == "false" })
+	tui.Exit(1)
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool {
+		return protocol.Deref(e.SessionID) == protocol.SessionID(id) && protocol.Deref(e.ExitCode) == 1
+	})
+	mark = app.EventCount()
+	app.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal), AttachPolicy: protocol.Ptr(protocol.AttachPolicyRevive), Cols: protocol.Ptr(100), Rows: protocol.Ptr(30)})
+	revived := testworld.AwaitSince(app, mark, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
+	if !revived.Success || !protocol.Deref(revived.Revived) {
+		t.Fatalf("reviving the open Sigma session with sigma_enabled off failed: %s", protocol.Deref(revived.Error))
+	}
+	if again := pair.Outpost.LaunchedCarrying(terminal); again.ConversationID != tui.ConversationID {
+		t.Fatalf("the revival resumed conversation %s, want %s", again.ConversationID, tui.ConversationID)
+	}
+	denied, _, _ := pair.Home.RequestSpawn(app, fakeagent.Sigma, pair.Outpost.Path("new"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
+	if want := `agent "sigma" is not available`; denied.Success || !strings.Contains(protocol.Deref(denied.Error), want) {
+		t.Fatalf("a new Sigma launch on the outpost with sigma_enabled off = %v %q, want %q", denied.Success, protocol.Deref(denied.Error), want)
+	}
+	requireNoHomeSigmaServer(t, pair)
+	t.Logf("with sigma_enabled off, %s revived on the outpost into conversation %s; a new launch was refused: %s", id, tui.ConversationID, protocol.Deref(denied.Error))
+}
