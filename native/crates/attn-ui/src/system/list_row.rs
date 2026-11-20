@@ -51,7 +51,8 @@ type Press = Box<dyn FnOnce(El) -> El>;
 /// controls and, while they show, its hover controls. A list narrower than their sum cuts the
 /// title under its floor. The sidebar, 188 points inside at its narrowest, holds a lead and three
 /// hover controls; the Automations drawer, 388 inside at its narrowest, holds a select row with
-/// Run now and three. A fourth hover control in the sidebar at its narrowest is a known shortfall.
+/// Run now and three. No sidebar row shows more than three: a queue row's band gives it Settle
+/// and Snooze, or Ask to close, beside its actions, never all.
 pub struct ListRow {
     key: String,
     label: String,
