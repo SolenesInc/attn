@@ -18,8 +18,20 @@ pub enum Look {
     Quiet,
     /// Removes something or turns it off.
     Danger,
-    /// Makes something of the app's own, such as a new agent: brand words on a brand tint.
+    /// The standing invitation in a window's chrome, such as New: the primary ink on a brand
+    /// tint inside a brand edge. Not a second primary: a surface's one main action is Primary.
     Brand,
+}
+
+impl Look {
+    /// The role a button's words take: a control's, or for the brand look the quieter words of
+    /// what a row says, so the invitation stands in the chrome without outweighing it.
+    fn words(self) -> Type {
+        match self {
+            Look::Brand => Type::Small,
+            _ => Type::Control,
+        }
+    }
 }
 
 /// What a button shows: words, or one mark of [`crate::glyph`].
@@ -37,6 +49,7 @@ pub struct Button {
     unavailable: bool,
     open: bool,
     chosen: Option<bool>,
+    leading: Option<El>,
     trailing: Option<El>,
     press: Option<Press>,
     button: KitButton,
@@ -66,6 +79,7 @@ impl Button {
             unavailable: false,
             open: false,
             chosen: None,
+            leading: None,
             trailing: None,
             press: None,
         }
@@ -80,7 +94,9 @@ impl Button {
     /// each side and its edge, or its height when it shows a mark.
     pub(crate) fn natural_width(&self, size: Size) -> f32 {
         match &self.shown {
-            Shown::Words(words) => width_of(words, Type::Control) + 2.0 * (size.inset().pt() + 1.0),
+            Shown::Words(words) => {
+                width_of(words, self.look.words()) + 2.0 * (size.inset().pt() + 1.0)
+            }
             Shown::Mark(..) => size.height(),
         }
     }
@@ -92,6 +108,12 @@ impl Button {
 
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    /// A mark before the words, such as the dot of a count.
+    pub fn leading(mut self, mark: El) -> Self {
+        self.leading = Some(mark);
         self
     }
 
@@ -162,24 +184,18 @@ impl Button {
             Look::Plain => (t.bg_button, t.border_hover, t.text_primary),
             Look::Quiet => (Color::TRANSPARENT, Color::TRANSPARENT, t.text_secondary),
             Look::Danger => (t.bg_button, t.error.alpha(0.45), t.error),
-            Look::Brand => (
-                crate::colors::mix_srgb(t.bg_panel, t.brand, BRAND_TINT),
-                t.brand.alpha(BRAND_EDGE),
-                crate::colors::moved_until_it_reads(
-                    t.brand,
-                    t.text_primary,
-                    crate::colors::mix_srgb(t.bg_panel, t.brand, BRAND_TINT),
-                ),
-            ),
+            Look::Brand => (crate::brand_fill(t), crate::brand_edge(t), t.text_primary),
         };
         let square = matches!(self.shown, Shown::Mark(..));
         let shown = self.shown;
-        let trailing = self.trailing;
+        let (leading, trailing) = (self.leading, self.trailing);
+        let role = self.look.words();
         let label = move |_, _| match shown {
             Shown::Words(shown) => door::gap(row().items_center(), Space::S4)
                 .shrink()
                 .min_w(0.0)
-                .child(words(shown, Type::Control, ink).truncate())
+                .children(leading)
+                .child(words(shown, role, ink).truncate())
                 .children(trailing),
             Shown::Mark(mark, size) => door::control_mark(mark, size).color(ink),
         };
@@ -223,8 +239,3 @@ impl Button {
         Control::new(button, self.size)
     }
 }
-
-/// How much brand the brand look mixes into the panel, and how strong its edge is, as the
-/// Tauri app's title-bar New.
-const BRAND_TINT: f32 = 0.12;
-const BRAND_EDGE: f32 = 0.5;

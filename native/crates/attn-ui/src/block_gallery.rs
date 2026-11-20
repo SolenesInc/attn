@@ -5,8 +5,9 @@ use rune_kit::TextInput;
 
 use crate::Tokens;
 use crate::blocks::{
-    Actions, Block, Choices, Disclosure, Empty, Field, Head, Inline, Notice, Page, Prose, Refusal,
-    Section, SettingRow, Stack, Status, SubRow, Table, TableColumns, TableRow, saved, swatches,
+    Actions, Block, Choices, Disclosure, Empty, Field, Head, Inline, Notice, Page, Popover, Prose,
+    Refusal, Section, SettingRow, Stack, Status, SubRow, Table, TableColumns, TableRow, saved,
+    swatches,
 };
 use crate::colors::scheme_for;
 use crate::system::{
@@ -100,6 +101,11 @@ const LONG_TITLE: &str = "Narrowest tile width before tiles stack into a column 
 
 pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
     playground
+        .story(
+            Story::new("Blocks/Popover", Blocks::default, popovers)
+                .variant("Rest", |_| {})
+                .variant("Refused", |s| s.failed = true),
+        )
         .story(
             common(Story::new("Blocks/Page", Blocks::default, page))
                 .variant("Saving", |s| s.saving = true)
@@ -599,6 +605,43 @@ fn fields(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
         ),
     ];
     stage(s, cx, &t, fields)
+}
+
+/// A popover that renames something: its field filling the popover's width, the reason a name
+/// was refused under it, and its actions.
+fn popovers(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
+    let t = tokens(cx);
+    let name = TextInput::new(&s.line)
+        .key("popover.name.input")
+        .label("Rename session")
+        .on_edit(|s: &mut Blocks| &mut s.line);
+    let popover = Popover::new("popover", "Rename session")
+        .push(Block::control(
+            "popover.name.block",
+            line_box(name, FieldState::failed_if(s.failed), &t).key("popover.name.box"),
+        ))
+        .push_all(s.failed.then(|| {
+            Block::custom(
+                "popover.why",
+                Refusal::new("popover.refused", "A session's name can't be empty.").build(&t),
+            )
+        }))
+        .actions(
+            Actions::new("popover.actions")
+                .then_end()
+                .push(Button::new("Cancel").on_press_tx(noop).build(&t))
+                .push(
+                    Button::new("Save")
+                        .look(Look::Primary)
+                        .on_press_tx(noop)
+                        .build(&t),
+                ),
+        )
+        .build(&t);
+    el().w_full()
+        .h_full()
+        .fill(t.bg_app)
+        .child(col().w_full().h_full().center().child(popover))
 }
 
 fn path_state(s: &Blocks) -> FieldState {

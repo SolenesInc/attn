@@ -252,6 +252,9 @@ const PRESSABLE: &[(&str, &str)] = &[
     ("Library/Button", "button.plain.regular"),
     ("Library/Button", "button.quiet.regular"),
     ("Library/Button", "button.danger.regular"),
+    ("Library/Button", "button.brand.regular"),
+    ("Library/Icon button", "icon-button.plain"),
+    ("Library/Icon button", "icon-button.edged"),
     ("Library/Switch", "switch.off/control"),
     ("Library/Switch", "switch.on/control"),
     ("Library/Segmented", "segmented.theme/segment1"),
@@ -380,15 +383,32 @@ fn focus_and_every_other_state_leave_a_fields_edge_where_it_was() {
 
 #[test]
 fn a_focused_field_draws_the_ring_every_control_draws() {
+    let boxes = FIELD_BOXES.map(|key| ("Library/Field box", "Filled", key));
+    let held = [
+        ("Blocks/Popover", "Rest", "popover.name.box"),
+        ("Blocks/Popover", "Refused", "popover.name.box"),
+    ];
     for dark in [true, false] {
         let t = tokens(dark);
-        for key in FIELD_BOXES {
-            let mut rt = story(dark, "Library/Field box", "Filled");
+        for (name, variant, key) in boxes.into_iter().chain(held) {
+            let mut rt = if name.starts_with("Blocks/") {
+                block_story(dark, name, variant)
+            } else {
+                story(dark, name, variant)
+            };
             let e = element(&rt, key);
             click(&mut rt, &e);
             let field = element(&rt, key);
             let ring = ring_of(&rt, &field, &t)
                 .unwrap_or_else(|| panic!("{key}, dark={dark}: focused, draws no ring"));
+            let [rx, ry, rw, rh] = ring.rect;
+            let [x0, y0, x1, y1] = ring.clip;
+            assert!(
+                x0 <= rx && y0 <= ry && rx + rw <= x1 && ry + rh <= y1,
+                "{name} {variant}, dark={dark}: {key}'s ring {:?} is cut by {:?}",
+                ring.rect,
+                ring.clip
+            );
             let [x, y, w, h] = ring.rect.map(|v| v / SCALE);
             let reach = field.rect[0] - x;
             assert!(
@@ -1544,6 +1564,35 @@ fn a_banner_stands_apart_from_the_title_bar_and_its_words_and_ring_read_on_it() 
                         "dark={dark}: {tone}'s {part} ring stands {shows:.2}:1 from the fill"
                     );
                 }
+            }
+        }
+    }
+}
+
+#[test]
+fn every_buttons_words_read_on_its_rest_fill_in_dark_and_light() {
+    for dark in [true, false] {
+        let t = tokens(dark);
+        let rt = story(dark, "Library/Button", "Rest");
+        let all = rt.elements();
+        for (look, _) in BUTTONS.iter().filter(|(look, _)| *look != "danger") {
+            for (size, _) in SIZES {
+                let key = format!("button.{look}.{size}");
+                let button = element(&rt, &key);
+                let fill = surface(&rt, &button, t.bg_panel);
+                let word = all
+                    .iter()
+                    .find(|e| {
+                        e.text_color.is_some()
+                            && std::iter::successors(e.parent, |&p| all[p].parent)
+                                .any(|p| all[p].key.as_deref() == Some(key.as_str()))
+                    })
+                    .unwrap_or_else(|| panic!("{key} draws no words"));
+                let reads = contrast(drawn_over(word.text_color.expect("words"), fill), fill);
+                assert!(
+                    reads >= TEXT_READS,
+                    "dark={dark}: {key}'s words read {reads:.2}:1 on its fill"
+                );
             }
         }
     }

@@ -185,8 +185,23 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
 
 /// The Tauri app's brand-tinted control: a `brand` edge at 50% over a 12% `brand` fill.
 pub fn brand_tinted(e: rune::El, t: &Tokens) -> rune::El {
-    e.fill(t.brand.alpha(0.12)).border(1.0, t.brand.alpha(0.5))
+    e.fill(t.brand.alpha(BRAND_FILL)).border(1.0, brand_edge(t))
 }
+
+/// The fill of the window's standing invitation, such as New: `brand` at the Tauri app's 12%
+/// mixed into the panel the chrome stands on, opaque so its hover and pressed layers step from
+/// what is drawn.
+pub fn brand_fill(t: &Tokens) -> Color {
+    colors::mix_srgb(t.bg_panel, t.brand, BRAND_FILL)
+}
+
+/// The edge of the window's standing invitation: `brand` at the Tauri app's 50%.
+pub fn brand_edge(t: &Tokens) -> Color {
+    t.brand.alpha(BRAND_EDGE)
+}
+
+const BRAND_FILL: f32 = 0.12;
+const BRAND_EDGE: f32 = 0.5;
 
 /// The Tauri app's ink on a brand fill, `color-mix(in srgb, var(--color-brand) 12%, black)`.
 pub fn brand_ink(t: &Tokens) -> Color {

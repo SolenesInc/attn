@@ -9,7 +9,8 @@ use crate::colors::scheme_for;
 use crate::system::{
     Beside, Button as Action, Choice, FieldState, IconSize, Look, Segment, Segmented, Size, Space,
     Tone, Trigger, TriggerLook, Type, area_box, arrows, checks, choices, code_box, disclosure,
-    door, expander, icon, icon_box, line_box, number_box, press_area, stepper, switch, tag, words,
+    door, expander, icon, icon_box, icon_button, line_box, number_box, press_area, stepper, switch,
+    tag, words,
 };
 use crate::{Tokens, kit};
 
@@ -123,6 +124,15 @@ pub const SUBJECTS: &[(&str, &[&str])] = &[
     ("Library/Press area", &["press-area"]),
     ("Library/Disclosure", &["disclosure"]),
     ("Library/Trigger", &["trigger.field", "trigger.quiet"]),
+    (
+        "Library/Icon button",
+        &[
+            "icon-button.plain",
+            "icon-button.edged",
+            "icon-button.panel",
+            "icon-button.counted",
+        ],
+    ),
 ];
 
 /// Two branches to start from that differ only at their ends, the second longer than any line.
@@ -195,6 +205,13 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Closed", |_| {})
                 .variant("Open", |s| s.open = true)
                 .variant("Failed", |s| s.failed = true)
+                .variant("Focus", |s| s.rings = true)
+                .variant("Disabled", |s| s.disabled = true),
+        )
+        .story(
+            Story::new("Library/Icon button", Library::default, icon_buttons)
+                .variant("Rest", |_| {})
+                .variant("Open", |s| s.open = true)
                 .variant("Focus", |s| s.rings = true)
                 .variant("Disabled", |s| s.disabled = true),
         )
@@ -376,6 +393,47 @@ fn triggers(s: &Library, cx: &mut Cx<Library>) -> El {
         .child(shown("trigger.field", TriggerLook::Field))
         .child(shown("trigger.quiet", TriggerLook::Quiet));
     library_stage(&t, column)
+}
+
+/// The title bar's icon buttons at its icon size: a bare one, one edged at rest as a tool that
+/// stands alone in a bar, a panel's that is selected while its panel is open, and one counting
+/// what waits behind it.
+fn icon_buttons(s: &Library, cx: &mut Cx<Library>) -> El {
+    if s.rings {
+        cx.force_focus_rings();
+    }
+    let t = library_tokens(cx);
+    let shown = |key: &str, label: &str, glyph: &'static rune::Icon| {
+        icon_button(key, label, glyph, IconSize::Large)
+            .disabled(s.disabled)
+            .on_press_tx(|s: &mut Library, _: &mut Tx| s.open = !s.open)
+    };
+    let line = door::gap(row().items_center(), Space::S8)
+        .child(
+            shown("icon-button.plain", "Close", &crate::icon::COLLAPSE)
+                .build(&t)
+                .into(),
+        )
+        .child(
+            shown("icon-button.edged", "Commands", &crate::icon::COMMANDS)
+                .edged()
+                .build(&t)
+                .into(),
+        )
+        .child(
+            shown("icon-button.panel", "Garden", &crate::icon::QUEUE_FLOW)
+                .selected(s.open)
+                .build(&t)
+                .into(),
+        )
+        .child(
+            shown("icon-button.counted", "Asks", &crate::icon::EXPAND)
+                .count(Some("3".into()))
+                .selected(s.open)
+                .build(&t)
+                .into(),
+        );
+    library_stage(&t, line)
 }
 
 /// The narrowest column a button is drawn in: a sidebar's footer.

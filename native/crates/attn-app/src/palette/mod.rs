@@ -31,12 +31,6 @@ pub(crate) enum Face {
     Commands,
 }
 
-/// Whether the palette is open on the agents.
-pub(crate) fn shows_agents(state: &State) -> bool {
-    state.window.layer == Some(crate::shell::Layer::Palette(crate::shell::Palette::Search))
-        && face(&state.window.search.query.text) == Face::Agents
-}
-
 fn face(query: &str) -> Face {
     if query.starts_with(COMMANDS) {
         Face::Commands

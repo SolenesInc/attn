@@ -459,25 +459,33 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
         system::DotShape::Filled,
         system::DotSize::Regular,
     );
-    let content = Inline::line()
-        .child(waiting)
-        .child(words(count, Type::Name, t.text_primary).single_line())
+    let after = Inline::line()
+        .shrink()
         .children((!trail.is_empty()).then(|| {
             words(trail, Type::Small, t.text_secondary)
                 .single_line()
                 .truncate()
                 .shrink()
-        }));
+        }))
+        .child(system::glyph(
+            attn_ui::glyph::CARET_DOWN,
+            IconSize::Small,
+            t.text_dimmed,
+        ));
     let pill = El::from(
-        system::Trigger::new("queue-bar.pill", said, content)
-            .compact()
-            .open(crate::palette::shows_agents(state))
-            .value(owed.0.to_string())
-            .build(t, |state: &mut State, tx: &mut Tx| {
+        system::Button::new(count)
+            .size(system::Size::Compact)
+            .leading(waiting)
+            .trailing(after)
+            .on_press_tx(|state: &mut State, tx: &mut Tx| {
                 super::bar_peek::dismiss(state);
                 crate::dispatch(state, crate::Action::UiActionMenu, tx);
-            }),
+            })
+            .build(t),
     )
+    .key("queue-bar.pill")
+    .label(said)
+    .a11y_value(owed.0.to_string())
     .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
         super::bar_peek::anchor_hovered(state, super::bar_peek::Anchor::Waiting, inside)
     })
