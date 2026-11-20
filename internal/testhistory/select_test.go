@@ -402,10 +402,12 @@ func TestFilteredAppRunsDoNotPriceTheirFile(t *testing.T) {
 	}
 }
 
-func TestOnlyTheAcceptanceHarnessTestsAreLandingAppTests(t *testing.T) {
+func TestOnlyTheAcceptanceHarnessAndBrowserRuntimeTestsAreLandingAppTests(t *testing.T) {
 	for path, want := range map[string]string{
 		"app/scripts/real-app-harness/common.test.mjs":  "vitest scripts/real-app-harness/common.test.mjs",
 		"app/scripts/real-app-harness/plan.test.ts":     "vitest scripts/real-app-harness/plan.test.ts",
+		"app/src/browser/runtime.test.ts":               "vitest src/browser/runtime.test.ts",
+		"app/src/browser/runtime.ts":                    "",
 		"app/src/App.test.tsx":                          "",
 		"app/src/utils/x.test.mjs":                      "",
 		"app/lint/rule.test.ts":                         "",

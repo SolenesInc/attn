@@ -2,6 +2,7 @@ package testhistory
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -15,9 +16,11 @@ const ClearedAfter = 30
 
 const VitestSuiteUnit = "vitest ."
 
+var appTestDirs = []string{"scripts/real-app-harness/", "src/browser/"}
+
 func AppTestUnit(repoPath string) (string, bool) {
 	file, ok := strings.CutPrefix(repoPath, "app/")
-	if !ok || !strings.HasPrefix(file, "scripts/real-app-harness/") {
+	if !ok || !slices.ContainsFunc(appTestDirs, func(dir string) bool { return strings.HasPrefix(file, dir) }) {
 		return "", false
 	}
 	if !strings.HasSuffix(file, ".test.ts") && !strings.HasSuffix(file, ".test.mjs") {

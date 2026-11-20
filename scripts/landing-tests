@@ -163,6 +163,9 @@ vitest scripts/real-app-harness/parallelMatrix.test.mjs
 vitest scripts/real-app-harness/scenarioCatalog.test.mjs
 vitest scripts/real-app-harness/workerRegistry.test.mjs
 
+group browser-runtime ^app/src/browser/
+vitest src/browser/runtime.test.ts
+
 group production-copy ^scripts/gardenpushperf/copy-production\.sh$
 go ./internal/daemon TestACopyOfProductionNeverRunsACopiedAgent
 

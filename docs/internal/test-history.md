@@ -203,7 +203,8 @@ runs:
   - top-level Go tests whose function overlaps a changed line in a `_test.go`
     file outside `testdata`
   - changed test files of the App acceptance harness
-    (`app/scripts/real-app-harness/*.test.{ts,mjs}`)
+    (`app/scripts/real-app-harness/*.test.{ts,mjs}`) and of the browser runtime
+    the native app embeds (`app/src/browser/*.test.{ts,mjs}`)
 - every test that failed on `main` and has since passed there, on at least one
   and fewer than 30 later main revisions in the lane where it failed, whatever
   its runner, except the Tauri app's Vitest and Playwright files, which `main`

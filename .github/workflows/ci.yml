@@ -419,9 +419,9 @@ jobs:
       - name: Lint and check the committed browser runtime
         run: make check-js-tools
 
-      - name: Test the App acceptance harness
+      - name: Test the browser runtime and the App acceptance harness
         working-directory: app
-        run: pnpm run test scripts/real-app-harness
+        run: pnpm run test src/browser scripts/real-app-harness
 
       - name: Upload test receipts
         if: always()

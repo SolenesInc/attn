@@ -129,7 +129,8 @@ fast gate:
   changed paths, the tests the landing changes, and every test that failed on
   `main` and has since passed there, until it clears. A change under `native/`
   runs every test of the `native/` workspace, and a change under
-  `app/scripts/real-app-harness/` runs the harness's tests. A test that is still red on `main` is
+  `app/scripts/real-app-harness/` runs the harness's tests, and a change under
+  `app/src/browser/` the browser runtime's. A test that is still red on `main` is
   listed, not run. `land.sh` prints each test it added and why.
   [Test history](test-history.md#selection) specifies the choice, and
   `scripts/land.sh --baseline` lands with the baseline groups alone.
