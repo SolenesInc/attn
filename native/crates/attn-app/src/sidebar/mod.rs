@@ -586,7 +586,7 @@ fn mark(
     label: &str,
     t: &Tokens,
 ) -> El {
-    system::glyph(glyph, IconSize::Small, t.accent)
+    system::mark_chip(glyph, t.accent, t)
         .key(format!("{row_key}.{name}"))
         .role("img")
         .label(label)

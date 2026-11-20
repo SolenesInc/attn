@@ -149,6 +149,7 @@ pub const CHROME_SHEETS: &[ChromeSheet] = &[
             "chip.count.wide",
             "chip.dots",
             "chip.pill",
+            "chip.mark",
             "chip.keys",
         ],
         columns: &[("Rest", "Rest", "", "")],
@@ -585,6 +586,7 @@ fn chips(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
         count_badge(128, t.warning, crate::warning_ink(&t)).key("chip.count.wide"),
         dots(&t).key("chip.dots"),
         crate::system::pill("chip.pill", "Set up ⏎", &t),
+        crate::system::mark_chip("↳", t.accent, &t).key("chip.mark"),
         crate::system::keys_hint(["⌘", "⇧", "K"], "Open the palette", &t).key("chip.keys"),
     ];
     stage(
