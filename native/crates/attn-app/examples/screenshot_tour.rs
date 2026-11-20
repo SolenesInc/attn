@@ -2386,7 +2386,20 @@ fn settings_analytics(dark: bool) {
 /// Analytics with a new vent of the longest real text and a done one, sharing on and its
 /// status read: the list with its chosen vent, then the machine settings open. `smallest` shows
 /// it at 800x600 at the largest text, top and bottom.
+/// A vent written in Japanese, long enough to run the selected row's column past a screen.
+const LONG_CJK_VENT: &str = "`attn seed tend` が拒否されました。シードは二時間前に終了したセッションが保持しており、`attn seed park` には担当者のセッション ID が必要ですが、拒否メッセージにはその ID がどこにも書かれていません。社内プラットフォームの作業ツリー /Users/someone/プロジェクト/社内プラットフォーム/InternationalEngineeringObservability で docs/internal/garden.md と CLI のソースを読み、古い担当はセッションが閉じられたときにだけ外れることをやっと見つけました。次の担当者が同じ調査を繰り返さないように、拒否メッセージに担当者のセッションと、それを閉じる方法を書いてほしいです。";
+
 fn settings_analytics_populated(dark: bool, smallest: bool) {
+    analytics_populated(dark, smallest, false);
+}
+
+/// The populated page at the regular size with a long vent in Japanese chosen, its Send under
+/// the vent's text.
+fn settings_analytics_cjk(dark: bool) {
+    analytics_populated(dark, false, true);
+}
+
+fn analytics_populated(dark: bool, smallest: bool, cjk: bool) {
     let build = attn_protocol::AnalyticsBuild {
         version: "0.42.1".into(),
         commit: "a3f9e1c22".into(),
@@ -2432,7 +2445,11 @@ fn settings_analytics_populated(dark: bool, smallest: bool) {
                 vent(
                     "v-new",
                     "engineering observability staging review of the garden bell staleness",
-                    "`attn seed tend s-f68sja` refused: the seed is held by a session that ended two hours ago, and attn seed park needs the tender's session id, which the refusal never names. I had to read docs/internal/garden.md and the CLI source at /Users/someone/projects/victor/attn--a-worktree-with-a-long-name/cli/src/seed/tend.rs to find that a stale claim clears only when its session is closed.",
+                    if cjk {
+                        LONG_CJK_VENT
+                    } else {
+                        "`attn seed tend s-f68sja` refused: the seed is held by a session that ended two hours ago, and attn seed park needs the tender's session id, which the refusal never names. I had to read docs/internal/garden.md and the CLI source at /Users/someone/projects/victor/attn--a-worktree-with-a-long-name/cli/src/seed/tend.rs to find that a stale claim clears only when its session is closed."
+                    },
                     false,
                 ),
                 vent(
@@ -2460,6 +2477,8 @@ fn settings_analytics_populated(dark: bool, smallest: bool) {
     );
     let name = if smallest {
         "settings-smallest-analytics"
+    } else if cjk {
+        "settings-analytics-cjk"
     } else {
         "settings-analytics-populated"
     };
@@ -2467,6 +2486,9 @@ fn settings_analytics_populated(dark: bool, smallest: bool) {
         world.resize((800.0, 600.0));
     }
     snap(&mut world, name, dark);
+    if cjk {
+        return;
+    }
     tap(&mut world, Key::Text("m".into()));
     world.gesture(|app| {
         app.update(|_, tx| tx.scroll_into_view_in("settings.body", "settings.analytics.machine"))
@@ -6987,6 +7009,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("settings_analytics_populated", || {
             settings_analytics_populated(dark, false)
         });
+        scene("settings_analytics_cjk", || settings_analytics_cjk(dark));
         scene("settings_analytics_smallest", || {
             settings_analytics_populated(dark, true)
         });
