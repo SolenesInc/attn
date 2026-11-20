@@ -263,3 +263,26 @@ fn a_cards_action_and_a_lanes_control_draw_their_words_whole_at_every_width() {
         }
     }
 }
+
+#[test]
+fn a_key_lines_tabs_are_set_off_only_from_hints_on_their_own_line() {
+    for (variant, set_off) in [("Rest", true), ("Narrow", false), ("Smallest long", false)] {
+        let rt = story("Blocks/KeyLine", variant);
+        let all = rt.elements();
+        let tabs = all
+            .iter()
+            .find(|e| e.role == "tablist")
+            .unwrap_or_else(|| panic!("{variant}: no tabs"));
+        let last = all
+            .iter()
+            .filter(|e| e.role == "tab")
+            .last()
+            .unwrap_or_else(|| panic!("{variant}: no tab"));
+        let room = (tabs.rect[0] + tabs.rect[2]) - (last.rect[0] + last.rect[2]);
+        assert_eq!(
+            room > 4.0,
+            set_off,
+            "{variant}: the tabs end {room} past their last tab"
+        );
+    }
+}

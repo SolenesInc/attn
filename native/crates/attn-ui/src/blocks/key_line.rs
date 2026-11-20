@@ -65,7 +65,7 @@ impl KeyLine {
         }
     }
 
-    /// The tabs a key picks, named `label`, set off from the hints by a hairline.
+    /// The tabs a key picks, set off by a hairline from the hints that share their line.
     pub fn tabs(mut self, tabs: impl IntoIterator<Item = El>) -> Self {
         self.tabs.extend(tabs);
         self
@@ -87,14 +87,16 @@ impl KeyLine {
     }
 
     pub fn build(self, t: &Tokens) -> El {
+        let set_off = self.fit == KeyFit::Line;
         let tabs = (!self.tabs.is_empty()).then(|| {
-            door::sides(
-                door::gap(row().role("tablist").label("Frames"), Space::S2),
-                Space::S0,
-                Space::S8,
-            )
-            .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
-            .children(self.tabs)
+            let tabs = door::gap(row().role("tablist").label("Frames"), Space::S2);
+            let tabs = if set_off {
+                door::sides(tabs, Space::S0, Space::S8)
+                    .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
+            } else {
+                tabs
+            };
+            tabs.children(self.tabs)
         });
         let hints = |hints: Vec<El>| {
             door::gaps(
