@@ -113,6 +113,22 @@ func TestSeedHelpAndFlagsBelongToEachVerb(t *testing.T) {
 			t.Errorf("seed %q: exit %d, stdout %q, stderr %q", args, ran.Code, ran.Stdout, ran.Stderr)
 		}
 	}
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"search"}, "seed search: needs words, got none\nusage: attn seed search <words>"},
+		{[]string{"ready", "extra"}, `seed ready: takes no arguments, got 1: "extra"` + "\nusage: attn seed ready "},
+		{[]string{"show"}, "seed show: takes 1 argument (seed), got none\nusage: attn seed show <id>"},
+		{[]string{"review", "show", "a", "b"}, `seed review show: takes at most 1 argument ([review]), got 2: "a" "b"`},
+		{[]string{"link", "s-a", "blocks"}, `seed link: takes 3 arguments (a, relation, b), got 2: "s-a" "blocks"` + "\nusage: attn seed link <a> <blocks|part-of|discovered-from> <b>"},
+		{[]string{"rollback"}, "seed rollback: takes 1 or 2 arguments (seed, [version]), got none"},
+	} {
+		ran := s.Attn(append([]string{"seed"}, tc.args...)...)
+		if ran.Code != 2 || ran.Stdout != "" || !strings.HasPrefix(ran.Stderr, tc.want) {
+			t.Errorf("seed %q: exit %d, stdout %q, stderr %q; want exit 2 and %q", tc.args, ran.Code, ran.Stdout, ran.Stderr, tc.want)
+		}
+	}
 }
 
 func TestEmptySeedMessageStdinCannotEraseABody(t *testing.T) {

@@ -6,6 +6,41 @@ import "encoding/json"
 
 var _ json.RawMessage
 
+const (
+	CodeBadBookmark              = "bad_bookmark"
+	CodeBadWindow                = "bad_window"
+	CodeClearWithPR              = "clear_with_pr"
+	CodeClearWithReason          = "clear_with_reason"
+	CodeClearWithReminder        = "clear_with_reminder"
+	CodeClearWithStandby         = "clear_with_standby"
+	CodeClearWithoutWhenMerged   = "clear_without_when_merged"
+	CodeDetachNeedsTo            = "detach_needs_to"
+	CodeEmptyWords               = "empty_words"
+	CodeInAndAt                  = "in_and_at"
+	CodeNeedsMessage             = "needs_message"
+	CodeNeedsNext                = "needs_next"
+	CodeNeedsStatement           = "needs_statement"
+	CodeNeedsTime                = "needs_time"
+	CodeNoDocument               = "no_document"
+	CodeNotACheckID              = "not_a_check_id"
+	CodeNotAPlot                 = "not_a_plot"
+	CodeNotAPRURL                = "not_a_pr_url"
+	CodeNotExported              = "not_exported"
+	CodeNotInReview              = "not_in_review"
+	CodePlotAndStale             = "plot_and_stale"
+	CodePRWithoutWhenMerged      = "pr_without_when_merged"
+	CodeReferenceNeedsPath       = "reference_needs_path"
+	CodeSinceAndSection          = "since_and_section"
+	CodeStandbyWithScope         = "standby_with_scope"
+	CodeTransferNeedsLocalPath   = "transfer_needs_local_path"
+	CodeTransferNeedsManagedPath = "transfer_needs_managed_path"
+	CodeTransferNeedsMode        = "transfer_needs_mode"
+	CodeTransferWithNote         = "transfer_with_note"
+	CodeTwoDocuments             = "two_documents"
+	CodeWindowWithoutStale       = "window_without_stale"
+	CodeWordsAndClear            = "words_and_clear"
+)
+
 var specs = map[string]spec{
 	"seed search":        {readOnly: true},
 	"seed plant":         {readOnly: false},

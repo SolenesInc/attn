@@ -424,9 +424,9 @@ async function plantTestSeed(
         const response = JSON.parse(chunk.toString()) as {
           error?: string;
           command_refusal?: { message?: string };
-          command_result?: { seed?: { id?: string } };
+          command_result?: { id?: string };
         };
-        const id = response.command_result?.seed?.id;
+        const id = response.command_result?.id;
         if (!id) throw new Error(response.error || response.command_refusal?.message || `seed plant returned ${chunk.toString()}`);
         client.end();
         resolve({ id });
