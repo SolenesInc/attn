@@ -42,6 +42,8 @@ pub enum Case {
     Sheet,
     /// A finder that lists nothing.
     Empty,
+    /// A popover as wide as a document's line, in a column with room for more.
+    Reading,
 }
 
 /// The window the smallest variants draw in: 800 by 600 at 150% text.
@@ -121,7 +123,14 @@ pub const FLOATING_SUBJECTS: &[FloatingSubject] = &[
         "popover",
         "Library/Popover",
         &["story.popover"],
-        &["Rest", "Failed", "Long", "Smallest long"],
+        &[
+            "Rest",
+            "Failed",
+            "Reading",
+            "Reading smallest",
+            "Long",
+            "Smallest long",
+        ],
         Some(".actions"),
     ),
     (
@@ -205,7 +214,12 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
         .story(common(
             Story::new("Library/Popover", Floating::default, popover_story)
                 .variant("Rest", |_| {})
-                .variant("Failed", |s| s.case = Case::Failed),
+                .variant("Failed", |s| s.case = Case::Failed)
+                .variant("Reading", |s| s.case = Case::Reading)
+                .variant("Reading smallest", |s| {
+                    s.case = Case::Reading;
+                    s.smallest = true;
+                }),
         ))
         .story(
             Story::new("Library/Pager", Floating::default, pager_story)
@@ -246,7 +260,11 @@ fn window(s: &Floating, t: &Tokens, content: El, layer: Vec<El>) -> El {
 
 /// Controls one under another, centred on the stage.
 fn column(s: &Floating, t: &Tokens, children: Vec<El>) -> El {
-    let width = if s.smallest { SMALLEST.0 } else { 560.0 };
+    let width = match (s.smallest, s.case) {
+        (true, _) => SMALLEST.0,
+        (false, Case::Reading) => 800.0,
+        (false, _) => 560.0,
+    };
     let content = door::frame(
         door::gap(col().w(width), Space::S24).children(children),
         Space::S24,
@@ -317,7 +335,7 @@ fn dialog(s: &Floating, cx: &mut Cx<Floating>) -> El {
                 .column(vec![sheet_items("Panes", s, &t)])
                 .build(),
         ),
-        Case::Prompt | Case::Empty => dialog,
+        Case::Prompt | Case::Empty | Case::Reading => dialog,
     };
     if s.case != Case::Sheet {
         dialog = dialog
@@ -619,6 +637,9 @@ fn popover_story(s: &Floating, cx: &mut Cx<Floating>) -> El {
             )
             .build(&t),
         );
+    }
+    if s.case == Case::Reading {
+        popover = popover.reading();
     }
     let popover = popover.actions(
         Actions::new("story.popover.actions").then_end().push(

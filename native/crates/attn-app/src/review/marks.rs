@@ -4,10 +4,9 @@
 
 use attn_protocol::{MarkdownAnnotation, MarkdownAnnotationAnchor, ReviewRow};
 use attn_ui::Tokens;
-use attn_ui::blocks::{Inline, Remark, Stack, Voice, key_choice};
+use attn_ui::blocks::{Actions, Block, Inline, Popover, Remark, Stack, Voice, key_choice};
 use attn_ui::system::{Reading, Type, keys_hint, read_as, words};
-use rune::tok::space;
-use rune::{El, Key, KeyEvent, TextEdit, Tx, col, text};
+use rune::{El, Key, KeyEvent, TextEdit, Tx, text};
 use rune_kit::TextArea;
 
 use crate::State;
@@ -310,11 +309,11 @@ pub(crate) fn composer_view(composer: &Composer, written: &TextEdit, t: &Tokens)
         (Some(To::Session(s)), Kind::Question) => format!("Sent to {s} at once"),
         _ => hint.to_owned(),
     };
-    let place = format!(
-        "{} {}",
-        composer.anchor.file.clone().unwrap_or_default(),
-        range(Some(&composer.anchor))
-    );
+    let place = composer
+        .anchor
+        .file
+        .as_ref()
+        .map(|file| format!("{file} {}", range(Some(&composer.anchor))));
     let area = TextArea::new(written)
         .key(FIELD)
         .width(None)
@@ -328,29 +327,23 @@ pub(crate) fn composer_view(composer: &Composer, written: &TextEdit, t: &Tokens)
         .on_edit(field)
         .on_key(on_key)
         .build(attn_ui::kit(t));
-    let panel = col()
-        .key("review.composer")
-        .role("dialog")
-        .label(title)
-        .modal_tx(true, close)
-        .w_full()
-        .max_w(560.0)
-        .padding(space::S3)
-        .child(
+    Popover::new("review.composer", title)
+        .reading()
+        .push(Block::custom(
+            "review.composer.place",
             Stack::tight()
-                .w_full()
-                .child(words(title, Type::Heading, t.text_primary))
-                .child(words(place, Type::Small, t.text_secondary))
-                .child(words(hint, Type::Small, t.text_tertiary))
-                .child(area)
-                .child(
-                    Inline::loose()
-                        .child(keys_hint(["↵"], "save", t))
-                        .child(keys_hint(["⇧", "↵"], "new line", t))
-                        .child(keys_hint(["esc"], "cancel", t)),
-                ),
-        );
-    rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0)
+                .children(place.map(|place| words(place, Type::Small, t.text_secondary)))
+                .child(words(hint, Type::Small, t.text_tertiary)),
+        ))
+        .push(Block::custom("review.composer.input", area))
+        .actions(
+            Actions::new("review.composer.keys")
+                .push(keys_hint(["↵"], "save", t))
+                .push(keys_hint(["⇧", "↵"], "new line", t))
+                .push(keys_hint(["esc"], "cancel", t)),
+        )
+        .build(t)
+        .modal_tx(true, close)
 }
 
 /// Where a mark of the send sits: its file's lines, a line of the document, or the whole
@@ -474,15 +467,10 @@ pub(crate) fn sheet(
             .checked(picked);
         super::verdict_press(choice, tile, v)
     });
-    let (title, onto, problem_to) = match to {
-        Some(Recipient::Session(name)) => (format!("Send the review to {name}"), None, None),
-        Some(Recipient::Seed(seed)) => (
-            "Send the review".into(),
-            Some(format!("Goes onto {seed}.")),
-            None,
-        ),
+    let (onto, problem_to) = match to {
+        Some(Recipient::Session(name)) => (Some(format!("Goes to {name}.")), None),
+        Some(Recipient::Seed(seed)) => (Some(format!("Goes onto {seed}.")), None),
         None => (
-            "Send the review".into(),
             None,
             Some("Bind a session to this tile to send the review."),
         ),
@@ -494,37 +482,31 @@ pub(crate) fn sheet(
             .label("Send"),
         tile,
     );
-    let panel = col()
-        .key("review.send")
-        .role("dialog")
-        .label("Send the review")
-        .w_full()
-        .max_w(640.0)
-        .px(20.0)
-        .py(16.0)
-        .child(
+    Popover::new("review.send", "Send the review")
+        .reading()
+        .push(Block::custom(
+            "review.send.marks",
             Stack::tight()
-                .w_full()
-                .child(words(title, Type::Heading, t.text_primary))
                 .children(onto.map(|o| words(o, Type::Body, t.text_secondary)))
                 .children(problem_to.map(|p| words(p, Type::Body, t.warning).wrap()))
                 .child(Stack::tight().role("list").label("Marks").children(entries))
                 .children(edits)
-                .children(alone)
-                .child(
-                    Inline::joined()
-                        .role("radiogroup")
-                        .label("Verdict")
-                        .children(choices),
-                )
-                .children(problem)
-                .child(
-                    Inline::joined()
-                        .child(send)
-                        .child(keys_hint(["esc"], "keep reviewing", t)),
-                ),
-        );
-    rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0)
+                .children(alone),
+        ))
+        .push(Block::custom(
+            "review.send.verdict",
+            Inline::joined()
+                .role("radiogroup")
+                .label("Verdict")
+                .children(choices),
+        ))
+        .push_all(problem.map(|p| Block::custom("review.send.problem", p)))
+        .actions(
+            Actions::new("review.send.actions")
+                .push(send)
+                .push(keys_hint(["esc"], "keep reviewing", t)),
+        )
+        .build(t)
 }
 
 /// Sends the review in document `uri`'s draft from review tile `tile` with `verdict`, its marks

@@ -986,9 +986,9 @@ pub(crate) fn body(
                 .filter(|c| c.tile == tile)
                 .map(|c| {
                     marks::composer_view(c, &reviews.composer_text, t).pin(
-                        Some(0.0),
                         Some(space::S6),
-                        Some(0.0),
+                        Some(space::S6),
+                        Some(space::S6),
                         None,
                     )
                 }),

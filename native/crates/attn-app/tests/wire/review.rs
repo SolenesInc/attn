@@ -3783,7 +3783,7 @@ fn a_click_on_a_verdict_in_the_send_sheet_picks_it_as_its_key_does_and_send_send
         .filter_map(|n| n.name)
         .collect();
     assert!(
-        sheet.iter().any(|t| t == "Send the review to Agent a"),
+        sheet.iter().any(|t| t == "Goes to Agent a."),
         "the sheet names the session the review goes to: {sheet:?}"
     );
     click(&mut world, Target::key("review.send.verdict.c"));

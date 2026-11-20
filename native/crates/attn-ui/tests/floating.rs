@@ -763,3 +763,57 @@ fn a_shown_refusal_leaves_a_horizontal_viewport_without_the_focus_where_it_was()
         "the strip stays where the wheel put it"
     );
 }
+
+#[test]
+fn a_reading_popover_stands_as_wide_as_a_documents_line_and_never_past_its_container() {
+    let wide = |variant: &str| element(&story("Library/Popover", variant), "story.popover").rect[2];
+    let roomy = wide("Reading");
+    assert!(
+        (roomy - attn_ui::blocks::DOCUMENT).abs() < 0.5,
+        "with room, a reading popover stands {roomy} wide, not a document's line"
+    );
+    let narrow = wide("Reading smallest");
+    let column = 533.0 - 2.0 * STAGE_INSET;
+    assert!(
+        (narrow - column).abs() < 0.5,
+        "in a column {column} wide, a reading popover stands {narrow} wide: it should fill the column"
+    );
+}
+
+#[test]
+fn tab_through_a_popover_reaches_only_its_controls() {
+    let mut rt = story("Library/Popover", "Rest");
+    rt.set_full_keyboard_access(true);
+    let press = |rt: &mut Runtime<()>, shift: bool| {
+        rt.key(rune::KeyEvent {
+            key: rune::Key::Tab,
+            mods: rune::Mods {
+                shift,
+                ..rune::Mods::default()
+            },
+        });
+        rt.frame(0.1);
+    };
+    press(&mut rt, true);
+    let mut reached = Vec::new();
+    for _ in 0..12 {
+        if let Some(key) = rt
+            .elements()
+            .into_iter()
+            .find(|e| e.focused)
+            .and_then(|e| e.key)
+            .filter(|k| k.starts_with("story.popover"))
+        {
+            reached.push(key);
+        }
+        press(&mut rt, false);
+    }
+    assert!(
+        !reached.iter().any(|k| k == "story.popover"),
+        "Tab stopped on the popover's frame: {reached:?}"
+    );
+    assert!(
+        reached.iter().any(|k| k == "story.popover.actions"),
+        "Tab never reached the popover's action: {reached:?}"
+    );
+}
