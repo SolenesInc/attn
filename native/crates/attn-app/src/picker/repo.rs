@@ -125,6 +125,15 @@ pub(crate) fn root_key(which: Which) -> String {
     format!("{}.repo", which.key())
 }
 
+/// The part of the chooser that scrolls when the window is short, so its footer stays whole.
+pub(crate) fn body_key(which: Which) -> String {
+    format!("{}.repo.body", which.key())
+}
+
+pub(crate) fn row_key(which: Which, i: usize) -> String {
+    format!("{}.repo.row.{i}", which.key())
+}
+
 /// The setting that remembers where starts in the repository at `root` went, on `host` or on
 /// this machine.
 pub(crate) fn memory_key(root: &str, host: Option<&str>) -> String {
@@ -231,6 +240,21 @@ fn set_zone(state: &mut State, which: Which, zone: Zone, tx: &mut Tx) {
     }
     let key = chooser.focus_key(which);
     tx.focus(key, false);
+    reveal(state, which, tx);
+}
+
+/// Scrolls the chooser to its top while the form has the keys, and to the committed row, so
+/// it shows whole, while the rows have them.
+fn reveal(state: &mut State, which: Which, tx: &mut Tx) {
+    let Some(chooser) = chooser_of(state, which) else {
+        return;
+    };
+    match chooser.zone {
+        Zone::Create => tx.scroll_to_y(body_key(which), 0.0),
+        Zone::Destinations => {
+            tx.scroll_into_view_in(body_key(which), row_key(which, chooser.committed))
+        }
+    }
 }
 
 /// The create form took the keyboard, by a press or a key in its field: the committed row
@@ -309,51 +333,55 @@ pub(crate) fn on_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut Tx
             }
             _ => false,
         },
-        Zone::Destinations => match (&ev.key, letter) {
-            (Key::Up, _) if chooser.committed == 0 => {
-                set_zone(state, which, Zone::Create, tx);
-                true
-            }
-            (Key::Up, _) => {
-                chooser.committed -= 1;
-                true
-            }
-            (Key::Down, _) => {
-                chooser.committed = (chooser.committed + 1).min(rows - 1);
-                true
-            }
-            (Key::Enter, _) => {
-                let row = chooser.committed;
-                activate(state, which, row, tx);
-                true
-            }
-            (Key::Escape, _) => {
-                back(state, which, tx);
-                true
-            }
-            (_, Some('d' | 'D')) => {
-                if let Some(row) = chooser.destinations().get(chooser.committed)
-                    && !row.main
-                {
-                    chooser.delete = Some(Delete::Asking {
-                        path: row.path.clone(),
-                    });
+        Zone::Destinations => {
+            let handled = match (&ev.key, letter) {
+                (Key::Up, _) if chooser.committed == 0 => {
+                    set_zone(state, which, Zone::Create, tx);
+                    true
                 }
-                true
-            }
-            (_, Some('r' | 'R')) => {
-                refresh(state, which, tx);
-                true
-            }
-            (_, Some(digit @ '1'..='9')) => {
-                let row = digit as usize - '1' as usize;
-                if row < rows {
-                    chooser.committed = row;
+                (Key::Up, _) => {
+                    chooser.committed -= 1;
+                    true
                 }
-                true
-            }
-            _ => false,
-        },
+                (Key::Down, _) => {
+                    chooser.committed = (chooser.committed + 1).min(rows - 1);
+                    true
+                }
+                (Key::Enter, _) => {
+                    let row = chooser.committed;
+                    activate(state, which, row, tx);
+                    true
+                }
+                (Key::Escape, _) => {
+                    back(state, which, tx);
+                    true
+                }
+                (_, Some('d' | 'D')) => {
+                    if let Some(row) = chooser.destinations().get(chooser.committed)
+                        && !row.main
+                    {
+                        chooser.delete = Some(Delete::Asking {
+                            path: row.path.clone(),
+                        });
+                    }
+                    true
+                }
+                (_, Some('r' | 'R')) => {
+                    refresh(state, which, tx);
+                    true
+                }
+                (_, Some(digit @ '1'..='9')) => {
+                    let row = digit as usize - '1' as usize;
+                    if row < rows {
+                        chooser.committed = row;
+                    }
+                    true
+                }
+                _ => false,
+            };
+            reveal(state, which, tx);
+            handled
+        }
     }
 }
 
@@ -552,12 +580,15 @@ pub(crate) fn row_detail(chooser: &Chooser, row: &Destination, now: f64) -> Stri
     }
     let info = &chooser.info;
     let hash: String = info.current_commit_hash.chars().take(7).collect();
-    format!(
-        "{} • {} • {}",
+    [
         paths::tildify(&info.repo),
         hash,
-        ago(&info.current_commit_time, now)
-    )
+        ago(&info.current_commit_time, now),
+    ]
+    .into_iter()
+    .filter(|part| !part.is_empty())
+    .collect::<Vec<_>>()
+    .join(" • ")
 }
 
 /// How long ago an RFC 3339 time was, as the chooser says it: minutes, hours, then days.

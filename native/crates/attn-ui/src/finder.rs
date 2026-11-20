@@ -381,8 +381,27 @@ pub fn chip(t: &Tokens, key: impl Into<String>, said: impl Into<Said>) -> El {
 /// What a finder says between its query and its footer, such as what went wrong or what is
 /// under way, spaced as blocks.
 pub fn notices(blocks: Vec<Block>) -> El {
-    door::inset(crate::blocks::stacked(blocks), OPTION_LINE, Space::S12)
+    door::inset(crate::blocks::stacked(blocks), OPTION_LINE, NOTICES_INSET)
 }
+
+/// [`notices`] that can outgrow a short window, keyed `key`: they give way and scroll so the
+/// footer under them stays whole, and a row scrolled into view at either end keeps the
+/// notices' inset between it and the edge.
+pub fn scrolling_notices(t: &Tokens, key: impl Into<String>, blocks: Vec<Block>) -> El {
+    col()
+        .key(key)
+        .w_full()
+        .shrink()
+        .min_h(0.0)
+        .scroll(rune::ScrollSpec {
+            stick_bottom: false,
+        })
+        .scroll_margin(NOTICES_INSET.pt())
+        .child(notices(blocks))
+        .scroll_bar_styled(crate::scroll_bar(t))
+}
+
+const NOTICES_INSET: Space = Space::S12;
 
 /// A finder's list of groups, each under its heading: it scrolls past `max` points, or
 /// sooner where the window is shorter.

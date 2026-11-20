@@ -1888,8 +1888,8 @@ fn launcher_missing_harness(dark: bool) {
 }
 
 /// The classic picker's new worktree in a repository whose default and current branches differ
-/// only at their ends.
-fn picker_start_from(dark: bool) {
+/// only at their ends; with `worktrees` to open, scrolled down to the last of them.
+fn picker_start_from(dark: bool, worktrees: usize) {
     let daemon = launcher_daemon_with(dark, false, false);
     daemon
         .on("inspect_path", |r: &Request| {
@@ -1907,13 +1907,24 @@ fn picker_start_from(dark: bool) {
                 ..InspectPathResultMessage::new()
             })
         })
-        .on("get_repo_info", |_: &Request| {
+        .on("get_repo_info", move |_: &Request| {
             message(GetRepoInfoResultMessage {
                 success: true,
                 info: Some(RepoInfo {
                     repo: SHOP.into(),
                     current_branch: "release/customer-platform-2026.21".into(),
                     default_branch: "release/customer-platform-2026.12".into(),
+                    worktrees: (1..=worktrees)
+                        .map(|i| {
+                            let branch = format!("release/customer-platform-2026.21-hotfix-{i}");
+                            Worktree {
+                                path: format!("{SHOP}--hotfix-{i}"),
+                                main_repo: SHOP.into(),
+                                branch,
+                                ..Worktree::default()
+                            }
+                        })
+                        .collect(),
                     ..RepoInfo::default()
                 }),
                 ..GetRepoInfoResultMessage::new()
@@ -1924,7 +1935,14 @@ fn picker_start_from(dark: bool) {
     world.gesture(|app| app.type_text("shop"));
     world.advance(std::time::Duration::from_millis(200));
     tap(&mut world, Key::Enter);
-    snap(&mut world, "picker-start-from", dark);
+    if worktrees == 0 {
+        snap(&mut world, "picker-start-from", dark);
+        return;
+    }
+    for _ in 0..=worktrees {
+        tap(&mut world, Key::Down);
+    }
+    snap(&mut world, "picker-start-from-worktrees", dark);
 }
 
 /// The classic new-session picker, Launcher 2.0 off: its harness toggle and its key footer.
@@ -5494,7 +5512,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("automation_hour", || automation_hour(dark));
         scene("automation_time_zones", || automation_time_zones(dark));
         scene("picker_dialog", || picker_dialog(dark));
-        scene("picker_start_from", || picker_start_from(dark));
+        scene("picker_start_from", || picker_start_from(dark, 0));
+        scene("picker_start_from_worktrees", || picker_start_from(dark, 4));
         scene("launcher_yolo_caption", || launcher_yolo_caption(dark));
         scene("launcher_missing_harness", || {
             launcher_missing_harness(dark)

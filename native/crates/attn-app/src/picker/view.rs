@@ -515,7 +515,7 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
                     d.branch.clone()
                 };
                 let detail = repo::row_detail(chooser, d, now);
-                let line = ListRow::new(format!("{w}.repo.row.{i}"), name.clone())
+                let line = ListRow::new(repo::row_key(which, i), name.clone())
                     .role("option")
                     .unfocusable()
                     .cursor(committed)
@@ -676,28 +676,29 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
             .heading()
             .build(t)
     };
+    let body = vec![Block::custom(
+        format!("{w}.repo.rows.block"),
+        Stack::tight()
+            .key(repo::root_key(which))
+            .role("group")
+            .label("Repository options")
+            .focusable(true)
+            .w_full()
+            .children(refreshing)
+            .child(section("new", "New worktree"))
+            .child(form)
+            .child(section("existing", "Open existing"))
+            .child(
+                Stack::tight()
+                    .key(format!("{w}.repo.rows"))
+                    .role("listbox")
+                    .label("Open existing")
+                    .w_full()
+                    .children(rows),
+            ),
+    )];
     vec![
-        finder::notices(vec![Block::custom(
-            format!("{w}.repo.rows.block"),
-            Stack::tight()
-                .key(repo::root_key(which))
-                .role("group")
-                .label("Repository options")
-                .focusable(true)
-                .w_full()
-                .children(refreshing)
-                .child(section("new", "New worktree"))
-                .child(form)
-                .child(section("existing", "Open existing"))
-                .child(
-                    Stack::tight()
-                        .key(format!("{w}.repo.rows"))
-                        .role("listbox")
-                        .label("Open existing")
-                        .w_full()
-                        .children(rows),
-                ),
-        )]),
+        finder::scrolling_notices(t, repo::body_key(which), body),
         footer(w, hints, t),
     ]
 }

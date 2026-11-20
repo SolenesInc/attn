@@ -1189,41 +1189,49 @@ fn texts_in(world: &World, within: &str) -> Vec<(String, [f32; 4], [f32; 4])> {
         .collect()
 }
 
+const RELEASE_DEFAULT: &str = "release/customer-platform-2026.12";
+const RELEASE_CURRENT: &str = "release/customer-platform-2026.21";
+
+/// A repository whose two start points differ only at their ends, opened in the picker at
+/// 150% text in a window of `window`, with `worktrees` to open.
+fn release_repo(window: (f32, f32), worktrees: Vec<Worktree>) -> World {
+    let mut world = World::start_sized(
+        daemon(
+            initial(
+                vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
+                &[("uiScale", "1.5")],
+            ),
+            &[],
+        ),
+        window,
+    );
+    world.open_desktop();
+    world
+        .daemon
+        .on("inspect_path", in_repo)
+        .on("get_repo_info", move |_| {
+            message(GetRepoInfoResultMessage {
+                success: true,
+                info: Some(RepoInfo {
+                    repo: REPO.into(),
+                    current_branch: RELEASE_CURRENT.into(),
+                    default_branch: RELEASE_DEFAULT.into(),
+                    current_commit_hash: "0123456789abcdef".into(),
+                    current_commit_time: "2026-11-01T10:00:00Z".into(),
+                    worktrees: worktrees.clone(),
+                }),
+                ..GetRepoInfoResultMessage::new()
+            })
+        });
+    open_repo(&mut world, REPO);
+    world
+}
+
 #[test]
 fn two_start_points_that_differ_at_their_ends_both_show_whole_in_the_smallest_window_at_the_largest_text()
  {
-    const DEFAULT: &str = "release/customer-platform-2026.12";
-    const CURRENT: &str = "release/customer-platform-2026.21";
     let start_labels = |window: (f32, f32)| {
-        let mut world = World::start_sized(
-            daemon(
-                initial(
-                    vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
-                    &[("uiScale", "1.5")],
-                ),
-                &[],
-            ),
-            window,
-        );
-        world.open_desktop();
-        world
-            .daemon
-            .on("inspect_path", in_repo)
-            .on("get_repo_info", |_| {
-                message(GetRepoInfoResultMessage {
-                    success: true,
-                    info: Some(RepoInfo {
-                        repo: REPO.into(),
-                        current_branch: CURRENT.into(),
-                        default_branch: DEFAULT.into(),
-                        current_commit_hash: "0123456789abcdef".into(),
-                        current_commit_time: "2026-11-01T10:00:00Z".into(),
-                        worktrees: Vec::new(),
-                    }),
-                    ..GetRepoInfoResultMessage::new()
-                })
-            });
-        open_repo(&mut world, REPO);
+        let world = release_repo(window, Vec::new());
         ["default", "current"].map(|which| {
             texts_in(&world, &format!("new-session.repo.start.{which}"))
                 .into_iter()
@@ -1249,10 +1257,117 @@ fn two_start_points_that_differ_at_their_ends_both_show_whole_in_the_smallest_wi
     assert_eq!(
         [&small[0].0, &small[1].0],
         [
-            &format!("Start from {DEFAULT}"),
-            &format!("Start from {CURRENT}")
+            &format!("Start from {RELEASE_DEFAULT}"),
+            &format!("Start from {RELEASE_CURRENT}")
         ]
     );
+}
+
+#[test]
+fn in_the_smallest_window_at_the_largest_text_the_chooser_scrolls_and_its_footer_keys_stay_whole() {
+    const WINDOW: (f32, f32) = (800.0, 600.0);
+    const BODY_END_INSET: f32 = 12.0;
+    let window_points = [0.0, 0.0, WINDOW.0 / 1.5, WINDOW.1 / 1.5];
+    let inside = |inner: [f32; 4], outer: [f32; 4]| {
+        inner[0] + 0.5 >= outer[0]
+            && inner[1] + 0.5 >= outer[1]
+            && inner[0] + inner[2] <= outer[0] + outer[2] + 0.5
+            && inner[1] + inner[3] <= outer[1] + outer[3] + 0.5
+    };
+    for count in [1, 4] {
+        let branches: Vec<String> = (1..=count)
+            .map(|i| format!("{RELEASE_CURRENT}-hotfix-{i}"))
+            .collect();
+        let mut world = release_repo(WINDOW, branches.iter().map(|b| worktree(b)).collect());
+        let footer_in_view = |world: &World, zone: &str| {
+            let all = world.runtime().elements();
+            let dialog = all
+                .iter()
+                .find(|e| e.key.as_deref() == Some("new-session"))
+                .expect("the picker is open")
+                .visible;
+            let footer = texts_in(world, "new-session.hints");
+            assert!(
+                !footer.is_empty(),
+                "{count} worktrees, {zone}: the footer draws no keys"
+            );
+            for (said, rect, visible) in footer {
+                assert!(
+                    (rect[1] - visible[1]).abs() < 0.5 && (rect[3] - visible[3]).abs() < 0.5,
+                    "{count} worktrees, {zone}: {said:?} at {rect:?} is clipped to {visible:?}"
+                );
+                assert!(
+                    inside(rect, dialog) && inside(rect, window_points),
+                    "{count} worktrees, {zone}: {said:?} at {rect:?} is outside the dialog {dialog:?} or the window"
+                );
+            }
+        };
+        footer_in_view(&world, "the form");
+        for _ in 0..=count {
+            press(&mut world, Key::Down);
+        }
+        footer_in_view(&world, "the last row");
+        let last = format!("new-session.repo.row.{count}");
+        let (_, rect, visible) = texts_in(&world, &last)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| panic!("{last} draws no name"));
+        assert!(
+            (rect[1] - visible[1]).abs() < 0.5 && (rect[3] - visible[3]).abs() < 0.5,
+            "{count} worktrees: the committed last row at {rect:?} is scrolled out to {visible:?}"
+        );
+        let body = world
+            .runtime()
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some("new-session.repo.body"))
+            .expect("the chooser has a body")
+            .visible;
+        let row = world
+            .runtime()
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(last.as_str()))
+            .expect("the last row is drawn")
+            .rect;
+        let room_under = body[1] + body[3] - (row[1] + row[3]);
+        assert!(
+            room_under + 0.5 >= BODY_END_INSET,
+            "{count} worktrees: scrolled to its end, the last row has {room_under} points under it, not the body's {BODY_END_INSET}"
+        );
+        assert_eq!(
+            committed(&world).as_deref(),
+            branches.last().map(String::as_str)
+        );
+    }
+}
+
+#[test]
+fn a_repository_with_no_commit_yet_says_only_its_path_under_its_checkout() {
+    let mut world = busy_desktop_with(&[], &[]);
+    world
+        .daemon
+        .on("inspect_path", in_repo)
+        .on("get_repo_info", |_| {
+            message(GetRepoInfoResultMessage {
+                success: true,
+                info: Some(RepoInfo {
+                    repo: REPO.into(),
+                    current_branch: "main".into(),
+                    default_branch: "main".into(),
+                    ..RepoInfo::default()
+                }),
+                ..GetRepoInfoResultMessage::new()
+            })
+        });
+    open_repo(&mut world, REPO);
+    let subtitle = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("new-session.repo.row.0.subtitle"))
+        .and_then(|e| e.text);
+    assert_eq!(subtitle.as_deref(), Some(REPO));
 }
 
 #[test]
