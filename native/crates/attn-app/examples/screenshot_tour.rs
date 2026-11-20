@@ -2342,7 +2342,34 @@ fn settings_smallest_pages(dark: bool) {
             ),
         ],
         |_| {},
-        |_| {},
+        |daemon| {
+            daemon.on("delegation_preferences_get", |r: &Request| {
+                let harness = |id: &str, name: &str| Harness {
+                    id: id.into(),
+                    name: name.into(),
+                    available: true,
+                    model_pin: true,
+                    effort_pin: true,
+                    discovery: true,
+                };
+                message(DelegationPreferencesResultMessage {
+                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                    success: true,
+                    preferences: Some(DelegationPreferences::default()),
+                    harnesses: Some(vec![
+                        harness("claude", "Claude Code"),
+                        harness("codex", "Codex"),
+                        harness(
+                            "snipe",
+                            "Engineering observability staging review agent with a long name",
+                        ),
+                    ]),
+                    templates: Some(Vec::new()),
+                    expanded_roles: Some(Vec::new()),
+                    ..DelegationPreferencesResultMessage::new()
+                })
+            });
+        },
     );
     settings_smallest_page(
         dark,
@@ -2449,6 +2476,7 @@ fn settings_smallest_pages(dark: bool) {
                     harnesses: Some(vec![
                         harness("claude", "Claude Code"),
                         harness("codex", "Codex"),
+                        harness("plug", "Build `東京` _staging_ *driver*"),
                     ]),
                     templates: Some(Vec::new()),
                     expanded_roles: Some(Vec::new()),
@@ -2457,6 +2485,22 @@ fn settings_smallest_pages(dark: bool) {
             });
             daemon.on("harness_models", |r: &Request| {
                 let request_id: String = r["request_id"].as_str().unwrap_or_default().into();
+                if r["harness"] == "plug" {
+                    return message(HarnessModelsResultMessage {
+                        request_id,
+                        success: true,
+                        models: vec![HarnessModel {
+                            harness: "plug".into(),
+                            id: "driver-1".into(),
+                            name: "Driver 1".into(),
+                            access: "unknown".into(),
+                            effort_support: "unsupported".into(),
+                            tier_source: "none".into(),
+                            ..HarnessModel::default()
+                        }],
+                        ..HarnessModelsResultMessage::new()
+                    });
+                }
                 if r["harness"] == "codex" {
                     return message(HarnessModelsResultMessage {
                         request_id,
