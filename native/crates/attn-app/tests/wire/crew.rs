@@ -2891,11 +2891,18 @@ fn a_narrow_page_stands_the_roster_above_the_details_and_keeps_every_tab_whole()
 
 #[test]
 fn rename_focuses_a_field_whole_in_the_details_and_the_window_at_any_size_and_name() {
-    let long = with(member("intl", 1), |m| {
-        m.name = "International Engineering Observability 国际工程可观测性".into()
-    });
+    let long = |id: &str, name: &str| {
+        with(member(id, 1), |m| {
+            m.name = format!(
+                "{name}-build-and-release-platform-本番の権限を移行する作業ツリー-tokyo-region-primary"
+            )
+        })
+    };
     for (size, members) in [
-        ((533.0, 400.0), vec![long.clone()]),
+        (
+            (533.0, 400.0),
+            vec![long("chief", "Chief"), long("scout", "scout")],
+        ),
         ((1440.0, 900.0), vec![member("chief", 1)]),
     ] {
         let mut world = start(members);

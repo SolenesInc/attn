@@ -40,7 +40,7 @@ const nodes = async () => {
   return all;
 };
 const node = async (key) => (await nodes()).find((n) => n.key === key) ?? null;
-const field = (setting) => `settings.input.${setting}.field`;
+const field = (setting) => `settings.setting.${setting}`;
 const replaceText = async (key, text) => {
   await driver.click({ key });
   await driver.pressKey('End');

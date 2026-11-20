@@ -124,7 +124,7 @@ try {
   });
 
   await runner.step('a_refused_field_says_why_and_a_good_value_saves', async () => {
-    const field = 'settings.input.projects_directory.field';
+    const field = 'settings.setting.projects_directory';
     const before = attn('settings', 'get', 'projects_directory').trim();
     await replaceText(field, 'relative/dir');
     await driver.pressKey('Enter');

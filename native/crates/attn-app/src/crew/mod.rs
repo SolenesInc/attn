@@ -374,6 +374,7 @@ pub(crate) fn begin_rename(state: &mut State, member: &str, tx: &mut Tx) {
         error: None,
     });
     tx.focus(view::RENAME_FIELD, true);
+    tx.scroll_into_view(format!("{}.field", view::RENAME_FIELD));
 }
 
 pub(crate) fn cancel_rename(state: &mut State, tx: &mut Tx) {
