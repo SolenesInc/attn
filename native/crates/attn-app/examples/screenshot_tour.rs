@@ -5867,7 +5867,12 @@ fn crew_page_with(dark: bool, smallest: bool) -> World {
 fn desktop_naming(dark: bool) {
     let mut world = crew_page(dark);
     click(&mut world, Target::key("crew.tab.launch"));
-    click(&mut world, Target::key("crew.launch.chief.desktop-trigger"));
+    world
+        .automate(
+            "press",
+            json!({"target": {"key": "crew.launch.chief.desktop-trigger"}}),
+        )
+        .expect("the Desktop list opens");
     world
         .automate(
             "press",
@@ -6450,7 +6455,12 @@ fn snooze_menu(dark: bool) {
     );
     let mut world = World::start_sized(daemon, window());
     deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
-    click(&mut world, Target::key("queue-turn.s0.snooze"));
+    let snooze = Target::key("queue-turn.s0.snooze");
+    if world.screen().find(snooze.clone()).is_some() {
+        click(&mut world, snooze);
+    } else {
+        press(&mut world, Action::SessionSnooze);
+    }
     snap(&mut world, "snooze-menu", dark);
 }
 
