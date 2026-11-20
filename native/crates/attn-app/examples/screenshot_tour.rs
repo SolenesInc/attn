@@ -5205,6 +5205,35 @@ fn review_diagram(dark: bool) {
     snap(&mut world, "review-diagram", dark);
 }
 
+/// A note being written on the review's first block, the review alone.
+fn review_composer(dark: bool) {
+    let mut world = review_alone(dark);
+    write_review_note(&mut world);
+    snap(&mut world, "review-composer", dark);
+}
+
+/// A note being written on the review's first block, the review in its tile beside the agent.
+fn review_composer_beside(dark: bool) {
+    let mut world = review_beside_agent(dark);
+    focus_review(&mut world);
+    write_review_note(&mut world);
+    snap(&mut world, "review-composer-beside", dark);
+}
+
+fn write_review_note(world: &mut World) {
+    tap(world, Key::Down);
+    world.gesture(|app| app.type_text("c"));
+    world.gesture(|app| app.type_text("Name the case this misses."));
+}
+
+/// The send of the review, the review in its tile beside the agent.
+fn review_send_beside(dark: bool) {
+    let mut world = review_beside_agent(dark);
+    focus_review(&mut world);
+    press(&mut world, Action::MarkdownSendAnnotations);
+    snap(&mut world, "review-send-beside", dark);
+}
+
 fn launcher_empty_desktop(dark: bool) {
     let mut world = start(launcher_daemon(dark, true));
     snap(&mut world, "launcher-empty-desktop", dark);
@@ -6376,6 +6405,14 @@ fn annotation_notes(dark: bool) {
     click(&mut world, Target::key("tile.m.document.notes"));
     world.settle();
     snap(&mut world, "annotation-notes-list", dark);
+}
+
+/// The menu of the Send of a document with one note: where else the notes can go.
+fn annotation_send_menu(dark: bool) {
+    let mut world = annotation_saved(dark);
+    world.gesture(|app| app.click(Target::key("tile.m.document.send.menu")));
+    world.settle();
+    snap(&mut world, "annotation-send-menu", dark);
 }
 
 fn request_id(r: &Request) -> String {
@@ -7705,6 +7742,9 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("review_edit", || review_edit(dark));
         scene("review_edit_refused", || review_edit_refused(dark));
         scene("review_diagram", || review_diagram(dark));
+        scene("review_send_beside", || review_send_beside(dark));
+        scene("review_composer", || review_composer(dark));
+        scene("review_composer_beside", || review_composer_beside(dark));
         scene("ledger_seeded", || ledger_seeded(dark));
         scene("ledger_worktrees", || ledger_worktrees(dark));
         scene("ledger_smallest", || ledger_smallest(dark));
@@ -7752,6 +7792,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("annotation_comment", || annotation_comment(dark));
         scene("annotation_saved_shot", || annotation_saved_shot(dark));
         scene("annotation_notes", || annotation_notes(dark));
+        scene("annotation_send_menu", || annotation_send_menu(dark));
         scene("markdown_reader", || markdown_reader(dark));
         scene("markdown_missing", || markdown_missing(dark));
         scene("snooze_menu", || snooze_menu(dark));
