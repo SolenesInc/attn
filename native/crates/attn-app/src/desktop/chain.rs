@@ -192,9 +192,22 @@ pub(super) fn widths(trigger: &Trigger, font: TextStyle) -> Widths {
     }
 }
 
-/// The role chip of the sidebar row keyed `row`, which pins the delegation chain beside the
-/// sidebar.
-pub(crate) fn chip(row: &str, session: &str, trigger: &Trigger, t: &Tokens) -> El {
+/// The sidebar row keyed `key` of an agent in a delegation chain, in either flow: its role chip
+/// a kept control at the row's end, which pins the chain beside the sidebar.
+pub(crate) fn on_row(
+    row: attn_ui::system::ListRow,
+    key: &str,
+    session: &str,
+    trigger: &Trigger,
+    t: &Tokens,
+) -> attn_ui::system::ListRow {
+    row.controls(
+        [chip(key, session, trigger, t)],
+        attn_ui::system::Reveal::Always,
+    )
+}
+
+fn chip(row: &str, session: &str, trigger: &Trigger, t: &Tokens) -> El {
     let host = header_pop::Host::Row(row.to_owned());
     let pressed = (host.clone(), session.to_owned());
     let color = if trigger.leads {

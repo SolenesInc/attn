@@ -275,3 +275,29 @@ mod tests {
         assert_eq!(schemes, files);
     }
 }
+
+/// `moving`, taken toward `toward` only as far as it needs to read on `against` or against it,
+/// at the 4.5:1 body text needs: a fill deepened under its words, or words deepened on a wash.
+pub fn moved_until_it_reads(moving: Color, toward: Color, against: Color) -> Color {
+    if contrast(moving, against) >= READS {
+        return moving;
+    }
+    let (mut low, mut high) = (0.0f32, 1.0f32);
+    for _ in 0..24 {
+        let mid = (low + high) / 2.0;
+        if contrast(mix_srgb(moving, toward, mid), against) < READS {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    mix_srgb(moving, toward, high)
+}
+
+/// How far apart two colours read, as WCAG counts it.
+pub fn contrast(a: Color, b: Color) -> f32 {
+    let (a, b) = (a.luminance(), b.luminance());
+    (a.max(b) + 0.05) / (a.min(b) + 0.05)
+}
+
+const READS: f32 = 4.5;

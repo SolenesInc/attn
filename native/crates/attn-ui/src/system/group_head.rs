@@ -7,6 +7,9 @@ use super::{
 };
 use crate::Tokens;
 
+/// Where a heading's words start in from its sides, and a list's notes with them.
+pub(crate) const INSET: Space = Space::S4;
+
 /// The heading of a group in a list, such as a desktop's in the sidebar or a section of the
 /// queue: a mark, the group's name, a hairline to the end, and the keys that go to it. Pressing
 /// it goes to the group, or opens and closes it, unless it is only a heading.
@@ -212,7 +215,7 @@ impl GroupHead {
             .children(self.trailing)
             .hover_group()
             .children(controls);
-        let head = door::gap(door::inset(head, Space::S4, Space::S0), Space::S6);
+        let head = door::gap(door::inset(head, INSET, Space::S0), Space::S6);
         let head = door::corner(head, Radius::Tag);
         if self.heading {
             return head.role("heading");

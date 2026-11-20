@@ -11,12 +11,7 @@ pub fn number_chip(number: i64, current: bool, empty: bool, t: &Tokens) -> El {
     } else {
         t.text_tertiary
     };
-    let chip = row()
-        .min_w(door::line_height(Type::Tag) + 2.0 * Space::S2.pt())
-        .justify_center()
-        .items_center()
-        .child(words(number.to_string(), Type::Tag, ink));
-    let chip = door::corner(door::inset(chip, Space::S4, Space::S0), Radius::Tag);
+    let chip = chip_frame(words(number.to_string(), Type::Tag, ink));
     match (current, empty) {
         (true, _) => chip.fill(t.brand).border(1.0, t.brand),
         (false, true) => chip
@@ -27,6 +22,21 @@ pub fn number_chip(number: i64, current: bool, empty: bool, t: &Tokens) -> El {
             .border_dash(2.0, 2.0),
         (false, false) => chip.border(1.0, t.border),
     }
+}
+
+/// `face` in a chip's small frame, edged as a number chip at rest, such as the count of the
+/// desktops without a number or the overview's mark.
+pub fn chip_edge(face: El, t: &Tokens) -> El {
+    chip_frame(face).border(1.0, t.border)
+}
+
+fn chip_frame(face: El) -> El {
+    let chip = row()
+        .min_w(door::line_height(Type::Tag) + 2.0 * Space::S2.pt())
+        .justify_center()
+        .items_center()
+        .child(face);
+    door::corner(door::inset(chip, Space::S4, Space::S0), Radius::Tag)
 }
 
 /// How many things wait, as a round count in `fill` with `ink`, such as the turns waiting on a

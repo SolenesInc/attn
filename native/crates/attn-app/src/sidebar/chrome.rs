@@ -307,7 +307,10 @@ fn overview_chip(keys: Option<String>, t: &Tokens) -> El {
     system::chip_button(
         "queue.desktop-overview",
         label,
-        system::icon(&attn_ui::icon::OVERVIEW, IconSize::Small, t.text_dimmed),
+        system::chip_edge(
+            system::icon(&attn_ui::icon::OVERVIEW, IconSize::Small, t.text_dimmed),
+            t,
+        ),
         false,
         t,
     )
@@ -345,8 +348,7 @@ fn strip_extras(extras: Extras, t: &Tokens) -> Option<El> {
         } else {
             t.text_tertiary
         };
-        let face = row()
-            .child(words(format!("+{count}"), Type::Tag, ink))
+        let face = system::chip_edge(words(format!("+{count}"), Type::Tag, ink), t)
             .children((waiting > 0).then(|| waiting_dot(t)));
         system::chip_button(
             "queue.desktop-extras",
@@ -451,7 +453,7 @@ pub(crate) fn rail(state: &State, t: &Tokens) -> El {
     let home = state.window.view == View::Home;
     let home_button =
         system::icon_button("rail.home", "Home", &attn_ui::icon::HOME, IconSize::Regular)
-            .expanded(home)
+            .selected(home)
             .ink(if home { t.text_primary } else { t.text_dimmed })
             .on_press(|state: &mut State| state.window.go_home())
             .build(t);

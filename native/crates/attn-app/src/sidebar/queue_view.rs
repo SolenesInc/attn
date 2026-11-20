@@ -845,7 +845,7 @@ fn queue_row(key: String, a: &QueueAgent, cursor: bool, logos: bool, t: &Tokens)
         .tint(a.agent.offline.then_some(t.error))
         .hover_controls(row_controls(&key, a));
     if let Some(chain) = &a.agent.chain {
-        row = row.aside(crate::desktop::chain::chip(&key, &a.agent.id, chain, t));
+        row = crate::desktop::chain::on_row(row, &key, &a.agent.id, chain, t);
     }
     if let Some(asks) = crate::asks::marker(&key, a.agent.asks, t) {
         row = row.aside(asks);

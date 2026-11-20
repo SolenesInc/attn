@@ -79,8 +79,6 @@ pub struct Banner {
 /// which every tone stands further from the title bar than a hover step, in dark and in light.
 const TINT: f32 = 0.18;
 const EDGE: f32 = 0.45;
-/// WCAG's AA contrast for text below 18 points.
-const READS: f32 = 4.5;
 /// The least width a sentence keeps beside its actions: 40 characters, the shortest line that
 /// still reads as one, which the banners' real sentences in Name (6.24 to 6.63 a character)
 /// measure 250 across. Actions that would leave it less, or leave it more lines than it shows,
@@ -641,7 +639,7 @@ impl Paint {
         };
         if tone == BannerTone::Bad {
             let ink = t.bg_app;
-            let fill = deepened_for(hue, ink, t.text_primary);
+            let fill = colors::moved_until_it_reads(hue, t.text_primary, ink);
             return Paint {
                 fill,
                 edge: fill,
@@ -745,26 +743,4 @@ impl Paint {
         let close = door::corner(close, Radius::Control);
         focus::ring(press(layers::pressable(close, self.fill, t)), t)
     }
-}
-
-/// `fill`, moved toward `toward` only as far as `ink` needs to read on it.
-fn deepened_for(fill: Color, ink: Color, toward: Color) -> Color {
-    if contrast(ink, fill) >= READS {
-        return fill;
-    }
-    let (mut low, mut high) = (0.0f32, 1.0f32);
-    for _ in 0..24 {
-        let mid = (low + high) / 2.0;
-        if contrast(ink, colors::mix_srgb(fill, toward, mid)) < READS {
-            low = mid;
-        } else {
-            high = mid;
-        }
-    }
-    colors::mix_srgb(fill, toward, high)
-}
-
-fn contrast(a: Color, b: Color) -> f32 {
-    let (a, b) = (a.luminance(), b.luminance());
-    (a.max(b) + 0.05) / (a.min(b) + 0.05)
 }

@@ -142,8 +142,9 @@ impl ListRow {
         .w_full()
     }
 
-    /// A line of a list that is not a row, such as what an empty list says, at the inset rows
-    /// set their words and as tall as its words, ending in the keys that reach it, if any.
+    /// A line of a list that is not a row, such as what an empty list says, its words on the line
+    /// group headings start theirs on and as tall as they are, the keys that reach it, if any,
+    /// at its end.
     pub fn note(
         key: impl Into<String>,
         said: impl Into<Said>,
@@ -161,8 +162,8 @@ impl ListRow {
                     .role("label")
                     .label(said.text())
                     .items_center(),
-                Size::Compact.inset(),
-                Size::Compact.inset(),
+                super::group_head::INSET,
+                super::group_head::INSET,
             ),
             Space::S6,
         )
@@ -171,7 +172,8 @@ impl ListRow {
                 .a11y_hidden()
                 .single_line()
                 .truncate()
-                .shrink(),
+                .shrink()
+                .grow(1.0),
         )
         .children(keys.map(|keys| {
             words(keys, Type::Mono, t.text_dimmed)
@@ -684,13 +686,13 @@ impl ListRow {
                     row()
                         .h(band)
                         .items_center()
-                        .child(inline)
                         .children(over.map(|over| {
                             row()
                                 .pin(Some(0.0), Some(0.0), None, Some(0.0))
                                 .w(0.0)
                                 .child(over)
-                        })),
+                        }))
+                        .child(inline),
                 ),
                 None,
             ),

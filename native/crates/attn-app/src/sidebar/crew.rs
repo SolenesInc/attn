@@ -216,7 +216,7 @@ pub(crate) fn row_view(key: String, m: &Resting, t: &Tokens) -> El {
         );
         let sun = match m.phase {
             None => sun.ink(t.text_dimmed),
-            Some(_) => sun.ink(t.warning).expanded(true),
+            Some(_) => sun.ink(t.warning).selected(true),
         };
         El::from(
             sun.on_press_tx(move |state: &mut State, tx: &mut Tx| {

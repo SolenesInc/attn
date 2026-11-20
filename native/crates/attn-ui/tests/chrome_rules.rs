@@ -446,7 +446,7 @@ fn quiet_controls_are_faint_until_their_row_is_selected_and_a_tree_row_steps_in(
 }
 
 #[test]
-fn a_rows_hover_controls_take_its_badges_room_and_leave_its_kept_controls_in_view_and_tab_after_them()
+fn a_rows_hover_controls_take_its_badges_room_and_leave_its_kept_controls_in_view_and_tab_before_them()
  {
     for dark in [true, false] {
         for variant in ROW_VARIANTS {
@@ -477,16 +477,20 @@ fn a_rows_hover_controls_take_its_badges_room_and_leave_its_kept_controls_in_vie
     }
     let mut rt = story(true, "Chrome/List row", "Rest");
     tab_to(&mut rt, "row.crew");
-    rt.key(KeyEvent {
-        key: Key::Tab,
-        mods: Mods::default(),
-    });
-    rt.frame(1.0);
-    let focused = rt.elements().into_iter().find(|e| e.focus_visible);
+    let mut reached = Vec::new();
+    for _ in 0..2 {
+        rt.key(KeyEvent {
+            key: Key::Tab,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0);
+        let focused = rt.elements().into_iter().find(|e| e.focus_visible);
+        reached.push(focused.and_then(|e| e.key).unwrap_or_default());
+    }
     assert_eq!(
-        focused.and_then(|e| e.key).as_deref(),
-        Some("row.crew.start"),
-        "Tab reaches the control a row keeps in view before its hover controls"
+        reached,
+        ["row.crew.actions", "row.crew.start"],
+        "Tab reaches a row's hover controls, then what it keeps in view, as they stand left to right"
     );
 }
 
@@ -830,6 +834,16 @@ fn a_pill_stands_on_its_own_ground_and_its_words_read_on_it_in_every_scheme() {
                 "{}, dark={dark}: the pill's words read at {ratio:.2}",
                 scheme.id
             );
+            let t = scheme.colors(dark).ui;
+            if contrast(solid(t.brand), solid(pill.fill)) >= 4.5 {
+                assert!(
+                    [ink.r - t.brand.r, ink.g - t.brand.g, ink.b - t.brand.b]
+                        .iter()
+                        .all(|d| d.abs() < 1e-4),
+                    "{}, dark={dark}: brand reads on the pill, yet its words are {ink:?}",
+                    scheme.id
+                );
+            }
         }
     }
 }

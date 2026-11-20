@@ -190,14 +190,19 @@ pub(crate) fn dismiss(state: &mut State, return_focus: bool, tx: &mut Tx) {
 }
 
 /// Puts the focus on the slot: in queue flow on a Chief in session, the queue list's cursor on
-/// its row.
+/// its row, and on its Start between sessions.
 fn focus_row(state: &mut State, tx: &mut Tx) {
     let Some(row) = row_key(state) else { return };
-    let session = view(state).and_then(|v| v.session);
-    match session {
+    let Some(view) = view(state) else { return };
+    let setting_up = matches!(
+        view.phase,
+        Phase::Unconfigured | Phase::Configuring | Phase::Starting
+    );
+    match view.session {
         Some(session) if row != SLOT && crate::sidebar::actions::queue_flow(state) => {
             crate::sidebar::actions::focus_row(state, &row, &session, tx);
         }
+        _ if row == SLOT && !setting_up => tx.focus(format!("{SLOT}.start"), true),
         _ => tx.focus(row, true),
     }
 }

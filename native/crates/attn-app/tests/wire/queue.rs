@@ -455,6 +455,12 @@ fn collapsing_the_desktop_sidebar_leaves_the_rail_with_home_and_every_desktop_by
     world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
     let screen = world.screen();
     assert!(screen.find(Target::key("sidebar")).is_none());
+    let home = screen.get(Target::key("rail.home"));
+    assert!(
+        !home.is("expanded") && !home.is("collapsed"),
+        "Home opens nothing, yet says {:?}",
+        home.states
+    );
     assert_eq!(
         screen.get(Target::key("rail.home")).value.as_deref(),
         Some("current")
@@ -2421,3 +2427,42 @@ fn the_queue_sidebar_at_150_percent_text_stands_no_taller_than_it_did_before_the
 /// system: the crew head, the Chief, the waiting head, two turns, the agent list's toggle and
 /// its counts, and the gaps between the sections: 219, measured with this test at 9a16295f7.
 const QUEUE_ON_MAIN: f32 = 219.0;
+
+#[test]
+fn a_delegated_turn_keeps_its_chain_chip_and_its_name_floor_beside_three_hover_controls_at_the_narrowest_sidebar()
+ {
+    use attn_protocol::SessionDelegationRole;
+    let delegated = Session {
+        dispatcher_session_id: Some("t-old".into()),
+        delegation_role: Some(SessionDelegationRole {
+            name: "Builder".into(),
+            ..SessionDelegationRole::default()
+        }),
+        label: "Rework the ledger's sweep across every profile".into(),
+        ..turn("t-new", 5)
+    };
+    let mut message = queue(one_desktop(vec![delegated, turn("t-old", 120)]));
+    message
+        .settings
+        .get_or_insert_default()
+        .insert("sidebar_width".to_owned(), "200".to_owned());
+    let mut world = World::start(Daemon::scripted().state(message));
+    let row = "queue-turn.t-new";
+    let [x, y, w, h] = world.rect(row).map(|v| v as f32);
+    world.gesture(|app| app.move_to((x + w / 4.0, y + h / 2.0)));
+    let screen = world.screen();
+    let bounds = |key: &str| screen.bounds(Target::key(key)).expect(key);
+    let [chain_x, ..] = bounds(&format!("{row}.chain"));
+    for control in ["settle", "snooze", "actions"] {
+        let [cx, _, cw, _] = bounds(&format!("{row}.{control}"));
+        assert!(
+            cx + cw <= chain_x + 0.5,
+            "{control} ends at {} over the chain chip at {chain_x}",
+            cx + cw
+        );
+    }
+    let [_, _, name_w, _] = screen
+        .bounds(Target::role("label").name("Rework the ledger's sweep across every profile"))
+        .expect("the name");
+    assert!(name_w >= 46.0, "the name keeps {name_w} of its 46 floor");
+}

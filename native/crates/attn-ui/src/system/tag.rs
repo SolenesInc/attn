@@ -23,14 +23,16 @@ pub(crate) fn tag_height() -> f32 {
     door::line_height(Type::Tag) + 2.0 * Space::S2.pt()
 }
 
-/// What pressing the row it sits in does, such as "Set up ⏎": primary words on the brand mixed
-/// into the panel, round. Its ground is its own, so the words read the same on a row at rest,
+/// What pressing the row it sits in does, such as "Set up ⏎": brand words on the brand mixed
+/// into the panel, round, the words taken toward the primary ink only as far as they need to read. Its ground is its own, so the words read the same on a row at rest,
 /// hovered or pressed.
 pub fn pill(key: impl Into<String>, said: impl Into<Said>, t: &Tokens) -> El {
-    let pill = words(said, Type::Control, t.text_primary)
+    let ground = crate::colors::mix_srgb(t.bg_panel, t.brand, PILL_WASH);
+    let ink = crate::colors::moved_until_it_reads(t.brand, t.text_primary, ground);
+    let pill = words(said, Type::Control, ink)
         .key(key.into())
         .single_line()
-        .fill(crate::colors::mix_srgb(t.bg_panel, t.brand, PILL_WASH));
+        .fill(ground);
     door::corner(door::inset(pill, Space::S6, Space::S0), Radius::Round)
 }
 

@@ -71,6 +71,13 @@ impl IconButton {
         self
     }
 
+    /// The button stands for what is current, or for an action waiting on a second press: it
+    /// takes the selected fill and says nothing about opening anything.
+    pub fn selected(mut self, selected: bool) -> Self {
+        self.open = selected;
+        self
+    }
+
     /// The icon in `ink` rather than the quiet ink every icon button draws in.
     pub fn ink(mut self, ink: Color) -> Self {
         self.ink = Some(ink);
