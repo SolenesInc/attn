@@ -2460,9 +2460,104 @@ fn settings_smallest_pages(dark: bool) {
             });
         },
     );
-    settings_smallest_page(dark, "backgroundTasks", "task runner", &[], |_| {}, |_| {});
-    settings_smallest_page(dark, "senders", "senders", &[], |_| {}, |_| {});
-    settings_smallest_page(dark, "phones", "phones", SWITCHED_ON, |_| {}, |_| {});
+    settings_smallest_page(
+        dark,
+        "backgroundTasks",
+        "task runner",
+        &[],
+        |_| {},
+        |daemon| {
+            daemon.on("task_list", |r: &Request| {
+                let task = |id: &str, state: &str, error: Option<&str>| attn_protocol::Task {
+                    id: id.into(),
+                    kind: "session_activity".into(),
+                    subject: format!("engineering-observability-staging-builder-session-{id}"),
+                    state: state.into(),
+                    attempts: 12,
+                    next_attempt_at: "2026-11-20T09:00:00Z".into(),
+                    created_at: "2026-11-20T08:00:00Z".into(),
+                    updated_at: "2026-11-20T08:30:00Z".into(),
+                    last_error: error.map(str::to_owned),
+                    last_diagnostic: error.map(|_| "stderr: authentication failed for https://api.example.com/v1/sessions: token expired".to_owned()),
+                    ..attn_protocol::Task::default()
+                };
+                message(attn_protocol::TaskListResultMessage {
+                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                    success: true,
+                    tasks: Some(vec![
+                        task("1", "dead", Some("The agent process exited with status 2 after the provider refused its credentials three times in a row.")),
+                        task("2", "running", None),
+                        task("3", "queued", None),
+                    ]),
+                    ..attn_protocol::TaskListResultMessage::new()
+                })
+            });
+        },
+    );
+    settings_smallest_page(
+        dark,
+        "senders",
+        "senders",
+        &[],
+        |_| {},
+        |daemon| {
+            daemon.on("senders_get", |_: &Request| {
+                let sender =
+                    |id: &str, name: &str, used: Option<&str>| attn_protocol::PairedSender {
+                        id: id.into(),
+                        name: name.into(),
+                        created_at: "2026-11-01T09:00:00Z".into(),
+                        last_used_at: used.map(str::to_owned),
+                    };
+                message(attn_protocol::SendersUpdatedMessage {
+                    senders: vec![
+                        sender(
+                            "s1",
+                            "engineering-observability-staging-deploy-bot",
+                            Some("2026-11-19T17:45:00Z"),
+                        ),
+                        sender("s2", "ci", None),
+                    ],
+                    ..attn_protocol::SendersUpdatedMessage::new()
+                })
+            });
+        },
+    );
+    settings_smallest_page(
+        dark,
+        "phones",
+        "phones",
+        SWITCHED_ON,
+        |_| {},
+        |daemon| {
+            daemon.on("phones_get", |_: &Request| {
+                let phone =
+                    |device: &str, name: &str, connected: bool| attn_protocol::PhonePairing {
+                        device_id: device.into(),
+                        profile_id: PROFILE.into(),
+                        name: name.into(),
+                        created_at: "2026-11-02T10:00:00Z".into(),
+                        last_seen_at: "2026-11-18T21:10:00Z".into(),
+                        connected,
+                    };
+                message(PhonesUpdatedMessage {
+                    link: PhoneLink {
+                        state: "connected".into(),
+                        ..PhoneLink::default()
+                    },
+                    pairings: vec![
+                        phone(
+                            "d1",
+                            "Alexandra Konstantinopoulou’s iPhone 17 Pro Max",
+                            false,
+                        ),
+                        phone("d2", "iPad", true),
+                    ],
+                    ..PhonesUpdatedMessage::new()
+                })
+            });
+        },
+    );
     settings_smallest_page(
         dark,
         "plugins",
