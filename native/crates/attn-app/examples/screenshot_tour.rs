@@ -3976,6 +3976,13 @@ fn usage() -> SessionUsage {
     }
 }
 
+/// The delegation chain pinned beside the sidebar by the Builder's role on its row.
+fn session_chain_row(dark: bool) {
+    let mut world = plain(dark);
+    world.gesture(|app| app.click(Target::key("sidebar.session.s2.chain")));
+    snap(&mut world, "session-chain-row", dark);
+}
+
 fn session_usage(dark: bool) {
     let mut world = popover_world(
         dark,
@@ -5085,6 +5092,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("markdown_missing", || markdown_missing(dark));
         scene("snooze_menu", || snooze_menu(dark));
         scene("rename_session", || rename_session(dark));
+        scene("session_chain_row", || session_chain_row(dark));
         scene("session_usage", || session_usage(dark));
         scene("session_seed_context", || session_seed_context(dark));
         scene("notifications_empty", || notifications_empty(dark));
