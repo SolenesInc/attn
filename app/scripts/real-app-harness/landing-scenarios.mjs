@@ -2,16 +2,9 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { scenarioSkipReason } from './matrixDigest.mjs';
-import { scenarioCatalog } from './scenarioCatalog.mjs';
+import { scenarioApp, scenarioCatalog } from './scenarioCatalog.mjs';
 
-const packageScripts = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).scripts;
 const repositoryRoot = new URL('../../../', import.meta.url);
-
-function scenarioFile(scenario) {
-  const [program, ...args] = scenario.command;
-  const words = program === 'pnpm' ? packageScripts[args[1]].split(' ') : scenario.command;
-  return `app/${words[1]}`;
-}
 
 function changesProductCode(path) {
   return /^(app\/src\/|app\/src-tauri\/|internal\/|cmd\/|pty-host\/|native\/)/.test(path)
@@ -38,8 +31,11 @@ const listed = new Set(
 
 const runnable = [];
 for (const scenario of scenarioCatalog) {
-  const changed = changedFiles.has(scenarioFile(scenario));
   const recentlyFailed = recentlyFailedOnMain.delete(scenario.id);
+  if (scenarioApp(scenario) !== 'native') {
+    continue;
+  }
+  const changed = changedFiles.has(`app/${scenario.command[1]}`);
   if (!changed && !recentlyFailed && !listed.has(scenario.id)) {
     continue;
   }

@@ -402,13 +402,14 @@ func TestFilteredAppRunsDoNotPriceTheirFile(t *testing.T) {
 	}
 }
 
-func TestAppTestFilesFollowTheRunnersIncludes(t *testing.T) {
+func TestOnlyTheAcceptanceHarnessTestsAreLandingAppTests(t *testing.T) {
 	for path, want := range map[string]string{
-		"app/src/App.test.tsx":                          "vitest src/App.test.tsx",
-		"app/src/utils/x.test.mjs":                      "vitest src/utils/x.test.mjs",
 		"app/scripts/real-app-harness/common.test.mjs":  "vitest scripts/real-app-harness/common.test.mjs",
-		"app/lint/rule.test.ts":                         "vitest lint/rule.test.ts",
-		"app/e2e/queue.spec.ts":                         "playwright e2e/queue.spec.ts",
+		"app/scripts/real-app-harness/plan.test.ts":     "vitest scripts/real-app-harness/plan.test.ts",
+		"app/src/App.test.tsx":                          "",
+		"app/src/utils/x.test.mjs":                      "",
+		"app/lint/rule.test.ts":                         "",
+		"app/e2e/queue.spec.ts":                         "",
 		"app/scripts/demo-harness/fixtures/a/b.test.js": "",
 		"app/src/helpers.ts":                            "",
 		"internal/x_test.go":                            "",

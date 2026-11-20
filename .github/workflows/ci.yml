@@ -37,11 +37,9 @@ jobs:
       cli: ${{ steps.select.outputs.cli }}
       generated: ${{ steps.select.outputs.generated }}
       daemon: ${{ steps.select.outputs.daemon }}
-      frontend: ${{ steps.select.outputs.frontend }}
+      js_tools: ${{ steps.select.outputs.js_tools }}
       mobile: ${{ steps.select.outputs.mobile }}
-      tauri: ${{ steps.select.outputs.tauri }}
       native: ${{ steps.select.outputs.native }}
-      app_acceptance_tauri: ${{ steps.select.outputs.app_acceptance_tauri }}
       app_acceptance: ${{ steps.select.outputs.app_acceptance }}
       release_preflight: ${{ steps.select.outputs.release_preflight }}
     steps:
@@ -100,12 +98,12 @@ jobs:
           group: daemon
           key: ${{ steps.keys.outputs.daemon }}
 
-      - name: Look up frontend's pass record
-        if: steps.keys.outputs.frontend
+      - name: Look up js_tools's pass record
+        if: steps.keys.outputs.js_tools
         uses: ./.github/actions/ci-pass-record
         with:
-          group: frontend
-          key: ${{ steps.keys.outputs.frontend }}
+          group: js_tools
+          key: ${{ steps.keys.outputs.js_tools }}
 
       - name: Look up mobile's pass record
         if: steps.keys.outputs.mobile
@@ -114,26 +112,12 @@ jobs:
           group: mobile
           key: ${{ steps.keys.outputs.mobile }}
 
-      - name: Look up tauri's pass record
-        if: steps.keys.outputs.tauri
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: tauri
-          key: ${{ steps.keys.outputs.tauri }}
-
       - name: Look up native's pass record
         if: steps.keys.outputs.native
         uses: ./.github/actions/ci-pass-record
         with:
           group: native
           key: ${{ steps.keys.outputs.native }}
-
-      - name: Look up app_acceptance_tauri's pass record
-        if: steps.keys.outputs.app_acceptance_tauri
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: app_acceptance_tauri
-          key: ${{ steps.keys.outputs.app_acceptance_tauri }}
 
       - name: Look up app_acceptance's pass record
         if: steps.keys.outputs.app_acceptance
@@ -402,14 +386,13 @@ jobs:
     with:
       os: ubuntu-24.04
 
-  frontend:
-    name: Frontend
+  # The JavaScript that outlives the Tauri app: the browser runtime the native
+  # app embeds, the App acceptance harness, the plugin SDK and the prompt editor.
+  js-tools:
+    name: JavaScript tools
     needs: changes
-    if: needs.changes.outputs.frontend != 'carried'
+    if: needs.changes.outputs.js_tools != 'carried'
     runs-on: ubuntu-24.04-arm
-    defaults:
-      run:
-        working-directory: app
     steps:
       - uses: actions/checkout@v4
 
@@ -419,45 +402,70 @@ jobs:
           go: 'true'
           node: 'true'
 
-      - name: Check generated prompt catalogs
-        working-directory: .
-        run: go run ./cmd/promptgen --check
-
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
+      - name: Ensure ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
+        with:
+          include-wasm: 'true'
+
       - name: Install dependencies
+        working-directory: app
         run: pnpm install --frozen-lockfile
 
-      - name: Check the committed browser runtime
-        working-directory: .
-        run: make check-browser-runtime
+      - name: Lint and check the committed browser runtime
+        run: make check-js-tools
 
-      - name: Type check
-        run: pnpm run typecheck
-
-      - name: Build
-        run: pnpm run build
-
-      - name: Lint
-        run: pnpm run lint
-
-      - name: Test
-        run: pnpm run test --sequence.shuffle.files
+      - name: Test the App acceptance harness
+        working-directory: app
+        run: pnpm run test scripts/real-app-harness
 
       - name: Upload test receipts
         if: always()
         uses: ./.github/actions/upload-test-receipts
         with:
-          name: frontend
+          name: js-tools
 
       - name: Test prompt editor helpers
-        working-directory: .
+        run: node --test cmd/prompt-editor/test/compare.test.mjs
+
+      - name: Get Playwright version
+        id: playwright-version
+        working-directory: app
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}
+
+      # `install --with-deps` hung past 25 minutes on 2026-09-26 without saying
+      # whether apt or the download stalled; bounded steps name the one that does.
+      - name: Bound apt network waits
         run: |
-          node --test cmd/prompt-editor/test/compare.test.mjs
-          app/node_modules/.bin/oxlint --deny-warnings cmd/prompt-editor/web cmd/prompt-editor/test
+          printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' \
+            | sudo tee /etc/apt/apt.conf.d/80-ci-timeouts
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 10
+        working-directory: app
+        run: pnpm exec playwright install chromium
+
+      - name: Install Playwright OS deps
+        timeout-minutes: 10
+        working-directory: app
+        run: pnpm exec playwright install-deps chromium
+
+      - name: Test prompt editor in Chromium
+        run: |
+          node cmd/prompt-editor/test/browser.mjs
+          node cmd/prompt-editor/test/collaboration.mjs
 
   mobile:
     name: Mobile
@@ -486,110 +494,6 @@ jobs:
       - name: Format, lint, type check and test
         run: pnpm run check
 
-  # E2E runs apart from the unit job so the two overlap instead of stacking.
-  # Each shard is its own runner with its own throwaway daemon + Vite server,
-  # so the shared-daemon constraint that forces workers:1 in playwright.config
-  # still holds within a shard.
-  frontend-e2e:
-    name: Frontend E2E (${{ matrix.shard }}/3)
-    needs: changes
-    if: needs.changes.outputs.frontend != 'carried'
-    runs-on: ubuntu-24.04-arm
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-    defaults:
-      run:
-        working-directory: app
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go and Node.js
-        uses: ./.github/actions/setup-toolchains
-        with:
-          go: 'true'
-          node: 'true'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Ensure ghostty-vt artifacts
-        uses: ./.github/actions/cache-ghostty-vt
-        with:
-          include-wasm: 'true'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build attn binary
-        run: |
-          cd ..
-          ./scripts/build-libghostty-vt.sh
-          go build -o /tmp/attnd ./cmd/attnd
-
-      - name: Build attn CLI
-        uses: ./.github/actions/cache-attn-cli
-        with:
-          out: /tmp/attn
-
-      - name: Get Playwright version
-        id: playwright-version
-        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}
-
-      # `install --with-deps` hung past 25 minutes on 2026-09-26 without saying
-      # whether apt or the download stalled; bounded steps name the one that does.
-      - name: Bound apt network waits
-        run: |
-          printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' \
-            | sudo tee /etc/apt/apt.conf.d/80-ci-timeouts
-
-      # The suite only runs chromium (no projects configured), so skip the
-      # firefox/webkit downloads.
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        timeout-minutes: 10
-        run: pnpm exec playwright install chromium
-
-      - name: Install Playwright OS deps
-        timeout-minutes: 10
-        run: pnpm exec playwright install-deps chromium
-
-      - name: E2E
-        env:
-          ATTN_E2E_BIN: /tmp/attn
-        run: pnpm run e2e --shard=${{ matrix.shard }}/3
-
-      - name: Upload test receipts
-        if: always()
-        uses: ./.github/actions/upload-test-receipts
-        with:
-          name: frontend-e2e-${{ matrix.shard }}
-
-      - name: Test prompt editor in Chromium
-        if: matrix.shard == 1
-        working-directory: .
-        run: |
-          node cmd/prompt-editor/test/browser.mjs
-          node cmd/prompt-editor/test/collaboration.mjs
-
-  rust:
-    name: Tauri
-    needs: changes
-    if: needs.changes.outputs.tauri != 'carried'
-    uses: ./.github/workflows/tauri.yml
-    with:
-      os: ubuntu-24.04
-
   native:
     name: Native
     needs: changes
@@ -610,19 +514,6 @@ jobs:
     with:
       os: ubuntu-24.04
 
-  app-acceptance-tauri:
-    name: App acceptance (tauri)
-    needs: changes
-    if: needs.changes.outputs.app_acceptance_tauri != 'carried'
-    permissions:
-      actions: read
-      contents: read
-      pull-requests: read
-    uses: ./.github/workflows/app-acceptance-matrix.yml
-    with:
-      app: tauri
-      shards: '[1, 2, 3, 4, 5, 6, 7, 8]'
-
   app-acceptance-native:
     name: App acceptance (native)
     needs: changes
@@ -638,7 +529,7 @@ jobs:
 
   app-acceptance:
     name: App acceptance
-    needs: [changes, app-acceptance-tauri, app-acceptance-native]
+    needs: [changes, app-acceptance-native]
     # !cancelled() so a red matrix still reaches the gate instead of skipping.
     if: >-
       !cancelled() && needs.changes.result == 'success'
@@ -657,11 +548,10 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           HEAD_BRANCH: ${{ github.head_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          TAURI_RESULT: ${{ needs.changes.outputs.app_acceptance_tauri == 'carried' && 'carried' || needs.app-acceptance-tauri.result }}
           NATIVE_RESULT: ${{ needs.changes.outputs.app_acceptance == 'carried' && 'carried' || needs.app-acceptance-native.result }}
         run: |
-          if [[ "$TAURI_RESULT" =~ ^(success|carried)$ ]] && [[ "$NATIVE_RESULT" =~ ^(success|carried)$ ]]; then
-            echo "app acceptance: for $HEAD_SHA the tauri Linux serial matrix is $TAURI_RESULT and the native one is $NATIVE_RESULT"
+          if [[ "$NATIVE_RESULT" =~ ^(success|carried)$ ]]; then
+            echo "app acceptance: for $HEAD_SHA the native Linux serial matrix is $NATIVE_RESULT"
             exit 0
           fi
           if [[ "$EVENT_NAME/$HEAD_BRANCH" =~ ^pull_request/release/v[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
@@ -671,8 +561,7 @@ jobs:
             echo "app acceptance: manual receipt covers $HEAD_SHA"
             exit 0
           fi
-          echo "app acceptance: for $HEAD_SHA the tauri matrix is $TAURI_RESULT and the native matrix is" \
-            "$NATIVE_RESULT; each matrix's Matrix job says why" >&2
+          echo "app acceptance: for $HEAD_SHA the native matrix is $NATIVE_RESULT; its Matrix job says why" >&2
           exit 1
 
   release-preflight:
@@ -694,13 +583,10 @@ jobs:
       - go-lint
       - backend
       - pty-compatibility
-      - frontend
+      - js-tools
       - mobile
-      - frontend-e2e
-      - rust
       - native
       - attn-cli
-      - app-acceptance-tauri
       - app-acceptance-native
       - app-acceptance
       - release-preflight
@@ -729,13 +615,10 @@ jobs:
       - go-lint
       - backend
       - pty-compatibility
-      - frontend
+      - js-tools
       - mobile
-      - frontend-e2e
-      - rust
       - native
       - attn-cli
-      - app-acceptance-tauri
       - app-acceptance-native
       - app-acceptance
       - release-preflight
@@ -749,11 +632,9 @@ jobs:
         {"attn-cli": ["cli"],
         "generated-types": ["generated"],
         "go-lint": ["daemon"], "backend": ["daemon"], "pty-compatibility": ["daemon"],
-        "frontend": ["frontend"], "frontend-e2e": ["frontend"],
+        "js-tools": ["js_tools"],
         "mobile": ["mobile"],
-        "rust": ["tauri"],
         "native": ["native"],
-        "app-acceptance-tauri": ["app_acceptance_tauri"],
         "app-acceptance-native": ["app_acceptance"],
         "release-preflight": ["release_preflight"]}
     steps:
@@ -793,12 +674,12 @@ jobs:
           key: ${{ steps.passed.outputs.daemon }}
           write: 'true'
 
-      - name: Record frontend's pass
-        if: '!cancelled() && steps.passed.outputs.frontend'
+      - name: Record js_tools's pass
+        if: '!cancelled() && steps.passed.outputs.js_tools'
         uses: ./.github/actions/ci-pass-record
         with:
-          group: frontend
-          key: ${{ steps.passed.outputs.frontend }}
+          group: js_tools
+          key: ${{ steps.passed.outputs.js_tools }}
           write: 'true'
 
       - name: Record mobile's pass
@@ -809,28 +690,12 @@ jobs:
           key: ${{ steps.passed.outputs.mobile }}
           write: 'true'
 
-      - name: Record tauri's pass
-        if: '!cancelled() && steps.passed.outputs.tauri'
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: tauri
-          key: ${{ steps.passed.outputs.tauri }}
-          write: 'true'
-
       - name: Record native's pass
         if: '!cancelled() && steps.passed.outputs.native'
         uses: ./.github/actions/ci-pass-record
         with:
           group: native
           key: ${{ steps.passed.outputs.native }}
-          write: 'true'
-
-      - name: Record app_acceptance_tauri's pass
-        if: '!cancelled() && steps.passed.outputs.app_acceptance_tauri'
-        uses: ./.github/actions/ci-pass-record
-        with:
-          group: app_acceptance_tauri
-          key: ${{ steps.passed.outputs.app_acceptance_tauri }}
           write: 'true'
 
       - name: Record app_acceptance's pass

@@ -138,9 +138,9 @@ func TestLandLeavesFilesStillRedOnMainOutOfTheVitestSuite(t *testing.T) {
 	}
 	start := time.Now().Add(-time.Hour).Truncate(time.Second)
 	repo.write("scripts/landing-tests", "group app ^app/\nvitest .\n")
-	repo.write("app/src/red.test.ts", "test\n")
+	repo.write("app/scripts/real-app-harness/red.test.mjs", "test\n")
 	failedAt := repo.commit("tests", start)
-	body, err := json.Marshal(otherLaneRun("red-fails", failedAt, "vitest src/red.test.ts", testhistory.Fail, start.Add(time.Minute)))
+	body, err := json.Marshal(otherLaneRun("red-fails", failedAt, "vitest scripts/real-app-harness/red.test.mjs", testhistory.Fail, start.Add(time.Minute)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestLandLeavesFilesStillRedOnMainOutOfTheVitestSuite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "vitest .\nred vitest src/red.test.ts\n"; string(units) != want {
+	if want := "vitest .\nred vitest scripts/real-app-harness/red.test.mjs\n"; string(units) != want {
 		t.Fatalf("units = %q, want %q", units, want)
 	}
 }

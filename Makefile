@@ -222,7 +222,7 @@ lint: lint-go lint-frontend
 
 GO_PACKAGES ?= ./...
 
-.PHONY: compile-go check-go check-frontend check-browser-runtime check-mobile check-native test-native test-native-wire
+.PHONY: compile-go check-go check-js-tools check-browser-runtime check-mobile check-native test-native test-native-wire
 compile-go: $(NATIVE_VT_DEP)
 	go list -test -deps -export $(GO_PACKAGES) >/dev/null
 
@@ -250,8 +250,8 @@ lint-frontend: $(APP_NODE_MODULES)
 	cd app && pnpm run lint
 	app/node_modules/.bin/oxlint --deny-warnings cmd/prompt-editor/web cmd/prompt-editor/test
 
-check-frontend: lint-frontend check-browser-runtime
-	cd app && pnpm exec tsrs --noEmit
+check-js-tools: check-browser-runtime
+	app/node_modules/.bin/oxlint --deny-warnings app/scripts sdk cmd/prompt-editor/web cmd/prompt-editor/test
 
 check-mobile: $(MOBILE_NODE_MODULES)
 	cd mobile && pnpm run check

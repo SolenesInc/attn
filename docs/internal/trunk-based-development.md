@@ -33,7 +33,8 @@ Each check runs in one of two places:
   that changes a path of the `native` landing group, the native wire suite
   (`make test-native-wire`), on the landing runner.
 
-A landing selects three kinds of scenario:
+A landing selects three kinds of the native app's scenarios, and never one of
+the Tauri app's:
 
 - each scenario it adds or changes, because a scenario can pass on the Mac where
   its author ran it and fail on Linux
@@ -91,8 +92,9 @@ Over 884 `main` commits ending at 582e27999, the first two kinds run a scenario 
 scenarios, 13 at the 90th percentile and 57 at most. On CI, 1 scenario took a
 median of 291s over 28 runs, 16 took 704s and 23 took 1024s, in single runs. Of
 the 8 windows where `main` broke a scenario the landing did not change in that
-period, the selection stops 3 (7f90df394, 6bd6f16f8, 94ea7af92), and the whole
-Vitest suite in the landing stops 1 (d6269a1d6). The other 4 still reach `main`,
+period, the selection stops 3 (7f90df394, 6bd6f16f8, 94ea7af92), and the Tauri
+app's Vitest suite, which landings no longer run, stopped 1 (d6269a1d6). The
+other 4 still reach `main`,
 because the landing changed no feature file that lists the scenario, or because
 the scenario failed only after other scenarios ran in the same shard. Running
 the whole matrix for every product change would catch them, on 58% of landings,
@@ -106,9 +108,9 @@ fast gate:
   failures surface in the landing tests and in CI.
 - Protocol schema or prompt inputs: check that generated types or catalogs
   are current.
-- `app/`: lint, and typecheck with tsrs, a Rust port of the TypeScript 7
-  checker. CI on `main` still typechecks with the TypeScript version that
-  `app/package.json` pins.
+- `app/`, `sdk/` or `cmd/prompt-editor/`: `make check-js-tools`, which lints
+  the App acceptance harness, the plugin SDK and the prompt editor, and checks
+  that the committed browser runtime the native app embeds matches its sources.
 - `native/`, the protocol schema or `cli/protocol`: `make check-native`, which
   checks formatting, runs `cargo check` on the whole `native/` workspace, and
   runs clippy on the crates the landing changes, or on every crate when it
@@ -126,9 +128,8 @@ fast gate:
   push, not a suite: the groups of `scripts/landing-tests` that match the
   changed paths, the tests the landing changes, and every test that failed on
   `main` and has since passed there, until it clears. A change under `native/`
-  runs every test of the `native/` workspace. A change under `app/`
-  runs the whole Vitest suite: for such landings, Vitest's import graph selected
-  164 to 191 of 270 files and took as long. A test that is still red on `main` is
+  runs every test of the `native/` workspace, and a change under
+  `app/scripts/real-app-harness/` runs the harness's tests. A test that is still red on `main` is
   listed, not run. `land.sh` prints each test it added and why.
   [Test history](test-history.md#selection) specifies the choice, and
   `scripts/land.sh --baseline` lands with the baseline groups alone.
@@ -189,9 +190,10 @@ any other conflict stops the land before the push.
 
 Checks before landing are fast and local: targeted tests, the change on the
 surface it touches, and a review scaled to the change's risk. The full Go
-suite, the Playwright specs and the Linux scenario matrices of both app
-shells, Tauri and native, run in CI on `main` after landing, and so do the
-combinations of changes that landed together. A push runs each job group, such
+suite and the native app's Linux scenario matrix run in CI on `main` after
+landing, and so do the combinations of changes that landed together. Neither
+CI nor the landing runs the Tauri app's tests, because the native app replaces
+it. A push runs each job group, such
 as the four `Daemon` jobs, unless the group already passed with the same
 inputs: every tracked file except those `.github/ci-inputs.yml` names as
 unread by any job of the group. A file the list leaves out is a claim that no

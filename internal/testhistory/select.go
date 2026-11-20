@@ -17,18 +17,13 @@ const VitestSuiteUnit = "vitest ."
 
 func AppTestUnit(repoPath string) (string, bool) {
 	file, ok := strings.CutPrefix(repoPath, "app/")
-	if !ok {
+	if !ok || !strings.HasPrefix(file, "scripts/real-app-harness/") {
 		return "", false
 	}
-	if strings.HasPrefix(file, "e2e/") && strings.HasSuffix(file, ".spec.ts") {
-		return "playwright " + file, true
+	if !strings.HasSuffix(file, ".test.ts") && !strings.HasSuffix(file, ".test.mjs") {
+		return "", false
 	}
-	for _, root := range vitestInclude {
-		if strings.HasPrefix(file, root.dir) && hasAnySuffix(file, root.suffixes) {
-			return "vitest " + file, true
-		}
-	}
-	return "", false
+	return "vitest " + file, true
 }
 
 func CargoTestUnits(repoPath string) []string {
@@ -67,24 +62,6 @@ func cargoTargetName(file, dir string) (string, bool) {
 		return name, true
 	}
 	return "", false
-}
-
-var vitestInclude = []struct {
-	dir      string
-	suffixes []string
-}{
-	{"src/", []string{".test.ts", ".test.tsx", ".test.mjs"}},
-	{"scripts/real-app-harness/", []string{".test.ts", ".test.mjs"}},
-	{"lint/", []string{".test.ts"}},
-}
-
-func hasAnySuffix(name string, suffixes []string) bool {
-	for _, suffix := range suffixes {
-		if strings.HasSuffix(name, suffix) {
-			return true
-		}
-	}
-	return false
 }
 
 type Inventory map[string]bool

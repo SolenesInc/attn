@@ -196,16 +196,18 @@ arguments name the groups whose path pattern matched the change. `land.sh`
 runs:
 
 - the baseline: every unit of those groups in `scripts/landing-tests`, including
-  `vitest .`, the whole Vitest suite in one run, and `cargo .`, every test of
-  the `native/` workspace in one run
+  `cargo .`, every test of the `native/` workspace in one run. A group can also
+  name `vitest .`, the whole Vitest suite in one run; none does since the Tauri
+  app's tests left the landing
 - the tests the change touches:
   - top-level Go tests whose function overlaps a changed line in a `_test.go`
     file outside `testdata`
-  - changed Vitest files that match `testFilePatterns` in `app/vite.config.ts`
-  - changed Playwright files (`app/e2e/**/*.spec.ts`)
+  - changed test files of the App acceptance harness
+    (`app/scripts/real-app-harness/*.test.{ts,mjs}`)
 - every test that failed on `main` and has since passed there, on at least one
   and fewer than 30 later main revisions in the lane where it failed, whatever
-  its runner. A test still red on `main`, with no pass since its last failure,
+  its runner, except the Tauri app's Vitest and Playwright files, which `main`
+  no longer runs. A test still red on `main`, with no pass since its last failure,
   is listed as `RED` and not run. The sheriff owns it. A red test blocks no
   landing, unless the test is in the baseline or the landing changes the test.
   `land` writes a red Vitest file as `red vitest <file>`, and `landing-tests.sh`

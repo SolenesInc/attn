@@ -196,7 +196,6 @@ chmod +x scripts/native-build-clean
 cp "$root/scripts/land-linux.sh" scripts/land-linux.sh
 mkdir -p app/scripts/real-app-harness
 cp "$root"/app/scripts/real-app-harness/{landing-scenarios,scenarioCatalog,matrixDigest}.mjs app/scripts/real-app-harness/
-cp "$root/app/package.json" app/package.json
 git add .
 git commit -qm baseline
 git remote add origin "$work/remote"
@@ -284,7 +283,7 @@ expect_output 'ATTN_FREEZE_EXCEPTION=s-nope00 names no seed'
 git reset -q --soft HEAD^
 export ATTN_FREEZE_EXCEPTION=s-fix123
 land 'App change'
-expect_checks 'land --group app' check-frontend "landing-tests $selected_units" sync
+expect_checks check-js-tools sync
 expect_output 'changing the frozen Tauri app under the exception for seed s-fix123'
 unset ATTN_FREEZE_EXCEPTION
 
@@ -303,10 +302,6 @@ printf '\n' >>native/crates/demo/src/lib.rs
 land 'Native crate change'
 expect_checks 'land --group native' 'check-native NATIVE_CLIPPY=-p demo' "landing-tests $selected_units" sync
 export ATTN_FREEZE_EXCEPTION=s-fix123
-
-printf '\n' >>app/src/example.ts
-land 'App change while a Vitest file is red on main' "LAND_SELECTED=$(printf 'vitest .\nred vitest src/red.test.ts')"
-expect_checks 'land --group app' check-frontend 'landing-tests --unit vitest . --red vitest src/red.test.ts' sync
 
 mkdir -p mobile/src
 printf 'export {};\n' >mobile/src/example.ts
@@ -389,23 +384,23 @@ no_land_scenario_refs() {
 }
 
 mkdir -p app/scripts/real-app-harness
-printf '// changed\n' >app/scripts/real-app-harness/scenario-shelf-moves.mjs
+printf '// changed\n' >app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
 : >"$LAND_SOAK_REFS"
-land 'Change a scenario, named through a package script'
+land 'Change a scenario'
 grep -qF 'soak workflow run acceptance-soak.yml' "$LAND_CHECK_LOG" || { echo 'a changed scenario did not run before the push' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
-grep -qF -- '-f scenarios=shelf-moves -f repeat=1' "$LAND_CHECK_LOG" || { echo 'the soak did not name the changed scenario' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
-grep -qF 'check-frontend' "$LAND_CHECK_LOG" || { echo 'the gate did not run beside the scenarios' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+grep -qF -- '-f scenarios=native-shelf-moves -f repeat=1' "$LAND_CHECK_LOG" || { echo 'the soak did not name the changed scenario' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+grep -qF 'check-js-tools' "$LAND_CHECK_LOG" || { echo 'the gate did not run beside the scenarios' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 grep -qF refs/heads/land-scenarios/ "$LAND_SOAK_REFS" || { echo 'the soak ran before its ref reached the remote' >&2; exit 1; }
 no_land_scenario_refs
 expect_output 'passed on CI'
 
-printf '// changed\n' >app/scripts/real-app-harness/scenario-focusless-native.mjs
+printf '// changed\n' >app/scripts/real-app-harness/scenario-native-quick-capture.mjs
 land 'Change a macOS-only scenario'
 if grep -qF 'soak' "$LAND_CHECK_LOG"; then echo 'a macOS-only scenario ran on Linux' >&2; exit 1; fi
-expect_output 'scenario focusless-native changed and does not run on Linux'
+expect_output 'scenario native-quick-capture changed and does not run on Linux'
 
 mkdir -p .agents/skills/drive-attn/features
-printf '## Tests\n\n- Wire: `internal/example/example_wire_test.go`.\n- Scenario: `shelf-layout`, `focusless-native`, `shelf-peek`.\n' >.agents/skills/drive-attn/features/example.md
+printf '## Tests\n\n- Wire: `internal/example/example_wire_test.go`.\n- Scenario: `native-shelf-layout`, `native-quick-capture`, `native-shelf-peek`.\n' >.agents/skills/drive-attn/features/example.md
 land 'Reword a feature file without changing the product'
 if grep -qF 'soak' "$LAND_CHECK_LOG"; then echo 'a feature file alone ran its scenarios' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; fi
 
@@ -416,7 +411,7 @@ if grep -qF 'soak' "$LAND_CHECK_LOG"; then echo 'a product change alone ran a sc
 printf '\n' >>internal/example/example.go
 printf '\n' >>.agents/skills/drive-attn/features/example.md
 land 'Change the product and the feature file that describes it'
-grep -qF -- '-f scenarios=shelf-layout,shelf-peek -f repeat=1' "$LAND_CHECK_LOG" || { echo 'the soak did not name the feature file scenarios that run on Linux' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+grep -qF -- '-f scenarios=native-shelf-peek,native-shelf-layout -f repeat=1' "$LAND_CHECK_LOG" || { echo 'the soak did not name the feature file scenarios that run on Linux' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 no_land_scenario_refs
 
 touch "$LAND_MOVE_MAIN"
@@ -467,12 +462,12 @@ printf '\n' >>app/src/example.ts
 land 'A commit by the global identity' GIT_CONFIG_GLOBAL="$work/matching-identity"
 
 refuses 'a failed app check' LAND_CHECK_EXIT=1
-refuses 'a failed landing test' LAND_TESTS_EXIT=1
+refuses 'a failed landing test' LAND_TESTS_EXIT=1 app/scripts/real-app-harness/example.test.mjs
 refuses 'a failed Go check' LAND_CHECK_EXIT=1 internal/example/example.go
 grep -qF 'make ran: check-go' "$work/failure" || { echo 'the failed Go check left no output' >&2; cat "$work/failure" >&2; exit 1; }
 refuses 'a failed landing test beside passing Go checks' LAND_TESTS_EXIT=1 internal/example/example.go
 grep -qF 'make ran: check-go' "$work/failure" || { echo 'the Go checks left no output' >&2; cat "$work/failure" >&2; exit 1; }
-refuses 'a changed scenario that fails on CI' LAND_SOAK_EXIT=1 app/scripts/real-app-harness/scenario-shelf-moves.mjs
+refuses 'a changed scenario that fails on CI' LAND_SOAK_EXIT=1 app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
 grep -qF 'gh run view 7 --log-failed' "$work/failure" || { echo 'the failed scenario did not say how to read it' >&2; cat "$work/failure" >&2; exit 1; }
 no_land_scenario_refs
 refuses 'a failed Go compile' LAND_COMPILE_EXIT=1 internal/example/example.go
@@ -485,7 +480,7 @@ record_for_landing() {
 mkdir "$work/soak-hold"
 mkfifo "$work/soak-hold/watching" "$work/soak-release"
 ln -s "$work/soak-release" "$work/soak-hold/release"
-printf '// gate fails\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+printf '// gate fails\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
 git add -A
 git commit -qm 'Scenario change whose gate fails while its scenario runs'
 : >"$LAND_CHECK_LOG"
@@ -504,7 +499,7 @@ touch "$LAND_REJECT_MAIN"
 : >"$LAND_CHECK_LOG"
 if bash "$root/scripts/land.sh" >"$work/output" 2>&1; then echo 'main accepted a push it rejects' >&2; exit 1; fi
 grep -qF 'soak workflow run' "$LAND_CHECK_LOG" || { echo 'the scenario did not run' >&2; cat "$work/output" >&2; exit 1; }
-grep -qxF 'shelf-moves github https://example.invalid/runs/7' "$(record_for_landing)" || { echo 'a passed scenario left no pass record' >&2; exit 1; }
+grep -qxF 'native-shelf-moves github https://example.invalid/runs/7' "$(record_for_landing)" || { echo 'a passed scenario left no pass record' >&2; exit 1; }
 git -C "$LAND_OTHER" pull -q origin main
 printf 'moved\n' >"$LAND_OTHER/moved.md"
 git -C "$LAND_OTHER" add -A
@@ -515,8 +510,8 @@ touch "$LAND_REJECT_MAIN"
 : >"$LAND_CHECK_LOG"
 if bash "$root/scripts/land.sh" >"$work/output" 2>&1; then echo 'main accepted a push it rejects' >&2; exit 1; fi
 if grep -qF soak "$LAND_CHECK_LOG"; then echo 'an unchanged diff ran its scenario again after a rebase' >&2; cat "$work/output" >&2; exit 1; fi
-expect_output 'scenario shelf-moves passed on this diff already: https://example.invalid/runs/7'
-grep -qF 'check-frontend' "$LAND_CHECK_LOG" || { echo 'a landing with recorded scenarios skipped its gate' >&2; exit 1; }
+expect_output 'scenario native-shelf-moves passed on this diff already: https://example.invalid/runs/7'
+grep -qF 'check-js-tools' "$LAND_CHECK_LOG" || { echo 'a landing with recorded scenarios skipped its gate' >&2; exit 1; }
 rm "$LAND_REJECT_MAIN"
 printf 'changed diff\n' >>README.md
 git add -A
@@ -526,91 +521,91 @@ bash "$root/scripts/land.sh" >"$work/output" 2>&1 || { cat "$work/output" >&2; e
 [ "$(git rev-parse HEAD)" = "$(git --git-dir="$work/remote" rev-parse main)" ]
 grep -qF 'soak workflow run' "$LAND_CHECK_LOG" || { echo 'a changed diff did not run its scenario again' >&2; cat "$work/output" >&2; exit 1; }
 
-recently_failed="$selected"$'\nnative shelf-peek\nnative focusless-native\nnative retired-scenario'
+recently_failed="$selected"$'\nnative native-shelf-peek\nnative native-quick-capture\nnative retired-scenario'
 expect_recent_scenarios_ran() {
   grep -qxF "${go_choice[1]}" "$LAND_CHECK_LOG" || { echo 'the landing tests were not handed exactly the units that are not scenarios' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
-  expect_output 'scenario focusless-native failed on main recently and does not run on Linux'
+  expect_output 'scenario native-quick-capture failed on main recently and does not run on Linux'
   expect_output 'scenario retired-scenario failed on main recently and is no longer in the scenario catalog'
 }
 printf '\n' >>internal/example/example.go
 land 'Go change while a scenario that failed on main has since passed there' LAND_SELECTED="$recently_failed"
-grep -qF -- '-f scenarios=shelf-peek -f repeat=1' "$LAND_CHECK_LOG" || { echo 'the scenario step did not run the scenario the landing tests chose' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
-expect_output 'land: scenarios shelf-peek passed on CI'"'"'s Linux'
+grep -qF -- '-f scenarios=native-shelf-peek -f repeat=1' "$LAND_CHECK_LOG" || { echo 'the scenario step did not run the scenario the landing tests chose' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+expect_output 'land: scenarios native-shelf-peek passed on CI'"'"'s Linux'
 expect_recent_scenarios_ran
 no_land_scenario_refs
 
 git config attn.landRunner ssh:runner.invalid
 printf '// on the landing runner\n' >>internal/example/example.go
 land 'Go change on the landing runner while a scenario that failed on main has since passed there' LAND_SELECTED="$recently_failed"
-grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --turn-limit 654 --scenario shelf-peek --out ' "$LAND_CHECK_LOG" || { echo 'the landing runner did not run the scenario the landing tests chose' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
-expect_output 'scenario shelf-peek passed on runner.invalid in 2s'
+grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --turn-limit 654 --scenario native-shelf-peek --out ' "$LAND_CHECK_LOG" || { echo 'the landing runner did not run the scenario the landing tests chose' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+expect_output 'scenario native-shelf-peek passed on runner.invalid in 2s'
 expect_recent_scenarios_ran
 
-printf '\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+printf '\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
 land 'Change a scenario on the landing runner' LAND_RUNNER_WAITED=7
-grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --turn-limit 654 --scenario shelf-moves --out ' "$LAND_CHECK_LOG" || { echo 'the scenario did not run on the landing runner' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --turn-limit 654 --scenario native-shelf-moves --out ' "$LAND_CHECK_LOG" || { echo 'the scenario did not run on the landing runner' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 if grep -qF 'workflow run' "$LAND_CHECK_LOG"; then echo 'a scenario that passed on the landing runner ran on CI' >&2; exit 1; fi
-expect_output 'scenario shelf-moves passed on runner.invalid in 2s'
+expect_output 'scenario native-shelf-moves passed on runner.invalid in 2s'
 expect_output 's, 7s of it waiting for other landings'
-grep -rqE '^shelf-moves ssh:runner.invalid /.*/runner.log$' "$records" || { echo 'a scenario that passed on the landing runner left no pass record' >&2; exit 1; }
+grep -rqE '^native-shelf-moves ssh:runner.invalid /.*/runner.log$' "$records" || { echo 'a scenario that passed on the landing runner left no pass record' >&2; exit 1; }
 
-printf '\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
-printf '// busy runner\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+printf '\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
+printf '// busy runner\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
 land 'Change a scenario while the landing runner stays busy past the turn limit' LAND_RUNNER_GAVE_UP=655
-grep -qF -- '-f scenarios=shelf-moves -f repeat=1' "$LAND_CHECK_LOG" || { echo 'a landing that gave up its wait for the landing runner did not run on CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+grep -qF -- '-f scenarios=native-shelf-moves -f repeat=1' "$LAND_CHECK_LOG" || { echo 'a landing that gave up its wait for the landing runner did not run on CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 expect_output "waited 655s for a turn on the landing runner runner.invalid, past its 654s limit, so the scenarios run on CI's Linux instead"
-grep -qE '^shelf-moves github ' "$(ls -t "$records"/* | head -1)" || { echo 'a scenario that passed on CI after the wait left no pass record' >&2; exit 1; }
+grep -qE '^native-shelf-moves github ' "$(ls -t "$records"/* | head -1)" || { echo 'a scenario that passed on CI after the wait left no pass record' >&2; exit 1; }
 
-printf '\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+printf '\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
 land 'Change a scenario while the landing runner is down' LAND_RUNNER_REACH_EXIT=255
 if grep -qF runner "$LAND_CHECK_LOG"; then echo 'a scenario ran on an unreachable landing runner' >&2; exit 1; fi
-grep -qF -- '-f scenarios=shelf-moves -f repeat=1' "$LAND_CHECK_LOG" || { echo 'an unreachable landing runner did not fall back to CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+grep -qF -- '-f scenarios=native-shelf-moves -f repeat=1' "$LAND_CHECK_LOG" || { echo 'an unreachable landing runner did not fall back to CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 expect_output 'the landing runner runner.invalid cannot be reached'
 
 git config --add attn.landRunner ssh:second.invalid
-printf '// two runners\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+printf '// two runners\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
 land 'Change a scenario while the first of two landing runners is busy' LAND_RUNNER_BUSY=runner.invalid
 grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --turn-limit 0 ' "$LAND_CHECK_LOG" || { echo 'a landing with two runners waited on the first one' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 expect_output 'the landing runner runner.invalid is busy with another landing'
-expect_output 'scenario shelf-moves passed on second.invalid in 2s'
+expect_output 'scenario native-shelf-moves passed on second.invalid in 2s'
 if grep -qF 'workflow run' "$LAND_CHECK_LOG"; then echo 'a scenario that passed on the second landing runner ran on CI' >&2; exit 1; fi
-grep -rqE '^shelf-moves ssh:second.invalid ' "$records" || { echo 'a scenario that passed on the second landing runner left no pass record' >&2; exit 1; }
+grep -rqE '^native-shelf-moves ssh:second.invalid ' "$records" || { echo 'a scenario that passed on the second landing runner left no pass record' >&2; exit 1; }
 
-printf '// both busy\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+printf '// both busy\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
 land 'Change a scenario while both landing runners are busy' LAND_RUNNER_BUSY=runner.invalid LAND_RUNNER_ALSO_BUSY=second.invalid
 grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --turn-limit 654 ' "$LAND_CHECK_LOG" || { echo 'a landing that found every runner busy did not wait for the first' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
-expect_output 'scenario shelf-moves passed on runner.invalid in 2s'
+expect_output 'scenario native-shelf-moves passed on runner.invalid in 2s'
 git config --unset-all attn.landRunner
 git config attn.landRunner ssh:runner.invalid
 
 printf '\n' >>internal/example/example.go
 printf '\n' >>.agents/skills/drive-attn/features/example.md
-land 'Change the product while a scenario fails on the landing runner' LAND_RUNNER_FAIL=shelf-peek
-[ "$(grep -c '^runner soak ' "$LAND_CHECK_LOG")" = 1 ] && grep -qE -- '--scenario (shelf-layout,shelf-peek|shelf-peek,shelf-layout) ' "$LAND_CHECK_LOG" || { echo 'the landing runner did not run every scenario in one run' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
-grep -qF -- '-f scenarios=shelf-peek -f repeat=1' "$LAND_CHECK_LOG" || { echo 'only the scenario that failed on the landing runner should run on CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
-expect_output 'scenario shelf-peek failed on runner.invalid in 3s, so it runs again on CI'
-grep -rqE '^shelf-layout ssh:runner.invalid ' "$records" || { echo 'a scenario that passed beside a failed one left no pass record' >&2; exit 1; }
+land 'Change the product while a scenario fails on the landing runner' LAND_RUNNER_FAIL=native-shelf-peek
+[ "$(grep -c '^runner soak ' "$LAND_CHECK_LOG")" = 1 ] && grep -qE -- '--scenario (native-shelf-layout,native-shelf-peek|native-shelf-peek,native-shelf-layout) ' "$LAND_CHECK_LOG" || { echo 'the landing runner did not run every scenario in one run' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+grep -qF -- '-f scenarios=native-shelf-peek -f repeat=1' "$LAND_CHECK_LOG" || { echo 'only the scenario that failed on the landing runner should run on CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+expect_output 'scenario native-shelf-peek failed on runner.invalid in 3s, so it runs again on CI'
+grep -rqE '^native-shelf-layout ssh:runner.invalid ' "$records" || { echo 'a scenario that passed beside a failed one left no pass record' >&2; exit 1; }
 no_land_scenario_refs
 
 printf '// runner dies\n' >>internal/example/example.go
 printf 'runner dies\n' >>.agents/skills/drive-attn/features/example.md
-land 'Change the product while the landing runner dies before its last scenario' LAND_RUNNER_CRASH_AT=shelf-peek
-grep -qF -- '-f scenarios=shelf-peek -f repeat=1' "$LAND_CHECK_LOG" || { echo 'a scenario the landing runner did not finish should run on CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
-expect_output 'scenario shelf-peek did not finish on runner.invalid, so it runs again on CI'
-record="$(grep -rlE '^shelf-peek github ' "$records" | xargs ls -t | head -1)"
-grep -qE '^shelf-layout ssh:runner.invalid ' "$record" || { echo 'the scenario the landing runner finished left no pass record' >&2; cat "$record" >&2; exit 1; }
-if grep -qE '^shelf-peek ssh:' "$record"; then echo 'a scenario the landing runner did not finish was recorded as passed there' >&2; exit 1; fi
+land 'Change the product while the landing runner dies before its last scenario' LAND_RUNNER_CRASH_AT=native-shelf-layout
+grep -qF -- '-f scenarios=native-shelf-layout -f repeat=1' "$LAND_CHECK_LOG" || { echo 'a scenario the landing runner did not finish should run on CI' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+expect_output 'scenario native-shelf-layout did not finish on runner.invalid, so it runs again on CI'
+record="$(grep -rlE '^native-shelf-layout github ' "$records" | xargs ls -t | head -1)"
+grep -qE '^native-shelf-peek ssh:runner.invalid ' "$record" || { echo 'the scenario the landing runner finished left no pass record' >&2; cat "$record" >&2; exit 1; }
+if grep -qE '^native-shelf-layout ssh:' "$record"; then echo 'a scenario the landing runner did not finish was recorded as passed there' >&2; exit 1; fi
 
-export LAND_RUNNER_FAIL=shelf-moves
-refuses 'a scenario that fails on the landing runner and on CI' LAND_SOAK_EXIT=1 app/scripts/real-app-harness/scenario-shelf-moves.mjs
+export LAND_RUNNER_FAIL=native-shelf-moves
+refuses 'a scenario that fails on the landing runner and on CI' LAND_SOAK_EXIT=1 app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
 unset LAND_RUNNER_FAIL
 grep -qF 'gh run view 7 --log-failed' "$work/failure" || { echo 'the scenario that failed on CI did not block the landing' >&2; cat "$work/failure" >&2; exit 1; }
 no_land_scenario_refs
 
 mkdir "$work/runner-hold"
 mkfifo "$work/runner-hold/watching" "$work/runner-hold/release"
-printf '// gate fails on the runner\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
-printf '// gate fails on the runner\n' >>app/scripts/real-app-harness/scenario-shelf-peek.mjs
+printf '// gate fails on the runner\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
+printf '// gate fails on the runner\n' >>app/scripts/real-app-harness/scenario-native-shelf-peek.mjs
 git add -A
 git commit -qm 'Scenario change whose gate fails while it runs on the landing runner'
 : >"$LAND_CHECK_LOG"
@@ -642,16 +637,16 @@ grep -qF 'the native wire suite failed on Linux, on runner.invalid in 4s, so not
 grep -qxF 'test wire::tiles::a_tile_fits ... FAILED' "$work/failure" || { echo 'the landing did not name the wire test that failed on Linux' >&2; cat "$work/failure" >&2; exit 1; }
 
 printf '// beside a scenario\n' >>native/crates/demo/src/lib.rs
-printf '// beside the wire suite\n' >>app/scripts/real-app-harness/scenario-shelf-moves.mjs
+printf '// beside the wire suite\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
 land 'Native and scenario change from a Mac' LAND_HOST_OS=Darwin LAND_SELECTED='cargo .'
-[ "$(grep -c '^runner soak ' "$LAND_CHECK_LOG")" = 1 ] && grep -qE -- '--scenario shelf-moves --out [^ ]+ --native-wire$' "$LAND_CHECK_LOG" || { echo 'the wire suite and the scenario did not share one turn on the landing runner' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+[ "$(grep -c '^runner soak ' "$LAND_CHECK_LOG")" = 1 ] && grep -qE -- '--scenario native-shelf-moves --out [^ ]+ --native-wire$' "$LAND_CHECK_LOG" || { echo 'the wire suite and the scenario did not share one turn on the landing runner' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 
 printf '// runner down\n' >>native/crates/demo/src/lib.rs
 land 'Native change from a Mac while the landing runner is down' LAND_HOST_OS=Darwin LAND_RUNNER_REACH_EXIT=255 LAND_SELECTED='cargo .'
 expect_output "no landing runner can be reached, so the native wire suite runs on Linux only in CI's Native job, after the push"
 
 git config attn.landRunner runner.invalid
-refuses 'a landing runner that names no runner' GIT_CONFIG_NOSYSTEM=1 app/scripts/real-app-harness/scenario-shelf-moves.mjs
+refuses 'a landing runner that names no runner' GIT_CONFIG_NOSYSTEM=1 app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
 grep -qF 'set it to github or ssh:<target>' "$work/failure" || { cat "$work/failure" >&2; exit 1; }
 git config --unset attn.landRunner
 

@@ -49,7 +49,7 @@ daemon:
   - 'app/**'
   - '!app/src/prompts/**'
   - '!app/src/ghostty/testdata/**'
-frontend:
+js_tools:
   - 'native/**'
   - 'mobile/**'
 mobile:
@@ -64,19 +64,11 @@ mobile:
   - 'test/**'
   - 'tools/**'
   - 'docs/**'
-tauri:
-  - 'native/**'
-  - 'mobile/**'
-  - 'sdk/**'
-  - 'app/e2e/**'
 native:
   - 'mobile/**'
   - 'sdk/**'
 app_acceptance:
   - 'mobile/**'
-app_acceptance_tauri:
-  - 'mobile/**'
-  - 'native/**'
 release_preflight:
   - 'native/**'
   - 'mobile/**'

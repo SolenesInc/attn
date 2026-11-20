@@ -153,10 +153,15 @@ go ./cmd/attn-ingest TestTheSameBatchSentConcurrentlyIsStoredOnce
 go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes
 go ./cmd/attn-ingest TestEachRecordKindReadsBackAsTypedColumnsThroughItsView
 
-group app ^app/|^internal/colors/schemes/
-vitest .
-playwright e2e/queue-sidebar-fit.spec.ts
-playwright e2e/notebook-tile.spec.ts
+group real-app-harness ^app/scripts/real-app-harness/
+vitest scripts/real-app-harness/agentTripwire.test.mjs
+vitest scripts/real-app-harness/common.test.mjs
+vitest scripts/real-app-harness/defaultInstanceHarness.test.mjs
+vitest scripts/real-app-harness/freshWorld.test.mjs
+vitest scripts/real-app-harness/harnessInstance.test.mjs
+vitest scripts/real-app-harness/parallelMatrix.test.mjs
+vitest scripts/real-app-harness/scenarioCatalog.test.mjs
+vitest scripts/real-app-harness/workerRegistry.test.mjs
 
 group production-copy ^scripts/gardenpushperf/copy-production\.sh$
 go ./internal/daemon TestACopyOfProductionNeverRunsACopiedAgent

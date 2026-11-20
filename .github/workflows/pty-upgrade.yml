@@ -50,6 +50,11 @@ jobs:
 
       - name: Build host and native terminal library
         run: make build-pty-host
+      - name: PTY host fmt, clippy, and test
+        run: |
+          cargo fmt --manifest-path pty-host/Cargo.toml -- --check
+          cargo clippy --manifest-path pty-host/Cargo.toml --all-targets -- -D warnings
+          cargo test --manifest-path pty-host/Cargo.toml
       - name: Install listener discovery tool
         if: runner.os == 'Linux'
         run: command -v lsof >/dev/null || (sudo apt-get update && sudo apt-get install -y lsof)
