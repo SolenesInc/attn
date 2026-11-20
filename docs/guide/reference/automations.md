@@ -151,6 +151,10 @@ location:
   path: /Users/you/projects/api
 ```
 
+`launch.driver` is `claude`, `codex` or, while [Sigma](using-sigma.md) is on,
+`sigma`. The form does not offer Sigma yet, so define a Sigma automation in
+YAML.
+
 ## Details
 
 <details>
@@ -165,6 +169,8 @@ A run you start stands apart from the trigger, so you can test without changing 
 <summary>Do runs stop to ask me for permissions?</summary>
 
 Runs start unattended, with an approval reviewer in your place, so a routine permission prompt does not wait for you. A run still stops and is owed a turn when it finishes or asks you something.
+
+Sigma has no reviewer. A Sigma run starts its conversation with approvals `auto`, as [YOLO](using-sigma.md#how-a-session-runs) does, so it runs every call without review.
 </details>
 
 <details>

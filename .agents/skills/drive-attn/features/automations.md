@@ -232,7 +232,7 @@ Steps:
 - **Outposts**: a definition has no host. Its runs start on the home's machine.
 - **Profiles**: an automation belongs to the profile that applied it, and its runs, seeds and launch desktop stay there. Outside attn, `--profile` picks the profile on every verb.
 - **Performance and idle cost**: the scheduler runs once a minute whether or not anything is due. A cleanup removes the worktrees of finished runs. Until then, the worktrees stay on disk.
-- **Harnesses**: `launch.driver` picks claude, codex or a plugin driver, with `model`, `effort` and `executable`. The run's agent gets the same opening in every harness.
+- **Harnesses**: `launch.driver` picks claude, codex or sigma, with `model`, `effort` and `executable`; a plugin driver is refused. A Sigma run starts its conversation with approvals `auto`. The forms offer only claude and codex. The run's agent gets the same opening in every harness.
 - **Keyboard and native input**: ⌘⇧J and the palette reach runs. The drawer and the form are pointer-first, and their controls take Tab and Enter like any form.
 - **Compatibility across versions**: a definition carrying `enabled` is refused with `enabled is managed outside the spec; use 'attn automation enable' or 'attn automation disable'`, and one carrying `policy` with `policy has been removed; scheduled triggers take continuity and catch_up directly`. Unknown fields are refused by name.
 - **Flow**: in queue flow, runs stay out of the user's queue. The queue sidebar groups current sessions under their automation, and the queue bar counts them and outstanding turns. Superseded singleton sessions stay in run history, and their outstanding turns still join next-run navigation. In desktop flow sessions keep their tiles on the launch desktop, marked ⚡.
@@ -240,7 +240,7 @@ Steps:
 
 ## Tests
 
-- Wire: `internal/daemon/automation_*_wire_test.go`, `internal/daemon/automation_wire_test.go`, `internal/daemon/automations_test.go`, `internal/daemon/garden_profile_automations_wire_test.go`.
+- Wire: `internal/daemon/automation_*_wire_test.go`, `internal/daemon/automation_wire_test.go`, `internal/daemon/automations_test.go`, `internal/daemon/garden_profile_automations_wire_test.go`, `internal/daemon/sigma_wire_test.go` (a Sigma run).
 - Stack: `cmd/attnd/automation_profile_stack_test.go`, `internal/daemon/automation_codex_launch_stack_test.go`.
 - Scenario: `native-automation-form` and `native-automation-surface` in the native app, `automation-form` and `automation-surface` in the Tauri app.
 - Kernel: `internal/automation/automation_test.go`, `internal/automation/schedule_test.go`, `internal/store/automations_test.go`.

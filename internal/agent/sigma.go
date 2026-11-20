@@ -35,6 +35,7 @@ func (s *Sigma) Capabilities() Capabilities {
 	return Capabilities{
 		HasResume:             true,
 		HasYolo:               true,
+		HasUnattendedApproval: true,
 		HasInitialPrompt:      true,
 		HasLaunchInstructions: true,
 		HasModelPin:           true,
@@ -61,7 +62,7 @@ func (s *Sigma) Server() ServerDeclaration {
 
 func (s *Sigma) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	args := []string{"--conversation", sigmaConversation(opts)}
-	if opts.YoloMode {
+	if opts.YoloMode || opts.AutoApprove {
 		args = append(args, "--auto")
 	}
 	if model := strings.TrimSpace(opts.Model); model != "" {

@@ -79,6 +79,8 @@ func (c *Claude) Capabilities() Capabilities {
 		HarnessSignals:        HarnessSignalsClaude,
 		HasResume:             true,
 		HasYolo:               true,
+		HasAutoApprove:        true,
+		HasUnattendedApproval: true,
 		HasInitialPrompt:      true,
 		HasLaunchInstructions: true,
 		HasModelPin:           true,

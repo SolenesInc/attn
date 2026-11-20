@@ -28,8 +28,13 @@ refuses its registration, because Attn has the harness of that name.
   launches `sigma --conversation <id>`, with the initial prompt, model, effort
   and YOLO setting that you chose at launch. When you write a model as
   `provider/model`, such as `openai/gpt-5.5`, you also pick the provider. With
-  YOLO, the conversation starts in a mode where calls that change things run
-  without asking you first.
+  YOLO, the conversation starts with approvals `auto`: every call runs without
+  asking you first.
+- **Auto-approve** leaves Sigma sessions alone. Claude Code and Codex put a
+  reviewer between the agent and its calls, and Sigma has none, so a Sigma
+  session asks you as Sigma does unless you launch it with YOLO.
+- An [automation](automations.md) run has nobody to ask, so a Sigma run starts
+  with approvals `auto`, as YOLO does, and runs every call without review.
 - A new conversation starts with Attn's instructions, as other harnesses get
   them at launch. Sigma stores those instructions in the conversation, so a
   resumed or reloaded session keeps the instructions it started with, as a

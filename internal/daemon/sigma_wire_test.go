@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -186,5 +187,36 @@ func TestAttnRolesInstallTheWorkflowSkillWhereSigmaAndItsClaudeProvidersLook(t *
 	}
 	if _, err := os.Stat(claudeSkill); err != nil {
 		t.Errorf("Sigma's relative provider folder kept attn-workflow from Claude: %v", err)
+	}
+}
+
+func TestASigmaAutomationStartsItsConversationWithApprovalsAuto(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "sigma_enabled", "true")
+	folder := w.Path("check")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
+name: Nightly check
+trigger: {type: manual}
+prompt: Report the flaky tests.
+launch: {driver: sigma, model: openai/gpt-5.5, effort: high}
+location: {type: directory, path: %q}
+`, folder))
+	awaitAutomationChanged(app, 1)
+	run := testworld.Request(app, protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "now"},
+		protocol.EventAutomationRunResult, automationAnswer[protocol.AutomationRunResultMessage]("now"))
+	if !run.Success || protocol.Deref(run.Run.SessionID) == "" {
+		t.Fatalf("automation_run = %+v, want a delivered run with a session", run)
+	}
+	sigma := w.Launched(string(protocol.Deref(run.Run.SessionID)))
+	if got := sigma.Prompted(); !strings.Contains(got, "Report the flaky tests.") {
+		t.Errorf("sigma received %q, want the automation's prompt", got)
+	}
+	started := w.AppServer(fakeagent.Sigma).Started(sigma.ConversationID)
+	if started.Approvals != "auto" || started.Provider != "openai" || started.Model != "gpt-5.5" || started.Effort != "high" {
+		t.Errorf("the automation's conversation started with approvals %q and %s/%s at %s, want approvals auto and openai/gpt-5.5 at high", started.Approvals, started.Provider, started.Model, started.Effort)
 	}
 }

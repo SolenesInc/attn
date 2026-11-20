@@ -59,6 +59,10 @@ type Capabilities struct {
 
 	HasYolo bool
 
+	HasAutoApprove bool
+
+	HasUnattendedApproval bool
+
 	HasInitialPrompt bool
 
 	HasLaunchInstructions bool

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/automation"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
@@ -41,7 +42,7 @@ func (d *Daemon) validateAutomationSpec(raw string) (automation.DefinitionSpec, 
 	if err := d.validateHarnessModelEffort(spec.Launch.Driver, spec.Launch.Model, spec.Launch.Effort); err != nil {
 		return spec, nil, err
 	}
-	if spec.Launch.Driver != "codex" && spec.Launch.Driver != "claude" {
+	if !agentdriver.EffectiveCapabilities(agentdriver.Get(spec.Launch.Driver)).HasUnattendedApproval {
 		return spec, nil, fmt.Errorf("agent %q does not support automation automatic approval", spec.Launch.Driver)
 	}
 	for identity, source := range spec.Location.RepositorySources.Overrides {

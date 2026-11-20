@@ -27,24 +27,31 @@ func TestAutoApproveDefaultsOnAndRespectsAnExplicitChoice(t *testing.T) {
 		{"false", "false"},
 		{"false", "true"},
 	}
-	for _, agent := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+	for _, agent := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Sigma} {
 		t.Run(string(agent), func(t *testing.T) {
 			w := newWorld(t, agent)
 			app := w.App()
+			if agent == fakeagent.Sigma {
+				setSetting(t, app, "sigma_enabled", "true")
+			}
 			for _, launch := range launches {
 				setSetting(t, app, "direct_agent_launch_enabled", launch.direct)
 				if launch.stored != "" {
 					setSetting(t, app, "auto_approve_enabled", launch.stored)
 				}
-				want := launch.stored != "false"
-				if got := w.App().Initial.Settings["auto_approve_enabled"]; got != strconv.FormatBool(want) {
-					t.Errorf("direct=%s stored=%q: settings report auto-approve %q, want %t", launch.direct, launch.stored, got, want)
+				on := launch.stored != "false"
+				if got := w.App().Initial.Settings["auto_approve_enabled"]; got != strconv.FormatBool(on) {
+					t.Errorf("direct=%s stored=%q: settings report auto-approve %q, want %t", launch.direct, launch.stored, got, on)
 				}
+				want := on && agent != fakeagent.Sigma
 				run := w.Launched(w.Spawn(app, agent, w.Path("shop")))
 				mode, _ := flagValue(run.Argv, "--permission-mode")
 				auto := mode == "auto"
-				if agent == fakeagent.Codex {
+				switch agent {
+				case fakeagent.Codex:
 					auto = w.CodexServer().Permissions(run.ConversationID).ApprovalsReviewer == "auto_review"
+				case fakeagent.Sigma:
+					auto = w.AppServer(fakeagent.Sigma).Started(run.ConversationID).Approvals == "auto"
 				}
 				if auto != want {
 					t.Errorf("direct=%s stored=%q: %s ran with auto-approve %t, want %t: %q", launch.direct, launch.stored, agent, auto, want, run.Argv)
