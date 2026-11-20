@@ -7220,33 +7220,6 @@ fn a_long_search_limit_gives_way_before_the_results_do() {
 }
 
 #[test]
-fn the_keyboards_search_result_stays_marked_apart_from_a_hovered_one() {
-    let (mut world, _) = open_served(DOCUMENT, bundle());
-    serve_search(&world);
-    type_key(&mut world, "/");
-    search(&mut world, "calc");
-    let [x, y, w, h] = world
-        .screen()
-        .bounds(Target::key("review.search.option.0"))
-        .expect("the first result");
-    world.gesture(|app| app.runtime.pointer_move(x + w / 2.0, y + h / 2.0));
-    press(&mut world, Key::Down);
-    let marked = |n: usize| {
-        world
-            .runtime()
-            .elements()
-            .into_iter()
-            .any(|e| e.key.as_deref() == Some(&format!("review.search.option.{n}.in-view")))
-    };
-    assert!(
-        marked(1) && !marked(0),
-        "the keyboard's row 1 is marked {}, the hovered row 0 {}",
-        marked(1),
-        marked(0)
-    );
-}
-
-#[test]
 fn a_narrow_reviews_key_line_keeps_its_language_servers_and_their_setup_in_reach() {
     let narrow = || {
         let world = review_in(

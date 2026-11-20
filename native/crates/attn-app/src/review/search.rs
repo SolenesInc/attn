@@ -363,7 +363,7 @@ pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: 
                 .role("option")
                 .unfocusable()
                 .cursor(on)
-                .in_view(on)
+                .selected(on)
                 .title_el(what.a11y_hidden())
                 .aside(where_.a11y_hidden())
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| pick(state, i, tx))

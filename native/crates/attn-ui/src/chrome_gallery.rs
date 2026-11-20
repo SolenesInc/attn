@@ -313,6 +313,34 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             ])
             .build(&t)
             .on_press_tx(press),
+        ListRow::new("row.cursor", "Open calc.go")
+            .role("option")
+            .unfocusable()
+            .title("calc.go")
+            .cursor(s.lit)
+            .selected(s.lit)
+            .build(&t)
+            .on_press_tx(press),
+        ListRow::new("row.chosen", "Open util.go")
+            .role("option")
+            .unfocusable()
+            .title("util.go")
+            .selected(s.lit)
+            .build(&t)
+            .on_press_tx(press),
+        ListRow::new("row.shown", "Open agent b")
+            .unfocusable()
+            .title("agent b")
+            .in_view(s.lit)
+            .build(&t)
+            .on_press_tx(press),
+        ListRow::new("row.shown-cursor", "Open agent a")
+            .unfocusable()
+            .title("agent a")
+            .in_view(s.lit)
+            .cursor(s.lit)
+            .build(&t)
+            .on_press_tx(press),
         rune::col().fill(t.bg_elevated).child(
             ListRow::new("row.raised", "Move to Doing")
                 .title("Doing")

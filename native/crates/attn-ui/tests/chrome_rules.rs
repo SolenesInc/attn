@@ -1422,3 +1422,49 @@ fn a_focused_kept_control_keeps_the_focus_while_its_rows_other_parts_come_and_go
         }
     }
 }
+
+#[test]
+fn the_keyboards_row_keeps_a_chosen_rows_ground_and_carries_the_bar_a_hovered_row_never_draws() {
+    let bar = |rt: &Runtime<()>, key: &str| {
+        rt.elements()
+            .iter()
+            .any(|e| e.key.as_deref() == Some(&format!("{key}.in-view")))
+    };
+    for dark in [true, false] {
+        let t = tokens(dark);
+        let mut rt = story(dark, "Chrome/List row", "Rest");
+        let e = element(&rt, "row.cursor");
+        let (x, y) = on_words(&e);
+        rt.pointer_move(x, y);
+        rt.frame(1.0);
+        assert!(
+            !bar(&rt, "row.cursor"),
+            "dark={dark}: a hovered row draws the bar"
+        );
+        let rt = story(dark, "Chrome/List row", "In view");
+        let keyboards = surface(&rt, &element(&rt, "row.cursor"), t.bg_panel);
+        let chosen = surface(&rt, &element(&rt, "row.chosen"), t.bg_panel);
+        assert_eq!(
+            keyboards, chosen,
+            "dark={dark}: the keyboard's row stands on another ground than a chosen row"
+        );
+        assert!(
+            bar(&rt, "row.cursor"),
+            "dark={dark}: the keyboard's row has no bar"
+        );
+    }
+}
+
+#[test]
+fn a_row_in_view_looks_the_same_with_the_keyboards_cursor_on_it_or_not() {
+    for dark in [true, false] {
+        let t = tokens(dark);
+        let rt = story(dark, "Chrome/List row", "In view");
+        let shown = surface(&rt, &element(&rt, "row.shown"), t.bg_panel);
+        let with_cursor = surface(&rt, &element(&rt, "row.shown-cursor"), t.bg_panel);
+        assert_eq!(
+            shown, with_cursor,
+            "dark={dark}: the keyboard's cursor changes a row in view"
+        );
+    }
+}

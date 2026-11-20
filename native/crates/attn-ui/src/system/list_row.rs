@@ -359,7 +359,9 @@ impl ListRow {
     }
 
     /// The keyboard's cursor of a list that holds the keyboard itself is on the row: it draws
-    /// the focus ring while the list has the focus.
+    /// the focus ring while the list has the focus, and while selected it carries the brand bar at
+    /// its start, which no hovered row draws, so the row Enter opens stays marked under the
+    /// pointer elsewhere. A row in view keeps its own look whether the cursor is on it or not.
     pub fn cursor(mut self, cursor: bool) -> Self {
         self.cursor = cursor;
         self
@@ -767,7 +769,8 @@ impl ListRow {
         .min_w(0.0)
         .child(part(band_line, "band"))
         .children(lower);
-        let bar = (self.mark == Mark::InView).then(|| {
+        let keyboards = self.cursor && self.mark == Mark::Selected;
+        let bar = (self.mark == Mark::InView || keyboards).then(|| {
             let top = (height - BAR.1) / 2.0;
             door::corner(
                 el().key(format!("{}.in-view", self.key))
