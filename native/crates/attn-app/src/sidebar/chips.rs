@@ -450,6 +450,8 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
         .map(|r| super::model::display_name(r.session))
         .collect();
     let more = bands.turns.len().saturating_sub(crumbs.len());
+    use super::crowding::{GivenUp, Part};
+    let given_up = super::crowding::given_up(state);
     let count = super::queue_view::owed_label(owed).unwrap_or_else(|| "Nothing owed".into());
     let mut said = count.clone();
     if !crumbs.is_empty() {
@@ -466,6 +468,9 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
     }
     if more > 0 {
         trail.push_str(&format!(" +{more}"));
+    }
+    if given_up >= GivenUp::PillWord {
+        trail.clear();
     }
     let waiting = system::dot(
         if owed.0 > 0 { t.warning } else { t.text_dimmed },
@@ -485,8 +490,13 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
             IconSize::Small,
             t.text_dimmed,
         ));
+    let shown = if given_up < GivenUp::PillWord {
+        count
+    } else {
+        owed.0.to_string()
+    };
     let pill = El::from(
-        system::Button::new(count)
+        system::Button::new(shown)
             .size(system::Size::Compact)
             .leading(waiting)
             .whole()
@@ -504,24 +514,40 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
         super::bar_peek::anchor_hovered(state, super::bar_peek::Anchor::Waiting, inside)
     })
     .shrink()
-    .min_w(PILL_MIN_W)
+    .min_w(if given_up < GivenUp::PillWord {
+        PILL_MIN_W
+    } else {
+        0.0
+    })
     .max_w(PILL_MAX_W);
-    let crowded = super::crowding::crowded(state);
-    Inline::joined()
+    let crowded = given_up >= GivenUp::Desktops;
+    let bar = Inline::joined()
         .key("queue-bar")
         .role("group")
         .label("Queue bar")
-        .grow(1.0)
         .h_full()
-        .on_measure(super::crowding::bar_laid_out)
         .child(pill)
         .children(
-            crate::notifications::critical_strip(&state.facts.notifications, t)
-                .map(|strip| strip.shrink().max_w(CRITICAL_STRIP_MAX_W)),
+            (given_up < GivenUp::Strip)
+                .then(|| crate::notifications::critical_strip(&state.facts.notifications, t))
+                .flatten()
+                .map(|strip| {
+                    super::crowding::part(
+                        strip
+                            .shrink()
+                            .min_w(CRITICAL_STRIP_MIN_W)
+                            .max_w(CRITICAL_STRIP_MAX_W),
+                        Part::Strip,
+                    )
+                }),
         )
-        .child(shelf)
+        .children((given_up < GivenUp::Shelf).then(|| super::crowding::part(shelf, Part::Shelf)))
         .children((!crowded).then(|| runs_chip(state, t)).flatten())
-        .child(desktops(state, bands, crowded, t))
+        .children(
+            (given_up < GivenUp::Chips)
+                .then(|| super::crowding::part(desktops(state, bands, crowded, t), Part::Chips)),
+        );
+    super::crowding::filled(bar)
 }
 
 /// The queue bar's desktop chips, as the Tauri app's `.queue-bar-desktops`.
@@ -532,9 +558,6 @@ fn desktops(state: &State, bands: &Bands<'_>, crowded: bool, t: &Tokens) -> El {
         .role("group")
         .label("Desktops")
         .h_full()
-        .on_measure(move |state: &mut State, rect| {
-            super::crowding::chips_laid_out(state, rect, crowded)
-        })
         .children(chips.iter().map(|c| {
             let drop = drop_on(state, &c.desktop);
             chip("queue-bar.desktop", c, Look::Bar, drop, t)
@@ -597,6 +620,10 @@ fn runs_chip(state: &State, t: &Tokens) -> Option<El> {
 /// whole, and the crumbs cut before the pill crowds the desktops.
 const PILL_MIN_W: f32 = 124.0;
 const PILL_MAX_W: f32 = 640.0;
+
+/// The narrowest the critical strip stands in the bar: its mark and about ten characters of its
+/// sentence; past that it leaves the bar rather than cut its sentence to nothing.
+const CRITICAL_STRIP_MIN_W: f32 = 96.0;
 
 /// The widest the critical strip stands in the bar, as the Tauri app's `.queue-bar
 /// .critical-strip`; it shrinks with the waiting pill when the bar is tight.

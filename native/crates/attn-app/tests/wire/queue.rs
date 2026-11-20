@@ -2334,6 +2334,98 @@ fn crowded_bar(on_desktop: bool) -> (World, InitialStateMessage) {
 }
 
 #[test]
+fn no_part_of_the_title_bar_covers_another_in_the_smallest_window_at_every_text_size() {
+    for (scale, collapsed) in ["1", "1.25", "1.5"]
+        .into_iter()
+        .flat_map(|scale| [(scale, true), (scale, false)])
+    {
+        let mut message = crowding_desktops(8);
+        message
+            .settings
+            .get_or_insert_default()
+            .insert("uiScale".to_owned(), scale.to_owned());
+        message.profiles.as_mut().unwrap()[0].name = "Work-build-and-release-platform".into();
+        for desktop in message.desktops.as_mut().unwrap() {
+            desktop.name = format!("{}-build-and-release-platform-migration", desktop.name);
+        }
+        let critical = attn_protocol::Notification {
+            id: "n1".into(),
+            kind: "task_failed".into(),
+            severity: "critical".into(),
+            title: "The nightly review automation failed three times in a row and stopped retrying"
+                .into(),
+            created_at: ago(5),
+            ..attn_protocol::Notification::default()
+        };
+        let daemon = Daemon::scripted().state(message);
+        daemon.on("notification_list", move |r| {
+            attn_testkit::message(attn_protocol::NotificationListResultMessage {
+                request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                success: true,
+                notifications: Some(vec![critical.clone()]),
+                unread_count: 1,
+                unread_critical_count: 1,
+                critical_title: Some(critical.title.clone()),
+                ..attn_protocol::NotificationListResultMessage::new()
+            })
+        });
+        let mut world = World::start_sized(daemon, (800.0, 600.0));
+        world.window_controls_take(MACOS_WINDOW_CONTROLS);
+        world.gesture(|app| app.click(Target::key("queue.desktop.1")));
+        if collapsed {
+            world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+            world.settle();
+            assert!(
+                world.screen().find(Target::key("queue-bar.pill")).is_some(),
+                "{scale}: the waiting pill shows"
+            );
+        }
+        let elements = world.runtime().elements();
+        let window = elements
+            .iter()
+            .find(|e| e.key.as_deref() == Some("titlebar"))
+            .map(|e| e.rect[0] + e.rect[2])
+            .expect("the title bar shows");
+        let pieces: Vec<_> = elements
+            .iter()
+            .filter(|e| {
+                !e.exiting
+                    && e.opacity > 0.0
+                    && e.rect[2] > 0.0
+                    && e.path.contains("titlebar")
+                    && (e.focusable || e.key.as_deref().is_some_and(|k| k.ends_with(".waiting")))
+            })
+            .collect();
+        for piece in &pieces {
+            let [x, _, w, _] = piece.rect;
+            assert!(
+                x >= 0.0 && x + w <= window + 0.5,
+                "{scale} collapsed {collapsed}: {:?} lies past the window at {x}..{}",
+                piece.key,
+                x + w
+            );
+        }
+        for (i, a) in pieces.iter().enumerate() {
+            for b in &pieces[i + 1..] {
+                if a.path.starts_with(&b.path) || b.path.starts_with(&a.path) {
+                    continue;
+                }
+                let ([ax, ay, aw, ah], [bx, by, bw, bh]) = (a.rect, b.rect);
+                let apart = ax + aw <= bx + 0.5
+                    || bx + bw <= ax + 0.5
+                    || ay + ah <= by + 0.5
+                    || by + bh <= ay + 0.5;
+                assert!(
+                    apart,
+                    "{scale} collapsed {collapsed}: {:?} at {:?} covers {:?} at {:?}",
+                    a.key, a.rect, b.key, b.rect
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn a_crowded_queue_bar_keeps_the_window_s_desktop_and_gathers_the_rest_into_the_extras_chip() {
     let (mut world, message) = crowded_bar(true);
     let has = |world: &World, key: &str| world.screen().find(Target::key(key)).is_some();

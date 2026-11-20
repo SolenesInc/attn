@@ -1289,7 +1289,7 @@ const LANDS_AT_ONCE: &[AllowRow] = &[
     AllowRow::new("pop-out", "sidebar.frame", ALONE, SIDEBAR_GOES).max(1),
     AllowRow::new("pop-in", "sidebar.frame", ALONE, SIDEBAR_GOES).max(1),
     AllowRow::new("jump", "titlebar.left", ALONE, SIDEBAR_GOES).max(2),
-    AllowRow::new("jump", "titlebar.middle", ALONE, SIDEBAR_GOES).max(6),
+    AllowRow::new("jump", "titlebar.middle", ALONE, SIDEBAR_GOES).max(8),
     AllowRow::new(
         "text-swap",
         "titlebar.sidebar",

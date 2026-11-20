@@ -12,6 +12,11 @@ impl Inline {
         door::gaps(row().flex_wrap().items_center(), Space::S4, Space::S4).max_w_frac(1.0)
     }
 
+    /// The room between the parts of a joined line, which a part that leaves frees with it.
+    pub fn joined_gap() -> f32 {
+        Space::S4.pt()
+    }
+
     /// Close together on one line that never wraps, its parts giving way as they shrink: a mark
     /// and a name that truncates.
     pub fn joined() -> El {

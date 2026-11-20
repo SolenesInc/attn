@@ -396,8 +396,19 @@ pub(crate) fn pill(state: &State, t: &Tokens) -> El {
         .role("button")
         .description(help.clone())
         .help(help)
-        .max_w(PILL_MAX_W);
-    crate::shell::title_bar_slot(PILL_SLOT, pill)
+        .max_w(
+            if crate::sidebar::crowding::given_up(state)
+                >= crate::sidebar::crowding::GivenUp::ProfileName
+            {
+                crate::sidebar::crowding::PROFILE_SHORT_W
+            } else {
+                PILL_MAX_W
+            },
+        );
+    crate::sidebar::crowding::part(
+        crate::shell::title_bar_slot(PILL_SLOT, pill),
+        crate::sidebar::crowding::Part::Profile,
+    )
 }
 
 /// The pill's widest: a profile's name truncates past it, leaving the title bar its room.

@@ -632,6 +632,7 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         .min_w(0.0)
         .h_full()
         .items_center()
+        .on_measure(crate::sidebar::crowding::middle_laid_out)
         .child(if connected {
             crate::sidebar::title_middle(state, shelf, t)
         } else {
@@ -661,6 +662,7 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
         .items_center()
         .window_drag()
+        .on_measure(crate::sidebar::crowding::bar_laid_out)
         .on_layout_tx(|state: &mut State, [_, _, w, _], tx: &mut Tx| {
             if state.window.desk.window_w == Some(w) {
                 tx.live_only();

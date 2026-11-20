@@ -71,7 +71,13 @@ pub(crate) fn title_middle(state: &State, shelf: El, t: &Tokens) -> El {
         let bands = queue::bands(&state.facts, state.window.now_ms);
         chips::queue_bar(state, &bands, shelf, t)
     } else {
-        shelf
+        let shown = crowding::given_up(state) < crowding::GivenUp::Shelf;
+        crowding::filled(
+            rune::row()
+                .items_center()
+                .h_full()
+                .children(shown.then(|| crowding::part(shelf, crowding::Part::Shelf))),
+        )
     }
 }
 
