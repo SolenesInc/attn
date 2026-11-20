@@ -21,8 +21,9 @@ pub struct Field {
 }
 
 impl Field {
-    /// `key` names what the field holds, such as the input inside it: the field is `{key}.field`,
-    /// its label `{key}.label`, the value it shows `{key}.value` and its error `{key}.error`.
+    /// `key` is the key of the input the field holds, so the two never share one: the field is
+    /// `{key}.field`, its label `{key}.label`, the value it shows `{key}.value`, its hint
+    /// `{key}.hint` and its error `{key}.error`.
     pub fn new(key: impl Into<String>, label: impl Into<String>) -> Field {
         Field {
             key: key.into(),
@@ -139,10 +140,11 @@ impl Field {
                     .wrap()
             }))
             .children(self.refusal)
-            .children(
-                self.hint
-                    .map(|h| words(h, Type::Small, t.text_tertiary).wrap()),
-            );
+            .children(self.hint.map(|h| {
+                words(h, Type::Small, t.text_tertiary)
+                    .key(format!("{}.hint", self.key))
+                    .wrap()
+            }));
         Block::new(Kind::Field, door::gap(field, Space::S6))
     }
 }

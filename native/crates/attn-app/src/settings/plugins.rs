@@ -435,7 +435,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let listed = &state.facts.plugins;
     let busy = plugins.busy.is_some();
     let mut page = vec![
-        Field::new("settings.plugins.add", "Plugin source")
+        Field::new("settings.plugins.source", "Plugin source")
             .control(line_box(
                 TextInput::new(&plugins.source)
                     .key("settings.plugins.source")

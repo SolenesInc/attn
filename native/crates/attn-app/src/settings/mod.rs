@@ -190,18 +190,16 @@ enum Leave {
 
 /// The page's scrolling body.
 pub(crate) const BODY: &str = "settings.body";
-const FIELD_PREFIX: &str = "settings.input.";
-const FIELD_SUFFIX: &str = ".field";
 
-/// The key of the text field that edits `setting`.
+/// The key of the input that edits `setting`; the Field around it is `{key}.field`.
 pub(crate) fn field_key(setting: &str) -> String {
-    format!("{FIELD_PREFIX}{setting}{FIELD_SUFFIX}")
+    format!("settings.setting.{setting}")
 }
 
 /// The key of the field that edits `part` of the setting `setting`, for a setting several fields
 /// edit together.
 pub(crate) fn part_field_key(setting: &str, part: &str) -> String {
-    format!("{FIELD_PREFIX}{setting}#{part}{FIELD_SUFFIX}")
+    format!("settings.setting.{setting}#{part}")
 }
 
 /// The fields the page shows besides the dialog's own, each with how it reads and saves.

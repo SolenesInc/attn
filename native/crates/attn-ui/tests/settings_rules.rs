@@ -100,6 +100,40 @@ fn a_fields_label_runs_to_the_fields_measure_before_it_wraps() {
     }
 }
 
+#[test]
+fn a_field_holds_its_input_under_its_own_key_and_no_two_parts_share_a_key() {
+    for variant in WIDTHS {
+        let rt = block_story("Blocks/Field", variant);
+        let all = rt.elements();
+        let mut keys: Vec<&str> = all
+            .iter()
+            .filter_map(|e| e.key.as_deref())
+            .filter(|k| k.starts_with("field."))
+            .collect();
+        keys.sort_unstable();
+        let shared: Vec<&&str> = keys
+            .windows(2)
+            .filter(|w| w[0] == w[1])
+            .map(|w| &w[0])
+            .collect();
+        assert!(shared.is_empty(), "{variant}: keys held twice: {shared:?}");
+        for key in ["field.name", "field.path", "field.count"] {
+            let field = all
+                .iter()
+                .find(|e| e.key.as_deref() == Some(format!("{key}.field").as_str()))
+                .unwrap_or_else(|| panic!("{variant}: no {key}.field"));
+            let input = all
+                .iter()
+                .find(|e| e.key.as_deref() == Some(key))
+                .unwrap_or_else(|| panic!("{variant}: no input keyed {key}"));
+            assert!(
+                input.path.starts_with(&field.path),
+                "{variant}: the input {key} is not inside {key}.field"
+            );
+        }
+    }
+}
+
 #[derive(Default)]
 struct Sibling {
     notice: bool,

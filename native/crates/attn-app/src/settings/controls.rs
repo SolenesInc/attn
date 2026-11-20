@@ -70,7 +70,7 @@ impl SettingField {
             Some(step) => number_box(input.trailing(setting_arrows(key, step, t)), refused, t),
             None => line_box(input, refused, t),
         };
-        let mut field = Field::new(format!("settings.setting.{key}"), self.label)
+        let mut field = Field::new(super::field_key(key), self.label)
             .mark(saved_mark(state, key, t))
             .control(control)
             .refusal(refusal(state, key, t));

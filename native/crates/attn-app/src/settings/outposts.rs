@@ -588,7 +588,7 @@ fn add_form(state: &State, t: &Tokens) -> Block {
         .form()
         .description("Add the destination you use with ssh. attn installs your home's build there and pins its identity on first contact.")
         .push(
-            Field::new("settings.outposts.add.name", "Name")
+            Field::new("settings.outposts.name", "Name")
                 .control(line_box(
                     TextInput::new(&page.name)
                         .key("settings.outposts.name")
@@ -602,7 +602,7 @@ fn add_form(state: &State, t: &Tokens) -> Block {
                 .build(t),
         )
         .push(
-            Field::new("settings.outposts.add.destination", "ssh destination")
+            Field::new("settings.outposts.destination", "ssh destination")
                 .control(line_box(
                     TextInput::new(&page.destination)
                         .key("settings.outposts.destination")

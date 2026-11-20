@@ -2156,7 +2156,7 @@ fn settings_refused(dark: bool, section: &str, search: &str, setting: &str, type
         if smallest {
             world.resize((800.0, 600.0));
         }
-        let field = format!("settings.input.{setting}.field");
+        let field = format!("settings.setting.{setting}");
         world.gesture(|app| {
             app.update(|_, tx| tx.scroll_center_in_instant("settings.body", &field))
         });

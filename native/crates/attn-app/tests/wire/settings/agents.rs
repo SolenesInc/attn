@@ -736,7 +736,7 @@ const NEW_RATES: [(&str, &str); 5] = [
 const NEW_MODEL: &str = "settings.price-new.model";
 
 fn rate(model: &str, rate: &str) -> String {
-    format!("settings.input.session_cost.price.{model}#{rate}.field")
+    format!("settings.setting.session_cost.price.{model}#{rate}")
 }
 
 fn new_rate(rate: &str) -> String {

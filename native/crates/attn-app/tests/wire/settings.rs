@@ -187,7 +187,7 @@ fn writes(world: &World) -> Vec<(String, String)> {
 }
 
 fn field(setting: &str) -> String {
-    format!("settings.input.{setting}.field")
+    format!("settings.setting.{setting}")
 }
 
 fn value(world: &World, key: &str) -> String {

@@ -478,9 +478,9 @@ fn fields(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
             .control(
                 number_box(
                     TextInput::new(&s.number)
-                        .key("field.count.input")
+                        .key("field.count")
                         .label("Wait before counting down (seconds)")
-                        .trailing(arrows("field.count.input", &t, |_: &mut Blocks, _: bool, _: &mut Tx| {}))
+                        .trailing(arrows("field.count", &t, |_: &mut Blocks, _: bool, _: &mut Tx| {}))
                         .on_edit(|s: &mut Blocks| &mut s.number),
                     FieldState::Ready,
                     &t,
