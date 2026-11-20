@@ -2324,7 +2324,17 @@ fn settings_smallest_page(
 /// The pages whose structure moved onto blocks before their lists, each at the smallest size
 /// with the longest real content it meets.
 fn settings_smallest_pages(dark: bool) {
-    settings_smallest_page(dark, "agents", "agents", &[], |_| {}, |_| {});
+    settings_smallest_page(
+        dark,
+        "agents",
+        "agents",
+        &[
+            ("claude_available", "checking"),
+            ("codex_available", "false"),
+        ],
+        |_| {},
+        |_| {},
+    );
     settings_smallest_page(
         dark,
         "outposts",
