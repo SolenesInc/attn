@@ -561,7 +561,7 @@ fn a_lost_connection_disables_changes_and_a_recovering_daemon_says_so() {
         named(&world, "settings.outposts.offline").as_deref(),
         Some("Connect to the home daemon to change outposts.")
     );
-    click(&mut world, &part("repair"));
+    let _refused = world.automate("press", json!({"target": {"key": part("repair")}}));
     assert_eq!(world.daemon.sent_of("repair_outpost").len(), 1);
 }
 

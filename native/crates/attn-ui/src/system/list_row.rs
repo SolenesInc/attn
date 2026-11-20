@@ -13,6 +13,10 @@ const QUIET: f32 = 0.5;
 /// between the fade's end and them.
 const FADE: Space = Space::S16;
 const FADE_ROOM: Space = Space::S4;
+/// The narrowest a title gets before what follows it on its line gives way: "Nightly" in `Name`,
+/// 46 points as the review of landing 1 measured it, so a name keeps its first word in the
+/// sidebar at its narrowest.
+const TITLE_FLOOR: f32 = 46.0;
 
 /// How a row's always-shown controls show.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -433,136 +437,153 @@ impl ListRow {
                 one_line(words(said, kind, ink).key(title_key))
             }
         });
+        let title = title.map(|title| title.min_w(TITLE_FLOOR));
         let subtitle_key = self
             .subtitle_key
             .unwrap_or_else(|| format!("{}.subtitle", self.key));
         let subtitle = self
             .subtitle
             .map(|line| one_line(line.key(subtitle_key)).min_w(0.0));
+        let has_lead = self.lead.is_some();
         let lead = self
             .lead
             .map(|lead| on_band(row().w(LEAD).justify_center().items_center().child(lead)));
         let hovering = !self.hover.is_empty();
         let reach = self.hover.iter().map(IconButton::width).sum::<f32>()
             + Space::S2.pt() * self.hover.len().saturating_sub(1) as f32
-            + FADE_ROOM.pt();
+            + FADE_ROOM.pt()
+            - Space::S8.pt();
         let tagged = !self.tags.is_empty();
-        let fade = |e: El| {
+        let under_title = hovering && tagged && !wraps;
+        let title_line = door::gap(row(), Space::S6).w_full().min_w(0.0);
+        let (title_line, under) = match (wraps, tagged, under_title) {
+            (true, ..) => (
+                title_line.items_start().children(title).children(self.tags),
+                None,
+            ),
+            (false, true, true) => (
+                title_line.h(band).items_center().children(title),
+                Some(door::gap(row().items_center(), Space::S6).children(self.tags)),
+            ),
+            (false, true, false) => (
+                title_line
+                    .flex_wrap()
+                    .items_center()
+                    .children(title.map(|title| on_band(title).shrink().min_w(0.0)))
+                    .children(self.tags.into_iter().map(on_band)),
+                None,
+            ),
+            (false, false, _) => (title_line.h(band).items_center().children(title), None),
+        };
+        let gives_way = |e: El| {
             if hovering {
-                door::fade_before_hover(e, FADE, reach)
+                e.group_opacity(1.0, 0.0)
             } else {
                 e
             }
         };
-        let last = self.tags.len().saturating_sub(1);
-        let tags: Vec<El> = self
-            .tags
-            .into_iter()
-            .enumerate()
-            .map(|(at, tag)| {
-                if hovering && at == last {
-                    door::room_after(tag, FADE.pt() + reach)
-                } else {
-                    tag
-                }
-            })
-            .collect();
-        let title_line = door::gap(row(), Space::S6).w_full().min_w(0.0);
-        let title_line = match (wraps, tagged) {
-            (true, _) => title_line.items_start().children(title).children(tags),
-            (false, true) => title_line
-                .flex_wrap()
-                .items_center()
-                .children(title.map(|title| fade(on_band(title).grow(1.0).shrink().min_w(0.0))))
-                .children(tags.into_iter().map(on_band)),
-            (false, false) => title_line
-                .h(band)
-                .items_center()
-                .children(title)
-                .children(tags),
-        };
-        let title_line = if tagged && !wraps {
-            title_line
-        } else {
-            fade(title_line)
-        };
-        let words_column = door::gap(col(), Space::S2)
+        let asides = (!self.asides.is_empty()).then(|| {
+            gives_way(
+                on_band(
+                    door::gap(row().items_center(), Space::S6)
+                        .shrink()
+                        .min_w(0.0)
+                        .children(self.asides),
+                )
+                .max_w_frac(0.5)
+                .shrink()
+                .min_w(0.0),
+            )
+        });
+        let badges = (!self.badges.is_empty()).then(|| {
+            gives_way(on_band(
+                door::gap(row().items_center(), Space::S6)
+                    .key(format!("{}.badges", self.key))
+                    .children(self.badges),
+            ))
+        });
+        let fading = door::gap(row(), Space::S8)
             .grow(1.0)
             .min_w(0.0)
-            .child(title_line)
-            .children(subtitle);
-        let asides = (!self.asides.is_empty()).then(|| {
-            let asides = on_band(
-                door::gap(row().items_center(), Space::S6)
-                    .shrink()
-                    .min_w(0.0)
-                    .children(self.asides),
-            )
-            .max_w_frac(0.5)
-            .shrink()
-            .min_w(0.0);
-            if hovering {
-                asides.group_opacity(1.0, 0.0)
-            } else {
-                asides
-            }
-        });
+            .items_start()
+            .child(title_line.grow(1.0))
+            .children(asides)
+            .children(badges);
+        let fading = match (hovering, wraps) {
+            (true, false) => door::fade_before_hover(fading, FADE, reach),
+            (true, true) => door::room_after(fading, reach),
+            (false, _) => fading,
+        };
         let controls_key = format!("{}.controls", self.key);
         let inline = (!self.inline.is_empty()).then(|| {
-            let controls = door::gap(row(), Space::S4)
-                .key(controls_key.clone())
-                .items_center()
-                .children(self.inline);
+            let controls = on_band(
+                door::gap(row(), Space::S4)
+                    .key(controls_key.clone())
+                    .items_center()
+                    .children(self.inline),
+            );
             if self.quiet && !lit {
                 controls.group_opacity(QUIET, 1.0)
             } else {
                 controls
             }
         });
-        let kept = !self.badges.is_empty() || inline.is_some();
-        let overlay = hovering.then(|| {
+        let over = hovering.then(|| {
             let key = if inline.is_some() {
                 format!("{controls_key}.hover")
             } else {
                 controls_key.clone()
             };
-            let over = row()
+            door::gap(row(), Space::S2)
                 .key(key)
                 .group_opacity(0.0, 1.0)
                 .pin(None, Some(0.0), Some(0.0), Some(0.0))
-                .items_start()
-                .child(
-                    door::gap(row(), Space::S2)
+                .items_center()
+                .children(self.hover.into_iter().map(|b| El::from(b.build(t))))
+        });
+        let (inline, anchor) = match (inline, over) {
+            (Some(inline), over) => (
+                Some(
+                    row()
                         .h(band)
                         .items_center()
-                        .children(self.hover.into_iter().map(|b| El::from(b.build(t)))),
-                );
-            let end = if kept { Space::S8 } else { size.inset() };
-            let over = door::sides(over, Space::S0, end);
-            if two_lines && !kept {
-                door::rows(over, Space::S6, Space::S0)
-            } else {
-                over
-            }
-        });
-        let (kept, overlaid) = match (kept, overlay) {
-            (true, overlay) => {
-                let anchor = overlay.map(|over| {
-                    row()
-                        .pin(Some(0.0), Some(0.0), None, Some(0.0))
-                        .w(0.0)
-                        .child(over)
-                });
-                let end = door::gap(row(), Space::S6)
-                    .h(band)
-                    .items_center()
-                    .children(self.badges)
-                    .children(inline)
-                    .children(anchor);
-                (Some(end), None)
-            }
-            (false, overlay) => (None, overlay),
+                        .child(inline)
+                        .children(over.map(|over| {
+                            row()
+                                .pin(Some(0.0), Some(0.0), None, Some(0.0))
+                                .w(0.0)
+                                .child(over)
+                        })),
+                ),
+                None,
+            ),
+            (None, over) => (None, over.map(|over| row().w(0.0).h(band).child(over))),
         };
+        let band_line = door::gap(row(), Space::S8)
+            .w_full()
+            .min_w(0.0)
+            .items_start()
+            .children(lead)
+            .child(fading)
+            .children(anchor)
+            .children(inline);
+        let lower = (under.is_some() || subtitle.is_some()).then(|| {
+            let lines = door::gap(col(), Space::S2)
+                .grow(1.0)
+                .min_w(0.0)
+                .children(under)
+                .children(subtitle);
+            row()
+                .w_full()
+                .min_w(0.0)
+                .children(has_lead.then(|| row().w(LEAD + Space::S8.pt())))
+                .child(lines)
+        });
+        let rows = door::gap(col(), if under_title { Space::S6 } else { Space::S2 })
+            .grow(1.0)
+            .min_w(0.0)
+            .child(band_line)
+            .children(lower);
         let bar = (self.mark == Mark::InView).then(|| {
             let top = (height - BAR.1) / 2.0;
             door::corner(
@@ -574,18 +595,6 @@ impl ListRow {
                 Radius::Round,
             )
         });
-        let words_part = door::gap(row(), Space::S8)
-            .grow(1.0)
-            .min_w(0.0)
-            .items_start()
-            .children(lead)
-            .child(words_column);
-        let content = door::gap(row(), Space::S8)
-            .grow(1.0)
-            .min_w(0.0)
-            .items_start()
-            .child(words_part)
-            .children(asides);
         let item = self
             .select
             .is_some()
@@ -604,9 +613,7 @@ impl ListRow {
             .items_start()
             .fill(fill)
             .hover_group()
-            .child(content)
-            .children(kept)
-            .children(overlaid)
+            .child(rows)
             .children(bar);
         let line = match self.expanded {
             Some(open) => line.expanded(open),

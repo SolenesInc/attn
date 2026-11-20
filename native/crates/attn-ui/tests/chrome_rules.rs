@@ -254,7 +254,7 @@ fn hover_and_pressed_take_the_row_step_on_every_chrome_control() {
 fn a_rows_hover_controls_show_whole_on_the_first_frame_on_its_ground_with_its_words_ending_before_them()
  {
     for dark in [true, false] {
-        for variant in ["Rest", "In view", "Long"] {
+        for variant in ROW_VARIANTS {
             for key in ["row.agent", "row.tile", "row.two", "row.keyed"] {
                 let mut rt = story(dark, "Chrome/List row", variant);
                 let row = element(&rt, key);
@@ -298,6 +298,13 @@ fn a_rows_hover_controls_show_whole_on_the_first_frame_on_its_ground_with_its_wo
                     words_end <= controls_start,
                     "{variant}, dark={dark}: {key}'s words reach {words_end} under its controls at {controls_start}"
                 );
+                if key != "row.keyed" {
+                    assert!(
+                        title.visible[2] >= TITLE_FLOOR,
+                        "{variant}, dark={dark}: {key}'s title shows {} points under its controls",
+                        title.visible[2]
+                    );
+                }
                 rt.pointer_leave();
                 rt.frame(1.0 / 60.0);
                 let left = element(&rt, &format!("{key}.title")).visible;
@@ -438,27 +445,33 @@ fn quiet_controls_are_faint_until_their_row_is_selected_and_a_tree_row_steps_in(
 }
 
 #[test]
-fn a_rows_hover_controls_leave_its_badges_and_kept_controls_in_view_and_tab_after_them() {
-    let kept = [
-        ("row.agent", "row.agent.controls", "row.agent.tag"),
-        ("row.crew", "row.crew.controls.hover", "row.crew.start"),
-    ];
+fn a_rows_hover_controls_take_its_badges_room_and_leave_its_kept_controls_in_view_and_tab_after_them()
+ {
     for dark in [true, false] {
         for variant in ROW_VARIANTS {
-            for (key, over, stays) in kept {
-                let mut rt = story(dark, "Chrome/List row", variant);
-                let (x, y) = middle(&element(&rt, key));
-                rt.pointer_move(x, y);
-                rt.frame(1.0 / 60.0);
-                let over = element(&rt, over);
-                let stays = element(&rt, stays);
-                assert!(
-                    over.rect[0] + over.rect[2] <= stays.rect[0] + 0.5,
-                    "{variant}, dark={dark}: {key}'s hover controls end at {} over what it keeps from {}",
-                    over.rect[0] + over.rect[2],
-                    stays.rect[0]
-                );
-            }
+            let mut rt = story(dark, "Chrome/List row", variant);
+            let (x, y) = middle(&element(&rt, "row.agent"));
+            rt.pointer_move(x, y);
+            rt.frame(1.0 / 60.0);
+            let badges = element(&rt, "row.agent.badges");
+            assert!(
+                badges.opacity < 0.01,
+                "{variant}, dark={dark}: row.agent's badges show at {} under its hover controls",
+                badges.opacity
+            );
+
+            let mut rt = story(dark, "Chrome/List row", variant);
+            let (x, y) = middle(&element(&rt, "row.crew"));
+            rt.pointer_move(x, y);
+            rt.frame(1.0 / 60.0);
+            let over = element(&rt, "row.crew.controls.hover");
+            let stays = element(&rt, "row.crew.start");
+            assert!(
+                over.rect[0] + over.rect[2] <= stays.rect[0] + 0.5,
+                "{variant}, dark={dark}: row.crew's hover controls end at {} over what it keeps from {}",
+                over.rect[0] + over.rect[2],
+                stays.rect[0]
+            );
         }
     }
     let mut rt = story(true, "Chrome/List row", "Rest");
@@ -667,26 +680,60 @@ fn a_disabled_piece_takes_no_tab_stop_and_no_press_on_any_part_of_it() {
     }
 }
 
+thread_local! {
+    static PILL_TOKENS: std::cell::Cell<Option<Tokens>> = const { std::cell::Cell::new(None) };
+}
+
+fn pill_tokens() -> Tokens {
+    PILL_TOKENS
+        .with(|cell| cell.get())
+        .expect("the pill's tokens")
+}
+
+fn pill_view(t: &Tokens, _: &mut Cx<Tokens>) -> El {
+    rune::row()
+        .items_start()
+        .child(attn_ui::system::pill("pill", "Set up ⏎", t))
+}
+
 #[test]
-fn a_pills_words_read_on_its_wash_and_it_stands_inside_a_rows_band() {
-    for dark in [true, false] {
-        let t = tokens(dark);
-        let rt = story(dark, "Chrome/Chip", "Rest");
-        let pill = element(&rt, "chip.pill");
-        let ground = surface(&rt, &pill, t.bg_panel);
-        let ink = pill.text_color.expect("the pill has words");
-        let ink = [ink.r, ink.g, ink.b].map(rune::theme::srgb_encode);
-        let ratio = contrast(ink, ground);
-        assert!(
-            ratio >= 4.5,
-            "dark={dark}: the pill's words read at {ratio:.2} on its wash"
-        );
-        assert!(
-            pill.rect[3] <= ListRow::height(),
-            "dark={dark}: the pill stands {} tall, past a row's {}",
-            pill.rect[3],
-            ListRow::height()
-        );
+fn a_pill_stands_on_its_own_ground_and_its_words_read_on_it_in_every_scheme() {
+    for scheme in attn_ui::colors::SCHEMES.iter() {
+        for dark in [true, false] {
+            PILL_TOKENS.with(|cell| cell.set(Some(scheme.colors(dark).ui)));
+            let mut rt = App::new(AppSpec {
+                fonts: attn_ui::FONTS,
+                families: attn_ui::FAMILIES,
+                ..AppSpec::new("pill", WINDOW, pill_tokens, pill_view)
+            })
+            .headless_runtime(WINDOW, Env::new(dark, SCALE));
+            rt.frame(0.0);
+            let pill = rt
+                .elements()
+                .into_iter()
+                .find(|e| e.key.as_deref() == Some("pill"))
+                .expect("the pill");
+            assert!(
+                pill.fill.a > 0.999,
+                "{}, dark={dark}: the pill's ground lets the row show through at {}",
+                scheme.id,
+                pill.fill.a
+            );
+            assert!(
+                pill.rect[3] <= ListRow::height(),
+                "the pill stands {} tall, past a row's {}",
+                pill.rect[3],
+                ListRow::height()
+            );
+            let solid = |c: rune::Color| [c.r, c.g, c.b].map(rune::theme::srgb_encode);
+            let ink = pill.text_color.expect("the pill has words");
+            let ratio = contrast(solid(ink), solid(pill.fill));
+            assert!(
+                ratio >= 4.5,
+                "{}, dark={dark}: the pill's words read at {ratio:.2}",
+                scheme.id
+            );
+        }
     }
 }
 
@@ -750,6 +797,32 @@ fn a_lit_row_stands_apart_from_a_raised_surface() {
         assert!(
             contrast(lit, raised) > 1.05,
             "dark={dark}: the lit row {lit:?} is the raised surface {raised:?}"
+        );
+    }
+}
+
+#[test]
+fn a_wrapped_rows_title_keeps_its_controls_room_at_rest_and_never_fades() {
+    for variant in ROW_VARIANTS {
+        let mut rt = story(true, "Chrome/List row", variant);
+        let row = element(&rt, "row.wrapped");
+        let rest = element(&rt, "row.wrapped.title");
+        let (x, y) = middle(&row);
+        rt.pointer_move(x, y);
+        rt.frame(1.0 / 60.0);
+        let hovered = element(&rt, "row.wrapped.title");
+        assert!(
+            near(rest.visible, hovered.visible) && near(rest.rect, hovered.rect),
+            "{variant}: hovering changes the wrapped title from {:?} to {:?}",
+            rest.visible,
+            hovered.visible
+        );
+        let controls = element(&rt, "row.wrapped.controls");
+        assert!(
+            rest.rect[0] + rest.rect[2] <= controls.rect[0] + 0.5,
+            "{variant}: the wrapped title runs to {} under its controls from {}",
+            rest.rect[0] + rest.rect[2],
+            controls.rect[0]
         );
     }
 }

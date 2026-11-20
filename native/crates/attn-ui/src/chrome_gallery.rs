@@ -216,8 +216,16 @@ fn dot(t: &Tokens) -> El {
     )
 }
 
+/// A row's hover controls, three of them.
 fn row_controls(key: &str) -> Vec<IconButton> {
     vec![
+        icon_button(
+            format!("{key}.snooze"),
+            "Snooze",
+            crate::glyph::MOON,
+            IconSize::Small,
+        )
+        .on_press_tx(press),
         icon_button(
             format!("{key}.rename"),
             "Rename",
@@ -301,6 +309,13 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
                 .build(&t)
                 .on_press_tx(press),
         ),
+        ListRow::new("row.wrapped", "Open the failed run")
+            .lead(dot(&t))
+            .title("Run failed: connect ECONNREFUSED /tmp/attn-501/daemon.sock")
+            .hover_controls(row_controls("row.wrapped"))
+            .wrap()
+            .build(&t)
+            .on_press_tx(press),
         ListRow::new("row.two", "Open the delegation chain")
             .lead(dot(&t))
             .title(if s.long { LONG_AGENT } else { "chrome" })
