@@ -5,7 +5,7 @@ use attn_protocol::{PairedSender, SenderUnpairResultMessage, SendersUpdatedMessa
 use attn_testkit::{Daemon, Target, World, message};
 use serde_json::Value;
 
-use super::{accepting, click, named, open, press_action, rest};
+use super::{accepting, click, edged_as_error, named, open, press_action, rest};
 
 const ROW: &str = "settings.sender.sender-1";
 
@@ -107,6 +107,42 @@ fn shows_why_removing_a_sender_failed_and_sends_one_removal_for_a_double_press()
         error.name.as_deref(),
         Some(r#"no paired sender named "deploy-bot""#)
     );
+    assert!(edged_as_error(&world, "settings.senders.error"));
+}
+
+#[test]
+fn a_refused_removal_says_why_under_its_sender_in_view_however_many_senders_follow() {
+    let senders = (1..=30)
+        .map(|n| PairedSender {
+            id: format!("sender-{n}"),
+            name: format!("engineering-observability-deploy-bot-{n}"),
+            ..deploy_bot(None)
+        })
+        .collect();
+    let (daemon, _) = home(senders);
+    daemon.on("sender_unpair", |_| {
+        message(SenderUnpairResultMessage {
+            success: false,
+            error: Some("the daemon could not write the senders file: permission denied".into()),
+            ..SenderUnpairResultMessage::new()
+        })
+    });
+    let mut world = World::start(daemon);
+    on_senders(&mut world);
+    click(&mut world, "settings.sender.sender-1.remove");
+    let error = "settings.senders.error";
+    let (body, notice) = (world.rect("settings.body"), world.rect(error));
+    assert!(
+        notice[1] >= body[1] && notice[1] + notice[3] <= body[1] + body[3],
+        "the refusal at {notice:?} lies inside the page's view {body:?}"
+    );
+    assert!(edged_as_error(&world, error));
+    let mut top = |key: &str| world.rect(key)[1];
+    assert!(
+        top("settings.sender.sender-1") < notice[1] && notice[1] < top("settings.sender.sender-2"),
+        "the refusal lies between the sender it was pressed on and the next"
+    );
+    rest(&mut world);
 }
 
 #[test]

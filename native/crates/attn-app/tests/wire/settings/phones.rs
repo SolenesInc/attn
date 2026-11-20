@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use attn_app::Action;
 
-use super::{click, named, open, press, press_action};
+use super::{click, edged_as_error, named, open, press, press_action};
 
 /// Ten minutes after the world's wall clock starts: a fresh code's expiry.
 const EXPIRES_AT: &str = "2026-11-12T09:10:00Z";
@@ -326,6 +326,39 @@ fn shows_why_the_link_is_down_and_why_a_code_could_not_be_shown() {
             .name
             .unwrap()
             .starts_with("this home has not registered with Attn Cloud yet")
+    );
+    assert!(edged_as_error(&world, "settings.phones.work.error"));
+}
+
+#[test]
+fn a_refused_revoke_says_why_as_an_error_under_the_phone_it_was_pressed_on() {
+    let ipad = PhonePairing {
+        device_id: "device-2".into(),
+        name: "iPad".into(),
+        ..phone(false)
+    };
+    let (daemon, _) = home(phones(vec![], vec![phone(true), ipad]));
+    daemon.on("phone_pairing_revoke", |_| {
+        message(PhonePairingRevokeResultMessage {
+            success: false,
+            error: Some("the phone's pairing is held by another home".into()),
+            ..PhonePairingRevokeResultMessage::new()
+        })
+    });
+    let mut world = World::start(daemon);
+    on_phones(&mut world);
+    click(&mut world, "settings.phone.work.device-1.revoke");
+    let error = "settings.phones.work.error";
+    assert_eq!(
+        named(&world, error).as_deref(),
+        Some("the phone's pairing is held by another home")
+    );
+    assert!(edged_as_error(&world, error));
+    let mut top = |key: &str| world.rect(key)[1];
+    assert!(
+        top("settings.phone.work.device-1") < top(error)
+            && top(error) < top("settings.phone.work.device-2"),
+        "the refusal lies between the phone it was pressed on and the next"
     );
 }
 

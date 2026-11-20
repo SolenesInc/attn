@@ -6,15 +6,20 @@ use attn_protocol::{PairedSender, SenderUnpairMessage, SendersGetMessage};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Block, List, Notice, Prose, Section, Status};
 use attn_ui::system::{Button, ListRow, Reveal, Size};
-use rune::{El, Tx};
+use rune::Tx;
 
 use crate::State;
 use crate::sidebar::queue::epoch_ms;
 
-/// Why the last Remove failed.
+/// Why the last Remove failed, and the sender it was pressed on.
 #[derive(Default)]
 pub(crate) struct Senders {
-    error: Option<String>,
+    refused: Option<Refused>,
+}
+
+struct Refused {
+    sender: String,
+    why: String,
 }
 
 fn shown(state: &State) -> bool {
@@ -29,7 +34,7 @@ fn read(state: &mut State) {
 /// showed.
 pub(super) fn arrive(state: &mut State) {
     if shown(state) {
-        state.window.settings.senders.error = None;
+        state.window.settings.senders.refused = None;
         read(state);
     }
 }
@@ -46,21 +51,26 @@ pub(super) fn follow(state: &mut State, changed: Slices) {
 
 /// Unpairs a sender, once however often it is pressed before the daemon answers.
 fn remove(state: &mut State, id: &str, tx: &mut Tx) {
-    state.window.settings.senders.error = None;
+    state.window.settings.senders.refused = None;
     if state
         .requests
         .waits_for(|c| c["cmd"] == "sender_unpair" && c["sender"] == id)
     {
         return;
     }
-    let sender = id.to_owned();
+    let (sender, pressed) = (id.to_owned(), id.to_owned());
     state.ask(
         |request_id| SenderUnpairMessage {
             sender,
             request_id: Some(request_id),
             ..SenderUnpairMessage::new()
         },
-        |state, answer, _| state.window.settings.senders.error = answer.outcome().err(),
+        move |state, answer, _| {
+            state.window.settings.senders.refused = answer.outcome().err().map(|why| Refused {
+                sender: pressed,
+                why,
+            });
+        },
         tx,
     );
 }
@@ -69,7 +79,7 @@ fn when(at: &str) -> String {
     epoch_ms(at).map_or_else(|| at.to_owned(), crate::calendar::date_time)
 }
 
-fn paired_sender(sender: &PairedSender, t: &Tokens) -> El {
+fn paired_sender(sender: &PairedSender, t: &Tokens) -> ListRow {
     let used = sender.last_used_at.as_deref().map_or_else(
         || "Never used".to_owned(),
         |at| format!("Last used {}", when(at)),
@@ -91,7 +101,6 @@ fn paired_sender(sender: &PairedSender, t: &Tokens) -> El {
                 .into()],
             Reveal::Always,
         )
-        .build(t)
 }
 
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
@@ -111,14 +120,29 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
             .build(t),
         )
     } else {
+        let refused = state.window.settings.senders.refused.as_ref();
+        let under = |sender: &PairedSender| match refused {
+            Some(refused) if refused.sender == sender.id => vec![refusal(refused, t)],
+            _ => Vec::new(),
+        };
         section.push(
-            List::new("settings.senders.list", "Paired senders")
-                .rows(senders.iter().map(|s| paired_sender(s, t)))
+            senders
+                .iter()
+                .fold(
+                    List::new("settings.senders.list", "Paired senders"),
+                    |list, sender| list.row_with(paired_sender(sender, t), under(sender)),
+                )
                 .build(t),
         )
     };
-    if let Some(error) = &state.window.settings.senders.error {
-        section = section.push(Notice::warn("settings.senders.error", error.clone()).build(t));
+    if let Some(refused) = state.window.settings.senders.refused.as_ref()
+        && !senders.iter().any(|s| s.id == refused.sender)
+    {
+        section = section.push(refusal(refused, t));
     }
     vec![section.build(t)]
+}
+
+fn refusal(refused: &Refused, t: &Tokens) -> Block {
+    Notice::error("settings.senders.error", refused.why.clone()).build(t)
 }

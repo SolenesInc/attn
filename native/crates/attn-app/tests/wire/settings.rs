@@ -770,6 +770,35 @@ fn refused_edge_and_ring(world: &World, input: &str) -> (bool, bool) {
     (true, ring)
 }
 
+/// Whether the notice keyed `key` has its edge drawn in the error's ink, as a refusal's is,
+/// rather than in the warning's.
+fn edged_as_error(world: &World, key: &str) -> bool {
+    let rt = world.runtime();
+    let t = attn_ui::colors::scheme_for(None)
+        .colors(rt.env.system_dark)
+        .ui;
+    let encode = |c: rune::Color| [c.r, c.g, c.b].map(rune::theme::srgb_encode);
+    let (error, warning) = (encode(t.error), encode(t.warning));
+    let notice = world
+        .screen()
+        .bounds(Target::key(key))
+        .unwrap_or_else(|| panic!("{key} is laid out"))
+        .map(|v| v * rt.env.scale);
+    let edge = rt
+        .instances
+        .iter()
+        .filter(|i| i.params[0] > 0.0 && (0..4).all(|c| (i.rect[c] - notice[c]).abs() < 1.0))
+        .map(|i| [0, 1, 2].map(|c| i.border[c] / i.border[3]))
+        .next()
+        .unwrap_or_else(|| panic!("{key} has no edge"));
+    let near = |ink: [f32; 3]| (0..3).all(|c| (edge[c] - ink[c]).abs() < 0.01);
+    assert!(
+        near(error) || near(warning),
+        "{key}'s edge {edge:?} is neither the error's {error:?} nor the warning's {warning:?}"
+    );
+    near(error)
+}
+
 #[test]
 fn a_refused_value_is_sent_once_per_enter_shows_its_reason_beside_the_field_and_retry_resends() {
     let (daemon, _) = keeping(&[], |key, value| {
