@@ -2383,6 +2383,98 @@ fn settings_analytics(dark: bool) {
     snap(&mut world, "settings-analytics", dark);
 }
 
+/// Analytics with a new vent of the longest real text and a done one, sharing on and its
+/// status read: the list with its chosen vent, then the machine settings open. `smallest` shows
+/// it at 800x600 at the largest text, top and bottom.
+fn settings_analytics_populated(dark: bool, smallest: bool) {
+    let build = attn_protocol::AnalyticsBuild {
+        version: "0.42.1".into(),
+        commit: "a3f9e1c22".into(),
+        channel: "source".into(),
+        dirty: true,
+        os: "darwin".into(),
+        arch: "arm64".into(),
+        ..attn_protocol::AnalyticsBuild::default()
+    };
+    let vent = |id: &str, label: &str, text: &str, done: bool| attn_protocol::Vent {
+        id: id.into(),
+        session_id: "s1".into(),
+        kind: "attn".into(),
+        text: text.into(),
+        created_at: "2026-11-19T14:02:11Z".into(),
+        dismissed_at: done.then(|| "2026-11-19T15:00:00Z".into()),
+        context: attn_protocol::VentContext {
+            session_label: label.into(),
+            harness: "claude".into(),
+            harness_version: Some("2.4.1".into()),
+            model: Some("claude-opus-5-5".into()),
+            model_requested: Some("opus".into()),
+            build: build.clone(),
+            experimental: vec!["asks_enabled".into(), "pty_shared_host_enabled".into()],
+            ..attn_protocol::VentContext::default()
+        },
+        ..attn_protocol::Vent::default()
+    };
+    let mut settings = vec![
+        ("analytics.enabled", "true"),
+        ("analytics.sharing_enabled", "true"),
+    ];
+    if smallest {
+        settings.push(("uiScale", "1.5"));
+    }
+    let mut world = settings_world(
+        dark,
+        "analytics",
+        "analytics",
+        &settings,
+        |state| {
+            state.vents = Some(vec![
+                vent(
+                    "v-new",
+                    "engineering observability staging review of the garden bell staleness",
+                    "`attn seed tend s-f68sja` refused: the seed is held by a session that ended two hours ago, and attn seed park needs the tender's session id, which the refusal never names. I had to read docs/internal/garden.md and the CLI source at /Users/someone/projects/victor/attn--a-worktree-with-a-long-name/cli/src/seed/tend.rs to find that a stale claim clears only when its session is closed.",
+                    false,
+                ),
+                vent(
+                    "v-done",
+                    "songcheck deploy",
+                    "kubectl cannot reach the cluster.",
+                    true,
+                ),
+            ]);
+        },
+        |daemon| {
+            daemon.on("get_analytics_status", |r: &Request| {
+                message(attn_protocol::GetAnalyticsStatusResultMessage {
+                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                    success: true,
+                    records: 40,
+                    bytes: 4096,
+                    waiting: 12,
+                    last_sent_at: Some("2026-11-19T14:00:12Z".into()),
+                    ingest_url: "https://attn-telemetry.caketroll.cloud".into(),
+                    ..attn_protocol::GetAnalyticsStatusResultMessage::new()
+                })
+            });
+        },
+    );
+    let name = if smallest {
+        "settings-smallest-analytics"
+    } else {
+        "settings-analytics-populated"
+    };
+    if smallest {
+        world.resize((800.0, 600.0));
+    }
+    snap(&mut world, name, dark);
+    tap(&mut world, Key::Text("m".into()));
+    snap(&mut world, &format!("{name}-machine"), dark);
+    if smallest {
+        world.gesture(|app| app.update(|_, tx| tx.scroll_to_bottom_instant("settings.body")));
+        snap(&mut world, &format!("{name}-bottom"), dark);
+    }
+}
+
 /// Outposts and Launcher 2.0 turned on, so their pages show their on switches.
 const SWITCHED_ON: &[(&str, &str)] = &[
     ("outposts_enabled", "true"),
@@ -6889,6 +6981,12 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("whats_new", || whats_new(dark, 0, "whats-new"));
         scene("whats_new", || whats_new(dark, 1, "whats-new-night"));
         scene("settings_analytics", || settings_analytics(dark));
+        scene("settings_analytics_populated", || {
+            settings_analytics_populated(dark, false)
+        });
+        scene("settings_analytics_smallest", || {
+            settings_analytics_populated(dark, true)
+        });
         scene("ledger", || ledger(dark));
         scene("asks", || asks(dark));
         scene("asks_empty", || asks_empty(dark));
