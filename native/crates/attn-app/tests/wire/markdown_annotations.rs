@@ -1235,7 +1235,7 @@ fn a_refused_retarget_sends_where_the_tile_is_bound_and_a_tile_bound_elsewhere_h
         Some("Send 1 to Agent a")
     );
 
-    let (world, _) = start_with(
+    let (mut world, _) = start_with(
         DOC,
         Kept {
             bound: Some("s-gone"),
@@ -1245,6 +1245,28 @@ fn a_refused_retarget_sends_where_the_tile_is_bound_and_a_tile_bound_elsewhere_h
     let send = world.screen().get(Target::key("tile.m.document.send"));
     assert_eq!(send.name.as_deref(), Some("Send 1 to No session"));
     assert!(send.states.iter().any(|s| s == "disabled"));
+
+    let [x, y, w, h] = world
+        .screen()
+        .bounds(Target::key("tile.m.document.send"))
+        .unwrap();
+    world.gesture(|app| app.move_to((x + w / 2.0, y + h / 2.0)));
+    world.advance(Duration::from_secs(2));
+    assert!(
+        world
+            .screen()
+            .find(Target::role("tooltip").name("Choose a session before sending annotations"))
+            .is_some(),
+        "the disabled send says why under the pointer:\n{}",
+        world.screen()
+    );
+    click(&mut world, "send");
+    assert!(
+        world
+            .daemon
+            .sent_of("markdown_annotations_submit")
+            .is_empty()
+    );
 }
 
 #[test]

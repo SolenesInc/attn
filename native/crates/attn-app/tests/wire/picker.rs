@@ -1032,6 +1032,24 @@ fn a_harness_being_checked_stays_selectable_then_gives_way_once_it_turns_out_mis
         Some("Claude is not available on this machine")
     );
     assert_eq!(chosen(&world), "Codex");
+
+    let [x, y, w, h] = world
+        .screen()
+        .bounds(Target::key("new-session.agent.claude"))
+        .unwrap();
+    world.gesture(|app| app.move_to((x + w / 2.0, y + h / 2.0)));
+    world.advance(Duration::from_secs(2));
+    assert!(
+        world
+            .screen()
+            .find(Target::role("tooltip").name("Claude is not available on this machine"))
+            .is_some(),
+        "the missing harness says why under the pointer:\n{}",
+        world.screen()
+    );
+    world.gesture(|app| app.click(Target::key("new-session.agent.claude")));
+    world.settle();
+    assert_eq!(chosen(&world), "Codex", "a press picks the missing harness");
     rest(&mut world);
 }
 
