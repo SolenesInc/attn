@@ -9,6 +9,9 @@ use crate::system::{Radius, Said, Size, Space, Tone, Type, door, words};
 const DOT: f32 = 6.0;
 const EDGE: f32 = 0.45;
 const WASH: f32 = 0.08;
+/// The room between a notice's edge and what it holds. A pinned notice's sentence scrolls
+/// inside the room at its end, so its scroll bar stands beside the words, never over them.
+const NOTICE_INSET_X: Space = Space::S12;
 const NOTICE_INSET_Y: Space = Space::S8;
 
 /// A line across the page that says what is happening or what went wrong, with what to do
@@ -125,10 +128,14 @@ impl Notice {
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
-                .child(said)
+                .child(door::sides(
+                    col().w_full().child(said),
+                    Space::S0,
+                    NOTICE_INSET_X,
+                ))
                 .scroll_bar_styled(crate::scroll_bar(t));
             door::gap(col().grow(1.0).min_w(0.0).min_h(0.0), Space::S8)
-                .child(sentence)
+                .child(door::hang_right(sentence, NOTICE_INSET_X))
                 .children(self.action.map(|action| action.w_full()))
         } else {
             door::gaps(
@@ -154,7 +161,7 @@ impl Notice {
             return door::gap(line, Space::S8);
         }
         let line = line.fill(fill).border(1.0, edge);
-        let line = door::gap(door::inset(line, Space::S12, NOTICE_INSET_Y), Space::S8);
+        let line = door::gap(door::inset(line, NOTICE_INSET_X, NOTICE_INSET_Y), Space::S8);
         door::corner(line, Radius::Card)
     }
 }
