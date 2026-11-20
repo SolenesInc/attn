@@ -1,18 +1,25 @@
 use rune::{Tx, el, row};
 
-use super::{Control, Radius, Size, Space, Type, disabled, door, focus, kit, layers, words};
+use super::{Control, Radius, Said, Size, Space, Type, disabled, door, focus, kit, layers, words};
 use crate::Tokens;
 
 const TRACK: (f32, f32) = (36.0, 20.0);
 const KNOB: f32 = 14.0;
 const KNOB_TRAVEL: (f32, f32) = (3.0, 19.0);
 
-/// A switch, with its state word beside it when `show_state`.
+/// What a switch shows after its track. A press on it presses the switch.
+pub enum Beside {
+    Nothing,
+    State,
+    Label,
+}
+
+/// A switch named `label`, with what `beside` asks for after its track.
 pub fn switch<S: 'static>(
     key: impl Into<String>,
     label: &str,
     on: bool,
-    show_state: bool,
+    beside: Beside,
     disabled: bool,
     t: &Tokens,
     toggle: impl Fn(&mut S, &mut Tx) + 'static,
@@ -41,16 +48,14 @@ pub fn switch<S: 'static>(
         .checked(on)
         .focusable(true)
         .items_center();
-    let state_word = show_state.then(|| {
-        words(
-            if on { "On" } else { "Off" },
-            Type::Control,
-            t.text_secondary,
-        )
-        .a11y_hidden()
-    });
+    let caption = match beside {
+        Beside::Nothing => None,
+        Beside::State => Some(Said::from(if on { "On" } else { "Off" })),
+        Beside::Label => Some(Said::from(label.to_owned())),
+    }
+    .map(|caption| words(caption, Type::Control, t.text_secondary).a11y_hidden());
     if disabled {
-        let switch = switch.child(track).children(state_word);
+        let switch = switch.child(track).children(caption);
         return Control::new(
             disabled::dim(door::corner(door::gap(switch, Space::S8), Radius::Round)),
             Size::Compact,
@@ -62,7 +67,7 @@ pub fn switch<S: 'static>(
         .on_press_tx(move |s: &mut S, tx: &mut Tx| on_track(s, tx));
     let switch = switch
         .child(track)
-        .children(state_word)
+        .children(caption)
         .on_press_tx(move |s: &mut S, tx: &mut Tx| toggle(s, tx));
     let switch = door::corner(door::gap(switch, Space::S8), Radius::Round);
     Control::new(focus::ring(switch, t), Size::Compact)

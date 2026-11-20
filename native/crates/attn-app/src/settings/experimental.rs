@@ -43,7 +43,7 @@ fn flag(state: &State, feature: &Feature, t: &Tokens) -> Block {
         format!("settings.flag.{}", feature.key),
         feature.name,
         feature.summary,
-        feature_switch(state, feature.key, false, t),
+        feature_switch(state, feature.key, attn_ui::system::Beside::Nothing, t),
     )
     .note(feature_note(state, feature.key, t))
     .build(t)

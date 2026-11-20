@@ -187,7 +187,7 @@ pub(in crate::settings) fn pill(state: &State, t: &Tokens) -> Option<El> {
         "settings.delegation.switch",
         "Delegation preferences",
         on,
-        true,
+        system::Beside::State,
         false,
         t,
         |state: &mut State, tx: &mut Tx| {

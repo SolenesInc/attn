@@ -4,8 +4,8 @@ use attn_ui::blocks::{
     Actions, Block, Disclosure, Field as FieldBlock, Inline, Notice, Prose, Refusal, Sheet, Stack,
 };
 use attn_ui::system::{
-    Button, FieldState, IconSize, Look, Segment, Segmented, Size, Trigger, TriggerLook, Type,
-    area_box, code_box, icon_button, line_box, switch, words,
+    Beside, Button, FieldState, IconSize, Look, Segment, Segmented, Size, Trigger, TriggerLook,
+    Type, area_box, code_box, icon_button, line_box, switch, words,
 };
 use attn_ui::{Tokens, glyph};
 use rune::{Align, El, Key, KeyEvent, Side, TextEdit, Tx};
@@ -134,19 +134,15 @@ pub(crate) fn view(state: &State, f: &Form, t: &Tokens) -> El {
     }
     if let (Some(enabled), Load::Ready) = (f.enabled, &f.load) {
         let word = if enabled { "Enabled" } else { "Disabled" };
-        sheet = sheet.aside(
-            Inline::loose()
-                .child(words(word, Type::Control, t.text_secondary).a11y_hidden())
-                .child(El::from(switch(
-                    key("enabled"),
-                    word,
-                    enabled,
-                    false,
-                    false,
-                    t,
-                    |state: &mut State, tx: &mut Tx| super::toggle_enabled(state, tx),
-                ))),
-        );
+        sheet = sheet.aside(Inline::loose().child(El::from(switch(
+            key("enabled"),
+            word,
+            enabled,
+            Beside::Label,
+            false,
+            t,
+            |state: &mut State, tx: &mut Tx| super::toggle_enabled(state, tx),
+        ))));
     }
     let sheet = sheet.close(close);
     let sheet = match &f.load {
@@ -1261,7 +1257,7 @@ fn friendly_controls(f: &Form, schedule: &Friendly, t: &Tokens) -> Vec<El> {
                 key("schedule-window"),
                 "Only between",
                 on,
-                false,
+                Beside::Label,
                 false,
                 t,
                 move |state: &mut State, _: &mut Tx| {
@@ -1272,7 +1268,6 @@ fn friendly_controls(f: &Form, schedule: &Friendly, t: &Tokens) -> Vec<El> {
                     super::set_schedule(state, s);
                 },
             )));
-            second = second.child(said("Only between").a11y_hidden());
             if on {
                 second = second.child(next()).child(said("and")).child(next());
             }

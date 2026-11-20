@@ -8,8 +8,8 @@ use attn_ui::Tokens;
 use attn_ui::blocks::{Block, Field, Inline, Refusal, Stack, saved};
 use attn_ui::keycap;
 use attn_ui::system::{
-    Button, Control, FieldState, Segment, Segmented, Type, arrows, line_box, number_box, switch,
-    words,
+    Beside, Button, Control, FieldState, Segment, Segmented, Type, arrows, line_box, number_box,
+    switch, words,
 };
 use rune::{El, Tx};
 use rune_kit::TextInput;
@@ -262,7 +262,7 @@ pub(super) fn segmented(
 pub(super) fn feature_switch(
     state: &State,
     key: &'static str,
-    show_state: bool,
+    beside: Beside,
     t: &Tokens,
 ) -> Control {
     let feature = feature(key);
@@ -271,7 +271,7 @@ pub(super) fn feature_switch(
         format!("settings.feature.{key}"),
         feature.name,
         on,
-        show_state,
+        beside,
         false,
         t,
         move |state: &mut State, tx: &mut Tx| {
@@ -336,7 +336,7 @@ pub(super) fn setting_switch(state: &State, key: &'static str, label: &str, t: &
         format!("settings.switch.{key}"),
         label,
         on,
-        false,
+        Beside::Nothing,
         false,
         t,
         move |state: &mut State, tx: &mut Tx| {

@@ -262,6 +262,49 @@ fn the_runs_peek_lists_every_run_by_automation_and_tags_the_one_the_walk_opens_n
 }
 
 #[test]
+fn a_long_automation_name_in_the_runs_peek_ends_before_its_run_count_begins() {
+    const LONG: &str = "Nightly verify that deployment artifacts match the signed manifests and publish the staging release report";
+    for (width, scale) in [(1024.0, "1"), (1200.0, "1.5")] {
+        let mut state = queue(one_desktop(vec![run_of("n1", 1, LONG, true)]));
+        state
+            .settings
+            .get_or_insert_with(Default::default)
+            .insert("uiScale".into(), scale.into());
+        let mut world = World::start_sized(Daemon::scripted().state(state), (width, 600.0));
+        world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+        hover(&mut world, "queue-bar.runs");
+
+        let row = format!("{PEEK}.group:1");
+        let elements = world.runtime().elements();
+        let drawn = |key: String| {
+            elements
+                .iter()
+                .find(|e| e.key.as_deref() == Some(key.as_str()))
+                .unwrap_or_else(|| panic!("{key} is drawn"))
+        };
+        let (name, count) = (
+            drawn(format!("{row}.title")),
+            drawn(format!("{row}.detail")),
+        );
+        assert_eq!(count.text.as_deref(), Some("1 need you · 1 run"));
+        let case = format!("{width} wide at {scale}x text");
+        assert!(
+            name.visible[0] + name.visible[2] <= count.visible[0] + 0.5,
+            "{case}: the name {:?} runs into its count {:?}",
+            name.visible,
+            count.visible
+        );
+        assert!(
+            (count.rect[0] - count.visible[0]).abs() < 0.5
+                && (count.rect[2] - count.visible[2]).abs() < 0.5,
+            "{case}: the count {:?} is clipped to {:?}",
+            count.rect,
+            count.visible
+        );
+    }
+}
+
+#[test]
 fn the_runs_peek_closes_with_its_last_run_and_the_chip_comes_back_closed() {
     let mut world = collapsed(bar_runs());
     hover(&mut world, "queue-bar.runs");

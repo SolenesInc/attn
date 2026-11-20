@@ -143,7 +143,7 @@ struct Sibling {
 
 fn sibling_view(state: &Sibling, cx: &mut Cx<Sibling>) -> El {
     use attn_ui::blocks::{Actions, Block, Notice, Page, Section, SettingRow};
-    use attn_ui::system::{Button, Type, switch, words};
+    use attn_ui::system::{Beside, Button, Type, switch, words};
     let t = attn_ui::colors::scheme_for(None)
         .colors(cx.system_dark())
         .ui;
@@ -186,7 +186,7 @@ fn sibling_view(state: &Sibling, cx: &mut Cx<Sibling>) -> El {
                     "switch",
                     "Auto-approve",
                     state.on,
-                    false,
+                    Beside::Nothing,
                     false,
                     &t,
                     |state: &mut Sibling, _: &mut rune::Tx| state.on = !state.on,

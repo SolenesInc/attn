@@ -5,7 +5,7 @@ use rune::{Cx, El, Playground, Story};
 
 use crate::block_gallery::{Blocks, common, noop, stage, tokens};
 use crate::blocks::{Facts, Inline, Prose, Section, SettingRow};
-use crate::system::{Button, Look, Size, Tone, Type, switch, words};
+use crate::system::{Beside, Button, Look, Size, Tone, Type, switch, words};
 
 /// Every Settings block story, by name, with the keys of what it draws: what the state sheets
 /// and the rule tests read.
@@ -44,7 +44,15 @@ fn aside(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
                 key.to_owned(),
                 name,
                 summary,
-                switch(format!("{key}.switch"), name, on, false, false, &t, noop),
+                switch(
+                    format!("{key}.switch"),
+                    name,
+                    on,
+                    Beside::Nothing,
+                    false,
+                    &t,
+                    noop,
+                ),
             )
             .note(note.map(|n| words(n.to_owned(), Type::Small, t.text_muted).wrap()))
             .build(&t)

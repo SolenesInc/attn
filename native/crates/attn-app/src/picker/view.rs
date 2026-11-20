@@ -123,6 +123,8 @@ pub(crate) struct AgentOption {
     /// The key that picks it with ⌥: `T` for Terminal, its number for the first nine others.
     pub(crate) key: Option<String>,
     pub(crate) checking: bool,
+    /// Installed here, but not on the machine the start goes to.
+    pub(crate) absent: bool,
     pub(crate) title: Option<String>,
 }
 
@@ -170,6 +172,7 @@ pub(crate) fn agent_options(state: &State, choice: &Choice, offer: &Offer) -> Ve
                 selectable,
                 key,
                 checking,
+                absent: absent.is_some(),
                 title,
             }
         })
@@ -230,6 +233,7 @@ pub(crate) fn harness_toggle(
         let mut segment = Segment::new(key, option.label.clone())
             .chosen(option.chosen)
             .disabled(!option.selectable)
+            .missing(option.absent)
             .trailing(mark)
             .on_press_tx(move |state: &mut State, _: &mut Tx| {
                 super::choose_agent(state, which, &picked)
@@ -258,7 +262,7 @@ pub(crate) fn yolo_control(which: Which, yolo: &Yolo, keys: String, t: &Tokens) 
         format!("{}.yolo", which.key()),
         "YOLO",
         yolo.on,
-        false,
+        attn_ui::system::Beside::Label,
         !yolo.supported,
         t,
         move |state: &mut State, _: &mut Tx| super::toggle_yolo(state, which),
@@ -268,7 +272,6 @@ pub(crate) fn yolo_control(which: Which, yolo: &Yolo, keys: String, t: &Tokens) 
     .help(yolo.title.clone());
     Inline::loose()
         .child(switch)
-        .child(words("YOLO", Type::Control, t.text_secondary).a11y_hidden())
         .children(yolo.supported.then(|| {
             words(keys, Type::Mono, t.text_muted)
                 .key(format!("{}.yolo.keys", which.key()))
@@ -552,6 +555,7 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
             .collect();
     let start = |kind: Start, label: String, suffix: &str| {
         Segment::new(format!("{w}.repo.start.{suffix}"), label)
+            .cut_middle()
             .chosen(chooser.start == kind)
             .on_press_tx(move |state: &mut State, _: &mut Tx| {
                 if let Some(chooser) = state
@@ -611,6 +615,7 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
         .child(
             Segmented::new(format!("{w}.repo.start"), "Start from")
                 .without_tab_stops()
+                .stacked()
                 .option(start(
                     Start::Default,
                     format!("Start from {}", chooser.info.default_branch),

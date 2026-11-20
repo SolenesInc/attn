@@ -304,7 +304,11 @@ pub(crate) fn row_face(r: &Row, key: String, place: Place, t: &Tokens) -> El {
             .build(t),
         Look::Choice { detail } => row
             .title(r.label.clone())
-            .aside(age(detail.clone(), "detail"))
+            .aside(
+                words(detail.clone(), Type::Mono, t.text_tertiary)
+                    .key(format!("{key}.detail"))
+                    .single_line(),
+            )
             .build(t),
         Look::Divider => unreachable!("a divider returned above"),
     }

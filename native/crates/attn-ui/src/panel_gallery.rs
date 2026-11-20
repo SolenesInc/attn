@@ -9,8 +9,8 @@ use crate::blocks::inspector::{aside, lines, value};
 use crate::blocks::{Actions, Block, Facts, Field, Inspector, List, Notice, Prose, Refusal, Sheet};
 use crate::colors::scheme_for;
 use crate::system::{
-    Button, FieldState, IconSize, ListRow, Look, Reveal, Size, Tone, Type, icon_button, line_box,
-    press_area, switch, tag, words,
+    Beside, Button, FieldState, IconSize, ListRow, Look, Reveal, Size, Tone, Type, icon_button,
+    line_box, press_area, switch, tag, words,
 };
 
 /// What a panel story shows: the state its variant sets.
@@ -154,7 +154,7 @@ fn sheet(s: &Panels, cx: &mut Cx<Panels>) -> El {
             "sheet.enabled",
             "Enabled",
             s.on,
-            false,
+            Beside::Nothing,
             false,
             &t,
             |s: &mut Panels, _: &mut Tx| s.on = !s.on,
@@ -247,7 +247,7 @@ fn row(s: &Panels, t: &Tokens, i: usize, name: &str, selected: bool) -> (ListRow
             format!("list.toggle{i}"),
             "Enabled",
             true,
-            false,
+            Beside::Nothing,
             false,
             t,
             noop,

@@ -1,4 +1,4 @@
-use rune::{Color, El, Tx, row};
+use rune::{Color, El, Tx, col, row};
 
 use super::{Control, Radius, Said, Size, Space, Type, disabled, door, focus, layers, words};
 use crate::Tokens;
@@ -10,6 +10,7 @@ pub struct Segmented {
     options: Vec<Segment>,
     disabled: bool,
     tab_stops: bool,
+    stacked: bool,
 }
 
 /// One option of a [`Segmented`].
@@ -18,6 +19,8 @@ pub struct Segment {
     name: Said,
     chosen: bool,
     disabled: bool,
+    missing: bool,
+    cut_middle: bool,
     help: Option<String>,
     trailing: Option<El>,
     press: Option<Box<dyn FnOnce(El) -> El>>,
@@ -30,6 +33,8 @@ impl Segment {
             name: name.into(),
             chosen: false,
             disabled: false,
+            missing: false,
+            cut_middle: false,
             help: None,
             trailing: None,
             press: None,
@@ -44,6 +49,19 @@ impl Segment {
     /// Shown but not chosen by a press: what it needs is missing.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    /// Chosen by a press, but missing where it would be used: its name is struck through.
+    pub fn missing(mut self, missing: bool) -> Self {
+        self.missing = missing;
+        self
+    }
+
+    /// The name, cut short, keeps its start and its end, so names that differ only at the end,
+    /// such as two branches of one release, stay apart.
+    pub fn cut_middle(mut self) -> Self {
+        self.cut_middle = true;
         self
     }
 
@@ -64,11 +82,29 @@ impl Segment {
         self
     }
 
-    fn build(self, (i, n): (usize, usize), track_disabled: bool, tab_stop: bool, t: &Tokens) -> El {
+    fn build(
+        self,
+        (i, n): (usize, usize),
+        stacked: bool,
+        track_disabled: bool,
+        tab_stop: bool,
+        t: &Tokens,
+    ) -> El {
         let (fill, ink) = if self.chosen {
             (t.bg_selected, t.text_primary)
         } else {
             (Color::TRANSPARENT, t.text_secondary)
+        };
+        let name = words(self.name.clone(), Type::Control, ink);
+        let name = if self.missing {
+            name.strike(0, self.name.text().len(), None)
+        } else {
+            name
+        };
+        let name = if self.cut_middle {
+            name.truncate_middle()
+        } else {
+            name.truncate()
         };
         let option = row()
             .key(self.key)
@@ -81,15 +117,14 @@ impl Segment {
             .min_h(Size::Compact.height())
             .shrink()
             .min_w(0.0)
-            .center()
-            .fill(fill)
-            .child(
-                words(self.name, Type::Control, ink)
-                    .truncate()
-                    .shrink()
-                    .min_w(0.0)
-                    .a11y_hidden(),
-            )
+            .fill(fill);
+        let option = if stacked {
+            option.w_full().items_center()
+        } else {
+            option.center()
+        };
+        let option = option
+            .child(name.shrink().min_w(0.0).a11y_hidden())
             .children(self.trailing);
         let option = door::inset(option, Size::Compact.inset(), Space::S4);
         let option = door::gap(door::corner(option, Radius::Control), Space::S4);
@@ -125,6 +160,7 @@ impl Segmented {
             options: Vec::new(),
             disabled: false,
             tab_stops: true,
+            stacked: false,
         }
     }
 
@@ -132,6 +168,13 @@ impl Segmented {
     /// option takes a Tab stop.
     pub fn without_tab_stops(mut self) -> Self {
         self.tab_stops = false;
+        self
+    }
+
+    /// The options one under another, each the control's width: for names too long to share
+    /// a line, such as two branches to start from.
+    pub fn stacked(mut self) -> Self {
+        self.stacked = true;
         self
     }
 
@@ -153,23 +196,21 @@ impl Segmented {
 
     pub fn build(self, t: &Tokens) -> Control {
         let n = self.options.len();
-        let track = row()
+        let track = if self.stacked {
+            col().w_full()
+        } else {
+            row().shrink().min_w(0.0).max_w_frac(1.0).items_center()
+        };
+        let track = track
             .key(self.key)
             .role("radiogroup")
             .label(self.label)
             .focus_group()
-            .shrink()
-            .min_w(0.0)
-            .max_w_frac(1.0)
-            .items_center()
             .fill(t.bg_input)
             .border(1.0, t.border)
-            .children(
-                self.options
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, option)| option.build((i, n), self.disabled, self.tab_stops, t)),
-            );
+            .children(self.options.into_iter().enumerate().map(|(i, option)| {
+                option.build((i, n), self.stacked, self.disabled, self.tab_stops, t)
+            }));
         let track = door::inset(door::gap(track, Space::S2), Space::S2, Space::S2);
         let track = door::corner(track, Radius::Card);
         let track = if self.disabled {

@@ -249,7 +249,12 @@ fn body(state: &State, t: &Tokens) -> El {
         head = head.note(note);
     }
     if let Some(key) = item.feature {
-        head = head.aside(controls::feature_switch(state, key, true, t));
+        head = head.aside(controls::feature_switch(
+            state,
+            key,
+            attn_ui::system::Beside::State,
+            t,
+        ));
     }
     let pills = pills(state, section, t);
     if !pills.is_empty() {

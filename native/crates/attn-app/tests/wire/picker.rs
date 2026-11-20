@@ -1174,6 +1174,87 @@ fn memory(world: &World) -> Vec<String> {
     saved(world, &format!("new_session_destination_local_{REPO}"))
 }
 
+/// The texts drawn inside the element keyed `within`: what each says, its box, and the part of
+/// it its clips leave in view.
+fn texts_in(world: &World, within: &str) -> Vec<(String, [f32; 4], [f32; 4])> {
+    let all = world.runtime().elements();
+    let Some(outer) = all.iter().find(|e| e.key.as_deref() == Some(within)) else {
+        return Vec::new();
+    };
+    all.iter()
+        .filter(|e| {
+            std::iter::successors(e.parent, |&p| all[p].parent).any(|p| all[p].path == outer.path)
+        })
+        .filter_map(|e| Some((e.text.clone()?, e.rect, e.visible)))
+        .collect()
+}
+
+#[test]
+fn two_start_points_that_differ_at_their_ends_both_show_whole_in_the_smallest_window_at_the_largest_text()
+ {
+    const DEFAULT: &str = "release/customer-platform-2026.12";
+    const CURRENT: &str = "release/customer-platform-2026.21";
+    let start_labels = |window: (f32, f32)| {
+        let mut world = World::start_sized(
+            daemon(
+                initial(
+                    vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
+                    &[("uiScale", "1.5")],
+                ),
+                &[],
+            ),
+            window,
+        );
+        world.open_desktop();
+        world
+            .daemon
+            .on("inspect_path", in_repo)
+            .on("get_repo_info", |_| {
+                message(GetRepoInfoResultMessage {
+                    success: true,
+                    info: Some(RepoInfo {
+                        repo: REPO.into(),
+                        current_branch: CURRENT.into(),
+                        default_branch: DEFAULT.into(),
+                        current_commit_hash: "0123456789abcdef".into(),
+                        current_commit_time: "2026-11-01T10:00:00Z".into(),
+                        worktrees: Vec::new(),
+                    }),
+                    ..GetRepoInfoResultMessage::new()
+                })
+            });
+        open_repo(&mut world, REPO);
+        ["default", "current"].map(|which| {
+            texts_in(&world, &format!("new-session.repo.start.{which}"))
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| panic!("the {which} start point draws no label"))
+        })
+    };
+    let natural = start_labels((2400.0, 1600.0));
+    let small = start_labels((800.0, 600.0));
+    for ((said, rect, visible), (whole, room, _)) in small.iter().zip(&natural) {
+        assert_eq!(said, whole);
+        assert!(
+            rect[2] + 0.5 >= room[2],
+            "{said:?} is cut to {} of its {}",
+            rect[2],
+            room[2]
+        );
+        assert!(
+            (rect[0] - visible[0]).abs() < 0.5 && (rect[2] - visible[2]).abs() < 0.5,
+            "{said:?} at {rect:?} is clipped to {visible:?}"
+        );
+    }
+    assert_eq!(
+        [&small[0].0, &small[1].0],
+        [
+            &format!("Start from {DEFAULT}"),
+            &format!("Start from {CURRENT}")
+        ]
+    );
+}
+
 #[test]
 fn a_typed_worktree_lands_on_its_row_and_enter_opens_it_without_creating_one() {
     let mut world = repo_world(&[("new_session_destination_local_/src/repo", "main_repo")]);

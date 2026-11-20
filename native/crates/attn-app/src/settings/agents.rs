@@ -11,7 +11,7 @@ use attn_ui::blocks::{
     Block, Disclosure, Facts, Inline, Notice, Prose, Section, SettingRow, Stack,
 };
 use attn_ui::system::{
-    Control, DotShape, DotSize, Segment, Segmented, Tone, Type, dot, switch, tag, words,
+    Beside, Control, DotShape, DotSize, Segment, Segmented, Tone, Type, dot, switch, tag, words,
 };
 use rune::{El, Tx, text};
 
@@ -209,7 +209,7 @@ fn setting_toggle(
         format!("settings.toggle.{key}"),
         name,
         on,
-        false,
+        Beside::Nothing,
         disabled,
         t,
         move |state: &mut State, tx: &mut Tx| {
@@ -307,7 +307,7 @@ fn session_defaults(state: &State, t: &Tokens) -> Block {
             .build(t),
         )
         .push(
-            SettingRow::new("settings.row.asks",asks.name, asks.summary, feature_switch(state, ASKS, false, t))
+            SettingRow::new("settings.row.asks",asks.name, asks.summary, feature_switch(state, ASKS, Beside::Nothing, t))
                 .note(feature_note(state, ASKS, t))
                 .build(t),
         )
@@ -376,7 +376,7 @@ fn seeds_on_standby(state: &State, t: &Tokens) -> Block {
         "settings.toggle.pull_requests.own_comments",
         "Ring on my own PR comments",
         ring,
-        false,
+        Beside::Nothing,
         false,
         t,
         move |state: &mut State, tx: &mut Tx| {

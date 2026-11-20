@@ -2,7 +2,7 @@ use attn_protocol::KeptConversationRow;
 use attn_ui::Tokens;
 use attn_ui::blocks::inspector::{aside, lines, value};
 use attn_ui::blocks::{Block, Facts, Inline, Inspector, List};
-use attn_ui::system::{IconSize, ListRow, Look, Reveal, Type, icon_button, switch, words};
+use attn_ui::system::{Beside, IconSize, ListRow, Look, Reveal, Type, icon_button, switch, words};
 use rune::{El, Key, KeyEvent, Tx};
 
 use super::super::mark::{Glyph, mark};
@@ -30,17 +30,15 @@ pub(crate) fn toolbar(state: &State, t: &Tokens) -> El {
         query_key,
         t,
     );
-    let deleted = Inline::loose()
-        .child(El::from(switch(
-            "ledger.deleted",
-            "Show deleted",
-            include,
-            false,
-            false,
-            t,
-            move |state: &mut State, tx: &mut Tx| super::set_include_deleted(state, !include, tx),
-        )))
-        .child(words("Show deleted", Type::Control, t.text_secondary).a11y_hidden());
+    let deleted = Inline::loose().child(El::from(switch(
+        "ledger.deleted",
+        "Show deleted",
+        include,
+        Beside::Label,
+        false,
+        t,
+        move |state: &mut State, tx: &mut Tx| super::set_include_deleted(state, !include, tx),
+    )));
     toolbar_line(vec![deleted, field], Vec::new(), t)
 }
 

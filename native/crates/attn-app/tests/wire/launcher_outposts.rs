@@ -820,6 +820,95 @@ fn a_harness_the_target_machine_lacks_reads_as_missing_and_is_refused() {
     rest(&mut world);
 }
 
+/// The words drawn struck through inside the element keyed `within`.
+fn struck_in(world: &World, within: &str) -> Vec<String> {
+    let all = world.runtime().elements();
+    let Some(outer) = all.iter().find(|e| e.key.as_deref() == Some(within)) else {
+        return Vec::new();
+    };
+    all.iter()
+        .filter(|e| !e.strikes.is_empty())
+        .filter(|e| {
+            std::iter::successors(e.parent, |&p| all[p].parent).any(|p| all[p].path == outer.path)
+        })
+        .filter_map(|e| e.text.clone())
+        .collect()
+}
+
+#[test]
+fn a_harness_the_target_machine_lacks_is_drawn_struck_through_until_the_target_has_it() {
+    let mut world = open(Setup {
+        sandbox_harnesses: vec!["codex"],
+        ..Setup::default()
+    });
+    assert_eq!(struck_in(&world, "new-session.agent.claude"), ["Claude"]);
+    assert!(struck_in(&world, "new-session.agent.codex").is_empty());
+
+    down(&mut world, 1);
+    assert!(struck_in(&world, "new-session.agent.claude").is_empty());
+    rest(&mut world);
+}
+
+/// The middle of the drawn "YOLO" beside the switch, where a pointer aims at its caption.
+fn yolo_caption(world: &World) -> (f32, f32) {
+    let [x, y, w, h] = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.text.as_deref() == Some("YOLO"))
+        .expect("the YOLO caption is drawn")
+        .visible;
+    (x + w / 2.0, y + h / 2.0)
+}
+
+#[test]
+fn clicking_the_yolo_caption_flips_the_switch_and_the_start_follows_it() {
+    for (w, current) in [("new-session", "d1"), ("launcher", "d2")] {
+        for was_on in [false, true] {
+            let mut settings = vec![("claude_cap_yolo".to_owned(), "true".to_owned())];
+            if was_on {
+                settings.push(("new_session_yolo_local".into(), "true".into()));
+            }
+            let mut world = world(Setup {
+                settings,
+                current,
+                ..Setup::default()
+            });
+            if w == "new-session" {
+                press_action(&mut world, &Action::SessionNew);
+            }
+            let on = |world: &World| {
+                world
+                    .screen()
+                    .get(Target::key(format!("{w}.yolo")))
+                    .is("checked")
+            };
+            assert_eq!(on(&world), was_on, "{w}");
+
+            let at = yolo_caption(&world);
+            world.gesture(|app| app.click_at(at));
+            assert_eq!(
+                on(&world),
+                !was_on,
+                "{w}: a click on the caption flips the switch"
+            );
+            press(&mut world, Key::Enter);
+
+            let sent = world.daemon.sent_of("spawn_session");
+            assert_eq!(sent.len(), 1, "{w}");
+            assert_eq!(
+                sent[0]
+                    .get("yolo_mode")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                !was_on,
+                "{w}: the start follows the switch"
+            );
+            rest(&mut world);
+        }
+    }
+}
+
 #[test]
 fn a_harness_only_an_outpost_has_can_be_picked_there_and_is_refused_on_this_mac() {
     let mut world = open(Setup {

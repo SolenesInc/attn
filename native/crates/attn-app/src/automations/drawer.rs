@@ -1,8 +1,8 @@
 use attn_protocol::{AutomationDefinitionSummary, AutomationRunSummary};
 use attn_ui::blocks::{Actions, Block, Inline, List, Notice, Refusal, Section, Sheet};
 use attn_ui::system::{
-    Button, FieldState, IconSize, ListRow, Look, Reveal, Size, Tone, Type, icon_button, line_box,
-    switch, tag, words,
+    Beside, Button, FieldState, IconSize, ListRow, Look, Reveal, Size, Tone, Type, icon_button,
+    line_box, switch, tag, words,
 };
 use attn_ui::{Tokens, glyph};
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col};
@@ -133,7 +133,7 @@ fn definition_row(
             format!("automations.toggle.{id}"),
             word,
             enabled,
-            false,
+            Beside::Nothing,
             toggling,
             t,
             move |state: &mut State, tx: &mut Tx| super::set_enabled(state, id, !enabled, tx),

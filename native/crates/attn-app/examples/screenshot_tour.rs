@@ -11,9 +11,10 @@ use attn_app::desktop::FocusStyle;
 use attn_app::screen::Screens;
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
-    ActorView, Ask, AskChoice, AskPart, AskQuestion, AutomationDefinitionResultMessage,
-    AutomationDefinitionSummary, AutomationDefinitionsResultMessage, AutomationProvenance,
-    AutomationRunSummary, AutomationRunsResultMessage, AutomationSchedulePreviewResultMessage,
+    ActorView, AgentCatalogResult, AgentCatalogResultMessage, Ask, AskChoice, AskPart, AskQuestion,
+    AutomationDefinitionResultMessage, AutomationDefinitionSummary,
+    AutomationDefinitionsResultMessage, AutomationProvenance, AutomationRunSummary,
+    AutomationRunsResultMessage, AutomationSchedulePreviewResultMessage,
     BrowseDirectoryResultMessage, BusConsumerStatus, BusStatusResultMessage,
     CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetResultMessage,
     CrewHandoffsGetResultMessage, CrewMember, DelegationPreferences,
@@ -1639,6 +1640,10 @@ fn launcher_daemon(dark: bool, empty: bool) -> Daemon {
 }
 
 fn launcher_daemon_with(dark: bool, empty: bool, launcher_2: bool) -> Daemon {
+    launcher_serving(launcher_state(dark, empty, launcher_2))
+}
+
+fn launcher_state(dark: bool, empty: bool, launcher_2: bool) -> InitialStateMessage {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     if let Some(desktops) = state.desktops.as_mut() {
         desktops[0].tree_json = pane("a").to_string();
@@ -1665,6 +1670,10 @@ fn launcher_daemon_with(dark: bool, empty: bool, launcher_2: bool) -> Daemon {
             settings.insert(key.into(), value.into());
         }
     }
+    state
+}
+
+fn launcher_serving(state: InitialStateMessage) -> Daemon {
     let daemon = scripted().state(state);
     daemon
         .on("delegation_preferences_get", |_: &Request| {
@@ -1800,6 +1809,122 @@ fn launcher_browse(dark: bool) {
     world.gesture(|app| app.type_text("~/projects/s"));
     world.advance(std::time::Duration::from_millis(200));
     snap(&mut world, "launcher-browse", dark);
+}
+
+/// Launcher 2.0 after a click on the YOLO switch's caption, which turns it on.
+fn launcher_yolo_caption(dark: bool) {
+    let mut world = start(launcher_daemon(dark, false));
+    press(&mut world, Action::SessionNew);
+    world.gesture(|app| {
+        let [x, y, w, h] = app
+            .runtime
+            .elements()
+            .into_iter()
+            .find(|e| e.text.as_deref() == Some("YOLO"))
+            .expect("the YOLO caption is drawn")
+            .visible;
+        app.click_at((x + w / 2.0, y + h / 2.0));
+        app.move_to((10.0, 10.0));
+    });
+    snap(&mut world, "launcher-yolo-caption", dark);
+}
+
+/// Launcher 2.0 on a recent on ai-sandbox, which lacks Claude, the harness chosen.
+fn launcher_missing_harness(dark: bool) {
+    const SANDBOX: &str = "outpost-ai";
+    let mut state = launcher_state(dark, false, true);
+    state.outposts = Some(vec![OutpostInfo {
+        id: SANDBOX.into(),
+        name: "ai-sandbox".into(),
+        destination: "ai-sandbox:2200".into(),
+        state: "connected".into(),
+        reach: "reachable".into(),
+        state_since: "2026-11-13T08:00:00Z".into(),
+        ..OutpostInfo::default()
+    }]);
+    if let Some(settings) = state.settings.as_mut() {
+        settings.insert("outposts_enabled".into(), "true".into());
+    }
+    let daemon = launcher_serving(state);
+    daemon
+        .on("get_recent_locations", |_: &Request| {
+            message(RecentLocationsResultMessage {
+                success: true,
+                home_path: Some("/home/me".into()),
+                recent_locations: vec![RecentLocation {
+                    host: Some(SANDBOX.into()),
+                    path: SHOP.into(),
+                    repo_root: Some(SHOP.into()),
+                    last_seen: "2026-11-13T08:00:00Z".into(),
+                    use_count: 1,
+                }],
+                ..RecentLocationsResultMessage::new()
+            })
+        })
+        .on("agent_catalog", |r: &Request| {
+            let machine = r["host"].as_str().unwrap_or_default().to_owned();
+            message(AgentCatalogResultMessage {
+                success: true,
+                host: machine.clone(),
+                catalog: Some(AgentCatalogResult {
+                    machine,
+                    harnesses: ["claude", "codex"]
+                        .iter()
+                        .map(|id| Harness {
+                            id: (*id).into(),
+                            name: (*id).into(),
+                            available: *id == "codex",
+                            ..Harness::default()
+                        })
+                        .collect(),
+                    ..AgentCatalogResult::default()
+                }),
+                ..AgentCatalogResultMessage::new()
+            })
+        });
+    let mut world = start(daemon);
+    press(&mut world, Action::SessionNew);
+    snap(&mut world, "launcher-missing-harness", dark);
+}
+
+/// The classic picker's new worktree in a repository whose default and current branches differ
+/// only at their ends.
+fn picker_start_from(dark: bool) {
+    let daemon = launcher_daemon_with(dark, false, false);
+    daemon
+        .on("inspect_path", |r: &Request| {
+            let path = r["path"].as_str().unwrap_or_default().to_owned();
+            message(InspectPathResultMessage {
+                success: true,
+                inspection: Some(PathInspection {
+                    exists: true,
+                    is_directory: true,
+                    input_path: path.clone(),
+                    repo_root: Some(path.clone()),
+                    resolved_path: path,
+                    home_path: Some("/home/me".into()),
+                }),
+                ..InspectPathResultMessage::new()
+            })
+        })
+        .on("get_repo_info", |_: &Request| {
+            message(GetRepoInfoResultMessage {
+                success: true,
+                info: Some(RepoInfo {
+                    repo: SHOP.into(),
+                    current_branch: "release/customer-platform-2026.21".into(),
+                    default_branch: "release/customer-platform-2026.12".into(),
+                    ..RepoInfo::default()
+                }),
+                ..GetRepoInfoResultMessage::new()
+            })
+        });
+    let mut world = start(daemon);
+    press(&mut world, Action::SessionNew);
+    world.gesture(|app| app.type_text("shop"));
+    world.advance(std::time::Duration::from_millis(200));
+    tap(&mut world, Key::Enter);
+    snap(&mut world, "picker-start-from", dark);
 }
 
 /// The classic new-session picker, Launcher 2.0 off: its harness toggle and its key footer.
@@ -3904,6 +4029,36 @@ fn queue_seeded_agent(dark: bool) {
     snap(&mut world, "queue-seeded-agent", dark);
 }
 
+/// The queue bar's runs peek over an automation whose name is longer than its row.
+fn queue_bar_runs_peek(dark: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    if let Some(settings) = state.settings.as_mut() {
+        settings.insert("queue_mode_enabled".to_owned(), "true".to_owned());
+    }
+    for session in state.sessions.iter_mut().flatten().take(1) {
+        session.state = "waiting_input".into();
+        session.turn_owed = Some(true);
+        session.turn_opened_at = Some("2026-11-12T08:55:00Z".into());
+        session.automation = Some(AutomationProvenance {
+            definition_id: 1,
+            definition_name: "Nightly verify that deployment artifacts match the signed manifests and publish the staging release report".into(),
+            run_id: "r1".into(),
+            trigger_type: "scheduled".into(),
+            ..AutomationProvenance::default()
+        });
+    }
+    let mut world = World::start_sized(scripted().state(state), window());
+    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+    world.gesture(|app| {
+        let chip = app
+            .runtime
+            .find("queue-bar.runs")
+            .expect("the runs chip shows");
+        app.move_to(chip);
+    });
+    snap(&mut world, "queue-bar-runs-peek", dark);
+}
+
 /// The seeded queue with the sidebar collapsed: the queue bar in the title bar.
 fn queue_bar(dark: bool) {
     let mut world = queue_seeded(dark, false, true, 3);
@@ -5339,6 +5494,11 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("automation_hour", || automation_hour(dark));
         scene("automation_time_zones", || automation_time_zones(dark));
         scene("picker_dialog", || picker_dialog(dark));
+        scene("picker_start_from", || picker_start_from(dark));
+        scene("launcher_yolo_caption", || launcher_yolo_caption(dark));
+        scene("launcher_missing_harness", || {
+            launcher_missing_harness(dark)
+        });
         scene("picker_empty_desktop", || picker_empty_desktop(dark));
         scene("shortcuts", || shortcuts(dark));
         scene("agent_palette", || agent_palette(dark));
@@ -5390,6 +5550,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("queue_runs", || queue_runs(dark, true, "queue-runs-open"));
         scene("queue_seeded_agent", || queue_seeded_agent(dark));
         scene("queue_bar", || queue_bar(dark));
+        scene("queue_bar_runs_peek", || queue_bar_runs_peek(dark));
         scene("queue_bar_crowded", || queue_bar_crowded(dark));
         scene("rail", || rail(dark));
         scene("chrome_smallest", || chrome_smallest(dark));

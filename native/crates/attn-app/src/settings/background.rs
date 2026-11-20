@@ -3,7 +3,7 @@
 
 use attn_ui::Tokens;
 use attn_ui::blocks::{Block, Field, Notice, Prose, Section, SettingRow};
-use attn_ui::system::{FieldState, arrows, number_box, switch};
+use attn_ui::system::{Beside, FieldState, arrows, number_box, switch};
 use rune::{El, TextEdit, Tx};
 use rune_kit::TextInput;
 use serde::{Deserialize, Serialize};
@@ -396,7 +396,7 @@ fn session_activity(state: &State, t: &Tokens) -> Block {
         "settings.activity.toggle",
         "Generate activity lines",
         enabled,
-        false,
+        Beside::Nothing,
         blocked,
         t,
         move |state: &mut State, tx: &mut Tx| {

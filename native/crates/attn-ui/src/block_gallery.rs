@@ -10,7 +10,7 @@ use crate::blocks::{
 };
 use crate::colors::scheme_for;
 use crate::system::{
-    Button, Choice, FieldState, Look, Segment, Segmented, Size, Space, Tone, Type, arrows,
+    Beside, Button, Choice, FieldState, Look, Segment, Segmented, Size, Space, Tone, Type, arrows,
     line_box, number_box, stepper, switch, tag, words,
 };
 
@@ -265,7 +265,7 @@ fn rows(s: &Blocks, t: &Tokens) -> Vec<Block> {
                 "row.switch.control",
                 "Sent files open",
                 s.on,
-                false,
+                Beside::Nothing,
                 s.disabled,
                 t,
                 |s: &mut Blocks, _: &mut Tx| s.on = !s.on,
@@ -358,7 +358,7 @@ fn page(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
             "page.switch",
             "Delegation",
             !s.disabled,
-            true,
+            Beside::State,
             false,
             &t,
             noop,

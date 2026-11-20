@@ -7,9 +7,9 @@ use rune_kit::{
 use crate::blocks::{Banner, BannerTone};
 use crate::colors::scheme_for;
 use crate::system::{
-    Button as Action, Choice, FieldState, IconSize, Look, Segment, Segmented, Size, Space, Tone,
-    Trigger, TriggerLook, Type, area_box, arrows, checks, choices, code_box, disclosure, door,
-    expander, icon, icon_box, line_box, number_box, press_area, stepper, switch, tag, words,
+    Beside, Button as Action, Choice, FieldState, IconSize, Look, Segment, Segmented, Size, Space,
+    Tone, Trigger, TriggerLook, Type, area_box, arrows, checks, choices, code_box, disclosure,
+    door, expander, icon, icon_box, line_box, number_box, press_area, stepper, switch, tag, words,
 };
 use crate::{Tokens, kit};
 
@@ -87,11 +87,16 @@ const LONG: &str = "An exceptionally long value that a person pasted without sto
 pub const SUBJECTS: &[(&str, &[&str])] = &[
     (
         "Library/Switch",
-        &["switch.off", "switch.on", "switch.word"],
+        &["switch.off", "switch.on", "switch.word", "switch.caption"],
     ),
     (
         "Library/Segmented",
-        &["segmented.theme", "segmented.agent", "segmented.long"],
+        &[
+            "segmented.theme",
+            "segmented.agent",
+            "segmented.long",
+            "segmented.start",
+        ],
     ),
     (
         "Library/Stepper",
@@ -115,6 +120,11 @@ pub const SUBJECTS: &[(&str, &[&str])] = &[
     ("Library/Trigger", &["trigger.field", "trigger.quiet"]),
 ];
 
+/// Two branches to start from that differ only at their ends, the second longer than any line.
+const START_POINTS: [&str; 2] = [
+    "Start from release/customer-platform-2026.12",
+    "Start from release/customer-platform-2026.21-with-the-hotfix-for-the-tokyo-region-rollout",
+];
 const LONG_NAME: &str = "Same agent, resumed when its session closed on its own";
 
 fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
@@ -803,18 +813,37 @@ fn switches(s: &Library, cx: &mut Cx<Library>) -> El {
                 "switch.off",
                 "Delegation",
                 false,
-                false,
+                Beside::Nothing,
                 s.disabled,
                 &t,
                 noop,
             )
             .into(),
-            switch("switch.on", "Delegation", true, false, s.disabled, &t, noop).into(),
+            switch(
+                "switch.on",
+                "Delegation",
+                true,
+                Beside::Nothing,
+                s.disabled,
+                &t,
+                noop,
+            )
+            .into(),
             switch(
                 "switch.word",
                 "Telemetry",
                 s.on,
-                true,
+                Beside::State,
+                s.disabled,
+                &t,
+                |s: &mut Library, _: &mut Tx| s.on = !s.on,
+            )
+            .into(),
+            switch(
+                "switch.caption",
+                "YOLO",
+                s.on,
+                Beside::Label,
                 s.disabled,
                 &t,
                 |s: &mut Library, _: &mut Tx| s.on = !s.on,
@@ -853,6 +882,12 @@ fn segmented(s: &Library, cx: &mut Cx<Library>) -> El {
                 .on_press_tx(pick(1)),
         )
         .option(
+            Segment::new("segment4", "Gemini")
+                .missing(true)
+                .help("Gemini is not installed on build-and-release")
+                .on_press_tx(pick(4)),
+        )
+        .option(
             Segment::new("segment2", "Pi")
                 .disabled(true)
                 .help("Pi CLI not found in PATH"),
@@ -878,6 +913,19 @@ fn segmented(s: &Library, cx: &mut Cx<Library>) -> El {
             "Agent",
             &["New each run", LONG_NAME],
         ))
+        .child(
+            Segmented::new("segmented.start", "Start from")
+                .stacked()
+                .options(START_POINTS.iter().enumerate().map(|(i, name)| {
+                    Segment::new(format!("segment{i}"), *name)
+                        .cut_middle()
+                        .chosen(i == s.chosen)
+                        .on_press_tx(pick(i))
+                }))
+                .disabled(s.disabled)
+                .build(&t)
+                .into(),
+        )
         .child(
             door::gap(
                 row().key("segmented.row").w_full().items_center(),
