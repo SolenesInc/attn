@@ -68,10 +68,13 @@ impl TerminalBar {
     }
 
     pub fn build(self, t: &Tokens) -> El {
-        let bar = door::gap(row().key(self.key).min_w(0.0).items_center(), Space::S4)
-            .children(self.field)
-            .children(self.items);
-        Frame::terminal_bar(t).draw(door::inset(bar, Space::S8, Space::S4))
+        let bar = door::gap(
+            row().key(self.key).min_w(0.0).justify_end().items_center(),
+            Space::S4,
+        )
+        .children(self.field)
+        .children(self.items);
+        Frame::terminal_bar(t).draw_clipped(door::inset(bar, Space::S8, Space::S4))
     }
 
     /// A button on a bar keyed `key` and read as `label`, its mark `mark`, set in while `on`.
@@ -147,14 +150,21 @@ impl TerminalBar {
         )
     }
 
-    /// `bars` one under another over a terminal's top right corner, one width for all, as wide
-    /// as the widest needs up to a reading line and never wider than the terminal.
+    /// `bars` one under another over a terminal's top right corner, each as wide as it needs up
+    /// to a reading line, so a short list leaves the terminal's output beside it visible. A bar
+    /// narrower than its smallest overflows past the terminal's left edge, never its right,
+    /// where its Close stands.
     pub fn corner(bars: Vec<El>) -> El {
         let bars = door::gap(
             col().items_stretch().shrink().min_w(0.0).max_w(MEASURE),
             Space::S4,
         )
-        .children(bars);
+        .children(bars.into_iter().map(|bar| {
+            row()
+                .justify_end()
+                .min_w(0.0)
+                .child(bar.shrink().min_w(0.0))
+        }));
         row()
             .pin(
                 Some(FROM_TOP.pt()),

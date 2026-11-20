@@ -202,3 +202,41 @@ fn a_long_tab_gives_way_before_it_crowds_the_others_out() {
         );
     }
 }
+
+#[test]
+fn a_notice_over_a_terminal_stands_on_an_opaque_ground() {
+    for variant in ["Rest", "Long", "Smallest long"] {
+        let rt = story("Tiles/Notices", variant);
+        let band = element(&rt, "story.tile.notices");
+        for key in ["story.tile.shared", "story.tile.stale"] {
+            let notice = element(&rt, key);
+            let grounded = rt.elements().into_iter().any(|e| {
+                notice.path.starts_with(&e.path)
+                    && e.path.starts_with(&band.path)
+                    && e.path != band.path
+                    && e.fill.a > 0.999
+                    && left(&e) <= left(&notice) + 0.5
+                    && right(&e) >= right(&notice) - 0.5
+                    && top(&e) <= top(&notice) + 0.5
+                    && bottom(&e) >= bottom(&notice) - 0.5
+            });
+            assert!(
+                grounded,
+                "{variant}: {key} lets the terminal show through its ground"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_filters_list_stands_no_wider_than_its_lines_need() {
+    let rt = story("Tiles/Filter", "Rest");
+    let bar = element(&rt, "story.tile.filter");
+    let list = framing(&rt, &element(&rt, "story.tile.filter.results"));
+    assert!(
+        list.rect[2] < bar.rect[2] - 0.5,
+        "the list stands {} wide, as wide as its bar at {}, over terminal output its short lines leave clear",
+        list.rect[2],
+        bar.rect[2]
+    );
+}

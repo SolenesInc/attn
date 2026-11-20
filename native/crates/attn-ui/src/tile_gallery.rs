@@ -26,6 +26,8 @@ pub struct Tiles {
 /// The narrowest tile a terminal stands in: the smallest window, 800 by 600 at 150% text, split
 /// in two side by side.
 const SMALLEST: f32 = 533.0 / 2.0;
+/// A story's terminal, as tall as a tile in the smallest window.
+const TERMINAL_H: f32 = 260.0;
 /// A tile at the default window's share of a row of two.
 const WIDE: f32 = 620.0;
 
@@ -144,7 +146,7 @@ fn terminal(s: &Tiles, t: &Tokens, over: Vec<El>) -> El {
     let tile = el()
         .key("story.tile")
         .w(width)
-        .h(260.0)
+        .h(TERMINAL_H)
         .fill(t.bg_tile)
         .border(1.0, t.border)
         .children(over);
@@ -310,7 +312,12 @@ fn notices_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
     terminal(
         s,
         &t,
-        vec![terminal_notices("story.tile.notices", vec![shared, stale])],
+        vec![terminal_notices(
+            "story.tile.notices",
+            vec![shared, stale],
+            TERMINAL_H - 4.0 * 18.0,
+            &t,
+        )],
     )
 }
 
@@ -377,7 +384,7 @@ fn drag_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
     let target = drop_target("story.tile.target", "s1 right", &t)
         .absolute(310.0, 0.0)
         .w(310.0)
-        .h(260.0);
+        .h(TERMINAL_H);
     let ghost = drag_ghost("story.tile.ghost", name, &t).absolute(120.0, 120.0);
     terminal(s, &t, vec![target, ghost])
 }

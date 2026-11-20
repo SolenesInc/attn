@@ -21,6 +21,9 @@ use crate::terminal::{Release, Terminals, accelerator};
 pub(super) const TILES: &str = "tiles";
 /// The strip over the line between two tiles that drags it, as wide as the Tauri app's.
 pub(super) const DIVIDER_PX: f32 = 9.0;
+/// The rows a terminal keeps clear under the notices over it: three whole rows, main's at the
+/// smallest window with the largest text, and the one the band's foot may cut.
+const ROWS_UNDER_NOTICES: f32 = 4.0;
 /// `.desktop-pane-headline`, the agent header's first line.
 const HEADLINE_PX: f32 = 30.0;
 const HEADLINE_PAD: f32 = 10.0;
@@ -965,9 +968,17 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
             let slot = if notices.is_empty() {
                 slot
             } else {
+                let (_, slot_h) = cx.terminals.slot_size(&pane.runtime_id).unwrap_or_default();
+                let row = cx
+                    .terminals
+                    .cell_font(&pane.runtime_id)
+                    .map_or(0.0, |(_, h)| h);
+                let rows = ROWS_UNDER_NOTICES * row;
                 slot.child(attn_ui::blocks::terminal_notices(
                     format!("terminal.{}.notices", pane.runtime_id),
                     notices,
+                    (slot_h - rows).max(0.0),
+                    t,
                 ))
             };
             let slot = match cx.terminals.marking(&pane.runtime_id) {
