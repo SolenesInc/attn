@@ -313,20 +313,22 @@ fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: 
     let found = catalogs::of(state, &harness.id, harness.discovery);
     let models: &[HarnessModel] = found.catalog.map_or(&[], |c| c.models.as_slice());
     let key = format!("settings.models.{}", harness.id);
-    let mut section = Section::new(key.clone(), harness.name.clone()).push(
-        Facts::new(format!("{key}.defaults"))
-            .fact(
-                format!("{key}.light-default"),
-                "Light default",
-                default_name(harness, &found, models, "light"),
-            )
-            .fact(
-                format!("{key}.deep-default"),
-                "Deep default",
-                default_name(harness, &found, models, "deep"),
-            )
-            .build(t),
-    );
+    let mut section = Section::new(key.clone(), harness.name.clone())
+        .region(format!("{} models", harness.name))
+        .push(
+            Facts::new(format!("{key}.defaults"))
+                .fact(
+                    format!("{key}.light-default"),
+                    "Light default",
+                    default_name(harness, &found, models, "light"),
+                )
+                .fact(
+                    format!("{key}.deep-default"),
+                    "Deep default",
+                    default_name(harness, &found, models, "deep"),
+                )
+                .build(t),
+        );
     if harness.discovery {
         let id = harness.id.clone();
         section = section.push(
