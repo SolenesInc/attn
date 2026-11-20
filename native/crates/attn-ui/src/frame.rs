@@ -1,7 +1,7 @@
 use rune::{Color, El, Shadow};
 
 use crate::Tokens;
-use crate::system::{Radius, door};
+use crate::system::{Radius, Space, door};
 
 /// A surface that floats over the window: its fill, its 1-point edge, its corners and the
 /// shadow under it. What the surface is decides all four, so a view picks the surface and
@@ -77,6 +77,12 @@ impl Frame {
                 .box_shadow(self.shadow),
             self.radius,
         )
+    }
+
+    /// [`draw`](Self::draw), what it holds set in from its edge, for a surface a feature lays out
+    /// itself from labels, fields and rows, such as the route picker's two lists.
+    pub fn draw_holding(self, surface: El) -> El {
+        self.draw(door::inset(surface, Space::S8, Space::S8))
     }
 
     /// [`draw`](Self::draw), with what the surface holds clipped to its corners, inside its

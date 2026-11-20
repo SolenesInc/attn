@@ -3,19 +3,19 @@
 //! model id, and the effort.
 
 use attn_protocol::HarnessModel;
+use attn_ui::Frame;
 use attn_ui::Tokens;
-use attn_ui::blocks::{Inline, Stack};
-use attn_ui::system::{self, Control, Look, Size, Trigger, TriggerLook, Type, words};
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{Color, El, Key, KeyEvent, TextEdit, Tx, col, row, text};
+use attn_ui::blocks::{Inline, Prose, Refusal, Stack};
+use attn_ui::system::{
+    self, Control, FieldState, ListRow, Look, Size, Trigger, TriggerLook, Type, line_box, words,
+};
+use rune::{Color, El, Key, KeyEvent, TextEdit, Tx, col, row};
 use rune_kit::ScrollBar;
-use rune_kit::popover::{anchored, raised};
-use rune_kit::{Button, ButtonVariant, Placement, TextInput};
+use rune_kit::popover::anchored;
+use rune_kit::{Placement, TextInput};
 use serde::{Deserialize, Serialize};
 
 use super::catalogs::{self, Catalog, Discovered, TIER_OVERRIDES};
-use super::pages::CAPTION;
 use crate::State;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -1019,6 +1019,13 @@ fn submit_filter(state: &mut State, tx: &mut Tx) {
     }
 }
 
+/// The picker's width, as main draws it: the harness column beside the model column.
+const PICKER_WIDTH: f32 = 560.0;
+/// The harness column's width, as main draws it: "Claude Code" and its unavailable mark.
+const HARNESS_COLUMN: f32 = 160.0;
+/// The model list's tallest before it scrolls, as main draws it: about seven two-line rows.
+const MODELS_TALLEST: f32 = 280.0;
+
 /// The picker over the page, when one is open.
 pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let Some(p) = picker(state) else { return };
@@ -1027,30 +1034,25 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     };
     let shown = shown_route(p, &value, &rules);
     let view = view(state, &shown, &rules);
-    let k = crate::settings::pages::kit(t);
-    let mut body = row().gap(space::S3).min_h(0.0).shrink();
+    let mut body = Inline::top().items_stretch().min_h(0.0).shrink();
     if !rules.fixed_harness {
         body = body.child(harness_list(&shown, &rules, t));
     }
     body = body.child(main(state, p, &view, t));
-    let surface = raised(
-        k,
+    let surface = Frame::menu(t).draw_holding(
         col()
             .key(PICKER)
             .role("dialog")
             .label("Choose a model")
-            .padding(space::S3)
-            .w(560.0)
-            .fill(t.bg_elevated)
+            .w(PICKER_WIDTH)
             .child(body)
             .on_key(on_key)
             .modal_tx(true, close)
             .modal_press_through(true)
             .focus_return(p.target.chip_key()),
-        k.radius.md,
     );
     layers.push(anchored(
-        k,
+        attn_ui::kit(t),
         surface,
         &p.target.chip_key(),
         Placement::BottomStart,
@@ -1059,101 +1061,96 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
 }
 
 fn kicker(label: &str, t: &Tokens) -> El {
-    text(label.to_owned())
-        .font(type_::SECTION)
-        .color(t.text_tertiary)
+    ListRow::note(
+        format!("settings.route-picker.head.{}", label.to_lowercase()),
+        label.to_owned(),
+        Type::Label,
+        t.text_tertiary,
+        None,
+        t,
+    )
 }
 
-fn option(key: String, label: &str, selected: bool, disabled: bool, t: &Tokens, content: El) -> El {
-    Button::new(label)
-        .variant(ButtonVariant::Ghost)
-        .label_with(move |_, _| content)
-        .disabled(disabled)
-        .build(crate::settings::pages::kit(t))
-        .key(key)
+/// One choice of a list box, its name wrapping, read as `name`.
+fn option(key: String, name: String, selected: bool, disabled: bool) -> ListRow {
+    ListRow::new(key, name.clone())
         .role("option")
-        .focus_selected(selected)
+        .wrap()
+        .title(name)
+        .selected(selected)
+        .disabled(disabled)
 }
 
 fn harness_list(shown: &Route, rules: &Rules, t: &Tokens) -> El {
     let preview = shown.harness.clone();
-    let mut list = col()
-        .key("settings.route-picker.harnesses")
-        .role("listbox")
-        .label("Harness")
-        .gap(2.0)
-        .w(160.0)
-        .child(kicker("Harness", t));
+    let mut rows = Vec::new();
     if rules.allow_none {
-        list = list.child(
+        let selected = preview.is_empty();
+        rows.push(
             option(
                 "settings.route-picker.harness.none".into(),
-                rules.none_label(),
-                preview.is_empty(),
+                rules.none_label().to_owned(),
+                selected,
                 false,
-                t,
-                text(rules.none_label())
-                    .font(type_::BODY)
-                    .color(t.text_primary),
             )
             .on_press_tx(|state: &mut State, tx: &mut Tx| {
                 change(state, Route::default(), tx);
                 finish(state, tx);
-            }),
+            })
+            .build(t)
+            .focus_selected(selected),
         );
     }
     for h in &rules.harnesses {
         let id = h.id.clone();
         let disabled = rules.require_available && !h.available;
-        let content = row()
-            .gap(space::S1)
-            .items_center()
-            .child(text(h.name.clone()).font(type_::BODY).color(t.text_primary))
-            .children((!h.available).then(|| {
-                text("●")
-                    .key(format!(
-                        "settings.route-picker.harness.{}.unavailable",
-                        h.id
-                    ))
-                    .font(CAPTION)
-                    .color(t.warning)
-            }));
+        let selected = preview == h.id;
         let mut item = option(
             format!("settings.route-picker.harness.{}", h.id),
-            &h.name,
-            preview == h.id,
+            h.name.clone(),
+            selected,
             disabled,
-            t,
-            content,
         );
         if !h.available {
-            item = item.description("Unavailable on this daemon");
+            item = item.description("Unavailable on this daemon").aside(
+                words("●", Type::Small, t.warning).key(format!(
+                    "settings.route-picker.harness.{}.unavailable",
+                    h.id
+                )),
+            );
         }
         if !disabled {
             item = item.on_press_tx(move |state: &mut State, tx: &mut Tx| {
                 pick_harness(state, id.clone(), tx)
             });
         }
-        list = list.child(item);
+        rows.push(item.build(t).focus_selected(selected));
     }
     if !preview.is_empty() && !rules.harnesses.iter().any(|h| h.id == preview) {
-        let label = format!("{preview} (not offered here)");
-        list = list.child(option(
-            "settings.route-picker.harness.missing".into(),
-            &label,
-            true,
-            true,
-            t,
-            text(label.clone())
-                .font(type_::BODY)
-                .color(t.text_secondary),
-        ));
+        rows.push(
+            option(
+                "settings.route-picker.harness.missing".into(),
+                format!("{preview} (not offered here)"),
+                true,
+                true,
+            )
+            .build(t)
+            .focus_selected(true),
+        );
     }
-    list
+    Stack::tight()
+        .w(HARNESS_COLUMN)
+        .child(kicker("Harness", t))
+        .child(
+            col()
+                .key("settings.route-picker.harnesses")
+                .role("listbox")
+                .label("Harness")
+                .children(rows),
+        )
 }
 
 fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
-    let k = crate::settings::pages::kit(t);
     let refresh = view.harness.filter(|h| h.discovery).map(|h| {
         let id = h.id.clone();
         El::from(
@@ -1168,22 +1165,23 @@ fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
         )
         .busy(view.discovered.loading)
     });
-    let mut main = col().grow(1.0).min_w(0.0).min_h(0.0).gap(space::S2).child(
-        row()
-            .gap(space::S2)
-            .items_center()
+    let mut main = Stack::loose().grow(1.0).min_w(0.0).min_h(0.0).child(
+        Inline::line()
+            .w_full()
             .child(kicker("Model", t).grow(1.0))
             .children(refresh),
     );
     if view.effective.is_empty() {
         return main.child(
-            text("Choose a harness to see its models.")
-                .font(CAPTION)
-                .color(t.text_tertiary),
+            Prose::hint(
+                "settings.route-picker.empty",
+                "Choose a harness to see its models.",
+            )
+            .el(t),
         );
     }
     if view.can_pin_model {
-        main = main.child(
+        main = main.child(El::from(line_box(
             TextInput::new(&p.query)
                 .key(FILTER)
                 .label("Filter models or enter an ID")
@@ -1197,44 +1195,43 @@ fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
                         .expect("the picker is open while its filter shows")
                         .query
                 })
-                .on_submit(submit_filter)
-                .width(None)
-                .build(k),
-        );
+                .on_submit(submit_filter),
+            FieldState::Ready,
+            t,
+        )));
     }
     main = main.child(model_list(p, view, t));
     let query = p.query.text.trim().to_owned();
     if view.can_pin_model && !query.is_empty() {
         let unsupported = manual(state).is_some_and(|(_, _, u)| u);
         let provider = has_provider(&view.effective).then(|| {
-            TextInput::new(&p.provider)
-                .key(PROVIDER)
-                .label("Provider")
-                .placeholder("Provider")
-                .on_edit(|state: &mut State| {
-                    &mut state
-                        .window
-                        .settings
-                        .route_picker
-                        .as_mut()
-                        .expect("the picker is open while its provider shows")
-                        .provider
-                })
-                .width(Some(120.0))
-                .build(k)
+            El::from(line_box(
+                TextInput::new(&p.provider)
+                    .key(PROVIDER)
+                    .label("Provider")
+                    .placeholder("Provider")
+                    .on_edit(|state: &mut State| {
+                        &mut state
+                            .window
+                            .settings
+                            .route_picker
+                            .as_mut()
+                            .expect("the picker is open while its provider shows")
+                            .provider
+                    }),
+                FieldState::Ready,
+                t,
+            ))
+            .w(PROVIDER_WIDTH)
         });
         main = main.child(
-            row()
-                .gap(space::S2)
-                .items_center()
-                .children(provider)
-                .child(El::from(
-                    attn_ui::system::Button::new(format!("Use “{query}”"))
-                        .disabled(unsupported)
-                        .on_press_tx(use_manual)
-                        .build(t)
-                        .key("settings.route-picker.manual"),
-                )),
+            Inline::loose().children(provider).child(El::from(
+                system::Button::new(format!("Use “{query}”"))
+                    .disabled(unsupported)
+                    .on_press_tx(use_manual)
+                    .build(t)
+                    .key("settings.route-picker.manual"),
+            )),
         );
     }
     main = main.children(effort_control(p, view, t));
@@ -1244,13 +1241,7 @@ fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
         .map(|c| c.detail.clone())
         .filter(|d| !d.is_empty())
     {
-        main = main.child(
-            text(detail)
-                .key("settings.route-picker.detail")
-                .font(CAPTION)
-                .color(t.text_tertiary)
-                .wrap(),
-        );
+        main = main.child(Prose::hint("settings.route-picker.detail", detail).el(t));
     }
     if view.harness.is_some_and(|h| !h.discovery) {
         let note = if view.can_pin_model {
@@ -1258,54 +1249,38 @@ fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
         } else {
             "The harness chooses its model."
         };
-        main = main.child(text(note).font(CAPTION).color(t.text_tertiary).wrap());
+        main = main.child(Prose::hint("settings.route-picker.note", note).el(t));
     }
     if let Some(error) = view.discovered.error {
-        main = main.child(
-            text(error.to_owned())
-                .key("settings.route-picker.error")
-                .role("alert")
-                .label(error.to_owned())
-                .font(CAPTION)
-                .color(t.error)
-                .wrap(),
-        );
+        main = main.child(Refusal::new("settings.route-picker.error", error.to_owned()).build(t));
     }
     main
 }
 
+/// The provider field's width, as main draws it: "openrouter" with the field's insets.
+const PROVIDER_WIDTH: f32 = 120.0;
+/// The effort field's width, as main draws it: "As the harness names it" with the insets.
+const EFFORT_WIDTH: f32 = 160.0;
+
 fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
     let query = p.query.text.clone();
-    let mut list = col()
-        .key("settings.route-picker.models")
-        .role("listbox")
-        .label("Model")
-        .gap(2.0)
-        .max_h(280.0)
-        .min_h(0.0)
-        .shrink()
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        });
+    let mut rows = Vec::new();
     let mut index = 0;
     if query.is_empty() || !view.can_pin_model {
         let next = view.with_model(None);
+        let selected = view.value.model.is_empty();
         let mut item = option(
             format!("settings.route-picker.model.{index}"),
-            &view.unset_label,
-            view.value.model.is_empty(),
+            view.unset_label.clone(),
+            selected,
             view.pins_unavailable,
-            t,
-            text(view.unset_label.clone())
-                .font(type_::BODY)
-                .color(t.text_primary),
         );
         if !view.pins_unavailable {
             item = item.on_press_tx(move |state: &mut State, tx: &mut Tx| {
                 pick_model(state, next.clone(), tx)
             });
         }
-        list = list.child(item);
+        rows.push(item.build(t).focus_selected(selected));
         index += 1;
     }
     let mut previous = String::new();
@@ -1318,7 +1293,14 @@ fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
             } else {
                 tier_label(&option_row.group)
             };
-            list = list.child(text(header).font(CAPTION).color(t.text_tertiary));
+            rows.push(ListRow::note(
+                format!("settings.route-picker.group.{}", option_row.group),
+                header,
+                Type::Label,
+                t.text_tertiary,
+                None,
+                t,
+            ));
         }
         previous = option_row.group.clone();
         let (selected, disabled, mark, detail, next) = match &option_row.model {
@@ -1381,54 +1363,54 @@ fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
         } else {
             format!("{} {mark}", option_row.label)
         };
-        let content = col()
-            .gap(2.0)
-            .child(text(name.clone()).font(type_::BODY).color(t.text_primary))
-            .children(
-                (!detail.is_empty())
-                    .then(|| text(detail.clone()).font(CAPTION).color(t.text_tertiary)),
-            );
         let mut item = option(
             format!("settings.route-picker.model.{index}"),
-            &name,
+            name,
             selected,
             disabled,
-            t,
-            content,
         );
         if !detail.is_empty() {
-            item = item.description(detail);
+            item = item.subtitle(detail.clone(), t).description(detail);
         }
         if !disabled {
             item = item.on_press_tx(move |state: &mut State, tx: &mut Tx| {
                 pick_model(state, next.clone(), tx)
             });
         }
-        list = list.child(item);
+        rows.push(item.build(t).focus_selected(selected));
         index += 1;
     }
     if view.discovered.loading {
-        list = list.child(
-            text("Discovering models…")
+        rows.push(
+            words("Discovering models…", Type::Small, t.text_tertiary)
                 .key("settings.route-picker.loading")
                 .role("status")
-                .label("Discovering models…")
-                .font(CAPTION)
-                .color(t.text_tertiary),
+                .label("Discovering models…"),
         );
     }
-    list.scroll_bar_styled(attn_ui::scroll_bar(t))
+    col()
+        .key("settings.route-picker.models")
+        .role("listbox")
+        .label("Model")
+        .max_h(MODELS_TALLEST)
+        .min_h(0.0)
+        .shrink()
+        .scroll(rune::ScrollSpec {
+            stick_bottom: false,
+        })
+        .children(rows)
+        .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
 fn effort_control(p: &Picker, view: &View, t: &Tokens) -> Option<El> {
     let value = &view.value;
     let head = |body: El| {
-        col()
+        Stack::tight()
             .key("settings.route-picker.effort-control")
-            .gap(space::S1)
             .child(kicker("Effort", t))
             .child(body)
     };
+    let quiet = |said: String| words(said, Type::Small, t.text_tertiary);
     match view.effort_mode {
         EffortMode::Hidden => return None,
         EffortMode::Pending if !view.pins_unavailable => {
@@ -1437,14 +1419,10 @@ fn effort_control(p: &Picker, view: &View, t: &Tokens) -> Option<El> {
             } else {
                 value.effort.clone()
             };
-            return Some(head(text(said).font(CAPTION).color(t.text_tertiary)));
+            return Some(head(quiet(said)));
         }
         EffortMode::Unsupported if value.effort.is_empty() && p.effort.is_none() => {
-            return Some(head(
-                text("Not available for this model.")
-                    .font(CAPTION)
-                    .color(t.text_tertiary),
-            ));
+            return Some(head(quiet("Not available for this model.".to_owned())));
         }
         _ => {}
     }
@@ -1454,12 +1432,10 @@ fn effort_control(p: &Picker, view: &View, t: &Tokens) -> Option<El> {
         if view.effort_missing {
             levels.push(value.effort.clone());
         }
-        let group = row()
+        let group = Inline::tight()
             .key(EFFORT)
             .role("group")
             .label("Effort")
-            .gap(space::S1)
-            .wrap()
             .children(levels.into_iter().enumerate().map(|(i, level)| {
                 let shown = if !level.is_empty() {
                     level.clone()
@@ -1505,10 +1481,15 @@ fn effort_control(p: &Picker, view: &View, t: &Tokens) -> Option<El> {
                 .effort
                 .get_or_insert_with(|| TextEdit::new(shown))
         })
-        .on_submit(|state: &mut State, tx: &mut Tx| finish(state, tx))
-        .width(Some(160.0))
-        .build(crate::settings::pages::kit(t));
-    Some(head(input))
+        .on_submit(|state: &mut State, tx: &mut Tx| finish(state, tx));
+    Some(head(
+        El::from(line_box(
+            input,
+            FieldState::disabled_if(view.pins_unavailable),
+            t,
+        ))
+        .w(EFFORT_WIDTH),
+    ))
 }
 
 /// Up and Down move through a list, Home and End go to its ends, and Left and Right move

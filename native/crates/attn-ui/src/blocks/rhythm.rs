@@ -51,4 +51,10 @@ impl Stack {
     pub fn tight() -> El {
         door::gap(col(), Space::S4)
     }
+
+    /// Apart: the parts of a one-off panel, such as the route picker's filter, its models and
+    /// its effort.
+    pub fn loose() -> El {
+        door::gap(col(), Space::S8)
+    }
 }
