@@ -165,7 +165,7 @@ impl Choice {
         };
         let rows = match self.size {
             Size::Regular => Space::S8,
-            Size::Compact => Space::S4,
+            Size::Compact | Size::Small => Space::S4,
         };
         let row = door::inset(door::gap(row, Space::S12), Space::S12, rows);
         let row = door::corner(row, Radius::Card);
