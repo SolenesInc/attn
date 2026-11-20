@@ -101,6 +101,20 @@ fn cap(key: String, look: Look, colors: Option<[Color; 3]>, t: &Tokens) -> El {
     }
 }
 
+/// Groups of outlined keys in a row ending on its end, each whole or gone: a group that does not
+/// fit after those before it leaves, the last first.
+pub fn giving_way(groups: impl IntoIterator<Item = El>) -> El {
+    door::clip(
+        door::gap(row(), Space::S6)
+            .flex_wrap()
+            .justify_end()
+            .h(door::line_height(HINT_TYPE) + 2.0)
+            .shrink()
+            .min_w(0.0)
+            .children(groups),
+    )
+}
+
 /// The Tauri app's `.keycap`: a chip lifted by a drop shadow, a faint ring and a top light,
 /// in `Keycap.css`'s literal black and white.
 fn raised_cap(cap: El, fill: Color) -> El {

@@ -278,11 +278,14 @@ pub(crate) fn row_face(r: &Row, key: String, place: Place, t: &Tokens) -> El {
                 row = row
                     .tag(words("· crew", Type::Body, t.text_tertiary).key(format!("{key}.crew")));
             }
-            row = row.aside(chip(slot.clone(), "slot"));
-            if let Some(keys) = tag {
-                row = row.aside(chip(keys.clone(), "tag"));
-            }
-            row.aside(column(
+            row.aside(
+                keycap::giving_way(
+                    std::iter::once(chip(slot.clone(), "slot"))
+                        .chain(tag.clone().map(|keys| chip(keys, "tag"))),
+                )
+                .key(format!("{key}.keys")),
+            )
+            .aside(column(
                 state_w(),
                 Some(state(&key, status.word(), status_tone(*status), t)),
             ))

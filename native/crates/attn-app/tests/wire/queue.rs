@@ -485,17 +485,57 @@ fn the_waiting_peeks_columns_keep_clear_of_each_other_in_the_smallest_window_at_
             Some("not set up"),
             "{scale}"
         );
+        let head = "queue-bar.peek.agent:a-long-waiting-agent-name";
+        let [_, keys_y, _, keys_h] = screen
+            .bounds(Target::key(format!("{head}.keys")))
+            .expect("the head of the queue has keys");
+        let shown = |part: &str| {
+            let [_, y, _, h] = screen
+                .bounds(Target::key(format!("{head}.{part}")))
+                .unwrap_or_else(|| panic!("{scale}: the head of the queue has its {part} key"));
+            if y >= keys_y && y + h <= keys_y + keys_h {
+                true
+            } else {
+                assert!(
+                    y >= keys_y + keys_h,
+                    "{scale}: the head's {part} key is cut, neither whole nor gone"
+                );
+                false
+            }
+        };
         assert!(
-            screen
-                .find(Target::key(
-                    "queue-bar.peek.agent:a-long-waiting-agent-name.tag"
-                ))
-                .is_some(),
-            "{scale}: the head of the queue shows its keys"
+            shown("slot"),
+            "{scale}: the head of the queue shows its desktop's key"
+        );
+        let tag_shown = shown("tag");
+        let [panel_x, _, panel_w, _] = screen
+            .bounds(Target::key("queue-bar.peek.panel"))
+            .expect("the peek shows");
+        let mut state_ends = Vec::new();
+        for row in rows {
+            for part in ["status", "age"] {
+                let [px, _, pw, _] = screen
+                    .bounds(Target::key(format!("{row}.{part}")))
+                    .unwrap_or_else(|| panic!("{scale}: {row} shows its {part}"));
+                assert!(
+                    px >= panel_x && px + pw <= panel_x + panel_w,
+                    "{scale}: {row}'s {part} at {px}..{} is cut by the peek's edge at {}",
+                    px + pw,
+                    panel_x + panel_w
+                );
+                if part == "status" {
+                    state_ends.push(px + pw);
+                }
+            }
+        }
+        assert!(
+            state_ends.windows(2).all(|w| (w[0] - w[1]).abs() < 0.5),
+            "{scale}: the state badges end at one edge: {state_ends:?}"
         );
         for row in rows {
             let mut parts: Vec<(&str, [f32; 4])> = ["slot", "tag", "status", "age"]
                 .into_iter()
+                .filter(|part| *part != "tag" || row != head || tag_shown)
                 .filter_map(|part| {
                     screen
                         .bounds(Target::key(format!("{row}.{part}")))
