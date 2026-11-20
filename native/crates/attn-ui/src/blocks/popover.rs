@@ -2,7 +2,7 @@ use rune::{El, col, row};
 use rune_kit::ScrollBar;
 
 use super::actions::Actions;
-use super::block::{Block, inner_gap, spaced};
+use super::block::{Block, Kind, spaced};
 use crate::system::{Size, Space, Type, door, words};
 use crate::{Frame, Tokens};
 
@@ -79,7 +79,7 @@ impl Popover {
             .actions
             .map(|actions| actions.build().el.key(format!("{}.actions", self.key)));
         let body = (!self.body.is_empty()).then(|| {
-            spaced(self.body, inner_gap, None)
+            spaced(self.body, gap, None)
                 .key(format!("{}.body", self.key))
                 .shrink()
                 .min_h(0.0)
@@ -103,8 +103,14 @@ impl Popover {
             Space::S12,
         );
         Frame::panel(t)
-            .draw_clipped(door::inset(surface, Space::S16, Space::S16))
+            .draw_clipped(door::inset(surface, Space::S12, Space::S12))
             .w(WIDTH)
             .min_h(0.0)
     }
+}
+
+/// A popover is small and close to what opened it: its blocks stand one step apart, closer
+/// than a page's or a form's.
+fn gap(_: Kind, _: Kind) -> Space {
+    Space::S12
 }

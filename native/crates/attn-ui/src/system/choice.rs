@@ -21,6 +21,7 @@ pub struct Choice {
     many: bool,
     chosen: bool,
     disabled: bool,
+    size: Size,
 }
 
 impl Choice {
@@ -34,6 +35,7 @@ impl Choice {
             many: false,
             chosen: false,
             disabled: false,
+            size: Size::Regular,
         }
     }
 
@@ -58,6 +60,12 @@ impl Choice {
     /// checkbox, in place of a dot.
     pub fn many(mut self, many: bool) -> Self {
         self.many = many;
+        self
+    }
+
+    /// A choice a compact control high, for a list in a small surface such as a popover.
+    pub fn compact(mut self) -> Self {
+        self.size = Size::Compact;
         self
     }
 
@@ -140,7 +148,7 @@ impl Choice {
             .focus_selected(self.chosen)
             .position_in_set(i + 1, n)
             .w_full()
-            .min_h(Size::Regular.height())
+            .min_h(self.size.height())
             .items_center()
             .fill(if self.chosen {
                 fill
@@ -150,13 +158,17 @@ impl Choice {
             .border(1.0, edge)
             .child(dot)
             .child(said);
-        let row = door::inset(door::gap(row, Space::S12), Space::S12, Space::S8);
+        let rows = match self.size {
+            Size::Regular => Space::S8,
+            Size::Compact => Space::S4,
+        };
+        let row = door::inset(door::gap(row, Space::S12), Space::S12, rows);
         let row = door::corner(row, Radius::Card);
         if self.disabled {
-            return Control::new(disabled::dim(row), Size::Regular);
+            return Control::new(disabled::dim(row), self.size);
         }
         let row = layers::pressable(row, fill, t).on_press_tx(press);
-        Control::new(focus::ring_on_edge(row, t), Size::Regular)
+        Control::new(focus::ring_on_edge(row, t), self.size)
     }
 }
 
