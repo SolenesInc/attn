@@ -102,16 +102,23 @@ fn cap(key: String, look: Look, colors: Option<[Color; 3]>, t: &Tokens) -> El {
 }
 
 /// Groups of outlined keys in a row ending on its end, each whole or gone: a group that does not
-/// fit after those before it leaves, the last first.
+/// fit after those before it leaves, the last first, down to none.
 pub fn giving_way(groups: impl IntoIterator<Item = El>) -> El {
+    let line = door::line_height(HINT_TYPE) + 2.0;
     door::clip(
-        door::gap(row(), Space::S6)
+        row()
             .flex_wrap()
             .justify_end()
-            .h(door::line_height(HINT_TYPE) + 2.0)
+            .h(line)
             .shrink()
             .min_w(0.0)
-            .children(groups),
+            .child(rune::el().w(0.0).h(line))
+            .children(
+                groups
+                    .into_iter()
+                    .enumerate()
+                    .map(|(n, g)| if n == 0 { g } else { g.ml(Space::S6.pt()) }),
+            ),
     )
 }
 

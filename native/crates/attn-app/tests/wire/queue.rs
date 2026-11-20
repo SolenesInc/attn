@@ -485,29 +485,36 @@ fn the_waiting_peeks_columns_keep_clear_of_each_other_in_the_smallest_window_at_
             Some("not set up"),
             "{scale}"
         );
-        let head = "queue-bar.peek.agent:a-long-waiting-agent-name";
-        let [_, keys_y, _, keys_h] = screen
-            .bounds(Target::key(format!("{head}.keys")))
-            .expect("the head of the queue has keys");
-        let shown = |part: &str| {
-            let [_, y, _, h] = screen
-                .bounds(Target::key(format!("{head}.{part}")))
-                .unwrap_or_else(|| panic!("{scale}: the head of the queue has its {part} key"));
-            if y >= keys_y && y + h <= keys_y + keys_h {
+        let shown = |row: &str, part: &str| {
+            let [kx, ky, kw, kh] = screen
+                .bounds(Target::key(format!("{row}.keys")))
+                .unwrap_or_else(|| panic!("{scale}: {row} has keys"));
+            let [x, y, w, h] = screen
+                .bounds(Target::key(format!("{row}.{part}")))
+                .unwrap_or_else(|| panic!("{scale}: {row} has its {part} key"));
+            if y >= ky && y + h <= ky + kh {
+                assert!(
+                    x >= kx - 0.5 && x + w <= kx + kw + 0.5,
+                    "{scale}: {row}'s {part} key at {x}..{} is cut by its keys' edges {kx}..{}",
+                    x + w,
+                    kx + kw
+                );
                 true
             } else {
                 assert!(
-                    y >= keys_y + keys_h,
-                    "{scale}: the head's {part} key is cut, neither whole nor gone"
+                    y >= ky + kh,
+                    "{scale}: {row}'s {part} key is cut, neither whole nor gone"
                 );
                 false
             }
         };
+        let head = "queue-bar.peek.agent:a-long-waiting-agent-name";
+        let slot_shown = shown(head, "slot");
+        let tag_shown = shown(head, "tag");
         assert!(
-            shown("slot"),
+            slot_shown,
             "{scale}: the head of the queue shows its desktop's key"
         );
-        let tag_shown = shown("tag");
         let [panel_x, _, panel_w, _] = screen
             .bounds(Target::key("queue-bar.peek.panel"))
             .expect("the peek shows");
@@ -535,7 +542,11 @@ fn the_waiting_peeks_columns_keep_clear_of_each_other_in_the_smallest_window_at_
         for row in rows {
             let mut parts: Vec<(&str, [f32; 4])> = ["slot", "tag", "status", "age"]
                 .into_iter()
-                .filter(|part| *part != "tag" || row != head || tag_shown)
+                .filter(|part| match (*part, row == head) {
+                    ("tag", true) => tag_shown,
+                    ("slot", true) => slot_shown,
+                    _ => true,
+                })
                 .filter_map(|part| {
                     screen
                         .bounds(Target::key(format!("{row}.{part}")))
