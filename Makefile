@@ -486,7 +486,7 @@ generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 	node scripts/generate-protocol-version.mjs
 	go run ./cmd/settingsgen app/src/types/settings.generated.ts
 	node scripts/generate-rust-protocol.mjs
-	go run ./cmd/cligen cli/protocol/src/go_values.rs cli/testdata
+	go run ./cmd/cligen cli/protocol/src/go_values.rs cli/testdata cli/attn/src internal/prompts/content/skills/attn/references
 	rm -rf internal/protocol/schema/tsp-output-home-gateway
 	cd internal/protocol/schema && pnpm exec tsp compile home_gateway.tsp --output-dir tsp-output-home-gateway
 	$(GO_JSONSCHEMA) -p homegateway --only-models --tags json --resolve-extension json --capitalization ID --capitalization API \
@@ -506,7 +506,7 @@ generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 # diff runs and this passes silently — commit the edit if you are trying to
 # reproduce a drift failure locally.
 check-types: generate-types
-	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go app/src/types/generated.ts app/src/types/settings.generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts internal/protocol/homegateway mobile/src/homeGateway/generated.ts mobile/src/homeGateway/version.ts cli/protocol/src/generated.rs cli/protocol/src/go_values.rs cli/testdata
+	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go app/src/types/generated.ts app/src/types/settings.generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts internal/protocol/homegateway mobile/src/homeGateway/generated.ts mobile/src/homeGateway/version.ts cli/protocol/src/generated.rs cli/protocol/src/go_values.rs cli/testdata cli/attn/src/commands/seed/help_generated.rs internal/prompts/content/skills/attn/references/garden.md
 
 # Refuses a Home Gateway API change that is not an addition to the schema on origin/main.
 check-home-gateway-compat:

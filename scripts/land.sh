@@ -32,6 +32,8 @@ protocol_outputs=(
   mobile/src/homeGateway/version.ts
   cli/protocol/src/generated.rs
   cli/protocol/src/go_values.rs
+  cli/attn/src/commands/seed/help_generated.rs
+  internal/prompts/content/skills/attn/references/garden.md
   cli/testdata/duration_string.jsonl
   cli/testdata/flag.jsonl
   cli/testdata/flag_spec.json
@@ -212,7 +214,7 @@ run_checks() {
     fi
     go_checks=(check-go "GO_PACKAGES=$packages")
   fi
-  touches '^internal/protocol/(schema/|constants\.go)|^internal/(setting|garden|prompts|ask|inbox)/|^cmd/(settingsgen|cligen)/|^cli/|^scripts/generate-rust-protocol\.mjs|^go\.mod$' && targets+=(check-types)
+  touches '^internal/protocol/(schema/|constants\.go)|^internal/(setting|garden|prompts|ask|inbox)/|^cmd/(settingsgen|cligen)/|^internal/catalog/|^cli/|^scripts/generate-rust-protocol\.mjs|^go\.mod$' && targets+=(check-types)
   touches '^internal/protocol/(schema/home_gateway\.tsp|homegateway/)' && targets+=(check-home-gateway-compat)
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^app/|^sdk/|^cmd/prompt-editor/' && targets+=(check-js-tools)

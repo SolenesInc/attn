@@ -1,6 +1,6 @@
-use std::fmt::Write as _;
 mod checks;
 mod flags;
+mod help_generated;
 mod render;
 mod table;
 mod verbs;
@@ -9,22 +9,18 @@ use super::{Run, Stop, print_stdout};
 use crate::client::{Client, Reply, SendError};
 use attn::go::quote::quote;
 use attn_protocol::CallerSessionMessage;
-use attn_protocol::go_values::{
-    CODEX_THREAD_PREFIX, DEFAULT_STALE_WINDOW_SECONDS, ENTRY_KINDS, SEARCH_DEFAULT_RESULTS,
-    SEARCH_MAX_RESULTS,
-};
-use flags::{Flags, ParseStop, verb_has_flag, verb_named};
-use render::format_window_seconds;
+use attn_protocol::go_values::CODEX_THREAD_PREFIX;
+use flags::{Flags, ParseStop};
 use std::io::Read;
-use table::{FLAGS, VERBS};
+use table::VERBS;
 
 pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     let Some(verb) = args.first() else {
-        print_stdout(&seed_help());
+        print_stdout(help_generated::GROUP_HELP);
         return Ok(());
     };
     if verb == "-h" || verb == "--help" {
-        print_stdout(&seed_help());
+        print_stdout(help_generated::GROUP_HELP);
         return Ok(());
     }
     let rest = &args[1..];
@@ -44,90 +40,11 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     verbs::dispatch(run, verb, rest)
 }
 
-fn expanded(text: &str) -> String {
-    text.replace(
-        "{stale_window}",
-        &format_window_seconds(DEFAULT_STALE_WINDOW_SECONDS),
-    )
-    .replace("{default_results}", &SEARCH_DEFAULT_RESULTS.to_string())
-    .replace("{max_results}", &SEARCH_MAX_RESULTS.to_string())
-    .replace("{entry_kinds}", &ENTRY_KINDS.join(", "))
-}
-
-fn verb_entry(out: &mut String, verb: &table::Verb, indent: &str) {
-    out.push_str(indent);
-    out.push_str(verb.synopsis);
-    out.push('\n');
-    for line in expanded(verb.about).split('\n') {
-        out.push_str(indent);
-        out.push_str("      ");
-        out.push_str(line);
-        out.push('\n');
-    }
-}
-
-fn flag_help(out: &mut String, definition: &table::FlagDef, owners: &str) {
-    let prefix = if definition.name.len() == 1 {
-        "-"
-    } else {
-        "--"
-    };
-    let label = format!("{prefix}{} {}", definition.name, definition.argument);
-    let label = label.trim();
-    let _ = writeln!(out, "  {label:<30} {}{owners}", expanded(definition.about));
-}
-
-fn verb_help(name: &str) -> String {
-    let verb = verb_named(name);
-    let mut out = String::new();
-    verb_entry(&mut out, verb, "");
-    out.push_str("\nflags:\n");
-    for definition in FLAGS {
-        if verb_has_flag(verb, definition.name) {
-            flag_help(&mut out, definition, "");
-        }
-    }
-    out
-}
-
-fn seed_help() -> String {
-    let mut out = String::from(
-        "usage: attn seed <command>
-
-A seed is the unit of work: one document, one short id, one slug made of the
-title's key words, planted in the garden. Commands take the id or the slug; a
-slug two seeds share is refused, listing each match.
-Anything worth handing off, parking, or attributing is a seed.
-Use attn seed <command> --help for one command's syntax and flags.
-
-commands:
-",
-    );
-    for verb in VERBS {
-        verb_entry(&mut out, verb, "  ");
-        out.push('\n');
-    }
-    out.push_str("flags:\n");
-    for definition in FLAGS {
-        if definition.name == "profile" || definition.name == "session" {
-            flag_help(&mut out, definition, " (every command)");
-            continue;
-        }
-        let owners: Vec<&str> = VERBS
-            .iter()
-            .filter(|verb| verb_has_flag(verb, definition.name))
-            .map(|verb| verb.name)
-            .collect();
-        flag_help(&mut out, definition, &format!(" ({})", owners.join(", ")));
-    }
-    out
-}
-
 fn usage_error(name: &str, message: &str) -> Stop {
     eprintln!("seed {name}: {message}");
     eprintln!(
         "usage: attn seed {} (attn seed {name} --help)",
-        verb_named(name).synopsis
+        help_generated::usage(name)
     );
     Stop(2)
 }
@@ -156,7 +73,7 @@ impl<'r, 'a> Session<'r, 'a> {
         match self.flags.parse(args) {
             Ok(positionals) => Ok(positionals),
             Err(ParseStop::Help) => {
-                print_stdout(&verb_help(&self.name));
+                print_stdout(help_generated::help(&self.name));
                 Err(Stop(0))
             }
             Err(ParseStop::Invalid(message)) => {

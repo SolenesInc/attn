@@ -1,0 +1,108 @@
+# Named argument types. `json` is the JSON Schema of the value in a tool's input
+# schema, `placeholder` is how CLI usage prints the value, and `doc` describes
+# the value wherever an arg of this type has no doc of its own.
+types:
+  seed:
+    json: {type: string, minLength: 1}
+    doc: "A seed's id, such as s-7k3f9m, or its slug. A slug two seeds share is refused, listing each match."
+    placeholder: "<id>"
+  check_id:
+    json: {type: string, pattern: "^C[1-9][0-9]*$"}
+    doc: "A check's id, such as C1."
+    placeholder: "<C#>"
+  check_definition:
+    json: {type: string, minLength: 1}
+    doc: "A statement the seed must prove; attn picks the id unless C#= names it, as in C5=Retries pass."
+    placeholder: '"[C#=]<statement>"'
+  relation:
+    json: {type: string, enum: [blocks, part-of, discovered-from]}
+    doc: "How a relates to b."
+    placeholder: "<blocks|part-of|discovered-from>"
+  duration:
+    json: {type: string, minLength: 1}
+    doc: "A duration from now, such as 20m, 2h or 1h30m."
+    placeholder: "<duration>"
+  window:
+    json: {type: string, minLength: 1}
+    doc: "A window of time, such as 72h or 14d."
+    placeholder: "<d>"
+  time:
+    json: {type: string, format: date-time}
+    doc: "An RFC3339 time, such as 2026-11-05T09:00:00+01:00."
+    placeholder: "<time>"
+  bookmark:
+    json: {type: integer, minimum: 0}
+    doc: "The bookmark an earlier read printed."
+    placeholder: "<bookmark>"
+  count:
+    json: {type: integer, minimum: 1}
+    placeholder: "<n>"
+  version:
+    json: {type: integer, minimum: 1}
+    doc: "A body version, as the edit entries in notes show it."
+    placeholder: "<version>"
+  markdown:
+    json: {type: string, minLength: 1}
+    doc: "Markdown."
+    placeholder: "<body>"
+  text:
+    json: {type: string, minLength: 1}
+    placeholder: "<text>"
+  name:
+    json: {type: string, minLength: 1}
+    placeholder: "<name>"
+  path:
+    json: {type: string, minLength: 1}
+    doc: "A path on this machine. A relative path resolves against the working directory."
+    placeholder: "<path>"
+  url:
+    json: {type: string, format: uri}
+    placeholder: "<url>"
+  revision:
+    json: {type: string, minLength: 1}
+    placeholder: "<rev>"
+  review_id:
+    json: {type: string, minLength: 1}
+    placeholder: "<review-id>"
+  entry_kind:
+    json: {type: string, minLength: 1}
+    placeholder: "<kind>"
+  bool:
+    json: {type: boolean}
+  plot:
+    json:
+      type: object
+      properties:
+        title: {type: string, minLength: 1}
+        body: {type: string}
+        part_of: {type: string, description: "A plot to plant this plot under, by id or slug."}
+        discovered_from: {type: string, description: "The seed whose work turned up this plot, by id or slug."}
+        checks:
+          type: array
+          items: {$ref: "#/$defs/check"}
+        children:
+          type: array
+          items:
+            type: object
+            properties:
+              title: {type: string, minLength: 1}
+              body: {type: string}
+              checks:
+                type: array
+                items: {$ref: "#/$defs/check"}
+              after:
+                type: array
+                items: {type: string}
+                description: "The siblings this child waits for, by step slug or full title."
+            required: [title]
+      required: [title]
+      $defs:
+        check:
+          type: object
+          properties:
+            id: {type: string}
+            text: {type: string, minLength: 1}
+            shared: {type: boolean}
+          required: [text]
+    doc: "A plot payload."
+    placeholder: "<path>"

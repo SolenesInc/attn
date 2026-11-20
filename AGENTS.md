@@ -329,6 +329,16 @@ Never hand-edit `internal/protocol/generated.go`,
 `cmd/cligen`, which reads Go constants, settings and prompts the CLI uses, so
 changing one of those also needs `make generate-types`.
 
+The catalog in `internal/catalog/content/*.yaml` defines each command once.
+`cmd/cligen` generates the seed family's CLI help
+(`cli/attn/src/commands/seed/help_generated.rs`) and the garden reference
+(`internal/prompts/content/skills/attn/references/garden.md`) from it, and
+refuses an entry without `runs` or `grant`. Edit the catalog, not those files,
+then run `make generate-types`. When the garden reference changes, copy it into
+`attn_skill/references/garden.md` in
+`internal/prompttest/testdata/agent-delivery.json`, which
+`TestLegacyPromptCompatibility` in `internal/agent` compares.
+
 ## Event bus
 
 - Publish entity ids as fact subjects; omit byte streams.
