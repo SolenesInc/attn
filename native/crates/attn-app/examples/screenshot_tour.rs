@@ -3676,23 +3676,9 @@ fn settings_smallest_pages(dark: bool) {
         |_| {},
         |daemon| {
             daemon.on("bus_status_get", |r: &Request| {
-                message(BusStatusResultMessage {
-                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
-                    success: true,
-                    earliest: 1_048_576,
-                    head: 1_049_000,
-                    rows: 1_048_576_000,
-                    bytes: 987_654_321_000,
-                    oldest_at: "2025-08-02T10:24:55Z".into(),
-                    newest_at: "2026-08-10T19:28:01Z".into(),
-                    delivering: true,
-                    retention_seconds: 365.0 * 86400.0,
-                    recent_window_seconds: 3600.0,
-                    baseline_window_seconds: 86400.0,
-                    surge_rate_per_hour: 1000.0,
-                    pin_alarm_seconds: 3600.0,
-                    ..BusStatusResultMessage::new()
-                })
+                message(crowded_bus(
+                    r["request_id"].as_str().unwrap_or_default().into(),
+                ))
             });
         },
     );
@@ -3905,34 +3891,85 @@ fn settings_smallest_pages(dark: bool) {
 fn settings_event_bus(dark: bool) {
     settings_section(dark, "eventBus", "event bus", &[], |daemon| {
         daemon.on("bus_status_get", |r: &Request| {
-            message(BusStatusResultMessage {
-                request_id: r["request_id"].as_str().unwrap_or_default().into(),
-                success: true,
-                earliest: 1,
-                head: 315_188,
-                rows: 315_188,
-                bytes: 23_815_114,
-                oldest_at: "2026-08-02T10:24:55Z".into(),
-                newest_at: "2026-08-10T19:28:01Z".into(),
-                delivering: true,
-                retention_seconds: 30.0 * 86400.0,
-                recent_window_seconds: 3600.0,
-                baseline_window_seconds: 86400.0,
-                surge_rate_per_hour: 1000.0,
-                pin_alarm_seconds: 3600.0,
-                consumers: vec![BusConsumerStatus {
-                    name: "projections".into(),
-                    cursor: 315_188,
-                    filter: "session.*".into(),
-                    enabled: true,
-                    updated_at: "2026-08-10T19:00:00Z".into(),
-                    live: true,
-                    ..BusConsumerStatus::default()
-                }],
-                ..BusStatusResultMessage::new()
-            })
+            message(crowded_bus(
+                r["request_id"].as_str().unwrap_or_default().into(),
+            ))
         });
     });
+}
+
+/// A bus with the longest real content: health findings, a loud producer, quiet classes, long
+/// names and filters, and consumers that are disabled, lagging, pinning, stalled and not running.
+fn crowded_bus(request_id: String) -> BusStatusResultMessage {
+    let producer =
+        |name: &str, events: i64, share: f64, surging: bool| attn_protocol::BusProducerStatus {
+            name: name.into(),
+            events,
+            share,
+            subjects: events / 40,
+            recent_per_hour: if surging { 18_432.5 } else { 112.0 },
+            baseline_per_hour: 96.25,
+            surging,
+            ..attn_protocol::BusProducerStatus::default()
+        };
+    let consumer = |name: &str, filter: &str| BusConsumerStatus {
+        name: name.into(),
+        cursor: 1_048_000,
+        filter: filter.into(),
+        enabled: true,
+        live: true,
+        updated_at: "2026-08-10T19:00:00Z".into(),
+        ..BusConsumerStatus::default()
+    };
+    BusStatusResultMessage {
+        request_id,
+        success: true,
+        earliest: 1_048_576,
+        head: 1_049_000,
+        rows: 1_048_576_000,
+        bytes: 987_654_321_000,
+        oldest_at: "2025-08-02T10:24:55Z".into(),
+        newest_at: "2026-08-10T19:28:01Z".into(),
+        delivering: true,
+        retention_seconds: 365.0 * 86400.0,
+        recent_window_seconds: 3600.0,
+        baseline_window_seconds: 86400.0,
+        surge_rate_per_hour: 1000.0,
+        pin_alarm_seconds: 3600.0,
+        health: vec![
+            attn_protocol::BusHealthEntry {
+                level: "error".into(),
+                message: "Consumer engineering-observability-staging-notifier has pinned 1.2 GB of the log for 3 days; retention cannot trim below its cursor".into(),
+                ..attn_protocol::BusHealthEntry::default()
+            },
+            attn_protocol::BusHealthEntry {
+                level: "warning".into(),
+                message: "session.state.changed published 18,432 events in the last hour against a usual 96".into(),
+                ..attn_protocol::BusHealthEntry::default()
+            },
+        ],
+        producers: vec![
+            producer("session.state.changed.across.every.profile.and.outpost", 1_048_000_000, 0.62, true),
+            producer("garden.seed.note.added", 210_000_000, 0.2, false),
+            producer("pr.review.thread.updated", 105_000_000, 0.1, false),
+            producer("notebook.sync.conflict.resolved", 2_000_000, 0.002, false),
+            producer("outpost.reach.changed", 1_000_000, 0.001, false),
+        ],
+        consumers: vec![
+            BusConsumerStatus {
+                lag: 1_048_576,
+                oldest_unread_at: "2026-08-07T19:00:00Z".into(),
+                holds_retention_floor: true,
+                pin_alarm: true,
+                pinned_bytes: 1_234_567_890,
+                ..consumer("engineering-observability-staging-notifier", "session.state.changed.across.every.profile.and.outpost")
+            },
+            BusConsumerStatus { enabled: false, ..consumer("ticketwatch", "pr.*") },
+            BusConsumerStatus { stalled: "handler returned: connection refused by https://hooks.example.com/attn".into(), ..consumer("webhook-relay", "") },
+            BusConsumerStatus { live: false, ..consumer("projections", "session.*") },
+        ],
+        ..BusStatusResultMessage::new()
+    }
 }
 
 /// The ledger with nothing in it: its header's Close and its status bar's keys.
