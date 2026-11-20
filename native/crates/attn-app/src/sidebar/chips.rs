@@ -495,6 +495,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
         system::Button::new(count)
             .size(system::Size::Compact)
             .leading(waiting)
+            .whole()
             .trailing(after)
             .on_press_tx(|state: &mut State, tx: &mut Tx| {
                 super::bar_peek::dismiss(state);

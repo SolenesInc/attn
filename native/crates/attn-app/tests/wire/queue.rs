@@ -2376,6 +2376,23 @@ fn a_crowded_queue_bar_keeps_the_window_s_desktop_and_gathers_the_rest_into_the_
         .bounds(Target::key("queue-bar.pill"))
         .unwrap();
     assert!(pill >= 124.0, "the waiting pill keeps its width: {pill}");
+    let count = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| {
+            e.text
+                .as_deref()
+                .is_some_and(|said| said.ends_with(" waiting"))
+        })
+        .expect("the waiting pill says how many wait");
+    let said = count.text.unwrap();
+    let whole = attn_ui::system::width_of(said.clone(), attn_ui::system::Type::Control);
+    assert!(
+        count.rect[2] >= whole - 0.5,
+        "the pill cuts its count {said:?} to {} of {whole}",
+        count.rect[2]
+    );
     let bounds = |key: &str| world.screen().bounds(Target::key(key)).unwrap();
     let [cap_x, _, cap_w, _] = bounds("shelf.cap.after");
     let [current, ..] = bounds("queue-bar.desktop.1");

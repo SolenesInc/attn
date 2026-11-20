@@ -51,6 +51,7 @@ pub struct Button {
     chosen: Option<bool>,
     leading: Option<El>,
     trailing: Option<El>,
+    whole: bool,
     press: Option<Press>,
     button: KitButton,
 }
@@ -81,6 +82,7 @@ impl Button {
             chosen: None,
             leading: None,
             trailing: None,
+            whole: false,
             press: None,
         }
     }
@@ -114,6 +116,13 @@ impl Button {
     /// A mark before the words, such as the dot of a count.
     pub fn leading(mut self, mark: El) -> Self {
         self.leading = Some(mark);
+        self
+    }
+
+    /// The words are never cut: what follows them gives way first, such as a count before the
+    /// crumbs that may shrink to nothing.
+    pub fn whole(mut self) -> Self {
+        self.whole = true;
         self
     }
 
@@ -190,12 +199,17 @@ impl Button {
         let shown = self.shown;
         let (leading, trailing) = (self.leading, self.trailing);
         let role = self.look.words();
+        let whole = self.whole;
         let label = move |_, _| match shown {
             Shown::Words(shown) => door::gap(row().items_center(), Space::S4)
                 .shrink()
                 .min_w(0.0)
                 .children(leading)
-                .child(words(shown, role, ink).truncate())
+                .child(if whole {
+                    words(shown, role, ink)
+                } else {
+                    words(shown, role, ink).truncate()
+                })
                 .children(trailing),
             Shown::Mark(mark, size) => door::control_mark(mark, size).color(ink),
         };
