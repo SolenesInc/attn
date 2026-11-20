@@ -1349,7 +1349,13 @@ fn an_unavailable_switch_is_still_heard_with_its_name_and_value_and_takes_no_tab
 #[test]
 fn a_refused_rate_shows_its_reason_and_retry_whole_in_the_smallest_window_at_the_largest_text() {
     const REASON: &str = "cannot create directory /Users/someone/プロジェクト/社内プラットフォーム/InternationalEngineeringObservability/ワークツリー: permission denied";
-    for typed in ["input_usd_per_mtok", "output_usd_per_mtok"] {
+    for typed in [
+        "input_usd_per_mtok",
+        "output_usd_per_mtok",
+        "cache_read_usd_per_mtok",
+        "cache_write_5m_usd_per_mtok",
+        "cache_write_1h_usd_per_mtok",
+    ] {
         let (daemon, stored) = keeping(
             &[
                 ("uiScale", "1.5"),

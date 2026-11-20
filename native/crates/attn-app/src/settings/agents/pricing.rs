@@ -50,11 +50,13 @@ pub(crate) struct Pricing {
     new: New,
 }
 
-/// A saved override's rate fields, and the draft they last showed.
+/// A saved override's rate fields, the draft they last showed, and the rate typed in last, which
+/// shows why the override was refused.
 #[derive(Default)]
 struct Card {
     rates: [TextEdit; 5],
     mirrored: Option<String>,
+    edited: usize,
 }
 
 #[derive(Default)]
@@ -240,11 +242,13 @@ fn add(state: &mut State, tx: &mut Tx) {
     autosave::commit(state, &key, tx);
 }
 
-/// One rate's field, `input` named for its rate under `label` and saving as its form does.
-fn rate_field(key: String, label: &str, input: TextInput, t: &Tokens) -> El {
+/// One rate's field, `input` named for its rate under `label` and saving as its form does, with
+/// why its override was refused under it.
+fn rate_field(key: String, label: &str, input: TextInput, refusal: Option<El>, t: &Tokens) -> El {
     let named = input.label(format!("{label} · USD/MTok")).placeholder("0");
     Field::new(key, label.to_owned())
         .control(number_box(named, FieldState::Ready, t))
+        .refusal(refusal)
         .el(t)
 }
 
@@ -253,9 +257,10 @@ fn rates(key: String, fields: impl Iterator<Item = El>) -> Block {
     Block::custom(key, Inline::fields().children(fields))
 }
 
-fn card_typed(state: &mut State, model: &str) {
+fn card_typed(state: &mut State, model: &str, rate: usize) {
     let pricing = &mut state.window.settings.agents.pricing;
     let card = pricing.cards.entry(model.to_owned()).or_default();
+    card.edited = rate;
     let draft = encode(
         &card
             .rates
@@ -278,6 +283,13 @@ fn existing(state: &State, model: &str, raw: &str, t: &Tokens) -> (ListRow, Vec<
         .cards
         .get(model)
         .unwrap_or(&empty);
+    let edited = card.edited.min(RATES.len() - 1);
+    let mut refusal = refusal_beside(
+        state,
+        &key,
+        super::super::part_field_key(&key, RATES[edited].0),
+        t,
+    );
     let fields = RATES.iter().enumerate().map(|(i, (rate, label))| {
         let (edit, change, submit, left) =
             (model.to_owned(), model.to_owned(), key.clone(), key.clone());
@@ -295,20 +307,15 @@ fn existing(state: &State, model: &str, raw: &str, t: &Tokens) -> (ListRow, Vec<
                     .or_default()
                     .rates[i]
             })
-            .on_change(move |state: &mut State, _: &mut Tx| card_typed(state, &change))
+            .on_change(move |state: &mut State, _: &mut Tx| card_typed(state, &change, i))
             .on_submit(move |state: &mut State, tx: &mut Tx| autosave::commit(state, &submit, tx))
             .on_blur(move |state: &mut State, tx: &mut Tx| {
                 autosave::commit_on_leave(state, &left, tx)
             });
-        rate_field(input_key, label, input, t)
+        let refused = if i == edited { refusal.take() } else { None };
+        rate_field(input_key, label, input, refused, t)
     });
     let remove = key.clone();
-    let refusal = refusal_beside(
-        state,
-        &key,
-        super::super::part_field_key(&key, RATES[0].0),
-        t,
-    );
     let row = ListRow::new(format!("settings.price.{model}"), model.to_owned())
         .still()
         .wrap()
@@ -339,9 +346,6 @@ fn existing(state: &State, model: &str, raw: &str, t: &Tokens) -> (ListRow, Vec<
             .build(t),
         );
     }
-    under.extend(
-        refusal.map(|refusal| Block::custom(format!("settings.price.{model}.refused"), refusal)),
-    );
     under.push(rates(format!("settings.price.{model}.rates"), fields));
     (row, under)
 }
@@ -448,7 +452,7 @@ fn new_form(state: &State, t: &Tokens) -> Block {
             })
             .on_submit(add)
             .on_blur(add);
-        rate_field(input_key, label, input, t)
+        rate_field(input_key, label, input, None, t)
     });
     let failure = new
         .adding
