@@ -266,7 +266,16 @@ impl Grid {
     fn place(&self, content: impl IntoIterator<Item = (Column, El)>) -> Vec<Vec<El>> {
         let mut placed: Vec<Vec<El>> = self.fixed.iter().map(|_| Vec::new()).collect();
         for (column, e) in content {
-            placed[column.0].push(e);
+            placed
+                .get_mut(column.0)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "a row placed content in column {} of another table, which has {} fixed columns",
+                        column.0,
+                        self.fixed.len()
+                    )
+                })
+                .push(e);
         }
         placed
     }
