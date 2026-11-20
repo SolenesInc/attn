@@ -6,15 +6,14 @@ use attn_protocol::{
     BusStatusResultMessage,
 };
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{Align, El, Tx, col, row, text};
+use rune::{El, Tx};
 
-use super::Section;
-use attn_ui::blocks::{Actions, Block, Facts, Inline, Notice, Prose, Stack, Status};
-use attn_ui::system::{self, Look, Tone, Type, tag, words};
+use attn_ui::blocks::{
+    Actions, Block, Facts, Inline, Notice, Prose, Section, Stack, Status, Table, TableColumns,
+    TableRow,
+};
+use attn_ui::system::{self, Look, Said, Size, Tone, Type, tag, words};
 
-use super::pages::{self};
 use crate::State;
 
 /// The daemon answers with one pass over the whole log, 209 ms at 945k rows, so the page reads
@@ -43,7 +42,7 @@ pub(crate) struct Bus {
 }
 
 fn shown(state: &State) -> bool {
-    super::is_open(state) && state.window.settings.section == Section::EventBus
+    super::is_open(state) && state.window.settings.section == super::Section::EventBus
 }
 
 /// Reads the bus when the page has just come into view.
@@ -169,18 +168,8 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<Block> {
         ));
     }
     page.push(summary(status, now_ms, t));
-    page.extend(
-        producers(bus, status, t)
-            .into_iter()
-            .enumerate()
-            .map(|(i, el)| Block::custom(format!("settings.bus.producers.part{i}"), el)),
-    );
-    page.extend(
-        consumers(bus, status, now_ms, t)
-            .into_iter()
-            .enumerate()
-            .map(|(i, el)| Block::custom(format!("settings.bus.consumers.part{i}"), el)),
-    );
+    page.push(producers(bus, status, t));
+    page.push(consumers(bus, status, now_ms, t));
     page.push(
         Actions::new("settings.bus.actions")
             .push(
@@ -234,90 +223,16 @@ fn summary(status: &BusStatusResultMessage, now_ms: i64, t: &Tokens) -> Block {
         .build(t)
 }
 
-/// A stat tile's name, as the Tauri app's `.bus-stat-label`: uppercase, spaced .06em.
-pub(super) const STAT_LABEL: rune::TextStyle = rune::TextStyle::new(12.0, 400.0).tracking(0.72);
+/// The width of a number column: the widest count a producer reaches, "1,048,000,000", 13
+/// characters of Mono at about 7.1 points each in the tour, 92 points, and room to spare.
+const NUMBER_W: f32 = 96.0;
 
-fn section_head(title: &str, hint: String, t: &Tokens) -> El {
-    col()
-        .gap(space::S1)
-        .pt(6.0)
-        .child(
-            text(title.to_owned())
-                .font(SECTION_TITLE)
-                .color(t.text_primary),
-        )
-        .child(pages::hint(hint, t).wrap())
-}
-
-/// A table section's title, as the Tauri app's `.bus-section-head h4`.
-const SECTION_TITLE: rune::TextStyle = rune::TextStyle::new(13.0, 700.0);
-
-/// A table's header row: the columns' names, uppercase and quiet on the raised fill, as the
-/// Tauri app's `.bus-head`.
-fn head_row(key: &str, name: &str, columns: Vec<String>, t: &Tokens) -> El {
-    table_row(
-        key.into(),
-        "Columns".into(),
-        type_::upper(name, STAT_LABEL).color(t.text_tertiary),
-        columns
-            .iter()
-            .map(|c| type_::upper(c, STAT_LABEL.mono()).color(t.text_tertiary))
-            .collect(),
-    )
-    .fill(t.bg_elevated)
-    .corners([5.0, 5.0, 0.0, 0.0])
-}
-
-fn numbers(cells: Vec<String>, t: &Tokens) -> Vec<El> {
-    cells
-        .into_iter()
-        .map(|n| text(n).font(type_::MONO_CAPTION).color(t.text_secondary))
-        .collect()
-}
-
-/// One table row: the name cell takes what is left, the number cells line up at the end.
-fn table_row(key: String, label: String, name: El, numbers: Vec<El>) -> El {
-    row()
-        .key(key)
-        .role("row")
-        .label(label)
-        .w_full()
-        .gap(10.0)
-        .py(7.0)
-        .px(10.0)
-        .items_center()
-        .child(name.grow(1.0).min_w(0.0))
-        .children(numbers.into_iter().map(|n| n.w(72.0).align(Align::End)))
-}
-
-/// A table's box, as the Tauri app's `.bus-table`: bordered and rounded, a rule between rows.
-fn table(key: &str, label: &str, rows: Vec<El>, t: &Tokens) -> El {
-    col()
-        .key(key.to_owned())
-        .role("table")
-        .label(label.to_owned())
-        .w_full()
-        .radius(6.0)
-        .border(1.0, t.border_subtle)
-        .children(rows.into_iter().enumerate().map(|(i, row)| {
-            if i == 0 {
-                row
-            } else {
-                row.border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-            }
-        }))
-}
-
-fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens) -> Vec<El> {
+fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens) -> Block {
     let recent = span(status.recent_window_seconds).unwrap_or_default();
     let baseline = span(status.baseline_window_seconds).unwrap_or_default();
-    let head = section_head(
-        "Producers",
-        format!(
-            "Rates are events per hour over the last {recent} and {baseline}. Far fewer subjects than events means a producer republishing the same entity rather than describing change."
-        ),
-        t,
-    );
+    let section = Section::new("settings.bus.producers.part", "Producers").description(format!(
+        "Rates are events per hour over the last {recent} and {baseline}. Far fewer subjects than events means a producer republishing the same entity rather than describing change."
+    ));
     let (loud, quiet): (Vec<&BusProducerStatus>, Vec<&BusProducerStatus>) = status
         .producers
         .iter()
@@ -327,73 +242,50 @@ fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens) -> Vec<El> 
     } else {
         loud
     };
-    let table = if shown.is_empty() {
-        pages::empty("Nothing has been published yet.", t).key("settings.bus.no-producers")
+    let section = if shown.is_empty() {
+        section.push(
+            Prose::empty(
+                "settings.bus.no-producers",
+                "Nothing has been published yet.",
+            )
+            .build(t),
+        )
     } else {
-        let header = head_row(
-            "settings.bus.producers.head",
-            "Fact",
-            vec![
-                "Events".into(),
-                "Share".into(),
-                "Subjects".into(),
-                format!("{recent}/h"),
-                format!("{baseline}/h"),
-            ],
-            t,
-        );
+        let mut columns = TableColumns::new("Fact");
+        let events = columns.fixed("Events", NUMBER_W);
+        let share = columns.fixed("Share", NUMBER_W);
+        let subjects = columns.fixed("Subjects", NUMBER_W);
+        let now = columns.fixed(format!("{recent}/h"), NUMBER_W);
+        let usual = columns.fixed(format!("{baseline}/h"), NUMBER_W);
         let rows = shown.into_iter().map(|p| {
-            let name = row()
-                .gap(space::S2)
-                .items_center()
-                .child(
-                    text(p.name.clone())
-                        .font(type_::MONO_CAPTION)
-                        .color(t.text_primary)
-                        .truncate(),
-                )
-                .children(p.surging.then(|| {
-                    El::from(tag(
-                        format!("settings.bus.producer.{}.loud", p.name),
-                        "Loud",
-                        Tone::Warn,
-                        t,
-                    ))
-                    .role("status")
-                }));
-            let cells = vec![
-                count(p.events),
-                format!("{:.1}%", p.share * 100.0),
-                count(p.subjects),
-                rate(p.recent_per_hour),
-                rate(p.baseline_per_hour),
-            ];
-            let mut label = vec![p.name.clone()];
-            if p.surging {
-                label.push("Loud".into());
-            }
-            label.extend(cells.iter().cloned());
-            let row = table_row(
+            let row = TableRow::<State>::still(
                 format!("settings.bus.producer.{}", p.name),
-                label.join(", "),
-                name,
-                numbers(cells, t),
+                p.name.clone(),
             );
-            if p.surging {
-                row.fill(t.brand.alpha(0.07))
+            let row = if p.surging {
+                row.tag_keyed(
+                    format!("settings.bus.producer.{}.loud", p.name),
+                    "Loud",
+                    Tone::Warn,
+                    None,
+                )
             } else {
                 row
-            }
+            };
+            row.cell(events, count(p.events))
+                .cell(share, format!("{:.1}%", p.share * 100.0))
+                .cell(subjects, count(p.subjects))
+                .cell(now, rate(p.recent_per_hour))
+                .cell(usual, rate(p.baseline_per_hour))
         });
-        table(
-            "settings.bus.producers",
-            "Producers",
-            std::iter::once(header).chain(rows).collect(),
-            t,
+        section.push(
+            Table::new("settings.bus.producers", columns)
+                .named("Producers")
+                .rows(rows)
+                .build(t),
         )
     };
-    let mut out = vec![head, table];
-    if !quiet.is_empty() {
+    let toggle = (!quiet.is_empty()).then(|| {
         let events: i64 = quiet.iter().map(|p| p.events).sum();
         let share: f64 = quiet.iter().map(|p| p.share).sum();
         let n = quiet.len();
@@ -407,8 +299,8 @@ fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens) -> Vec<El> 
                 share * 100.0
             )
         };
-        out.push(
-            row().child(El::from(
+        Actions::new("settings.bus.quiet")
+            .push(
                 system::Button::new(label)
                     .look(Look::Quiet)
                     .on_press(|state: &mut State| {
@@ -417,103 +309,80 @@ fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens) -> Vec<El> 
                     })
                     .build(t)
                     .key("settings.bus.toggle-quiet"),
-            )),
-        );
-    }
-    out
+            )
+            .build()
+    });
+    section.push_all(toggle).build(t)
 }
 
-fn consumers(bus: &Bus, status: &BusStatusResultMessage, now_ms: i64, t: &Tokens) -> Vec<El> {
-    let head = section_head(
-        "Consumers",
-        "Disabling stops delivery and releases retention. Enabling resumes from the saved cursor if it remains in the log.".into(),
-        t,
+fn consumers(bus: &Bus, status: &BusStatusResultMessage, now_ms: i64, t: &Tokens) -> Block {
+    let section = Section::new("settings.bus.consumers.part", "Consumers").description(
+        "Disabling stops delivery and releases retention. Enabling resumes from the saved cursor if it remains in the log.",
     );
     if status.consumers.is_empty() {
-        return vec![
-            head,
-            pages::empty("No durable consumers are registered. Every subscriber on this bus is ephemeral, so nothing holds a cursor and nothing pins retention.", t)
-                .key("settings.bus.no-consumers")
-                .wrap(),
-        ];
-    }
-    let header = head_row(
-        "settings.bus.consumers.head",
-        "Consumer",
-        vec!["Cursor".into(), "Lag".into(), "Waiting".into()],
-        t,
-    )
-    .child(rune::el().w(ACTION_W));
-    let rows = status.consumers.iter().map(|c| {
-        let marks = marks(c, status);
-        let name = row()
-            .gap(space::S2)
-            .items_center()
-            .child(
-                text(c.name.clone())
-                    .font(type_::MONO_CAPTION)
-                    .color(t.text_primary),
+        return section
+            .push(
+                Prose::empty(
+                    "settings.bus.no-consumers",
+                    "No durable consumers are registered. Every subscriber on this bus is ephemeral, so nothing holds a cursor and nothing pins retention.",
+                )
+                .build(t),
             )
-            .children(marks.iter().enumerate().map(|(i, (mark, tone, help))| {
-                let badge = El::from(tag(
-                    format!("settings.bus.consumer.{}.mark.{i}", c.name),
-                    mark,
-                    *tone,
-                    t,
-                ))
-                .role("status");
-                match help {
-                    Some(help) => badge.help(help.clone()),
-                    None => badge,
-                }
-            }))
-            .child(
-                text(if c.filter.is_empty() {
-                    "all facts".to_owned()
+            .build(t);
+    }
+    let mut columns = TableColumns::new("Consumer");
+    let cursor = columns.fixed("Cursor", NUMBER_W);
+    let lag = columns.fixed("Lag", NUMBER_W);
+    let waiting = columns.fixed("Waiting", NUMBER_W);
+    let action = columns.fixed("", ACTION_W);
+    let rows = status.consumers.iter().map(|c| {
+        let row =
+            TableRow::<State>::still(format!("settings.bus.consumer.{}", c.name), c.name.clone())
+                .subtitle(if c.filter.is_empty() {
+                    Said::from("all facts")
                 } else {
-                    c.filter.clone()
-                })
-                .font(type_::MONO_CAPTION)
-                .color(t.text_dimmed)
-                .truncate(),
-            );
-        let cells = vec![
-            count(c.cursor),
-            count(c.lag),
-            age(&c.oldest_unread_at, now_ms).unwrap_or_else(|| "—".into()),
-        ];
-        let mut label = vec![c.name.clone()];
-        label.extend(marks.iter().map(|(mark, _, _)| mark.clone()));
-        label.extend(cells.iter().cloned());
+                    Said::from(c.filter.clone())
+                });
+        let row =
+            marks(c, status)
+                .into_iter()
+                .enumerate()
+                .fold(row, |row, (i, (mark, tone, help))| {
+                    row.tag_keyed(
+                        format!("settings.bus.consumer.{}.mark.{i}", c.name),
+                        mark,
+                        tone,
+                        help,
+                    )
+                });
         let consumer = c.name.clone();
         let enabled = c.enabled;
-        let action = system::Button::new(if enabled { "Disable" } else { "Enable" })
+        let switch = system::Button::new(if enabled { "Disable" } else { "Enable" })
             .look(if enabled { Look::Danger } else { Look::Plain })
+            .size(Size::Compact)
             .disabled(bus.switching.is_some())
             .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                 switch(state, consumer.clone(), !enabled, tx)
             })
             .build(t)
-            .key(format!("settings.bus.consumer.{}.switch", c.name))
-            .into();
-        let row = table_row(
-            format!("settings.bus.consumer.{}", c.name),
-            label.join(", "),
-            name,
-            numbers(cells, t),
-        )
-        .child(row().w(ACTION_W).justify_end().child(action));
-        if c.enabled { row } else { row.opacity(0.6) }
+            .key(format!("settings.bus.consumer.{}.switch", c.name));
+        row.cell(cursor, count(c.cursor))
+            .cell(lag, count(c.lag))
+            .cell(
+                waiting,
+                age(&c.oldest_unread_at, now_ms).unwrap_or_else(|| "—".into()),
+            )
+            .control(action, switch)
+            .off(!c.enabled)
     });
-    vec![
-        head,
-        table(
-            "settings.bus.consumers",
-            "Consumers",
-            std::iter::once(header).chain(rows).collect(),
-            t,
-        ),
-    ]
+    section
+        .push(
+            Table::new("settings.bus.consumers", columns)
+                .named("Consumers")
+                .rows(rows)
+                .build(t),
+        )
+        .build(t)
 }
 
 /// The marks a consumer row carries, each with the tooltip that explains it.

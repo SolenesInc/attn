@@ -15,8 +15,8 @@ use crate::system::{
 /// fixed columns after it at widths the caller measured. A table also has a column for the
 /// rows' marks when a row has one, and one for their end buttons when a row has one.
 pub struct TableColumns {
-    name: &'static str,
-    fixed: Vec<(&'static str, f32)>,
+    name: Said,
+    fixed: Vec<(Said, f32)>,
 }
 
 /// A fixed column of the [`TableColumns`] that made it, where a row places its controls.
@@ -24,16 +24,16 @@ pub struct TableColumns {
 pub struct Column(usize);
 
 impl TableColumns {
-    pub fn new(name: &'static str) -> TableColumns {
+    pub fn new(name: impl Into<Said>) -> TableColumns {
         TableColumns {
-            name,
+            name: name.into(),
             fixed: Vec::new(),
         }
     }
 
     /// A column `width` wide after the ones before it, titled `title`.
-    pub fn fixed(&mut self, title: &'static str, width: f32) -> Column {
-        self.fixed.push((title, width));
+    pub fn fixed(&mut self, title: impl Into<Said>, width: f32) -> Column {
+        self.fixed.push((title.into(), width));
         Column(self.fixed.len() - 1)
     }
 }
@@ -59,6 +59,7 @@ pub struct Table<S> {
     empty: Option<Empty>,
     footer: Option<(String, Actions)>,
     dimmed: bool,
+    named: Option<String>,
 }
 
 impl<S: 'static> Table<S> {
@@ -70,7 +71,15 @@ impl<S: 'static> Table<S> {
             empty: None,
             footer: None,
             dimmed: false,
+            named: None,
         }
+    }
+
+    /// Assistive tools find the table as a table read as `label`, as one whose rows only show
+    /// their numbers is read.
+    pub fn named(mut self, label: impl Into<String>) -> Self {
+        self.named = Some(label.into());
+        self
     }
 
     pub fn row(mut self, row: TableRow<S>) -> Self {
@@ -123,8 +132,11 @@ impl<S: 'static> Table<S> {
             let quiet = door::hang_left(actions.build().el, Size::Regular.inset());
             grid.padded(grid.name_column(quiet), Space::S8).key(key)
         });
-        let table = col()
-            .key(self.key)
+        let mut table = col().key(self.key);
+        if let Some(label) = self.named {
+            table = table.role("table").label(label);
+        }
+        let table = table
             .w_full()
             .fill(t.bg_panel)
             .border(1.0, t.border)
@@ -140,8 +152,8 @@ impl<S: 'static> Table<S> {
 }
 
 struct Grid {
-    name: &'static str,
-    fixed: Vec<(&'static str, f32)>,
+    name: Said,
+    fixed: Vec<(Said, f32)>,
     lead: bool,
     action: bool,
     dimmed: bool,
@@ -189,7 +201,8 @@ impl Grid {
             .fixed
             .iter()
             .enumerate()
-            .map(|(i, &(_, w))| {
+            .map(|(i, (_, w))| {
+                let w = *w;
                 let content = fixed(Column(i)).shrink().max_w(w);
                 if Some(i) == last {
                     door::gaps(
@@ -204,7 +217,7 @@ impl Grid {
                 }
             })
             .collect();
-        let columns_width = self.fixed.iter().map(|&(_, w)| w).sum::<f32>()
+        let columns_width = self.fixed.iter().map(|(_, w)| *w).sum::<f32>()
             + COLUMN_GAP.pt() * self.fixed.len().saturating_sub(1) as f32
             + end_room;
         let columns = door::gaps(
@@ -250,10 +263,10 @@ impl Grid {
 
     /// The head on the columns, one line high, so a narrow table names only the columns on it.
     fn head(&self, t: &Tokens) -> El {
-        let label = |title: &'static str| words(title, Type::Label, t.text_tertiary);
+        let label = |title: &Said| words(title.clone(), Type::Label, t.text_tertiary);
         let line = self.line(
-            self.who(None, label(self.name), Space::S0),
-            |column| label(self.fixed[column.0].0),
+            self.who(None, label(&self.name), Space::S0),
+            |column| label(&self.fixed[column.0].0),
             None,
         );
         let line = door::clip(line.max_h(door::line_height(Type::Label)));
@@ -371,15 +384,26 @@ impl Empty {
     }
 }
 
+/// A tag after a row's name: what it says, its tone, its tooltip and, when the caller names it,
+/// its key.
+struct RowTag {
+    said: Said,
+    tone: Tone,
+    help: Option<String>,
+    key: Option<String>,
+}
+
 /// One row of a [`Table`]: a mark, a name that opens the row, words or controls in the fixed
 /// columns, and a button at its end.
 pub struct TableRow<S> {
     key: String,
     leading: Option<Control>,
     title: Said,
-    tags: Vec<(Said, Tone)>,
+    tags: Vec<RowTag>,
     subtitle: Said,
     controls: Vec<(Column, El)>,
+    cells: Vec<(Column, Said)>,
+    still: bool,
     more: Option<String>,
     off: bool,
     open: bool,
@@ -403,6 +427,8 @@ impl<S: 'static> TableRow<S> {
             tags: Vec::new(),
             subtitle: Said::default(),
             controls: Vec::new(),
+            cells: Vec::new(),
+            still: false,
             more: None,
             off: false,
             open: false,
@@ -414,6 +440,39 @@ impl<S: 'static> TableRow<S> {
         }
     }
 
+    /// A row that only shows its thing and does not open: its name is words, and the row is
+    /// read as its name, its tags and its cells.
+    pub fn still(key: impl Into<String>, title: impl Into<Said>) -> TableRow<S> {
+        let mut row = TableRow::new(key, title, |_: &mut S, _: &mut Tx| {});
+        row.still = true;
+        row
+    }
+
+    /// Words in the fixed column `column`, such as a count; text built at run time is drawn as
+    /// written.
+    pub fn cell(mut self, column: Column, said: impl Into<Said>) -> Self {
+        self.cells.push((column, said.into()));
+        self
+    }
+
+    /// A tag after the name keyed `key`, explained by `help` under the pointer and to assistive
+    /// tools when there is help, for a tag whose words change, such as a count.
+    pub fn tag_keyed(
+        mut self,
+        key: impl Into<String>,
+        said: impl Into<Said>,
+        tone: Tone,
+        help: Option<String>,
+    ) -> Self {
+        self.tags.push(RowTag {
+            said: said.into(),
+            tone,
+            help,
+            key: Some(key.into()),
+        });
+        self
+    }
+
     /// The row's mark in the icon column.
     pub fn leading(mut self, mark: Control) -> Self {
         self.leading = Some(mark);
@@ -421,7 +480,12 @@ impl<S: 'static> TableRow<S> {
     }
 
     pub fn tag(mut self, said: impl Into<Said>, tone: Tone) -> Self {
-        self.tags.push((said.into(), tone));
+        self.tags.push(RowTag {
+            said: said.into(),
+            tone,
+            help: None,
+            key: None,
+        });
         self
     }
 
@@ -478,7 +542,7 @@ impl<S: 'static> TableRow<S> {
         self.more.is_some() || self.sub_rows.iter().any(|s| s.trailing.is_some())
     }
 
-    fn build(self, grid: &Grid, ruled: bool, t: &Tokens) -> El {
+    fn build(mut self, grid: &Grid, ruled: bool, t: &Tokens) -> El {
         let toggle = self.toggle.clone();
         let quiet = self.off || grid.dimmed;
         let fade = |e: El| if quiet { door::faded(e) } else { e };
@@ -489,21 +553,35 @@ impl<S: 'static> TableRow<S> {
         )
         .child(
             words(&self.title, Type::Name, t.text_primary)
-                .wrap()
-                .shrink(),
+                .wrap_anywhere()
+                .shrink()
+                .min_w(0.0),
         )
-        .children(self.tags.iter().map(|(said, tone)| {
-            El::from(tag(
-                format!("{}.tag.{}", self.key, said.text()),
-                said,
-                *tone,
-                t,
-            ))
-        }));
+        .children(self.tags.iter().map(
+            |RowTag {
+                 said,
+                 tone,
+                 help,
+                 key,
+             }| {
+                let tag = El::from(tag(
+                    key.clone()
+                        .unwrap_or_else(|| format!("{}.tag.{}", self.key, said.text())),
+                    said,
+                    *tone,
+                    t,
+                ));
+                let tag = if self.still { tag.role("status") } else { tag };
+                match help {
+                    Some(help) => tag.help(help.clone()),
+                    None => tag,
+                }
+            },
+        ));
         let description: Vec<String> = self
             .tags
             .iter()
-            .map(|(said, _)| said.text())
+            .map(|tag| tag.said.text())
             .chain((!self.subtitle.text().is_empty()).then(|| self.subtitle.text()))
             .collect();
         let said = door::gap(col().w_full().min_w(0.0).items_start(), Space::S2)
@@ -513,10 +591,43 @@ impl<S: 'static> TableRow<S> {
                     .w_full()
                     .min_w(0.0)
                     .wrap()
-            }))
-            .a11y_hidden();
+            }));
+        let said = if self.still { said } else { said.a11y_hidden() };
         let said = door::on_band(said, Type::Name, Size::Regular);
         let said = fade(grid.who(self.leading.map(El::from), said, Space::S4));
+        let mut cells = std::mem::take(&mut self.cells);
+        cells.sort_by_key(|(column, _)| column.0);
+        let read: Vec<String> = std::iter::once(self.title.text())
+            .chain(self.tags.iter().map(|tag| tag.said.text()))
+            .chain(cells.iter().map(|(_, said)| said.text()))
+            .collect();
+        let cell_els = cells.into_iter().map(|(column, said)| {
+            (
+                column,
+                fade(
+                    words(said, Type::Mono, t.text_secondary)
+                        .wrap_anywhere()
+                        .shrink(),
+                ),
+            )
+        });
+        if self.still {
+            let mut placed = grid.place(cell_els.chain(self.controls));
+            let fixed = |column: Column| stacked(std::mem::take(&mut placed[column.0]));
+            let main = grid.padded(grid.line(said, fixed, None), Space::S8);
+            let out = col()
+                .key(self.key)
+                .role("row")
+                .label(read.join(", "))
+                .w_full()
+                .child(main);
+            return if ruled {
+                out.border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+            } else {
+                out
+            };
+        }
+        self.controls.extend(cell_els);
         let who = press_area(
             self.key.clone(),
             &self.title.text(),
