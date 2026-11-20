@@ -188,6 +188,23 @@ screen a change was not expected to touch. Shoot both runs of a pair on the same
 machine, since two GPUs need not draw the same pixels.
 `cargo clean` removes the base worktree with the rest of `native/target`.
 
+Beside each screen's picture the tour writes `a11y/NAME.tsv`: a line per keyed
+node of the screen's accessibility tree, with its role, name, value,
+description, states, level, the actions it answers, such as scrolling, and the
+key of its nearest keyed ancestor and the role and name of its nearest named
+one. `scripts/native-a11y-diff BASE AFTER` compares two tours' dumps and prints
+what the after tour lost and what changed, field by field, each difference once
+with the first screen that shows it, and exits 1 when there is any. A change
+that moves controls diffs the whole node this way, since a key, role and name
+can match while the node lost its description, its state, its scrolling or its
+place in its item or region.
+
+```sh
+scripts/native-screenshot-tour shoot --only 'asks*' /tmp/tour/base origin/main
+scripts/native-screenshot-tour shoot --only 'asks*' /tmp/tour/after
+scripts/native-a11y-diff /tmp/tour/base /tmp/tour/after
+```
+
 ## Layout, type and corners
 
 Views do not choose a gap, an inset, a font or a corner. They build pages

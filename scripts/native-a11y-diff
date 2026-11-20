@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""What two screenshot tours tell assistive technology differently, node by keyed node.
+
+  scripts/native-a11y-diff [--added] BASE AFTER
+
+BASE and AFTER are two `scripts/native-screenshot-tour shoot` outputs, or their a11y/ folders.
+Each screen's a11y/NAME.tsv holds a line per keyed node: its key, role, name, value,
+description, states, level, the actions it answers, and its nearest keyed and named ancestors.
+For every screen both tours shot, this compares the nodes of each key, as many as share it, in
+every column both dumps hold, and prints what AFTER lost, then what changed, field by field. A
+difference that repeats across screens prints once, with the first screen and how many more.
+Nodes only AFTER has are counted; --added lists them. Exits 1 when anything was lost or changed.
+"""
+import os
+import sys
+from collections import OrderedDict
+
+COLUMNS = [
+    "key", "role", "name", "value", "description", "states", "level", "actions",
+    "keyed ancestor", "named ancestor",
+]
+
+
+def a11y_dir(path):
+    inner = os.path.join(path, "a11y")
+    return inner if os.path.isdir(inner) else path
+
+
+def read(path):
+    nodes = {}
+    with open(path, encoding="utf-8") as lines:
+        for line in lines:
+            fields = line.rstrip("\n").split("\t")
+            nodes.setdefault(fields[0], []).append(tuple(fields[1:]))
+    return nodes
+
+
+def shown(node, width):
+    return ", ".join(
+        f"{COLUMNS[i + 1]} {value}" for i, value in enumerate(node[:width]) if value != "-"
+    )
+
+
+def main(argv):
+    show_added = "--added" in argv
+    paths = [a for a in argv if a != "--added"]
+    if len(paths) != 2:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    base_dir, after_dir = (a11y_dir(p) for p in paths)
+    found = OrderedDict()
+    added = OrderedDict()
+    for name in sorted(os.listdir(base_dir)):
+        after_path = os.path.join(after_dir, name)
+        if not name.endswith(".tsv") or not os.path.exists(after_path):
+            continue
+        screen = name[: -len(".tsv")]
+        base, after = read(os.path.join(base_dir, name)), read(after_path)
+        for key in sorted(base.keys() | after.keys()):
+            was, now = sorted(base.get(key, [])), sorted(after.get(key, []))
+            width = min(len(n) for n in was + now)
+            for at in range(max(len(was), len(now))):
+                if at >= len(now):
+                    found.setdefault(("lost", key, shown(was[at], width), ""), []).append(screen)
+                elif at >= len(was):
+                    added.setdefault((key, shown(now[at], width)), []).append(screen)
+                else:
+                    for i in range(width):
+                        if was[at][i] != now[at][i]:
+                            entry = ("changed", key, f"{COLUMNS[i + 1]}: {was[at][i]}", now[at][i])
+                            found.setdefault(entry, []).append(screen)
+
+    def on(screens):
+        more = f" +{len(screens) - 1}" if len(screens) > 1 else ""
+        return f"on: {screens[0]}{more}"
+
+    for kind in ("lost", "changed"):
+        for (k, key, before, after_value), screens in found.items():
+            if k != kind:
+                continue
+            arrow = f" -> {after_value}" if kind == "changed" else ""
+            print(f"{kind}\t{key}\t{before}{arrow}\t{on(screens)}")
+    print(f"added\t{len(added)} keyed nodes only the after tour has")
+    if show_added:
+        for (key, now), screens in added.items():
+            print(f"added\t{key}\t{now}\t{on(screens)}")
+    return 1 if found else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
