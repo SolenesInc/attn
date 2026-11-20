@@ -233,3 +233,175 @@ fn a_dialog_blurs_and_dims_the_whole_window_behind_it() {
         );
     }
 }
+
+/// The smallest window at 150% text: 800 by 600 points shown at 1.5.
+const SMALLEST_LARGE_TEXT: (f32, f32) = (800.0 / 1.5, 600.0 / 1.5);
+
+/// A dialog of each size, and how many lines its body says, from one to ten windows' worth.
+#[derive(Clone, Copy)]
+struct Asking {
+    size: attn_ui::blocks::DialogSize,
+    lines: usize,
+}
+
+thread_local! {
+    static ASKED: std::cell::Cell<Option<Asking>> = const { std::cell::Cell::new(None) };
+}
+
+fn asking(asking: &Asking, _: &mut Cx<Asking>) -> El {
+    use attn_ui::blocks::{Actions, Dialog, Prose};
+    use attn_ui::system::Button;
+    let t = attn_ui::colors::scheme_for(None).colors(true).ui;
+    let mut layer = Vec::new();
+    Dialog::new("rule", "Restart shared Codex now?")
+        .size(asking.size)
+        .on_close(|_: &mut Asking| {})
+        .push_all((0..asking.lines).map(|i| {
+            Prose::lead(
+                format!("rule.line.{i}"),
+                "Every Codex tile in this profile goes offline.",
+            )
+            .build(&t)
+        }))
+        .actions(
+            Actions::new("rule.actions")
+                .then_end()
+                .push(Button::new("Restart now").build(&t).key("rule.confirm")),
+        )
+        .build(&t, &mut layer);
+    rune::col().w_full().h_full().children(layer)
+}
+
+fn asked(case: Asking) -> Runtime<Asking> {
+    ASKED.with(|a| a.set(Some(case)));
+    let mut rt = App::new(AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..AppSpec::new(
+            "floating",
+            SMALLEST_LARGE_TEXT,
+            || ASKED.with(|a| a.get()).expect("a case"),
+            asking,
+        )
+    })
+    .headless_runtime(SMALLEST_LARGE_TEXT, Env::new(true, 1.0));
+    rt.frame(0.0);
+    rt.frame(1.0);
+    rt
+}
+
+#[test]
+fn a_dialogs_actions_stay_whole_in_the_window_and_its_body_scrolls_however_long() {
+    use attn_ui::blocks::DialogSize;
+    let (w, h) = SMALLEST_LARGE_TEXT;
+    for size in [
+        DialogSize::Prompt,
+        DialogSize::Form,
+        DialogSize::Sheet,
+        DialogSize::Tour,
+    ] {
+        for lines in [1, 4, 12, 24, 120] {
+            let rt = asked(Asking { size, lines });
+            let all = rt.elements();
+            let find = |key: &str| {
+                all.iter()
+                    .find(|e| e.key.as_deref() == Some(key))
+                    .unwrap_or_else(|| panic!("no {key}"))
+                    .clone()
+            };
+            let confirm = find("rule.confirm");
+            let [x, y, cw, ch] = confirm.rect;
+            assert!(
+                x >= 0.0 && y >= 0.0 && x + cw <= w && y + ch <= h,
+                "{size:?}, {lines} lines: the action at {:?} is not whole in the {w}x{h} window",
+                confirm.rect
+            );
+            assert_eq!(
+                confirm.visible, confirm.rect,
+                "{size:?}, {lines} lines: the action is cut"
+            );
+            let body = find("rule.body");
+            let last = find(&format!("rule.line.{}", lines - 1));
+            let shown = last.visible[3] >= last.rect[3] - 0.5;
+            let fits = bottom(&last) <= bottom(&body) + 0.5;
+            assert_eq!(
+                shown, fits,
+                "{size:?}, {lines} lines: the last line is shown {shown} though it fits {fits}"
+            );
+            assert!(
+                bottom(&body) <= y,
+                "{size:?}, {lines} lines: the body ends at {} below the action at {y}",
+                bottom(&body)
+            );
+        }
+    }
+}
+
+thread_local! {
+    static OFFERED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+fn offering(lines: &usize, _: &mut Cx<usize>) -> El {
+    use attn_ui::blocks::{Actions, Popover, Prose};
+    use attn_ui::system::Button;
+    use rune_kit::Placement;
+    use rune_kit::popover::anchored;
+    let t = attn_ui::colors::scheme_for(None).colors(true).ui;
+    let popover = Popover::new("rule", "Set up Captain")
+        .push_all((0..*lines).map(|i| {
+            Prose::lead(format!("rule.line.{i}"), "Where the Chief keeps its notes.").build(&t)
+        }))
+        .actions(
+            Actions::new("rule.actions")
+                .then_end()
+                .push(Button::new("Start Captain").build(&t).key("rule.confirm")),
+        )
+        .build(&t);
+    let row = el().key("rule.row").absolute(8.0, 40.0).size(200.0, 32.0);
+    let layer = vec![anchored(
+        attn_ui::kit(&t),
+        popover,
+        "rule.row",
+        Placement::RightStart,
+        10.0,
+    )];
+    rune_kit::root(rune::col().w_full().h_full().child(row), layer)
+}
+
+#[test]
+fn a_popovers_actions_stay_whole_in_the_window_and_its_body_scrolls_however_long() {
+    let (w, h) = SMALLEST_LARGE_TEXT;
+    for lines in [1, 4, 12, 24, 120] {
+        OFFERED.with(|o| o.set(lines));
+        let mut rt = App::new(AppSpec {
+            fonts: attn_ui::FONTS,
+            families: attn_ui::FAMILIES,
+            ..AppSpec::new(
+                "floating",
+                SMALLEST_LARGE_TEXT,
+                || OFFERED.with(|o| o.get()),
+                offering,
+            )
+        })
+        .headless_runtime(SMALLEST_LARGE_TEXT, Env::new(true, 1.0));
+        rt.frame(0.0);
+        for _ in 0..30 {
+            rt.frame(1.0 / 30.0);
+        }
+        let all = rt.elements();
+        let confirm = all
+            .iter()
+            .find(|e| e.key.as_deref() == Some("rule.confirm"))
+            .expect("the action is drawn");
+        let [x, y, cw, ch] = confirm.rect;
+        assert!(
+            x >= 0.0 && y >= 0.0 && x + cw <= w && y + ch <= h,
+            "{lines} lines: the action at {:?} is not whole in the {w}x{h} window",
+            confirm.rect
+        );
+        assert_eq!(
+            confirm.visible, confirm.rect,
+            "{lines} lines: the action is cut"
+        );
+    }
+}

@@ -1463,3 +1463,66 @@ fn on_a_first_launch_the_tour_keeps_the_first_setup_away_and_escape_reaches_the_
     assert!(!shows(&world, "new-session"));
     assert!(!shows(&world, SETUP));
 }
+
+/// Chief setup for `name` at 150% text in the smallest window, whose Notebook is at `notebook`.
+fn smallest_at_large_text(name: &str, notebook: &str) -> World {
+    let mut member = chief(false);
+    member.name = name.into();
+    let mut initial = initial(true, member, Vec::new());
+    let settings = initial.settings.as_mut().expect("settings");
+    settings.insert("uiScale".into(), "1.5".into());
+    settings.insert("notebook.root.effective".into(), notebook.into());
+    let mut world = World::start_sized(daemon(initial), (800.0, 600.0));
+    world.settle();
+    assert!(shows(&world, SETUP), "the first setup opens on its own");
+    world
+}
+
+/// Presses the middle of `key` with the pointer, after checking that all of it is in the window.
+fn press_in_window(world: &mut World, key: &str) {
+    let all = world.runtime().elements();
+    let window = all[0].rect;
+    let [x, y, w, h] = all
+        .iter()
+        .find(|e| e.key.as_deref() == Some(key))
+        .unwrap_or_else(|| panic!("{key} is not drawn"))
+        .rect;
+    assert!(
+        x >= 0.0 && y >= 0.0 && x + w <= window[2] && y + h <= window[3],
+        "{key} at {:?} is not whole in the {}x{} window",
+        [x, y, w, h],
+        window[2],
+        window[3]
+    );
+    world.gesture(|app| app.click_at((x + w / 2.0, y + h / 2.0)));
+}
+
+#[test]
+fn at_large_text_in_the_smallest_window_a_long_name_still_starts_by_a_click() {
+    let mut world =
+        smallest_at_large_text("Release Engineering Captain", "~/projects/attn-notebook");
+    press_in_window(&mut world, PRIMARY);
+    assert_eq!(sent(&world, "crew_set").len(), 1);
+}
+
+#[test]
+fn at_large_text_in_the_smallest_window_a_refusal_keeps_start_in_reach_for_the_retry() {
+    let mut world = smallest_at_large_text(
+        "Captain",
+        "/home/me/projects/product-infrastructure/shared-notebooks/設計と作業の記録/archive/team-notes/chief",
+    );
+    world.daemon.on("crew_set", |_| {
+        message(CrewSetResultMessage {
+            success: false,
+            error: Some(
+                "mkdir /home/me/projects/product-infrastructure/shared-notebooks/設計と作業の記録/archive/team-notes/chief: permission denied"
+                    .into(),
+            ),
+            ..CrewSetResultMessage::new()
+        })
+    });
+    press_in_window(&mut world, PRIMARY);
+    assert!(shows(&world, "chief-setup.alert"), "the refusal is said");
+    press_in_window(&mut world, PRIMARY);
+    assert_eq!(sent(&world, "crew_set").len(), 2);
+}

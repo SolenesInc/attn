@@ -1,4 +1,5 @@
 use rune::{El, col, row};
+use rune_kit::ScrollBar;
 
 use super::actions::Actions;
 use super::block::{Block, inner_gap, spaced};
@@ -74,13 +75,19 @@ impl Popover {
         let head = door::gap(row().w_full().items_start(), Space::S12)
             .child(col().grow(1.0).min_w(0.0).child(title))
             .child(beside);
-        let mut blocks = self.body;
-        if let Some(actions) = self.actions {
-            let mut line = actions.build();
-            line.el = line.el.key(format!("{}.actions", self.key));
-            blocks.push(line);
-        }
-        let body = (!blocks.is_empty()).then(|| spaced(blocks, inner_gap, None));
+        let actions = self
+            .actions
+            .map(|actions| actions.build().el.key(format!("{}.actions", self.key)));
+        let body = (!self.body.is_empty()).then(|| {
+            spaced(self.body, inner_gap, None)
+                .key(format!("{}.body", self.key))
+                .shrink()
+                .min_h(0.0)
+                .scroll(rune::ScrollSpec {
+                    stick_bottom: false,
+                })
+                .scroll_bar_styled(crate::scroll_bar(t))
+        });
         let surface = door::gap(
             col()
                 .key(self.key)
@@ -88,12 +95,16 @@ impl Popover {
                 .label(self.title)
                 .focusable(true)
                 .no_focus_ring()
+                .shrink()
+                .min_h(0.0)
                 .child(head)
-                .children(body),
+                .children(body)
+                .children(actions),
             Space::S12,
         );
         Frame::panel(t)
-            .draw(door::inset(surface, Space::S16, Space::S16))
+            .draw_clipped(door::inset(surface, Space::S16, Space::S16))
             .w(WIDTH)
+            .min_h(0.0)
     }
 }
