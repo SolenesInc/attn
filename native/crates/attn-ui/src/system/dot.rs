@@ -1,4 +1,4 @@
-use rune::{Color, El, el};
+use rune::{Color, El, el, row};
 
 use super::{Radius, door};
 
@@ -43,6 +43,27 @@ pub fn dot(ink: Color, shape: DotShape, size: DotSize) -> El {
         DotShape::Hollow => door::corner(mark, Radius::Round).border(RING, ink),
         DotShape::Square => mark.fill(ink),
     }
+}
+
+/// How far the strike through a [`struck_dot`] runs past its ring on each side, so it reads as
+/// crossing the ring out rather than as a line inside it.
+const STRIKE_OVERHANG: f32 = 2.0;
+
+/// A regular ring in `ink` struck through in `strike`: something that cannot be reached, such as
+/// an agent whose machine is offline.
+pub fn struck_dot(ink: Color, strike: Color) -> El {
+    let side = DotSize::Regular.side();
+    row()
+        .child(dot(ink, DotShape::Hollow, DotSize::Regular))
+        .child(
+            el().absolute(-STRIKE_OVERHANG, (side - RING) / 2.0)
+                .w(side + 2.0 * STRIKE_OVERHANG)
+                .h(RING)
+                .fill(strike)
+                .rotate(-std::f32::consts::FRAC_PI_4)
+                .inert(),
+        )
+        .a11y_hidden()
 }
 
 /// How wide a [`ringed_dot`] stands, its ring included.

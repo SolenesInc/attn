@@ -1,8 +1,9 @@
 use attn_protocol::{DesktopRenameMessage, RenameResultMessage, RenameSessionMessage};
-use attn_ui::type_;
-use attn_ui::{Frame, Tokens};
-use rune::{El, TextEdit, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, Placement, TextInput};
+use attn_ui::Tokens;
+use attn_ui::blocks::{Actions, Block, Popover, Refusal};
+use attn_ui::system::{Button, FieldState, Look, line_box};
+use rune::{El, TextEdit, Tx};
+use rune_kit::{Placement, TextInput};
 
 use crate::State;
 use crate::requests::Answer;
@@ -225,7 +226,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     Some(
         rune_kit::popover::anchored(
             attn_ui::kit(t),
-            Frame::menu(t).draw(popover(rename, t)),
+            popover(rename, t),
             rename.under.key(),
             match rename.under {
                 Opener::Control(_) => Placement::BottomEnd,
@@ -245,10 +246,6 @@ fn popover(rename: &Rename, t: &Tokens) -> El {
     let label = rename.named.label();
     let field = TextInput::new(&rename.edit)
         .key(format!("{key}.field"))
-        .plain()
-        .text_style(type_::BODY.mono())
-        .height(type_::BODY.mono().line_px())
-        .width(None)
         .label(label)
         .on_edit(|state: &mut State| {
             &mut state
@@ -263,87 +260,47 @@ fn popover(rename: &Rename, t: &Tokens) -> El {
         Some(default_name) => field.placeholder(default_name.clone()),
         None => field,
     };
-    let edge = if rename.edit.focused {
-        t.accent
-    } else {
-        t.border
+    let field_state = match rename.refused {
+        Some(_) => FieldState::Failed,
+        None => FieldState::Ready,
     };
-    let framed = row()
-        .w_full()
-        .px(8.0)
-        .py(6.0)
-        .radius(6.0)
-        .fill(t.bg_input)
-        .border(1.0, edge)
-        .child(field.build(attn_ui::kit(t)).grow(1.0));
-    col()
-        .key(key)
-        .role("dialog")
-        .label(label)
-        .w(240.0)
-        .padding(10.0)
+    let refused = rename.refused.as_deref().map(|why| {
+        Block::custom(
+            format!("{key}.why"),
+            Refusal::new(format!("{key}.refused"), why.to_owned()).build(t),
+        )
+    });
+    Popover::new(key, label)
+        .push(Block::control(
+            format!("{key}.name"),
+            line_box(field, field_state, t),
+        ))
+        .push_all(refused)
+        .actions(
+            Actions::new(format!("{key}.actions"))
+                .then_end()
+                .push(
+                    Button::new("Cancel")
+                        .disabled(rename.saving)
+                        .on_press_tx(cancel)
+                        .build(t)
+                        .key(format!("{key}.cancel")),
+                )
+                .push(
+                    Button::new("Save")
+                        .look(Look::Primary)
+                        .disabled(rename.saving)
+                        .on_press_tx(submit)
+                        .build(t)
+                        .key(format!("{key}.save")),
+                ),
+        )
+        .build(t)
         .modal_tx(true, |state: &mut State, _: &mut Tx| {
             state.window.rename = None
         })
-        .child(framed)
-        .children(rename.refused.as_deref().map(|why| {
-            text(why.to_owned())
-                .key(format!("{key}.refused"))
-                .font(type_::LABEL)
-                .color(t.error)
-                .wrap()
-                .w_full()
-                .mt(6.0)
-        }))
-        .child(
-            row()
-                .w_full()
-                .justify_end()
-                .gap(6.0)
-                .mt(8.0)
-                .child(action(
-                    key,
-                    "cancel",
-                    "Cancel",
-                    false,
-                    rename.saving,
-                    t,
-                    cancel,
-                ))
-                .child(action(key, "save", "Save", true, rename.saving, t, submit)),
-        )
 }
 
 fn cancel(state: &mut State, _: &mut Tx) {
     state.window.rename = None;
-}
-
-/// `.rename-popover-btn`: a bordered monospace button, filled with the accent for Save.
-fn action(
-    key: &str,
-    part: &str,
-    title: &str,
-    save: bool,
-    saving: bool,
-    t: &Tokens,
-    press: fn(&mut State, &mut Tx),
-) -> El {
-    let (fill, edge, ink) = if save {
-        (t.accent, t.accent, t.on_brand)
-    } else {
-        (rune::Color::TRANSPARENT, t.border, t.text_muted)
-    };
-    let face = title.to_owned();
-    Button::new(title)
-        .variant(ButtonVariant::Ghost)
-        .disabled(saving)
-        .on_press_tx(press)
-        .label_with(move |_, _| text(face).font(type_::MONO_CAPTION).color(ink))
-        .build(attn_ui::kit(t))
-        .key(format!("{key}.{part}"))
-        .h(type_::MONO_CAPTION.line_px() + 10.0)
-        .px(12.0)
-        .radius(6.0)
-        .fill(fill)
-        .border(1.0, edge)
 }

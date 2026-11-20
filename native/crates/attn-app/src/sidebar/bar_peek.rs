@@ -2,10 +2,9 @@
 //! pill lists the agents under it, hovering the runs chip lists the automation runs, and a row
 //! opens its agent or tile.
 
-use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{Align, El, Shadow, Side, Tx, col, text};
+use attn_ui::system::{ListRow, Type};
+use attn_ui::{Frame, Tokens};
+use rune::{Align, El, Side, Tx, col};
 use rune_kit::ScrollBar;
 
 use crate::State;
@@ -14,8 +13,8 @@ use crate::palette::Row;
 pub(crate) const PILL: &str = "queue-bar.pill";
 pub(crate) const RUNS: &str = "queue-bar.runs";
 const WIDTH: f32 = 600.0;
-/// The room between the anchor and the peek, inside the peek's hover region so the pointer
-/// crosses it without closing the peek.
+/// The room between the anchor and the peek, a bridge inside the peek's hover region so the
+/// pointer crosses it without closing the peek.
 const GAP: f32 = 6.0;
 
 /// What a peek lists, by the queue bar's control it hangs from.
@@ -113,42 +112,34 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     let peek = anchor.peek();
     let rows = rows.iter().map(|r| peek_row(peek, r, t));
     let foot = foot.map(|said| {
-        text(said)
-            .key(format!("{peek}.more"))
-            .font(type_::LABEL)
-            .color(t.text_tertiary)
-            .px(10.0)
-            .py(space::S1)
+        ListRow::note(
+            format!("{peek}.more"),
+            said,
+            Type::Small,
+            t.text_tertiary,
+            None,
+            t,
+        )
     });
-    let panel = col()
-        .key(format!("{peek}.panel"))
-        .w(WIDTH)
+    let rows = col()
+        .key(format!("{peek}.rows"))
+        .w_full()
         .shrink()
         .min_h(0.0)
-        .px(6.0)
-        .py(8.0)
-        .radius(12.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border_hover)
-        .box_shadow(Shadow {
-            y: 18.0,
-            blur: 50.0,
-            color: t.shadow.alpha(0.55),
-            ..Shadow::default()
+        .scroll(rune::ScrollSpec {
+            stick_bottom: false,
         })
-        .child(
-            col()
-                .key(format!("{peek}.rows"))
-                .w_full()
-                .shrink()
-                .min_h(0.0)
-                .scroll(rune::ScrollSpec {
-                    stick_bottom: false,
-                })
-                .children(rows)
-                .scroll_bar_styled(attn_ui::scroll_bar(t)),
-        )
-        .children(foot);
+        .children(rows)
+        .scroll_bar_styled(attn_ui::scroll_bar(t));
+    let panel = Frame::panel(t).draw_clipped(
+        ListRow::column()
+            .key(format!("{peek}.panel"))
+            .w(WIDTH)
+            .shrink()
+            .min_h(0.0)
+            .child(rows)
+            .children(foot),
+    );
     let (align, label) = match anchor {
         Anchor::Waiting => (Align::Start, "Agents"),
         Anchor::Runs => (Align::End, "Automation runs"),
@@ -160,7 +151,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
             .label(label)
             .shrink()
             .min_h(0.0)
-            .pt(GAP)
+            .child(rune::el().h(GAP))
             .child(panel)
             .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
                 state.window.bar_peek.peek = inside;
@@ -177,8 +168,6 @@ fn peek_row(peek: &str, r: &Row, t: &Tokens) -> El {
     }
     let picked = r.key.clone();
     face.role("button")
-        .radius(8.0)
-        .hover(t.bg_selected)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             dismiss(state);
             crate::palette::open_peeked(state, &picked, tx);

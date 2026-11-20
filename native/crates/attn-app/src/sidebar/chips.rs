@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Inline, Rail};
 use attn_ui::system::{self, IconSize, ListRow, Type, words};
-use rune::{El, Tx, row};
+use rune::{El, Tx};
 use rune_kit::ScrollBar;
 
 use super::model::{desktop_number, desktop_title, ordered_desktops};
@@ -485,19 +485,17 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
     .min_w(PILL_MIN_W)
     .max_w(PILL_MAX_W);
     let crowded = super::crowding::crowded(state);
-    row()
+    Inline::joined()
         .key("queue-bar")
         .role("group")
         .label("Queue bar")
         .grow(1.0)
-        .min_w(0.0)
         .h_full()
-        .items_center()
-        .gap(6.0)
         .on_measure(super::crowding::bar_laid_out)
         .child(pill)
         .children(
-            crate::notifications::critical_strip(&state.facts.notifications, t).map(|s| s.w(240.0)),
+            crate::notifications::critical_strip(&state.facts.notifications, t)
+                .map(|strip| strip.shrink().max_w(CRITICAL_STRIP_MAX_W)),
         )
         .child(shelf)
         .children((!crowded).then(|| runs_chip(state, t)).flatten())
@@ -507,13 +505,11 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
 /// The queue bar's desktop chips, as the Tauri app's `.queue-bar-desktops`.
 fn desktops(state: &State, bands: &Bands<'_>, crowded: bool, t: &Tokens) -> El {
     let (chips, extras) = slotted(chips(state, turns_on(bands)), crowded);
-    row()
+    Inline::joined()
         .key("queue-bar.desktops")
         .role("group")
         .label("Desktops")
         .h_full()
-        .items_center()
-        .gap(4.0)
         .on_measure(move |state: &mut State, rect| {
             super::crowding::chips_laid_out(state, rect, crowded)
         })
@@ -578,6 +574,10 @@ fn runs_chip(state: &State, t: &Tokens) -> Option<El> {
 /// whole, and the crumbs cut before the pill crowds the desktops.
 const PILL_MIN_W: f32 = 124.0;
 const PILL_MAX_W: f32 = 640.0;
+
+/// The widest the critical strip stands in the bar, as the Tauri app's `.queue-bar
+/// .critical-strip`; it shrinks with the waiting pill when the bar is tight.
+const CRITICAL_STRIP_MAX_W: f32 = 260.0;
 
 /// How far the bar's waiting count hangs past its chip's corner, as the Tauri app's
 /// `.queue-bar-desktop-waiting` at -6.

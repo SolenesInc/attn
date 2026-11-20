@@ -201,6 +201,11 @@ pub(crate) fn step_by_key(state: &mut crate::State, wider: bool, tx: &mut rune::
     }
 }
 
+/// How wide the sidebar's edge is to grab, centred on the edge so half of it lies over the
+/// rows' end and half over the content; the Tauri app's `.sidebar-resize-handle` is 9 and
+/// starts at the edge.
+const GRIP: f32 = 6.0;
+
 /// The edge the sidebar is dragged wider or narrower by: the width follows the pointer
 /// within the limits, Escape puts it back, the release sends it, and a double-click goes back
 /// to the default.
@@ -209,8 +214,8 @@ pub(crate) fn handle(t: &attn_ui::Tokens) -> rune::El {
         .key("sidebar.resize")
         .role("separator")
         .label("Resize the sidebar")
-        .pin(None, Some(0.0), Some(-3.0), Some(0.0))
-        .w(6.0)
+        .pin(None, Some(0.0), Some(-GRIP / 2.0), Some(0.0))
+        .w(GRIP)
         .cursor(rune::Cursor::ResizeColumn)
         .hover(t.border)
         .on_drag(

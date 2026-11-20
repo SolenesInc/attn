@@ -21,7 +21,7 @@ use attn_protocol::DesktopShowSessionMessage;
 use attn_ui::Tokens;
 use attn_ui::blocks::Inline;
 use attn_ui::system::{self, DotShape, DotSize, GroupHead, IconSize, ListRow, Tone, Type, words};
-use rune::{El, GrowthSpec, ScrollSpec, Tx, col, el, memo, row};
+use rune::{El, GrowthSpec, ScrollSpec, Tx, col, memo, row};
 use rune_kit::ScrollBar;
 
 pub(crate) use model::{AgentRow, Line, display_name, tile_title};
@@ -386,7 +386,7 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
                 rune::el()
                     .key(format!("{key}.seam"))
                     .pin(Some(0.0), edge.0, Some(0.0), edge.1)
-                    .h(2.0)
+                    .h(EDGE_LINE)
                     .fill(t.accent)
             }))
         },
@@ -464,6 +464,10 @@ fn desktop_row(key: String, desktop: &DesktopHeader, keys: Option<String>, t: &T
         None => head,
     }
 }
+
+/// A line along a row's edge, the seam a dragged row drops at or an agent's settling bar: two
+/// points, the thinnest that still reads over the row's hover fill.
+const EDGE_LINE: f32 = 2.0;
 
 /// How much of an agent's name stays before the marks after it give way: about six
 /// characters of body text, enough to tell agents apart.
@@ -710,7 +714,7 @@ pub(crate) fn settling_bar(
         .role("img")
         .label(label)
         .pin(Some(0.0), None, Some(0.0), Some(0.0))
-        .h(2.0);
+        .h(EDGE_LINE);
     Some(match drain {
         Some(c) => bar.live_trim(&c.drain),
         None => bar,
@@ -767,15 +771,7 @@ pub(crate) fn state_mark(row_key: &str, agent: &AgentRow, size: DotSize, t: &Tok
     if !agent.offline {
         return mark.child(system::dot(ink, DotShape::Filled, size));
     }
-    mark.child(system::dot(ink, DotShape::Hollow, DotSize::Regular))
-        .child(
-            el().absolute(-2.0, 3.25)
-                .w(12.0)
-                .h(1.5)
-                .fill(t.text_secondary)
-                .rotate(-std::f32::consts::FRAC_PI_4)
-                .inert(),
-        )
+    mark.child(system::struck_dot(ink, t.text_secondary))
 }
 
 pub(crate) fn state_color(state: AgentState, t: &Tokens) -> rune::Color {

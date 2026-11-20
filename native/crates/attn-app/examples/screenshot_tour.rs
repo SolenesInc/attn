@@ -6053,6 +6053,23 @@ fn queue_bar(dark: bool) {
     snap(&mut world, "queue-bar", dark);
 }
 
+/// The queue bar with the pointer on its waiting pill: the agents under it in its peek.
+fn queue_bar_peek(dark: bool) {
+    let mut world = queue_seeded(dark, false, true, 3);
+    world.gesture(|app| {
+        let pill = app
+            .runtime
+            .find("queue-bar.pill")
+            .expect("the bar shows its pill");
+        app.move_to(pill);
+    });
+    assert!(
+        world.screen().find(Target::key("queue-bar.peek")).is_some(),
+        "the peek opens"
+    );
+    snap(&mut world, "queue-bar-peek", dark);
+}
+
 /// The queue bar in the narrowest window, too narrow for a chip per desktop: the window's
 /// desktop's chip and the rest gathered into the extras chip.
 fn queue_bar_crowded(dark: bool) {
@@ -7645,6 +7662,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("queue_bar", || queue_bar(dark));
         scene("queue_bar_runs_peek", || queue_bar_runs_peek(dark));
         scene("queue_bar_crowded", || queue_bar_crowded(dark));
+        scene("queue_bar_peek", || queue_bar_peek(dark));
         scene("rail", || rail(dark));
         scene("chrome_smallest", || chrome_smallest(dark));
         scene("session_seeds", || session_seeds(dark));
