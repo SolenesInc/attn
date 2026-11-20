@@ -33,6 +33,8 @@ const (
 	methodServerStarted   = "started"
 	methodLoseNextSubmit  = "lose_next_submit"
 	methodSubmissions     = "submissions"
+	methodCompactions     = "compactions"
+	methodAnswerCompact   = "answer_compact"
 )
 
 type appServerFlavor struct {
@@ -44,15 +46,15 @@ type appServerFlavor struct {
 	socket       func(home string) string
 	hello        map[string]any
 	completions  bool
-	authorRefs   bool
+	sigmaWire    bool
 }
 
 var appServerFlavors = map[Harness]appServerFlavor{
 	Sigma: {
 		harness: Sigma, role: "sigma-server", homeVariable: "SIGMA_HOME", homeDir: "sg", rootVariable: "SIGMA_ROOT_CONVERSATION",
-		socket:     func(home string) string { return filepath.Join(home, "sigma.sock") },
-		hello:      map[string]any{"version": "fake", "protocol": 1},
-		authorRefs: true,
+		socket:    func(home string) string { return filepath.Join(home, "sigma.sock") },
+		hello:     map[string]any{"version": "fake", "protocol": 1},
+		sigmaWire: true,
 	},
 	SampleServer: {
 		harness: SampleServer, role: "sample-server-server", homeVariable: "SAMPLE_SERVER_HOME", homeDir: "ss", rootVariable: "SAMPLE_SERVER_ROOT_CONVERSATION",
@@ -149,17 +151,17 @@ type ServerAuthor struct {
 }
 
 func (f appServerFlavor) wireAuthor(name string) any {
-	if f.authorRefs {
+	if f.sigmaWire {
 		return ServerAuthor{ID: name, Name: name}
 	}
 	return name
 }
 
 func (f appServerFlavor) parseAuthor(method string, raw json.RawMessage) (ServerAuthor, string) {
-	if method != "conversation/submit" && method != "conversation/interrupt" {
+	if method != "conversation/submit" && method != "conversation/interrupt" && method != "conversation/compact" {
 		return ServerAuthor{}, ""
 	}
-	if f.authorRefs {
+	if f.sigmaWire {
 		var author ServerAuthor
 		if err := json.Unmarshal(raw, &author); err != nil || author.ID == "" || author.Name == "" {
 			return ServerAuthor{}, "InvalidParams: author {id, name} is required"
@@ -185,6 +187,7 @@ type ServerSubmission struct {
 	Author       string
 	AuthorID     string
 	Text         string
+	Steer        bool
 }
 
 type ServerProviderModels struct {
@@ -232,6 +235,15 @@ type ServerConversation struct {
 	requests     map[string]int
 	submitted    int
 	losesSubmit  bool
+	heldInputs   []ServerSubmission
+	compactions  int
+	compactsWith *ServerCompaction
+}
+
+// ServerCompaction is how Sigma answers conversation/compact: compacted, nothing_to_compact, failed or stopped.
+type ServerCompaction struct {
+	Outcome string `json:"outcome"`
+	Message string `json:"message,omitempty"`
 }
 
 type appServerConn struct {
@@ -384,8 +396,12 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		Author       json.RawMessage  `json:"author"`
 		Client       string           `json:"client"`
 		After        map[string]int64 `json:"after"`
+		Steer        *bool            `json:"steer"`
 	}
 	_ = json.Unmarshal(raw, &p)
+	if p.Steer != nil && !s.flavor.sigmaWire {
+		return nil, "InvalidParams: conversation/submit takes no steer"
+	}
 	author, refused := s.flavor.parseAuthor(method, p.Author)
 	if refused != "" {
 		return nil, refused
@@ -458,10 +474,13 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		} else if fresh && conv.Status == "idle" {
 			s.statusLocked(conv, "working", nil)
 		}
-		s.mu.Unlock()
-		if fresh {
-			s.submissionsOf(p.Conversation) <- ServerSubmission{Conversation: p.Conversation, RequestID: p.RequestID, Author: author.Name, AuthorID: author.ID, Text: p.Text}
+		submitted := ServerSubmission{Conversation: p.Conversation, RequestID: p.RequestID, Author: author.Name, AuthorID: author.ID, Text: p.Text, Steer: p.Steer != nil && *p.Steer}
+		if fresh && conv.Status == "waiting" {
+			conv.heldInputs = append(conv.heldInputs, submitted)
+		} else if fresh {
+			s.submissionsLocked(p.Conversation) <- submitted
 		}
+		s.mu.Unlock()
 		if lost {
 			return nil, replyLost
 		}
@@ -479,6 +498,24 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		s.mu.Unlock()
 		s.interruptsOf(p.Conversation) <- struct{}{}
 		return nil, ""
+	case "conversation/compact":
+		if !s.flavor.sigmaWire {
+			return nil, "UnknownMethod"
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		conv := s.convs[p.Conversation]
+		if conv == nil {
+			return nil, "NoSuchConversation"
+		}
+		answer := ServerCompaction{Outcome: "compacted"}
+		if conv.compactsWith != nil {
+			answer, conv.compactsWith = *conv.compactsWith, nil
+		}
+		if answer.Outcome == "compacted" {
+			conv.compactions++
+		}
+		return answer, ""
 	case methodServerFakeReply:
 		return nil, s.end(p.Conversation, map[string]any{"outcome": "answered", "said": p.Text})
 	case "status/watch":
@@ -535,6 +572,12 @@ func (s *appServer) end(conversation string, ended map[string]any) string {
 
 func (s *appServer) statusLocked(conv *ServerConversation, status string, ended map[string]any) {
 	conv.Status = status
+	if status != "waiting" {
+		for _, held := range conv.heldInputs {
+			s.submissionsLocked(conv.ID) <- held
+		}
+		conv.heldInputs = nil
+	}
 	if ended != nil {
 		conv.Ended = ended
 	}
@@ -553,6 +596,10 @@ func (s *appServer) statusLocked(conv *ServerConversation, status string, ended 
 func (s *appServer) submissionsOf(conversation string) chan ServerSubmission {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.submissionsLocked(conversation)
+}
+
+func (s *appServer) submissionsLocked(conversation string) chan ServerSubmission {
 	if s.submissions[conversation] == nil {
 		s.submissions[conversation] = make(chan ServerSubmission, 16)
 	}
@@ -589,7 +636,7 @@ func (s *appServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (a
 		return struct{}{}, failure(s.end(p.ThreadID, map[string]any{"outcome": "answered", "said": p.Text}))
 	case methodFailRun:
 		return struct{}{}, failure(s.end(p.ThreadID, map[string]any{"outcome": "failed", "message": p.Text}))
-	case methodAskApproval, methodWork, methodLoseNextSubmit, methodSubmissions, methodServerStarted:
+	case methodAskApproval, methodWork, methodLoseNextSubmit, methodSubmissions, methodServerStarted, methodCompactions, methodAnswerCompact:
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		conv := s.convs[p.ThreadID]
@@ -601,6 +648,10 @@ func (s *appServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (a
 			conv.losesSubmit = true
 		case methodSubmissions:
 			return conv.submitted, nil
+		case methodCompactions:
+			return conv.compactions, nil
+		case methodAnswerCompact:
+			conv.compactsWith = &ServerCompaction{Outcome: p.Outcome, Message: p.Text}
 		case methodServerStarted:
 			return conv, nil
 		default:
@@ -715,6 +766,19 @@ func (s *AppServer) Submissions(conversation string) int {
 	var admitted int
 	s.call(methodSubmissions, serverThreadParams{ThreadID: conversation}, &admitted)
 	return admitted
+}
+
+func (s *AppServer) Compactions(conversation string) int {
+	s.t.Helper()
+	var compacted int
+	s.call(methodCompactions, serverThreadParams{ThreadID: conversation}, &compacted)
+	return compacted
+}
+
+// AnswerNextCompaction makes the conversation's next conversation/compact end with this outcome instead of compacted.
+func (s *AppServer) AnswerNextCompaction(conversation string, answer ServerCompaction) {
+	s.t.Helper()
+	s.call(methodAnswerCompact, serverThreadParams{ThreadID: conversation, Outcome: answer.Outcome, Text: answer.Message}, nil)
 }
 
 func (s *AppServer) AwaitInterrupted(conversation string) {

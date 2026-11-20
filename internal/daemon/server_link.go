@@ -357,10 +357,14 @@ func (l *serverLink) Deliver(ctx context.Context, in harness.Input) harness.Cust
 	if conversation == "" {
 		return harness.Custody{Reason: fmt.Sprintf("session %s holds no %s conversation", in.Session, l.b.name)}
 	}
+	params := map[string]any{"conversation": conversation, "requestId": in.ID, "author": l.author(in.Voice), "text": in.Text}
+	if l.speaksSigma() {
+		params["steer"] = true
+	}
 	c, err := l.ensureServer(ctx, nil)
 	if err == nil {
 		callCtx, cancel := context.WithTimeout(ctx, serverCallLimit)
-		err = c.Call(callCtx, "conversation/submit", map[string]any{"conversation": conversation, "requestId": in.ID, "author": l.author(in.Voice), "text": in.Text}, nil)
+		err = c.Call(callCtx, "conversation/submit", params, nil)
 		cancel()
 	}
 	if err != nil {
@@ -379,10 +383,15 @@ func (l *serverLink) author(voice harness.Voice) any {
 	if voice == harness.VoiceUser {
 		name = userName()
 	}
-	if declaration := l.b.declaration.Load(); declaration != nil && declaration.AuthorRefs {
+	if l.speaksSigma() {
 		return serverAuthorRef{ID: name, Name: name}
 	}
 	return name
+}
+
+func (l *serverLink) speaksSigma() bool {
+	declaration := l.b.declaration.Load()
+	return declaration != nil && declaration.SigmaWire
 }
 
 func userName() string {
@@ -409,7 +418,7 @@ func (l *serverLink) sessionClosed(sessionID protocol.SessionID, _ string, relea
 	}
 	defer release()
 	params := map[string]any{"conversation": released}
-	if declaration.AuthorRefs {
+	if declaration.SigmaWire {
 		params["author"] = l.author(harness.VoiceAttn)
 	}
 	if err := c.Call(ctx, "conversation/interrupt", params, nil); err != nil {

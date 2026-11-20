@@ -1085,6 +1085,7 @@ type serverThreadParams struct {
 	ThreadID string `json:"threadId"`
 	Server   string `json:"server"`
 	Text     string `json:"text"`
+	Outcome  string `json:"outcome,omitempty"`
 }
 
 func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (any, error) {

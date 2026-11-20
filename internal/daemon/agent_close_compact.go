@@ -64,6 +64,9 @@ func (d *Daemon) compactPathRefusal(target *protocol.Session) *agentCloseRefusal
 	if d.codexShared().launchedShared(target.ID) {
 		return nil
 	}
+	if l, ok := d.linkOf(target.ID).(*serverLink); ok && l.speaksSigma() {
+		return nil
+	}
 	switch target.Agent {
 	case string(protocol.SessionAgentCodex):
 		return &agentCloseRefusal{"compact_unavailable",

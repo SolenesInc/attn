@@ -77,9 +77,11 @@ restart.
 Annotations, messages from other agents and inbox notifications reach the
 conversation as follow-ups through the server, never typed into the terminal.
 What you send arrives under your user name, and what Attn and other agents send
-arrives from `attn`. A message sent while a run works waits in the
-conversation's queue until the current run ends, then becomes the next run. A
-retried delivery is one follow-up.
+arrives from `attn`. A message sent while a run works reaches that run at its
+next step, as a steer, and a message sent while no run works starts one. A
+message sent while a call waits for your approval waits in Sigma and reaches the
+run once you answer the approval; it never answers the approval. A retried
+delivery is one follow-up.
 
 ## Closing and resuming
 
@@ -87,6 +89,18 @@ Closing a session interrupts its conversation's run, subagents included, and
 closes the session into the ledger. Quitting the TUI with `^C` closes the
 session the same way, as quitting any other harness does. Resume the session
 from the Sessions ledger to open its conversation in a new tile.
+
+An agent can compact its conversation just before it closes itself, with
+`attn agent close --self --compact` or on standby, as
+[Seeds on standby](delegation.md#seeds-on-standby) describes. Attn waits for
+the run to end and asks Sigma to compact the conversation. If Sigma finds
+nothing to compact, the session closes as if it had compacted. If the compact
+fails or is stopped, the session still closes, and its reason says the compact
+did not run.
+
+Reloading a Sigma session relaunches its TUI on the same conversation. The
+conversation keeps the instructions it started with, as a reloaded Claude Code
+session does.
 
 A Sigma conversation belongs to the profile whose session holds it. Attn refuses
 to resume the conversation in another profile while that session is open.

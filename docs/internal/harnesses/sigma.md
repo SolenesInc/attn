@@ -4,7 +4,8 @@ How Sigma behaves where attn meets it. The rules for adding a claim are in
 [Harness behavior](../harnesses.md).
 
 Sigma was named Nisse until 2026-11-14. Read in the source at SolenesInc/sigma
-6fb87ec, and the entries on authors, instructions and skills at 72006f8.
+6fb87ec, the entries on authors, instructions and skills at 72006f8, and those
+on steering and compaction at a903aa0.
 
 - One server per Sigma home holds every conversation. Clients reach the server
   over `SIGMA_HOME/sigma.sock`, and the home defaults to `~/.sigma`.
@@ -25,7 +26,16 @@ Sigma was named Nisse until 2026-11-14. Read in the source at SolenesInc/sigma
   `SIGMA_AUTHOR_NAME`, each defaulting to the system's user name
   (`packages/sigma/src/author.ts`).
 - `conversation/submit` is idempotent by its `requestId`: a retried submit is
-  one input.
+  one input. With `steer: true` the input reaches the run in flight at its next
+  step instead of waiting for the run to end; with no run working it starts one.
+  Input waits in the conversation's `pi.inbox` until the run takes it, so input
+  sent while a call waits on an approval reaches the run after the approval.
+  Only `approval/resolve` answers an approval (`packages/protocol/src/index.ts`,
+  `packages/sigma/src/server.ts`).
+- `conversation/compact {conversation, author, instructions?}` answers once the
+  compaction has ended, with `outcome` `compacted`, `nothing_to_compact`,
+  `failed` (with a `message`) or `stopped`. Behind a run in flight it waits for
+  the run's next step or its end.
 - Every `bash` call, and Claude Code's process, runs with
   `SIGMA_ROOT_CONVERSATION` set to the id of the conversation people started.
 - `conversation/start` takes `instructions`, kept with the conversation and

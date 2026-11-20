@@ -395,7 +395,8 @@ returns.
 
 Claude Code sessions with the [Claude mod](using-claude-mod.md) connected and
 Codex sessions on [shared Codex](using-shared-codex.md) compact on your home
-machine and on an outpost. Plugin sessions compact on your home machine when
+machine and on an outpost. [Sigma](using-sigma.md) sessions compact through
+the Sigma server. Plugin sessions compact on your home machine when
 their driver supports native compaction. Standby closes a session without a
 compaction path without compacting, and `attn agent close --self --compact`
 refuses it, saying why. Compacting does not

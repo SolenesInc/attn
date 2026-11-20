@@ -21,7 +21,7 @@ type ServerDeclaration struct {
 	OnClose               string          `json:"on_close"`
 	Recovery              string          `json:"recovery"`
 	Targets               bool            `json:"targets,omitempty"`
-	AuthorRefs            bool            `json:"-"`
+	SigmaWire             bool            `json:"-"`
 }
 
 type ServerHandshake struct {

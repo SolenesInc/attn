@@ -359,7 +359,11 @@ func (h monitorHost) Link(monitor *sessionmonitor.Monitor, voice harness.Voice) 
 		return codexMonitorLink{shared: h.daemon.codexShared(), monitor: monitor, target: target}
 	}
 	if l, ok := h.daemon.linkNamed(target.Kind).(*serverLink); ok {
-		return serverSessionLink{link: l, session: target.Session}
+		link := serverSessionLink{link: l, session: target.Session}
+		if l.speaksSigma() {
+			return sigmaSessionLink{link}
+		}
+		return link
 	}
 	if target.Driver.Run != "" && target.Driver.Route != "terminal" {
 		targetSession, _ := monitor.TitleTarget()
