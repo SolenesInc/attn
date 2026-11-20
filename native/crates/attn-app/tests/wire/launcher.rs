@@ -9,11 +9,11 @@ use attn_protocol::{
     BrowseDirectoryResultMessage, CreateWorktreeResultMessage, DelegationPreferences,
     DelegationPreferencesResultMessage, DeleteWorktreeResultMessage, Desktop, DesktopPane,
     DirectoryEntry, GetRepoInfoResultMessage, Harness, InitialStateMessage,
-    InspectPathResultMessage, PathInspection, Profile, ProfileArrangementChangedMessage,
-    RecentLocation, RecentLocationsResultMessage, RepoInfo, SettingsUpdatedMessage,
-    SpawnResultMessage, Worktree,
+    InspectPathResultMessage, OutpostInfo, OutpostsUpdatedMessage, PathInspection, Profile,
+    ProfileArrangementChangedMessage, RecentLocation, RecentLocationsResultMessage, RepoInfo,
+    SettingsUpdatedMessage, SpawnResultMessage, Worktree,
 };
-use attn_testkit::{Daemon, Target, World, key_event, message};
+use attn_testkit::{Answer, Daemon, Driver, Target, World, key_event, message};
 use rune::{Chord, Key, KeyEvent, KeyPlatform, Mods};
 use serde_json::Value;
 
@@ -1169,4 +1169,889 @@ fn the_ghost_completion_follows_the_typed_text() {
         "one more typed character moves the ghost on: {after_s} then {after_sh}"
     );
     rest(&mut world);
+}
+
+const PLACES: [&str; 8] = [
+    "/home/me/projects/alpha",
+    "/home/me/projects/bravo",
+    "/home/me/projects/charlie",
+    "/home/me/projects/delta",
+    "/home/me/projects/echo",
+    "/home/me/projects/foxtrot",
+    "/home/me/projects/golf",
+    "/home/me/projects/hotel",
+];
+
+/// The shop repository with eight worktrees, `w1` to `w8`.
+fn eight_worktrees() -> RepoInfo {
+    let mut info = shop("origin/main");
+    info.worktrees = (1..=8)
+        .map(|i| Worktree {
+            path: format!("{REPO}--w{i}"),
+            branch: format!("w{i}"),
+            main_repo: REPO.into(),
+            ..Worktree::default()
+        })
+        .collect();
+    info
+}
+
+/// The smallest window at text `scale`, where at 150% the launcher's list is shorter than its
+/// rows.
+fn small_with(scale: &str, recent: &[&str], info: RepoInfo) -> World {
+    let mut settings = settings("main_repo");
+    settings.push(("uiScale".to_owned(), scale.to_owned()));
+    let mut world = World::start_sized(
+        machine(
+            recent,
+            info,
+            &settings,
+            vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
+        ),
+        (800.0, 600.0),
+    );
+    world.open_desktop();
+    press_action(&mut world, &Action::SessionNew);
+    world
+}
+
+fn highlighted_key(world: &World, prefix: &str) -> String {
+    world
+        .screen()
+        .all(Target::role("list-box-option"))
+        .into_iter()
+        .find(|n| n.is("selected") && n.key.as_deref().is_some_and(|k| k.starts_with(prefix)))
+        .and_then(|n| n.key)
+        .expect("a row is highlighted")
+}
+
+fn inside(inner: [f32; 4], outer: [f32; 4]) -> bool {
+    const EPS: f32 = 0.5;
+    inner[0] >= outer[0] - EPS
+        && inner[1] >= outer[1] - EPS
+        && inner[0] + inner[2] <= outer[0] + outer[2] + EPS
+        && inner[1] + inner[3] <= outer[1] + outer[3] + EPS
+}
+
+/// Runs `cause`, named `what`, and checks the highlighted row of `rows` from the first frame it
+/// shows on, the cause's own or the one its answer arrives on: the list's scroll moves at most
+/// once, a jump and never a glide; the row stays inside the window and the list's settled box on
+/// every frame; and once the window settles it shows whole while the field keeps the keyboard.
+/// The rows and the list may still move into place as they did before, as inserted rows slide in
+/// and a message above the list takes its room. Returns the highlighted row's key.
+fn keeps_highlight_in_view(
+    world: &mut World,
+    what: &str,
+    list: &str,
+    rows: &str,
+    cause: impl FnOnce(&Daemon, &mut Driver),
+) -> String {
+    let rec = world.record(60.0, 0.5, cause);
+    let row = highlighted_key(world, rows);
+    let drawn_as = |key: &str, k: usize| {
+        let suffix = format!("/{key}");
+        rec.tracks
+            .iter()
+            .filter(|t| t.path.ends_with(&suffix))
+            .find_map(|t| t.frames.iter().find(|(f, _)| *f == k).map(|(_, at)| *at))
+    };
+    let from = rec.inputs[0].0;
+    let settled = rec.frames - 1;
+    let shown: Vec<_> = (from..rec.frames)
+        .filter_map(|k| drawn_as(&row, k).map(|at| (k, at)))
+        .collect();
+    let (first, _) = *shown
+        .first()
+        .unwrap_or_else(|| panic!("{row} was not drawn after {what}"));
+    assert_eq!(
+        shown.len(),
+        rec.frames - first,
+        "{row} left the window after it showed"
+    );
+    let list_box = drawn_as(list, settled)
+        .unwrap_or_else(|| panic!("{list} was drawn"))
+        .vis;
+    let window = [0.0, 0.0, rec.size.0, rec.size.1];
+    let jumps: Vec<usize> = shown
+        .windows(2)
+        .filter(|pair| pair[0].1.scrolled != pair[1].1.scrolled)
+        .map(|pair| pair[1].0)
+        .collect();
+    assert!(
+        jumps.len() <= 1,
+        "{list} scrolled on frames {jumps:?} after {row} showed on frame {first} ({what} was on {from}): a glide, not a jump"
+    );
+    for (k, at) in &shown {
+        assert!(
+            inside(at.rect, list_box) && inside(at.rect, window),
+            "after {what}, {row} on frame {k} is at {:?}, outside {list}'s {list_box:?}",
+            at.rect,
+        );
+    }
+    let at = drawn_as(&row, settled).expect("drawn");
+    assert!(
+        inside(at.rect, at.vis),
+        "after {what}, {row} is at {:?} but shows {:?}",
+        at.rect,
+        at.vis,
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("new-session.path.field"))
+            .is_some_and(|n| n.is("focused")),
+        "the field keeps the keyboard"
+    );
+    row
+}
+
+fn press_keeps_highlight_in_view(world: &mut World, key: Key, list: &str, rows: &str) -> String {
+    let what = format!("{key:?}");
+    keeps_highlight_in_view(world, &what, list, rows, |_, app| {
+        app.key(KeyEvent {
+            key,
+            mods: Mods::default(),
+        })
+    })
+}
+
+fn type_keeps_highlight_in_view(world: &mut World, text: &str, list: &str, rows: &str) -> String {
+    let what = format!("typing {text:?}");
+    keeps_highlight_in_view(world, &what, list, rows, |_, app| app.type_text(text))
+}
+
+fn index_of(key: &str) -> usize {
+    key.rsplit('.').next().unwrap().parse().unwrap()
+}
+
+/// Presses Down from the highlighted row onto the last, checking each step.
+fn down_to_the_last(world: &mut World, list: &str, rows: &str) {
+    let count = options(world, rows).len();
+    for _ in index_of(&highlighted_key(world, rows)) + 1..count {
+        press_keeps_highlight_in_view(world, Key::Down, list, rows);
+    }
+    assert_eq!(highlighted_key(world, rows), format!("{rows}{}", count - 1));
+}
+
+/// Down through every row and Up back to the first, where the list shows its top with its heading
+/// again as it opened, then Up once more onto the last, checking each step; returns the last
+/// row's key.
+fn walk_the_list(world: &mut World, list: &str, rows: &str) -> String {
+    let count = options(world, rows).len();
+    down_to_the_last(world, list, rows);
+    for _ in 1..count {
+        press_keeps_highlight_in_view(world, Key::Up, list, rows);
+    }
+    assert_eq!(highlighted_key(world, rows), format!("{rows}0"));
+    assert_eq!(world.screen().scrolled(Target::key(list)), Some(0.0));
+    let last = press_keeps_highlight_in_view(world, Key::Up, list, rows);
+    assert_eq!(last, format!("{rows}{}", count - 1));
+    last
+}
+
+const LOCATIONS: (&str, &str) = ("new-session.locations", "new-session.row.");
+const WHERE: (&str, &str) = ("new-session.where", "new-session.where.row.");
+
+#[test]
+fn arrows_keep_the_highlighted_location_whole_in_the_smallest_window_at_the_largest_text() {
+    let mut world = small_with("1.5", &PLACES, shop("origin/main"));
+    walk_the_list(&mut world, LOCATIONS.0, LOCATIONS.1);
+    assert_eq!(selected(&world, LOCATIONS.1), Some("hotel".to_owned()));
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        launched(&world),
+        [("/home/me/projects/hotel".to_owned(), "claude".to_owned())]
+    );
+}
+
+#[test]
+fn arrows_keep_the_highlighted_worktree_whole_in_the_smallest_window_at_the_largest_text() {
+    let mut world = small_with("1.5", &[REPO], eight_worktrees());
+    open_where(&mut world);
+    walk_the_list(&mut world, WHERE.0, WHERE.1);
+    assert_eq!(selected(&world, WHERE.1), Some("w8".to_owned()));
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        launched(&world),
+        [(format!("{REPO}--w8"), "claude".to_owned())]
+    );
+}
+
+#[test]
+fn typing_after_the_last_location_shows_the_top_row_it_highlights() {
+    for scale in ["1", "1.5"] {
+        let mut world = small_with(scale, &PLACES, shop("origin/main"));
+        down_to_the_last(&mut world, LOCATIONS.0, LOCATIONS.1);
+        let row = type_keeps_highlight_in_view(&mut world, "o", LOCATIONS.0, LOCATIONS.1);
+        assert_eq!(row, format!("{}0", LOCATIONS.1), "at {scale}");
+        let name = selected(&world, LOCATIONS.1).expect("a row is highlighted");
+        press(&mut world, Key::Enter);
+        assert_eq!(
+            launched(&world),
+            [(format!("/home/me/projects/{name}"), "claude".to_owned())],
+            "at {scale}"
+        );
+    }
+}
+
+#[test]
+fn typing_after_the_last_worktree_shows_the_new_worktree_it_highlights() {
+    for scale in ["1", "1.5"] {
+        let mut world = small_with(scale, &[REPO], eight_worktrees());
+        open_where(&mut world);
+        down_to_the_last(&mut world, WHERE.0, WHERE.1);
+        let row = type_keeps_highlight_in_view(&mut world, "w", WHERE.0, WHERE.1);
+        assert_eq!(row, format!("{}0", WHERE.1), "at {scale}");
+        press(&mut world, Key::Enter);
+        assert_eq!(
+            launched(&world),
+            [(format!("{REPO}--w"), "claude".to_owned())],
+            "at {scale}"
+        );
+    }
+}
+
+#[test]
+fn switching_to_where_and_back_from_the_last_location_shows_the_highlighted_rows() {
+    let mut recent = PLACES[..7].to_vec();
+    recent.push(REPO);
+    let mut world = small_with("1.5", &recent, eight_worktrees());
+    down_to_the_last(&mut world, LOCATIONS.0, LOCATIONS.1);
+    assert_eq!(selected(&world, LOCATIONS.1), Some("shop".to_owned()));
+    press_keeps_highlight_in_view(&mut world, Key::Tab, WHERE.0, WHERE.1);
+    down_to_the_last(&mut world, WHERE.0, WHERE.1);
+    let row = press_keeps_highlight_in_view(&mut world, Key::Escape, LOCATIONS.0, LOCATIONS.1);
+    assert_eq!(row, format!("{}0", LOCATIONS.1));
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        launched(&world),
+        [("/home/me/projects/alpha".to_owned(), "claude".to_owned())]
+    );
+}
+
+#[test]
+fn worktrees_that_arrive_after_a_branch_was_typed_show_the_row_it_names() {
+    let mut world = small_with("1.5", &[REPO], eight_worktrees());
+    world.daemon.answer_in_turn("get_repo_info", [Answer::Hold]);
+    press(&mut world, Key::Tab);
+    world.gesture(|app| app.type_text("w8"));
+    let asked = world.daemon.sent_of("get_repo_info").remove(0);
+    let row = keeps_highlight_in_view(
+        &mut world,
+        "the worktrees arriving",
+        WHERE.0,
+        WHERE.1,
+        |daemon, _| {
+            daemon.reply_to(
+                &asked,
+                GetRepoInfoResultMessage {
+                    success: true,
+                    info: Some(eight_worktrees()),
+                    ..GetRepoInfoResultMessage::new()
+                },
+            )
+        },
+    );
+    assert_eq!(selected(&world, WHERE.1), Some("w8".to_owned()));
+    assert_eq!(row, format!("{}3", WHERE.1));
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        launched(&world),
+        [(format!("{REPO}--w8"), "claude".to_owned())]
+    );
+}
+
+fn outpost(name: &str) -> OutpostInfo {
+    OutpostInfo {
+        id: format!("outpost-{name}"),
+        name: name.into(),
+        destination: format!("{name}:2200"),
+        state: "connected".into(),
+        reach: "reachable".into(),
+        state_since: "2026-05-16T16:00:00Z".into(),
+        ..OutpostInfo::default()
+    }
+}
+
+fn outposts_now(outposts: Vec<OutpostInfo>) -> OutpostsUpdatedMessage {
+    OutpostsUpdatedMessage {
+        outposts,
+        ..OutpostsUpdatedMessage::new()
+    }
+}
+
+fn alpha_machines(names: &[&str]) -> OutpostsUpdatedMessage {
+    outposts_now(names.iter().map(|n| outpost(n)).collect())
+}
+
+/// A search for "al" in the smallest window at the largest text, matching each machine in
+/// `machines` and the recent alpha, below them.
+fn searching_alpha(machines: &[&str]) -> World {
+    let mut settings = settings("main_repo");
+    settings.push(("uiScale".to_owned(), "1.5".to_owned()));
+    settings.push(("outposts_enabled".to_owned(), "true".to_owned()));
+    let mut world = World::start_sized(
+        machine(
+            &PLACES,
+            shop("origin/main"),
+            &settings,
+            vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
+        ),
+        (800.0, 600.0),
+    );
+    world.open_desktop();
+    world.daemon.emit(alpha_machines(machines));
+    world.settle();
+    press_action(&mut world, &Action::SessionNew);
+    world.gesture(|app| app.type_text("al"));
+    assert_eq!(options(&world, LOCATIONS.1).len(), machines.len() + 1);
+    world
+}
+
+fn down_to(world: &mut World, name: &str) {
+    while selected(world, LOCATIONS.1).as_deref() != Some(name) {
+        press(world, Key::Down);
+    }
+}
+
+#[test]
+fn machines_leaving_above_the_highlight_keep_it_on_its_row() {
+    let mut world = searching_alpha(&["alpha-box", "alpha-dev", "alpha-lab"]);
+    down_to_the_last(&mut world, LOCATIONS.0, LOCATIONS.1);
+    assert_eq!(selected(&world, LOCATIONS.1), Some("alpha".to_owned()));
+
+    keeps_highlight_in_view(
+        &mut world,
+        "two machines leaving",
+        LOCATIONS.0,
+        LOCATIONS.1,
+        |daemon, _| daemon.emit(alpha_machines(&["alpha-box"])),
+    );
+    assert_eq!(selected(&world, LOCATIONS.1), Some("alpha".to_owned()));
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        launched(&world),
+        [("/home/me/projects/alpha".to_owned(), "claude".to_owned())]
+    );
+}
+
+#[test]
+fn the_highlighted_machine_leaving_gives_the_highlight_to_the_top_row() {
+    let all = [
+        "alpha-1", "alpha-2", "alpha-3", "alpha-4", "alpha-5", "alpha-6",
+    ];
+    let mut world = searching_alpha(&all);
+    down_to(&mut world, "alpha-6:");
+    assert!(world.screen().scrolled(Target::key(LOCATIONS.0)) > Some(0.0));
+
+    let row = keeps_highlight_in_view(
+        &mut world,
+        "the highlighted machine leaving",
+        LOCATIONS.0,
+        LOCATIONS.1,
+        |daemon, _| daemon.emit(alpha_machines(&all[..5])),
+    );
+    assert_eq!(row, format!("{}0", LOCATIONS.1));
+    assert_eq!(world.screen().scrolled(Target::key(LOCATIONS.0)), Some(0.0));
+    press(&mut world, Key::Enter);
+    assert_eq!(field(&world, "new-session"), "alpha-1:~/");
+}
+
+#[test]
+fn machines_reordering_keep_the_highlight_on_its_row() {
+    let all = [
+        "alpha-1", "alpha-2", "alpha-3", "alpha-4", "alpha-5", "alpha-6",
+    ];
+    let mut world = searching_alpha(&all);
+    down_to(&mut world, "alpha-2:");
+    let before = highlighted_key(&world, LOCATIONS.1);
+
+    let mut reversed = all;
+    reversed.reverse();
+    let row = keeps_highlight_in_view(
+        &mut world,
+        "the machines reordering",
+        LOCATIONS.0,
+        LOCATIONS.1,
+        |daemon, _| daemon.emit(alpha_machines(&reversed)),
+    );
+    assert_ne!(row, before, "alpha-2 moved");
+    assert_eq!(selected(&world, LOCATIONS.1), Some("alpha-2:".to_owned()));
+    press(&mut world, Key::Enter);
+    assert_eq!(field(&world, "new-session"), "alpha-2:~/");
+}
+
+/// Eight recents a search for "bu" matches, which a machine named build-box also matches.
+fn build_folders() -> Vec<String> {
+    (1..=8)
+        .map(|i| format!("/home/me/projects/build-notes-{i:02}"))
+        .collect()
+}
+
+fn with_outposts(scale: &str, recent: &[String]) -> World {
+    let mut settings = settings("main_repo");
+    settings.push(("uiScale".to_owned(), scale.to_owned()));
+    settings.push(("outposts_enabled".to_owned(), "true".to_owned()));
+    let recent: Vec<&str> = recent.iter().map(String::as_str).collect();
+    let mut world = World::start_sized(
+        machine(
+            &recent,
+            shop("origin/main"),
+            &settings,
+            vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
+        ),
+        (800.0, 600.0),
+    );
+    world.open_desktop();
+    world
+}
+
+fn middle_of(world: &World, key: &str) -> (f32, f32) {
+    let [x, y, w, h] = world.screen().bounds(Target::key(key)).expect("laid out");
+    (x + w / 2.0, y + h / 2.0)
+}
+
+/// A wheel turn of `dy` points down at `at`, as the platform delivers it.
+fn wheel_at(world: &mut World, at: (f32, f32), dy: f32) {
+    world.gesture(|app| {
+        app.runtime
+            .wheel_event(rune::WheelEvent::new(0.0, -dy).at(at.0, at.1))
+    });
+}
+
+fn wheel_down(world: &mut World, dy: f32) {
+    let at = middle_of(world, LOCATIONS.0);
+    wheel_at(world, at, dy);
+    assert!(world.screen().scrolled(Target::key(LOCATIONS.0)) > Some(0.0));
+}
+
+#[test]
+fn a_machine_appearing_above_the_highlight_keeps_it_on_its_row() {
+    let folders = build_folders();
+    for scale in ["1", "1.5"] {
+        let mut world = with_outposts(scale, &folders);
+        press_action(&mut world, &Action::SessionNew);
+        world.gesture(|app| app.type_text("bu"));
+        let count = options(&world, LOCATIONS.1).len();
+        for _ in 1..count - 1 {
+            press(&mut world, Key::Down);
+        }
+        let before = selected(&world, LOCATIONS.1).expect("a row is highlighted");
+        let hovered = middle_of(&world, &format!("{}{}", LOCATIONS.1, count - 3));
+        world.gesture(|app| app.move_to(hovered));
+
+        keeps_highlight_in_view(
+            &mut world,
+            "a machine appearing above",
+            LOCATIONS.0,
+            LOCATIONS.1,
+            |daemon, _| daemon.emit(outposts_now(vec![outpost("build-box")])),
+        );
+        assert_eq!(options(&world, LOCATIONS.1).len(), count + 1, "at {scale}");
+        assert_eq!(selected(&world, LOCATIONS.1).as_ref(), Some(&before));
+        press(&mut world, Key::Enter);
+        assert_eq!(
+            launched(&world),
+            [(format!("/home/me/projects/{before}"), "claude".to_owned())],
+            "at {scale}"
+        );
+    }
+}
+
+#[test]
+fn recents_that_arrive_after_a_wheel_show_the_row_they_highlight() {
+    let folders = build_folders();
+    let mut world = with_outposts("1.5", &folders);
+    press_action(&mut world, &Action::SessionNew);
+    press(&mut world, Key::Escape);
+    world.daemon.on("get_recent_locations", |_| ());
+    press_action(&mut world, &Action::SessionNew);
+    assert!(world.screen().active_option().is_none());
+    wheel_down(&mut world, 400.0);
+    let asked = world.daemon.sent_of("get_recent_locations").pop().unwrap();
+    let recents: Vec<RecentLocation> = folders
+        .iter()
+        .enumerate()
+        .map(|(i, path)| RecentLocation {
+            path: path.clone(),
+            last_seen: format!("2026-05-16T16:0{}:00Z", 9 - i),
+            use_count: 1,
+            ..RecentLocation::default()
+        })
+        .collect();
+
+    let row = keeps_highlight_in_view(
+        &mut world,
+        "the recents arriving",
+        LOCATIONS.0,
+        LOCATIONS.1,
+        |daemon, _| {
+            daemon.reply_to(
+                &asked,
+                RecentLocationsResultMessage {
+                    success: true,
+                    home_path: Some(HOME.into()),
+                    recent_locations: recents,
+                    ..RecentLocationsResultMessage::new()
+                },
+            )
+        },
+    );
+    assert_eq!(row, format!("{}0", LOCATIONS.1));
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        launched(&world),
+        [(folders[0].clone(), "claude".to_owned())]
+    );
+}
+
+#[test]
+fn a_machine_appearing_above_the_top_row_keeps_the_highlight_on_it() {
+    let folders = build_folders();
+    let mut world = with_outposts("1.5", &folders);
+    press_action(&mut world, &Action::SessionNew);
+    world.gesture(|app| app.type_text("bu"));
+    assert_eq!(
+        selected(&world, LOCATIONS.1),
+        Some("build-notes-01".to_owned())
+    );
+
+    keeps_highlight_in_view(
+        &mut world,
+        "a machine appearing above",
+        LOCATIONS.0,
+        LOCATIONS.1,
+        |daemon, _| daemon.emit(outposts_now(vec![outpost("build-box")])),
+    );
+    assert_eq!(options(&world, LOCATIONS.1)[0].0, "build-box:");
+    assert_eq!(
+        selected(&world, LOCATIONS.1),
+        Some("build-notes-01".to_owned())
+    );
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        launched(&world),
+        [(folders[0].clone(), "claude".to_owned())]
+    );
+}
+
+/// Scrolls the locations by hand, as `how` names: the wheel, or a drag down the scroll bar.
+fn scroll_by_hand(world: &mut World, how: &str) {
+    let [x, y, w, h] = world
+        .screen()
+        .bounds(Target::key(LOCATIONS.0))
+        .expect("laid out");
+    match how {
+        "wheel" => wheel_at(world, (x + w / 2.0, y + h / 2.0), 200.0),
+        _ => world.gesture(|app| app.drag_from((x + w - 4.0, y + 8.0), (x + w - 4.0, y + h - 8.0))),
+    }
+    assert!(
+        world.screen().scrolled(Target::key(LOCATIONS.0)) > Some(0.0),
+        "the {how} scrolled the list"
+    );
+}
+
+#[test]
+fn rows_arriving_after_the_user_scrolls_leave_the_list_where_they_scrolled_it() {
+    let folders = build_folders();
+    for how in ["wheel", "scroll bar"] {
+        let mut world = with_outposts("1.5", &folders);
+        press_action(&mut world, &Action::SessionNew);
+        world.gesture(|app| app.type_text("bu"));
+        press(&mut world, Key::Down);
+        assert_eq!(
+            selected(&world, LOCATIONS.1),
+            Some("build-notes-02".to_owned())
+        );
+        scroll_by_hand(&mut world, how);
+        let scrolled = world.screen().scrolled(Target::key(LOCATIONS.0));
+
+        world.daemon.emit(outposts_now(vec![outpost("build-box")]));
+        world.settle();
+        rest(&mut world);
+        assert_eq!(
+            options(&world, LOCATIONS.1)[0].0,
+            "build-box:",
+            "after the {how}"
+        );
+        assert_eq!(
+            world.screen().scrolled(Target::key(LOCATIONS.0)),
+            scrolled,
+            "after the {how}"
+        );
+        assert_eq!(
+            selected(&world, LOCATIONS.1),
+            Some("build-notes-02".to_owned())
+        );
+        press(&mut world, Key::Enter);
+        assert_eq!(
+            launched(&world),
+            [(folders[1].clone(), "claude".to_owned())],
+            "after the {how}"
+        );
+    }
+}
+
+fn recents_reply(paths: Vec<(String, Option<String>)>) -> RecentLocationsResultMessage {
+    RecentLocationsResultMessage {
+        success: true,
+        home_path: Some(HOME.into()),
+        recent_locations: paths
+            .into_iter()
+            .enumerate()
+            .map(|(i, (path, host))| RecentLocation {
+                path,
+                host,
+                last_seen: format!("2026-05-16T16:{:02}:00Z", 30 - i),
+                use_count: 1,
+                ..RecentLocation::default()
+            })
+            .collect(),
+        ..RecentLocationsResultMessage::new()
+    }
+}
+
+fn whole_in(world: &World, row: &str, list: &str) -> bool {
+    let bounds = |key: &str| world.screen().bounds(Target::key(key)).expect("laid out");
+    inside(bounds(row), bounds(list))
+}
+
+#[test]
+fn a_press_on_the_list_that_does_not_scroll_it_keeps_the_highlight_in_view() {
+    let folders = build_folders();
+    for scale in ["1", "1.5"] {
+        let mut world = with_outposts(scale, &folders);
+        press_action(&mut world, &Action::SessionNew);
+        world.gesture(|app| app.type_text("bu"));
+        down_to(&mut world, "build-notes-08");
+        let scrolled = world.screen().scrolled(Target::key(LOCATIONS.0));
+        let [x, y, _, h] = world
+            .screen()
+            .bounds(Target::key(LOCATIONS.0))
+            .expect("laid out");
+        world.gesture(|app| app.click_at((x + 2.0, y + h / 2.0)));
+        assert_eq!(world.screen().scrolled(Target::key(LOCATIONS.0)), scrolled);
+        assert!(launched(&world).is_empty());
+
+        keeps_highlight_in_view(
+            &mut world,
+            "a machine appearing above",
+            LOCATIONS.0,
+            LOCATIONS.1,
+            |daemon, _| daemon.emit(outposts_now(vec![outpost("build-box")])),
+        );
+        assert_eq!(
+            selected(&world, LOCATIONS.1),
+            Some("build-notes-08".to_owned())
+        );
+        press(&mut world, Key::Enter);
+        assert_eq!(
+            launched(&world),
+            [(folders[7].clone(), "claude".to_owned())],
+            "at {scale}"
+        );
+    }
+}
+
+#[test]
+fn recents_a_dialog_hears_keep_the_inline_launchers_highlight_in_view() {
+    const INLINE: (&str, &str) = ("launcher.locations", "launcher.row.");
+    let folders = build_folders();
+    for scale in ["1", "1.5"] {
+        let mut settings = settings("main_repo");
+        settings.push(("uiScale".to_owned(), scale.to_owned()));
+        let recent: Vec<&str> = folders.iter().map(String::as_str).collect();
+        let mut world = World::start_sized(
+            machine(
+                &recent,
+                shop("origin/main"),
+                &settings,
+                vec![desktop("d1", "Desktop 1", vec![])],
+            ),
+            (800.0, 600.0),
+        );
+        world.open_desktop();
+        for _ in 1..folders.len() {
+            press(&mut world, Key::Down);
+        }
+        assert_eq!(
+            selected(&world, INLINE.1),
+            Some("build-notes-08".to_owned())
+        );
+        world.daemon.on("get_recent_locations", |_| ());
+        press_action(&mut world, &Action::SessionNewTerminal);
+        let asked = world.daemon.sent_of("get_recent_locations").pop().unwrap();
+        let newest = "/home/me/projects/build-notes-09".to_owned();
+        let paths = std::iter::once(newest)
+            .chain(folders.iter().cloned())
+            .map(|p| (p, None))
+            .collect();
+        world.daemon.reply_to(&asked, recents_reply(paths));
+        world.settle();
+        press(&mut world, Key::Escape);
+
+        assert_eq!(
+            selected(&world, INLINE.1),
+            Some("build-notes-08".to_owned())
+        );
+        let row = highlighted_key(&world, INLINE.1);
+        assert_eq!(row, format!("{}8", INLINE.1));
+        assert!(whole_in(&world, &row, INLINE.0), "at {scale}");
+        press(&mut world, Key::Enter);
+        assert_eq!(
+            launched(&world),
+            [(folders[7].clone(), "claude".to_owned())],
+            "at {scale}"
+        );
+    }
+}
+
+#[test]
+fn a_listing_that_fails_keeps_the_highlight_whole_as_its_message_takes_room() {
+    let folders = build_folders();
+    for scale in ["1", "1.5"] {
+        let mut world = with_outposts(scale, &[]);
+        world.daemon.on("browse_directory", |_| ());
+        world.daemon.on("get_recent_locations", |_| ());
+        world.daemon.emit(outposts_now(vec![outpost("build-box")]));
+        world.settle();
+        press_action(&mut world, &Action::SessionNew);
+        let asked = world.daemon.sent_of("get_recent_locations").pop().unwrap();
+        let paths = folders
+            .iter()
+            .map(|p| (p.clone(), Some("outpost-build-box".to_owned())))
+            .collect();
+        world.daemon.reply_to(&asked, recents_reply(paths));
+        world.settle();
+        world.gesture(|app| app.type_text("build-box:/home/me/projects/bu"));
+        let listing = world
+            .daemon
+            .sent_of("browse_directory")
+            .into_iter()
+            .find(|r| {
+                absolute(r["input_path"].as_str().unwrap()) == "/home/me/projects"
+                    && r["host"] == "outpost-build-box"
+            })
+            .expect("the folder was asked for");
+        assert_eq!(options(&world, LOCATIONS.1).len(), folders.len());
+        press(&mut world, Key::Up);
+        assert_eq!(
+            selected(&world, LOCATIONS.1),
+            Some("build-notes-08".to_owned())
+        );
+
+        keeps_highlight_in_view(
+            &mut world,
+            "the listing failing",
+            LOCATIONS.0,
+            LOCATIONS.1,
+            |daemon, _| {
+                daemon.reply_to(
+                    &listing,
+                    BrowseDirectoryResultMessage {
+                        success: false,
+                        error: Some("open /home/me/projects: permission denied".into()),
+                        ..BrowseDirectoryResultMessage::new()
+                    },
+                )
+            },
+        );
+        world.settle();
+        rest(&mut world);
+        let status = world
+            .screen()
+            .find(Target::key("new-session.status"))
+            .and_then(|n| n.name);
+        assert!(
+            status
+                .as_deref()
+                .is_some_and(|s| s.contains("permission denied")),
+            "{status:?}"
+        );
+        press(&mut world, Key::Enter);
+        let started = world.daemon.sent_of("spawn_session");
+        let started = started.last().expect("a start");
+        assert_eq!(started["cwd"], folders[7].as_str(), "at {scale}");
+        assert_eq!(started["host"], "outpost-build-box", "at {scale}");
+    }
+}
+
+#[test]
+fn a_browsed_result_that_leaves_while_highlighted_gives_the_highlight_to_the_first_left() {
+    const MISSING: &str = "/home/me/projects/checkout";
+    for scale in ["1", "1.5"] {
+        let mut world = with_outposts(scale, &[]);
+        world.daemon.on("browse_directory", |r| {
+            let dir = absolute(r["input_path"].as_str().unwrap());
+            if dir == MISSING && (r["host"].is_null() || r["host"] == "outpost-build-box") {
+                return message(BrowseDirectoryResultMessage {
+                    success: false,
+                    error: Some(format!("open {dir}: no such file or directory")),
+                    ..BrowseDirectoryResultMessage::new()
+                });
+            }
+            message(BrowseDirectoryResultMessage {
+                success: true,
+                directory: dir,
+                home_path: Some(HOME.into()),
+                ..BrowseDirectoryResultMessage::new()
+            })
+        });
+        world.daemon.on("inspect_path", |r| {
+            let path = r["path"].as_str().unwrap();
+            let elsewhere = r["host"] == "outpost-blue" || r["host"] == "outpost-green";
+            inspected(path, absolute(path) != MISSING || elsewhere)
+        });
+        world.daemon.emit(outposts_now(vec![
+            outpost("build-box"),
+            outpost("blue"),
+            outpost("green"),
+        ]));
+        world.settle();
+        press_action(&mut world, &Action::SessionNew);
+        world.gesture(|app| app.type_text("build-box:~/projects/checkout/"));
+        let found = options(&world, LOCATIONS.1);
+        assert_eq!(found.len(), 2, "{found:?}");
+        press(&mut world, Key::Up);
+        let left = selected(&world, LOCATIONS.1).expect("a row is highlighted");
+        let (gone, kept) = if left.ends_with("blue") {
+            ("blue", "green")
+        } else {
+            ("green", "blue")
+        };
+
+        world
+            .daemon
+            .emit(outposts_now(vec![outpost("build-box"), outpost(kept)]));
+        world.settle();
+        let found = options(&world, LOCATIONS.1);
+        assert_eq!(found.len(), 1, "{found:?} after {gone} left");
+        assert!(found[0].1, "{found:?}: the row left takes the highlight");
+        assert_eq!(world.screen().scrolled(Target::key(LOCATIONS.0)), Some(0.0));
+        press(&mut world, Key::Enter);
+        assert!(
+            field(&world, "new-session").starts_with(&format!("{kept}:")),
+            "at {scale}: {}",
+            field(&world, "new-session")
+        );
+    }
+}
+
+#[test]
+fn an_answer_that_moves_no_row_keeps_the_highlight_whole_and_the_launcher_at_rest() {
+    let mut world = with_outposts("1.5", &build_folders());
+    press_action(&mut world, &Action::SessionNew);
+    world.gesture(|app| app.type_text("bu"));
+    down_to(&mut world, "build-notes-08");
+    rest(&mut world);
+
+    world.daemon.emit(outposts_now(vec![outpost("tokyo")]));
+    world.settle();
+    rest(&mut world);
+    assert_eq!(
+        selected(&world, LOCATIONS.1),
+        Some("build-notes-08".to_owned())
+    );
+    let row = highlighted_key(&world, LOCATIONS.1);
+    assert!(whole_in(&world, &row, LOCATIONS.0));
 }

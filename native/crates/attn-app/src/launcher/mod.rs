@@ -47,8 +47,14 @@ pub(crate) struct Launcher {
     pub(crate) query: TextEdit,
     /// Whether this opening's recents have arrived; until then no row is highlighted.
     fresh: bool,
-    /// The row the user moved to. While searching, none means the top row.
-    highlight: Option<usize>,
+    /// The highlighted row, by what it is, so rows arriving, leaving or reordering keep it.
+    /// While searching, a list with rows always has one.
+    highlight: Option<RowId>,
+    /// Where the list and its highlighted row were last drawn.
+    pub(crate) drawn: Drawn,
+    /// Where the highlighted row sat, and the room its list had, when the user last could see
+    /// it whole.
+    kept: Option<(usize, [f32; 4])>,
     /// Folders the daemon listed, by machine and normalized path.
     listings: BTreeMap<String, Listing>,
     /// Paths an aimed search asked its machine about, by machine and path.
@@ -86,7 +92,7 @@ pub(crate) struct Where {
     pub(crate) info: Option<RepoInfo>,
     /// The name typed for a new worktree, which also filters the existing ones.
     pub(crate) branch: TextEdit,
-    pub(crate) highlight: Option<usize>,
+    highlight: Option<WhereRow>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -174,6 +180,46 @@ pub(crate) struct Row {
     pub(crate) host: Option<String>,
     pub(crate) repo_root: Option<String>,
     pub(crate) last_seen: Option<String>,
+}
+
+/// Where a list and its highlighted row were last drawn, in window points.
+pub(crate) struct Drawn {
+    pub(crate) list: rune::Live<[f32; 4]>,
+    pub(crate) row: rune::Live<[f32; 4]>,
+}
+
+impl Drawn {
+    fn new() -> Self {
+        Drawn {
+            list: rune::Live::new([0.0; 4]),
+            row: rune::Live::new([0.0; 4]),
+        }
+    }
+
+    fn showed_row_whole(&self) -> bool {
+        let ([_, top, _, height], [_, list_top, _, list_height]) =
+            (self.row.get(), self.list.get());
+        height > 0.0 && top >= list_top - 0.5 && top + height <= list_top + list_height + 0.5
+    }
+}
+
+/// What a location row is, wherever it sits: the same row keeps it as rows arrive, leave or
+/// reorder.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct RowId {
+    kind: Kind,
+    host: Option<String>,
+    path: String,
+}
+
+impl Row {
+    fn id(&self) -> RowId {
+        RowId {
+            kind: self.kind,
+            host: self.host.clone(),
+            path: self.path.clone(),
+        }
+    }
 }
 
 /// A browsed path's folder and the start of the name typed in it.
@@ -280,6 +326,8 @@ impl Launcher {
             query: TextEdit::default(),
             fresh: false,
             highlight: None,
+            drawn: Drawn::new(),
+            kept: None,
             listings: BTreeMap::new(),
             inspections: BTreeMap::new(),
             arrivals: 0,
@@ -299,6 +347,15 @@ impl Launcher {
 
     pub(crate) fn field_key(&self) -> String {
         format!("{}.path.field", self.which.key())
+    }
+
+    /// The scrolling list under the field: Where while choosing one, else Locations.
+    pub(crate) fn list_key(&self) -> String {
+        let w = self.which.key();
+        match self.place {
+            Some(_) => format!("{w}.where"),
+            None => format!("{w}.locations"),
+        }
     }
 
     pub(crate) fn address(&self, state: &State) -> Address {
@@ -404,7 +461,7 @@ impl Launcher {
             return place.host.clone();
         }
         let rows = self.rows(state);
-        if let Some(row) = self.selected(state, &rows).and_then(|i| rows.get(i)) {
+        if let Some(row) = self.selected(&rows).and_then(|i| rows.get(i)) {
             return row.host.clone();
         }
         match self.address(state) {
@@ -624,23 +681,39 @@ impl Launcher {
     /// The key of the highlighted row, the one Enter picks, which the field names as its
     /// active row for assistive technology.
     pub(crate) fn active_row_key(&self, state: &State) -> Option<String> {
-        let w = self.which.key();
+        self.highlighted_at(state).map(|i| self.row_key(i))
+    }
+
+    /// Where the highlighted row of the list that shows sits now.
+    fn highlighted_at(&self, state: &State) -> Option<usize> {
         match &self.place {
-            Some(place) => place.highlight.map(|i| format!("{w}.where.row.{i}")),
-            None => self
-                .selected(state, &self.rows(state))
-                .map(|i| format!("{w}.row.{i}")),
+            Some(place) => place.highlighted_at(),
+            None => self.selected(&self.rows(state)),
         }
     }
 
-    /// The highlighted row: while browsing, only one the user moved to; otherwise the one
-    /// the user moved to or else the top one, once this opening's recents arrived.
-    pub(crate) fn selected(&self, state: &State, rows: &[Row]) -> Option<usize> {
-        let moved = self.highlight.filter(|i| *i < rows.len());
+    /// The key of row `i` of the list that shows.
+    fn row_key(&self, i: usize) -> String {
+        let w = self.which.key();
+        match self.place {
+            Some(_) => format!("{w}.where.row.{i}"),
+            None => format!("{w}.row.{i}"),
+        }
+    }
+
+    /// Where the highlighted row sits among `rows`.
+    pub(crate) fn selected(&self, rows: &[Row]) -> Option<usize> {
+        let highlight = self.highlight.as_ref()?;
+        rows.iter().position(|r| r.id() == *highlight)
+    }
+
+    /// The row a fresh look at the locations highlights: while searching, the top one once
+    /// this opening's recents arrived; while browsing, none until the user moves to one.
+    fn first_row(&self, state: &State) -> Option<usize> {
         match self.address(state) {
-            Address::Browse { .. } => moved,
-            _ if !self.fresh || rows.is_empty() => None,
-            _ => Some(moved.unwrap_or(0)),
+            Address::Browse { .. } => None,
+            _ if !self.fresh || self.rows(state).is_empty() => None,
+            _ => Some(0),
         }
     }
 
@@ -712,15 +785,25 @@ impl Where {
         rows
     }
 
+    /// The highlighted destination, while it is among the rows.
+    pub(crate) fn highlighted(&self) -> Option<WhereRow> {
+        let highlight = self.highlight.as_ref()?;
+        self.rows().into_iter().find(|r| r == highlight)
+    }
+
+    fn highlighted_at(&self) -> Option<usize> {
+        let highlight = self.highlight.as_ref()?;
+        self.rows().iter().position(|r| r == highlight)
+    }
+
     /// The row a fresh look at the list lands on: the worktree named exactly as typed, else a
-    /// new one; with nothing typed, where the repository's last start went.
-    fn aim(&mut self, memory: Memory) {
-        if self.info.is_none() {
-            return;
-        }
+    /// new one; with nothing typed, where the repository's last start went. None until the
+    /// repository's worktrees are known.
+    fn aimed(&self, memory: Memory) -> Option<usize> {
+        self.info.as_ref()?;
         let rows = self.rows();
         let typed = self.branch.text.trim();
-        self.highlight = Some(if !typed.is_empty() {
+        Some(if !typed.is_empty() {
             rows.iter()
                 .position(|r| matches!(r, WhereRow::Existing { branch, .. } if branch == typed))
                 .unwrap_or(0)
@@ -730,7 +813,7 @@ impl Where {
             rows.iter()
                 .position(|r| matches!(r, WhereRow::Main { .. }))
                 .unwrap_or(0)
-        });
+        })
     }
 }
 
@@ -817,7 +900,9 @@ pub(crate) fn opened(state: &mut State, which: Which, tx: &mut Tx) {
                 return;
             };
             launcher.fresh = true;
-            fetch_wanted(state, which, tx);
+            for showing in [Which::Dialog, Which::Inline] {
+                fetch_wanted(state, showing, tx);
+            }
         },
         tx,
     );
@@ -1039,6 +1124,52 @@ fn request_inspection(
     );
 }
 
+/// Once a frame, before it draws, for each open launcher: a highlighted row that left gives the
+/// highlight to the first row left; a location list that shows rows with none highlighted
+/// highlights the first, as a fresh look; and a highlighted row the user could see whole stays
+/// whole when the rows or the list's room change under it, or when `answered` says a reply
+/// arrived this frame, which may change them as this frame draws. A scroll by the user changes
+/// neither, so the list stays where they put it. True when a highlight moved.
+pub(crate) fn follow_highlight(state: &mut State, answered: bool, tx: &mut Tx) -> bool {
+    let mut moved = false;
+    for which in [Which::Dialog, Which::Inline] {
+        moved |= follow_highlight_of(state, which, answered, tx);
+    }
+    moved
+}
+
+fn follow_highlight_of(state: &mut State, which: Which, answered: bool, tx: &mut Tx) -> bool {
+    let Some(launcher) = state.window.launching.launcher(which) else {
+        return false;
+    };
+    let at = launcher.highlighted_at(state);
+    if launcher.place.is_none() {
+        let rows = launcher.rows(state);
+        if launcher.highlight.is_some() && at.is_none() {
+            select(state, which, (!rows.is_empty()).then_some(0), tx);
+            return true;
+        }
+        if launcher.highlight.is_none() && launcher.first_row(state).is_some() {
+            select_first(state, which, tx);
+            return true;
+        }
+    }
+    let here = at.map(|at| (at, launcher.drawn.list.get()));
+    let changed_under =
+        here.is_some() && launcher.kept.is_some() && (launcher.kept != here || answered);
+    let whole = launcher.drawn.showed_row_whole();
+    if changed_under {
+        reveal(state, which, tx);
+    }
+    let launcher = state
+        .window
+        .launching
+        .launcher_mut(which)
+        .expect("the launcher is open");
+    launcher.kept = here.filter(|_| changed_under || whole);
+    false
+}
+
 /// Asks each machine for what the launcher wants from it that this opening has not asked
 /// yet, or that an outpost left unanswered before it became unreachable, so an outpost that
 /// becomes reachable while the launcher is open is asked too: each reachable outpost's
@@ -1204,9 +1335,8 @@ pub(crate) fn edited(state: &mut State, which: Which, tx: &mut Tx) {
         return;
     };
     launcher.problem = None;
-    if let Some(place) = &mut launcher.place {
-        place.aim(memory);
-    }
+    let aimed = launcher.place.as_ref().and_then(|p| p.aimed(memory));
+    select(state, which, aimed, tx);
 }
 
 /// The path changed: earlier answers go stale, the highlight goes back to the top, and what
@@ -1216,8 +1346,8 @@ fn query_changed(state: &mut State, which: Which, tx: &mut Tx) {
         return;
     };
     launcher.generation += 1;
-    launcher.highlight = None;
     launcher.problem = None;
+    select_first(state, which, tx);
     fetch_wanted(state, which, tx);
 }
 
@@ -1279,10 +1409,7 @@ pub(crate) fn on_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut Tx
         .place
         .as_ref()
         .is_some_and(|p| p.branch.text.is_empty());
-    let selected = match &launcher.place {
-        Some(place) => place.highlight,
-        None => launcher.selected(state, &rows),
-    };
+    let selected = launcher.highlighted_at(state);
     let browsing = matches!(launcher.address(state), Address::Browse { .. });
     match ev.key {
         Key::Down | Key::Up if ev.mods == rune::Mods::default() => {
@@ -1294,11 +1421,7 @@ pub(crate) fn on_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut Tx
                     (false, None | Some(0)) => len - 1,
                     (false, Some(i)) => i - 1,
                 };
-                let launcher = state.window.launching.launcher_mut(which).expect("open");
-                match &mut launcher.place {
-                    Some(place) => place.highlight = Some(next),
-                    None => launcher.highlight = Some(next),
-                }
+                select(state, which, Some(next), tx);
             }
             true
         }
@@ -1366,10 +1489,10 @@ fn step_back(state: &mut State, which: Which, tx: &mut Tx) {
     launcher.generation += 1;
     if let Some(place) = launcher.place.take() {
         launcher.query.focused = place.branch.focused;
-        launcher.highlight = None;
+        select_first(state, which, tx);
     } else if !launcher.query.text.is_empty() {
         launcher.query = replaced(&launcher.query, String::new());
-        launcher.highlight = None;
+        select_first(state, which, tx);
     } else if which == Which::Dialog {
         close(state, tx);
     }
@@ -1410,10 +1533,7 @@ fn tab(state: &mut State, which: Which, tx: &mut Tx) {
         return;
     }
     let rows = launcher.rows(state);
-    let row = launcher
-        .selected(state, &rows)
-        .and_then(|i| rows.get(i))
-        .cloned();
+    let row = launcher.selected(&rows).and_then(|i| rows.get(i)).cloned();
     let agent = launcher.agent(state) != TERMINAL;
     if agent && let Some(root) = row.as_ref().and_then(|r| r.repo_root.clone()) {
         let host = row.as_ref().and_then(|r| r.host.clone());
@@ -1535,7 +1655,7 @@ fn open_where(state: &mut State, which: Which, repo: String, host: Option<String
             request_id: Some(id),
             ..GetRepoInfoMessage::new()
         },
-        move |state, reply, _| {
+        move |state, reply, tx| {
             let memory = memory(state, &repo, host.as_deref());
             let Some(launcher) = current(state, which, opening, generation) else {
                 return;
@@ -1555,7 +1675,8 @@ fn open_where(state: &mut State, which: Which, repo: String, host: Option<String
                     });
                     if let Some(place) = &mut launcher.place {
                         place.info = Some(info);
-                        place.aim(memory);
+                        let aimed = place.aimed(memory);
+                        select(state, which, aimed, tx);
                     }
                 }
                 other => {
@@ -1598,6 +1719,51 @@ impl Start {
             label: None,
             host: self.host.clone(),
         }
+    }
+}
+
+/// Highlights the first row of the locations, as a fresh look at them does.
+fn select_first(state: &mut State, which: Which, tx: &mut Tx) {
+    let first = state
+        .window
+        .launching
+        .launcher(which)
+        .and_then(|launcher| launcher.first_row(state));
+    select(state, which, first, tx);
+}
+
+/// Highlights the row now at `at` in the list that shows, or none. The one way the highlight
+/// moves: it keeps the row itself, not its place, and the list scrolls to it.
+fn select(state: &mut State, which: Which, at: Option<usize>, tx: &mut Tx) {
+    let Some(launcher) = state.window.launching.launcher(which) else {
+        return;
+    };
+    let location = match launcher.place {
+        Some(_) => None,
+        None => at.and_then(|i| launcher.rows(state).get(i).map(Row::id)),
+    };
+    let launcher = state
+        .window
+        .launching
+        .launcher_mut(which)
+        .expect("the launcher is open");
+    match &mut launcher.place {
+        Some(place) => place.highlight = at.and_then(|i| place.rows().get(i).cloned()),
+        None => launcher.highlight = location,
+    }
+    reveal(state, which, tx);
+}
+
+/// Scrolls the list to the highlighted row, so it shows whole, or to its top with its heading
+/// when the top row or none is highlighted, as the launcher opened.
+fn reveal(state: &mut State, which: Which, tx: &mut Tx) {
+    let Some(launcher) = state.window.launching.launcher(which) else {
+        return;
+    };
+    let list = launcher.list_key();
+    match launcher.highlighted_at(state) {
+        None | Some(0) => tx.scroll_to_y(list, 0.0),
+        Some(i) => tx.scroll_into_view_in(list, launcher.row_key(i)),
     }
 }
 
@@ -1930,7 +2096,7 @@ fn delete_worktree(state: &mut State, which: Which, tx: &mut Tx) {
             request_id: Some(id),
             ..DeleteWorktreeMessage::new()
         },
-        move |state, reply, _| {
+        move |state, reply, tx| {
             let Some(launcher) = this(state, which, opening) else {
                 return;
             };
@@ -1938,15 +2104,15 @@ fn delete_worktree(state: &mut State, which: Which, tx: &mut Tx) {
             let result: Option<DeleteWorktreeResultMessage> = reply.parse();
             match result {
                 Some(r) if r.success => {
+                    launcher.deletion = None;
                     if let Some(place) = &mut launcher.place {
-                        let remaining = place.rows().len().saturating_sub(1);
+                        let at = place.highlighted_at();
                         if let Some(info) = &mut place.info {
                             info.worktrees.retain(|w| w.path != path);
                         }
-                        place.highlight =
-                            place.highlight.map(|h| h.min(remaining.saturating_sub(1)));
+                        let kept = at.map(|i| i.min(place.rows().len().saturating_sub(1)));
+                        select(state, which, kept, tx);
                     }
-                    launcher.deletion = None;
                 }
                 other => {
                     let forceable = other.as_ref().and_then(|r| r.forceable) == Some(true);
@@ -1976,7 +2142,7 @@ pub(crate) fn pick(state: &mut State, which: Which, index: usize, row: Row, tx: 
     if launcher.busy {
         return;
     }
-    launcher.highlight = Some(index);
+    select(state, which, Some(index), tx);
     launch(state, which, Some(row), false, None, tx);
 }
 
@@ -1994,8 +2160,6 @@ pub(crate) fn pick_destination(
     if launcher.busy || launcher.deletion.is_some() {
         return;
     }
-    if let Some(place) = &mut launcher.place {
-        place.highlight = Some(index);
-    }
+    select(state, which, Some(index), tx);
     launch(state, which, None, false, Some(row), tx);
 }

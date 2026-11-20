@@ -79,8 +79,8 @@ pub(crate) enum Catalog {
 /// One opening of a new-session launcher: the classic picker, or Launcher 2.0 while the
 /// `new_session_launcher_enabled` setting is on.
 pub(crate) enum Opened {
-    Classic(Picker),
-    Launcher(crate::launcher::Launcher),
+    Classic(Box<Picker>),
+    Launcher(Box<crate::launcher::Launcher>),
 }
 
 impl Opened {
@@ -93,13 +93,13 @@ impl Opened {
         state: &State,
     ) -> Opened {
         if crate::setting::on(&state.facts.settings, LAUNCHER_2) {
-            Opened::Launcher(crate::launcher::Launcher::open(
+            Opened::Launcher(Box::new(crate::launcher::Launcher::open(
                 which, desktop, anchor, direction, agent, state,
-            ))
+            )))
         } else {
-            Opened::Classic(Picker::open(
+            Opened::Classic(Box::new(Picker::open(
                 which, desktop, anchor, direction, agent, state,
-            ))
+            )))
         }
     }
 

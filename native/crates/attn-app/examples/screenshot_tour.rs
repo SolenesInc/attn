@@ -1593,6 +1593,37 @@ fn launcher_dialog(dark: bool) {
     snap(&mut world, "launcher-dialog", dark);
 }
 
+/// Six recents and Up from the first onto the last, which the list scrolls to when it is
+/// shorter than its rows.
+fn launcher_dialog_last(dark: bool) {
+    let daemon = launcher_daemon(dark, false);
+    daemon.on("get_recent_locations", |_: &Request| {
+        message(RecentLocationsResultMessage {
+            success: true,
+            home_path: Some("/home/me".into()),
+            recent_locations: ["shop", "api", "site", "docs", "infra", "mobile"]
+                .iter()
+                .map(|name| RecentLocation {
+                    path: format!("/home/me/projects/{name}"),
+                    last_seen: "2026-11-13T08:00:00Z".into(),
+                    use_count: 1,
+                    ..RecentLocation::default()
+                })
+                .collect(),
+            ..RecentLocationsResultMessage::new()
+        })
+    });
+    let mut world = start(daemon);
+    press(&mut world, Action::SessionNew);
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Up,
+            mods: Mods::default(),
+        })
+    });
+    snap(&mut world, "launcher-dialog-last", dark);
+}
+
 /// The shop's Where list with a branch typed, so the name it shows is not the random one: one
 /// that its `feature` worktree still matches.
 fn launcher_where(dark: bool) {
@@ -4231,6 +4262,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("terminal_overlays", || terminal_overlays(dark));
         scene("tile_window", || tile_window(dark));
         scene("launcher_dialog", || launcher_dialog(dark));
+        scene("launcher_dialog_last", || launcher_dialog_last(dark));
         scene("launcher_where", || launcher_where(dark));
         scene("launcher_empty_desktop", || launcher_empty_desktop(dark));
         scene("launcher_browse", || launcher_browse(dark));

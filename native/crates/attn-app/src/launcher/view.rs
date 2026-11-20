@@ -512,9 +512,9 @@ fn folders_in(directory: &str, machine: Option<&str>, look: &Look) -> El {
 }
 
 /// The scrolling list under the field.
-fn results(key: String, label: &str, children: Vec<El>, t: &Tokens) -> El {
+fn results(launcher: &Launcher, label: &str, children: Vec<El>, t: &Tokens) -> El {
     col()
-        .key(key)
+        .key(launcher.list_key())
         .role("listbox")
         .label(label)
         .w_full()
@@ -528,6 +528,7 @@ fn results(key: String, label: &str, children: Vec<El>, t: &Tokens) -> El {
         .pt(6.0)
         .pb(8.0)
         .children(children)
+        .drawn_rect_into(&launcher.drawn.list)
         .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
@@ -636,7 +637,7 @@ fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, loo
     let w = launcher.which.key();
     let outposts = outposts(state);
     let rows = launcher.rows(state);
-    let selected = launcher.selected(state, &rows);
+    let selected = launcher.selected(&rows);
     let address = launcher.address(state);
     let browsed = match &address {
         Address::Browse { path, machine, .. } => {
@@ -699,7 +700,7 @@ fn locations(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens, loo
                 .py(16.0)
         }));
     }
-    results(format!("{w}.locations"), "Locations", children, t)
+    results(launcher, "Locations", children, t)
 }
 
 /// The dot before a machine's name: green while connected, amber while stalled, red once lost
@@ -826,6 +827,9 @@ fn location_row(
     if let Some(detail) = detail {
         row_el = row_el.description(detail);
     }
+    if highlighted {
+        row_el = row_el.drawn_rect_into(&launcher.drawn.row);
+    }
     row_el
 }
 
@@ -859,6 +863,7 @@ fn where_list(
     let typed = !place.branch.text.trim().is_empty();
     let memory = memory(state, &place.repo, host);
     let shown = |path: &str| launcher.display(state, path, host);
+    let highlighted = place.highlighted();
     let mut children = Vec::new();
     for (i, r) in rows.iter().enumerate() {
         let after_new = i > 0 && matches!(rows[i - 1], WhereRow::New { .. });
@@ -871,7 +876,7 @@ fn where_list(
             launcher,
             i,
             r,
-            place.highlight == Some(i),
+            highlighted.as_ref() == Some(r),
             memory,
             &shown(&place.repo),
             &shown,
@@ -880,7 +885,7 @@ fn where_list(
             look,
         ));
     }
-    results(format!("{w}.where"), "Where", children, t)
+    results(launcher, "Where", children, t)
 }
 
 /// "NEW WORKTREE · name · type to rename", the name in green and as typed.
@@ -982,7 +987,7 @@ fn where_row(
         (WhereRow::Existing { .. }, _) => &icon::BRANCH,
     };
     let picked = r.clone();
-    option(
+    let row = option(
         format!("{}.where.row.{i}", which.key()),
         &name,
         highlighted,
@@ -995,7 +1000,12 @@ fn where_row(
     })
     .child(tile(glyph, highlighted, look))
     .child(info(name, Some(detail), highlighted, t, look))
-    .children(trailing)
+    .children(trailing);
+    if highlighted {
+        row.drawn_rect_into(&launcher.drawn.row)
+    } else {
+        row
+    }
 }
 
 /// One footer hint: its keys as keycaps among its words.
@@ -1049,7 +1059,7 @@ fn hints(state: &State, launcher: &Launcher, terminal: bool, look: &Look) -> El 
         ]);
         if place.is_none() {
             let rows = launcher.rows(state);
-            let selected = launcher.selected(state, &rows).and_then(|i| rows.get(i));
+            let selected = launcher.selected(&rows).and_then(|i| rows.get(i));
             let typed_repo = selected.is_none()
                 && match launcher.address(state) {
                     Address::Browse { path, machine, .. } => {
@@ -1071,10 +1081,7 @@ fn hints(state: &State, launcher: &Launcher, terminal: bool, look: &Look) -> El 
             hints.push(vec![Key("name:".into()), Words("machine")]);
         }
         if let Some(place) = place
-            && matches!(
-                place.highlight.and_then(|i| place.rows().get(i).cloned()),
-                Some(WhereRow::Existing { .. })
-            )
+            && matches!(place.highlighted(), Some(WhereRow::Existing { .. }))
         {
             hints.push(vec![Key(accel("⌫")), Words("delete")]);
         }
@@ -1190,7 +1197,7 @@ fn listed_age(at_ms: i64, now_ms: i64) -> String {
 /// folder or the first one; while searching, the highlighted machine.
 fn ghost(state: &State, launcher: &Launcher) -> Option<String> {
     let rows = launcher.rows(state);
-    let selected = launcher.selected(state, &rows).and_then(|i| rows.get(i));
+    let selected = launcher.selected(&rows).and_then(|i| rows.get(i));
     let row = match launcher.address(state) {
         Address::Browse { .. } => match selected {
             Some(row) => Some(row).filter(|r| r.kind == Kind::Folder),
