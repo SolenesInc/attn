@@ -813,6 +813,17 @@ fn a_desktop_heading_shows_its_keys_and_its_pencil_renames_it_showing_a_refusal_
         "the refusal wraps onto more lines inside the popover: {refused:?} in {popover:?}"
     );
 
+    let mut stops = Vec::new();
+    for _ in 0..3 {
+        world.gesture(|app| app.press("tab"));
+        stops.push(world.screen().focused().and_then(|n| n.key));
+    }
+    assert_eq!(
+        stops.last().cloned().flatten().as_deref(),
+        Some("desktop.rename.field"),
+        "Tab walks the popover's buttons and wraps to its field, never stopping on the popover: {stops:?}"
+    );
+
     refuse.store(false, Ordering::SeqCst);
     world.gesture(|app| app.press("enter"));
     world.settle();
