@@ -10,15 +10,15 @@ use attn_protocol::{
     RemovePluginMessage, SetPluginPriorityMessage,
 };
 use attn_ui::Tokens;
-use attn_ui::blocks::{Actions, Block, Field, Notice, Prose, Status};
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, FileDialogOptions, TextEdit, Tx, col, row, text};
+use attn_ui::blocks::{Actions, Block, Facts, Field, Inline, List, Notice, Prose, Status};
+use rune::{El, FileDialogOptions, TextEdit, Tx};
 use rune_kit::TextInput;
 
-use attn_ui::system::{Button, FieldState, Look, Tone, line_box, number_box, tag};
+use attn_ui::system::{
+    Button, FieldState, ListRow, Look, Reveal, Said, Size, Tone, Type, line_box, number_box, tag,
+    words,
+};
 
-use super::pages::{CAPTION, warning};
 use crate::State;
 use crate::requests::Answer;
 
@@ -263,28 +263,8 @@ fn health_tone(health: &str) -> Tone {
     }
 }
 
-fn meta(key: String, label: &str, value: String, t: &Tokens) -> El {
-    row()
-        .key(key)
-        .label(format!("{label} {value}"))
-        .gap(space::S3)
-        .child(
-            text(label.to_owned())
-                .font(CAPTION)
-                .color(t.text_tertiary)
-                .w(110.0),
-        )
-        .child(
-            text(value)
-                .font(type_::MONO_CAPTION)
-                .color(t.text_primary)
-                .wrap()
-                .grow(1.0)
-                .min_w(0.0),
-        )
-}
-
-fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> El {
+/// A plugin's row, and what is under it: what went wrong, where it lives and its priority.
+fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> (El, Vec<Block>) {
     let plugins = &state.window.settings.plugins;
     let name = plugin.name.clone();
     let busy = plugins.busy.is_some();
@@ -316,118 +296,91 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> El {
             let name = name.clone();
             move |state: &mut State, tx: &mut Tx| commit_priority(state, &name, tx)
         });
-    let priority = El::from(number_box(priority, FieldState::disabled_if(busy), t));
+    let priority = number_box(priority, FieldState::disabled_if(busy), t);
     let saved = plugins.saved.contains_key(&name).then(|| {
-        text("Saved")
+        words("Saved", Type::Small, t.success)
             .key(id("saved"))
             .role("status")
             .label("Saved")
-            .font(CAPTION)
-            .color(t.success)
     });
     let removing = name.clone();
-    let mut details: Vec<El> = Vec::new();
+    let mut under: Vec<Block> = Vec::new();
     if let Some(description) = plugin.description.as_ref().filter(|d| !d.is_empty()) {
-        details.push(
-            text(description.clone())
-                .font(CAPTION)
-                .color(t.text_tertiary)
-                .wrap(),
-        );
+        under.push(Prose::hint(id("description"), description.clone()).build(t));
     }
     if let Some(message) = plugin.health_message.as_ref().filter(|m| !m.is_empty()) {
-        details.push(warning(
-            id("healthcheck"),
-            format!("Healthcheck: {message}"),
-            t,
-        ));
+        under.push(Notice::warn(id("healthcheck"), format!("Healthcheck: {message}")).build(t));
     }
     if let Some(exit) = plugin.last_exit.as_ref().filter(|e| !e.is_empty()) {
-        details.push(warning(id("last-exit"), format!("Last exit: {exit}"), t));
+        under.push(Notice::warn(id("last-exit"), format!("Last exit: {exit}")).build(t));
     }
-    details.push(meta(id("path"), "Path", plugin.dir.clone(), t));
+    let mut facts = Facts::new(id("details")).code(id("path"), "Path", plugin.dir.clone());
     if let Some(target) = plugin.link_target.as_ref().filter(|l| !l.is_empty()) {
-        details.push(meta(id("linked-to"), "Linked to", target.clone(), t));
+        facts = facts.code(id("linked-to"), "Linked to", target.clone());
     }
     if let Some(attempt) = plugin.restart_attempt {
-        details.push(meta(
+        facts = facts.code(
             id("restart-attempt"),
             "Restart attempt",
             attempt.to_string(),
-            t,
-        ));
-    }
-    if let Some(next) = plugin.next_restart_at.as_ref().filter(|n| !n.is_empty()) {
-        details.push(meta(id("next-restart"), "Next restart", next.clone(), t));
-    }
-    details.push(
-        row()
-            .gap(space::S3)
-            .items_center()
-            .child(
-                text("Priority")
-                    .font(CAPTION)
-                    .color(t.text_tertiary)
-                    .w(110.0),
-            )
-            .child(priority)
-            .children(saved),
-    );
-    if plugins.busy.as_deref() == Some(name.as_str()) {
-        details.push(
-            text(format!("Updating {name}..."))
-                .key(id("busy"))
-                .font(CAPTION)
-                .color(t.text_tertiary),
         );
     }
-    let link = plugin
-        .link_target
-        .as_ref()
-        .filter(|l| !l.is_empty())
-        .map(|_| El::from(tag(id("linked"), "Linked", Tone::Neutral, t)).role("status"));
-    col()
-        .key(format!("settings.plugin.{name}"))
-        .role("group")
-        .label(name.clone())
-        .w_full()
-        .gap(space::S2)
-        .padding(space::S3)
-        .radius(6.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
-        .child(
-            row()
-                .w_full()
-                .gap(space::S2)
-                .items_center()
-                .child(text(name.clone()).font(type_::LABEL).color(t.text_primary))
-                .child(
-                    El::from(tag(
-                        id("version"),
-                        format!("v{}", plugin.version),
-                        Tone::Neutral,
-                        t,
-                    ))
-                    .role("status"),
-                )
-                .children(link)
-                .child(El::from(tag(id("runtime"), &phase, runtime_tone(&phase), t)).role("status"))
-                .child(El::from(tag(id("health"), &health, health_tone(&health), t)).role("status"))
-                .child(row().grow(1.0))
-                .child(
-                    Button::new("Remove")
-                        .look(Look::Danger)
-                        .disabled(busy || !plugin.can_uninstall)
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            remove(state, &removing, tx)
-                        })
-                        .build(t)
-                        .key(id("remove"))
-                        .into(),
-                ),
+    if let Some(next) = plugin.next_restart_at.as_ref().filter(|n| !n.is_empty()) {
+        facts = facts.code(id("next-restart"), "Next restart", next.clone());
+    }
+    under.push(facts.build(t));
+    under.push(
+        Field::new(priority_key(&name), "Priority")
+            .control(priority)
+            .mark(saved)
+            .build(t),
+    );
+    if plugins.busy.as_deref() == Some(name.as_str()) {
+        under.push(Status::new(id("busy"), format!("Updating {name}..."), true).build(t));
+    }
+    let tagged =
+        |key: String, said: Said, tone: Tone| El::from(tag(key, said, tone, t)).role("status");
+    let tags = Inline::tight()
+        .child(tagged(
+            id("version"),
+            format!("v{}", plugin.version).into(),
+            Tone::Neutral,
+        ))
+        .children(
+            plugin
+                .link_target
+                .as_ref()
+                .filter(|l| !l.is_empty())
+                .map(|_| tagged(id("linked"), "Linked".into(), Tone::Neutral)),
         )
-        .children(details)
+        .child(tagged(
+            id("runtime"),
+            phase.clone().into(),
+            runtime_tone(&phase),
+        ))
+        .child(tagged(
+            id("health"),
+            health.clone().into(),
+            health_tone(&health),
+        ));
+    let row = ListRow::new(format!("settings.plugin.{name}"), name.clone())
+        .still()
+        .wrap()
+        .title(name.clone())
+        .subtitle_el(tags)
+        .controls(
+            [Button::new("Remove")
+                .look(Look::Danger)
+                .size(Size::Compact)
+                .disabled(busy || !plugin.can_uninstall)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| remove(state, &removing, tx))
+                .build(t)
+                .key(id("remove"))
+                .into()],
+            Reveal::Always,
+        )
+        .build(t);
+    (row, under)
 }
 
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
@@ -481,14 +434,17 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     } else if listed.plugins.is_empty() {
         page.push(Prose::empty("settings.plugins.empty", "No plugins installed.").build(t));
     } else {
-        page.push(Block::custom(
-            "settings.plugins.list.block",
-            col()
-                .key("settings.plugins.list")
-                .w_full()
-                .gap(space::S2)
-                .children(listed.plugins.iter().map(|plugin| card(state, plugin, t))),
-        ));
+        page.push(
+            listed
+                .plugins
+                .iter()
+                .map(|plugin| card(state, plugin, t))
+                .fold(
+                    List::new("settings.plugins.list", "Plugins"),
+                    |list, (row, under)| list.row_with(row, under),
+                )
+                .build(t),
+        );
     }
     page
 }
@@ -517,7 +473,7 @@ pub(super) fn pills(state: &State, t: &Tokens) -> Vec<El> {
         .role("status"),
         n => El::from(tag(
             "settings.pill.plugins.health",
-            format!("{n} issue{}", if n == 1 { "" } else { "s" }),
+            &format!("{n} issue{}", if n == 1 { "" } else { "s" }),
             Tone::Bad,
             t,
         ))
@@ -527,7 +483,7 @@ pub(super) fn pills(state: &State, t: &Tokens) -> Vec<El> {
         health,
         El::from(tag(
             "settings.pill.plugins.running",
-            format!("{running}/{} running", listed.plugins.len()),
+            &format!("{running}/{} running", listed.plugins.len()),
             Tone::Neutral,
             t,
         ))

@@ -114,9 +114,9 @@ fn unmute_author(state: &mut State, author: &str) {
 
 fn muted_list(
     kind: &str,
-    title: &str,
+    title: &'static str,
     names: Vec<String>,
-    empty: &str,
+    empty: &'static str,
     t: &Tokens,
     unmute: fn(&mut State, &str),
 ) -> Block {
