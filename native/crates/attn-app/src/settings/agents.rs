@@ -39,6 +39,14 @@ const CAPABILITY_ORDER: &[(&str, &str)] = &[
     ("headless_task", "Headless task"),
 ];
 
+const CAPABILITY_LABELS: &[(&str, &str)] = &[
+    ("executable_setting", "Custom executable"),
+    ("model_pin", "Model pin"),
+    ("effort_pin", "Effort pin"),
+    ("context_window_cap", "Context cap"),
+    ("automation", "Automations"),
+];
+
 const RESUME_CHOICES: &[(&str, &str)] = &[
     ("any", "Any mail"),
     ("watches", "PRs and reminders"),
@@ -93,23 +101,27 @@ fn override_agents(settings: &BTreeMap<String, String>) -> Vec<String> {
     let availability = harnesses::availability(settings);
     let mut list: Vec<String> = ordered(settings)
         .into_iter()
-        .filter(|a| harnesses::builtin(a) && harnesses::selectable(&availability, a))
+        .filter(|a| pins_route(settings, a) && harnesses::selectable(&availability, a))
         .collect();
-    for agent in ["claude", "codex"] {
-        let stored = [model_key(agent), effort_key(agent), cap_key(agent)]
+    for agent in ordered(settings) {
+        let stored = [model_key(&agent), effort_key(&agent), cap_key(&agent)]
             .iter()
             .any(|k| settings.get(k).is_some_and(|v| !v.trim().is_empty()));
-        if stored && !list.iter().any(|a| a == agent) {
-            list.push(agent.to_owned());
+        if stored && !list.contains(&agent) {
+            list.push(agent);
         }
     }
     list
 }
 
+fn pins_route(settings: &BTreeMap<String, String>, agent: &str) -> bool {
+    harnesses::has(settings, agent, "model_pin") || harnesses::has(settings, agent, "effort_pin")
+}
+
 fn executable_agents(settings: &BTreeMap<String, String>) -> Vec<String> {
     ordered(settings)
         .into_iter()
-        .filter(|a| harnesses::builtin(a))
+        .filter(|a| harnesses::builtin(settings, a))
         .collect()
 }
 
@@ -480,6 +492,7 @@ fn route_badge(state: &State, agent: &str) -> String {
 fn capability_label(capability: &str) -> String {
     CAPABILITY_ORDER
         .iter()
+        .chain(CAPABILITY_LABELS)
         .find(|(key, _)| *key == capability)
         .map_or_else(
             || capability.replace(['_', '-'], " "),
@@ -533,7 +546,7 @@ fn advanced(state: &State, agent: &str, overrides: bool, open: bool, t: &Tokens)
             }
         },
     );
-    if harnesses::builtin(agent) {
+    if harnesses::builtin(&state.facts.settings, agent) {
         part = part.push(
             SettingField::new(executable_key(agent), "Executable")
                 .placeholder(agent)
@@ -541,7 +554,7 @@ fn advanced(state: &State, agent: &str, overrides: bool, open: bool, t: &Tokens)
                 .build(state, t),
         );
     }
-    if overrides {
+    if overrides && harnesses::has(&state.facts.settings, agent, "context_window_cap") {
         part = part.push(
             SettingField::new(cap_key(agent), "Context cap (tokens)")
                 .placeholder("Agent default")
@@ -560,7 +573,7 @@ fn agent_group(state: &State, agent: &str, t: &Tokens) -> Block {
     let label = crate::picker::agents::named(settings, agent);
     let status = harnesses::of(&harnesses::availability(settings), agent);
     let overrides = override_agents(settings).iter().any(|a| a == agent);
-    let executable = harnesses::builtin(agent);
+    let executable = harnesses::builtin(settings, agent);
     let refusal_inside = (executable && refused(state, &executable_key(agent)))
         || (overrides && refused(state, &cap_key(agent)));
     let open = refusal_inside

@@ -29,8 +29,8 @@ sidebar, or "Show automations" in the command palette (Cmd+Shift+K,
 Ctrl+Alt+K on Linux). Click **New automation** and fill in:
 
 - **Name**, and the **Trigger** with its settings (below).
-- **Runs as**. The harness (Claude Code or Codex), model and effort, and the
-  launch desktop where its agents start. By default that is a new desktop
+- **Runs as**. The harness (Claude Code, Codex or, while [Sigma](using-sigma.md)
+  is on, Sigma), model and effort, and the launch desktop where its agents start. By default that is a new desktop
   named after the automation.
 - **Prompt**. The instruction the agent receives. Details of the occurrence,
   such as the pull request, arrive separately as data, and Attn never changes the prompt with them.
@@ -152,8 +152,8 @@ location:
 ```
 
 `launch.driver` is `claude`, `codex` or, while [Sigma](using-sigma.md) is on,
-`sigma`. The form does not offer Sigma yet, so define a Sigma automation in
-YAML.
+`sigma`. The native app's form offers Sigma; in the Tauri app, define a Sigma
+automation in YAML.
 
 ## Details
 

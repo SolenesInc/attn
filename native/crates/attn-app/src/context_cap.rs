@@ -1,6 +1,8 @@
 //! The Tauri app's `SessionContextCapPrompt`: the token budget an agent compacts at, which
 //! the daemon applies by reloading the agent.
 
+use std::collections::BTreeMap;
+
 use attn_protocol::{SessionContextWindowCapResultMessage, SetSessionContextWindowCapMessage};
 use attn_ui::blocks::{Actions, Field};
 use attn_ui::system::{Button, FieldState, Look, Part, Said, line_box};
@@ -23,8 +25,8 @@ pub(crate) struct ContextCap {
 }
 
 /// Whether `agent` launches with a context-window cap.
-pub(crate) fn takes_cap(agent: &str) -> bool {
-    matches!(agent.to_lowercase().as_str(), "claude" | "codex")
+pub(crate) fn takes_cap(settings: &BTreeMap<String, String>, agent: &str) -> bool {
+    crate::settings::harnesses::has(settings, &agent.to_lowercase(), "context_window_cap")
 }
 
 pub(crate) fn open(state: &mut State, session: &str, tx: &mut Tx) {

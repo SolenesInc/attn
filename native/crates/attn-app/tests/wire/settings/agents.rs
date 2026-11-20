@@ -422,6 +422,38 @@ fn a_refused_context_cap_keeps_its_group_open_and_the_dialog_with_it() {
 }
 
 #[test]
+fn sigma_shows_its_executable_and_default_route_and_no_context_cap_it_cannot_apply() {
+    let mut world = on_agents(&both(&[
+        ("sigma_available", "true"),
+        ("sigma_cap_executable_setting", "true"),
+        ("sigma_cap_model_pin", "true"),
+        ("sigma_cap_effort_pin", "true"),
+        ("sigma_cap_context_window_cap", "false"),
+        ("sigma_executable", "/opt/sigma/bin/sigma"),
+    ]));
+    assert!(groups(&world).contains(&"Sigma".to_owned()));
+    open_advanced(&mut world, "sigma");
+    assert!(shows(&world, "settings.route.default-sigma"));
+    assert_eq!(
+        value(&world, &field("sigma_executable")),
+        "/opt/sigma/bin/sigma"
+    );
+    assert!(!shows(&world, &field("default_context_window_cap_sigma")));
+    assert!(capabilities(&world, "sigma").contains(&"Context cap Unavailable".to_owned()));
+    retype(
+        &mut world,
+        &field("sigma_executable"),
+        "/usr/local/bin/sigma",
+    );
+    click(&mut world, "settings.heading");
+    assert_eq!(
+        writes(&world),
+        saved(&[("sigma_executable", "/usr/local/bin/sigma")])
+    );
+    rest(&mut world);
+}
+
+#[test]
 fn a_plugin_agent_lists_its_capabilities_without_an_executable_field() {
     let mut world = on_agents(&[("snipe_available", "true"), ("snipe_cap_resume", "true")]);
     assert!(groups(&world).contains(&"Snipe".to_owned()));
@@ -923,11 +955,22 @@ fn the_preferred_agent_comes_first_with_what_each_agent_supports() {
         open_advanced(&mut world, agent);
     }
     assert_eq!(capabilities(&world, "plug"), ["custom cap Supported"]);
+    let built_in = [
+        "Automations Supported",
+        "Context cap Supported",
+        "Effort pin Supported",
+        "Custom executable Supported",
+        "Model pin Supported",
+    ];
     assert_eq!(
         capabilities(&world, "codex"),
-        ["Transcript watch Supported", "Classifier Unavailable"]
+        [
+            &["Transcript watch Supported", "Classifier Unavailable"][..],
+            &built_in[..]
+        ]
+        .concat()
     );
-    assert!(capabilities(&world, "claude").is_empty());
+    assert_eq!(capabilities(&world, "claude"), built_in);
     assert!(capabilities(&world, "mistral").is_empty());
     rest(&mut world);
 }

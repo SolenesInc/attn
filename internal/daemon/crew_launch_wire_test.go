@@ -85,3 +85,19 @@ func TestCrewSuccessorGetsTheOperatingModelAndDiscoveryPrompt(t *testing.T) {
 		}
 	}
 }
+
+func TestACrewMemberRunsOnSigmaWithTheOperatingModelAsItsInstructions(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Sigma)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "sigma_enabled", "true")
+	setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("sigma")})
+	day := startCrew(t, cli, "keel", "")
+	run := w.Launched(string(day.SessionID))
+	if got, want := run.Prompted(), prompts.RenderText("crew", "new-session", nil); got != want {
+		t.Fatalf("wake prompt = %q, want %q", got, want)
+	}
+	instructions := slices.Index(run.Argv, "--instructions")
+	if instructions < 0 || !strings.Contains(run.Argv[instructions+1], "## How you work") {
+		t.Fatalf("the Sigma member launched without the crew priming as its instructions: %q", run.Argv)
+	}
+}

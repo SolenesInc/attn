@@ -56,3 +56,19 @@ on steering and compaction at a903aa0.
   how its root's run ended. Subagents are part of their root's tree.
 - `conversation/list` carries `ended` on each conversation that has run: how
   its last run ended, the same as `status/watch` says.
+- Sigma's tools refuse no path outside the conversation's folder. A path
+  resolves from `~`, a `file://` URL or an absolute path with no containment
+  check (`packages/env/src/local.ts`, read at eb70be3). Approvals are per tool,
+  not per path (`asks` in `packages/harness/src/types.ts`). Claude Code's own
+  permission asks go to Sigma's approvals through `canUseTool`
+  (`packages/claude/src/process.ts`): a read outside the folder waits for an
+  approval in `ask` mode and runs in `auto` mode, and is never refused.
+- Prompt cache lifetime, measured 2026-11-20 on Sigma eb70be3 with real
+  accounts: each probe sent a first prompt carrying a random nonce, waited, then
+  sent a second prompt in the same conversation. Under the `claude` provider,
+  Claude Code writes only one-hour cache (`ephemeral_1h_input_tokens`, never
+  `5m`, in its own transcripts); the second prompt read the nonce turn back
+  after 55 minutes and read only the shared prefix after 65. Under the `openai`
+  provider, the second prompt read the nonce turn back after every gap tried,
+  up to 75 minutes. So a Sigma crew member's cache lasts at least an hour on
+  either provider, and the crew's default of 3600 s fits it.

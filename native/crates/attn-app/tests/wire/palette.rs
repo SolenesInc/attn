@@ -1785,4 +1785,24 @@ fn a_capped_agent_offers_to_change_its_cap_and_a_shell_offers_none() {
     press_action(&mut world, Action::UiCommandPalette);
     world.gesture(|app| app.type_text("context window"));
     assert!(titles(&world).is_empty());
+
+    let mut sigma = initial(
+        vec![desktop("d1", "work", 1, vec![agent_pane("sg")])],
+        vec![Session {
+            agent: "sigma".into(),
+            ..session("sg")
+        }],
+    );
+    sigma.settings = Some(BTreeMap::from([
+        ("sigma_available".to_owned(), "true".to_owned()),
+        (
+            "sigma_cap_context_window_cap".to_owned(),
+            "false".to_owned(),
+        ),
+    ]));
+    let mut world = World::start(daemon(sigma, vec![]));
+    world.open_desktop();
+    press_action(&mut world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("context window"));
+    assert!(titles(&world).is_empty(), "Sigma takes no context cap");
 }

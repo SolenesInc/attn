@@ -14,7 +14,7 @@ mod github;
 
 pub(crate) use desktop::EDITOR;
 mod controls;
-mod harnesses;
+pub(crate) mod harnesses;
 mod hygiene;
 mod models;
 pub(crate) mod outposts;

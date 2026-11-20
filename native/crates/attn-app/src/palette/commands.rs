@@ -561,10 +561,10 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             } else {
                 "Show harness logos in the sidebar"
             },
-            &["harness", "logo", "icon", "sidebar", "claude", "codex"],
+            &["harness", "logo", "icon", "sidebar", "claude", "codex", "sigma"],
             set(crate::sidebar::HARNESS_LOGOS, !logos_on),
         )
-        .describe("The Claude or Codex mark beside each agent"),
+        .describe("The Claude, Codex or Sigma mark beside each agent"),
     ]);
     let focus_style = FocusStyle::chosen();
     commands.extend(FocusStyle::ALL.map(|style| {
@@ -676,7 +676,7 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
                 .pin(),
             );
         }
-        if crate::context_cap::takes_cap(&session.agent) {
+        if crate::context_cap::takes_cap(&state.facts.settings, &session.agent) {
             commands.push(context_cap_command(session, &name));
         }
         if crate::desktop::seed_chip::shown(session, &state.facts) {

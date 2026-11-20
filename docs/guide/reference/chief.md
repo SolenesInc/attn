@@ -14,9 +14,10 @@ start and close like any member's.
 
 The Chief has its own row at the top of the sidebar's Crew section. A new Chief
 has no harness, so it stays between sessions and keeps its mail. Until you set it up, its
-row opens the setup: pick Claude Code or Codex, the model and effort, and the
+row opens the setup: pick Claude Code, Codex or, in the native app while
+[Sigma](using-sigma.md) is on, Sigma, the model and effort, and the
 profile's Notebook folder, then press Enter to start the Chief's first session. The Chief's home
-moves into the folder you pick. If neither harness is installed, the setup says
+moves into the folder you pick. If no harness is installed, the setup says
 so. Install one and choose "Check again".
 
 From a shell:

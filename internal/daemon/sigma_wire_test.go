@@ -257,3 +257,30 @@ location: {type: directory, path: %q}
 		t.Errorf("after Sigma's server reported the run working the run is %s with %q, want delivered", delivered.State, protocol.Deref(delivered.LastError))
 	}
 }
+
+func TestTheSettingsSayWhatSigmaTakesBesideTheOtherBuiltInHarnesses(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Sigma)
+	app := w.App()
+	setSetting(t, app, "sigma_enabled", "true")
+	settings := pluginDriverSettings(app, "sigma")
+	want := map[string]map[string]string{
+		"claude": {"executable_setting": "true", "model_pin": "true", "effort_pin": "true", "launch_instructions": "true", "context_window_cap": "true", "automation": "true"},
+		"codex":  {"executable_setting": "true", "model_pin": "true", "effort_pin": "true", "launch_instructions": "true", "context_window_cap": "true", "automation": "true"},
+		"sigma":  {"executable_setting": "true", "model_pin": "true", "effort_pin": "true", "launch_instructions": "true", "context_window_cap": "false", "automation": "true"},
+	}
+	for agent, capabilities := range want {
+		for capability, value := range capabilities {
+			if got := settings[agent+"_cap_"+capability]; got != value {
+				t.Errorf("%s_cap_%s = %q, want %q", agent, capability, got, value)
+			}
+		}
+	}
+
+	session := w.Spawn(app, fakeagent.Sigma, w.Path("shop"))
+	w.Launched(session)
+	capped := testworld.Request(app, protocol.SetSessionContextWindowCapMessage{Cmd: protocol.CmdSetSessionContextWindowCap, SessionID: protocol.SessionID(session), Cap: 200000},
+		protocol.EventSessionContextWindowCapResult, func(r protocol.SessionContextWindowCapResultMessage) bool { return string(r.SessionID) == session })
+	if capped.Success {
+		t.Errorf("a Sigma session accepted a context window cap Sigma cannot apply: %+v", capped)
+	}
+}

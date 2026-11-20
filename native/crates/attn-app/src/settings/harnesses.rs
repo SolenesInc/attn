@@ -192,7 +192,7 @@ pub(crate) fn listed(state: &State) -> Vec<Harness> {
         .iter()
         .map(|harness| {
             let mut harness = harness.clone();
-            if builtin(&harness.id) {
+            if builtin(&state.facts.settings, &harness.id) {
                 match state
                     .facts
                     .settings
@@ -209,8 +209,16 @@ pub(crate) fn listed(state: &State) -> Vec<Harness> {
         .collect()
 }
 
-pub(crate) fn builtin(agent: &str) -> bool {
-    matches!(agent, "codex" | "claude")
+/// Whether the daemon says `agent` has `capability`, from its `<agent>_cap_<capability>` setting.
+pub(crate) fn has(settings: &BTreeMap<String, String>, agent: &str, capability: &str) -> bool {
+    settings
+        .get(&format!("{agent}_cap_{capability}"))
+        .is_some_and(|v| v == "true")
+}
+
+/// A harness attn launches from its own executable, which a setting may name.
+pub(crate) fn builtin(settings: &BTreeMap<String, String>, agent: &str) -> bool {
+    has(settings, agent, "executable_setting")
 }
 
 /// The Retry the pages show beside a failed read.
@@ -394,12 +402,8 @@ pub(crate) fn headless(state: &State, agents: &[String]) -> Vec<RouteHarness> {
         .into_iter()
         .map(|h| RouteHarness {
             available: h.available
-                && builtin(&h.id)
-                && state
-                    .facts
-                    .settings
-                    .get(&format!("{}_cap_headless_task", h.id))
-                    .is_none_or(|v| v != "false"),
+                && builtin(&state.facts.settings, &h.id)
+                && has(&state.facts.settings, &h.id, "headless_task"),
             model_pin: true,
             effort_pin: true,
             ..h
@@ -419,7 +423,7 @@ pub(crate) fn headless_agents(
     let mut eligible: Vec<String> = ordered(&availability, Some(&preferred))
         .into_iter()
         .filter(|a| {
-            builtin(a)
+            builtin(settings, a)
                 && selectable(&availability, a)
                 && capabilities
                     .get(a)

@@ -977,6 +977,36 @@ fn a_new_automation_starts_on_the_codex_defaults_and_saves_the_model_and_effort_
 }
 
 #[test]
+fn the_form_offers_sigma_once_the_daemon_says_sigma_takes_automations() {
+    let offered = |automation: &str| {
+        let automation = automation.to_owned();
+        let mut world = open_new_with(|daemon| {
+            let mut listed = harnesses();
+            listed.push(harness_catalogs::harness("sigma", "Sigma"));
+            harness_catalogs::serve(daemon, &Arc::default(), listed);
+        });
+        world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+            settings: Some(
+                [
+                    ("sigma_available".to_owned(), "true".to_owned()),
+                    ("sigma_cap_automation".to_owned(), automation),
+                ]
+                .into(),
+            ),
+            ..attn_protocol::SettingsUpdatedMessage::new()
+        });
+        world.settle();
+        harness_catalogs::open_route(&mut world, "Automation model");
+        harness_catalogs::options(&world, "harnesses")
+            .into_iter()
+            .map(|(name, ..)| name)
+            .collect::<Vec<String>>()
+    };
+    assert_eq!(offered("false"), ["Claude", "Codex"]);
+    assert_eq!(offered("true"), ["Claude", "Codex", "Sigma"]);
+}
+
+#[test]
 fn a_github_definition_reads_into_its_fields_and_saves_against_the_revision_it_read() {
     let mut world = open_edit(
         AutomationDefinitionSummary {

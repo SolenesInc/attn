@@ -271,6 +271,11 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 		hasHeadlessTask, _ := agentdriver.HeadlessTaskAvailability(driver)
 		settings[capabilitySettingKey(name, "headless_task")] = strconv.FormatBool(hasHeadlessTask)
 		settings[capabilitySettingKey(name, "launch_instructions")] = strconv.FormatBool(d.agentSupportsChiefGuidance(name))
+		settings[capabilitySettingKey(name, "executable_setting")] = "true"
+		settings[capabilitySettingKey(name, "model_pin")] = strconv.FormatBool(caps.HasModelPin)
+		settings[capabilitySettingKey(name, "effort_pin")] = strconv.FormatBool(caps.HasEffortPin)
+		settings[capabilitySettingKey(name, "context_window_cap")] = strconv.FormatBool(caps.HasContextWindowCap)
+		settings[capabilitySettingKey(name, "automation")] = strconv.FormatBool(caps.HasAutoApprove)
 		if l := d.serverLinkFor(name); l != nil {
 			settings[capabilitySettingKey(name, "execution_target")] = strconv.FormatBool(l.hasTargets())
 			settings[capabilitySettingKey(name, "model_discovery")] = "true"

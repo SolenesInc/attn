@@ -423,17 +423,44 @@ impl Drop for Daemon {
     }
 }
 
+/// What a real daemon's settings say of each harness built into it, whatever else a test sets.
+fn with_built_in_harnesses(message: &mut Value) {
+    let event = message.get("event").and_then(Value::as_str);
+    if !matches!(event, Some("initial_state" | "settings_updated")) {
+        return;
+    }
+    let Some(settings) = message.get_mut("settings").and_then(Value::as_object_mut) else {
+        return;
+    };
+    for agent in ["claude", "codex"] {
+        for capability in [
+            "executable_setting",
+            "model_pin",
+            "effort_pin",
+            "context_window_cap",
+            "automation",
+        ] {
+            settings
+                .entry(format!("{agent}_cap_{capability}"))
+                .or_insert_with(|| Value::String("true".into()));
+        }
+    }
+}
+
 fn queue(shared: &Shared, (id, to): &(usize, mpsc::UnboundedSender<Out>), out: Out) {
     let rewrite = shared.rewrite.lock().unwrap().clone();
-    let out = match (out, rewrite) {
-        (Out::Text(text), Some(rewrite)) => match serde_json::from_str::<Value>(&text) {
+    let out = match out {
+        Out::Text(text) => match serde_json::from_str::<Value>(&text) {
             Ok(mut message) => {
-                rewrite(&mut message);
+                with_built_in_harnesses(&mut message);
+                if let Some(rewrite) = rewrite {
+                    rewrite(&mut message);
+                }
                 Out::Text(message.to_string())
             }
             Err(_) => Out::Text(text),
         },
-        (out, _) => out,
+        out => out,
     };
     if to.send(out).is_ok() {
         let mut log = shared.log.lock().unwrap();

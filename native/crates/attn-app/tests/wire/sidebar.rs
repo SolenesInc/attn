@@ -929,6 +929,7 @@ fn each_agent_row_names_its_harness_with_fallbacks_for_a_plugin_and_a_missing_on
     let rows = [
         ("claude", "claude", "Claude", "scheduled"),
         ("codex", "codex", "Codex", "idle"),
+        ("sigma", "sigma", "Sigma", "idle"),
         ("shell", "shell", "Shell", "idle"),
         ("plugin", "custom-driver", "Custom Driver", "idle"),
         ("missing", "", "Unknown harness", "idle"),

@@ -55,7 +55,7 @@ commands:
         Save launch settings without changing the member's markdown files.
         --launch-desktop selects own, a desktop digit (an empty slot gets a new desktop), name or id.
         --cwd sets the working directory; --model selects the model.
-        --agent accepts claude, codex, or an installed plugin driver.
+        --agent accepts claude, codex, sigma while it is on, or an installed plugin driver.
         --agent "" restores the crew default.
         --model "" restores default_model_<harness>, else fable on Claude;
         --model default runs on the harness's own default.

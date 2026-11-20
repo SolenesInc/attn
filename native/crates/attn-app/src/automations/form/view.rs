@@ -20,7 +20,6 @@ use crate::settings::{Route, RouteHarness, RouteTarget, Rules};
 pub(super) const DELETE: &str = "automations.form.delete";
 pub(super) const TIME_ZONE: &str = "automations.form.time-zone";
 const TIME_ZONES: &str = "automations.form.time-zones";
-const AUTOMATION_HARNESSES: [&str; 2] = ["codex", "claude"];
 const MINUTE_STEPS: [u32; 7] = [1, 2, 5, 10, 15, 20, 30];
 const HOUR_STEPS: [u32; 7] = [1, 2, 3, 4, 6, 8, 12];
 const DAYS: [(u8, &str, &str); 7] = [
@@ -394,14 +393,13 @@ fn overridden(f: &Form) -> bool {
 
 fn read_route(state: &State, _: &str) -> Option<(Route, Rules)> {
     let f = form(state).filter(|f| f.load == Load::Ready)?;
-    let offered: Vec<&str> = AUTOMATION_HARNESSES
-        .into_iter()
-        .chain(std::iter::once(f.agent.as_str()))
-        .collect();
+    let settings = &state.facts.settings;
+    let automation =
+        |id: &str| id == f.agent || crate::settings::harnesses::has(settings, id, "automation");
     let overridden = overridden(f);
     let mut harnesses: Vec<RouteHarness> = Vec::new();
     for h in crate::settings::listed_harnesses(state) {
-        if offered.contains(&h.id.as_str()) && !harnesses.iter().any(|o| o.id == h.id) {
+        if automation(&h.id) && !harnesses.iter().any(|o| o.id == h.id) {
             let mut h = RouteHarness::from(&h);
             h.discovery &= !overridden;
             harnesses.push(h);

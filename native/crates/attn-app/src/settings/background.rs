@@ -61,10 +61,10 @@ fn parse_advisor(raw: Option<&str>) -> Config {
     };
     let agent = parsed.agent.trim().to_lowercase();
     Config {
-        agent: if harnesses::builtin(&agent) {
-            agent
-        } else {
+        agent: if agent.is_empty() {
             "codex".into()
+        } else {
+            agent
         },
         model: parsed.model.trim().to_owned(),
         effort: parsed.effort.trim().to_owned(),

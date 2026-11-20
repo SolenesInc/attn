@@ -103,8 +103,7 @@ fn chief_harnesses(state: &State) -> Vec<RouteHarness> {
         .listed
         .iter()
         .filter(|h| {
-            matches!(h.id.as_str(), "claude" | "codex")
-                && h.available
+            h.available
                 && state
                     .facts
                     .settings

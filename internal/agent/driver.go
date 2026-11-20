@@ -71,6 +71,8 @@ type Capabilities struct {
 
 	HasExecutionTarget bool
 
+	HasContextWindowCap bool
+
 	ConversationIsSession bool
 }
 

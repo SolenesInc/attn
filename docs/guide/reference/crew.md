@@ -172,7 +172,7 @@ It never touches the member's markdown files.
 |---|---|
 | `--launch-desktop <own\|digit\|name\|id>` | Where sessions start. `own` or an empty desktop digit creates a new desktop, and `--desktop-name` names the desktop. |
 | `--cwd <dir>` | The working folder. Without it, the member works in its home. |
-| `--agent <name>` | `claude`, `codex` or an installed plugin harness. `""` goes back to the crew default, Claude Code. |
+| `--agent <name>` | `claude`, `codex`, `sigma` while [Sigma](using-sigma.md) is on, or an installed plugin harness. `""` goes back to the crew default, Claude Code. |
 | `--model <name>`, `--effort <level>` | The model and effort. `--model ""` goes back to `default_model_<harness>`, or `fable` on Claude Code when that is empty; `--model default` runs on the harness's own default. `--effort ""` goes back to the harness default. |
 | `--awareness-dir <dir>` | A folder the charter is about, which the member can reach. Repeat to set several. `""` clears them. |
 | `--home <dir>` | Where the member's home is now, after you moved or renamed its folder. See [Move a member's home](#move-a-members-home). |
@@ -219,7 +219,7 @@ Not by default. Members keep their rows in the Crew section and stay out of the 
 <details>
 <summary>What is the heartbeat I see in a member's terminal?</summary>
 
-A member's harness caches its conversation for a while. Attn assumes an hour for Claude Code and 30 minutes for Codex. When you are around, the member is between turns, and the cache will lapse in 5 minutes, Attn sends a heartbeat: the member repeats its last message. The repeat keeps the cache from lapsing before your next prompt. If you have been away from Attn for 2.5 hours, Attn instead asks the member to file its letter and close. Attn sends neither to a member whose run failed, such as on a usage limit, until the member runs again. `crew.heartbeat_enabled`, `crew.away_close_enabled`, `crew.away_seconds`, `crew.heartbeat_lead_seconds` and `crew.cache_ttl_seconds` (or `crew.cache_ttl_seconds.<harness>`) control the heartbeat and the close when you are away.
+A member's harness caches its conversation for a while. Attn assumes an hour for Claude Code and Sigma and 30 minutes for Codex. When you are around, the member is between turns, and the cache will lapse in 5 minutes, Attn sends a heartbeat: the member repeats its last message. The repeat keeps the cache from lapsing before your next prompt. If you have been away from Attn for 2.5 hours, Attn instead asks the member to file its letter and close. Attn sends neither to a member whose run failed, such as on a usage limit, until the member runs again. `crew.heartbeat_enabled`, `crew.away_close_enabled`, `crew.away_seconds`, `crew.heartbeat_lead_seconds` and `crew.cache_ttl_seconds` (or `crew.cache_ttl_seconds.<harness>`) control the heartbeat and the close when you are away.
 </details>
 
 <details>

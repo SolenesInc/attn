@@ -938,7 +938,7 @@ fn pick_harness(state: &mut State, id: String, tx: &mut Tx) {
 }
 
 fn has_provider(harness: &str) -> bool {
-    !super::harnesses::builtin(harness)
+    !matches!(harness, "codex" | "claude")
 }
 
 /// The model and provider typed into the filter, and whether the catalog refuses them.

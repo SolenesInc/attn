@@ -63,6 +63,20 @@ refuses its registration, because Attn has the harness of that name.
   server. Install Sigma and sign in to its providers on the outpost. See
   [Using outposts](using-outposts.md#run-agents-on-an-outpost).
 
+## Crew, the Chief and settings
+
+A crew member or the Chief can run on Sigma: run
+`attn crew set <member> --agent sigma`, or in the native app pick Sigma in the
+Chief's setup or under "Harness and model…". The member's orientation reaches
+Sigma as the conversation's instructions. Sigma's tools reach any folder, so a
+member's awareness folders need nothing more.
+
+In the native app, **Settings → Agents** lists Sigma beside Claude Code and
+Codex, with its executable, default model and default effort. Sigma takes no
+context cap, so its card has none and the palette offers no cap for a Sigma
+session. The automation form offers Sigma. With harness logos on, a Sigma
+session's row in the sidebar shows Sigma's mark.
+
 ## State
 
 The session's state comes from the server, not from the terminal:

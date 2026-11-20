@@ -99,6 +99,22 @@ pub(crate) fn catalog(harness: &str) -> Vec<HarnessModel> {
             ),
             model("codex", "new-model", "New model", None, EFFORTS),
         ],
+        "sigma" => vec![
+            HarnessModel {
+                provider: "claude".into(),
+                ..model("sigma", "opus", "Opus 5.5", Some("deep"), EFFORTS)
+            },
+            HarnessModel {
+                provider: "openai".into(),
+                ..model(
+                    "sigma",
+                    "gpt-6.1-terra",
+                    "gpt-6.1-terra",
+                    Some("light"),
+                    EFFORTS,
+                )
+            },
+        ],
         _ => Vec::new(),
     }
 }

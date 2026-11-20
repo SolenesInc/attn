@@ -516,6 +516,37 @@ fn with_no_harness_for_the_chief_check_again_reads_them_and_one_harness_hides_th
 }
 
 #[test]
+fn with_sigma_the_only_harness_here_that_takes_launch_instructions_the_chief_starts_on_sigma() {
+    let mut first = initial(true, chief(false), Vec::new());
+    let mut sigma = settings(true);
+    sigma.insert("claude_available".into(), "false".into());
+    sigma.insert("codex_available".into(), "false".into());
+    sigma.insert("sigma_available".into(), "true".into());
+    sigma.insert("sigma_cap_launch_instructions".into(), "true".into());
+    first.settings = Some(sigma);
+    let daemon = daemon(first);
+    daemon.on("delegation_preferences_get", |_| {
+        message(preferences_result(vec![
+            harness("claude", "Claude"),
+            harness("codex", "Codex"),
+            harness("sigma", "Sigma"),
+        ]))
+    });
+    let mut world = World::start(daemon);
+    world.settle();
+    assert!(!shows(&world, "chief-setup.empty"));
+    assert!(!shows(&world, "chief-setup.harness"));
+    assert_eq!(checked(&world, "model"), ["Opus 5.5 · recommended"]);
+    world.daemon.on("crew_set", |_| ());
+    click(&mut world, PRIMARY);
+    let set = &sent(&world, "crew_set")[0];
+    assert_eq!(
+        (&set["agent"], &set["model"]),
+        (&json!("sigma"), &json!("claude/opus"))
+    );
+}
+
+#[test]
 fn a_failed_harness_or_model_lookup_says_why_and_check_again_retries_before_start() {
     let mut world = World::start({
         let daemon = daemon(initial(true, chief(false), Vec::new()));
