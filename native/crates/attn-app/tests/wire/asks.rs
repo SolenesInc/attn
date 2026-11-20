@@ -1623,3 +1623,21 @@ fn the_open_count_follows_the_title_and_comes_before_the_replied_toggle() {
         "the count {count:?} does not come before Replied {replied:?}"
     );
 }
+
+#[test]
+fn the_list_of_asks_sets_its_words_on_the_line_of_the_ask_under_it() {
+    let mut world = start(
+        vec![cache_store(), release_day()],
+        vec![api_working(), web_waiting()],
+    );
+    open_drawer(&mut world);
+    let id = rows(&world).into_iter().next().expect("an ask is listed");
+    let title = world.rect(&format!("asks.row.{id}.title"));
+    let subject = world.rect("asks.subject.block");
+    assert!(
+        (title[0] - subject[0]).abs() <= 0.5,
+        "the row's words start at {}, the ask's subject at {}",
+        title[0],
+        subject[0]
+    );
+}

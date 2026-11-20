@@ -187,9 +187,10 @@ impl List {
     }
 
     /// The list as a column of its own as tall as its rows, up to `tallest`, past which it
-    /// scrolls, as above what the rows choose between.
+    /// scrolls, as above what the rows choose between, in a band that already keeps the
+    /// sheet's sides.
     pub fn scrolling_up_to(self, tallest: f32, t: &Tokens) -> El {
-        let list = door::frame(self.laid(t), Space::S8, Space::S16, Space::S8);
+        let list = door::frame(self.laid(t), Space::S8, Space::S0, Space::S8);
         col()
             .w_full()
             .max_h(tallest)
