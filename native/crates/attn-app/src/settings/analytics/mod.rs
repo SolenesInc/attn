@@ -220,6 +220,7 @@ fn switch_view(state: &mut State, view: usize, tx: &mut Tx) {
 fn step_view(state: &mut State, by: usize, tx: &mut Tx) {
     let view = (page_of(state).view + by) % VIEWS.len();
     switch_view(state, view, tx);
+    tx.focus(format!("settings.analytics.views.{}", VIEWS[view].0), true);
 }
 
 fn toggle_machine(state: &mut State) {
@@ -247,7 +248,9 @@ fn current(items: &[Item], selected: Option<&str>) -> usize {
 
 fn select(state: &mut State, key: String, tx: &mut Tx) {
     page_of(state).selected = Some(key);
-    tx.focus(view::PAGE, false);
+    if !tx.focused().is_some_and(|key| key.starts_with("item")) {
+        tx.focus(view::PAGE, false);
+    }
     reveal(state, tx);
 }
 
@@ -617,11 +620,14 @@ fn enter(state: &mut State, tx: &mut Tx) -> bool {
 }
 
 /// The page's keys, while the focus is on the page or a control in it.
-fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx, page_rows: usize) -> bool {
     if ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
         return false;
     }
+    let on_option = tx.focused().is_some_and(|key| key.starts_with("item"));
     match &ev.key {
+        Key::PageDown if on_option => step(state, page_rows as isize, tx),
+        Key::PageUp if on_option => step(state, -(page_rows as isize), tx),
         Key::Down => step(state, 1, tx),
         Key::Up => step(state, -1, tx),
         Key::Enter => return enter(state, tx),

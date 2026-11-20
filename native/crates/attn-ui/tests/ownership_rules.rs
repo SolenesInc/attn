@@ -225,7 +225,7 @@ fn beside_view(_: &(), cx: &mut Cx<()>) -> El {
         .push(El::from(Button::new("Send").build(&t)).key("send"))
         .in_page(&t);
     attn_ui::blocks::Page::new()
-        .push(inspector::beside_list(list, column))
+        .push(inspector::beside_list("split", list, column))
         .build("view", &t)
 }
 

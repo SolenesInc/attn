@@ -168,6 +168,7 @@ fn facts(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
             .code("facts.tiles.oldest", "Oldest", "2 days")
             .code("facts.tiles.unreachable", "Unreachable", "1 of 3")
             .tone(Some(Tone::Warn))
+            .after(Button::new("Details").on_press_tx(noop).build(&t).key("facts.tiles.details"))
             .build(&t),
         Prose::hint("facts.hint", "Add hosts with `gh auth login --hostname <host>`.").build(&t),
         Prose::hint("facts.code", "This profile uses:")

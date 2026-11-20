@@ -129,8 +129,8 @@ impl Facts {
         self
     }
 
-    /// A control after the tiles, in their row and with a tile's room, such as the button that
-    /// opens what they sum up.
+    /// A control after the tiles, in their row with a tile's room and height, such as the button
+    /// that opens what they sum up.
     pub fn after(mut self, control: impl Into<El>) -> Self {
         self.after = Some(control.into());
         self
@@ -142,15 +142,23 @@ impl Facts {
 
     /// The facts on their own, for a place that is not a page, such as a document's card.
     pub fn el(self, t: &Tokens) -> El {
-        let after = self
-            .after
-            .map(|control| control.grow_from(1.0, FACT_TILE_FLOOR));
+        let stretched = self.after.is_some();
+        let kind = self.facts.first().map_or(Type::Body, |fact| fact.kind);
+        let after = self.after.map(|control| {
+            col()
+                .grow_from(1.0, FACT_TILE_FLOOR)
+                .equal_columns(1)
+                .child(room(kind, t).grid_cell(0))
+                .child(col().grid_cell(0).child(control.grow(1.0)))
+        });
         let mut list = if self.tiles {
-            door::gaps(
-                row().w_full().flex_wrap().items_start(),
-                Space::S8,
-                Space::S8,
-            )
+            let line = row().w_full().flex_wrap();
+            let line = if stretched {
+                line.items_stretch()
+            } else {
+                line.items_start()
+            };
+            door::gaps(line, Space::S8, Space::S8)
         } else {
             door::gap(col().w_full(), Space::S8)
         };
@@ -171,6 +179,28 @@ impl Facts {
         }))
         .children(after)
     }
+}
+
+/// A tile's card around its label and value.
+fn card(label: El, value: El, t: &Tokens) -> El {
+    let tile = door::gap(col().grow_from(1.0, FACT_TILE_FLOOR), Space::S2)
+        .fill(t.bg_elevated)
+        .border(1.0, t.border_subtle)
+        .child(label)
+        .child(value);
+    door::corner(door::inset(tile, Space::S12, Space::S8), Radius::Control)
+}
+
+/// The room of an empty tile whose value reads as `kind`, unseen, so a control laid over it
+/// stands as tall as the tiles beside or above it.
+fn room(kind: Type, t: &Tokens) -> El {
+    card(
+        words(" ", Type::Label, t.text_tertiary),
+        words(" ", kind, t.text_primary),
+        t,
+    )
+    .opacity(0.0)
+    .a11y_hidden()
 }
 
 impl Fact {
@@ -194,6 +224,7 @@ impl Fact {
 
     fn tile(self, t: &Tokens) -> El {
         let ink = self.ink(t);
+        let tile_key = format!("{}.tile", self.key);
         let value = match self.shown {
             Some(shown) => shown.key(self.key),
             None => words(self.value.clone(), self.kind, ink)
@@ -201,12 +232,8 @@ impl Fact {
                 .label(self.value.text())
                 .truncate(),
         };
-        let tile = door::gap(col().grow_from(1.0, FACT_TILE_FLOOR), Space::S2)
-            .fill(t.bg_elevated)
-            .border(1.0, t.border_subtle)
-            .child(words(self.label, Type::Label, t.text_tertiary).truncate())
-            .child(value);
-        door::corner(door::inset(tile, Space::S12, Space::S8), Radius::Control)
+        let label = words(self.label, Type::Label, t.text_tertiary).truncate();
+        card(label, value, t).key(tile_key)
     }
 
     fn line(self, t: &Tokens) -> El {

@@ -157,11 +157,13 @@ pub fn beside(list: El, inspector: El) -> El {
 /// than an inspector gets and the inspector taking the larger part, and the inspector goes
 /// under the list where they don't. Their widths come from the page, never from what they
 /// hold, so a part opening in either moves nothing sideways. Give it an
-/// inspector built [`Inspector::in_page`], so the page is the one thing that scrolls.
-pub fn beside_list(list: super::Block, inspector: El) -> super::Block {
+/// inspector built [`Inspector::in_page`], so the page is the one thing that scrolls. The row
+/// is keyed `key`, so the focus in either keeps its place while blocks above come and go.
+pub fn beside_list(key: impl Into<String>, list: super::Block, inspector: El) -> super::Block {
     super::Block::new(
         super::block::Kind::Custom,
         row()
+            .key(key.into())
             .w_full()
             .flex_wrap()
             .items_start()

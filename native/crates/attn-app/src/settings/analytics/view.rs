@@ -4,14 +4,14 @@ use attn_protocol::{GetAnalyticsStatusResultMessage, Seed, Vent};
 use attn_ui::Tokens;
 use attn_ui::blocks::{
     Actions, Block, Facts, Group, Inline, Inspector, List, Notice, Prose, Section, SettingRow,
-    inspector,
+    Stack, inspector,
 };
 use attn_ui::keycap;
 use attn_ui::system::{
     self, DotShape, DotSize, ListRow, Look, Tone, Type, chip_button, count_badge, dot, keys_hint,
     tag, words,
 };
-use rune::{El, Tx, el};
+use rune::{El, KeyEvent, Tx, el};
 use rune_kit::{Toast, ToastRegion};
 
 use super::items::{self, Item, SEND_SENT, VENT_TOOLS, VENTS, VIEWS};
@@ -56,8 +56,11 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<Block> {
         )
         .build(t)
     });
+    let page_rows = options_in_view(index);
     let group = Group::new(PAGE, "Analytics records and vents")
-        .keys(super::key)
+        .keys(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+            super::key(state, ev, tx, page_rows)
+        })
         .push(stats(
             state,
             page,
@@ -73,11 +76,23 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<Block> {
         .push_all(page.machine.then(|| machine(state, page, sharing, t)))
         .push(views(state, page.view, t))
         .push(inspector::beside_list(
+            format!("{PAGE}.split"),
             rows(state, page, &items, index, t),
             selected(state, page, current, sharing, t),
         ))
         .push(hints(page.view, sharing, t));
     vec![group.build(t)]
+}
+
+/// How many options of the list stand in the page's view, by the last frame's layout: the
+/// page Page Up and Page Down move the choice by. One until the list has been laid out.
+fn options_in_view(index: usize) -> usize {
+    let view = rune::memo::layout_size(crate::settings::BODY).map(|[_, h]| h);
+    let option = rune::memo::layout_size(&format!("item{index}")).map(|[_, h]| h);
+    match (view, option) {
+        (Some(view), Some(option)) if option > 0.0 => ((view / option).floor() as usize).max(1),
+        _ => 1,
+    }
 }
 
 /// The last action's outcome over the dialog, with Undo when it can be taken back.
@@ -331,18 +346,21 @@ fn rows(state: &State, page: &Analytics, items: &[Item], index: usize, t: &Token
                 .label(label)
         };
         let section = |key: &str, label: &'static str, rows: Vec<(usize, &Item)>| -> Vec<El> {
-            if rows.is_empty() {
-                return Vec::new();
-            }
-            std::iter::once(heading(key, label))
-                .chain(rows.into_iter().map(|(i, item)| row(i, item)))
+            rows.into_iter()
+                .enumerate()
+                .map(|(at, (i, item))| {
+                    Stack::tight()
+                        .children((at == 0).then(|| heading(key, label)))
+                        .child(row(i, item))
+                })
                 .collect()
         };
         return Group::<State>::new(LIST, name)
-            .roving()
             .push(
                 List::new(format!("{LIST}.rows"), name)
                     .listbox()
+                    .roving()
+                    .follows()
                     .rows(
                         section("new", "New", new)
                             .into_iter()
@@ -358,10 +376,11 @@ fn rows(state: &State, page: &Analytics, items: &[Item], index: usize, t: &Token
         _ => "Reading the record…",
     };
     Group::<State>::new(LIST, name)
-        .roving()
         .push(
             List::new(format!("{LIST}.rows"), name)
                 .listbox()
+                .roving()
+                .follows()
                 .rows(items.iter().enumerate().map(|(i, item)| row(i, item)))
                 .empty(format!("{LIST}.empty"), said, None)
                 .build(t),

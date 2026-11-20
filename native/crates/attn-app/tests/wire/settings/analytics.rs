@@ -475,7 +475,11 @@ fn records() -> Vec<AnalyticsOutboxRow> {
 
 /// A daemon that keeps the records as the real one does, filtering by stream and clearing them.
 fn serve_records(daemon: &Daemon) {
-    let stored = Arc::new(Mutex::new(records()));
+    serve_these_records(daemon, records());
+}
+
+fn serve_these_records(daemon: &Daemon, rows: Vec<AnalyticsOutboxRow>) {
+    let stored = Arc::new(Mutex::new(rows));
     let kept = stored.clone();
     daemon.on("list_analytics_records", move |r: &Request| {
         let stream = r["stream"].as_str().map(|s| format!(r#""stream":"{s}""#));
@@ -1309,4 +1313,242 @@ fn keys_keep_answering_after_the_focused_vent_moves_to_done_and_back() {
     );
     press(&mut world, "u");
     assert_eq!(said(&world), "Undone.");
+}
+
+fn key_press(world: &mut World, key: Key) {
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key,
+            mods: Mods::default(),
+        })
+    });
+}
+
+/// A full first page of records, one a minute so none fold, with older ones to read.
+fn a_full_page_of_records() -> World {
+    let rows = (1..=200)
+        .rev()
+        .map(|id| {
+            record(
+                id,
+                "bus",
+                "pr.updated",
+                &format!("2026-10-24T{:02}:{:02}:00Z", id / 60, id % 60),
+                "",
+            )
+        })
+        .collect();
+    on_analytics(&[], Vec::new(), Vec::new(), move |daemon| {
+        serve_these_records(daemon, rows)
+    })
+}
+
+#[test]
+fn tab_in_a_record_view_stops_on_the_chosen_option_then_older_and_refresh() {
+    let mut world = a_full_page_of_records();
+    press(&mut world, "]");
+    super::tab_to(&mut world, "settings.analytics.views.all");
+    let mut order = Vec::new();
+    for _ in 0..3 {
+        tab_once(&mut world);
+        order.extend(focused(&world));
+    }
+    assert_eq!(
+        order,
+        [
+            "item0",
+            "settings.analytics.older",
+            "settings.analytics.refresh"
+        ],
+        "Tab after the view tabs"
+    );
+    key_press(&mut world, Key::Tab);
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Tab,
+            mods: Mods {
+                shift: true,
+                ..Mods::default()
+            },
+        })
+    });
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Tab,
+            mods: Mods {
+                shift: true,
+                ..Mods::default()
+            },
+        })
+    });
+    assert_eq!(focused(&world).as_deref(), Some("settings.analytics.older"));
+    press(&mut world, " ");
+    let asked: Vec<Value> = world
+        .daemon
+        .sent_of("list_analytics_records")
+        .iter()
+        .map(|r| r["before_id"].clone())
+        .collect();
+    assert_eq!(
+        asked,
+        [Value::Null, json!(1)],
+        "Space on Older reads the page before the oldest"
+    );
+}
+
+#[test]
+fn home_and_end_in_a_record_list_choose_its_ends_and_ask_the_daemon_nothing() {
+    let mut world = on_records();
+    press(&mut world, "]");
+    super::tab_to(&mut world, "settings.analytics.views.all");
+    tab_once(&mut world);
+    assert_eq!(focused(&world).as_deref(), Some("item0"));
+    let asked = world.daemon.sent_of("list_analytics_records").len();
+    key_press(&mut world, Key::End);
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("item2"),
+        "End reaches the last option"
+    );
+    assert_eq!(selection(&world), ["unselected", "unselected", "selected"]);
+    key_press(&mut world, Key::Home);
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("item0"),
+        "Home reaches the first"
+    );
+    assert_eq!(
+        world.daemon.sent_of("list_analytics_records").len(),
+        asked,
+        "moving in the list reads nothing"
+    );
+}
+
+/// Two new vents and one done, the done one `newest` or oldest of the three.
+fn two_new_and_one_done(newest: bool) -> World {
+    let mut first = vent("v-00");
+    first.created_at = "2026-11-12T08:59:50Z".into();
+    let mut second = vent("v-01");
+    second.created_at = "2026-11-12T08:59:40Z".into();
+    let mut done = vent("v-02");
+    done.created_at = if newest {
+        "2026-11-12T08:59:59Z"
+    } else {
+        "2026-11-12T08:59:00Z"
+    }
+    .into();
+    done.dismissed_at = Some("2026-11-12T09:00:00Z".into());
+    triage_of(vec![first, second, done])
+}
+
+#[test]
+fn dismissing_a_focused_vent_keeps_the_keyboard_in_the_list_so_u_undoes_it() {
+    for newest in [true, false] {
+        let mut world = two_new_and_one_done(newest);
+        super::tab_to(&mut world, "settings.analytics.views.vents");
+        tab_once(&mut world);
+        press(&mut world, "j");
+        assert_eq!(focused(&world).as_deref(), Some("item1"));
+        press(&mut world, "d");
+        let after = focused(&world);
+        assert!(
+            after.as_deref().is_some_and(|k| k.starts_with("item")),
+            "the focus stays on an option after d, the done vent newest: {newest}, on {after:?}"
+        );
+        assert_eq!(
+            selection(&world)
+                .iter()
+                .position(|s| *s == "selected")
+                .map(|at| format!("item{at}")),
+            after,
+            "the focused option is the chosen one"
+        );
+        press(&mut world, "u");
+        let asked: Vec<(String, Value)> = world
+            .daemon
+            .sent_of("set_vent_dismissed")
+            .iter()
+            .map(|r| (vent_id(r), r["dismissed"].clone()))
+            .collect();
+        assert_eq!(
+            asked,
+            [("v-01".into(), json!(true)), ("v-01".into(), json!(false))],
+            "u undoes the dismissal, the done vent newest: {newest}"
+        );
+    }
+}
+
+#[test]
+fn home_end_and_the_page_keys_move_the_choice_in_the_list_and_show_it_whole() {
+    let mut world = dense(36, "1.5");
+    world.resize((800.0, 600.0));
+    super::tab_to(&mut world, "settings.analytics.views.vents");
+    tab_once(&mut world);
+    let walk = |world: &mut World, key: Key| {
+        let pressed = format!("{key:?}");
+        key_press(world, key);
+        let on = focused(world).unwrap_or_default();
+        assert!(
+            on.starts_with("item"),
+            "{pressed} keeps the focus on an option, not {on:?}"
+        );
+        let chosen = selection(world).iter().position(|s| *s == "selected");
+        assert_eq!(
+            Some(format!("item{}", chosen.unwrap_or(99))),
+            Some(on.clone())
+        );
+        assert!(
+            in_view(world, &on),
+            "{pressed} shows {on} whole at {:?} in {:?}",
+            super::rect_of(world, &on),
+            super::rect_of(world, "settings.body")
+        );
+        on
+    };
+    assert_eq!(walk(&mut world, Key::End), "item35");
+    assert_eq!(walk(&mut world, Key::Home), "item0");
+    let down = walk(&mut world, Key::PageDown);
+    assert_ne!(down, "item0", "Page Down moves the choice");
+    let further = walk(&mut world, Key::PageDown);
+    assert_ne!(further, down);
+    assert_eq!(
+        walk(&mut world, Key::PageUp),
+        down,
+        "Page Up comes back a page"
+    );
+    for _ in 0..30 {
+        key_press(&mut world, Key::Down);
+    }
+    assert_eq!(
+        walk(&mut world, Key::Home),
+        "item0",
+        "Home from a done option"
+    );
+    assert_eq!(walk(&mut world, Key::End), "item35");
+}
+
+#[test]
+fn m_and_the_view_keys_keep_the_keyboard_on_the_page() {
+    let mut world = triage();
+    super::tab_to(&mut world, "settings.analytics.views.vents");
+    tab_once(&mut world);
+    press(&mut world, "m");
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("item0"),
+        "m opens Machine settings and the option keeps the focus"
+    );
+    press(&mut world, "]");
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("settings.analytics.views.all"),
+        "] puts the focus on the view it shows"
+    );
+    press(&mut world, "[");
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("settings.analytics.views.vents")
+    );
+    tab_once(&mut world);
+    assert_eq!(focused(&world).as_deref(), Some("item0"));
 }

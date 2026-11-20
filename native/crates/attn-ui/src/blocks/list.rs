@@ -23,6 +23,7 @@ pub struct List {
     count: Option<usize>,
     chooser: Option<Option<String>>,
     roving: bool,
+    follows: bool,
     listbox: bool,
     failed: bool,
     keys: Option<Box<dyn FnOnce(El) -> El>>,
@@ -44,6 +45,7 @@ impl List {
             count: None,
             chooser: None,
             roving: false,
+            follows: false,
             listbox: false,
             failed: false,
             keys: None,
@@ -85,6 +87,13 @@ impl List {
     /// Return presses.
     pub fn roving(mut self) -> Self {
         self.roving = true;
+        self
+    }
+
+    /// On a roving list, the arrows, Home and End choose the row they reach, as a list box whose
+    /// selection follows its focus does.
+    pub fn follows(mut self) -> Self {
+        self.follows = true;
         self
     }
 
@@ -335,6 +344,7 @@ impl List {
             },
             label: self.label.text(),
             roving: self.roving,
+            follows: self.follows,
             keys: self.keys,
             chooser: self.chooser,
         };
@@ -358,6 +368,7 @@ struct Semantics {
     role: &'static str,
     label: String,
     roving: bool,
+    follows: bool,
     keys: Option<Box<dyn FnOnce(El) -> El>>,
     chooser: Option<Option<String>>,
 }
@@ -365,10 +376,10 @@ struct Semantics {
 impl Semantics {
     fn onto(self, node: El) -> El {
         let node = node.key(self.key).role(self.role).label(self.label);
-        let node = if self.roving {
-            node.focus_group()
-        } else {
-            node
+        let node = match (self.roving, self.follows) {
+            (true, true) => node.focus_group().focus_follows(),
+            (true, false) => node.focus_group(),
+            (false, _) => node,
         };
         let node = match self.keys {
             Some(keys) => keys(node),

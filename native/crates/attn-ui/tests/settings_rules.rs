@@ -1318,3 +1318,29 @@ fn named_facts_are_a_list_of_their_facts_as_lines_and_as_tiles() {
         );
     }
 }
+
+#[test]
+fn every_item_in_a_tiles_row_with_a_control_after_it_has_one_height() {
+    let items = [
+        "facts.tiles.events.tile",
+        "facts.tiles.weight.tile",
+        "facts.tiles.seq.tile",
+        "facts.tiles.oldest.tile",
+        "facts.tiles.unreachable.tile",
+        "facts.tiles.details",
+    ];
+    for variant in WIDTHS {
+        let rt = block_story("Blocks/Facts", variant);
+        let heights: Vec<f32> = items
+            .iter()
+            .map(|k| rect_of(&rt, k, variant)[3] / SCALE)
+            .collect();
+        let (low, high) = heights
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(l, h), x| (l.min(*x), h.max(*x)));
+        assert!(
+            high - low < 0.5,
+            "{variant}: the tiles and the control after them are {heights:?} tall"
+        );
+    }
+}
