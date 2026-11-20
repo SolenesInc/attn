@@ -104,16 +104,18 @@ pub fn slot_badge(
     door::corner(door::inset(badge, Space::S2, Space::S0), Radius::Tag)
 }
 
-/// `face`, such as a number chip, as a button keyed `key` and read as `label`: a small square
-/// at least, filled while it is `selected`.
+/// `face`, such as a number chip, as a button keyed `key` and read as `label`: a square of
+/// `size` at least, filled while it is `selected`. A chip in a list's rows is `Small`; one in a
+/// bar of controls is as tall as they are.
 pub fn chip_button(
     key: impl Into<String>,
     label: impl Into<String>,
     face: El,
     selected: bool,
+    size: super::Size,
     t: &Tokens,
 ) -> El {
-    let side = super::Size::Small.height();
+    let side = size.height();
     let rest = if selected { t.bg_elevated } else { t.bg_panel };
     let button = row()
         .key(key.into())

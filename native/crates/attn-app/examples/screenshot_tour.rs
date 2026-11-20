@@ -5964,6 +5964,7 @@ fn queue_seeded(dark: bool, home: bool, sidebar_hidden: bool, slots: usize) -> W
     }
     if sidebar_hidden {
         click(&mut world, Target::key("titlebar.sidebar"));
+        world.gesture(|app| app.move_to((1100.0, 700.0)));
     }
     world
 }

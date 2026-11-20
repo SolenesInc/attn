@@ -151,12 +151,18 @@ pub(crate) fn chip(
         label,
         system::number_chip(slot, chip.current, chip.empty, t),
         chip.selected,
+        system::Size::Compact,
         t,
     )
     .help(named)
     .a11y_value(chip_value(chip.current, chip.empty))
     .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &desktop, tx))
-    .children(waiting_mark(chip.waiting, look, t));
+    .children(waiting_mark(
+        &format!("{prefix}.{slot}"),
+        chip.waiting,
+        look,
+        t,
+    ));
     dropped(face, drop, t)
 }
 
@@ -181,10 +187,12 @@ fn waiting_words(waiting: usize, look: Look) -> String {
 /// The turns waiting on a chip's desktops, over its top right corner: a dot on the strip, as
 /// the Tauri app's `.queue-desktop-chip-waiting`, their number on the bar, as its
 /// `.queue-bar-desktop-waiting`.
-fn waiting_mark(waiting: usize, look: Look, t: &Tokens) -> Option<El> {
+fn waiting_mark(chip: &str, waiting: usize, look: Look, t: &Tokens) -> Option<El> {
     (waiting > 0).then(|| match look {
         Look::Strip => waiting_dot(t),
         Look::Bar => system::count_badge(waiting, t.warning, attn_ui::warning_ink(t))
+            .key(format!("{chip}.waiting"))
+            .role("none")
             .pin(None, Some(-BADGE_OVERHANG), Some(-BADGE_OVERHANG), None)
             .inert(),
     })
@@ -213,12 +221,13 @@ fn extras_chip(key: &str, extras: Extras, look: Look, t: &Tokens) -> Option<El> 
             ),
             system::chip_edge(words(format!("+{count}"), Type::Tag, ink), t),
             selected,
+            system::Size::Compact,
             t,
         )
         .on_press_tx(|state: &mut State, tx: &mut Tx| {
             crate::dispatch(state, crate::Action::DesktopOverview, tx);
         })
-        .children(waiting_mark(waiting, look, t))
+        .children(waiting_mark(key, waiting, look, t))
     })
 }
 
@@ -236,6 +245,7 @@ fn overview_chip(keys: Option<String>, t: &Tokens) -> El {
             t,
         ),
         false,
+        system::Size::Small,
         t,
     )
     .on_press_tx(|state: &mut State, tx: &mut Tx| {
@@ -251,10 +261,17 @@ fn strip_chip(chip: &Chip, drop: Option<DesktopMark>, t: &Tokens) -> El {
     let slot = chip.slot.unwrap_or_default();
     let face = system::number_chip(slot, chip.selected, chip.empty, t)
         .children((chip.waiting > 0).then(|| waiting_dot(t)));
-    let button = system::chip_button(format!("queue.desktop.{slot}"), label, face, false, t)
-        .help(named)
-        .a11y_value(chip_value(chip.current, chip.empty))
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &desktop, tx));
+    let button = system::chip_button(
+        format!("queue.desktop.{slot}"),
+        label,
+        face,
+        false,
+        system::Size::Small,
+        t,
+    )
+    .help(named)
+    .a11y_value(chip_value(chip.current, chip.empty))
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &desktop, tx));
     dropped(button, drop, t)
 }
 
@@ -284,6 +301,7 @@ fn strip_extras(extras: Extras, t: &Tokens) -> Option<El> {
             ),
             face,
             selected,
+            system::Size::Small,
             t,
         )
         .on_press_tx(|state: &mut State, tx: &mut Tx| {
@@ -417,6 +435,7 @@ fn rail_chip(chip: &Chip, t: &Tokens) -> El {
         label,
         face,
         chip.current,
+        system::Size::Small,
         t,
     )
     .help(named)
@@ -531,6 +550,7 @@ fn desktops(state: &State, bands: &Bands<'_>, crowded: bool, t: &Tokens) -> El {
             Look::Bar,
             t,
         ))
+        .child(rune::el().w(BADGE_OVERHANG))
 }
 
 /// The queue bar's count of automation runs and of those that need the user; pressing it walks
@@ -588,5 +608,6 @@ const PILL_MAX_W: f32 = 640.0;
 const CRITICAL_STRIP_MAX_W: f32 = 260.0;
 
 /// How far the bar's waiting count hangs past its chip's corner, as the Tauri app's
-/// `.queue-bar-desktop-waiting` at -6.
+/// `.queue-bar-desktop-waiting` at -6; the bar keeps as much room after its last chip, so the
+/// count never lies over the toolbar.
 const BADGE_OVERHANG: f32 = 6.0;

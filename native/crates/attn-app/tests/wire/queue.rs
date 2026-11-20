@@ -2359,6 +2359,18 @@ fn a_crowded_queue_bar_keeps_the_window_s_desktop_and_gathers_the_rest_into_the_
         .bounds(Target::key("titlebar.right"))
         .unwrap();
     assert!(x + w <= toolbar, "the extras chip stays off the toolbar");
+    let [bx, _, bw, _] = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("queue-bar.desktop-extras.waiting"))
+        .expect("the extras chip counts its waiting turns")
+        .rect;
+    assert!(
+        bx + bw <= toolbar,
+        "the extras chip's count ends at {} over the toolbar at {toolbar}",
+        bx + bw
+    );
     let [_, _, pill, _] = world
         .screen()
         .bounds(Target::key("queue-bar.pill"))
@@ -2413,11 +2425,9 @@ fn bar_chips_drawn(recording: &rune::motion_gate::Recording) -> Vec<usize> {
                 .tracks
                 .iter()
                 .filter(|t| {
-                    t.path
-                        .rsplit('/')
-                        .next()
-                        .is_some_and(|key| key.starts_with("queue-bar.desktop."))
-                        && t.frames.iter().any(|(f, snap)| *f == k && snap.op > 0.0)
+                    t.path.rsplit('/').next().is_some_and(|key| {
+                        key.starts_with("queue-bar.desktop.") && !key.ends_with(".waiting")
+                    }) && t.frames.iter().any(|(f, snap)| *f == k && snap.op > 0.0)
                 })
                 .count()
         })
