@@ -403,7 +403,14 @@ impl ListRow {
                 let fill = tint.alpha(if lit { TINT.1 } else { TINT.0 });
                 (crate::colors::mix_srgb(below, tint, fill.a), fill)
             }
-            (None, true) => (t.bg_elevated, t.bg_elevated),
+            (None, true) => {
+                let lit = if below == t.bg_elevated {
+                    t.bg_selected
+                } else {
+                    t.bg_elevated
+                };
+                (lit, lit)
+            }
             (None, false) => (below, Color::TRANSPARENT),
         };
         let on_band = |e: El| row().h(band).items_center().child(e);

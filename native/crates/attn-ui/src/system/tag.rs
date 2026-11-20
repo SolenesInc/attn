@@ -21,12 +21,10 @@ pub(crate) fn tag_height() -> f32 {
     door::line_height(Type::Tag) + 2.0 * Space::S2.pt()
 }
 
-/// What pressing the row it sits in does, such as "Set up ⏎": on a brand wash, round, its words
-/// in the brand where that reads on the wash and in the primary ink where it does not, as the
-/// Asks pill's count.
+/// What pressing the row it sits in does, such as "Set up ⏎": primary words on a brand wash,
+/// round, so they read on the row's ground in every state.
 pub fn pill(key: impl Into<String>, said: &str, t: &Tokens) -> El {
-    let ink = if t.dark { t.brand } else { t.text_primary };
-    let pill = words(said, Type::Control, ink)
+    let pill = words(said, Type::Control, t.text_primary)
         .key(key.into())
         .single_line()
         .fill(t.brand.alpha(PILL_WASH));

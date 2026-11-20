@@ -293,6 +293,14 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             ])
             .build(&t)
             .on_press_tx(press),
+        rune::col().fill(t.bg_elevated).child(
+            ListRow::new("row.raised", "Move to Doing")
+                .title("Doing")
+                .on(t.bg_elevated)
+                .selected(true)
+                .build(&t)
+                .on_press_tx(press),
+        ),
         ListRow::new("row.two", "Open the delegation chain")
             .lead(dot(&t))
             .title(if s.long { LONG_AGENT } else { "chrome" })

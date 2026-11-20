@@ -737,3 +737,19 @@ fn a_rows_tag_is_drawn_whole_and_clear_of_its_controls_in_every_state() {
         }
     }
 }
+
+#[test]
+fn a_lit_row_stands_apart_from_a_raised_surface() {
+    for dark in [true, false] {
+        let t = tokens(dark);
+        let rt = story(dark, "Chrome/List row", "Rest");
+        let row = element(&rt, "row.raised");
+        let lit = surface(&rt, &row, t.bg_elevated);
+        let raised =
+            [t.bg_elevated.r, t.bg_elevated.g, t.bg_elevated.b].map(rune::theme::srgb_encode);
+        assert!(
+            contrast(lit, raised) > 1.05,
+            "dark={dark}: the lit row {lit:?} is the raised surface {raised:?}"
+        );
+    }
+}
