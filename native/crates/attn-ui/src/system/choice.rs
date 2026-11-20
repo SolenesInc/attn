@@ -125,6 +125,7 @@ impl Choice {
                 .child(tag),
             None => name,
         };
+        let described = self.note.clone();
         let named = door::gap(col().grow_from(1.0, NAME_FLOOR), Space::S2)
             .child(name)
             .children(self.note.map(|note| {
@@ -158,6 +159,10 @@ impl Choice {
             .border(1.0, edge)
             .child(dot)
             .child(said);
+        let row = match described {
+            Some(note) => row.description(note),
+            None => row,
+        };
         let rows = match self.size {
             Size::Regular => Space::S8,
             Size::Compact => Space::S4,
@@ -178,6 +183,17 @@ pub fn checks(key: impl Into<String>, label: &str) -> El {
     let group = col()
         .key(key.into())
         .role("group")
+        .label(label.to_owned())
+        .w_full();
+    door::gap(group, Space::S4)
+}
+
+/// The group that holds a list of choices each of which is its own stop of Tab, as a form's
+/// answers are, where Tab reaches every answer of a question in turn.
+pub fn answers(key: impl Into<String>, label: &str) -> El {
+    let group = col()
+        .key(key.into())
+        .role("radiogroup")
         .label(label.to_owned())
         .w_full();
     door::gap(group, Space::S4)

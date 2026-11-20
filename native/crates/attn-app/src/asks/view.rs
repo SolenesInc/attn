@@ -5,7 +5,7 @@ use attn_protocol::{Ask, AskAnswer, AskQuestion, AskSeedMention, Session};
 use attn_ui::blocks::{Block, Inline, List, Section, Sheet, Stack};
 use attn_ui::system::{
     Button, Choice, DotShape, DotSize, FieldState, IconSize, ListRow, Look, Size, Tone, Type,
-    area_box, checks, choices, count_badge, dot, icon_button, keycaps, keys_hint, line_box, tag,
+    answers, area_box, checks, count_badge, dot, icon_button, keycaps, keys_hint, line_box, tag,
     words,
 };
 use attn_ui::type_;
@@ -79,6 +79,7 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
             let item = &items[at];
             sheet
                 .top(list(&items, &item.ask.id, state.window.now_ms, t))
+                .keeps_room(ListRow::two_line_height() * SHOWN_ASKS)
                 .article("asks.ask", item.ask.subject.clone())
                 .push_all(article(state, item, t))
                 .footer(footer(state, item, items.len() > 1, t))
@@ -165,6 +166,8 @@ fn list(items: &[Item<'_>], shown: &str, now_ms: i64, t: &Tokens) -> El {
         .listbox()
         .rows(rows)
         .scrolling_up_to(ListRow::two_line_height() * SHOWN_ASKS, t)
+        .shrink()
+        .min_h(ListRow::two_line_height())
 }
 
 fn divider(key: &str, said: &'static str, t: &Tokens) -> El {
@@ -604,7 +607,7 @@ fn choice_list(
     let group = if many {
         checks(group_key, &question.prompt)
     } else {
-        choices(group_key, &question.prompt)
+        answers(group_key, &question.prompt)
     };
     let label = format!("Other answer to {}", question.prompt);
     let other = match answer {

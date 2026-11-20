@@ -243,7 +243,7 @@ fn fold_button(id: &SurfaceId, pane: Pane, open: bool, t: &Tokens) -> El {
 }
 
 fn tree(id: &SurfaceId, surface: &Surface, t: &Tokens) -> El {
-    let mut list = List::new(key(id, "files"), "Files").led();
+    let mut list = List::new(key(id, "files.list"), "Files").led();
     match surface.tree.folders.get("") {
         None | Some(Listing::Loading) => {
             list = list.empty(key(id, "files.loading"), "Loading…", None);
@@ -260,14 +260,15 @@ fn tree(id: &SurfaceId, surface: &Surface, t: &Tokens) -> El {
         }
     }
     col()
-        .role("navigation")
-        .label("Notebook files")
         .w(TREE_WIDTH)
         .h_full()
         .min_h(0.0)
         .fill(pane_fill(t))
         .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
-        .child(list.scrolling(t))
+        .child(
+            list.scrolls_as(key(id, "files"), "navigation", "Notebook files")
+                .scrolling(t),
+        )
 }
 
 fn folder_rows(

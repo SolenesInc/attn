@@ -2883,3 +2883,22 @@ fn the_fullscreen_notebook_in_the_smallest_window_folds_its_tree_and_rail_so_the
         note[2]
     );
 }
+
+#[test]
+fn the_file_tree_is_the_notebook_files_landmark_that_scrolls() {
+    let disk = Disk::with(&[("knowledge/index.md", INDEX)]);
+    let mut world = start(&disk);
+    open_fullscreen(&mut world);
+    let tree = world.screen().get(Target::key("notebook.files"));
+    assert_eq!(
+        (tree.role.as_str(), tree.name.as_deref()),
+        ("navigation", Some("Notebook files"))
+    );
+    assert!(
+        world
+            .screen()
+            .scrolled(Target::key("notebook.files"))
+            .is_some(),
+        "the landmark is what scrolls"
+    );
+}

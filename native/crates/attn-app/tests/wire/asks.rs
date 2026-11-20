@@ -1678,3 +1678,52 @@ fn the_title_bar_s_asks_button_reads_checked_while_its_drawer_is_open_as_the_oth
     open_drawer(&mut world);
     assert!(button(&world).is("checked"), "{:?}", button(&world).states);
 }
+
+#[test]
+fn tab_reaches_every_answer_of_a_question_as_on_main_even_after_one_is_chosen() {
+    let mut world = start(vec![rollout()], vec![api_working()]);
+    open_drawer(&mut world);
+    assert_eq!(focused(&world).as_deref(), Some("asks.q.q1.choice.0"));
+    world.gesture(|d| d.press("a"));
+    assert!(
+        world
+            .screen()
+            .get(Target::key("asks.q.q1.choice.0"))
+            .is("checked"),
+        "accepting the recommendations chooses eu"
+    );
+    plain(&mut world, Key::Tab);
+    assert_eq!(focused(&world).as_deref(), Some("asks.q.q1.choice.1"));
+}
+
+#[test]
+fn a_choice_s_line_under_its_name_is_its_description() {
+    let mut world = start(vec![cache_store()], vec![api_working()]);
+    open_drawer(&mut world);
+    let postgres = world.screen().get(Target::key("asks.q.q1.choice.0"));
+    assert_eq!(postgres.description.as_deref(), Some("already deployed"));
+}
+
+#[test]
+fn in_the_smallest_window_the_list_gives_way_so_the_ask_has_room_to_read_and_its_note_s_grip_shows()
+{
+    let mut world = start(
+        vec![rollout(), cache_store(), release_day()],
+        vec![api_working(), web_waiting()],
+    );
+    world.resize((533.0, 400.0));
+    open_drawer(&mut world);
+    const MAIN_S_ROOM: f64 = 85.0;
+    let ask = world.rect("asks.ask");
+    assert!(
+        ask[3] >= MAIN_S_ROOM,
+        "the ask has {} points to show itself",
+        ask[3]
+    );
+    scroll_to(&mut world, "asks.note.field-grip");
+    let grip = world.rect("asks.note.field-grip");
+    assert!(
+        grip[1] >= ask[1] && grip[1] + grip[3] <= ask[1] + ask[3],
+        "the grip {grip:?} is outside the ask's view {ask:?}"
+    );
+}

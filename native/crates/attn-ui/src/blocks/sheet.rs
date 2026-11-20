@@ -19,6 +19,7 @@ pub struct Sheet {
     fill: Option<El>,
     framed: bool,
     fits: Option<f32>,
+    room: f32,
     article: Option<(String, String)>,
     blocks: Vec<Block>,
     footer: Vec<Block>,
@@ -39,6 +40,7 @@ impl Sheet {
             fill: None,
             framed: false,
             fits: None,
+            room: 0.0,
             article: None,
             blocks: Vec::new(),
             footer: Vec::new(),
@@ -80,6 +82,13 @@ impl Sheet {
     /// The sheet stands as tall as what it holds, up to `tallest` or the room what holds it
     /// gives, whichever is less, past which its body scrolls inside it: for a sheet that opens
     /// over the window, such as a popover, rather than filling a drawer.
+    /// The body keeps at least `points` of the sheet's height, so the top band gives way first
+    /// when the sheet is short, as the list of asks gives way to the ask it shows.
+    pub fn keeps_room(mut self, points: f32) -> Self {
+        self.room = points;
+        self
+    }
+
     pub fn fits(mut self, tallest: f32) -> Self {
         self.fits = Some(tallest);
         self
@@ -151,6 +160,7 @@ impl Sheet {
         let top = self.top.map(|top| {
             door::frame(top, Space::S4, Space::S16, Space::S4)
                 .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+                .shrink()
         });
         let body = match self.fill {
             Some(body) => body.key(format!("{key}.body")).grow(1.0).min_h(0.0),
@@ -167,9 +177,9 @@ impl Sheet {
                 };
                 let body = body.w_full();
                 let body = if self.fits.is_some() {
-                    body.shrink().min_h(0.0)
+                    body.shrink().min_h(self.room)
                 } else {
-                    body.grow(1.0).min_h(0.0)
+                    body.grow(1.0).min_h(self.room)
                 };
                 body.scroll(rune::ScrollSpec {
                     stick_bottom: false,

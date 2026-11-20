@@ -40,7 +40,7 @@ pub use attachment::{drop_overlay, file_chip, image_tile};
 pub use button::{Button, Look};
 pub use check::Check;
 pub use chip::{chip_button, count_badge, keycaps, keys_hint, number_chip, slot_badge};
-pub use choice::{Choice, checks, choices};
+pub use choice::{Choice, answers, checks, choices};
 pub use composer::composer;
 pub use control::Control;
 pub use disclosure::disclosure;

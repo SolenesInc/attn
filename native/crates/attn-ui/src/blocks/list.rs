@@ -28,6 +28,7 @@ pub struct List {
     keys: Option<Box<dyn FnOnce(El) -> El>>,
     find: Option<El>,
     led: bool,
+    region: Option<(String, &'static str, String)>,
     items: Vec<Item>,
     empty: Option<(String, Said, Option<El>)>,
 }
@@ -48,6 +49,7 @@ impl List {
             keys: None,
             find: None,
             led: false,
+            region: None,
             items: Vec::new(),
             empty: None,
         }
@@ -93,6 +95,18 @@ impl List {
         keys: impl Fn(&mut S, &KeyEvent, &mut Tx) -> bool + 'static,
     ) -> Self {
         self.keys = Some(Box::new(move |list: El| list.focusable(true).on_key(keys)));
+        self
+    }
+
+    /// The column that scrolls the list is itself keyed `key` and read as a `role` named
+    /// `label`, such as the navigation landmark a file tree is, so what finds it can scroll it.
+    pub fn scrolls_as(
+        mut self,
+        key: impl Into<String>,
+        role: &'static str,
+        label: impl Into<String>,
+    ) -> Self {
+        self.region = Some((key.into(), role, label.into()));
         self
     }
 
@@ -175,8 +189,12 @@ impl List {
             .find
             .take()
             .map(|find| door::frame(find, Space::S8, Space::S16, Space::S0));
+        let rows = match self.region.take() {
+            Some((key, role, label)) => col().key(key).role(role).label(label),
+            None => col(),
+        };
         let list = door::frame(self.laid(t), Space::S8, Space::S16, Space::S8);
-        let rows = col()
+        let rows = rows
             .w_full()
             .min_w(0.0)
             .scroll(rune::ScrollSpec {
