@@ -128,6 +128,10 @@ pub(crate) fn over_previous_edge(e: El) -> El {
     e.ml(-1.0)
 }
 
+pub(crate) fn flush(highlight: rune_kit::Highlight) -> rune_kit::Highlight {
+    highlight.pad(0.0).radius(0.0)
+}
+
 pub(crate) fn line(input: rune_kit::TextInput, kind: Type) -> rune_kit::TextInput {
     input.text_style(style(kind))
 }

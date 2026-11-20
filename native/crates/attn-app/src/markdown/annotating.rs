@@ -6,13 +6,13 @@ use std::collections::{BTreeMap, HashMap};
 use std::ops::Range;
 
 use attn_protocol::MarkdownAnnotationAnchor;
-use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens};
-use rune::{
-    Chord, Cx, El, Key, KeyEvent, KeyPlatform, SelectionChange, TextEdit, Tx, col, el, row, text,
-    text_input,
+use attn_ui::blocks::{Actions, Block, Popover, Toolbar};
+use attn_ui::system::{
+    Button as UiButton, IconSize, Look, Size, Type, icon_button, passage_mark, words,
 };
-use rune_kit::{Button, ButtonVariant, Highlight};
+use attn_ui::{Tokens, type_};
+use rune::{Chord, Cx, El, Key, KeyEvent, KeyPlatform, SelectionChange, TextEdit, Tx, text_input};
+use rune_kit::Highlight;
 
 use super::anchoring::Resolved;
 use super::marks::{self, Saying};
@@ -27,10 +27,6 @@ const COMPOSER_ROOM: f32 = 280.0;
 const EDGE: f32 = 16.0;
 /// How long a mark brought into view glows.
 const FOCUS_SECONDS: f64 = 2.0;
-const CHIP: f32 = 28.0;
-/// The quick labels' emoji: the audit measured the Tauri toolbar's 14 px `.md-toolbar-emoji`
-/// glyphs 1.3 times as tall as native's at 13, so they draw at 17.
-const EMOJI: rune::TextStyle = rune::TextStyle::new(17.0, 400.0);
 
 /// A passage selected and let go, which the toolbar acts on.
 #[derive(Clone, Debug)]
@@ -215,7 +211,7 @@ pub(crate) fn highlights(
                 (false, true) => t.error.alpha(0.2),
                 (false, false) => t.warning.alpha(0.28),
             };
-            let highlight = square(Highlight::new().bg(bg)).key(mark_key(tile, &painted.id));
+            let highlight = passage_mark(bg).key(mark_key(tile, &painted.id));
             out.push((
                 painted.source.clone(),
                 if painted.deletion {
@@ -236,16 +232,10 @@ pub(crate) fn highlights(
         };
         out.push((
             pending.source.clone(),
-            square(Highlight::new().bg(bg)).key(key(tile, "pending")),
+            passage_mark(bg).key(key(tile, "pending")),
         ));
     }
     out
-}
-
-/// A mark painted as the Tauri reader's `::highlight()` paints it: a square block exactly as
-/// wide as its words.
-fn square(highlight: Highlight) -> Highlight {
-    highlight.pad(0.0).radius(0.0)
 }
 
 /// A selection in tile `tile`'s document changed: let go over a passage, the toolbar opens on
@@ -555,95 +545,69 @@ pub(crate) fn in_document(
     vec![toolbar(tile, reading.picking, t).absolute(left, top)]
 }
 
-fn button(
-    tile: &str,
-    part: &str,
-    glyph: impl Into<attn_ui::Glyph>,
-    ink: rune::Color,
-    label: &str,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    let glyph = glyph.into();
-    let font = match &glyph {
-        attn_ui::Glyph::Text(_) => EMOJI,
-        attn_ui::Glyph::Icon(_) => type_::BODY,
-    };
-    GlyphButton::new(glyph, label)
-        .variant(ButtonVariant::Ghost)
-        .font(font)
-        .icon_size(16.0)
-        .color(ink)
-        .side(CHIP)
-        .on_press_tx(press)
-        .build(attn_ui::kit(t))
-        .key(key(tile, &format!("toolbar.{part}")))
-        .w(CHIP)
-        .radius(6.0)
-}
-
 fn toolbar(tile: &str, picking: bool, t: &Tokens) -> El {
     let on = |f: fn(&mut State, &str, &mut Tx)| {
         let tile = tile.to_owned();
         move |state: &mut State, tx: &mut Tx| f(state, &tile, tx)
     };
-    let picker = on_picker(tile);
-    let mut parts = vec![
-        button(
-            tile,
-            "delete",
-            &attn_ui::icon::ANNOTATION_DELETE,
-            attn_ui::colors::mix_srgb(t.error, rune::Color::WHITE, 0.24),
-            "Delete",
-            t,
-            on(|state, tile, tx| mark(state, tile, Saying::Deletion, tx)),
-        ),
-        button(
-            tile,
-            "comment",
-            &attn_ui::icon::ANNOTATION_COMMENT,
-            t.warning,
-            "Comment",
-            t,
-            on(|state, tile, tx| compose(state, tile, false, "", tx)),
-        ),
-        button(
-            tile,
-            "zap",
-            &attn_ui::icon::ANNOTATION_LABEL,
-            t.warning,
-            "Quick label",
-            t,
-            move |state, _| picker(state),
+    let tool = |part: &str, glyph: attn_ui::Glyph, label: &str| {
+        icon_button(
+            key(tile, &format!("toolbar.{part}")),
+            label,
+            glyph,
+            IconSize::Regular,
         )
-        .fill(if picking {
-            t.accent.alpha(0.2)
-        } else {
-            rune::Color::TRANSPARENT
-        }),
+        .size(Size::Regular)
+    };
+    let picker = on_picker(tile);
+    let mut marking: Vec<El> = vec![
+        tool(
+            "delete",
+            (&attn_ui::icon::ANNOTATION_DELETE).into(),
+            "Delete",
+        )
+        .ink(t.error)
+        .on_press_tx(on(|state, tile, tx| {
+            mark(state, tile, Saying::Deletion, tx)
+        }))
+        .build(t)
+        .into(),
+        tool(
+            "comment",
+            (&attn_ui::icon::ANNOTATION_COMMENT).into(),
+            "Comment",
+        )
+        .ink(t.warning)
+        .on_press_tx(on(|state, tile, tx| compose(state, tile, false, "", tx)))
+        .build(t)
+        .into(),
+        tool(
+            "zap",
+            (&attn_ui::icon::ANNOTATION_LABEL).into(),
+            "Quick label",
+        )
+        .ink(t.warning)
+        .expanded(picking)
+        .on_press(move |state: &mut State| picker(state))
+        .build(t)
+        .into(),
     ];
     for promoted in annotations::promoted_labels() {
         let (pressed, id) = (tile.to_owned(), promoted.id);
-        parts.push(button(
-            tile,
-            &format!("label.{id}"),
-            promoted.emoji,
-            t.text_secondary,
-            promoted.text,
-            t,
-            move |state: &mut State, tx: &mut Tx| label(state, &pressed, id, tx),
-        ));
+        marking.push(
+            tool(&format!("label.{id}"), promoted.emoji.into(), promoted.text)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| label(state, &pressed, id, tx))
+                .build(t)
+                .into(),
+        );
     }
-    parts.push(el().w(1.0).h(18.0).mx(4.0).fill(t.border));
-    parts.push(button(
-        tile,
+    let cancel = tool(
         "cancel",
-        &attn_ui::icon::ANNOTATION_CANCEL,
-        t.text_secondary,
+        (&attn_ui::icon::ANNOTATION_CANCEL).into(),
         "Cancel",
-        t,
-        on(close_toolbar),
-    ));
+    )
+    .on_press_tx(on(close_toolbar))
+    .build(t);
     let list = picking.then(|| {
         let tile = tile.to_owned();
         crate::desktop::annotating::label_list(
@@ -652,16 +616,13 @@ fn toolbar(tile: &str, picking: bool, t: &Tokens) -> El {
             t,
         )
     });
-    let surface = col()
-        .key(key(tile, "toolbar"))
-        .role("toolbar")
-        .label("Annotate selection")
+    Toolbar::new(key(tile, "toolbar"), "Annotate selection")
+        .group(marking)
+        .group([cancel])
+        .under(list)
+        .build(t)
         .keeps_text_selection()
-        .padding(4.0)
         .on_press(|_: &mut State| {})
-        .child(row().items_center().gap(2.0).children(parts))
-        .children(list);
-    rune_kit::popover::raised(attn_ui::kit(t), surface, SURFACE_RADIUS)
 }
 
 fn on_picker(tile: &str) -> impl Fn(&mut State) + 'static {
@@ -672,11 +633,6 @@ fn on_picker(tile: &str) -> impl Fn(&mut State) + 'static {
         }
     }
 }
-
-/// The corner radius of the toolbar and the review notes, as the Tauri reader rounds them; the
-/// comment box rounds more.
-pub(crate) const SURFACE_RADIUS: f32 = 8.0;
-const COMPOSER_RADIUS: f32 = 12.0;
 
 fn composer_box(
     tile: &str,
@@ -717,7 +673,6 @@ fn composer_box(
         tile.to_owned(),
         tile.to_owned(),
     );
-    let (word, ink) = (if overall { "Add" } else { "Save" }, t.on_brand);
     let save_key = Chord::parse("mod+enter")
         .expect("the save chord parses")
         .label_on(KeyPlatform::current());
@@ -751,92 +706,54 @@ fn composer_box(
         .w_full()
         .min_h(72.0)
         .color(t.text_primary);
-    let rule = t.border.alpha(0.5);
-    let surface = col()
-        .key(key(tile, "composer"))
-        .role("dialog")
-        .label(if overall { "Overall Note" } else { "Comment" })
+    let close = icon_button(
+        key(tile, "composer.close"),
+        "Close",
+        &attn_ui::icon::ANNOTATION_CANCEL,
+        IconSize::Small,
+    )
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| close_composer(state, &closed, tx))
+    .build(t);
+    let save = UiButton::new(if overall { "Add" } else { "Save" })
+        .look(Look::Primary)
+        .size(Size::Compact)
+        .disabled(blank)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| save_comment(state, &saved, tx))
+        .build(t)
+        .key(key(tile, "composer.save"));
+    let quote = composer.about.is_some().then(|| {
+        Block::custom(
+            key(tile, "composer.quote"),
+            words(heading, Type::Label, t.text_muted).truncate(),
+        )
+    });
+    let popover = Popover::new(
+        key(tile, "composer"),
+        if overall { "Overall Note" } else { "Comment" },
+    )
+    .aside(close)
+    .push_all(quote)
+    .push(Block::custom(key(tile, "composer.input"), field))
+    .actions(
+        Actions::new(key(tile, "composer.keys"))
+            .push(words(
+                format!("{save_key} to save"),
+                Type::Small,
+                t.text_muted,
+            ))
+            .then_end()
+            .push(save),
+    )
+    .build(t);
+    popover
         .w(width)
         .on_press(|_: &mut State| {})
         .modal_tx(true, move |state: &mut State, tx: &mut Tx| {
             close_if_empty(state, &outside, tx)
         })
         .modal_press_through(true)
-        .child(
-            row()
-                .items_center()
-                .gap(8.0)
-                .px(12.0)
-                .py(8.0)
-                .border_sides([0.0, 0.0, 1.0, 0.0], rule)
-                .child(
-                    text(heading)
-                        .font(QUOTE)
-                        .color(t.text_muted)
-                        .single_line()
-                        .truncate()
-                        .grow(1.0),
-                )
-                .child(
-                    GlyphButton::new(&attn_ui::icon::ANNOTATION_CANCEL, "Close")
-                        .icon_size(14.0)
-                        .side(20.0)
-                        .color(t.text_muted)
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            close_composer(state, &closed, tx)
-                        })
-                        .build(attn_ui::kit(t))
-                        .key(key(tile, "composer.close"))
-                        .w(20.0)
-                        .radius(4.0),
-                ),
-        )
-        .child(col().px(12.0).pt(8.0).child(field))
-        .child(
-            row()
-                .items_center()
-                .justify_end()
-                .gap(10.0)
-                .px(12.0)
-                .py(8.0)
-                .border_sides([1.0, 0.0, 0.0, 0.0], rule)
-                .child(
-                    text(format!("{save_key} to save"))
-                        .font(HINT)
-                        .color(t.text_muted),
-                )
-                .child(
-                    Button::new(if overall { "Add" } else { "Save" })
-                        .variant(ButtonVariant::Neutral)
-                        .label_with(move |_, _| text(word).font(SAVE).color(ink))
-                        .disabled(blank)
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            save_comment(state, &saved, tx)
-                        })
-                        .build(attn_ui::kit(t))
-                        .key(key(tile, "composer.save"))
-                        .fill(t.accent)
-                        .radius(6.0)
-                        .px(12.0),
-                ),
-        );
-    rune_kit::popover::raised(attn_ui::kit(t), surface, COMPOSER_RADIUS).absolute(left, top)
+        .absolute(left, top)
 }
-
-/// The comment box's quote of its passage and its hint, quieter than the comment being
-/// written, as the Tauri reader's `.md-popover-quote` and `.md-popover-hint`.
-const QUOTE: rune::TextStyle = rune::TextStyle {
-    weight: 400.0,
-    ..type_::LABEL
-};
-const SAVE: rune::TextStyle = rune::TextStyle {
-    weight: 600.0,
-    ..type_::LABEL
-};
-const HINT: rune::TextStyle = rune::TextStyle {
-    size: 12.0,
-    ..QUOTE
-};
 
 /// The text tile `tile`'s comment box edits; a box that closed edits nothing that stays.
 fn composer_text<'a>(state: &'a mut State, tile: &str) -> &'a mut TextEdit {

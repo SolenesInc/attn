@@ -81,6 +81,12 @@ pub fn read_aside(e: rune::El, role: Reading, t: &Tokens) -> rune::El {
     )
 }
 
+/// A mark painted over a passage of a document in `fill`: a square block exactly as wide and
+/// tall as its words, so marks side by side meet with no seam.
+pub fn passage_mark(fill: Color) -> rune_kit::Highlight {
+    door::flush(rune_kit::Highlight::new().bg(fill))
+}
+
 /// `e`, text of a document, set in `role`.
 pub fn read_as(e: rune::El, role: Reading, t: &Tokens) -> rune::El {
     door::styled(e, role.style(t))

@@ -55,6 +55,7 @@ mod terminal_status;
 mod tile_frame;
 mod tile_header;
 mod tip;
+mod toolbar;
 mod trail;
 
 pub use actions::Actions;
@@ -113,6 +114,7 @@ pub use terminal_status::terminal_status;
 pub use tile_frame::{tile_area, tile_content};
 pub use tile_header::{Settling, SettlingChip, TileHeader};
 pub use tip::tip;
+pub use toolbar::Toolbar;
 pub use trail::Trail;
 
 pub use measure::{DOCUMENT, DOCUMENT_EDGE, DOCUMENT_GUTTER, document_inset, document_inside};
