@@ -228,7 +228,7 @@ fn state_tone(state: &str) -> Tone {
     match state {
         "connected" => Tone::Good,
         "stalled" => Tone::Warn,
-        "lost" | "refused" => Tone::Bad,
+        "lost" | "refused" | "error" => Tone::Bad,
         _ => Tone::Neutral,
     }
 }
