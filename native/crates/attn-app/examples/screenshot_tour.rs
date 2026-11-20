@@ -2468,6 +2468,9 @@ fn settings_analytics_populated(dark: bool, smallest: bool) {
     }
     snap(&mut world, name, dark);
     tap(&mut world, Key::Text("m".into()));
+    world.gesture(|app| {
+        app.update(|_, tx| tx.scroll_into_view_in("settings.body", "settings.analytics.machine"))
+    });
     snap(&mut world, &format!("{name}-machine"), dark);
     if smallest {
         world.gesture(|app| app.update(|_, tx| tx.scroll_to_bottom_instant("settings.body")));
