@@ -435,24 +435,35 @@ impl ListRow {
         let lead = self
             .lead
             .map(|lead| on_band(row().w(LEAD).justify_center().items_center().child(lead)));
-        let title_line = door::gap(row(), Space::S6)
-            .w_full()
-            .min_w(0.0)
-            .children(title);
-        let title_line = if wraps {
-            title_line.items_start()
-        } else {
-            title_line.h(band).items_center()
-        };
-        let words_column = door::gap(col(), Space::S2)
-            .grow(1.0)
-            .min_w(0.0)
-            .child(title_line.children(self.tags))
-            .children(subtitle);
         let hovering = !self.hover.is_empty();
         let reach = self.hover.iter().map(IconButton::width).sum::<f32>()
             + Space::S2.pt() * self.hover.len().saturating_sub(1) as f32
             + FADE_ROOM.pt();
+        let tagged = !self.tags.is_empty();
+        let title_line = door::gap(row(), Space::S6).w_full().min_w(0.0);
+        let title_line = match (wraps, tagged) {
+            (true, _) => title_line.items_start().children(title).children(self.tags),
+            (false, true) => title_line
+                .flex_wrap()
+                .items_center()
+                .children(title.map(|title| on_band(title).shrink().min_w(0.0)))
+                .children(self.tags.into_iter().map(on_band)),
+            (false, false) => title_line
+                .h(band)
+                .items_center()
+                .children(title)
+                .children(self.tags),
+        };
+        let title_line = if hovering {
+            door::fade_before_hover(title_line, FADE, reach)
+        } else {
+            title_line
+        };
+        let words_column = door::gap(col(), Space::S2)
+            .grow(1.0)
+            .min_w(0.0)
+            .child(title_line)
+            .children(subtitle);
         let asides = (!self.asides.is_empty()).then(|| {
             let asides = on_band(
                 door::gap(row().items_center(), Space::S6)
@@ -542,42 +553,25 @@ impl ListRow {
             .items_start()
             .children(lead)
             .child(words_column);
-        let selects = self.select.is_some();
-        let expanded = self.expanded;
-        let says_open = |e: El| match expanded {
-            Some(open) => e.expanded(open),
-            None => e,
-        };
-        let words_part = match self.select {
-            Some((key, label, attach)) => {
-                let button = attach(says_open(
-                    words_part
-                        .key(key)
-                        .role(self.select_role)
-                        .label(label)
-                        .focusable(true),
-                ));
-                let button = door::corner(button, Radius::Control);
-                focus::ring_on_edge(layers::pressable(button, rest, t), t)
-            }
-            None => words_part,
-        };
         let content = door::gap(row(), Space::S8)
             .grow(1.0)
             .min_w(0.0)
             .items_start()
             .child(words_part)
             .children(asides);
-        let content = if hovering {
-            door::fade_before_hover(content, FADE, reach)
-        } else {
-            content
+        let item = self
+            .select
+            .is_some()
+            .then(|| (self.key.clone(), self.role, self.label.clone()));
+        let (key, role, label, focusable, attach) = match self.select {
+            Some((key, label, attach)) => (key, self.select_role, label, true, Some(attach)),
+            None => (self.key, self.role, self.label, self.focusable, None),
         };
         let line = row()
-            .key(self.key)
-            .role(self.role)
-            .label(self.label)
-            .focusable(self.focusable)
+            .key(key)
+            .role(role)
+            .label(label)
+            .focusable(focusable)
             .w_full()
             .min_w(0.0)
             .items_start()
@@ -587,8 +581,11 @@ impl ListRow {
             .children(kept)
             .children(overlaid)
             .children(bar);
-        let line = if selects { line } else { says_open(line) };
-        let line = match (wraps, two_lines) {
+        let line = match self.expanded {
+            Some(open) => line.expanded(open),
+            None => line,
+        };
+        let line = match (wraps || tagged, two_lines) {
             (false, _) => line.h(height),
             (true, true) => line.min_h(height),
             (true, false) => door::on_band(line.min_h(height), Type::Body, Size::Regular),
@@ -601,18 +598,28 @@ impl ListRow {
             line
         };
         let line = door::corner(door::gap(line, Space::S8), Radius::Control);
-        if self.disabled {
-            return super::disabled::dim(line.focusable(false).disabled(true));
-        }
-        let line = if selects || self.still {
-            line
-        } else {
-            layers::pressable(line, rest, t)
+        let line = match attach {
+            Some(attach) => attach(line),
+            None => line,
         };
-        match (self.focusable, self.cursor) {
-            (_, true) => focus::ring_on_edge(line.focus_selected(true), t),
-            (true, false) => focus::ring_on_edge(line, t),
-            (false, false) => line,
+        let line = match (self.disabled, self.still, focusable, self.cursor) {
+            (true, ..) => super::disabled::dim(line),
+            (false, true, ..) => line,
+            (false, false, _, true) => {
+                focus::ring_on_edge(layers::pressable(line, rest, t).focus_selected(true), t)
+            }
+            (false, false, true, false) => focus::ring_on_edge(layers::pressable(line, rest, t), t),
+            (false, false, false, false) => layers::pressable(line, rest, t),
+        };
+        match item {
+            Some((key, role, label)) => row()
+                .key(key)
+                .role(role)
+                .label(label)
+                .w_full()
+                .min_w(0.0)
+                .child(line),
+            None => line,
         }
     }
 }

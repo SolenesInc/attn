@@ -143,6 +143,7 @@ pub const CHROME_SHEETS: &[ChromeSheet] = &[
             "chip.count",
             "chip.count.wide",
             "chip.dots",
+            "chip.pill",
             "chip.keys",
         ],
         columns: &[("Rest", "Rest", "", "")],
@@ -332,6 +333,7 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
                     .into()],
                 Reveal::Always,
             )
+            .hover_controls(row_controls("row.select"))
             .select("row.select.open", "Open Nightly triage", press)
             .selected(s.lit)
             .disabled(s.disabled)
@@ -538,6 +540,7 @@ fn chips(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
         count_badge(3, t.warning, crate::warning_ink(&t)).key("chip.count"),
         count_badge(128, t.warning, crate::warning_ink(&t)).key("chip.count.wide"),
         dots(&t).key("chip.dots"),
+        crate::system::pill("chip.pill", "Set up ⏎", &t),
         crate::system::keys_hint(["⌘", "⇧", "K"], "Open the palette", &t).key("chip.keys"),
     ];
     stage(

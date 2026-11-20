@@ -11,8 +11,8 @@ use crate::{Glyph, Tokens};
 const TINT: f32 = 0.22;
 const TINT_OPEN: f32 = 0.34;
 /// A dot's side, and the ring of the ground around it that keeps it apart from the icon.
-const DOT: f32 = 6.0;
-const DOT_RING: f32 = 1.5;
+const DOT: f32 = super::DotSize::Small.side();
+const DOT_RING: f32 = super::dot::RING;
 
 /// A button that is only an icon, named by its label: square, as tall as its size, its icon
 /// drawn at its icon size whatever the size of the square.

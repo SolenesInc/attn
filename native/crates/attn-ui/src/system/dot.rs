@@ -22,11 +22,12 @@ pub enum DotShape {
     Square,
 }
 
-/// How thick a hollow dot's ring is.
-const RING: f32 = 1.5;
+/// How thick a hollow dot's ring is, and the ring of ground round a dot laid over a mark.
+pub(crate) const RING: f32 = 1.5;
 
 impl DotSize {
-    const fn side(self) -> f32 {
+    /// How wide the dot stands, for a layout that reserves its room.
+    pub const fn side(self) -> f32 {
         match self {
             DotSize::Small => 6.0,
             DotSize::Regular => 8.0,

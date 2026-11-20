@@ -258,6 +258,7 @@ fn a_rows_hover_controls_show_whole_on_the_first_frame_on_its_ground_with_its_wo
             for key in ["row.agent", "row.tile", "row.two", "row.keyed"] {
                 let mut rt = story(dark, "Chrome/List row", variant);
                 let row = element(&rt, key);
+                let at_rest = element(&rt, &format!("{key}.title")).visible;
                 let controls = format!("{key}.controls");
                 assert!(
                     element(&rt, &controls).opacity < 0.01,
@@ -296,6 +297,13 @@ fn a_rows_hover_controls_show_whole_on_the_first_frame_on_its_ground_with_its_wo
                 assert!(
                     words_end <= controls_start,
                     "{variant}, dark={dark}: {key}'s words reach {words_end} under its controls at {controls_start}"
+                );
+                rt.pointer_leave();
+                rt.frame(1.0 / 60.0);
+                let left = element(&rt, &format!("{key}.title")).visible;
+                assert!(
+                    near(left, at_rest),
+                    "{variant}, dark={dark}: {key}'s words show {left:?} one frame after the pointer left, {at_rest:?} at rest: they move"
                 );
             }
         }
@@ -509,27 +517,77 @@ fn a_still_row_takes_no_press_or_focus_and_a_wrapped_row_grows_with_its_lead_on_
     }
 }
 
+/// The narrowest a row's title may get: "Nightly" in `Name`, 46 points as the review of landing 1
+/// measured it, so a name keeps its first word in the narrowest sidebar.
+const TITLE_FLOOR: f32 = 46.0;
+
+fn inside(inner: [f32; 4], outer: [f32; 4]) -> bool {
+    inner[0] >= outer[0] - 0.01
+        && inner[1] >= outer[1] - 0.01
+        && inner[0] + inner[2] <= outer[0] + outer[2] + 0.01
+        && inner[1] + inner[3] <= outer[1] + outer[3] + 0.01
+}
+
 #[test]
-fn a_tag_on_a_rows_title_line_stays_inside_the_row() {
+fn a_select_rows_state_box_holds_every_part_and_its_tag_drops_under_before_its_title_is_cut() {
     for variant in ROW_VARIANTS {
-        let rt = story(true, "Chrome/List row", variant);
-        let tag = element(&rt, "row.select.tag");
+        let mut rt = story(true, "Chrome/List row", variant);
         let row = element(&rt, "row.select");
-        let (top, bottom) = (row.rect[1], row.rect[1] + row.rect[3]);
+        let open = element(&rt, "row.select.open");
         assert!(
-            tag.rect[1] >= top - 0.01 && tag.rect[1] + tag.rect[3] <= bottom + 0.01,
-            "{variant}: the tag runs from {} to {} past its row's {top} to {bottom}",
-            tag.rect[1],
-            tag.rect[1] + tag.rect[3]
+            near(open.rect, row.rect),
+            "{variant}: the row's button {:?} is not the row {:?}",
+            open.rect,
+            row.rect
         );
+        for part in ["row.select.title", "row.select.tag", "row.select.run"] {
+            let e = element(&rt, part);
+            assert!(
+                inside(e.rect, open.rect),
+                "{variant}: {part} {:?} lies outside the row's state box {:?}",
+                e.rect,
+                open.rect
+            );
+        }
         let title = element(&rt, "row.select.title");
-        let (tag_mid, title_mid) = (
-            tag.rect[1] + tag.rect[3] / 2.0,
-            title.rect[1] + title.rect[3] / 2.0,
+        let tag = element(&rt, "row.select.tag");
+        let on_line =
+            ((tag.rect[1] + tag.rect[3] / 2.0) - (title.rect[1] + title.rect[3] / 2.0)).abs() < 0.6;
+        let under = tag.rect[1] >= title.rect[1] + title.rect[3] - 0.01;
+        assert!(
+            on_line || under,
+            "{variant}: the tag {:?} is neither on the title's line nor under it {:?}",
+            tag.rect,
+            title.rect
         );
         assert!(
-            (tag_mid - title_mid).abs() < 0.6,
-            "{variant}: the tag centres at {tag_mid}, the title at {title_mid}"
+            title.rect[2] >= TITLE_FLOOR,
+            "{variant}: the title gets {} points",
+            title.rect[2]
+        );
+        let corner = (row.rect[0] + 2.0, row.rect[1] + row.rect[3] - 2.0);
+        click(&mut rt, corner);
+        assert_eq!(
+            presses(&rt),
+            1,
+            "{variant}: a press on the row's padding opens nothing"
+        );
+    }
+}
+
+#[test]
+fn a_rows_hover_fade_reaches_only_the_line_its_controls_stand_on() {
+    for variant in ROW_VARIANTS {
+        let mut rt = story(true, "Chrome/List row", variant);
+        let row = element(&rt, "row.two");
+        let rest = element(&rt, "row.two.subtitle").visible;
+        let (x, y) = middle(&row);
+        rt.pointer_move(x, y);
+        rt.frame(1.0 / 60.0);
+        let hovered = element(&rt, "row.two.subtitle").visible;
+        assert!(
+            near(rest, hovered),
+            "{variant}: hovering cuts the line under the controls from {rest:?} to {hovered:?}"
         );
     }
 }
@@ -606,5 +664,28 @@ fn a_disabled_piece_takes_no_tab_stop_and_no_press_on_any_part_of_it() {
                 );
             }
         }
+    }
+}
+
+#[test]
+fn a_pills_words_read_on_its_wash_and_it_stands_inside_a_rows_band() {
+    for dark in [true, false] {
+        let t = tokens(dark);
+        let rt = story(dark, "Chrome/Chip", "Rest");
+        let pill = element(&rt, "chip.pill");
+        let ground = surface(&rt, &pill, t.bg_panel);
+        let ink = pill.text_color.expect("the pill has words");
+        let ink = [ink.r, ink.g, ink.b].map(rune::theme::srgb_encode);
+        let ratio = contrast(ink, ground);
+        assert!(
+            ratio >= 4.5,
+            "dark={dark}: the pill's words read at {ratio:.2} on its wash"
+        );
+        assert!(
+            pill.rect[3] <= ListRow::height(),
+            "dark={dark}: the pill stands {} tall, past a row's {}",
+            pill.rect[3],
+            ListRow::height()
+        );
     }
 }
