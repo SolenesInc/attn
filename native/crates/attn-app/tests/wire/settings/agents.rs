@@ -842,7 +842,7 @@ fn fill_new(world: &mut World, model: &str) {
 fn cards(world: &World) -> Vec<String> {
     world
         .screen()
-        .descendants(Target::key("settings.pricing.body"))
+        .descendants(Target::key("settings.prices"))
         .into_iter()
         .filter(|n| {
             n.role == "list-item"

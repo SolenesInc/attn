@@ -513,6 +513,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Block {
             pricing.open = !pricing.open;
         },
     )
+    .body_key("settings.prices")
     .push(
         Prose::hint(
             "settings.prices.lead",

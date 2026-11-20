@@ -20,6 +20,7 @@ pub struct Disclosure<S> {
     disabled: bool,
     toggle: Press<S>,
     region: Option<String>,
+    body: Option<String>,
     blocks: Vec<Block>,
 }
 
@@ -40,6 +41,7 @@ impl<S: 'static> Disclosure<S> {
             disabled: false,
             toggle: Rc::new(toggle),
             region: None,
+            body: None,
             blocks: Vec::new(),
         }
     }
@@ -73,6 +75,13 @@ impl<S: 'static> Disclosure<S> {
         self
     }
 
+    /// Keys what the part holds, while open, as `key` rather than `{key}.body`, for a part whose
+    /// body tests and scripts already find by another key.
+    pub fn body_key(mut self, key: impl Into<String>) -> Self {
+        self.body = Some(key.into());
+        self
+    }
+
     pub fn push(mut self, block: Block) -> Self {
         self.blocks.push(block);
         self
@@ -81,7 +90,7 @@ impl<S: 'static> Disclosure<S> {
     pub fn build(self, t: &Tokens) -> Block {
         let toggle = self.toggle;
         let part = format!("{}.part", self.key);
-        let body_key = format!("{}.body", self.key);
+        let body_key = self.body.unwrap_or_else(|| format!("{}.body", self.key));
         let (shown_body, shown_control) = (body_key.clone(), format!("{}.reach", self.key));
         let opening = !self.open;
         let label = self.label.text();
