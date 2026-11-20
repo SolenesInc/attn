@@ -2386,20 +2386,39 @@ fn settings_analytics(dark: bool) {
 /// Analytics with a new vent of the longest real text and a done one, sharing on and its
 /// status read: the list with its chosen vent, then the machine settings open. `smallest` shows
 /// it at 800x600 at the largest text, top and bottom.
-/// A vent written in Japanese, long enough to run the selected row's column past a screen.
+/// A vent written in Japanese, long enough to run the selected row's column past a screen; its
+/// scene also has sharing refused, the review's worst case for Send.
 const LONG_CJK_VENT: &str = "`attn seed tend` が拒否されました。シードは二時間前に終了したセッションが保持しており、`attn seed park` には担当者のセッション ID が必要ですが、拒否メッセージにはその ID がどこにも書かれていません。社内プラットフォームの作業ツリー /Users/someone/プロジェクト/社内プラットフォーム/InternationalEngineeringObservability で docs/internal/garden.md と CLI のソースを読み、古い担当はセッションが閉じられたときにだけ外れることをやっと見つけました。次の担当者が同じ調査を繰り返さないように、拒否メッセージに担当者のセッションと、それを閉じる方法を書いてほしいです。";
 
+/// Which vent the populated Analytics page has chosen.
+#[derive(Clone, Copy, PartialEq)]
+enum Chosen {
+    Usual,
+    /// The long vent in Japanese, with sharing refused.
+    Japanese,
+    /// A tool vent past the length that folds, opened with Show all.
+    Folded,
+}
+
 fn settings_analytics_populated(dark: bool, smallest: bool) {
-    analytics_populated(dark, smallest, false);
+    analytics_populated(dark, smallest, Chosen::Usual);
+}
+
+/// The populated page at the regular size with a vent past the folding length opened with
+/// Show all.
+fn settings_analytics_show_all(dark: bool) {
+    analytics_populated(dark, false, Chosen::Folded);
 }
 
 /// The populated page at the regular size with a long vent in Japanese chosen, its Send under
 /// the vent's text.
 fn settings_analytics_cjk(dark: bool) {
-    analytics_populated(dark, false, true);
+    analytics_populated(dark, false, Chosen::Japanese);
 }
 
-fn analytics_populated(dark: bool, smallest: bool, cjk: bool) {
+fn analytics_populated(dark: bool, smallest: bool, chosen: Chosen) {
+    let cjk = chosen == Chosen::Japanese;
+    let folded = "The daemon refused to write the settings after the user opened Analytics while its outpost was unreachable. ".repeat(6);
     let build = attn_protocol::AnalyticsBuild {
         version: "0.42.1".into(),
         commit: "a3f9e1c22".into(),
@@ -2447,6 +2466,8 @@ fn analytics_populated(dark: bool, smallest: bool, cjk: bool) {
                     "engineering observability staging review of the garden bell staleness",
                     if cjk {
                         LONG_CJK_VENT
+                    } else if chosen == Chosen::Folded {
+                        &folded
                     } else {
                         "`attn seed tend s-f68sja` refused: the seed is held by a session that ended two hours ago, and attn seed park needs the tender's session id, which the refusal never names. I had to read docs/internal/garden.md and the CLI source at /Users/someone/projects/victor/attn--a-worktree-with-a-long-name/cli/src/seed/tend.rs to find that a stale claim clears only when its session is closed."
                     },
@@ -2460,8 +2481,8 @@ fn analytics_populated(dark: bool, smallest: bool, cjk: bool) {
                 ),
             ]);
         },
-        |daemon| {
-            daemon.on("get_analytics_status", |r: &Request| {
+        move |daemon| {
+            daemon.on("get_analytics_status", move |r: &Request| {
                 message(attn_protocol::GetAnalyticsStatusResultMessage {
                     request_id: r["request_id"].as_str().unwrap_or_default().into(),
                     success: true,
@@ -2470,6 +2491,9 @@ fn analytics_populated(dark: bool, smallest: bool, cjk: bool) {
                     waiting: 12,
                     last_sent_at: Some("2026-11-19T14:00:12Z".into()),
                     ingest_url: "https://attn-telemetry.caketroll.cloud".into(),
+                    last_refusal: cjk.then(|| {
+                        "Analytics upload returned 413: this outpost exceeded the server's request size limit. 接続設定を確認してから同期を再試行してください。".into()
+                    }),
                     ..attn_protocol::GetAnalyticsStatusResultMessage::new()
                 })
             });
@@ -2479,14 +2503,19 @@ fn analytics_populated(dark: bool, smallest: bool, cjk: bool) {
         "settings-smallest-analytics"
     } else if cjk {
         "settings-analytics-cjk"
+    } else if chosen == Chosen::Folded {
+        "settings-analytics-show-all"
     } else {
         "settings-analytics-populated"
     };
     if smallest {
         world.resize((800.0, 600.0));
     }
+    if chosen == Chosen::Folded {
+        world.gesture(|app| app.click(Target::key("settings.analytics.vent.more")));
+    }
     snap(&mut world, name, dark);
-    if cjk {
+    if chosen != Chosen::Usual {
         return;
     }
     tap(&mut world, Key::Text("m".into()));
@@ -7010,6 +7039,9 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
             settings_analytics_populated(dark, false)
         });
         scene("settings_analytics_cjk", || settings_analytics_cjk(dark));
+        scene("settings_analytics_show_all", || {
+            settings_analytics_show_all(dark)
+        });
         scene("settings_analytics_smallest", || {
             settings_analytics_populated(dark, true)
         });
