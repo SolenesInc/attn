@@ -243,7 +243,7 @@ impl ListRow {
     }
 
     /// Controls that show at the row's end, on its own ground, while the pointer or the keyboard
-    /// is on it: its asides give way to them and its words end in a fade before them. Up to its
+    /// is on it: its asides and tags give way to them and its words end in a fade before them. Up to its
     /// badges and always-shown controls, which stay in view.
     pub fn hover_controls(mut self, controls: impl IntoIterator<Item = IconButton>) -> Self {
         self.hover.extend(controls);
@@ -440,19 +440,27 @@ impl ListRow {
             + Space::S2.pt() * self.hover.len().saturating_sub(1) as f32
             + FADE_ROOM.pt();
         let tagged = !self.tags.is_empty();
+        let tags: Vec<El> = if hovering {
+            self.tags
+                .into_iter()
+                .map(|tag| tag.group_opacity(1.0, 0.0))
+                .collect()
+        } else {
+            self.tags
+        };
         let title_line = door::gap(row(), Space::S6).w_full().min_w(0.0);
         let title_line = match (wraps, tagged) {
-            (true, _) => title_line.items_start().children(title).children(self.tags),
+            (true, _) => title_line.items_start().children(title).children(tags),
             (false, true) => title_line
                 .flex_wrap()
                 .items_center()
                 .children(title.map(|title| on_band(title).shrink().min_w(0.0)))
-                .children(self.tags.into_iter().map(on_band)),
+                .children(tags.into_iter().map(on_band)),
             (false, false) => title_line
                 .h(band)
                 .items_center()
                 .children(title)
-                .children(self.tags),
+                .children(tags),
         };
         let title_line = if hovering {
             door::fade_before_hover(title_line, FADE, reach)
