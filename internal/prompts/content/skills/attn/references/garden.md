@@ -38,7 +38,7 @@ Keep the shared plan in the parent. In each child, name the child's own work. Al
 
 Plants a whole plot in one move from a JSON payload, read from the `-f` file, or from stdin when the file is - or omitted: {"title": …, "body": …, "checks": [{"id": "C5", "text": …, "shared": true}], "part_of": "<plot>", "discovered_from": "<seed>", "children": [{"title": …, "body": …, "checks": […], "after": ["<sibling step slug>"]}]}.
 
-Children are parallel by default; `after` names the siblings a child waits for, by step slug or full title. `part_of` plants the plot inside another plot, and `discovered_from` records the seed whose work turned up the plot; give each by id or slug. A shared check is proven by every child. The plot, its children and their edges commit together. Prints the plot's id and each child's id and step slug, then up to 3 similar open seeds across all planted titles, each naming the new seed it resembles. Planting always proceeds; wither a new seed if a suggestion is the same work.
+Children are parallel by default; `after` names the siblings a child waits for, by step slug or full title. `part_of` plants the plot inside another plot, and `discovered_from` records the seed whose work turned up the plot; give each by id or slug. A shared check is proven by each seed below the plot that has no children. The plot, its children and their edges commit together. Prints the plot's id and each child's id and step slug, then up to 3 similar open seeds across all planted titles, each naming the new seed it resembles. Planting always proceeds; wither a new seed if a suggestion is the same work.
 
     attn seed link <a> <blocks|part-of|discovered-from> <b> [--json]
 
@@ -149,7 +149,7 @@ Whoever does the work reports each check, as Report each check as you prove it (
 
     attn seed check add <id> [<C#>] -m "<statement>" [--shared] [--ring] [--json]
 
-Defines a statement the seed must prove and prints its id, which the body cites. attn picks the next free id in the plot tree; `<C#>` names one instead. On a plot, `--shared` makes every seed below it prove the check with its own report. Removed ids are never reused.
+Defines a statement the seed must prove and prints its id, which the body cites. attn picks the next free id in the plot tree; `<C#>` names one instead. On a plot, `--shared` puts the check on each seed below the plot that has no children, and each of those seeds proves it with its own report. Removed ids are never reused.
 
     attn seed check edit <id> <C#> -m "<statement>" [--ring] [--json]
 

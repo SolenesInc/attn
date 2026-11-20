@@ -144,7 +144,7 @@ commands:
     doc: |
       Plants a whole plot in one move from a JSON payload, read from the `plot` file, or from stdin when the file is - or omitted: {"title": …, "body": …, "checks": [{"id": "C5", "text": …, "shared": true}], "part_of": "<plot>", "discovered_from": "<seed>", "children": [{"title": …, "body": …, "checks": […], "after": ["<sibling step slug>"]}]}.
 
-      Children are parallel by default; `after` names the siblings a child waits for, by step slug or full title. `part_of` plants the plot inside another plot, and `discovered_from` records the seed whose work turned up the plot; give each by id or slug. A shared check is proven by every child. The plot, its children and their edges commit together. Prints the plot's id and each child's id and step slug, then up to 3 similar open seeds across all planted titles, each naming the new seed it resembles. Planting always proceeds; wither a new seed if a suggestion is the same work.
+      Children are parallel by default; `after` names the siblings a child waits for, by step slug or full title. `part_of` plants the plot inside another plot, and `discovered_from` records the seed whose work turned up the plot; give each by id or slug. A shared check is proven by each seed below the plot that has no children. The plot, its children and their edges commit together. Prints the plot's id and each child's id and step slug, then up to 3 similar open seeds across all planted titles, each naming the new seed it resembles. Planting always proceeds; wither a new seed if a suggestion is the same work.
     args:
       - {name: plot, type: plot, required: true, cli: "-f", file: true, doc: "the plot payload to read; - or omitted reads stdin"}
     result: SeedPlotResult
@@ -347,12 +347,12 @@ commands:
     runs: home
     grant: full
     doc: |
-      Defines a statement the seed must prove and prints its id, which the body cites. attn picks the next free id in the plot tree; `id` names one instead. On a plot, `shared` makes every seed below it prove the check with its own report. Removed ids are never reused.
+      Defines a statement the seed must prove and prints its id, which the body cites. attn picks the next free id in the plot tree; `id` names one instead. On a plot, `shared` puts the check on each seed below the plot that has no children, and each of those seeds proves it with its own report. Removed ids are never reused.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
       - {name: id, type: check_id, cli: pos}
       - {name: statement, type: text, required: true, cli: "-m", stdin: true, placeholder: '"<statement>"', doc: "what the seed must prove"}
-      - {name: shared, type: bool, cli: "--shared", doc: "every seed below this plot proves the check"}
+      - {name: shared, type: bool, cli: "--shared", doc: "each seed below this plot that has no children proves the check with its own report"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
 
