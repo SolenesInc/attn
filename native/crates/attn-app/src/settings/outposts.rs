@@ -8,15 +8,12 @@ use attn_protocol::{
     ProfileActionResultMessage, RemoveOutpostMessage, RepairOutpostMessage, UpdateOutpostMessage,
 };
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, TextEdit, Tx, col, row, text};
+use rune::{El, TextEdit, Tx};
 use rune_kit::TextInput;
 
-use attn_ui::blocks::{Actions, Block, Field, Notice, Prose, Section};
-use attn_ui::system::{Button, FieldState, Look, Tone, line_box, tag};
+use attn_ui::blocks::{Actions, Block, Facts, Field, Inline, List, Notice, Prose, Section, Status};
+use attn_ui::system::{Button, FieldState, ListRow, Look, Size, Tone, Type, line_box, tag, words};
 
-use super::pages::{CAPTION, warning};
 use crate::State;
 use crate::action::Action;
 
@@ -274,72 +271,36 @@ fn notebook_text(notebook: &OutpostNotebook) -> String {
     format!("Notebook: {label} · {size} {unit} and {items} {noun} left")
 }
 
-fn notebook(key: &str, notebook: &OutpostNotebook, t: &Tokens) -> El {
+/// What an outpost's Notebook is doing, and what it kept aside, as lines under its row.
+fn notebook(key: &str, notebook: &OutpostNotebook, t: &Tokens) -> Vec<Block> {
     let said = notebook_text(notebook);
-    let line = if notebook.state == "error" {
-        warning(format!("{key}.notebook.state"), said, t)
+    let state_key = format!("{key}.notebook.state");
+    let state = if notebook.state == "error" {
+        Notice::warn(state_key, said).build(t)
     } else {
-        text(said.clone())
-            .key(format!("{key}.notebook.state"))
-            .label(said)
-            .font(CAPTION)
-            .color(t.text_tertiary)
-            .wrap()
+        Status::new(state_key, said, false).build(t)
     };
     let conflicts = notebook.conflicts.unwrap_or(0);
-    col()
-        .key(format!("{key}.notebook"))
-        .role("status")
-        .gap(space::S1)
-        .child(line)
-        .children((conflicts > 0).then(|| {
-            let copies = if conflicts == 1 { "copy" } else { "copies" };
-            warning(
-                format!("{key}.notebook.conflicts"),
-                format!("{conflicts} conflict {copies}"),
-                t,
-            )
-        }))
-        .children(notebook.previous_root.as_ref().map(|root| {
-            let said = format!("Previous folder saved at {root}");
-            text(said.clone())
-                .key(format!("{key}.notebook.previous"))
-                .label(said)
-                .font(CAPTION)
-                .color(t.text_tertiary)
-                .wrap()
-        }))
-}
-
-fn meta(key: String, label: &str, value: String, t: &Tokens) -> El {
-    row()
-        .key(key)
-        .label(format!("{label} {value}"))
-        .gap(space::S3)
-        .child(
-            text(label.to_owned())
-                .font(CAPTION)
-                .color(t.text_tertiary)
-                .w(140.0),
+    let conflicts = (conflicts > 0).then(|| {
+        let copies = if conflicts == 1 { "copy" } else { "copies" };
+        Notice::warn(
+            format!("{key}.notebook.conflicts"),
+            format!("{conflicts} conflict {copies}"),
         )
-        .child(
-            text(value)
-                .font(type_::MONO_CAPTION)
-                .color(t.text_primary)
-                .wrap()
-                .grow(1.0)
-                .min_w(0.0),
+        .build(t)
+    });
+    let previous = notebook.previous_root.as_ref().map(|root| {
+        Prose::hint(
+            format!("{key}.notebook.previous"),
+            format!("Previous folder saved at {root}"),
         )
-}
-
-fn status(key: String, said: String, t: &Tokens) -> El {
-    text(said.clone())
-        .key(key)
-        .role("status")
-        .label(said)
-        .font(CAPTION)
-        .color(t.text_tertiary)
-        .wrap()
+        .build(t)
+    });
+    [state]
+        .into_iter()
+        .chain(conflicts)
+        .chain(previous)
+        .collect()
 }
 
 fn action(
@@ -350,6 +311,7 @@ fn action(
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
     Button::new(label)
+        .size(Size::Compact)
         .disabled(disabled)
         .on_press_tx(press)
         .build(t)
@@ -357,7 +319,8 @@ fn action(
         .into()
 }
 
-fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> El {
+/// An outpost's row, and what is under it: its details, its trouble and what can be done.
+fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> (El, Vec<Block>) {
     let page = &state.window.settings.outposts;
     let online = connected(state);
     let id = outpost.id.clone();
@@ -367,9 +330,9 @@ fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> El {
     let confirming = count > 0 && page.removing.as_deref() == Some(id.as_str());
     let noun = if count == 1 { "terminal" } else { "terminals" };
     let reachable = outpost.reach == "reachable";
-    let mut details = vec![
-        meta(part("since"), "Since", timestamp(&outpost.state_since), t),
-        meta(
+    let mut facts = Facts::new(part("details"))
+        .fact(part("since"), "Since", timestamp(&outpost.state_since))
+        .code(
             part("build"),
             "Build",
             outpost
@@ -377,46 +340,35 @@ fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> El {
                 .clone()
                 .filter(|b| !b.is_empty())
                 .unwrap_or_else(|| "Not yet known".into()),
-            t,
-        ),
-    ];
+        );
     if outpost.host_missing == Some(true) {
-        details.push(meta(
-            part("host"),
-            "Shared terminal host",
-            "Not installed".into(),
-            t,
-        ));
+        facts = facts.fact(part("host"), "Shared terminal host", "Not installed");
     }
     if let Some(daemon) = outpost.daemon_id.clone().filter(|d| !d.is_empty()) {
-        details.push(meta(part("daemon"), "Daemon", daemon, t));
+        facts = facts.code(part("daemon"), "Daemon", daemon);
     }
     if let Some(fingerprint) = outpost
         .host_key_fingerprint
         .clone()
         .filter(|f| !f.is_empty())
     {
-        details.push(meta(part("host-key"), "Host key", fingerprint, t));
+        facts = facts.code(part("host-key"), "Host key", fingerprint);
     }
+    let mut under = vec![facts.build(t)];
     if let Some(error) = outpost.last_error.clone().filter(|e| !e.is_empty()) {
-        details.push(
-            col()
-                .key(part("error"))
-                .gap(space::S1)
-                .child(warning(part("error.text"), error, t))
-                .children(
-                    outpost
-                        .last_error_at
-                        .as_deref()
-                        .map(|at| text(timestamp(at)).font(CAPTION).color(t.text_tertiary)),
-                ),
+        under.push(Notice::warn(part("error.text"), error).build(t));
+        under.extend(
+            outpost
+                .last_error_at
+                .as_deref()
+                .map(|at| Prose::hint(part("error"), format!("At {}", timestamp(at))).build(t)),
         );
     }
     if let Some(nb) = &outpost.notebook {
-        details.push(notebook(&key, nb, t));
+        under.extend(notebook(&key, nb, t));
     }
     if let Some(said) = crate::outpost::update_text(outpost) {
-        details.push(status(part("update"), said, t));
+        under.push(Status::new(part("update"), said, false).build(t));
     }
     let run = state.facts.update_run.as_ref().as_ref();
     let in_run = run
@@ -425,12 +377,13 @@ fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> El {
         .flat_map(|run| run.outposts.iter())
         .chain(run.into_iter().flat_map(crate::update_run::failed_outposts))
         .filter(|o| o.id == id);
-    details.extend(in_run.map(|o| {
-        status(
+    under.extend(in_run.map(|o| {
+        Status::new(
             part("run"),
             crate::update_run::outpost_step(o).to_owned(),
-            t,
+            false,
         )
+        .build(t)
     }));
 
     let mut actions: Vec<El> = Vec::new();
@@ -514,47 +467,28 @@ fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> El {
             },
         ));
     }
-    let unreachable_note = (confirming && !reachable).then(|| {
-        status(
+    under.push(
+        actions
+            .into_iter()
+            .fold(Actions::new(part("actions")), Actions::push)
+            .build(),
+    );
+    under.extend((confirming && !reachable).then(|| {
+        Notice::info(
             part("remove-note"),
             format!(
                 "{} isn't connected. If ssh cannot stop it, its daemon and shells keep running there. Run this instance's attn enrollment leave and attn daemon stop commands there.",
                 outpost.name
             ),
-            t,
         )
-    });
-    col()
-        .key(key.clone())
-        .role("listitem")
-        .label(outpost.name.clone())
-        .w_full()
-        .gap(space::S2)
-        .padding(space::S3)
-        .radius(6.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
-        .child(
-            row()
-                .w_full()
-                .gap(space::S3)
-                .items_center()
-                .child(
-                    col()
-                        .grow(1.0)
-                        .min_w(0.0)
-                        .gap(space::S1)
-                        .child(
-                            text(outpost.name.clone())
-                                .font(type_::LABEL)
-                                .color(t.text_primary),
-                        )
-                        .child(
-                            text(outpost.destination.clone())
-                                .font(CAPTION)
-                                .color(t.text_tertiary),
-                        ),
-                )
+        .build(t)
+    }));
+    let row = ListRow::new(key.clone(), outpost.name.clone())
+        .still()
+        .wrap()
+        .title(outpost.name.clone())
+        .subtitle_el(
+            Inline::tight()
                 .child(
                     El::from(tag(
                         part("state"),
@@ -563,17 +497,16 @@ fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> El {
                         t,
                     ))
                     .role("status"),
+                )
+                .child(
+                    words(outpost.destination.clone(), Type::Small, t.text_tertiary)
+                        .wrap_anywhere()
+                        .shrink()
+                        .min_w(0.0),
                 ),
         )
-        .children(details)
-        .child(
-            row()
-                .key(part("actions"))
-                .gap(space::S2)
-                .items_center()
-                .children(actions),
-        )
-        .children(unreachable_note)
+        .build(t);
+    (row, under)
 }
 
 fn add_form(state: &State, t: &Tokens) -> Block {
@@ -643,16 +576,14 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let list = if listed.is_empty() {
         Prose::empty("settings.outposts.empty", "No outposts added.").build(t)
     } else {
-        Block::custom(
-            "settings.outposts.list.block",
-            col()
-                .key("settings.outposts.list")
-                .role("list")
-                .label("Outposts")
-                .w_full()
-                .gap(space::S2)
-                .children(listed.iter().map(|outpost| card(state, outpost, t))),
-        )
+        listed
+            .iter()
+            .map(|outpost| card(state, outpost, t))
+            .fold(
+                List::new("settings.outposts.list", "Outposts"),
+                |list, (row, under)| list.row_with(row, under),
+            )
+            .build(t)
     };
     shown.push(
         Section::new("settings.block.outposts.list", "Outposts")
