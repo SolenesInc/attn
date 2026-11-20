@@ -748,7 +748,6 @@ fn runs_head(key: String, runs: usize, needing: usize, keys: Option<String>, t: 
                     .shrink(),
             )
             .keys(keys, t)
-            .tint(Some(t.warning))
             .build(t)
             .description("Open the next run needing you; press again for the one after")
             .on_press_tx(|state: &mut State, tx: &mut Tx| {
