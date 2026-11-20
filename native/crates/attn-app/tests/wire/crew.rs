@@ -2888,3 +2888,54 @@ fn a_narrow_page_stands_the_roster_above_the_details_and_keeps_every_tab_whole()
         assert_eq!(world.rect(key)[2], width, "{key} keeps its whole word");
     }
 }
+
+#[test]
+fn rename_focuses_a_field_whole_in_the_details_and_the_window_at_any_size_and_name() {
+    let long = with(member("intl", 1), |m| {
+        m.name = "International Engineering Observability 国际工程可观测性".into()
+    });
+    for (size, members) in [
+        ((533.0, 400.0), vec![long.clone()]),
+        ((1440.0, 900.0), vec![member("chief", 1)]),
+    ] {
+        let mut world = start(members);
+        world.resize(size);
+        open(&mut world);
+        click(&mut world, "crew.rename");
+        assert_eq!(
+            world.screen().focused().and_then(|n| n.key).as_deref(),
+            Some("crew.rename.field")
+        );
+        let field = world.rect("crew.rename.field");
+        let detail = world.rect("crew.detail");
+        let window = [0.0, 0.0, f64::from(size.0), f64::from(size.1)];
+        let inside = |outer: [f64; 4], inner: [f64; 4]| {
+            inner[0] >= outer[0] - 0.5
+                && inner[1] >= outer[1] - 0.5
+                && inner[0] + inner[2] <= outer[0] + outer[2] + 0.5
+                && inner[1] + inner[3] <= outer[1] + outer[3] + 0.5
+        };
+        assert!(
+            inside(detail, field),
+            "{size:?}: the field {field:?} runs past the details {detail:?}"
+        );
+        assert!(
+            inside(window, field),
+            "{size:?}: the field {field:?} runs past the window"
+        );
+        const ROOM_FOR_A_NAME: f64 = 200.0;
+        assert!(
+            field[2] >= ROOM_FOR_A_NAME,
+            "{size:?}: the field leaves {} points for a name",
+            field[2]
+        );
+        world.gesture(|app| app.type_text(" two"));
+        assert!(
+            world
+                .screen()
+                .find(Target::key("crew.rename.field"))
+                .and_then(|n| n.value)
+                .is_some_and(|v| v.ends_with(" two"))
+        );
+    }
+}

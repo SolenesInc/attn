@@ -609,3 +609,73 @@ fn a_tag_that_drops_under_a_long_title_adds_only_its_height_and_one_inner_gap_to
         tag[3]
     );
 }
+
+#[test]
+fn a_long_failure_in_the_smallest_window_stays_inside_the_panel_and_retry_scrolls_into_it() {
+    let mut failed = notification(
+        "failed",
+        "critical",
+        "Nightly dependency upgrade failed on the services repository tonight",
+    );
+    failed.trigger = "Scheduled run of Nightly dependency upgrade".into();
+    failed.impact = "No pull request was opened for the services repository tonight.".into();
+    failed.cause = "Codex does not trust /home/someone/projects/InternationalEngineeringObservability/worktrees/nightly-dependency-upgrade".into();
+    failed.diagnostic =
+        "stderr: ".to_owned() + &"codex: refusing to run in an untrusted directory\n".repeat(12);
+    let failed = acting(failed, &[("retry_task", "Retry", "task-1")]);
+    let mut world = start(vec![failed]);
+    world.resize((533.0, 400.0));
+    open(&mut world);
+    expand(&mut world, "failed");
+    click(&mut world, &format!("{}.diagnostic", row("failed")));
+
+    let inside = |outer: [f64; 4], inner: [f64; 4]| {
+        inner[0] >= outer[0] - 0.5
+            && inner[1] >= outer[1] - 0.5
+            && inner[0] + inner[2] <= outer[0] + outer[2] + 0.5
+            && inner[1] + inner[3] <= outer[1] + outer[3] + 0.5
+    };
+    let window = [0.0, 0.0, 533.0, 400.0];
+    let panel = world.rect(PANEL);
+    let body = world.rect("notifications.sheet.body");
+    assert!(
+        inside(window, panel),
+        "the panel {panel:?} runs past the window"
+    );
+    assert!(
+        inside(panel, body),
+        "the body {body:?} runs past the panel {panel:?}"
+    );
+
+    let retry = format!("{}.action.0", row("failed"));
+    let [x, y, w, h] = body;
+    world.gesture(|app| {
+        app.runtime
+            .wheel((x + w / 2.0) as f32, (y + h / 2.0) as f32, -4000.0)
+    });
+    let shown = world.rect(&retry);
+    assert!(
+        inside(body, shown),
+        "Retry at {shown:?} stays outside the body {body:?}"
+    );
+
+    world.gesture(|app| {
+        app.runtime
+            .wheel((x + w / 2.0) as f32, (y + h / 2.0) as f32, 4000.0)
+    });
+    for _ in 0..12 {
+        if world.screen().focused().and_then(|n| n.key) == Some(retry.clone()) {
+            break;
+        }
+        world.gesture(|d| d.press("tab"));
+    }
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key),
+        Some(retry.clone())
+    );
+    let focused = world.rect(&retry);
+    assert!(
+        inside(body, focused),
+        "the focused Retry at {focused:?} is outside the body {body:?}"
+    );
+}

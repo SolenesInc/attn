@@ -69,8 +69,9 @@ impl Sheet {
         self
     }
 
-    /// The sheet stands as tall as what it holds, up to `tallest`, past which its body scrolls:
-    /// for a sheet that opens over the window, such as a popover, rather than filling a drawer.
+    /// The sheet stands as tall as what it holds, up to `tallest` or the room what holds it
+    /// gives, whichever is less, past which its body scrolls inside it: for a sheet that opens
+    /// over the window, such as a popover, rather than filling a drawer.
     pub fn fits(mut self, tallest: f32) -> Self {
         self.fits = Some(tallest);
         self
@@ -174,7 +175,7 @@ impl Sheet {
         });
         let sheet = col().key(key).label(label).w_full().min_h(0.0);
         let sheet = match self.fits {
-            Some(tallest) => sheet.max_h(tallest),
+            Some(tallest) => sheet.max_h(tallest).shrink(),
             None => sheet.h_full(),
         };
         let sheet = sheet

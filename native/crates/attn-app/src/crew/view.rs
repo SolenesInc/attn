@@ -257,6 +257,7 @@ fn detail(state: &State, t: &Tokens) -> El {
     };
     Page::new()
         .head(heading(state, member, t))
+        .push_all(rename(state, member, t))
         .push(Block::control("crew.tabs.block", tabs(tab, t)))
         .push_all(blocks)
         .build("crew.detail", t)
@@ -268,7 +269,7 @@ fn heading(state: &State, member: &CrewMember, t: &Tokens) -> Head {
         .crew
         .rename
         .as_ref()
-        .filter(|r| r.member == member.id);
+        .is_some_and(|r| r.member == member.id);
     let in_session = member.binding_session.is_some();
     let presence_tag = El::from(tag(
         "crew.presence.pill",
@@ -288,67 +289,75 @@ fn heading(state: &State, member: &CrewMember, t: &Tokens) -> Head {
                 .label(presence(member)),
         )
         .aside(presence_tag);
-    match renaming {
-        Some(rename) => {
-            let input = TextInput::new(&rename.edit)
-                .key(RENAME_FIELD)
-                .label(format!("New name for {}", member.name))
-                .on_edit(|state: &mut State| {
-                    let rename = state
-                        .window
-                        .crew
-                        .rename
-                        .as_mut()
-                        .expect("the rename field shows only while renaming");
-                    &mut rename.edit
-                })
-                .on_change(|state: &mut State, _: &mut Tx| {
-                    if let Some(rename) = state.window.crew.rename.as_mut() {
-                        rename.error = None;
-                    }
-                })
-                .on_submit(super::submit_rename)
-                .on_key(|state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-                    if ev.key != Key::Escape {
-                        return false;
-                    }
-                    if state.window.crew.rename.as_ref().is_some_and(|r| !r.saving) {
-                        super::cancel_rename(state, tx);
-                    }
-                    true
-                });
-            let field = line_box(
-                input,
-                if rename.saving {
-                    FieldState::Disabled
-                } else {
-                    FieldState::failed_if(rename.error.is_some())
-                },
-                t,
-            );
-            head.aside(
-                Stack::tight().child(field.into()).children(
-                    rename
-                        .error
-                        .as_ref()
-                        .map(|why| Refusal::new("crew.rename.error", why.clone()).build(t)),
-                ),
-            )
-        }
-        None => {
-            let id = member.id.clone();
-            head.aside(
-                Button::new("Rename")
-                    .size(Size::Compact)
-                    .look(Look::Quiet)
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        super::begin_rename(state, &id, tx)
-                    })
-                    .build(t)
-                    .key(RENAME),
-            )
-        }
+    if renaming {
+        return head;
     }
+    let id = member.id.clone();
+    head.aside(
+        Button::new("Rename")
+            .size(Size::Compact)
+            .look(Look::Quiet)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| super::begin_rename(state, &id, tx))
+            .build(t)
+            .key(RENAME),
+    )
+}
+
+/// The field that renames the member, across the details under its name, while renaming.
+fn rename(state: &State, member: &CrewMember, t: &Tokens) -> Option<Block> {
+    let rename = state
+        .window
+        .crew
+        .rename
+        .as_ref()
+        .filter(|r| r.member == member.id)?;
+    let input = TextInput::new(&rename.edit)
+        .key(RENAME_FIELD)
+        .label(format!("New name for {}", member.name))
+        .on_edit(|state: &mut State| {
+            let rename = state
+                .window
+                .crew
+                .rename
+                .as_mut()
+                .expect("the rename field shows only while renaming");
+            &mut rename.edit
+        })
+        .on_change(|state: &mut State, _: &mut Tx| {
+            if let Some(rename) = state.window.crew.rename.as_mut() {
+                rename.error = None;
+            }
+        })
+        .on_submit(super::submit_rename)
+        .on_key(|state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+            if ev.key != Key::Escape {
+                return false;
+            }
+            if state.window.crew.rename.as_ref().is_some_and(|r| !r.saving) {
+                super::cancel_rename(state, tx);
+            }
+            true
+        });
+    let field = line_box(
+        input,
+        if rename.saving {
+            FieldState::Disabled
+        } else {
+            FieldState::failed_if(rename.error.is_some())
+        },
+        t,
+    );
+    Some(
+        Field::new(RENAME_FIELD, "New name")
+            .control(field)
+            .refusal(
+                rename
+                    .error
+                    .as_ref()
+                    .map(|why| Refusal::new("crew.rename.error", why.clone()).build(t)),
+            )
+            .build(t),
+    )
 }
 
 /// The member's details: one button per tab, the shown one raised.

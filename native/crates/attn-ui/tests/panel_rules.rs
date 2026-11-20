@@ -289,3 +289,71 @@ fn every_tab_stop_in_a_panel_has_a_key_and_a_name() {
         }
     }
 }
+
+fn fitting(lines: &usize, cx: &mut Cx<usize>) -> El {
+    let t = attn_ui::colors::scheme_for(None)
+        .colors(cx.system_dark())
+        .ui;
+    let said = (0..*lines)
+        .map(|n| format!("Line {n} of what the sheet holds"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let sheet = attn_ui::blocks::Sheet::new("fit", "Notifications")
+        .fits(520.0)
+        .push(attn_ui::blocks::Block::custom(
+            "fit.words",
+            attn_ui::system::words(said, attn_ui::system::Type::Body, t.text_primary).wrap(),
+        ))
+        .build(&t);
+    rune::col()
+        .key("room")
+        .w(360.0)
+        .max_h(FITTING_ROOM)
+        .child(sheet)
+}
+
+const FITTING_WINDOW: (f32, f32) = (533.0, 400.0);
+
+static FITTING_LINES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(1);
+
+fn fitting_lines() -> usize {
+    FITTING_LINES.load(std::sync::atomic::Ordering::Relaxed)
+}
+const FITTING_ROOM: f32 = 352.0;
+
+#[test]
+fn a_fitting_sheet_keeps_its_body_inside_its_frame_and_its_frame_inside_its_room() {
+    let line = 20.0;
+    let most = (10.0 * FITTING_WINDOW.1 / line) as usize;
+    for lines in [1, 2, 5, 10, 20, most / 2, most] {
+        FITTING_LINES.store(lines, std::sync::atomic::Ordering::Relaxed);
+        let mut rt = App::new(AppSpec {
+            fonts: attn_ui::FONTS,
+            families: attn_ui::FAMILIES,
+            ..AppSpec::new("fitting", FITTING_WINDOW, fitting_lines, fitting)
+        })
+        .headless_runtime(FITTING_WINDOW, Env::new(true, SCALE));
+        while rt.frame(1.0 / 60.0) {}
+        let all = rt.elements();
+        let rect = |key: &str| {
+            all.iter()
+                .find(|e| e.key.as_deref() == Some(key))
+                .unwrap_or_else(|| panic!("{lines} lines: no {key}"))
+                .rect
+        };
+        let (room, frame, body) = (rect("room"), rect("fit"), rect("fit.body"));
+        let window = [0.0, 0.0, FITTING_WINDOW.0, FITTING_WINDOW.1];
+        assert!(
+            holds(window, room),
+            "{lines} lines: the room {room:?} runs past the window"
+        );
+        assert!(
+            holds(room, frame),
+            "{lines} lines: the sheet {frame:?} runs past its room {room:?}"
+        );
+        assert!(
+            holds(frame, body),
+            "{lines} lines: the body {body:?} runs past the sheet {frame:?}"
+        );
+    }
+}
