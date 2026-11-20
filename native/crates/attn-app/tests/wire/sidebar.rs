@@ -1296,17 +1296,17 @@ fn an_agent_row_ends_its_marks_at_its_right_edge_and_flags_priority_ahead_of_its
     let [name_x, _, name_w, _] = bounds("sidebar.session.a.name");
     let [flag_x, _, flag_w, _] = bounds("sidebar.session.a.priority");
     assert_eq!(
-        delegated_x + delegated_w,
+        chain_x + chain_w,
         row_x + row_w - 8.0,
-        "the last mark ends at the row's padding, with nothing hidden after it"
+        "the role, a control, ends at the row's padding, with nothing hidden after it"
     );
     assert!(
-        chain_x + chain_w <= delegated_x,
-        "the role comes before the badges"
+        delegated_x + delegated_w <= chain_x,
+        "the marks come before the role"
     );
     assert!(
-        name_x + name_w + 8.0 >= chain_x,
-        "a long name runs up to the marks: {name_x}+{name_w} against {chain_x}"
+        name_x + name_w + 8.0 >= delegated_x,
+        "a long name runs up to the marks: {name_x}+{name_w} against {delegated_x}"
     );
     assert!(flag_x + flag_w <= name_x, "the flag leads the name");
     assert_eq!(

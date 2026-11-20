@@ -506,7 +506,10 @@ fn agent_row(
         row = row.badge(crate::desktop::provenance::badge_view(&key, pr, t));
     }
     if let Some(chain) = &agent.chain {
-        row = row.badge(crate::desktop::chain::chip(&key, &agent.id, chain, t));
+        row = row.controls(
+            [crate::desktop::chain::chip(&key, &agent.id, chain, t)],
+            attn_ui::system::Reveal::Always,
+        );
     }
     if let Some(run) = &agent.run {
         row = row.badge(crate::desktop::provenance::run_view(&key, run, t));
