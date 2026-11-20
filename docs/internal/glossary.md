@@ -138,8 +138,8 @@ paired sender           a program the user allowed in the app to send quick
                         text with attn refine, and to make model calls; like
                         an OAuth client
 model call              one request from a paired sender to a model, with its
-                        own instructions and input, a text answer and no
-                        tools; like an API request
+                        own instructions and input, a text answer and no tool
+                        that reaches outside the call; like an API request
 model call spare        a harness process that attn starts before a model call
                         exists, to answer the next one; like a warm standby
 ```
