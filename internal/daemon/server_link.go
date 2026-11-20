@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -51,7 +52,11 @@ func (l *serverLink) logf(format string, args ...any) {
 func (l *serverLink) kind() string { return l.b.kind }
 
 func (l *serverLink) canRun(req *spawnRequest) bool {
-	return req.agent == l.b.agent && (!req.hasPluginDriver || l.b.plugin == req.pluginDriver.PluginName) && !req.isShell && req.policy.unattendedLaunch.Executable == ""
+	return req.agent == l.b.agent && (!req.hasPluginDriver || l.b.plugin == req.pluginDriver.PluginName) && !req.isShell && l.runsLaunch(req.policy.unattendedLaunch)
+}
+
+func (l *serverLink) runsLaunch(launch launchcontract.UnattendedLaunchSpec) bool {
+	return launch.Executable == ""
 }
 
 func (l *serverLink) enabledForNewLaunches() bool {

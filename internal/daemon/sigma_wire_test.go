@@ -190,6 +190,40 @@ func TestAttnRolesInstallTheWorkflowSkillWhereSigmaAndItsClaudeProvidersLook(t *
 	}
 }
 
+func TestASigmaAutomationWithAnExecutableOverrideIsDeliveredAfterItsFirstAnswer(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app := w.App()
+	setSetting(t, app, "sigma_enabled", "true")
+	w.Launched(w.Spawn(app, fakeagent.Sigma, w.Path("shop")))
+	server := w.AppServer(fakeagent.Sigma)
+	folder := w.Path("check")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	applyAutomation(t, w.Client(), fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
+name: Nightly check
+trigger: {type: manual}
+prompt: Report the flaky tests.
+launch: {driver: sigma, executable: %q}
+location: {type: directory, path: %q}
+`, filepath.Join(w.Dir, "bin", "sigma"), folder))
+	awaitAutomationChanged(app, 1)
+	receipt := runAutomationFromApp(app, "explicit-executable")
+	if !receipt.Success || receipt.Run == nil {
+		t.Fatalf("starting the automation answered %s", describeRunAnswer(receipt))
+	}
+	sigma := w.Launched(string(protocol.Deref(receipt.Run.SessionID)))
+	if prompt := server.Prompted(sigma.ConversationID).Text; !strings.Contains(prompt, "Report the flaky tests.") {
+		t.Fatalf("Sigma received %q, want the automation's prompt", prompt)
+	}
+	server.Reply(sigma.ConversationID, "Done.")
+	server.Started(sigma.ConversationID)
+	sigma.Exit(0)
+	if run := awaitRunState(t, w, app, receipt.Run.ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" }); run.State != "delivered" {
+		t.Fatalf("Sigma launched by its executable override answered its first turn and exited with code 0, and the run is %s with %q, want delivered", run.State, protocol.Deref(run.LastError))
+	}
+}
+
 func TestASigmaAutomationStartsItsConversationWithApprovalsAuto(t *testing.T) {
 	w := newWorld(t, fakeagent.Sigma)
 	app, cli := w.App(), w.Client()
