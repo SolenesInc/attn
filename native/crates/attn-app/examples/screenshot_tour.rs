@@ -2404,7 +2404,66 @@ fn settings_smallest_pages(dark: bool) {
         });
         },
     );
-    settings_smallest_page(dark, "models", "models", &[], |_| {}, |_| {});
+    settings_smallest_page(
+        dark,
+        "models",
+        "models",
+        &[(
+            "model_tier_overrides",
+            r#"[{"harness":"codex","provider":"openrouter","model":"gpt-5.1-codex-max-preview-2026-09-30-with-extended-context","tier":"deep"}]"#,
+        )],
+        |_| {},
+        |daemon| {
+            daemon.on("delegation_preferences_get", |r: &Request| {
+                let harness = |id: &str, name: &str| Harness {
+                    id: id.into(),
+                    name: name.into(),
+                    available: true,
+                    model_pin: true,
+                    effort_pin: true,
+                    discovery: true,
+                };
+                message(DelegationPreferencesResultMessage {
+                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                    success: true,
+                    preferences: Some(DelegationPreferences::default()),
+                    harnesses: Some(vec![
+                        harness("claude", "Claude Code"),
+                        harness("codex", "Codex"),
+                    ]),
+                    templates: Some(Vec::new()),
+                    expanded_roles: Some(Vec::new()),
+                    ..DelegationPreferencesResultMessage::new()
+                })
+            });
+            daemon.on("harness_models", |r: &Request| {
+                let request_id: String = r["request_id"].as_str().unwrap_or_default().into();
+                if r["harness"] == "codex" {
+                    return message(HarnessModelsResultMessage {
+                        request_id,
+                        success: false,
+                        error: Some("codex models: exec: \"codex\": executable file not found in $PATH while listing the provider catalog".into()),
+                        ..HarnessModelsResultMessage::new()
+                    });
+                }
+                message(HarnessModelsResultMessage {
+                    request_id,
+                    success: true,
+                    models: vec![HarnessModel {
+                        harness: "claude".into(),
+                        provider: "bedrock-eu-north-1".into(),
+                        id: "anthropic.claude-opus-5-5-20261101-v1:0-with-extended-thinking".into(),
+                        name: "Claude Opus 5.5 with extended thinking (Bedrock, EU North)".into(),
+                        access: "unknown".into(),
+                        effort_support: "unsupported".into(),
+                        tier_source: "none".into(),
+                        ..HarnessModel::default()
+                    }],
+                    ..HarnessModelsResultMessage::new()
+                })
+            });
+        },
+    );
 }
 
 /// The event bus with one live consumer, its Disable, and the footer's Refresh.
