@@ -1130,3 +1130,33 @@ fn an_unavailable_switch_is_still_heard_with_its_name_and_value_and_takes_no_tab
     );
     assert!(node(&world, &host).is("checked"));
 }
+
+#[test]
+fn a_refused_rate_shows_its_reason_and_retry_whole_in_the_smallest_window_at_the_largest_text() {
+    const REASON: &str = "cannot create directory /Users/someone/プロジェクト/社内プラットフォーム/InternationalEngineeringObservability/ワークツリー: permission denied";
+    for typed in ["input_usd_per_mtok", "output_usd_per_mtok"] {
+        let (daemon, stored) = keeping(
+            &[
+                ("uiScale", "1.5"),
+                ("session_cost.price.claude-priced", RATES),
+            ],
+            |key, _| (key == "session_cost.price.claude-priced").then(|| REASON.to_owned()),
+        );
+        let mut world = on_pricing_with(daemon, &stored);
+        world.resize((800.0, 600.0));
+        retype(&mut world, &rate("claude-priced", typed), "7");
+        press(&mut world, Key::Enter);
+        let body = world.rect("settings.body");
+        for part in [
+            "settings.refusal.session_cost.price.claude-priced",
+            "settings.retry.session_cost.price.claude-priced",
+        ] {
+            let shown = world.rect(part);
+            assert!(
+                shown[1] >= body[1] && shown[1] + shown[3] <= body[1] + body[3],
+                "{typed}: {part} at {shown:?} lies whole inside the page's view {body:?}"
+            );
+        }
+        rest(&mut world);
+    }
+}

@@ -3,9 +3,10 @@ use std::sync::{Arc, Mutex};
 use attn_app::Action;
 use attn_protocol::{PairedSender, SenderUnpairResultMessage, SendersUpdatedMessage};
 use attn_testkit::{Daemon, Target, World, message};
+use rune::Key;
 use serde_json::Value;
 
-use super::{accepting, click, edged_as_error, named, open, press_action, rest};
+use super::{accepting, click, edged_as_error, named, open, press, press_action, rest, tab_to};
 
 const ROW: &str = "settings.sender.sender-1";
 
@@ -110,16 +111,13 @@ fn shows_why_removing_a_sender_failed_and_sends_one_removal_for_a_double_press()
     assert!(edged_as_error(&world, "settings.senders.error"));
 }
 
-#[test]
-fn a_refused_removal_says_why_under_its_sender_in_view_however_many_senders_follow() {
-    let senders = (1..=30)
-        .map(|n| PairedSender {
-            id: format!("sender-{n}"),
-            name: format!("engineering-observability-deploy-bot-{n}"),
-            ..deploy_bot(None)
-        })
-        .collect();
-    let (daemon, _) = home(senders);
+fn refusing_two() -> World {
+    let ci = PairedSender {
+        id: "sender-2".into(),
+        name: "ci".into(),
+        ..deploy_bot(None)
+    };
+    let (daemon, _) = home(vec![deploy_bot(None), ci]);
     daemon.on("sender_unpair", |_| {
         message(SenderUnpairResultMessage {
             success: false,
@@ -129,18 +127,54 @@ fn a_refused_removal_says_why_under_its_sender_in_view_however_many_senders_foll
     });
     let mut world = World::start(daemon);
     on_senders(&mut world);
-    click(&mut world, "settings.sender.sender-1.remove");
-    let error = "settings.senders.error";
-    let (body, notice) = (world.rect("settings.body"), world.rect(error));
-    assert!(
-        notice[1] >= body[1] && notice[1] + notice[3] <= body[1] + body[3],
-        "the refusal at {notice:?} lies inside the page's view {body:?}"
+    world
+}
+
+#[test]
+fn a_refused_removal_keeps_the_keyboard_on_remove_and_space_sends_it_again() {
+    let mut world = refusing_two();
+    let remove = format!("{ROW}.remove");
+    tab_to(&mut world, &remove);
+    press(&mut world, Key::Text(" ".into()));
+    assert!(named(&world, "settings.senders.error").is_some());
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some(remove.as_str()),
+        "Remove keeps the keyboard through the refusal"
     );
-    assert!(edged_as_error(&world, error));
-    let mut top = |key: &str| world.rect(key)[1];
+    press(&mut world, Key::Text(" ".into()));
+    assert_eq!(world.daemon.sent_of("sender_unpair").len(), 2);
+    rest(&mut world);
+}
+
+#[test]
+fn a_refusal_appearing_moves_no_sender_row() {
+    let mut world = refusing_two();
+    let remove = format!("{ROW}.remove");
+    tab_to(&mut world, &remove);
+    let rec = world.record(60.0, 1.0, |_, app| {
+        app.key(rune::KeyEvent {
+            key: Key::Text(" ".into()),
+            mods: rune::Mods::default(),
+        })
+    });
+    assert!(named(&world, "settings.senders.error").is_some());
+    let from = rec.inputs[0].0;
+    let track = rec
+        .tracks
+        .iter()
+        .find(|t| t.path.ends_with("/settings.sender.sender-2"))
+        .expect("the second sender is on screen");
+    let places: Vec<[f32; 4]> = track
+        .frames
+        .iter()
+        .filter(|(k, _)| *k >= from)
+        .map(|(_, s)| s.rect)
+        .collect();
+    let moves = places.windows(2).filter(|w| w[0] != w[1]).count();
     assert!(
-        top("settings.sender.sender-1") < notice[1] && notice[1] < top("settings.sender.sender-2"),
-        "the refusal lies between the sender it was pressed on and the next"
+        moves <= 1,
+        "the second sender moved {moves} times on its way to its place: {places:?}"
     );
     rest(&mut world);
 }

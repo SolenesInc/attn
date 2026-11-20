@@ -23,17 +23,11 @@ const PAIRING_LIFETIME_MINUTES: u32 = 10;
 /// Why the last pairing, cancel or revoke failed, by profile.
 #[derive(Default)]
 pub(crate) struct Phones {
-    errors: BTreeMap<String, Refused>,
+    errors: BTreeMap<String, String>,
     /// Each shown code's QR image, by the text it encodes, drawn once when the code arrives.
     images: BTreeMap<String, Pixels>,
     /// Whether the page was in view at the last frame.
     in_view: bool,
-}
-
-/// Why an action on a profile's phones failed, and the phone it was pressed on, if it was one.
-struct Refused {
-    phone: Option<String>,
-    why: String,
 }
 
 /// Modules of light margin around the symbol, as the Tauri app's `uqr` border.
@@ -175,13 +169,14 @@ pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {
         .min()
 }
 
-fn failed(state: &mut State, profile_id: &str, phone: Option<String>, why: String) {
+fn failed(state: &mut State, profile_id: &str, why: String, tx: &mut Tx) {
+    tx.instant();
     state
         .window
         .settings
         .phones
         .errors
-        .insert(profile_id.to_owned(), Refused { phone, why });
+        .insert(profile_id.to_owned(), why);
 }
 
 fn pair(state: &mut State, profile_id: &str, tx: &mut Tx) {
@@ -197,7 +192,7 @@ fn pair(state: &mut State, profile_id: &str, tx: &mut Tx) {
         move |state, answer, tx| match answer.outcome() {
             Ok(_) if !shown(state) => cancel_quietly(state, answered, tx),
             Ok(_) => {}
-            Err(why) => failed(state, &answered, None, why),
+            Err(why) => failed(state, &answered, why, tx),
         },
         tx,
     );
@@ -212,9 +207,9 @@ fn cancel(state: &mut State, profile_id: &str, tx: &mut Tx) {
             request_id,
             ..PhonePairCancelMessage::new()
         },
-        move |state, answer, _| {
+        move |state, answer, tx| {
             if let Err(why) = answer.outcome() {
-                failed(state, &answered, None, why);
+                failed(state, &answered, why, tx);
             }
         },
         tx,
@@ -231,7 +226,7 @@ fn revoke(state: &mut State, device_id: &str, profile_id: &str, tx: &mut Tx) {
         return;
     }
     let (device, profile) = (device_id.to_owned(), profile_id.to_owned());
-    let (answered, pressed) = (profile.clone(), device.clone());
+    let answered = profile.clone();
     state.ask(
         |request_id| PhonePairingRevokeMessage {
             device_id: device,
@@ -239,9 +234,9 @@ fn revoke(state: &mut State, device_id: &str, profile_id: &str, tx: &mut Tx) {
             request_id,
             ..PhonePairingRevokeMessage::new()
         },
-        move |state, answer, _| {
+        move |state, answer, tx| {
             if let Err(why) = answer.outcome() {
-                failed(state, &answered, Some(pressed), why);
+                failed(state, &answered, why, tx);
             }
         },
         tx,
@@ -274,7 +269,7 @@ fn link_text(link: &PhoneLink) -> (String, bool) {
     }
 }
 
-fn paired_phone(pairing: &PhonePairing, t: &Tokens) -> ListRow {
+fn paired_phone(pairing: &PhonePairing, t: &Tokens) -> El {
     let seen = if pairing.connected {
         "Connected now".to_owned()
     } else {
@@ -303,6 +298,7 @@ fn paired_phone(pairing: &PhonePairing, t: &Tokens) -> ListRow {
                 .into()],
             Reveal::Always,
         )
+        .build(t)
 }
 
 fn pairing_code(state: &State, code: &PhonePairingCode, profile: &Profile, t: &Tokens) -> Block {
@@ -375,43 +371,27 @@ fn profile_block(
         format!("Phones for {}", profile.name),
     )
     .description("A phone you pair here sees this profile's agents and nothing else.");
-    let refused = state.window.settings.phones.errors.get(&profile.id);
-    let refusal = |refused: &Refused| {
-        Notice::error(
-            format!("settings.phones.{}.error", profile.id),
-            refused.why.clone(),
-        )
-        .build(t)
-    };
-    let on_row = |pairing: &PhonePairing| {
-        refused.is_some_and(|r| r.phone.as_deref() == Some(pairing.device_id.as_str()))
-    };
-    let held = paired.iter().any(|p| on_row(p));
     if !paired.is_empty() {
         section = section.push(
-            paired
-                .into_iter()
-                .fold(
-                    List::new(
-                        format!("settings.phones.{}.list", profile.id),
-                        format!("Phones paired with {}", profile.name),
-                    ),
-                    |list, pairing| {
-                        let under = match refused {
-                            Some(refused) if on_row(pairing) => vec![refusal(refused)],
-                            _ => Vec::new(),
-                        };
-                        list.row_with(paired_phone(pairing, t), under)
-                    },
-                )
-                .build(t),
+            List::new(
+                format!("settings.phones.{}.list", profile.id),
+                format!("Phones paired with {}", profile.name),
+            )
+            .rows(paired.into_iter().map(|p| paired_phone(p, t)))
+            .build(t),
         );
     }
     if let Some(code) = code {
         section = section.push(pairing_code(state, code, profile, t));
     }
-    if let Some(refused) = refused.filter(|_| !held) {
-        section = section.push(refusal(refused));
+    if let Some(error) = state.window.settings.phones.errors.get(&profile.id) {
+        section = section.push(
+            Notice::error(
+                format!("settings.phones.{}.error", profile.id),
+                error.clone(),
+            )
+            .build(t),
+        );
     }
     let id = profile.id.clone();
     section

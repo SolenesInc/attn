@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use attn_app::Action;
 
-use super::{click, edged_as_error, named, open, press, press_action};
+use super::{click, edged_as_error, named, open, press, press_action, tab_to};
 
 /// Ten minutes after the world's wall clock starts: a fresh code's expiry.
 const EXPIRES_AT: &str = "2026-11-12T09:10:00Z";
@@ -331,7 +331,7 @@ fn shows_why_the_link_is_down_and_why_a_code_could_not_be_shown() {
 }
 
 #[test]
-fn a_refused_revoke_says_why_as_an_error_under_the_phone_it_was_pressed_on() {
+fn a_refused_revoke_says_why_as_an_error_and_keeps_the_keyboard_on_revoke() {
     let ipad = PhonePairing {
         device_id: "device-2".into(),
         name: "iPad".into(),
@@ -347,19 +347,22 @@ fn a_refused_revoke_says_why_as_an_error_under_the_phone_it_was_pressed_on() {
     });
     let mut world = World::start(daemon);
     on_phones(&mut world);
-    click(&mut world, "settings.phone.work.device-1.revoke");
+    let revoke = "settings.phone.work.device-1.revoke";
+    tab_to(&mut world, revoke);
+    press(&mut world, Key::Text(" ".into()));
     let error = "settings.phones.work.error";
     assert_eq!(
         named(&world, error).as_deref(),
         Some("the phone's pairing is held by another home")
     );
     assert!(edged_as_error(&world, error));
-    let mut top = |key: &str| world.rect(key)[1];
-    assert!(
-        top("settings.phone.work.device-1") < top(error)
-            && top(error) < top("settings.phone.work.device-2"),
-        "the refusal lies between the phone it was pressed on and the next"
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some(revoke),
+        "Revoke keeps the keyboard through the refusal"
     );
+    press(&mut world, Key::Text(" ".into()));
+    assert_eq!(world.daemon.sent_of("phone_pairing_revoke").len(), 2);
 }
 
 #[test]

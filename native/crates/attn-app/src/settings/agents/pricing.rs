@@ -339,10 +339,10 @@ fn existing(state: &State, model: &str, raw: &str, t: &Tokens) -> (ListRow, Vec<
             .build(t),
         );
     }
-    under.push(rates(format!("settings.price.{model}.rates"), fields));
     under.extend(
         refusal.map(|refusal| Block::custom(format!("settings.price.{model}.refused"), refusal)),
     );
+    under.push(rates(format!("settings.price.{model}.rates"), fields));
     (row, under)
 }
 
