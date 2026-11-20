@@ -856,10 +856,24 @@ fn record_a11y(name: &str, tree: &str) {
         .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
 }
 
+/// Whether the element at `at` is a text field or inside one. A field's text scrolls under its
+/// caret and a completion draws inside it, both on purpose.
+fn in_field(elements: &[rune::ElementInfo], mut at: usize) -> bool {
+    loop {
+        if matches!(elements[at].role, "textbox" | "searchbox") {
+            return true;
+        }
+        match elements[at].parent {
+            Some(parent) => at = parent,
+            None => return false,
+        }
+    }
+}
+
 /// Text a clip cuts across its line, or whose glyphs run past its own box: what it says and how
 /// many points of it the clip hides or its glyphs spill. Text that truncates fits its box and is
 /// never cut, and text scrolled partly out of view is cut only top or bottom. Text under a modal
-/// is left out, as it is judged where it is in front. Text inside a view
+/// is left out, as it is judged where it is in front, and so is text in a field. Text inside a view
 /// that scrolls sideways is wider on purpose, and is left out: a scroll view with room to scroll
 /// sideways, which `sideways` lists by key and box, as accessibility offers it scrolling left.
 fn cut_text(elements: &[rune::ElementInfo], sideways: &[(String, [f32; 4])]) -> Vec<(String, f32)> {
@@ -890,7 +904,7 @@ fn cut_text(elements: &[rune::ElementInfo], sideways: &[(String, [f32; 4])]) -> 
             if said.trim().is_empty() || vw <= 0.0 || vh <= 0.0 {
                 return None;
             }
-            if scrolls_sideways(at) {
+            if scrolls_sideways(at) || in_field(elements, at) {
                 return None;
             }
             let hidden = (vx - x).max(0.0) + ((x + w) - (vx + vw)).max(0.0) + e.text_overflow;
@@ -947,8 +961,8 @@ fn record_cuts(name: &str, dark: bool, cut: &[(String, f32)]) {
 /// Pairs of texts drawn over one another: two texts whose visible boxes cross with nothing
 /// between them. An element that holds the later text but not the earlier, and fills or blurs
 /// what is behind it across where they cross, as a sheet, a popover or a panel does, hides the
-/// earlier one, so that pair is not listed. A field's box is the field, which a completion draws
-/// inside on purpose, and a link's or a highlight's box lies over its own text, so neither pairs.
+/// earlier one, so that pair is not listed. Text in a field, and a link's or a highlight's box,
+/// which lies over its own text, pair with nothing.
 fn overprinted_text(elements: &[rune::ElementInfo]) -> Vec<(String, String)> {
     let holders = |mut at: usize| {
         let mut up = vec![at];
@@ -971,10 +985,8 @@ fn overprinted_text(elements: &[rune::ElementInfo]) -> Vec<(String, String)> {
         .enumerate()
         .filter(|(_, e)| !e.exiting && e.opacity > 0.0 && e.visible[2] > 0.0 && e.visible[3] > 0.0)
         .filter(|(_, e)| e.text.as_ref().is_some_and(|t| !t.trim().is_empty()))
-        .filter(|(_, e)| {
-            !e.path.contains("#link-")
-                && !e.path.contains("#mark-")
-                && !matches!(e.role, "textbox" | "searchbox")
+        .filter(|(at, e)| {
+            !e.path.contains("#link-") && !e.path.contains("#mark-") && !in_field(elements, *at)
         })
         .map(|(at, _)| at)
         .collect();

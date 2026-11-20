@@ -145,11 +145,12 @@ layout nodes and draw instances, so a change reports what a screen costs before
 and after, `clips.tsv` lists each screen's count of text that a clip cuts
 across its line without an ellipsis or whose glyphs run past its own box, then
 each such text with the points it loses or spills. Text in a view that scrolls
-sideways is left out, and so is text under a modal, which counts on the screens
-where it is in front. `overlaps.tsv` lists each screen's count of texts drawn
+sideways is left out, and so is text in a field, which scrolls under its caret,
+and text under a modal, which counts on the screens where it is in front. `overlaps.tsv` lists each screen's count of texts drawn
 over one another, then each pair: two texts whose boxes cross with nothing
 filled or blurred between them, so a sheet or popover over the window pairs with
-nothing beneath it. A field and the completion drawn inside it do not pair.
+nothing beneath it. Text in a field, such as a completion drawn inside it, pairs
+with nothing.
 
 ```sh
 scripts/native-screenshot-tour shoot /tmp/tour/base origin/main
