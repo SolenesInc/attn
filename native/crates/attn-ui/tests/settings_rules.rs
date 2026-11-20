@@ -1236,6 +1236,8 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::terminal_status::terminal_status(label)", false),
     ("blocks::terminal_status::terminal_status(said)", false),
     ("blocks::preedit::preedit(said)", false),
+    ("blocks::floating_panel::FloatingPanel::new(title)", false),
+    ("blocks::tip::tip(said)", false),
     ("blocks::tile_header::TileHeader::title(said)", false),
     ("blocks::tile_header::SettlingChip::new(label)", false),
     ("blocks::tile_header::SettlingChip::new(said)", true),

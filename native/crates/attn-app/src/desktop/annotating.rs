@@ -1,8 +1,13 @@
+use attn_ui::GlyphButton;
+use attn_ui::Tokens;
+use attn_ui::blocks::{Block, Card, FloatingPanel, Inline, Stack, Status, rail};
+use attn_ui::system::{
+    Button as SystemButton, FieldState, IconSize, Look, Size, Type, area_box, glyph, icon_button,
+    words,
+};
 use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens};
 use rune::{Drag, El, Key, KeyEvent, Tx, col, el, row, text};
-use rune_kit::ScrollBar;
-use rune_kit::{Button, ButtonVariant, TextArea};
+use rune_kit::{Button, ButtonVariant, ScrollBar, TextArea};
 
 use crate::State;
 use crate::annotations::{self, QuickLabel, draft};
@@ -15,6 +20,10 @@ const GAP: f32 = 10.0;
 const CHIP: f32 = 28.0;
 /// The comment box's width.
 const COMPOSE_W: f32 = 320.0;
+/// The tallest the cards stand before they scroll.
+const CARDS_H: f32 = 240.0;
+/// The widest a drag's notice stands.
+const NOTICE_W: f32 = 300.0;
 /// The panel's width, and how far it sits from the slot's bottom right corner.
 const PANEL_W: f32 = 300.0;
 const PANEL_INSET: f32 = 20.0;
@@ -35,7 +44,7 @@ pub(super) fn layers(
 ) -> Vec<El> {
     let shows_sent = matches!(marking.outcome, Some(Outcome::Sent { .. }));
     let panel = (!marking.marks.is_empty() || shows_sent)
-        .then(|| panel(id, marking, send_key, unreachable, t));
+        .then(|| panel(id, marking, slot, send_key, unreachable, t));
     let notice = marking.notice.as_ref().map(|n| notice(id, n, slot, t));
     let popup = marking
         .popup
@@ -172,24 +181,18 @@ pub(crate) fn place(at: (f32, f32), size: (f32, f32), slot: (f32, f32)) -> (f32,
 }
 
 fn notice(id: &str, notice: &Notice, slot: (f32, f32), t: &Tokens) -> El {
-    let width = 300.0_f32.min(slot.0 - 2.0 * MARGIN);
+    let width = NOTICE_W.min(slot.0 - 2.0 * MARGIN);
     let left = (notice.at.0 - width / 2.0)
         .min(slot.0 - width - MARGIN)
         .max(MARGIN);
     let top = (notice.at.1 + GAP).min(slot.1 - 60.0).max(MARGIN);
-    text(notice.text.clone())
-        .key(format!("terminal.{id}.annotation.notice"))
-        .role("status")
-        .font(type_::LABEL)
-        .color(t.text_primary)
-        .wrap()
-        .w(width)
-        .px(10.0)
-        .py(6.0)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .absolute(left, top)
+    attn_ui::blocks::tip(
+        format!("terminal.{id}.annotation.notice"),
+        notice.text.clone(),
+        width,
+        t,
+    )
+    .absolute(left, top)
 }
 
 fn popup(
@@ -443,94 +446,73 @@ fn pick(
 
 fn compose(id: &str, popup: &Popup, mark: &crate::terminal::Annotation, t: &Tokens) -> El {
     let (edited, changed, keyed) = (id.to_owned(), id.to_owned(), id.to_owned());
-    let field = TextArea::new(&popup.comment)
-        .key(draft::comment_field_key(id))
-        .width(None)
-        .resizable()
-        .label("Annotation comment")
-        .placeholder("What should change here?")
-        .on_edit(move |state: &mut State| state.terminals.popup_comment(&edited))
-        .on_change(move |state: &mut State, tx: &mut Tx| {
-            draft::comment_edited(state, &changed, tx);
-        })
-        .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-            on_comment_key(state, &keyed, ev, tx)
-        })
-        .build(attn_ui::kit(t));
+    let field = area_box(
+        TextArea::new(&popup.comment)
+            .key(draft::comment_field_key(id))
+            .width(None)
+            .resizable()
+            .label("Annotation comment")
+            .placeholder("What should change here?")
+            .on_edit(move |state: &mut State| state.terminals.popup_comment(&edited))
+            .on_change(move |state: &mut State, tx: &mut Tx| {
+                draft::comment_edited(state, &changed, tx);
+            })
+            .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+                on_comment_key(state, &keyed, ev, tx)
+            }),
+        FieldState::Ready,
+        t,
+    );
     let (removed, gone, dismissed, saved) =
         (id.to_owned(), mark.id.clone(), id.to_owned(), id.to_owned());
-    let actions = row()
-        .items_center()
-        .gap(6.0)
-        .child(compose_button(
-            id,
-            "delete",
-            "Remove",
-            t.error,
-            t,
-            move |state, tx| draft::remove(state, &removed, &gone, tx),
-        ))
+    let actions = Inline::line()
+        .w_full()
+        .child(
+            SystemButton::new("Remove")
+                .look(Look::Danger)
+                .size(Size::Compact)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    draft::remove(state, &removed, &gone, tx)
+                })
+                .build(t)
+                .key(format!("terminal.{id}.annotation.delete"))
+                .into(),
+        )
         .child(el().grow(1.0))
         .child(
-            compose_button(
-                id,
-                "cancel",
-                "Cancel",
-                t.text_secondary,
-                t,
-                move |state, tx| draft::dismiss(state, &dismissed, tx),
-            )
-            .fill(t.bg_button)
-            .border(1.0, t.border),
+            SystemButton::new("Cancel")
+                .look(Look::Plain)
+                .size(Size::Compact)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    draft::dismiss(state, &dismissed, tx)
+                })
+                .build(t)
+                .key(format!("terminal.{id}.annotation.cancel"))
+                .into(),
         )
         .child(
-            compose_button(
-                id,
-                "comment",
-                "Comment",
-                t.text_secondary,
-                t,
-                move |state, tx| draft::save_comment(state, &saved, tx),
-            )
-            .fill(t.bg_button)
-            .border(1.0, t.border),
+            SystemButton::new("Comment")
+                .look(Look::Plain)
+                .size(Size::Compact)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    draft::save_comment(state, &saved, tx)
+                })
+                .build(t)
+                .key(format!("terminal.{id}.annotation.comment"))
+                .into(),
         );
-    col()
+    Stack::tight()
         .w(COMPOSE_W)
-        .gap(6.0)
-        .mt(4.0)
-        .child(
-            text(mark.quote.clone())
+        .child(rail(
+            words(mark.quote.clone(), Type::Small, t.text_tertiary)
                 .key(format!("terminal.{id}.annotation.quote"))
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
                 .wrap()
-                .max_lines(2)
-                .pl(8.0)
-                .border_sides([0.0, 0.0, 0.0, 2.0], t.border_hover),
-        )
-        .child(field)
+                .max_lines(2),
+            false,
+            t,
+        ))
+        .child(field.into())
         .child(actions)
-}
-
-fn compose_button(
-    id: &str,
-    part: &str,
-    title: &str,
-    ink: rune::Color,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    let face = title.to_owned();
-    Button::new(title)
-        .variant(ButtonVariant::Ghost)
-        .on_press_tx(press)
-        .label_with(move |_, _| text(face).font(type_::LABEL).color(ink))
-        .build(attn_ui::kit(t))
-        .key(format!("terminal.{id}.annotation.{part}"))
-        .h(type_::LABEL.line_px() + 8.0)
-        .px(10.0)
-        .radius(6.0)
 }
 
 /// Escape dismisses the popup and ⌘Enter, or Ctrl+Enter, keeps the comment.
@@ -548,68 +530,44 @@ fn on_comment_key(state: &mut State, id: &str, ev: &KeyEvent, tx: &mut Tx) -> bo
 fn panel(
     id: &str,
     marking: &Marking,
+    slot: (f32, f32),
     send_key: Option<&str>,
     unreachable: Option<&str>,
     t: &Tokens,
 ) -> El {
     let count = marking.marks.len();
     let (dragged, measured) = (id.to_owned(), id.to_owned());
-    let head = row()
-        .key(format!("terminal.{id}.annotation.panel.head"))
-        .items_center()
-        .gap(8.0)
-        .px(10.0)
-        .py(8.0)
-        .cursor(rune::Cursor::Grab)
-        .on_drag(move |state: &mut State, d: &mut Drag, tx: &mut Tx| {
-            drag_box(state, &dragged, Moves::Panel, d, tx);
-        })
-        .child(
-            text(attn_ui::glyph::GRABBER)
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
-        )
-        .child(
-            text("Annotations")
-                .font(type_::TITLE)
-                .color(t.text_primary)
-                .grow(1.0),
-        )
-        .child(
-            text(count.to_string())
-                .font(type_::LABEL)
-                .color(t.text_secondary),
-        );
-    let cards = col()
+    let cards = Stack::tight()
         .key(format!("terminal.{id}.annotation.cards"))
-        .gap(4.0)
-        .px(8.0)
-        .max_h(240.0)
+        .w_full()
+        .max_h(CARDS_H)
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
         .children(marking.marks.iter().map(|m| card(id, m, t)))
         .scroll_bar_styled(attn_ui::scroll_bar(t));
     let (edited, changed, keyed) = (id.to_owned(), id.to_owned(), id.to_owned());
-    let note = TextArea::new(&marking.note)
-        .key(format!("terminal.{id}.annotation.note.field"))
-        .width(None)
-        .resizable()
-        .label("Note sent with these annotations")
-        .placeholder("Anything else to say with these?")
-        .on_edit(move |state: &mut State| state.terminals.note(&edited))
-        .on_change(move |state: &mut State, tx: &mut Tx| {
-            draft::edited(state, &changed, tx);
-        })
-        .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-            if ev.key == Key::Enter && (ev.mods.cmd || ev.mods.ctrl) {
-                draft::send(state, &keyed, tx);
-                return true;
-            }
-            false
-        })
-        .build(attn_ui::kit(t));
-    let note = el().px(8.0).pt(6.0).child(note);
+    let note = area_box(
+        TextArea::new(&marking.note)
+            .key(format!("terminal.{id}.annotation.note.field"))
+            .width(None)
+            .resizable()
+            .label("Note sent with these annotations")
+            .placeholder("Anything else to say with these?")
+            .on_edit(move |state: &mut State| state.terminals.note(&edited))
+            .on_change(move |state: &mut State, tx: &mut Tx| {
+                draft::edited(state, &changed, tx);
+            })
+            .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+                if ev.key == Key::Enter && (ev.mods.cmd || ev.mods.ctrl) {
+                    draft::send(state, &keyed, tx);
+                    return true;
+                }
+                false
+            }),
+        FieldState::Ready,
+        t,
+    );
     let said = match &marking.outcome {
         Some(Outcome::Skipped) => Some("Not sent — the session is waiting on an approval, where the sending Enter would answer it. Send again once you have answered.".to_owned()),
         Some(Outcome::Failed(why)) => Some(why.clone()),
@@ -618,100 +576,85 @@ fn panel(
         )),
         _ => None,
     };
-    let said = said.map(|said| {
-        text(said)
-            .key(format!("terminal.{id}.annotation.outcome"))
-            .role("status")
-            .font(type_::LABEL)
-            .color(t.text_secondary)
-            .wrap()
-            .px(10.0)
-            .pt(6.0)
-    });
-    let foot = match marking.outcome {
-        Some(Outcome::Sent { count, kept: 0, .. }) => row().child(
-            text(format!("✓ sent {count} to the session"))
-                .key(format!("terminal.{id}.annotation.sent"))
-                .font(type_::LABEL)
-                .color(t.success),
-        ),
+    let foot: El = match marking.outcome {
+        Some(Outcome::Sent { count, kept: 0, .. }) => words(
+            format!("✓ sent {count} to the session"),
+            Type::Small,
+            t.success,
+        )
+        .key(format!("terminal.{id}.annotation.sent")),
         _ => {
             let sending = marking.outcome == Some(Outcome::Sending);
             let plural = if count == 1 { "" } else { "s" };
             let pressed = id.to_owned();
-            let (secondary, tertiary) = (t.text_secondary, t.text_tertiary);
-            let send_key = send_key.filter(|_| !sending).map(str::to_owned);
-            let button = Button::new("Send all").variant(ButtonVariant::GhostMuted);
-            let button = if sending {
-                button
-            } else {
-                button.on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            let send = SystemButton::new(if sending { "Sending…" } else { "Send all" })
+                .look(Look::Plain)
+                .size(Size::Compact)
+                .disabled(sending)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     draft::send(state, &pressed, tx);
-                })
+                });
+            let send = match send_key.filter(|_| !sending) {
+                Some(key) => send.trailing(words(key.to_owned(), Type::Small, t.text_tertiary)),
+                None => send,
             };
-            let button = button
-                .label_with(move |_, _| {
-                    row()
-                        .items_center()
-                        .gap(6.0)
-                        .child(
-                            text(if sending { "Sending…" } else { "Send all" })
-                                .font(type_::LABEL)
-                                .color(secondary),
-                        )
-                        .children(send_key.map(|key| text(key).font(type_::LABEL).color(tertiary)))
-                })
-                .build(attn_ui::kit(t))
-                .key(format!("terminal.{id}.annotation.send"))
-                .h(type_::LABEL.line_px() + 8.0)
-                .px(10.0)
-                .radius(6.0)
-                .fill(t.bg_button)
-                .border(1.0, t.border);
-            row()
-                .items_center()
+            Inline::line()
+                .w_full()
                 .child(
-                    text(format!("{count} annotation{plural}"))
-                        .font(type_::LABEL)
-                        .color(t.text_secondary)
-                        .grow(1.0),
+                    words(
+                        format!("{count} annotation{plural}"),
+                        Type::Small,
+                        t.text_secondary,
+                    )
+                    .grow(1.0),
                 )
-                .children(unreachable.is_none().then_some(button))
+                .children(unreachable.is_none().then(|| {
+                    send.build(t)
+                        .key(format!("terminal.{id}.annotation.send"))
+                        .into()
+                }))
         }
     };
-    let placed = col()
-        .key(format!("terminal.{id}.annotation.panel"))
-        .role("group")
-        .label("Annotations")
-        .w(PANEL_W)
-        .radius(10.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border)
+    let panel =
+        FloatingPanel::new(
+            format!("terminal.{id}.annotation.panel"),
+            "Annotations",
+            PANEL_W,
+        )
+        .max_height(slot.1 - 2.0 * PANEL_INSET)
+        .aside(words(count.to_string(), Type::Small, t.text_secondary))
+        .push_all(unreachable.map(|host| {
+            Status::new(
+                format!("terminal.{id}.annotation.unreachable"),
+                format!("{host} is unreachable"),
+                true,
+            )
+            .build(t)
+        }))
+        .push(Block::custom(
+            format!("terminal.{id}.annotation.cards.slot"),
+            cards,
+        ))
+        .push(Block::control(
+            format!("terminal.{id}.annotation.note"),
+            El::from(note).w_full(),
+        ))
+        .push_all(said.map(|said| {
+            Status::new(format!("terminal.{id}.annotation.outcome"), said, true).build(t)
+        }))
+        .foot(foot)
+        .build(t, move |state: &mut State, d: &mut Drag, tx: &mut Tx| {
+            drag_box(state, &dragged, Moves::Panel, d, tx);
+        })
         .on_press(|_: &mut State| {})
         .on_layout_tx(move |state: &mut State, [_, _, w, h], tx: &mut Tx| {
             if !draft::panel_measured(state, &measured, (w, h)) {
                 tx.live_only();
             }
-        })
-        .child(head)
-        .children(unreachable.map(|host| {
-            let said = format!("{host} is unreachable");
-            text(said.clone())
-                .key(format!("terminal.{id}.annotation.unreachable"))
-                .role("status")
-                .label(said)
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .wrap()
-                .px(10.0)
-        }))
-        .child(cards)
-        .child(note)
-        .children(said)
-        .child(foot.px(10.0).py(8.0));
+        });
     match marking.panel_at {
-        Some((left, top)) => placed.absolute(left, top),
-        None => placed.pin(None, None, Some(PANEL_INSET), Some(PANEL_INSET)),
+        Some((left, top)) => panel.absolute(left, top),
+        None => panel.pin(None, None, Some(PANEL_INSET), Some(PANEL_INSET)),
     }
 }
 
@@ -723,29 +666,24 @@ fn card(id: &str, mark: &Annotation, t: &Tokens) -> El {
         mark.id.clone(),
         mark.id.clone(),
     );
-    let open = row()
+    let open = Inline::top()
         .key(format!("terminal.{id}.annotation.card.{}", mark.id))
         .role("button")
         .label("Edit this annotation")
-        .gap(6.0)
         .grow(1.0)
         .min_w(0.0)
-        .child(text(emoji.to_owned()).font(type_::LABEL))
+        .child(glyph(emoji, IconSize::Small, t.text_secondary))
         .child(
-            col()
+            Stack::tight()
                 .grow(1.0)
                 .min_w(0.0)
                 .child(
-                    text(mark.quote.clone())
-                        .font(type_::LABEL)
-                        .color(t.text_secondary)
+                    words(mark.quote.clone(), Type::Small, t.text_secondary)
                         .wrap()
                         .max_lines(2),
                 )
                 .children((!mark.comment.is_empty()).then(|| {
-                    text(mark.comment.clone())
-                        .font(type_::LABEL)
-                        .color(t.text_primary)
+                    words(mark.comment.clone(), Type::Small, t.text_primary)
                         .wrap()
                         .max_lines(2)
                 })),
@@ -756,25 +694,20 @@ fn card(id: &str, mark: &Annotation, t: &Tokens) -> El {
                 draft::open_card(state, &opened, &mark_id, at, tx);
             }
         });
-    let remove = GlyphButton::new(attn_ui::glyph::TIMES, "Remove annotation")
-        .variant(ButtonVariant::GhostFaint)
-        .font(type_::LABEL)
-        .side(type_::LABEL.line_px())
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            draft::remove_card(state, &removed, &gone, tx);
-        })
-        .build(attn_ui::kit(t))
-        .key(format!("terminal.{id}.annotation.card.{}.remove", mark.id))
-        .px(4.0);
-    row()
-        .items_start()
-        .gap(4.0)
-        .px(6.0)
-        .py(5.0)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .child(open)
-        .child(remove)
+    let remove = icon_button(
+        format!("terminal.{id}.annotation.card.{}.remove", mark.id),
+        "Remove annotation",
+        attn_ui::glyph::TIMES,
+        IconSize::Small,
+    )
+    .size(Size::Small)
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+        draft::remove_card(state, &removed, &gone, tx);
+    })
+    .build(t);
+    Card::new(format!("terminal.{id}.annotation.card.{}.face", mark.id))
+        .push(Inline::top().child(open).child(remove.into()))
+        .build(t)
 }
 
 /// Where a card press opens its popup in the slot: over the panel's left edge, where the card

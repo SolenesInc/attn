@@ -69,7 +69,8 @@ fn within(rt: &Runtime<()>, outer: &ElementInfo) -> Vec<ElementInfo> {
         .collect()
 }
 
-const STORIES: [(&str, &[&str]); 5] = [
+const STORIES: [(&str, &[&str]); 6] = [
+    ("Tiles/Annotations", &["Rest", "Long", "Smallest long"]),
     (
         "Tiles/Find bar",
         &["Rest", "Case on", "Long", "Smallest long"],

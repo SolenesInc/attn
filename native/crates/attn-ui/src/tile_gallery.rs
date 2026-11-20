@@ -7,8 +7,8 @@ use rune_kit::TextInput;
 
 use crate::Tokens;
 use crate::blocks::{
-    Inline, Notice, Settling, SettlingChip, Tabs, TerminalBar, TileHeader, drag_ghost, drop_target,
-    terminal_notices, terminal_status,
+    Block, Card, FloatingPanel, Inline, Notice, Settling, SettlingChip, Stack, Status, Tabs,
+    TerminalBar, TileHeader, drag_ghost, drop_target, terminal_notices, terminal_status, tip,
 };
 use crate::colors::scheme_for;
 use crate::system::{
@@ -91,6 +91,13 @@ pub const TILE_SUBJECTS: &[TileSubject] = &[
         Some(".popout"),
     ),
     (
+        "tile-annotations",
+        "Tiles/Annotations",
+        &["story.tile"],
+        &["Rest", "Long", "Smallest long"],
+        Some(".panel.send"),
+    ),
+    (
         "tile-drag",
         "Tiles/Drag",
         &["story.tile"],
@@ -143,6 +150,10 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Focus", |s| s.settling = Some(Settling::Counting))
                 .variant("Paused", |s| s.settling = Some(Settling::Paused))
                 .variant("Kept", |s| s.settling = Some(Settling::Kept)),
+        ))
+        .story(common(
+            Story::new("Tiles/Annotations", Tiles::default, annotations_story)
+                .variant("Rest", |_| {}),
         ))
         .story(
             Story::new("Tiles/Drag", Tiles::default, drag_story)
@@ -518,4 +529,91 @@ fn header_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
             .child(tile("story.agent", agent))
             .child(tile("story.doc", doc)),
     )
+}
+
+fn annotations_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
+    let t = tokens(cx);
+    let quote = if s.long {
+        "error[E0308]: mismatched types in attn--ds-chrome-tiles/native/crates/attn-app/src/desktop/view.rs:1325 expected `El`, found `Control` — 本番の権限を移行する作業ツリー"
+    } else {
+        "error: could not compile `attn-app`"
+    };
+    let card = |i: usize, comment: &str| {
+        let face = Inline::top()
+            .child(crate::system::glyph(
+                "🐛",
+                IconSize::Small,
+                t.text_secondary,
+            ))
+            .child(
+                Stack::tight()
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .child(
+                        words(quote.to_owned(), Type::Small, t.text_secondary)
+                            .wrap()
+                            .max_lines(2),
+                    )
+                    .child(
+                        words(comment.to_owned(), Type::Small, t.text_primary)
+                            .wrap()
+                            .max_lines(2),
+                    ),
+            )
+            .child(
+                icon_button(
+                    format!("story.tile.card.{i}.remove"),
+                    "Remove annotation",
+                    crate::glyph::TIMES,
+                    IconSize::Small,
+                )
+                .size(Size::Small)
+                .build(&t)
+                .into(),
+            );
+        Card::new(format!("story.tile.card.{i}"))
+            .push(face)
+            .build(&t)
+    };
+    let send = Button::new("Send all")
+        .look(Look::Plain)
+        .size(Size::Compact)
+        .trailing(words("Ctrl+Enter", Type::Small, t.text_tertiary))
+        .on_press_tx(pressed)
+        .build(&t)
+        .key("story.tile.panel.send");
+    let foot = Inline::line()
+        .w_full()
+        .child(words("2 annotations", Type::Small, t.text_secondary).grow(1.0))
+        .child(send.into());
+    let width = if s.smallest { 240.0 } else { 300.0 };
+    let panel = FloatingPanel::new("story.tile.panel", "Annotations", width)
+        .max_height(260.0 - 2.0 * 16.0)
+        .aside(words("2", Type::Small, t.text_secondary))
+        .push_all(s.long.then(|| {
+            Status::new(
+                "story.tile.unreachable",
+                "attn-linux-landing-runner-with-a-long-hostname is unreachable",
+                true,
+            )
+            .build(&t)
+        }))
+        .push(Block::custom(
+            "story.tile.cards",
+            Stack::tight()
+                .w_full()
+                .child(card(0, "This should take the Control"))
+                .child(card(1, "Same here")),
+        ))
+        .foot(foot)
+        .build(&t, |_: &mut Tiles, _: &mut rune::Drag, _: &mut Tx| {})
+        .pin(None, None, Some(16.0), Some(16.0));
+    let notice = tip(
+        "story.tile.tip",
+        "Drag across text to annotate it",
+        220.0,
+        &t,
+    )
+    .absolute(24.0, 24.0);
+    terminal(s, &t, vec![panel, notice])
 }
