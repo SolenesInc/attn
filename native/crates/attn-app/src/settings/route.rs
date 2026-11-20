@@ -673,11 +673,14 @@ pub(crate) fn badge(state: &State, t: &Tokens, value: &Route) -> El {
         .items_end()
         .px(9.0)
         .py(5.0)
-        .radius(999.0)
+        .radius(14.0)
         .fill(t.bg_panel)
         .border(1.0, t.border)
         .child(
             text(view.harness_name.clone())
+                .wrap_anywhere()
+                .shrink()
+                .min_w(0.0)
                 .font(CAPTION)
                 .color(t.text_secondary),
         )

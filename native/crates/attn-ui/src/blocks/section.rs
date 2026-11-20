@@ -3,7 +3,7 @@ use rune::{El, col, row};
 use super::block::{Block, Kind, inner_gap, spaced};
 use super::measure::READING;
 use crate::Tokens;
-use crate::system::{Space, Type, door, words};
+use crate::system::{Space, Type, door, verbatim, words};
 
 /// A titled part of a page: its name, what it is for, then its blocks. Sections that follow
 /// each other on a page are set apart by a rule. Its title is a heading under the page's, keyed
@@ -102,7 +102,7 @@ impl Section {
         let title = door::gaps(row().flex_wrap().items_end(), Space::S2, Space::S8)
             .child(match self.heading {
                 Some(heading) => heading.shrink().min_w(0.0),
-                None => words(self.title.clone(), Type::Heading, t.text_primary)
+                None => verbatim(self.title.clone(), Type::Heading, t.text_primary)
                     .key(heading_key)
                     .role("heading")
                     .level(2)
@@ -112,7 +112,7 @@ impl Section {
             })
             .children(
                 self.aside
-                    .map(|aside| words(aside, Type::Small, t.text_tertiary)),
+                    .map(|aside| verbatim(aside, Type::Small, t.text_tertiary)),
             );
         let title = if self.controls.is_empty() {
             title

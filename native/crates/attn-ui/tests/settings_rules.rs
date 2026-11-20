@@ -490,18 +490,23 @@ fn a_sections_title_is_a_heading_under_the_pages() {
 const OUTSIDE: &str = "/opt/agents/codex-`canary` not found";
 
 fn outside_view(_: &(), cx: &mut Cx<()>) -> El {
-    use attn_ui::blocks::{Facts, Notice, Page};
+    use attn_ui::blocks::{Facts, Notice, Page, Section};
     let t = attn_ui::colors::scheme_for(None)
         .colors(cx.system_dark())
         .ui;
-    Page::new()
-        .push(Notice::warn("notice", OUTSIDE).build(&t))
-        .push(
-            Facts::new("facts")
-                .code("facts.path", "Path", OUTSIDE)
-                .build(&t),
-        )
-        .build("page", &t)
+    let plain = OUTSIDE.replace('`', "");
+    let mut page = Page::new();
+    for (suffix, said) in [("", OUTSIDE.to_owned()), (".plain", plain)] {
+        page = page
+            .push(Section::new(format!("section{suffix}"), said.clone()).build(&t))
+            .push(Notice::warn(format!("notice{suffix}"), said.clone()).build(&t))
+            .push(
+                Facts::new(format!("facts{suffix}"))
+                    .code(format!("facts.path{suffix}"), "Path", said)
+                    .build(&t),
+            );
+    }
+    page.build("page", &t)
 }
 
 #[test]
@@ -509,24 +514,26 @@ fn text_from_outside_is_drawn_as_written_backticks_and_all() {
     let mut rt = App::new(AppSpec {
         fonts: attn_ui::FONTS,
         families: attn_ui::FAMILIES,
-        ..AppSpec::new("outside", (900.0, 400.0), || (), outside_view)
+        ..AppSpec::new("outside", (900.0, 900.0), || (), outside_view)
     })
-    .headless_runtime((900.0, 400.0), Env::new(true, SCALE));
+    .headless_runtime((900.0, 900.0), Env::new(true, SCALE));
     while rt.frame(1.0 / 60.0) {}
-    let drawn = OUTSIDE.chars().filter(|c| !c.is_whitespace()).count();
-    for key in ["notice", "facts.path"] {
+    let glyphs = |key: &str| {
         let rect = rt
             .elements()
             .into_iter()
             .find(|e| e.key.as_deref() == Some(key))
             .unwrap_or_else(|| panic!("no {key}"))
             .rect;
-        let glyphs = glyphs_in(&rt, rect).len();
-        let label_glyphs = if key == "facts.path" { "Path".len() } else { 0 };
+        glyphs_in(&rt, rect).len()
+    };
+    let backticks = OUTSIDE.matches('`').count();
+    for key in ["section", "notice", "facts.path"] {
+        let (with, without) = (glyphs(key), glyphs(&format!("{key}.plain")));
         assert_eq!(
-            glyphs - label_glyphs,
-            drawn,
-            "{key} draws {glyphs} glyphs for {OUTSIDE:?}"
+            with - without,
+            backticks,
+            "{key} draws {with} glyphs for {OUTSIDE:?} and {without} without its backticks"
         );
     }
 }
