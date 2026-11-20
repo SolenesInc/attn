@@ -621,7 +621,7 @@ pub(crate) fn field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
                 at.saturating_sub(1)
             };
             state.window.garden.walked = (answers.question, next);
-            tx.scroll_into_view_in(view::RESULTS, view::row_key(&answers.ids[next]));
+            tx.scroll_row_into_view_in(view::RESULTS, view::row_key(&answers.ids[next]));
             true
         }
         Key::Down | Key::Up => walk_rows(state, ev.key == Key::Down, tx),

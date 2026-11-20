@@ -1721,6 +1721,76 @@ fn find_shows_every_match_and_moves_the_selection_to_the_next_and_the_previous()
     assert!(world.runtime_is_at_rest());
 }
 
+/// The Notebook in the smallest window at the largest text.
+fn start_smallest(disk: &Disk) -> World {
+    let mut world = start(disk);
+    world.resize((800.0, 600.0));
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some([("uiScale".to_owned(), "1.5".to_owned())].into()),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    world
+}
+
+#[test]
+fn find_shows_a_match_near_the_end_of_a_paragraph_taller_than_the_view_on_the_frame_enter_selects_it()
+ {
+    let lead = (0..5)
+        .map(|i| format!("Preparation step {i}.\n\n"))
+        .collect::<String>();
+    let paragraph =
+        "Read the rollout report and check deployment health before continuing. ".repeat(48);
+    let note = format!("# Plan\n\n{lead}{paragraph}quasar\n\n## Afterwards\n\n{lead}");
+    let disk = Disk::with(&[("knowledge/index.md", &note)]);
+    let mut world = start_smallest(&disk);
+    open_fullscreen(&mut world);
+    world.gesture(|d| {
+        d.click(Target::key("notebook.editor.line.0"));
+        d.press("mod+f");
+    });
+    world.gesture(|d| d.type_text("quasar"));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("notebook.editor.findcount"))
+            .name
+            .as_deref(),
+        Some("1 match")
+    );
+    let mut first_frame = None;
+    world.gesture(|d| {
+        d.press("enter");
+        d.runtime.frame(0.0);
+        let elements = d.runtime.elements();
+        let viewport = elements
+            .iter()
+            .find(|e| e.key.as_deref() == Some("notebook.scroll"))
+            .map(|e| e.visible);
+        let paragraph = elements
+            .iter()
+            .find(|e| {
+                e.text
+                    .as_deref()
+                    .is_some_and(|t| t.starts_with("Read the rollout") && t.ends_with("quasar"))
+            })
+            .map(|e| e.rect);
+        first_frame = viewport.zip(paragraph);
+    });
+    let (viewport, paragraph) =
+        first_frame.expect("the view and the matched paragraph are laid out");
+    assert!(
+        paragraph[3] > viewport[3],
+        "the paragraph is taller than the view: {paragraph:?} in {viewport:?}"
+    );
+    let end = paragraph[1] + paragraph[3];
+    assert!(
+        end > viewport[1] + 1.0 && end <= viewport[1] + viewport[3] + 0.5,
+        "the paragraph's last line, which holds the match, is in view: {paragraph:?} in {viewport:?}"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
 #[test]
 fn find_matches_on_a_line_whose_lowercase_changes_length_and_replaces_exactly_the_match() {
     let disk = Disk::with(&[("knowledge/index.md", "# Index\n\nİstanbul lantern\n")]);
