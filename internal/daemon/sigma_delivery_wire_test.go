@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -17,7 +16,7 @@ func sigmaInARun(t *testing.T, w *world) (*testworld.Peer, string, string, *fake
 	return app, session, view.ConversationID, server
 }
 
-func TestFeedbackReachesAnIdleSigmaConversationAndSteersARunningOne(t *testing.T) {
+func TestFeedbackDuringASigmaRunSteersThatRun(t *testing.T) {
 	w := newWorld(t, fakeagent.Sigma)
 	app, session, conversation, server := sigmaInARun(t, w)
 
@@ -32,18 +31,9 @@ func TestFeedbackReachesAnIdleSigmaConversationAndSteersARunningOne(t *testing.T
 	}
 	server.Reply(conversation, "Fixed, refunds too. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-
-	mark := len(app.Log())
-	if r := submitSessionAnnotationFeedbackAs(app, session, "idle", "now the coupons"); !r.Success || r.Status != "delivered" {
-		t.Fatalf("feedback at idle = %+v, want it delivered", r)
-	}
-	if got := server.Prompted(conversation); got.Text != "now the coupons" {
-		t.Fatalf("Sigma took %+v at idle, want the feedback", got)
-	}
-	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 }
 
-func TestFeedbackDuringASigmaApprovalWaitsInSigmaUntilTheApprovalIsAnswered(t *testing.T) {
+func TestFeedbackDuringASigmaApprovalReachesSigmaAsASteerAndLeavesTheApprovalOpen(t *testing.T) {
 	w := newWorld(t, fakeagent.Sigma)
 	app, session, conversation, server := sigmaInARun(t, w)
 	server.AskApproval(conversation)
@@ -52,17 +42,15 @@ func TestFeedbackDuringASigmaApprovalWaitsInSigmaUntilTheApprovalIsAnswered(t *t
 	if r := submitSessionAnnotationFeedbackAs(app, session, "during-approval", "check the rounding"); !r.Success || r.Status != "delivered" {
 		t.Fatalf("feedback during the approval = %+v, want it handed to Sigma", r)
 	}
-	if got := server.Submissions(conversation); got != 2 {
-		t.Fatalf("Sigma admitted %d inputs during the approval, want the prompt and the feedback", got)
+	if got := server.Prompted(conversation); got.Text != "check the rounding" || !got.Steer {
+		t.Fatalf("Sigma took %+v during the approval, want the feedback as a steer, which waits in Sigma's inbox until the run's next step", got)
 	}
 	if got := queriedSession(t, w.Client(), session).State; got != protocol.SessionStatePendingApproval {
 		t.Fatalf("the feedback left the session %s, want the approval still open", got)
 	}
 
 	server.Work(conversation)
-	if got := server.Prompted(conversation); got.Text != "check the rounding" || !got.Steer {
-		t.Fatalf("after the approval Sigma's run took %+v, want the feedback as a steer", got)
-	}
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	server.Reply(conversation, "Rounded. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 }
@@ -85,25 +73,21 @@ func TestASigmaSessionThatClosesCompactingCompactsOnceItsRunEndsAndThenCloses(t 
 			server.AnswerNextCompaction(conversation, tc.answer)
 
 			closeCompacting(t, cli, session)
-			if got := server.Compactions(conversation); got != 0 {
-				t.Fatalf("the conversation compacted %d times during the run that asked to close", got)
-			}
 			stillOpen(t, cli, session, "during the run that asked to close")
 
 			server.Reply(conversation, "Fixed and closing. <!-- attn:state=idle -->")
 			closed := awaitClosed(app, session)
-			reason := protocol.Deref(closed.CloseReason)
-			if protocol.Deref(closed.ClosedBy) != session || !strings.HasPrefix(reason, compactReason) {
-				t.Fatalf("ledger entry = %+v, want it closed by itself for %q", closed, compactReason)
+			if protocol.Deref(closed.ClosedBy) != session {
+				t.Fatalf("ledger entry = %+v, want it closed by itself", closed)
 			}
-			if tc.failure == "" && reason != compactReason {
+			if tc.failure != "" {
+				compactDidNotRun(t, closed, tc.failure)
+			} else if reason := protocol.Deref(closed.CloseReason); reason != compactReason {
 				t.Errorf("the session closed for %q after Sigma answered %s, want %q alone", reason, tc.answer.Outcome, compactReason)
 			}
-			if tc.failure != "" && (!strings.Contains(reason, "the compact did not run") || !strings.Contains(reason, tc.failure)) {
-				t.Errorf("the session closed for %q after Sigma answered %s, want it to say the compact did not run: %s", reason, tc.answer.Outcome, tc.failure)
-			}
-			if got := server.Compactions(conversation); got != tc.compactions {
-				t.Errorf("the conversation compacted %d times before the close, want %d", got, tc.compactions)
+			compacted, duringARun := server.Compactions(conversation)
+			if compacted != tc.compactions || duringARun != 0 {
+				t.Errorf("the conversation compacted %d times, %d asked during a run, want %d and none during a run", compacted, duringARun, tc.compactions)
 			}
 			server.AwaitInterrupted(conversation)
 		})

@@ -32,7 +32,8 @@ refuses its registration, because Attn has the harness of that name.
   without asking you first.
 - A new conversation starts with Attn's instructions, as other harnesses get
   them at launch. Sigma stores those instructions in the conversation, so a
-  resumed session keeps the instructions it started with.
+  resumed or reloaded session keeps the instructions it started with, as a
+  Claude Code session does.
 - A delegation role that needs the attn-workflow skill installs it where Sigma
   finds skills: `skills` in the Sigma home, `skills` in `CLAUDE_CONFIG_DIR` (by
   default `~/.claude`), and `skills` in the folder of each Claude provider in
@@ -77,10 +78,11 @@ restart.
 Annotations, messages from other agents and inbox notifications reach the
 conversation as follow-ups through the server, never typed into the terminal.
 What you send arrives under your user name, and what Attn and other agents send
-arrives from `attn`. A message sent while a run works reaches that run at its
-next step, as a steer, and a message sent while no run works starts one. A
-message sent while a call waits for your approval waits in Sigma and reaches the
-run once you answer the approval; it never answers the approval. A retried
+arrives from `attn`. An annotation sent while a run works reaches that run at
+its next step, as a steer; one sent while a call waits for your approval waits
+in Sigma until you answer the approval, and never answers it. Messages from
+other agents and inbox notifications wait for the run to end, as they do for
+other harnesses. Whatever arrives while no run works starts one. A retried
 delivery is one follow-up.
 
 ## Closing and resuming
@@ -90,17 +92,10 @@ closes the session into the ledger. Quitting the TUI with `^C` closes the
 session the same way, as quitting any other harness does. Resume the session
 from the Sessions ledger to open its conversation in a new tile.
 
-An agent can compact its conversation just before it closes itself, with
-`attn agent close --self --compact` or on standby, as
+An agent can compact its conversation just before it closes itself, as
 [Seeds on standby](delegation.md#seeds-on-standby) describes. Attn waits for
-the run to end and asks Sigma to compact the conversation. If Sigma finds
-nothing to compact, the session closes as if it had compacted. If the compact
-fails or is stopped, the session still closes, and its reason says the compact
-did not run.
-
-Reloading a Sigma session relaunches its TUI on the same conversation. The
-conversation keeps the instructions it started with, as a reloaded Claude Code
-session does.
+the run to end, then asks Sigma to compact the conversation. When Sigma finds
+nothing to compact, the session closes as if it had compacted.
 
 A Sigma conversation belongs to the profile whose session holds it. Attn refuses
 to resume the conversation in another profile while that session is open.

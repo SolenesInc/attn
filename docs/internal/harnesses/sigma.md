@@ -28,9 +28,9 @@ on steering and compaction at a903aa0.
 - `conversation/submit` is idempotent by its `requestId`: a retried submit is
   one input. With `steer: true` the input reaches the run in flight at its next
   step instead of waiting for the run to end; with no run working it starts one.
-  Input waits in the conversation's `pi.inbox` until the run takes it, so input
-  sent while a call waits on an approval reaches the run after the approval.
-  Only `approval/resolve` answers an approval (`packages/protocol/src/index.ts`,
+  Input waits in the conversation's `pi.inbox` until the run takes it, and only
+  `approval/resolve` answers an approval; what a steer does while a call waits
+  on an approval is not probed (`packages/protocol/src/index.ts`,
   `packages/sigma/src/server.ts`).
 - `conversation/compact {conversation, author, instructions?}` answers once the
   compaction has ended, with `outcome` `compacted`, `nothing_to_compact`,

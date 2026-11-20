@@ -28,7 +28,8 @@ func (s sigmaSessionLink) Compact(ctx context.Context, in harness.Input) harness
 	}
 	c, err := l.ensureServer(ctx, nil)
 	if err != nil {
-		return harness.Custody{Reason: fmt.Sprintf("compact %s conversation %s: %v", l.b.name, conversation, err)}
+		l.d.compactions.report(l.d, session, in.ID, sigmaCompaction{}.outcome(err))
+		return harness.Custody{Taken: true, At: time.Now()}
 	}
 	params := map[string]any{"conversation": conversation, "author": l.author(harness.VoiceAttn)}
 	started := l.d.life.Go(l.b.agent+"Compact", func() {

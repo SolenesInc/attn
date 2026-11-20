@@ -79,7 +79,7 @@ The agent receives a message headed "Markdown Annotations" that gives the file's
 <details>
 <summary>Why wasn't my batch sent?</summary>
 
-When the agent is waiting on an approval prompt, Attn does not send: the Enter that submits the batch would answer the prompt. The batch stays as it is, and the panel or tile header says why. Answer the prompt, then send again.
+When the agent is waiting on an approval prompt in its terminal, Attn does not send: the Enter that submits the batch would answer the prompt. The batch stays as it is, and the panel or tile header says why. Answer the prompt, then send again. A [Sigma](using-sigma.md) session takes the batch during an approval, and the agent reads it after you answer.
 </details>
 
 <details>

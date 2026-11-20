@@ -235,8 +235,8 @@ type ServerConversation struct {
 	requests     map[string]int
 	submitted    int
 	losesSubmit  bool
-	heldInputs   []ServerSubmission
 	compactions  int
+	compactedMid int
 	compactsWith *ServerCompaction
 }
 
@@ -475,12 +475,10 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 			s.statusLocked(conv, "working", nil)
 		}
 		submitted := ServerSubmission{Conversation: p.Conversation, RequestID: p.RequestID, Author: author.Name, AuthorID: author.ID, Text: p.Text, Steer: p.Steer != nil && *p.Steer}
-		if fresh && conv.Status == "waiting" {
-			conv.heldInputs = append(conv.heldInputs, submitted)
-		} else if fresh {
-			s.submissionsLocked(p.Conversation) <- submitted
-		}
 		s.mu.Unlock()
+		if fresh {
+			s.submissionsOf(p.Conversation) <- submitted
+		}
 		if lost {
 			return nil, replyLost
 		}
@@ -514,6 +512,9 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		}
 		if answer.Outcome == "compacted" {
 			conv.compactions++
+		}
+		if conv.Status != "idle" {
+			conv.compactedMid++
 		}
 		return answer, ""
 	case methodServerFakeReply:
@@ -572,12 +573,6 @@ func (s *appServer) end(conversation string, ended map[string]any) string {
 
 func (s *appServer) statusLocked(conv *ServerConversation, status string, ended map[string]any) {
 	conv.Status = status
-	if status != "waiting" {
-		for _, held := range conv.heldInputs {
-			s.submissionsLocked(conv.ID) <- held
-		}
-		conv.heldInputs = nil
-	}
 	if ended != nil {
 		conv.Ended = ended
 	}
@@ -596,10 +591,6 @@ func (s *appServer) statusLocked(conv *ServerConversation, status string, ended 
 func (s *appServer) submissionsOf(conversation string) chan ServerSubmission {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.submissionsLocked(conversation)
-}
-
-func (s *appServer) submissionsLocked(conversation string) chan ServerSubmission {
 	if s.submissions[conversation] == nil {
 		s.submissions[conversation] = make(chan ServerSubmission, 16)
 	}
@@ -649,7 +640,7 @@ func (s *appServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (a
 		case methodSubmissions:
 			return conv.submitted, nil
 		case methodCompactions:
-			return conv.compactions, nil
+			return []int{conv.compactions, conv.compactedMid}, nil
 		case methodAnswerCompact:
 			conv.compactsWith = &ServerCompaction{Outcome: p.Outcome, Message: p.Text}
 		case methodServerStarted:
@@ -768,11 +759,12 @@ func (s *AppServer) Submissions(conversation string) int {
 	return admitted
 }
 
-func (s *AppServer) Compactions(conversation string) int {
+// Compactions counts the conversation's compactions, and the conversation/compact calls that arrived while a run worked.
+func (s *AppServer) Compactions(conversation string) (compacted, askedDuringARun int) {
 	s.t.Helper()
-	var compacted int
-	s.call(methodCompactions, serverThreadParams{ThreadID: conversation}, &compacted)
-	return compacted
+	var counts []int
+	s.call(methodCompactions, serverThreadParams{ThreadID: conversation}, &counts)
+	return counts[0], counts[1]
 }
 
 // AnswerNextCompaction makes the conversation's next conversation/compact end with this outcome instead of compacted.

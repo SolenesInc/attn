@@ -813,7 +813,8 @@ commands:
         When the compact fails, the session still
         closes, and the reason says the compact did not run. Only a Claude
         session with the Claude mod and a Codex session on the shared Codex app
-        server compact, on the home machine or an outpost. attn refuses any other
+        server compact, on the home machine or an outpost, and a Sigma session
+        on the home machine. attn refuses any other
         session, and the refusal says why. Compact only a
         session that will resume as itself, as a seed's tender does when its
         standby resumes it. A crew member's next session starts fresh.

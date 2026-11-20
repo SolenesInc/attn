@@ -112,7 +112,7 @@ Known differences from the Tauri app: the panel sits at its terminal's bottom ri
 
 - A terminal mark needs ⌥ down for the whole drag and prose from a finished message. A drag over the prompt, tool output or a shell opens nothing, and a plain drag only selects text to copy.
 - The marked text must still line up with the message. Retry after the agent's reply has settled on screen, and read rows from `read_pane_text`, never from a screenshot.
-- attn refuses to send to a session that waits on an approval, and says so, because the Enter that sends would answer the approval. Answer the approval, then send again.
+- attn refuses to send to a terminal session that waits on an approval, and says so, because the Enter that sends would answer the approval. Answer the approval, then send again. A Sigma session takes the send during an approval, and the agent reads it after the approval is answered.
 - ⌘↩ sends only from the active tile. With focus elsewhere it does nothing. Click into the tile or use the send button.
 - attn removes a mark that has no label or comment when the mark's popup closes. Give a mark a label before you mark the next passage.
 - A reply whose text repeats an earlier reply in the same conversation cannot be marked: the drag shows "Only what the agent wrote can be annotated". The mock's fixed replies repeat, so mark each reply text once per session, or start another session.
