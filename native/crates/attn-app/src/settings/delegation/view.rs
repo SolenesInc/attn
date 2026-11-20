@@ -258,6 +258,7 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     }
     let (columns, runs_on) = columns();
     let mut roles = Table::new("settings.delegation.table", columns)
+        .head_key("settings.delegation.head")
         .rows(
             preferences
                 .roles
@@ -379,6 +380,7 @@ fn role_row(
             Field::new(format!("{key}.instructions"), "Instructions")
                 .note("maintained by Attn, updates with releases")
                 .value(view.instructions.clone())
+                .value_key(format!("{key}.instructions"))
                 .build(t),
         )
     } else {

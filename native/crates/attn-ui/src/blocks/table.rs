@@ -74,6 +74,7 @@ pub struct Table<S> {
     rows: Vec<TableRow<S>>,
     empty: Option<Empty>,
     footer: Option<(String, Actions)>,
+    head_key: Option<String>,
     dimmed: bool,
     named: Option<String>,
     compact: bool,
@@ -87,10 +88,18 @@ impl<S: 'static> Table<S> {
             rows: Vec::new(),
             empty: None,
             footer: None,
+            head_key: None,
             dimmed: false,
             named: None,
             compact: false,
         }
+    }
+
+    /// The head's key in place of `{key}.head`, for a page whose head had its own key before it
+    /// stood in a table.
+    pub fn head_key(mut self, key: impl Into<String>) -> Self {
+        self.head_key = Some(key.into());
+        self
     }
 
     /// Rows as tall as their text, not a Regular control, for a table of many rows read at a
@@ -147,7 +156,10 @@ impl<S: 'static> Table<S> {
             dimmed: self.dimmed,
             compact: self.compact,
         };
-        let mut head = grid.dim(grid.head(&self.key, t).key(format!("{}.head", self.key)));
+        let head_key = self
+            .head_key
+            .unwrap_or_else(|| format!("{}.head", self.key));
+        let mut head = grid.dim(grid.head(&head_key, t).key(head_key));
         if self.named.is_some() {
             head = head.role("row").label("Columns");
         }
@@ -313,11 +325,11 @@ impl Grid {
     }
 
     /// The head on the columns, one line high, so a narrow table names only the columns on it.
-    fn head(&self, table: &str, t: &Tokens) -> El {
+    fn head(&self, head: &str, t: &Tokens) -> El {
         let label = |title: &Said| words(title.clone(), Type::Label, t.text_tertiary);
         let line = self.line(
             self.who(None, label(&self.name), Space::S0),
-            |column| label(&self.fixed[column.0].0).key(format!("{table}.head.{}", column.0)),
+            |column| label(&self.fixed[column.0].0).key(format!("{head}.{}", column.0)),
             None,
         );
         let line = door::clip(line.max_h(door::line_height(Type::Label)));

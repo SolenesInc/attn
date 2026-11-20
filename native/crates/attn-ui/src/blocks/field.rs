@@ -14,6 +14,7 @@ pub struct Field {
     controls: Vec<El>,
     action: Option<El>,
     value: Option<Said>,
+    value_key: Option<String>,
     hint: Option<Said>,
     error: Option<Said>,
     mark: Option<El>,
@@ -32,6 +33,7 @@ impl Field {
             controls: Vec::new(),
             action: None,
             value: None,
+            value_key: None,
             hint: None,
             error: None,
             mark: None,
@@ -59,6 +61,13 @@ impl Field {
 
     pub fn note(mut self, note: impl Into<Said>) -> Self {
         self.note = Some(note.into());
+        self
+    }
+
+    /// The value's key in place of `{key}.value`, for a page whose value had its own key before
+    /// it stood in a field.
+    pub fn value_key(mut self, key: impl Into<String>) -> Self {
+        self.value_key = Some(key.into());
         self
     }
 
@@ -118,9 +127,12 @@ impl Field {
                 .min_w(0.0)
         }))
         .children(self.mark);
+        let value_key = self
+            .value_key
+            .unwrap_or_else(|| format!("{}.value", self.key));
         let value = self.value.map(|v| {
             let shown = words(v.clone(), Type::Body, t.text_secondary)
-                .key(format!("{}.value", self.key))
+                .key(value_key)
                 .label(v.text())
                 .wrap()
                 .w_full()
