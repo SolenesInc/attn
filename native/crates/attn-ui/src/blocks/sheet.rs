@@ -21,6 +21,7 @@ pub struct Sheet {
     fits: Option<f32>,
     room: f32,
     article: Option<(String, String)>,
+    body_key: Option<String>,
     blocks: Vec<Block>,
     footer: Vec<Block>,
 }
@@ -42,6 +43,7 @@ impl Sheet {
             fits: None,
             room: 0.0,
             article: None,
+            body_key: None,
             blocks: Vec::new(),
             footer: Vec::new(),
         }
@@ -91,6 +93,13 @@ impl Sheet {
 
     pub fn fits(mut self, tallest: f32) -> Self {
         self.fits = Some(tallest);
+        self
+    }
+
+    /// The body that scrolls is keyed `key` rather than `{key}.body`, as a feature whose key
+    /// names the part that scrolls.
+    pub fn body_key(mut self, key: impl Into<String>) -> Self {
+        self.body_key = Some(key.into());
         self
     }
 
@@ -173,7 +182,11 @@ impl Sheet {
                 );
                 let body = match self.article {
                     Some((article, label)) => col().key(article).role("article").label(label),
-                    None => col().key(format!("{key}.body")),
+                    None => col().key(
+                        self.body_key
+                            .clone()
+                            .unwrap_or_else(|| format!("{key}.body")),
+                    ),
                 };
                 let body = body.w_full();
                 let body = if self.fits.is_some() {

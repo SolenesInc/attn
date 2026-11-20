@@ -161,17 +161,14 @@ fn roster(state: &State, t: &Tokens, stacked: bool) -> El {
             }
             true
         })
+        .scrolls_as("crew.roster", "complementary", "Crew roster")
         .scrolling(t);
     let list = if stacked {
         list.shrink().min_h(0.0)
     } else {
         list.grow(1.0).min_h(0.0)
     };
-    let shown = Stack::tight()
-        .key("crew.roster")
-        .role("complementary")
-        .label("Crew roster")
-        .child(list);
+    let shown = Stack::tight().child(list);
     if stacked {
         shown
             .w_full()

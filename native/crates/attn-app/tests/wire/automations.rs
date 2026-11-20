@@ -822,3 +822,21 @@ fn a_profile_switch_shows_the_new_profile_s_automations_and_drops_what_the_old_o
     assert_eq!(state["selected"], Value::Null);
     assert_eq!(state["runs"], Value::Null);
 }
+
+#[test]
+fn an_assistive_scroll_moves_the_drawer_s_body_when_its_definitions_overflow_as_on_main() {
+    let definitions = (1..=12)
+        .map(|i| definition(i, &format!("Automation {i}")))
+        .collect();
+    let mut world = opened_in((533.0, 400.0), &Scene::of(definitions), |_| {});
+    world.gesture(|d| {
+        assert!(
+            d.runtime.accessibility_action(
+                "automations.body",
+                rune::accesskit::Action::ScrollDown,
+                None
+            ),
+            "automations.body does not scroll down"
+        );
+    });
+}

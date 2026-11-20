@@ -2946,3 +2946,28 @@ fn rename_focuses_a_field_whole_in_the_details_and_the_window_at_any_size_and_na
         );
     }
 }
+
+#[test]
+fn an_assistive_scroll_moves_the_crew_roster_when_its_members_overflow_as_on_main() {
+    let names = [
+        "ash", "birch", "cedar", "dahlia", "elm", "fern", "gorse", "hazel", "iris", "juniper",
+    ];
+    let mut world = start(names.iter().map(|n| member(n, 1)).collect());
+    world.resize((1440.0, 400.0));
+    open(&mut world);
+    let roster = world.screen().get(Target::key("crew.roster"));
+    assert_eq!(
+        (roster.role.as_str(), roster.name.as_deref()),
+        ("complementary", Some("Crew roster"))
+    );
+    world.gesture(|d| {
+        assert!(
+            d.runtime.accessibility_action(
+                "crew.roster",
+                rune::accesskit::Action::ScrollDown,
+                None
+            ),
+            "crew.roster does not scroll down"
+        );
+    });
+}

@@ -59,6 +59,7 @@ fn new_button(key: &str, t: &Tokens) -> El {
 
 fn list(automations: &Automations, t: &Tokens) -> El {
     let mut sheet = Sheet::new("automations.sheet", "Automations")
+        .body_key("automations.body")
         .aside(new_button("automations.new", t))
         .close(close_button("automations.close", "Close automations", t));
     if let Some(error) = &automations.error {
@@ -85,7 +86,7 @@ fn list(automations: &Automations, t: &Tokens) -> El {
     {
         sheet = sheet.push(runs(automations, selected, t));
     }
-    sheet.build(t).key("automations.body")
+    sheet.build(t)
 }
 
 fn refusal(key: String, said: &str, t: &Tokens) -> Block {
