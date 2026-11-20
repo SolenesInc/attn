@@ -10,9 +10,10 @@ use crate::State;
 /// What the title bar has given up, each step on top of those before it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum GivenUp {
-    /// The waiting pill's crumbs shrink on their own before any step.
     #[default]
     Nothing,
+    /// The waiting pill's crumbs leave; it keeps its dot, its count and its caret.
+    Crumbs,
     /// The critical notification leaves the bar; the bell keeps its dot.
     Strip,
     /// Every desktop but the window's gathers into the extras chip, and the runs chip leaves.
@@ -29,7 +30,8 @@ pub(crate) enum GivenUp {
     PillWord,
 }
 
-const STEPS: [GivenUp; 6] = [
+const STEPS: [GivenUp; 7] = [
+    GivenUp::Crumbs,
     GivenUp::Strip,
     GivenUp::Desktops,
     GivenUp::ProfileName,
@@ -74,7 +76,7 @@ impl Contents {
             GivenUp::Nothing | GivenUp::ProfileName | GivenUp::Shelf => true,
             GivenUp::Strip => self.queue_bar && self.critical,
             GivenUp::Desktops => self.queue_bar && (self.desktops > 1 || self.runs),
-            GivenUp::Chips | GivenUp::PillWord => self.queue_bar,
+            GivenUp::Crumbs | GivenUp::Chips | GivenUp::PillWord => self.queue_bar,
         }
     }
 }
@@ -218,8 +220,8 @@ pub(crate) enum Part {
 
 impl Widths {
     /// The room `step` frees, when it is known before the step is taken: the part it removes
-    /// and the gap before it. Gathering the desktops and saying only the waiting number leave
-    /// something in the part's place, so what they free is measured after.
+    /// and the gap before it. Dropping the crumbs, gathering the desktops and saying only the
+    /// waiting number leave something in the part's place, so what they free is measured after.
     fn freed_by(&self, step: GivenUp) -> Option<f32> {
         let gap = attn_ui::blocks::Inline::joined_gap();
         match step {
@@ -227,7 +229,7 @@ impl Widths {
             GivenUp::ProfileName => Some((self.profile - PROFILE_SHORT_W).max(0.0)),
             GivenUp::Chips => Some(self.chips + gap),
             GivenUp::Shelf => Some(self.shelf + gap),
-            GivenUp::Nothing | GivenUp::Desktops | GivenUp::PillWord => None,
+            GivenUp::Nothing | GivenUp::Crumbs | GivenUp::Desktops | GivenUp::PillWord => None,
         }
     }
 }

@@ -469,7 +469,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
     if more > 0 {
         trail.push_str(&format!(" +{more}"));
     }
-    if given_up >= GivenUp::PillWord {
+    if given_up >= GivenUp::Crumbs {
         trail.clear();
     }
     let waiting = system::dot(
@@ -514,7 +514,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
         super::bar_peek::anchor_hovered(state, super::bar_peek::Anchor::Waiting, inside)
     })
     .shrink()
-    .min_w(if given_up < GivenUp::PillWord {
+    .min_w(if given_up < GivenUp::Crumbs {
         PILL_MIN_W
     } else {
         0.0

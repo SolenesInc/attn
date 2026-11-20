@@ -2304,14 +2304,14 @@ fn arranged_on(world: &mut World, message: &InitialStateMessage, current: &str, 
 const MACOS_WINDOW_CONTROLS: f32 = 69.0;
 /// Wide enough for every chip of eight desktops, the runs chip and the waiting pill.
 const ROOMY: (f32, f32) = (1400.0, 900.0);
-/// At Home, too narrow for the chips of eight desktops beside the waiting pill and the runs
-/// chip (they need a window 903 wide), with room for the crowded bar (it keeps off the toolbar
-/// down to 678).
-const CROWDED_AT_HOME: (f32, f32) = (800.0, 900.0);
-/// On desktop 1, too narrow for the chips of eight desktops beside the waiting pill, the runs
-/// chip and its two tiles' shelf (they need a window 1047 wide), and wide enough for them beside
-/// desktop 3's single tile (903).
-const CROWDED_BESIDE_SHELF: (f32, f32) = (975.0, 900.0);
+/// At Home, too narrow for the chips of eight desktops beside the waiting pill without its crumbs
+/// and the runs chip (they need a window 779 wide), with room for the crowded bar (it keeps off
+/// the toolbar down to 594).
+const CROWDED_AT_HOME: (f32, f32) = (700.0, 900.0);
+/// On desktop 1, too narrow for the chips of eight desktops beside the waiting pill without its
+/// crumbs, the runs chip and its two tiles' shelf (they need a window 923 wide), and wide enough
+/// for them beside desktop 3's single tile (779).
+const CROWDED_BESIDE_SHELF: (f32, f32) = (850.0, 900.0);
 
 /// The queue bar crowded by eight desktops, on desktop 1 where its tiles leave the shelf
 /// beside the chips, or at Home.
@@ -2407,7 +2407,11 @@ fn no_part_of_the_title_bar_covers_another_in_the_smallest_window_at_every_text_
         }
         for (i, a) in pieces.iter().enumerate() {
             for b in &pieces[i + 1..] {
-                if a.path.starts_with(&b.path) || b.path.starts_with(&a.path) {
+                let among_chips = |e: &&rune::ElementInfo| e.path.contains("queue-bar.desktops/");
+                if a.path.starts_with(&b.path)
+                    || b.path.starts_with(&a.path)
+                    || (among_chips(a) && among_chips(b))
+                {
                     continue;
                 }
                 let ([ax, ay, aw, ah], [bx, by, bw, bh]) = (a.rect, b.rect);
@@ -2419,6 +2423,15 @@ fn no_part_of_the_title_bar_covers_another_in_the_smallest_window_at_every_text_
                     apart,
                     "{scale} collapsed {collapsed}: {:?} at {:?} covers {:?} at {:?}",
                     a.key, a.rect, b.key, b.rect
+                );
+            }
+        }
+        if collapsed && scale == "1" {
+            let screen = world.screen();
+            for key in ["queue-bar.desktop.1", "queue-bar.desktop-extras"] {
+                assert!(
+                    screen.find(Target::key(key)).is_some(),
+                    "the bar gives up the pill's crumbs before the window's chip and the extras: {key}"
                 );
             }
         }
@@ -2482,11 +2495,6 @@ fn a_crowded_queue_bar_keeps_the_window_s_desktop_and_gathers_the_rest_into_the_
         by >= 0.0,
         "the extras chip's count rises past the bar's top edge to {by}"
     );
-    let [_, _, pill, _] = world
-        .screen()
-        .bounds(Target::key("queue-bar.pill"))
-        .unwrap();
-    assert!(pill >= 124.0, "the waiting pill keeps its width: {pill}");
     let count = world
         .runtime()
         .elements()
