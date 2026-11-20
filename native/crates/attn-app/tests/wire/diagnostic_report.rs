@@ -731,3 +731,35 @@ fn a_key_typed_in_the_main_window_joins_its_daemon_write_in_a_report_from_a_popp
 
     assert_eq!(joined_journey(&report, &trace)["runtimeId"], "r2");
 }
+
+#[test]
+fn after_the_close_button_tab_reaches_clear_before_the_first_pane() {
+    let mut world = on_the_desktop(answering(daemon()));
+    create_report(&mut world);
+    let tab = |world: &mut World| {
+        world.gesture(|app| {
+            app.key(rune::KeyEvent {
+                key: rune::Key::Tab,
+                mods: rune::Mods::default(),
+            })
+        });
+        world.screen().focused().and_then(|n| n.key)
+    };
+    let mut reached = Vec::new();
+    for _ in 0..12 {
+        let key = tab(&mut world).unwrap_or_default();
+        if key == "diagnostic-report.pane.p1" {
+            break;
+        }
+        reached.push(key);
+    }
+    let close = reached
+        .iter()
+        .position(|k| k == "close")
+        .expect("Tab reaches the close button");
+    assert_eq!(
+        reached.get(close + 1).map(String::as_str),
+        Some("diagnostic-report.clear"),
+        "after the close button Tab went {reached:?}"
+    );
+}

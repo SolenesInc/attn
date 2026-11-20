@@ -371,6 +371,21 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     }
     let mut output = Section::new("diagnostic-report.output", "Recent terminal output")
         .description("Optional. Output may contain private text or secrets.");
+    if !draft.selected.is_empty() {
+        output = output.control(
+            Button::new("Clear")
+                .look(Look::Quiet)
+                .size(Size::Compact)
+                .disabled(saving)
+                .on_press(|state: &mut State| {
+                    if let Some(draft) = &mut state.window.diagnostic_report {
+                        draft.selected.clear();
+                    }
+                })
+                .build(t)
+                .key("diagnostic-report.clear"),
+        );
+    }
     if groups.is_empty() {
         output = output.push(
             Prose::lead(
@@ -410,25 +425,6 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .child(words(label, Type::Label, t.text_tertiary))
                 .children(checks),
         ));
-    }
-    if !draft.selected.is_empty() {
-        output = output.push(
-            Actions::new("diagnostic-report.included-actions")
-                .push(
-                    Button::new("Clear")
-                        .look(Look::Quiet)
-                        .size(Size::Compact)
-                        .disabled(saving)
-                        .on_press(|state: &mut State| {
-                            if let Some(draft) = &mut state.window.diagnostic_report {
-                                draft.selected.clear();
-                            }
-                        })
-                        .build(t)
-                        .key("diagnostic-report.clear"),
-                )
-                .build(),
-        );
     }
     let save = Button::new(if saving { "Saving…" } else { "Save report" })
         .look(Look::Primary)
