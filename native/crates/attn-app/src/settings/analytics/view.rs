@@ -492,13 +492,15 @@ fn vent_detail(
     } else {
         None
     };
-    let head =
+    let label = words(
+        vent.context.session_label.clone(),
+        Type::Name,
+        t.text_primary,
+    )
+    .wrap();
+    let tagged = vent.kind == VENT_TOOLS || outcome.is_some();
+    let tags =
         Inline::tight()
-            .child(words(
-                vent.context.session_label.clone(),
-                Type::Name,
-                t.text_primary,
-            ))
             .children((vent.kind == VENT_TOOLS).then(|| {
                 El::from(tag(
                     "settings.analytics.vent.tools",
@@ -597,7 +599,11 @@ fn vent_detail(
         t,
     );
     let facts = fact(facts, "vent.experimental", "Experimental", experimental, t);
-    let mut column = column.push(head).push(body);
+    let mut column = column.push(label);
+    if tagged {
+        column = column.push(tags);
+    }
+    column = column.push(body);
     if let Some(more) = more {
         column = column.push(more);
     }

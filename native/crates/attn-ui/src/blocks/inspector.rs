@@ -127,7 +127,17 @@ pub fn beside(list: El, inspector: El) -> El {
         .child(inspector)
 }
 
-/// [`beside`] for a list built as a block, such as one that holds more than one list.
+/// A list built as a block, such as one that holds more than one list, with its inspector
+/// beside it while both fit, the list no narrower than an inspector gets, and under it where
+/// they don't.
 pub fn beside_list(list: super::Block, inspector: El) -> super::Block {
-    super::Block::new(super::block::Kind::Custom, beside(list.el, inspector))
+    super::Block::new(
+        super::block::Kind::Custom,
+        row()
+            .w_full()
+            .flex_wrap()
+            .items_start()
+            .child(list.el.grow_from(1.0, NARROWEST))
+            .child(inspector),
+    )
 }
