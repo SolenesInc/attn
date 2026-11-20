@@ -10,7 +10,7 @@ import { createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
-const ACCENT_LEAD = 40;
+const PRIMARY_LEAD = 40;
 
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
@@ -95,7 +95,7 @@ try {
     const [x, y, , h] = (await driver.find({ key: 'close_desktop.confirm' })).rect;
     const at = (Math.round((y + h / 2) * scale) * image.width + Math.round((x + 4) * scale)) * 4;
     const [r, g, b] = image.data.subarray(at, at + 3);
-    runner.assert(b - Math.max(r, g) >= ACCENT_LEAD, `the confirm button fills with the accent, its blue ${ACCENT_LEAD} levels or more above red and green`, { scale, fill: [r, g, b] });
+    runner.assert(r - b >= PRIMARY_LEAD, `the confirm button fills with the primary action's orange, its red ${PRIMARY_LEAD} levels or more above blue`, { scale, fill: [r, g, b] });
     const ended = observer.waitForMessage((message) => message.event === 'session_unregistered' && message.session?.id === id && message, 'the shell ended');
     await driver.click({ key: 'close_desktop.confirm' });
     await observer.waitFor(() => !observer.desktop(desktop.id), 'the desktop closed');
