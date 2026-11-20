@@ -163,6 +163,24 @@ fn ring_of<'a>(rt: &'a Runtime<()>, e: &ElementInfo, t: &Tokens) -> Option<&'a I
     })
 }
 
+/// How strongly the layers open around `instance` let it show: the product of their opacities.
+fn strength_around(rt: &Runtime<()>, instance: &Instance) -> f32 {
+    let at = rt
+        .instances
+        .iter()
+        .position(|i| std::ptr::eq(i, instance))
+        .expect("the instance is the frame's");
+    let mut open: Vec<f32> = Vec::new();
+    for i in &rt.instances[..at] {
+        if i.params[1] == rune::render::KIND_LAYER {
+            open.push(i.fill[3]);
+        } else if i.params[1] == rune::render::KIND_LAYER_END {
+            open.pop();
+        }
+    }
+    open.iter().product()
+}
+
 /// A field shows focus with its own warm edge, not a ring round it.
 fn is_text_editor(e: &ElementInfo) -> bool {
     e.caret.is_some() || e.role.contains("text")
@@ -172,11 +190,14 @@ fn is_text_editor(e: &ElementInfo) -> bool {
 fn every_focus_ring_is_drawn_whole_and_undimmed() {
     let stories = std::iter::once("Library/Button")
         .chain(SUBJECTS.iter().map(|(name, _)| *name))
-        .filter(|name| !matches!(*name, "Library/Tag" | "Library/Icon box"));
-    for name in stories {
+        .filter(|name| !matches!(*name, "Library/Tag" | "Library/Icon box"))
+        .map(|name| (name, "Focus"))
+        .chain(std::iter::once(("Library/Button", "Unavailable focus")));
+    for (name, variant) in stories {
+        let face_fades = variant == "Unavailable focus";
         for dark in [true, false] {
             let t = tokens(dark);
-            let mut rt = story(dark, name, "Focus");
+            let mut rt = story(dark, name, variant);
             let painted = paint_one_frame(&mut rt);
             let shown = rt.elements();
             let focusable: Vec<ElementInfo> = rt
@@ -187,21 +208,25 @@ fn every_focus_ring_is_drawn_whole_and_undimmed() {
                 .collect();
             assert!(!focusable.is_empty(), "{name} draws nothing focusable");
             for e in focusable {
-                let ring = ring_of(&rt, &e, &t)
-                    .unwrap_or_else(|| panic!("{name}, dark={dark}: {:?} draws no ring", e.key));
+                let ring = ring_of(&rt, &e, &t).unwrap_or_else(|| {
+                    panic!("{name} {variant}, dark={dark}: {:?} draws no ring", e.key)
+                });
                 let [x, y, w, h] = ring.rect;
                 let [x0, y0, x1, y1] = ring.clip;
                 assert!(
                     x0 <= x && y0 <= y && x + w <= x1 && y + h <= y1,
-                    "{name}, dark={dark}: {:?}'s ring {:?} is cut by {:?}",
+                    "{name} {variant}, dark={dark}: {:?}'s ring {:?} is cut by {:?}",
                     e.key,
                     ring.rect,
                     ring.clip
                 );
                 let shown_at = least_fade_within(&painted, &shown, &e);
                 assert!(
-                    ring.border[3] >= 0.999 && e.opacity >= 0.999 && shown_at >= 0.999,
-                    "{name}, dark={dark}: {:?}'s ring is dimmed (it shows at {shown_at})",
+                    ring.border[3] >= 0.999
+                        && e.opacity >= 0.999
+                        && strength_around(&rt, ring) >= 0.999
+                        && (face_fades || shown_at >= 0.999),
+                    "{name} {variant}, dark={dark}: {:?}'s ring is dimmed (it shows at {shown_at})",
                     e.key
                 );
             }
@@ -843,17 +868,18 @@ fn a_segmented_control_stays_inside_its_column() {
 }
 
 /// Each story with a Disabled variant, and the variant it dims.
-const DISABLED: &[(&str, &str)] = &[
-    ("Library/Button", "Rest"),
-    ("Library/Switch", "Rest"),
-    ("Library/Segmented", "Rest"),
-    ("Library/Stepper", "Rest"),
-    ("Library/Expander", "Closed"),
-    ("Library/Choice", "First chosen"),
-    ("Library/Press area", "Closed"),
-    ("Library/Disclosure", "Closed"),
-    ("Library/Trigger", "Rest"),
-    ("Library/Field box", "Filled"),
+const DISABLED: &[(&str, &str, &str)] = &[
+    ("Library/Button", "Rest", "Disabled"),
+    ("Library/Button", "Rest", "Unavailable"),
+    ("Library/Switch", "Rest", "Disabled"),
+    ("Library/Segmented", "Rest", "Disabled"),
+    ("Library/Stepper", "Rest", "Disabled"),
+    ("Library/Expander", "Closed", "Disabled"),
+    ("Library/Choice", "First chosen", "Disabled"),
+    ("Library/Press area", "Closed", "Disabled"),
+    ("Library/Disclosure", "Closed", "Disabled"),
+    ("Library/Trigger", "Rest", "Disabled"),
+    ("Library/Field box", "Filled", "Disabled"),
 ];
 
 /// The parts whose rest look is warm: disabled, they first turn neutral, so they are held to
@@ -981,11 +1007,11 @@ fn subjects(name: &str) -> Vec<String> {
 
 #[test]
 fn disabled_draws_every_part_of_every_control_at_half_strength() {
-    for &(name, rest_variant) in DISABLED {
+    for &(name, rest_variant, disabled_variant) in DISABLED {
         for dark in [true, false] {
             let t = tokens(dark);
             let rest = story(dark, name, rest_variant);
-            let disabled = story(dark, name, "Disabled");
+            let disabled = story(dark, name, disabled_variant);
             let keys = subjects(name);
             let keys: Vec<&str> = keys.iter().map(String::as_str).collect();
             let ground = [t.bg_panel.r, t.bg_panel.g, t.bg_panel.b].map(rune::theme::srgb_encode);
@@ -2122,29 +2148,36 @@ const UNAVAILABLE: f32 = 0.5;
 
 #[test]
 fn a_disabled_primary_keeps_its_hue_at_half_strength_and_its_label_reads_on_it() {
-    for dark in [true, false] {
+    for (dark, variant) in [true, false]
+        .into_iter()
+        .flat_map(|dark| ["Disabled", "Unavailable"].map(|variant| (dark, variant)))
+    {
         let t = tokens(dark);
-        let rt = story(dark, "Library/Button", "Disabled");
+        let rt = story(dark, "Library/Button", variant);
         let ground = [t.bg_panel.r, t.bg_panel.g, t.bg_panel.b].map(rune::theme::srgb_encode);
         let primary = [t.warning.r, t.warning.g, t.warning.b].map(rune::theme::srgb_encode);
         let half = [0, 1, 2].map(|c| primary[c] * UNAVAILABLE + ground[c] * (1.0 - UNAVAILABLE));
         for size in ["regular", "compact"] {
             let key = format!("button.primary.{size}");
             let button = element(&rt, &key);
-            let drawn = surface(&rt, &button, t.bg_panel);
+            let fill = rt
+                .instances
+                .iter()
+                .position(|i| near(i.rect, device(button.rect)) && i.fill[3] > 0.0)
+                .unwrap_or_else(|| panic!("{key} {variant}, dark={dark}: draws no fill"));
+            let drawn = shown(&rt, Part::Fill(fill), t.bg_panel);
             assert!(
                 (0..3).all(|c| (drawn[c] - half[c]).abs() < 0.02),
-                "{key}, dark={dark}: a disabled Primary is drawn {drawn:?}, not its hue at half strength {half:?}"
+                "{key} {variant}, dark={dark}: a disabled Primary is drawn {drawn:?}, not its hue at half strength {half:?}"
             );
-            let label = glyphs_in(&rt, &button)
+            let (glyph, _) = *glyphs_in(&rt, &button)
                 .first()
-                .unwrap_or_else(|| panic!("{key}, dark={dark}: draws no label"))
-                .1
-                .fill;
-            let apart = contrast([label[0], label[1], label[2]], drawn);
+                .unwrap_or_else(|| panic!("{key} {variant}, dark={dark}: draws no label"));
+            let label = shown(&rt, Part::Fill(glyph), t.bg_panel);
+            let apart = contrast(label, drawn);
             assert!(
                 apart >= CONTROL_EDGE - ROUNDING,
-                "{key}, dark={dark}: the label stands {apart:.2}:1 on the fill, under {CONTROL_EDGE}:1"
+                "{key} {variant}, dark={dark}: the label stands {apart:.2}:1 on the fill, under {CONTROL_EDGE}:1"
             );
         }
     }

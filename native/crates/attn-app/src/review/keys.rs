@@ -6,11 +6,11 @@ use std::collections::HashSet;
 use attn_protocol::{ReviewBundle, ReviewFile};
 use attn_ui::Tokens;
 use attn_ui::blocks::{
-    Block, Byline, Card, Head, Inline, KeyFit, KeyLine, Prose, Reader, Room, Stack, Surface,
-    key_choice_width, key_tab, place,
+    Block, Byline, Card, Inline, KeyFit, KeyLine, Prose, Sheet, Stack, key_choice_width, key_tab,
+    place,
 };
 use attn_ui::system::{Type, keycaps, keys_hint, keys_hint_width, words};
-use rune::{El, Tx, row};
+use rune::{El, Key, Tx, row};
 
 use super::frames::Frame;
 use super::{Review, Spot, frame_press, place_press, prefix};
@@ -432,7 +432,10 @@ const ALL_KEYS: &[(&str, &str)] = &[
         "esc",
         "Close the edit box, the send, the search, this sheet, a selection, or the file view. In the Walkthrough, return to the stop.",
     ),
-    ("?", "Show or hide this sheet."),
+    (
+        "?",
+        "Show or hide this sheet. PageUp and PageDown scroll it, Home and End go to its ends.",
+    ),
 ];
 
 /// Every key the review takes, with what it does.
@@ -457,10 +460,23 @@ pub(super) fn sheet(prefix: &str, read_only: bool, t: &Tokens) -> El {
                 .child(words(*what, Type::Body, t.text_primary).wrap().grow(1.0)),
         )
     });
-    let head = Head::new(format!("{prefix}.sheet.title"), "Keys")
-        .lead("Selecting text and typing still writes a comment, as in any markdown tile.");
-    let reader = Reader::new()
-        .head(head)
+    let title = words("Keys", Type::PageTitle, t.text_primary)
+        .key(format!("{prefix}.sheet.title"))
+        .role("heading")
+        .level(1)
+        .label("Keys");
+    Sheet::new(format!("{prefix}.sheet"), "Keys")
+        .head(title)
+        .body_key(sheet_body(prefix))
+        .fits(f32::INFINITY)
+        .framed()
+        .push(
+            Prose::lead(
+                format!("{prefix}.sheet.lead"),
+                "Selecting text and typing still writes a comment, as in any markdown tile.",
+            )
+            .build(t),
+        )
         .push_all(read_only.then(|| {
             Prose::empty(
                 format!("{prefix}.sheet.read-only"),
@@ -469,12 +485,26 @@ pub(super) fn sheet(prefix: &str, read_only: bool, t: &Tokens) -> El {
             .build(t)
         }))
         .push_all(rows)
-        .build(format!("{prefix}.sheet.page"), Room::Narrow, t);
-    Surface::panel(reader, t)
-        .key(format!("{prefix}.sheet"))
+        .build(t)
         .role("dialog")
         .label("Review keys")
         .box_shadow(attn_ui::frame::shadow(t, 18.0, 40.0, 0.32))
+}
+
+/// The part of the keys sheet that scrolls under its title.
+pub(super) fn sheet_body(prefix: &str) -> String {
+    format!("{prefix}.sheet.page")
+}
+
+/// Page Up and Page Down page the open keys sheet, Home and End take it to its ends.
+pub(super) fn scroll_sheet(prefix: &str, key: &Key, tx: &mut Tx) {
+    let body = sheet_body(prefix);
+    match key {
+        Key::PageDown => tx.scroll_page(body, 1),
+        Key::PageUp => tx.scroll_page(body, -1),
+        Key::Home => tx.scroll_to_y(body, 0.0),
+        _ => tx.scroll_to_bottom_instant(body),
+    }
 }
 
 /// The column the sheet's keycaps stand in: past the widest, "Shift+Enter".

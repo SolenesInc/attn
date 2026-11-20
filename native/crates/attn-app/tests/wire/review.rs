@@ -7328,6 +7328,139 @@ fn the_list_of_places_keeps_its_close_and_its_list_above_the_key_line_in_the_sma
 }
 
 #[test]
+fn the_keys_sheet_of_a_small_review_at_the_largest_text_scrolls_to_its_last_key() {
+    let mut world = review_in(
+        row(vec![document_tile("m", DOC, None)]),
+        (800.0, 600.0),
+        Some("1.5"),
+    );
+    click(&mut world, Target::key("tile.m.review.keys"));
+    world.gesture(|app| app.type_text("?"));
+
+    let [_, ry, _, rh] = world.rect("tile.m.review");
+    let [_, sy, _, sh] = world.rect("tile.m.review.sheet");
+    assert!(
+        sy + sh <= ry + rh + 0.5,
+        "the sheet runs past its tile: {sy}+{sh} in {ry}+{rh}"
+    );
+    let body = "tile.m.review.sheet.page";
+    let last = "tile.m.review.sheet.?";
+    let whole = |world: &mut World, key: &str| {
+        let [_, by, _, bh] = world.rect(body);
+        let [_, y, _, h] = world.rect(key);
+        y >= by - 0.5 && y + h <= by + bh + 0.5
+    };
+    assert!(
+        !whole(&mut world, last),
+        "every key fits the sheet unscrolled"
+    );
+
+    let [bx, by, bw, bh] = world.rect(body);
+    for _ in 0..100 {
+        if whole(&mut world, last) {
+            break;
+        }
+        world.gesture(|app| {
+            app.runtime.wheel_event(
+                rune::WheelEvent::new(0.0, -60.0)
+                    .at((bx + bw / 2.0) as f32, (by + bh / 2.0) as f32),
+            )
+        });
+    }
+    assert!(
+        whole(&mut world, last),
+        "the wheel never shows the last key whole: {:?} in {:?}, sheet {:?}",
+        world.rect(last),
+        world.rect(body),
+        world.rect("tile.m.review.sheet")
+    );
+
+    let first = "tile.m.review.sheet.1 2 3";
+    press(&mut world, Key::Home);
+    assert!(
+        whole(&mut world, first),
+        "Home does not go back to the first key"
+    );
+    for _ in 0..20 {
+        if whole(&mut world, last) {
+            break;
+        }
+        press(&mut world, Key::PageDown);
+    }
+    assert!(
+        whole(&mut world, last),
+        "Page Down never shows the last key whole"
+    );
+    press(&mut world, Key::Home);
+    press(&mut world, Key::End);
+    assert!(
+        whole(&mut world, last),
+        "End does not show the last key whole"
+    );
+    press(&mut world, Key::Escape);
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Review keys"))
+            .is_none()
+    );
+    world.advance(std::time::Duration::from_secs(3));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_narrow_popped_out_review_of_three_frames_keeps_all_keys_whole_and_opens_the_sheet() {
+    let mut tile = document_tile("m", DOC, None);
+    tile["window"] = json!({"x": 60.0, "y": 60.0, "width": 400.0, "height": 700.0});
+    let mut world = start_with_tree(row(vec![pane("a"), tile]), (1400.0, 900.0));
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some([("uiScale".to_owned(), "1.5".to_owned())].into()),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    let _calc = serve(&world);
+    deliver(&mut world, &map_document(), Some(map_bundle("brief")));
+    let window = world.tile_windows()[0].key.clone();
+
+    let screen = world.tile_screen(&window);
+    let tabs: Vec<String> = screen
+        .descendants(Target::role("tab-list").name("Frames"))
+        .into_iter()
+        .filter(|n| n.role == "tab")
+        .filter_map(|n| n.name)
+        .collect();
+    assert_eq!(tabs, ["1 Brief", "2 Walkthrough", "3 Map"], "{screen}");
+    let [lx, _, lw, _] = screen
+        .bounds(Target::key("tile.m.review.keys"))
+        .unwrap_or_else(|| panic!("no key line:\n{screen}"));
+    let hint = screen
+        .descendants(Target::key("tile.m.review.keys"))
+        .into_iter()
+        .find(|n| n.name.as_deref() == Some("? all keys"))
+        .unwrap_or_else(|| panic!("no all keys:\n{screen}"));
+    let all_keys = Target::role(hint.role).name("? all keys");
+    let [x, y, w, h] = screen
+        .bounds(all_keys)
+        .unwrap_or_else(|| panic!("no all keys:\n{screen}"));
+    assert!(
+        x >= lx - 0.5 && x + w <= lx + lw + 0.5,
+        "all keys at {x}+{w} runs past its key line at {lx}+{lw}"
+    );
+
+    let centre = (x + w / 2.0, y + h / 2.0);
+    world.tile_gesture(&window, |app| app.click_at(centre));
+    world.tile_gesture(&window, |app| app.type_text("?"));
+    assert!(
+        world
+            .tile_screen(&window)
+            .find(Target::role("dialog").name("Review keys"))
+            .is_some(),
+        "? opens no keys sheet:\n{}",
+        world.tile_screen(&window)
+    );
+}
+
+#[test]
 fn a_narrow_reviews_key_line_keeps_its_language_servers_and_their_setup_in_reach() {
     let narrow = || {
         let world = review_in(

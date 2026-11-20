@@ -1,4 +1,4 @@
-use rune::El;
+use rune::{Color, El};
 
 /// How strongly an unavailable control draws: the strength rune-kit draws an unavailable field
 /// at, so a field and every other control dim alike.
@@ -17,7 +17,11 @@ pub(crate) fn unavailable(e: El) -> El {
     e.disabled(true).inert()
 }
 
-/// Drawn as [`dim`] draws, while it keeps its place on Tab and its accessible state.
-pub(crate) fn faded(e: El) -> El {
-    e.layer_opacity(STRENGTH)
+/// An unavailable control that draws its own strength and keeps its place on Tab, so the
+/// keyboard reaches it and reads why; it takes no press and shows no hover.
+pub(crate) fn reachable(e: El) -> El {
+    e.disabled(true)
+        .focusable(true)
+        .hover(Color::TRANSPARENT)
+        .press(Color::TRANSPARENT)
 }

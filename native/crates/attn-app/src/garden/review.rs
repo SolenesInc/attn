@@ -1002,7 +1002,7 @@ fn rail(shown: &GardenReview, selected: &str, full: bool, t: &Tokens) -> El {
             .children(rows)
     } else {
         Bar::new("garden.review.rail")
-            .push_all(rows.map(|r| r.w(DOCK_RAIL_ITEM).grow(0.0)))
+            .push_all(rows.map(|r| r.w(DOCK_RAIL_ITEM)))
             .build(t)
             .role("navigation")
             .label("Seeds in this review")

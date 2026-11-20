@@ -30,13 +30,13 @@ use attn_protocol::{
     RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage,
     RecordCommandUsageResultMessage, RefreshPRsResultMessage, RepoInfo, ReviewBundle, ReviewFile,
     ReviewFlow, ReviewFlowGroup, ReviewFlowMessage, ReviewFlowParticipant, ReviewNotShown,
-    ReviewNote, ReviewRow, ReviewStop, Seed, SeedCheck, SeedDocument, SeedDocumentGetResultMessage,
-    SeedEdge, SeedNote, SeedPlotProgress, SeedReviewResultMessage, Session,
-    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
-    SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
-    SessionPullRequest, SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState,
-    UpdateChangedMessage, UpdateOutpostProgress, UpdateRun, Worktree, WorktreeListResult,
-    WorktreeListResultEvent,
+    ReviewNote, ReviewRow, ReviewStop, Seed, SeedCheck, SeedContinuation, SeedDocument,
+    SeedDocumentGetResultMessage, SeedEdge, SeedNote, SeedPlotProgress, SeedReviewResultMessage,
+    Session, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage,
+    SessionLedgerEntry, SessionListResult, SessionListResultMessage, SessionMessage,
+    SessionMessagesGetResultMessage, SessionPullRequest, SessionUsage, SessionUsageModel,
+    SharedCodexBlocker, SharedCodexState, UpdateChangedMessage, UpdateOutpostProgress, UpdateRun,
+    Worktree, WorktreeListResult, WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Metrics};
 use attn_testkit::tree::{pane, row};
@@ -1467,6 +1467,50 @@ fn garden_board(dark: bool) {
     click(&mut world, Target::role("button").name("Expand the garden"));
     click(&mut world, Target::key("garden.view.board"));
     snap(&mut world, "garden-board", dark);
+}
+
+/// The board inside a plot it drilled into, the trail back on its own line, Tab on the first
+/// of the view controls.
+fn garden_board_plot(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::BoardOpen);
+    world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
+    world.gesture(|app| app.click(Target::key("garden.view.board")));
+    world.gesture(|app| app.click(Target::key("garden.board.drill.s-plot")));
+    tap(&mut world, Key::Tab);
+    snap(&mut world, "garden-board-plot", dark);
+}
+
+/// A seed whose agent runs on an outpost out of reach, Tab on its unavailable Resume.
+fn garden_seed_resume_unreachable(dark: bool) {
+    let mut seeds = seeds();
+    let one = seeds
+        .iter_mut()
+        .find(|s| s.id == "s-one")
+        .expect("the fixture holds s-one");
+    one.continuation = Some(SeedContinuation {
+        agent: "codex".into(),
+        cwd: "/repo".into(),
+        directory_state: "unreachable".into(),
+        outpost: Some("studio".into()),
+        resume_available: false,
+        resume_reason: Some(
+            "outpost \"studio\" is unreachable; Resume returns when it is back".into(),
+        ),
+        ..SeedContinuation::default()
+    });
+    let mut world = garden_world(dark, seeds);
+    press(&mut world, Action::BoardOpen);
+    world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
+    world.gesture(|app| app.click(Target::key("garden.row.s-plot")));
+    world.gesture(|app| app.click(Target::key("garden.row.s-one")));
+    for _ in 0..80 {
+        if world.screen().focused().and_then(|n| n.name).as_deref() == Some("Resume on studio") {
+            break;
+        }
+        tap(&mut world, Key::Tab);
+    }
+    snap(&mut world, "garden-seed-resume-unreachable", dark);
 }
 
 /// The board with a card picked, its move menu open under it.
@@ -4885,6 +4929,45 @@ fn review_beside_agent_with(dark: bool, bundle: ReviewBundle) -> World {
     world
 }
 
+/// The review popped out into a window 400 points wide, with a sequence diagram whose arrow
+/// points to a stop, so its key line offers all three frames.
+fn review_popped_narrow(dark: bool) {
+    let fence = REVIEW.lines().count() as i64 + 2;
+    let document = format!(
+        "{REVIEW}\n```mermaid\nsequenceDiagram\n  participant poll as Poll\n  participant totals as Totals\n  poll->>totals: Sum(rows)\n```\n"
+    );
+    let mut bundle = review();
+    let stop = bundle.stops[0].heading_line;
+    bundle.flows = vec![ReviewFlow {
+        line: fence,
+        drawn: true,
+        participants: ["poll", "totals"]
+            .map(|id| ReviewFlowParticipant {
+                id: id.into(),
+                label: id.into(),
+                actor: false,
+            })
+            .to_vec(),
+        messages: vec![ReviewFlowMessage {
+            line: fence + 4,
+            from: "poll".into(),
+            to: "totals".into(),
+            arrow: "->>".into(),
+            text: "Sum(rows)".into(),
+            stop_line: Some(stop),
+            ..ReviewFlowMessage::default()
+        }],
+        ..ReviewFlow::default()
+    }];
+    let mut tile = document_tile("m", "/repo/review.md");
+    tile["window"] = json!({"x": 10.0, "y": 20.0, "width": 400.0, "height": 760.0});
+    let daemon = scripted().state(initial(dark, row(vec![pane("a"), tile]), vec![]));
+    serve_totals(&daemon);
+    let mut world = start(daemon);
+    deliver(&mut world, "/repo/review.md", &document, Some(bundle));
+    snap_tile_window(&mut world, "review-popped-narrow", dark);
+}
+
 fn review_beside(dark: bool) {
     let mut world = review_beside_agent(dark);
     focus_review(&mut world);
@@ -7657,6 +7740,10 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("garden_search_body", || garden_search_body(dark, false));
         scene("garden_search_body", || garden_search_body(dark, true));
         scene("garden_board_menu", || garden_board_menu(dark));
+        scene("garden_board_plot", || garden_board_plot(dark));
+        scene("garden_seed_resume_unreachable", || {
+            garden_seed_resume_unreachable(dark)
+        });
         scene("garden_seed_tile", || garden_seed_tile(dark));
         scene("garden_review_screen", || {
             garden_review_screen(dark, true, true, "garden-review")
@@ -7733,6 +7820,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("review_focused", || review_focused(dark));
         scene("review_walkthrough", || review_walkthrough(dark));
         scene("review_beside", || review_beside(dark));
+        scene("review_popped_narrow", || review_popped_narrow(dark));
         scene("review_server_missing", || review_server_missing(dark));
         scene("review_search", || review_search(dark));
         scene("review_send_sheet", || review_send_sheet(dark));

@@ -63,6 +63,7 @@ pub struct Library {
     pub long: bool,
     pub chosen: usize,
     pub disabled: bool,
+    pub unavailable: bool,
     pub failed: bool,
     pub narrow: bool,
     pub many: bool,
@@ -229,6 +230,11 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Rest", |_| {})
                 .variant("Focus", |s| s.rings = true)
                 .variant("Disabled", |s| s.disabled = true)
+                .variant("Unavailable", |s| s.unavailable = true)
+                .variant("Unavailable focus", |s| {
+                    s.unavailable = true;
+                    s.rings = true;
+                })
                 .variant("Long label", |s| s.long = true)
                 .variant("Narrow", |s| {
                     s.long = true;
@@ -345,11 +351,17 @@ fn buttons(s: &Library, cx: &mut Cx<Library>) -> El {
                 (Look::Danger, true) => "Remove this automation for good",
                 (Look::Brand, true) => "New agent in this folder",
             };
-            let button: El = Action::new(shown)
+            let button = Action::new(shown)
                 .look(look)
                 .size(size)
                 .disabled(s.disabled)
-                .on_press_tx(|_: &mut Library, _: &mut Tx| {})
+                .on_press_tx(|_: &mut Library, _: &mut Tx| {});
+            let button = if s.unavailable {
+                button.unavailable("Nothing has changed yet")
+            } else {
+                button
+            };
+            let button: El = button
                 .build(&t)
                 .key(format!("button.{look_key}.{size_key}"))
                 .into();

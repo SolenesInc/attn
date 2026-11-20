@@ -1033,12 +1033,14 @@ fn prose_width(block: document::Prose) -> f32 {
 
 /// `panel` floating over the reader as the Tauri app's review sheets do: centered across,
 /// `down` of the reader's height from its top, `share` of its width and at most `width` points.
+/// A panel that can shrink stops as far above the reader's foot.
 fn floating(panel: El, down: f32, width: f32, share: f32) -> El {
     col()
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .items_center()
         .child(rune::el().h_frac(down))
         .child(panel.w_frac(share).max_w(width))
+        .child(rune::el().h_frac(down))
 }
 
 /// The Before and After switch over a diagram, keyed `key`, with `b` or a press on a side.
@@ -1368,6 +1370,10 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         (Key::Escape, _) if review.help => {
             review.help = false;
             None
+        }
+        (Key::PageUp | Key::PageDown | Key::Home | Key::End, _) if review.help => {
+            keys::scroll_sheet(&prefix(&tile), &ev.key, tx);
+            return true;
         }
         (Key::Escape, _) if review.select_from.is_some() => {
             review.select_from = None;

@@ -157,7 +157,8 @@ impl KeyFit {
 }
 
 /// The line under a reader that names its keys: tabs and hints, and one hint at its end, such as
-/// the key that shows them all. The tabs and the end always share a line.
+/// the key that shows them all. The tabs and the end always share a line, and the end never
+/// gives way: in a line too narrow for both, the tabs wrap in the room it leaves.
 pub struct KeyLine {
     key: String,
     label: String,
@@ -212,7 +213,11 @@ impl KeyLine {
     pub fn build(self, t: &Tokens) -> El {
         let set_off = self.fit == KeyFit::Line;
         let tabs = (!self.tabs.is_empty()).then(|| {
-            let tabs = door::gap(row().role("tablist").label("Frames"), Space::S2);
+            let tabs = door::gaps(
+                row().role("tablist").label("Frames").flex_wrap().shrink(),
+                Space::S2,
+                Space::S2,
+            );
             let tabs = if set_off {
                 door::sides(tabs, Space::S0, Space::S8)
                     .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)

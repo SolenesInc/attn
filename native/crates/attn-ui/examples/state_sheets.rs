@@ -213,6 +213,8 @@ fn sheets() -> Vec<Sheet> {
                 column("Pressed", "Rest", Gesture::Press),
                 column("Focus", "Rest", Gesture::Tab),
                 column("Disabled", "Disabled", Gesture::None),
+                column("Off", "Unavailable", Gesture::None),
+                column("Off focus", "Unavailable focus", Gesture::None),
                 column("Long label", "Long label", Gesture::None),
                 column("Narrow", "Narrow", Gesture::None),
             ],

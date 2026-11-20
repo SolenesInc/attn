@@ -797,6 +797,13 @@ pub(super) fn view(state: &State, t: &Tokens) -> El {
         .min_h(0.0)
         .on_key(key)
         .child(header(state, &place, t));
+    if !place.trail.is_empty() {
+        page = page.child(
+            Bar::new("garden.board.where")
+                .lead(trail(&place, t))
+                .build(t),
+        );
+    }
     if let Some(error) = &walk.error {
         page = page.child(
             Bar::new("garden.board.error")
@@ -843,13 +850,8 @@ pub(super) fn view(state: &State, t: &Tokens) -> El {
 }
 
 fn header(state: &State, place: &Place, t: &Tokens) -> El {
-    let lead = if place.trail.is_empty() {
-        words("The garden", Type::Small, t.text_secondary)
-    } else {
-        trail(place, t)
-    };
     Bar::new("garden.board.header")
-        .lead(lead)
+        .lead(words("The garden", Type::Small, t.text_secondary))
         .push(super::view::view_switch(state, t))
         .push(
             words(place.scoped.to_string(), Type::Small, t.text_tertiary).key("garden.board.total"),

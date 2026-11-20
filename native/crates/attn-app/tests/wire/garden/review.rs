@@ -924,6 +924,103 @@ fn reads_and_decides_on_the_item_chosen_from_the_rail() {
     assert!(world.runtime_is_at_rest());
 }
 
+/// A docked review of `count` seeds, each with a title of a usual length.
+fn docked_with(count: usize) -> World {
+    let seeds: Vec<Seed> = (1..=count)
+        .map(|n| {
+            with(
+                seed(
+                    &format!("s-dock{n}"),
+                    &format!("Tidy the dock strip, part {n}"),
+                ),
+                |s| {
+                    s.status = "growing".into();
+                },
+            )
+        })
+        .collect();
+    let items = seeds
+        .iter()
+        .map(|s| GardenReviewItem {
+            id: format!("r-1.{}", s.id),
+            seed_id: s.id.clone(),
+            title: s.title.clone(),
+            ..item()
+        })
+        .collect();
+    let (mut world, _) = garden(Script {
+        seeds,
+        ..Script::of(Some(review(items)))
+    });
+    click(&mut world, "Continue review");
+    world
+}
+
+fn dock_item(n: usize) -> String {
+    format!("garden.review.rail.r-1.s-dock{n}")
+}
+
+/// Each seed in the dock's strip keeps one length and stands apart from the next.
+fn assert_items_stand_apart(world: &mut World, count: usize) {
+    let rects: Vec<[f64; 4]> = (1..=count).map(|n| world.rect(&dock_item(n))).collect();
+    for (n, rect) in rects.iter().enumerate() {
+        assert_eq!(
+            rect[2],
+            190.0,
+            "seed {} stands {} wide in the strip",
+            n + 1,
+            rect[2]
+        );
+    }
+    for pair in rects.windows(2) {
+        assert!(
+            pair[0][0] + pair[0][2] <= pair[1][0],
+            "two seeds in the strip overlap: {:?} and {:?}",
+            pair[0],
+            pair[1]
+        );
+    }
+}
+
+#[test]
+fn a_docked_review_lays_its_seeds_out_apart_and_scrolls_sideways_to_the_last() {
+    let mut world = docked_with(2);
+    assert_items_stand_apart(&mut world, 2);
+
+    let mut world = docked_with(5);
+    assert_items_stand_apart(&mut world, 5);
+    let [x, y, w, h] = world.rect("garden.review.rail");
+    let last = dock_item(5);
+    assert!(
+        world.rect(&last)[0] >= x + w,
+        "the fifth seed starts in view"
+    );
+    for _ in 0..40 {
+        let [left, _, width, _] = world.rect(&last);
+        if left + width <= x + w {
+            break;
+        }
+        let at = ((x + w / 2.0) as f32, (y + h / 2.0) as f32);
+        world.gesture(|app| {
+            app.runtime
+                .wheel_event(rune::WheelEvent::new(-60.0, 0.0).at(at.0, at.1))
+        });
+    }
+    let [left, _, width, _] = world.rect(&last);
+    assert!(
+        left >= x && left + width <= x + w,
+        "the strip does not scroll the fifth seed into view: {left}..{} in {x}..{}",
+        left + width,
+        x + w
+    );
+    world.gesture(|app| app.click(Target::key(last)));
+    assert_eq!(
+        read_title(&world).as_deref(),
+        Some("Tidy the dock strip, part 5")
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
 #[test]
 fn reads_and_decides_on_the_next_item_once_one_is_resolved() {
     let (mut world, showing) = reviewing_two();

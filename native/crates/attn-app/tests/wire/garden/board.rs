@@ -469,6 +469,30 @@ fn opens_a_plot_with_the_right_arrow_and_climbs_out_with_the_left() {
 }
 
 #[test]
+fn tab_after_opening_a_plot_reaches_the_views_and_close_before_the_way_back() {
+    let world = &mut open_board(
+        vec![
+            plot("s-crown1", "the migration", ""),
+            with(part_of("s-crown1", "s-part11", "one panel"), |s| {
+                s.status = "growing".into()
+            }),
+        ],
+        Vec::new(),
+    );
+    key(world, Key::Down);
+    key(world, Key::Right);
+
+    let order: Vec<String> = (0..4)
+        .map(|_| {
+            key(world, Key::Tab);
+            focused(world).and_then(|n| n.name).unwrap_or_default()
+        })
+        .collect();
+    assert_eq!(order, ["list", "board", "Close", "Garden"]);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn puts_away_the_compose_line_then_the_menu_then_the_garden_with_escape() {
     let world = &mut open_board(garden(), Vec::new());
 

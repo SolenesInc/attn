@@ -180,7 +180,7 @@ impl Button {
     pub fn unavailable(mut self, reason: impl Into<String>) -> Self {
         self.disabled = true;
         self.unavailable = true;
-        self.button = self.button.unavailable(reason);
+        self.button = self.button.help(reason);
         self
     }
 
@@ -224,6 +224,27 @@ impl Button {
             Look::Brand => (crate::brand_fill(t), crate::brand_edge(t), t.text_primary),
         };
         let square = matches!(self.shown, Shown::Mark(..));
+        let face = Face {
+            inset: if square { Space::S0 } else { self.size.inset() },
+            joined: self.joined,
+            whole: self.whole,
+            ..if !self.disabled {
+                Face::BARE
+            } else if self.look == Look::Primary {
+                Face {
+                    fill,
+                    edge,
+                    ..Face::BARE
+                }
+            } else {
+                Face {
+                    fill,
+                    edge,
+                    strength: disabled::STRENGTH,
+                    ..Face::BARE
+                }
+            }
+        };
         let shown = self.shown;
         let (leading, trailing) = (self.leading, self.trailing);
         let role = self.look.words();
@@ -240,23 +261,28 @@ impl Button {
                 .child(words(lead, role, t.text_secondary))
                 .child(most(words(said, role, t.text_secondary).truncate()))
         });
-        let label = move |_, _| match shown {
-            Shown::Words(shown) => giving_way(door::gap(row().items_center(), Space::S4), whole)
-                .children(leading)
-                .child(match quiet {
-                    Some(quiet) => {
-                        let at_least = width_of(&shown, role);
-                        door::gap(row().items_center(), Space::S4)
-                            .shrink()
-                            .min_w(0.0)
-                            .child(words(shown, role, ink).min_w(at_least))
-                            .child(quiet)
-                    }
-                    None if whole => words(shown, role, ink),
-                    None => most(words(shown, role, ink).truncate()),
-                })
-                .children(trailing),
-            Shown::Mark(mark, size) => door::control_mark(mark, size).color(ink),
+        let label = move |_, _| {
+            let label = match shown {
+                Shown::Words(shown) => {
+                    giving_way(door::gap(row().items_center(), Space::S4), whole)
+                        .children(leading)
+                        .child(match quiet {
+                            Some(quiet) => {
+                                let at_least = width_of(&shown, role);
+                                door::gap(row().items_center(), Space::S4)
+                                    .shrink()
+                                    .min_w(0.0)
+                                    .child(words(shown, role, ink).min_w(at_least))
+                                    .child(quiet)
+                            }
+                            None if whole => words(shown, role, ink),
+                            None => most(words(shown, role, ink).truncate()),
+                        })
+                        .children(trailing)
+                }
+                Shown::Mark(mark, size) => door::control_mark(mark, size).color(ink),
+            };
+            face.around(label)
         };
         let button = match self.press {
             Some(attach) if !self.disabled => attach(self.button),
@@ -267,30 +293,30 @@ impl Button {
             .label_with(label)
             .build(kit(t))
             .h(self.size.height());
-        let button = giving_way(button, whole)
-            .justify_center()
-            .fill(fill)
-            .border(1.0, edge);
+        let button = door::inset(
+            giving_way(button, whole).justify_center(),
+            Space::S0,
+            Space::S0,
+        );
+        let button = if self.disabled {
+            button
+        } else {
+            button.fill(fill).border(1.0, edge)
+        };
         let button = if square {
             let side = self.size.height();
             button.w(side).min_w(side)
         } else {
-            door::inset(button, self.size.inset(), Space::S0)
+            button
         };
         let button = match self.joined {
             Some(join) => focus::ring_inside(door::corner_joined(button, Radius::Control, join), t),
             None => focus::ring(door::corner(button, Radius::Control), t),
         };
-        let button = if self.unavailable && self.look == Look::Primary {
-            button
-        } else if self.unavailable && self.joined.is_some() {
-            focus::ring_inside(disabled::faded(button), t)
-        } else if self.unavailable {
-            focus::ring(disabled::faded(button), t)
-        } else if self.disabled && self.look == Look::Primary {
-            disabled::unavailable(button)
+        let button = if self.unavailable {
+            disabled::reachable(button)
         } else if self.disabled {
-            disabled::dim(button)
+            disabled::unavailable(button)
         } else {
             let surface = if fill.a > 0.0 { fill } else { t.bg_panel };
             layers::pressable(button, surface, t)
@@ -310,5 +336,44 @@ fn giving_way(el: El, whole: bool) -> El {
         el.shrink_first()
     } else {
         el.shrink().min_w(0.0)
+    }
+}
+
+/// What a button draws inside its focus ring. An unavailable one draws its fill, its edge and
+/// its words here, together at `strength`, so the ring round it stays whole; an available one
+/// keeps its fill and edge on the button, under its hover and press.
+#[derive(Clone, Copy)]
+struct Face {
+    fill: Color,
+    edge: Color,
+    inset: Space,
+    joined: Option<Join>,
+    whole: bool,
+    strength: f32,
+}
+
+impl Face {
+    const BARE: Face = Face {
+        fill: Color::TRANSPARENT,
+        edge: Color::TRANSPARENT,
+        inset: Space::S0,
+        joined: None,
+        whole: false,
+        strength: 1.0,
+    };
+
+    fn around(self, label: El) -> El {
+        let face = giving_way(row().w_full().h_full(), self.whole)
+            .items_center()
+            .justify_center()
+            .fill(self.fill)
+            .border(1.0, self.edge)
+            .child(label);
+        let face = door::inset(face, self.inset, Space::S0);
+        match self.joined {
+            Some(join) => door::corner_joined(face, Radius::Control, join),
+            None => door::corner(face, Radius::Control),
+        }
+        .layer_opacity(self.strength)
     }
 }
