@@ -2873,6 +2873,138 @@ fn settings_refused(dark: bool, section: &str, search: &str, setting: &str, type
     }
 }
 
+/// The model price overrides on the Agents page, opened: a saved override for the longest real
+/// model id with one rate refused, a saved override that no longer parses, and the new override's
+/// form holding a model that already has one, each brought into view; then the billed-as list open.
+fn settings_pricing(dark: bool) {
+    const LONG_MODEL: &str =
+        "anthropic.claude-opus-5-5-20261101-v1:0-with-extended-thinking-eu-north-1";
+    let rates = r#"{"input_usd_per_mtok":15,"output_usd_per_mtok":75,"cache_read_usd_per_mtok":1.5,"cache_write_5m_usd_per_mtok":18.75,"cache_write_1h_usd_per_mtok":30}"#;
+    let long = format!("session_cost.price.{LONG_MODEL}");
+    let settings = [
+        (long.as_str(), rates),
+        (
+            "session_cost.price.gpt-6-astra",
+            r#"{"input_usd_per_mtok":3}"#,
+        ),
+        ("session_cost.billed_as.codex-auto-review", "gpt-6-sol"),
+    ];
+    let mut world = settings_world(dark, "agents", "agents", &settings, |_| {}, refusing);
+    let focus = |world: &mut World, key: String| {
+        world.gesture(move |app| app.update(move |_, tx| tx.focus(key, true)));
+    };
+    focus(&mut world, "settings.pricing".to_owned());
+    tap(&mut world, Key::Text(" ".into()));
+    let rate = format!("settings.setting.{long}#cache_read_usd_per_mtok");
+    focus(&mut world, rate.clone());
+    world.gesture(|app| app.type_text("5"));
+    tap(&mut world, Key::Enter);
+    world.gesture(|app| app.update(|_, tx| tx.scroll_center_in_instant("settings.body", &rate)));
+    snap(&mut world, "settings-agents-pricing-refused", dark);
+    for (key, typed) in [
+        ("settings.price-new.model", "gpt-6-astra"),
+        ("settings.price-new.input_usd_per_mtok", "2"),
+    ] {
+        focus(&mut world, key.to_owned());
+        world.gesture(|app| app.type_text(typed));
+    }
+    world.gesture(|app| app.update(|_, tx| tx.scroll_to_bottom_instant("settings.body")));
+    snap(&mut world, "settings-agents-pricing-new", dark);
+    let trigger = "settings.price.billed-as-trigger";
+    focus(&mut world, trigger.to_owned());
+    tap(&mut world, Key::Text(" ".into()));
+    snap(&mut world, "settings-agents-pricing-billed-as", dark);
+}
+
+/// Paired senders and Phones with the person's Remove and Revoke refused, each refusal under
+/// the row it was pressed on: the longest real sender and phone names and a daemon's sentence.
+fn settings_refused_rows(dark: bool) {
+    let mut world = settings_world(
+        dark,
+        "senders",
+        "senders",
+        &[],
+        |_| {},
+        |daemon| {
+            daemon.on("senders_get", |_: &Request| {
+                let sender = |id: &str, name: &str| attn_protocol::PairedSender {
+                    id: id.into(),
+                    name: name.into(),
+                    created_at: "2026-11-01T09:00:00Z".into(),
+                    last_used_at: Some("2026-11-19T17:45:00Z".into()),
+                };
+                message(attn_protocol::SendersUpdatedMessage {
+                    senders: vec![
+                        sender("s1", "engineering-observability-staging-deploy-bot"),
+                        sender("s2", "ci"),
+                    ],
+                    ..attn_protocol::SendersUpdatedMessage::new()
+                })
+            });
+            daemon.on("sender_unpair", |_: &Request| {
+                message(attn_protocol::SenderUnpairResultMessage {
+                    success: false,
+                    error: Some(LONG_REFUSAL.into()),
+                    ..attn_protocol::SenderUnpairResultMessage::new()
+                })
+            });
+        },
+    );
+    world.gesture(|app| {
+        app.update(|_, tx| {
+            tx.scroll_center_in_instant("settings.body", "settings.sender.s1.remove")
+        })
+    });
+    world.gesture(|app| app.click(Target::key("settings.sender.s1.remove")));
+    snap(&mut world, "settings-senders-refused", dark);
+    let mut world = settings_world(
+        dark,
+        "phones",
+        "phones",
+        &[("phone_access_enabled", "true")],
+        |_| {},
+        |daemon| {
+            daemon.on("phones_get", |_: &Request| {
+                let phone =
+                    |device: &str, name: &str, connected: bool| attn_protocol::PhonePairing {
+                        device_id: device.into(),
+                        profile_id: PROFILE.into(),
+                        name: name.into(),
+                        created_at: "2026-11-02T10:00:00Z".into(),
+                        last_seen_at: "2026-11-18T21:10:00Z".into(),
+                        connected,
+                    };
+                message(PhonesUpdatedMessage {
+                    link: PhoneLink {
+                        state: "connected".into(),
+                        ..PhoneLink::default()
+                    },
+                    pairings: vec![
+                        phone(
+                            "d1",
+                            "Alexandra Konstantinopoulou’s iPhone 17 Pro Max",
+                            false,
+                        ),
+                        phone("d2", "iPad", true),
+                    ],
+                    ..PhonesUpdatedMessage::new()
+                })
+            });
+            daemon.on("phone_pairing_revoke", |_: &Request| {
+                message(attn_protocol::PhonePairingRevokeResultMessage {
+                    success: false,
+                    error: Some(LONG_REFUSAL.into()),
+                    ..attn_protocol::PhonePairingRevokeResultMessage::new()
+                })
+            });
+        },
+    );
+    let revoke = format!("settings.phone.{PROFILE}.d1.revoke");
+    world.gesture(|app| app.update(|_, tx| tx.scroll_center_in_instant("settings.body", &revoke)));
+    world.gesture(|app| app.click(Target::key(revoke.clone())));
+    snap(&mut world, "settings-phones-refused", dark);
+}
+
 /// The structural states of the Settings pages that have them: a refused field, a list with
 /// its rows, a list with none, a refused action, and each long page's end.
 fn settings_page_states(dark: bool) {
@@ -6514,6 +6646,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
             settings_bottom(dark, "experimental", "experimental", SWITCHED_ON)
         });
         scene("settings_page_states", || settings_page_states(dark));
+        scene("settings_pricing", || settings_pricing(dark));
+        scene("settings_refused_rows", || settings_refused_rows(dark));
         scene("settings_smallest_pages", || settings_smallest_pages(dark));
         scene("automation_new", || automation_new(dark));
         scene("automations_empty", || automations_empty(dark));
