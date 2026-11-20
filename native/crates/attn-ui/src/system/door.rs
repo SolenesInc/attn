@@ -75,6 +75,20 @@ pub(crate) fn ring_room(e: El) -> El {
     e.mt(-reach).mb(-reach).pt(reach).pb(reach)
 }
 
+/// A scrolling box reaching out by the focus ring's reach above and below, its neighbours where
+/// they were, for content that keeps that room at its ends ([`ring_ends`]).
+pub(crate) fn over_ring_room(e: El) -> El {
+    let reach = super::focus::RING_REACH;
+    e.mt(-reach).mb(-reach)
+}
+
+/// Content of a scrolling box with the focus ring's reach as room at its top and its end, so a
+/// control's ring stays whole when the box scrolls to either end.
+pub(crate) fn ring_ends(e: El) -> El {
+    let reach = super::focus::RING_REACH;
+    e.pt(reach).pb(reach)
+}
+
 pub(crate) fn hang_left(e: El, by: Space) -> El {
     e.ml(-by.pt())
 }

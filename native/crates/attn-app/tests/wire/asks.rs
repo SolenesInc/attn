@@ -964,6 +964,59 @@ fn the_wheel_scrolls_a_preview_that_overflows_to_its_last_answer_which_opens_tha
 }
 
 #[test]
+fn an_answer_s_focus_ring_stays_whole_in_a_preview_scrolled_to_either_end() {
+    let more = |id: &str, subject: &str, minutes: i64| Ask {
+        id: id.into(),
+        subject: subject.into(),
+        created_at: ago(minutes),
+        ..cache_store()
+    };
+    let mut world = start(
+        vec![
+            cache_store(),
+            more("a-cache2", "Cache size", 20),
+            more("a-cache3", "Cache region", 10),
+        ],
+        vec![api_working()],
+    );
+    world.resize((533.0, 400.0));
+    world.open_desktop();
+    world.gesture(|app| app.runtime.set_full_keyboard_access(true));
+    rest_on(&mut world, "tile.p0.ask");
+    world.advance(Duration::from_millis(160));
+    rest_on(&mut world, "tile.p0.ask.popover.body");
+    let reach = f64::from(attn_ui::system::RING_REACH);
+    for answer in [
+        "asks.preview.a-cache1.answer",
+        "asks.preview.a-cache3.answer",
+    ] {
+        for _ in 0..60 {
+            if focused(&world).as_deref() == Some(answer) {
+                break;
+            }
+            plain(&mut world, Key::Tab);
+        }
+        assert_eq!(
+            focused(&world).as_deref(),
+            Some(answer),
+            "Tab reaches {answer}"
+        );
+        world.settle();
+        let [bx, by, bw, bh] = world.rect("tile.p0.ask.popover.body");
+        let [x, y, w, h] = world.rect(answer);
+        assert!(
+            x - reach >= bx - 0.5
+                && y - reach >= by - 0.5
+                && x + w + reach <= bx + bw + 0.5
+                && y + h + reach <= by + bh + 0.5,
+            "{answer} at {:?} rings past the preview's body at {:?}",
+            [x, y, w, h],
+            [bx, by, bw, bh]
+        );
+    }
+}
+
+#[test]
 fn the_preview_stays_closed_when_the_agent_asks_again_after_its_last_ask_closed_under_the_pointer()
 {
     let mut world = start(vec![cache_store()], vec![api_working()]);

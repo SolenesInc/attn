@@ -3,7 +3,7 @@ use rune_kit::ScrollBar;
 
 use super::actions::Actions;
 use super::block::{Block, Kind, spaced};
-use crate::system::{Said, Size, Space, Type, door, words};
+use crate::system::{RING_REACH, Said, Size, Space, Type, door, words};
 use crate::{Frame, Tokens};
 
 /// A small form opened from a control and anchored beside it: its title, controls beside the
@@ -93,13 +93,17 @@ impl Popover {
             )
         });
         let body = (!self.body.is_empty()).then(|| {
-            door::inset(spaced(self.body, gap, None), INSET, Space::S0)
+            let content =
+                door::ring_ends(door::inset(spaced(self.body, gap, None), INSET, Space::S0));
+            door::over_ring_room(col())
                 .key(format!("{}.body", self.key))
                 .shrink()
                 .min_h(0.0)
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
+                .scroll_margin(RING_REACH)
+                .child(content)
                 .scroll_bar_styled(crate::scroll_bar(t))
         });
         let surface = door::gap(
@@ -123,8 +127,9 @@ impl Popover {
     }
 }
 
-/// The room between a popover's sides and what it holds. Its body scrolls with that room
-/// inside it, so its scroll bar stands in the room beside the words, never over them.
+/// The room between a popover's sides and what it holds. Its body scrolls with that room, and
+/// the focus ring's reach above and below, inside it, so its scroll bar stands beside the words
+/// and a control's ring stays whole at either end of the scroll.
 const INSET: Space = Space::S12;
 
 /// A popover is small and close to what opened it: its blocks stand one step apart, closer
