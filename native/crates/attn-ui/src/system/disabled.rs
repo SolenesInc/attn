@@ -5,8 +5,8 @@ use rune::El;
 pub(crate) const STRENGTH: f32 = 0.5;
 
 /// An unavailable control: every part it draws, fill, edge and ink, at one strength, so the
-/// levels between its parts stay as they were. It takes no focus; the caller leaves it no press,
-/// no layers and no ring.
+/// levels between its parts stay as they were. Nothing in it takes focus, a press or the
+/// pointer, whoever attached them.
 pub(crate) fn dim(e: El) -> El {
-    e.disabled(true).layer_opacity(STRENGTH)
+    e.disabled(true).inert().layer_opacity(STRENGTH)
 }

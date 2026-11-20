@@ -533,3 +533,78 @@ fn a_tag_on_a_rows_title_line_stays_inside_the_row() {
         );
     }
 }
+
+const DISABLED: [(&str, &[&str]); 3] = [
+    ("Chrome/List row", &["row.agent", "row.select"]),
+    ("Chrome/Group head", &["head.empty", "head.toggle"]),
+    ("Chrome/Icon button", &["icon.16-in-32"]),
+];
+
+fn presses(rt: &Runtime<()>) -> u32 {
+    element(rt, "stage.presses")
+        .label
+        .and_then(|said| said.parse().ok())
+        .expect("the stage counts its presses")
+}
+
+fn click(rt: &mut Runtime<()>, (x, y): (f32, f32)) {
+    rt.pointer_move(x, y);
+    rt.frame(1.0 / 60.0);
+    rt.pointer_down(x, y);
+    rt.pointer_up(x, y);
+    rt.frame(1.0 / 60.0);
+}
+
+#[test]
+fn a_disabled_piece_takes_no_tab_stop_and_no_press_on_any_part_of_it() {
+    for (name, keys) in DISABLED {
+        for key in keys {
+            let mut rt = story(true, name, "Rest");
+            let piece = element(&rt, key);
+            click(&mut rt, middle(&piece));
+            assert!(
+                presses(&rt) > 0,
+                "{key} takes no press while enabled, so the probe proves nothing"
+            );
+
+            let mut rt = story(true, name, "Disabled");
+            let piece = element(&rt, key);
+            rt.pointer_move(middle(&piece).0, middle(&piece).1);
+            rt.frame(1.0 / 60.0);
+            let parts: Vec<ElementInfo> = std::iter::once(piece.clone())
+                .chain(within(&rt, &piece))
+                .filter(|e| e.path == piece.path || e.role == "button" || e.focusable)
+                .collect();
+            for part in &parts {
+                click(&mut rt, middle(part));
+                assert_eq!(
+                    presses(&rt),
+                    0,
+                    "disabled {key}: a click on {:?} ran its press",
+                    part.key
+                );
+            }
+
+            rt.set_full_keyboard_access(true);
+            for _ in 0..40 {
+                rt.key(KeyEvent {
+                    key: Key::Tab,
+                    mods: Mods::default(),
+                });
+                rt.frame(1.0);
+                let all = rt.elements();
+                let inside = all.iter().find(|e| {
+                    e.focused
+                        && (e.path == piece.path
+                            || std::iter::successors(e.parent, |&p| all[p].parent)
+                                .any(|p| all[p].path == piece.path))
+                });
+                assert!(
+                    inside.is_none(),
+                    "disabled {key}: Tab stops on {:?}",
+                    inside.and_then(|e| e.key.clone())
+                );
+            }
+        }
+    }
+}

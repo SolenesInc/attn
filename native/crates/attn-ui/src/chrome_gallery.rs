@@ -20,6 +20,7 @@ pub struct Chrome {
     pub long: bool,
     pub narrow: bool,
     pub disabled: bool,
+    pub presses: u32,
 }
 
 /// How wide the sidebar's rows are: the sidebar at its default width and at its narrowest, less
@@ -83,6 +84,7 @@ pub const CHROME_SHEETS: &[ChromeSheet] = &[
             ("Selected, focus", "In view", "tab", ""),
             ("Long", "Long", "", ""),
             ("Narrow long", "Narrow long", "", ""),
+            ("Disabled", "Disabled", "", ""),
         ],
     },
     ChromeSheet {
@@ -151,6 +153,7 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
         .story(
             Story::new("Chrome/List row", Chrome::default, list_rows)
                 .variant("Rest", |_| {})
+                .variant("Disabled", |s| s.disabled = true)
                 .variant("In view", |s| s.lit = true)
                 .variant("Long", |s| s.long = true)
                 .variant("Narrow long", |s| {
@@ -183,7 +186,9 @@ fn tokens(cx: &Cx<Chrome>) -> Tokens {
     scheme_for(None).colors(cx.system_dark()).ui
 }
 
-fn noop(_: &mut Chrome, _: &mut Tx) {}
+fn press(s: &mut Chrome, _: &mut Tx) {
+    s.presses += 1;
+}
 
 /// The controls in a column as wide as the sidebar's rows, on the sidebar's surface.
 fn stage(s: &Chrome, cx: &mut Cx<Chrome>, t: &Tokens, items: Vec<El>) -> El {
@@ -191,10 +196,15 @@ fn stage(s: &Chrome, cx: &mut Cx<Chrome>, t: &Tokens, items: Vec<El>) -> El {
         cx.force_focus_rings();
     }
     let width = if s.narrow { NARROW } else { WIDE };
-    el().w_full().h_full().fill(t.bg_panel).child(
-        door::inset(col(), Space::S24, Space::S24)
-            .child(door::gap(col(), Space::S12).w(width).children(items)),
-    )
+    el().key("stage.presses")
+        .label(s.presses.to_string())
+        .w_full()
+        .h_full()
+        .fill(t.bg_panel)
+        .child(
+            door::inset(col(), Space::S24, Space::S24)
+                .child(door::gap(col(), Space::S12).w(width).children(items)),
+        )
 }
 
 fn dot(t: &Tokens) -> El {
@@ -212,14 +222,14 @@ fn row_controls(key: &str) -> Vec<IconButton> {
             &icon::PENCIL,
             IconSize::Small,
         )
-        .on_press_tx(noop),
+        .on_press_tx(press),
         icon_button(
             format!("{key}.close"),
             "Close",
             crate::glyph::TIMES,
             IconSize::Small,
         )
-        .on_press_tx(noop),
+        .on_press_tx(press),
     ]
 }
 
@@ -238,8 +248,9 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             .badge(tag("row.agent.tag", "Builder", Tone::Neutral, &t))
             .hover_controls(row_controls("row.agent"))
             .in_view(s.lit)
+            .disabled(s.disabled)
             .build(&t)
-            .on_press_tx(noop),
+            .on_press_tx(press),
         ListRow::new("row.nav", "Home")
             .lead(crate::system::icon(
                 &icon::HOME,
@@ -254,7 +265,7 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             .keys(Some("⌘⇧H".to_owned()), &t)
             .current(s.lit)
             .build(&t)
-            .on_press_tx(noop),
+            .on_press_tx(press),
         ListRow::new("row.tile", "Open notes.md")
             .lead(crate::system::icon(
                 &icon::MARKDOWN,
@@ -266,7 +277,7 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             .hover_controls(row_controls("row.tile"))
             .in_view(s.lit)
             .build(&t)
-            .on_press_tx(noop),
+            .on_press_tx(press),
         ListRow::new("row.two", "Open the delegation chain")
             .lead(dot(&t))
             .title(if s.long { LONG_AGENT } else { "chrome" })
@@ -281,7 +292,7 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             .hover_controls(row_controls("row.two"))
             .in_view(s.lit)
             .build(&t)
-            .on_press_tx(noop),
+            .on_press_tx(press),
         ListRow::new("row.select", "Nightly triage")
             .lead(dot(&t))
             .title(if s.long {
@@ -301,14 +312,15 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             .controls(
                 [crate::system::Button::new("Run now")
                     .size(Size::Compact)
-                    .on_press_tx(noop)
+                    .on_press_tx(press)
                     .build(&t)
                     .key("row.select.run")
                     .into()],
                 Reveal::Always,
             )
-            .select("row.select.open", "Open Nightly triage", noop)
+            .select("row.select.open", "Open Nightly triage", press)
             .selected(s.lit)
+            .disabled(s.disabled)
             .build(&t),
         ListRow::new("row.quiet", "Session api-review")
             .title(if s.long { LONG_AGENT } else { "api-review" })
@@ -321,7 +333,7 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             )
             .selected(s.lit)
             .build(&t)
-            .on_press_tx(noop),
+            .on_press_tx(press),
         ListRow::new("row.tree", "Open notes")
             .depth(2)
             .lead(crate::system::icon(
@@ -332,18 +344,18 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             .title(if s.long { LONG_DESKTOP } else { "notes" })
             .selected(s.lit)
             .build(&t)
-            .on_press_tx(noop),
+            .on_press_tx(press),
         ListRow::new("row.crew", "Start Archivist")
             .lead(dot(&t))
             .title(if s.long { LONG_AGENT } else { "Archivist" })
             .hover_controls([
                 icon_button("row.crew.actions", "Actions", "•••", IconSize::Small)
-                    .on_press_tx(noop),
+                    .on_press_tx(press),
             ])
             .controls(
                 [
                     icon_button("row.crew.start", "Start", &icon::CREW_SUN, IconSize::Small)
-                        .on_press_tx(noop)
+                        .on_press_tx(press)
                         .build(&t)
                         .into(),
                 ],
@@ -351,7 +363,7 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             )
             .selected(s.lit)
             .build(&t)
-            .on_press_tx(noop),
+            .on_press_tx(press),
         ListRow::new("row.still", "Split right")
             .lead(dot(&t))
             .title("Split right")
@@ -391,7 +403,7 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             .dimmed(true)
             .selected(s.lit)
             .build(&t)
-            .on_press_tx(noop),
+            .on_press_tx(press),
     ];
     stage(s, cx, &t, rows)
 }
@@ -403,7 +415,7 @@ fn icon_buttons(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
         icon_button(key, key, glyph, size)
             .expanded(s.open)
             .disabled(s.disabled)
-            .on_press_tx(noop)
+            .on_press_tx(press)
     };
     let items = vec![
         button("icon.18-in-26", (&icon::BELL).into(), IconSize::Large)
@@ -449,18 +461,19 @@ fn group_heads(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             .mark(number_chip(1, true, false, &t))
             .keys(Some("⌃1".to_owned()))
             .build(&t)
-            .on_press_tx(noop),
+            .on_press_tx(press),
         GroupHead::new("head.named", format!("Open {name}"))
             .mark(number_chip(2, false, false, &t))
             .name(name)
             .keys(Some("⌃2".to_owned()))
             .build(&t)
-            .on_press_tx(noop),
+            .on_press_tx(press),
         GroupHead::new("head.empty", "Open Desktop 12")
             .mark(number_chip(12, false, true, &t))
             .controls(row_controls("head.empty"))
+            .disabled(s.disabled)
             .build(&t)
-            .on_press_tx(noop),
+            .on_press_tx(press),
         GroupHead::new("head.section", "Crew")
             .heading()
             .section("Crew")
@@ -468,7 +481,7 @@ fn group_heads(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
                 crate::system::Button::new("manage")
                     .look(crate::system::Look::Quiet)
                     .size(Size::Compact)
-                    .on_press_tx(noop)
+                    .on_press_tx(press)
                     .build(&t)
                     .into(),
             )
@@ -483,7 +496,7 @@ fn group_heads(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             .keys(Some("⌘⇧A".to_owned()))
             .disabled(s.disabled)
             .build(&t)
-            .on_press_tx(noop),
+            .on_press_tx(press),
     ];
     stage(s, cx, &t, heads)
 }
