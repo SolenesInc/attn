@@ -689,3 +689,51 @@ fn a_pills_words_read_on_its_wash_and_it_stands_inside_a_rows_band() {
         );
     }
 }
+
+#[test]
+fn a_rows_tag_is_drawn_whole_and_clear_of_its_controls_in_every_state() {
+    for variant in ROW_VARIANTS {
+        for state in ["rest", "hover", "tab"] {
+            let mut rt = story(true, "Chrome/List row", variant);
+            let row = element(&rt, "row.select");
+            match state {
+                "hover" => {
+                    let (x, y) = middle(&row);
+                    rt.pointer_move(x, y);
+                    rt.frame(1.0 / 60.0);
+                }
+                "tab" => tab_to(&mut rt, "row.select.open"),
+                _ => {}
+            }
+            let tag = element(&rt, "row.select.tag");
+            assert!(
+                tag.opacity > 0.999,
+                "{variant}, {state}: the tag shows at {}",
+                tag.opacity
+            );
+            assert!(
+                near(tag.visible, tag.rect),
+                "{variant}, {state}: the tag shows {:?} of {:?}",
+                tag.visible,
+                tag.rect
+            );
+            let overlaps = |a: [f32; 4], b: [f32; 4]| {
+                a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3]
+            };
+            for control in rt.elements().into_iter().filter(|e| {
+                e.role == "button"
+                    && e.key
+                        .as_deref()
+                        .is_some_and(|k| k.starts_with("row.select.") && k != "row.select.open")
+            }) {
+                assert!(
+                    !overlaps(tag.rect, control.rect),
+                    "{variant}, {state}: the tag {:?} lies under {:?} {:?}",
+                    tag.rect,
+                    control.key,
+                    control.rect
+                );
+            }
+        }
+    }
+}

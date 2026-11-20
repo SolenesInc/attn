@@ -124,6 +124,11 @@ pub(crate) fn inside_edge(e: El) -> El {
     e.padding(1.0)
 }
 
+/// `e` with `points` of empty room after it, which its line keeps or breaks before.
+pub(crate) fn room_after(e: El, points: f32) -> El {
+    e.mr(points)
+}
+
 /// How wide `said` stands in `kind`, as the runtime lays it out.
 pub(crate) fn width(said: &str, kind: Type) -> f32 {
     rune::text::measure(said, &[], style(kind), None).0
