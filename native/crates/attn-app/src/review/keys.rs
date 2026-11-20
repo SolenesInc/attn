@@ -324,7 +324,7 @@ pub(super) fn key_line(
         .tabs(tabs)
         .end(keys_hint(["?"], "all keys", t));
     if let Some(servers) = servers {
-        line = line.push(servers);
+        line = line.status(servers);
     }
     if fit != KeyFit::Tabs {
         line = keys.iter().fold(line, |line, (k, w)| {

@@ -7060,3 +7060,67 @@ fn the_key_line_keeps_its_frame_tabs_and_all_keys_on_one_line_and_never_takes_ov
         );
     }
 }
+
+#[test]
+fn a_narrow_reviews_key_line_keeps_its_language_servers_and_their_setup_in_reach() {
+    let narrow = || {
+        let world = review_in(
+            row(vec![document_tile("m", DOC, None)]),
+            (800.0, 600.0),
+            Some("1.5"),
+        );
+        let _calc = serve(&world);
+        world
+    };
+    let window = |world: &World, key: &str| {
+        let [x, y, w, h] = world
+            .screen()
+            .bounds(Target::key(key))
+            .unwrap_or_else(|| panic!("{key} is gone from the narrow review"));
+        assert!(
+            x >= 0.0 && y >= 0.0 && x + w <= 800.0 + 0.5 && y + h <= 600.0 + 0.5,
+            "{key} at {:?} is outside the window",
+            [x, y, w, h]
+        );
+    };
+
+    for state in ["missing", "failed"] {
+        let mut world = narrow();
+        deliver(
+            &mut world,
+            DOCUMENT,
+            Some(with_servers(vec![server("go", state)])),
+        );
+        for key in [
+            "tile.m.review.server.go",
+            "tile.m.review.setup.start",
+            "tile.m.review.setup.offer",
+        ] {
+            window(&world, key);
+        }
+    }
+
+    let mut world = narrow();
+    let mut setup = server("go", "missing");
+    setup.setup_session_id = Some("s-setup".into());
+    deliver(&mut world, DOCUMENT, Some(with_servers(vec![setup])));
+    world.daemon.emit(attn_protocol::SessionsUpdatedMessage {
+        sessions: Some(vec![Session {
+            id: "s-setup".into(),
+            label: "Go setup".into(),
+            directory: "/repo".into(),
+            profile_id: "work".into(),
+            state: "working".into(),
+            ..Session::default()
+        }]),
+        ..attn_protocol::SessionsUpdatedMessage::new()
+    });
+    world.settle();
+    assert_eq!(servers(&world), ["go setting up in Go setup"]);
+    window(&world, "tile.m.review.server.go");
+    click(&mut world, Target::key("tile.m.review.server.go"));
+    assert_eq!(
+        world.daemon.sent_of("desktop_show_session").last().unwrap()["session_id"],
+        json!("s-setup")
+    );
+}

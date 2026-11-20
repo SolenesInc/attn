@@ -10,7 +10,7 @@ use crate::blocks::{
 };
 use crate::colors::scheme_for;
 use crate::system::{
-    Button, Link, Look, Size, Tone, Type, dot_on_line, keys_hint, meter, tag, words,
+    Button, Link, Look, Size, Space, Tone, Type, door, dot_on_line, keys_hint, meter, tag, words,
 };
 
 /// What a reading story shows: the state its variant sets.
@@ -517,8 +517,20 @@ fn keys_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
         Width::Narrow => KeyFit::Under,
         Width::Smallest => KeyFit::Tabs,
     };
+    let status = door::gap(row().items_center(), Space::S8)
+        .key("keys.status")
+        .child(words("go no server", Type::Small, t.warning))
+        .child(
+            Button::new("set up")
+                .size(Size::Compact)
+                .on_press_tx(noop)
+                .build(&t)
+                .key("keys.status.setup")
+                .into(),
+        );
     let line = line
         .fit(fit)
+        .status(status)
         .end(keys_hint(["?"], "all keys", &t))
         .build(&t);
     stage(s, cx, &t, col().w_full().child(line))

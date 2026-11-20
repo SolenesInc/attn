@@ -49,6 +49,7 @@ pub struct KeyLine {
     label: String,
     tabs: Vec<El>,
     hints: Vec<El>,
+    status: Option<El>,
     end: Option<El>,
     fit: KeyFit,
 }
@@ -60,6 +61,7 @@ impl KeyLine {
             label: label.into(),
             tabs: Vec::new(),
             hints: Vec::new(),
+            status: None,
             end: None,
             fit: KeyFit::Line,
         }
@@ -73,6 +75,13 @@ impl KeyLine {
 
     pub fn push(mut self, hint: impl Into<El>) -> Self {
         self.hints.push(hint.into());
+        self
+    }
+
+    /// What the reader's tools report, with the controls that act on it, such as its language
+    /// servers' state: before the hints, and on a line of its own when the hints give way.
+    pub fn status(mut self, status: El) -> Self {
+        self.status = Some(status);
         self
     }
 
@@ -119,11 +128,12 @@ impl KeyLine {
             Space::S4,
         )
         .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle);
+        let (status, shown) = (self.status, self.hints);
         match self.fit {
             KeyFit::Line => toolbar.child(
                 line(row())
                     .children(tabs)
-                    .child(hints(self.hints))
+                    .child(hints(status.into_iter().chain(shown).collect()))
                     .children(self.end),
             ),
             KeyFit::Under => door::gap(toolbar, Space::S4)
@@ -133,13 +143,15 @@ impl KeyLine {
                         .child(row().grow(1.0))
                         .children(self.end),
                 )
-                .child(hints(self.hints).w_full()),
-            KeyFit::Tabs => toolbar.child(
-                line(row())
-                    .children(tabs)
-                    .child(row().grow(1.0))
-                    .children(self.end),
-            ),
+                .child(hints(status.into_iter().chain(shown).collect()).w_full()),
+            KeyFit::Tabs => door::gap(toolbar, Space::S4)
+                .child(
+                    line(row())
+                        .children(tabs)
+                        .child(row().grow(1.0))
+                        .children(self.end),
+                )
+                .children(status.map(|status| hints(vec![status]).w_full())),
         }
     }
 }
