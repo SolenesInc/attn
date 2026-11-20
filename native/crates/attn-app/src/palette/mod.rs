@@ -460,6 +460,9 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
                 };
                 if let Some(to) = to {
                     state.window.search.highlight = Some(listing.rows[to].key.clone());
+                    let first = !(0..to).any(|i| pickable(&i));
+                    let row = (!first).then(|| view::row_key(&listing.rows[to]));
+                    attn_ui::finder::reveal(tx, view::LIST, row);
                 }
             }
             true

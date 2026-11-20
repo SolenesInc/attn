@@ -99,10 +99,15 @@ fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     };
     let rows = rows(finder);
     match ev.key {
-        Key::Down if !rows.is_empty() => {
-            finder.highlighted = (finder.highlighted + 1).min(rows.len() - 1)
+        Key::Down | Key::Up if !rows.is_empty() => {
+            finder.highlighted = match ev.key {
+                Key::Down => (finder.highlighted + 1).min(rows.len() - 1),
+                _ => finder.highlighted.saturating_sub(1),
+            };
+            let row = (finder.highlighted > 0).then(|| row_key(&rows[finder.highlighted]));
+            attn_ui::finder::reveal(tx, LIST, row);
         }
-        Key::Up => finder.highlighted = finder.highlighted.saturating_sub(1),
+        Key::Up => {}
         Key::Enter => {
             if let Some(path) = rows.get(finder.highlighted).cloned() {
                 pick(state, path, tx);
@@ -150,7 +155,7 @@ pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Op
         Some(_) => "No notes match.",
     };
     let list = finder::list(
-        "notebook.finder.list",
+        LIST,
         rows.iter()
             .enumerate()
             .map(|(i, path)| option(path, i == finder.highlighted, t))
@@ -177,6 +182,8 @@ pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Op
         finder::FinderSize::Narrow,
     ))
 }
+
+const LIST: &str = "notebook.finder.list";
 
 fn row_key(path: &str) -> String {
     format!("notebook.finder.row.{path}")

@@ -58,7 +58,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         finder::empty(t, "palette.empty", message)
     });
     let list = finder::list(
-        "palette.list",
+        LIST,
         listing
             .rows
             .iter()
@@ -116,6 +116,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
     finder::layer(t, "palette", panel, FinderSize::Palette)
 }
 
+pub(super) const LIST: &str = "palette.list";
+
 fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
     let (pointing, pressing) = (r.key.clone(), r.key.clone());
     let face = row_face(r, row_key(r), Place::Palette { highlighted }, t);
@@ -126,7 +128,7 @@ fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
         .on_press_tx(move |state: &mut State, tx: &mut Tx| super::pick_key(state, &pressing, tx))
 }
 
-fn row_key(r: &Row) -> String {
+pub(super) fn row_key(r: &Row) -> String {
     format!("palette.row.{}", r.key)
 }
 

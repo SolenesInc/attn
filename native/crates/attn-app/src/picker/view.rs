@@ -444,7 +444,7 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
         hints.push(Hint::keys("", "Esc", " cancel").at_end());
     }
     let list = finder::grouped(
-        format!("{w}.locations"),
+        list_key(which),
         "Locations",
         group("Recent", true)
             .into_iter()
@@ -460,7 +460,11 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
 /// How tall a picker's list gets before it scrolls.
 const LIST_H: f32 = 340.0;
 
-fn row_key(which: Which, i: usize) -> String {
+pub(super) fn list_key(which: Which) -> String {
+    format!("{}.locations", which.key())
+}
+
+pub(super) fn row_key(which: Which, i: usize) -> String {
     format!("{}.row.{i}", which.key())
 }
 

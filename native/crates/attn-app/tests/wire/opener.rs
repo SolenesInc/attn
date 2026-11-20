@@ -42,6 +42,8 @@ struct Setup {
     /// Document tiles beside the agent's pane, and the leaf the screen shows as active.
     tiles: Vec<Value>,
     active: &'static str,
+    /// The smallest window at the largest text, where the list scrolls.
+    small: bool,
 }
 
 impl Default for Setup {
@@ -53,6 +55,7 @@ impl Default for Setup {
             index: Some((vec!["docs/design.md", "README.md", "docs/plan.md"], false)),
             tiles: Vec::new(),
             active: "p1",
+            small: false,
         }
     }
 }
@@ -70,6 +73,9 @@ fn index_reply(r: &Request, files: &[&str], truncated: bool) -> Value {
 
 fn start(setup: Setup) -> World {
     let mut settings = BTreeMap::new();
+    if setup.small {
+        settings.insert("uiScale".to_owned(), "1.5".to_owned());
+    }
     if !setup.notebook.is_empty() {
         settings.insert(
             "notebook.root.effective".to_owned(),
@@ -182,7 +188,12 @@ fn start(setup: Setup) -> World {
     daemon.on("desktop_show_leaf", |r| {
         json!({"event": "desktop_show_leaf_result", "request_id": r["request_id"], "success": true})
     });
-    let mut world = World::start_sized(daemon, (1600.0, 900.0));
+    let size = if setup.small {
+        (800.0, 600.0)
+    } else {
+        (1600.0, 900.0)
+    };
+    let mut world = World::start_sized(daemon, size);
     if setup.session.is_some() {
         world.open_desktop();
     }
@@ -322,6 +333,39 @@ fn enter_opens_the_highlighted_file_by_its_absolute_path_for_the_agent_and_shows
     assert_eq!(
         sent(&world, "desktop_show_leaf")[0]["leaf_id"],
         "tile-opened"
+    );
+}
+
+#[test]
+fn arrows_show_each_file_whole_in_the_smallest_window_at_the_largest_text_and_enter_opens_it() {
+    const FILES: [&str; 40] = [
+        "a01.md", "a02.md", "a03.md", "a04.md", "a05.md", "a06.md", "a07.md", "a08.md", "a09.md",
+        "a10.md", "a11.md", "a12.md", "a13.md", "a14.md", "a15.md", "a16.md", "a17.md", "a18.md",
+        "a19.md", "a20.md", "a21.md", "a22.md", "a23.md", "a24.md", "a25.md", "a26.md", "a27.md",
+        "a28.md", "a29.md", "a30.md", "a31.md", "a32.md", "a33.md", "a34.md", "a35.md", "a36.md",
+        "a37.md", "a38.md", "a39.md", "a40.md",
+    ];
+    let mut world = start(Setup {
+        recents: Vec::new(),
+        index: Some((FILES.to_vec(), false)),
+        small: true,
+        ..Setup::default()
+    });
+    world.gesture(|app| app.type_text("a"));
+    super::arrows_show_each_option(&mut world, "opener.list");
+    for _ in 0..30 {
+        press(&mut world, "down");
+    }
+    let highlighted = world.screen().active_option().and_then(|n| n.name);
+    press(&mut world, "enter");
+    let opened = sent(&world, "open_markdown");
+    assert_eq!(opened.len(), 1);
+    let path = opened[0]["path"].as_str().unwrap_or_default().to_owned();
+    assert!(
+        highlighted
+            .as_deref()
+            .is_some_and(|name| name.starts_with(path.trim_start_matches("/repo/"))),
+        "Enter opened {path}, not the highlighted {highlighted:?}"
     );
 }
 

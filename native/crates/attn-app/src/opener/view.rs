@@ -27,7 +27,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
     )
     .build(attn_ui::kit(t));
     let list = finder::list(
-        "opener.list",
+        LIST,
         rows.iter()
             .enumerate()
             .map(|(i, r)| option(r, at == Some(i), t))
@@ -54,7 +54,9 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
     )
 }
 
-fn row_key(r: &Row) -> String {
+pub(super) const LIST: &str = "opener.list";
+
+pub(super) fn row_key(r: &Row) -> String {
     format!("opener.row.{}", r.key)
 }
 

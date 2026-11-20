@@ -1760,11 +1760,11 @@ fn reveal(state: &mut State, which: Which, tx: &mut Tx) {
     let Some(launcher) = state.window.launching.launcher(which) else {
         return;
     };
-    let list = launcher.list_key();
-    match launcher.highlighted_at(state) {
-        None | Some(0) => tx.scroll_to_y(list, 0.0),
-        Some(i) => tx.scroll_into_view_in(list, launcher.row_key(i)),
-    }
+    let row = match launcher.highlighted_at(state) {
+        None | Some(0) => None,
+        Some(i) => Some(launcher.row_key(i)),
+    };
+    attn_ui::finder::reveal(tx, launcher.list_key(), row);
 }
 
 /// Starts the picked row, the typed path, or the picked destination: an agent, or a terminal

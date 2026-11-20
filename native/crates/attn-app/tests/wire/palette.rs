@@ -655,6 +655,78 @@ fn arrows_move_the_highlight_without_wrapping_and_an_edit_puts_it_back_on_top() 
     rest(&mut world);
 }
 
+/// The palette over `state` in the smallest window at the largest text, where its list scrolls.
+fn small(mut state: InitialStateMessage) -> World {
+    state
+        .settings
+        .get_or_insert_with(BTreeMap::new)
+        .insert("uiScale".to_owned(), "1.5".to_owned());
+    World::start_sized(daemon(state, vec![]), (800.0, 600.0))
+}
+
+#[test]
+fn arrows_show_each_command_whole_in_the_smallest_window_at_the_largest_text_and_enter_runs_it() {
+    let desktops = (1..=12)
+        .map(|slot| desktop(&format!("d{slot}"), "work", slot, vec![]))
+        .collect();
+    let mut world = small(initial(desktops, vec![]));
+    press_action(&mut world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("go to desk"));
+    assert_eq!(titles(&world).len(), 12);
+    super::arrows_show_each_option(&mut world, "palette.list");
+    for _ in 0..10 {
+        press(&mut world, Key::Down);
+    }
+    let slot = highlighted(&world)
+        .and_then(|t| t.strip_prefix("Go to Desktop ").map(str::to_owned))
+        .expect("a desktop is highlighted");
+    press(&mut world, Key::Enter);
+    let current: Vec<String> = world
+        .daemon
+        .sent_of("desktop_set_current")
+        .iter()
+        .map(|r| r["desktop_id"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(current, [format!("d{slot}")]);
+    rest(&mut world);
+}
+
+#[test]
+fn arrows_show_each_agent_whole_in_the_smallest_window_at_the_largest_text_and_enter_picks_it() {
+    let names: Vec<String> = (1..=20).map(|i| format!("agent{i:02}")).collect();
+    let desktops = names
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            let id = format!("d-{name}");
+            let mut pane = super::sidebar::pane(&id, &format!("p-{name}"), name);
+            pane.runtime_id = format!("rt-{name}");
+            let mut desktop = super::sidebar::desktop(&id, &format!("{i:02}"), name, vec![pane]);
+            desktop.profile_id = "work".into();
+            desktop
+        })
+        .collect();
+    let mut world = small(initial(
+        desktops,
+        names.iter().map(|n| session(n)).collect(),
+    ));
+    open_agents(&mut world);
+    super::arrows_show_each_option(&mut world, "palette.list");
+    for _ in 0..16 {
+        press(&mut world, Key::Down);
+    }
+    let picked = highlighted(&world).expect("an agent is highlighted");
+    press(&mut world, Key::Enter);
+    assert!(world.screen().find(Target::key("palette")).is_none());
+    let shown: Vec<Value> = world
+        .daemon
+        .sent_of("desktop_show_session")
+        .iter()
+        .map(|m| m["session_id"].clone())
+        .collect();
+    assert_eq!(shown, [json!(picked)], "Enter shows the highlighted agent");
+}
+
 #[test]
 fn the_highlight_stays_on_its_command_as_rows_arrive_and_enter_does_nothing_with_none() {
     let mut world = World::start(daemon(initial(two_desktops(), vec![]), vec![]));

@@ -741,6 +741,13 @@ fn browse(state: &mut State, which: Which, tx: &mut Tx) {
     );
 }
 
+/// Scrolls the list to the highlighted row at `index`, or to its top with its heading for the
+/// first row.
+fn reveal(which: Which, index: usize, tx: &mut Tx) {
+    let row = (index > 0).then(|| view::row_key(which, index));
+    attn_ui::finder::reveal(tx, view::list_key(which), row);
+}
+
 /// Keys a picker hears while it, or a control in it, has focus, after the agent keys and the
 /// keymap's shortcuts. Returns whether it took the key.
 pub(crate) fn on_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut Tx) -> bool {
@@ -766,6 +773,7 @@ pub(crate) fn on_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut Tx
                 index,
                 automatic: false,
             });
+            reveal(which, index, tx);
             true
         }
         Key::Up if !rows.is_empty() => {
@@ -777,6 +785,7 @@ pub(crate) fn on_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut Tx
                 index,
                 automatic: false,
             });
+            reveal(which, index, tx);
             true
         }
         Key::Tab => {

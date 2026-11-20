@@ -149,6 +149,17 @@ pub fn list(key: impl Into<String>, rows: Vec<El>) -> El {
     scrolling(key, LIST_INSET, LIST_INSET, col().w_full().children(rows)).role("listbox")
 }
 
+/// Scrolls the list keyed `list_key` so its highlighted row shows whole after the keyboard
+/// moves the highlight: to the list's top, its heading with it, when `row_key` is `None` for the
+/// first row or no row, or until the row keyed `row_key` is in view, with the list's inset
+/// around it.
+pub fn reveal(tx: &mut rune::Tx, list_key: impl Into<String>, row_key: Option<String>) {
+    match row_key {
+        None => tx.scroll_to_y(list_key, 0.0),
+        Some(row_key) => tx.scroll_into_view_in(list_key, row_key),
+    }
+}
+
 /// `content` set in by `x` and `y` inside a viewport keyed `key` that scrolls once its box
 /// reaches its height. The inset scrolls with the content and is kept as the scroll margin, so
 /// scrolled to either end, by hand or by a row scrolled into view, the content keeps the room

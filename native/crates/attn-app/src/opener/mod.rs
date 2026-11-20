@@ -328,6 +328,8 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
                 _ => 0,
             };
             state.opener.highlighted = Some(rows[next].key.clone());
+            let row = (next > 0).then(|| view::row_key(&rows[next]));
+            attn_ui::finder::reveal(tx, view::LIST, row);
             true
         }
         Key::Enter => {

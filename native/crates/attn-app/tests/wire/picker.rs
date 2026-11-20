@@ -189,6 +189,22 @@ fn busy_desktop_with(recent: &'static [&'static str], settings: &[(&str, &str)])
     world
 }
 
+/// [`busy_desktop`] in the smallest window at the largest text, where the list scrolls.
+fn small_desktop(recent: &'static [&'static str]) -> World {
+    let mut world = World::start_sized(
+        daemon(
+            initial(
+                vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
+                &[("uiScale", "1.5")],
+            ),
+            recent,
+        ),
+        (800.0, 600.0),
+    );
+    world.open_desktop();
+    world
+}
+
 /// Holds every `cmd` the app sends, unanswered, for the test to answer with `reply_to`.
 fn hold(world: &World, cmd: &str) -> Arc<Mutex<Vec<Request>>> {
     let held: Arc<Mutex<Vec<Request>>> = Arc::default();
@@ -431,6 +447,37 @@ fn a_highlight_the_arrows_made_goes_on_the_first_escape_and_enter_opens_it() {
 
     assert_eq!(sent(&world, "inspect_path", "path"), ["/home/me/src/rune"]);
     assert_eq!(spawns(&world).len(), 1);
+    rest(&mut world);
+}
+
+#[test]
+fn arrows_show_each_location_whole_in_the_smallest_window_at_the_largest_text_and_enter_opens_it() {
+    const RECENT: [&str; 12] = [
+        "/home/me/src/r01",
+        "/home/me/src/r02",
+        "/home/me/src/r03",
+        "/home/me/src/r04",
+        "/home/me/src/r05",
+        "/home/me/src/r06",
+        "/home/me/src/r07",
+        "/home/me/src/r08",
+        "/home/me/src/r09",
+        "/home/me/src/r10",
+        "/home/me/src/r11",
+        "/home/me/src/r12",
+    ];
+    let mut world = small_desktop(&RECENT);
+    open_dialog(&mut world);
+    super::arrows_show_each_option(&mut world, "new-session.locations");
+    for _ in 0..9 {
+        press(&mut world, Key::Down);
+    }
+    assert_eq!(
+        highlighted(&world, "new-session").as_deref(),
+        Some("~/src/r10")
+    );
+    press(&mut world, Key::Enter);
+    assert_eq!(sent(&world, "inspect_path", "path"), ["/home/me/src/r10"]);
     rest(&mut world);
 }
 

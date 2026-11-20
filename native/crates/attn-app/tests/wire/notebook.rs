@@ -103,7 +103,15 @@ fn start(disk: &Disk) -> World {
 }
 
 fn start_with(disk: &Disk, tree: Option<Value>) -> World {
+    start_sized(disk, tree, false)
+}
+
+/// [`start_with`], in the smallest window at the largest text when `small`.
+fn start_sized(disk: &Disk, tree: Option<Value>, small: bool) -> World {
     let mut settings = BTreeMap::new();
+    if small {
+        settings.insert("uiScale".to_owned(), "1.5".to_owned());
+    }
     settings.insert("notebook.root.effective".to_owned(), NOTEBOOK.to_owned());
     let daemon = Daemon::scripted().state(InitialStateMessage {
         selected_profile_id: Some("work".into()),
@@ -144,7 +152,12 @@ fn start_with(disk: &Disk, tree: Option<Value>) -> World {
         "desktop_dock_tile",
         |_| json!({ "event": "profile_action_result", "success": true }),
     );
-    let mut world = World::start_sized(daemon, (1600.0, 900.0));
+    let size = if small {
+        (800.0, 600.0)
+    } else {
+        (1600.0, 900.0)
+    };
+    let mut world = World::start_sized(daemon, size);
     if tree.is_some() {
         world.open_desktop();
     }
@@ -1233,6 +1246,83 @@ fn the_finder_opens_a_note_by_name_inside_the_notebook_and_the_opener_once_it_cl
     );
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
+}
+
+/// Thirty notes, `n01.md` to `n30.md`, each titled by its name.
+fn thirty_notes() -> Vec<(String, String)> {
+    (1..=30)
+        .map(|i| (format!("n{i:02}.md"), format!("# n{i:02}\n")))
+        .collect()
+}
+
+fn serve_notes(world: &World, notes: &[(String, String)]) {
+    let files: Vec<String> = notes.iter().map(|(path, _)| path.clone()).collect();
+    world.daemon.on("fs_index", move |req| {
+        json!({ "event": "fs_index_result", "success": true, "root": req["root"].as_str().unwrap_or(NOTEBOOK),
+            "files": files, "truncated": false })
+    });
+}
+
+#[test]
+fn arrows_show_each_note_whole_in_the_smallest_window_at_the_largest_text_and_enter_opens_it() {
+    let notes = thirty_notes();
+    let disk = Disk::with(
+        &notes
+            .iter()
+            .map(|(p, b)| (p.as_str(), b.as_str()))
+            .collect::<Vec<_>>(),
+    );
+    let mut world = start_sized(&disk, None, true);
+    serve_notes(&world, &notes);
+    open_fullscreen(&mut world);
+    world
+        .automate("run", json!({ "name": "file.open" }))
+        .unwrap();
+    world.settle();
+    super::arrows_show_each_option(&mut world, "notebook.finder.list");
+    for _ in 0..20 {
+        world.gesture(|d| d.press("down"));
+    }
+    let picked = world.screen().active_option().and_then(|n| n.key);
+    world.gesture(|d| d.press("enter"));
+    let title = world
+        .screen()
+        .get(Target::key("notebook.document.title"))
+        .name;
+    assert_eq!(
+        picked,
+        title.map(|t| format!("notebook.finder.row.{t}.md")),
+        "Enter opens the highlighted note"
+    );
+}
+
+#[test]
+fn arrows_show_each_note_whole_in_an_editor_tiles_finder_and_enter_opens_it() {
+    let notes = thirty_notes();
+    let disk = Disk::with(
+        &notes
+            .iter()
+            .map(|(p, b)| (p.as_str(), b.as_str()))
+            .collect::<Vec<_>>(),
+    );
+    let mut world = start_with(&disk, Some(row(vec![pane("a")])));
+    serve_notes(&world, &notes);
+    arrange(&mut world, row(vec![pane("a"), editor_tile("n", "")]), 2);
+    super::arrows_show_each_option(&mut world, "notebook.finder.list");
+    for _ in 0..20 {
+        world.gesture(|d| d.press("down"));
+    }
+    let picked = world.screen().active_option().and_then(|n| n.key);
+    world.gesture(|d| d.press("enter"));
+    let title = world
+        .screen()
+        .get(Target::key("notebook.tile.n.document.title"))
+        .name;
+    assert_eq!(
+        picked,
+        title.map(|t| format!("notebook.finder.row.{t}.md")),
+        "Enter opens the highlighted note"
+    );
 }
 
 #[test]
