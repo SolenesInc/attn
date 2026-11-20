@@ -327,10 +327,14 @@ pub(crate) fn write(state: &mut State, place: Place, over: Option<Option<String>
         None => Some(open.hash.clone()).filter(|h| !h.is_empty()),
     };
     let content = open.draft.text();
+    let notice_stood = open.save.error.is_some() || open.save.conflict.is_some();
     open.save.writing = Some((write_id, content.clone()));
     open.save.error = None;
     open.save.conflict = None;
     let (path, home) = (open.path.clone(), open.home.clone());
+    if notice_stood && let Place::Surface(id) = &place {
+        notice_moves(state, id, tx);
+    }
     let root = home_root(state, &home);
     let sent = content.clone();
     let asked = path.clone();
@@ -413,6 +417,7 @@ fn failed(state: &mut State, place: &Place, tx: &mut Tx) {
     match place {
         Place::Surface(id) => {
             state.notebook.after_save.remove(id);
+            notice_moves(state, id, tx);
         }
         Place::Shelf(id) => {
             let notice = state.notebook.shelf.get(*id).and_then(save_notice);
@@ -486,4 +491,17 @@ pub(crate) fn tile_params(state: &State, tile: &str) -> Option<(String, String)>
                 _ => None,
             })
     })
+}
+
+/// A save's notice comes or goes over the surface's note: the note's view lands at once, and
+/// the caret's line stays where it shows.
+fn notice_moves(state: &State, id: &SurfaceId, tx: &mut Tx) {
+    let key = super::view::key(id, "editor");
+    if let Some(editor) = super::editor_of(state, &key) {
+        tx.keep_on_screen(format!(
+            "{key}.line.{}",
+            editor.doc.id(editor.doc.caret.line)
+        ));
+    }
+    tx.instant();
 }

@@ -2,6 +2,7 @@ use rune::{El, col, row};
 use rune_kit::ScrollBar;
 
 use super::block::{Block, inner_gap, page_gap, spaced};
+use super::notice::Notice;
 use crate::Tokens;
 use crate::system::{Radius, Said, Space, Type, door, words};
 
@@ -16,7 +17,7 @@ pub struct Sheet {
     close: Option<El>,
     head: Option<El>,
     top: Option<El>,
-    notices: Vec<Block>,
+    notices: Vec<Notice>,
     fill: Option<El>,
     framed: bool,
     fits: Option<f32>,
@@ -86,8 +87,8 @@ impl Sheet {
     /// The sheet stands as tall as what it holds, up to `tallest` or the room what holds it
     /// gives, whichever is less, past which its body scrolls inside it: for a sheet that opens
     /// over the window, such as a popover, rather than filling a drawer.
-    /// The body keeps at least `points` of the sheet's height, so the top band gives way first
-    /// when the sheet is short, as the list of asks gives way to the ask it shows.
+    /// The body keeps at least `points` of the sheet's height, so the top band and the notices
+    /// give way first when the sheet is short, as the list of asks gives way to the ask it shows.
     pub fn keeps_room(mut self, points: f32) -> Self {
         self.room = points;
         self
@@ -126,9 +127,11 @@ impl Sheet {
     }
 
     /// What went wrong that the person must see wherever the body is scrolled, with what
-    /// recovers from it, such as a save that failed: under the top, over the body.
-    pub fn notices(mut self, blocks: impl IntoIterator<Item = Block>) -> Self {
-        self.notices.extend(blocks);
+    /// recovers from it, such as a save that failed: under the title line, over the top and
+    /// the body. They give way to the room the body keeps ([`Self::keeps_room`]): their
+    /// sentences scroll and their actions stay whole.
+    pub fn notices(mut self, notices: impl IntoIterator<Item = Notice>) -> Self {
+        self.notices.extend(notices);
         self
     }
 
@@ -181,14 +184,13 @@ impl Sheet {
                 .shrink()
         });
         let notices = (!self.notices.is_empty()).then(|| {
-            door::frame(
-                spaced(self.notices, inner_gap, None),
-                Space::S12,
-                Space::S16,
-                Space::S12,
-            )
-            .key(format!("{key}.notices"))
-            .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+            let notices = door::gap(col().w_full(), Space::S12)
+                .children(self.notices.into_iter().map(|notice| notice.pinned(t)));
+            door::frame(notices, Space::S12, Space::S16, Space::S12)
+                .key(format!("{key}.notices"))
+                .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+                .shrink()
+                .min_h(0.0)
         });
         let body = match self.fill {
             Some(body) => body.key(format!("{key}.body")).grow(1.0).min_h(0.0),
@@ -237,8 +239,8 @@ impl Sheet {
         };
         let sheet = sheet
             .child(header)
-            .children(top)
             .children(notices)
+            .children(top)
             .child(body)
             .children(footer);
         if self.framed {

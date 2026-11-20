@@ -102,17 +102,32 @@ fn start(disk: &Disk) -> World {
     start_with(disk, None)
 }
 
-fn start_with(disk: &Disk, tree: Option<Value>) -> World {
-    start_sized(disk, tree, false)
+/// The window the app runs in: its size, and the text size the `uiScale` setting asks for.
+#[derive(Clone, Copy)]
+struct Window {
+    size: (f32, f32),
+    text: f32,
 }
 
-/// [`start_with`], in the smallest window at the largest text when `small`.
-fn start_sized(disk: &Disk, tree: Option<Value>, small: bool) -> World {
+const WIDE: Window = Window {
+    size: (1600.0, 900.0),
+    text: 1.0,
+};
+
+/// The smallest window a person works in, with the largest text the app offers.
+const SMALLEST: Window = Window {
+    size: (800.0, 600.0),
+    text: 1.5,
+};
+
+fn start_with(disk: &Disk, tree: Option<Value>) -> World {
+    start_in(disk, tree, WIDE)
+}
+
+fn start_in(disk: &Disk, tree: Option<Value>, window: Window) -> World {
     let mut settings = BTreeMap::new();
-    if small {
-        settings.insert("uiScale".to_owned(), "1.5".to_owned());
-    }
     settings.insert("notebook.root.effective".to_owned(), NOTEBOOK.to_owned());
+    settings.insert("uiScale".to_owned(), window.text.to_string());
     let daemon = Daemon::scripted().state(InitialStateMessage {
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![Profile {
@@ -152,12 +167,7 @@ fn start_sized(disk: &Disk, tree: Option<Value>, small: bool) -> World {
         "desktop_dock_tile",
         |_| json!({ "event": "profile_action_result", "success": true }),
     );
-    let size = if small {
-        (800.0, 600.0)
-    } else {
-        (1600.0, 900.0)
-    };
-    let mut world = World::start_sized(daemon, size);
+    let mut world = World::start_sized(daemon, window.size);
     if tree.is_some() {
         world.open_desktop();
     }
@@ -1272,7 +1282,7 @@ fn arrows_show_each_note_whole_in_the_smallest_window_at_the_largest_text_and_en
             .map(|(p, b)| (p.as_str(), b.as_str()))
             .collect::<Vec<_>>(),
     );
-    let mut world = start_sized(&disk, None, true);
+    let mut world = start_in(&disk, None, SMALLEST);
     serve_notes(&world, &notes);
     open_fullscreen(&mut world);
     world
@@ -1336,7 +1346,7 @@ fn arrows_show_each_note_whole_in_an_editor_tiles_finder_and_enter_opens_it() {
 #[test]
 fn a_shorter_index_answer_after_reopening_leaves_the_arrows_and_enter_on_its_rows() {
     let disk = Disk::with(&[("n01.md", "# n01\n")]);
-    let mut world = start_sized(&disk, None, true);
+    let mut world = start_in(&disk, None, SMALLEST);
     world
         .daemon
         .answer_in_turn("fs_index", [Answer::Hold, Answer::Hold]);

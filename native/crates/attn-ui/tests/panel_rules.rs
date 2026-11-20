@@ -516,3 +516,66 @@ fn a_scroll_bar_never_lies_over_what_it_scrolls() {
         "no panel story shows a scroll bar to hold this to"
     );
 }
+
+#[test]
+fn a_notices_actions_share_a_line_where_its_line_holds_them_at_any_text_size() {
+    for variant in [
+        "Notice",
+        "Narrow notice",
+        "Notice at 150%",
+        "Smallest notice",
+        "Smallest notice at 150%",
+    ] {
+        let rt = story("Panels/Sheet", variant);
+        let notice = element(&rt, "sheet.conflict");
+        let reload = element(&rt, "sheet.reload");
+        let overwrite = element(&rt, "sheet.overwrite");
+        let inset = 12.0;
+        let line = notice.rect[0] + notice.rect[2] - inset - reload.rect[0];
+        let both = overwrite.rect[0] + overwrite.rect[2] - reload.rect[0];
+        assert!(
+            both <= line,
+            "{variant}: the two actions need {both} on a line of {line}"
+        );
+        assert_eq!(
+            reload.rect[1], overwrite.rect[1],
+            "{variant}: Overwrite anyway sits under Reload from disk though its line holds both: {:?} {:?}",
+            reload.rect, overwrite.rect
+        );
+    }
+}
+
+#[test]
+fn a_notice_too_long_for_its_sheet_scrolls_its_sentence_and_keeps_its_actions_whole() {
+    let mut rt = story("Panels/Sheet", "Smallest notice at 150%");
+    let band = element(&rt, "sheet.notices");
+    let sentence = element(&rt, "sheet.conflict.sentence");
+    let body = element(&rt, "sheet.body");
+    let inside = |e: &ElementInfo| {
+        e.rect[1] >= band.rect[1] && e.rect[1] + e.rect[3] <= band.rect[1] + band.rect[3]
+    };
+    for action in ["sheet.reload", "sheet.overwrite"] {
+        let action = element(&rt, action);
+        assert!(
+            inside(&action),
+            "{:?} lies outside the band {:?}",
+            action.rect,
+            band.rect
+        );
+    }
+    assert!(
+        rt.accessibility_action(
+            "sheet.conflict.sentence",
+            rune::accesskit::Action::ScrollDown,
+            None
+        ),
+        "the sentence gives way by scrolling, but its view {:?} holds it all",
+        sentence.rect
+    );
+    assert!(
+        band.rect[1] + band.rect[3] <= body.rect[1],
+        "{:?} {:?}",
+        band.rect,
+        body.rect
+    );
+}

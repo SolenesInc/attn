@@ -24,6 +24,7 @@ pub struct Panels {
     pub loading: bool,
     pub failed: bool,
     pub pinned: bool,
+    pub zoom: Option<f32>,
     pub empty: bool,
     pub bare: bool,
     pub keys: bool,
@@ -91,10 +92,25 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Loading", |s| s.loading = true)
                 .variant("Failed", |s| s.failed = true)
                 .variant("Notice", |s| s.pinned = true)
+                .variant("Narrow notice", |s| {
+                    s.size = Drawer::Narrow;
+                    s.pinned = true;
+                })
+                .variant("Notice at 150%", |s| {
+                    s.size = Drawer::Narrow;
+                    s.pinned = true;
+                    s.zoom = Some(1.5);
+                })
                 .variant("Smallest notice", |s| {
                     s.size = Drawer::Smallest;
                     s.long = true;
                     s.pinned = true;
+                })
+                .variant("Smallest notice at 150%", |s| {
+                    s.size = Drawer::Smallest;
+                    s.long = true;
+                    s.pinned = true;
+                    s.zoom = Some(1.5);
                 }),
         )
         .story(
@@ -145,6 +161,9 @@ fn stage(s: &Panels, cx: &mut Cx<Panels>, t: &Tokens, tallest: f32, panel: El) -
     if s.rings {
         cx.force_focus_rings();
     }
+    if let Some(zoom) = s.zoom {
+        cx.zoom(zoom);
+    }
     let (w, h) = s.size.size();
     let h = h.min(tallest);
     el().w_full().h_full().fill(t.bg_app).child(
@@ -190,13 +209,13 @@ fn sheet(s: &Panels, cx: &mut Cx<Panels>) -> El {
                 if s.long {
                     LONG_CONFLICT
                 } else {
-                    "This automation changed since you opened it."
+                    "This file changed on disk since you opened it."
                 },
             )
             .action(
                 Inline::loose()
                     .child(El::from(
-                        Button::new("Reload")
+                        Button::new("Reload from disk")
                             .size(Size::Compact)
                             .look(Look::Plain)
                             .on_press_tx(noop)
@@ -212,7 +231,6 @@ fn sheet(s: &Panels, cx: &mut Cx<Panels>) -> El {
                             .key("sheet.overwrite"),
                     )),
             )
-            .build(&t)
         }));
     let sheet = if s.loading {
         sheet.push(

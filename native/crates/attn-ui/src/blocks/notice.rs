@@ -1,4 +1,5 @@
-use rune::{Color, El, el, row};
+use rune::{Color, El, col, el, row};
+use rune_kit::ScrollBar;
 
 use super::block::{Block, Kind};
 use super::measure::COPY_FLOOR;
@@ -56,6 +57,16 @@ impl Notice {
     }
 
     pub fn build(self, t: &Tokens) -> Block {
+        Block::new(Kind::Notice, self.line(t, false))
+    }
+
+    /// The notice in a band that gives way to what it stands over: once the band is short, the
+    /// sentence scrolls inside it and the action keeps a whole line under it.
+    pub(crate) fn pinned(self, t: &Tokens) -> El {
+        self.line(t, true).shrink().min_h(0.0)
+    }
+
+    fn line(self, t: &Tokens, pinned: bool) -> El {
         let (ink, edge, fill) = match self.tone {
             Tone::Bad => (t.text_primary, t.error.alpha(EDGE), t.error.alpha(WASH)),
             Tone::Warn => (t.text_primary, t.warning.alpha(EDGE), t.warning.alpha(WASH)),
@@ -84,27 +95,45 @@ impl Notice {
         } else {
             door::on_band(said, Type::Small, Size::Regular)
         };
-        let said = door::gaps(
-            row().grow(1.0).min_w(0.0).flex_wrap().items_start(),
-            Space::S8,
-            Space::S8,
-        )
-        .child(said.grow_from(1.0, COPY_FLOOR))
-        .children(self.action);
+        let said = if pinned {
+            let sentence = col()
+                .key(format!("{}.sentence", self.key))
+                .shrink()
+                .min_h(Size::Regular.height())
+                .scroll(rune::ScrollSpec {
+                    stick_bottom: false,
+                })
+                .scroll_bar_styled(crate::scroll_bar(t))
+                .child(said);
+            door::gap(col().grow(1.0).min_w(0.0).min_h(0.0), Space::S8)
+                .child(sentence)
+                .children(self.action.map(|action| action.w_full()))
+        } else {
+            door::gaps(
+                row().grow(1.0).min_w(0.0).flex_wrap().items_start(),
+                Space::S8,
+                Space::S8,
+            )
+            .child(said.grow_from(1.0, COPY_FLOOR))
+            .children(self.action)
+        };
         let line = row()
             .key(self.key)
             .role(role)
             .label(self.said.text())
-            .w_full()
-            .items_start()
-            .child(mark)
-            .child(said);
+            .w_full();
+        let line = if pinned {
+            line.items_stretch()
+        } else {
+            line.items_start()
+        };
+        let line = line.child(mark).child(said);
         if self.bare {
-            return Block::new(Kind::Notice, door::gap(line, Space::S8));
+            return door::gap(line, Space::S8);
         }
         let line = line.fill(fill).border(1.0, edge);
         let line = door::gap(door::inset(line, Space::S12, Space::S8), Space::S8);
-        Block::new(Kind::Notice, door::corner(line, Radius::Card))
+        door::corner(line, Radius::Card)
     }
 }
 

@@ -516,8 +516,9 @@ fn open_view(id: &SurfaceId, open: &Open, t: &Tokens) -> El {
         .head(head)
         .top(top)
         .article(key(id, "scroll"), title)
+        .keeps_room(super::editor::room_for_whole_lines(3.0))
         .notices(conflict(id, open, t))
-        .notices(save_error(open, t))
+        .notices(save_error(open))
         .push(Block::custom(key(id, "editor.block"), editor))
         .build(t)
 }
@@ -537,12 +538,12 @@ fn status(open: &Open) -> Option<&'static str> {
     }
 }
 
-fn save_error(open: &Open, t: &Tokens) -> Option<Block> {
+fn save_error(open: &Open) -> Option<Notice> {
     let error = open.save.error.as_ref()?;
-    Some(Notice::error("notebook.save-error", error.clone()).build(t))
+    Some(Notice::error("notebook.save-error", error.clone()))
 }
 
-fn conflict(id: &SurfaceId, open: &Open, t: &Tokens) -> Option<Block> {
+fn conflict(id: &SurfaceId, open: &Open, t: &Tokens) -> Option<Notice> {
     let current = open.save.conflict.as_ref()?;
     let said = if current.is_some() {
         "This file changed on disk since you opened it."
@@ -574,11 +575,7 @@ fn conflict(id: &SurfaceId, open: &Open, t: &Tokens) -> Option<Block> {
                 .build(t)
                 .key(key(id, "document.overwrite")),
         ));
-    Some(
-        Notice::warn(key(id, "document.conflict"), said)
-            .action(actions)
-            .build(t),
-    )
+    Some(Notice::warn(key(id, "document.conflict"), said).action(actions))
 }
 
 /// The `type` in a note's front matter.

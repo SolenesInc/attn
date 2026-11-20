@@ -29,6 +29,12 @@ pub(crate) const BODY: TextStyle = TextStyle::new(14.0, 400.0)
         "New York, Georgia, Times New Roman, Noto Serif, DejaVu Serif, Liberation Serif",
     ))
     .features("'liga' 0, 'calt' 0");
+/// The height in which `lines` of the note's body always show whole, wherever it is scrolled:
+/// a line cut at one edge leaves its rest at the other.
+pub(crate) fn room_for_whole_lines(lines: f32) -> f32 {
+    (lines + 1.0) * BODY.line_px()
+}
+
 const HEADING_SCALE: [f32; 6] = [1.7, 1.4, 1.2, 1.08, 1.0, 1.0];
 const HEADING_WEIGHT: [f32; 6] = [650.0, 630.0, 600.0, 600.0, 600.0, 600.0];
 
