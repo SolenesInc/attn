@@ -247,8 +247,9 @@ impl ListRow {
     }
 
     /// Controls that show at the row's end, on its own ground, while the pointer or the keyboard
-    /// is on it: its asides give way to them, its tags keep clear of them and its words end in a fade before them. Up to its
-    /// badges and always-shown controls, which stay in view.
+    /// is on it. Its asides and badges give way to them, its tags sit under its title, and a
+    /// one-line title ends in a fade before them; always-shown controls stay in view. Up to three
+    /// keep the title's floor at the sidebar's narrowest; a fourth there is a known shortfall.
     pub fn hover_controls(mut self, controls: impl IntoIterator<Item = IconButton>) -> Self {
         self.hover.extend(controls);
         self
