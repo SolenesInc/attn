@@ -22,6 +22,7 @@ const goodFamily = `commands:
     summary: one seed
     runs: home
     grant: own
+    wrong_args: 'needs exactly one seed id, got {count}'
     doc: Reads one seed.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
@@ -86,6 +87,16 @@ func TestLoadRefusesWhatWouldBreakAHarnessOrAnUnmarkedCommand(t *testing.T) {
 			name:  "a requirement waived by an arg the command lacks",
 			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "cli: pos}", "cli: pos, unless: clear}", 1)},
 			want:  []string{"seed.yaml: seed show", `arg "seed": unless names "clear"`},
+		},
+		{
+			name:  "positionals without the CLI's text for a wrong count",
+			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "    wrong_args: 'needs exactly one seed id, got {count}'\n", "", 1)},
+			want:  []string{"seed.yaml: seed show: wrong_args is missing"},
+		},
+		{
+			name:  "an error code without its fix",
+			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "grant: own", "grant: own\n    errors: [{code: no_such_check}]", 1)},
+			want:  []string{"seed.yaml: seed show", `error "no_such_check" has no fix`},
 		},
 		{
 			name:  "a may_need that is no grant name",

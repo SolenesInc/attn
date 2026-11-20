@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/command"
 	"io"
 	"net"
 	"net/http"
@@ -206,6 +207,8 @@ type Daemon struct {
 	terminalsOnce            sync.Once
 	ptySizes                 terminalSizes
 	routerOnce               sync.Once
+	commandsOnce             sync.Once
+	commands                 *command.Layer
 	routes                   *Router
 	terminalState            *terminalRegistry
 	noAgentSockets           bool
@@ -2928,7 +2931,9 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 				if _, asksStatus := msg.(*protocol.UpdateStatusMessage); asksStatus && d.answerUpdateStatusFromNotice(conn) {
 					return
 				}
-				d.router().Forward(bufferedSocket{Conn: conn, reader: reader}, data, caller)
+				if err := d.router().Forward(data, caller, bufferedSocket{Conn: conn, reader: reader}, conn); err != nil {
+					d.sendError(conn, err.Error())
+				}
 				return
 			}
 		}
@@ -3219,6 +3224,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handlePullRequestList(conn, msg.(*protocol.PullRequestListMessage), caller)
 	case protocol.CmdQuery:
 		d.handleQuery(conn, msg.(*protocol.QueryMessage))
+	case protocol.CmdRunCommand:
+		d.serveRunCommand(ctx, conn, msg.(*protocol.RunCommandMessage))
 	case protocol.CmdCallerSession:
 		d.handleCallerSession(conn, caller)
 	case protocol.CmdQueryPRs:

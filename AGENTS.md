@@ -330,12 +330,16 @@ Never hand-edit `internal/protocol/generated.go`,
 changing one of those also needs `make generate-types`.
 
 The catalog in `internal/catalog/content/*.yaml` defines each command once.
-`cmd/cligen` generates the seed family's CLI help
-(`cli/attn/src/commands/seed/help_generated.rs`) and the garden reference
-(`internal/prompts/content/skills/attn/references/garden.md`) from it, and
+`cmd/cligen` generates from it the seed family's CLI help and parse table
+(`cli/attn/src/commands/seed/help_generated.rs` and `table_generated.rs`),
+each command's arguments (`internal/command/args_generated.go`), the machine
+each command runs on (`internal/protocol/commands_generated.go`) and the garden
+reference (`internal/prompts/content/skills/attn/references/garden.md`), and
 refuses an entry without `runs` or `grant`. Edit the catalog, not those files,
-then run `make generate-types`. When the garden reference changes, copy it into
-`attn_skill/references/garden.md` in
+then run `make generate-types`. The CLI sends a catalog command as
+`run_command`, and `internal/command` runs it with the handler the daemon gives
+it (`internal/daemon/commands_seed.go`). When the garden reference changes,
+copy it into `attn_skill/references/garden.md` in
 `internal/prompttest/testdata/agent-delivery.json`, which
 `TestLegacyPromptCompatibility` in `internal/agent` compares.
 

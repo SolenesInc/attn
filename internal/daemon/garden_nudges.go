@@ -61,6 +61,15 @@ func (d *Daemon) gardenTenderSession(seed garden.Seed) (string, error) {
 }
 
 func (d *Daemon) handleSeedWatch(conn net.Conn, msg *protocol.SeedWatchMessage) {
+	result, err := d.seedWatch(msg)
+	if err != nil {
+		d.sendRefusal(conn, err.Error(), err)
+		return
+	}
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedWatchResult: result})
+}
+
+func (d *Daemon) seedWatch(msg *protocol.SeedWatchMessage) (*protocol.SeedWatchResult, error) {
 	verb := "watch"
 	watching := !protocol.Deref(msg.Unwatch)
 	if !watching {
@@ -68,20 +77,17 @@ func (d *Daemon) handleSeedWatch(conn net.Conn, msg *protocol.SeedWatchMessage) 
 	}
 	seed, _, err := d.readSeed(msg.SeedID)
 	if err != nil {
-		d.sendGardenError(conn, verb, err)
-		return
+		return nil, gardenFailure(verb, err)
 	}
 	sessionID := protocol.TrimID(msg.SourceSessionID)
 	if sessionID == "" || d.store.Get(sessionID) == nil {
-		d.sendGardenError(conn, verb, protocol.Refuse(protocol.RefusalInvalidInput, "watching is for a live attn session; pass --session or run it inside one"))
-		return
+		return nil, gardenFailure(verb, protocol.Refuse(protocol.RefusalInvalidInput, "watching is for a live attn session; pass --session or run it inside one"))
 	}
 	result, err := d.setSeedWatch(sessionID, seed.ID, watching)
 	if err != nil {
-		d.sendGardenError(conn, verb, err)
-		return
+		return nil, gardenFailure(verb, err)
 	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedWatchResult: result})
+	return result, nil
 }
 
 func (d *Daemon) setSeedWatch(sessionID protocol.SessionID, seedID string, watching bool) (*protocol.SeedWatchResult, error) {

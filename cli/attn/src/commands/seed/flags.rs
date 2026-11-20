@@ -1,16 +1,9 @@
-use super::table::{FLAGS, VERBS, Verb};
-use attn::go::flag::{Flag, FlagDefault, FlagError, FlagSet, Value};
-
-#[derive(Clone, Copy)]
-pub enum FlagKind {
-    Bool,
-    Str,
-    Int,
-    Repeated,
-}
+use super::table_generated::COMMANDS;
+use crate::command::{Command, flags_of};
+use attn::go::flag::{FlagError, FlagSet, Value};
 
 pub struct Flags {
-    pub verb: &'static Verb,
+    pub verb: &'static Command,
     fs: FlagSet<'static>,
     pub caller: Option<(String, String)>,
 }
@@ -20,37 +13,28 @@ pub enum ParseStop {
     Invalid(String),
 }
 
-pub fn verb_named(name: &str) -> &'static Verb {
-    VERBS
+const GROUP: Command = Command {
+    name: "",
+    read_only: false,
+    result: false,
+    wrong_args: "",
+    no_args: "",
+    args: &[],
+};
+
+pub fn verb_named(name: &str) -> &'static Command {
+    COMMANDS
         .iter()
         .find(|verb| verb.name == name)
-        .unwrap_or_else(|| panic!("unknown seed verb: {name}"))
-}
-
-pub fn verb_has_flag(verb: &Verb, name: &str) -> bool {
-    name == "profile" || name == "session" || verb.flags.contains(&name)
+        .unwrap_or(&GROUP)
 }
 
 impl Flags {
     pub fn new(name: &str) -> Self {
         let verb = verb_named(name);
-        let definitions: Vec<Flag<'static>> = FLAGS
-            .iter()
-            .filter(|definition| verb_has_flag(verb, definition.name))
-            .map(|definition| Flag {
-                name: definition.name,
-                default: match definition.kind {
-                    FlagKind::Bool => FlagDefault::Bool(false),
-                    FlagKind::Str => FlagDefault::String(""),
-                    FlagKind::Int => FlagDefault::Int(0),
-                    FlagKind::Repeated => FlagDefault::Repeated,
-                },
-                usage: "",
-            })
-            .collect();
         Self {
             verb,
-            fs: FlagSet::new("", &definitions),
+            fs: FlagSet::new("", &flags_of(verb)),
             caller: None,
         }
     }

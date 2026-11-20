@@ -177,6 +177,7 @@ const (
 	CmdSeedStandby                   = "seed_standby"
 	CmdSeedTransition                = "seed_transition"
 	CmdSeedNote                      = "seed_note"
+	CmdRunCommand                    = "run_command"
 	CmdSeedCheck                     = "seed_check"
 	CmdSeedNotes                     = "seed_notes"
 	CmdSeedWatch                     = "seed_watch"

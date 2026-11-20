@@ -13,6 +13,7 @@ const (
 	LocatorSession
 	LocatorTerminal
 	LocatorSetting
+	LocatorCommand
 )
 
 type Placement struct {
@@ -181,6 +182,7 @@ var Placements = map[string][]Placement{
 	"review_search":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"review_sent":                      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"review_start":                     {Placement{LocatorHere, ""}},
+	"run_command":                      {Placement{LocatorCommand, "command"}},
 	"seed_artifact_transfer":           {Placement{LocatorHome, ""}},
 	"seed_artifact_transfer_here":      {Placement{LocatorMachine, "host"}},
 	"seed_authorization":               {Placement{LocatorHome, ""}},
@@ -273,12 +275,19 @@ func SocketPlacement(command string, frame []byte) (Placement, bool) {
 	if !declared {
 		return Placement{}, false
 	}
-	if len(places) == 1 {
+	if len(places) == 1 && places[0].Locator != LocatorCommand {
 		return places[0], true
 	}
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(frame, &fields) != nil {
 		return Placement{}, false
+	}
+	if places[0].Locator == LocatorCommand {
+		var name string
+		if json.Unmarshal(fields[places[0].Field], &name) != nil {
+			return Placement{}, false
+		}
+		return Placement{CommandRuns[name], ""}, true
 	}
 	for _, place := range places[:len(places)-1] {
 		if raw, present := fields[place.Field]; present && string(raw) != "null" {
@@ -2211,6 +2220,18 @@ func (m ReviewStartMessage) Placement() Placement {
 }
 
 func (m ReviewStartMessage) Locate() string {
+	return ""
+}
+
+func (RunCommandMessage) CommandName() string {
+	return "run_command"
+}
+
+func (m RunCommandMessage) Placement() Placement {
+	return Placement{CommandRuns[m.Command], ""}
+}
+
+func (m RunCommandMessage) Locate() string {
 	return ""
 }
 

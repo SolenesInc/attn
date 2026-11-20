@@ -2541,6 +2541,17 @@ type CommandErrorMessage struct {
 	TerminalID *string `json:"terminal_id,omitempty,omitzero"`
 }
 
+type CommandRefusal struct {
+	// Code corresponds to the JSON schema field "code".
+	Code string `json:"code"`
+
+	// Fix corresponds to the JSON schema field "fix".
+	Fix *string `json:"fix,omitempty,omitzero"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message string `json:"message"`
+}
+
 type CommandUsage struct {
 	// CommandID corresponds to the JSON schema field "command_id".
 	CommandID string `json:"command_id"`
@@ -9767,6 +9778,12 @@ type Response struct {
 	// CodexStatusResult corresponds to the JSON schema field "codex_status_result".
 	CodexStatusResult *CodexStatusResult `json:"codex_status_result,omitempty,omitzero"`
 
+	// CommandRefusal corresponds to the JSON schema field "command_refusal".
+	CommandRefusal *CommandRefusal `json:"command_refusal,omitempty,omitzero"`
+
+	// CommandResult corresponds to the JSON schema field "command_result".
+	CommandResult interface{} `json:"command_result,omitempty,omitzero"`
+
 	// CrewApplyResult corresponds to the JSON schema field "crew_apply_result".
 	CrewApplyResult *CrewApplyResult `json:"crew_apply_result,omitempty,omitzero"`
 
@@ -10585,6 +10602,26 @@ type ReviewStop struct {
 
 	// To corresponds to the JSON schema field "to".
 	To int `json:"to"`
+}
+
+type RunCommandMessage struct {
+	// Args corresponds to the JSON schema field "args".
+	Args RecordUnknown `json:"args,omitempty,omitzero"`
+
+	// CallerID corresponds to the JSON schema field "caller_id".
+	CallerID *TerminalID `json:"caller_id,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Command corresponds to the JSON schema field "command".
+	Command string `json:"command"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 }
 
 type RuntimeRespawnedMessage struct {

@@ -180,6 +180,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdSeedRollback:                  decodeInto[SeedRollbackMessage],
 	CmdSeedTransition:                decodeInto[SeedTransitionMessage],
 	CmdSeedNote:                      decodeInto[SeedNoteMessage],
+	CmdRunCommand:                    decodeInto[RunCommandMessage],
 	CmdSeedCheck:                     decodeInto[SeedCheckMessage],
 	CmdSeedNotes:                     decodeInto[SeedNotesMessage],
 	CmdSeedWatch:                     decodeInto[SeedWatchMessage],

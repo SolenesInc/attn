@@ -30,6 +30,17 @@ impl SendError {
         }
     }
 
+    pub fn refused(message: String, refusal: String) -> Self {
+        Self {
+            message,
+            refusal: Some(if refusal.is_empty() {
+                REFUSAL_UNCLASSIFIED.to_string()
+            } else {
+                refusal
+            }),
+        }
+    }
+
     pub fn deadline_exceeded(&self) -> bool {
         self.message == DEADLINE_EXCEEDED
     }
@@ -152,6 +163,16 @@ impl Reply {
         Ok(current)
     }
 
+    pub fn field(&self, name: &str) -> Reply {
+        Reply {
+            raw: self
+                .raw_field(&[name])
+                .unwrap_or("null")
+                .as_bytes()
+                .to_vec(),
+        }
+    }
+
     pub fn present(&self, field: &str) -> bool {
         self.raw_field(&[field]).is_ok_and(|value| value != "null")
     }
@@ -243,6 +264,12 @@ impl<'a> Client<'a> {
     ) -> Result<Reply, SendError> {
         let frame = self.scoped_frame(message, garden_command)?;
         self.exchange(&frame, deadline).map(|raw| Reply { raw })
+    }
+
+    /// Sends a frame and returns the reply as it came, refusal or not.
+    pub fn call_command<M: Serialize>(&self, message: &M) -> Result<Reply, SendError> {
+        let frame = self.frame(message)?;
+        self.round_trip(&frame, None).map(|raw| Reply { raw })
     }
 
     pub fn call_automation<M: Serialize>(&self, message: &M) -> Result<Reply, SendError> {

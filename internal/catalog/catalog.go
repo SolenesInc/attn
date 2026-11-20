@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -33,6 +34,8 @@ const (
 )
 
 var gates = []string{"any", "own", "full"}
+
+var errorCodePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 var grantNames = []string{"read_repo", "push_repo", "push_workflows", "push_default_branch", "use_host", "net_read", "net_write", "steer", "approve"}
 
@@ -83,19 +86,28 @@ type Reference struct {
 }
 
 type Command struct {
-	Name     string           `yaml:"name"`
-	Summary  string           `yaml:"summary"`
-	Core     bool             `yaml:"core"`
-	Runs     Runs             `yaml:"runs"`
-	Grant    string           `yaml:"grant"`
-	MayNeed  []string         `yaml:"may_need"`
-	Doc      string           `yaml:"doc"`
-	Args     []Arg            `yaml:"args"`
-	Result   string           `yaml:"result"`
-	Examples []map[string]any `yaml:"examples"`
-	Offered  *bool            `yaml:"offered"`
-	Reason   string           `yaml:"reason"`
-	File     string           `yaml:"-"`
+	Name      string           `yaml:"name"`
+	Summary   string           `yaml:"summary"`
+	Core      bool             `yaml:"core"`
+	Runs      Runs             `yaml:"runs"`
+	Grant     string           `yaml:"grant"`
+	MayNeed   []string         `yaml:"may_need"`
+	Doc       string           `yaml:"doc"`
+	Args      []Arg            `yaml:"args"`
+	ReadOnly  bool             `yaml:"read_only"`
+	Result    string           `yaml:"result"`
+	Errors    []Error          `yaml:"errors"`
+	Examples  []map[string]any `yaml:"examples"`
+	WrongArgs string           `yaml:"wrong_args"`
+	NoArgs    string           `yaml:"no_args"`
+	Offered   *bool            `yaml:"offered"`
+	Reason    string           `yaml:"reason"`
+	File      string           `yaml:"-"`
+}
+
+type Error struct {
+	Code string `yaml:"code"`
+	Fix  string `yaml:"fix"`
 }
 
 type Arg struct {
@@ -293,6 +305,21 @@ func (c *Catalog) check() []string {
 		}
 		if strings.TrimSpace(cmd.Doc) == "" {
 			add("%s: doc is missing", where)
+		}
+		if cmd.WrongArgs == "" && slices.ContainsFunc(cmd.Args, func(a Arg) bool { return a.CLI == "pos" || a.CLI == "rest" }) {
+			add("%s: wrong_args is missing; say what the CLI prints when the positionals do not fit", where)
+		}
+		codes := map[string]bool{}
+		for _, e := range cmd.Errors {
+			switch {
+			case !errorCodePattern.MatchString(e.Code):
+				add("%s: error code %q is not a lower_snake_case name", where, e.Code)
+			case codes[e.Code]:
+				add("%s: error %q is listed twice", where, e.Code)
+			case strings.TrimSpace(e.Fix) == "":
+				add("%s: error %q has no fix", where, e.Code)
+			}
+			codes[e.Code] = true
 		}
 		args := map[string]bool{}
 		for _, a := range cmd.Args {

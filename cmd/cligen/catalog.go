@@ -39,13 +39,16 @@ type familyOutput struct {
 	rustHelp string
 }
 
-func writeCatalog(cliRoot, referencesDir string) error {
+func writeCatalog(cliRoot, referencesDir, goRoot string) error {
 	c, err := catalog.Builtin()
 	if err != nil {
 		return fmt.Errorf("catalog:\n%w", err)
 	}
 	g := generator{c: c}
 	if err := g.checkResults(); err != nil {
+		return err
+	}
+	if err := writeCommandTables(c, cliRoot, goRoot); err != nil {
 		return err
 	}
 	for _, out := range []familyOutput{{group: "seed", rustHelp: "commands/seed/help_generated.rs"}} {

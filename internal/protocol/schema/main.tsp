@@ -7317,6 +7317,32 @@ model SeedNote {
   "seq"?: safeint;
 }
 
+// RunCommandMessage runs one catalog command (internal/catalog) for the caller
+// the frame names: caller_id is the terminal, session_id and profile_id are the
+// CLI's --session and --profile. args holds the command's typed arguments by
+// their catalog names. The reply carries command_result, the shape the entry's
+// result names, or command_refusal; a refusal of the garden's own checks also
+// sets error and refusal, as every garden command's reply does. Where it runs
+// comes from the entry's runs.
+@extension("x-on", #{ command: "command" })
+model RunCommandMessage {
+  cmd: "run_command";
+  ...SocketCaller;
+  command: string;
+  args?: Record<unknown>;
+  session_id?: SessionID;
+  profile_id?: string;
+}
+
+// CommandRefusal is why a command did not run. code is a refusal class
+// (Refusal) when the garden refused, `usage` when the arguments do not form a
+// call, or a code the catalog entry lists in errors.
+model CommandRefusal {
+  code: string;
+  message: string;
+  fix?: string;
+}
+
 @extension("x-on", #{ home: true })
 model SeedNoteMessage {
   "profile_id"?: string;
@@ -7699,6 +7725,8 @@ model DictationRefineResultMessage {
 // ============================================================================
 
 model Response {
+  command_result?: unknown;
+  command_refusal?: CommandRefusal;
   settings_list?: SettingsListResult;
   setting?: SettingEntry;
   ok: boolean;

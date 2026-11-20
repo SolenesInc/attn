@@ -1,8 +1,9 @@
 mod checks;
 mod flags;
 mod help_generated;
+mod present;
 mod render;
-mod table;
+mod table_generated;
 mod verbs;
 
 use super::{Run, Stop, print_stdout};
@@ -12,7 +13,7 @@ use attn_protocol::CallerSessionMessage;
 use attn_protocol::go_values::CODEX_THREAD_PREFIX;
 use flags::{Flags, ParseStop};
 use std::io::Read;
-use table::VERBS;
+use table_generated::COMMANDS;
 
 pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     let Some(verb) = args.first() else {
@@ -24,9 +25,9 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
         return Ok(());
     }
     let rest = &args[1..];
-    let known = VERBS
+    let known = COMMANDS
         .iter()
-        .any(|entry| entry.name == verb && !entry.name.contains(' '));
+        .any(|entry| entry.name.split(' ').next() == Some(verb.as_str()));
     if !known {
         run.path = "seed".to_string();
         run.usage_error = Some(super::USAGE_UNKNOWN_COMMAND);
@@ -36,6 +37,11 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     }
     if verb != "authorization" {
         run.path = format!("seed {verb}");
+    }
+    if let Some(cmd) = COMMANDS.iter().find(|cmd| cmd.name == verb)
+        && present::MOVED.contains(&cmd.name)
+    {
+        return crate::command::run(run, &present::Seed, cmd, rest);
     }
     verbs::dispatch(run, verb, rest)
 }

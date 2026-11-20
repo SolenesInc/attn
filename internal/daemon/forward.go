@@ -33,34 +33,38 @@ type bufferedSocket struct {
 
 func (c bufferedSocket) Read(p []byte) (int, error) { return c.reader.Read(p) }
 
-func (r *Router) Forward(socket net.Conn, frame []byte, caller protocol.SessionID) {
+type forwardInput interface {
+	io.Reader
+	SetReadDeadline(time.Time) error
+}
+
+// Forward runs a frame on the home for caller and copies the home's reply
+// frames to out. input carries what the caller sends after the frame, as a
+// socket client does; nil sends the frame alone.
+func (r *Router) Forward(frame []byte, caller protocol.SessionID, input forwardInput, out io.Writer) error {
 	d := r.daemon
 	conn, name, err := d.homeConn(d.enrollmentStatus())
 	if err != nil {
-		d.sendError(socket, err.Error())
-		return
+		return err
 	}
 	lost := fmt.Sprintf("lost %s during this call; it may have run", name)
-	lostText := func() string {
+	lostError := func() error {
 		if notice := d.homeUpdateNoticeText(name); notice != "" {
-			return lost + "; " + notice
+			return errors.New(lost + "; " + notice)
 		}
-		return lost
+		return errors.New(lost)
 	}
 	header, err := json.Marshal(forwardRequest{Caller: caller})
 	if err != nil {
-		d.sendError(socket, err.Error())
-		return
+		return err
 	}
 	channel, requests, err := conn.Open(d.life.Context(), bridgeForward, header)
 	if err != nil {
 		var refused *bridge.CallRejected
 		if errors.As(err, &refused) {
-			d.sendError(socket, err.Error())
-		} else {
-			d.sendError(socket, lostText())
+			return err
 		}
-		return
+		return lostError()
 	}
 	defer channel.Close()
 	completed := make(chan bool, 1)
@@ -80,29 +84,29 @@ func (r *Router) Forward(socket net.Conn, frame []byte, caller protocol.SessionI
 	goTransport(func() {
 		defer close(inputEnded)
 		if _, err := channel.Write(frame); err == nil {
-			_, _ = io.Copy(channel, socket)
+			_, _ = io.Copy(channel, input)
 		}
 		_ = channel.CloseWrite()
 	})
 	defer func() {
 		_ = channel.Close()
-		_ = socket.SetReadDeadline(time.Now())
+		_ = input.SetReadDeadline(time.Now())
 		<-inputEnded
 	}()
 	reader := bufio.NewReader(channel)
 	for {
 		frame, err := reader.ReadBytes('\n')
 		if len(frame) > 0 && frame[len(frame)-1] == '\n' {
-			if _, writeErr := socket.Write(frame); writeErr != nil {
-				return
+			if _, writeErr := out.Write(frame); writeErr != nil {
+				return nil
 			}
 		}
 		if err != nil {
 			_ = channel.Close()
 			if !<-completed {
-				d.sendError(socket, lostText())
+				return lostError()
 			}
-			return
+			return nil
 		}
 	}
 }

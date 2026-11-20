@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "ea82fac77940";
+pub const PROTOCOL_VERSION: &str = "cbfc1fe60e2b";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -2356,6 +2356,13 @@ impl CommandErrorMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CommandRefusal {
+    pub code: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fix: Option<String>,
+    pub message: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CommandUsage {
@@ -9291,6 +9298,10 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub codex_status_result: Option<CodexStatusResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_refusal: Option<CommandRefusal>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_result: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crew_apply_result: Option<CrewApplyResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crew_charter_get_result: Option<CrewCharterGetResult>,
@@ -9891,6 +9902,29 @@ pub struct ReviewStop {
     #[serde(deserialize_with = "null_as_default")]
     pub rows: Vec<ReviewRow>,
     pub to: i64,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RunCommandMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<BTreeMap<String, serde_json::Value>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caller_id: Option<TerminalID>,
+    pub cmd: String,
+    pub command: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<SessionID>,
+}
+
+impl RunCommandMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "run_command".to_string(),
+            ..Self::default()
+        }
+    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RuntimeRespawnedMessage {

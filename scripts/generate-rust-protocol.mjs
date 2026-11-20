@@ -50,6 +50,7 @@ const isStringAlternatives = alternatives => alternatives.every(alternative => a
 
 function rustType(schema, model, field) {
   const where = `${model}.${field}`;
+  if (Object.keys(schema).length === 0) return 'serde_json::Value';
   if (schema.$ref?.startsWith('#/$defs/')) return rustType(models.get(model).$defs[schema.$ref.slice('#/$defs/'.length)], model, field);
   if (isModelReference(schema)) return modelName(schema.$ref);
   if (schema.anyOf) {
