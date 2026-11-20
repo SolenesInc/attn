@@ -682,51 +682,41 @@ pub(crate) fn badge(state: &State, t: &Tokens, value: &Route) -> El {
     let tier = view.tier.as_ref();
     let mark = TierInfo::mark(tier, false);
     let quiet = tier.is_some_and(|t| t.tier.is_some());
-    row()
-        .flex_wrap()
-        .shrink()
-        .min_w(0.0)
-        .gap(7.0)
-        .items_end()
-        .px(9.0)
-        .py(5.0)
-        .radius(14.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border)
-        .child(
-            text(view.harness_name.clone())
+    let model_ink = if view.missing {
+        t.warning
+    } else {
+        t.text_primary
+    };
+    let effort_ink = if view.effort_missing {
+        t.warning
+    } else {
+        t.accent
+    };
+    attn_ui::blocks::pill(
+        [
+            words(view.harness_name.clone(), Type::Small, t.text_secondary)
                 .wrap_anywhere()
                 .shrink()
-                .min_w(0.0)
-                .font(CAPTION)
-                .color(t.text_secondary),
-        )
-        .child(
-            text(view.model_label.clone())
+                .min_w(0.0),
+            words(view.model_label.clone(), Type::Small, model_ink)
                 .wrap_anywhere()
                 .shrink()
-                .min_w(0.0)
-                .font(CAPTION)
-                .color(if view.missing {
-                    t.warning
-                } else {
-                    t.text_primary
-                }),
-        )
-        .children((!mark.is_empty()).then(|| {
-            text(mark)
-                .font(CAPTION)
-                .color(if quiet { t.text_tertiary } else { t.warning })
+                .min_w(0.0),
+        ]
+        .into_iter()
+        .chain((!mark.is_empty()).then(|| {
+            words(
+                mark,
+                Type::Small,
+                if quiet { t.text_tertiary } else { t.warning },
+            )
         }))
-        .children((!value.effort.is_empty()).then(|| {
-            text(value.effort.clone())
-                .font(CAPTION)
-                .color(if view.effort_missing {
-                    t.warning
-                } else {
-                    t.accent
-                })
-        }))
+        .chain(
+            (!value.effort.is_empty())
+                .then(|| words(value.effort.clone(), Type::Small, effort_ink)),
+        ),
+        t,
+    )
 }
 
 /// The Tauri app's `.route-field`: harness and model on one line beside the caret, and the
