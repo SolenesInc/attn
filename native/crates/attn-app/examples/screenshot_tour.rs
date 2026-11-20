@@ -2010,6 +2010,7 @@ fn notebook_open(dark: bool) -> World {
         .automate("run", json!({ "name": "notebook.openFullscreen" }))
         .unwrap();
     world.settle();
+    unfold_tree(&mut world, "notebook");
     world.gesture(|app| app.click(Target::key("notebook.file.todo.md")));
     world
 }
@@ -2096,6 +2097,7 @@ fn notebook_tile_empty(dark: bool) {
 fn notebook_tile_open(dark: bool) -> World {
     let mut world = start(notebook_daemon(dark, None));
     world.gesture(|app| app.press("escape"));
+    unfold_tree(&mut world, "notebook.tile.n");
     world.gesture(|app| app.click(Target::key("notebook.tile.n.file.index.md")));
     world
 }
@@ -2122,6 +2124,7 @@ fn notebook_note(dark: bool) {
         .automate("run", json!({ "name": "notebook.openFullscreen" }))
         .unwrap();
     world.settle();
+    unfold_tree(&mut world, "notebook");
     world.gesture(|app| app.click(Target::key("notebook.file.index.md")));
     snap(&mut world, "notebook-note", dark);
 }
@@ -3065,6 +3068,7 @@ fn notebook_tree(dark: bool) {
         .automate("run", json!({ "name": "notebook.openFullscreen" }))
         .unwrap();
     world.settle();
+    unfold_tree(&mut world, "notebook");
     world.gesture(|app| app.click(Target::key("notebook.file.knowledge")));
     snap(&mut world, "notebook-tree", dark);
 }
@@ -5489,4 +5493,17 @@ fn usage_error() -> std::process::ExitCode {
         "usage: screenshot_tour shoot OUT [--scheme ID] [--only PATTERN]... [--window WxH] [--text SCALE] [--long] | compare BASE AFTER DIFF"
     );
     std::process::ExitCode::from(2)
+}
+
+/// Shows the notebook's file tree where its width has folded it away, as a person presses the
+/// fold handle, so a scene can pick from the tree at any window size.
+fn unfold_tree(world: &mut World, notebook: &str) {
+    if world
+        .screen()
+        .find(Target::key(format!("{notebook}.files")))
+        .is_none()
+    {
+        let fold = format!("{notebook}.fold.tree");
+        world.gesture(|app| app.click(Target::key(fold)));
+    }
 }
