@@ -58,6 +58,7 @@ func (s *Sigma) Server() ServerDeclaration {
 		OnClose:                  "interrupt",
 		Recovery:                 "last-run",
 		SigmaWire:                true,
+		ConversationWatch:        true,
 	}
 }
 

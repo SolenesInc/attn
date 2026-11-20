@@ -59,6 +59,33 @@ func TestTheMessageWindowShowsEachSessionsOwnAnswersOldestFirstUnderStableKeys(t
 	}
 }
 
+func TestAnAppServerSessionsMessageWindowShowsItsAnswersOldestFirstUnderStableKeys(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		session, view, server := appServerSession(t, w, app, h)
+		conversation := view.ConversationID
+		promptUntilWorking(app, session, view, server, "plan the discount field")
+		server.Reply(conversation, "An earlier answer. <!-- attn:state=idle -->")
+		promptUntilWorking(app, session, view, server, "build it")
+		server.Reply(conversation, "The answer under annotation. <!-- attn:state=idle -->")
+
+		window := messageWindowShowing(app, session, "The answer under annotation.")
+		if got := messageMarkdowns(window); !slices.Equal(got, []string{"An earlier answer.", "The answer under annotation."}) || window.Truncated || window.Status != protocol.SessionMessageWindowStatusReady {
+			t.Fatalf("the window = %q (status %s, truncated %v), want both answers oldest first", got, window.Status, window.Truncated)
+		}
+		if window.Messages[0].Key == "" || window.Messages[0].Key == window.Messages[1].Key {
+			t.Errorf("message keys = %q and %q, want one per message", window.Messages[0].Key, window.Messages[1].Key)
+		}
+		again := messageWindowShowing(app, session, "The answer under annotation.")
+		for i := range window.Messages {
+			if again.Messages[i].Key != window.Messages[i].Key {
+				t.Errorf("message %d changed its key from %q to %q across reads", i, window.Messages[i].Key, again.Messages[i].Key)
+			}
+		}
+	})
+}
+
 func TestTheMessageWindowKeepsTheNewestAnswersWithinItsBudgetAndSaysItDroppedSome(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

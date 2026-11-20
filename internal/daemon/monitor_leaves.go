@@ -160,8 +160,16 @@ func (d *Daemon) renameLink(_ context.Context, msg protocol.LinkRenameMessage) (
 	return struct{}{}, nil
 }
 
-func (d *Daemon) readTranscriptActivity(_ context.Context, msg protocol.TranscriptActivityMessage) (protocol.TranscriptActivityResult, error) {
+func (d *Daemon) readTranscriptActivity(ctx context.Context, msg protocol.TranscriptActivityMessage) (protocol.TranscriptActivityResult, error) {
 	var result protocol.TranscriptActivityResult
+	if session := d.monitorTranscriptSession(msg.SessionID); session != nil {
+		if l, conversation := d.serverConversationOf(session); l != nil {
+			if conversation == "" {
+				return result, nil
+			}
+			return l.activity(ctx, conversation, msg)
+		}
+	}
 	monitor := d.sessionMonitor(msg.SessionID)
 	path := monitor.ActivityTranscript()
 	if path == "" {
@@ -202,13 +210,13 @@ func (d *Daemon) readTranscriptActivity(_ context.Context, msg protocol.Transcri
 	return result, nil
 }
 
-func (d *Daemon) readMonitorAssistantWindow(_ context.Context, msg protocol.MonitorAssistantWindowMessage) (protocol.MonitorAssistantWindowResult, error) {
+func (d *Daemon) readMonitorAssistantWindow(ctx context.Context, msg protocol.MonitorAssistantWindowMessage) (protocol.MonitorAssistantWindowResult, error) {
 	var result protocol.MonitorAssistantWindowResult
 	session := d.store.Get(msg.SessionID)
 	if session == nil {
 		return result, fmt.Errorf("session_not_found")
 	}
-	window, available := d.sessionMonitor(msg.SessionID).AssistantWindow(session.Agent)
+	window, available := d.assistantWindow(ctx, session)
 	encoded, err := json.Marshal(window)
 	result.Available, result.Window = available, string(encoded)
 	return result, err
@@ -219,18 +227,13 @@ func (d *Daemon) readMonitorStateTrace(_ context.Context, msg protocol.MonitorSt
 	return protocol.MonitorStateTraceResult{Observations: string(encoded)}, err
 }
 
-func (d *Daemon) readMonitorTranscriptPage(_ context.Context, msg protocol.MonitorTranscriptPageMessage) (protocol.MonitorTranscriptPageResult, error) {
+func (d *Daemon) readMonitorTranscriptPage(ctx context.Context, msg protocol.MonitorTranscriptPageMessage) (protocol.MonitorTranscriptPageResult, error) {
 	var result protocol.MonitorTranscriptPageResult
 	session := d.monitorTranscriptSession(msg.SessionID)
 	if session == nil {
 		return result, fmt.Errorf("session_not_found")
 	}
-	path := d.inspectableTranscriptPath(session.ID, session.Agent)
-	if path == "" {
-		result.ErrorKind = protocol.Ptr(protocol.MonitorReadErrorKindTranscriptUnavailable)
-		return result, nil
-	}
-	page, err := transcript.ReadEventPage(path, session.Agent, protocol.Deref(msg.Cursor), sessionTranscriptPageSize)
+	page, err := d.transcriptPage(ctx, session, protocol.Deref(msg.Cursor))
 	if err != nil {
 		result.ErrorKind = protocol.Ptr(protocol.MonitorReadErrorKind(transcriptReadErrorKind(err)))
 		return result, nil
@@ -253,10 +256,20 @@ func transcriptReadErrorKind(err error) string {
 	}
 }
 
-func (d *Daemon) readMonitorLastAssistant(_ context.Context, msg protocol.MonitorLastAssistantMessage) (protocol.MonitorLastAssistantResult, error) {
+func (d *Daemon) readMonitorLastAssistant(ctx context.Context, msg protocol.MonitorLastAssistantMessage) (protocol.MonitorLastAssistantResult, error) {
 	session := d.monitorTranscriptSession(msg.SessionID)
 	if session == nil {
 		return protocol.MonitorLastAssistantResult{}, fmt.Errorf("session_not_found")
+	}
+	if l, conversation := d.serverConversationOf(session); l != nil {
+		if conversation == "" {
+			return protocol.MonitorLastAssistantResult{}, nil
+		}
+		message, err := l.lastReply(ctx, conversation)
+		if runes := []rune(message); len(runes) > agentPeekMessageMaxChars {
+			message = string(runes[len(runes)-agentPeekMessageMaxChars:])
+		}
+		return protocol.MonitorLastAssistantResult{Text: message}, err
 	}
 	path := d.inspectableTranscriptPath(session.ID, session.Agent)
 	if path == "" {
@@ -265,6 +278,22 @@ func (d *Daemon) readMonitorLastAssistant(_ context.Context, msg protocol.Monito
 	message, err := transcript.ExtractLastAssistantMessage(path, agentPeekMessageMaxChars)
 	return protocol.MonitorLastAssistantResult{Text: message}, err
 }
+
+func (d *Daemon) transcriptPage(ctx context.Context, session *protocol.SessionLedgerEntry, cursor string) (transcript.EventPage, error) {
+	if l, conversation := d.serverConversationOf(session); l != nil {
+		if conversation == "" {
+			return transcript.EventPage{}, errTranscriptUnavailable
+		}
+		return l.transcriptPage(ctx, conversation, cursor, sessionTranscriptPageSize)
+	}
+	path := d.inspectableTranscriptPath(session.ID, session.Agent)
+	if path == "" {
+		return transcript.EventPage{}, errTranscriptUnavailable
+	}
+	return transcript.ReadEventPage(path, session.Agent, cursor, sessionTranscriptPageSize)
+}
+
+var errTranscriptUnavailable = errors.New("transcript unavailable")
 
 func (d *Daemon) monitorTranscriptSession(id protocol.SessionID) *protocol.SessionLedgerEntry {
 	if session := d.store.SessionLedgerEntry(id); session != nil {
@@ -275,4 +304,15 @@ func (d *Daemon) monitorTranscriptSession(id protocol.SessionID) *protocol.Sessi
 		return nil
 	}
 	return &protocol.SessionLedgerEntry{ID: id, Agent: records.Agent}
+}
+
+func (d *Daemon) assistantWindow(ctx context.Context, session *protocol.Session) (sessionmonitor.AssistantWindow, bool) {
+	if l := d.serverLinkFor(string(session.Agent)); l.watchesConversations() {
+		conversation := d.store.GetSessionConversation(session.ID).NativeID
+		if conversation == "" {
+			return sessionmonitor.AssistantWindow{}, false
+		}
+		return l.assistantWindow(ctx, conversation)
+	}
+	return d.sessionMonitor(session.ID).AssistantWindow(session.Agent)
 }

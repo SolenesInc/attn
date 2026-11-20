@@ -403,6 +403,11 @@ func (w *World) AppServer(h fakeagent.Harness) *fakeagent.AppServer {
 	return w.kit.AppServer(h)
 }
 
+func (w *World) AppServerAfter(h fakeagent.Harness, launched int) *fakeagent.AppServer {
+	w.T.Helper()
+	return w.kit.AppServerAfter(h, launched)
+}
+
 func (w *World) AppServers(h fakeagent.Harness) int {
 	return w.kit.AppServers(h)
 }

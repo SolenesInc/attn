@@ -106,7 +106,7 @@ describe("AttnPluginClient driver", () => {
         homeEnv: "SAMPLE_HOME", defaultHome: ".sample", socketName: "sample.sock",
         initialize: { server: "sample", protocol: { exact: 1 } },
         callerConversationEnv: "SAMPLE_ROOT_CONVERSATION", callerConversationHeader: "Sample-Root-Conversation", onClose: "leave-running",
-        recovery: "numbered-completions", targets: true,
+        recovery: "numbered-completions", targets: true, conversationWatch: true,
       },
     };
     client.driver(definition);
@@ -119,7 +119,7 @@ describe("AttnPluginClient driver", () => {
         home_env: "SAMPLE_HOME", default_home: ".sample", socket_name: "sample.sock",
         initialize: { server: "sample", protocol: { exact: 1 } },
         caller_conversation_env: "SAMPLE_ROOT_CONVERSATION", caller_conversation_header: "Sample-Root-Conversation", on_close: "leave-running",
-        recovery: "numbered-completions", targets: true,
+        recovery: "numbered-completions", targets: true, conversation_watch: true,
       },
     });
     const legacyDaemon = await startDaemon({ "driver.register": new Error('unsupported driver capability "server_binding"') });

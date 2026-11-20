@@ -283,3 +283,19 @@ func setVentKind(app *testworld.Peer, id string, kind protocol.VentKind) protoco
 	return testworld.Request(app, protocol.SetVentKindMessage{Cmd: protocol.CmdSetVentKind, RequestID: request, VentID: id, Kind: kind},
 		protocol.EventSetVentKindResult, func(r protocol.SetVentKindResultMessage) bool { return r.RequestID == request })
 }
+
+func TestAVentFromAnAppServerSessionNamesTheVersionItsServerReported(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "analytics.enabled", "true")
+		session, _, _ := appServerSession(t, w, app, h)
+		vent, err := cli.RecordVent(protocol.SessionID(session), protocol.VentKindAttn, "the build is slow")
+		if err != nil {
+			t.Fatalf("vent: %v", err)
+		}
+		if got := protocol.Deref(vent.Context.HarnessVersion); got != "fake" {
+			t.Errorf("the vent names harness version %q, want the version %s's server reported at initialize", got, h)
+		}
+	})
+}

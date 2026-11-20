@@ -1,0 +1,18 @@
+[
+  {"name": "claude edit", "tool_name": "Edit", "tool_input": {"file_path": "/repo/notes.md", "old_string": "old"}, "cwd": "", "want": ["/repo/notes.md"]},
+  {"name": "claude write", "tool_name": "Write", "tool_input": {"file_path": "/repo/extra.md", "content": "# Extra\n"}, "cwd": "", "want": ["/repo/extra.md"]},
+  {"name": "notebook", "tool_name": "NotebookEdit", "tool_input": {"notebook_path": "/repo/analysis.md", "new_source": "x"}, "cwd": "", "want": ["/repo/analysis.md"]},
+  {"name": "sigma edit", "tool_name": "edit", "tool_input": {"path": "/repo/notes.md", "edits": [{"oldText": "a", "newText": "b"}]}, "cwd": "", "want": ["/repo/notes.md"]},
+  {"name": "sigma write resolves against the session's folder", "tool_name": "write", "tool_input": {"path": "docs/plan.md", "content": "# Plan\n"}, "cwd": "/repo", "want": ["/repo/docs/plan.md"]},
+  {"name": "several patched files", "tool_name": "apply_patch", "tool_input": {"command": "*** Begin Patch\n*** Update File: /repo/notes.md\n@@\n-old line\n+new line\n*** Add File: /repo/extra.md\n+# Extra\n*** End Patch"}, "cwd": "", "want": ["/repo/notes.md", "/repo/extra.md"]},
+  {"name": "sigma sends the patch as patch", "tool_name": "apply_patch", "tool_input": {"patch": "*** Begin Patch\n*** Add File: /repo/extra.md\n+# Extra\n*** End Patch"}, "cwd": "", "want": ["/repo/extra.md"]},
+  {"name": "rename at destination", "tool_name": "apply_patch", "tool_input": {"command": "*** Begin Patch\n*** Update File: /repo/old.md\n*** Move to: /repo/new.md\n@@\n-a\n+b\n*** End Patch"}, "cwd": "", "want": ["/repo/new.md"]},
+  {"name": "deletion", "tool_name": "apply_patch", "tool_input": {"command": "*** Begin Patch\n*** Delete File: /repo/gone.md\n*** End Patch"}, "cwd": "", "want": []},
+  {"name": "relative resolves", "tool_name": "Write", "tool_input": {"file_path": "docs/plan.md"}, "cwd": "/repo", "want": ["/repo/docs/plan.md"]},
+  {"name": "relative without cwd", "tool_name": "Write", "tool_input": {"file_path": "docs/plan.md"}, "cwd": "", "want": []},
+  {"name": "source file", "tool_name": "Edit", "tool_input": {"file_path": "/repo/main.go"}, "cwd": "", "want": []},
+  {"name": "shell rewrite", "tool_name": "Bash", "tool_input": {"command": "sed -i '' s/a/b/ notes.md"}, "cwd": "", "want": []},
+  {"name": "read", "tool_name": "Read", "tool_input": {"file_path": "/repo/notes.md"}, "cwd": "", "want": []},
+  {"name": "same file twice", "tool_name": "apply_patch", "tool_input": {"command": "*** Update File: /repo/notes.md\n*** Update File: /repo/notes.md"}, "cwd": "", "want": ["/repo/notes.md"]},
+  {"name": "malformed", "tool_name": "Edit", "tool_input": "not an object", "cwd": "", "want": []}
+]

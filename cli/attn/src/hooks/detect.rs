@@ -10,10 +10,14 @@ struct FileEditInput<'a> {
     file_path: Raw<'a>,
     #[serde(borrow, default)]
     notebook_path: Raw<'a>,
+    #[serde(borrow, default)]
+    path: Raw<'a>,
 }
 
 #[derive(Deserialize)]
 struct PatchInput<'a> {
+    #[serde(borrow, default)]
+    patch: Raw<'a>,
     #[serde(borrow, default)]
     command: Raw<'a>,
     #[serde(borrow, default)]
@@ -28,7 +32,7 @@ struct SendFilesInput<'a> {
 
 pub fn markdown_edits(tool_name: &str, tool_input: Raw<'_>, cwd: &str) -> Vec<String> {
     let paths = match tool_name {
-        "Edit" | "Write" | "MultiEdit" | "NotebookEdit" => {
+        "Edit" | "Write" | "MultiEdit" | "NotebookEdit" | "edit" | "write" => {
             edited_file_paths(tool_input).unwrap_or_default()
         }
         "apply_patch" => patched_paths(tool_input).unwrap_or_default(),
@@ -46,18 +50,19 @@ fn edited_file_paths(tool_input: Raw<'_>) -> Option<Vec<String>> {
     Some(vec![
         strict_text(input.file_path)?,
         strict_text(input.notebook_path)?,
+        strict_text(input.path)?,
     ])
 }
 
 fn patched_paths(tool_input: Raw<'_>) -> Option<Vec<String>> {
     let input: PatchInput<'_> = parse_object(tool_input)?;
-    let command = strict_text(input.command)?;
-    let input = strict_text(input.input)?;
-    let patch = if command.trim().is_empty() {
-        input
-    } else {
-        command
-    };
+    let patch = [input.patch, input.command, input.input]
+        .into_iter()
+        .map(strict_text)
+        .collect::<Option<Vec<_>>>()?
+        .into_iter()
+        .find(|text| !text.trim().is_empty())
+        .unwrap_or_default();
     Some(apply_patch_targets(&patch))
 }
 
@@ -279,92 +284,24 @@ mod tests {
         .unwrap()
     }
 
+    #[derive(Deserialize)]
+    struct MarkdownEditCase<'a> {
+        name: String,
+        tool_name: String,
+        #[serde(borrow)]
+        tool_input: &'a RawValue,
+        cwd: String,
+        want: Vec<String>,
+    }
+
     #[test]
-    fn markdown_edits_cases() {
-        let cases: [(&str, &str, &str, &str, &[&str]); 13] = [
-            (
-                "claude edit",
-                "Edit",
-                r#"{"file_path":"/repo/notes.md","old_string":"old"}"#,
-                "",
-                &["/repo/notes.md"],
-            ),
-            (
-                "claude write",
-                "Write",
-                r##"{"file_path":"/repo/extra.md","content":"# Extra\n"}"##,
-                "",
-                &["/repo/extra.md"],
-            ),
-            (
-                "notebook",
-                "NotebookEdit",
-                r#"{"notebook_path":"/repo/analysis.md","new_source":"x"}"#,
-                "",
-                &["/repo/analysis.md"],
-            ),
-            (
-                "several patched files",
-                "apply_patch",
-                r#"{"command":"*** Begin Patch\n*** Update File: /repo/notes.md\n@@\n-old line\n+new line\n*** Add File: /repo/extra.md\n+# Extra\n*** End Patch"}"#,
-                "",
-                &["/repo/notes.md", "/repo/extra.md"],
-            ),
-            (
-                "rename at destination",
-                "apply_patch",
-                r#"{"command":"*** Begin Patch\n*** Update File: /repo/old.md\n*** Move to: /repo/new.md\n@@\n-a\n+b\n*** End Patch"}"#,
-                "",
-                &["/repo/new.md"],
-            ),
-            (
-                "deletion",
-                "apply_patch",
-                r#"{"command":"*** Begin Patch\n*** Delete File: /repo/gone.md\n*** End Patch"}"#,
-                "",
-                &[],
-            ),
-            (
-                "relative resolves",
-                "Write",
-                r#"{"file_path":"docs/plan.md"}"#,
-                "/repo",
-                &["/repo/docs/plan.md"],
-            ),
-            (
-                "relative without cwd",
-                "Write",
-                r#"{"file_path":"docs/plan.md"}"#,
-                "",
-                &[],
-            ),
-            (
-                "source file",
-                "Edit",
-                r#"{"file_path":"/repo/main.go"}"#,
-                "",
-                &[],
-            ),
-            (
-                "shell rewrite",
-                "Bash",
-                r#"{"command":"sed -i '' s/a/b/ notes.md"}"#,
-                "",
-                &[],
-            ),
-            ("read", "Read", r#"{"file_path":"/repo/notes.md"}"#, "", &[]),
-            (
-                "same file twice",
-                "apply_patch",
-                r#"{"command":"*** Update File: /repo/notes.md\n*** Update File: /repo/notes.md"}"#,
-                "",
-                &["/repo/notes.md"],
-            ),
-            ("malformed", "Edit", r#""not an object""#, "", &[]),
-        ];
-        for (name, tool, input, cwd, want) in cases {
-            let input = raw(input);
-            assert_eq!(markdown_edits(tool, Some(&input), cwd), want, "{name}");
+    fn markdown_edits_against_the_shared_corpus() {
+        let corpus = fixture("markdown-edits.json");
+        let cases: Vec<MarkdownEditCase<'_>> = serde_json::from_str(&corpus).unwrap();
+        assert!(!cases.is_empty());
+        for case in cases {
+            let got = markdown_edits(&case.tool_name, Some(case.tool_input), &case.cwd);
+            assert_eq!(got, case.want, "{}", case.name);
         }
     }
 

@@ -431,6 +431,9 @@ func userName() string {
 }
 
 func (l *serverLink) sessionClosed(sessionID protocol.SessionID, _ string, released string) {
+	if p, err := l.connection(); err == nil {
+		p.events.run(l.d, func() { p.closeFeed(sessionID) })
+	}
 	declaration := l.b.declaration.Load()
 	if declaration == nil || declaration.OnClose == "leave-running" || released == "" {
 		return

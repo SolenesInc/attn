@@ -749,6 +749,9 @@ func (d *Daemon) pluginConversationResumable(reg pluginDriverRegistration, resum
 }
 
 func (d *Daemon) pluginConversationsResumable(reg pluginDriverRegistration, conversations []pluginResumeConversation) map[pluginResumeConversation]conversationAvailability {
+	if l := d.serverLinkFor(reg.Agent); l.watchesConversations() {
+		return l.conversationsResumable(conversations)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), pluginResumeAvailabilityTimeout)
 	defer cancel()
 	var result pluginResumeAvailableResult

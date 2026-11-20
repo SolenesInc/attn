@@ -262,6 +262,9 @@ func (d *Daemon) ventContext(session *protocol.Session) protocol.VentContext {
 			context.HarnessVersion = &version
 		}
 	}
+	if version := d.serverLinkFor(string(session.Agent)).serverVersion(); version != "" {
+		context.HarnessVersion = &version
+	}
 	return context
 }
 

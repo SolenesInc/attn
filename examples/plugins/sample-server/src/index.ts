@@ -45,6 +45,7 @@ client.driver({
     onClose: "leave-running",
     recovery: "numbered-completions",
     targets: true,
+    conversationWatch: true,
   },
 });
 await client.connect();

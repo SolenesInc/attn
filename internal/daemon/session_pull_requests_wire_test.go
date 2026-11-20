@@ -206,3 +206,18 @@ func (s *pullRequestStates) merge(numbers ...int) {
 		s.merged[number] = true
 	}
 }
+
+func TestAPullRequestAnAppServerAgentCreatesBelongsToItsSession(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		session, view, server := appServerSession(t, w, app, h)
+		promptUntilWorking(app, session, view, server, "open a pull request")
+		server.ToolCall(view.ConversationID, fakeagent.ServerToolCall{Name: "bash", Input: map[string]any{"command": "gh pr view 3"}, Output: shopPull(3)})
+		server.ToolCall(view.ConversationID, fakeagent.ServerToolCall{Name: "bash", Input: map[string]any{"command": "gh pr create --fill"}, Output: shopPull(4) + "\n"})
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return len(s.PullRequests) > 0 })
+		if got := pullNumbers(queriedSession(t, w.Client(), session)); !slices.Equal(got, []int{4}) {
+			t.Fatalf("the session's pull requests = %v, want only the one gh pr create made", got)
+		}
+	})
+}

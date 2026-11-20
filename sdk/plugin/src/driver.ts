@@ -27,6 +27,7 @@ export type ServerBinding = {
  onClose: "interrupt" | "leave-running";
  recovery: "last-run" | "numbered-completions";
  targets?: boolean;
+ conversationWatch?: boolean;
 };
 
 /** A home whose `skills` folder the harness reads user skills from: `$homeEnv`, or else `defaultHome`, absolute or relative to the user's home. */
@@ -47,6 +48,7 @@ export function serverRegistration(server: ServerBinding | undefined): Record<st
   socket_name: server.socketName, initialize: server.initialize,
   caller_conversation_env: server.callerConversationEnv, caller_conversation_header: server.callerConversationHeader, on_close: server.onClose,
   recovery: server.recovery, targets: server.targets,
+  conversation_watch: server.conversationWatch,
  };
 }
 

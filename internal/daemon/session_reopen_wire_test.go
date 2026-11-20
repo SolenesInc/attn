@@ -469,3 +469,31 @@ func TestADeletedProfilesSessionCannotReopen(t *testing.T) {
 		}
 	}
 }
+
+func TestAClosedAppServerSessionWhoseConversationTheServerNoLongerHasRefusesResume(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app, cli := w.App(), w.Client()
+		kept, keptView, server := appServerSession(t, w, app, h)
+		promptUntilWorking(app, kept, keptView, server, "keep this one")
+		server.Reply(keptView.ConversationID, "Kept.")
+		vanished := w.Spawn(app, h, w.Path("shop"))
+		vanishedView := w.Launched(vanished)
+		promptUntilWorking(app, vanished, vanishedView, server, "forget this one")
+		server.Reply(vanishedView.ConversationID, "Done.")
+		for _, session := range []string{kept, vanished} {
+			testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+			closeSession(t, cli, session, "done")
+			awaitClosed(app, session)
+		}
+		server.Forget(vanishedView.ConversationID)
+
+		if verdict := reopenVerdict(t, cli, kept); !verdict.Reopenable {
+			t.Errorf("the verdict on the conversation the server still has = %+v, want it resumable", verdict)
+		}
+		verdict := reopenVerdict(t, cli, vanished)
+		if verdict.Reopenable || !strings.Contains(protocol.Deref(verdict.Reason), "no longer on "+string(h)+"'s server") {
+			t.Errorf("the verdict on the conversation the server forgot = %+v, want no resume because the server no longer has it", verdict)
+		}
+	})
+}

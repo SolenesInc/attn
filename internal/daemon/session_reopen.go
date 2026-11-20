@@ -257,10 +257,15 @@ func (d *Daemon) reopenConversation(execution garden.Execution, resumeID string,
 }
 
 func (d *Daemon) conversationResumable(agentName, resumeID, cwd string) conversationAvailability {
-	if plugin, ok := d.ensurePluginRegistry().driver(agentName); ok {
-		if !plugin.Capabilities["resume"] {
-			return conversationAvailability{Reason: fmt.Sprintf("agent %q does not resume conversations, so conversation %s cannot be picked up", agentName, resumeID)}
-		}
+	plugin, isPlugin := d.ensurePluginRegistry().driver(agentName)
+	if isPlugin && !plugin.Capabilities["resume"] {
+		return conversationAvailability{Reason: fmt.Sprintf("agent %q does not resume conversations, so conversation %s cannot be picked up", agentName, resumeID)}
+	}
+	if l := d.serverLinkFor(agentName); l.watchesConversations() {
+		conversation := pluginResumeConversation{Agent: agentName, CWD: cwd, ResumeSessionID: resumeID}
+		return l.conversationsResumable([]pluginResumeConversation{conversation})[conversation]
+	}
+	if isPlugin {
 		return d.pluginConversationResumable(plugin, resumeID, cwd)
 	}
 	driver := agentdriver.Get(agentName)

@@ -243,6 +243,7 @@ server: {
   onClose: "leave-running",
   recovery: "numbered-completions",
   targets: true,
+  conversationWatch: true,
 }
 ```
 
@@ -251,7 +252,12 @@ the server's identity. `initialize.protocol` accepts either `{ exact: N }` or
 `{ min: N }`. A mismatched identity or protocol refuses the operation before a
 view starts. Use `onClose: "interrupt"` to interrupt a conversation when its
 last owning session closes, or `"leave-running"` to leave the server's run going.
-`recovery` is `"last-run"` or `"numbered-completions"`.
+`recovery` is `"last-run"` or `"numbered-completions"`. Set
+`conversationWatch: true` when the server answers `conversation/watch` and
+`conversation/entries`. Attn then follows each open session's conversation, as
+the watching binding below describes. Without it, a server session has no
+transcript, last reply, activity line, title from its prompt, usage, recent
+files or pull requests from its tools.
 
 The executable, optional executable override, home variable and default home
 resolve in the daemon's machine and login environment. `socketName` is a filename
@@ -344,6 +350,45 @@ conversations, then streams `{conversation, status, ended?}` changes.
 Numbered recovery accepts `status/watch {after: {conversation: completion}}`
 and replays newer idle completions. Completion numbers ascend per conversation.
 
+A watching binding also supports `conversation/watch` and
+`conversation/entries`. Attn then judges resume from `conversation/list`
+instead of `driver.resume_available`: a conversation attn has seen entries of
+and the list of a running server no longer holds cannot be resumed.
+
+- `conversation/watch {conversation, window: {min, max, from?}}` streams
+  `{_tag: "view", view: {entries, before?, docs}}`, then
+  `{_tag: "change", ops}`. An op is `["r", value]`, which replaces the whole
+  view, `["s", path, value]`, `["d", path]`, `["a", path, text]`, which appends
+  text, `["t", path, length]`, which truncates, `["p", path, at, deleteCount,
+  items]`, which splices an array, or `["m", path, order]`, which reorders one.
+  New entries are spliced onto the end of `["entries"]`. `before` names the
+  entry just before the window, so attn reads any gap with
+  `conversation/entries`. With `from`,
+  the view starts at that entry when the server still holds it. Past `max`
+  entries, the window drops its oldest down to `min`.
+- `conversation/entries {conversation, from?, to?, order, limit, cursor?}`
+  returns `{entries, next?}`; `next` is the `cursor` of the next page.
+- Attn asks for at most 8 entries a call and a window of 4 to 8, because it
+  closes the connection on a reply line over 64 MiB.
+- An entry is `{id, kind, model}`. Ids ascend across the server, and attn
+  remembers the last one it saw. `model` holds messages with a `role` of
+  `user`, `assistant` or `toolResult`, a `timestamp` in milliseconds and
+  `content`, a string or blocks of `{type: "text", text}` and
+  `{type: "toolCall", id, name, arguments}`. A tool result names its
+  `toolCallId` and `toolName`, and `isError` when the call failed. attn reads
+  the kinds `sigma.user`, `pi.assistant` and `pi.tool-result`. Entries written
+  before a session launched are history: they title a resumed session and
+  count toward nothing else.
+- `docs["pi.usage"].models` maps `provider/model` to
+  `{input, output, cacheRead, cacheWrite, cost: {total}}`, the conversation's
+  totals so far. `docs["pi.live"].compactions` lists the compactions running,
+  each with its `trigger`.
+- Attn finds edited markdown files in `Edit`, `Write`, `MultiEdit`,
+  `NotebookEdit`, `edit` and `write` calls, by `file_path`, `notebook_path` or
+  `path`, and in `apply_patch` calls. It finds a pull request in a `bash`,
+  `shell` or `exec_command` call that runs `gh pr create`, by the pull request
+  URL in its output.
+
 ## The wire, for any language
 
 Attn starts an installed plugin with these environment variables:
@@ -382,11 +427,11 @@ A shared-server registration adds `capabilities: {"server_binding": true}` and
 `server` to `driver.register`. Its keys are `protocol`, `executable`, optional
 `executable_env`, `serve_args`, `home_env`, `default_home`, `socket_name`,
 `initialize`, `caller_conversation_env`, `on_close`, `recovery`, and optional
-`caller_conversation_header` and `targets`. Their values match the SDK
-declaration above. The SDK translates camel case option names to these snake
-case wire names. `server_binding` and `message_delivery` are mutually
-exclusive. The server supplies models and state without `model_discovery` or
-`state_reporting`.
+`caller_conversation_header`, `targets` and `conversation_watch`. Their values
+match the SDK declaration above. The SDK translates camel case option names to
+these snake case wire names. `server_binding` and `message_delivery` are
+mutually exclusive. The server supplies models and state without
+`model_discovery` or `state_reporting`.
 
 Attn to plugin, each answered with a result or a JSON-RPC error:
 

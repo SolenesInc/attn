@@ -87,6 +87,42 @@ func TestTheActivityLineSaysWhatTheAgentDidSinceTheLastLineWhileTheUserWatches(t
 	}
 }
 
+func TestAnAppServerSessionsActivityLineSaysWhatItDidSinceTheLastLine(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newTitlingWorld(t, h, fakeagent.Claude)
+		app := w.App()
+		setSetting(t, app, "activity.enabled", "true")
+		setSetting(t, app, "activity.config", `{"agent":"claude"}`)
+		app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, DashboardVisible: true})
+		session, view, server := appServerSession(t, w, app, h, func(m *protocol.SpawnSessionMessage) {
+			m.Label = protocol.Ptr("checkout")
+		})
+		serverActivityTurn(t, w, app, view, server, session, "start on the tests", "Starting on the tests.")
+		awaitActivityTask(app, session, func(task protocol.Task) bool { return task.State == "done" })
+
+		serverActivityTurn(t, w, app, view, server, session, "run the frontend tests", "The frontend suite is running.")
+		task := w.HeadlessTask()
+		if !strings.Contains(task.Prompt, "The frontend suite is running.") || strings.Contains(task.Prompt, "Starting on the tests.") {
+			t.Errorf("the activity prompt %q, want only the output since the line was last seeded", task.Prompt)
+		}
+		task.Answer("Running the frontend test suite.")
+		awaitActivity(app, session, "Running the frontend test suite")
+	})
+}
+
+func serverActivityTurn(t *testing.T, w *world, app *testworld.Peer, view *fakeagent.Run, server *fakeagent.AppServer, session, prompt, reply string) {
+	t.Helper()
+	mark := len(app.Log())
+	app.TypeLine(session, prompt)
+	view.Prompted()
+	server.Prompted(view.ConversationID)
+	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	replied := time.Now()
+	server.Reply(view.ConversationID, reply+" <!-- attn:state=idle -->")
+	answerTurnVerdict(t, w, "DONE")
+	awaitIdleSince(t, app, session, replied)
+}
+
 func TestTurningActivityOffClearsEveryLineAndKeepsARunningOneFromLanding(t *testing.T) {
 	w, app, cli, session, agent := watchedActivityWorld(t)
 	activityTurn(t, w, app, agent, session, "run the frontend tests", "The frontend suite is running.")

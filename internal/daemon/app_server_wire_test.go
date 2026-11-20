@@ -373,13 +373,18 @@ func rejoinAppServer(t *testing.T, w *world, h fakeagent.Harness) {
 
 func registerSampleServerDriver(t *testing.T, w *world, app *testworld.Peer) {
 	t.Helper()
+	registerSampleServerDriverDeclaring(t, w, app, serverDriverDeclaration(w))
+}
+
+func registerSampleServerDriverDeclaring(t *testing.T, w *world, app *testworld.Peer, declaration map[string]any) {
+	t.Helper()
 	driver := dialDriver(t, w, "sample-server")
 	driver.agent = "sample-server"
 	driver.mu.Lock()
 	driver.serverExecutable = filepath.Join(w.Dir, "bin", "sample-server")
 	driver.mu.Unlock()
 	caps := map[string]bool{"server_binding": true, "resume": true, "yolo": true, "initial_prompt": true, "model_pin": true, "effort_pin": true, "launch_instructions": true}
-	if err := driver.call("driver.register", map[string]any{"agent": "sample-server", "capabilities": caps, "server": serverDriverDeclaration(w)}, &driver.registered); err != nil {
+	if err := driver.call("driver.register", map[string]any{"agent": "sample-server", "capabilities": caps, "server": declaration}, &driver.registered); err != nil {
 		t.Fatal(err)
 	}
 	awaitDriverAvailable(app, "sample-server")
@@ -407,4 +412,113 @@ func TestADelegationToAnAppServerHarnessConfirmsItsFirstTurnOnceTheServerReports
 			t.Errorf("the server was prompted %q, want the brief", prompted.Text)
 		}
 	})
+}
+
+func serverUsage(tokens int) map[string]any {
+	return map[string]any{"input": tokens - 20, "output": 20, "cacheRead": 0, "cacheWrite": 0, "totalTokens": tokens, "cost": map[string]any{"total": 0.01}}
+}
+
+func awaitServerFeed(app *testworld.Peer, session, conversation string, server *fakeagent.AppServer, tokens int) *protocol.SessionUsage {
+	app.T.Helper()
+	server.SetUsage(conversation, "openai/gpt-5.5", serverUsage(tokens))
+	return awaitUsageTokens(app, session, tokens)
+}
+
+func writeMarkdownCall(path string) fakeagent.ServerToolCall {
+	return fakeagent.ServerToolCall{Name: "write", Input: map[string]any{"path": path, "content": "# Plan\n"}, Output: "Successfully wrote to " + path}
+}
+
+func recentCount(app *testworld.Peer, path string) int {
+	app.T.Helper()
+	for _, file := range recentFiles(app, 0, "") {
+		if file.Path == path {
+			return file.Count
+		}
+	}
+	return 0
+}
+
+func TestAHiddenAppServerSessionStillReportsItsRepliesAndPullRequests(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		session, view, server := appServerSession(t, w, app, h)
+		conversation := view.ConversationID
+		promptUntilWorking(app, session, view, server, "open the pull request")
+
+		launched := w.AppServers(h)
+		held := w.restartHoldingRevives()
+		defer held.Release()
+		app, cli := w.App(), w.Client()
+		rejoinAppServer(t, w, h)
+		server = w.AppServerAfter(h, launched)
+		server.ToolCall(conversation, fakeagent.ServerToolCall{Name: "bash", Input: map[string]any{"command": "gh pr create --fill"}, Output: shopPull(7) + "\n"})
+		server.Reply(conversation, "Opened the pull request.")
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool {
+			return s.State == protocol.SessionStateIdle && slices.Equal(pullNumbers(s), []int{7})
+		})
+		peek, err := cli.AgentPeek(session)
+		if err != nil || protocol.Deref(peek.LastAssistantMessage) != "Opened the pull request." {
+			t.Fatalf("peek at the hidden session = %q, %v, want its latest reply", protocol.Deref(peek.LastAssistantMessage), err)
+		}
+		read, err := cli.SessionTranscript(session, "")
+		if err != nil || len(read.Events) != 4 {
+			t.Fatalf("the hidden session's transcript = %+v, %v, want its prompt, tool call, result and reply", read.Events, err)
+		}
+	})
+}
+
+func TestAnAppServerFeedRecordsEachEntryOnceAcrossDaemonAndServerRestarts(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		session, view, server := appServerSession(t, w, app, h)
+		conversation, plan := view.ConversationID, markdownFile(t, w, "plan.md")
+		promptUntilWorking(app, session, view, server, "write the plan")
+		server.ToolCall(conversation, writeMarkdownCall(plan))
+		awaitServerFeed(app, session, conversation, server, 100)
+		if got := recentCount(app, plan); got != 1 {
+			t.Fatalf("plan.md after one edit counts %d, want 1", got)
+		}
+
+		launched := w.AppServers(h)
+		w.restart()
+		app = w.App()
+		rejoinAppServer(t, w, h)
+		server = w.AppServerAfter(h, launched)
+		w.Launched(session)
+		server.ToolCall(conversation, writeMarkdownCall(plan))
+		awaitServerFeed(app, session, conversation, server, 200)
+		if got := recentCount(app, plan); got != 2 {
+			t.Fatalf("plan.md after a daemon restart and a second edit counts %d, want 2", got)
+		}
+
+		launched = w.AppServers(h)
+		server.Crash()
+		server = w.AppServerAfter(h, launched)
+		server.ToolCall(conversation, writeMarkdownCall(plan))
+		awaitServerFeed(app, session, conversation, server, 300)
+		if got := recentCount(app, plan); got != 3 {
+			t.Fatalf("plan.md after a server restart and a third edit counts %d, want 3", got)
+		}
+	})
+}
+
+func TestAPluginServerThatDoesNotDeclareConversationWatchGetsNoFeed(t *testing.T) {
+	w := newWorld(t, fakeagent.SampleServer)
+	app := w.App()
+	declaration := serverDriverDeclaration(w)
+	delete(declaration, "conversation_watch")
+	registerSampleServerDriverDeclaring(t, w, app, declaration)
+	session := w.Spawn(app, fakeagent.SampleServer, w.Path("shop"))
+	view, server := w.Launched(session), w.AppServer(fakeagent.SampleServer)
+	promptUntilWorking(app, session, view, server, "hello")
+	server.Reply(view.ConversationID, "hi")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if watchers := server.Watchers(view.ConversationID); watchers != 0 {
+		t.Errorf("the undeclared server has %d conversation watches, want none", watchers)
+	}
+	if _, err := w.Client().SessionTranscript(session, ""); err == nil {
+		t.Error("the transcript of a session whose server answers no conversation/watch was readable, want it unavailable")
+	}
 }

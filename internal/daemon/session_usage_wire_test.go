@@ -46,6 +46,35 @@ func TestAResumedConversationCountsOnlyTheUsageAfterTheResume(t *testing.T) {
 	}
 }
 
+func TestAResumedAppServerConversationCountsOnlyTheUsageAfterTheResume(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		_, _, server := appServerSession(t, w, app, h)
+		server.StartedElsewhere("earlier-conversation", w.Path("shop"), "price the cart")
+		server.SetUsage("earlier-conversation", "openai/gpt-5.5", serverUsage(5000))
+
+		resumed, _, _ := w.RequestSpawn(app, h, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+			m.ResumeSessionID = protocol.Ptr("earlier-conversation")
+		})
+		if !resumed.Success {
+			t.Fatalf("resume the earlier conversation: %s", protocol.Deref(resumed.Error))
+		}
+		session := string(resumed.ID)
+		promptUntilWorking(app, session, w.Launched(session), server, "carry on")
+		server.SetUsage("earlier-conversation", "openai/gpt-5.5", serverUsage(5100))
+		awaitUsageTokens(app, session, 100)
+
+		launched := w.AppServers(h)
+		w.restart()
+		app = w.App()
+		rejoinAppServer(t, w, h)
+		server = w.AppServerAfter(h, launched)
+		w.Launched(session)
+		server.SetUsage("earlier-conversation", "openai/gpt-5.5", serverUsage(5150))
+		awaitUsageTokens(app, session, 150)
+	})
+}
 func TestAReplacedTranscriptFlagsTheUsageIncomplete(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()

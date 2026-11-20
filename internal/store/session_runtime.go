@@ -164,6 +164,8 @@ type SessionRuntimeRecords struct {
 	ConversationNativeID       string
 	ConversationTranscriptPath string
 	ServerCompletion           int64
+	ServerEntry                int64
+	ServerUsageBaseline        string
 }
 
 func (s *Store) SessionRuntimeRecords(id protocol.SessionID) SessionRuntimeRecords {
@@ -248,4 +250,61 @@ func (s *Store) PendingSessionConversations() map[protocol.SessionID]string {
 		pending[id] = chain
 	}
 	return pending
+}
+
+type ServerFeed struct {
+	Entry         int64
+	UsageBaseline string
+}
+
+func (s *Store) ServerFeed(id protocol.SessionID) ServerFeed {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		records := s.runtimeRecords[id]
+		return ServerFeed{Entry: records.ServerEntry, UsageBaseline: records.ServerUsageBaseline}
+	}
+	var feed ServerFeed
+	if err := s.db.QueryRow(`SELECT server_entry, server_usage_baseline FROM session_runtime WHERE session_id = ?`, id).Scan(&feed.Entry, &feed.UsageBaseline); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		log.Printf("[store] session %s server feed: %v", id, err)
+	}
+	return feed
+}
+
+func (s *Store) SaveServerFeedEntry(id protocol.SessionID, entry int64) {
+	s.saveServerFeedColumn(id, "server_entry", entry, func(records *SessionRuntimeRecords) { records.ServerEntry = entry })
+}
+
+func (s *Store) SaveServerUsageBaseline(id protocol.SessionID, baseline string) {
+	s.saveServerFeedColumn(id, "server_usage_baseline", baseline, func(records *SessionRuntimeRecords) { records.ServerUsageBaseline = baseline })
+}
+
+func (s *Store) saveServerFeedColumn(id protocol.SessionID, column string, value any, inMemory func(*SessionRuntimeRecords)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		if s.runtimeRecords == nil {
+			s.runtimeRecords = make(map[protocol.SessionID]SessionRuntimeRecords)
+		}
+		records := s.runtimeRecords[id]
+		inMemory(&records)
+		s.runtimeRecords[id] = records
+		return
+	}
+	if _, err := s.db.Exec(`INSERT INTO session_runtime(session_id, `+column+`, home_daemon_id) VALUES (?, ?, COALESCE((SELECT copied_from FROM sessions WHERE id = ?), '')) ON CONFLICT(session_id) DO UPDATE SET `+column+` = excluded.`+column, id, value, id); err != nil {
+		log.Printf("[store] save session %s %s: %v", id, column, err)
+	}
+}
+
+func (s *Store) ServerConversationSeen(conversation string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return false
+	}
+	var seen bool
+	if err := s.db.QueryRow(`SELECT EXISTS (SELECT 1 FROM sessions s JOIN session_runtime r ON r.session_id = s.id WHERE s.resume_session_id = ? AND r.server_entry > 0)`, conversation).Scan(&seen); err != nil {
+		log.Printf("[store] server conversation %s seen: %v", conversation, err)
+	}
+	return seen
 }

@@ -34,12 +34,26 @@ type serverConnection struct {
 	busy        map[string]string
 	ended       map[string]serverEnded
 	tools       *serverToolsRegistration
+	feeds       map[protocol.SessionID]*serverFeed
 }
 
 type serverToolsRegistration struct {
 	client *effectrpc.Client
 	drop   context.CancelFunc
 	live   bool
+}
+
+func (l *serverLink) serverVersion() string {
+	if l == nil {
+		return ""
+	}
+	p, err := l.connection()
+	if err != nil {
+		return ""
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.info.Version
 }
 
 func (l *serverLink) connection() (*serverConnection, error) {
@@ -196,6 +210,7 @@ func (p *serverConnection) hold(c *effectrpc.Client, info effectrpc.ServerInfo) 
 	p.ready = make(chan struct{})
 	p.readyClosed = false
 	p.mu.Unlock()
+	p.events.run(p.d, p.closeFeeds)
 	if !p.d.life.Go("appServerStatus", func() { p.watch(c) }) {
 		c.Close()
 	}
@@ -384,6 +399,7 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 			}
 			l.observeQuiet(id, l.unseen(id, last[conversation]))
 		}
+		p.openFeeds(c, nil, false)
 		return
 	}
 	if tree.Ended != nil && tree.Status != "idle" {
@@ -404,6 +420,9 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 			p.busy = make(map[string]string)
 		}
 		p.busy[tree.Conversation] = tree.Status
+	}
+	if tree.Status != "idle" {
+		p.openFeeds(c, map[string]bool{tree.Conversation: true}, true)
 	}
 	for id, l := range p.sessions() {
 		if p.d.linkConversation(id) != tree.Conversation {

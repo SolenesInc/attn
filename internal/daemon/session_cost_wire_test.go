@@ -152,3 +152,19 @@ func TestRootAndSubagentUsageGrowingInOneTickTellTheAppOnce(t *testing.T) {
 		}
 	})
 }
+
+func TestAnAppServerSessionsUsageAndCostComeFromItsServerAndCountOnce(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		session, view, server := appServerSession(t, w, app, h)
+		promptUntilWorking(app, session, view, server, "add a discount field")
+		usage := awaitServerFeed(app, session, view.ConversationID, server, 1200)
+		if len(usage.Models) != 1 || usage.Models[0].Purpose != "agent" || usage.CostUsd == nil {
+			t.Errorf("usage = %+v, want one priced agent row", usage)
+		}
+		if usage := awaitServerFeed(app, session, view.ConversationID, server, 1500); len(usage.Models) != 1 {
+			t.Errorf("usage after the server's total grew = %+v, want the one row replaced, not added to", usage)
+		}
+	})
+}

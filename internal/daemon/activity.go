@@ -90,7 +90,7 @@ func (d *Daemon) sessionActivityScanHandler(context.Context, *jobs.Job) (any, er
 		if d.unreachableSessionHost(session.ID) != "" {
 			continue
 		}
-		if !sessionGeneratesActivity(session) {
+		if !d.sessionGeneratesActivity(session) {
 			continue
 		}
 		stored := d.store.GetSessionActivity(session.ID)
@@ -146,7 +146,7 @@ func (d *Daemon) enqueueSessionActivity(sessionID protocol.SessionID) {
 		return
 	}
 	session := d.store.Get(sessionID)
-	if session == nil || !sessionGeneratesActivity(session) {
+	if session == nil || !d.sessionGeneratesActivity(session) {
 		return
 	}
 	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(sessionID))
@@ -165,12 +165,15 @@ func (d *Daemon) enqueueSessionActivity(sessionID protocol.SessionID) {
 	}
 }
 
-func sessionGeneratesActivity(session *protocol.Session) bool {
+func (d *Daemon) sessionGeneratesActivity(session *protocol.Session) bool {
 	if session == nil {
 		return false
 	}
 	if session.ParentSessionID != nil && protocol.TrimID(*session.ParentSessionID) != "" {
 		return false
+	}
+	if d.serverLinkFor(string(session.Agent)).watchesConversations() {
+		return true
 	}
 	driver := agentdriver.Get(session.Agent)
 	if driver == nil {
@@ -367,7 +370,7 @@ func (d *Daemon) runActivity(ctx context.Context, c command.Caller, a command.Ac
 		result.Error = protocol.Ptr(err.Error())
 	}
 	for _, session := range d.store.List("") {
-		if !sessionGeneratesActivity(session) {
+		if !d.sessionGeneratesActivity(session) {
 			continue
 		}
 		entry := protocol.ActivityStatusSession{ID: session.ID, Label: session.Label}

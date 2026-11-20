@@ -97,6 +97,27 @@ back. Attn uses what the server reports about how the conversation's last run
 ended. A session that was already waiting or idle keeps its state through the
 restart.
 
+## What Attn reads from the conversation
+
+Attn follows each open Sigma session's conversation on the server, so a session
+whose tile is closed, or whose TUI has not come back yet, still reports:
+
+- the session's title, from the first prompt you type, or for a conversation
+  started outside Attn, from its first prompt;
+- `attn session transcript` and the last reply in `attn agent peek`;
+- the activity line, and the agent's replies you can select to annotate;
+- usage and cost, from the totals Sigma keeps for each model, counting only
+  what the session spent after it resumed a conversation;
+- markdown files the agent writes or edits, in recent files, and the pull
+  requests its `gh pr create` calls open, on the session;
+- **working** while Sigma compacts the conversation.
+
+Attn picks up where it left off after an Attn or Sigma server restart, and
+counts nothing twice. Attn follows the session's own conversation, not those of
+its subagents, so the files and pull requests their tools make, and what they
+spend, do not reach the session. Sigma has no tool that sends you a file, so a Sigma agent sends no
+files to a tile.
+
 ## Messages
 
 Annotations, messages from other agents and inbox notifications reach the
@@ -117,7 +138,9 @@ delivery is one follow-up.
 Closing a session interrupts its conversation's run, subagents included, and
 closes the session into the ledger. Quitting the TUI with `^C` closes the
 session the same way, as quitting any other harness does. Resume the session
-from the Sessions ledger to open its conversation in a new tile.
+from the Sessions ledger to open its conversation in a new tile. If the server is
+running and no longer holds a conversation Attn has followed, Attn says so
+instead of offering a resume.
 
 An agent can compact its conversation just before it closes itself, as
 [Seeds on standby](delegation.md#seeds-on-standby) describes. Attn waits for

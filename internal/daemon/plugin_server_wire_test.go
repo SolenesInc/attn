@@ -20,6 +20,7 @@ func serverDriverDeclaration(w *world) map[string]any {
 		"serve_args": []string{"serve"}, "home_env": "SAMPLE_SERVER_HOME", "default_home": ".sample-server", "socket_name": "sample-server.sock",
 		"initialize":              map[string]any{"server": "sample-server", "protocol": map[string]int{"exact": 1}},
 		"caller_conversation_env": "SAMPLE_SERVER_ROOT_CONVERSATION", "on_close": "leave-running", "recovery": "numbered-completions", "targets": true,
+		"conversation_watch": true,
 	}
 }
 

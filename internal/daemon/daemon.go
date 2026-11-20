@@ -3647,16 +3647,9 @@ func (d *Daemon) handleFilesEdited(conn net.Conn, msg *protocol.FilesEditedMessa
 		d.sendOK(conn)
 		return
 	}
-	now := time.Now()
-	if monitor := d.sessionMonitor(sessionID); monitor != nil {
-		if !monitor.ReportEditedFiles(paths, now, d.awayFromHome(sessionID)) {
-			d.sendError(conn, "edited file monitor view was not applied")
-			return
-		}
-	} else {
-		for _, path := range paths {
-			d.store.RecordFileActivity(store.FileActivity{Path: path, Source: store.FileActivitySourceEdited, SessionID: sessionID, At: now})
-		}
+	if !d.recordEditedFiles(sessionID, paths) {
+		d.sendError(conn, "edited file monitor view was not applied")
+		return
 	}
 	d.sendOK(conn)
 }

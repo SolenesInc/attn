@@ -358,3 +358,49 @@ func TestAFailedTitleWarnsOnlyTheProfileThatOwnsTheSession(t *testing.T) {
 		}
 	})
 }
+
+func TestTheFirstPromptTheUserTypesTitlesAnAppServerSession(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newTitlingWorld(t, h, fakeagent.Claude)
+		app := w.App()
+		session, view, server := appServerSession(t, w, app, h)
+		promptUntilWorking(app, session, view, server, "the login form rejects valid passwords")
+		task := w.HeadlessTask()
+		if !strings.Contains(task.Prompt, "the login form rejects valid passwords") {
+			t.Fatalf("the title task asked %q, want it asked about the prompt the user typed into %s", task.Prompt, h)
+		}
+		task.Answer("Fix login flow")
+		awaitLabel(app, session, "Fix login flow")
+	})
+}
+
+func TestAnAppServerConversationStartedOutsideAttnIsTitledFromItsFirstPromptWhenResumed(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newTitlingWorld(t, h, fakeagent.Claude)
+		app := w.App()
+		_, _, server := appServerSession(t, w, app, h)
+		server.StartedElsewhere("outside-conversation", w.Path("shop"), "migrate the billing tables")
+		plan := markdownFile(t, w, "plan.md")
+		server.ToolCalls("outside-conversation", 150, writeMarkdownCall(plan))
+
+		resumed, _, _ := w.RequestSpawn(app, h, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+			m.ResumeSessionID = protocol.Ptr("outside-conversation")
+		})
+		if !resumed.Success {
+			t.Fatalf("resume the conversation started outside attn: %s", protocol.Deref(resumed.Error))
+		}
+		session := string(resumed.ID)
+		view := w.Launched(session)
+		promptUntilWorking(app, session, view, server, "carry on")
+		task := w.HeadlessTask()
+		if !strings.Contains(task.Prompt, "migrate the billing tables") {
+			t.Fatalf("the title task asked %q, want it asked about the conversation's first prompt", task.Prompt)
+		}
+		task.Answer("Billing table migration")
+		awaitLabel(app, session, "Billing table migration")
+		awaitServerFeed(app, session, "outside-conversation", server, 100)
+		if got := recentCount(app, plan); got != 0 {
+			t.Fatalf("plan.md, written 150 times before the session resumed the conversation, counts %d in recent files, want 0", got)
+		}
+	})
+}

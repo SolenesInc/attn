@@ -177,3 +177,24 @@ func TestAppReadsATerminalsScreenWithoutAttaching(t *testing.T) {
 		t.Errorf("read of an unknown terminal = %+v, want a failure that says why", result)
 	}
 }
+
+func TestAgentPeekShowsAnAppServerSessionsLatestReply(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app, cli := w.App(), w.Client()
+		session, view, server := appServerSession(t, w, app, h)
+		promptUntilWorking(app, session, view, server, "plan the discount field")
+		server.Reply(view.ConversationID, "first answer")
+		promptUntilWorking(app, session, view, server, "build it")
+		server.Reply(view.ConversationID, "latest answer")
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+		peek, err := cli.AgentPeek(session)
+		if err != nil {
+			t.Fatalf("peek: %v", err)
+		}
+		if last := protocol.Deref(peek.LastAssistantMessage); last != "latest answer" {
+			t.Errorf("last assistant message = %q, want the latest reply", last)
+		}
+	})
+}

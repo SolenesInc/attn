@@ -327,3 +327,20 @@ func TestAnAgentAttnCannotReadGetsRings(t *testing.T) {
 		}
 	})
 }
+
+func TestAnAppServerCompactionShowsTheSessionCompactingUntilItEnds(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		session, view, server := appServerSession(t, w, app, h)
+		promptUntilWorking(app, session, view, server, "look at the logs")
+		server.Reply(view.ConversationID, "Looked.")
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		server.Compacting(view.ConversationID, "auto")
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool {
+			return s.State == protocol.SessionStateWorking && protocol.Deref(s.StateReason) == "compacting"
+		})
+		server.Compacted(view.ConversationID, "auto")
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	})
+}

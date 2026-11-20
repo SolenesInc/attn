@@ -64,11 +64,11 @@ func newTranscriptWatcher(monitor *Monitor, agent protocol.SessionAgent, cwd str
 		stopCh:    make(chan struct{}),
 		doneCh:    make(chan struct{}),
 		status:    protocol.SessionMessageWindowStatusDiscovering,
-		window:    newAnnotatableWindow(),
+		window:    NewAnnotatableWindow(),
 	}
 }
 
-func newAnnotatableWindow() *transcript.AssistantWindow {
+func NewAnnotatableWindow() *transcript.AssistantWindow {
 	return transcript.NewAssistantWindow(transcript.AssistantWindowLimits{
 		MaxMessages:     AnnotatableWindowMessages,
 		MaxMessageChars: AnnotatableMessageMaxChars,
@@ -107,7 +107,7 @@ func (w *transcriptWatcher) resetSource(status protocol.SessionMessageWindowStat
 	w.status = status
 	w.detail = detail
 	w.transcriptPath = path
-	w.window = newAnnotatableWindow()
+	w.window = NewAnnotatableWindow()
 	if omittedPrefix {
 		w.window.MarkPrefixOmitted()
 	}

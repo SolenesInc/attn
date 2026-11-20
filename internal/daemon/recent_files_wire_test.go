@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -308,4 +309,22 @@ func paths(files []protocol.FileActivity) []string {
 		out = append(out, file.Path)
 	}
 	return out
+}
+
+func TestAMarkdownFileAnAppServerAgentEditsIsARecentFile(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		session, view, server := appServerSession(t, w, app, h)
+		plan := w.Path("shop", "docs", "plan.md")
+		writeMarkdownFile(t, plan)
+		promptUntilWorking(app, session, view, server, "write the plan")
+		server.ToolCall(view.ConversationID, writeMarkdownCall("docs/plan.md"))
+		server.ToolCall(view.ConversationID, writeMarkdownCall("main.go"))
+		awaitServerFeed(app, session, view.ConversationID, server, 100)
+		files := recentFiles(app, 0, "")
+		if got := paths(files); !slices.Equal(got, []string{plan}) || files[0].Source != "edited" || string(protocol.Deref(files[0].SessionID)) != session {
+			t.Fatalf("recent files = %+v, want the plan the agent wrote, edited by %s", files, session)
+		}
+	})
 }

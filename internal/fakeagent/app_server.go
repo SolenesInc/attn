@@ -275,6 +275,10 @@ type appServer struct {
 	offline     chan struct{}
 	mcp         map[string]mcpRegistration
 	mcpChanged  chan struct{}
+	transcripts map[string]*serverTranscript
+	nextEntry   int64
+	nextCall    int
+	watchers    []*serverWatcher
 }
 
 func runAppServer(cfg config, flavor appServerFlavor) int {
@@ -314,6 +318,7 @@ func runAppServer(cfg config, flavor appServerFlavor) int {
 		return 1
 	}
 	s.listener = listener
+	s.loadState()
 	report := launch{Role: flavor.role, Harness: flavor.harness, Pid: os.Getpid(), Argv: os.Args, Env: os.Environ()}
 	if err := control.call(context.Background(), methodLaunched, report, nil); err != nil {
 		return 1
@@ -366,11 +371,19 @@ func (s *appServer) serveConn(c *appServerConn) {
 		if f.ID == nil {
 			if f.Method == "@effect/rpc/Interrupt" {
 				s.interruptRegistration(c, f.Params)
+				var interrupted struct {
+					RequestID uint64 `json:"requestId"`
+				}
+				if json.Unmarshal(f.Params, &interrupted) == nil {
+					s.mu.Lock()
+					s.unwatchLocked(c, &interrupted.RequestID)
+					s.mu.Unlock()
+				}
 			}
 			continue
 		}
 		result, failure := s.handle(c, *f.ID, f.Method, f.Params)
-		if failure == replyLost || (f.Method == "status/watch" && failure == "") {
+		if failure == replyLost || ((f.Method == "status/watch" || f.Method == "conversation/watch") && failure == "") {
 			continue
 		}
 		reply := map[string]any{"jsonrpc": "2.0", "id": *f.ID, "result": result}
@@ -391,6 +404,7 @@ func (s *appServer) serveConn(c *appServerConn) {
 			s.mcpChangedLocked()
 		}
 	}
+	s.unwatchLocked(c, nil)
 	s.mu.Unlock()
 	s.idleSoon()
 }
@@ -457,6 +471,7 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 			conv = &p.ServerConversation
 			conv.Status, conv.requests = "idle", map[string]int{}
 			s.convs[p.ID] = conv
+			s.appendLocked(p.ID, serverEntry{Kind: "sigma.started", Data: map[string]any{"author": author}})
 		}
 		return conv, ""
 	case "conversation/list":
@@ -481,6 +496,7 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 			conv.submitted++
 			submission = conv.submitted
 			conv.requests[p.RequestID] = submission
+			s.appendLocked(p.Conversation, serverEntry{Kind: "sigma.user", Data: map[string]any{"author": author, "requestId": p.RequestID}, Model: []json.RawMessage{message("user", map[string]any{"content": p.Text})}})
 		}
 		if lost {
 			conv.losesSubmit = false
@@ -541,6 +557,20 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		return nil, s.end(p.Conversation, map[string]any{"outcome": "answered", "said": p.Text})
 	case "mcp/register":
 		return s.register(c, id, raw)
+	case "conversation/watch":
+		var watch struct {
+			Window struct {
+				From int64 `json:"from"`
+			} `json:"window"`
+		}
+		_ = json.Unmarshal(raw, &watch)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return nil, s.watchLocked(c, id, p.Conversation, watch.Window.From)
+	case "conversation/entries":
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.entriesLocked(raw)
 	case "status/watch":
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -585,6 +615,12 @@ func (s *appServer) end(conversation string, ended map[string]any) string {
 	if conv == nil {
 		return "NoSuchConversation"
 	}
+	runEnd := map[string]any{"outcome": ended["outcome"]}
+	if said, answered := ended["said"].(string); answered {
+		s.appendLocked(conversation, serverEntry{Kind: "pi.assistant", Model: []json.RawMessage{message("assistant", map[string]any{"content": []any{map[string]any{"type": "text", "text": said}}})}})
+		runEnd["answer"] = s.nextEntry
+	}
+	s.appendLocked(conversation, serverEntry{Kind: "sigma.run_end", Data: runEnd})
 	s.statusLocked(conv, "idle", s.endedLocked(conv, ended))
 	if s.offline != nil {
 		close(s.offline)
@@ -629,6 +665,9 @@ func (s *appServer) interruptsOf(conversation string) chan struct{} {
 }
 
 func (s *appServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (any, error) {
+	if result, err, handled := s.handleTranscriptKit(method, raw); handled {
+		return result, err
+	}
 	var p serverThreadParams
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, err
@@ -722,18 +761,25 @@ type AppServer struct {
 
 func (k *Kit) AppServer(h Harness) *AppServer {
 	k.t.Helper()
+	return k.AppServerAfter(h, 0)
+}
+
+func (k *Kit) AppServerAfter(h Harness, launched int) *AppServer {
+	k.t.Helper()
 	flavor := appServerFlavors[h]
 	deadline := time.After(HangGuard)
 	for {
 		k.mu.Lock()
 		var found *fake
+		count := 0
 		for _, f := range k.fakes {
 			if f.Role == flavor.role {
 				found = f
+				count++
 			}
 		}
 		k.mu.Unlock()
-		if found != nil {
+		if found != nil && count > launched {
 			return &AppServer{t: k.t, flavor: flavor, fake: found}
 		}
 		select {

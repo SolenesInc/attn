@@ -23,6 +23,7 @@ type ServerDeclaration struct {
 	Recovery                 string          `json:"recovery"`
 	Targets                  bool            `json:"targets,omitempty"`
 	SigmaWire                bool            `json:"-"`
+	ConversationWatch        bool            `json:"conversation_watch,omitempty"`
 }
 
 type ServerHandshake struct {

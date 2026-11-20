@@ -4,8 +4,9 @@ How Sigma behaves where attn meets it. The rules for adding a claim are in
 [Harness behavior](../harnesses.md).
 
 Sigma was named Nisse until 2026-11-14. Read in the source at SolenesInc/sigma
-6fb87ec, the entries on authors, instructions and skills at 72006f8, and those
-on steering and compaction at a903aa0.
+6fb87ec, the entries on authors, instructions and skills at 72006f8, and the
+entries on steering, compaction, watching, entries, tools, forks and tasks at
+a903aa0, where a probe on 2026-11-20 checked forks, tasks and an idle watch.
 
 - One server per Sigma home holds every conversation. Clients reach the server
   over `SIGMA_HOME/sigma.sock`, and the home defaults to `~/.sigma`.
@@ -72,3 +73,34 @@ on steering and compaction at a903aa0.
   provider, the second prompt read the nonce turn back after every gap tried,
   up to 75 minutes. So a Sigma crew member's cache lasts at least an hour on
   either provider, and the crew's default of 3600 s fits it.
+- `conversation/watch` streams a view of the newest entries and the
+  conversation's docs, then each change as ops on that view. Past `max`
+  entries, twice `min` and 100 by default, the window drops its oldest down to
+  `min` and sets `before`. A slow reader gets the ops folded, or the whole
+  view again. With `window.from`, the view starts at that entry when at most
+  `max` entries follow it. A watch sends nothing while the conversation is
+  idle (probe).
+- Entry ids ascend across the server, not within one conversation.
+  `conversation/entries` pages a conversation's entries in either order.
+- A prompt is a `sigma.user` entry, whose data names its author. A reply or a
+  tool call is a `pi.assistant` entry, and a tool's output a `pi.tool-result`
+  entry. `pi.usage` holds each model's token and cost totals, and `pi.live`
+  the compactions running.
+- A subagent is a conversation of its own, with its own entries and its own
+  `pi.usage`, which counts only that conversation's spend; the parent gets a
+  `sigma.subagent` entry pointing at it, and `conversation/list` gives each
+  subagent's `lineage` (`parent`, `root`) (`packages/kernel/docs/spec.md`,
+  `packages/protocol/src/index.ts`).
+- A conversation's `title` in `conversation/list` is a subagent's title, or
+  else the first line of the conversation's first prompt.
+- Sigma's own tools are `read`, `write` and `edit`, which take a `path`,
+  `apply_patch`, which takes a `patch` in Codex's format, `bash`, `grep`,
+  `glob` and tool search (`packages/tools/src`). Sigma has no tool that sends
+  the user a file.
+- `/fork` in the TUI starts a new conversation that inherits the entries up to
+  a point. The original conversation's watch gets nothing. The fork's first
+  entry is `sigma.forked`, naming the client's `SIGMA_AUTHOR_ID`, and
+  `conversation/list` gives the fork's `fork.of` (probe).
+- `tasks/watch` shows only `claude.run` tasks, from pending to running to gone
+  at the run's end. Sigma sleeps only for a retry's backoff or a deferred poll
+  inside a run, so no task outlives a run (probe, `packages/harness/src/live.ts`).
