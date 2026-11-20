@@ -39,9 +39,10 @@ Preconditions:
 
 Recipes:
 
-- **The spare.** Within a few seconds of pairing, with the app open, `ps -ax -o pid=,ppid=,stat=,time=,command=` shows a `claude --print --plugin-dir <its scratch dir>/claude-mod ... --disallowedTools * ... --input-format stream-json` under the daemon, with no `--model` and no `--system-prompt`. Its state is `T`, stopped, and its CPU time does not grow.
+- **The spare.** Within a few seconds of pairing, with the app open, `ps -ax -o pid=,ppid=,stat=,time=,command=` shows a `claude --print ... --disallowedTools * ... --input-format stream-json` under the daemon, with no `--model` and no `--system-prompt`. Its state is `T`, stopped, and its CPU time does not grow. With `ANTHROPIC_API_KEY` in the env file it runs with `--bare` and stops the same way.
 - **A call on the defaults.** `{ echo "$TOKEN"; echo '{"purpose":"drive","system":"Answer with one word.","input":"What color is a clear daytime sky?","limit_ms":60000}'; } | ./attn model call --token-stdin` prints `{"harness":"claude","model":"sonnet","model_ms":<n>,"text":"Blue"}` and exits 0. `grep 'model call: sender' ~/.attn-<name>/daemon.log | tail -1` shows `spare=true` and none of the call's text. A new spare is running.
-- **Codex.** Add `"harness":"codex","tier":"light"`: the line names `codex` and `gpt-6-luna` and has no `model_ms`. The log shows `spare=false`, and the claude spare keeps running.
+- **Codex.** Add `"harness":"codex","tier":"light"`: the line names `codex` and `gpt-6-luna` and has no `model_ms`. The log shows `spare=false`, and the claude spare keeps running. While it runs, `ps` shows `codex exec ... -c instructions="Answer with one word." ... -` with no input in its arguments.
+- **A large input.** An `input` of 1 MiB (`python3 -c 'print("x"*1048576)'`) answers on Claude and on Codex. On Codex one character more fails with `headless agent input is longer than the harness accepts`.
 - **Settings.** `./attn settings set model_calls.agent codex` ends the spare (`model call spare: ending the claude spare: codex cannot start ahead`). With `model_calls.model light`, a call naming nothing answers from codex's light model. Set both back to empty: a spare starts again.
 - **Limit.** `"system":"Write a 2000-word essay.","limit_ms":1500` prints `{"error":"the model did not answer within 1.5s","harness":"claude","limit_ms":1500,"model":"sonnet"}` and exits 1; no claude is left running for it.
 - **Refusals.** `"tier":"light","model":"opus"` gives `model call: name a tier or a model, not both`; `"harness":"gemini"` gives `model call: no harness named "gemini" is installed; installed: claude, codex`.
@@ -53,8 +54,9 @@ Recipes:
 
 - **Linux**: the daemon and CLI run there the same way; pairing still needs the Tauri app.
 - **Outposts**: model calls run on the home, where the sender is paired; an outpost's harnesses do not answer them.
-- **Performance and idle cost**: the spare holds about 200 to 300 MB and uses no CPU while it waits: attn's Claude mod reports the session started, and attn stops the spare with SIGSTOP until a call takes it. It ends 4 hours after the last presence report or call, when the last sender is unpaired, when headless tasks go off, or when the default harness cannot start ahead.
-- **Harnesses**: Claude answers from the spare; Codex answers cold through `codex exec`. Plugin harnesses do not answer model calls yet.
+- **Performance and idle cost**: the spare holds about 200 to 300 MB and uses no CPU while it waits: once Claude answers attn's `mcp_status` request, attn stops the spare with SIGSTOP until a call takes it, with or without `--bare`. It ends 4 hours after the last presence report or call, when the last sender is unpaired, when headless tasks go off, or when the default harness cannot start ahead.
+- **Harnesses**: Claude answers from the spare; Codex answers cold through `codex exec`, which still declares its computation-only `exec` and `wait` tools (`docs/internal/harnesses/codex.md`, Headless runs). Plugin harnesses do not answer model calls yet.
+- **Sign-ins**: with an API key or a cloud provider, Claude runs with `--bare`, which loads no plugins; the spare does not depend on them.
 
 ## Tests
 
@@ -64,7 +66,7 @@ Recipes:
 
 - The spare starts only after the app reports the user present, or after a call. Right after a daemon restart there is none until then; the first call runs cold.
 - `ATTN_HEADLESS_TASKS` in the daemon's environment beats the `headless_tasks.enabled` setting, so turn tasks off in the env file, not with `attn settings set`.
-- A change to `internal/claudemod/mod` reaches the spare too: each spare runs a copy of the mod from its scratch directory, with `ATTN_MODEL_CALL_SPARE_STARTED` set, so the mod only reports the start and never polls attn.
+- A cold call's input goes to the harness on stdin, so `ps` never shows it. The instructions are still arguments.
 - `tokens_in` counts cached input too, as Claude reports it in `usage`.
 - `attn model log` outside a session with two profiles needs `--profile`, as `attn send senders` does.
 - Working but wrong: a caller's text in the daemon log or the model log, or a spare that holds a second call's conversation. Each spare answers once and exits.

@@ -296,26 +296,32 @@ sign-in and synthetic text, 2026-11-19 (plot `s-jhntry`, F2 to F5):
   0.73 s of CPU over 3 idle minutes, and 0.19 s with
   `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, which attn sets on the spare.
   Under attn, the spare used 1.6 to 1.9 s over 10 idle minutes either way.
-- A mod loaded with `--plugin-dir` runs its `session.start` hook 0.4 to 1.3 s
-  after the process starts, before any input arrives (2.1.329). Claude keeps
-  working for a few seconds after that: one spare used another 0.4 s of CPU in
-  the next 5 s. In a worker-hosted module `$.env.get` returns a promise; a
-  `$.fs.write` given the promise as its path throws "arguments are not plain
-  data". `$.fs.write` to a FIFO writes into it and leaves the FIFO in place.
-- A spare stopped with SIGSTOP from `session.start` uses no CPU: 0.00 s over
-  30 s, 60 s and 2 minutes. After SIGCONT it answered with 50 to 177 ms beyond
-  the model's time over 3 calls, against 35 to 76 ms for one never stopped.
-  attn's mod writes `started` to the FIFO that `ATTN_MODEL_CALL_SPARE_STARTED`
-  names, and attn stops the spare's process group until a call takes it.
-  Through `attn model call` (seed `s-jwy81g`, C2), 10 calls on a stopped spare
-  took a median of 190 ms beyond the model's time (109 to 365 ms), and the
-  spare used 0.00 s of CPU over 10 idle minutes. When its daemon was killed
-  with SIGKILL, the stopped spare was gone within 200 ms: its process group
-  is orphaned with a stopped member, so the kernel sends SIGHUP and SIGCONT.
+- Before its first input the process writes nothing on stdout, with or
+  without `--bare`. It answers a `control_request` with `subtype: mcp_status`
+  once its session has started: 24 ms after a mod's `session.start` hook ran
+  (1.3 s after launch) without `--bare`, and 0.6 to 1.1 s after launch under
+  `--bare`, where Claude loads no plugins and a mod's hooks never run.
+  `get_settings` is answered earlier, before `session.start`. The probe leaves
+  the call unchanged: with and without it, the model request carried the same
+  `system` and no tools (2.1.329, a fake API behind a recording proxy,
+  2026-11-20, seed `s-63n4ng`). attn writes `mcp_status` as the spare starts
+  and stops the spare's process group with SIGSTOP when the answer arrives.
+- A stopped spare uses no CPU. Through `agent.StartSpare` on 2.1.329, it used
+  0 clock ticks over 10 idle minutes, under `--bare` with
+  `ANTHROPIC_API_KEY` and under `--setting-sources ''`, and then answered the
+  call (seed `s-63n4ng`, C14). Stopped from a mod's `session.start` instead,
+  a spare answered after SIGCONT with 50 to 177 ms beyond the model's time
+  over 3 calls, against 35 to 76 ms for one never stopped. When its daemon
+  was killed with SIGKILL, the stopped spare was gone within 200 ms: its
+  process group is orphaned with a stopped member, so the kernel sends SIGHUP
+  and SIGCONT.
+- In a worker-hosted mod module `$.env.get` returns a promise; a `$.fs.write`
+  given the promise as its path throws "arguments are not plain data".
+  `$.fs.write` to a FIFO writes into it and leaves the FIFO in place.
 - A spare still answers after 2 hours idle (2.1.329, seed `s-jwy81g`). Left
   running, one took its instructions and model and answered in 1,241 ms,
-  1,121 ms of it the model's, having used 15.6 s of CPU in those 2 hours. Stopped with
-  SIGSTOP from `session.start`, one used 0.00 s of CPU in 2 hours and, after
+  1,121 ms of it the model's, having used 15.6 s of CPU in those 2 hours.
+  Stopped with SIGSTOP from `session.start`, one used 0.00 s of CPU in 2 hours and, after
   SIGCONT, answered with 52 ms beyond the model's time.
 - A process started with no model and no instructions takes both afterwards:
   a `control_request` with `subtype: initialize` and `systemPrompt`, then one
@@ -333,6 +339,10 @@ sign-in and synthetic text, 2026-11-19 (plot `s-jhntry`, F2 to F5):
 - `--disallowedTools '*'` keeps a call to 661 input tokens. `--allowedTools`
   adds about 19,300 tokens of tool definitions to every call. A `jsonSchema`
   on `initialize` returns `structured_output` only under `--allowedTools`.
+
+A cold call runs `claude --print` with no prompt argument, and Claude reads the
+prompt from stdin. On 2.1.329 a 1,048,576-byte input reached the model request
+whole as the user message, with and without `--bare` (seed `s-63n4ng`).
 
 Probed on 2.1.329 with `--bare`, `ANTHROPIC_API_KEY` and a local fake API
 behind a recording proxy (`scripts/fakeclaudeapi`), 2026-11-19: both control

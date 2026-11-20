@@ -6,28 +6,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/headless"
 )
 
-const (
-	ClaudeSpareStartedEnv  = "ATTN_MODEL_CALL_SPARE_STARTED"
-	claudeSpareStartedLine = "started\n"
-	claudeSpareExitedLine  = "exited\n"
-)
+const claudeSpareReadyRequest = "attn-ready"
 
 var _ SpareStarter = (*Claude)(nil)
 
-func claudeSpareArgs(modDir string) []string {
-	args := []string{"--print", "--plugin-dir", modDir}
+func claudeSpareArgs() []string {
+	args := []string{"--print"}
 	args = append(args, claudeHeadlessIsolationArgs()...)
 	return append(args,
 		"--strict-mcp-config",
@@ -43,56 +36,40 @@ func claudeSpareArgs(modDir string) []string {
 }
 
 // StartSpare starts claude with no model, instructions or input; it waits on
-// stdin until Answer gives it all three (F2, F4 of seed s-jhntry). Once attn's
-// mod reports the session started, the spare is stopped until Answer.
+// stdin until Answer gives it all three (F2, F4 of seed s-jhntry). Claude
+// answers an mcp_status request once its session has started, with or without
+// --bare; the spare is then stopped until Answer.
 func (c *Claude) StartSpare(ctx context.Context, executable, workDir string) (Spare, error) {
 	if !headless.Enabled() {
 		return nil, headless.Refusal("claude spare")
 	}
-	modDir := filepath.Join(workDir, "claude-mod")
-	if err := claudemod.Install(modDir); err != nil {
-		return nil, fmt.Errorf("install attn's claude mod for the spare: %w", err)
-	}
-	startedPath := filepath.Join(workDir, "started")
-	if err := syscall.Mkfifo(startedPath, 0o600); err != nil {
-		return nil, fmt.Errorf("make the spare's started pipe: %w", err)
-	}
-	started, err := os.OpenFile(startedPath, os.O_RDWR, 0)
-	if err != nil {
-		return nil, fmt.Errorf("open the spare's started pipe: %w", err)
-	}
-	cmd := exec.Command(executable, claudeSpareArgs(modDir)...)
+	cmd := exec.Command(executable, claudeSpareArgs()...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Dir = workDir
-	cmd.Env = append(headlessEnvironment("claude"), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", ClaudeSpareStartedEnv+"="+startedPath)
+	cmd.Env = append(headlessEnvironment("claude"), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1")
 	var stderr boundedHeadlessOutput
 	cmd.Stderr = &stderr
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		started.Close()
 		return nil, err
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		started.Close()
 		return nil, err
 	}
 	if err := cmd.Start(); err != nil {
-		started.Close()
 		return nil, fmt.Errorf("start claude spare: %w", err)
 	}
-	spare := &claudeSpare{cmd: cmd, stdin: stdin, stdout: bufio.NewReader(stdout), stderr: &stderr, exited: make(chan struct{})}
+	spare := &claudeSpare{cmd: cmd, stdin: stdin, stdout: bufio.NewReader(stdout), stderr: &stderr, exited: make(chan struct{}), started: make(chan struct{})}
 	go func() {
 		_ = cmd.Wait()
 		close(spare.exited)
-		_, _ = started.WriteString(claudeSpareExitedLine)
 	}()
-	go func() {
-		defer started.Close()
-		if line, _ := bufio.NewReader(started).ReadString('\n'); line == claudeSpareStartedLine {
-			spare.stopUntilTaken()
-		}
-	}()
+	if err := spare.write(map[string]any{"type": "control_request", "request_id": claudeSpareReadyRequest, "request": map[string]any{"subtype": "mcp_status"}}); err != nil {
+		spare.Close()
+		return nil, fmt.Errorf("ask the claude spare whether it started: %w", err)
+	}
+	go spare.stopOnceStarted()
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -104,17 +81,25 @@ func (c *Claude) StartSpare(ctx context.Context, executable, workDir string) (Sp
 }
 
 type claudeSpare struct {
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	stdout *bufio.Reader
-	stderr *boundedHeadlessOutput
-	exited chan struct{}
-	used   sync.Once
-	closed sync.Once
+	cmd     *exec.Cmd
+	stdin   io.WriteCloser
+	stdout  *bufio.Reader
+	stderr  *boundedHeadlessOutput
+	exited  chan struct{}
+	started chan struct{}
+	used    sync.Once
+	closed  sync.Once
 
 	mu      sync.Mutex
 	taken   bool
 	stopped bool
+}
+
+func (s *claudeSpare) stopOnceStarted() {
+	defer close(s.started)
+	if s.awaitControlSuccess(context.Background()) == nil {
+		s.stopUntilTaken()
+	}
 }
 
 func (s *claudeSpare) stopUntilTaken() {
@@ -174,6 +159,7 @@ func (s *claudeSpare) Answer(ctx context.Context, request ModelCallRequest) (Mod
 func (s *claudeSpare) answer(ctx context.Context, request ModelCallRequest) (ModelCallResult, error) {
 	stop := context.AfterFunc(ctx, func() { _ = syscall.Kill(-s.cmd.Process.Pid, syscall.SIGKILL) })
 	defer stop()
+	<-s.started
 	controls := []claudeControlRequest{
 		{ID: "attn-instructions", Request: map[string]any{"subtype": "initialize", "systemPrompt": request.SystemPrompt}},
 	}
