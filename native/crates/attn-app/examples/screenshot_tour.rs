@@ -3181,6 +3181,14 @@ fn review_keys(dark: bool) {
 /// The review shown alone on its desktop, bound to agent a's session, beside a second open
 /// document, as the Tauri audit shot it: its tabs over the tile, its header and its brief.
 fn review_alone(dark: bool) -> World {
+    let mut world = review_beside_agent(dark);
+    world.gesture(|app| app.click(Target::key("tile.m.focus")));
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    world
+}
+
+/// The review in its tile beside the agent it reviews for, as a desktop first shows it.
+fn review_beside_agent(dark: bool) -> World {
     let mut bound = document_tile("m", "/repo/review.md");
     bound["tile_session_id"] = json!("s0");
     let tiles = row(vec![bound, document_tile("n", "/repo/notes.md")]);
@@ -3193,9 +3201,13 @@ fn review_alone(dark: bool) -> World {
     let mut world = start(daemon);
     deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
     deliver_to(&mut world, "n", "/repo/notes.md", "# Notes\n", None);
-    world.gesture(|app| app.click(Target::key("tile.m.focus")));
-    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
     world
+}
+
+fn review_beside(dark: bool) {
+    let mut world = review_beside_agent(dark);
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    snap(&mut world, "review-beside", dark);
 }
 
 fn review_focused(dark: bool) {
@@ -5320,6 +5332,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("review_file", || review_file(dark));
         scene("review_focused", || review_focused(dark));
         scene("review_walkthrough", || review_walkthrough(dark));
+        scene("review_beside", || review_beside(dark));
         scene("review_search", || review_search(dark));
         scene("review_send_sheet", || review_send_sheet(dark));
         scene("ledger_seeded", || ledger_seeded(dark));
