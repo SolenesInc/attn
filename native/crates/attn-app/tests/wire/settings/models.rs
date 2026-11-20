@@ -22,11 +22,17 @@ fn on_models(settings: &[(&str, &str)], listed: Vec<Harness>) -> (World, Setting
     (world, stored)
 }
 
-fn region(world: &World, name: &str) -> bool {
+/// The page has a part for the harness named `name`.
+fn has_part(world: &World, name: &str) -> bool {
     world
         .screen()
-        .find(Target::role("region").name(format!("{name} models")))
-        .is_some()
+        .all(Target::role("group").name(name))
+        .iter()
+        .any(|n| {
+            n.key
+                .as_deref()
+                .is_some_and(|k| k.starts_with("settings.models."))
+        })
 }
 
 fn row(harness: &str, model: &str) -> String {
@@ -103,10 +109,10 @@ fn shows_reported_order_flags_untiered_models_and_names_live_light_and_deep_defa
             "Tier for New model",
         ]
     );
-    assert_eq!(light_default(&world), "Light default → gpt-6-luna");
+    assert_eq!(light_default(&world), "Light default gpt-6-luna");
     assert_eq!(
         said(&world, "settings.models.codex.deep-default"),
-        "Deep default → gpt-6.1-sol"
+        "Deep default gpt-6.1-sol"
     );
     assert_eq!(
         said(&world, &format!("{}.tier", row("codex", "new-model"))),
@@ -132,7 +138,7 @@ fn a_tier_updates_the_mapping_and_the_live_default_and_reset_returns_to_the_ship
             r#"[{"harness":"codex","provider":"","model":"gpt-6-luna","tier":"standard"}]"#
         )
     );
-    assert_eq!(light_default(&world), "Light default → gpt-5.6-luna");
+    assert_eq!(light_default(&world), "Light default gpt-5.6-luna");
     assert_eq!(
         said(&world, &format!("{}.detail", row("codex", "gpt-6-luna"))),
         "Your tier · attn: light"
@@ -146,7 +152,7 @@ fn a_tier_updates_the_mapping_and_the_live_default_and_reset_returns_to_the_ship
     click(&mut world, &reset);
     world.settle();
     assert_eq!(last_write(&world), overrides_written("[]"));
-    assert_eq!(light_default(&world), "Light default → gpt-6-luna");
+    assert_eq!(light_default(&world), "Light default gpt-6-luna");
     rest(&mut world);
 }
 
@@ -282,7 +288,7 @@ fn a_new_executable_rediscovers_the_harness_models() {
     });
     change_settings(&mut world, &[("codex_executable", "/another/codex")]);
     assert_eq!(codex(&world), before + 1);
-    assert_eq!(light_default(&world), "Light default → Replacement Luna");
+    assert_eq!(light_default(&world), "Light default Replacement Luna");
     assert!(
         world
             .screen()
@@ -309,7 +315,7 @@ fn a_driver_registering_on_a_connected_plugin_joins_the_harness_list() {
             ("new-driver_cap_model_pin", "true"),
         ],
     );
-    assert!(region(&world, "New driver"));
+    assert!(has_part(&world, "New driver"));
     assert_eq!(preference_reads(&world), reads + 1);
     change_settings(
         &mut world,
@@ -336,11 +342,11 @@ fn a_driver_losing_initial_prompt_support_leaves_the_harness_list() {
         ],
         harnesses(),
     );
-    assert!(region(&world, "Plug"));
+    assert!(has_part(&world, "Plug"));
     let listed: Vec<Harness> = harnesses().into_iter().filter(|h| h.id != "plug").collect();
     serve(&world.daemon, &stored, listed);
     change_settings(&mut world, &[("plug_cap_initial_prompt", "false")]);
-    assert!(!region(&world, "Plug"));
+    assert!(!has_part(&world, "Plug"));
     rest(&mut world);
 }
 
@@ -373,7 +379,7 @@ fn a_plugin_change_reads_the_harnesses_again_and_a_health_timestamp_does_not() {
     });
     serve(&world.daemon, &stored, listed);
     plugins_now(&mut world, vec![plugin.clone()]);
-    assert!(region(&world, "Demo"));
+    assert!(has_part(&world, "Demo"));
     let reads = preference_reads(&world);
     plugins_now(
         &mut world,
@@ -385,7 +391,7 @@ fn a_plugin_change_reads_the_harnesses_again_and_a_health_timestamp_does_not() {
     assert_eq!(preference_reads(&world), reads);
     serve(&world.daemon, &stored, harnesses());
     plugins_now(&mut world, Vec::new());
-    assert!(!region(&world, "Demo"));
+    assert!(!has_part(&world, "Demo"));
     assert_eq!(preference_reads(&world), reads + 1);
     rest(&mut world);
 }

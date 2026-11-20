@@ -3,7 +3,7 @@
 
 use attn_protocol::{Harness, HarnessModel};
 use attn_ui::Tokens;
-use attn_ui::blocks::{Block, Status};
+use attn_ui::blocks::{Actions, Block, Facts, Notice, Prose, Section, Status};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, Tx, col, row, text};
@@ -13,7 +13,7 @@ use super::catalogs::{self, TIER_OVERRIDES};
 use super::harnesses;
 use attn_ui::system::Button;
 
-use super::pages::{BLOCK_HEADING, CAPTION, block, blocks, warning};
+use super::pages::CAPTION;
 use super::route::{TierInfo, TierOverride, tier_label, tier_overrides};
 use crate::State;
 
@@ -309,84 +309,65 @@ fn default_name(
         .unwrap_or_else(|| format!("none found, {} decides", harness.name))
 }
 
-fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: &Tokens) -> El {
+fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: &Tokens) -> Block {
     let found = catalogs::of(state, &harness.id, harness.discovery);
     let models: &[HarnessModel] = found.catalog.map_or(&[], |c| c.models.as_slice());
     let key = format!("settings.models.{}", harness.id);
-    let mut heading = row().w_full().gap(12.0).items_start().child(
-        text(harness.name.clone())
-            .key(format!("{key}.heading"))
-            .role("heading")
-            .label(harness.name.clone())
-            .font(BLOCK_HEADING)
-            .color(t.text_primary)
-            .grow(1.0),
+    let mut section = Section::new(key.clone(), harness.name.clone()).push(
+        Facts::new(format!("{key}.defaults"))
+            .fact(
+                format!("{key}.light-default"),
+                "Light default",
+                default_name(harness, &found, models, "light"),
+            )
+            .fact(
+                format!("{key}.deep-default"),
+                "Deep default",
+                default_name(harness, &found, models, "deep"),
+            )
+            .build(t),
     );
     if harness.discovery {
         let id = harness.id.clone();
-        heading = heading.child(quiet(
-            format!("{key}.refresh"),
-            "Refresh",
-            "Refresh",
-            t,
-            move |state, tx| {
-                catalogs::discover(state, &id, true, tx);
-            },
-        ));
-    }
-    let default_line = |tier: &str, said: String| {
-        text(said.clone())
-            .key(format!("{key}.{tier}-default"))
-            .label(said)
-            .font(CAPTION)
-            .color(t.text_primary)
-    };
-    let defaults = row()
-        .w_full()
-        .flex_wrap()
-        .gap(20.0)
-        .py(12.0)
-        .child(default_line(
-            "light",
-            format!(
-                "Light default → {}",
-                default_name(harness, &found, models, "light")
-            ),
-        ))
-        .child(default_line(
-            "deep",
-            format!(
-                "Deep default → {}",
-                default_name(harness, &found, models, "deep")
-            ),
-        ));
-    let mut body = vec![heading, defaults];
-    if let Some(error) = found.error {
-        body.push(warning(format!("{key}.error"), error.to_owned(), t));
-    }
-    if !harness.discovery {
-        body.push(caption(
-            format!("{key}.no-catalog"),
-            "This harness does not report a model catalog.".into(),
-            t,
-        ));
-    }
-    if found.loading && found.catalog.is_none() {
-        body.push(
-            caption(
-                format!("{key}.discovering"),
-                "Discovering models…".into(),
-                t,
-            )
-            .role("status"),
+        section = section.push(
+            Actions::new(format!("{key}.actions"))
+                .push(quiet(
+                    format!("{key}.refresh"),
+                    "Refresh",
+                    "Refresh",
+                    t,
+                    move |state, tx| {
+                        catalogs::discover(state, &id, true, tx);
+                    },
+                ))
+                .build(),
         );
     }
-    body.push(
-        col()
-            .w_full()
-            .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-            .children(models.iter().map(|m| model_row(m, entries, t))),
-    );
+    if let Some(error) = found.error {
+        section = section.push(Notice::warn(format!("{key}.error"), error.to_owned()).build(t));
+    }
+    if !harness.discovery {
+        section = section.push(
+            Prose::hint(
+                format!("{key}.no-catalog"),
+                "This harness does not report a model catalog.",
+            )
+            .build(t),
+        );
+    }
+    if found.loading && found.catalog.is_none() {
+        section = section
+            .push(Status::new(format!("{key}.discovering"), "Discovering models…", true).build(t));
+    }
+    if !models.is_empty() {
+        section = section.push(Block::custom(
+            format!("{key}.models"),
+            col()
+                .w_full()
+                .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
+                .children(models.iter().map(|m| model_row(m, entries, t))),
+        ));
+    }
     let shows_orphans = !harness.discovery
         || found.catalog.is_some()
         || found.error.is_some()
@@ -407,32 +388,21 @@ fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: 
         } else {
             "No longer reported"
         };
-        body.push(
-            col()
-                .w_full()
-                .mt(18.0)
-                .child(
-                    text(title)
-                        .key(format!("{key}.orphans"))
-                        .role("heading")
-                        .label(title)
-                        .font(BLOCK_HEADING)
-                        .color(t.text_primary),
-                )
-                .children(orphans.into_iter().map(|e| orphan_row(e, t))),
+        section = section.push(
+            Section::new(format!("{key}.orphans"), title)
+                .push(Block::custom(
+                    format!("{key}.orphans.list"),
+                    col()
+                        .w_full()
+                        .children(orphans.into_iter().map(|e| orphan_row(e, t))),
+                ))
+                .build(t),
         );
     }
-    col()
-        .key(key)
-        .role("region")
-        .label(format!("{} models", harness.name))
-        .w_full()
-        .gap(12.0)
-        .pb(22.0)
-        .children(body)
+    section.build(t)
 }
 
-fn missing_harnesses(listed: &[Harness], entries: &[TierOverride], t: &Tokens) -> Option<El> {
+fn missing_harnesses(listed: &[Harness], entries: &[TierOverride], t: &Tokens) -> Option<Block> {
     let missing: Vec<&TierOverride> = entries
         .iter()
         .filter(|e| !listed.iter().any(|h| h.id == e.harness))
@@ -440,7 +410,7 @@ fn missing_harnesses(listed: &[Harness], entries: &[TierOverride], t: &Tokens) -
     if missing.is_empty() {
         return None;
     }
-    let rows = missing
+    let rows: Vec<El> = missing
         .into_iter()
         .map(|entry| {
             let said = format!(
@@ -473,13 +443,17 @@ fn missing_harnesses(listed: &[Harness], entries: &[TierOverride], t: &Tokens) -
                 ))
         })
         .collect();
-    Some(block(
-        "models-missing",
-        "Harnesses no longer reported",
-        "",
-        t,
-        rows,
-    ))
+    Some(
+        Section::new(
+            "settings.block.models-missing",
+            "Harnesses no longer reported",
+        )
+        .push(Block::custom(
+            "settings.models.missing",
+            col().w_full().children(rows),
+        ))
+        .build(t),
+    )
 }
 
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
@@ -490,15 +464,12 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     if harnesses::first_loading(state) {
         out.push(Status::new("settings.models.loading", "Loading harnesses…", true).build(t));
     }
-    let harness_blocks: Vec<El> = listed
-        .iter()
-        .map(|h| harness_block(state, h, &entries, t))
-        .chain(missing_harnesses(&listed, &entries, t))
-        .collect();
-    out.push(Block::custom(
-        "settings.models.harnesses",
-        col().w_full().children(blocks(harness_blocks, t)),
-    ));
+    out.extend(
+        listed
+            .iter()
+            .map(|h| harness_block(state, h, &entries, t))
+            .chain(missing_harnesses(&listed, &entries, t)),
+    );
     out
 }
 
