@@ -13,19 +13,19 @@ const LABEL: &str = "Open a markdown file";
 pub(crate) fn view(state: &State, t: &Tokens) -> El {
     let (rows, empty) = super::rows(state);
     let at = super::highlighted(&state.opener, &rows);
-    let field = TextInput::new(&state.opener.query)
-        .key(super::FIELD)
-        .plain()
-        .text_style(finder::FIELD_TEXT)
-        .height(finder::FIELD_TEXT.line_px())
-        .width(None)
-        .label(LABEL)
-        .placeholder("Open a markdown file…")
-        .active_descendant(at.map(|i| row_key(&rows[i])))
-        .on_edit(|state: &mut State| &mut state.opener.query)
-        .on_change(super::edited)
-        .on_key(super::on_key)
-        .build(attn_ui::kit(t));
+    let field = finder::field(
+        TextInput::new(&state.opener.query)
+            .key(super::FIELD)
+            .plain()
+            .width(None)
+            .label(LABEL)
+            .placeholder("Open a markdown file…")
+            .active_descendant(at.map(|i| row_key(&rows[i])))
+            .on_edit(|state: &mut State| &mut state.opener.query)
+            .on_change(super::edited)
+            .on_key(super::on_key),
+    )
+    .build(attn_ui::kit(t));
     let list = finder::list("opener.list")
         .label(LABEL)
         .children(
@@ -42,13 +42,14 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         .role("dialog")
         .label(LABEL)
         .modal_tx(true, super::close)
-        .max_h(finder::MAX_H)
+        .max_h(finder::FinderSize::Narrow.max_height())
         .shrink()
         .min_h(0.0);
     attn_ui::finder::layer(
         t,
         "opener",
         finder::panel(t, panel, finder::input_row(None, field, None), list, None),
+        finder::FinderSize::Narrow,
     )
 }
 

@@ -17,6 +17,7 @@ pub(crate) const fn style(kind: Type) -> TextStyle {
         Type::Tag => TextStyle::new(12.0, 600.0).mono().tracking(0.8).lh(14.0),
         Type::Mono => TextStyle::new(12.0, 400.0).mono(),
         Type::Control => TextStyle::new(12.0, 600.0),
+        Type::Compose => TextStyle::new(18.0, 400.0).lh(27.0),
     }
 }
 
@@ -137,6 +138,22 @@ pub(crate) fn inside_edge(e: El) -> El {
     e.padding(1.0)
 }
 
+/// `e` clipped to `radius` inside its 1-point edge, so what it holds never covers the edge.
+pub(crate) fn clip_inside_corner(e: El, radius: Radius) -> El {
+    e.clip_rounded(radius.pt() - 1.0)
+}
+
+/// `e` with a 1-point rule of `ink` along its top.
+pub(crate) fn rule_above(e: El, ink: rune::Color) -> El {
+    e.border_sides([1.0, 0.0, 0.0, 0.0], ink).border_layout()
+}
+
+/// `e` in `style`, for the text a caller outside the type roles still hands in, such as a
+/// glyph button's mark.
+pub(crate) fn styled(e: El, style: TextStyle) -> El {
+    e.font(style)
+}
+
 /// `e` with `points` of empty room after it, which its line keeps or breaks before.
 pub(crate) fn room_after(e: El, points: f32) -> El {
     e.mr(points)
@@ -172,4 +189,15 @@ pub(crate) fn fade_before_hover(e: El, fade: Space, reach: f32) -> El {
 
 pub(crate) fn rows(e: El, top: Space, bottom: Space) -> El {
     e.pt(top.pt()).pb(bottom.pt())
+}
+
+/// A style of [`crate::type_`], the styles views used before the type roles, which go once the
+/// last view takes its roles.
+pub(crate) const fn legacy(size: f32, weight: f32) -> TextStyle {
+    TextStyle::new(size, weight)
+}
+
+/// A free text input whose words are set as `kind`.
+pub(crate) fn text_input(edit: &rune::TextEdit, kind: Type) -> El {
+    rune::text_input(edit, style(kind))
 }

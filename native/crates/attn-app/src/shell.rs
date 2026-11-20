@@ -1,7 +1,8 @@
 use attn_client::Desktop;
 use attn_client::{Connection, Facts, Refusal};
+use attn_ui::dialog::Dialog;
 use attn_ui::type_;
-use attn_ui::{Dialog, DialogFrame, Tokens};
+use attn_ui::{DialogFrame, Tokens};
 use rune::tok::space;
 use rune::{Chord, Cx, El, Tx, col, el, row, text};
 use rune_kit::ScrollBar;

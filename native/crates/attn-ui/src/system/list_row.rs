@@ -57,6 +57,7 @@ pub struct ListRow {
     label: String,
     lead: Option<El>,
     title: Option<Title>,
+    cut_middle: bool,
     subtitle: Option<El>,
     subtitle_key: Option<String>,
     tags: Vec<El>,
@@ -93,6 +94,7 @@ impl ListRow {
             label: label.into(),
             lead: None,
             title: None,
+            cut_middle: false,
             subtitle: None,
             subtitle_key: None,
             tags: Vec::new(),
@@ -189,6 +191,13 @@ impl ListRow {
     /// The row's name, secondary until the row is current: a place rather than a thing.
     pub fn quiet_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(Title::Words(title.into(), true));
+        self
+    }
+
+    /// The title and subtitle, cut short, keep their start and their end, so names that differ
+    /// only at the end, such as two checkouts of one repository, stay apart.
+    pub fn cut_middle(mut self) -> Self {
+        self.cut_middle = true;
         self
     }
 
@@ -431,9 +440,12 @@ impl ListRow {
             (None, false) => (below, Color::TRANSPARENT),
         };
         let on_band = |e: El| row().h(band).items_center().child(e);
+        let cut_middle = self.cut_middle;
         let one_line = |e: El| {
             if wraps {
                 e.wrap().w_full()
+            } else if cut_middle {
+                e.single_line().truncate_middle().shrink()
             } else {
                 e.single_line().truncate().shrink()
             }

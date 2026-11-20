@@ -3,6 +3,8 @@
 
 use rune::{El, TextStyle, text};
 
+use crate::system::{Type, door};
+
 pub use rune::tok::type_::{BODY, LABEL, TITLE};
 
 /// A section's heading: rune's `SECTION` at attn's least text size, 12.
@@ -13,14 +15,14 @@ pub const SECTION: TextStyle = TextStyle {
 
 /// The Tauri app's small text, `font-size: var(--font-size-sm)`: what a surface says about
 /// itself, such as states, counts, ages and who did what. The native app draws it a point larger.
-pub const CAPTION: TextStyle = TextStyle::new(12.0, 400.0);
+pub const CAPTION: TextStyle = door::style(Type::Small);
 
 /// The Tauri app's small monospace text, `font-family: 'JetBrains Mono', …`: key hints, ids,
 /// paths, counts, ages and other values read as data rather than prose.
-pub const MONO_CAPTION: TextStyle = TextStyle::new(12.0, 400.0).mono();
+pub const MONO_CAPTION: TextStyle = door::style(Type::Mono);
 
 /// The Tauri app's 12px regular text: small buttons, hints and fields.
-pub const SMALL: TextStyle = TextStyle::new(12.0, 400.0);
+pub const SMALL: TextStyle = door::style(Type::Small);
 
 /// The Tauri app's uppercase monospace headings and labels, `text-transform: uppercase;
 /// letter-spacing: .04em–.16em`: section headings, kickers, field labels and badges.
@@ -34,11 +36,11 @@ pub const BOLD_CAPS: TextStyle = TextStyle {
 
 /// The Tauri app's small bordered tags and pills, such as a tile's kind and a settings page's
 /// state: bold uppercase monospace.
-pub const BADGE: TextStyle = TextStyle::new(12.0, 700.0).mono().tracking(0.6);
+pub const BADGE: TextStyle = door::legacy(12.0, 700.0).mono().tracking(0.6);
 
 /// The Tauri app's uppercase labels in the interface face, `text-transform: uppercase;
 /// letter-spacing: .04em–.1em` with no monospace: group labels and small titles.
-pub const SANS_CAPS: TextStyle = TextStyle::new(12.0, 400.0).tracking(0.9);
+pub const SANS_CAPS: TextStyle = door::legacy(12.0, 400.0).tracking(0.9);
 
 /// The title of a drawer or panel, as the Tauri app's drawer headers: uppercase monospace at
 /// medium weight, widely spaced.
@@ -51,7 +53,7 @@ pub const DRAWER_TITLE: TextStyle = TextStyle {
 /// `label` drawn uppercase in `style`, as CSS `text-transform: uppercase` draws it: the label
 /// it reads as stays `label`.
 pub fn upper(label: &str, style: TextStyle) -> El {
-    text(label.to_uppercase()).label(label).font(style)
+    door::styled(text(label.to_uppercase()).label(label), style)
 }
 
 /// `label` as one of the Tauri app's uppercase monospace headings, in [`CAPS`].

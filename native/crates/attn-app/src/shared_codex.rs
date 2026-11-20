@@ -10,9 +10,10 @@ use attn_protocol::{
     InstallCodexUpdateMessage, RestartSharedCodexMessage, SharedCodexBlocker, SharedCodexState,
 };
 use attn_ui::blocks::{Banner, BannerTone};
+use attn_ui::dialog::Dialog;
 use attn_ui::system::Button;
 use attn_ui::type_;
-use attn_ui::{Dialog, DialogFrame, Tokens};
+use attn_ui::{DialogFrame, Tokens};
 use rune::{Cx, El, TextStyle, Tx, col, text};
 use serde::{Deserialize, Serialize};
 

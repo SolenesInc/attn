@@ -9,11 +9,10 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use attn_protocol::SupportSnapshotMessage;
-use attn_ui::{Dialog, DialogFrame, Tokens, type_};
-use rune::tok::space;
-use rune::{El, FileDialogOptions, TextStyle, Tx, col, row, text};
-use rune_kit::ScrollBar;
-use rune_kit::{Button, ButtonVariant, Checkbox, ControlSize};
+use attn_ui::blocks::{Actions, Block, DialogSize, Notice, Prose, Section, Stack};
+use attn_ui::system::{Button, Check, Look, Size, Type, words};
+use attn_ui::{Dialog, Tokens};
+use rune::{El, FileDialogOptions, Tx};
 use serde_json::{Value, json};
 
 use crate::State;
@@ -362,7 +361,6 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let Some(draft) = &state.window.diagnostic_report else {
         return;
     };
-    let k = attn_ui::kit(t);
     let saving = draft.saving;
     let mut groups: Vec<(&str, &str, Vec<&Pane>)> = Vec::new();
     for pane in &draft.capture.panes {
@@ -371,189 +369,107 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
             None => groups.push((&pane.desktop_id, &pane.desktop_label, vec![pane])),
         }
     }
-    let output_heading = row()
-        .w_full()
-        .items_center()
-        .gap(space::S3)
-        .child(
-            col()
-                .grow(1.0)
-                .gap(space::S1)
-                .child(
-                    text("Recent terminal output")
-                        .font(HEADING)
-                        .color(t.text_primary),
+    let mut output = Section::new("diagnostic-report.output", "Recent terminal output")
+        .description("Optional. Output may contain private text or secrets.");
+    if groups.is_empty() {
+        output = output.push(
+            Prose::lead(
+                "diagnostic-report.empty",
+                "No mounted terminal panes are available.",
+            )
+            .quiet(true)
+            .build(t),
+        );
+    }
+    for (id, label, panes) in groups {
+        let checks = panes.into_iter().map(|pane| {
+            let id = pane.pane_id.clone();
+            let note = if pane.available {
+                pane.session_label.clone()
+            } else {
+                format!("{}, not currently mounted", pane.session_label)
+            };
+            El::from(
+                Check::new(
+                    format!("diagnostic-report.pane.{}", pane.pane_id),
+                    pane.title.clone(),
                 )
-                .child(
-                    text("Optional. Output may contain private text or secrets.")
-                        .font(SMALL_PRINT)
-                        .color(t.text_muted),
-                ),
-        )
-        .children((!draft.selected.is_empty()).then(|| {
-            Button::new("Clear")
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
-                .disabled(saving)
-                .on_press(|state: &mut State| {
-                    if let Some(draft) = &mut state.window.diagnostic_report {
-                        draft.selected.clear();
-                    }
-                })
-                .build(k)
-                .key("diagnostic-report.clear")
-        }));
-    let choices = if groups.is_empty() {
-        col().child(
-            text("No mounted terminal panes are available.")
-                .key("diagnostic-report.empty")
-                .font(SMALL_PRINT)
-                .color(t.text_muted),
-        )
-    } else {
-        col()
-            .gap(space::S3)
-            .children(groups.into_iter().map(|(id, label, panes)| {
-                col()
-                    .key(format!("diagnostic-report.desktop.{id}"))
-                    .role("group")
-                    .label(label.to_owned())
-                    .gap(space::S1)
-                    .child(
-                        text(label.to_owned())
-                            .font(type_::LABEL)
-                            .color(t.text_tertiary),
-                    )
-                    .children(panes.into_iter().map(|pane| {
-                        let id = pane.pane_id.clone();
-                        let description = if pane.available {
-                            pane.session_label.clone()
-                        } else {
-                            format!("{}, not currently mounted", pane.session_label)
-                        };
-                        Checkbox::new(draft.selected.contains(&pane.pane_id))
-                            .label(pane.title.clone())
-                            .description(description)
-                            .disabled(saving || !pane.available)
-                            .on_toggle(move |state: &mut State| toggle(state, &id))
-                            .build(k)
-                            .key(format!("diagnostic-report.pane.{}", pane.pane_id))
-                    }))
-            }))
-    };
-    let save_words = if saving { "Saving…" } else { "Save report" };
-    let footer = row()
-        .key("diagnostic-report.footer")
-        .w_full()
-        .gap(space::S2)
-        .pt(16.0)
-        .pb(20.0)
-        .px(INSET)
-        .justify_end()
-        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-        .border_layout()
-        .child(footer_button(
-            Button::new("Cancel")
-                .label_with(move |_, ink| text("Cancel").font(ACTION).color(ink))
-                .disabled(saving)
-                .on_press_tx(close)
-                .build(k)
-                .key("diagnostic-report.cancel")
-                .fill(t.bg_panel)
-                .border(1.0, t.border_hover),
-        ))
-        .child(footer_button(
-            Button::new(save_words)
-                .variant(ButtonVariant::Submit)
-                .label_with(move |_, ink| text(save_words).font(ACTION).color(ink))
-                .disabled(saving)
-                .on_press_tx(start_saving)
-                .build(k)
-                .key(SAVE)
-                .default_button(),
-        ));
-    let paragraph = |said: &str| {
-        text(said.to_owned())
-            .font(CALLOUT)
-            .color(t.text_tertiary)
-            .wrap()
-    };
-    let body = col()
-        .key("diagnostic-report.body")
-        .w_full()
-        .shrink()
-        .min_h(0.0)
-        .child(
-            col()
-                .key("diagnostic-report.included")
-                .mt(18.0)
-                .mx(INSET)
-                .px(16.0)
-                .py(14.0)
-                .gap(5.0)
-                .corners([3.0, 8.0, 8.0, 3.0])
-                .fill(attn_ui::colors::mix_srgb(t.bg_app, t.brand, 0.07))
-                .border_sides([0.0, 0.0, 0.0, 3.0], t.brand.alpha(0.65))
-                .border_layout()
-                .child(text("Included automatically").font(HEADING).color(t.text_primary))
-                .child(paragraph("App and daemon versions, session and pane metadata, shortened working directories, and the daemon's terminal health."))
-                .child(paragraph("Environment variables, credentials, clipboard data, raw prompt bodies, raw terminal bytes, logs, and error text stay out.")),
-        )
-        .child(
-            col()
-                .key("diagnostic-report.output")
+                .note(note)
+                .checked(draft.selected.contains(&pane.pane_id))
+                .disabled(saving || !pane.available)
+                .build(t, move |state: &mut State, _: &mut Tx| toggle(state, &id)),
+            )
+        });
+        output = output.push(Block::custom(
+            format!("diagnostic-report.desktop.{id}.block"),
+            Stack::tight()
+                .key(format!("diagnostic-report.desktop.{id}"))
+                .role("group")
+                .label(label.to_owned())
                 .w_full()
-                .shrink()
-                .min_h(0.0)
-                .scroll(rune::ScrollSpec {
-                    stick_bottom: false,
-                })
-                .pt(18.0)
-                .pb(8.0)
-                .px(INSET)
-                .gap(space::S3)
-                .child(output_heading)
-                .child(choices)
-                .scroll_bar_styled(attn_ui::scroll_bar(t)),
-        )
-        .children(draft.error.as_ref().map(|why| {
-            text(why.clone())
-                .key("diagnostic-report.error")
-                .role("alert")
-                .font(type_::BODY)
-                .color(t.error)
-                .wrap()
-                .mt(4.0)
-                .px(INSET)
-        }))
-        .child(footer);
-    Dialog::new(DIALOG, "Create diagnostic report", DialogFrame::report(t))
-        .subtitle("Save one file with the evidence needed to trace a stuck terminal.")
-        .width(620.0)
-        .max_height(760.0)
+                .child(words(label, Type::Label, t.text_tertiary))
+                .children(checks),
+        ));
+    }
+    if !draft.selected.is_empty() {
+        output = output.push(
+            Actions::new("diagnostic-report.included-actions")
+                .push(
+                    Button::new("Clear")
+                        .look(Look::Quiet)
+                        .size(Size::Compact)
+                        .disabled(saving)
+                        .on_press(|state: &mut State| {
+                            if let Some(draft) = &mut state.window.diagnostic_report {
+                                draft.selected.clear();
+                            }
+                        })
+                        .build(t)
+                        .key("diagnostic-report.clear"),
+                )
+                .build(),
+        );
+    }
+    let save = Button::new(if saving { "Saving…" } else { "Save report" })
+        .look(Look::Primary)
+        .disabled(saving)
+        .on_press_tx(start_saving)
+        .build(t)
+        .key(SAVE);
+    Dialog::new(DIALOG, "Create diagnostic report")
+        .close_button()
+        .lead("Save one file with the evidence needed to trace a stuck terminal.")
+        .size(DialogSize::Form)
         .click_outside(!saving)
         .on_close_tx(close)
-        .child(body)
+        .push(
+            Notice::info(
+                "diagnostic-report.included",
+                "Included automatically: app and daemon versions, session and pane metadata, \
+                 shortened working directories, and the daemon's terminal health. Environment \
+                 variables, credentials, clipboard data, raw prompt bodies, raw terminal bytes, \
+                 logs, and error text stay out.",
+            )
+            .build(t),
+        )
+        .push(output.build(t))
+        .push_all(
+            draft
+                .error
+                .as_ref()
+                .map(|why| Notice::error("diagnostic-report.error", why.clone()).build(t)),
+        )
+        .actions(
+            Actions::new("diagnostic-report.actions")
+                .then_end()
+                .push(
+                    Button::new("Cancel")
+                        .disabled(saving)
+                        .on_press_tx(close)
+                        .build(t)
+                        .key("diagnostic-report.cancel"),
+                )
+                .push(El::from(save).default_button()),
+        )
         .build(t, layers);
-}
-
-/// `.diagnostic-report-sheet`'s inset, which its header, callout, output and footer share.
-const INSET: f32 = 24.0;
-
-/// `.diagnostic-report-included strong`, `.diagnostic-report-output strong`.
-const HEADING: TextStyle = TextStyle::new(13.0, 600.0);
-
-/// `.diagnostic-report-included p`.
-const CALLOUT: TextStyle = TextStyle::new(12.0, 400.0).lh(18.6);
-
-/// `.diagnostic-report-output-heading span` and `.diagnostic-report-empty`, at the native app's
-/// least text size.
-const SMALL_PRINT: TextStyle = TextStyle::new(12.0, 400.0);
-
-/// `.diagnostic-report-actions button`'s label.
-const ACTION: TextStyle = TextStyle::new(12.0, 600.0);
-
-/// `.diagnostic-report-actions button`: at least 96 points wide and 32 high, 6 point corners.
-fn footer_button(button: El) -> El {
-    button.h(32.0).min_w(96.0).px(14.0).radius(6.0)
 }

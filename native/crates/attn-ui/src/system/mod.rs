@@ -1,9 +1,12 @@
 //! attn's design system: the spacing scale, the type roles, the corners and the controls every
 //! view shares. Only this crate can make a step of the scale, so a view cannot invent one.
 
+mod attachment;
 mod button;
+mod check;
 mod chip;
 mod choice;
+mod composer;
 mod control;
 mod disabled;
 mod disclosure;
@@ -19,6 +22,7 @@ mod icon_button;
 mod icon_size;
 pub(crate) mod layers;
 mod list_row;
+mod pager;
 mod press_area;
 mod radius;
 mod search_field;
@@ -31,9 +35,12 @@ mod tag;
 mod trigger;
 mod type_role;
 
+pub use attachment::{drop_overlay, file_chip, image_tile};
 pub use button::{Button, Look};
+pub use check::Check;
 pub use chip::{chip_button, count_badge, keycaps, keys_hint, number_chip, slot_badge};
 pub use choice::{Choice, checks, choices};
+pub use composer::composer;
 pub use control::Control;
 pub use disclosure::disclosure;
 pub use dot::{DotShape, DotSize, dot};
@@ -47,6 +54,7 @@ pub use icon_button::{IconButton, icon_button};
 pub use icon_size::{IconSize, glyph, icon};
 pub use layers::{hover_layer, pressed_layer};
 pub use list_row::{ListRow, Reveal};
+pub use pager::pager;
 pub use press_area::press_area;
 pub use radius::Radius;
 pub use search_field::search_field;

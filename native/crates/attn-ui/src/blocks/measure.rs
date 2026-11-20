@@ -13,6 +13,9 @@ pub(crate) const FIELD: f32 = READING + 2.0 * Size::Regular.inset().pt();
 /// take the whole line, however narrow.
 pub(crate) const COPY_FLOOR: f32 = 288.0;
 
+/// A dialog that asks one thing: its lead at the reading measure, inside the dialog's insets.
+pub(crate) const PROMPT: f32 = READING + 2.0 * crate::system::Space::S24.pt();
+
 /// The column a fact's name takes: the longest name, "Shared terminal host", measures 118 in
 /// `Small`.
 pub(crate) const FACT_LABEL: f32 = 128.0;

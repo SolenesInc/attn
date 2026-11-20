@@ -1563,7 +1563,7 @@ fn the_palette_caps_the_context_window_of_a_claude_agent_and_shows_the_daemons_r
     world.gesture(|app| app.type_text("lots"));
     press(&mut world, Key::Enter);
     assert_eq!(
-        text_of(&world, "context-cap.refused").as_deref(),
+        text_of(&world, "context-cap.field.error").as_deref(),
         Some("Enter a whole number of tokens, or leave blank for no cap")
     );
     assert!(
@@ -1576,7 +1576,7 @@ fn the_palette_caps_the_context_window_of_a_claude_agent_and_shows_the_daemons_r
     retype_field(&mut world, "context-cap.field", "500");
     press(&mut world, Key::Enter);
     assert_eq!(
-        text_of(&world, "context-cap.refused").as_deref(),
+        text_of(&world, "context-cap.field.error").as_deref(),
         Some("context window cap must be 0 or at least 10000; got 500")
     );
 

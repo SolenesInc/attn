@@ -1,6 +1,8 @@
 use attn_client::Desktop;
 use attn_protocol::DesktopCloseMessage;
-use attn_ui::{Dialog, DialogFrame, Tokens};
+use attn_ui::blocks::Actions;
+use attn_ui::system::{Button, Look};
+use attn_ui::{Dialog, Tokens};
 use rune::{El, Tx};
 
 use crate::State;
@@ -110,23 +112,29 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
         return Vec::new();
     };
     let mut layer = Vec::new();
-    Dialog::new(
-        "close_desktop",
-        format!("Close {}?", closing.title),
-        DialogFrame::prompt(t),
-    )
-    .subtitle("Close this desktop and everything inside it?")
-    .on_close_tx(cancel)
-    .width(620.0)
-    .child(crate::prompt_dialog::actions(
-        crate::prompt_dialog::button("Cancel", false, "close_desktop.cancel", t, |b| {
-            b.on_press_tx(cancel)
-        })
-        .autofocus(),
-        crate::prompt_dialog::button("Close desktop", true, "close_desktop.confirm", t, |b| {
-            b.on_press_tx(confirm)
-        }),
-    ))
-    .build(t, &mut layer);
+    Dialog::new("close_desktop", format!("Close {}?", closing.title))
+        .lead("Close this desktop and everything inside it?")
+        .on_close_tx(cancel)
+        .actions(
+            Actions::new("close_desktop.actions")
+                .then_end()
+                .push(
+                    El::from(
+                        Button::new("Cancel")
+                            .on_press_tx(cancel)
+                            .build(t)
+                            .key("close_desktop.cancel"),
+                    )
+                    .autofocus(),
+                )
+                .push(
+                    Button::new("Close desktop")
+                        .look(Look::Primary)
+                        .on_press_tx(confirm)
+                        .build(t)
+                        .key("close_desktop.confirm"),
+                ),
+        )
+        .build(t, &mut layer);
     layer
 }

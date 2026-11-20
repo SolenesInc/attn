@@ -6,7 +6,8 @@
 use std::collections::BTreeMap;
 
 use attn_protocol::SetSettingMessage;
-use attn_ui::{Dialog, DialogFrame, GlyphButton, Tokens, glyph, keycap, type_};
+use attn_ui::dialog::Dialog;
+use attn_ui::{DialogFrame, GlyphButton, Tokens, glyph, keycap, type_};
 use rune::tok::space;
 use rune::{
     Chord, ChordKey, ChordMod, El, KeyPlatform, Shortcut, ShortcutError, TextEdit, TextStyle, Tx,

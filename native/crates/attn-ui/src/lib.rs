@@ -6,6 +6,7 @@ pub mod block_gallery;
 pub mod blocks;
 pub mod chrome_gallery;
 pub mod colors;
+pub mod floating_gallery;
 pub mod panel_gallery;
 mod scroll_bar;
 pub mod settings_gallery;
@@ -169,12 +170,9 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
         size: 12.0,
         ..kit.ty.small_medium
     };
-    kit.standard_menu = standard_menu(&kit, t);
+    kit.standard_menu = standard_menu();
     kit.standard_menu_label = Some(rune_kit::MenuLabel {
-        font: rune::TextStyle {
-            weight: 400.0,
-            ..kit.ty.text_small_medium
-        },
+        font: system::door::style(system::Type::Small),
         ink: t.text_secondary,
         focused_ink: t.text_primary,
     });
@@ -196,17 +194,17 @@ pub fn warning_ink(t: &Tokens) -> Color {
     colors::mix_srgb(t.warning, t.shadow, 0.9)
 }
 
-/// The Tauri app's menus, `.session-actions-popover` and `.snooze-menu`, with rows 29 points
-/// high in the kit's own row text.
-fn standard_menu(kit: &rune_kit::Kit, t: &Tokens) -> rune_kit::StandardMenu {
-    const ROW_HEIGHT: f32 = 29.0;
-    let line = kit.ty.text_small_medium.line_height;
+/// Every menu: a menu's surface, its rows a compact control high with their words at a compact
+/// control's inset, inside the menu's own small inset.
+fn standard_menu() -> rune_kit::StandardMenu {
+    let line = system::door::line_height(system::Type::Small);
+    let row = system::Size::Compact;
     rune_kit::StandardMenu {
         edge_alpha: 1.0,
-        radius: Frame::menu(t).radius,
-        inset: 5.0,
-        row_padding: (9.0, (ROW_HEIGHT - line) / 2.0),
-        row_radius: 5.0,
+        radius: system::Radius::Card.pt(),
+        inset: system::Space::S4.pt(),
+        row_padding: (row.inset().pt(), (row.height() - line) / 2.0),
+        row_radius: system::Radius::Control.pt(),
     }
 }
 
@@ -221,7 +219,7 @@ fn input_ring(t: &Tokens) -> Shadow {
 }
 
 fn popover_shadow(t: &Tokens) -> Shadow {
-    Frame::menu(t).shadow
+    Frame::menu(t).shadow()
 }
 
 /// The faces attn draws its text in: Inter for the interface, and Symbols Nerd Font Mono for
@@ -246,9 +244,10 @@ pub const FAMILIES: (&str, &str) = (
 
 pub mod backdrop;
 pub use backdrop::Backdrop;
+pub use blocks::Dialog;
 pub mod dialog;
+pub use dialog::DialogFrame;
 pub mod finder;
-pub use dialog::{Dialog, DialogFrame};
 pub mod frame;
 pub use frame::Frame;
 pub mod glyph;

@@ -8,9 +8,8 @@ use rune::{Color, El, text};
 const PAINTED_WIDTH: f32 = 520.0;
 const HEIGHT: f32 = 250.0;
 
-/// The width a scene is drawn at: `.whats-new-step`'s 552 point column, which the Tauri SVG
-/// fills.
-pub(super) const WIDTH: f32 = 552.0;
+/// The width a scene is drawn at: a tour dialog's drawing.
+pub(super) const WIDTH: f32 = attn_ui::blocks::TOUR_DRAWING;
 
 #[derive(Clone, Copy)]
 enum Agent {

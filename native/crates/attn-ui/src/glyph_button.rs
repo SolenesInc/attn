@@ -1,6 +1,8 @@
 use rune::{Color, El, Icon, TextStyle, Tx, row, text};
 use rune_kit::{Button, ButtonVariant, Kit};
 
+use crate::system::{Space, door};
+
 /// What a [`GlyphButton`] draws: an icon of [`crate::icon`], or text such as a mark of
 /// [`crate::glyph`] or `Aa`.
 pub enum Glyph {
@@ -13,7 +15,7 @@ impl Glyph {
     pub fn draw(self, icon_size: f32, font: TextStyle, ink: Color) -> El {
         match self {
             Glyph::Icon(icon) => rune::icon(icon, icon_size).color(ink),
-            Glyph::Text(glyph) => text(glyph).font(font).color(ink),
+            Glyph::Text(glyph) => door::styled(text(glyph), font).color(ink),
         }
     }
 }
@@ -127,18 +129,25 @@ impl GlyphButton {
             color,
             trailing,
         } = self;
-        let padding = if trailing.is_some() { 4.0 } else { 0.0 };
-        button
+        let padding = if trailing.is_some() {
+            Space::S4
+        } else {
+            Space::S0
+        };
+        let button = button
             .label_with(move |style, ink| {
                 let glyph = glyph.draw(icon_size, font.unwrap_or(style), color.unwrap_or(ink));
                 match trailing {
-                    Some(trailing) => row().gap(4.0).items_center().child(glyph).child(trailing),
+                    Some(trailing) => door::gap(row(), Space::S4)
+                        .items_center()
+                        .child(glyph)
+                        .child(trailing),
                     None => glyph,
                 }
             })
             .build(k)
             .h(side)
-            .min_w(side)
-            .px(padding)
+            .min_w(side);
+        door::inset(button, padding, Space::S0)
     }
 }

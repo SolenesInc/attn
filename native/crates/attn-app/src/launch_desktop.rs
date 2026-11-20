@@ -7,10 +7,10 @@ use attn_client::Desktop;
 use attn_protocol::{
     LaunchDesktopGetMessage, LaunchDesktopKind, LaunchDesktopResultMessage, LaunchDesktopSetting,
 };
-use attn_ui::system::{Trigger, TriggerLook, Type, words};
-use attn_ui::type_;
-use attn_ui::{Dialog, DialogFrame, Tokens};
-use rune::{El, Key, KeyEvent, TextEdit, Tx, col, text};
+use attn_ui::blocks::{Actions, Field as FieldBlock};
+use attn_ui::system::{Button, FieldState, Look, Trigger, TriggerLook, Type, line_box, words};
+use attn_ui::{Dialog, Tokens};
+use rune::{El, Key, KeyEvent, TextEdit, Tx};
 use rune_kit::{Select, SelectAppearance, TextInput};
 
 use crate::State;
@@ -341,7 +341,6 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let Some(naming) = &picker.naming else {
         return;
     };
-    let k = attn_ui::kit(t);
     let empty = naming.name.text.trim().is_empty();
     let shortcut = crate::Action::desktop_select(naming.slot)
         .and_then(|action| state.keymap.binding(&action))
@@ -350,65 +349,51 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         Some(keys) => format!("On {keys}."),
         None => "No shortcut.".to_owned(),
     };
-    let prompt = DialogFrame::prompt(t);
-    let frame = DialogFrame {
-        header: [22.0, 24.0, 0.0, 24.0],
-        ..prompt
-    };
-    Dialog::new("launch-desktop.naming", "A new desktop", frame)
-        .width(620.0)
+    let name = TextInput::new(&naming.name)
+        .key(NAME_FIELD)
+        .label("Name")
+        .on_edit(|state: &mut State| {
+            &mut state
+                .window
+                .launch_desktop
+                .naming
+                .as_mut()
+                .expect("the name field shows only while naming")
+                .name
+        })
+        .on_submit(use_name)
+        .on_key(|state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+            if ev.key != Key::Escape {
+                return false;
+            }
+            cancel_name(state, tx);
+            true
+        });
+    Dialog::new("launch-desktop.naming", "A new desktop")
         .on_close_tx(cancel_name)
-        .child(
-            col()
-                .w_full()
-                .px(24.0)
-                .pt(20.0)
-                .pb(20.0)
-                .gap(8.0)
-                .child(text("Name").font(type_::BODY).color(t.text_primary))
-                .child(
-                    TextInput::new(&naming.name)
-                        .key(NAME_FIELD)
-                        .label("Name")
-                        .width(None)
-                        .on_edit(|state: &mut State| {
-                            &mut state
-                                .window
-                                .launch_desktop
-                                .naming
-                                .as_mut()
-                                .expect("the name field shows only while naming")
-                                .name
-                        })
-                        .on_submit(use_name)
-                        .on_key(|state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-                            if ev.key != Key::Escape {
-                                return false;
-                            }
-                            cancel_name(state, tx);
-                            true
-                        })
-                        .build(k),
+        .push(
+            FieldBlock::new("launch-desktop.naming", "Name")
+                .control(line_box(name, FieldState::Ready, t))
+                .hint(hint)
+                .build(t),
+        )
+        .actions(
+            Actions::new("launch-desktop.naming.actions")
+                .then_end()
+                .push(
+                    Button::new("Cancel")
+                        .on_press_tx(cancel_name)
+                        .build(t)
+                        .key("launch-desktop.naming.cancel"),
                 )
-                .child(
-                    text(hint.clone())
-                        .key("launch-desktop.naming.hint")
-                        .label(hint)
-                        .font(type_::LABEL)
-                        .color(t.text_muted),
+                .push(
+                    Button::new("Use this name")
+                        .look(Look::Primary)
+                        .disabled(empty)
+                        .on_press_tx(use_name)
+                        .build(t)
+                        .key("launch-desktop.naming.use"),
                 ),
         )
-        .child(crate::prompt_dialog::actions(
-            crate::prompt_dialog::button("Cancel", false, "launch-desktop.naming.cancel", t, |b| {
-                b.on_press_tx(cancel_name)
-            }),
-            crate::prompt_dialog::button(
-                "Use this name",
-                true,
-                "launch-desktop.naming.use",
-                t,
-                |b| b.disabled(empty).on_press_tx(use_name),
-            ),
-        ))
         .build(t, layers);
 }

@@ -1,13 +1,13 @@
 //! What's new: a short tour of the release's ideas, one step at a time, shown on the first
 //! launch of a release, replayable from the command palette and from Home's banner.
 
+use attn_ui::blocks::{Actions, Block, DialogSize, Inline, Stack};
 use attn_ui::keycap;
-use attn_ui::type_;
-use attn_ui::{Dialog, DialogFrame, Tokens};
+use attn_ui::system::{Button, Look, Size, Type, pager, words};
+use attn_ui::{Dialog, Tokens, type_};
 use rune::tok::space;
-use rune::{El, Key, KeyEvent, Mods, TextStyle, Tx, col, row, text};
-use rune_kit::ScrollBar;
-use rune_kit::{Button, ButtonVariant, ControlSize};
+use rune::{El, Key, KeyEvent, Mods, Tx, col, row, text};
+use rune_kit::{ButtonVariant, ControlSize};
 
 use crate::State;
 use crate::action::Action;
@@ -228,7 +228,7 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
                     ),
             )
             .child(
-                Button::new("Show me")
+                rune_kit::Button::new("Show me")
                     .variant(ButtonVariant::Submit)
                     .control_size(ControlSize::Small)
                     .on_press_tx(open)
@@ -253,224 +253,140 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     if state.window.layer != Some(Layer::WhatsNew) {
         return;
     }
-    let k = attn_ui::kit(t);
     let steps = steps(&state.keymap);
     let index = state.window.whats_new.step.min(steps.len() - 1);
     let step = &steps[index];
     let last = index + 1 == steps.len();
-    let keys = row()
-        .key("whats-new.keys")
-        .role("list")
-        .label("Keys")
-        .w_full()
-        .flex_wrap()
-        .gaps(8.0, 18.0)
-        .children(step.keys.iter().map(|(name, keys)| {
-            row()
-                .key(format!("whats-new.key.{name}"))
-                .role("listitem")
-                .label(format!("{} {name}", keys.said))
-                .items_center()
-                .gap(8.0)
-                .child(keycaps(keys, t).a11y_hidden())
-                .child(
-                    text(*name)
-                        .font(type_::BODY)
-                        .color(t.text_secondary)
-                        .a11y_hidden(),
-                )
-        }));
-    let dots = row()
-        .key("whats-new.dots")
-        .gap(6.0)
-        .items_center()
-        .children(steps.iter().enumerate().map(|(i, s)| {
-            let current = i == index;
-            rune::el()
-                .key(format!("whats-new.dot.{i}"))
-                .role("button")
-                .label(format!("Step {}: {}", i + 1, s.title))
-                .a11y_value(if current { "current" } else { "" })
-                .size(if current { 18.0 } else { 7.0 }, 7.0)
-                .radius(3.5)
-                .fill(if current {
-                    t.brand
-                } else {
-                    t.text_tertiary.alpha(0.6)
-                })
-                .motion(DOT_MOTION)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    go(state, i as isize, tx);
-                    tx.focus(PRIMARY, false);
-                })
-        }));
-    let footer = row()
-        .key("whats-new.footer")
-        .w_full()
-        .items_center()
-        .gap(space::S3)
-        .px(INSET)
-        .py(14.0)
-        .fill(t.shadow.alpha(0.2))
-        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-        .border_layout()
-        .child(
-            row().grow(1.0).min_w(0.0).child(
-                link_button("View all shortcuts →", t)
-                    .on_press_tx(view_shortcuts)
-                    .build(k)
-                    .key("whats-new.shortcuts"),
+    let keys = (!step.keys.is_empty()).then(|| {
+        Inline::loose()
+            .key("whats-new.keys")
+            .role("list")
+            .label("Keys")
+            .children(step.keys.iter().map(|(name, keys)| {
+                Inline::loose()
+                    .key(format!("whats-new.key.{name}"))
+                    .role("listitem")
+                    .label(format!("{} {name}", keys.said))
+                    .child(keycaps(keys, t).a11y_hidden())
+                    .child(words(*name, Type::Body, t.text_secondary).a11y_hidden())
+            }))
+    });
+    let titles: Vec<&str> = steps.iter().map(|s| s.title).collect();
+    let dots = pager(
+        ("whats-new.dots", "whats-new.dot"),
+        steps.len(),
+        index,
+        |i| format!("Step {}: {}", i + 1, titles[i]),
+        t,
+        |state: &mut State, i: usize, tx: &mut Tx| {
+            go(state, i as isize, tx);
+            tx.focus(PRIMARY, false);
+        },
+    );
+    let scene = Block::custom(
+        "whats-new.scene.block",
+        col()
+            .key(format!("whats-new.step.{index}"))
+            .w_full()
+            .transition(step_entrance())
+            .child(scenes::scene(step.scene, t)),
+    );
+    let told = Block::custom(
+        "whats-new.told.block",
+        Stack::tight()
+            .w_full()
+            .child(
+                words(step.title, Type::Heading, t.text_primary)
+                    .key("whats-new.title")
+                    .role("heading")
+                    .level(2)
+                    .wrap(),
+            )
+            .child(
+                words(step.body, Type::Body, t.text_secondary)
+                    .key("whats-new.body")
+                    .wrap(),
             ),
-        )
-        .child(dots)
-        .child(
-            row()
-                .grow(1.0)
-                .min_w(0.0)
-                .gap(8.0)
-                .justify_end()
-                .children((index > 0).then(|| {
-                    back_button(t)
-                        .on_press_tx(back)
-                        .build(k)
-                        .key("whats-new.back")
-                        .h(32.0)
-                        .px(14.0)
-                        .radius(8.0)
-                        .border(1.0, t.border)
-                }))
-                .child(
-                    Button::new(if last { "Got it" } else { "Next" })
-                        .variant(ButtonVariant::Submit)
-                        .on_press_tx(advance)
-                        .build(k)
-                        .key(PRIMARY)
-                        .default_button()
-                        .h(32.0)
-                        .px(18.0)
-                        .radius(8.0),
-                ),
+    );
+    let scheme = Block::custom(
+        "whats-new.scheme.block",
+        Stack::tight()
+            .child(
+                El::from(
+                    Button::new(scheme_label(state, &step.scheme))
+                        .size(Size::Compact)
+                        .on_press(scheme_press(state, &step.scheme))
+                        .build(t)
+                        .key("whats-new.scheme"),
+                )
+                .self_start(),
+            )
+            .children(keys),
+    );
+    let mut actions = Actions::new("whats-new.actions").push(
+        Button::new("View all shortcuts →")
+            .look(Look::Quiet)
+            .on_press_tx(view_shortcuts)
+            .build(t)
+            .key("whats-new.shortcuts"),
+    );
+    actions = actions.then_center().push(dots).then_end();
+    if index > 0 {
+        actions = actions.push(
+            Button::new("Back")
+                .on_press_tx(back)
+                .build(t)
+                .key("whats-new.back"),
         );
-    let step_view = col()
-        .key("whats-new.step")
-        .w_full()
-        .h(LIVE_HEIGHT)
-        .shrink()
-        .min_h(0.0)
-        .pt(12.0)
-        .px(INSET)
-        .pb(4.0)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .child(
-            col()
-                .key(format!("whats-new.step.{index}"))
-                .w_full()
-                .transition(step_entrance())
-                .child(scenes::scene(step.scene, t))
-                .child(
-                    text(step.title)
-                        .key("whats-new.title")
-                        .role("heading")
-                        .level(2)
-                        .font(STEP_TITLE)
-                        .color(t.text_primary)
-                        .mt(18.0),
-                )
-                .child(
-                    text(step.body)
-                        .key("whats-new.body")
-                        .font(STEP_BODY)
-                        .color(t.text_tertiary)
-                        .wrap()
-                        .mt(6.0),
-                )
-                .child(row().mt(14.0).child(scheme_button(state, &step.scheme, k)))
-                .children((!step.keys.is_empty()).then(|| keys.mt(14.0))),
+    }
+    actions = actions.push(
+        El::from(
+            Button::new(if last { "Got it" } else { "Next" })
+                .look(Look::Primary)
+                .on_press_tx(advance)
+                .build(t)
+                .key(PRIMARY),
         )
-        .scroll_bar_styled(attn_ui::scroll_bar(t));
-    Dialog::new(DIALOG, "What's new", DialogFrame::whats_new(t))
-        .width(scenes::WIDTH + 2.0 * INSET)
+        .default_button(),
+    );
+    Dialog::new(DIALOG, "What's new")
+        .size(DialogSize::Tour)
         .click_outside(true)
-        .lead(
-            row()
-                .items_center()
-                .gap(10.0)
-                .child(
-                    text("WHAT'S NEW")
-                        .key("whats-new.eyebrow")
-                        .font(EYEBROW)
-                        .color(t.brand),
-                )
-                .child(
-                    text(format!("{} of {}", index + 1, steps.len()))
-                        .key("whats-new.count")
-                        .font(COUNT)
-                        .color(t.text_dimmed),
-                ),
+        .aside(
+            words(
+                format!("{} of {}", index + 1, steps.len()),
+                Type::Small,
+                t.text_tertiary,
+            )
+            .key("whats-new.count"),
         )
+        .close_button()
         .on_close_tx(dismiss)
-        .child(
-            col()
-                .key("whats-new.tour")
-                .w_full()
-                .shrink()
-                .min_h(0.0)
-                .on_key(on_key)
-                .child(step_view)
-                .child(footer),
-        )
+        .on_key(on_key)
+        .push(scene)
+        .push(told)
+        .push(scheme)
+        .actions(actions)
         .build(t, layers);
 }
 
-/// Puts the step's scheme on, or, while it is on, takes attn's own back.
-fn scheme_button(state: &State, scheme: &Scheme, k: &rune_kit::Kit) -> El {
-    let on = crate::color_scheme(&state.facts.settings).id == scheme.id;
-    let (label, id) = if on {
-        (scheme.back, "")
+/// The scheme button's words: the step's scheme to put on, or, while it is on, attn's own back.
+fn scheme_label(state: &State, scheme: &Scheme) -> &'static str {
+    if crate::color_scheme(&state.facts.settings).id == scheme.id {
+        scheme.back
     } else {
-        (scheme.offer, scheme.id)
+        scheme.offer
+    }
+}
+
+fn scheme_press(state: &State, scheme: &Scheme) -> impl Fn(&mut State) + 'static {
+    let id = if crate::color_scheme(&state.facts.settings).id == scheme.id {
+        ""
+    } else {
+        scheme.id
     };
-    Button::new(label)
-        .variant(ButtonVariant::Outline)
-        .control_size(ControlSize::Small)
-        .on_press(move |state: &mut State| {
-            crate::settings::appearance::choose_color_scheme(state, id)
-        })
-        .build(k)
-        .key("whats-new.scheme")
+    move |state: &mut State| crate::settings::appearance::choose_color_scheme(state, id)
 }
-
-/// `.whats-new-eyebrow`, at the native app's least text size.
-const EYEBROW: TextStyle = TextStyle::new(12.0, 700.0).tracking(0.96);
-
-/// `.whats-new-count`, at the native app's least text size.
-const COUNT: TextStyle = TextStyle::new(12.0, 400.0);
-
-/// `.whats-new-link`: a quiet link in the tertiary color.
-fn link_button(words: &'static str, t: &Tokens) -> Button {
-    let ink = t.text_tertiary;
-    Button::new(words)
-        .variant(ButtonVariant::Ghost)
-        .control_size(ControlSize::Small)
-        .label_with(move |_, _| text(words).font(STEP_BODY).color(ink))
-}
-
-/// `.whats-new-back`: regular type in the secondary color, inside the border color's edge.
-fn back_button(t: &Tokens) -> Button {
-    let ink = t.text_secondary;
-    Button::new("Back")
-        .variant(ButtonVariant::Ghost)
-        .label_with(move |_, _| text("Back").font(STEP_BODY).color(ink))
-}
-
-/// `.whats-new-step`'s and `.whats-new-footer`'s inset.
-const INSET: f32 = 24.0;
-
-/// `.whats-new-live { flex: 0 1 480px }`: the tallest step, so the footer holds still while
-/// stepping, and less in a window too short for it.
-const LIVE_HEIGHT: f32 = 480.0;
 
 /// `@keyframes whats-new-step`: each step fades in from 8 points right over 180 ms, and the
 /// step it replaces is gone at once.
@@ -482,15 +398,6 @@ fn step_entrance() -> rune::Transition {
     )
     .springs(SpringPair::new(Spring::new(0.18, 0.0), Spring::NONE))
 }
-
-/// `.whats-new-dot { transition: width 160ms, background 160ms }`.
-const DOT_MOTION: rune::Spring = rune::Spring::new(0.16, 0.0);
-
-/// `.whats-new-step h2`.
-const STEP_TITLE: TextStyle = TextStyle::new(19.0, 600.0).tracking(-0.19);
-
-/// `.whats-new-step p`.
-const STEP_BODY: TextStyle = TextStyle::new(13.0, 400.0).lh(20.15);
 
 pub(super) fn keycaps(keys: &Combos, t: &Tokens) -> El {
     keycap::alternatives(

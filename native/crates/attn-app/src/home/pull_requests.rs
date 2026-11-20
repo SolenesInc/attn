@@ -8,8 +8,10 @@ use attn_protocol::{
     ApprovePRMessage, MergePRMessage, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, PR,
     PRVisitedMessage, RefreshPRsMessage,
 };
+use attn_ui::blocks::Actions;
+use attn_ui::system::Look;
 use attn_ui::type_;
-use attn_ui::{Dialog, DialogFrame, GlyphButton, Tokens, glyph, icon};
+use attn_ui::{Dialog, GlyphButton, Tokens, glyph, icon};
 use rune::tok::space;
 use rune::{Beat, Color, El, Sequence, TextStyle, Tx, col, el, memo, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize};
@@ -858,70 +860,26 @@ pub(crate) fn merge_confirmation(state: &State, t: &Tokens) -> Vec<El> {
         return Vec::new();
     };
     let mut layer = Vec::new();
-    Dialog::new(
-        "home.prs.merge",
-        format!("Merge PR #{number}?"),
-        DialogFrame::merge(t),
-    )
-    .width(400.0)
-    .on_close_tx(cancel_merge)
-    .child(
-        text("This will merge the pull request and delete the branch.")
-            .key("home.prs.merge.said")
-            .font(type_::LABEL)
-            .color(t.text_tertiary)
-            .wrap()
-            .padding(16.0),
-    )
-    .child(
-        row()
-            .w_full()
-            .gap(8.0)
-            .padding(16.0)
-            .justify_end()
-            .border_sides([1.0, 0.0, 0.0, 0.0], t.border)
-            .border_layout()
-            .child(merge_button("Cancel", false, t, cancel_merge).key("home.prs.merge.cancel"))
-            .child(merge_button("Merge", true, t, confirm_merge).key("home.prs.merge.confirm")),
-    )
-    .build(t, &mut layer);
+    Dialog::new("home.prs.merge", format!("Merge PR #{number}?"))
+        .lead("This will merge the pull request and delete the branch.")
+        .on_close_tx(cancel_merge)
+        .actions(
+            Actions::new("home.prs.merge.actions")
+                .then_end()
+                .push(
+                    attn_ui::system::Button::new("Cancel")
+                        .on_press_tx(cancel_merge)
+                        .build(t)
+                        .key("home.prs.merge.cancel"),
+                )
+                .push(
+                    attn_ui::system::Button::new("Merge")
+                        .look(Look::Primary)
+                        .on_press_tx(confirm_merge)
+                        .build(t)
+                        .key("home.prs.merge.confirm"),
+                ),
+        )
+        .build(t, &mut layer);
     layer
-}
-
-/// `.modal-btn`: 8 points above and below 12 point text, inside a 1 point edge.
-const MERGE_BUTTON_HEIGHT: f32 = 32.0;
-
-/// The merge confirmation's `.modal-btn-cancel`, or its `.modal-btn-primary` when `primary`.
-fn merge_button(
-    label: &'static str,
-    primary: bool,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    let (fill, edge, ink, hover) = if primary {
-        (
-            t.annotation,
-            t.annotation,
-            t.on_accent,
-            attn_ui::colors::mix_srgb(t.text_primary, t.merged, 0.71),
-        )
-    } else {
-        (
-            rune::Color::TRANSPARENT,
-            t.border,
-            t.text_tertiary,
-            t.bg_elevated,
-        )
-    };
-    Button::new(label)
-        .variant(ButtonVariant::Ghost)
-        .on_press_tx(press)
-        .label_with(move |_, _| text(label).font(TextStyle::new(12.0, 600.0)).color(ink))
-        .build(attn_ui::kit(t))
-        .h(MERGE_BUTTON_HEIGHT)
-        .px(16.0)
-        .radius(4.0)
-        .fill(fill)
-        .border(1.0, edge)
-        .hover(hover)
 }

@@ -1,7 +1,7 @@
 use attn_client::Notifications;
 use attn_protocol::Notification;
 use attn_ui::blocks::{Actions, Block, Disclosure, List, Notice, Prose, Sheet, Stack};
-use attn_ui::frame::{self, Frame};
+use attn_ui::frame::Frame;
 use attn_ui::system::{
     Button, Control, DotShape, DotSize, IconSize, ListRow, Size, Tone, Type, dot, icon_button, tag,
     words,
@@ -120,13 +120,7 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
         .child(sheet);
     popover::anchored(
         k,
-        Frame {
-            fill: t.bg_elevated,
-            radius: 12.0,
-            shadow: frame::shadow(t, 18.0, 48.0, 0.36),
-            ..Frame::menu(t)
-        }
-        .draw(surface),
+        Frame::panel(t).draw(surface),
         crate::shell::TITLE_BAR_LEFT,
         Placement::BottomStart,
         8.0,

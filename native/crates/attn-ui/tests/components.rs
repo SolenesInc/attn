@@ -18,7 +18,6 @@ fn every_shared_component_has_its_role_and_a_name_in_dark_and_light() {
         ("Components/Button", "button"),
         ("Components/Field", "text-input"),
         ("Components/Menu", "menu"),
-        ("Components/Dialog", "dialog"),
         ("Components/Popover", "dialog"),
         ("Components/Toast", "status"),
         ("Components/Tooltip", "tooltip"),

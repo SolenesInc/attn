@@ -1753,3 +1753,80 @@ fn a_machine_takes_at_most_half_a_recent_row_and_a_folder_gives_way_before_its_m
         }
     }
 }
+
+/// What a text inside `within` saying `said` shows of itself, as a share of its natural width.
+fn shown(world: &World, within: &str, said: &str) -> f32 {
+    texts_in(world, within)
+        .into_iter()
+        .find(|(s, _, _)| s == said)
+        .map(|(_, r, v)| if r[2] > 0.0 { v[2] / r[2] } else { 0.0 })
+        .unwrap_or(0.0)
+}
+
+#[test]
+fn a_recent_rows_name_and_age_stay_whole_at_large_text_and_its_machine_gives_way_first() {
+    for scale in ["1.4", "1.5"] {
+        for w in ["launcher", "new-session"] {
+            let current = if w == "launcher" { "d2" } else { "d1" };
+            let world = launcher_world(scale, w, current, LONG_MACHINE, (800.0, 600.0));
+            let row = format!("{w}.row.0");
+            let natural = widths(&texts_in(
+                &launcher_world(scale, w, current, LONG_MACHINE, (2400.0, 1600.0)),
+                &row,
+            ));
+            let given = widths(&texts_in(&world, &row));
+            let case = format!("{w} at {scale}x text");
+            for said in ["shop", "179d"] {
+                assert!(
+                    given.get(said).copied().unwrap_or(0.0) + 0.5 >= natural[said],
+                    "{case}: {said:?} gives way before the machine: {given:?} of {natural:?}"
+                );
+                assert!(shown(&world, &row, said) > 0.99, "{case}: {said:?} is cut");
+            }
+            assert!(
+                given[LONG_MACHINE] < natural[LONG_MACHINE],
+                "{case}: the machine never gives way: {given:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn two_recent_checkouts_that_differ_only_at_the_end_both_show_their_whole_names() {
+    for scale in ["1", "1.4", "1.5"] {
+        let mut world = launcher_world(scale, "x", "d1", "landing-runner", (800.0, 600.0));
+        world.daemon.on("get_recent_locations", |_| {
+            message(RecentLocationsResultMessage {
+                success: true,
+                home_path: Some(HOME.into()),
+                recent_locations: vec![
+                    recent(
+                        Some(SANDBOX),
+                        &format!("{HOME}/projects/account-permissions-migration-test"),
+                        true,
+                        3,
+                    ),
+                    recent(
+                        Some(SANDBOX),
+                        &format!("{HOME}/projects/account-permissions-migration-prod"),
+                        true,
+                        2,
+                    ),
+                ],
+                ..RecentLocationsResultMessage::new()
+            })
+        });
+        press_action(&mut world, &Action::SessionNew);
+        for (row, name) in [
+            ("new-session.row.0", "account-permissions-migration-test"),
+            ("new-session.row.1", "account-permissions-migration-prod"),
+        ] {
+            assert!(
+                shown(&world, row, name) > 0.99,
+                "at {scale}x text, {name:?} is cut: {:?}",
+                texts_in(&world, row)
+            );
+        }
+        rest(&mut world);
+    }
+}

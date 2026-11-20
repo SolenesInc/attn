@@ -6,13 +6,14 @@ use attn_protocol::{
     Profile, ProfileActionResultMessage, ProfileCreateMessage, ProfileDeleteMessage,
     ProfileRenameMessage, ProfileSelectMessage,
 };
-use attn_ui::frame::{self, Frame};
-use attn_ui::keycap;
-use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens};
-use rune::tok::space;
-use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, Kit, Placement, TextInput, popover};
+use attn_ui::Tokens;
+use attn_ui::blocks::{Actions, Block, Field, Menu, Notice, Prose};
+use attn_ui::system::{
+    Button, FieldState, IconSize, ListRow, Look, Reveal, Trigger, TriggerLook, Type, glyph,
+    icon_button, keycaps, line_box, words,
+};
+use rune::{El, Key, KeyEvent, TextEdit, Tx};
+use rune_kit::{Placement, TextInput, popover};
 
 use crate::requests::{Answer, Refused};
 use crate::shell::Layer;
@@ -23,7 +24,6 @@ pub(crate) const PILL: &str = "titlebar.profile";
 const PILL_SLOT: &str = "titlebar.profile.slot";
 const NAME_FIELD: &str = "profile-switcher.name";
 const CHOOSE: &str = "profile-switcher.choose.";
-const WIDTH: f32 = 260.0;
 
 /// The switcher's highlighted profile, what it is doing and what the daemon last refused. They
 /// start over each time it opens.
@@ -377,46 +377,31 @@ pub(crate) fn pill(state: &State, t: &Tokens) -> El {
         .keymap
         .binding(&Action::ProfileSwitch)
         .map(|b| state.keymap.label(b));
-    let shown = name.clone();
-    let (ink, caret) = (t.text_primary, t.text_dimmed);
-    let button = Button::new(name)
-        .variant(ButtonVariant::GhostMuted)
-        .help("Switch profile")
-        .expanded(is_open(state))
-        .label_with(move |_, _| {
-            row()
-                .gap(6.0)
-                .items_center()
-                .child(
-                    text(shown)
-                        .font(NAME_TYPE)
-                        .color(ink)
-                        .single_line()
-                        .truncate()
-                        .shrink(),
-                )
-                .child(rune::icon(&attn_ui::icon::DISCLOSE_OPEN, CARET_PX).color(caret))
-        })
-        .on_press_tx(toggle);
-    let pill = match keys {
-        Some(keys) => button.shortcut(keys),
-        None => button,
-    }
-    .build(attn_ui::kit(t))
-    .key(PILL)
-    .h(24.0)
-    .max_w(140.0)
-    .px(8.0)
-    .radius(6.0)
-    .fill(t.bg_elevated)
-    .border(1.0, t.border)
-    .hover(t.bg_elevated)
-    .hover_border(t.border_focus);
+    let help = match keys {
+        Some(keys) => format!("Switch profile  {keys}"),
+        None => "Switch profile".to_owned(),
+    };
+    let pill = Trigger::new(
+        PILL,
+        name.clone(),
+        words(name.clone(), Type::Control, t.text_primary)
+            .single_line()
+            .truncate()
+            .shrink(),
+    )
+    .look(TriggerLook::Field)
+    .open(is_open(state))
+    .build(t, toggle);
+    let pill = El::from(pill)
+        .role("button")
+        .description(help.clone())
+        .help(help)
+        .max_w(PILL_MAX_W);
     crate::shell::title_bar_slot(PILL_SLOT, pill)
 }
 
-const NAME_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
-const CARET_PX: f32 = 8.0;
+/// The pill's widest: a profile's name truncates past it, leaving the title bar its room.
+const PILL_MAX_W: f32 = 140.0;
 
 /// The switcher under the pill, while it is open.
 pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
@@ -425,179 +410,119 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     }
     let k = attn_ui::kit(t);
     let switcher = &state.window.profile_switcher;
-    let mut menu = col()
-        .key(MENU)
-        .role("menu")
-        .label("Switch profile")
-        .w(WIDTH)
-        .padding(space::S1)
-        .gap(2.0)
-        .focusable(true)
-        .no_focus_ring()
-        .on_key(key)
-        .modal_tx(true, dismiss);
+    let mut menu = Menu::new(MENU, "Switch profile");
     if let (Mode::List, Some(profile)) = (&switcher.mode, highlighted(state)) {
-        menu = menu.active_descendant(format!("{CHOOSE}{}", profile.id));
+        menu = menu.active(Some(format!("{CHOOSE}{}", profile.id)));
     }
+    let refusal = switcher
+        .refusal
+        .clone()
+        .map(|said| Notice::error("profile-switcher.refusal", said).build(t));
     menu = match &switcher.mode {
-        Mode::List => menu.children(list(state, t, k)),
+        Mode::List => menu.rows(list(state, t)).form(refusal).footer(
+            Actions::new("profile-switcher.list-actions").push(
+                Button::new("New profile")
+                    .look(Look::Quiet)
+                    .trailing(keycaps(["N"], t))
+                    .on_press_tx(start_new)
+                    .build(t)
+                    .key("profile-switcher.new"),
+            ),
+        ),
         Mode::Name { profile, draft } => {
             let renaming = profile.as_deref().and_then(|p| name_of(state, p));
-            menu.child(name_form(renaming, draft, switcher.busy, t, k))
+            let (form, actions) = name_form(renaming, draft, switcher.busy, t);
+            menu.form(std::iter::once(form).chain(refusal))
+                .footer(actions)
         }
         Mode::Delete { profile } => {
             let name = name_of(state, profile).unwrap_or_default();
-            menu.child(delete_form(&name, switcher.busy, t, k))
+            let (form, actions) = delete_form(&name, switcher.busy, t);
+            menu.form(std::iter::once(form).chain(refusal))
+                .footer(actions)
         }
     };
-    menu = menu.children(switcher.refusal.clone().map(|said| {
-        text(said.clone())
-            .key("profile-switcher.refusal")
-            .role("alert")
-            .label(said)
-            .font(type_::LABEL)
-            .color(t.error)
-            .px(space::S2)
-            .py(space::S1)
-    }));
-    if matches!(switcher.mode, Mode::List) {
-        menu = menu.child(
-            actions(t).child(
-                Button::new("New profile")
-                    .variant(ButtonVariant::Ghost)
-                    .shortcut("N")
-                    .on_press_tx(start_new)
-                    .label_with({
-                        let cap = keycap::Keys::outlined(&["N"]).build(t).a11y_hidden();
-                        let ink = t.text_secondary;
-                        move |_, _| {
-                            row()
-                                .grow(1.0)
-                                .gap(4.0)
-                                .items_center()
-                                .child(rune::icon(&attn_ui::icon::PLUS, 13.0).color(ink))
-                                .child(text("New profile").font(type_::BODY).color(ink).grow(1.0))
-                                .child(cap)
-                        }
-                    })
-                    .build(k)
-                    .key("profile-switcher.new")
-                    .grow(1.0),
-            ),
-        );
-    }
     Some(popover::anchored(
         k,
-        Frame {
-            fill: t.bg_elevated,
-            edge: t.border_hover,
-            shadow: frame::shadow(t, 12.0, 36.0, 0.45),
-            ..Frame::menu(t)
-        }
-        .draw(menu),
+        menu.build(t).on_key(key).modal_tx(true, dismiss),
         PILL_SLOT,
         Placement::BottomEnd,
         4.0,
     ))
 }
 
-fn list(state: &State, t: &Tokens, k: &Kit) -> Vec<El> {
+fn list(state: &State, t: &Tokens) -> Vec<El> {
     let highlighted = highlighted(state).map(|p| p.id.clone());
     ordered(state)
         .into_iter()
         .map(|profile| {
             let current = profile.id == state.facts.profiles.selected;
             let lit = Some(&profile.id) == highlighted.as_ref();
-            profile_row(profile, current, lit, t, k)
+            profile_row(profile, current, lit, t)
         })
         .collect()
 }
 
-fn profile_row(profile: &Profile, current: bool, lit: bool, t: &Tokens, k: &Kit) -> El {
+fn profile_row(profile: &Profile, current: bool, lit: bool, t: &Tokens) -> El {
     let id = profile.id.clone();
     let name = profile.name.clone();
-    let shown = name.clone();
-    let mark = t.brand;
-    let choose_button = Button::new(name.clone())
-        .variant(ButtonVariant::Ghost)
-        .label_with(move |font, ink| {
-            row()
-                .w_full()
-                .gap(space::S2)
-                .items_center()
-                .child(
-                    text(if current { "✓" } else { "" })
-                        .font(type_::LABEL)
-                        .color(mark)
-                        .w(12.0),
-                )
-                .child(text(shown).font(font).color(ink).truncate().grow(1.0))
+    let rename = icon_button(
+        format!("profile-switcher.rename.{id}"),
+        format!("Rename {name}"),
+        &attn_ui::icon::PENCIL,
+        IconSize::Regular,
+    )
+    .help("Rename  R")
+    .on_press_tx({
+        let id = id.clone();
+        move |state: &mut State, tx: &mut Tx| start_rename(state, &id, tx)
+    })
+    .build(t);
+    let delete = icon_button(
+        format!("profile-switcher.delete.{id}"),
+        format!("Delete {name}"),
+        &attn_ui::icon::TRASH,
+        IconSize::Regular,
+    )
+    .help("Delete  ⌫")
+    .on_press_tx({
+        let id = id.clone();
+        move |state: &mut State, tx: &mut Tx| start_delete(state, &id, tx)
+    })
+    .build(t);
+    ListRow::new(format!("profile-switcher.row.{id}"), name.clone())
+        .lead(if current {
+            glyph("✓", IconSize::Small, t.brand)
+        } else {
+            glyph(" ", IconSize::Small, t.brand)
         })
-        .on_press_tx({
+        .title(name.clone())
+        .selected(lit)
+        .controls([El::from(rename), El::from(delete)], Reveal::Always)
+        .select_role("menuitem")
+        .select(format!("{CHOOSE}{id}"), name, {
             let id = id.clone();
             move |state: &mut State, tx: &mut Tx| choose(state, &id, tx)
         })
-        .build(k)
-        .key(format!("{CHOOSE}{id}"))
-        .role("menuitem")
-        .a11y_value(if current { "current" } else { "" })
-        .grow(1.0)
-        .min_w(0.0)
-        .justify_start();
-    let rename = GlyphButton::new(&attn_ui::icon::PENCIL, format!("Rename {name}"))
-        .icon_size(13.0)
-        .color(t.text_secondary)
-        .help("Rename  R")
-        .trailing(keycap::Keys::outlined(&["R"]).build(t).a11y_hidden())
-        .on_press_tx({
-            let id = id.clone();
-            move |state: &mut State, tx: &mut Tx| start_rename(state, &id, tx)
-        })
-        .build(k)
-        .key(format!("profile-switcher.rename.{id}"));
-    let delete = GlyphButton::new(&attn_ui::icon::TRASH, format!("Delete {name}"))
-        .icon_size(13.0)
-        .color(t.text_secondary)
-        .help("Delete  ⌫")
-        .trailing(keycap::Keys::outlined(&["⌫"]).build(t).a11y_hidden())
-        .on_press_tx({
-            let id = id.clone();
-            move |state: &mut State, tx: &mut Tx| start_delete(state, &id, tx)
-        })
-        .build(k)
-        .key(format!("profile-switcher.delete.{id}"));
-    let line = row()
-        .key(format!("profile-switcher.row.{id}"))
-        .w_full()
-        .min_h(30.0)
-        .gap(space::S1)
-        .items_center()
-        .radius(5.0)
-        .child(choose_button)
-        .child(rename)
-        .child(delete);
-    if lit { line.fill(t.bg_selected) } else { line }
+        .build(t)
 }
 
-fn actions(t: &Tokens) -> El {
-    row()
-        .w_full()
-        .gap(space::S1)
-        .mt(space::S1)
-        .pt(space::S1)
-        .border_sides([1.0, 0.0, 0.0, 0.0], t.border)
-}
-
-fn back(k: &Kit) -> El {
+fn back(t: &Tokens) -> El {
     Button::new("Back")
-        .variant(ButtonVariant::GhostMuted)
-        .shortcut("esc")
+        .look(Look::Quiet)
+        .trailing(keycaps(["esc"], t))
         .on_press_tx(back_to_list)
-        .build(k)
+        .build(t)
         .key("profile-switcher.back")
+        .into()
 }
 
-fn name_form(renaming: Option<String>, draft: &TextEdit, busy: bool, t: &Tokens, k: &Kit) -> El {
+fn name_form(
+    renaming: Option<String>,
+    draft: &TextEdit,
+    busy: bool,
+    t: &Tokens,
+) -> (Block, Actions) {
     let label = match &renaming {
         None => "New profile name".to_owned(),
         Some(name) => format!("Rename {name}"),
@@ -610,63 +535,43 @@ fn name_form(renaming: Option<String>, draft: &TextEdit, busy: bool, t: &Tokens,
     let field = TextInput::new(draft)
         .key(NAME_FIELD)
         .label(label.clone())
-        .width(None)
-        .disabled(busy)
         .on_edit(
             |state: &mut State| match &mut state.window.profile_switcher.mode {
                 Mode::Name { draft, .. } => &mut **draft,
                 _ => unreachable!("the name field shows only while naming"),
             },
         )
-        .on_submit(submit_name)
-        .build(k);
-    col()
-        .key("profile-switcher.form")
-        .w_full()
-        .padding(space::S2)
-        .gap(space::S2)
-        .child(text(label).font(type_::LABEL).color(t.text_secondary))
-        .child(field)
-        .child(
-            actions(t)
-                .child(
-                    Button::new(submit)
-                        .variant(ButtonVariant::Submit)
-                        .shortcut("⏎")
-                        .disabled(busy || draft.text.trim().is_empty())
-                        .on_press_tx(submit_name)
-                        .build(k)
-                        .key("profile-switcher.submit"),
-                )
-                .child(back(k)),
+        .on_submit(submit_name);
+    let form = Field::new(NAME_FIELD, label)
+        .control(line_box(field, FieldState::disabled_if(busy), t))
+        .build(t);
+    let actions = Actions::new("profile-switcher.form-actions")
+        .push(
+            Button::new(submit)
+                .look(Look::Primary)
+                .trailing(keycaps(["⏎"], t))
+                .disabled(busy || draft.text.trim().is_empty())
+                .on_press_tx(submit_name)
+                .build(t)
+                .key("profile-switcher.submit"),
         )
+        .push(back(t));
+    (form, actions)
 }
 
-fn delete_form(name: &str, busy: bool, t: &Tokens, k: &Kit) -> El {
+fn delete_form(name: &str, busy: bool, t: &Tokens) -> (Block, Actions) {
     let ask = format!("Delete {name}? Clean up its agents, crew, automations and tiles first.");
-    col()
-        .key("profile-switcher.delete")
-        .w_full()
-        .padding(space::S2)
-        .gap(space::S2)
-        .child(
-            text(ask.clone())
-                .key("profile-switcher.delete.ask")
-                .label(ask)
-                .font(type_::BODY)
-                .color(t.text_primary),
+    let form = Prose::lead("profile-switcher.delete.ask", ask).build(t);
+    let actions = Actions::new("profile-switcher.delete-actions")
+        .push(
+            Button::new(format!("Delete {name}"))
+                .look(Look::Danger)
+                .trailing(keycaps(["⏎"], t))
+                .disabled(busy)
+                .on_press_tx(delete)
+                .build(t)
+                .key("profile-switcher.confirm"),
         )
-        .child(
-            actions(t)
-                .child(
-                    Button::new(format!("Delete {name}"))
-                        .variant(ButtonVariant::Danger)
-                        .shortcut("⏎")
-                        .disabled(busy)
-                        .on_press_tx(delete)
-                        .build(k)
-                        .key("profile-switcher.confirm"),
-                )
-                .child(back(k)),
-        )
+        .push(back(t));
+    (form, actions)
 }

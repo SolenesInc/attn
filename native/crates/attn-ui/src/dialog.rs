@@ -1,9 +1,9 @@
-use rune::{Color, El, Shadow, TextStyle, Tx, col, row, text};
+use rune::{Color, El, Shadow, TextStyle, Tx, col, el, row, text};
 use rune_kit::ButtonVariant;
 
 use crate::frame::shadow;
 use crate::system::{IconSize, Size, door};
-use crate::{Backdrop, Frame, GlyphButton, Tokens};
+use crate::{GlyphButton, Tokens};
 
 /// How a dialog is framed, as the Tauri app's CSS draws that family of dialog: the backdrop
 /// behind it, its surface, the header's insets and the rule under it, the title and subtitle
@@ -70,49 +70,6 @@ impl DialogFrame {
         }
     }
 
-    /// What's New: `.whats-new-modal`, whose header runs straight into the step under it.
-    pub fn whats_new(t: &Tokens) -> DialogFrame {
-        DialogFrame {
-            surface: Frame {
-                radius: 14.0,
-                ..DialogFrame::sheet(t).surface
-            },
-            glow: Some(glow(t, 140.0, 0.06)),
-            header: [14.0, 16.0, 0.0, 24.0],
-            rule: None,
-            title: TextStyle::new(13.0, 500.0).lh(16.0),
-            ..DialogFrame::sheet(t)
-        }
-    }
-
-    /// A raised sheet with a large title over a sentence that says what it is for:
-    /// `.diagnostic-report-sheet`.
-    pub fn report(t: &Tokens) -> DialogFrame {
-        DialogFrame {
-            backdrop: Backdrop::overlay(t),
-            surface: Frame {
-                fill: t.bg_elevated,
-                edge: t.border_hover,
-                radius: 12.0,
-                shadow: shadow(t, 24.0, 80.0, 0.58),
-            },
-            glow: None,
-            header: [22.0, 24.0, 18.0, 24.0],
-            rule: Some(t.border_subtle),
-            title: TextStyle::new(18.0, 600.0),
-            subtitle: TextStyle::new(12.0, 400.0).lh(18.6),
-            subtitle_ink: t.text_tertiary,
-            subtitle_gap: 5.0,
-            close: Some(Close {
-                size: IconSize::Large,
-                ink: t.text_muted,
-                side: CLOSE_SIDE,
-            }),
-            sheen: None,
-            wash: None,
-        }
-    }
-
     /// A question that Cancel and one action answer, with no ×: `.mp-dialog`.
     pub fn prompt(t: &Tokens) -> DialogFrame {
         DialogFrame {
@@ -133,56 +90,6 @@ impl DialogFrame {
             close: None,
             sheen: None,
             wash: None,
-        }
-    }
-
-    /// A pull request's merge, asked first: `.merge-confirm-modal`, a ruled header with a
-    /// monospace title.
-    pub fn merge(t: &Tokens) -> DialogFrame {
-        DialogFrame {
-            backdrop: Backdrop {
-                fill: t.shadow.alpha(0.6),
-                blur: 0.0,
-            },
-            surface: Frame {
-                fill: t.bg_panel,
-                edge: t.border,
-                radius: 8.0,
-                shadow: shadow(t, 24.0, 64.0, 0.6),
-            },
-            header: [16.0, 16.0, 16.0, 16.0],
-            rule: Some(t.border),
-            title: TextStyle::new(13.0, 600.0).mono(),
-            ..DialogFrame::prompt(t)
-        }
-    }
-
-    /// A session being set up, or why it was not: `.cleanup-content` over
-    /// `.session-progress-prompt`, a card washed in brand from its corner, with no ×.
-    pub fn progress(t: &Tokens) -> DialogFrame {
-        DialogFrame {
-            backdrop: Backdrop {
-                fill: t.bg_overlay,
-                blur: 2.0,
-            },
-            surface: Frame {
-                fill: t.bg_panel,
-                edge: t.border_hover,
-                radius: 8.0,
-                shadow: shadow(t, 22.0, 76.0, 0.54),
-            },
-            glow: Some(Shadow {
-                spread: 1.0,
-                color: Color::WHITE.alpha(0.03),
-                ..Shadow::default()
-            }),
-            header: [18.0, 20.0, 0.0, 20.0],
-            sheen: Some([t.bg_elevated, t.bg_panel]),
-            wash: Some((
-                135f32.to_radians(),
-                [(0.0, t.brand.alpha(0.08)), (0.42, t.brand.alpha(0.0))],
-            )),
-            ..DialogFrame::prompt(t)
         }
     }
 }
@@ -416,5 +323,57 @@ impl Dialog {
                 .center()
                 .child(panel),
         );
+    }
+}
+
+/// A surface's fill, edge, corners and shadow, as main drew a dialog before the blocks.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Frame {
+    pub fill: Color,
+    pub edge: Color,
+    pub radius: f32,
+    pub shadow: Shadow,
+}
+
+impl Frame {
+    pub fn draw(self, surface: El) -> El {
+        surface
+            .fill(self.fill)
+            .border(1.0, self.edge)
+            .radius(self.radius)
+            .box_shadow(self.shadow)
+    }
+}
+
+/// What a dialog lays between itself and the window, as main drew it before the blocks.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Backdrop {
+    pub fill: Color,
+    pub blur: f32,
+}
+
+impl Backdrop {
+    fn modal(t: &Tokens) -> Backdrop {
+        Backdrop {
+            fill: t.shadow.alpha(0.7),
+            blur: 4.0,
+        }
+    }
+
+    fn overlay(t: &Tokens) -> Backdrop {
+        Backdrop {
+            fill: t.bg_overlay,
+            blur: 0.0,
+        }
+    }
+
+    pub fn draw(self, key: impl Into<String>) -> El {
+        el().key(key.into())
+            .absolute(0.0, 0.0)
+            .w_full()
+            .h_full()
+            .backdrop_blur(self.blur)
+            .fill(self.fill)
+            .a11y_hidden()
     }
 }

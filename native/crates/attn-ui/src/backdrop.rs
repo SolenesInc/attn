@@ -3,55 +3,38 @@ use rune::{Color, El, el};
 use crate::Tokens;
 
 /// What a surface over the window lays between itself and the window: a fill over everything
-/// behind it, blurred first when `blur` is not 0, as the Tauri app's CSS dims or washes the
-/// window under that surface.
+/// behind it, blurred first when `blur` is not 0.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Backdrop {
-    pub fill: Color,
-    pub blur: f32,
+    fill: Color,
+    blur: f32,
 }
 
 impl Backdrop {
-    /// A dialog that holds the person until it closes: `.whats-new-overlay`,
-    /// `.shortcuts-overlay`, `.shortcut-editor-overlay`.
+    /// A surface that holds the person until it closes, such as a dialog or the launcher: the
+    /// window dimmed and blurred behind it, so it reads as set aside.
     pub fn modal(t: &Tokens) -> Backdrop {
-        Backdrop {
-            fill: t.shadow.alpha(0.7),
-            blur: 4.0,
-        }
-    }
-
-    /// The scheme's own overlay: `.settings-overlay`, `.diagnostic-report-overlay`,
-    /// `.desktop-overview-scrim`.
-    pub fn overlay(t: &Tokens) -> Backdrop {
-        Backdrop {
-            fill: t.bg_overlay,
-            blur: 0.0,
-        }
-    }
-
-    /// The command palette's wash of the app background: `.unified-palette`.
-    pub fn palette(t: &Tokens) -> Backdrop {
-        Backdrop {
-            fill: t.bg_app.alpha(0.6),
-            blur: 0.0,
-        }
-    }
-
-    /// A finder's lighter wash of the app background: `.palette`, which the file opener and
-    /// the notebook's finder share.
-    pub fn finder(t: &Tokens) -> Backdrop {
-        Backdrop {
-            fill: t.bg_app.alpha(0.55),
-            blur: 0.0,
-        }
-    }
-
-    /// The new-session dialog's: `.location-picker-overlay`.
-    pub fn launcher(t: &Tokens) -> Backdrop {
         Backdrop {
             fill: t.shadow.alpha(0.5),
             blur: 2.0,
+        }
+    }
+
+    /// The same dim without the blur, for a surface drawn inside a layer of the window, where
+    /// a blur has nothing behind it to blur.
+    pub fn dim(t: &Tokens) -> Backdrop {
+        Backdrop {
+            fill: t.shadow.alpha(0.5),
+            blur: 0.0,
+        }
+    }
+
+    /// A finder's light wash of the app background, which keeps the window readable behind
+    /// the palette and the file opener.
+    pub fn finder(t: &Tokens) -> Backdrop {
+        Backdrop {
+            fill: t.bg_app.alpha(0.6),
+            blur: 0.0,
         }
     }
 

@@ -2,18 +2,16 @@
 //! the daemon applies by reloading the agent.
 
 use attn_protocol::{SessionContextWindowCapResultMessage, SetSessionContextWindowCapMessage};
-use attn_ui::{Backdrop, Dialog, DialogFrame, Frame, Tokens};
-use rune::{Align, El, Span, TextEdit, TextStyle, Tx, col, text};
+use attn_ui::blocks::{Actions, Field};
+use attn_ui::system::{Button, FieldState, Look, line_box};
+use attn_ui::{Dialog, Tokens};
+use rune::{El, TextEdit, Tx};
 use rune_kit::TextInput;
 
 use crate::State;
 use crate::sidebar::model::display_name;
 
 const KEY: &str = "context-cap";
-const TITLE_TYPE: TextStyle = TextStyle::new(12.0, 600.0).mono().tracking(1.1);
-const MESSAGE_TYPE: TextStyle = TextStyle::new(13.0, 400.0).lh(20.0);
-const INPUT_TYPE: TextStyle = TextStyle::new(12.0, 400.0).mono();
-const ERROR_TYPE: TextStyle = TextStyle::new(12.0, 400.0);
 
 pub(crate) struct ContextCap {
     session: String,
@@ -125,61 +123,19 @@ fn submit(state: &mut State, tx: &mut Tx) {
     );
 }
 
-/// `.context-cap-content`: a centred card over the window's overlay.
-fn frame(t: &Tokens) -> DialogFrame {
-    DialogFrame {
-        backdrop: Backdrop::overlay(t),
-        surface: Frame {
-            fill: t.bg_elevated,
-            edge: t.border,
-            radius: 12.0,
-            shadow: attn_ui::frame::shadow(t, 16.0, 48.0, 0.42),
-        },
-        header: [20.0, 22.0, 14.0, 22.0],
-        ..DialogFrame::prompt(t)
-    }
-}
-
 pub(crate) fn view(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let Some(prompt) = &state.window.context_cap else {
         return;
     };
-    let before = "Cap ";
-    let message = format!(
-        "{before}{}’s context window so it compacts at this many tokens. Blank means no cap. \
+    let lead = format!(
+        "Cap `{}`’s context window so it compacts at this many tokens. Blank means no cap. \
          Saving reloads the agent to apply it: the conversation is resumed, but anything \
          mid-turn is lost.",
         prompt.name
     );
-    let name = Span::new(before.len(), before.len() + prompt.name.len())
-        .mono()
-        .color(t.brand);
-    let lead = col()
-        .w_full()
-        .gap(11.0)
-        .child(
-            text("CONTEXT WINDOW CAP")
-                .font(TITLE_TYPE)
-                .color(t.text_muted)
-                .w_full()
-                .align(Align::Center),
-        )
-        .child(
-            text(message)
-                .key(format!("{KEY}.message"))
-                .font(MESSAGE_TYPE)
-                .color(t.text_primary)
-                .spans(vec![name])
-                .w_full()
-                .wrap()
-                .align(Align::Center),
-        );
-    let field = TextInput::new(&prompt.edit)
+    let saving = prompt.saving;
+    let input = TextInput::new(&prompt.edit)
         .key(format!("{KEY}.field"))
-        .plain()
-        .text_style(INPUT_TYPE)
-        .height(INPUT_TYPE.line_px())
-        .width(None)
         .label("Context window cap in tokens")
         .placeholder("e.g. 800000 — blank for no cap")
         .on_edit(|state: &mut State| {
@@ -195,57 +151,39 @@ pub(crate) fn view(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 prompt.refused = None;
             }
         })
-        .on_submit(submit)
-        .build(attn_ui::kit(t));
-    let saving = prompt.saving;
-    let body = col()
-        .w_full()
-        .px(22.0)
-        .gap(14.0)
-        .child(
-            col()
-                .w_full()
-                .px(10.0)
-                .py(8.0)
-                .radius(6.0)
-                .fill(t.bg_app)
-                .border(1.0, t.border_hover)
-                .child(field.w_full()),
-        )
-        .children(prompt.refused.clone().map(|why| {
-            text(why)
-                .key(format!("{KEY}.refused"))
-                .font(ERROR_TYPE)
-                .color(t.error)
-                .w_full()
-                .wrap()
-                .align(Align::Center)
-        }));
-    let actions = rune::row()
-        .w_full()
-        .gap(8.0)
-        .pt(14.0)
-        .pb(20.0)
-        .justify_center()
-        .child(crate::prompt_dialog::button(
-            "Cancel",
-            false,
-            format!("{KEY}.cancel"),
-            t,
-            |b| b.disabled(saving).on_press_tx(close),
-        ))
-        .child(crate::prompt_dialog::button(
-            if saving { "Saving…" } else { "Save" },
-            true,
-            format!("{KEY}.save"),
-            t,
-            |b| b.disabled(saving).on_press_tx(submit),
-        ));
-    Dialog::new(KEY, "Context window cap", frame(t))
+        .on_submit(submit);
+    let field = if saving {
+        FieldState::Disabled
+    } else {
+        FieldState::failed_if(prompt.refused.is_some())
+    };
+    Dialog::new(KEY, "Context window cap")
         .lead(lead)
-        .width(460.0)
         .on_close_tx(close)
-        .child(body)
-        .child(actions)
+        .push(
+            Field::new(format!("{KEY}.field"), "Cap in tokens")
+                .control(line_box(input, field, t))
+                .error(prompt.refused.clone())
+                .build(t),
+        )
+        .actions(
+            Actions::new(format!("{KEY}.actions"))
+                .then_end()
+                .push(
+                    Button::new("Cancel")
+                        .disabled(saving)
+                        .on_press_tx(close)
+                        .build(t)
+                        .key(format!("{KEY}.cancel")),
+                )
+                .push(
+                    Button::new(if saving { "Saving…" } else { "Save" })
+                        .look(Look::Primary)
+                        .disabled(saving)
+                        .on_press_tx(submit)
+                        .build(t)
+                        .key(format!("{KEY}.save")),
+                ),
+        )
         .build(t, layers);
 }

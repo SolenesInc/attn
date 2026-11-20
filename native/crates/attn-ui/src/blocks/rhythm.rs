@@ -17,6 +17,12 @@ impl Inline {
         door::gap(row().items_center(), Space::S4).min_w(0.0)
     }
 
+    /// Close together on one line that never wraps, its parts giving way as they shrink: a mark
+    /// and a name that truncates.
+    pub fn line() -> El {
+        door::gap(row().items_center().min_w(0.0), Space::S4)
+    }
+
     /// Apart: a control and what goes with it, such as a field and its Saved mark.
     pub fn loose() -> El {
         door::gaps(row().flex_wrap().items_center(), Space::S8, Space::S8).max_w_frac(1.0)

@@ -23,6 +23,8 @@ pub enum Type {
     Mono,
     /// A button's or a segment's word: 12/600.
     Control,
+    /// What a person writes as the main thing on a surface, such as a quick message: 18/400.
+    Compose,
 }
 
 impl Type {

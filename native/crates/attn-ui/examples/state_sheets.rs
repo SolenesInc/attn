@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use attn_ui::block_gallery::BLOCK_SUBJECTS;
 use attn_ui::chrome_gallery::CHROME_SHEETS;
 use attn_ui::colors::scheme_for;
+use attn_ui::floating_gallery::FLOATING_SUBJECTS;
 use attn_ui::gallery::{BANNERS, BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
 use attn_ui::panel_gallery::{PANEL_SUBJECTS, PANEL_VARIANTS};
 use attn_ui::settings_gallery::{SETTINGS_SUBJECTS, SETTINGS_VARIANTS};
@@ -290,6 +291,31 @@ fn sheets() -> Vec<Sheet> {
         .map(|variant| column(variant, variant, Gesture::None))
         .collect(),
     });
+    all.extend(
+        FLOATING_SUBJECTS
+            .iter()
+            .map(|&(name, story, keys, variants, aim)| {
+                let mut columns = vec![column(variants[0], variants[0], Gesture::None)];
+                if let Some(aim) = aim {
+                    columns.push(aimed("Hover", variants[0], Gesture::Hover, aim));
+                    columns.push(aimed("Pressed", variants[0], Gesture::Press, aim));
+                }
+                columns.extend(variants[1..].iter().map(|&v| match v {
+                    "Focus" => column("Focus", variants[0], Gesture::Tab),
+                    "Failed focus" => column("Failed, focused", "Failed", Gesture::Tab),
+                    v => column(v, v, Gesture::None),
+                }));
+                Sheet {
+                    name,
+                    story,
+                    rows: keys
+                        .iter()
+                        .map(|k| ((*k).to_owned(), (*k).to_owned()))
+                        .collect(),
+                    columns,
+                }
+            }),
+    );
     all
 }
 

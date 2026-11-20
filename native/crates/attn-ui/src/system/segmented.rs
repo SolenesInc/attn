@@ -9,6 +9,7 @@ pub struct Segmented {
     label: String,
     options: Vec<Segment>,
     disabled: bool,
+    tab_stops: bool,
 }
 
 /// One option of a [`Segmented`].
@@ -63,7 +64,7 @@ impl Segment {
         self
     }
 
-    fn build(self, (i, n): (usize, usize), track_disabled: bool, t: &Tokens) -> El {
+    fn build(self, (i, n): (usize, usize), track_disabled: bool, tab_stop: bool, t: &Tokens) -> El {
         let (fill, ink) = if self.chosen {
             (t.bg_selected, t.text_primary)
         } else {
@@ -75,7 +76,7 @@ impl Segment {
             .label(self.name.clone())
             .checked(self.chosen)
             .position_in_set(i + 1, n)
-            .focusable(true)
+            .focusable(tab_stop)
             .focus_selected(self.chosen)
             .min_h(Size::Compact.height())
             .shrink()
@@ -123,7 +124,15 @@ impl Segmented {
             label: label.into(),
             options: Vec::new(),
             disabled: false,
+            tab_stops: true,
         }
+    }
+
+    /// The keys that choose live elsewhere, such as Alt and a letter beside each name, so no
+    /// option takes a Tab stop.
+    pub fn without_tab_stops(mut self) -> Self {
+        self.tab_stops = false;
+        self
     }
 
     /// The whole control can't be changed now: every option is drawn and read as unavailable.
@@ -159,7 +168,7 @@ impl Segmented {
                 self.options
                     .into_iter()
                     .enumerate()
-                    .map(|(i, option)| option.build((i, n), self.disabled, t)),
+                    .map(|(i, option)| option.build((i, n), self.disabled, self.tab_stops, t)),
             );
         let track = door::inset(door::gap(track, Space::S2), Space::S2, Space::S2);
         let track = door::corner(track, Radius::Card);

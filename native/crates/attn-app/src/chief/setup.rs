@@ -3,12 +3,12 @@
 
 use attn_protocol::{GetSettingsMessage, HarnessModel};
 use attn_ui::Tokens;
-use attn_ui::frame::{self, Frame};
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, FileDialogOptions, Tx, col, el, row, text};
+use attn_ui::blocks::{Actions, Block, Field, Inline, Notice, Popover, Prose, Status};
+use attn_ui::frame::Frame;
+use attn_ui::system::{Button, Choice as ChoiceRow, Look, Segment, Segmented, Size, Type, words};
+use rune::{El, FileDialogOptions, Tx, el};
+use rune_kit::Placement;
 use rune_kit::popover::anchored;
-use rune_kit::{Button, ButtonVariant, ControlSize, Placement};
 
 use super::{Phase, View};
 use crate::State;
@@ -16,7 +16,6 @@ use crate::settings::{EffortMode, Route, RouteHarness, Rules};
 
 pub(crate) const POP: &str = "chief-setup";
 const PRIMARY: &str = "chief-setup.primary";
-const ESC_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0).mono();
 const RECHECK: &str = "chief-setup.recheck";
 
 /// The setup while it shows: the route it would save, the folder the user chose, and the
@@ -519,160 +518,66 @@ fn choose_folder(state: &mut State, tx: &mut Tx) {
 }
 
 /// Arrows walk the focused radio's group, picking as they go, and Enter on a radio saves. The
-/// harness and the effort are the Tauri app's `.chief-seg` segments; the models are its
-/// `.chief-pop-models` rows.
+/// harness and the effort are segments; the models are a list of choices.
 fn radios(group: Group, choices: &[Choice], busy: bool, t: &Tokens) -> El {
-    let group_el = match group {
-        Group::Model => col().w_full().gap(1.0),
-        Group::Harness | Group::Effort => row()
-            .w_full()
-            .equal_columns(choices.len())
-            .padding(2.0)
-            .radius(7.0)
-            .fill(t.bg_elevated),
+    let label = |c: &Choice| match &c.mark {
+        Some(mark) => format!("{} · {mark}", c.label),
+        None => c.label.clone(),
     };
-    group_el
-        .key(format!("{POP}.{}", group.id()))
-        .role("radiogroup")
-        .label(group.label())
-        .focus_group()
-        .children(choices.iter().map(|c| {
-            let choice = match group {
-                Group::Model => model_row(c, t),
-                Group::Harness | Group::Effort => segment(c, t),
-            };
-            let label = match &c.mark {
-                Some(mark) => format!("{} · {mark}", c.label),
-                None => c.label.clone(),
-            };
-            let mut choice = choice
-                .key(c.key.clone())
-                .role("radio")
-                .label(label)
-                .checked(c.checked)
-                .focusable(!busy)
-                .focus_selected(c.checked)
-                .focus_ring(2.0, -2.0, t.brand)
-                .disabled(busy);
-            if busy {
-                choice = choice.layer_opacity(0.45);
-            } else if let Some(p) = c.pick.clone() {
-                choice = choice.on_press(move |state: &mut State| pick(state, &p));
+    let press = |c: &Choice| {
+        let p = c.pick.clone();
+        move |state: &mut State, _: &mut Tx| {
+            if let Some(p) = &p {
+                pick(state, p);
             }
-            choice
-        }))
-}
-
-/// One of `.chief-seg`'s buttons: the chosen one raised on the button tone.
-fn segment(c: &Choice, t: &Tokens) -> El {
-    let (fill, ink) = if c.checked {
-        (t.bg_button, t.text_primary)
-    } else {
-        (rune::Color::TRANSPARENT, t.text_secondary)
+        }
     };
-    let mut segment = row()
-        .min_w(0.0)
-        .center()
-        .px(6.0)
-        .py(4.0)
-        .radius(5.0)
-        .fill(fill)
-        .child(
-            text(c.label.clone())
-                .font(type_::CAPTION)
-                .color(ink)
-                .single_line()
-                .truncate()
-                .a11y_hidden(),
-        );
-    if c.checked {
-        segment = segment.box_shadow(rune::Shadow {
-            y: 1.0,
-            color: rune::Color::BLACK.alpha(0.25),
-            ..rune::Shadow::default()
-        });
-    }
-    segment
-}
-
-/// One of `.chief-pop-models`' rows: the chosen one tinted and outlined in brand.
-fn model_row(c: &Choice, t: &Tokens) -> El {
-    let mark_ink = if c.checked { t.brand } else { t.text_tertiary };
-    let line = row()
-        .w_full()
-        .items_start()
-        .gap(space::S2)
-        .px(8.0)
-        .py(6.0)
-        .radius(6.0)
-        .child(
-            text(c.label.clone())
-                .font(type_::CAPTION)
-                .color(t.text_primary)
-                .grow(1.0)
-                .min_w(0.0)
-                .wrap()
-                .a11y_hidden(),
-        )
-        .children(c.mark.clone().map(|mark| {
-            text(mark)
-                .font(type_::CAPTION)
-                .color(mark_ink)
-                .a11y_hidden()
-        }));
-    if c.checked {
-        line.fill(t.brand.alpha(0.12)).box_shadow(rune::Shadow {
-            spread: 1.0,
-            color: t.brand.alpha(0.45),
-            inset: true,
-            ..rune::Shadow::default()
-        })
-    } else {
-        line.hover(t.bg_elevated)
+    let key = format!("{POP}.{}", group.id());
+    match group {
+        Group::Harness | Group::Effort => Segmented::new(key, group.label())
+            .disabled(busy)
+            .options(choices.iter().map(|c| {
+                Segment::new(c.key.clone(), c.label.clone())
+                    .chosen(c.checked)
+                    .on_press_tx(press(c))
+            }))
+            .build(t)
+            .into(),
+        Group::Model => {
+            let n = choices.len();
+            attn_ui::system::choices(&key, group.label()).children(choices.iter().enumerate().map(
+                |(i, c)| {
+                    let mut choice = ChoiceRow::new(c.key.clone(), c.label.clone())
+                        .chosen(c.checked)
+                        .disabled(busy);
+                    if let Some(mark) = &c.mark {
+                        choice = choice.note(mark.clone());
+                    }
+                    El::from(choice.build((i, n), t, press(c)).label(label(c)))
+                },
+            ))
+        }
     }
 }
 
-fn kicker(label: &str, t: &Tokens) -> El {
-    type_::caps(label).color(t.text_tertiary)
+fn field(key: &str, label: &str, control: El, t: &Tokens) -> Block {
+    Field::new(format!("{POP}.{key}"), label)
+        .control(control)
+        .build(t)
 }
 
 fn link(key: &str, label: &str, t: &Tokens, press: fn(&mut State, &mut Tx)) -> El {
     Button::new(label)
-        .variant(ButtonVariant::Ghost)
-        .control_size(ControlSize::Small)
+        .look(Look::Quiet)
+        .size(Size::Compact)
         .on_press_tx(press)
-        .build(attn_ui::kit(t))
+        .build(t)
         .key(key.to_owned())
+        .into()
 }
 
-/// `.chief-folder-choose`: underlined words with no box.
-fn choose_link(busy: bool, t: &Tokens) -> El {
-    let words = "Choose…";
-    let link = text(words)
-        .key(format!("{POP}.folder.choose"))
-        .role("button")
-        .label("Choose the Notebook folder")
-        .font(type_::CAPTION)
-        .color(t.text_secondary)
-        .spans([rune::Span::new(0, words.len()).underline(t.border_hover)])
-        .single_line()
-        .focusable(!busy)
-        .focus_ring(2.0, -2.0, t.brand)
-        .disabled(busy);
-    if busy {
-        link.layer_opacity(0.45)
-    } else {
-        link.on_press_tx(choose_folder)
-    }
-}
-
-fn alert(text_: &str, t: &Tokens) -> El {
-    text(text_.to_owned())
-        .key(format!("{POP}.alert"))
-        .role("alert")
-        .font(type_::LABEL)
-        .color(t.error)
-        .wrap()
+fn alert(said: &str, t: &Tokens) -> Block {
+    Notice::error(format!("{POP}.alert"), said).build(t)
 }
 
 fn open_agents_settings(state: &mut State, tx: &mut Tx) {
@@ -696,124 +601,103 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         format!("{}'s harness", view.name)
     };
     let k = attn_ui::kit(t);
-    let dimmed = t.text_dimmed;
-    let head = row()
-        .items_center()
-        .gap(space::S2)
-        .child(
-            text(title.clone())
-                .key(format!("{POP}.heading"))
-                .role("heading")
-                .font(type_::TITLE)
-                .color(t.text_primary)
-                .grow(1.0),
-        )
-        .child(
-            Button::new("esc")
-                .variant(ButtonVariant::GhostMuted)
-                .control_size(ControlSize::Small)
-                .on_press_tx(|state: &mut State, tx: &mut Tx| super::dismiss(state, true, tx))
-                .label_with(move |_, _| text("esc").font(ESC_TYPE).color(dimmed))
-                .build(k)
-                .key(format!("{POP}.close"))
-                .label("Close Chief setup")
-                .px(0.0)
-                .h(ESC_TYPE.line_px()),
-        );
-    let mut body = col().gap(space::S3);
+    let mut popover = Popover::new(POP, title).aside(
+        Button::new("esc")
+            .look(Look::Quiet)
+            .size(Size::Compact)
+            .on_press_tx(|state: &mut State, tx: &mut Tx| super::dismiss(state, true, tx))
+            .build(t)
+            .key(format!("{POP}.close"))
+            .label("Close Chief setup"),
+    );
     if form.checking {
-        body = body.child(
-            text("Checking harnesses…")
-                .role("status")
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
-        );
+        popover = popover
+            .push(Status::new(format!("{POP}.checking"), "Checking harnesses…", true).build(t));
     } else if !form.shows_route() {
-        body = body.child(match &form.harness_error {
+        popover = popover.push(match &form.harness_error {
             Some(why) => alert(why, t),
-            None => {
-                text("No harness here can run the Chief. Install Claude Code or Codex to start it.")
-                    .key(format!("{POP}.empty"))
-                    .font(type_::LABEL)
-                    .color(t.text_secondary)
-                    .wrap()
-            }
+            None => Prose::lead(
+                format!("{POP}.empty"),
+                "No harness here can run the Chief. Install Claude Code or Codex to start it.",
+            )
+            .build(t),
         });
-        body = body.child(
-            row()
-                .gap(space::S2)
-                .child(link(RECHECK, "Check again", t, recheck))
-                .child(link(
+        popover = popover.push(
+            Actions::new(format!("{POP}.empty-actions"))
+                .push(link(RECHECK, "Check again", t, recheck))
+                .push(link(
                     &format!("{POP}.settings"),
                     "Settings › Agents",
                     t,
                     open_agents_settings,
-                )),
+                ))
+                .build(),
         );
     } else {
         if !form.harnesses.is_empty() {
-            body = body.child(
-                col()
-                    .key(format!("{POP}.harness-field"))
-                    .gap(space::S1)
-                    .child(kicker("Harness", t))
-                    .child(radios(Group::Harness, &form.harnesses, view.busy, t)),
-            );
+            popover = popover.push(field(
+                "harness-field",
+                "Harness",
+                radios(Group::Harness, &form.harnesses, view.busy, t),
+                t,
+            ));
         }
-        let mut models = col()
-            .key(format!("{POP}.model-field"))
-            .gap(space::S1)
-            .child(kicker("Model", t));
         match &form.model_error {
             Some(why) => {
-                models = models.child(alert(why, t)).child(link(
-                    RECHECK,
-                    "Check again",
+                popover = popover.push(alert(why, t)).push(
+                    Actions::new(format!("{POP}.models-actions"))
+                        .push(link(RECHECK, "Check again", t, recheck_models))
+                        .build(),
+                );
+            }
+            None => {
+                popover = popover.push(field(
+                    "model-field",
+                    "Model",
+                    radios(Group::Model, &form.models, view.busy, t),
                     t,
-                    recheck_models,
                 ));
             }
-            None => models = models.child(radios(Group::Model, &form.models, view.busy, t)),
         }
         if form.models_loading {
-            models = models.child(
-                text("Checking models…")
-                    .role("status")
-                    .font(type_::LABEL)
-                    .color(t.text_tertiary),
+            popover = popover.push(
+                Status::new(format!("{POP}.models-checking"), "Checking models…", true).build(t),
             );
         }
-        body = body.child(models);
         if !form.efforts.is_empty() {
-            body = body.child(
-                col()
-                    .key(format!("{POP}.effort-field"))
-                    .gap(space::S1)
-                    .child(kicker("Effort", t))
-                    .child(radios(Group::Effort, &form.efforts, view.busy, t)),
-            );
+            popover = popover.push(field(
+                "effort-field",
+                "Effort",
+                radios(Group::Effort, &form.efforts, view.busy, t),
+                t,
+            ));
         }
         if first_run {
-            body = body.child(
-                row()
+            let choose = Button::new("Choose…")
+                .look(Look::Quiet)
+                .size(Size::Compact)
+                .disabled(view.busy)
+                .on_press_tx(choose_folder)
+                .build(t)
+                .key(format!("{POP}.folder.choose"))
+                .label("Choose the Notebook folder");
+            popover = popover.push(Block::custom(
+                format!("{POP}.folder.block"),
+                Inline::loose()
                     .key(format!("{POP}.folder-field"))
-                    .gap(space::S2)
-                    .items_start()
-                    .child(text("Notebook").font(type_::CAPTION).color(t.text_tertiary))
+                    .child(words("Notebook", Type::Label, t.text_tertiary))
                     .child(
-                        text(form.folder.clone())
+                        words(form.folder.clone(), Type::Mono, t.text_secondary)
                             .key(format!("{POP}.folder"))
-                            .font(type_::MONO_CAPTION)
-                            .color(t.text_secondary)
                             .wrap_anywhere()
-                            .grow(1.0)
+                            .shrink()
                             .min_w(0.0),
                     )
-                    .child(choose_link(view.busy, t)),
-            );
+                    .child(El::from(choose)),
+            ));
         }
         if let Some(why) = super::setup_error(state) {
-            body = body.child(alert(why, t));
+            popover = popover.push(alert(why, t));
         }
         let primary = match (view.phase, first_run, &view.session) {
             (Phase::Configuring, true, _) => "Starting…".to_owned(),
@@ -823,60 +707,35 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
             (_, false, None) => "Save".to_owned(),
         };
         let can_save = form.can_save;
-        let shown = primary.clone();
-        let mut button = Button::new(primary.clone())
-            .variant(ButtonVariant::Submit)
-            .label_with(move |style, ink| {
-                row()
-                    .gap(10.0)
-                    .items_center()
-                    .child(text(shown.clone()).font(style).color(ink))
-                    .child(text("⏎").font(style).color(ink.alpha(0.65)))
-            })
-            .on_press_tx(submit)
-            .build(k)
-            .key(PRIMARY)
-            .default_button()
-            .label(primary)
-            .a11y_value(if can_save { "ready" } else { "unavailable" });
-        if !can_save {
-            button = button.layer_opacity(0.45);
-        }
-        body = body.child(
-            row()
-                .key(format!("{POP}.actions"))
-                .justify_end()
-                .child(button),
+        let button = El::from(
+            Button::new(primary.clone())
+                .look(if can_save { Look::Primary } else { Look::Plain })
+                .trailing(words("⏎", Type::Control, attn_ui::warning_ink(t)).a11y_hidden())
+                .on_press_tx(submit)
+                .build(t)
+                .key(PRIMARY)
+                .label(primary),
+        )
+        .default_button()
+        .a11y_value(if can_save { "ready" } else { "unavailable" });
+        popover = popover.actions(
+            Actions::new(format!("{POP}.actions"))
+                .then_end()
+                .push(button),
         );
     }
-    let frame = Frame {
-        edge: t.border_hover,
-        radius: 10.0,
-        shadow: frame::shadow(t, 18.0, 40.0, 0.38),
-        ..Frame::menu(t)
-    };
-    let surface = frame.draw(
-        col()
-            .key(POP)
-            .role("dialog")
-            .label(title)
-            .focusable(true)
-            .no_focus_ring()
-            .padding(space::S3)
-            .gap(space::S3)
-            .w(280.0)
-            .child(head)
-            .child(body)
-            .on_press_outside(|state: &mut State, tx: &mut Tx| {
-                let over_the_window = state.window.layer.is_some();
-                super::dismiss(state, !over_the_window, tx)
-            }),
-    );
+    let frame = Frame::panel(t);
+    let surface = popover
+        .build(t)
+        .on_press_outside(|state: &mut State, tx: &mut Tx| {
+            let over_the_window = state.window.layer.is_some();
+            super::dismiss(state, !over_the_window, tx)
+        });
     let notch = el()
         .key(format!("{POP}.notch"))
         .size(NOTCH, NOTCH)
-        .fill(frame.fill)
-        .border_sides([0.0, 0.0, 1.0, 1.0], frame.edge)
+        .fill(frame.fill())
+        .border_sides([0.0, 0.0, 1.0, 1.0], frame.edge())
         .rotate(std::f32::consts::FRAC_PI_4)
         .a11y_hidden();
     let beside_row = SIDEBAR_INSET + BESIDE_SIDEBAR;
@@ -898,6 +757,6 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
 const BESIDE_SIDEBAR: f32 = 10.0;
 const ABOVE_ROW: f32 = 10.0;
 /// How far the row ends inside the sidebar: the sidebar's padding.
-const SIDEBAR_INSET: f32 = space::S2;
+const SIDEBAR_INSET: f32 = rune::tok::space::S2;
 /// The square turned into the notch that points at the row: `.chief-pop-notch`.
 const NOTCH: f32 = 10.0;

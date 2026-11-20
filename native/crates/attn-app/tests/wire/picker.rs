@@ -2354,3 +2354,34 @@ fn a_screen_reader_hears_the_harness_and_yolo_the_option_keys_choose() {
     );
     rest(&mut world);
 }
+
+#[test]
+fn the_harness_toggle_takes_no_tab_stop_and_alt_with_its_letter_chooses() {
+    let mut world = busy_desktop(&[]);
+    open_dialog(&mut world);
+    let segments: Vec<_> = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .filter(|e| {
+            e.key
+                .as_deref()
+                .is_some_and(|k| k.starts_with("new-session.agent.") && !k.ends_with(".keys"))
+        })
+        .collect();
+    assert!(!segments.is_empty(), "the toggle shows its harnesses");
+    for segment in &segments {
+        assert!(
+            !segment.focusable,
+            "{:?} takes a Tab stop: Tab in the picker completes the path",
+            segment.key
+        );
+    }
+    let ev = key_event(&rune::Chord::parse("alt+2").unwrap());
+    world.gesture(|app| app.key(ev));
+    assert_eq!(
+        chosen(&world),
+        "Codex",
+        "Alt and a harness's number choose it"
+    );
+}

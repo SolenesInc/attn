@@ -1,9 +1,9 @@
 use attn_ui::Tokens;
-use attn_ui::finder::{self, Hint};
+use attn_ui::blocks::{Inline, Stack};
+use attn_ui::finder::{self, FinderSize, Hint};
 use attn_ui::keycap;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Tx, col, el, row, text};
+use attn_ui::system::{DotShape, DotSize, IconSize, ListRow, Tone, Type, dot, glyph, tag, words};
+use rune::{El, Tx, col, row};
 use rune_kit::TextInput;
 
 use super::{Look, Mode, Row, Status};
@@ -26,29 +26,27 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         ),
         Mode::Snooze { name } => (format!("Snooze {name}"), format!("Snooze {name}")),
     };
-    let field = TextInput::new(&search.query)
-        .key(super::field_key())
-        .plain()
-        .text_style(finder::FIELD_TEXT)
-        .height(finder::FIELD_TEXT.line_px())
-        .width(None)
-        .label(label.clone())
-        .placeholder(placeholder)
-        .active_descendant(at.map(|i| row_key(&listing.rows[i])))
-        .on_edit(|state: &mut State| &mut state.window.search.query)
-        .on_change(super::edited)
-        .on_key(super::on_key)
-        .build(attn_ui::kit(t));
+    let field = finder::field(
+        TextInput::new(&search.query)
+            .key(super::field_key())
+            .plain()
+            .width(None)
+            .label(label.clone())
+            .placeholder(placeholder)
+            .active_descendant(at.map(|i| row_key(&listing.rows[i])))
+            .on_edit(|state: &mut State| &mut state.window.search.query)
+            .on_change(super::edited)
+            .on_key(super::on_key),
+    )
+    .build(attn_ui::kit(t));
     let header = finder::input_row(
         super::badge(state, &listing.mode)
             .map(|b| keycap::Keys::outlined(&[b]).build(t).key("palette.badge")),
         field,
-        listing.count.clone().map(|c| {
-            text(c)
-                .key("palette.count")
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary)
-        }),
+        listing
+            .count
+            .clone()
+            .map(|c| words(c, Type::Mono, t.text_tertiary).key("palette.count")),
     )
     .key("palette.header");
     let empty = listing.rows.is_empty().then(|| {
@@ -61,7 +59,6 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
     });
     let list = finder::list("palette.list")
         .label(label.clone())
-        .py(4.0)
         .children(
             listing
                 .rows
@@ -84,19 +81,19 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             if actions.snooze {
                 hints.push(super::action_hint(state, &Action::SessionSnooze, "snooze"));
             }
-            hints.push(Hint::keys("", "esc", " closes"));
+            hints.push(Hint::keys("", "esc", " closes").at_end());
             hints
         }
         Mode::Commands => vec![
             Hint::keys("", "↑↓", " move"),
             Hint::keys("", "↵", " run"),
             Hint::keys("delete ", ">", " to search agents"),
-            Hint::keys("", "esc", " closes"),
+            Hint::keys("", "esc", " closes").at_end(),
         ],
         Mode::Snooze { .. } => vec![
             Hint::keys("", "↑↓", " move"),
             Hint::keys("", "↵", " snooze"),
-            Hint::keys("", "esc", " back to agents"),
+            Hint::keys("", "esc", " back to agents").at_end(),
         ],
     };
     let panel = col()
@@ -105,8 +102,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         .label(label)
         .modal_tx(true, super::close)
         .w_full()
-        .max_w(760.0)
-        .max_h(620.0)
+        .max_h(FinderSize::Palette.max_height())
         .shrink()
         .min_h(0.0);
     let panel = finder::panel(
@@ -116,21 +112,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         list,
         Some(finder::footer(t, "palette", hints)),
     );
-    el().key("palette")
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .child(attn_ui::Backdrop::palette(t).draw("palette.scrim"))
-        .child(
-            col()
-                .w_full()
-                .h_full()
-                .px(16.0)
-                .pt(110.0)
-                .pb(30.0)
-                .items_center()
-                .child(panel),
-        )
+    finder::layer(t, "palette", panel, FinderSize::Palette)
 }
 
 fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
@@ -139,9 +121,7 @@ fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
     if let Look::Divider = r.look {
         return face;
     }
-    finder::option(t, face, highlighted)
-        .py(ROW_PY)
-        .on_pointer_move(move |state: &mut State, p| super::pointed(state, &pointing, (p.x, p.y)))
+    face.on_pointer_move(move |state: &mut State, p| super::pointed(state, &pointing, (p.x, p.y)))
         .on_press_tx(move |state: &mut State, tx: &mut Tx| super::pick_key(state, &pressing, tx))
 }
 
@@ -157,111 +137,86 @@ pub(crate) enum Place {
     Peek,
 }
 
-const ROW_GAP: f32 = 10.0;
-const ROW_PX: f32 = 10.0;
-const ROW_PY: f32 = 5.0;
-const ROW_MIN_H: f32 = 22.0;
-const DESCRIPTION_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
-const PILL_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
-const KIND_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
-/// The status column: "unreachable", the longest status word, measures 71 in `PILL_TYPE`, with
-/// the 2.5 a side it had at 10 points.
-const PILL_W: f32 = 76.0;
-const AGE_MIN_W: f32 = 36.0;
-const TAG_W: f32 = 34.0;
-const KIND_W: f32 = 42.0;
-const QUIET_TINT: f32 = 0.12;
+/// The state column: "UNREACHABLE", the longest state, in `Tag` with its insets.
+const STATE_W: f32 = 104.0;
+/// The age column: "12d", the longest age, in `Mono`.
+const AGE_W: f32 = 36.0;
+/// The keys column: one outlined key.
+const KEYS_W: f32 = 34.0;
+/// The kind column of a tile: "NOTE", the longest kind, in `Tag` with its insets.
+const KIND_W: f32 = 56.0;
 
-/// A row as the palette and the queue bar's peek draw it, keyed `key`: the Tauri app's
-/// `.unified-palette-row` inside its option's padding, its trailing columns at fixed widths so
-/// they line up row to row.
+/// A row as the palette and the queue bar's peek draw it, keyed `key`, its trailing columns at
+/// fixed widths so they line up row to row.
 pub(crate) fn row_face(r: &Row, key: String, place: Place, t: &Tokens) -> El {
     if let Look::Divider = r.look {
-        return el()
+        return Stack::tight()
             .key(key)
             .w_full()
-            .h(1.0)
-            .my(space::S1)
-            .fill(t.border_subtle)
+            .child(rune::el().w_full().h(1.0).fill(t.border_subtle))
             .a11y_hidden();
     }
-    let (name_color, details) = match place {
-        Place::Palette { highlighted } => (finder::title_color(t, highlighted), true),
-        Place::Peek => (t.text_secondary, false),
+    let (highlighted, details) = match place {
+        Place::Palette { highlighted } => (highlighted, true),
+        Place::Peek => (false, false),
     };
-    let muted = |s: String| {
-        text(s)
-            .font(type_::BODY)
-            .color(t.text_tertiary)
-            .single_line()
-    };
-    let age = |s: String| {
-        text(s)
-            .key(format!("{key}.age"))
-            .font(type_::MONO_CAPTION)
-            .color(t.text_tertiary)
-            .single_line()
-            .min_w(AGE_MIN_W)
-            .align(rune::Align::End)
+    let column = |width: f32, e: Option<El>| row().w(width).justify_end().children(e);
+    let age = |s: String, part: &str| {
+        column(
+            AGE_W,
+            Some(
+                words(s, Type::Mono, t.text_tertiary)
+                    .key(format!("{key}.{part}"))
+                    .single_line(),
+            ),
+        )
     };
     let chip = |s: String, part: &str| {
         keycap::Keys::outlined(&[s])
             .build(t)
             .key(format!("{key}.{part}"))
     };
-    let title = |s: String| {
-        text(s)
-            .font(type_::BODY)
-            .color(name_color)
-            .single_line()
-            .truncate()
-    };
-    let name = || row().grow(1.0).min_w(0.0).items_center().gap(4.0);
-    let option = row()
-        .key(key.clone())
+    let mut row = ListRow::new(key.clone(), r.label.clone())
         .role("option")
-        .label(r.label.clone())
-        .w_full()
-        .items_center()
-        .gap(ROW_GAP)
-        .px(ROW_PX)
-        .py(ROW_PY)
-        .min_h(ROW_MIN_H + 2.0 * ROW_PY);
+        .unfocusable()
+        .cursor(highlighted)
+        .selected(highlighted);
     match &r.look {
         Look::Command {
             icon,
             description,
             shortcut,
         } => {
-            let mut name = name().gap(8.0).child(title(r.label.clone()));
-            let mut option = option;
+            row = row.title(r.label.clone());
+            if let Some(icon) = icon {
+                row = row.lead(
+                    Stack::tight()
+                        .key(format!("{key}.icon"))
+                        .role("img")
+                        .label(icon.word())
+                        .child(glyph(icon.glyph(), IconSize::Small, t.text_tertiary)),
+                );
+            }
             if let Some(description) = description {
-                name = name.child(
-                    text(description.clone())
-                        .font(DESCRIPTION_TYPE)
-                        .color(t.text_tertiary)
+                row = row.tag(
+                    words(description.clone(), Type::Small, t.text_tertiary)
                         .single_line()
                         .truncate()
                         .shrink(),
                 );
-                option = option.description(description.clone());
             }
-            option
-                .children(icon.map(|icon| {
-                    row()
-                        .key(format!("{key}.icon"))
-                        .role("img")
-                        .label(icon.word())
-                        .w(16.0)
-                        .justify_center()
-                        .child(icon.glyph().draw(15.0, type_::BODY, t.text_tertiary))
-                }))
-                .child(name)
-                .children(shortcut.as_ref().map(|caps| {
+            if let Some(caps) = shortcut {
+                row = row.aside(
                     keycap::Keys::raised(caps)
                         .build(t)
-                        .key(format!("{key}.shortcut"))
-                }))
+                        .key(format!("{key}.shortcut")),
+                );
+            }
+            let built = row.build(t);
+            match description {
+                Some(d) => built.description(d.clone()),
+                None => built,
+            }
         }
         Look::Agent {
             agent,
@@ -271,25 +226,36 @@ pub(crate) fn row_face(r: &Row, key: String, place: Place, t: &Tokens) -> El {
             age: owed,
             tag,
         } => {
-            let name = name()
-                .children(
-                    agent
-                        .priority
-                        .then(|| crate::sidebar::priority_flag(&key, t)),
-                )
-                .child(title(agent.name.clone()))
-                .children(
-                    (*crew && details).then(|| muted("· crew".into()).key(format!("{key}.crew"))),
-                );
-            let (ink, tint) = status_ink(*status, t);
-            option
+            let mut title = Inline::tight().child(
+                words(agent.name.clone(), Type::Body, t.text_primary)
+                    .single_line()
+                    .truncate()
+                    .shrink(),
+            );
+            if agent.priority {
+                title = Inline::tight()
+                    .child(crate::sidebar::priority_flag(&key, t))
+                    .child(
+                        words(agent.name.clone(), Type::Body, t.text_primary)
+                            .single_line()
+                            .truncate()
+                            .shrink(),
+                    );
+            }
+            row = row.title_el(title).lead(status_dot(&key, *status, t));
+            if *crew && details {
+                row = row
+                    .tag(words("· crew", Type::Body, t.text_tertiary).key(format!("{key}.crew")));
+            }
+            row.aside(chip(slot.clone(), "slot"))
+                .aside(column(
+                    STATE_W,
+                    Some(state(&key, status.word(), status_tone(*status), t)),
+                ))
+                .aside(age(owed.clone(), "age"))
+                .aside(column(KEYS_W, tag.clone().map(|tag| chip(tag, "tag"))))
+                .build(t)
                 .a11y_value(status.word())
-                .child(status_dot(&key, *status, t))
-                .child(name)
-                .child(chip(slot.clone(), "slot"))
-                .child(pill(&key, status.word(), ink, tint))
-                .child(age(owed.clone()))
-                .child(tag_column(tag.clone().map(|tag| chip(tag, "tag"))))
         }
         Look::Member {
             chief,
@@ -307,110 +273,76 @@ pub(crate) fn row_face(r: &Row, key: String, place: Place, t: &Tokens) -> El {
                 (false, true, None) => Some("· crew".to_owned()),
                 (false, true, Some(desk)) => Some(format!("· crew · {desk}")),
             };
-            option
+            row = row.title(r.label.clone()).lead(state_mark(
+                &key,
+                word,
+                t.text_tertiary,
+                DotShape::Hollow,
+            ));
+            if let Some(role) = role {
+                row = row.tag(words(role, Type::Body, t.text_tertiary).key(format!("{key}.crew")));
+            }
+            row.aside(column(STATE_W, Some(state(&key, word, Tone::Neutral, t))))
+                .aside(age(hint.into(), "age"))
+                .aside(column(KEYS_W, None))
+                .build(t)
                 .a11y_value(word)
-                .child(
-                    el().key(format!("{key}.state"))
-                        .w(7.0)
-                        .h(7.0)
-                        .radius(3.5)
-                        .border(1.0, t.text_tertiary),
-                )
-                .child(
-                    name()
-                        .child(title(r.label.clone()))
-                        .children(role.map(|role| muted(role).key(format!("{key}.crew")))),
-                )
-                .child(pill(&key, word, t.text_tertiary, QUIET_TINT))
-                .child(age(hint.into()))
-                .child(tag_column(None))
         }
-        Look::Tile { icon, word, slot } => option
-            .child(
-                row()
+        Look::Tile { icon, word, slot } => row
+            .title(r.label.clone())
+            .lead(
+                Stack::tight()
                     .key(format!("{key}.icon"))
-                    .w(14.0)
-                    .h(14.0)
-                    .center()
                     .a11y_hidden()
-                    .child(attn_ui::Glyph::from(*icon).draw(14.0, type_::BODY, t.text_tertiary)),
+                    .child(glyph(*icon, IconSize::Small, t.text_tertiary)),
             )
-            .child(
-                row()
-                    .w(KIND_W)
-                    .py(2.0)
-                    .radius(4.0)
-                    .justify_center()
-                    .fill(t.text_tertiary.alpha(QUIET_TINT))
-                    .child(
-                        text(word.to_string())
-                            .key(format!("{key}.kind"))
-                            .font(KIND_TYPE)
-                            .color(t.text_tertiary),
-                    ),
-            )
-            .child(name().child(title(r.label.clone())))
-            .child(chip(slot.clone(), "slot")),
-        Look::Choice { detail } => option
-            .child(name().child(title(r.label.clone())))
-            .child(age(detail.clone()).key(format!("{key}.detail"))),
+            .tag(column(
+                KIND_W,
+                Some(tag(format!("{key}.kind"), word, Tone::Neutral, t).into()),
+            ))
+            .aside(chip(slot.clone(), "slot"))
+            .build(t),
+        Look::Choice { detail } => row
+            .title(r.label.clone())
+            .aside(age(detail.clone(), "detail"))
+            .build(t),
         Look::Divider => unreachable!("a divider returned above"),
     }
 }
 
-/// The last column, which holds the keys that jump to a row, kept as wide on a row without
-/// them so the columns before it line up.
-fn tag_column(tag: Option<El>) -> El {
-    row().w(TAG_W).justify_end().children(tag)
+fn state(row_key: &str, word: &str, tone: Tone, t: &Tokens) -> El {
+    tag(format!("{row_key}.status"), word, tone, t).into()
 }
 
 /// An agent row's dot: filled warm while the agent waits for the user, green while it works or
-/// is the chief, an outline while it sleeps or its outpost is out of reach.
+/// is the chief, a ring while it sleeps or its outpost is out of reach.
 fn status_dot(row_key: &str, status: Status, t: &Tokens) -> El {
-    let dot = el()
+    let (ink, shape) = match status {
+        Status::Waiting | Status::Approval => (t.warning, DotShape::Filled),
+        Status::Working | Status::Chief => (t.success, DotShape::Filled),
+        Status::Snoozed => (t.text_tertiary, DotShape::Hollow),
+        Status::Unreachable => (t.error, DotShape::Hollow),
+        Status::Idle => (t.text_dimmed, DotShape::Filled),
+    };
+    state_mark(row_key, status.word(), ink, shape)
+}
+
+/// A row's state as a dot, keyed `{row_key}.state` and read as `said`.
+fn state_mark(row_key: &str, said: &str, ink: rune::Color, shape: DotShape) -> El {
+    Stack::tight()
         .key(format!("{row_key}.state"))
         .role("img")
-        .label(status.word())
-        .a11y_value(status.word())
-        .w(7.0)
-        .h(7.0)
-        .radius(3.5);
-    match status {
-        Status::Waiting | Status::Approval => dot.fill(t.warning),
-        Status::Working | Status::Chief => dot.fill(t.success),
-        Status::Snoozed => dot.border(1.0, t.text_tertiary),
-        Status::Unreachable => dot.border(1.0, t.error),
-        Status::Idle => dot.fill(t.text_dimmed),
-    }
+        .label(said.to_owned())
+        .a11y_value(said.to_owned())
+        .child(dot(ink, shape, DotSize::Regular))
 }
 
-/// A status's ink and how strongly its pill is tinted with it.
-fn status_ink(status: Status, t: &Tokens) -> (rune::Color, f32) {
+/// How a state's tag reads.
+fn status_tone(status: Status) -> Tone {
     match status {
-        Status::Waiting => (t.warning, 0.14),
-        Status::Approval | Status::Unreachable => (t.error, 0.14),
-        Status::Working => (t.success, 0.14),
-        Status::Chief => (t.brand, 0.14),
-        Status::Snoozed | Status::Idle => (t.text_tertiary, QUIET_TINT),
+        Status::Waiting => Tone::Warn,
+        Status::Approval | Status::Unreachable => Tone::Bad,
+        Status::Working | Status::Chief => Tone::Good,
+        Status::Snoozed | Status::Idle => Tone::Neutral,
     }
-}
-
-/// A row's status word on a tint of its ink, as the Tauri app's `.unified-palette-pill`: a
-/// fixed column whose words wrap when they do not fit.
-fn pill(row_key: &str, word: &str, ink: rune::Color, tint: f32) -> El {
-    col()
-        .w(PILL_W)
-        .py(1.0)
-        .radius(4.0)
-        .justify_center()
-        .fill(ink.alpha(tint))
-        .child(
-            text(word)
-                .key(format!("{row_key}.status"))
-                .font(PILL_TYPE)
-                .color(ink)
-                .w_full()
-                .wrap()
-                .align(rune::Align::Center),
-        )
 }

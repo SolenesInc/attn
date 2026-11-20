@@ -1171,6 +1171,75 @@ fn the_ghost_completion_follows_the_typed_text() {
     rest(&mut world);
 }
 
+/// Where an element's content starts: the leftmost text or icon inside it.
+fn starts_at(world: &World, key: &str) -> f32 {
+    let all = world.runtime().elements();
+    let at = all
+        .iter()
+        .position(|e| e.key.as_deref() == Some(key))
+        .unwrap_or_else(|| panic!("{key} is not drawn"));
+    all.iter()
+        .enumerate()
+        .filter(|(i, e)| {
+            *i == at || std::iter::successors(e.parent, |&p| all[p].parent).any(|p| p == at)
+        })
+        .filter(|(_, e)| {
+            e.role == "icon" || e.text.as_deref().is_some_and(|s| !s.trim().is_empty())
+        })
+        .map(|(_, e)| e.rect[0])
+        .fold(f32::INFINITY, f32::min)
+}
+
+fn field_box_starts_at(world: &World, key: &str) -> f32 {
+    let all = world.runtime().elements();
+    let at = all
+        .iter()
+        .position(|e| e.key.as_deref() == Some(key))
+        .unwrap_or_else(|| panic!("{key} is not drawn"));
+    std::iter::successors(all[at].parent, |&p| all[p].parent)
+        .map(|p| &all[p])
+        .find(|e| e.fill.a > 0.0)
+        .map(|e| e.rect[0])
+        .expect("the field sits in a box")
+}
+
+#[test]
+fn the_launchers_title_field_headings_rows_and_hints_start_on_one_line() {
+    let mut world = open("");
+    let w = "new-session";
+    let all = world.runtime().elements();
+    let heading = all
+        .iter()
+        .filter(|e| e.role == "heading")
+        .filter_map(|e| e.key.clone())
+        .find(|k| k.starts_with(&format!("{w}.")) && k != &format!("{w}.title"))
+        .expect("the recents have a heading");
+    let edges = [
+        ("title", starts_at(&world, &format!("{w}.title"))),
+        (
+            "field's box",
+            field_box_starts_at(&world, &format!("{w}.path.field")),
+        ),
+        ("heading", starts_at(&world, &heading)),
+        ("first row", starts_at(&world, &format!("{w}.row.0"))),
+        (
+            "first hint's keycap",
+            world
+                .screen()
+                .bounds(Target::key(format!("{w}.hint.0")))
+                .expect("the footer has hints")[0],
+        ),
+    ];
+    let line = edges[0].1;
+    for (what, x) in edges {
+        assert!(
+            (x - line).abs() < 0.5,
+            "the {what} starts at {x}, off the line {line} the title starts on: {edges:?}"
+        );
+    }
+    rest(&mut world);
+}
+
 const PLACES: [&str; 8] = [
     "/home/me/projects/alpha",
     "/home/me/projects/bravo",

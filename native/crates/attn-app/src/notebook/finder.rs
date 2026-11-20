@@ -120,31 +120,31 @@ fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Option<El> {
     let finder = notebook.finder.as_ref().filter(|f| f.surface == *id)?;
     let rows = rows(finder);
-    let field = TextInput::new(&finder.query)
-        .key(FIELD)
-        .plain()
-        .text_style(finder::FIELD_TEXT)
-        .height(finder::FIELD_TEXT.line_px())
-        .width(None)
-        .label(LABEL)
-        .placeholder("Find a note…")
-        .active_descendant(rows.get(finder.highlighted).map(|path| row_key(path)))
-        .on_edit(|state: &mut State| {
-            &mut state
-                .notebook
-                .finder
-                .as_mut()
-                .expect("the finder shows")
-                .query
-        })
-        .on_change(|state: &mut State, _: &mut Tx| {
-            if let Some(finder) = state.notebook.finder.as_mut() {
-                finder.highlighted = 0;
-            }
-            state.notebook.revision += 1;
-        })
-        .on_key(on_key)
-        .build(attn_ui::kit(t));
+    let field = finder::field(
+        TextInput::new(&finder.query)
+            .key(FIELD)
+            .plain()
+            .width(None)
+            .label(LABEL)
+            .placeholder("Find a note…")
+            .active_descendant(rows.get(finder.highlighted).map(|path| row_key(path)))
+            .on_edit(|state: &mut State| {
+                &mut state
+                    .notebook
+                    .finder
+                    .as_mut()
+                    .expect("the finder shows")
+                    .query
+            })
+            .on_change(|state: &mut State, _: &mut Tx| {
+                if let Some(finder) = state.notebook.finder.as_mut() {
+                    finder.highlighted = 0;
+                }
+                state.notebook.revision += 1;
+            })
+            .on_key(on_key),
+    )
+    .build(attn_ui::kit(t));
     let empty = match finder.files {
         None => "Loading notes…",
         Some(_) => "No notes match.",
@@ -165,12 +165,17 @@ pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Op
         .key("notebook.finder")
         .role("dialog")
         .label(LABEL)
-        .max_h(finder::MAX_H)
+        .max_h(finder::FinderSize::Narrow.max_height())
         .shrink()
         .min_h(0.0)
         .on_press_outside(close);
     let panel = finder::panel(t, panel, finder::input_row(None, field, None), list, None);
-    Some(finder::layer(t, "notebook.finder.layer", panel))
+    Some(finder::layer(
+        t,
+        "notebook.finder.layer",
+        panel,
+        finder::FinderSize::Narrow,
+    ))
 }
 
 fn row_key(path: &str) -> String {

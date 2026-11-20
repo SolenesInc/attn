@@ -4,11 +4,12 @@ use std::rc::Rc;
 use rune::{Color, Cx, El, Tx, col, row};
 use rune_kit::ScrollBar;
 
+use crate::dialog::Dialog;
 use crate::system::{
     Button, IconSize, Look, RING_REACH, Radius, Size, Space, Type, door, focus, layers, lines_at,
     width_of, words,
 };
-use crate::{Dialog, DialogFrame, Tokens, colors, icon};
+use crate::{DialogFrame, Tokens, colors, icon};
 
 /// What a banner is about, which decides its colour and its glyph.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

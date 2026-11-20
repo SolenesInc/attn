@@ -11,7 +11,7 @@ use crate::system::{
     Trigger, TriggerLook, Type, area_box, arrows, checks, choices, code_box, disclosure, door,
     expander, icon, icon_box, line_box, number_box, press_area, stepper, switch, tag, words,
 };
-use crate::{Dialog, DialogFrame, Tokens, kit};
+use crate::{Tokens, kit};
 
 /// What a component story shows: one component, open where it opens, in the stage's
 /// appearance, which the playground's own switch sets.
@@ -29,7 +29,6 @@ pub const STORIES: &[(&str, View)] = &[
     ("Components/Button", button),
     ("Components/Field", field),
     ("Components/Menu", menu),
-    ("Components/Dialog", dialog),
     ("Components/Popover", popover),
     ("Components/Toast", toast),
     ("Components/Tooltip", tooltip),
@@ -43,8 +42,10 @@ pub fn playground<S: 'static>() -> Playground<S> {
         Playground::new().shortcut(None).bar(false),
         |playground, &(name, view)| playground.story(Story::new(name, Showcase::default, view)),
     );
-    crate::panel_gallery::stories(crate::chrome_gallery::stories(
-        crate::settings_gallery::stories(crate::block_gallery::stories(library(components))),
+    crate::floating_gallery::stories(crate::panel_gallery::stories(
+        crate::chrome_gallery::stories(crate::settings_gallery::stories(
+            crate::block_gallery::stories(library(components)),
+        )),
     ))
 }
 
@@ -469,8 +470,7 @@ fn list_row(_: &Showcase, cx: &mut Cx<Showcase>) -> El {
 
 fn button(_: &Showcase, cx: &mut Cx<Showcase>) -> El {
     stage(cx, |k, _| {
-        rune::row()
-            .gap(8.0)
+        door::gap(rune::row(), Space::S8)
             .child(
                 Button::new("New session")
                     .variant(ButtonVariant::Submit)
@@ -508,37 +508,6 @@ fn menu(_: &Showcase, cx: &mut Cx<Showcase>) -> El {
             .item(MenuItem::new("Close").danger(true))
             .open(true)
             .build(k, layer)
-    })
-}
-
-fn dialog(s: &Showcase, cx: &mut Cx<Showcase>) -> El {
-    let t = scheme_for(None).colors(cx.system_dark()).ui;
-    stage(cx, |k, layer| {
-        if !s.dismissed {
-            Dialog::new(
-                "story.dialog",
-                "Close this session?",
-                DialogFrame::prompt(&t),
-            )
-            .subtitle("The agent stops and its terminal closes.")
-            .child(
-                rune::row()
-                    .gap(10.0)
-                    .justify_end()
-                    .w_full()
-                    .px(24.0)
-                    .pb(22.0)
-                    .child(Button::new("Cancel").build(k))
-                    .child(
-                        Button::new("Close session")
-                            .variant(ButtonVariant::Danger)
-                            .build(k),
-                    ),
-            )
-            .on_close(|s: &mut Showcase| s.dismissed = true)
-            .build(&t, layer);
-        }
-        el()
     })
 }
 

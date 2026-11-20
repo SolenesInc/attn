@@ -4,7 +4,7 @@
 use attn_client::Desktop;
 use attn_protocol::{DesktopCreateMessage, DesktopMoveLeafMessage, ProfileActionResultMessage};
 use attn_ui::Tokens;
-use attn_ui::frame::{self, Frame};
+use attn_ui::frame::Frame;
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, Key, KeyEvent, Tx, col, el, row, text};
@@ -299,19 +299,13 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         )
         .child(grid)
         .scroll_bar_styled(attn_ui::scroll_bar(t));
-    let dialog = Frame {
-        edge: t.border_hover,
-        radius: 12.0,
-        shadow: frame::shadow(t, 20.0, 60.0, 0.5),
-        ..Frame::menu(t)
-    }
-    .draw(dialog);
+    let dialog = Frame::dialog(t).draw(dialog);
     Some(
         el().key("overview")
             .absolute(0.0, 0.0)
             .w_full()
             .h_full()
-            .child(attn_ui::Backdrop::overlay(t).draw("overview.scrim"))
+            .child(attn_ui::Backdrop::dim(t).draw("overview.scrim"))
             .child(
                 col()
                     .w_full()

@@ -1,11 +1,13 @@
-use attn_ui::colors::mix_srgb;
-use attn_ui::keycap;
-use attn_ui::type_;
-use attn_ui::{Dialog, DialogFrame, GlyphButton, Tokens, glyph};
-use rune::tok::space;
-use rune::{El, TextStyle, Tx, col, el, row, text};
+use attn_ui::blocks::{Actions, Block, DialogSize, Field as FieldBlock, Inline, Notice, Stack};
+use attn_ui::finder::{self, FinderSize, Hint};
+use attn_ui::system::{
+    GroupHead, IconSize, ListRow, Look, Segment, Segmented, Size, Type, icon, icon_button,
+    press_area, words,
+};
+use attn_ui::{Dialog, Tokens, glyph};
+use rune::{El, Tx, col, el};
 use rune_kit::ScrollBar;
-use rune_kit::{Button, ButtonVariant, TextInput};
+use rune_kit::TextInput;
 
 use super::repo::{self, Chooser, Delete, Start, Zone};
 use super::{Catalog, Choice, Offer, Opened, Picker, Which, agents, listed, numbered, paths};
@@ -33,15 +35,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Vec<El> {
                         tx,
                     );
                 });
-            surface(
-                frame,
-                RADIUS,
-                t.border_subtle,
-                t,
-                &dialog_shadows(t, 20.0, 50.0, 0.8),
-            )
-            .w_full()
-            .max_w(DIALOG_W)
+            finder::framed(t, frame, FinderSize::Wide)
         }
         Opened::Launcher(launcher) => crate::launcher::framed(state, launcher, t)
             .key("new-session")
@@ -52,7 +46,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Vec<El> {
             }),
     };
     vec![
-        attn_ui::Backdrop::launcher(t)
+        attn_ui::Backdrop::modal(t)
             .draw("new-session.scrim")
             .on_press_tx(|state: &mut State, tx: &mut Tx| {
                 if state.window.launching.launcher(Which::Dialog).is_some() {
@@ -61,14 +55,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Vec<El> {
                     super::close(state, tx)
                 }
             }),
-        col()
-            .key("new-session.layer")
-            .absolute(0.0, 0.0)
-            .w_full()
-            .h_full()
-            .pt(80.0)
-            .items_center()
-            .child(frame),
+        finder::placed(frame, FinderSize::Wide).key("new-session.layer"),
     ]
 }
 
@@ -79,25 +66,15 @@ pub(crate) fn inline(state: &State, t: &Tokens) -> Option<El> {
         let message = format!("Starting {}…", starting.name);
         return Some(
             col().key("launcher").w_full().h_full().center().child(
-                text(message.clone())
+                words(message.clone(), Type::Body, t.text_secondary)
                     .key("launcher.starting")
                     .role("status")
-                    .label(message)
-                    .font(type_::BODY)
-                    .color(t.text_secondary),
+                    .label(message),
             ),
         );
     }
     let frame = match launching.shown_inline()? {
-        Opened::Classic(picker) => surface(
-            frame(state, picker, t),
-            RADIUS,
-            t.border_subtle,
-            t,
-            &dialog_shadows(t, 20.0, 50.0, 0.45)[..2],
-        )
-        .w_full()
-        .max_w(DIALOG_W),
+        Opened::Classic(picker) => finder::framed(t, frame(state, picker, t), FinderSize::Wide),
         Opened::Launcher(launcher) => crate::launcher::framed(state, launcher, t),
     };
     Some(
@@ -106,8 +83,8 @@ pub(crate) fn inline(state: &State, t: &Tokens) -> Option<El> {
             .w_full()
             .h_full()
             .items_center()
-            .pt(EMPTY_DESKTOP_DROP * crate::shell::TITLE_BAR_HEIGHT)
-            .child(el().h_frac(EMPTY_DESKTOP_DROP).shrink().min_h(0.0))
+            .child(el().h(EMPTY_DESKTOP_DROP * crate::shell::TITLE_BAR_HEIGHT))
+            .child(el().h_frac(EMPTY_DESKTOP_DROP))
             .child(frame.key("launcher").role("group").label("New agent")),
     )
 }
@@ -145,8 +122,6 @@ pub(crate) struct AgentOption {
     pub(crate) chosen: bool,
     /// The key that picks it with ⌥: `T` for Terminal, its number for the first nine others.
     pub(crate) key: Option<String>,
-    /// Struck through: the machine the start aims at lacks it.
-    pub(crate) absent: bool,
     pub(crate) checking: bool,
     pub(crate) title: Option<String>,
 }
@@ -190,7 +165,6 @@ pub(crate) fn agent_options(state: &State, choice: &Choice, offer: &Offer) -> Ve
             };
             AgentOption {
                 chosen: current == agent,
-                absent: absent.is_some(),
                 agent,
                 label,
                 selectable,
@@ -224,47 +198,89 @@ pub(crate) fn yolo(state: &State, choice: &Choice, offer: &Offer) -> Yolo {
     }
 }
 
-/// The harness option's row: its role, name, state and the press that picks it.
-pub(crate) fn agent_option(which: Which, option: &AgentOption) -> El {
-    let picked = option.agent.clone();
-    let mut el = row()
-        .key(format!("{}.agent.{}", which.key(), option.agent))
-        .role("radio")
-        .label(option.label.clone())
-        .checked(option.chosen)
-        .disabled(!option.selectable)
-        .items_center()
-        .on_press_tx(move |state: &mut State, _: &mut Tx| {
-            super::choose_agent(state, which, &picked)
-        });
-    if let Some(title) = &option.title {
-        el = el.description(title.clone()).help(title.clone());
-    }
-    el
+/// The harness toggle: the harnesses as segments, each with the letter that picks it with
+/// Alt, the Alt before them, and what the toggle says while the list loads or after it failed
+/// to. The letters choose, so the segments take no Tab stop.
+pub(crate) fn harness_toggle(
+    state: &State,
+    which: Which,
+    options: Vec<AgentOption>,
+    t: &Tokens,
+) -> El {
+    let w = which.key();
+    let legend = rune::Chord::parse("alt+t")
+        .expect("the Alt chord parses")
+        .keycaps_on(rune::KeyPlatform::current())
+        .swap_remove(0);
+    let segments = options.into_iter().map(|option| {
+        let picked = option.agent.clone();
+        let key = format!("{w}.agent.{}", option.agent);
+        let mark = Inline::tight()
+            .children(option.key.as_ref().map(|k| {
+                words(k.clone(), Type::Mono, t.text_muted)
+                    .key(format!("{key}.keys"))
+                    .label(spoken(&format!("alt+{}", k.to_lowercase())))
+            }))
+            .children(option.checking.then(|| {
+                words("…", Type::Small, t.text_tertiary)
+                    .key(format!("{key}.checking"))
+                    .role("img")
+                    .label("checking")
+            }));
+        let mut segment = Segment::new(key, option.label.clone())
+            .chosen(option.chosen)
+            .disabled(!option.selectable)
+            .trailing(mark)
+            .on_press_tx(move |state: &mut State, _: &mut Tx| {
+                super::choose_agent(state, which, &picked)
+            });
+        if let Some(title) = option.title {
+            segment = segment.help(title);
+        }
+        segment
+    });
+    Inline::loose()
+        .children(catalog_note(state, which, t))
+        .child(words(legend, Type::Mono, t.text_muted).a11y_hidden())
+        .child(
+            Segmented::new(format!("{w}.agents"), "Session agent")
+                .without_tab_stops()
+                .options(segments)
+                .build(t)
+                .into(),
+        )
 }
 
-pub(crate) fn checking_mark(which: Which, option: &AgentOption, t: &Tokens) -> Option<El> {
-    option.checking.then(|| {
-        text("…")
-            .key(format!("{}.agent.{}.checking", which.key(), option.agent))
-            .role("img")
-            .label("checking")
-            .color(t.text_tertiary)
-    })
+/// The YOLO switch and the keys that flip it. Its keys flip it, so it takes no Tab stop.
+/// `keys` is the chord as the bar shows it.
+pub(crate) fn yolo_control(which: Which, yolo: &Yolo, keys: String, t: &Tokens) -> El {
+    let switch = El::from(attn_ui::system::switch(
+        format!("{}.yolo", which.key()),
+        "YOLO",
+        yolo.on,
+        false,
+        !yolo.supported,
+        t,
+        move |state: &mut State, _: &mut Tx| super::toggle_yolo(state, which),
+    ))
+    .focusable(false)
+    .description(yolo.title.clone())
+    .help(yolo.title.clone());
+    Inline::loose()
+        .child(switch)
+        .child(words("YOLO", Type::Control, t.text_secondary).a11y_hidden())
+        .children(yolo.supported.then(|| {
+            words(keys, Type::Mono, t.text_muted)
+                .key(format!("{}.yolo.keys", which.key()))
+                .label(spoken("alt+q"))
+        }))
 }
 
-/// The YOLO switch's row: its role, name, state and the press that flips it.
-pub(crate) fn yolo_switch(which: Which, yolo: &Yolo) -> El {
-    row()
-        .key(format!("{}.yolo", which.key()))
-        .role("switch")
-        .label("YOLO")
-        .checked(yolo.on)
-        .disabled(!yolo.supported)
-        .description(yolo.title.clone())
-        .help(yolo.title.clone())
-        .items_center()
-        .on_press_tx(move |state: &mut State, _: &mut Tx| super::toggle_yolo(state, which))
+/// `spec` as this platform names the chord.
+fn spoken(spec: &str) -> String {
+    rune::Chord::parse(spec)
+        .expect("a picker chord parses")
+        .label_on(rune::KeyPlatform::current())
 }
 
 /// What the toggle says while the harness list loads or after it failed to.
@@ -272,27 +288,24 @@ pub(crate) fn catalog_note(state: &State, which: Which, t: &Tokens) -> Option<El
     let w = which.key();
     match &state.window.launching.catalog {
         Catalog::Unasked | Catalog::Loading => Some(
-            text("Loading harnesses…")
+            words("Loading harnesses…", Type::Small, t.text_tertiary)
                 .key(format!("{w}.agents.loading"))
-                .role("status")
-                .label("Loading harnesses…")
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
+                .role("status"),
         ),
         Catalog::Failed(error) => Some(
-            row()
+            Inline::tight()
                 .key(format!("{w}.agents.error"))
                 .role("alert")
                 .label(error.clone())
-                .gap(space::S1)
+                .child(words(error.clone(), Type::Small, t.text_secondary).a11y_hidden())
                 .child(
-                    text(error.clone())
-                        .font(type_::LABEL)
-                        .color(t.text_secondary),
-                )
-                .child(
-                    link("Retry", type_::LABEL, t, super::retry_catalog)
-                        .key(format!("{w}.agents.retry")),
+                    attn_ui::system::Button::new("Retry")
+                        .look(Look::Quiet)
+                        .size(Size::Compact)
+                        .on_press_tx(super::retry_catalog)
+                        .build(t)
+                        .key(format!("{w}.agents.retry"))
+                        .into(),
                 ),
         ),
         Catalog::Loaded(_) => None,
@@ -302,146 +315,15 @@ pub(crate) fn catalog_note(state: &State, which: Which, t: &Tokens) -> Option<El
 /// The classic picker's two bars, Tauri's `.picker-agent-bar` and `.picker-chief-bar`: each
 /// names its control at the left and holds it at the right edge.
 fn controls(state: &State, which: Which, choice: &Choice, offer: &Offer, t: &Tokens) -> El {
-    let w = which.key();
-    let options = agent_options(state, choice, offer)
-        .into_iter()
-        .map(|option| {
-            let name = text(option.label.clone())
-                .font(OPTION_TYPE)
-                .color(if option.chosen {
-                    t.bg_app
-                } else if option.selectable {
-                    t.text_tertiary
-                } else {
-                    t.text_muted
-                });
-            let name = if option.absent {
-                name.strike(0, option.label.len(), None)
-            } else {
-                name
-            };
-            pill(agent_option(which, &option), option.chosen, t)
-                .child(name)
-                .children(checking_mark(which, &option, t))
-                .children(option.key.as_ref().map(|k| {
-                    keycaps(
-                        format!("{w}.agent.{}.keys", option.agent),
-                        &format!("alt+{}", k.to_lowercase()),
-                        option.chosen,
-                        t,
-                    )
-                }))
-        });
-    let yolo = yolo(state, choice, offer);
-    let switch = pill(yolo_switch(which, &yolo), yolo.on, t)
-        .child(
-            text(if yolo.on { "On" } else { "Off" })
-                .font(OPTION_TYPE)
-                .color(if yolo.on {
-                    t.bg_app
-                } else if yolo.supported {
-                    t.text_tertiary
-                } else {
-                    t.text_muted
-                }),
-        )
-        .children(
-            yolo.supported
-                .then(|| keycaps(format!("{w}.yolo.keys"), "alt+q", yolo.on, t)),
-        );
-    col()
-        .w_full()
-        .child(
-            bar("SESSION AGENT", 0.02, t).child(
-                row()
-                    .key(format!("{w}.agents"))
-                    .role("radiogroup")
-                    .label("Session agent")
-                    .gap(space::S2)
-                    .items_center()
-                    .shrink()
-                    .children(catalog_note(state, which, t))
-                    .child(toggle(options, t)),
-            ),
-        )
-        .child(bar("YOLO", 0.015, t).child(toggle([switch], t)))
-}
-
-/// A band of the classic picker: its label at the left, `wash` of white over the panel, a
-/// hairline under it.
-fn bar(label: &str, wash: f32, t: &Tokens) -> El {
-    row()
-        .w_full()
-        .items_center()
-        .justify_between()
-        .gap(space::S3)
-        .px(16.0)
-        .pt(10.0)
-        .pb(10.0 + HAIRLINE)
-        .fill(t.highlight.alpha(wash))
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-        .child(section(label, t))
-}
-
-/// Tauri's `.agent-option`: a pill in the toggle's track, the chosen one a brand gradient that
-/// glows under it.
-fn pill(option: El, chosen: bool, t: &Tokens) -> El {
-    let option = option.gap(space::S2).px(12.0).py(6.0).radius(999.0);
-    if chosen {
-        option
-            .fill(t.brand)
-            .gradient(t.brand, mix_srgb(t.brand, t.highlight, 0.15))
-            .box_shadow(rune::Shadow {
-                y: 6.0,
-                blur: 16.0,
-                color: t.brand.alpha(0.25),
-                ..rune::Shadow::default()
-            })
-    } else {
-        option
-    }
-}
-
-/// Tauri's agent toggle: a pill track holding the options.
-fn toggle(options: impl IntoIterator<Item = El>, t: &Tokens) -> El {
-    row()
-        .items_center()
-        .flex_wrap()
-        .shrink()
-        .gap(4.0)
-        .padding(3.0)
-        .radius(999.0)
-        .fill(t.bg_input)
-        .border(1.0, t.border)
-        .children(options)
-}
-
-/// The chord `spec` that picks an option, as one chip, Tauri's `.agent-shortcut`: muted on a
-/// resting option, dark ink on a pale chip on the chosen orange pill.
-fn keycaps(key: String, spec: &str, chosen: bool, t: &Tokens) -> El {
-    let chord = rune::Chord::parse(spec)
-        .expect("a picker chord parses")
-        .label_on(rune::KeyPlatform::current());
-    let (ink, edge, fill) = if chosen {
-        (
-            mix_srgb(t.brand, rune::Color::BLACK, 0.77),
-            t.shadow.alpha(0.2),
-            t.highlight.alpha(0.45),
-        )
-    } else {
-        (t.text_muted, t.border, t.highlight.alpha(0.04))
-    };
-    keycap::Keys::outlined(&[chord])
-        .colors(ink, edge, fill)
-        .build(t)
-        .key(key)
+    let toggle = harness_toggle(state, which, agent_options(state, choice, offer), t);
+    let yolo = yolo_control(which, &yolo(state, choice, offer), spoken("alt+q"), t);
+    attn_ui::finder::bar(t, vec![toggle, yolo])
 }
 
 fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
     let which = picker.which;
     let w = which.key();
     let launching = &state.window.launching;
-    let home = &launching.home;
     let title = match which {
         Which::Dialog => "New Session Location".to_owned(),
         Which::Inline => format!(
@@ -449,229 +331,159 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
             desktop_label(state, picker.desktop.as_ref())
         ),
     };
-    let field_key = picker.field_key();
     let rows = picker.rows(launching);
     let ghost = picker
         .ghost(&rows)
         .filter(|g| g.starts_with(&picker.input.text))
         .map(|g| g[picker.input.text.len()..].to_owned());
-    let field = row()
-        .w_full()
-        .items_center()
-        .px(FIELD_PAD_X)
-        .py(12.0 + HAIRLINE)
-        .radius(4.0)
-        .fill(t.bg_input)
-        .border(1.0, t.border)
-        .focus_within_ring(1.0, -1.0, t.brand)
-        .child(
-            TextInput::new(&picker.input)
-                .key(field_key)
-                .plain()
-                .text_style(FIELD)
-                .height(FIELD.line_px())
-                .width(None)
-                .label("Path")
-                .placeholder("Type path (e.g., ~/projects) or search...")
-                .active_descendant(picker.highlight.map(|h| row_key(which, h.index)))
-                .on_edit(move |state: &mut State| state.window.launching.input_mut(which))
-                .on_change(move |state: &mut State, tx: &mut Tx| super::edited(state, which, tx))
-                .on_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
-                    super::on_key(state, which, ev, tx)
-                })
-                .build(attn_ui::kit(t))
-                .grow(1.0),
-        )
-        .children(ghost.map(|g| {
-            ghost_text(
-                format!("{w}.ghost"),
-                &picker.input.text,
-                g,
-                FIELD,
-                FIELD_PAD_X + PLAIN_INSET,
-                t.text_dimmed.alpha(0.7),
-            )
-        }));
-    let mut header = col()
-        .w_full()
-        .px(16.0)
-        .pt(16.0)
-        .pb(12.0 + HAIRLINE)
-        .fill(t.highlight.alpha(0.01))
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-        .child(
-            text(title.to_uppercase())
-                .key(format!("{w}.title"))
-                .role("heading")
-                .label(title.clone())
-                .font(TITLE)
-                .color(t.brand)
-                .single_line()
-                .truncate()
-                .w_full()
-                .help_when_truncated(title)
-                .mb(12.0),
-        )
-        .child(field);
+    let input = finder::query_field(
+        TextInput::new(&picker.input)
+            .key(picker.field_key())
+            .plain()
+            .width(None)
+            .label("Path")
+            .placeholder("Type path (e.g., ~/projects) or search...")
+            .active_descendant(picker.highlight.map(|h| row_key(which, h.index)))
+            .on_edit(move |state: &mut State| state.window.launching.input_mut(which))
+            .on_change(move |state: &mut State, tx: &mut Tx| super::edited(state, which, tx))
+            .on_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
+                super::on_key(state, which, ev, tx)
+            }),
+    )
+    .build(attn_ui::kit(t));
+    let field = finder::query_box(
+        t,
+        None,
+        input,
+        ghost.map(|g| finder::ghost(format!("{w}.ghost"), &picker.input.text, g, t.text_muted)),
+    );
+    let mut said = Vec::new();
     if let Some(dir) = &picker.browsing {
-        header = header.child(
-            text(format!("Browsing: {dir}"))
-                .key(format!("{w}.browsing"))
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-                .pt(8.0),
+        said.push(
+            words(format!("Browsing: `{dir}`"), Type::Small, t.text_tertiary)
+                .key(format!("{w}.browsing")),
         );
     }
     if let Some((operation, path)) = &picker.operation {
-        header = header.child(
-            row()
-                .key(format!("{w}.operation"))
-                .role("status")
-                .label(operation.label())
-                .mt(10.0)
-                .gap(space::S1)
-                .child(
-                    text(operation.label())
-                        .font(type_::LABEL)
-                        .color(t.text_secondary),
-                )
-                .child(text(path.clone()).font(type_::LABEL).color(t.text_tertiary)),
+        said.push(
+            words(
+                format!("{} `{path}`", operation.label()),
+                Type::Small,
+                t.text_secondary,
+            )
+            .key(format!("{w}.operation"))
+            .role("status")
+            .label(operation.label()),
         );
     }
     if let Some(error) = &picker.error {
-        header = header.child(
-            text(error.clone())
+        said.push(
+            words(error.clone(), Type::Small, t.error)
                 .key(format!("{w}.error"))
                 .role("alert")
                 .label(error.clone())
-                .font(type_::BODY)
-                .color(t.error)
-                .mt(10.0),
+                .wrap(),
         );
     }
-    let recents: Vec<El> = rows
-        .iter()
-        .enumerate()
-        .filter(|(_, r)| r.recent)
-        .map(|(i, r)| location_row(picker, i, r, home, t))
-        .collect();
-    let directories: Vec<El> = rows
-        .iter()
-        .enumerate()
-        .filter(|(_, r)| !r.recent)
-        .map(|(i, r)| location_row(picker, i, r, home, t))
-        .collect();
-    let empty = (rows.is_empty()).then(|| {
+    let header = finder::query(
+        t,
+        finder::title(t, format!("{w}.title"), &title)
+            .label(title.clone())
+            .single_line()
+            .truncate()
+            .help_when_truncated(title),
+        field,
+        (!said.is_empty()).then(|| Stack::tight().w_full().children(said)),
+    );
+    let group = |name: &str, recent: bool| {
+        let rows: Vec<El> = rows
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r.recent == recent)
+            .map(|(i, r)| location_row(picker, i, r, t))
+            .collect();
+        (!rows.is_empty()).then(|| {
+            Stack::tight()
+                .key(format!("{w}.{}", name.to_lowercase()))
+                .role("group")
+                .label(name)
+                .w_full()
+                .child(finder::heading(
+                    GroupHead::new(format!("{w}.{}.head", name.to_lowercase()), name)
+                        .section(name)
+                        .heading()
+                        .build(t),
+                ))
+                .children(rows)
+        })
+    };
+    let empty = rows.is_empty().then(|| {
         let message = if picker.input.text.is_empty() {
             "Type a path to browse directories"
         } else {
             "No matches. Press Enter to use path directly."
         };
-        row().w_full().justify_center().px(20.0).py(48.0).child(
-            text(message)
-                .key(format!("{w}.empty"))
-                .label(message)
-                .font(FIELD)
-                .color(t.text_dimmed)
-                .wrap(),
-        )
+        finder::empty(t, format!("{w}.empty"), message)
     });
-    let group = |name: &str, title: &str, rows: Vec<El>| {
-        (!rows.is_empty()).then(|| {
-            col()
-                .key(format!("{w}.{}", name.to_lowercase()))
-                .role("group")
-                .label(name)
-                .gap(2.0)
-                .mb(4.0)
-                .child(section(title, t).px(10.0).pt(10.0).pb(6.0))
-                .children(rows)
-        })
-    };
     let mut hints = vec![
-        ("↑↓", "navigate"),
-        ("Tab", "autocomplete"),
-        ("Enter", "select"),
+        Hint::keys("", "↑↓", " navigate"),
+        Hint::keys("", "Tab", " autocomplete"),
+        Hint::keys("", "Enter", " select"),
     ];
     if which == Which::Dialog {
-        hints.push(("Esc", "cancel"));
+        hints.push(Hint::keys("", "Esc", " cancel").at_end());
     }
-    vec![
-        header,
-        col()
-            .key(format!("{w}.locations"))
-            .role("listbox")
-            .label("Locations")
-            .w_full()
-            .max_h(340.0)
-            .scroll(rune::ScrollSpec {
-                stick_bottom: false,
-            })
-            .padding(8.0)
-            .children(group("Recent", "RECENT", recents))
-            .children(group("Directories", "DIRECTORIES", directories))
-            .children(empty)
-            .scroll_bar_styled(attn_ui::scroll_bar(t)),
-        footer(w, &hints, t),
-    ]
+    let list = finder::grouped(
+        format!("{w}.locations"),
+        "Locations",
+        group("Recent", true)
+            .into_iter()
+            .chain(group("Directories", false))
+            .chain(empty)
+            .collect(),
+        LIST_H,
+    )
+    .scroll_bar_styled(attn_ui::scroll_bar(t));
+    vec![header, list, footer(w, hints, t)]
 }
+
+/// How tall a picker's list gets before it scrolls.
+const LIST_H: f32 = 340.0;
 
 fn row_key(which: Which, i: usize) -> String {
     format!("{}.row.{i}", which.key())
 }
 
-fn location_row(picker: &Picker, i: usize, r: &super::Row, _home: &str, t: &Tokens) -> El {
+fn location_row(picker: &Picker, i: usize, r: &super::Row, t: &Tokens) -> El {
     let which = picker.which;
     let highlighted = picker.highlight.is_some_and(|h| h.index == i);
     let path = r.path.clone();
-    let option = col()
-        .key(row_key(which, i))
+    let mut line = ListRow::new(row_key(which, i), r.name.clone())
         .role("option")
-        .label(r.name.clone())
-        .focus_selected(highlighted);
-    let mut option = item(option, highlighted, t)
+        .unfocusable()
+        .cursor(highlighted)
+        .selected(highlighted)
+        .lead(icon(
+            if r.recent {
+                &attn_ui::icon::RECENT
+            } else {
+                &attn_ui::icon::FOLDER
+            },
+            IconSize::Regular,
+            t.text_tertiary,
+        ))
+        .title(r.name.clone());
+    if let Some(shown) = &r.shown_path {
+        line = line.subtitle(format!("`{shown}`"), t);
+    }
+    let option = line
+        .build(t)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             super::open_path(state, which, &path, tx)
-        })
-        .child(
-            row()
-                .gap(space::S1)
-                .child(
-                    text(if r.recent {
-                        glyph::CLOCK
-                    } else {
-                        glyph::FOLDER
-                    })
-                    .font(type_::BODY)
-                    .color(t.text_tertiary),
-                )
-                .child(text(r.name.clone()).font(type_::BODY).color(t.text_primary)),
-        );
-    if let Some(shown) = &r.shown_path {
-        option = option.description(shown.clone()).child(
-            text(shown.clone())
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
-        );
-    }
-    option
-}
-
-/// Tauri's `.picker-item`: a bare row that a faint wash marks under the pointer, and a brand
-/// tint and edge while it is highlighted.
-fn item(option: El, highlighted: bool, t: &Tokens) -> El {
-    let option = option.w_full().px(12.0).py(10.0).radius(4.0).border(
-        1.0,
-        if highlighted {
-            t.brand.alpha(0.2)
-        } else {
-            rune::Color::TRANSPARENT
-        },
-    );
-    if highlighted {
-        option.fill(t.brand.alpha(0.08))
-    } else {
-        option.hover(t.highlight.alpha(0.03))
+        });
+    match &r.shown_path {
+        Some(shown) => option.description(shown.clone()),
+        None => option,
     }
 }
 
@@ -681,61 +493,59 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
     let w = which.key();
     let destinations = chooser.destinations();
     let in_rows = chooser.zone == Zone::Destinations;
-    let rows = destinations.iter().enumerate().map(|(i, d)| {
-        let committed = in_rows && chooser.committed == i;
-        let prompt = chooser
-            .delete
-            .as_ref()
-            .filter(|del| del.path() == d.path)
-            .map(|del| delete_prompt(w, del, t));
-        let name = if d.branch.is_empty() {
-            paths::basename(&d.path).to_owned()
-        } else {
-            d.branch.clone()
-        };
-        let detail = repo::row_detail(chooser, d, now);
-        let option = col()
-            .key(format!("{w}.repo.row.{i}"))
-            .role("option")
-            .label(name.clone())
-            .description(detail.clone())
-            .focus_selected(committed);
-        item(option, committed, t)
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| repo::activate(state, which, i, tx))
-            .child(match prompt {
-                Some(prompt) => prompt,
-                None => row()
-                    .gap(space::S1)
-                    .child(
-                        text(if d.main {
-                            glyph::CIRCLE
+    let rows: Vec<El> =
+        destinations
+            .iter()
+            .enumerate()
+            .map(|(i, d)| {
+                let committed = in_rows && chooser.committed == i;
+                let name = if d.branch.is_empty() {
+                    paths::basename(&d.path).to_owned()
+                } else {
+                    d.branch.clone()
+                };
+                let detail = repo::row_detail(chooser, d, now);
+                let line = ListRow::new(format!("{w}.repo.row.{i}"), name.clone())
+                    .role("option")
+                    .unfocusable()
+                    .cursor(committed)
+                    .selected(committed)
+                    .lead(icon(
+                        if d.main {
+                            &attn_ui::icon::MAIN_BRANCH
                         } else {
-                            glyph::CIRCLE_DOT
-                        })
-                        .font(type_::BODY)
-                        .color(t.text_tertiary),
-                    )
-                    .child(text(name).font(type_::BODY).color(t.text_primary).grow(1.0))
-                    .child(
-                        text((i + 1).to_string())
-                            .font(type_::MONO_CAPTION)
-                            .color(t.text_tertiary),
-                    ),
+                            &attn_ui::icon::BRANCH
+                        },
+                        IconSize::Regular,
+                        t.text_tertiary,
+                    ));
+                let line = match chooser.delete.as_ref().filter(|del| del.path() == d.path) {
+                    Some(del) => {
+                        let (first, second, role, label) = delete_said(del);
+                        line.title_el(
+                            words(first, Type::Body, t.text_primary)
+                                .key(format!("{w}.repo.delete"))
+                                .role(role)
+                                .label(label)
+                                .single_line()
+                                .truncate(),
+                        )
+                        .subtitle(second.unwrap_or_default(), t)
+                    }
+                    None => line.title(name).subtitle(detail.clone(), t).aside(words(
+                        (i + 1).to_string(),
+                        Type::Mono,
+                        t.text_tertiary,
+                    )),
+                };
+                line.build(t).description(detail).on_press_tx(
+                    move |state: &mut State, tx: &mut Tx| repo::activate(state, which, i, tx),
+                )
             })
-            .child(text(detail).font(type_::LABEL).color(t.text_tertiary))
-    });
-    let start = |kind: Start, label: String| {
-        let chosen = chooser.start == kind;
-        let suffix = match kind {
-            Start::Default => "default",
-            Start::Current => "current",
-        };
-        row()
-            .key(format!("{w}.repo.start.{suffix}"))
-            .role("radio")
-            .label(label.clone())
-            .checked(chosen)
-            .gap(space::S1)
+            .collect();
+    let start = |kind: Start, label: String, suffix: &str| {
+        Segment::new(format!("{w}.repo.start.{suffix}"), label)
+            .chosen(chooser.start == kind)
             .on_press_tx(move |state: &mut State, _: &mut Tx| {
                 if let Some(chooser) = state
                     .window
@@ -746,125 +556,137 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
                     chooser.start = kind;
                 }
             })
-            .child(
-                text(if chosen {
-                    glyph::CIRCLE_DOT
-                } else {
-                    glyph::CIRCLE_OPEN
-                })
-                .font(type_::BODY),
-            )
-            .child(text(label).font(type_::LABEL).color(t.text_secondary))
     };
-    let form = col()
+    let name = finder::query_field(
+        TextInput::new(&chooser.name)
+            .key(repo::name_key(which))
+            .plain()
+            .width(None)
+            .label("Branch name")
+            .placeholder("Branch name...")
+            .on_edit(move |state: &mut State| name_edit(state, which))
+            .on_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
+                repo::enter_form(state, which);
+                super::on_key(state, which, ev, tx)
+            }),
+    )
+    .build(attn_ui::kit(t));
+    let reroll = icon_button(
+        format!("{w}.repo.reroll"),
+        "Pick another name",
+        glyph::REFRESH,
+        IconSize::Regular,
+    )
+    .help("Pick another name (⌃R)")
+    .on_press(move |state: &mut State| reroll(state, which))
+    .build(t);
+    let form = Stack::tight()
         .key(format!("{w}.repo.form"))
-        .gap(space::S1)
+        .w_full()
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             repo::enter_form(state, which);
             tx.focus(repo::name_key(which), false);
         })
         .child(
-            row()
-                .gap(space::S1)
-                .items_center()
-                .child(text("+").font(type_::BODY).color(t.text_secondary))
+            Inline::line()
+                .w_full()
                 .child(
-                    TextInput::new(&chooser.name)
-                        .key(repo::name_key(which))
-                        .plain()
-                        .text_style(type_::BODY)
-                        .height(type_::BODY.line_px())
-                        .width(None)
-                        .label("Branch name")
-                        .placeholder("Branch name...")
-                        .on_edit(move |state: &mut State| name_edit(state, which))
-                        .on_key(move |state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
-                            repo::enter_form(state, which);
-                            super::on_key(state, which, ev, tx)
-                        })
-                        .build(attn_ui::kit(t))
-                        .grow(1.0),
+                    finder::query_box(
+                        t,
+                        Some(words("+", Type::Body, t.text_secondary)),
+                        name,
+                        None,
+                    )
+                    .grow(1.0),
                 )
-                .child(
-                    GlyphButton::new(glyph::REFRESH, "Pick another name")
-                        .variant(ButtonVariant::Ghost)
-                        .font(type_::BODY)
-                        .side(type_::BODY.line_px())
-                        .help("Pick another name (⌃R)")
-                        .on_press(move |state: &mut State| reroll(state, which))
-                        .build(attn_ui::kit(t))
-                        .key(format!("{w}.repo.reroll")),
-                ),
+                .child(El::from(reroll)),
         )
-        .child(start(
-            Start::Default,
-            format!("Start from {}", chooser.info.default_branch),
-        ))
-        .child(start(
-            Start::Current,
-            format!("Start from {}", chooser.current_branch()),
-        ))
         .child(
-            text(
+            Segmented::new(format!("{w}.repo.start"), "Start from")
+                .without_tab_stops()
+                .option(start(
+                    Start::Default,
+                    format!("Start from {}", chooser.info.default_branch),
+                    "default",
+                ))
+                .option(start(
+                    Start::Current,
+                    format!("Start from {}", chooser.current_branch()),
+                    "current",
+                ))
+                .build(t)
+                .into(),
+        )
+        .child(
+            words(
                 "Enter to create • Tab to toggle • ⌃R for another name • ↓ to open an existing one",
+                Type::Small,
+                t.text_tertiary,
             )
-            .font(type_::LABEL)
-            .color(t.text_tertiary),
+            .wrap(),
         );
     let refreshing = chooser.refreshing.then(|| {
-        text("Refreshing repo options")
+        words("Refreshing repo options", Type::Small, t.text_tertiary)
             .key(format!("{w}.repo.refreshing"))
             .role("status")
-            .label("Refreshing repo options")
-            .font(type_::LABEL)
-            .color(t.text_tertiary)
     });
     let on_worktree = destinations.get(chooser.committed).is_some_and(|d| !d.main);
-    let hints: Vec<(&str, &str)> = match chooser.zone {
+    let hints: Vec<Hint> = match chooser.zone {
         Zone::Create => vec![
-            ("Enter", "Create worktree"),
-            ("↓", "Open existing"),
-            ("Esc", "Back"),
+            Hint::keys("", "Enter", " Create worktree"),
+            Hint::keys("", "↓", " Open existing"),
+            Hint::keys("", "Esc", " Back").at_end(),
         ],
         Zone::Destinations => {
-            let mut hints = vec![("↑↓", "Navigate"), ("Enter", "Open")];
+            let mut hints = vec![
+                Hint::keys("", "↑↓", " Navigate"),
+                Hint::keys("", "Enter", " Open"),
+            ];
             if on_worktree {
-                hints.push(("D", "Delete worktree"));
+                hints.push(Hint::keys("", "D", " Delete worktree"));
             }
-            hints.push((
+            hints.push(Hint::keys(
+                "",
                 "R",
                 if chooser.refreshing {
-                    "Refresh ..."
+                    " Refresh ..."
                 } else {
-                    "Refresh"
+                    " Refresh"
                 },
             ));
-            hints.push(("Esc", "Back"));
+            hints.push(Hint::keys("", "Esc", " Back").at_end());
             hints
         }
     };
+    let section = |key: &str, name: &str| {
+        GroupHead::new(format!("{w}.repo.{key}"), name)
+            .section(name)
+            .heading()
+            .build(t)
+    };
     vec![
-        col()
-            .key(repo::root_key(which))
-            .role("group")
-            .label("Repository options")
-            .focusable(true)
-            .w_full()
-            .padding(16.0)
-            .gap(space::S2)
-            .children(refreshing)
-            .child(section("NEW WORKTREE", t))
-            .child(form)
-            .child(section("OPEN EXISTING", t))
-            .child(
-                col()
-                    .key(format!("{w}.repo.rows"))
-                    .role("listbox")
-                    .label("Open existing")
-                    .gap(2.0)
-                    .children(rows),
-            ),
-        footer(w, &hints, t),
+        finder::notices(vec![Block::custom(
+            format!("{w}.repo.rows.block"),
+            Stack::tight()
+                .key(repo::root_key(which))
+                .role("group")
+                .label("Repository options")
+                .focusable(true)
+                .w_full()
+                .children(refreshing)
+                .child(section("new", "New worktree"))
+                .child(form)
+                .child(section("existing", "Open existing"))
+                .child(
+                    Stack::tight()
+                        .key(format!("{w}.repo.rows"))
+                        .role("listbox")
+                        .label("Open existing")
+                        .w_full()
+                        .children(rows),
+                ),
+        )]),
+        footer(w, hints, t),
     ]
 }
 
@@ -888,9 +710,11 @@ fn reroll(state: &mut State, which: Which) {
     }
 }
 
-fn delete_prompt(w: &str, delete: &Delete, t: &Tokens) -> El {
+/// What a worktree's row says while it is being deleted: its line, the line under it, its
+/// role and its name.
+fn delete_said(delete: &Delete) -> (String, Option<String>, &'static str, String) {
     let name = paths::basename(delete.path()).to_owned();
-    let (first, second, role, label) = match delete {
+    match delete {
         Delete::Asking { .. } => (
             format!("Delete {name}? (y/n)"),
             None,
@@ -915,13 +739,7 @@ fn delete_prompt(w: &str, delete: &Delete, t: &Tokens) -> El {
             "alert",
             format!("Delete failed: {error}"),
         ),
-    };
-    col()
-        .key(format!("{w}.repo.delete"))
-        .role(role)
-        .label(label)
-        .child(text(first).font(type_::BODY).color(t.text_primary))
-        .children(second.map(|s| text(s).font(type_::LABEL).color(t.text_secondary)))
+    }
 }
 
 /// The corner prompt for an agent starting in a new worktree, and the dialog it opens when the
@@ -930,44 +748,33 @@ pub(crate) fn worktree_setup(state: &State, t: &Tokens) -> Vec<El> {
     let Some(setup) = state.window.launching.worktree.as_ref() else {
         return Vec::new();
     };
-    let k = attn_ui::kit(t);
     if let (Some(error), true) = (&setup.failed, setup.opened) {
         let mut layers = Vec::new();
-        let ink = t.text_primary;
-        Dialog::new(
-            "worktree-setup",
-            "Session was not created",
-            DialogFrame::progress(t),
-        )
-        .subtitle(setup.subject.clone())
-        .lead(not_created(setup, error, t))
-        .width(560.0)
-        .on_close(|state: &mut State| state.window.launching.worktree = None)
-        .child(
-            row()
-                .w_full()
-                .justify_end()
-                .px(20.0)
-                .pt(18.0)
-                .pb(20.0)
-                .child(
-                    Button::new("Dismiss")
-                        .variant(ButtonVariant::Ghost)
+        let folder = match &setup.step {
+            repo::Step::SyncingRepo(path) | repo::Step::CreatingWorktree(path) => {
+                Some(paths::tildify(path))
+            }
+            repo::Step::FetchingDetails => None,
+        };
+        Dialog::new("worktree-setup", "Session was not created")
+            .lead(setup.subject.clone())
+            .size(DialogSize::Form)
+            .on_close(|state: &mut State| state.window.launching.worktree = None)
+            .push_all(folder.map(|folder| {
+                FieldBlock::new("worktree-setup.folder", "Folder")
+                    .value(folder)
+                    .build(t)
+            }))
+            .push(Notice::error("worktree-setup.error", format!("Create failed: {error}")).build(t))
+            .actions(
+                Actions::new("worktree-setup.actions").then_end().push(
+                    attn_ui::system::Button::new("Dismiss")
                         .on_press(|state: &mut State| state.window.launching.worktree = None)
-                        .label_with(move |_, _| {
-                            text("Dismiss").font(TextStyle::new(12.0, 650.0)).color(ink)
-                        })
-                        .build(k)
-                        .key("worktree-setup.dismiss")
-                        .h(34.0)
-                        .px(13.0)
-                        .radius(6.0)
-                        .fill(t.border)
-                        .border(1.0, t.border_hover)
-                        .hover(t.border_hover),
+                        .build(t)
+                        .key("worktree-setup.dismiss"),
                 ),
-        )
-        .build(t, &mut layers);
+            )
+            .build(t, &mut layers);
         return layers;
     }
     let (title, detail) = match &setup.failed {
@@ -981,53 +788,31 @@ pub(crate) fn worktree_setup(state: &State, t: &Tokens) -> Vec<El> {
         Some(_) => "open to resolve".to_owned(),
         None => setup.step.command(),
     };
-    let lines = col()
-        .items_start()
-        .child(
-            text("Session setup")
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
-        )
-        .child(text(title.clone()).font(type_::BODY).color(t.text_primary))
-        .child(
-            text(detail.clone())
-                .font(type_::LABEL)
-                .color(t.text_secondary),
-        )
-        .child(text(last).font(type_::LABEL).color(t.text_tertiary));
+    let lines = Stack::tight()
+        .child(words("Session setup", Type::Label, t.text_tertiary))
+        .child(words(title.clone(), Type::Body, t.text_primary))
+        .child(words(detail.clone(), Type::Small, t.text_secondary))
+        .child(words(last, Type::Small, t.text_tertiary));
     let name = format!("{title}: {detail}");
-    let corner = if setup.failed.is_some() {
-        let height = 3.0 * type_::LABEL.line_px() + type_::BODY.line_px() + 2.0 * space::S2;
-        Button::new(name)
-            .variant(ButtonVariant::Ghost)
-            .on_press(|state: &mut State| {
+    let corner: El = if setup.failed.is_some() {
+        press_area(
+            "worktree-setup",
+            &name,
+            false,
+            false,
+            lines,
+            t,
+            |state: &mut State, _: &mut Tx| {
                 if let Some(setup) = &mut state.window.launching.worktree {
                     setup.opened = true;
                 }
-            })
-            .label_with(move |_, _| lines)
-            .build(k)
-            .h(height)
-            .px(space::S2)
+            },
+        )
+        .into()
     } else {
-        lines.role("status").label(name).padding(space::S2)
+        lines.key("worktree-setup").role("status").label(name)
     };
-    let corner = rune_kit::popover::raised(k, corner.key("worktree-setup"), 6.0);
-    vec![
-        el().key("worktree-setup.corner")
-            .absolute(0.0, 0.0)
-            .w_full()
-            .h_full()
-            .child(
-                col()
-                    .w_full()
-                    .h_full()
-                    .items_end()
-                    .justify_end()
-                    .padding(space::S3)
-                    .child(corner),
-            ),
-    ]
+    vec![finder::corner_card(t, "worktree-setup.corner", corner)]
 }
 
 pub(crate) fn desktop_label(state: &State, desktop: Option<&String>) -> String {
@@ -1055,242 +840,9 @@ pub(crate) fn desktop_label(state: &State, desktop: Option<&String>) -> String {
     format!("Desktop {number}")
 }
 
-const TITLE: rune::TextStyle = rune::TextStyle {
-    size: type_::TITLE.size,
-    ..type_::DRAWER_TITLE
-};
-
-const SECTION: rune::TextStyle = rune::TextStyle {
-    tracking: 1.6,
-    ..type_::CAPS
-};
-
-fn section(title: &str, t: &Tokens) -> El {
-    type_::upper(title, SECTION).color(t.text_dimmed)
-}
-
-/// Tauri's `.picker-footer`: a darker band across the frame's foot, under a hairline, each
-/// hint a keycap and its word.
-fn footer(w: &str, hints: &[(&str, &str)], t: &Tokens) -> El {
-    row()
+/// A picker's footer: its key hints over a rule, keyed `{w}.hints`.
+fn footer(w: &str, hints: Vec<Hint>, t: &Tokens) -> El {
+    finder::footer(t, w, hints)
         .key(format!("{w}.hints"))
-        .w_full()
-        .px(16.0)
-        .pt(10.0 + HAIRLINE)
-        .pb(10.0)
-        .gap(20.0)
-        .items_center()
-        .flex_wrap()
-        .fill(t.shadow.alpha(0.3))
         .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-        .children(hints.iter().map(|&(key, word)| {
-            row()
-                .label(format!("{key} {word}"))
-                .gap(4.0)
-                .items_center()
-                .child(keycap::Keys::outlined(&[key]).build(t).a11y_hidden())
-                .child(
-                    text(word)
-                        .font(type_::LABEL)
-                        .color(t.text_dimmed)
-                        .a11y_hidden(),
-                )
-        }))
 }
-
-/// What `.cleanup-content` says of a worktree that could not be made: the failed status pin
-/// beside the kicker, the heading, the branch and folder, and git's error.
-fn not_created(setup: &repo::Setup, error: &str, t: &Tokens) -> El {
-    let folder = match &setup.step {
-        repo::Step::SyncingRepo(path) | repo::Step::CreatingWorktree(path) => {
-            Some(paths::tildify(path))
-        }
-        repo::Step::FetchingDetails => None,
-    };
-    let pin = el()
-        .w(10.0)
-        .min_h(72.0)
-        .radius(5.0)
-        .fill(t.error)
-        .box_shadow(rune::Shadow {
-            blur: 28.0,
-            color: t.error.alpha(0.32),
-            ..rune::Shadow::default()
-        });
-    let failure = col()
-        .key("worktree-setup.error")
-        .role("alert")
-        .label(format!("Create failed: {error}"))
-        .w_full()
-        .mt(14.0)
-        .px(12.0)
-        .py(11.0)
-        .gap(8.0)
-        .radius(7.0)
-        .fill(t.error.alpha(0.09))
-        .border(1.0, t.error.alpha(0.36))
-        .child(
-            text("Create failed")
-                .font(TextStyle::new(12.0, 700.0).mono())
-                .color(t.text_primary),
-        )
-        .child(
-            text(error.to_owned())
-                .font(type_::MONO_CAPTION)
-                .color(t.text_muted)
-                .wrap(),
-        );
-    let copy = col()
-        .grow(1.0)
-        .min_w(0.0)
-        .child(
-            type_::upper(
-                "Action needed",
-                TextStyle::new(12.0, 700.0).mono().tracking(1.4),
-            )
-            .color(mix_srgb(t.brand, rune::Color::WHITE, 0.3))
-            .mb(7.0),
-        )
-        .child(
-            text("Session was not created")
-                .font(TextStyle::new(18.0, 650.0).lh(21.6))
-                .color(t.text_primary),
-        )
-        .child(
-            col()
-                .w_full()
-                .mt(10.0)
-                .gap(5.0)
-                .child(
-                    text(setup.subject.clone())
-                        .font(TextStyle::new(13.0, 400.0).mono())
-                        .color(t.text_primary)
-                        .single_line()
-                        .truncate(),
-                )
-                .children(folder.map(|folder| {
-                    text(folder)
-                        .font(type_::MONO_CAPTION)
-                        .color(t.text_muted)
-                        .single_line()
-                        .truncate()
-                })),
-        )
-        .child(failure);
-    row()
-        .w_full()
-        .items_start()
-        .gap(14.0)
-        .child(pin)
-        .child(copy)
-}
-
-/// A word in the accent colour that is pressed as a button named by it.
-fn link(
-    word: &'static str,
-    font: rune::TextStyle,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    let ink = t.accent;
-    Button::new(word)
-        .variant(ButtonVariant::GhostMuted)
-        .on_press_tx(press)
-        .label_with(move |_, _| text(word).font(font).color(ink))
-        .build(attn_ui::kit(t))
-        .h(font.line_px())
-        .px(0.0)
-}
-
-/// A launcher's panel, Tauri's `.location-picker`: the app's background inside an `edge`,
-/// floating on `shadows`. The shadows sit on an outer box, since the clip that rounds the bands'
-/// corners would cut them off. A border takes no room here, where CSS gives it its width, so
-/// the bands start a point in.
-pub(crate) fn surface(
-    frame: El,
-    radius: f32,
-    edge: rune::Color,
-    t: &Tokens,
-    shadows: &[rune::Shadow],
-) -> El {
-    shadows.iter().fold(
-        col().radius(radius).child(
-            frame
-                .w_full()
-                .padding(1.0)
-                .radius(radius)
-                .fill(t.bg_app)
-                .border(1.0, edge)
-                .clip_rounded(radius),
-        ),
-        |surface, shadow| surface.box_shadow(*shadow),
-    )
-}
-
-/// Tauri's launcher shadows: a faint white ring, a drop of `y` and `blur` at `alpha` black, and
-/// a wide brand glow.
-pub(crate) fn dialog_shadows(t: &Tokens, y: f32, blur: f32, alpha: f32) -> [rune::Shadow; 3] {
-    [
-        rune::Shadow {
-            spread: 1.0,
-            color: t.highlight.alpha(0.03),
-            ..rune::Shadow::default()
-        },
-        rune::Shadow {
-            y,
-            blur,
-            color: t.shadow.alpha(alpha),
-            ..rune::Shadow::default()
-        },
-        rune::Shadow {
-            blur: 100.0,
-            color: t.brand.alpha(0.03),
-            ..rune::Shadow::default()
-        },
-    ]
-}
-
-/// Tauri's `.path-ghost`: the rest of a completion, set right after the text typed into a
-/// field whose text starts `inset` points in.
-pub(crate) fn ghost_text(
-    key: String,
-    typed: &str,
-    rest: String,
-    font: TextStyle,
-    inset: f32,
-    ink: rune::Color,
-) -> El {
-    row()
-        .pin(
-            Some(inset + rune::text::advance(typed, font)),
-            Some(0.0),
-            Some(0.0),
-            Some(0.0),
-        )
-        .items_center()
-        .clip_rounded(0.0)
-        .child(
-            text(rest.clone())
-                .key(key)
-                .label(rest)
-                .font(font)
-                .color(ink)
-                .single_line(),
-        )
-}
-
-/// The width of a band's dividing line, which sits inside the band where CSS adds it outside.
-pub(crate) const HAIRLINE: f32 = 1.0;
-
-/// How far a plain `TextInput` sets its text in from its own edge.
-pub(crate) const PLAIN_INSET: f32 = 2.0;
-
-const FIELD: TextStyle = type_::BODY.mono();
-/// `.path-input`'s 14 points and its border, less the plain field's own inset.
-const FIELD_PAD_X: f32 = 14.0 + HAIRLINE - PLAIN_INSET;
-const RADIUS: f32 = 8.0;
-
-pub(crate) const OPTION_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 500.0).mono();
-
-/// Tauri's `.location-picker` width.
-pub(crate) const DIALOG_W: f32 = 760.0;

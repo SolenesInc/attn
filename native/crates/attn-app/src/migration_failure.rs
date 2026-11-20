@@ -3,10 +3,9 @@
 
 use attn_client::MigrationMarker;
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, ControlSize};
+use attn_ui::blocks::{Block, Head, Inline, Page, Stack};
+use attn_ui::system::{Button, Size, Type, words};
+use rune::{El, Tx};
 
 use crate::State;
 
@@ -67,74 +66,68 @@ fn report(marker: &MigrationMarker) -> String {
 }
 
 pub(crate) fn screen(state: &State, marker: &MigrationMarker, t: &Tokens) -> El {
-    let k = attn_ui::kit(t);
     let copied = state.window.migration_details_copied;
     let report = report(marker);
-    col()
-        .key("migration-failure")
-        .role("main")
-        .label("attn seems broken after migration")
-        .max_w(640.0)
-        .gap(space::S3)
-        .padding(space::S6)
-        .child(
-            text("attn seems broken after migration")
-                .key("migration-failure.title")
-                .role("heading")
-                .level(1)
-                .font(type_::TITLE)
-                .color(t.text_primary),
-        )
-        .child(
-            text("Ask an agent outside attn to investigate, preferably one running from within the attn codebase. Give it the details below.")
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .wrap(),
-        )
-        .child(
-            col()
-                .key("migration-failure.facts")
-                .role("list")
-                .label("Details")
-                .w_full()
-                .gap(space::S2)
-                .children(facts(marker).into_iter().enumerate().map(|(i, (label, value))| {
-                    row()
+    let facts = Stack::tight()
+        .key("migration-failure.facts")
+        .role("list")
+        .label("Details")
+        .w_full()
+        .children(
+            facts(marker)
+                .into_iter()
+                .enumerate()
+                .map(|(i, (label, value))| {
+                    Inline::loose()
                         .key(format!("migration-failure.fact.{i}"))
                         .role("listitem")
                         .label(format!("{label}: {value}"))
                         .w_full()
-                        .gap(space::S3)
+                        .items_start()
                         .child(
-                            text(label)
-                                .font(type_::LABEL)
-                                .color(t.text_tertiary)
-                                .w(160.0)
+                            words(label, Type::Label, t.text_tertiary)
+                                .w(LABEL_W)
                                 .wrap()
                                 .a11y_hidden(),
                         )
                         .child(
-                            text(value)
-                                .font(type_::MONO_CAPTION)
-                                .color(t.text_primary)
-                                .grow(1.0)
+                            words(value, Type::Mono, t.text_primary)
+                                .grow_from(1.0, COPY_FLOOR)
                                 .min_w(0.0)
                                 .wrap()
                                 .selectable(true)
                                 .a11y_hidden(),
                         )
-                })),
+                }),
+        );
+    let copy = Button::new(if copied { "Copied" } else { "Copy details" })
+        .size(Size::Compact)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            tx.copy(report.clone());
+            state.window.migration_details_copied = true;
+        })
+        .build(t)
+        .key("migration-failure.copy");
+    Page::new()
+        .head(
+            Head::new(
+                "migration-failure.title",
+                "attn seems broken after migration",
+            )
+            .lead(
+                "Ask an agent outside attn to investigate, preferably one running from within \
+                 the attn codebase. Give it the details below.",
+            ),
         )
-        .child(
-            Button::new(if copied { "Copied" } else { "Copy details" })
-                .variant(ButtonVariant::Neutral)
-                .control_size(ControlSize::Small)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    tx.copy(report.clone());
-                    state.window.migration_details_copied = true;
-                })
-                .build(k)
-                .key("migration-failure.copy")
-                .self_start(),
-        )
+        .push(Block::custom("migration-failure.facts.block", facts))
+        .push(Block::control("migration-failure.copy.block", copy))
+        .build("migration-failure", t)
+        .role("main")
+        .label("attn seems broken after migration")
 }
+
+/// A fact's name: "Schema version before", the longest known one, measures 172.2 in `Label`.
+const LABEL_W: f32 = 200.0;
+
+/// The narrowest a fact's value gets beside its name before it moves under it.
+const COPY_FLOOR: f32 = 240.0;

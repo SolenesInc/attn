@@ -1,58 +1,97 @@
 use rune::{Color, El, Shadow};
 
 use crate::Tokens;
+use crate::system::{Radius, door};
 
-/// How a floating surface is framed: its fill, its 1 point edge, its corners and the shadow
-/// under it, as the Tauri app's CSS draws that surface.
+/// A surface that floats over the window: its fill, its 1-point edge, its corners and the
+/// shadow under it. What the surface is decides all four, so a view picks the surface and
+/// never a corner or a shadow. A surface anchored to a control takes a card's corners; a surface
+/// over the whole window takes a panel's.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Frame {
-    pub fill: Color,
-    pub edge: Color,
-    pub radius: f32,
-    pub shadow: Shadow,
+    fill: Color,
+    edge: Color,
+    radius: Radius,
+    shadow: Shadow,
 }
 
 impl Frame {
-    /// A menu or a small popover over a row: `.session-actions-popover`, `.snooze-menu`,
-    /// `.rename-popover`.
+    /// A list of choices opened from a control: a menu, a select's list, a small popover over a
+    /// row.
     pub fn menu(t: &Tokens) -> Frame {
         Frame {
             fill: t.bg_panel,
             edge: t.border,
-            radius: 8.0,
-            shadow: shadow(t, 16.0, 36.0, 0.42),
+            radius: Radius::Card,
+            shadow: anchored(t),
         }
     }
 
-    /// A popover that opens from a tile header: `.session-usage-popover`,
-    /// `.tended-seeds-popover`.
+    /// A panel of details opened from a control, raised above a menu.
     pub fn panel(t: &Tokens) -> Frame {
         Frame {
             fill: t.bg_elevated,
             edge: t.border_hover,
-            radius: 10.0,
-            shadow: shadow(t, 12.0, 36.0, 0.25),
+            radius: Radius::Card,
+            shadow: anchored(t),
         }
     }
 
-    /// A bar over a terminal and what it lists: `.ghostty-find-bar`, `.ghostty-filter-bar`,
-    /// `.ghostty-filter-results`.
+    /// A dialog, a finder, or anything else over the window that holds it until it closes.
+    pub fn dialog(t: &Tokens) -> Frame {
+        Frame {
+            fill: t.bg_panel,
+            edge: t.border_hover,
+            radius: Radius::Panel,
+            shadow: over_window(t),
+        }
+    }
+
+    /// A bar over a terminal and what it lists.
     pub fn terminal_bar(t: &Tokens) -> Frame {
         Frame {
             fill: t.bg_tile.alpha(0.95),
             edge: t.border,
-            radius: 6.0,
+            radius: Radius::Control,
             shadow: shadow(t, 2.0, 8.0, 0.25),
         }
     }
 
-    pub fn draw(self, surface: El) -> El {
-        surface
-            .fill(self.fill)
-            .border(1.0, self.edge)
-            .radius(self.radius)
-            .box_shadow(self.shadow)
+    pub fn fill(&self) -> Color {
+        self.fill
     }
+
+    pub fn edge(&self) -> Color {
+        self.edge
+    }
+
+    pub fn shadow(&self) -> Shadow {
+        self.shadow
+    }
+
+    pub fn draw(self, surface: El) -> El {
+        door::corner(
+            surface
+                .fill(self.fill)
+                .border(1.0, self.edge)
+                .box_shadow(self.shadow),
+            self.radius,
+        )
+    }
+
+    /// [`draw`](Self::draw), with what the surface holds clipped to its corners, inside its
+    /// edge.
+    pub fn draw_clipped(self, surface: El) -> El {
+        door::clip_inside_corner(self.draw(surface), self.radius)
+    }
+}
+
+fn anchored(t: &Tokens) -> Shadow {
+    shadow(t, 16.0, 36.0, 0.42)
+}
+
+fn over_window(t: &Tokens) -> Shadow {
+    shadow(t, 24.0, 64.0, 0.5)
 }
 
 /// `box-shadow: 0 {y}px {blur}px rgba(0, 0, 0, {alpha})`.

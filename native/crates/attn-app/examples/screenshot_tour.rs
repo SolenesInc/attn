@@ -4269,6 +4269,87 @@ fn shared_codex_restart(dark: bool) {
     snap(&mut world, "shared-codex-restart", dark);
 }
 
+/// The finders, the switcher and Quick Capture in their other states: a file search that
+/// matches nothing, the switcher naming and deleting a profile, and Quick
+/// Capture's recent messages.
+fn floating_states(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::FileOpen);
+    world.gesture(|app| app.type_text("nothing matches this"));
+    snap(&mut world, "opener-no-match", dark);
+
+    let mut world = with_document(dark);
+    press(&mut world, Action::ProfileSwitch);
+    world.gesture(|app| app.type_text("n"));
+    snap(&mut world, "profile-switcher-new", dark);
+
+    let mut world = with_document(dark);
+    press(&mut world, Action::ProfileSwitch);
+    tap(&mut world, Key::Backspace);
+    snap(&mut world, "profile-switcher-delete", dark);
+
+    let mut world = quick_capture_world(dark);
+    world.capture_gesture(|panel| panel.click(Target::key("capture.recent")));
+    snap_capture(&mut world, "quick-capture-recent", dark);
+}
+
+/// The smallest window at the largest text, where a dialog keeps 501 points.
+const SMALLEST_TEXT: &str = "1.5";
+
+/// The dialogs at their worst: the smallest window at 150% text, with the longest names and
+/// refusals they meet.
+fn dialogs_smallest(dark: bool) {
+    let long =
+        "pending_approval agent in worktree attn--ds-dialogs-palette-with-a-long-branch-name";
+    let mut world = popover_world(
+        dark,
+        |state| {
+            if let Some(settings) = state.settings.as_mut() {
+                settings.insert("uiScale".into(), SMALLEST_TEXT.into());
+            }
+            first_session(state).label = long.into();
+            state.shared_codex = Some(SharedCodexState {
+                running_version: Some("0.162.1".into()),
+                installed_version: Some("0.163.0-alpha.7+linux.landing-runner".into()),
+                latest_version: Some("0.163.0".into()),
+                restart: "pending".into(),
+                blockers: Some(
+                    [("s0", "turn"), ("s2", "approval")]
+                        .iter()
+                        .map(|(session, reason)| SharedCodexBlocker {
+                            session_id: (*session).into(),
+                            reason: (*reason).into(),
+                        })
+                        .collect(),
+                ),
+                ..SharedCodexState::default()
+            })
+        },
+        |_| {},
+    );
+    world.resize((800.0, 600.0));
+    world.gesture(|app| app.click(Target::role("button").name("Restart now")));
+    snap(&mut world, "shared-codex-restart-smallest", dark);
+
+    let mut world = popover_world(
+        dark,
+        |state| {
+            if let Some(settings) = state.settings.as_mut() {
+                settings.insert("uiScale".into(), SMALLEST_TEXT.into());
+            }
+            first_session(state).label = long.into();
+        },
+        |_| {},
+    );
+    world.resize((800.0, 600.0));
+    press(&mut world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("context window"));
+    tap(&mut world, Key::Enter);
+    world.gesture(|app| app.type_text("eight hundred thousand"));
+    tap(&mut world, Key::Enter);
+    snap(&mut world, "context-cap-smallest-refused", dark);
+}
+
 const HOME_BUILD: &str = "0.14.0 (source git:home, protocol current)";
 const OLD_BUILD: &str = "0.13.0 (source git:old, protocol old)";
 
@@ -5076,6 +5157,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("update_banners", || update_banners(dark));
         scene("codex_banners", || codex_banners(dark));
         scene("smallest_banners", || smallest_banners(dark));
+        scene("dialogs_smallest", || dialogs_smallest(dark));
+        scene("floating_states", || floating_states(dark));
     }
     let unmatched: Vec<String> = ONLY.with_borrow(|only| {
         only.iter()
