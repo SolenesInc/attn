@@ -187,12 +187,14 @@ fn measure(state: &mut State) {
                 None => break,
             }
         }
-    } else if crowding
-        .taken
-        .last()
-        .is_some_and(|(_, needed)| bar_w >= *needed)
-    {
-        crowding.taken.pop();
+    } else {
+        while crowding
+            .taken
+            .last()
+            .is_some_and(|(_, needed)| bar_w >= *needed)
+        {
+            crowding.taken.pop();
+        }
     }
 }
 

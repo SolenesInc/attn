@@ -2422,6 +2422,21 @@ fn no_part_of_the_title_bar_covers_another_in_the_smallest_window_at_every_text_
                 );
             }
         }
+        if collapsed {
+            world.resize((2400.0, 900.0));
+            let screen = world.screen();
+            for key in ["sidebar.critical", "shelf.slot", "queue-bar.desktop.8"] {
+                assert!(
+                    screen.find(Target::key(key)).is_some(),
+                    "{scale}: a roomy bar shows {key} again"
+                );
+            }
+            let [.., profile, _] = screen.bounds(Target::key("titlebar.profile")).unwrap();
+            assert!(
+                profile > 100.0,
+                "{scale}: the profile pill says its name again: {profile}"
+            );
+        }
     }
 }
 
