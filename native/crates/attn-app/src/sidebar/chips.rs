@@ -147,25 +147,17 @@ pub(crate) fn chip(
     let desktop = chip.desktop.clone();
     let (named, label) = said(chip, look);
     let slot = chip.slot.unwrap_or_default();
-    let ink = match (chip.selected, chip.empty) {
-        (true, _) => t.text_primary,
-        (false, true) => t.text_dimmed,
-        (false, false) => t.text_secondary,
-    };
-    let face = queue_chip_face(look, chip.selected, !chip.empty, t)
-        .key(format!("{prefix}.{slot}"))
-        .role("button")
-        .focusable(true)
-        .label(label)
-        .help(named)
-        .a11y_value(chip_value(chip.current, chip.empty))
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &desktop, tx))
-        .child(
-            text(slot.to_string())
-                .font(digits(look, chip.selected))
-                .color(ink),
-        )
-        .children(waiting_mark(chip.waiting, look, t));
+    let face = system::chip_button(
+        format!("{prefix}.{slot}"),
+        label,
+        system::number_chip(slot, chip.current, chip.empty, t),
+        chip.selected,
+        t,
+    )
+    .help(named)
+    .a11y_value(chip_value(chip.current, chip.empty))
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &desktop, tx))
+    .children(waiting_mark(chip.waiting, look, t));
     dropped(face, drop, t)
 }
 
@@ -175,48 +167,6 @@ fn dropped(face: El, drop: Option<DesktopMark>, t: &Tokens) -> El {
         Some(DesktopMark::Source) => face.opacity(0.4),
         Some(DesktopMark::Accepts) => face.border(1.0, t.brand).border_dash(2.0, 2.0),
         Some(DesktopMark::Target) => face.border(1.0, t.brand).fill(t.brand.alpha(0.18)),
-    }
-}
-
-/// The frame of a queue chip, before its content.
-fn queue_chip_face(look: Look, selected: bool, has_panes: bool, t: &Tokens) -> El {
-    let face = row().center();
-    match look {
-        Look::Strip => {
-            let face = face
-                .min_w(15.0)
-                .h(18.0)
-                .radius(4.0)
-                .border(1.0, t.border)
-                .hover(t.bg_elevated);
-            match (selected, has_panes) {
-                (true, _) => face.fill(t.bg_elevated).border(1.0, t.border_focus),
-                (false, true) => face.fill(super::wash(t, 0.03)),
-                (false, false) => face,
-            }
-        }
-        Look::Bar => {
-            let face = face
-                .min_w(24.0)
-                .h(24.0)
-                .radius(6.0)
-                .border(1.0, rune::Color::TRANSPARENT)
-                .hover(t.bg_elevated);
-            match (selected, has_panes) {
-                (true, _) => face
-                    .fill(t.accent.alpha(0.22))
-                    .border(1.0, t.accent.alpha(0.5)),
-                (false, true) => face.fill(super::wash(t, 0.04)),
-                (false, false) => face,
-            }
-        }
-    }
-}
-
-fn digits(look: Look, selected: bool) -> rune::TextStyle {
-    match look {
-        Look::Strip => rune::TextStyle::new(12.0, if selected { 600.0 } else { 400.0 }).mono(),
-        Look::Bar => rune::TextStyle::new(12.0, 600.0).mono(),
     }
 }
 
@@ -249,33 +199,27 @@ fn extras_chip(key: &str, extras: Extras, look: Look, t: &Tokens) -> Option<El> 
         crowded,
     } = extras;
     (count > 0).then(|| {
-        queue_chip_face(look, selected, false, t)
-            .key(key.to_owned())
-            .role("button")
-            .focusable(true)
-            .label(format!(
+        let ink = if selected {
+            t.text_primary
+        } else {
+            t.text_tertiary
+        };
+        system::chip_button(
+            key,
+            format!(
                 "{count} more desktop{}{}{}",
                 if count == 1 { "" } else { "s" },
                 if crowded { "" } else { " without a shortcut" },
                 waiting_words(waiting, look)
-            ))
-            .px(if look == Look::Strip { 5.0 } else { 6.0 })
-            .on_press_tx(|state: &mut State, tx: &mut Tx| {
-                crate::dispatch(state, crate::Action::DesktopOverview, tx);
-            })
-            .child(
-                text(format!("+{count}"))
-                    .font(match look {
-                        Look::Strip => digits(look, selected),
-                        Look::Bar => rune::TextStyle::new(12.0, 500.0).mono(),
-                    })
-                    .color(if selected {
-                        t.text_primary
-                    } else {
-                        t.text_tertiary
-                    }),
-            )
-            .children(waiting_mark(waiting, look, t))
+            ),
+            system::chip_edge(words(format!("+{count}"), Type::Tag, ink), t),
+            selected,
+            t,
+        )
+        .on_press_tx(|state: &mut State, tx: &mut Tx| {
+            crate::dispatch(state, crate::Action::DesktopOverview, tx);
+        })
+        .children(waiting_mark(waiting, look, t))
     })
 }
 

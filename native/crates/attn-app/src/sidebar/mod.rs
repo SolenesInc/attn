@@ -465,16 +465,6 @@ fn desktop_row(key: String, desktop: &DesktopHeader, keys: Option<String>, t: &T
     }
 }
 
-/// The Tauri app's white washes, `rgba(255, 255, 255, alpha)`, which its light theme does not
-/// show.
-pub(crate) fn wash(t: &Tokens, alpha: f32) -> rune::Color {
-    if t.dark {
-        t.text_primary.alpha(alpha)
-    } else {
-        rune::Color::TRANSPARENT
-    }
-}
-
 /// How much of an agent's name stays before the marks after it give way: about six
 /// characters of body text, enough to tell agents apart.
 const NAME_MIN_W: f32 = 64.0;
