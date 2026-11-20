@@ -2479,7 +2479,6 @@ fn settings_smallest_pages(dark: bool) {
                     updated_at: "2026-11-20T08:30:00Z".into(),
                     last_error: error.map(str::to_owned),
                     last_diagnostic: error.map(|_| "stderr: authentication failed for https://api.example.com/v1/sessions: token expired".to_owned()),
-                    ..attn_protocol::Task::default()
                 };
                 message(attn_protocol::TaskListResultMessage {
                     request_id: r["request_id"].as_str().unwrap_or_default().into(),

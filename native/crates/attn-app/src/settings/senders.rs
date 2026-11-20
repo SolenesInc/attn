@@ -79,6 +79,7 @@ fn paired_sender(sender: &PairedSender, t: &Tokens) -> El {
     let id = sender.id.clone();
     ListRow::new(key.clone(), sender.name.clone())
         .still()
+        .wrap()
         .title(sender.name.clone())
         .subtitle_keyed(format!("{key}.copy"), copy, t)
         .controls(

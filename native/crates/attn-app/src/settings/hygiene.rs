@@ -125,6 +125,7 @@ fn muted_list(
             let pressed = name.clone();
             ListRow::new(format!("settings.muted.{kind}.{name}"), name.clone())
                 .still()
+                .wrap()
                 .title(name.clone())
                 .controls(
                     [Button::new("Unmute")

@@ -5,7 +5,7 @@ use std::collections::HashSet;
 
 use attn_protocol::{Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage};
 use attn_ui::Tokens;
-use attn_ui::blocks::{Block, Disclosure, List, Notice, Prose, Status};
+use attn_ui::blocks::{Block, Disclosure, Inline, List, Notice, Prose, Status};
 use attn_ui::system::{Button, ListRow, Reveal, Size, Tone, Type, tag, words};
 use rune::{El, Tx};
 
@@ -154,14 +154,23 @@ fn row_of(tasks: &Tasks, task: &Task, now_ms: i64, t: &Tokens) -> (El, Vec<Block
     let id = task.id.clone();
     let row = ListRow::new(key.clone(), subject.clone())
         .still()
-        .title_el(words(subject, Type::Mono, t.text_primary).truncate())
-        .tag(tag(
-            format!("{key}.state"),
-            &task.state,
-            tone_of(&task.state),
-            t,
-        ))
-        .subtitle(tries, t)
+        .wrap()
+        .title_el(
+            words(subject, Type::Mono, t.text_primary)
+                .wrap_anywhere()
+                .w_full()
+                .min_w(0.0),
+        )
+        .subtitle_el(
+            Inline::tight()
+                .child(El::from(tag(
+                    format!("{key}.state"),
+                    &task.state,
+                    tone_of(&task.state),
+                    t,
+                )))
+                .child(words(tries, Type::Small, t.text_tertiary).wrap()),
+        )
         .controls(
             can_retry.then(|| {
                 Button::new(if retrying { "Retrying…" } else { "Retry" })

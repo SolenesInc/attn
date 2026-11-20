@@ -283,6 +283,7 @@ fn paired_phone(pairing: &PhonePairing, t: &Tokens) -> El {
     let (device, profile) = (pairing.device_id.clone(), pairing.profile_id.clone());
     ListRow::new(key.clone(), pairing.name.clone())
         .still()
+        .wrap()
         .title(pairing.name.clone())
         .subtitle_keyed(format!("{key}.seen"), seen, t)
         .controls(
