@@ -7,9 +7,9 @@ use attn_protocol::{ReviewBundle, ReviewFile};
 use attn_ui::Tokens;
 use attn_ui::blocks::{
     Block, Byline, Card, Head, Inline, KeyFit, KeyLine, Prose, Reader, Room, Stack, Surface,
-    key_tab, place,
+    key_choice_width, key_tab, place,
 };
-use attn_ui::system::{Type, keycaps, keys_hint, words};
+use attn_ui::system::{Type, keycaps, keys_hint, keys_hint_width, words};
 use rune::{El, Tx, row};
 
 use super::frames::Frame;
@@ -280,23 +280,6 @@ fn keys_for(
     keys
 }
 
-/// The room the full key line needs on one line: Brief's, the widest, while marking, with
-/// Linux's "Ctrl+Shift+Enter" for send. Measured in a wire run with the review alone in the
-/// window: one line at 1350, two at 1345. Walkthrough's takes one line from 1320.
-const LINE_ROOM: f32 = 1350.0;
-
-/// The narrowest room in which Brief's hints wrap to two lines under the tabs and "? all keys".
-/// Measured in the same run: two lines at 565, three at 560. Walkthrough's take two from 510.
-const UNDER_ROOM: f32 = 565.0;
-
-fn fit(room: Option<u32>) -> KeyFit {
-    match room.map(|r| r as f32) {
-        Some(room) if room >= LINE_ROOM => KeyFit::Line,
-        Some(room) if room < UNDER_ROOM => KeyFit::Tabs,
-        _ => KeyFit::Under,
-    }
-}
-
 pub(super) fn key_line(
     tile: &str,
     (frame, offered): (Frame, &[Frame]),
@@ -318,7 +301,26 @@ pub(super) fn key_line(
     } else {
         Vec::new()
     };
-    let fit = fit(room);
+    let fit = match room {
+        Some(room) => {
+            let tabs: Vec<f32> = Frame::ALL
+                .iter()
+                .filter(|(f, _, _)| offered.len() > 1 && offered.contains(f))
+                .map(|(_, key, name)| key_choice_width(key, name))
+                .collect();
+            let hints: Vec<f32> = keys
+                .iter()
+                .map(|(k, w)| keys_hint_width(k.split(' '), w))
+                .collect();
+            KeyFit::in_room(
+                room as f32,
+                &tabs,
+                &hints,
+                keys_hint_width(["?"], "all keys"),
+            )
+        }
+        None => KeyFit::Under,
+    };
     let mut line = KeyLine::new(format!("{prefix}.keys"), "Review keys")
         .fit(fit)
         .tabs(tabs)

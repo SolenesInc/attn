@@ -63,6 +63,20 @@ pub fn keycaps(keys: impl IntoIterator<Item = impl Into<String>>, t: &Tokens) ->
     }))
 }
 
+/// How wide [`keycaps`] draws `keys`.
+pub fn keycaps_width<'a>(keys: impl IntoIterator<Item = &'a str>) -> f32 {
+    let caps: Vec<f32> = keys
+        .into_iter()
+        .map(|key| door::width(key, Type::Mono) + 2.0 * Space::S4.pt())
+        .collect();
+    caps.iter().sum::<f32>() + Space::S2.pt() * caps.len().saturating_sub(1) as f32
+}
+
+/// How wide [`keys_hint`] draws `keys` and `what`.
+pub fn keys_hint_width<'a>(keys: impl IntoIterator<Item = &'a str>, what: &str) -> f32 {
+    keycaps_width(keys) + Space::S6.pt() + door::width(what, Type::Small)
+}
+
 /// What the keys `keys` do, said after their caps, read as one name.
 pub fn keys_hint(
     keys: impl IntoIterator<Item = impl Into<String>>,

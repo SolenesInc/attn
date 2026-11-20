@@ -7059,6 +7059,21 @@ fn the_key_line_keeps_its_frame_tabs_and_all_keys_on_one_line_and_never_takes_ov
             "at {size:?} and {scale:?} the key line is not the tabs and all keys alone"
         );
     }
+
+    let mut world = review_in(
+        row(vec![pane("a"), document_tile("m", DOC, None)]),
+        (1440.0, 900.0),
+        None,
+    );
+    click(&mut world, Target::key("tile.m.review.facts"));
+    click(&mut world, Target::key("tile.m.review.file.1"));
+    assert!(file_view(&world).is_some());
+    let rows = key_line_rows(&world);
+    assert!(
+        rows.len() <= 3 && rows[0].iter().any(|w| w == "all keys"),
+        "with a file open the key line takes {} lines: {rows:?}",
+        rows.len()
+    );
 }
 
 #[test]

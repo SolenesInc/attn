@@ -51,7 +51,7 @@ pub use entry::{Entry, entries, rail};
 pub use facts::Facts;
 pub use field::Field;
 pub use inspector::Inspector;
-pub use key_line::{KeyFit, KeyLine, key_choice, key_tab};
+pub use key_line::{KeyFit, KeyLine, key_choice, key_choice_width, key_tab};
 pub use lane::{Lane, board, lanes};
 pub use list::List;
 pub use menu::Menu;

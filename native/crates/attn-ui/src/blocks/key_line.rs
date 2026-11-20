@@ -1,7 +1,7 @@
 use rune::{Color, El, col, row};
 
 use crate::Tokens;
-use crate::system::{Radius, Size, Space, Type, door, keycaps, words};
+use crate::system::{Radius, Size, Space, Type, door, keycaps, keycaps_width, words};
 
 /// A choice a key picks, its caps before its name: drawn on a tint with an edge while it is
 /// picked, and read as its keys and its name.
@@ -25,6 +25,14 @@ pub fn key_choice(keys: &str, name: &str, on: bool, t: &Tokens) -> El {
     }
 }
 
+/// How wide [`key_choice`] draws `keys` and `name`.
+pub fn key_choice_width(keys: &str, name: &str) -> f32 {
+    2.0 * Space::S8.pt()
+        + keycaps_width(keys.split(' '))
+        + Space::S4.pt()
+        + door::width(name, Type::Small)
+}
+
 /// A tab a key picks: [`key_choice`] read as a tab, checked while it is picked.
 pub fn key_tab(keys: &str, name: &str, on: bool, t: &Tokens) -> El {
     key_choice(keys, name, on, t).role("tab").checked(on)
@@ -40,6 +48,41 @@ pub enum KeyFit {
     Under,
     /// The tabs and the end alone; the end's key shows the rest.
     Tabs,
+}
+
+impl KeyFit {
+    /// The fit for a key line `room` points wide, from the widths its tabs, hints and end draw
+    /// at, as [`key_choice_width`] and [`keys_hint_width`] give them: one line when everything
+    /// fits on it, the hints under the tabs while they take two lines at most, else the tabs
+    /// alone.
+    pub fn in_room(room: f32, tabs: &[f32], hints: &[f32], end: f32) -> KeyFit {
+        let inside = room - 2.0 * Space::S8.pt();
+        let gap = Space::S16.pt();
+        let row = |widths: &[f32]| {
+            widths.iter().sum::<f32>() + Space::S2.pt() * widths.len().saturating_sub(1) as f32
+        };
+        let tabs_room = if tabs.is_empty() {
+            0.0
+        } else {
+            row(tabs) + Space::S8.pt() + gap
+        };
+        let hints_room = hints.iter().sum::<f32>() + gap * hints.len().saturating_sub(1) as f32;
+        if tabs_room + hints_room + gap + end <= inside {
+            return KeyFit::Line;
+        }
+        let lines = hints.iter().fold((0, f32::INFINITY), |(lines, used), &w| {
+            if used + gap + w <= inside {
+                (lines, used + gap + w)
+            } else {
+                (lines + 1, w)
+            }
+        });
+        if lines.0 <= 2 {
+            KeyFit::Under
+        } else {
+            KeyFit::Tabs
+        }
+    }
 }
 
 /// The line under a reader that names its keys: tabs and hints, and one hint at its end, such as

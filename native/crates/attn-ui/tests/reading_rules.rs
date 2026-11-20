@@ -1,6 +1,6 @@
 //! The rules the reading blocks hold, read from their gallery stories' element trees.
 
-use attn_ui::reading_gallery::READING_SUBJECTS;
+use attn_ui::reading_gallery::{KEY_HINTS, KEY_TABS, READING_SUBJECTS};
 use rune::{App, AppSpec, Cx, El, ElementInfo, Env, Runtime, el};
 
 const WINDOW: (f32, f32) = (1500.0, 1100.0);
@@ -283,6 +283,30 @@ fn a_key_lines_tabs_are_set_off_only_from_hints_on_their_own_line() {
             room > 4.0,
             set_off,
             "{variant}: the tabs end {room} past their last tab"
+        );
+    }
+}
+
+#[test]
+fn a_key_lines_measured_widths_are_never_narrower_than_it_draws_and_within_a_point() {
+    let rt = story("Blocks/KeyLine", "Long");
+    let drawn = |key: &str| element(&rt, key).rect[2];
+    for (keys, name) in KEY_TABS {
+        let key = format!("keys.tab.{keys}");
+        let measured = attn_ui::blocks::key_choice_width(keys, name);
+        assert!(
+            (0.0..=1.0).contains(&(measured - drawn(&key))),
+            "{key} draws {} wide, measured {measured}",
+            drawn(&key)
+        );
+    }
+    for (keys, what) in KEY_HINTS {
+        let key = format!("keys.hint.{what}");
+        let measured = attn_ui::system::keys_hint_width(keys.iter().copied(), what);
+        assert!(
+            (0.0..=1.0).contains(&(measured - drawn(&key))),
+            "{key} draws {} wide, measured {measured}",
+            drawn(&key)
         );
     }
 }

@@ -493,25 +493,40 @@ fn remarks_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
     )
 }
 
+/// The KeyLine story's frame tabs, by their keys and names.
+pub const KEY_TABS: &[(&str, &str)] = &[("1", "Diff"), ("2", "Files")];
+
+/// The KeyLine story's hints, by their keys and what they do: the first [`SHORT_HINTS`] in
+/// every state, all of them in its long one.
+pub const KEY_HINTS: &[(&[&str], &str)] = &[
+    (&["j", "k"], "move"),
+    (&["n"], "note"),
+    (&["Enter"], "open"),
+    (&["⌘", "Enter"], "send"),
+    (&["["], "previous file"),
+    (&["]"], "next file"),
+    (&["/"], "search"),
+    (&["Esc"], "close"),
+];
+
+const SHORT_HINTS: usize = 3;
+
 fn keys_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
     let t = tokens(cx);
-    let line = KeyLine::new("keys", "Keys")
-        .tabs([
-            key_tab("1", "Diff", true, &t),
-            key_tab("2", "Files", false, &t),
-        ])
-        .push(keys_hint(["j", "k"], "move", &t))
-        .push(keys_hint(["n"], "note", &t))
-        .push(keys_hint(["Enter"], "open", &t));
-    let line = if s.long {
-        line.push(keys_hint(["⌘", "Enter"], "send", &t))
-            .push(keys_hint(["["], "previous file", &t))
-            .push(keys_hint(["]"], "next file", &t))
-            .push(keys_hint(["/"], "search", &t))
-            .push(keys_hint(["Esc"], "close", &t))
+    let hints = if s.long {
+        KEY_HINTS
     } else {
-        line
+        &KEY_HINTS[..SHORT_HINTS]
     };
+    let line =
+        KeyLine::new("keys", "Keys").tabs(KEY_TABS.iter().enumerate().map(|(at, (keys, name))| {
+            key_tab(keys, name, at == 0, &t).key(format!("keys.tab.{keys}"))
+        }));
+    let line = hints.iter().fold(line, |line, (keys, what)| {
+        line.push(
+            keys_hint(keys.iter().copied(), what.to_owned(), &t).key(format!("keys.hint.{what}")),
+        )
+    });
     let fit = match s.width {
         Width::Wide => KeyFit::Line,
         Width::Narrow => KeyFit::Under,
