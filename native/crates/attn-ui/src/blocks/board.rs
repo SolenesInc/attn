@@ -112,7 +112,9 @@ impl Brand {
             .truncate()
             .shrink();
         let said = col().grow(1.0).min_w(0.0).child(name).child(
-            words(self.lead, Type::Label, t.text_dimmed)
+            door::styled(text(self.lead.to_uppercase()), door::TAGLINE)
+                .color(t.text_dimmed)
+                .label(self.lead)
                 .single_line()
                 .truncate()
                 .shrink(),

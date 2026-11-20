@@ -1423,6 +1423,32 @@ fn an_asks_images_show_from_the_copy_the_home_keeps() {
 }
 
 #[test]
+fn an_asker_name_on_home_stays_whole_beside_a_long_subject_while_the_row_has_room() {
+    let width_beside = |subject: &str| {
+        let world = start(
+            vec![Ask {
+                subject: subject.into(),
+                ..cache_store()
+            }],
+            vec![api_working()],
+        );
+        world
+            .screen()
+            .bounds(Target::key("home.ask.a-cache1.from"))
+            .unwrap()[2]
+    };
+    let short = width_beside("Cache store");
+    let long = width_beside(
+        "Which store should keep the cache once deploys stop emptying it, and who owns its \
+         eviction policy when the catalog doubles in size next quarter?",
+    );
+    assert_eq!(
+        long, short,
+        "the asker's name keeps its width beside a long subject"
+    );
+}
+
+#[test]
 fn a_long_asker_name_on_home_ends_in_an_ellipsis_and_leaves_room_for_the_subject() {
     let asker = Session {
         label:

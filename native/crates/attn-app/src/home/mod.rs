@@ -52,7 +52,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         settings(t),
     );
     if let Some(banner) = crate::whats_new::banner(state, t) {
-        board = board.top(banner);
+        board = board.top(Block::custom("home.intro-banner.slot", banner));
     }
     if let Some(running) = &home.all_settled {
         board = board.top(Block::custom(
@@ -283,6 +283,7 @@ fn ask_row(item: &AskItem<'_>, t: &Tokens) -> El {
                         .key(format!("{key}.from"))
                         .single_line()
                         .truncate()
+                        .shrink()
                         .max_w_frac(ASKER_SHARE),
                 )
                 .child(
@@ -290,8 +291,7 @@ fn ask_row(item: &AskItem<'_>, t: &Tokens) -> El {
                         .key(format!("{key}.subject"))
                         .single_line()
                         .truncate()
-                        .shrink()
-                        .min_w(0.0),
+                        .grow_from(1.0, 0.0),
                 ),
         )
         .build(t)
@@ -302,13 +302,8 @@ fn session_row(a: &HomeAgent, t: &Tokens) -> El {
     let key = format!("home.session.{}", a.agent.id);
     memo(key.clone(), (a, *t), || {
         let id = a.agent.id.clone();
-        let name_kind = if a.activity.is_some() {
-            Type::Name
-        } else {
-            Type::Body
-        };
         let name = crate::sidebar::flagged(&key, &a.agent, t).shrink().child(
-            words(a.agent.name.clone(), name_kind, t.text_primary)
+            words(a.agent.name.clone(), Type::Body, t.text_primary)
                 .single_line()
                 .truncate()
                 .shrink(),

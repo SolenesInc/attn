@@ -173,6 +173,9 @@ pub(crate) fn rule_above(e: El, ink: rune::Color) -> El {
 /// The brand's name as its mark draws it, apart from the type roles: 24/700 mono.
 pub(crate) const WORDMARK: TextStyle = TextStyle::new(24.0, 700.0).mono();
 
+/// What the brand is, under its wordmark: widely spaced capitals in the interface face.
+pub(crate) const TAGLINE: TextStyle = TextStyle::new(12.0, 400.0).tracking(0.9);
+
 /// `e` in `style`, for the text a caller outside the type roles still hands in, such as a
 /// glyph button's mark.
 pub(crate) fn styled(e: El, style: TextStyle) -> El {

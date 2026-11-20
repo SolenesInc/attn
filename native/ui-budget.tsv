@@ -25,7 +25,7 @@ budget	attn-app/src/review	97
 budget	attn-app/src/settings	171
 budget	attn-app/src/sidebar	53
 budget	attn-app/src/terminal	0
-budget	attn-app/src/whats_new	0
+budget	attn-app/src/whats_new	7
 allow	native/crates/attn-ui/src/colors/mod.rs
 allow	native/crates/attn-ui/src/system/door.rs
 allow	native/crates/attn-app/src/terminal/input_trace.rs

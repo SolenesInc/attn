@@ -357,6 +357,7 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
                 .shrink()
                 .a11y_hidden()
         }))
+        .child(rune::el().grow(1.0))
         .children(marks(pr, &key, t));
     let title = words(pr.title.clone(), Type::Body, t.text_primary)
         .wrap()
@@ -703,7 +704,7 @@ pub(crate) fn rate_limit_notice(state: &State, t: &Tokens) -> Option<Block> {
     let left_ms = rate_limit_left_ms(&state.facts, state.window.now_ms)?;
     let (minutes, seconds) = (left_ms / 60_000, left_ms % 60_000 / 1000);
     Some(
-        Notice::info(
+        Notice::warn(
             "home.rate-limit",
             format!("GitHub rate limited. Resuming in {minutes}m {seconds}s"),
         )
