@@ -42,10 +42,12 @@ pub fn playground<S: 'static>() -> Playground<S> {
         Playground::new().shortcut(None).bar(false),
         |playground, &(name, view)| playground.story(Story::new(name, Showcase::default, view)),
     );
-    crate::board_gallery::stories(crate::reading_gallery::stories(
-        crate::floating_gallery::stories(crate::panel_gallery::stories(
-            crate::chrome_gallery::stories(crate::settings_gallery::stories(
-                crate::block_gallery::stories(library(components)),
+    crate::tile_gallery::stories(crate::board_gallery::stories(
+        crate::reading_gallery::stories(crate::floating_gallery::stories(
+            crate::panel_gallery::stories(crate::chrome_gallery::stories(
+                crate::settings_gallery::stories(crate::block_gallery::stories(library(
+                    components,
+                ))),
             )),
         )),
     ))

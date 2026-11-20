@@ -13,6 +13,7 @@ pub mod reading_gallery;
 mod scroll_bar;
 pub mod settings_gallery;
 pub mod system;
+pub mod tile_gallery;
 pub mod type_;
 
 pub use scroll_bar::{

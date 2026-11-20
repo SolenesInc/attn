@@ -1,6 +1,7 @@
 use attn_client::Desktop;
 use attn_protocol::{DesktopPane, Session};
 use attn_term::mouse;
+use attn_ui::blocks::Tabs;
 use attn_ui::colors::TerminalColors;
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
@@ -242,63 +243,22 @@ fn review_tabs(desktop: &Desktop, view: super::layout::View, t: &Tokens) -> Opti
     if documents.len() < 2 || !documents.iter().any(|(id, _)| *id == shown) {
         return None;
     }
-    let tabs = documents.into_iter().map(|(id, name)| {
-        let selected = id == shown;
-        let (desktop, leaf) = (desktop.id.clone(), id.clone());
-        text(name.clone())
-            .key(format!("review.tab.{id}"))
-            .role("tab")
-            .label(name)
-            .checked(selected)
-            .font(type_::LABEL)
-            .color(if selected {
-                t.text_primary
-            } else {
-                t.text_secondary
-            })
-            .single_line()
-            .truncate()
-            .max_w(220.0)
-            .px(9.0)
-            .py(5.0)
-            .radius(6.0)
-            .border(
-                1.0,
-                if selected {
-                    t.brand.alpha(0.38)
-                } else {
-                    t.brand.alpha(0.0)
+    let tabs = documents.into_iter().fold(
+        Tabs::new("review.tabs", "Open review documents"),
+        |tabs, (id, name)| {
+            let (desktop, leaf) = (desktop.id.clone(), id.clone());
+            tabs.tab(
+                format!("review.tab.{id}"),
+                name,
+                id == shown,
+                t,
+                move |state: &mut State, tx: &mut Tx| {
+                    super::actions::focus_leaf(state, &desktop, &leaf, tx)
                 },
             )
-            .fill(if selected {
-                t.brand.alpha(0.12)
-            } else {
-                rune::Color::TRANSPARENT
-            })
-            .hover(if selected {
-                t.brand.alpha(0.12)
-            } else {
-                t.bg_button
-            })
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                super::actions::focus_leaf(state, &desktop, &leaf, tx)
-            })
-    });
-    Some(
-        row()
-            .key("review.tabs")
-            .role("tablist")
-            .label("Open review documents")
-            .w_full()
-            .items_center()
-            .gap(3.0)
-            .px(space::S3)
-            .py(6.0)
-            .fill(t.bg_elevated)
-            .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
-            .scroll_x()
-            .children(tabs),
-    )
+        },
+    );
+    Some(tabs.build(t))
 }
 
 /// What an agent header's second line shows, each piece at the level its tile's width leaves
@@ -737,7 +697,11 @@ fn empty(t: &Tokens, message: &str) -> El {
         .w_full()
         .h_full()
         .center()
-        .child(text(message).font(type_::BODY).color(t.text_tertiary))
+        .child(attn_ui::system::words(
+            message.to_owned(),
+            attn_ui::system::Type::Body,
+            t.text_tertiary,
+        ))
 }
 
 struct TileCx<'a> {
@@ -997,16 +961,14 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 .stale
                 .contains(&pane.session_id)
                 .then(|| super::stale_build::notice(&pane.session_id, t));
-            let slot = if shared.is_some() || stale.is_some() {
-                slot.child(
-                    col()
-                        .absolute(0.0, 0.0)
-                        .w_full()
-                        .children(shared)
-                        .children(stale),
-                )
-            } else {
+            let notices: Vec<_> = shared.into_iter().chain(stale).collect();
+            let slot = if notices.is_empty() {
                 slot
+            } else {
+                slot.child(attn_ui::blocks::terminal_notices(
+                    format!("terminal.{}.notices", pane.runtime_id),
+                    notices,
+                ))
             };
             let slot = match cx.terminals.marking(&pane.runtime_id) {
                 Some(marking) => slot.children(super::annotating::layers(

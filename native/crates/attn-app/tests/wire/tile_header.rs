@@ -1358,14 +1358,11 @@ fn a_header_warns_while_another_terminal_has_its_conversation_open_naming_where_
         world
             .screen()
             .find(Target::key("session.s-a.shared-conversation"))
-            .map(|_| texts(world, "session.s-a.shared-conversation"))
+            .map(|notice| notice.name.unwrap_or_default())
     };
     assert_eq!(
         notice(&world).expect("the notice is up"),
-        [
-            "This conversation is also open in “ledger sweep, again” on Reviews.",
-            "Two agent processes on one conversation split its history. Close one of them.",
-        ]
+        "This conversation is also open in “ledger sweep, again” on Reviews. Two agent processes on one conversation split its history. Close one of them."
     );
     assert!(
         world

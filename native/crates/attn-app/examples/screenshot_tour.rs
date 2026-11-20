@@ -1680,6 +1680,51 @@ fn terminal_overlays(dark: bool) {
     snap(&mut world, "terminal-overlays", dark);
 }
 
+/// Terminal `a` whose conversation another terminal has open, running an older build than the
+/// daemon, on a machine being reconnected: both notices over its top and the strip under it.
+fn tile_notices(dark: bool) {
+    let mut world = popover_world(
+        dark,
+        |state| {
+            let first = first_session(state);
+            first.conversation_shared_with = Some(vec!["s1".into()]);
+            first.terminal_build_stale = Some(true);
+            first.host = Some("studio".into());
+            state.outposts = Some(vec![OutpostInfo {
+                reach: "connecting".into(),
+                ..outpost("studio", HOME_BUILD, None, None)
+            }]);
+        },
+        |_| {},
+    );
+    snap(&mut world, "tile-notices", dark);
+}
+
+/// Terminal `a`'s filter over a block's output, typed into, listing the lines that match.
+fn terminal_filter(dark: bool) {
+    let mut world = plain(dark);
+    let output: String = (1..=40)
+        .map(|n| format!("test desktop::view::tile_{n} ... ok\r\n"))
+        .collect();
+    write(
+        &mut world,
+        &format!(
+            "\x1b]133;A\x07$ \x1b]133;B\x07cargo test\r\n\x1b]133;C\x07{output}\x1b]133;D;0\x07\x1b]133;A\x07$ "
+        ),
+    );
+    let at = cell(&world, 1, 2);
+    world.gesture(|app| {
+        app.runtime.pointer_move(at.0, at.1);
+        app.runtime
+            .button_down(at.0, at.1, rune::PointerButton::Secondary);
+        app.runtime
+            .button_up(at.0, at.1, rune::PointerButton::Secondary);
+    });
+    world.gesture(|app| app.runtime.resolve_popup(Some("filter-block")).unwrap());
+    world.gesture(|app| app.type_text("tile_1"));
+    snap(&mut world, "terminal-filter", dark);
+}
+
 fn alt() -> rune::Mods {
     rune::Mods {
         alt: true,
@@ -3728,6 +3773,13 @@ fn review_beside(dark: bool) {
     let mut world = review_beside_agent(dark);
     focus_review(&mut world);
     snap(&mut world, "review-beside", dark);
+}
+
+/// The review shown alone while a second document shares its desktop: the tabs over it.
+fn review_tabs(dark: bool) {
+    let mut world = review_beside_agent(dark);
+    world.gesture(|app| app.click(Target::key("tile.m.focus")));
+    snap(&mut world, "review-tabs", dark);
 }
 
 fn review_focused(dark: bool) {
@@ -5987,6 +6039,9 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("opener", || opener(dark));
         scene("context_cap", || context_cap(dark));
         scene("terminal_overlays", || terminal_overlays(dark));
+        scene("terminal_filter", || terminal_filter(dark));
+        scene("tile_notices", || tile_notices(dark));
+        scene("review_tabs", || review_tabs(dark));
         scene("tile_window", || tile_window(dark));
         scene("launcher_dialog", || launcher_dialog(dark));
         scene("launcher_dialog_last", || launcher_dialog_last(dark));

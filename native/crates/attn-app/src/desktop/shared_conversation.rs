@@ -1,8 +1,7 @@
 use attn_client::Desktop;
 use attn_protocol::Session;
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::{El, col, text};
+use attn_ui::blocks::{Block, Notice};
 
 /// Where each session whose conversation another terminal also has open says it is open, as
 /// the Tauri app words it, from the desktop that shows the session.
@@ -52,28 +51,14 @@ fn where_open(peer: &str, sessions: &[Session], desktops: &[Desktop], viewing: &
     }
 }
 
-/// The banner over the top of a session's terminal while another terminal has its
-/// conversation open.
-pub(super) fn notice(session: &str, lead: &str, t: &Tokens) -> El {
-    col()
-        .key(format!("session.{session}.shared-conversation"))
-        .role("status")
-        .w_full()
-        .gap(2.0)
-        .padding(8.0)
-        .px(12.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.warning)
-        .child(
-            text(lead.to_owned())
-                .font(type_::LABEL)
-                .color(t.text_primary)
-                .wrap(),
-        )
-        .child(
-            text("Two agent processes on one conversation split its history. Close one of them.")
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .wrap(),
-        )
+/// What says over the top of a session's terminal that another terminal has its conversation
+/// open.
+pub(super) fn notice(session: &str, lead: &str, t: &Tokens) -> Block {
+    Notice::warn(
+        format!("session.{session}.shared-conversation"),
+        format!(
+            "{lead} Two agent processes on one conversation split its history. Close one of them."
+        ),
+    )
+    .build(t)
 }

@@ -4,9 +4,7 @@
 use std::collections::HashMap;
 
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{Beat, Easing, El, Sequence, Tx, el, row, text};
+use rune::{Beat, Easing, El, Sequence, Tx, el};
 
 use crate::State;
 
@@ -118,29 +116,20 @@ impl Refusals {
         if said.is_empty() {
             return None;
         }
-        let part = |key: String, said: String| {
-            text(said.clone())
-                .key(key)
-                .label(said)
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .single_line()
-                .truncate()
-        };
-        Some(
-            row()
-                .key(format!("tile.{terminal}.status"))
-                .role("status")
-                .label(said.join(" "))
-                .w_full()
-                .gap(space::S3)
-                .px(space::S2)
-                .py(space::S1)
-                .fill(t.bg_panel)
-                .children(notice.map(|n| part(format!("tile.{terminal}.reach"), n)))
-                .children(screen_on.map(|n| part(format!("tile.{terminal}.screen-on"), n)))
-                .children(count.map(|n| part(format!("tile.refused.{terminal}"), n))),
-        )
+        let parts: Vec<(String, String)> = [
+            notice.map(|n| (format!("tile.{terminal}.reach"), n)),
+            screen_on.map(|n| (format!("tile.{terminal}.screen-on"), n)),
+            count.map(|n| (format!("tile.refused.{terminal}"), n)),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        Some(attn_ui::blocks::terminal_status(
+            format!("tile.{terminal}.status"),
+            said.join(" "),
+            parts,
+            t,
+        ))
     }
 }
 

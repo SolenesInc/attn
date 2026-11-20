@@ -3,9 +3,7 @@
 
 use attn_protocol::{DesktopMoveLeafMessage, ProfileActionResultMessage};
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{Drag, El, Phase, Tx, row, text};
+use rune::{Drag, El, Phase, Tx};
 
 use super::layout::{self, Edge, Node, ShelfDrop, TILE_MIN_HEIGHT, TILE_MIN_WIDTH};
 use super::shelf::{PendingDrop, Shelf};
@@ -888,31 +886,22 @@ fn to_desktop(
     );
 }
 
+/// How far the dragged tile's name sits from the pointer, clear of the cursor's arrow.
+const POINTER_ROOM: f32 = 12.0;
+
 /// What a drag shows over the window: the dragged tile's name by the pointer, and where it
 /// would land on a tile.
 pub(crate) fn overlay(state: &State, t: &Tokens) -> Vec<El> {
     let Some(drag) = state.window.desk.drag.as_ref().filter(|d| d.active) else {
         return vec![];
     };
-    let ghost = row()
-        .key("drag.ghost")
-        .role("status")
-        .label(drag.source.label().to_owned())
-        .absolute(drag.at[0] + 12.0, drag.at[1] + 12.0)
-        .px(space::S2)
-        .py(space::S1)
-        .child(
-            text(drag.source.label().to_owned())
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .single_line(),
-        );
+    let ghost = attn_ui::blocks::drag_ghost("drag.ghost", drag.source.label().to_owned(), t)
+        .absolute(drag.at[0] + POINTER_ROOM, drag.at[1] + POINTER_ROOM);
     let mark = match &drag.target {
         Some(Target::Tile(dock)) => Some(
-            rune::el()
-                .key("drag.target")
-                .role("group")
-                .label(format!(
+            attn_ui::blocks::drop_target(
+                "drag.target",
+                format!(
                     "{} {}",
                     dock.anchor,
                     if dock.replaces {
@@ -920,17 +909,15 @@ pub(crate) fn overlay(state: &State, t: &Tokens) -> Vec<El> {
                     } else {
                         dock.side.as_str()
                     }
-                ))
-                .absolute(dock.rect[0], dock.rect[1])
-                .w(dock.rect[2])
-                .h(dock.rect[3])
-                .radius(6.0)
-                .fill(t.accent.alpha(0.14))
-                .border(1.5, t.border_focus),
+                ),
+                t,
+            )
+            .absolute(dock.rect[0], dock.rect[1])
+            .w(dock.rect[2])
+            .h(dock.rect[3]),
         ),
         _ => None,
     };
-    let ghost = rune_kit::popover::raised(attn_ui::kit(t), ghost, 6.0);
     mark.into_iter().chain([ghost]).collect()
 }
 

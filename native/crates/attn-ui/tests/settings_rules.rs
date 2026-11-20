@@ -1214,6 +1214,17 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("system::link::Link::new(shown)", false),
     ("system::mark::marked(said)", false),
     ("system::mark::with_command(said)", false),
+    ("blocks::drag_marks::drag_ghost(said)", false),
+    ("blocks::drag_marks::drop_target(label)", false),
+    ("blocks::tabs::Tabs::new(label)", false),
+    ("blocks::tabs::Tabs::tab(name)", false),
+    ("blocks::terminal_bar::TerminalBar::count(said)", false),
+    ("blocks::terminal_bar::TerminalBar::button(label)", false),
+    ("blocks::terminal_bar::TerminalBar::none(said)", false),
+    ("blocks::terminal_bar::TerminalBar::line(label)", false),
+    ("blocks::terminal_bar::TerminalBar::line(said)", false),
+    ("blocks::terminal_status::terminal_status(label)", false),
+    ("blocks::terminal_status::terminal_status(said)", false),
 ];
 
 #[test]

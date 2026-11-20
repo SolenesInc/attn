@@ -20,6 +20,7 @@ use attn_ui::panel_gallery::{PANEL_SUBJECTS, PANEL_VARIANTS};
 use attn_ui::reading_gallery::READING_SUBJECTS;
 use attn_ui::settings_gallery::{SETTINGS_SUBJECTS, SETTINGS_VARIANTS};
 use attn_ui::system::{Type, words};
+use attn_ui::tile_gallery::TILE_SUBJECTS;
 use rune::render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer, write_png};
 use rune::{App, AppSpec, Compositor, Cx, El, Env, Frame, Key, KeyEvent, Mods, Runtime, col, el};
 
@@ -302,31 +303,29 @@ fn sheets() -> Vec<Sheet> {
         .map(|variant| column(variant, variant, Gesture::None))
         .collect(),
     });
-    all.extend(
-        FLOATING_SUBJECTS
-            .iter()
-            .map(|&(name, story, keys, variants, aim)| {
-                let mut columns = vec![column(variants[0], variants[0], Gesture::None)];
-                if let Some(aim) = aim {
-                    columns.push(aimed("Hover", variants[0], Gesture::Hover, aim));
-                    columns.push(aimed("Pressed", variants[0], Gesture::Press, aim));
-                }
-                columns.extend(variants[1..].iter().map(|&v| match v {
-                    "Focus" => column("Focus", variants[0], Gesture::Tab),
-                    "Failed focus" => column("Failed, focused", "Failed", Gesture::Tab),
-                    v => column(v, v, Gesture::None),
-                }));
-                Sheet {
-                    name,
-                    story,
-                    rows: keys
-                        .iter()
-                        .map(|k| ((*k).to_owned(), (*k).to_owned()))
-                        .collect(),
-                    columns,
-                }
-            }),
-    );
+    all.extend(FLOATING_SUBJECTS.iter().chain(TILE_SUBJECTS).map(
+        |&(name, story, keys, variants, aim)| {
+            let mut columns = vec![column(variants[0], variants[0], Gesture::None)];
+            if let Some(aim) = aim {
+                columns.push(aimed("Hover", variants[0], Gesture::Hover, aim));
+                columns.push(aimed("Pressed", variants[0], Gesture::Press, aim));
+            }
+            columns.extend(variants[1..].iter().map(|&v| match v {
+                "Focus" => column("Focus", variants[0], Gesture::Tab),
+                "Failed focus" => column("Failed, focused", "Failed", Gesture::Tab),
+                v => column(v, v, Gesture::None),
+            }));
+            Sheet {
+                name,
+                story,
+                rows: keys
+                    .iter()
+                    .map(|k| ((*k).to_owned(), (*k).to_owned()))
+                    .collect(),
+                columns,
+            }
+        },
+    ));
     all
 }
 

@@ -35,17 +35,21 @@ fn shows(world: &World) -> bool {
 fn a_session_on_an_older_terminal_says_so_until_dismissed_for_the_rest_of_the_run() {
     let mut world = running(true);
     assert!(shows(&world));
-    let texts: Vec<String> = world
-        .screen()
-        .all(Target::role("label"))
-        .into_iter()
-        .filter_map(|label| label.name)
-        .collect();
+    let notice = world.screen().get(Target::key(NOTICE));
     assert!(
-        texts.contains(&"This session is running an older terminal.".to_owned()),
-        "{texts:?}"
+        notice
+            .name
+            .as_deref()
+            .is_some_and(|said| said.starts_with("This session is running an older terminal.")),
+        "{:?}",
+        notice.name
     );
-    assert!(texts.contains(&"↻ Reload session".to_owned()), "{texts:?}");
+    world.gesture(|app| app.click(Target::key("session.s1.stale-build.reload")));
+    assert_eq!(
+        world.daemon.sent_of("reload_session").len(),
+        1,
+        "Reload session on the notice reloads the session"
+    );
 
     world.gesture(|app| app.click(Target::key("session.s1.stale-build.dismiss")));
     assert!(!shows(&world));

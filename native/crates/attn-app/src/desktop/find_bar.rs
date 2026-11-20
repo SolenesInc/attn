@@ -1,12 +1,13 @@
-use attn_ui::Frame;
-use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens};
-use rune::tok::space;
-use rune::{El, Key, KeyEvent, Tx, el, row, text};
-use rune_kit::{ButtonVariant, TextInput};
+use attn_ui::Tokens;
+use attn_ui::blocks::TerminalBar;
+use rune::{El, Key, KeyEvent, Tx};
+use rune_kit::TextInput;
 
 use crate::State;
 use crate::terminal::{Finding, Toward, find_field_key};
+
+/// The find field's width, as the Tauri terminal's.
+const FIELD_W: f32 = 160.0;
 
 /// Terminal `id`'s find bar over its top right corner, as the Tauri terminal floats it: the
 /// field, Match case, the count, and the keys to step through the matches or close it.
@@ -14,70 +15,52 @@ pub(super) fn bar(id: &str, finding: &Finding, t: &Tokens) -> El {
     let (edit, edited, keyed) = (id.to_owned(), id.to_owned(), id.to_owned());
     let field = TextInput::new(&finding.query)
         .key(find_field_key(id))
-        .plain()
-        .text_style(type_::MONO_CAPTION)
-        .height(type_::MONO_CAPTION.line_px())
-        .width(Some(160.0))
         .label("Find")
         .placeholder("Find")
         .on_edit(move |state: &mut State| state.terminals.find_query(&edit))
         .on_change(move |state: &mut State, _: &mut Tx| state.terminals.find_edited(&edited))
-        .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| on_key(state, &keyed, ev, tx))
-        .build(attn_ui::kit(t));
-    let case = find_button(
-        id,
-        "case",
-        "Aa",
-        "Match case",
-        finding.case,
-        t,
-        |state, id, _| state.terminals.toggle_find_case(id),
-    );
-    let count = text(finding.count())
-        .key(format!("terminal.{id}.find.count"))
-        .font(type_::MONO_CAPTION)
-        .color(t.text_secondary)
-        .single_line();
-    let older = find_button(
-        id,
-        "prev",
-        attn_ui::glyph::PREVIOUS,
-        "Previous match",
-        false,
-        t,
-        |state, id, _| state.terminals.step_find(id, Toward::Older),
-    );
-    let newer = find_button(
-        id,
-        "next",
-        attn_ui::glyph::NEXT,
-        "Next match",
-        false,
-        t,
-        |state, id, _| state.terminals.step_find(id, Toward::Newer),
-    );
-    let close = find_button(
-        id,
-        "close",
-        attn_ui::glyph::TIMES,
-        "Close find",
-        false,
-        t,
-        |state, id, tx| state.terminals.close_find(id, tx),
-    );
-    let bar = row()
-        .key(format!("terminal.{id}.find"))
-        .items_center()
-        .gap(4.0)
-        .px(7.0)
-        .py(5.0)
-        .children([field, case, count, older, newer, close]);
-    let bar = Frame::terminal_bar(t).draw(bar);
-    el().absolute(0.0, 6.0)
-        .w_full()
-        .pr(14.0)
-        .justify_end()
-        .child(bar)
+        .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| on_key(state, &keyed, ev, tx));
+    let bar = TerminalBar::new(format!("terminal.{id}.find"))
+        .field(field, FIELD_W, t)
+        .push(find_button(
+            id,
+            "case",
+            "Aa",
+            "Match case",
+            finding.case,
+            t,
+            |state, id, _| state.terminals.toggle_find_case(id),
+        ))
+        .count(format!("terminal.{id}.find.count"), finding.count(), t)
+        .push(find_button(
+            id,
+            "prev",
+            attn_ui::glyph::PREVIOUS,
+            "Previous match",
+            false,
+            t,
+            |state, id, _| state.terminals.step_find(id, Toward::Older),
+        ))
+        .push(find_button(
+            id,
+            "next",
+            attn_ui::glyph::NEXT,
+            "Next match",
+            false,
+            t,
+            |state, id, _| state.terminals.step_find(id, Toward::Newer),
+        ))
+        .push(find_button(
+            id,
+            "close",
+            attn_ui::glyph::TIMES,
+            "Close find",
+            false,
+            t,
+            |state, id, tx| state.terminals.close_find(id, tx),
+        ))
+        .build(t);
+    TerminalBar::corner(vec![bar])
 }
 
 /// Escape closes the bar; Enter steps to the older match and Shift+Enter to the newer, as in
@@ -95,7 +78,7 @@ fn on_key(state: &mut State, id: &str, ev: &KeyEvent, tx: &mut Tx) -> bool {
 fn find_button(
     id: &str,
     part: &str,
-    glyph: &str,
+    glyph: &'static str,
     label: &str,
     on: bool,
     t: &Tokens,
@@ -122,35 +105,20 @@ fn find_button(
 /// keyboard back to the bar's `field` while the bar stays open.
 pub(super) fn button(
     key: String,
-    glyph: &str,
+    glyph: &'static str,
     label: &str,
     on: bool,
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
     field: impl Fn(&State) -> Option<String> + 'static,
 ) -> El {
-    GlyphButton::new(glyph, label)
-        .variant(if on {
-            ButtonVariant::Ghost
-        } else {
-            ButtonVariant::GhostMuted
-        })
-        .font(attn_ui::glyph::SMALL)
-        .side(attn_ui::glyph::SMALL.line_px() + 4.0)
+    TerminalBar::button(key, label, glyph, on)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             press(state, tx);
             if let Some(field) = field(state) {
                 tx.focus(field, false);
             }
         })
-        .build(attn_ui::kit(t))
-        .key(key)
-        .px(space::S1)
-        .radius(4.0)
-        .hover(rune::Color::TRANSPARENT)
-        .fill(if on {
-            t.text_secondary.alpha(0.3)
-        } else {
-            rune::Color::TRANSPARENT
-        })
+        .build(t)
+        .into()
 }

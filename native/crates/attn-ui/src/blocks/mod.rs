@@ -13,6 +13,7 @@ mod choices;
 mod columns;
 mod dialog;
 mod disclosure;
+mod drag_marks;
 mod entry;
 mod facts;
 mod field;
@@ -37,6 +38,10 @@ mod setting_row;
 mod sheet;
 mod surface;
 mod table;
+mod tabs;
+mod terminal_bar;
+mod terminal_notices;
+mod terminal_status;
 mod trail;
 
 pub use actions::Actions;
@@ -50,6 +55,7 @@ pub use choices::{Choices, swatches};
 pub use columns::Columns;
 pub use dialog::{Dialog, DialogSize, TOUR_DRAWING};
 pub use disclosure::Disclosure;
+pub use drag_marks::{drag_ghost, drop_target};
 pub use entry::{Entry, entries, rail};
 pub use facts::Facts;
 pub use field::Field;
@@ -77,6 +83,10 @@ pub(crate) fn stacked(blocks: Vec<Block>) -> rune::El {
     block::spaced(blocks, block::inner_gap, None)
 }
 pub use surface::Surface;
+pub use tabs::Tabs;
+pub use terminal_bar::TerminalBar;
+pub use terminal_notices::terminal_notices;
+pub use terminal_status::terminal_status;
 pub use trail::Trail;
 
 pub use measure::{DOCUMENT, DOCUMENT_EDGE, DOCUMENT_GUTTER, document_inset, document_inside};
