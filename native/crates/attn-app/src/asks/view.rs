@@ -443,7 +443,7 @@ fn snooze_button(snoozed: bool, from: &str, t: &Tokens) -> El {
 /// Open agent, Snooze and Open in Garden: what to do with the ask besides answering it.
 fn ask_button(
     key: &str,
-    said: &str,
+    said: &'static str,
     help: &str,
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,

@@ -160,7 +160,7 @@ impl Choice {
             .child(dot)
             .child(said);
         let row = match described {
-            Some(note) => row.description(note),
+            Some(note) => row.description(note.text()),
             None => row,
         };
         let rows = match self.size {
