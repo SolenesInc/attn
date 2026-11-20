@@ -3,7 +3,7 @@ use rune::{Color, El, el, row};
 use super::block::{Block, Kind};
 use super::measure::COPY_FLOOR;
 use crate::Tokens;
-use crate::system::{Radius, Size, Space, Tone, Type, door, words};
+use crate::system::{Radius, Size, Space, Tone, Type, door, verbatim, words};
 
 const DOT: f32 = 6.0;
 const EDGE: f32 = 0.45;
@@ -61,7 +61,7 @@ impl Notice {
             .h(Size::Regular.height())
             .items_center()
             .child(dot(tone_ink(self.tone, t)));
-        let said = words(self.said.clone(), Type::Small, ink)
+        let said = verbatim(self.said.clone(), Type::Small, ink)
             .wrap_anywhere()
             .a11y_hidden();
         let said = door::gaps(
@@ -157,7 +157,7 @@ impl Refusal {
     }
 
     pub fn build(self, t: &Tokens) -> El {
-        let said = words(self.reason.clone(), Type::Small, t.error).wrap_anywhere();
+        let said = verbatim(self.reason.clone(), Type::Small, t.error).wrap_anywhere();
         let said = if self.retry.is_some() {
             door::on_band(said, Type::Small, Size::Regular)
         } else {

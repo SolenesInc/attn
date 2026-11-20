@@ -58,7 +58,7 @@ pub use switch::switch;
 pub use tag::{Tone, pill, tag};
 pub use trigger::{Trigger, TriggerLook};
 pub(crate) use type_role::words_and_code;
-pub use type_role::{Type, words};
+pub use type_role::{Type, verbatim, words};
 pub(crate) use type_role::{lines_at, width_of};
 
 use crate::Tokens;

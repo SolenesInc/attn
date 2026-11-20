@@ -1,7 +1,9 @@
 use rune::{Color, El, Tx, row};
 
 use super::expander::opens_in_place;
-use super::{Control, Radius, Size, Space, Tone, Type, disabled, door, focus, layers, tag, words};
+use super::{
+    Control, Radius, Size, Space, Tone, Type, disabled, door, focus, layers, tag, verbatim,
+};
 use crate::Tokens;
 
 /// The control that opens and closes a part of a page or a form: a chevron, its name, what
@@ -28,7 +30,7 @@ pub fn disclosure<S: 'static>(
         Color::TRANSPARENT
     };
     let (beside_el, beside_said) = match beside {
-        Some((el, said)) => (Some(el.a11y_hidden()), Some(said)),
+        Some((el, said)) => (Some(el.shrink().min_w(0.0).a11y_hidden()), Some(said)),
         None => (None, None),
     };
     let description = beside_said
@@ -44,7 +46,13 @@ pub fn disclosure<S: 'static>(
         Space::S4,
         Space::S8,
     )
-    .child(words(label, Type::Control, ink).a11y_hidden())
+    .child(
+        verbatim(label, Type::Control, ink)
+            .wrap_anywhere()
+            .shrink()
+            .min_w(0.0)
+            .a11y_hidden(),
+    )
     .children(beside_el)
     .children(chips.iter().enumerate().map(chip));
     let line = row()

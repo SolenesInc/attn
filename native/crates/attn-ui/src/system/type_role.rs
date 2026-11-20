@@ -49,6 +49,18 @@ pub fn words(words: impl Into<String>, kind: Type, ink: Color) -> El {
     door::font(rich(shown.clone(), spans).label(shown), kind).color(ink)
 }
 
+/// `words` set as `kind` in `ink` exactly as written, backticks and all: text that comes from
+/// outside, such as an error, a name or a path, is never taken for markup.
+pub fn verbatim(words: impl Into<String>, kind: Type, ink: Color) -> El {
+    let words = words.into();
+    let shown = if kind.upper() {
+        words.to_uppercase()
+    } else {
+        words.clone()
+    };
+    door::font(text(shown).label(words), kind).color(ink)
+}
+
 /// `said`, then `code` in `Mono`, both read as written: a value such as a path is never taken
 /// for markup, however it is spelled.
 pub(crate) fn words_and_code(said: &str, code: &str, kind: Type, ink: Color) -> El {

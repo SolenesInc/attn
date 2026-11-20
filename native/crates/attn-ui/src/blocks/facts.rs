@@ -3,7 +3,7 @@ use rune::{Color, El, col, row};
 use super::block::{Block, Kind};
 use super::measure::{FACT_LABEL, FACT_TILE_FLOOR, FACT_VALUE_FLOOR};
 use crate::Tokens;
-use crate::system::{Radius, Size, Space, Tone, Type, door, words};
+use crate::system::{Radius, Size, Space, Tone, Type, door, verbatim, words};
 
 /// What something is, read and not changed here: names, each with its value. As a list, each
 /// value sits beside its name and moves under it where it would get narrower than it reads. As
@@ -157,7 +157,7 @@ impl Fact {
         let ink = self.ink(t);
         let value = match self.shown {
             Some(shown) => shown.key(self.key),
-            None => words(self.value.clone(), self.kind, ink)
+            None => verbatim(self.value.clone(), self.kind, ink)
                 .key(self.key)
                 .label(self.value)
                 .truncate(),
@@ -178,7 +178,7 @@ impl Fact {
         let (value, said) = match self.shown {
             Some(shown) => (shown, self.label),
             None => (
-                words(self.value.clone(), self.kind, self.ink(t))
+                verbatim(self.value.clone(), self.kind, self.ink(t))
                     .wrap_anywhere()
                     .a11y_hidden(),
                 format!("{} {}", self.label, self.value),

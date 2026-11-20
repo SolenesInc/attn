@@ -486,3 +486,47 @@ fn a_sections_title_is_a_heading_under_the_pages() {
         );
     }
 }
+
+const OUTSIDE: &str = "/opt/agents/codex-`canary` not found";
+
+fn outside_view(_: &(), cx: &mut Cx<()>) -> El {
+    use attn_ui::blocks::{Facts, Notice, Page};
+    let t = attn_ui::colors::scheme_for(None)
+        .colors(cx.system_dark())
+        .ui;
+    Page::new()
+        .push(Notice::warn("notice", OUTSIDE).build(&t))
+        .push(
+            Facts::new("facts")
+                .code("facts.path", "Path", OUTSIDE)
+                .build(&t),
+        )
+        .build("page", &t)
+}
+
+#[test]
+fn text_from_outside_is_drawn_as_written_backticks_and_all() {
+    let mut rt = App::new(AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..AppSpec::new("outside", (900.0, 400.0), || (), outside_view)
+    })
+    .headless_runtime((900.0, 400.0), Env::new(true, SCALE));
+    while rt.frame(1.0 / 60.0) {}
+    let drawn = OUTSIDE.chars().filter(|c| !c.is_whitespace()).count();
+    for key in ["notice", "facts.path"] {
+        let rect = rt
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("no {key}"))
+            .rect;
+        let glyphs = glyphs_in(&rt, rect).len();
+        let label_glyphs = if key == "facts.path" { "Path".len() } else { 0 };
+        assert_eq!(
+            glyphs - label_glyphs,
+            drawn,
+            "{key} draws {glyphs} glyphs for {OUTSIDE:?}"
+        );
+    }
+}

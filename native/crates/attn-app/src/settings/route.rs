@@ -666,6 +666,9 @@ pub(crate) fn badge(state: &State, t: &Tokens, value: &Route) -> El {
     let mark = TierInfo::mark(tier, false);
     let quiet = tier.is_some_and(|t| t.tier.is_some());
     row()
+        .flex_wrap()
+        .shrink()
+        .min_w(0.0)
         .gap(7.0)
         .items_end()
         .px(9.0)
@@ -680,6 +683,9 @@ pub(crate) fn badge(state: &State, t: &Tokens, value: &Route) -> El {
         )
         .child(
             text(view.model_label.clone())
+                .wrap_anywhere()
+                .shrink()
+                .min_w(0.0)
                 .font(CAPTION)
                 .color(if view.missing {
                     t.warning
