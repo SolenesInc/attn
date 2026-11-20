@@ -166,3 +166,43 @@ fn a_related_seeds_state_stays_inside_the_docked_page_beside_a_long_title() {
         );
     }
 }
+
+#[test]
+fn a_docked_rows_long_title_wraps_whole_and_the_next_row_starts_under_it() {
+    const LONG: &str = "Catppuccin for attn-build-and-release-platform-本番の権限を移行する作業ツリー-tokyo-region-primary";
+    let seeds = vec![
+        seed("s-long01", LONG),
+        seed("s-long02", &format!("Catppuccin color schemes-{LONG}")),
+        seed("s-short1", "short"),
+    ];
+    let mut world = World::start_sized(daemon(seeds, Vec::new()), (1118.0, 800.0));
+    click(&mut world, "Show the garden");
+    assert_eq!(shown(&world), "dock");
+    let one_line = bounds(&world, "garden.row.s-short1.title")[3];
+    let dock = bounds(&world, "garden.body")[2];
+    assert!(dock <= 381.0, "the dock is {dock} wide");
+    let ids = ["s-long01", "s-long02", "s-short1"];
+    for pair in ids.windows(2) {
+        let row = bounds(&world, &format!("garden.row.{}", pair[0]));
+        let title = bounds(&world, &format!("garden.row.{}.title", pair[0]));
+        let next = bounds(&world, &format!("garden.row.{}", pair[1]));
+        assert!(
+            title[3] >= 2.0 * one_line - 0.5,
+            "{}'s title stands {} tall, one line of {one_line}",
+            pair[0],
+            title[3]
+        );
+        assert!(
+            title[1] >= row[1] - 0.5 && title[1] + title[3] <= row[1] + row[3] + 0.5,
+            "{}'s title {title:?} runs out of its row {row:?}",
+            pair[0]
+        );
+        assert!(
+            next[1] >= row[1] + row[3] - 0.5,
+            "{} at {next:?} starts inside {} at {row:?}",
+            pair[1],
+            pair[0]
+        );
+    }
+    assert!(world.runtime_is_at_rest());
+}

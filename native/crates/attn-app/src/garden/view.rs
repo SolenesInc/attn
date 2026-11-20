@@ -709,10 +709,11 @@ fn seed_row(spec: &RowSpec, t: &Tokens) -> El {
             t.text_primary
         };
         let title = marked(&seed.title, &look.title_ranges, Type::Name, ink, t.brand)
-            .single_line()
-            .truncate()
-            .shrink();
+            .wrap()
+            .w_full()
+            .key(format!("{key}.title"));
         let mut row = ListRow::new(key.clone(), seed.title.clone())
+            .wrap()
             .lead(
                 dot(
                     state_color(&seed.status, t),
