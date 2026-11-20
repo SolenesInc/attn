@@ -922,3 +922,42 @@ fn a_new_worktree_session_that_cannot_finish_says_why_starts_nothing_and_can_be_
         &["ensure_repo", "create_worktree_from_branch"],
     );
 }
+
+#[test]
+fn the_hostname_beside_a_pr_number_opens_the_pr_and_says_so_on_hover() {
+    let mut world = start(
+        one_desktop(vec![]),
+        vec![
+            pr("public", 1, "reviewer", "on github.com"),
+            PR {
+                host: "ghe.corp.example".into(),
+                url: "https://ghe.corp.example/victorarias/attn/pull/4".into(),
+                ..pr("enterprise", 4, "reviewer", "the same repo on another host")
+            },
+        ],
+    );
+    world.daemon.on("pr_visited", |_| ());
+    press(&mut world, Action::SessionGoToDashboard);
+    let [x, y, w, h] = world.rect("home.pr.enterprise.host");
+    let at = ((x + w / 2.0) as f32, (y + h / 2.0) as f32);
+
+    world.gesture(|app| app.move_to(at));
+    world.advance(Duration::from_secs(2));
+    assert!(
+        world
+            .screen()
+            .find(Target::role("tooltip").name("Open #4 on GitHub"))
+            .is_some(),
+        "hovering the hostname shows the Open tooltip:\n{}",
+        world.screen()
+    );
+
+    world.gesture(|app| app.click_at(at));
+    let visited = world.daemon.sent_of("pr_visited");
+    assert_eq!(visited.len(), 1);
+    assert_eq!(visited[0]["id"], "enterprise");
+    assert_eq!(
+        world.opened_links(),
+        ["https://ghe.corp.example/victorarias/attn/pull/4"]
+    );
+}

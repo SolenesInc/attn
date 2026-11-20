@@ -4999,6 +4999,17 @@ fn home_full(dark: bool) {
             ..pr("r2", 13, "reviewer", "org/shop", "Bump serde")
         },
         pr("r3", 4, "reviewer", "org/api", "Add the orders endpoint"),
+        PR {
+            host: "ghe.corp.example".into(),
+            url: "https://ghe.corp.example/org/shop/pull/12".into(),
+            ..pr(
+                "r4",
+                12,
+                "reviewer",
+                "org/shop",
+                "Cache the catalog on the mirror",
+            )
+        },
     ]);
     let mut world = World::start_sized(scripted().state(state), window());
     press(&mut world, Action::SessionGoToDashboard);
@@ -5006,6 +5017,28 @@ fn home_full(dark: bool) {
     world.gesture(|app| app.click(Target::key("home.prs.repo.org/api.fold")));
     world.gesture(|app| app.move_to((1.0, 1.0)));
     snap(&mut world, "home-full", dark);
+    let [cx, cy, cw, ch] = world
+        .screen()
+        .bounds(Target::key("home.cards.scroll"))
+        .expect("home's cards are on screen");
+    while world
+        .screen()
+        .bounds(Target::key("home.pr.r4.open"))
+        .is_some_and(|[_, y, _, h]| y + h > cy + ch)
+    {
+        let scrolled = world.screen().scrolled(Target::key("home.cards.scroll"));
+        world.gesture(|app| app.runtime.wheel(cx + cw / 2.0, cy + ch / 2.0, -60.0));
+        world.settle();
+        assert_ne!(
+            world.screen().scrolled(Target::key("home.cards.scroll")),
+            scrolled,
+            "the wheel scrolls home's cards toward the second host's pull request"
+        );
+    }
+    let [x, y, w, h] = world.rect("home.pr.r4.host");
+    world.gesture(|app| app.move_to(((x + w / 2.0) as f32, (y + h / 2.0) as f32)));
+    world.advance(std::time::Duration::from_secs(2));
+    snap(&mut world, "home-full-host-hover", dark);
 }
 
 /// Home on the first launch of a release whose tour the user already met: the notice that

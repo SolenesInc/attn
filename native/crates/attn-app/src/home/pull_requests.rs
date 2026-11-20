@@ -328,16 +328,26 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
         Some(host) => format!("{heading} on {host}"),
         None => heading.clone(),
     };
+    let mut open = Button::new(heading.clone())
+        .look(Look::Quiet)
+        .size(Size::Compact)
+        .help(format!("Open {heading} on GitHub"));
+    if let Some(host) = host {
+        open = open.trailing(
+            words(host.to_lowercase(), Type::Mono, t.text_tertiary)
+                .key(format!("{key}.host"))
+                .single_line()
+                .truncate()
+                .shrink()
+                .a11y_hidden(),
+        );
+    }
     let open = El::from(
-        Button::new(heading.clone())
-            .look(Look::Quiet)
-            .size(Size::Compact)
-            .help(format!("Open {heading} on GitHub"))
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                visit(state, &visited);
-                open_url(state, &url, tx)
-            })
-            .build(t),
+        open.on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            visit(state, &visited);
+            open_url(state, &url, tx)
+        })
+        .build(t),
     )
     .key(format!("{key}.open"))
     .label(format!("{named}: {}", pr.title));
@@ -350,13 +360,6 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
                 .label(role.said()),
         )
         .child(open)
-        .children(host.map(|host| {
-            words(host.to_lowercase(), Type::Mono, t.text_tertiary)
-                .single_line()
-                .truncate()
-                .shrink()
-                .a11y_hidden()
-        }))
         .child(rune::el().grow(1.0))
         .children(marks(pr, &key, t));
     let title = words(pr.title.clone(), Type::Body, t.text_primary)
