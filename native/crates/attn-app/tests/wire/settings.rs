@@ -441,9 +441,9 @@ fn every_section_is_headed_by_its_navigation_name() {
             .screen()
             .descendants(Target::key("settings.body"))
             .into_iter()
-            .filter(|n| n.role == "heading")
+            .filter(|n| n.role == "heading" && n.level == Some(1))
             .count();
-        assert_eq!(headings, 1, "{name} has one heading");
+        assert_eq!(headings, 1, "{name} has one heading at the top");
     }
     rest(&mut world);
 }

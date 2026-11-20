@@ -419,11 +419,15 @@ fn sections_view(_: &(), cx: &mut Cx<()>) -> El {
     Page::new()
         .push(Section::new("plain", "Pairing").build(&t))
         .push(Section::new("adding", "Add an outpost").form().build(&t))
+        .push(
+            Section::new("codex", "Codex")
+                .region("Codex models")
+                .build(&t),
+        )
         .build("page", &t)
 }
 
-#[test]
-fn a_section_marked_as_a_form_is_a_form_named_by_its_heading() {
+fn sections() -> Runtime<()> {
     let mut rt = App::new(AppSpec {
         fonts: attn_ui::FONTS,
         families: attn_ui::FAMILIES,
@@ -431,6 +435,12 @@ fn a_section_marked_as_a_form_is_a_form_named_by_its_heading() {
     })
     .headless_runtime((600.0, 400.0), Env::new(true, SCALE));
     while rt.frame(1.0 / 60.0) {}
+    rt
+}
+
+#[test]
+fn a_section_marked_as_a_form_is_a_form_named_by_its_heading() {
+    let rt = sections();
     let section = |key: &str| {
         let e = rt
             .elements()
@@ -441,4 +451,38 @@ fn a_section_marked_as_a_form_is_a_form_named_by_its_heading() {
     };
     assert_eq!(section("adding"), ("form", Some("Add an outpost".into())));
     assert_eq!(section("plain"), ("group", Some("Pairing".into())));
+}
+
+#[test]
+fn a_section_marked_as_a_region_is_a_landmark_by_its_given_name() {
+    let rt = sections();
+    let codex = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("codex"))
+        .expect("the codex section");
+    assert_eq!(
+        (codex.role, codex.label),
+        ("region", Some("Codex models".into()))
+    );
+}
+
+#[test]
+fn a_sections_title_is_a_heading_under_the_pages() {
+    let rt = sections();
+    for (key, title) in [
+        ("plain", "Pairing"),
+        ("adding", "Add an outpost"),
+        ("codex", "Codex"),
+    ] {
+        let heading = rt
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(format!("{key}.heading").as_str()))
+            .unwrap_or_else(|| panic!("no heading for {key}"));
+        assert_eq!(
+            (heading.role, heading.label),
+            ("heading", Some(title.into()))
+        );
+    }
 }

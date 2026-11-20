@@ -6,7 +6,8 @@ use crate::Tokens;
 use crate::system::{Space, Type, door, words};
 
 /// A titled part of a page: its name, what it is for, then its blocks. Sections that follow
-/// each other on a page are set apart by a rule.
+/// each other on a page are set apart by a rule. Its title is a heading under the page's, keyed
+/// `{key}.heading`.
 pub struct Section {
     key: String,
     title: String,
@@ -14,8 +15,15 @@ pub struct Section {
     description: String,
     aside: Option<String>,
     controls: Vec<El>,
-    form: bool,
+    found_as: FoundAs,
     blocks: Vec<Block>,
+}
+
+/// What assistive tools find a section as.
+enum FoundAs {
+    Group,
+    Form,
+    Region(String),
 }
 
 impl Section {
@@ -27,7 +35,7 @@ impl Section {
             description: String::new(),
             aside: None,
             controls: Vec::new(),
-            form: false,
+            found_as: FoundAs::Group,
             blocks: Vec::new(),
         }
     }
@@ -59,7 +67,14 @@ impl Section {
 
     /// Assistive tools find the section as a form named by its heading, not as a group.
     pub fn form(mut self) -> Self {
-        self.form = true;
+        self.found_as = FoundAs::Form;
+        self
+    }
+
+    /// Assistive tools find the section as a landmark named `name`, among the places of the
+    /// page a reader moves between.
+    pub fn region(mut self, name: impl Into<String>) -> Self {
+        self.found_as = FoundAs::Region(name.into());
         self
     }
 
@@ -78,10 +93,20 @@ impl Section {
             Some(aside) => format!("{}, {aside}", self.title),
             None => self.title.clone(),
         };
+        let (role, label) = match self.found_as {
+            FoundAs::Group => ("group", label),
+            FoundAs::Form => ("form", label),
+            FoundAs::Region(name) => ("region", name),
+        };
+        let heading_key = format!("{}.heading", self.key);
         let title = door::gaps(row().flex_wrap().items_end(), Space::S2, Space::S8)
             .child(match self.heading {
                 Some(heading) => heading.shrink().min_w(0.0),
-                None => words(self.title, Type::Heading, t.text_primary)
+                None => words(self.title.clone(), Type::Heading, t.text_primary)
+                    .key(heading_key)
+                    .role("heading")
+                    .level(2)
+                    .label(self.title)
                     .wrap()
                     .shrink(),
             })
@@ -105,7 +130,7 @@ impl Section {
         );
         let section = col()
             .key(self.key)
-            .role(if self.form { "form" } else { "group" })
+            .role(role)
             .label(label)
             .w_full()
             .child(head)

@@ -161,6 +161,7 @@ impl Head {
             .wrap()
             .key(self.key)
             .role("heading")
+            .level(1)
             .label(self.title);
         let lead = self.lead.map(|lead| {
             words(lead, Type::Body, t.text_secondary)
