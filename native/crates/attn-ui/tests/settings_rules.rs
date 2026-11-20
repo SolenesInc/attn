@@ -642,7 +642,7 @@ fn every_block(
                 Type::Body,
                 t.text_primary,
                 None,
-                &t,
+                t,
             ),
         ),
         held("button", El::from(Button::new(said.clone()).build(t))),

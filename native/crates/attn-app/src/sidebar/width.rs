@@ -250,7 +250,7 @@ pub(crate) fn label_view(state: &crate::State, t: &attn_ui::Tokens) -> Option<ru
     (w.dragging || w.label_until.is_some()).then(|| {
         let label = rune::El::from(attn_ui::system::tag(
             "sidebar.width-label",
-            &label(of(state), w.window),
+            label(of(state), w.window),
             attn_ui::system::Tone::Neutral,
             t,
         ))
