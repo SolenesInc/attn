@@ -357,3 +357,71 @@ fn a_fitting_sheet_keeps_its_body_inside_its_frame_and_its_frame_inside_its_room
         );
     }
 }
+
+static SCROLLING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+fn scrolling_variant() -> usize {
+    SCROLLING.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn scrolling_list(variant: &usize, cx: &mut Cx<usize>) -> El {
+    use attn_ui::blocks::List;
+    use attn_ui::system::ListRow;
+    let t = attn_ui::colors::scheme_for(None)
+        .colors(cx.system_dark())
+        .ui;
+    let list = (0..40).fold(List::new("rows", "Rows"), |list, i| {
+        list.row(ListRow::new(format!("rows.{i}"), format!("Row {i}")).build(&t))
+    });
+    let shown = match variant {
+        0 => list.scrolling(&t),
+        1 => list
+            .heading()
+            .count(40)
+            .find(Some(attn_ui::system::words(
+                "Find",
+                attn_ui::system::Type::Body,
+                t.text_primary,
+            )))
+            .scrolling(&t),
+        2 => list.scrolling_up_to(200.0, &t),
+        _ => list
+            .scrolls_as("files", "navigation", "Files")
+            .scrolling(&t),
+    };
+    rune::col().w(360.0).h(300.0).child(shown)
+}
+
+#[test]
+fn a_scrolling_list_s_key_names_the_node_that_scrolls() {
+    let window = (600.0, 400.0);
+    for (variant, key, role) in [
+        (0, "rows", "list"),
+        (1, "rows", "list"),
+        (2, "rows", "list"),
+        (3, "files", "navigation"),
+    ] {
+        SCROLLING.store(variant, std::sync::atomic::Ordering::Relaxed);
+        let mut rt = App::new(AppSpec {
+            fonts: attn_ui::FONTS,
+            families: attn_ui::FAMILIES,
+            ..AppSpec::new("scrolling", window, scrolling_variant, scrolling_list)
+        })
+        .headless_runtime(window, Env::new(true, SCALE));
+        while rt.frame(1.0 / 60.0) {}
+        let node = rt
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("variant {variant}: no {key}"));
+        assert_eq!(
+            node.role, role,
+            "variant {variant}: {key} is a {}",
+            node.role
+        );
+        assert!(
+            rt.accessibility_action(key, rune::accesskit::Action::ScrollDown, None),
+            "variant {variant}: {key} does not scroll down though its 40 rows overflow"
+        );
+    }
+}

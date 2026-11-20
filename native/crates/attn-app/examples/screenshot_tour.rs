@@ -772,7 +772,8 @@ fn snap(world: &mut World, name: &str, dark: bool) {
 }
 
 /// Each screen's accessibility tree as assistive technology reads it, one keyed node a line:
-/// key, role, name, value, description, states and level, in `a11y/NAME.tsv`, for diffing two
+/// key, role, name, value, description, states, level and the actions it answers, such as
+/// scrolling, in `a11y/NAME.tsv`, for diffing two
 /// tours beyond what `reach` holds.
 fn record_a11y(name: &str, tree: &str) {
     let tree: Value = serde_json::from_str(tree).unwrap_or_else(|e| panic!("{name}: {e}"));
@@ -795,6 +796,7 @@ fn record_a11y(name: &str, tree: &str) {
                     "description",
                     "states",
                     "level",
+                    "actions",
                 ]
                 .map(field)
                 .join("\t"),

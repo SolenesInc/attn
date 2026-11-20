@@ -179,57 +179,80 @@ impl List {
     }
 
     pub fn build(self, t: &Tokens) -> Block {
-        Block::new(Kind::List, self.laid(t))
+        let (heading, list, semantics) = self.laid(t);
+        let list = semantics.onto(list);
+        let list = match heading {
+            Some(heading) => door::gap(col().w_full(), Space::S8)
+                .child(heading)
+                .child(list),
+            None => list,
+        };
+        Block::new(Kind::List, list)
     }
 
     /// The list as a column of its own that scrolls, filling the height it is given, as beside
-    /// an inspector.
+    /// an inspector. Its key, role and name sit on the node that scrolls, with its heading and
+    /// find field above it, staying while the rows scroll.
     pub fn scrolling(mut self, t: &Tokens) -> El {
         let find = self
             .find
             .take()
             .map(|find| door::frame(find, Space::S8, Space::S16, Space::S0));
-        let rows = match self.region.take() {
-            Some((key, role, label)) => col().key(key).role(role).label(label),
-            None => col(),
+        let region = self.region.take();
+        let (heading, content, semantics) = self.laid(t);
+        let heading = heading.map(|heading| door::frame(heading, Space::S8, Space::S16, Space::S0));
+        let (content, rows) = match region {
+            Some((key, role, label)) => (
+                semantics.onto(content),
+                col().key(key).role(role).label(label),
+            ),
+            None => (content, semantics.onto(col())),
         };
-        let list = door::frame(self.laid(t), Space::S8, Space::S16, Space::S8);
         let rows = rows
             .w_full()
             .min_w(0.0)
             .scroll(rune::ScrollSpec {
                 stick_bottom: false,
             })
-            .child(list)
+            .child(door::frame(content, Space::S8, Space::S16, Space::S8))
             .scroll_bar_styled(crate::scroll_bar(t));
-        match find {
-            Some(find) => col()
-                .w_full()
-                .h_full()
-                .min_w(0.0)
-                .child(find)
-                .child(rows.grow(1.0).min_h(0.0)),
-            None => rows.h_full(),
+        if find.is_none() && heading.is_none() {
+            return rows.h_full();
         }
+        col()
+            .w_full()
+            .h_full()
+            .min_w(0.0)
+            .min_h(0.0)
+            .children(find)
+            .children(heading)
+            .child(rows.shrink().min_h(0.0))
     }
 
     /// The list as a column of its own as tall as its rows, up to `tallest`, past which it
     /// scrolls, as above what the rows choose between, in a band that already keeps the
-    /// sheet's sides.
+    /// sheet's sides. Its key, role and name sit on the node that scrolls.
     pub fn scrolling_up_to(self, tallest: f32, t: &Tokens) -> El {
-        let list = door::frame(self.laid(t), Space::S8, Space::S0, Space::S8);
-        col()
+        let (heading, content, semantics) = self.laid(t);
+        let rows = semantics
+            .onto(col())
             .w_full()
             .max_h(tallest)
             .min_w(0.0)
             .scroll(rune::ScrollSpec {
                 stick_bottom: false,
             })
-            .child(list)
-            .scroll_bar_styled(crate::scroll_bar(t))
+            .child(door::frame(content, Space::S8, Space::S0, Space::S8))
+            .scroll_bar_styled(crate::scroll_bar(t));
+        match heading {
+            Some(heading) => col().w_full().min_w(0.0).child(heading).child(rows),
+            None => rows,
+        }
     }
 
-    fn laid(self, t: &Tokens) -> El {
+    /// What the list draws, and what it is to a reader and the keyboard, apart: a list that
+    /// scrolls puts the second on the node that scrolls.
+    fn laid(self, t: &Tokens) -> (Option<El>, El, Semantics) {
         let empty = match self.empty {
             Some((key, said, action)) if self.items.is_empty() => {
                 let (role, ink) = if self.failed {
@@ -303,31 +326,19 @@ impl List {
                 door::sides(line, Size::Compact.inset(), Size::Compact.inset())
             }
         });
-        let list = col()
-            .key(self.key)
-            .role(if self.chooser.is_some() || self.listbox {
+        let semantics = Semantics {
+            key: self.key,
+            role: if self.chooser.is_some() || self.listbox {
                 "listbox"
             } else {
                 "list"
-            })
-            .label(self.label.text())
-            .w_full()
-            .children(items)
-            .children(empty);
-        let list = if self.roving {
-            list.focus_group()
-        } else {
-            list
+            },
+            label: self.label.text(),
+            roving: self.roving,
+            keys: self.keys,
+            chooser: self.chooser,
         };
-        let list = match self.keys {
-            Some(keys) => keys(list),
-            None => list,
-        };
-        let list = match self.chooser {
-            Some(Some(chosen)) => list.focusable(true).active_descendant(chosen),
-            Some(None) => list.focusable(true),
-            None => list,
-        };
+        let list = col().w_full().children(items).children(empty);
         let list = if self.card {
             door::corner(
                 door::inset(list, Space::S4, Space::S4).border(1.0, t.border_subtle),
@@ -336,11 +347,37 @@ impl List {
         } else {
             list
         };
-        match heading {
-            Some(heading) => door::gap(col().w_full(), Space::S8)
-                .child(heading)
-                .child(list),
-            None => list,
+        (heading, list, semantics)
+    }
+}
+
+/// What a list is to a reader and the keyboard: its key, role and name, and how it takes the
+/// keyboard, all on one node.
+struct Semantics {
+    key: String,
+    role: &'static str,
+    label: String,
+    roving: bool,
+    keys: Option<Box<dyn FnOnce(El) -> El>>,
+    chooser: Option<Option<String>>,
+}
+
+impl Semantics {
+    fn onto(self, node: El) -> El {
+        let node = node.key(self.key).role(self.role).label(self.label);
+        let node = if self.roving {
+            node.focus_group()
+        } else {
+            node
+        };
+        let node = match self.keys {
+            Some(keys) => keys(node),
+            None => node,
+        };
+        match self.chooser {
+            Some(Some(chosen)) => node.focusable(true).active_descendant(chosen),
+            Some(None) => node.focusable(true),
+            None => node,
         }
     }
 }

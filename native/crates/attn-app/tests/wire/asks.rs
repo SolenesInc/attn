@@ -1727,3 +1727,25 @@ fn in_the_smallest_window_the_list_gives_way_so_the_ask_has_room_to_read_and_its
         "the grip {grip:?} is outside the ask's view {ask:?}"
     );
 }
+
+#[test]
+fn an_assistive_scroll_moves_the_list_of_asks_when_it_overflows_as_on_main() {
+    let asks = (0..10)
+        .map(|i| {
+            let mut a = cache_store();
+            a.id = format!("a-many{i}");
+            a.created_at = ago(30 + i);
+            a
+        })
+        .collect();
+    let mut world = start(asks, vec![api_working()]);
+    world.resize((533.0, 400.0));
+    open_drawer(&mut world);
+    world.gesture(|d| {
+        assert!(
+            d.runtime
+                .accessibility_action("asks.list", rune::accesskit::Action::ScrollDown, None),
+            "asks.list does not scroll down"
+        );
+    });
+}
