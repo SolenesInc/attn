@@ -115,7 +115,7 @@ func (s *Sigma) SkillDirs(lookupEnv func(string) string, homeDir string) ([]stri
 	claudeHome := envHome(lookupEnv("CLAUDE_CONFIG_DIR"), filepath.Join(homeDir, ".claude"))
 	providers, relative := sigmaClaudeProviderHomes(sigmaHome, homeDir)
 	if len(relative) > 0 {
-		return nil, fmt.Errorf("Sigma's Claude providers %s name a relative config_dir or env.CLAUDE_CONFIG_DIR; make it absolute (config_dir may start with ~/) so attn can install the skills Attn roles need there", strings.Join(relative, ", "))
+		return nil, fmt.Errorf("the Claude providers %s in Sigma's config.toml name a relative config_dir or env.CLAUDE_CONFIG_DIR; make it absolute (config_dir may start with ~/) so attn can install the skills Attn roles need there", strings.Join(relative, ", "))
 	}
 	dirs := []string{filepath.Join(sigmaHome, "skills"), filepath.Join(claudeHome, "skills")}
 	for _, home := range providers {
