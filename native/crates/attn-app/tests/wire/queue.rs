@@ -749,11 +749,14 @@ fn the_desktop_strip_names_the_window_s_desktop_at_home_too_and_its_last_chip_op
     let mut world = World::start(Daemon::scripted().state(message));
     world.gesture(|app| app.key(chord(Action::SessionGoToDashboard)));
 
-    let current = world
-        .screen()
-        .children(Target::key("queue.desktop-current"))
-        .into_iter()
-        .filter_map(|n| n.name)
+    let current = std::iter::once(name(&world, "queue.desktop-current"))
+        .chain(
+            world
+                .screen()
+                .children(Target::key("queue.desktop-current"))
+                .into_iter()
+                .filter_map(|n| n.name),
+        )
         .collect::<Vec<_>>();
     assert_eq!(
         current,
@@ -2391,3 +2394,30 @@ fn a_queue_bar_crowds_or_shows_every_chip_from_the_first_frame_of_a_resize_or_de
         ["queue-bar.desktop.1", "queue-bar.desktop-extras"]
     );
 }
+
+#[test]
+fn the_queue_sidebar_at_150_percent_text_stands_no_taller_than_it_did_before_the_design_system() {
+    let mut message = the_queue();
+    message
+        .settings
+        .get_or_insert_default()
+        .insert("uiScale".to_owned(), "1.5".to_owned());
+    let world = World::start_sized(Daemon::scripted().state(message), (800.0, 600.0));
+    let screen = world.screen();
+    let lines: Vec<[f32; 4]> = lines(&world)
+        .iter()
+        .map(|key| screen.bounds(Target::key(key)).expect(key))
+        .collect();
+    let top = lines.iter().map(|b| b[1]).fold(f32::INFINITY, f32::min);
+    let bottom = lines.iter().map(|b| b[1] + b[3]).fold(0.0, f32::max);
+    let stands = bottom - top;
+    assert!(
+        stands <= QUEUE_ON_MAIN,
+        "the queue's lines stand {stands}, past the {QUEUE_ON_MAIN} they stood before"
+    );
+}
+
+/// How tall [`the_queue`]'s lines stood at 150% text in the smallest window before the design
+/// system: the crew head, the Chief, the waiting head, two turns, the agent list's toggle and
+/// its counts, and the gaps between the sections: 219, measured with this test at 9a16295f7.
+const QUEUE_ON_MAIN: f32 = 219.0;

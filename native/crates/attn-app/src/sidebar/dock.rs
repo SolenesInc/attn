@@ -191,6 +191,7 @@ pub(crate) fn view(dock: &Dock, t: &Tokens) -> El {
     };
     let toggle = El::from(
         system::icon_button("sidebar.dock.toggle", toggle_said, toggle, IconSize::Small)
+            .size(system::Size::Small)
             .on_press_tx(toggle_collapsed)
             .build(t),
     )

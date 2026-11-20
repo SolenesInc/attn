@@ -368,18 +368,16 @@ fn strip_extras(extras: Extras, t: &Tokens) -> Option<El> {
 
 /// A dot over a desktop chip's corner while an agent on it wants the user.
 fn waiting_dot(t: &Tokens) -> El {
-    rune::row()
-        .pin(None, Some(-DOT_OVERHANG), Some(-DOT_OVERHANG), None)
-        .inert()
-        .child(system::dot(
-            t.state_waiting,
-            system::DotShape::Filled,
-            system::DotSize::Regular,
-        ))
+    system::ringed_dot(t.warning, t.bg_panel).pin(
+        None,
+        Some(-DOT_OVERHANG),
+        Some(-DOT_OVERHANG),
+        None,
+    )
 }
 
 /// How far a desktop chip's waiting dot hangs past its corner: half the dot.
-const DOT_OVERHANG: f32 = system::DotSize::Regular.side() / 2.0;
+const DOT_OVERHANG: f32 = system::RINGED_DOT / 2.0;
 
 /// The queue sidebar's foot: a chip per slotted desktop, the others as one, the overview's
 /// chip, and the window's desktop by name with the overview's keys.
@@ -406,17 +404,15 @@ pub(crate) fn desktop_strip(state: &State, bands: &Bands<'_>, t: &Tokens) -> El 
                 .child(overview_chip(overview_keys.clone(), t)),
         )
         .child(
-            ListRow::new("queue.desktop-current", current.clone().unwrap_or_default())
-                .title_el(
-                    words(current.unwrap_or_default(), Type::Mono, t.text_tertiary)
-                        .single_line()
-                        .truncate()
-                        .shrink(),
-                )
-                .keys(overview_keys, t)
-                .unfocusable()
-                .build(t)
-                .role("note"),
+            ListRow::note(
+                "queue.desktop-current",
+                current.unwrap_or_default(),
+                Type::Mono,
+                t.text_tertiary,
+                overview_keys,
+                t,
+            )
+            .role("note"),
         )
 }
 

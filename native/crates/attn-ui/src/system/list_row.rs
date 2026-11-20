@@ -143,17 +143,24 @@ impl ListRow {
     }
 
     /// A line of a list that is not a row, such as what an empty list says, at the inset rows
-    /// set their words.
-    pub fn note(key: impl Into<String>, said: impl Into<Said>, kind: Type, ink: Color) -> El {
-        let said = said.into();
-        door::sides(
-            row()
-                .key(key.into())
-                .label(said.text())
-                .h(Self::height())
-                .items_center(),
-            Size::Compact.inset(),
-            Size::Compact.inset(),
+    /// set their words and as tall as its words, ending in the keys that reach it, if any.
+    pub fn note(
+        key: impl Into<String>,
+        said: impl Into<Said>,
+        kind: Type,
+        ink: Color,
+        keys: Option<String>,
+        t: &Tokens,
+    ) -> El {
+        let (key, said) = (key.into(), said.into());
+        let keys_key = format!("{key}.keys");
+        door::gap(
+            door::sides(
+                row().key(key).label(said.text()).items_center(),
+                Size::Compact.inset(),
+                Size::Compact.inset(),
+            ),
+            Space::S6,
         )
         .child(
             words(said, kind, ink)
@@ -162,6 +169,13 @@ impl ListRow {
                 .truncate()
                 .shrink(),
         )
+        .children(keys.map(|keys| {
+            words(keys, Type::Mono, t.text_dimmed)
+                .key(keys_key)
+                .single_line()
+                .truncate()
+                .shrink()
+        }))
     }
 
     /// The room between the sections of one list.
@@ -286,9 +300,11 @@ impl ListRow {
     /// Controls that show at the row's end, on its own ground, while the pointer or the keyboard
     /// is on it. Its asides and badges give way to them, its tags sit under its title, and a
     /// one-line title ends in a fade before them, and a wrapping row keeps their room for all its
-    /// lines at rest too. Always-shown controls stay in view.
+    /// lines at rest too. Always-shown controls stay in view. They stand small and adjoin, so the
+    /// words keep their room.
     pub fn hover_controls(mut self, controls: impl IntoIterator<Item = IconButton>) -> Self {
-        self.hover.extend(controls);
+        self.hover
+            .extend(controls.into_iter().map(|c| c.size(Size::Small)));
         self
     }
 
@@ -539,8 +555,7 @@ impl ListRow {
             .lead
             .map(|lead| on_band(row().w(LEAD).justify_center().items_center().child(lead)));
         let hovering = !self.hover.is_empty();
-        let controls_width = self.hover.iter().map(IconButton::width).sum::<f32>()
-            + Space::S2.pt() * self.hover.len().saturating_sub(1) as f32;
+        let controls_width = self.hover.iter().map(IconButton::width).sum::<f32>();
         let over_words = if self.inline.is_empty() {
             controls_width
         } else {
@@ -652,7 +667,7 @@ impl ListRow {
             } else {
                 controls_key.clone()
             };
-            door::gap(row(), Space::S2)
+            row()
                 .key(key)
                 .group_opacity(0.0, 1.0)
                 .pin(None, Some(0.0), Some(0.0), Some(0.0))

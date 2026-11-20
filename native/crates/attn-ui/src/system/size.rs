@@ -7,6 +7,9 @@ pub enum Size {
     #[default]
     Regular,
     Compact,
+    /// Laid in a list row's line beside its words, as its hover controls are, so the words
+    /// keep their room: 20, as the sidebar's row controls stood before the design system.
+    Small,
 }
 
 impl Size {
@@ -14,6 +17,7 @@ impl Size {
         match self {
             Size::Regular => 32.0,
             Size::Compact => 26.0,
+            Size::Small => 20.0,
         }
     }
 
@@ -21,6 +25,7 @@ impl Size {
         match self {
             Size::Regular => Space::S12,
             Size::Compact => Space::S8,
+            Size::Small => Space::S4,
         }
     }
 }

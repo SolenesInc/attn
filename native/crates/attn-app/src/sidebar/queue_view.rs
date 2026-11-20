@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use attn_ui::Tokens;
 use attn_ui::blocks::Inline;
-use attn_ui::system::{self, GroupHead, IconSize, ListRow, Look, Size, Type, words};
+use attn_ui::system::{self, GroupHead, IconSize, ListRow, Type, words};
 use rune::{El, GrowthSpec, ScrollSpec, Tx, col, memo, row};
 use rune_kit::ScrollBar;
 use rune_kit::TextInput;
@@ -603,9 +603,11 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
                 } => waiting_head(key, (*waiting, *unreachable), keys, t),
                 QLine::AgentsToggle { open, more } => agents_toggle(key, *open, *more, keys, t),
                 QLine::Counts(counts) => {
-                    ListRow::note(key, counts.clone(), Type::Mono, t.text_tertiary)
+                    ListRow::note(key, counts.clone(), Type::Mono, t.text_tertiary, None, t)
                 }
-                QLine::Empty(_) => ListRow::note(key, "Nobody else.", Type::Small, t.text_muted),
+                QLine::Empty(_) => {
+                    ListRow::note(key, "Nobody else.", Type::Small, t.text_muted, None, t)
+                }
                 QLine::Agent(agent) => {
                     let bar = super::settling_bar(state, &key, &agent.agent, t);
                     queue_row(key, agent, cursor, logos, t).children(bar)
@@ -622,19 +624,16 @@ fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
 }
 
 pub(super) fn crew_rule(key: String, t: &Tokens) -> El {
-    let manage = El::from(
-        system::Button::new("manage")
-            .look(Look::Quiet)
-            .size(Size::Compact)
-            .on_press_tx(|state: &mut State, tx: &mut Tx| crate::crew::open(state, None, tx))
-            .build(t),
-    )
-    .key(format!("{key}.manage"))
-    .label("Manage crew");
+    let manage = format!("{key}.manage");
     GroupHead::new(key, "Crew")
         .heading()
         .section("Crew")
-        .trailing(manage)
+        .action(
+            manage,
+            "manage",
+            "Manage crew",
+            |state: &mut State, tx: &mut Tx| crate::crew::open(state, None, tx),
+        )
         .build(t)
 }
 
@@ -688,7 +687,7 @@ fn waiting_head(
 /// an unreachable count in tertiary.
 fn owed_words((waiting, unreachable): (usize, usize), t: &Tokens) -> El {
     if waiting == 0 && unreachable == 0 {
-        return words("Nothing owed", Type::Name, t.text_tertiary);
+        return words("Nothing owed", Type::Body, t.text_tertiary);
     }
     let mut parts = Vec::new();
     if waiting > 0 {

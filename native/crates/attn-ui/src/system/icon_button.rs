@@ -137,6 +137,7 @@ impl IconButton {
         match (self.count.is_some(), self.keys.is_some()) {
             (true, _) => (Space::S8, Radius::Round),
             (false, true) => (Space::S6, Radius::Control),
+            (false, false) if self.size == Size::Small => (Space::S0, Radius::Control),
             (false, false) => (Space::S4, Radius::Control),
         }
     }
@@ -164,16 +165,9 @@ impl IconButton {
                 Glyph::Text(said) => door::mark_text(said, icon).color(ink),
             };
             let mark = match dot {
-                Some(dot_ink) => row().child(mark).child(
-                    door::corner(
-                        rune::el().size(DOT + 2.0 * DOT_RING, DOT + 2.0 * DOT_RING),
-                        Radius::Round,
-                    )
-                    .fill(dot_ink)
-                    .border(DOT_RING, ground)
-                    .absolute(icon.pt() - DOT, -DOT_RING)
-                    .inert(),
-                ),
+                Some(dot_ink) => row()
+                    .child(mark)
+                    .child(super::ringed_dot(dot_ink, ground).absolute(icon.pt() - DOT, -DOT_RING)),
                 None => mark,
             };
             door::gap(row().items_center(), Space::S4)

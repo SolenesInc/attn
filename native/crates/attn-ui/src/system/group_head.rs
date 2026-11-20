@@ -1,7 +1,9 @@
-use rune::{El, el, row};
+use rune::{El, Tx, el, row};
+use rune_kit::{Button as KitButton, ButtonVariant};
 
 use super::{
-    IconButton, IconSize, Radius, Said, Size, Space, Type, disabled, door, focus, layers, words,
+    IconButton, IconSize, Radius, Said, Size, Space, Type, disabled, door, focus, kit, layers,
+    words,
 };
 use crate::Tokens;
 
@@ -16,10 +18,17 @@ pub struct GroupHead {
     asides: Vec<El>,
     keys: Option<String>,
     trailing: Vec<El>,
+    action: Option<Action>,
     controls: Vec<IconButton>,
     open: Option<bool>,
     heading: bool,
     disabled: bool,
+}
+
+struct Action {
+    key: String,
+    said: String,
+    button: KitButton,
 }
 
 enum Name {
@@ -38,6 +47,7 @@ impl GroupHead {
             asides: Vec::new(),
             keys: None,
             trailing: Vec::new(),
+            action: None,
             controls: Vec::new(),
             open: None,
             heading: false,
@@ -45,9 +55,10 @@ impl GroupHead {
         }
     }
 
-    /// How tall every group heading stands.
+    /// How tall every group heading stands: 24, as the sidebar's heads stood before the design
+    /// system, holding a small control.
     pub fn height() -> f32 {
-        Size::Compact.height()
+        24.0
     }
 
     pub fn mark(mut self, mark: El) -> Self {
@@ -90,11 +101,29 @@ impl GroupHead {
         self
     }
 
+    /// An action said in words at the heading's end, as quiet as its keys, such as Manage, read
+    /// as `label`.
+    pub fn action<S: 'static>(
+        mut self,
+        key: impl Into<String>,
+        said: impl Into<String>,
+        label: impl Into<String>,
+        press: impl Fn(&mut S, &mut Tx) + 'static,
+    ) -> Self {
+        self.action = Some(Action {
+            key: key.into(),
+            said: said.into(),
+            button: KitButton::new(label).on_press_tx(press),
+        });
+        self
+    }
+
     /// Controls that show at the heading's end while the pointer or the keyboard is on it, on
     /// its own ground, what they lie over ending in a fade before them. A heading has these or
     /// [`Self::trailing`] controls, not both.
     pub fn controls(mut self, controls: impl IntoIterator<Item = IconButton>) -> Self {
-        self.controls.extend(controls);
+        self.controls
+            .extend(controls.into_iter().map(|c| c.size(Size::Small)));
         self
     }
 
@@ -118,11 +147,10 @@ impl GroupHead {
     pub fn build(self, t: &Tokens) -> El {
         debug_assert!(self.controls.is_empty() || self.trailing.is_empty());
         let keys_key = format!("{}.keys", self.key);
-        let controls_width = self.controls.iter().map(IconButton::width).sum::<f32>()
-            + Space::S2.pt() * self.controls.len().saturating_sub(1) as f32;
+        let controls_width = self.controls.iter().map(IconButton::width).sum::<f32>();
         let hovering = !self.controls.is_empty();
         let controls = hovering.then(|| {
-            let controls = door::gap(row(), Space::S2)
+            let controls = row()
                 .key(format!("{}.controls", self.key))
                 .group_opacity(0.0, 1.0)
                 .pin(None, Some(0.0), Some(0.0), Some(0.0))
@@ -152,14 +180,20 @@ impl GroupHead {
             .children(self.mark)
             .children(name.map(|name| name.single_line().truncate().shrink()))
             .children(self.asides)
-            .child(el().grow(1.0).h(1.0).fill(t.border_subtle))
-            .children(self.keys.map(|keys| {
-                words(keys, Type::Mono, t.text_dimmed)
-                    .key(keys_key)
-                    .single_line()
-                    .truncate()
-                    .shrink()
-            }));
+            .child(
+                door::gap(row(), Space::S6)
+                    .grow_from(1.0, 0.0)
+                    .h_full()
+                    .items_center()
+                    .child(el().grow(1.0).h(1.0).fill(t.border_subtle))
+                    .children(self.keys.map(|keys| {
+                        words(keys, Type::Mono, t.text_dimmed)
+                            .key(keys_key)
+                            .single_line()
+                            .truncate()
+                            .shrink()
+                    })),
+            );
         let content = door::gap(content, Space::S6);
         let content = if hovering {
             door::fade_before_hover(content, controls_width)
@@ -174,6 +208,7 @@ impl GroupHead {
             .h(Self::height())
             .items_center()
             .child(content)
+            .children(self.action.map(|action| action.build(t)))
             .children(self.trailing)
             .hover_group()
             .children(controls);
@@ -193,5 +228,23 @@ impl GroupHead {
         } else {
             head
         }
+    }
+}
+
+impl Action {
+    fn build(self, t: &Tokens) -> El {
+        let ink = t.text_tertiary;
+        let said = self.said;
+        let button = self
+            .button
+            .variant(ButtonVariant::Ghost)
+            .label_with(move |_, _| words(said, Type::Body, ink).single_line())
+            .build(kit(t))
+            .key(self.key)
+            .h(Size::Small.height())
+            .justify_center();
+        let button = door::inset(button, Space::S4, Space::S0);
+        let button = focus::ring(door::corner(button, Radius::Control), t);
+        layers::pressable(button, t.bg_panel, t)
     }
 }

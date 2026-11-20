@@ -44,3 +44,16 @@ pub fn dot(ink: Color, shape: DotShape, size: DotSize) -> El {
         DotShape::Square => mark.fill(ink),
     }
 }
+
+/// How wide a [`ringed_dot`] stands, its ring included.
+pub const RINGED_DOT: f32 = DotSize::Small.side() + 2.0 * RING;
+
+/// A small dot laid over a mark's corner, such as turns waiting on a desktop, ringed in `ground`
+/// so it reads apart from the mark it lies on.
+pub fn ringed_dot(ink: Color, ground: Color) -> El {
+    door::corner(el().size(RINGED_DOT, RINGED_DOT), Radius::Round)
+        .fill(ink)
+        .border(RING, ground)
+        .inert()
+        .a11y_hidden()
+}

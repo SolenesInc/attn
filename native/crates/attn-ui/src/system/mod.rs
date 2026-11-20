@@ -44,7 +44,7 @@ pub use choice::{Choice, answers, checks, choices};
 pub use composer::composer;
 pub use control::Control;
 pub use disclosure::disclosure;
-pub use dot::{DotShape, DotSize, dot};
+pub use dot::{DotShape, DotSize, RINGED_DOT, dot, ringed_dot};
 pub use drop_zone::drop_zone;
 pub use expander::{expander, opens_in_place};
 pub use field_box::{FieldState, area_box, code_box, line_box, number_box};
