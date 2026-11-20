@@ -326,3 +326,61 @@ fn a_figures_node_centres_its_words_on_both_axes() {
         }
     }
 }
+
+#[test]
+fn a_split_controls_halves_share_one_edge_and_stand_as_one_height() {
+    for variant in WIDTHS {
+        let rt = story("Blocks/Split", variant);
+        for (action, more) in [
+            ("split.send", "split.send.menu"),
+            ("split.failed", "split.failed.menu"),
+        ] {
+            let (a, m) = (element(&rt, action).rect, element(&rt, more).rect);
+            assert!(
+                (a[0] + a[2] - 1.0 - m[0]).abs() < 0.01,
+                "{variant}: {more} at {m:?} does not lie on {action}'s edge at {a:?}"
+            );
+            assert!(
+                (a[1] - m[1]).abs() < 0.01 && (a[3] - m[3]).abs() < 0.01,
+                "{variant}: {action} {a:?} and {more} {m:?} stand apart"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_toolbars_buttons_stand_on_one_line_with_a_rule_only_between_its_groups() {
+    for variant in WIDTHS {
+        let rt = story("Blocks/Toolbar", variant);
+        let all = rt.elements();
+        let toolbar = element(&rt, "toolbar");
+        assert_eq!(toolbar.role, "toolbar", "{variant}");
+        let buttons: Vec<&ElementInfo> = drawn_under(&all, &toolbar)
+            .filter(|e| e.focusable)
+            .collect();
+        let line = buttons.first().expect("a toolbar holds buttons").rect;
+        let strip: Vec<&ElementInfo> = buttons
+            .iter()
+            .copied()
+            .filter(|b| (b.rect[1] - line[1]).abs() < 0.01)
+            .collect();
+        assert_eq!(
+            strip.len(),
+            5,
+            "{variant}: the strip's buttons share a line"
+        );
+        let gaps: Vec<f32> = strip
+            .windows(2)
+            .map(|w| w[1].rect[0] - (w[0].rect[0] + w[0].rect[2]))
+            .collect();
+        let within = gaps[0];
+        assert!(
+            gaps[..3].iter().all(|g| (g - within).abs() < 0.01),
+            "{variant}: a group's buttons stand evenly apart: {gaps:?}"
+        );
+        assert!(
+            gaps[3] > within + 1.0,
+            "{variant}: the rule sets the last group apart: {gaps:?}"
+        );
+    }
+}

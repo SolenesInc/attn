@@ -5,13 +5,14 @@ use rune::{Cx, El, Playground, Story, Tx, col, el, row};
 
 use crate::Tokens;
 use crate::blocks::{
-    Bar, Block, Byline, Card, Entry, Figure, Head, KeyFit, KeyLine, Lane, Pane, Prose, Reader,
-    Remark, Room, Section, Standing, Surface, Trail, Voice, board, entries, key_tab, lanes, place,
-    rail,
+    Bar, Block, Byline, Card, Entry, Figure, Head, Inline, KeyFit, KeyLine, Lane, Pane, Prose,
+    Reader, Remark, Room, Section, Stack, Standing, Surface, Toolbar, Trail, Voice, board, entries,
+    key_tab, lanes, place, rail,
 };
 use crate::colors::scheme_for;
 use crate::system::{
-    Button, Link, Look, Size, Space, Tone, Type, door, dot_on_line, keys_hint, meter, tag, words,
+    Button, IconSize, Join, Link, Look, Size, Space, Tone, Type, door, dot_on_line, icon_button,
+    keys_hint, meter, split, tag, words,
 };
 
 /// What a reading story shows: the state its variant sets.
@@ -60,6 +61,8 @@ pub const READING_SUBJECTS: &[(&str, &[&str], &[&str])] = &[
     ("Blocks/Remark", &["remarks"], &[]),
     ("Blocks/KeyLine", &["keys"], &[]),
     ("Blocks/Figure", &["figure"], &[]),
+    ("Blocks/Toolbar", &["toolbar"], &[]),
+    ("Blocks/Split", &["split"], &[]),
 ];
 
 const LONG_TITLE: &str = "Move the reading surfaces onto blocks so the garden, the review reader and the markdown reader share one system";
@@ -94,6 +97,8 @@ fn view_of(name: &str) -> View {
         "Blocks/Remark" => remarks_story,
         "Blocks/KeyLine" => keys_story,
         "Blocks/Figure" => figure_story,
+        "Blocks/Toolbar" => toolbar_story,
+        "Blocks/Split" => split_story,
         _ => board_story,
     }
 }
@@ -582,4 +587,109 @@ fn figure_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
         .child(band(0, false, "Add(a, b)"))
         .child(band(1, true, "helper()"));
     stage(s, cx, &t, figure)
+}
+
+fn toolbar_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
+    let t = tokens(cx);
+    let tool = |key: &str, glyph: &'static str, label: &str, ink| {
+        let button: El = icon_button(key, label, glyph, IconSize::Regular)
+            .size(Size::Regular)
+            .ink(ink)
+            .expanded(s.long && key == "toolbar.label")
+            .on_press_tx(noop)
+            .build(&t)
+            .into();
+        button
+    };
+    let under = s.long.then(|| {
+        Stack::tight()
+            .key("toolbar.picker")
+            .child(quiet("toolbar.pick.0", "👍 I agree", &t))
+            .child(quiet("toolbar.pick.1", "Cut this", &t))
+    });
+    let toolbar = Toolbar::new("toolbar", "Annotate selection")
+        .group([
+            tool("toolbar.delete", crate::glyph::BAN, "Delete", t.error),
+            tool(
+                "toolbar.comment",
+                crate::glyph::COMMENT,
+                "Comment",
+                t.warning,
+            ),
+            tool(
+                "toolbar.label",
+                crate::glyph::BOLT,
+                "Quick label",
+                t.warning,
+            ),
+            tool("toolbar.agree", "👍", "I agree", t.text_secondary),
+        ])
+        .group([tool(
+            "toolbar.cancel",
+            crate::glyph::TIMES,
+            "Cancel",
+            t.text_secondary,
+        )])
+        .under(under)
+        .build(&t);
+    stage(s, cx, &t, row().child(toolbar))
+}
+
+fn split_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
+    let t = tokens(cx);
+    let more = |key: &str| -> El {
+        Button::mark(crate::glyph::CARET_DOWN, IconSize::Small)
+            .size(Size::Compact)
+            .joined(Join::Previous)
+            .on_press_tx(noop)
+            .build(&t)
+            .key(key)
+            .label("Change annotation destination")
+            .into()
+    };
+    let to = |name: &'static str| words(name, Type::Control, t.text_secondary).truncate();
+    let send: El = Button::new("Send 3")
+        .size(Size::Compact)
+        .trailing(to(if s.long {
+            "to the session with the longest name"
+        } else {
+            "to Alder"
+        }))
+        .joined(Join::Next)
+        .on_press_tx(noop)
+        .build(&t)
+        .key("split.send")
+        .into();
+    let failed: El = Button::new("Send failed")
+        .size(Size::Compact)
+        .leading(words("!", Type::Control, t.warning))
+        .trailing(to("to Alder"))
+        .joined(Join::Next)
+        .on_press_tx(noop)
+        .build(&t)
+        .key("split.failed")
+        .into();
+    let sent: El = Button::new("Sent ✓")
+        .size(Size::Compact)
+        .leading(words("✓", Type::Control, t.success))
+        .on_press_tx(noop)
+        .build(&t)
+        .key("split.sent")
+        .into();
+    let line = |key: &str, parts: Vec<El>| Inline::line().key(key.to_owned()).children(parts);
+    let content = Stack::tight()
+        .key("split")
+        .child(line(
+            "split.ready",
+            vec![
+                quiet("split.notes", "Notes 3", &t),
+                split(send, more("split.send.menu")),
+            ],
+        ))
+        .child(line(
+            "split.problem",
+            vec![split(failed, more("split.failed.menu"))],
+        ))
+        .child(line("split.done", vec![sent]));
+    stage(s, cx, &t, content)
 }

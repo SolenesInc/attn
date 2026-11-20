@@ -1204,6 +1204,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::remark::Remark::new(lines)", false),
     ("blocks::remark::Remark::new(said)", false),
     ("blocks::remark::Remark::label(label)", false),
+    ("blocks::toolbar::Toolbar::new(label)", false),
     ("blocks::trail::Trail::new(label)", false),
     ("blocks::trail::Trail::here(said)", true),
     ("blocks::table::TableColumns::new(name)", true),
