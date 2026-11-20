@@ -677,6 +677,10 @@ fn arrows_show_each_command_whole_in_the_smallest_window_at_the_largest_text_and
     for _ in 0..10 {
         press(&mut world, Key::Down);
     }
+    super::typing_shows_the_active_option(&mut world, "palette.list", " ");
+    for _ in 0..10 {
+        press(&mut world, Key::Down);
+    }
     let slot = highlighted(&world)
         .and_then(|t| t.strip_prefix("Go to Desktop ").map(str::to_owned))
         .expect("a desktop is highlighted");
@@ -712,6 +716,10 @@ fn arrows_show_each_agent_whole_in_the_smallest_window_at_the_largest_text_and_e
     ));
     open_agents(&mut world);
     super::arrows_show_each_option(&mut world, "palette.list");
+    for _ in 0..16 {
+        press(&mut world, Key::Down);
+    }
+    super::typing_shows_the_active_option(&mut world, "palette.list", "agent");
     for _ in 0..16 {
         press(&mut world, Key::Down);
     }

@@ -1283,6 +1283,10 @@ fn arrows_show_each_note_whole_in_the_smallest_window_at_the_largest_text_and_en
     for _ in 0..20 {
         world.gesture(|d| d.press("down"));
     }
+    super::typing_shows_the_active_option(&mut world, "notebook.finder.list", "n");
+    for _ in 0..20 {
+        world.gesture(|d| d.press("down"));
+    }
     let picked = world.screen().active_option().and_then(|n| n.key);
     world.gesture(|d| d.press("enter"));
     let title = world
@@ -1312,6 +1316,10 @@ fn arrows_show_each_note_whole_in_an_editor_tiles_finder_and_enter_opens_it() {
     for _ in 0..20 {
         world.gesture(|d| d.press("down"));
     }
+    super::typing_shows_the_active_option(&mut world, "notebook.finder.list", "n");
+    for _ in 0..20 {
+        world.gesture(|d| d.press("down"));
+    }
     let picked = world.screen().active_option().and_then(|n| n.key);
     world.gesture(|d| d.press("enter"));
     let title = world
@@ -1322,6 +1330,66 @@ fn arrows_show_each_note_whole_in_an_editor_tiles_finder_and_enter_opens_it() {
         picked,
         title.map(|t| format!("notebook.finder.row.{t}.md")),
         "Enter opens the highlighted note"
+    );
+}
+
+#[test]
+fn a_shorter_index_answer_after_reopening_leaves_the_arrows_and_enter_on_its_rows() {
+    let disk = Disk::with(&[("n01.md", "# n01\n")]);
+    let mut world = start_sized(&disk, None, true);
+    world
+        .daemon
+        .answer_in_turn("fs_index", [Answer::Hold, Answer::Hold]);
+    open_fullscreen(&mut world);
+    let open = |world: &mut World| {
+        world
+            .automate("run", json!({ "name": "file.open" }))
+            .unwrap();
+        world.settle();
+    };
+    open(&mut world);
+    world.gesture(|d| d.press("escape"));
+    open(&mut world);
+    let asks = world.daemon.sent_of("fs_index");
+    assert_eq!(asks.len(), 2);
+    let answer = |files: Vec<String>| {
+        json!({ "event": "fs_index_result", "success": true, "root": NOTEBOOK,
+            "files": files, "truncated": false })
+    };
+    let notes = thirty_notes();
+    for (path, body) in &notes {
+        disk.put(path, body);
+    }
+    world.daemon.reply_to(
+        &asks[1],
+        answer(notes.iter().map(|(p, _)| p.clone()).collect()),
+    );
+    world.settle();
+    for _ in 0..8 {
+        world.gesture(|d| d.press("down"));
+    }
+    let active = |world: &World| world.screen().active_option().and_then(|n| n.key);
+    assert_eq!(
+        active(&world).as_deref(),
+        Some("notebook.finder.row.n09.md")
+    );
+    world
+        .daemon
+        .reply_to(&asks[0], answer(vec!["n01.md".to_owned()]));
+    world.settle();
+    world.gesture(|d| d.press("up"));
+    assert_eq!(
+        active(&world).as_deref(),
+        Some("notebook.finder.row.n01.md")
+    );
+    world.gesture(|d| d.press("enter"));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("notebook.document.title"))
+            .name
+            .as_deref(),
+        Some("n01")
     );
 }
 

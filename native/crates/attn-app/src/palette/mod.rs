@@ -411,10 +411,11 @@ pub(crate) fn highlighted(search: &Search, rows: &[Row]) -> Option<usize> {
 
 /// An edit searches again from the top; typing while choosing a snooze searches the agents
 /// for what was typed.
-pub(crate) fn edited(state: &mut State, _: &mut Tx) {
+pub(crate) fn edited(state: &mut State, tx: &mut Tx) {
     let search = &mut state.window.search;
     search.snoozing = None;
     search.highlight = None;
+    attn_ui::finder::reveal(tx, view::LIST, None);
 }
 
 /// Settle, priority and snooze while the palette is open: they act on the highlighted agent of

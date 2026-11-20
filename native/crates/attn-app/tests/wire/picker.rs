@@ -472,6 +472,10 @@ fn arrows_show_each_location_whole_in_the_smallest_window_at_the_largest_text_an
     for _ in 0..9 {
         press(&mut world, Key::Down);
     }
+    super::typing_shows_the_active_option(&mut world, "new-session.locations", "src");
+    for _ in 0..10 {
+        press(&mut world, Key::Down);
+    }
     assert_eq!(
         highlighted(&world, "new-session").as_deref(),
         Some("~/src/r10")

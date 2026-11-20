@@ -651,6 +651,7 @@ pub(crate) fn edited(state: &mut State, which: Which, tx: &mut Tx) {
     picker.stale();
     picker.typed = true;
     picker.highlight = None;
+    attn_ui::finder::reveal(tx, view::list_key(which), None);
     picker.operation = None;
     picker.error = None;
     let at = tx.clock() + BROWSE_DELAY;

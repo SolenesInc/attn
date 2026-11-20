@@ -356,6 +356,7 @@ fn arrows_show_each_file_whole_in_the_smallest_window_at_the_largest_text_and_en
     for _ in 0..30 {
         press(&mut world, "down");
     }
+    super::typing_shows_the_active_option(&mut world, "opener.list", ".");
     let highlighted = world.screen().active_option().and_then(|n| n.name);
     press(&mut world, "enter");
     let opened = sent(&world, "open_markdown");

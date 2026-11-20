@@ -100,9 +100,11 @@ fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let rows = rows(finder);
     match ev.key {
         Key::Down | Key::Up if !rows.is_empty() => {
+            let last = rows.len() - 1;
+            let at = finder.highlighted.min(last);
             finder.highlighted = match ev.key {
-                Key::Down => (finder.highlighted + 1).min(rows.len() - 1),
-                _ => finder.highlighted.saturating_sub(1),
+                Key::Down => (at + 1).min(last),
+                _ => at.saturating_sub(1),
             };
             let row = (finder.highlighted > 0).then(|| row_key(&rows[finder.highlighted]));
             attn_ui::finder::reveal(tx, LIST, row);
@@ -141,10 +143,11 @@ pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Op
                     .expect("the finder shows")
                     .query
             })
-            .on_change(|state: &mut State, _: &mut Tx| {
+            .on_change(|state: &mut State, tx: &mut Tx| {
                 if let Some(finder) = state.notebook.finder.as_mut() {
                     finder.highlighted = 0;
                 }
+                attn_ui::finder::reveal(tx, LIST, None);
                 state.notebook.revision += 1;
             })
             .on_key(on_key),

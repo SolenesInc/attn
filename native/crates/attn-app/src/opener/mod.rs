@@ -246,6 +246,11 @@ pub(crate) fn highlighted(opener: &Opener, rows: &[Row]) -> Option<usize> {
 }
 
 pub(crate) fn edited(state: &mut State, tx: &mut Tx) {
+    let (rows, _) = rows(state);
+    let row = highlighted(&state.opener, &rows)
+        .filter(|&at| at > 0)
+        .map(|at| view::row_key(&rows[at]));
+    attn_ui::finder::reveal(tx, view::LIST, row);
     let browsing = paths::is_path(&state.opener.query.text);
     if !browsing {
         state.opener.browse = Browse::default();

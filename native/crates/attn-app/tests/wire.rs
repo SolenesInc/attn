@@ -9,6 +9,53 @@ mod wire {
     /// The room a finder's list leaves between its rows and its edges.
     const FINDER_INSET: f32 = 8.0;
 
+    /// Checks that `active` shows whole inside `list`; returns the room under it.
+    fn active_option_shows_whole(
+        world: &attn_testkit::World,
+        list: &str,
+        active: &str,
+        step: &str,
+    ) -> f32 {
+        let elements = world.runtime().elements();
+        let find = |k: &str| {
+            elements
+                .iter()
+                .find(|e| e.key.as_deref() == Some(k))
+                .unwrap_or_else(|| panic!("{k} is drawn"))
+        };
+        let view = find(list).visible;
+        let row = find(active).rect;
+        assert!(
+            row[1] >= view[1] - 0.5 && row[1] + row[3] <= view[1] + view[3] + 0.5,
+            "{step}: {active} at {row:?} does not show whole in {list}'s {view:?}"
+        );
+        view[1] + view[3] - (row[1] + row[3])
+    }
+
+    /// Types `text` into a field whose `list` the arrows have scrolled, and checks that the
+    /// option the field then names shows whole, or that the list shows its top when it names
+    /// none.
+    pub(crate) fn typing_shows_the_active_option(
+        world: &mut attn_testkit::World,
+        list: &str,
+        text: &str,
+    ) {
+        let scrolled =
+            |world: &attn_testkit::World| world.screen().scrolled(attn_testkit::Target::key(list));
+        assert!(scrolled(world) > Some(0.0), "the arrows scrolled {list}");
+        world.gesture(|app| app.type_text(text));
+        match world.screen().active_option().and_then(|n| n.key) {
+            Some(active) => {
+                active_option_shows_whole(world, list, &active, &format!("typing {text:?}"));
+            }
+            None => assert_eq!(
+                scrolled(world),
+                Some(0.0),
+                "typing {text:?}: {list} shows its top"
+            ),
+        }
+    }
+
     /// Presses Down until the field's active option is the last of `list`'s, from the first
     /// when none is active, then Up back to the first, and checks that each option shows whole inside the list as it becomes active,
     /// the last with the list's inset under it and the first with the list at its top.
@@ -30,21 +77,7 @@ mod wire {
                 .collect()
         };
         let shown = |world: &attn_testkit::World, step: &str| {
-            let active = key(world);
-            let elements = world.runtime().elements();
-            let find = |k: &str| {
-                elements
-                    .iter()
-                    .find(|e| e.key.as_deref() == Some(k))
-                    .unwrap_or_else(|| panic!("{k} is drawn"))
-            };
-            let view = find(list).visible;
-            let row = find(&active).rect;
-            assert!(
-                row[1] >= view[1] - 0.5 && row[1] + row[3] <= view[1] + view[3] + 0.5,
-                "{step}: {active} at {row:?} does not show whole in {list}'s {view:?}"
-            );
-            (active, view[1] + view[3] - (row[1] + row[3]))
+            active_option_shows_whole(world, list, &key(world), step)
         };
         let all = options(world);
         assert!(
@@ -70,7 +103,7 @@ mod wire {
                 break;
             }
             press(world, rune::Key::Down);
-            (_, room_under) = shown(world, "Down");
+            room_under = shown(world, "Down");
         }
         assert_eq!(key(world), last, "Down reaches {list}'s last option");
         assert!(
