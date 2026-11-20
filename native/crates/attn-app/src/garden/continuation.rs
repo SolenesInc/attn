@@ -180,6 +180,14 @@ impl Sheet<'_> {
             let (cancelled, sent) = (spot.clone(), spot.clone());
             Actions::new(spot.key("actions"))
                 .push(
+                    quiet("Cancel")
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            cancelled.put_away(state, &cancelled.key("open"), tx)
+                        })
+                        .build(t)
+                        .key(spot.key("cancel")),
+                )
+                .push(
                     plain("Send to Chief")
                         .look(Look::Primary)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
@@ -188,14 +196,6 @@ impl Sheet<'_> {
                         })
                         .build(t)
                         .key(spot.key("send")),
-                )
-                .push(
-                    quiet("Cancel")
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            cancelled.put_away(state, &cancelled.key("open"), tx)
-                        })
-                        .build(t)
-                        .key(spot.key("cancel")),
                 )
                 .build()
         };

@@ -380,3 +380,30 @@ fn the_note_s_grip_drags_it_taller_and_back_without_losing_its_words() {
         Some("Continue from the parser tests.")
     );
 }
+
+#[test]
+fn tab_from_the_handover_fields_reaches_cancel_before_handover() {
+    let mut world = opened(vec![continued(placed())], |_| None);
+    click(&mut world, "Handover");
+    let mut trail = Vec::new();
+    for _ in 0..16 {
+        if let Some(key) = focused(&world).and_then(|n| n.key) {
+            let end = key == "garden.handover.cancel" || key == "garden.handover.send";
+            trail.push(key);
+            if end {
+                break;
+            }
+        }
+        key(&mut world, Key::Tab);
+    }
+    assert_eq!(
+        trail.last().map(String::as_str),
+        Some("garden.handover.cancel"),
+        "{trail:?}"
+    );
+    key(&mut world, Key::Tab);
+    assert_eq!(
+        focused(&world).and_then(|n| n.key).as_deref(),
+        Some("garden.handover.send")
+    );
+}

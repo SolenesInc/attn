@@ -1273,3 +1273,26 @@ fn each_way_to_decide_a_seed_opens_a_form_named_for_its_decision() {
         );
     }
 }
+
+#[test]
+fn tab_from_a_decisions_field_reaches_cancel_before_its_submit() {
+    for action in ["Park", "Wither", "Send to Chief"] {
+        let mut world = handover_review(item(), saved("reuse_cwd"));
+        click(&mut world, action);
+        let mut trail = Vec::new();
+        for _ in 0..12 {
+            if let Some(key) = focused(&world).and_then(|n| n.key) {
+                let end = key.ends_with(".cancel") || key.ends_with(".send");
+                trail.push(key);
+                if end {
+                    break;
+                }
+            }
+            key(&mut world, Key::Tab);
+        }
+        assert!(
+            trail.last().is_some_and(|key| key.ends_with(".cancel")),
+            "{action}: {trail:?}"
+        );
+    }
+}
