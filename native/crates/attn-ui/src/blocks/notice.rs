@@ -103,8 +103,8 @@ impl Notice {
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
-                .scroll_bar_styled(crate::scroll_bar(t))
-                .child(said);
+                .child(said)
+                .scroll_bar_styled(crate::scroll_bar(t));
             door::gap(col().grow(1.0).min_w(0.0).min_h(0.0), Space::S8)
                 .child(sentence)
                 .children(self.action.map(|action| action.w_full()))

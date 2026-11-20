@@ -575,12 +575,17 @@ fn a_write_error_far_down_a_long_note_in_an_editor_tile_keeps_the_caret_where_it
 }
 
 /// In the smallest window at the largest text, each failure leaves three whole lines of the
-/// note in view and its actions whole, however long its sentence.
+/// note in view and its actions whole, however long its sentence: one too long for its band
+/// scrolls inside it.
 fn a_failed_save_leaves_three_lines_in_the_smallest_window(
     document: &str,
     world_of: fn(Window) -> Box<dyn FnOnce(&Disk) -> World>,
 ) {
-    for failure in [Failure::Conflict, DISK_FULL, NESTED_PATH] {
+    for (failure, gives_way) in [
+        (Failure::Conflict, false),
+        (DISK_FULL, false),
+        (NESTED_PATH, true),
+    ] {
         let (disk, mut world, _) = typed_far_down(world_of(SMALLEST), document);
         let held = world.daemon.sent_of("fs_write").pop().unwrap();
         fail(&world.daemon, &held, &disk, &failure);
@@ -613,6 +618,27 @@ fn a_failed_save_leaves_three_lines_in_the_smallest_window(
             "{alert} at {:?} runs out of its band",
             [ay, ah]
         );
+        let sentence = Target::key(format!("{alert}.sentence"));
+        let [_, sy, _, sh] = screen.bounds(sentence.clone()).unwrap();
+        assert!(
+            sh > 0.0 && sy >= ay && sy + sh <= ay + ah,
+            "{alert}'s sentence shows at {:?}, out of its notice",
+            [sy, sh]
+        );
+        if gives_way {
+            world.gesture(|d| {
+                d.runtime.accessibility_action(
+                    &format!("{alert}.sentence"),
+                    rune::accesskit::Action::ScrollDown,
+                    None,
+                );
+            });
+            world.settle();
+            assert!(
+                world.screen().scrolled(sentence).is_some_and(|y| y > 0.0),
+                "{alert}'s sentence does not scroll inside its band"
+            );
+        }
         if let Failure::Conflict = failure {
             for action in ["document.reload", "document.overwrite"] {
                 let [_, y, _, h] = screen

@@ -82,7 +82,7 @@ const LIST_HEIGHT: f32 = 480.0;
 
 const LONG_TITLE: &str = "Review every pull request the release train touches before it leaves";
 const LONG_LINE: &str = "Scheduled — 0 9 * * 1-5 (Europe/Stockholm) · /Users/someone/projects/a-very-long-worktree-basename--with-its-branch";
-const LONG_CONFLICT: &str = "This automation changed on disk since you opened it: another window or an agent saved it while you were editing here";
+const LONG_CONFLICT: &str = "This automation changed on disk since you opened it: another window or an agent saved /Users/someone/projects/engineering-platform-and-infrastructure/production-rollout-and-deployment/backup-and-recovery-procedures-for-the-production-cluster/disaster-recovery-and-staged-migration-for-the-tokyo-region/nightly-backfill.toml while you were editing here";
 const LONG_ERROR: &str = "automation_runs_get failed: the daemon could not read the run history because the database is locked by another writer; try again in a moment";
 
 pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
@@ -185,6 +185,12 @@ fn close(t: &Tokens) -> El {
         .into()
 }
 
+/// The height in which `lines` of body text always show whole, wherever they are scrolled, as
+/// the Notebook keeps for its note.
+fn room_for_whole_body_lines(lines: f32) -> f32 {
+    (lines + 1.0) * crate::system::door::line_height(Type::Body)
+}
+
 fn sheet(s: &Panels, cx: &mut Cx<Panels>) -> El {
     let t = tokens(cx);
     let title = if s.long {
@@ -193,6 +199,7 @@ fn sheet(s: &Panels, cx: &mut Cx<Panels>) -> El {
         "Edit automation"
     };
     let sheet = Sheet::new("sheet", title)
+        .keeps_room(room_for_whole_body_lines(3.0))
         .aside(switch(
             "sheet.enabled",
             "Enabled",

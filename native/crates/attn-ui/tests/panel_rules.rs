@@ -549,28 +549,55 @@ fn a_notices_actions_share_a_line_where_its_line_holds_them_at_any_text_size() {
 fn a_notice_too_long_for_its_sheet_scrolls_its_sentence_and_keeps_its_actions_whole() {
     let mut rt = story("Panels/Sheet", "Smallest notice at 150%");
     let band = element(&rt, "sheet.notices");
-    let sentence = element(&rt, "sheet.conflict.sentence");
+    let notice = element(&rt, "sheet.conflict");
+    let view = element(&rt, "sheet.conflict.sentence");
     let body = element(&rt, "sheet.body");
-    let inside = |e: &ElementInfo| {
-        e.rect[1] >= band.rect[1] && e.rect[1] + e.rect[3] <= band.rect[1] + band.rect[3]
+    let inside = |e: &ElementInfo, of: &ElementInfo| {
+        e.rect[1] >= of.rect[1] && e.rect[1] + e.rect[3] <= of.rect[1] + of.rect[3]
     };
     for action in ["sheet.reload", "sheet.overwrite"] {
         let action = element(&rt, action);
         assert!(
-            inside(&action),
+            inside(&action, &band),
             "{:?} lies outside the band {:?}",
             action.rect,
             band.rect
         );
     }
     assert!(
-        rt.accessibility_action(
-            "sheet.conflict.sentence",
-            rune::accesskit::Action::ScrollDown,
-            None
-        ),
-        "the sentence gives way by scrolling, but its view {:?} holds it all",
-        sentence.rect
+        inside(&view, &notice),
+        "the sentence's view {:?} runs out of its notice {:?}",
+        view.rect,
+        notice.rect
+    );
+    let sentence = |rt: &Runtime<()>| {
+        rt.elements()
+            .into_iter()
+            .find(|e| {
+                e.text
+                    .as_deref()
+                    .is_some_and(|t| t.starts_with("This automation changed"))
+            })
+            .expect("the notice's sentence")
+            .rect
+    };
+    let [_, top, _, tall] = sentence(&rt);
+    assert!(
+        tall > view.rect[3],
+        "the sentence, {tall} tall, fits its view {:?}: the story no longer gives way",
+        view.rect
+    );
+    rt.accessibility_action(
+        "sheet.conflict.sentence",
+        rune::accesskit::Action::ScrollDown,
+        None,
+    );
+    for _ in 0..60 {
+        rt.frame(1.0 / 60.0);
+    }
+    assert!(
+        sentence(&rt)[1] < top,
+        "the sentence scrolls in its view: its top stays at {top}"
     );
     assert!(
         band.rect[1] + band.rect[3] <= body.rect[1],
