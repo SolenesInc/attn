@@ -1,11 +1,11 @@
 use attn_protocol::{AutomationProvenance, Session, SessionPullRequest};
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Key, KeyEvent, TextStyle, Tx, col, el, row, text};
-use rune_kit::{Button, ButtonVariant, Placement};
+use attn_ui::blocks::{Actions, Block, Facts, HeaderPiece, Inline, Popover, Stack};
+use attn_ui::system::{Button, DotShape, DotSize, Link, Look, Size, Type, dot, keys_hint, words};
+use rune::{Color, El, Key, KeyEvent, Tx};
+use rune_kit::Placement;
 
-use super::fit::{Level, Widths, text_w};
+use super::fit::{Level, Widths};
 use super::header_pop::{self, Pop, What};
 use crate::State;
 
@@ -160,19 +160,13 @@ pub(crate) fn badge(session: &Session) -> Option<Badge> {
 
 pub(crate) fn badge_view(row_key: &str, badge: &Badge, t: &Tokens) -> El {
     let number = format!("#{}", badge.number);
-    row()
+    Inline::joined()
         .key(format!("{row_key}.pr"))
         .role("img")
         .label(badge.said.clone())
         .a11y_value(number.clone())
-        .items_center()
-        .gap(4.0)
-        .child(el().w(6.0).h(6.0).radius(3.0).fill(badge.tone.color(t)))
-        .child(
-            text(number)
-                .font(type_::MONO_CAPTION)
-                .color(t.text_secondary),
-        )
+        .child(dot(badge.tone.color(t), DotShape::Filled, DotSize::Small))
+        .child(words(number, Type::Mono, t.text_secondary))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -209,33 +203,23 @@ pub(crate) fn run(session: &Session) -> Option<Run> {
 }
 
 pub(crate) fn run_view(row_key: &str, run: &Run, t: &Tokens) -> El {
-    row()
+    Inline::line()
         .key(format!("{row_key}.run"))
         .role("img")
         .label(run.said.clone())
         .a11y_value(run.shown())
-        .items_center()
-        .gap(4.0)
         .shrink()
         .max_w(RUN_MAX_W)
+        .child(words(attn_ui::glyph::BOLT, Type::Mono, t.text_tertiary))
         .child(
-            text(attn_ui::glyph::BOLT)
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary),
-        )
-        .child(
-            text(run.definition.clone())
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary)
+            words(run.definition.clone(), Type::Mono, t.text_tertiary)
                 .single_line()
                 .truncate()
                 .shrink(),
         )
         .children(run.number.map(|n| {
-            text(format!("#{n}"))
+            words(format!("#{n}"), Type::Mono, t.text_tertiary)
                 .key(format!("{row_key}.run.number"))
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary)
                 .single_line()
         }))
 }
@@ -343,82 +327,87 @@ fn parts(line: &Line) -> Vec<Part<'_>> {
     parts
 }
 
-/// The provenance line in the header of `leaf`, in full or as its icons alone.
-pub(super) fn piece(
-    leaf: &str,
-    session: &str,
-    line: &Line,
-    level: Level,
-    font: TextStyle,
-    t: &Tokens,
-) -> El {
+/// The provenance line in the header of `leaf`, in full or as its icons alone, inked by `t`
+/// when it is drawn and by nothing when it is only measured.
+fn face(leaf: &str, session: &str, line: &Line, level: Level, t: Option<&Tokens>) -> HeaderPiece {
     let icons = level == Level::Icon;
+    let ink = |pick: fn(&Tokens) -> Color| t.map_or(Color::TRANSPARENT, pick);
     let pr_name = line.pull_request.as_ref().map(|pr| pr.name.as_str());
     let target_name = line
         .automation
         .as_ref()
         .and_then(|a| a.target.as_ref())
         .map(|t| t.name.as_str());
-    let shown = parts(line).into_iter().filter_map(|part| {
-        let content = if icons {
-            part.icon?.to_owned()
-        } else {
-            part.text
-        };
-        let said = |ink| text(content.clone()).font(font).single_line().color(ink);
-        let accent = if icons { t.accent } else { t.text_secondary };
-        Some(match part.does {
-            Does::Say => said(t.text_tertiary),
-            Does::Title => said(t.text_secondary),
-            Does::Status(tone) => said(tone.color(t)),
-            Does::OpenTarget(url) => {
-                let url = url.to_owned();
-                header_pop::link(
-                    format!("Open pull request {}", target_name.unwrap_or_default()),
-                    content,
-                    font,
-                    accent,
-                    t,
-                    move |state, tx| open(state, &url, tx),
-                )
-                .key(format!("tile.{leaf}.automation.target"))
-            }
-            Does::ShowDetails => {
-                let pressed = (leaf.to_owned(), session.to_owned());
-                let details = header_pop::link(
-                    format!("Pull request {} details", pr_name.unwrap_or_default()),
-                    content,
-                    font,
-                    accent,
-                    t,
-                    move |state, tx| {
-                        header_pop::press(state, &pressed.0, &pressed.1, What::Details, tx)
-                    },
-                )
-                .key(header_pop::anchor(leaf, What::Details));
-                header_pop::hovers(details, leaf, session, What::Details)
+    let accent = if icons {
+        ink(|t| t.accent)
+    } else {
+        ink(|t| t.text_secondary)
+    };
+    parts(line)
+        .into_iter()
+        .fold(HeaderPiece::new(), |face, part| {
+            let Some(shown) = (if icons {
+                part.icon.map(str::to_owned)
+            } else {
+                Some(part.text)
+            }) else {
+                return face;
+            };
+            match part.does {
+                Does::Say => face.words(shown, ink(|t| t.text_tertiary)),
+                Does::Title => face.words(shown, ink(|t| t.text_secondary)),
+                Does::Status(tone) => {
+                    face.words(shown, t.map_or(Color::TRANSPARENT, |t| tone.color(t)))
+                }
+                Does::OpenTarget(url) => {
+                    let url = url.to_owned();
+                    face.link(
+                        format!("tile.{leaf}.automation.target"),
+                        format!("Open pull request {}", target_name.unwrap_or_default()),
+                        shown,
+                        accent,
+                        move |link| {
+                            link.on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                                open(state, &url, tx)
+                            })
+                        },
+                    )
+                }
+                Does::ShowDetails => {
+                    let (leaf, session) = (leaf.to_owned(), session.to_owned());
+                    face.link(
+                        header_pop::anchor(&leaf, What::Details),
+                        format!("Pull request {} details", pr_name.unwrap_or_default()),
+                        shown,
+                        accent,
+                        move |link| {
+                            let pressed = (leaf.clone(), session.clone());
+                            let link = link.on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                                header_pop::press(state, &pressed.0, &pressed.1, What::Details, tx)
+                            });
+                            header_pop::hovers(link, &leaf, &session, What::Details)
+                        },
+                    )
+                }
             }
         })
-    });
-    row()
+}
+
+/// The provenance line in the header of `leaf`, in full or as its icons alone.
+pub(super) fn piece(leaf: &str, session: &str, line: &Line, level: Level, t: &Tokens) -> El {
+    face(leaf, session, line, level, Some(t))
+        .build(t)
         .key(format!("tile.{leaf}.provenance"))
-        .items_center()
-        .gap(space::S1)
-        .children(shown)
 }
 
 /// The provenance line's width in full, and as its icons alone.
-pub(super) fn widths(line: &Line, font: TextStyle) -> Widths {
-    let run = |texts: Vec<&str>| {
-        texts.iter().map(|s| text_w(s, font)).sum::<f32>()
-            + space::S1 * texts.len().saturating_sub(1) as f32
-    };
-    let parts = parts(line);
-    let icons: Vec<&str> = parts.iter().filter_map(|p| p.icon).collect();
+pub(super) fn widths(line: &Line) -> Widths {
+    let at = |level| face("", "", line, level, None).width();
+    let has_icons = parts(line).iter().any(|p| p.icon.is_some());
     Widths {
-        full: run(parts.iter().map(|p| p.text.as_str()).collect()),
+        full: at(Level::Full),
         short: None,
-        icon: (!icons.is_empty()).then(|| run(icons)),
+        icon: has_icons.then(|| at(Level::Icon)),
     }
 }
 
@@ -469,6 +458,10 @@ fn age(created: &str, now_ms: i64) -> String {
     format!("{ago} · {when}")
 }
 
+/// How wide the details stand: a pull request's title of 60 characters keeps two lines in
+/// `Name`.
+const DETAILS_W: f32 = 360.0;
+
 /// The open details popover: the picked pull request's state, and the others the session has.
 pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     let session = state.facts.sessions.iter().find(|s| s.id == pop.session)?;
@@ -481,82 +474,52 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         .min(all.len().checked_sub(1)?);
     let current = all[picked];
     let identity = target_name(&current.repository, current.number);
-    let pair = |name: &str, (value, tone): (String, Tone)| {
-        row()
-            .w_full()
-            .gap(space::S2)
-            .child(
-                text(name.to_owned())
-                    .font(type_::LABEL)
-                    .color(t.text_tertiary)
-                    .w(64.0),
-            )
-            .child(
-                text(value)
-                    .font(type_::LABEL)
-                    .color(match tone {
-                        Tone::Neutral => t.text_secondary,
-                        tone => tone.color(t),
-                    })
-                    .grow(1.0),
-            )
+    let surface_key = pop.surface();
+    let fact = |facts: Facts, name: &str, (value, tone): (String, Tone)| {
+        let ink = match tone {
+            Tone::Neutral => t.text_secondary,
+            tone => tone.color(t),
+        };
+        facts.item(
+            format!("{surface_key}.{name}"),
+            name.to_owned(),
+            words(value, Type::Body, ink),
+        )
     };
-    let state_rows: Vec<El> = if current
+    let facts = fact(
+        Facts::new(format!("{surface_key}.facts")),
+        "state",
+        (current.state.clone(), Tone::Neutral),
+    );
+    let facts = if current
         .status_fetched_at
         .as_deref()
         .is_none_or(str::is_empty)
     {
-        vec![pair("status", ("waiting for GitHub".into(), Tone::Neutral))]
+        fact(
+            facts,
+            "status",
+            ("waiting for GitHub".into(), Tone::Neutral),
+        )
     } else {
-        vec![
-            pair("checks", said(checks(current))),
-            pair("review", said(review(current))),
-            pair("merge", said(merge(current))),
-        ]
+        let facts = fact(facts, "checks", said(checks(current)));
+        let facts = fact(facts, "review", said(review(current)));
+        fact(facts, "merge", said(merge(current)))
     };
-    let url = current.url.clone();
-    let head = row()
-        .w_full()
-        .gap(space::S2)
-        .items_center()
-        .child({
-            let title = current
-                .title
-                .clone()
-                .filter(|t| !t.is_empty())
-                .unwrap_or_else(|| identity.clone());
-            Button::new(format!("Open {identity} on GitHub"))
-                .variant(ButtonVariant::Ghost)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &url, tx))
-                .label_with(move |_, ink| {
-                    text(title)
-                        .font(type_::LABEL)
-                        .color(ink)
-                        .truncate()
-                        .grow(1.0)
-                })
-                .build(attn_ui::kit(t))
-                .key(format!("{}.title", pop.surface()))
-                .h(type_::LABEL.line_px())
-                .px(0.0)
-                .justify_start()
-                .min_w(0.0)
-                .grow(1.0)
-        })
-        .child(
-            text(identity.clone())
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
-        );
-    let list = (all.len() > 1).then(|| {
-        col()
+    let facts = fact(
+        facts,
+        "opened",
+        (age(&current.created_at, state.window.now_ms), Tone::Neutral),
+    );
+    let mut blocks = vec![facts.build(t)];
+    if all.len() > 1 {
+        let list = Stack::tight()
             .role("list")
             .label("Pull requests from this session")
             .w_full()
-            .gap(2.0)
             .children(all.iter().enumerate().map(|(i, pr)| {
                 let url = pr.url.clone();
-                text(format!(
+                let shown = format!(
                     "#{} {} · {}",
                     pr.number,
                     pr.title
@@ -564,50 +527,59 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
                         .filter(|t| !t.is_empty())
                         .unwrap_or_else(|| pr.url.clone()),
                     status(pr).0
-                ))
-                .key(format!("{}.pr.{i}", pop.surface()))
-                .role("button")
-                .font(type_::LABEL)
-                .color(if i == picked {
-                    t.text_primary
-                } else {
-                    t.text_secondary
-                })
-                .single_line()
-                .truncate()
+                );
+                El::from(
+                    Link::new(format!("{surface_key}.pr.{i}"), shown)
+                        .ink(if i == picked {
+                            t.text_primary
+                        } else {
+                            t.text_secondary
+                        })
+                        .build(t),
+                )
+                .focusable(false)
                 .on_hover_change(move |state: &mut State, inside, _: &mut Tx| {
                     if inside {
                         state.window.desk.header_pop.picked = i;
                     }
                 })
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &url, tx))
-            }))
-    });
-    let hints = if all.len() > 1 {
-        "↑↓ pick · ↵ open · c copy url"
-    } else {
-        "↵ open · c copy url"
-    };
-    let surface = col()
-        .key(pop.surface())
-        .role("dialog")
+            }));
+        blocks.push(Block::custom(format!("{surface_key}.prs"), list));
+    }
+    let picking = all.len() > 1;
+    let url = current.url.clone();
+    let open_button: El = Button::new("Open on GitHub ↗")
+        .look(Look::Plain)
+        .size(Size::Compact)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &url, tx))
+        .build(t)
+        .key(format!("{surface_key}.title"))
+        .label(format!("Open {identity} on GitHub"))
+        .into();
+    let title = current
+        .title
+        .clone()
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| identity.clone());
+    let surface = Popover::new(surface_key.clone(), title)
+        .aside(words(identity.clone(), Type::Mono, t.text_tertiary))
+        .push_all(blocks)
+        .actions(
+            Actions::new("open").push(open_button).push(
+                Inline::loose()
+                    .key(format!("{surface_key}.keys"))
+                    .children(picking.then(|| keys_hint(["↑", "↓"], "pick", t)))
+                    .child(keys_hint(["↵"], "open", t))
+                    .child(keys_hint(["c"], "copy url", t)),
+            ),
+        )
+        .build(t)
         .label(format!("Pull request {identity}"))
-        .w(320.0)
-        .padding(space::S2)
-        .gap(space::S1)
-        .focusable(true)
+        .w(DETAILS_W)
         .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
             header_pop::hover_popover(state, inside, tx)
-        })
-        .child(head)
-        .child(pair("state", (current.state.clone(), Tone::Neutral)))
-        .children(state_rows)
-        .child(pair(
-            "opened",
-            (age(&current.created_at, state.window.now_ms), Tone::Neutral),
-        ))
-        .children(list)
-        .child(text(hints).font(type_::LABEL).color(t.text_muted));
+        });
     let surface = if pop.pinned {
         let urls: Vec<String> = all.iter().map(|pr| pr.url.clone()).collect();
         surface
@@ -623,7 +595,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     };
     Some(rune_kit::popover::anchored(
         attn_ui::kit(t),
-        rune_kit::popover::raised(attn_ui::kit(t), surface, 6.0),
+        surface,
         &pop.anchor(),
         Placement::BottomStart,
         4.0,

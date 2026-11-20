@@ -3,11 +3,12 @@
 
 use attn_client::Desktop;
 use attn_protocol::{DesktopMoveLeafMessage, DesktopSetWantedColsMessage, SetSettingMessage};
-use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens};
-use rune::tok::space;
-use rune::{Drag, El, Phase, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant};
+use attn_ui::Tokens;
+use attn_ui::blocks::{self, Card, Inline, Menu};
+use attn_ui::system::{
+    DotShape, DotSize, IconSize, Size, Type, dot as state_dot, icon_button, words,
+};
+use rune::{Drag, El, Phase, Tx, row};
 
 use super::drag::{Owner, Source};
 
@@ -21,9 +22,7 @@ use crate::sidebar::AgentState;
 
 const CHIP_PX: f32 = 112.0;
 const LIVE_DOT_PX: f32 = 28.0;
-const LIVE_PAD_PX: f32 = 4.0;
-const MARK_PX: f32 = 7.0;
-const SHELF_GAP_PX: f32 = 4.0;
+const MARK: DotSize = DotSize::Small;
 const CAPS_PX: f32 = 104.0;
 /// How long the width label shows after fewer or more tiles.
 const WIDTH_LABEL_SECONDS: f64 = 1.5;
@@ -32,6 +31,8 @@ const FLASH_SECONDS: f64 = 0.9;
 /// The Tauri app's `top: calc(100% + 4px)` between the shelf's dots and the width control,
 /// which the control's own edge spans so the pointer crosses it without leaving both.
 const WIDTH_CONTROL_GAP_PX: f32 = 4.0;
+/// How far under the title bar's controls the layers they open hang.
+const ANCHOR_GAP_PX: f32 = 4.0;
 
 const FLASH_FADE: &[rune::Beat] = &[
     rune::Beat::new(0.0).opacity(1.0),
@@ -245,7 +246,7 @@ impl Shelf {
         let (before, screen, after) =
             (chips(&plan.before), chips(&plan.screen), chips(&plan.after));
         let available = desk.shelf_px.unwrap_or(f32::INFINITY);
-        let live = 2.0 * LIVE_PAD_PX + screen.iter().map(dot_px).sum::<f32>() + SHELF_GAP_PX;
+        let live = screen.iter().map(dot_px).sum::<f32>() + blocks::Shelf::gap();
         let (left, right) = allot(available, before.len(), after.len(), live);
         Some(Shelf {
             desktop: desktop.id.clone(),
@@ -330,7 +331,6 @@ fn view(state: &State, shelf: Option<Shelf>, t: &Tokens) -> Option<El> {
     let dots = row()
         .key("shelf.live")
         .items_center()
-        .px(LIVE_PAD_PX)
         .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
             state.window.desk.width_control.dots = inside
         })
@@ -355,22 +355,20 @@ fn view(state: &State, shelf: Option<Shelf>, t: &Tokens) -> Option<El> {
         owner()
             .role("toolbar")
             .label("Shelf")
-            .items_center()
-            .gap(SHELF_GAP_PX)
             .on_layout_tx(|state: &mut State, rect, tx: &mut Tx| record(state, "shelf", rect, tx))
             .children(menu(Edge::Left, shelf.before_cap()))
             .children(
                 shelf
                     .before_chips()
                     .iter()
-                    .map(|c| chip_button(c, id, peeked.as_deref(), mark(c), t)),
+                    .map(|c| chip_button(c, id, peeked.as_deref(), mark(c), Width::Slot, t)),
             )
             .child(dots)
             .children(
                 shelf
                     .after_chips()
                     .iter()
-                    .map(|c| chip_button(c, id, peeked.as_deref(), mark(c), t)),
+                    .map(|c| chip_button(c, id, peeked.as_deref(), mark(c), Width::Slot, t)),
             )
             .children(menu(Edge::Right, shelf.after_cap())),
     )
@@ -378,7 +376,7 @@ fn view(state: &State, shelf: Option<Shelf>, t: &Tokens) -> Option<El> {
 
 /// The shelf's row, which runs its chips' drags.
 fn owner() -> El {
-    super::view::moves_with_the_row(row().key("shelf")).on_drag(
+    super::view::moves_with_the_row(blocks::Shelf::row("shelf")).on_drag(
         |state: &mut State, d: &mut Drag, tx: &mut Tx| {
             super::drag::gesture(state, d, tx, Owner::Shelf)
         },
@@ -425,6 +423,13 @@ pub(crate) fn slot(state: &State, t: &Tokens) -> El {
         .children(view(state, shelf, t))
 }
 
+/// How wide a column's chip stands: its slot of the shelf, or the whole width of a cap's menu.
+#[derive(Clone, Copy)]
+enum Width {
+    Slot,
+    Full,
+}
+
 /// A column's chip. The pointer resting on it peeks at the tile it brings, or at the tile whose
 /// mark it rests on; `peeked` is the tile the open peek shows.
 fn chip_button(
@@ -432,6 +437,7 @@ fn chip_button(
     desktop: &str,
     peeked: Option<&str>,
     drop: Option<Edge>,
+    width: Width,
     t: &Tokens,
 ) -> El {
     let key = format!("shelf.chip.{}", chip.key);
@@ -447,7 +453,6 @@ fn chip_button(
             let (desktop, leaf, column) = (desktop.to_owned(), leaf.clone(), chip.key.clone());
             row()
                 .key(format!("{key}.member.{i}"))
-                .pt(2.0)
                 .border_sides(
                     [0.0, 0.0, 2.0, 0.0],
                     if peeked {
@@ -475,20 +480,32 @@ fn chip_button(
     .map(|(_, words)| *words)
     .collect::<Vec<_>>()
     .join(", ");
-    let chip = row()
-        .key(key.clone())
-        .role("button")
-        .label(chip.label.clone())
+    let face = Inline::line()
+        .w_full()
+        .child(blocks::Shelf::marks(marks))
+        .child(
+            words(
+                chip.label.clone(),
+                Type::Small,
+                if chip.arrival.is_some() {
+                    t.text_primary
+                } else {
+                    t.text_secondary
+                },
+            )
+            .single_line()
+            .truncate()
+            .grow(1.0),
+        )
+        .children((0..chip.asking).map(|i| {
+            words("?", Type::Label, t.accent)
+                .key(format!("{key}.ask.{i}"))
+                .role("img")
+                .label("Open ask")
+        }));
+    let chip = blocks::Shelf::chip(key.clone(), chip.label.clone(), face, false, t)
         .a11y_value(state)
-        .w(CHIP_PX - space::S1)
         .min_w(0.0)
-        .h(22.0)
-        .items_center()
-        .gap(5.0)
-        .px(6.0)
-        .radius(5.0)
-        .fill(t.bg_button)
-        .border(1.0, t.border)
         .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
             record(state, &recorded, rect, tx)
         })
@@ -501,28 +518,11 @@ fn chip_button(
             let (desktop, leaf, column) = &moved;
             super::peek::hover_chip(state, desktop, leaf, column, tx)
         })
-        .children(marks)
-        .child(
-            text(chip.label.clone())
-                .font(type_::CAPTION)
-                .color(if chip.arrival.is_some() {
-                    t.text_primary
-                } else {
-                    t.text_secondary
-                })
-                .single_line()
-                .truncate()
-                .grow(1.0),
-        )
-        .children((0..chip.asking).map(|i| {
-            text("?")
-                .key(format!("{key}.ask.{i}"))
-                .role("img")
-                .label("Open ask")
-                .font(type_::LABEL)
-                .color(t.accent)
-        }))
         .children(flash);
+    let chip = match width {
+        Width::Slot => chip.w(CHIP_PX - blocks::Shelf::gap()),
+        Width::Full => chip.w_full(),
+    };
     drop_bar(chip, drop, t)
 }
 
@@ -530,11 +530,7 @@ fn chip_button(
 /// the Tauri app's `desktop-shelf-chip-arrival`; keyed by when the flash ends, so a new flash
 /// plays from the start.
 fn flash_ring(chip_key: &str, until: u64, t: &Tokens) -> El {
-    rune::el()
-        .key(format!("{chip_key}.flash.{until}"))
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .radius(5.0)
-        .border(1.0, t.accent)
+    blocks::Shelf::flash(format!("{chip_key}.flash.{until}"), t)
         .transition(rune::Transition::none())
         .sequence(rune::Sequence::new(FLASH_FADE))
 }
@@ -542,54 +538,41 @@ fn flash_ring(chip_key: &str, until: u64, t: &Tokens) -> El {
 /// A tile's mark on its chip: an agent's state dot, or a square, in the warning colour while
 /// the chip needs the person.
 fn member_mark(member: Member, needs: bool, t: &Tokens) -> El {
-    let mark = rune::el();
     match member {
-        Member::Agent(state) => mark
-            .w(MARK_PX)
-            .h(MARK_PX)
-            .radius(MARK_PX / 2.0)
-            .fill(crate::sidebar::state_color(state, t)),
-        Member::Tile => mark.w(MARK_PX).h(MARK_PX).radius(1.0).fill(if needs {
-            t.warning
-        } else {
-            t.text_secondary
-        }),
+        Member::Agent(state) => state_dot(
+            crate::sidebar::state_color(state, t),
+            DotShape::Filled,
+            MARK,
+        ),
+        Member::Tile => state_dot(
+            if needs { t.warning } else { t.text_secondary },
+            DotShape::Square,
+            MARK,
+        ),
     }
 }
 
-/// How wide a tile on screen's button is: its marks 1 point apart with 2 points either side, and
-/// at least `LIVE_DOT_PX`.
+/// How wide a tile on screen's button is: its marks, and at least `LIVE_DOT_PX`.
 fn dot_px(chip: &Chip) -> f32 {
-    let marks = chip.members.len() as f32;
-    (4.0 + marks * MARK_PX + (marks - 1.0).max(0.0)).max(LIVE_DOT_PX)
+    blocks::Shelf::marks_chip_width(chip.members.len(), MARK).max(LIVE_DOT_PX)
 }
 
 /// A tile on screen's button in the shelf, as the Tauri app's `.desktop-shelf-dot`: the marks
-/// of its column's tiles, underlined while it holds the active tile.
+/// of its column's tiles, filled while it holds the active tile.
 fn dot(chip: &Chip, current: bool, desktop: &str, t: &Tokens) -> El {
     let (desktop, leaf) = (desktop.to_owned(), chip.go.clone());
-    row()
-        .key(format!("shelf.dot.{}", chip.key))
-        .role("button")
-        .label(chip.label.clone())
-        .a11y_value(if current { "current" } else { "" })
-        .min_w(LIVE_DOT_PX)
-        .h(22.0)
-        .px(2.0)
-        .gap(1.0)
-        .center()
-        .border_sides(
-            [0.0, 0.0, 2.0, 0.0],
-            if current {
-                t.text_secondary
-            } else {
-                rune::Color::TRANSPARENT
-            },
-        )
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            actions::show_leaf(state, &desktop, &leaf, tx)
-        })
-        .children(chip.members.iter().map(|m| member_mark(*m, false, t)))
+    blocks::Shelf::chip(
+        format!("shelf.dot.{}", chip.key),
+        chip.label.clone(),
+        blocks::Shelf::marks(chip.members.iter().map(|m| member_mark(*m, false, t))),
+        current,
+        t,
+    )
+    .a11y_value(if current { "current" } else { "" })
+    .min_w(LIVE_DOT_PX)
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+        actions::show_leaf(state, &desktop, &leaf, tx)
+    })
 }
 
 /// The accent bar on the side of a chip or cap a dragged tile would land on.
@@ -617,23 +600,20 @@ fn cap(side: Edge, chips: &[Chip], open: bool, drop: bool, t: &Tokens) -> Option
     } else {
         t.text_secondary
     };
-    let cap = Button::new(format!("{n} more this way"))
-        .variant(ButtonVariant::Ghost)
-        .on_press(move |state: &mut State| {
-            let desk = &mut state.window.desk;
-            desk.cap_open = (desk.cap_open != Some(side)).then_some(side);
-        })
-        .label_with(move |_, _| text(caption).font(type_::LABEL).color(ink))
-        .build(attn_ui::kit(t))
-        .key(key)
-        .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
-            record(state, &recorded, rect, tx)
-        })
-        .a11y_value(if open { "open" } else { "" })
-        .h(type_::LABEL.line_px() + 2.0 * space::S1)
-        .px(space::S2)
-        .radius(4.0)
-        .border(1.0, t.border);
+    let cap = blocks::Shelf::chip(
+        key,
+        format!("{n} more this way"),
+        words(caption, Type::Label, ink),
+        open,
+        t,
+    )
+    .on_press(move |state: &mut State| {
+        let desk = &mut state.window.desk;
+        desk.cap_open = (desk.cap_open != Some(side)).then_some(side);
+    })
+    .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| record(state, &recorded, rect, tx))
+    .a11y_value(if open { "open" } else { "" })
+    .focusable(true);
     Some(drop_bar(cap, drop.then_some(side), t))
 }
 
@@ -657,29 +637,25 @@ pub(crate) fn cap_menu(state: &State, t: &Tokens) -> Option<El> {
         return holding(state, Owner::Menu).then_some(layer);
     }
     let peeked = super::peek::peeked(state, &shelf.desktop);
-    let menu = col()
-        .key(format!("shelf.menu.{name}"))
-        .role("menu")
-        .label(format!("{} more this way", held.len()))
-        .padding(space::S1)
-        .gap(space::S1)
-        .children(
-            held.iter()
-                .map(|c| chip_button(c, &shelf.desktop, peeked.as_deref(), None, t)),
-        );
-    let menu = rune_kit::popover::raised(attn_ui::kit(t), menu, 6.0);
-    let place = row().w_full().padding(space::S2);
-    let place = match side {
-        Edge::Left => place,
-        Edge::Right => place.justify_end(),
-    };
-    Some(
-        layer.child(
-            place
-                .absolute(0.0, crate::shell::TITLE_BAR_HEIGHT)
-                .child(menu),
-        ),
+    let menu = Menu::new(
+        format!("shelf.menu.{name}"),
+        format!("{} more this way", held.len()),
     )
+    .rows(
+        held.iter()
+            .map(|c| chip_button(c, &shelf.desktop, peeked.as_deref(), None, Width::Full, t)),
+    )
+    .build(t)
+    .anchored(
+        format!("shelf.cap.{name}"),
+        rune::Side::Bottom,
+        match side {
+            Edge::Left => rune::Align::Start,
+            Edge::Right => rune::Align::End,
+        },
+        ANCHOR_GAP_PX,
+    );
+    Some(layer.child(menu))
 }
 
 /// A press on an open cap's menu drags the chip under it; one beside the menu closes it.
@@ -709,20 +685,18 @@ pub(crate) fn width_control_layer(state: &State, t: &Tokens) -> Option<El> {
     }
     let shelf = Shelf::of(state)?;
     let leading = shelf.before_cap().is_empty() && shelf.before_chips().is_empty();
-    let control = width_control(shelf.screen.len(), Desk::narrowest_cols(&state.facts), t)
-        .px(6.0)
-        .py(3.0)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border);
+    let control = raised(
+        "shelf.width.anchor",
+        width_control(shelf.screen.len(), Desk::narrowest_cols(&state.facts), t),
+        t,
+    );
     Some(
-        col()
-            .key("shelf.width.anchor")
-            .pt(WIDTH_CONTROL_GAP_PX)
+        rune::col()
+            .child(rune::el().h(WIDTH_CONTROL_GAP_PX))
+            .child(control)
             .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
                 state.window.desk.width_control.control = inside
             })
-            .child(control)
             .anchored(
                 "shelf.live",
                 rune::Side::Bottom,
@@ -736,38 +710,42 @@ pub(crate) fn width_control_layer(state: &State, t: &Tokens) -> Option<El> {
     )
 }
 
+/// `content` on a small card raised over the tiles, keyed `key`.
+fn raised(key: &str, content: El, t: &Tokens) -> El {
+    attn_ui::Frame::menu(t).draw(Card::new(key).push(content).build(t))
+}
+
 fn width_control(shown: usize, cols: u32, t: &Tokens) -> El {
-    let button = |key: &str, label: &str, glyph: &str, action: Action| {
-        GlyphButton::new(glyph, label)
-            .font(type_::LABEL)
-            .side(type_::LABEL.line_px())
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                crate::dispatch::dispatch(state, action.clone(), tx);
-            })
-            .build(attn_ui::kit(t))
-            .key(key.to_owned())
-            .px(space::S1)
+    let button = |key: &str, label: &str, mark: &'static str, action: Action| {
+        El::from(
+            icon_button(key, label, mark, IconSize::Small)
+                .size(Size::Small)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    crate::dispatch::dispatch(state, action.clone(), tx);
+                })
+                .build(t),
+        )
     };
-    row()
+    Inline::joined()
         .key("shelf.width")
-        .items_center()
-        .gap(space::S1)
         .child(
-            text(format!("{shown} · ≥{cols} cols"))
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-                .single_line(),
+            words(
+                format!("{shown} · ≥{cols} cols"),
+                Type::Label,
+                t.text_tertiary,
+            )
+            .single_line(),
         )
         .child(button(
             "shelf.width.fewer",
             "Fewer, wider tiles",
-            "−",
+            attn_ui::glyph::MINUS,
             Action::ShelfFewerTiles,
         ))
         .child(button(
             "shelf.width.more",
             "More, narrower tiles",
-            "+",
+            attn_ui::glyph::PLUS,
             Action::ShelfMoreTiles,
         ))
 }
@@ -801,38 +779,32 @@ pub(crate) fn width_label(state: &State, t: &Tokens) -> Option<El> {
         })
         .collect::<Vec<_>>()
         .join(" ");
-    let card = col()
-        .key("shelf.width.label")
+    let tiles = format!("{shown} tile{}", if shown == 1 { "" } else { "s" });
+    let lines = attn_ui::blocks::Stack::tight()
+        .child(words(tiles.clone(), Type::Name, t.text_primary))
+        .child(words(
+            format!("at least {cols} cols each"),
+            Type::Small,
+            t.text_secondary,
+        ))
+        .children(cleared.map(|c| words(c, Type::Small, t.text_secondary)))
+        .child(words(steps, Type::Mono, t.text_tertiary));
+    let card = raised("shelf.width.label", lines, t)
         .role("status")
-        .label(format!("{shown} tile{}", if shown == 1 { "" } else { "s" }))
-        .padding(space::S2)
-        .gap(space::S1)
-        .child(
-            text(format!("{shown} tile{}", if shown == 1 { "" } else { "s" }))
-                .font(type_::LABEL)
-                .color(t.text_primary),
-        )
-        .child(
-            text(format!("at least {cols} cols each"))
-                .font(type_::LABEL)
-                .color(t.text_secondary),
-        )
-        .children(cleared.map(|c| text(c).font(type_::LABEL).color(t.text_secondary)))
-        .child(text(steps).font(type_::LABEL).color(t.text_tertiary));
-    let card = rune_kit::popover::raised(attn_ui::kit(t), card, 6.0);
+        .label(tiles);
     Some(
         rune::el()
             .key("shelf.width.layer")
             .inert()
-            .absolute(0.0, crate::shell::TITLE_BAR_HEIGHT)
+            .absolute(0.0, 0.0)
             .w_full()
-            .child(
-                row()
-                    .w_full()
-                    .justify_center()
-                    .padding(space::S2)
-                    .child(card),
-            ),
+            .h_full()
+            .child(card.anchored(
+                "shelf.slot",
+                rune::Side::Bottom,
+                rune::Align::Center,
+                ANCHOR_GAP_PX,
+            )),
     )
 }
 

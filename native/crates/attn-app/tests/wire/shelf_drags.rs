@@ -586,6 +586,32 @@ fn many_ids() -> Vec<String> {
 }
 
 #[test]
+fn a_press_on_a_cap_opens_the_menu_of_the_chips_it_holds_and_a_second_press_closes_it() {
+    let ids = many_ids();
+    let mut world = start(TWO_FIT, None, vec![many("p00", &ids)]);
+    world.gesture(|app| app.click(Target::key("shelf.cap.after")));
+    world.settle();
+    let menu = world
+        .screen()
+        .find(Target::key("shelf.menu.after"))
+        .expect("the cap opens its menu");
+    assert_eq!(menu.role, "menu");
+    assert!(
+        world.screen().find(Target::key("shelf.chip.p23")).is_some(),
+        "the menu holds the cap's chips"
+    );
+    world.gesture(|app| app.click(Target::key("shelf.cap.after")));
+    world.settle();
+    assert!(
+        world
+            .screen()
+            .find(Target::key("shelf.menu.after"))
+            .is_none()
+    );
+    rest(&mut world);
+}
+
+#[test]
 fn a_tile_dropped_on_the_trailing_cap_moves_past_the_rows_last_column_and_shows_beside_it() {
     let ids = many_ids();
     let mut world = start(TWO_FIT, None, vec![many("p00", &ids)]);

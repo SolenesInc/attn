@@ -1,14 +1,15 @@
 use std::collections::{HashMap, HashSet};
 
 use attn_protocol::{ActorView, Session};
-use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens};
-use rune::tok::space;
-use rune::{El, Key, KeyEvent, TextStyle, Tx, col, el, row, text};
-use rune_kit::ScrollBar;
-use rune_kit::{Button, ButtonVariant, Placement};
+use attn_ui::blocks::{Actions, Block, HeaderPiece, Popover, Prose};
+use attn_ui::system::{
+    DotShape, DotSize, IconSize, ListRow, Type, dot, icon_button, keys_hint, words,
+};
+use attn_ui::{Tokens, glyph, type_};
+use rune::{Color, El, Key, KeyEvent, Tx, col};
+use rune_kit::Placement;
 
-use super::fit::{Level, Widths, text_w};
+use super::fit::{Level, Widths};
 use super::header_pop::{self, Pop, What};
 use super::role_icon::Mark;
 use crate::State;
@@ -25,8 +26,6 @@ pub struct Trigger {
 }
 
 const MARK_PX: f32 = 14.0;
-const MARK_GAP: f32 = 5.0;
-const TRIGGER_PAD: f32 = 4.0;
 
 fn dispatched_by_party(session: &Session) -> bool {
     session
@@ -137,58 +136,47 @@ pub(crate) fn current_row(session: &str, sessions: &[Session]) -> usize {
         .unwrap_or(0)
 }
 
-/// The role in the header of `leaf`, which shows the delegation chain on hover and pins it on a
-/// press.
-pub(super) fn piece(
-    leaf: &str,
-    session: &str,
-    trigger: &Trigger,
-    level: Level,
-    font: TextStyle,
-    t: &Tokens,
-) -> El {
-    let pressed = (leaf.to_owned(), session.to_owned());
-    let color = if trigger.leads {
+/// The role's ink: the accent while it leads its chain.
+fn ink(trigger: &Trigger, t: &Tokens) -> Color {
+    if trigger.leads {
         t.accent
     } else {
         t.text_tertiary
-    };
-    let (mark, words) = (trigger.mark.clone(), trigger.text.clone());
-    let full = level == Level::Full;
-    let name_key = format!("{}.name", header_pop::anchor(leaf, What::Chain));
-    let role = Button::new(trigger.label.clone())
-        .variant(ButtonVariant::GhostMuted)
+    }
+}
+
+/// The role at `level` in `ink`, its name keyed `name_key`.
+fn face(trigger: &Trigger, name_key: String, level: Level, ink: Color) -> HeaderPiece {
+    let mark = trigger.mark.el(MARK_PX, type_::CAPTION, ink);
+    let piece = HeaderPiece::new().drawn(mark, trigger.mark.width(MARK_PX, type_::CAPTION));
+    if level == Level::Full {
+        piece.words_keyed(name_key, trigger.text.clone(), ink, None)
+    } else {
+        piece
+    }
+}
+
+/// The role in the header of `leaf`, which shows the delegation chain on hover and pins it on a
+/// press.
+pub(super) fn piece(leaf: &str, session: &str, trigger: &Trigger, level: Level, t: &Tokens) -> El {
+    let pressed = (leaf.to_owned(), session.to_owned());
+    let anchor = header_pop::anchor(leaf, What::Chain);
+    let role = face(trigger, format!("{anchor}.name"), level, ink(trigger, t))
+        .button(anchor, trigger.label.clone(), t)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             header_pop::press(state, &pressed.0, &pressed.1, What::Chain, tx)
         })
-        .label_with(move |_, _| {
-            row()
-                .items_center()
-                .gap(MARK_GAP)
-                .child(mark.el(MARK_PX, font, color))
-                .children(full.then(|| {
-                    text(words)
-                        .key(name_key)
-                        .font(font)
-                        .color(color)
-                        .single_line()
-                }))
-        })
-        .build(attn_ui::kit(t))
-        .key(header_pop::anchor(leaf, What::Chain))
-        .keeps_press_from_within()
-        .h(font.line_px().max(MARK_PX))
-        .px(TRIGGER_PAD);
+        .keeps_press_from_within();
     header_pop::hovers(role, leaf, session, What::Chain)
 }
 
 /// The role's width with its name, and as its mark alone.
-pub(super) fn widths(trigger: &Trigger, font: TextStyle) -> Widths {
-    let mark = trigger.mark.width(MARK_PX, font);
+pub(super) fn widths(trigger: &Trigger) -> Widths {
+    let at = |level| face(trigger, String::new(), level, Color::TRANSPARENT).button_width();
     Widths {
-        full: TRIGGER_PAD * 2.0 + mark + MARK_GAP + text_w(&trigger.text, font),
+        full: at(Level::Full),
         short: None,
-        icon: Some(TRIGGER_PAD * 2.0 + mark),
+        icon: Some(at(Level::Icon)),
     }
 }
 
@@ -210,22 +198,11 @@ pub(crate) fn on_row(
 fn chip(row: &str, session: &str, trigger: &Trigger, t: &Tokens) -> El {
     let host = header_pop::Host::Row(row.to_owned());
     let pressed = (host.clone(), session.to_owned());
-    let color = if trigger.leads {
-        t.accent
-    } else {
-        t.text_tertiary
-    };
-    let mark = trigger.mark.clone();
-    Button::new(trigger.label.clone())
-        .variant(ButtonVariant::GhostMuted)
+    face(trigger, String::new(), Level::Icon, ink(trigger, t))
+        .button(header_pop::row_anchor(row), trigger.label.clone(), t)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             header_pop::press_on(state, pressed.0.clone(), &pressed.1, What::Chain, tx)
         })
-        .label_with(move |_, _| mark.el(MARK_PX, type_::LABEL, color))
-        .build(attn_ui::kit(t))
-        .key(header_pop::row_anchor(row))
-        .h(MARK_PX + 4.0)
-        .px(2.0)
 }
 
 /// A sidebar row of an agent in a delegation chain, which shows the chain while the pointer
@@ -239,77 +216,59 @@ pub(crate) fn row_hovers(row_el: El, row: &str, session: &str) -> El {
     )
 }
 
-/// The open delegation chain, under its role, or beside the sidebar for a sidebar row.
+/// How wide the open chain stands: an agent named after its worktree,
+/// "attn--ds-page-blocks-delegation", keeps its name whole in `Name` two levels down.
+const CHAIN_W: f32 = 360.0;
+
+/// The open delegation chain, under its role, or beside the sidebar for a sidebar row: its
+/// agents as a tree, each with its role and its state, the one on screen marked.
 pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     let sessions = &state.facts.sessions;
-    let current = sessions.iter().find(|s| s.id == pop.session)?;
+    sessions.iter().find(|s| s.id == pop.session)?;
     let (rows, earlier) = tree(&pop.session, sessions);
     let picked = state.window.desk.header_pop.picked;
-    let close = GlyphButton::new("×", "Close delegation chain")
-        .variant(ButtonVariant::GhostFaint)
-        .font(type_::LABEL)
-        .side(type_::LABEL.line_px())
-        .on_press(|state: &mut State| header_pop::close(state))
-        .build(attn_ui::kit(t))
-        .key(format!("{}.close", pop.surface()));
-    let heading = row()
-        .w_full()
-        .items_center()
-        .child(
-            text(display_name(current))
-                .font(type_::LABEL)
-                .color(t.text_primary)
-                .truncate()
-                .grow(1.0),
-        )
-        .child(close);
+    let surface_key = pop.surface();
+    let close = icon_button(
+        format!("{surface_key}.close"),
+        "Close delegation chain",
+        glyph::TIMES,
+        IconSize::Large,
+    )
+    .on_press(|state: &mut State| header_pop::close(state))
+    .build(t);
     let agents = col()
         .key(agents_key(pop))
         .role("tree")
         .label("Agents in delegation chain")
         .w_full()
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .shrink()
-        .min_h(0.0)
-        .gap(2.0)
         .children(
             rows.iter()
                 .enumerate()
                 .map(|(i, (session, depth))| agent_row(pop, i, session, *depth, i == picked, t)),
+        );
+    let mut blocks = Vec::new();
+    blocks.extend(earlier.map(|name| {
+        Prose::hint(
+            format!("{surface_key}.earlier"),
+            format!("Started by {name}, which attn cannot show."),
         )
-        .scroll_bar_styled(attn_ui::scroll_bar(t));
-    let surface = col()
-        .key(pop.surface())
-        .role("dialog")
-        .label("Delegation chain")
+        .build(t)
+    }));
+    blocks.push(Block::custom(format!("{surface_key}.tree"), agents));
+    let keys = Actions::new("keys")
+        .push(keys_hint(["↑", "↓"], "move", t))
+        .push(keys_hint(["↵"], "open", t))
+        .push(keys_hint(["esc"], "close", t));
+    let surface = Popover::new(surface_key, "Delegation chain")
+        .aside(close)
+        .push_all(blocks)
+        .actions(keys)
+        .build(t)
+        .w(CHAIN_W)
         .active_descendant(row_key(pop, picked))
-        .w(300.0)
-        .padding(space::S2)
-        .gap(space::S1)
-        .min_h(0.0)
-        .focusable(true)
         .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
             header_pop::hover_popover(state, inside, tx)
-        })
-        .child(heading)
-        .child(
-            text("Delegation chain")
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
-        )
-        .children(earlier.map(|name| {
-            text(format!("↑ {name} · unavailable"))
-                .font(type_::LABEL)
-                .color(t.text_muted)
-        }))
-        .child(agents)
-        .child(
-            text("↑ ↓ navigate · ↵ open · esc close")
-                .font(type_::LABEL)
-                .color(t.text_muted),
-        );
+        });
     let surface = if pop.pinned {
         surface
             .on_key(chain_key)
@@ -327,7 +286,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     };
     Some(rune_kit::popover::anchored(
         attn_ui::kit(t),
-        rune_kit::popover::raised(attn_ui::kit(t), surface, 6.0),
+        surface,
         &anchor,
         placement,
         4.0,
@@ -338,13 +297,17 @@ fn agents_key(pop: &Pop) -> String {
     format!("{}.agents", pop.surface())
 }
 
+fn body_key(pop: &Pop) -> String {
+    format!("{}.body", pop.surface())
+}
+
 fn row_key(pop: &Pop, i: usize) -> String {
     format!("{}.agent.{i}", pop.surface())
 }
 
 /// Keeps the picked agent of the open chain in view.
 pub(crate) fn reveal(pop: &Pop, picked: usize, tx: &mut Tx) {
-    tx.scroll_into_view_in(agents_key(pop), row_key(pop, picked));
+    tx.scroll_into_view_in(body_key(pop), row_key(pop, picked));
 }
 
 fn agent_row(pop: &Pop, i: usize, session: &Session, depth: usize, picked: bool, t: &Tokens) -> El {
@@ -356,47 +319,26 @@ fn agent_row(pop: &Pop, i: usize, session: &Session, depth: usize, picked: bool,
         .unwrap_or_else(|| harness_label(&session.agent));
     let current = session.id == pop.session;
     let label = format!("{name} · {kind}{}", if current { " · current" } else { "" });
+    let agent_state = AgentState::parse(&session.state);
     let id = session.id.clone();
-    row()
-        .key(row_key(pop, i))
+    ListRow::new(row_key(pop, i), label)
         .role("treeitem")
-        .label(label)
-        .focus_selected(picked)
+        .unfocusable()
+        .depth(depth.min(u8::MAX as usize) as u8)
+        .lead(dot(
+            crate::sidebar::state_color(agent_state, t),
+            DotShape::Filled,
+            DotSize::Regular,
+        ))
+        .title(name)
+        .subtitle(kind, t)
+        .aside(words(agent_state.spoken(), Type::Small, t.text_tertiary))
+        .in_view(current)
+        .cursor(picked)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| select(state, &id, tx))
+        .build(t)
         .level(depth as u32 + 1)
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .pl(depth as f32 * 14.0)
-        .py(2.0)
-        .radius(4.0)
-        .fill(if picked { t.bg_selected } else { t.bg_elevated })
-        .child(
-            text(if depth > 0 { "↳" } else { "" })
-                .font(type_::LABEL)
-                .color(t.text_muted)
-                .w(10.0),
-        )
-        .child(
-            col()
-                .grow(1.0)
-                .child(
-                    text(name)
-                        .font(type_::LABEL)
-                        .color(t.text_primary)
-                        .truncate(),
-                )
-                .child(text(kind).font(type_::LABEL).color(t.text_tertiary)),
-        )
-        .children(current.then(|| text("current").font(type_::LABEL).color(t.text_tertiary)))
-        .child(
-            el().w(7.0)
-                .h(7.0)
-                .radius(3.5)
-                .fill(crate::sidebar::state_color(
-                    AgentState::parse(&session.state),
-                    t,
-                )),
-        )
+        .focus_selected(picked)
         .on_pointer_move_local(move |state: &mut State, _, tx: &mut Tx| {
             let pop = &mut state.window.desk.header_pop;
             if pop.picked == i {
@@ -405,7 +347,6 @@ fn agent_row(pop: &Pop, i: usize, session: &Session, depth: usize, picked: bool,
                 pop.picked = i;
             }
         })
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| select(state, &id, tx))
 }
 
 /// Up, Down, Home, End and Enter on a chain shown by hover, which takes them the way a pinned

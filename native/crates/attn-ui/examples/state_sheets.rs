@@ -14,6 +14,7 @@ use attn_ui::block_gallery::BLOCK_SUBJECTS;
 use attn_ui::board_gallery::BOARD_SUBJECTS;
 use attn_ui::chrome_gallery::CHROME_SHEETS;
 use attn_ui::colors::scheme_for;
+use attn_ui::desk_gallery::DESK_SHEETS;
 use attn_ui::floating_gallery::FLOATING_SUBJECTS;
 use attn_ui::gallery::{BANNERS, BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
 use attn_ui::panel_gallery::{PANEL_SUBJECTS, PANEL_VARIANTS};
@@ -815,7 +816,7 @@ fn main() {
 
 /// The sheets of the chrome's controls, as `attn_ui::chrome_gallery` lists them.
 fn chrome_sheets() -> impl Iterator<Item = Sheet> {
-    CHROME_SHEETS.iter().map(|sheet| Sheet {
+    CHROME_SHEETS.iter().chain(DESK_SHEETS).map(|sheet| Sheet {
         name: sheet.name,
         story: sheet.story,
         rows: sheet

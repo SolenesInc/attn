@@ -7,6 +7,7 @@ pub mod blocks;
 pub mod board_gallery;
 pub mod chrome_gallery;
 pub mod colors;
+pub mod desk_gallery;
 pub mod floating_gallery;
 pub mod panel_gallery;
 pub mod reading_gallery;

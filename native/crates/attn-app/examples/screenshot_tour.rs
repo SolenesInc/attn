@@ -33,8 +33,8 @@ use attn_protocol::{
     Seed, SeedCheck, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote,
     SeedPlotProgress, SeedReviewResultMessage, Session, SessionAnnotationsGetResultMessage,
     SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
-    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionUsage,
-    SessionUsageModel, SharedCodexBlocker, SharedCodexState, UpdateChangedMessage,
+    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionPullRequest,
+    SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState, UpdateChangedMessage,
     UpdateOutpostProgress, UpdateRun, Worktree, WorktreeListResult, WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Metrics};
@@ -1204,6 +1204,30 @@ fn tended_agent(dark: bool) -> InitialStateMessage {
 /// two agents off screen as chips; `hovered`, with the pointer on its dots, which show the
 /// width control.
 fn shelf(dark: bool, hovered: bool) {
+    let mut world = shelf_world(dark);
+    if hovered {
+        world.gesture(|app| {
+            let dots = app
+                .runtime
+                .find("shelf.live")
+                .expect("the shelf's dots are laid out");
+            app.move_to(dots);
+        });
+    }
+    snap(
+        &mut world,
+        if hovered {
+            "shelf-width-control"
+        } else {
+            "shelf"
+        },
+        dark,
+    );
+}
+
+/// The audit's desktop: the waiting reviewer active beside a shell and a document, and two
+/// agents off screen as chips.
+fn shelf_world(dark: bool) -> World {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     let named = |id: &str, label: &str, agent: &str, status: &str| Session {
         label: label.into(),
@@ -1238,24 +1262,48 @@ fn shelf(dark: bool, hovered: bool) {
     }
     let mut world = start(scripted().state(state));
     deliver(&mut world, "/repo/plan.md", DOCUMENT, None);
-    if hovered {
-        world.gesture(|app| {
-            let dots = app
-                .runtime
-                .find("shelf.live")
-                .expect("the shelf's dots are laid out");
-            app.move_to(dots);
-        });
+    world
+}
+
+/// The shelf of [`shelf`] with the pointer resting on the builder's chip, whose peek opens; in a
+/// window too narrow for the chip, on the chip in its cap's menu.
+fn shelf_peek(dark: bool) {
+    let mut world = shelf_world(dark);
+    world.resize((900.0, 600.0));
+    if world.screen().find(Target::key("shelf.chip.w")).is_none() {
+        let cap = ["shelf.cap.after", "shelf.cap.before"]
+            .into_iter()
+            .find(|key| world.screen().find(Target::key(*key)).is_some())
+            .expect("a chip the shelf has no room for is in a cap");
+        world.gesture(|app| app.click(Target::key(cap)));
+        world.settle();
     }
-    snap(
-        &mut world,
-        if hovered {
-            "shelf-width-control"
-        } else {
-            "shelf"
-        },
-        dark,
-    );
+    world.gesture(|app| {
+        let chip = app
+            .runtime
+            .find("shelf.chip.w")
+            .expect("the builder's chip is laid out");
+        app.move_to(chip);
+    });
+    world.advance(std::time::Duration::from_millis(400));
+    snap(&mut world, "shelf-peek", dark);
+}
+
+/// The shelf of [`shelf`] in a window too narrow for its chips, its cap's menu open, and the
+/// label fewer tiles shows.
+fn shelf_caps(dark: bool) {
+    let mut world = shelf_world(dark);
+    world.resize((900.0, 600.0));
+    let cap = ["shelf.cap.after", "shelf.cap.before"]
+        .into_iter()
+        .find(|key| world.screen().find(Target::key(*key)).is_some());
+    if let Some(cap) = cap {
+        world.gesture(|app| app.click(Target::key(cap)));
+    }
+    snap(&mut world, "shelf-cap-menu", dark);
+    let mut world = shelf_world(dark);
+    run(&mut world, Action::ShelfFewerTiles);
+    snap(&mut world, "shelf-width-label", dark);
 }
 
 /// Gives the review the keyboard as a click on its key line does: on "? all keys", which ends
@@ -6167,6 +6215,73 @@ fn session_chain_row(dark: bool) {
     snap(&mut world, "session-chain-row", dark);
 }
 
+/// Terminal `a`'s agent was started by an automation run on a pull request and opened two of
+/// its own, the newest with a title longer than the popover; its details pinned open.
+fn session_pr_details(dark: bool) {
+    let pull_request = |number: i64, state: &str, title: &str| SessionPullRequest {
+        repository: "github.com/victorarias/attn".into(),
+        number,
+        url: format!("https://github.com/victorarias/attn/pull/{number}"),
+        title: Some(title.into()),
+        created_at: "2026-11-12T08:00:00Z".into(),
+        state: state.into(),
+        ..SessionPullRequest::default()
+    };
+    let mut world = popover_world(
+        dark,
+        |state| {
+            let session = first_session(state);
+            session.pull_requests = Some(vec![
+                SessionPullRequest {
+                    ci_status: Some("pending".into()),
+                    review_status: Some("pending".into()),
+                    mergeable_state: Some("clean".into()),
+                    status_fetched_at: Some("2026-11-12T08:30:00Z".into()),
+                    ..pull_request(
+                        812,
+                        "open",
+                        "Chrome: the overview, the shelf, the peek and the seed chips draw through the blocks",
+                    )
+                },
+                pull_request(790, "merged", "Header pieces measure what they draw"),
+            ]);
+            session.automation = Some(AutomationProvenance {
+                run_id: "run-1".into(),
+                definition_id: 1,
+                definition_name: "Requested PR review - GPT Sol medium".into(),
+                trigger_type: "github_review_requested".into(),
+                ..AutomationProvenance::default()
+            });
+        },
+        |_| {},
+    );
+    world.gesture(|app| app.click(Target::key("tile.a.details")));
+    snap(&mut world, "session-pr-details", dark);
+}
+
+/// Terminal `a`'s agent orchestrates a chain three deep, its delegates named after their
+/// worktrees; the role in its header pins the chain open.
+fn session_chain_tile(dark: bool) {
+    let mut world = popover_world(
+        dark,
+        |state| {
+            let sessions = state.sessions.as_mut().expect("the tour's sessions");
+            sessions[0].delegation_role = Some(attn_protocol::SessionDelegationRole {
+                name: "Orchestrator".into(),
+                icon: Some("compass".into()),
+                ..Default::default()
+            });
+            sessions[1].dispatcher_session_id = Some("s0".into());
+            sessions[1].label = "attn--ds-page-blocks-delegation-appearance".into();
+            sessions[2].label = "attn--ds-chrome-overview-shelf-peek-seed-chips".into();
+            sessions[3].dispatcher_session_id = Some("s0".into());
+        },
+        |_| {},
+    );
+    world.gesture(|app| app.click(Target::key("tile.a.role")));
+    snap(&mut world, "session-chain-tile", dark);
+}
+
 fn session_usage(dark: bool) {
     let mut world = popover_world(
         dark,
@@ -7177,6 +7292,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("tile_focus", || tile_focus(dark));
         scene("shelf", || shelf(dark, false));
         scene("shelf", || shelf(dark, true));
+        scene("shelf_peek", || shelf_peek(dark));
+        scene("shelf_caps", || shelf_caps(dark));
         scene("review_stop", || review_stop(dark));
         scene("garden", || garden(dark));
         scene("garden_dock", || garden_dock(dark));
@@ -7327,6 +7444,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("snooze_menu", || snooze_menu(dark));
         scene("rename_session", || rename_session(dark));
         scene("session_chain_row", || session_chain_row(dark));
+        scene("session_chain_tile", || session_chain_tile(dark));
+        scene("session_pr_details", || session_pr_details(dark));
         scene("session_usage", || session_usage(dark));
         scene("session_seed_context", || session_seed_context(dark));
         scene("notifications_empty", || notifications_empty(dark));

@@ -36,6 +36,10 @@ pub enum DialogSize {
     /// beside the widest page, filling the window down to 880 tall, its lead quiet on the
     /// title's line so the page keeps the height.
     Workspace,
+    /// A board of cards, such as the desktop overview's desktops in miniature: three cards of
+    /// about 276 side by side, as tall as they hold up to 800, the overview's size before the
+    /// design system.
+    Board,
 }
 
 /// A tour's drawing: the width its scenes are painted at.
@@ -49,6 +53,7 @@ impl DialogSize {
             DialogSize::Sheet => 760.0,
             DialogSize::Tour => TOUR_DRAWING + 2.0 * Space::S24.pt(),
             DialogSize::Workspace => Dialog::NAVIGATION + super::page::Page::WIDEST,
+            DialogSize::Board => 880.0,
         }
     }
 
@@ -56,6 +61,7 @@ impl DialogSize {
         match self {
             DialogSize::Prompt | DialogSize::Tour => Height::Fit(None),
             DialogSize::Form => Height::Fit(Some(760.0)),
+            DialogSize::Board => Height::Fit(Some(800.0)),
             DialogSize::Sheet => Height::Window(0.84),
             DialogSize::Workspace => Height::Fill(880.0),
         }
@@ -82,6 +88,7 @@ pub struct Dialog {
     top: Option<El>,
     actions: Option<Actions>,
     size: DialogSize,
+    named: Option<(String, String)>,
     outside: bool,
     close: Option<(Wrap, Wrap)>,
     keys: Option<Wrap>,
@@ -104,6 +111,7 @@ impl Dialog {
             top: None,
             actions: None,
             size: DialogSize::Prompt,
+            named: None,
             outside: true,
             close: None,
             keys: None,
@@ -180,6 +188,13 @@ impl Dialog {
         self
     }
 
+    /// Keys the surface `surface` and the backdrop `scrim` in place of `{key}-dialog` and
+    /// `{key}-scrim`, for a dialog whose keys tests and scripts found before it was a Dialog.
+    pub fn surface_keys(mut self, surface: impl Into<String>, scrim: impl Into<String>) -> Self {
+        self.named = Some((surface.into(), scrim.into()));
+        self
+    }
+
     pub fn size(mut self, size: DialogSize) -> Self {
         self.size = size;
         self
@@ -224,6 +239,12 @@ impl Dialog {
     }
 
     pub fn build(self, t: &Tokens, layer: &mut Vec<El>) {
+        let (surface_key, scrim_key) = self.named.clone().unwrap_or_else(|| {
+            (
+                format!("{}-dialog", self.key),
+                format!("{}-scrim", self.key),
+            )
+        });
         let Some((press, modal)) = self.close else {
             return;
         };
@@ -322,7 +343,7 @@ impl Dialog {
         };
         let panel = Frame::dialog(t)
             .draw_clipped(panel)
-            .key(format!("{}-dialog", self.key))
+            .key(surface_key)
             .role("dialog")
             .label(self.title.text())
             .description(self.lead.map(|lead| lead.text()).unwrap_or_default())
@@ -343,7 +364,7 @@ impl Dialog {
         let panel = modal(panel).modal_click_outside(self.outside);
         layer.push(
             Backdrop::modal(t)
-                .draw(format!("{}-scrim", self.key))
+                .draw(scrim_key)
                 .token_motion(k.motion.overlay),
         );
         layer.push(

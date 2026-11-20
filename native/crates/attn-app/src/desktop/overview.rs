@@ -4,12 +4,9 @@
 use attn_client::Desktop;
 use attn_protocol::{DesktopCreateMessage, DesktopMoveLeafMessage, ProfileActionResultMessage};
 use attn_ui::Tokens;
-use attn_ui::frame::Frame;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Key, KeyEvent, Tx, col, el, row, text};
-use rune_kit::ScrollBar;
-use rune_kit::{Button, ButtonVariant};
+use attn_ui::blocks::{Block, Card, Dialog, DialogSize, Grid, Inline, Miniature, Stack, Standing};
+use attn_ui::system::{Button, Look, Size, Type, keycaps, keys_hint, words};
+use rune::{El, Key, KeyEvent, Tx, col, row};
 
 use super::layout::{Direction, LeafKind, Node};
 use crate::State;
@@ -17,8 +14,12 @@ use crate::requests::Refused;
 use crate::shell::Layer;
 
 const GRID_COLUMNS: usize = 3;
-const MINI_ASPECT: f32 = 9.0 / 16.0;
+/// A desktop drawn small stands as a wide window does.
+const MINI_ASPECT: f32 = 16.0 / 9.0;
+/// The new desktop's card stands at least as tall as an empty desktop's.
+const NEW_CARD_H: f32 = 110.0;
 pub(crate) const DIALOG: &str = "overview.dialog";
+const GRID: &str = "overview.grid";
 
 /// Opens the overview on the current desktop, or closes it.
 pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
@@ -199,30 +200,15 @@ fn mini_node(node: &Node, desktop: &Desktop, t: &Tokens) -> El {
                     .filter(|t| !t.is_empty())
                     .unwrap_or_else(|| "Agent".to_owned()),
             };
-            let on = leaf.id == desktop.active_pane_id;
-            el().w_full()
-                .h_full()
-                .min_w(0.0)
-                .min_h(0.0)
-                .fill(t.bg_button)
-                .border(1.0, if on { t.accent } else { t.border })
-                .px(4.0)
-                .py(2.0)
-                .clip_rounded(0.0)
-                .child(
-                    text(label)
-                        .font(rune::TextStyle::new(12.0, 400.0))
-                        .color(if on { t.text_primary } else { t.text_secondary })
-                        .single_line()
-                        .truncate(),
-                )
+            Miniature::tile(label, leaf.id == desktop.active_pane_id, t)
         }
     }
 }
 
-pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
+pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
+    let mut layer = Vec::new();
     if state.window.layer != Some(Layer::Overview) {
-        return None;
+        return layer;
     }
     let facts = &state.facts;
     let desktops = ordered(state);
@@ -257,64 +243,33 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         })
         .collect();
     cards.push(new_card(t));
-    let grid = el()
-        .w_full()
-        .equal_columns(GRID_COLUMNS)
-        .gap(10.0)
-        .children(cards);
-    let dialog = col()
-        .key(DIALOG)
-        .role("dialog")
-        .label("Desktop overview")
-        .modal_tx(true, close)
+    let grid = Grid::cards(GRID, GRID_COLUMNS, cards)
         .focusable(true)
-        .autofocus()
-        .on_key(key);
-    let dialog = match focused {
-        Some(id) => dialog.active_descendant(card_key(id)),
-        None => dialog,
+        .no_focus_ring()
+        .autofocus();
+    let grid = match focused {
+        Some(id) => grid.active_descendant(card_key(id)),
+        None => grid,
     };
-    let dialog = dialog
-        .w_full()
-        .max_w(880.0)
-        .max_h(800.0)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .padding(16.0)
-        .child(
-            text(format!(
-                "{profile} · {count} {}",
-                if count == 1 { "desktop" } else { "desktops" }
-            ))
-            .font(rune::TextStyle::new(14.0, 600.0))
-            .color(t.text_primary),
-        )
-        .child(
-            text("Arrows move · ↵ switch · ⇧↵ send the focused pane · digits switch · Esc closes")
-                .font(rune::TextStyle::new(12.0, 400.0))
-                .color(t.text_tertiary)
-                .mt(4.0)
-                .pb(12.0),
-        )
-        .child(grid)
-        .scroll_bar_styled(attn_ui::scroll_bar(t));
-    let dialog = Frame::dialog(t).draw(dialog);
-    Some(
-        el().key("overview")
-            .absolute(0.0, 0.0)
-            .w_full()
-            .h_full()
-            .child(attn_ui::Backdrop::dim(t).draw("overview.scrim"))
-            .child(
-                col()
-                    .w_full()
-                    .h_full()
-                    .padding(space::S6)
-                    .center()
-                    .child(dialog),
-            ),
-    )
+    let keys = Inline::loose()
+        .child(keys_hint(["←", "→", "↑", "↓"], "move", t))
+        .child(keys_hint(["↵"], "switch", t))
+        .child(keys_hint(["⇧", "↵"], "send the focused pane", t))
+        .child(keys_hint(["1–9"], "switch", t))
+        .child(keys_hint(["esc"], "close", t));
+    Dialog::new("overview", "Desktop overview")
+        .surface_keys(DIALOG, "overview.scrim")
+        .lead(format!(
+            "{profile} · {count} {}",
+            if count == 1 { "desktop" } else { "desktops" }
+        ))
+        .top(keys)
+        .push(Block::custom(format!("{GRID}.slot"), grid))
+        .size(DialogSize::Board)
+        .on_key(key)
+        .on_close_tx(close)
+        .build(t, &mut layer);
+    layer
 }
 
 fn card(
@@ -328,99 +283,69 @@ fn card(
     let layout = mini(desktop, t);
     let empty = layout.is_none();
     let id = desktop.id.clone();
-    let head = row()
+    let head = Inline::line()
         .w_full()
-        .items_center()
-        .gap(space::S2)
+        .children(slot.map(|keys| keycaps([keys], t)))
         .child(
-            text(slot.clone().unwrap_or_else(|| "no shortcut".to_owned()))
-                .font(type_::MONO_CAPTION)
-                .color(if slot.is_some() {
-                    t.text_secondary
-                } else {
-                    t.text_muted
-                }),
-        )
-        .child(
-            text(title.to_owned())
-                .font(type_::BODY)
-                .color(t.text_primary)
+            words(title.to_owned(), Type::Body, t.text_primary)
                 .single_line()
                 .truncate()
                 .shrink(),
         )
-        .children(empty.then(|| {
-            text("empty")
-                .font(type_::CAPTION.italic())
-                .color(t.text_muted)
-        }));
-    let mini = el()
-        .w_full()
-        .aspect_ratio(1.0 / MINI_ASPECT)
-        .radius(4.0)
-        .fill(t.bg_app)
-        .children(layout);
-    let open = col()
-        .key(card_key(&desktop.id))
-        .role("button")
-        .label(title.to_owned())
+        .children(empty.then(|| words("empty", Type::Small, t.text_muted)));
+    let open = Card::new(card_key(&desktop.id))
+        .control("button", title)
+        .standing(if current {
+            Standing::Picked
+        } else {
+            Standing::Resting
+        })
+        .push(head)
+        .push(Miniature::ground(layout, MINI_ASPECT, t))
+        .build(t)
+        .focusable(false)
         .a11y_value(match (current, focused) {
             (true, true) => "current, focused",
             (true, false) => "current",
             (false, true) => "focused",
             _ => "",
         })
-        .w_full()
-        .gap(6.0)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| switch(state, &id, tx))
-        .child(head)
-        .child(mini);
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| switch(state, &id, tx));
+    let open = if focused {
+        open.outline(2.0, 0.0, t.border_focus)
+    } else {
+        open
+    };
     let target = desktop.id.clone();
     let send_button = can_send.then(|| {
-        Button::new("Send focused pane here ⇧↵")
-            .variant(ButtonVariant::GhostMuted)
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| send(state, &target, tx))
-            .label_with(|_, ink| {
-                text("Send focused pane here ⇧↵")
-                    .font(type_::CAPTION)
-                    .color(ink)
-            })
-            .build(attn_ui::kit(t))
-            .key(format!("overview.send.{}", desktop.id))
-            .h(type_::CAPTION.line_px() + 4.0)
-            .px(space::S2)
-            .radius(5.0)
-            .fill(t.bg_button)
-            .border(1.0, t.border)
+        El::from(
+            Button::new("Send here")
+                .look(Look::Quiet)
+                .size(Size::Compact)
+                .shortcut("⇧↵")
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| send(state, &target, tx))
+                .build(t)
+                .key(format!("overview.send.{}", desktop.id))
+                .label("Send focused pane here ⇧↵"),
+        )
+        .self_start()
     });
-    let card = col()
+    Stack::tight()
         .key(format!("overview.desktop.{}", desktop.id))
         .min_w(0.0)
-        .gap(6.0)
-        .padding(space::S2)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, if current { t.accent } else { t.border })
         .child(open)
-        .child(row().gap(6.0).children(send_button));
-    if focused {
-        card.outline(2.0, 0.0, t.border_focus)
-    } else {
-        card
-    }
+        .children(send_button)
 }
 
 fn new_card(t: &Tokens) -> El {
-    Button::new("New desktop")
-        .variant(ButtonVariant::GhostFaint)
+    Card::new("overview.new")
+        .control("button", "New desktop")
+        .push(words("+ New desktop", Type::Body, t.text_secondary))
+        .build(t)
         .on_press_tx(create)
-        .label_with(|_, ink| text("+ New desktop").font(type_::BODY).color(ink))
-        .build(attn_ui::kit(t))
-        .key("overview.new")
         .min_w(0.0)
         .h_full()
-        .min_h(110.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
+        .min_h(NEW_CARD_H)
+        .justify_center()
+        .items_center()
 }

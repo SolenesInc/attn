@@ -4,13 +4,13 @@ use std::sync::Arc;
 use attn_client::Facts;
 use attn_protocol::{Seed, SeedDocument, SeedNote, Session};
 use attn_ui::Tokens;
-use attn_ui::type_;
+use attn_ui::blocks::{Actions, Block, Card, HeaderPiece, Inline, Menu, Popover, Prose, Stack};
+use attn_ui::system::{Button, IconSize, Link, ListRow, Look, Size, Type, glyph, keys_hint, words};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
-use rune::tok::space;
-use rune::{Color, El, Key, KeyEvent, TextStyle, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant, Placement};
+use rune::{Color, El, Key, KeyEvent, Tx, row};
+use rune_kit::Placement;
 
-use super::fit::{Level, Widths, text_w};
+use super::fit::{Level, Widths};
 use super::header_pop::{self, Pop, What};
 use crate::State;
 
@@ -74,8 +74,6 @@ pub(crate) struct Chip {
     crown: Option<String>,
 }
 
-const MARK_GAP: f32 = 4.0;
-const PAD: f32 = 4.0;
 const SHORT_LABEL: f32 = 84.0;
 const MAX_ANCESTRY: usize = 32;
 
@@ -139,24 +137,6 @@ pub(crate) fn state_color(status: &str, t: &Tokens) -> Color {
         _ => t.text_tertiary,
     }
 }
-
-/// A seed's state in words on a tint of its colour, as `.seed-state-label`.
-fn state_pill(status: &str, font: TextStyle, t: &Tokens) -> El {
-    let color = state_color(status, t);
-    text(state_label(status))
-        .font(TextStyle {
-            weight: 500.0,
-            ..font
-        })
-        .color(color)
-        .single_line()
-        .fill(color.alpha(STATE_PILL_TINT))
-        .radius(4.0)
-        .px(STATE_PILL_PAD)
-}
-
-const STATE_PILL_PAD: f32 = 5.0;
-const STATE_PILL_TINT: f32 = 0.1;
 
 fn plot_counts(seed: &Seed) -> Vec<(&'static str, i64)> {
     let Some(p) = &seed.plot_progress else {
@@ -340,107 +320,77 @@ pub(crate) fn told(state: &State) -> Option<String> {
     chip.single().then(|| chip.entries[0].id.clone())
 }
 
-/// The drawing of a seed in `status`, `size` points square, as the Tauri app's
-/// `SeedStateIcon`.
-fn mark(status: &str, size: f32, t: &Tokens) -> El {
-    rune::icon(attn_ui::icon::seed(status), size).color(state_color(status, t))
+/// What a part of the chip is inked as.
+enum Ink<'a> {
+    State(&'a str),
+    Label,
+    Count,
 }
 
-/// The chip's own mark, and the marks beside its counts: `.pane-seed-chip .seed-state-icon`
-/// and `.pane-seed-counts svg`.
-const CHIP_MARK: f32 = 16.0;
-const COUNT_MARK: f32 = 13.0;
+fn ink(t: &Tokens) -> impl Fn(Ink) -> Color + '_ {
+    move |ink| match ink {
+        Ink::State(status) => state_color(status, t),
+        Ink::Label => t.text_secondary,
+        Ink::Count => t.text_tertiary,
+    }
+}
+
+/// The chip at `level`, inked by `ink`.
+fn face(chip: &Chip, anchor: &str, level: Level, ink: impl Fn(Ink) -> Color) -> HeaderPiece {
+    let full = level != Level::Icon;
+    let mut face = HeaderPiece::new().mark(
+        attn_ui::icon::seed(&chip.status),
+        ink(Ink::State(&chip.status)),
+    );
+    if full && !chip.repeats_title {
+        let within = (level == Level::Short).then_some(SHORT_LABEL);
+        face = face.words_keyed(
+            format!("{anchor}.label"),
+            chip.label.clone(),
+            ink(Ink::Label),
+            within,
+        );
+    }
+    if !full {
+        return face;
+    }
+    for (state, n) in &chip.counts {
+        face = face.count(
+            attn_ui::icon::seed(state),
+            ink(Ink::State(state)),
+            n.to_string(),
+            format!("{n} {state}"),
+        );
+    }
+    if let Some(fraction) = &chip.fraction {
+        face = face.words(fraction.clone(), ink(Ink::Count));
+    }
+    if !chip.aggregate() {
+        face = face.state(state_label(&chip.status), ink(Ink::State(&chip.status)));
+    }
+    face
+}
 
 /// The chip in the header of `leaf`: a press opens its seed beside the agent, or pins the list
 /// of an aggregate chip; resting on it previews the popover.
-pub(super) fn piece(
-    leaf: &str,
-    session: &str,
-    chip: &Chip,
-    level: Level,
-    font: TextStyle,
-    t: &Tokens,
-) -> El {
+pub(super) fn piece(leaf: &str, session: &str, chip: &Chip, level: Level, t: &Tokens) -> El {
     let anchor = header_pop::anchor(leaf, What::Seed);
-    let full = level != Level::Icon;
-    let (status, label, fraction) = (
-        chip.status.clone(),
-        chip.label.clone(),
-        chip.fraction.clone(),
-    );
-    let counts = chip.counts.clone();
-    let pill = !chip.aggregate();
-    let shows_label = full && !chip.repeats_title;
-    let short = level == Level::Short;
-    let mut face = row()
-        .items_center()
-        .gap(MARK_GAP)
-        .child(mark(&status, CHIP_MARK, t));
-    if shows_label {
-        let words = text(label)
-            .key(format!("{anchor}.label"))
-            .font(font)
-            .color(t.text_secondary)
-            .single_line()
-            .truncate();
-        face = face.child(if short {
-            words.max_w(SHORT_LABEL)
-        } else {
-            words
-        });
-    }
-    if full {
-        face = face
-            .children(counts.iter().map(|(state, n)| {
-                row()
-                    .items_center()
-                    .gap(1.0)
-                    .label(format!("{n} {state}"))
-                    .child(mark(state, COUNT_MARK, t))
-                    .child(text(n.to_string()).font(font).color(t.text_tertiary))
-            }))
-            .children(fraction.map(|f| text(f).font(font).color(t.text_tertiary)))
-            .children(pill.then(|| state_pill(&status, font, t)));
-    }
     let pressed = (leaf.to_owned(), session.to_owned(), chip.opens.clone());
-    let button = Button::new(chip.name())
-        .variant(ButtonVariant::GhostMuted)
+    let button = face(chip, &anchor, level, ink(t))
+        .button(anchor.clone(), chip.name(), t)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             press(state, &pressed.0, &pressed.1, pressed.2.as_deref(), tx)
-        })
-        .label_with(move |_, _| face)
-        .build(attn_ui::kit(t))
-        .key(anchor)
-        .h(font.line_px())
-        .px(PAD);
+        });
     header_pop::hovers(button, leaf, session, What::Seed)
 }
 
 /// The chip's width in full, with its label cut short, and as its mark alone.
-pub(super) fn widths(chip: &Chip, font: TextStyle) -> Widths {
-    let icon = 2.0 * PAD + CHIP_MARK;
-    let label = if chip.repeats_title {
-        0.0
-    } else {
-        text_w(&chip.label, font)
-    };
-    let mut rest: Vec<f32> = chip
-        .counts
-        .iter()
-        .map(|(_, n)| COUNT_MARK + 1.0 + text_w(&n.to_string(), font))
-        .collect();
-    if let Some(fraction) = &chip.fraction {
-        rest.push(text_w(fraction, font));
-    }
-    if !chip.aggregate() {
-        rest.push(text_w(state_label(&chip.status), font) + 2.0 * STATE_PILL_PAD);
-    }
-    let rest: f32 = rest.iter().map(|w| w + MARK_GAP).sum();
-    let with = |label: f32| icon + if label > 0.0 { MARK_GAP + label } else { 0.0 } + rest;
+pub(super) fn widths(chip: &Chip) -> Widths {
+    let at = |level| face(chip, "", level, |_| Color::TRANSPARENT).button_width();
     Widths {
-        full: with(label),
-        short: Some(with(label.min(SHORT_LABEL))),
-        icon: Some(icon),
+        full: at(Level::Full),
+        short: Some(at(Level::Short)),
+        icon: Some(at(Level::Icon)),
     }
 }
 
@@ -511,57 +461,27 @@ fn written(note: &SeedNote) -> i64 {
     crate::sidebar::queue::epoch_ms(&note.created_at).unwrap_or(i64::MIN)
 }
 
-fn caption(words: &str, t: &Tokens) -> El {
-    text(words.to_owned())
-        .font(attn_ui::kit(t).ty.caption())
-        .color(t.text_tertiary)
-}
-
-fn prose(words: String, t: &Tokens) -> El {
-    text(words).font(type_::BODY).color(t.text_primary).wrap()
-}
-
 fn seed_key(pop: &Pop, i: usize) -> String {
     format!("{}.seed.{i}", pop.surface())
 }
+
+/// How wide the seed popover stands: a seed's title of 50 characters keeps two lines in `Name`.
+const POPOVER_W: f32 = 360.0;
 
 /// The open seed popover, under its chip.
 pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     let chip = of_facts(&pop.session, &state.facts)?;
     let single = chip.single();
-    let body = if single {
+    let surface = if single {
         context(state, pop, &chip, t)
     } else {
         list(state, pop, &chip, t)
     };
-    let surface = col()
-        .key(pop.surface())
-        .role(if single { "dialog" } else { "listbox" })
-        .label(if single {
-            "Seed context"
-        } else {
-            "Seeds this agent is tending"
-        })
-        .w(360.0)
-        .padding(5.0)
-        .gap(space::S2)
-        .min_h(0.0)
-        .focusable(true)
-        .no_focus_ring()
+    let surface = surface
+        .w(POPOVER_W)
         .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
             header_pop::hover_popover(state, inside, tx)
-        })
-        .child(body)
-        .children((pop.pinned && !single).then(|| {
-            text("↑ ↓ move · ↵ open · esc close")
-                .font(attn_ui::kit(t).ty.caption())
-                .color(t.text_muted)
-        }));
-    let surface = if pop.pinned && !single {
-        surface.active_descendant(seed_key(pop, state.window.desk.header_pop.picked))
-    } else {
-        surface
-    };
+        });
     let surface = if pop.pinned {
         let ids: Vec<String> = chip.entries.iter().map(|e| e.id.clone()).collect();
         let session = pop.session.clone();
@@ -578,14 +498,17 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     };
     Some(rune_kit::popover::anchored(
         attn_ui::kit(t),
-        attn_ui::Frame::panel(t).draw(surface),
+        surface,
         &pop.anchor(),
         Placement::BottomEnd,
         4.0,
     ))
 }
 
+/// The story of the one seed the agent works on: its title, its state and how long it has been
+/// in it, its latest note, why it closed, and the way to open it.
 fn context(state: &State, pop: &Pop, chip: &Chip, t: &Tokens) -> El {
+    let surface_key = pop.surface();
     let primary = &chip.entries[0];
     let (document, error) = crate::garden::reading(&state.window.garden, &primary.id);
     let seed = document
@@ -603,23 +526,18 @@ fn context(state: &State, pop: &Pop, chip: &Chip, t: &Tokens) -> El {
             }
         })
         .unwrap_or_default();
-    let standing = row()
-        .key(format!("{}.state", pop.surface()))
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .child(mark(status, 44.0, t))
+    let ink = state_color(status, t);
+    let standing = Inline::top()
+        .key(format!("{surface_key}.state"))
+        .child(glyph(attn_ui::icon::seed(status), IconSize::Large, ink))
         .child(
-            col()
+            Stack::tight()
                 .grow(1.0)
-                .child(
-                    text(state_label(status))
-                        .font(type_::TITLE)
-                        .color(state_color(status, t)),
-                )
-                .child(caption(state_meaning(status), t).wrap()),
+                .min_w(0.0)
+                .child(words(state_label(status), Type::Name, ink))
+                .child(words(state_meaning(status), Type::Small, t.text_tertiary).wrap()),
         )
-        .children((!elapsed.is_empty()).then(|| caption(&elapsed, t)));
+        .children((!elapsed.is_empty()).then(|| words(elapsed, Type::Small, t.text_tertiary)));
     let latest = latest_note(document);
     let note_words = match (latest, error, document) {
         (Some(note), _, _) => excerpt(&note.body, 360),
@@ -630,29 +548,27 @@ fn context(state: &State, pop: &Pop, chip: &Chip, t: &Tokens) -> El {
     let note_head = row()
         .w_full()
         .justify_between()
-        .gap(space::S2)
-        .child(caption(
+        .child(words(
             if latest.is_some_and(|n| n.kind == "handoff") {
                 "Latest handoff"
             } else {
                 "Latest note"
             },
-            t,
+            Type::Label,
+            t.text_tertiary,
         ))
-        .children(latest.map(|n| caption(&crate::garden::model::ago(&n.created_at, now), t)));
-    let note = col()
-        .key(format!("{}.note", pop.surface()))
-        .label("Latest note")
-        .w_full()
-        .mt(16.0)
-        .py(11.0)
-        .px(12.0)
-        .gap(7.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
-        .radius(7.0)
-        .child(note_head)
-        .child(prose(note_words, t));
+        .children(latest.map(|n| {
+            words(
+                crate::garden::model::ago(&n.created_at, now),
+                Type::Small,
+                t.text_tertiary,
+            )
+        }));
+    let note = Card::new(format!("{surface_key}.note"))
+        .push(note_head)
+        .push(words(note_words, Type::Body, t.text_primary).wrap())
+        .build(t)
+        .label("Latest note");
     let reason = seed
         .and_then(|s| s.reason.as_deref())
         .map(str::trim)
@@ -674,73 +590,53 @@ fn context(state: &State, pop: &Pop, chip: &Chip, t: &Tokens) -> El {
     let session = pop.session.clone();
     let reports_to = chip.entries.get(1).map(|crown| {
         let (id, session) = (crown.id.clone(), session.clone());
-        kit_link(
-            format!("Reports to {} ↗", crown.title),
-            format!("{}.reports-to", pop.surface()),
-            t,
-            move |state, tx| open(state, &id, &session, tx),
+        let key = format!("{surface_key}.reports-to");
+        let link: El = Link::new(key.clone(), format!("Reports to {} ↗", crown.title))
+            .build(t)
+            .into();
+        Block::control(
+            format!("{key}.line"),
+            link.on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &id, &session, tx)),
         )
     });
-    let (id, face) = (primary.id.clone(), primary.id.clone());
-    let id_ink = t.text_tertiary;
-    let open_seed = Button::new(format!("Open seed {id}"))
-        .variant(ButtonVariant::GhostMuted)
+    let id = primary.id.clone();
+    let open_seed: El = Button::new("Open seed ↗")
+        .look(Look::Plain)
+        .size(Size::Compact)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &id, &session, tx))
-        .label_with(move |_, ink| {
-            row()
+        .build(t)
+        .key(format!("{surface_key}.open"))
+        .label(format!("Open seed {}", primary.id))
+        .into();
+    let mut blocks = vec![
+        Block::custom(format!("{surface_key}.standing"), standing),
+        Block::custom(format!("{surface_key}.latest"), note),
+    ];
+    blocks.extend(outcome.map(|(head, said)| {
+        Block::custom(
+            format!("{surface_key}.outcome"),
+            Stack::tight()
                 .w_full()
-                .gap(space::S2)
-                .child(text("Open seed ↗").font(OPEN_TYPE).color(ink).grow(1.0))
-                .child(text(face).font(type_::MONO_CAPTION).color(id_ink))
-        })
-        .build(attn_ui::kit(t))
-        .key(format!("{}.open", pop.surface()))
-        .w_full()
-        .h(OPEN_TYPE.line_px() + 20.0)
-        .px(11.0)
-        .mt(7.0)
-        .radius(6.0)
-        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle);
-    let told = col()
-        .w_full()
-        .child(standing)
-        .child(note)
-        .children(outcome.map(|(head, words)| {
-            col()
-                .key(format!("{}.outcome", pop.surface()))
-                .mt(14.0)
-                .gap(7.0)
-                .child(caption(head, t))
-                .child(prose(words, t))
-        }))
-        .children(reports_here.then(|| caption("This agent reports to this seed.", t).mt(13.0)))
-        .pt(11.0)
-        .px(11.0)
-        .pb(4.0);
-    col()
-        .w_full()
-        .child(told)
-        .children(reports_to)
-        .child(open_seed)
-}
-
-/// `.pane-seed-context-open`: the popover's own text, at regular weight.
-const OPEN_TYPE: TextStyle = TextStyle {
-    weight: 400.0,
-    ..type_::LABEL
-};
-
-fn kit_link(
-    label: String,
-    key: String,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    Button::new(label)
-        .variant(ButtonVariant::GhostMuted)
-        .on_press_tx(press)
-        .build(attn_ui::kit(t))
-        .key(key)
+                .child(words(head, Type::Label, t.text_tertiary))
+                .child(words(said, Type::Body, t.text_primary).wrap()),
+        )
+    }));
+    if reports_here {
+        blocks.push(
+            Prose::hint(
+                format!("{surface_key}.reports-here"),
+                "This agent reports to this seed.",
+            )
+            .build(t),
+        );
+    }
+    blocks.extend(reports_to);
+    Popover::new(surface_key, primary.title.clone())
+        .aside(words(primary.id.clone(), Type::Mono, t.text_tertiary))
+        .push_all(blocks)
+        .actions(Actions::new("open").push(open_seed))
+        .build(t)
+        .label("Seed context")
 }
 
 fn garden_seed<'a>(state: &'a State, id: &str) -> Option<&'a Seed> {
@@ -750,18 +646,31 @@ fn garden_seed<'a>(state: &'a State, id: &str) -> Option<&'a Seed> {
         .map(|s| &**s)
 }
 
+/// The seeds an agent works on, to pick one to open.
 fn list(state: &State, pop: &Pop, chip: &Chip, t: &Tokens) -> El {
     let picked = state.window.desk.header_pop.picked;
-    col()
-        .key(format!("{}.seeds", pop.surface()))
-        .w_full()
-        .gap(2.0)
-        .children(chip.entries.iter().enumerate().map(|(i, entry)| {
-            let about = garden_seed(state, &entry.id)
-                .map(|s| excerpt(s.reason.as_deref().unwrap_or(&s.body), 100))
-                .unwrap_or_default();
-            option(pop, chip, i, entry, about, pop.pinned && i == picked, t)
-        }))
+    let rows = chip.entries.iter().enumerate().map(|(i, entry)| {
+        let about = garden_seed(state, &entry.id)
+            .map(|s| excerpt(s.reason.as_deref().unwrap_or(&s.body), 100))
+            .unwrap_or_default();
+        option(pop, chip, i, entry, about, pop.pinned && i == picked, t)
+    });
+    let menu = Menu::new(pop.surface(), "Seeds this agent is tending")
+        .listbox()
+        .rows(rows);
+    let menu = if pop.pinned {
+        menu.active(Some(seed_key(pop, picked)))
+            .form([Block::custom(
+                format!("{}.keys", pop.surface()),
+                Inline::loose()
+                    .child(keys_hint(["↑", "↓"], "move", t))
+                    .child(keys_hint(["↵"], "open", t))
+                    .child(keys_hint(["esc"], "close", t)),
+            )])
+    } else {
+        menu
+    };
+    menu.build(t)
 }
 
 fn option(
@@ -773,7 +682,6 @@ fn option(
     picked: bool,
     t: &Tokens,
 ) -> El {
-    let title = entry.title.clone();
     let fraction = entry.fraction.clone().filter(|_| entry.role == Role::Plot);
     let side = fraction.unwrap_or_else(|| state_label(&entry.status).to_owned());
     let reports = entry.role == Role::Crown || chip.crown.as_deref() == Some(&entry.id);
@@ -784,45 +692,34 @@ fn option(
         entry.status.as_str()
     };
     let (id, session) = (entry.id.clone(), pop.session.clone());
-    row()
-        .key(seed_key(pop, i))
+    let row = ListRow::new(seed_key(pop, i), format!("{} · {side}", entry.title))
         .role("option")
-        .label(format!("{title} · {side}"))
-        .focus_selected(picked)
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .padding(4.0)
-        .radius(4.0)
-        .fill(if picked { t.bg_selected } else { t.bg_elevated })
-        .child(mark(status, 24.0, t))
-        .child(
-            col()
-                .grow(1.0)
-                .min_w(0.0)
-                .child(
-                    text(title)
-                        .font(type_::LABEL)
-                        .color(t.text_primary)
-                        .truncate(),
-                )
-                .children((!note.is_empty()).then(|| {
-                    text(note)
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary)
-                        .truncate()
-                })),
-        )
-        .child(text(side).font(type_::LABEL).color(t.text_tertiary))
-        .on_pointer_move_local(move |state: &mut State, _, tx: &mut Tx| {
+        .unfocusable()
+        .cursor(picked)
+        .selected(picked)
+        .lead(glyph(
+            attn_ui::icon::seed(status),
+            IconSize::Regular,
+            state_color(status, t),
+        ))
+        .title(entry.title.clone())
+        .aside(words(side, Type::Small, t.text_tertiary))
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &id, &session, tx));
+    let row = if note.is_empty() {
+        row
+    } else {
+        row.subtitle(note, t)
+    };
+    row.build(t).focus_selected(picked).on_pointer_move_local(
+        move |state: &mut State, _, tx: &mut Tx| {
             let pop = &mut state.window.desk.header_pop;
             if pop.picked == i {
                 tx.live_only();
             } else {
                 pop.picked = i;
             }
-        })
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &id, &session, tx))
+        },
+    )
 }
 
 fn list_key(

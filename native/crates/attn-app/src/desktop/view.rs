@@ -373,22 +373,19 @@ fn sublines(
                 let pieces: Vec<(Piece, Widths)> = [
                     sub.seed
                         .as_ref()
-                        .map(|c| (Piece::Seed, super::seed_chip::widths(c, SUBLINE_TYPE))),
+                        .map(|c| (Piece::Seed, super::seed_chip::widths(c))),
                     sub.role
                         .as_ref()
-                        .map(|r| (Piece::Role, super::chain::widths(r, SUBLINE_TYPE))),
+                        .map(|r| (Piece::Role, super::chain::widths(r))),
                     sub.host
                         .as_deref()
                         .map(|h| (Piece::Host, super::host::widths(h))),
                     sub.usage
                         .as_ref()
                         .map(|u| (Piece::Usage, super::usage::width(u, SUBLINE_TYPE))),
-                    sub.provenance.as_ref().map(|l| {
-                        (
-                            Piece::Provenance,
-                            super::provenance::widths(l, SUBLINE_TYPE),
-                        )
-                    }),
+                    sub.provenance
+                        .as_ref()
+                        .map(|l| (Piece::Provenance, super::provenance::widths(l))),
                     Some((Piece::Id, id_width(&s.id))),
                 ]
                 .into_iter()
@@ -1421,7 +1418,6 @@ fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Toke
             session,
             sub.seed.as_ref()?,
             level,
-            SUBLINE_TYPE,
             t,
         ))
     });
@@ -1432,7 +1428,6 @@ fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Toke
             session,
             sub.role.as_ref()?,
             level,
-            SUBLINE_TYPE,
             t,
         ))
     });
@@ -1458,7 +1453,6 @@ fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Toke
             session,
             sub.provenance.as_ref()?,
             level,
-            SUBLINE_TYPE,
             t,
         ))
     });

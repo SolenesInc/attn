@@ -7,12 +7,13 @@ use attn_protocol::{
     PtyInputMessage, PtyInputProbeResultMessage, TerminalReadTextMessage,
     TerminalReadTextResultMessage,
 };
-use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, ScrollSpec, TextEdit, Tx, col, el, row, text};
-use rune_kit::ScrollBar;
-use rune_kit::{Button, ButtonVariant, TextInput};
+use attn_ui::blocks::{Bar, Screen as ScreenText};
+use attn_ui::system::{
+    Button, DotShape, DotSize, FieldState, Look, Size, Type, dot, keycaps, line_box, words,
+};
+use attn_ui::{Frame, Tokens};
+use rune::{El, TextEdit, Tx, col};
+use rune_kit::TextInput;
 
 use super::layout::{LeafKind, Node};
 use super::shelf::Shelf;
@@ -44,7 +45,8 @@ pub(crate) struct Peeks {
 pub(crate) struct Open {
     pub(crate) desktop: String,
     pub(crate) leaf: String,
-    /// The chip's bottom-left corner in the window, which the panel hangs from.
+    /// The point in the window the panel hangs from: its chip's bottom-left corner on the
+    /// shelf, or beside the cap's menu that holds its chip, so it covers neither.
     anchor: [f32; 2],
     /// The tile's terminal, when it has one.
     runtime: Option<String>,
@@ -300,6 +302,11 @@ fn show(state: &mut State, desktop: String, leaf: String, chip: &str) {
         .and_then(|d| super::view::pane_of(d, &leaf))
         .map(|p| p.runtime_id.clone())
         .filter(|r| !r.is_empty());
+    let anchor = if state.window.desk.cap_open.is_some() {
+        [rect[0] + rect[2] + ANCHOR_GAP_PX, rect[1] - ANCHOR_GAP_PX]
+    } else {
+        [rect[0], rect[1] + rect[3]]
+    };
     let peeks = &mut state.window.desk.peeks;
     let draft = runtime
         .as_ref()
@@ -309,7 +316,7 @@ fn show(state: &mut State, desktop: String, leaf: String, chip: &str) {
     peeks.open = Some(Open {
         desktop,
         leaf,
-        anchor: [rect[0], rect[1] + rect[3]],
+        anchor,
         next_read: runtime.as_ref().map(|_| 0.0),
         runtime,
         screen: Screen::default(),
@@ -647,65 +654,69 @@ impl Peeks {
 /// The strip under an agent's terminal that keeps a reply the peek could not send.
 pub(crate) fn unsent_strip(runtime: &str, text_: &str, t: &Tokens) -> El {
     let (copied, discarded) = (text_.to_owned(), runtime.to_owned());
-    row()
-        .key(format!("tile.unsent.{runtime}"))
-        .role("status")
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .px(space::S2)
-        .py(space::S1)
-        .fill(t.bg_panel)
-        .child(
-            text(format!("Unsent reply: {text_}"))
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .single_line()
-                .truncate()
-                .grow(1.0),
+    Bar::new(format!("tile.unsent.{runtime}"))
+        .lead(
+            words(
+                format!("Unsent reply: {text_}"),
+                Type::Small,
+                t.text_secondary,
+            )
+            .single_line()
+            .truncate(),
         )
-        .child(button(
+        .push(button(
             format!("tile.unsent.{runtime}.copy"),
             "Copy",
-            None,
+            Keys::None,
             t,
             move |_, tx| tx.copy(copied.clone()),
         ))
-        .child(button(
+        .push(button(
             format!("tile.unsent.{runtime}.discard"),
             "Discard",
-            None,
+            Keys::None,
             t,
             move |state, _| {
                 state.window.desk.peeks.replies.remove(&discarded);
             },
         ))
+        .build(t)
+        .role("status")
+        .fill(t.bg_panel)
 }
+
+/// The keys a button of the peek shows after its word, or only in its help when the peek is
+/// too narrow to show them beside a reply field that holds its placeholder.
+#[derive(Clone, Copy)]
+enum Keys<'a> {
+    None,
+    Shown(&'a str),
+    Help(&'a str),
+}
+
+/// How wide a peek stands at least to show its buttons' keys, measured on a 780-wide peek:
+/// Open and Close with their keys, the prompt, the gaps and the line's insets take 214.5, and
+/// "Reply without changing the layout" takes 208 in its field, 234 with the field's insets.
+const KEYS_SHOWN_W: f32 = 460.0;
 
 /// A button of the peek or the unsent strip: its word, and the key that does the same.
 fn button(
     key: String,
     label: &str,
-    kbd: Option<&str>,
+    keys: Keys,
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    let (face, kbd, tertiary) = (label.to_owned(), kbd.map(str::to_owned), t.text_tertiary);
-    Button::new(label)
-        .variant(ButtonVariant::GhostMuted)
-        .on_press_tx(press)
-        .label_with(move |_, ink| {
-            row()
-                .gap(space::S1)
-                .child(text(face).font(type_::LABEL).color(ink))
-                .children(kbd.map(|kbd| text(kbd).font(type_::LABEL).color(tertiary)))
-        })
-        .build(attn_ui::kit(t))
-        .key(key)
-        .h(type_::LABEL.line_px())
-        .px(space::S2)
-        .radius(4.0)
-        .fill(t.bg_button)
+    let button = Button::new(label.to_owned())
+        .look(Look::Quiet)
+        .size(Size::Compact)
+        .on_press_tx(press);
+    let button = match keys {
+        Keys::None => button,
+        Keys::Shown(kbd) => button.trailing(keycaps([kbd], t)),
+        Keys::Help(kbd) => button.shortcut(kbd),
+    };
+    button.build(t).key(key).into()
 }
 
 fn notice(reply: Option<&Reply>, blocked: Option<&str>) -> Option<String> {
@@ -761,34 +772,29 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         None => y,
     }
     .max(EDGE_PX);
-    let header = row()
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .px(space::S2)
-        .py(space::S1)
-        .children(agent.map(|a| {
-            el().w(7.0)
-                .h(7.0)
-                .radius(3.5)
-                .fill(crate::sidebar::state_color(a, t))
-        }))
-        .child(
-            text(title.clone())
-                .font(type_::LABEL)
-                .color(t.text_primary)
+    let header = Bar::new("shelf.peek.head");
+    let header = match agent {
+        Some(a) => header.start(dot(
+            crate::sidebar::state_color(a, t),
+            DotShape::Filled,
+            DotSize::Regular,
+        )),
+        None => header,
+    };
+    let header = header
+        .lead(
+            words(title.clone(), Type::Name, t.text_primary)
                 .single_line()
-                .truncate()
-                .grow(1.0),
+                .truncate(),
         )
-        .children(kind.map(|k| text(k).font(type_::LABEL).color(t.text_tertiary)));
+        .push_all(kind.map(|k| words(k, Type::Label, t.text_tertiary)))
+        .build(t);
     let mut panel = col()
         .key("shelf.peek")
         .role("dialog")
         .label(title)
         .absolute(area.x + x, area.y + y)
         .w(width)
-        .clip_rounded(8.0)
         .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
             if inside {
                 enter_peek(state);
@@ -798,12 +804,21 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         })
         .child(header);
     if let (Some(runtime), Some(h)) = (&open.runtime, height) {
-        panel = panel.h(h).children(terminal(state, open, runtime, t));
+        panel = panel
+            .h(h)
+            .children(terminal(state, open, runtime, width >= KEYS_SHOWN_W, t));
     }
-    Some(rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0))
+    Some(Frame::panel(t).draw_clipped(panel))
 }
 
-fn terminal(state: &State, open: &Open, runtime: &str, t: &Tokens) -> Vec<El> {
+fn terminal(state: &State, open: &Open, runtime: &str, roomy: bool, t: &Tokens) -> Vec<El> {
+    let keys = |kbd| {
+        if roomy {
+            Keys::Shown(kbd)
+        } else {
+            Keys::Help(kbd)
+        }
+    };
     let peeks = &state.window.desk.peeks;
     let reply = peeks.replies.get(runtime);
     let blocked = blocked(state, open);
@@ -811,42 +826,17 @@ fn terminal(state: &State, open: &Open, runtime: &str, t: &Tokens) -> Vec<El> {
         (None, Some(failure)) => format!("Could not read this terminal: {failure}"),
         (text, _) => text.clone().unwrap_or_default(),
     };
-    let screen = col()
-        .key("shelf.peek.screen")
-        .w_full()
-        .grow(1.0)
-        .min_h(0.0)
-        .scroll(ScrollSpec { stick_bottom: true })
-        .scroll_xy()
-        .px(space::S2)
-        .py(space::S2)
-        .child(
-            text(shown)
-                .font(rune::TextStyle {
-                    family: rune::Family::Mono,
-                    ..type_::LABEL
-                })
-                .color(t.text_primary)
-                .selectable(true),
-        )
-        .scroll_bar_styled(attn_ui::scroll_bar(t).both_ways());
-    let notice = notice(reply, blocked).map(|words| {
-        row()
-            .key("shelf.peek.notice")
+    let screen = ScreenText::showing("shelf.peek.screen", shown, t);
+    let notice = notice(reply, blocked).map(|said| {
+        Bar::new("shelf.peek.notice")
+            .lead(words(said.clone(), Type::Small, t.text_secondary).wrap())
+            .build(t)
             .role("status")
-            .label(words.clone())
-            .w_full()
-            .px(space::S2)
-            .py(space::S1)
+            .label(said)
             .fill(t.bg_panel)
-            .child(text(words).font(type_::LABEL).color(t.text_secondary))
     });
     let field = TextInput::new(&peeks.field)
         .key(field_key(&open.leaf))
-        .plain()
-        .text_style(type_::LABEL)
-        .height(type_::LABEL.line_px())
-        .width(None)
         .label("Reply")
         .read_only(matches!(
             reply,
@@ -862,35 +852,28 @@ fn terminal(state: &State, open: &Open, runtime: &str, t: &Tokens) -> Vec<El> {
         .on_submit(submit)
         .on_key(|state: &mut State, ev: &rune::KeyEvent, _: &mut Tx| {
             ev.key == rune::Key::Escape && close(state)
-        })
-        .build(attn_ui::kit(t))
-        .grow(1.0)
-        .min_w(0.0);
-    let reply_row = row()
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .px(space::S2)
-        .py(space::S1)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
-        .child(text("❯").font(type_::LABEL).color(t.text_secondary))
-        .child(field)
-        .child(button(
+        });
+    let field: El = line_box(field, FieldState::Ready, t).into();
+    let reply_row = Bar::new("shelf.peek.reply")
+        .start(words("❯", Type::Mono, t.text_secondary))
+        .lead(field)
+        .push(button(
             "shelf.peek.open".to_owned(),
             "Open",
-            Some("↵"),
+            keys("↵"),
             t,
             open_tile,
         ))
-        .child(button(
+        .push(button(
             "shelf.peek.close".to_owned(),
             "Close",
-            Some("esc"),
+            keys("esc"),
             t,
             |state, _| {
                 close(state);
             },
-        ));
+        ))
+        .build(t);
     let mut parts = vec![screen];
     parts.extend(notice);
     parts.push(reply_row);

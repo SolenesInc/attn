@@ -3186,6 +3186,49 @@ fn the_overviews_cards_share_one_grid_whatever_each_card_holds() {
 }
 
 #[test]
+fn the_overviews_cards_keep_the_width_that_shows_each_desktops_tiles_by_name() {
+    let mut world = start(two_desktops());
+    press(&mut world, Action::DesktopOverview);
+    let [_, _, w, _] = world
+        .screen()
+        .bounds(Target::key("overview.desktop.work/desktop_1"))
+        .unwrap();
+    assert!(
+        w >= 260.0,
+        "a card stands as wide as the overview drew it before the design system (276), not {w}"
+    );
+}
+
+#[test]
+fn at_the_smallest_window_with_large_text_each_send_button_stays_inside_its_own_card() {
+    let desktops = vec![
+        four_in_a_row("a"),
+        desktop(2, "x", Some(row([pane("x"), pane("y")]))),
+        desktop(3, "z", Some(row([pane("z")]))),
+    ];
+    let state = InitialStateMessage {
+        settings: Some([("uiScale".to_owned(), "1.5".to_owned())].into()),
+        ..initial(desktops)
+    };
+    let mut world = World::start_sized(Daemon::scripted().state(state), (800.0, 600.0));
+    world.open_desktop();
+    press(&mut world, Action::DesktopOverview);
+    let screen = world.screen();
+    for desktop in ["work/desktop_2", "work/desktop_3"] {
+        let [cx, _, cw, _] = screen
+            .bounds(Target::key(format!("overview.desktop.{desktop}")))
+            .unwrap();
+        let [x, _, w, _] = screen
+            .bounds(Target::key(format!("overview.send.{desktop}")))
+            .unwrap();
+        assert!(
+            x >= cx - 0.5 && x + w <= cx + cw + 0.5,
+            "{desktop}: Send at {x}+{w} runs out of its card at {cx}+{cw}"
+        );
+    }
+}
+
+#[test]
 fn the_overviews_new_desktop_card_makes_a_desktop_and_switches_to_it() {
     let daemon = daemon(two_desktops());
     daemon.on("desktop_create", |_| {

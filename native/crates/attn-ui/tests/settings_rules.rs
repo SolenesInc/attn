@@ -1244,6 +1244,19 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::tile_header::SettlingChip::keys(keys)", true),
     ("blocks::tile_header::SettlingChip::widths(said)", false),
     ("blocks::tile_header::SettlingChip::widths(keys)", false),
+    ("blocks::dialog::Dialog::surface_keys(surface)", false),
+    ("blocks::dialog::Dialog::surface_keys(scrim)", false),
+    ("blocks::header_piece::HeaderPiece::words(said)", true),
+    ("blocks::header_piece::HeaderPiece::words_keyed(said)", true),
+    ("blocks::header_piece::HeaderPiece::count(count)", false),
+    ("blocks::header_piece::HeaderPiece::count(label)", false),
+    ("blocks::header_piece::HeaderPiece::state(said)", true),
+    ("blocks::header_piece::HeaderPiece::link(label)", false),
+    ("blocks::header_piece::HeaderPiece::link(said)", false),
+    ("blocks::header_piece::HeaderPiece::button(label)", false),
+    ("blocks::miniature::Miniature::tile(name)", true),
+    ("blocks::screen::Screen::showing(shown)", false),
+    ("blocks::shelf::Shelf::chip(label)", false),
 ];
 
 #[test]

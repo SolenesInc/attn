@@ -110,6 +110,10 @@ fn start_on(sessions: Vec<Session>, desktops: Vec<Desktop>) -> World {
 }
 
 fn start_from(state: InitialStateMessage) -> World {
+    start_sized_from(state, SIZE)
+}
+
+fn start_sized_from(state: InitialStateMessage, size: (f32, f32)) -> World {
     let daemon = Daemon::scripted().state(InitialStateMessage {
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![profile()]),
@@ -132,7 +136,7 @@ fn start_from(state: InitialStateMessage) -> World {
                 ..RecordCommandUsageResultMessage::new()
             })
         });
-    let mut world = World::start_sized(daemon, SIZE);
+    let mut world = World::start_sized(daemon, size);
     world.open_desktop();
     world
 }
@@ -641,7 +645,8 @@ fn the_pull_request_details_open_on_hover_and_close_soon_after_the_pointer_leave
         "attn#71",
         "open",
         "waiting for GitHub",
-        "↵ open · c copy url",
+        "↵ open",
+        "c copy url",
     ] {
         assert!(shown.lines().any(|l| l == line), "{line:?} in {shown}");
     }
@@ -679,7 +684,9 @@ fn pinned_pull_request_details_pick_with_the_arrows_open_with_return_and_copy_wi
         "passed",
         "approved",
         "no conflicts",
-        "↑↓ pick · ↵ open · c copy url",
+        "↑ ↓ pick",
+        "↵ open",
+        "c copy url",
     ] {
         assert!(shown.lines().any(|l| l == line), "{line:?} in {shown}");
     }
@@ -1052,11 +1059,17 @@ fn a_chain_whose_first_dispatcher_attn_cannot_show_names_it_above_the_agents() {
         alder_sent("sibling", "release notes"),
     ]);
     world.gesture(|app| app.click(Target::key("tile.a.role")));
-    assert!(texts(&world, "tile.a.role.popover").contains(&"↑ Chief · unavailable".into()));
+    assert!(
+        texts(&world, "tile.a.role.popover")
+            .contains(&"Started by Chief, which attn cannot show.".into())
+    );
     key(&mut world, Key::Escape);
 
     world.gesture(|app| app.click(Target::key("tile.b.role")));
-    assert!(texts(&world, "tile.b.role.popover").contains(&"↑ Alder · unavailable".into()));
+    assert!(
+        texts(&world, "tile.b.role.popover")
+            .contains(&"Started by Alder, which attn cannot show.".into())
+    );
     assert!(
         !chain(&world)
             .into_iter()
@@ -1109,6 +1122,65 @@ fn a_chain_walks_the_whole_tree_from_its_root_with_each_agents_depth() {
 }
 
 #[test]
+fn at_the_smallest_window_with_large_text_pinned_details_keep_every_pull_request_whole_and_pressable()
+ {
+    const LONG: &str =
+        "-build-and-release-platform-本番の権限を移行する作業ツリー-tokyo-region-primary";
+    let titled = |number, state: &str, title: &str| SessionPullRequest {
+        title: Some(format!("{title}{LONG}")),
+        status_fetched_at: Some("2026-08-30T12:05:00Z".into()),
+        ci_status: Some("pending".into()),
+        review_status: Some("pending".into()),
+        mergeable_state: Some("clean".into()),
+        ..pull_request(number, state, "2026-08-30T12:00:00Z")
+    };
+    let mut world = start_sized_from(
+        InitialStateMessage {
+            desktops: Some(vec![desktop("a")]),
+            sessions: Some(vec![
+                with_pull_requests(vec![
+                    titled(
+                        812,
+                        "open",
+                        "Chrome: the overview, the shelf, the peek and the seed chips",
+                    ),
+                    titled(790, "merged", "Header pieces measure what they draw"),
+                ]),
+                session("b", "docs", None),
+            ]),
+            settings: Some([("uiScale".to_owned(), "1.5".to_owned())].into()),
+            ..InitialStateMessage::new()
+        },
+        (800.0, 600.0),
+    );
+    world.gesture(|app| app.click(Target::key("tile.a.details")));
+    world.settle();
+    for key in ["tile.a.details.popover.pr.1", "tile.a.details.popover.keys"] {
+        let elements = world.runtime().elements();
+        let shown = elements
+            .iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("{key} is drawn"));
+        assert!(
+            shown.visible[3] >= shown.rect[3] - 0.5,
+            "{key} shows {} of its {} points",
+            shown.visible[3],
+            shown.rect[3]
+        );
+    }
+    let [x, y, w, h] = world
+        .runtime()
+        .presented("tile.a.details.popover.pr.1")
+        .unwrap()
+        .0;
+    world.gesture(|app| app.click_at((x + w / 2.0, y + h / 2.0)));
+    assert_eq!(
+        world.opened_links(),
+        ["https://github.com/victorarias/attn/pull/790"]
+    );
+}
+
+#[test]
 fn the_details_of_one_pull_request_spell_out_every_status_the_daemon_reported() {
     let mut pr = pull_request(71, "open", "2026-08-30T12:00:00Z");
     pr.status_fetched_at = Some("2026-08-30T12:05:00Z".into());
@@ -1131,7 +1203,10 @@ fn the_details_of_one_pull_request_spell_out_every_status_the_daemon_reported() 
     assert_eq!(after("merge"), "no conflicts");
     assert_eq!(after("state"), "open");
     assert!(after("opened").contains(" ago · "), "{shown}");
-    assert!(lines.contains(&"↵ open · c copy url"), "{shown}");
+    assert!(
+        lines.contains(&"↵ open") && lines.contains(&"c copy url"),
+        "{shown}"
+    );
     assert!(
         world
             .screen()
@@ -1203,7 +1278,7 @@ fn a_chain_taller_than_the_window_fits_it_and_scrolls_to_the_agent_it_picks() {
         "the card fits the window: {card_y} + {card_h}"
     );
     let shows = |world: &World, row: usize| {
-        let [_, top, _, h] = drawn(world, "tile.a.role.popover.agents");
+        let [_, top, _, h] = drawn(world, "tile.a.role.popover.body");
         let [_, y, _, rh] = drawn(world, &format!("tile.a.role.popover.agent.{row}"));
         y >= top - 0.5 && y + rh <= top + h + 0.5
     };
