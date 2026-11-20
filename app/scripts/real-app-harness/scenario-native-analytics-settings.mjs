@@ -47,7 +47,7 @@ async function rows() {
   let group = '';
   const listed = [];
   for (const node of await under(LIST)) {
-    if ((node.role === 'group' || node.role === 'list-box') && node.name) group = node.name;
+    if (['group', 'list-box', 'heading'].includes(node.role) && node.name) group = node.name;
     if (node.role === 'list-box-option') listed.push({ key: node.key, group, name: node.name ?? '' });
   }
   return listed;

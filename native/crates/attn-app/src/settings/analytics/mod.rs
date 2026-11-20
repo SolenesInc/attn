@@ -254,11 +254,7 @@ fn select(state: &mut State, key: String, tx: &mut Tx) {
 fn reveal(state: &State, tx: &mut Tx) {
     let items = listed(state);
     let index = current(&items, state.window.settings.analytics.selected.as_deref());
-    let shown = format!("item{index}");
-    if tx.focused().is_some_and(|key| key.starts_with("item")) {
-        tx.focus(shown.clone(), true);
-    }
-    tx.scroll_into_view_in(view::LIST, shown);
+    tx.scroll_into_view_in(view::LIST, format!("item{index}"));
 }
 
 fn step(state: &mut State, by: isize, tx: &mut Tx) {

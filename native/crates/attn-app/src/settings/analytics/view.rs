@@ -324,19 +324,32 @@ fn rows(state: &State, page: &Analytics, items: &[Item], index: usize, t: &Token
             .iter()
             .enumerate()
             .partition(|(_, item)| !matches!(item, Item::Vent { done: true, .. }));
-        let part = |key: &str, label: &'static str, rows: Vec<(usize, &Item)>| {
-            (!rows.is_empty()).then(|| {
-                List::new(format!("{LIST}.{key}"), label)
-                    .heading()
-                    .listbox()
-                    .rows(rows.into_iter().map(|(i, item)| row(i, item)))
-                    .build(t)
-            })
+        let heading = |key: &str, label: &'static str| {
+            words(label, Type::Label, t.text_tertiary)
+                .key(format!("{LIST}.heading.{key}"))
+                .role("heading")
+                .label(label)
+        };
+        let section = |key: &str, label: &'static str, rows: Vec<(usize, &Item)>| -> Vec<El> {
+            if rows.is_empty() {
+                return Vec::new();
+            }
+            std::iter::once(heading(key, label))
+                .chain(rows.into_iter().map(|(i, item)| row(i, item)))
+                .collect()
         };
         return Group::<State>::new(LIST, name)
             .roving()
-            .push_all(part("new", "New", new))
-            .push_all(part("done", "Done", done))
+            .push(
+                List::new(format!("{LIST}.rows"), name)
+                    .listbox()
+                    .rows(
+                        section("new", "New", new)
+                            .into_iter()
+                            .chain(section("done", "Done", done)),
+                    )
+                    .build(t),
+            )
             .build(t);
     }
     let said = match &page.records {

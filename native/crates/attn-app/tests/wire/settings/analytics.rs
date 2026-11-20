@@ -391,7 +391,7 @@ fn rows(world: &World) -> Vec<String> {
         .descendants(Target::key("settings.analytics.list"))
     {
         match node.role.as_str() {
-            "group" | "list-box" => {
+            "group" | "list-box" | "heading" => {
                 if let Some(name) = node.name {
                     group = name;
                 }
@@ -1229,6 +1229,13 @@ fn tab_into_a_long_list_shows_its_chosen_option() {
         super::rect_of(&world, "item20"),
         super::rect_of(&world, "settings.body")
     );
+    press(&mut world, "j");
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("item21"),
+        "j moves the focus with the choice"
+    );
+    assert!(in_view(&world, "item21"), "the next option shows");
 }
 
 #[test]
@@ -1283,4 +1290,23 @@ fn show_all_moves_neither_column_sideways() {
             );
         }
     }
+}
+
+#[test]
+fn keys_keep_answering_after_the_focused_vent_moves_to_done_and_back() {
+    let mut world = triage();
+    super::tab_to(&mut world, "settings.analytics.views.vents");
+    tab_once(&mut world);
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("item0"),
+        "the vent's option has the focus"
+    );
+    press(&mut world, "d");
+    assert!(
+        focused(&world).is_some_and(|k| k.starts_with("item")),
+        "the focus stays on an option after the vent moves to Done"
+    );
+    press(&mut world, "u");
+    assert_eq!(said(&world), "Undone.");
 }
