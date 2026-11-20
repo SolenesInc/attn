@@ -75,6 +75,7 @@ pub const CHROME_SHEETS: &[ChromeSheet] = &[
             "row.dimmed",
             "row.still",
             "row.wrap",
+            "row.wrapped",
         ],
         columns: &[
             ("Rest", "Rest", "", ""),

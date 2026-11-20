@@ -8,7 +8,8 @@ use attn_ui::system::ListRow;
 use rune::render::Instance;
 use rune::{App, AppSpec, Cx, El, ElementInfo, Env, Key, KeyEvent, Mods, Runtime, el};
 
-const WINDOW: (f32, f32) = (1400.0, 800.0);
+/// Tall enough for the List row stage at its narrowest, which stands 836 points.
+const WINDOW: (f32, f32) = (1400.0, 900.0);
 const SCALE: f32 = 2.0;
 const RING_REACH: f32 = 4.0;
 const ROWS: [&str; 4] = ["row.agent", "row.nav", "row.tile", "row.two"];

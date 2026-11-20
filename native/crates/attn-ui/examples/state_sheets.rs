@@ -18,7 +18,8 @@ use attn_ui::system::{Type, words};
 use rune::render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer, write_png};
 use rune::{App, AppSpec, Compositor, Cx, El, Env, Frame, Key, KeyEvent, Mods, Runtime, col, el};
 
-const WINDOW: (f32, f32) = (1400.0, 800.0);
+/// Tall enough for the List row stage at its narrowest, which stands 836 points.
+const WINDOW: (f32, f32) = (1400.0, 900.0);
 /// Wide enough for a block on a page of the widest width its story draws.
 const BLOCK_WINDOW: (f32, f32) = (1500.0, 1100.0);
 const SCALE: f32 = 2.0;
