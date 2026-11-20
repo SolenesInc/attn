@@ -1206,6 +1206,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::trail::Trail::here(said)", true),
     ("blocks::table::TableColumns::new(name)", true),
     ("blocks::table::TableColumns::fixed(title)", true),
+    ("blocks::table::TableColumns::fixed_end(title)", true),
     ("blocks::table::Empty::new(heading)", true),
     ("blocks::table::Empty::new(copy)", true),
     ("blocks::table::TableRow::new(title)", true),

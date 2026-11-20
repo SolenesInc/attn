@@ -91,6 +91,7 @@ pub const BLOCK_SUBJECTS: &[(&str, &[&str])] = &[
     ("Blocks/Disclosure", &["disclosure.block.part"]),
     ("Blocks/Actions", &["actions"]),
     ("Blocks/Table", &["table"]),
+    ("Blocks/Diagnostics table", &["facts"]),
 ];
 
 const LONG_COPY: &str = "Every agent attn starts on this machine, including the ones that run on a schedule and the ones another agent delegates to, reads this before its first turn, so a long value here reaches all of them.";
@@ -198,6 +199,11 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
                     s.width = Width::Narrow;
                 }),
         )
+        .story(common(Story::new(
+            "Blocks/Diagnostics table",
+            Blocks::default,
+            diagnostics_table,
+        )))
 }
 
 pub(crate) fn common(story: Story<Blocks>) -> Story<Blocks> {
@@ -730,6 +736,39 @@ fn field_state(s: &Blocks) -> FieldState {
 
 /// The fixed column of the table story: a model chip as Delegation shows one.
 const RUNS_ON: f32 = 280.0;
+
+/// Room for "1,048,000,000", 13 Mono characters at about 7.1 points.
+const COUNT: f32 = 96.0;
+
+const LONG_FACT: &str = "workspace.terminal.layout.snapshot.persisted.across.every.profile";
+
+/// A compact table of identifiers and counts, as a diagnostics page lists what it measured.
+fn diagnostics_table(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
+    let t = tokens(cx);
+    let mut columns = TableColumns::new("Fact").identifiers();
+    let events = columns.fixed_end("Events", COUNT);
+    let share = columns.fixed_end("Share", COUNT);
+    let long = if s.long { LONG_FACT } else { "pr.updated" };
+    let rows = [
+        ("session.state.changed", "232,213", "73.7%", true),
+        (long, "4", "0.1%", false),
+    ]
+    .map(|(name, count, part, loud)| {
+        let row = TableRow::<Blocks>::still(format!("facts.{name}"), name.to_owned());
+        let row = if loud {
+            row.tag("Loud", Tone::Warn)
+        } else {
+            row
+        };
+        row.cell(events, count.to_owned())
+            .cell(share, part.to_owned())
+    });
+    let mut table = Table::new("facts", columns).compact().named("Facts");
+    for row in rows {
+        table = table.row(row);
+    }
+    stage(s, cx, &t, vec![table.build(&t)])
+}
 
 fn model(key: &str, said: &str, unset: bool, t: &Tokens) -> Control {
     let ink = if unset { t.warning } else { t.text_primary };

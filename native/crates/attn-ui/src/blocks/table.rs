@@ -16,7 +16,8 @@ use crate::system::{
 /// rows' marks when a row has one, and one for their end buttons when a row has one.
 pub struct TableColumns {
     name: Said,
-    fixed: Vec<(Said, f32)>,
+    identifiers: bool,
+    fixed: Vec<(Said, f32, bool)>,
 }
 
 /// A fixed column of the [`TableColumns`] that made it, where a row places its controls.
@@ -28,12 +29,27 @@ impl TableColumns {
         TableColumns {
             name: name.into(),
             fixed: Vec::new(),
+            identifiers: false,
         }
+    }
+
+    /// Names that are identifiers, such as `session.state.changed`: drawn in Mono and, where one
+    /// must wrap, broken after its dots, never inside a part.
+    pub fn identifiers(mut self) -> Self {
+        self.identifiers = true;
+        self
     }
 
     /// A column `width` wide after the ones before it, titled `title`.
     pub fn fixed(&mut self, title: impl Into<Said>, width: f32) -> Column {
-        self.fixed.push((title.into(), width));
+        self.fixed.push((title.into(), width, false));
+        Column(self.fixed.len() - 1)
+    }
+
+    /// [`Self::fixed`] whose content and title end on the column's trailing edge, as numbers
+    /// do so that numbers of any size share a right edge.
+    pub fn fixed_end(&mut self, title: impl Into<Said>, width: f32) -> Column {
+        self.fixed.push((title.into(), width, true));
         Column(self.fixed.len() - 1)
     }
 }
@@ -60,6 +76,7 @@ pub struct Table<S> {
     footer: Option<(String, Actions)>,
     dimmed: bool,
     named: Option<String>,
+    compact: bool,
 }
 
 impl<S: 'static> Table<S> {
@@ -72,7 +89,15 @@ impl<S: 'static> Table<S> {
             footer: None,
             dimmed: false,
             named: None,
+            compact: false,
         }
+    }
+
+    /// Rows as tall as their text, not a Regular control, for a table of many rows read at a
+    /// glance, such as a diagnostics list.
+    pub fn compact(mut self) -> Self {
+        self.compact = true;
+        self
     }
 
     /// Assistive tools find the table as a table read as `label`, as one whose rows only show
@@ -115,12 +140,14 @@ impl<S: 'static> Table<S> {
     pub fn build(self, t: &Tokens) -> Block {
         let grid = Grid {
             name: self.columns.name,
+            identifiers: self.columns.identifiers,
             fixed: self.columns.fixed,
             lead: self.rows.iter().any(|r| r.leading.is_some()),
             action: self.rows.iter().any(TableRow::has_end),
             dimmed: self.dimmed,
+            compact: self.compact,
         };
-        let head = grid.dim(grid.head(t).key(format!("{}.head", self.key)));
+        let head = grid.dim(grid.head(&self.key, t).key(format!("{}.head", self.key)));
         let n = self.rows.len();
         let footed = self.footer.is_some();
         let rows = self
@@ -153,13 +180,24 @@ impl<S: 'static> Table<S> {
 
 struct Grid {
     name: Said,
-    fixed: Vec<(Said, f32)>,
+    identifiers: bool,
+    fixed: Vec<(Said, f32, bool)>,
+    compact: bool,
     lead: bool,
     action: bool,
     dimmed: bool,
 }
 
 impl Grid {
+    /// How tall a row's first line stands: a Regular control, or in a compact table its text.
+    fn band(&self) -> f32 {
+        if self.compact {
+            0.0
+        } else {
+            Size::Regular.height()
+        }
+    }
+
     fn dim(&self, e: El) -> El {
         if self.dimmed { door::faded(e) } else { e }
     }
@@ -177,7 +215,12 @@ impl Grid {
             between,
             COLUMN_GAP,
         )
-        .child(row().w(side).min_w(side).children(lead.map(band)))
+        .child(
+            row()
+                .w(side)
+                .min_w(side)
+                .children(lead.map(|l| band(l, side))),
+        )
         .child(name.grow_from(1.0, FLEX_FLOOR))
     }
 
@@ -201,9 +244,14 @@ impl Grid {
             .fixed
             .iter()
             .enumerate()
-            .map(|(i, (_, w))| {
+            .map(|(i, (_, w, end))| {
                 let w = *w;
                 let content = fixed(Column(i)).shrink().max_w(w);
+                let content = if *end {
+                    row().w(w).justify_end().child(content)
+                } else {
+                    content
+                };
                 if Some(i) == last {
                     door::gaps(
                         row().items_start().flex_wrap().grow_from(1.0, w + end_room),
@@ -217,7 +265,7 @@ impl Grid {
                 }
             })
             .collect();
-        let columns_width = self.fixed.iter().map(|(_, w)| *w).sum::<f32>()
+        let columns_width = self.fixed.iter().map(|(_, w, _)| *w).sum::<f32>()
             + COLUMN_GAP.pt() * self.fixed.len().saturating_sub(1) as f32
             + end_room;
         let columns = door::gaps(
@@ -262,11 +310,11 @@ impl Grid {
     }
 
     /// The head on the columns, one line high, so a narrow table names only the columns on it.
-    fn head(&self, t: &Tokens) -> El {
+    fn head(&self, table: &str, t: &Tokens) -> El {
         let label = |title: &Said| words(title.clone(), Type::Label, t.text_tertiary);
         let line = self.line(
             self.who(None, label(&self.name), Space::S0),
-            |column| label(&self.fixed[column.0].0),
+            |column| label(&self.fixed[column.0].0).key(format!("{table}.head.{}", column.0)),
             None,
         );
         let line = door::clip(line.max_h(door::line_height(Type::Label)));
@@ -304,19 +352,33 @@ impl Grid {
     }
 }
 
-/// A row's part centred on its first line, a band one Regular control high.
-fn band(content: El) -> El {
-    row()
-        .min_h(Size::Regular.height())
-        .items_center()
-        .child(content)
+/// `name` in Mono, its parts after each dot free to start a line, a part with no dot wrapping
+/// where it must.
+fn identifier(key: &str, name: &str, t: &Tokens) -> El {
+    let parts = name.split_inclusive('.').enumerate().map(|(i, part)| {
+        words(Said::from(part.to_owned()), Type::Mono, t.text_primary)
+            .key(format!("{key}.name.{i}"))
+            .wrap_anywhere()
+            .shrink()
+            .min_w(0.0)
+    });
+    col()
+        .label(name.to_owned())
+        .shrink()
+        .min_w(0.0)
+        .child(row().w_full().flex_wrap().children(parts).a11y_hidden())
+}
+
+/// A row's part centred on its first line, a band `height` high.
+fn band(content: El, height: f32) -> El {
+    row().min_h(height).items_center().child(content)
 }
 
 /// A fixed column's content: the first on the row's first line, the rest under it.
-fn stacked(content: Vec<El>) -> El {
+fn stacked(content: Vec<El>, height: f32) -> El {
     let mut content = content.into_iter();
     door::gap(col().items_start(), Space::S4)
-        .children(content.next().map(|c| band(c).w_full()))
+        .children(content.next().map(|c| band(c, height).w_full()))
         .children(content)
 }
 
@@ -551,12 +613,13 @@ impl<S: 'static> TableRow<S> {
             Space::S4,
             Space::S8,
         )
-        .child(
+        .child(if grid.identifiers {
+            identifier(&self.key, &self.title.text(), t)
+        } else {
             words(&self.title, Type::Name, t.text_primary)
-                .wrap_anywhere()
+                .wrap()
                 .shrink()
-                .min_w(0.0),
-        )
+        })
         .children(self.tags.iter().map(
             |RowTag {
                  said,
@@ -593,7 +656,11 @@ impl<S: 'static> TableRow<S> {
                     .wrap()
             }));
         let said = if self.still { said } else { said.a11y_hidden() };
-        let said = door::on_band(said, Type::Name, Size::Regular);
+        let said = if grid.compact {
+            said
+        } else {
+            door::on_band(said, Type::Name, Size::Regular)
+        };
         let said = fade(grid.who(self.leading.map(El::from), said, Space::S4));
         let mut cells = std::mem::take(&mut self.cells);
         cells.sort_by_key(|(column, _)| column.0);
@@ -601,19 +668,22 @@ impl<S: 'static> TableRow<S> {
             .chain(self.tags.iter().map(|tag| tag.said.text()))
             .chain(cells.iter().map(|(_, said)| said.text()))
             .collect();
+        let key = self.key.clone();
         let cell_els = cells.into_iter().map(|(column, said)| {
             (
                 column,
                 fade(
                     words(said, Type::Mono, t.text_secondary)
                         .wrap_anywhere()
-                        .shrink(),
+                        .shrink()
+                        .key(format!("{key}.cell.{}", column.0)),
                 ),
             )
         });
         if self.still {
             let mut placed = grid.place(cell_els.chain(self.controls));
-            let fixed = |column: Column| stacked(std::mem::take(&mut placed[column.0]));
+            let fixed =
+                |column: Column| stacked(std::mem::take(&mut placed[column.0]), grid.band());
             let main = grid.padded(grid.line(said, fixed, None), Space::S8);
             let out = col()
                 .key(self.key)
@@ -639,7 +709,7 @@ impl<S: 'static> TableRow<S> {
         );
         let who = whole_width(El::from(who).description(description.join(" · ")));
         let mut placed = grid.place(self.controls);
-        let fixed = |column: Column| stacked(std::mem::take(&mut placed[column.0]));
+        let fixed = |column: Column| stacked(std::mem::take(&mut placed[column.0]), grid.band());
         let more = self.more.map(|label| {
             let toggle = self.toggle.clone();
             band(
@@ -652,6 +722,7 @@ impl<S: 'static> TableRow<S> {
                     .key(format!("{}.more", self.key))
                     .label(label)
                     .into(),
+                grid.band(),
             )
         });
         let main = grid.padded(grid.line(who, fixed, more), Space::S8);
@@ -669,7 +740,7 @@ impl<S: 'static> TableRow<S> {
                 let mut placed = grid.place([(at, hung(footer))]);
                 let line = grid.line(
                     grid.who(None, row(), Space::S0),
-                    |column| stacked(std::mem::take(&mut placed[column.0])),
+                    |column| stacked(std::mem::take(&mut placed[column.0]), grid.band()),
                     None,
                 );
                 out = out.child(door::below(line, Space::S12));
@@ -799,8 +870,8 @@ impl<S: 'static> SubRow<S> {
             .w_full()
             .child(grid.line(
                 grid.who(None, rail, Space::S0),
-                |column| stacked(std::mem::take(&mut placed[column.0])),
-                self.trailing.map(|c| band(c.into())),
+                |column| stacked(std::mem::take(&mut placed[column.0]), grid.band()),
+                self.trailing.map(|c| band(c.into(), grid.band())),
             ));
         if self.open && !self.details.is_empty() {
             let details = spaced(self.details, inner_gap, None).max_w(FIELD);

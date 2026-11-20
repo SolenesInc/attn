@@ -2695,3 +2695,74 @@ fn a_notices_actions_share_a_line_wherever_its_line_holds_them_at_every_text_siz
         }
     }
 }
+
+const FACTS: &[&str] = &["facts.session.state.changed", "facts.pr.updated"];
+const MONO: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
+
+fn words_right(rt: &Runtime<()>, e: &ElementInfo) -> f32 {
+    shown_glyphs(rt, e.rect)
+        .iter()
+        .map(|g| g[0] + g[2])
+        .fold(f32::NEG_INFINITY, f32::max)
+}
+
+#[test]
+fn an_end_columns_numbers_and_title_share_its_right_edge() {
+    for variant in ["Rest", "Focus"] {
+        let rt = block_story(true, "Blocks/Diagnostics table", variant);
+        for column in 0..2 {
+            let edge = words_right(&rt, &element(&rt, &format!("facts.head.{column}")));
+            for row in FACTS {
+                let cell = element(&rt, &format!("{row}.cell.{column}"));
+                let at = words_right(&rt, &cell);
+                assert!(
+                    (at - edge).abs() <= GLYPH_SLACK,
+                    "{variant} {row}: column {column}'s number ends at {at}, off its title's end \
+                     at {edge}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn an_identifier_wraps_only_after_its_dots() {
+    let line = MONO.line_px();
+    for variant in ["Long", "Narrow long", "Smallest long"] {
+        let rt = block_story(true, "Blocks/Diagnostics table", variant);
+        let row = "facts.workspace.terminal.layout.snapshot.persisted.across.every.profile";
+        let parts: Vec<ElementInfo> = (0..8)
+            .map(|i| element(&rt, &format!("{row}.name.{i}")))
+            .collect();
+        for (i, part) in parts.iter().enumerate() {
+            assert!(
+                part.rect[3] <= line + 0.5,
+                "{variant}: part {i} is {} tall, more than one {line} line: it broke inside",
+                part.rect[3]
+            );
+        }
+        let lines = parts
+            .windows(2)
+            .filter(|w| w[1].rect[1] > w[0].rect[1] + 0.5)
+            .count();
+        assert!(
+            variant == "Long" || lines > 0,
+            "{variant}: the long identifier stands on one line"
+        );
+    }
+}
+
+#[test]
+fn a_compact_tables_one_line_row_is_as_tall_as_its_text() {
+    let line = MONO.line_px();
+    for variant in ["Rest", "Focus"] {
+        let rt = block_story(true, "Blocks/Diagnostics table", variant);
+        let row = element(&rt, "facts.pr.updated");
+        let want = line + 2.0 * 8.0;
+        assert!(
+            row.rect[3] <= want + 0.5,
+            "{variant}: a one-line row is {} tall, past its text and its room at {want}",
+            row.rect[3]
+        );
+    }
+}

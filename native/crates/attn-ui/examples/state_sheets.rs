@@ -711,6 +711,7 @@ const BLOCK_VARIANTS: &[(&str, &[State])] = &[
             state("Open narrow"),
         ],
     ),
+    ("Blocks/Diagnostics table", &[]),
 ];
 
 /// A block's sheet: each state on a row of its own, since a block is as wide as a page.

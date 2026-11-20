@@ -251,12 +251,12 @@ fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens) -> Block {
             .build(t),
         )
     } else {
-        let mut columns = TableColumns::new("Fact");
-        let events = columns.fixed("Events", NUMBER_W);
-        let share = columns.fixed("Share", NUMBER_W);
-        let subjects = columns.fixed("Subjects", NUMBER_W);
-        let now = columns.fixed(format!("{recent}/h"), NUMBER_W);
-        let usual = columns.fixed(format!("{baseline}/h"), NUMBER_W);
+        let mut columns = TableColumns::new("Fact").identifiers();
+        let events = columns.fixed_end("Events", NUMBER_W);
+        let share = columns.fixed_end("Share", NUMBER_W);
+        let subjects = columns.fixed_end("Subjects", NUMBER_W);
+        let now = columns.fixed_end(format!("{recent}/h"), NUMBER_W);
+        let usual = columns.fixed_end(format!("{baseline}/h"), NUMBER_W);
         let rows = shown.into_iter().map(|p| {
             let row = TableRow::<State>::still(
                 format!("settings.bus.producer.{}", p.name),
@@ -280,6 +280,7 @@ fn producers(bus: &Bus, status: &BusStatusResultMessage, t: &Tokens) -> Block {
         });
         section.push(
             Table::new("settings.bus.producers", columns)
+                .compact()
                 .named("Producers")
                 .rows(rows)
                 .build(t),
@@ -330,10 +331,10 @@ fn consumers(bus: &Bus, status: &BusStatusResultMessage, now_ms: i64, t: &Tokens
             )
             .build(t);
     }
-    let mut columns = TableColumns::new("Consumer");
-    let cursor = columns.fixed("Cursor", NUMBER_W);
-    let lag = columns.fixed("Lag", NUMBER_W);
-    let waiting = columns.fixed("Waiting", NUMBER_W);
+    let mut columns = TableColumns::new("Consumer").identifiers();
+    let cursor = columns.fixed_end("Cursor", NUMBER_W);
+    let lag = columns.fixed_end("Lag", NUMBER_W);
+    let waiting = columns.fixed_end("Waiting", NUMBER_W);
     let action = columns.fixed("", ACTION_W);
     let rows = status.consumers.iter().map(|c| {
         let row =
@@ -378,6 +379,7 @@ fn consumers(bus: &Bus, status: &BusStatusResultMessage, now_ms: i64, t: &Tokens
     section
         .push(
             Table::new("settings.bus.consumers", columns)
+                .compact()
                 .named("Consumers")
                 .rows(rows)
                 .build(t),
