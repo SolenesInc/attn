@@ -27,6 +27,12 @@ impl Inline {
     pub fn loose() -> El {
         door::gaps(row().flex_wrap().items_center(), Space::S8, Space::S8).max_w_frac(1.0)
     }
+
+    /// Fields that share a line, such as the rates of one price ([`super::Field::el`]): as far
+    /// apart across and down as fields one under another, onto further lines when one runs out.
+    pub fn fields() -> El {
+        door::gaps(row().flex_wrap().items_start(), Space::S16, Space::S16).max_w_frac(1.0)
+    }
 }
 
 impl Inline {

@@ -842,10 +842,10 @@ fn fill_new(world: &mut World, model: &str) {
 fn cards(world: &World) -> Vec<String> {
     world
         .screen()
-        .descendants(Target::key("settings.prices"))
+        .descendants(Target::key("settings.pricing.body"))
         .into_iter()
         .filter(|n| {
-            n.role == "group"
+            n.role == "list-item"
                 && n.key
                     .as_deref()
                     .is_some_and(|k| k.starts_with("settings.price."))

@@ -629,6 +629,6 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
         session_defaults(state, t),
         seeds_on_standby(state, t),
         groups.build(t),
-        Block::custom("settings.pricing.block", pricing::page(state, t)),
+        pricing::page(state, t),
     ]
 }

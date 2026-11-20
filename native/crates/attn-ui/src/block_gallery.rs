@@ -74,6 +74,7 @@ pub const BLOCK_SUBJECTS: &[(&str, &[&str])] = &[
             "field.path.field",
             "field.read.field",
             "field.count.field",
+            "field.rates",
         ],
     ),
     (
@@ -569,6 +570,27 @@ fn fields(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
                 "How long the agent must keep working before anything starts.",
             ))
             .build(&t),
+        Block::custom(
+            "field.rates.slot",
+            Inline::fields().key("field.rates").children(
+                ["Input", "Cache write · 5m", "Cache write · 1h"]
+                    .into_iter()
+                    .map(|rate| {
+                        let key = format!("field.rate.{rate}");
+                        Field::new(key.clone(), rate)
+                            .control(number_box(
+                                TextInput::new(&s.number)
+                                    .key(key)
+                                    .label(format!("{rate} · USD/MTok"))
+                                    .placeholder("0")
+                                    .on_edit(|s: &mut Blocks| &mut s.number),
+                                FieldState::Ready,
+                                &t,
+                            ))
+                            .el(&t)
+                    }),
+            ),
+        ),
     ];
     stage(s, cx, &t, fields)
 }

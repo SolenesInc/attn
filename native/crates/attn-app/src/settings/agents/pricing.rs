@@ -2,15 +2,16 @@
 //! model the built-in table misses, and the form that adds one.
 
 use attn_ui::Tokens;
-use attn_ui::system::{Button, FieldState, Look, disclosure, line_box, number_box};
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, TextEdit, Tx, col, row, text};
+use attn_ui::blocks::{Block, Disclosure, Field, Inline, List, Notice, Prose, Section};
+use attn_ui::system::{
+    Button, FieldState, ListRow, Look, Reveal, Size, Trigger, TriggerLook, Type, line_box,
+    number_box, words,
+};
+use rune::{El, TextEdit, Tx};
 use rune_kit::{Select, SelectAppearance, TextInput};
 
 use super::super::autosave::{self, Codec, PLAIN};
 use super::super::controls::refusal_beside;
-use super::super::pages::{CAPTION, S4};
 use crate::State;
 
 const PRICE_PREFIX: &str = "session_cost.price.";
@@ -240,12 +241,16 @@ fn add(state: &mut State, tx: &mut Tx) {
 }
 
 /// One rate's field, `input` named for its rate under `label` and saving as its form does.
-fn rate_input(label: &str, input: TextInput, t: &Tokens) -> El {
-    let name = format!("{label} · USD/MTok");
-    col()
-        .gap(space::S1)
-        .child(text(name.clone()).font(CAPTION).color(t.text_secondary))
-        .child(number_box(input.label(name).placeholder("0"), FieldState::Ready, t).into())
+fn rate_field(key: String, label: &str, input: TextInput, t: &Tokens) -> El {
+    let named = input.label(format!("{label} · USD/MTok")).placeholder("0");
+    Field::new(key, label.to_owned())
+        .control(number_box(named, FieldState::Ready, t))
+        .el(t)
+}
+
+/// The five rates of one price, side by side, onto further lines when the room runs out.
+fn rates(key: String, fields: impl Iterator<Item = El>) -> Block {
+    Block::custom(key, Inline::fields().children(fields))
 }
 
 fn card_typed(state: &mut State, model: &str) {
@@ -262,7 +267,7 @@ fn card_typed(state: &mut State, model: &str) {
     *state.window.settings.autosave.draft_mut(&price_key(model)) = TextEdit::new(draft);
 }
 
-fn existing(state: &State, model: &str, raw: &str, t: &Tokens) -> El {
+fn existing(state: &State, model: &str, raw: &str, t: &Tokens) -> (ListRow, Vec<Block>) {
     let key = price_key(model);
     let empty = Card::default();
     let card = state
@@ -273,11 +278,12 @@ fn existing(state: &State, model: &str, raw: &str, t: &Tokens) -> El {
         .cards
         .get(model)
         .unwrap_or(&empty);
-    let rates = RATES.iter().enumerate().map(|(i, (rate, label))| {
+    let fields = RATES.iter().enumerate().map(|(i, (rate, label))| {
         let (edit, change, submit, left) =
             (model.to_owned(), model.to_owned(), key.clone(), key.clone());
+        let input_key = super::super::part_field_key(&key, rate);
         let input = TextInput::new(&card.rates[i])
-            .key(super::super::part_field_key(&key, rate))
+            .key(input_key.clone())
             .on_edit(move |state: &mut State| {
                 &mut state
                     .window
@@ -294,7 +300,7 @@ fn existing(state: &State, model: &str, raw: &str, t: &Tokens) -> El {
             .on_blur(move |state: &mut State, tx: &mut Tx| {
                 autosave::commit_on_leave(state, &left, tx)
             });
-        rate_input(label, input, t)
+        rate_field(input_key, label, input, t)
     });
     let remove = key.clone();
     let refusal = refusal_beside(
@@ -303,55 +309,53 @@ fn existing(state: &State, model: &str, raw: &str, t: &Tokens) -> El {
         super::super::part_field_key(&key, RATES[0].0),
         t,
     );
-    col()
-        .key(format!("settings.price.{model}"))
-        .role("group")
-        .label(model.to_owned())
-        .w_full()
-        .gap(space::S2)
-        .padding(space::S3)
-        .radius(6.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
-        .child(
-            row()
-                .w_full()
-                .items_center()
-                .child(
-                    text(model.to_owned())
-                        .font(type_::MONO_CAPTION)
-                        .color(t.text_primary)
-                        .grow(1.0),
-                )
-                .child(
-                    Button::new("Remove")
-                        .look(Look::Danger)
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            autosave::apply(state, &remove, "", tx)
-                        })
-                        .build(t)
-                        .key(format!("settings.price.{model}.remove"))
-                        .into(),
-                ),
+    let row = ListRow::new(format!("settings.price.{model}"), model.to_owned())
+        .still()
+        .wrap()
+        .title_el(
+            words(model.to_owned(), Type::Mono, t.text_primary)
+                .wrap_anywhere()
+                .w_full(),
         )
-        .children(parse_card(raw).is_none().then(|| {
-            warning(
-                &format!("settings.price.{model}.invalid"),
+        .controls(
+            [Button::new("Remove")
+                .look(Look::Danger)
+                .size(Size::Compact)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    autosave::apply(state, &remove, "", tx)
+                })
+                .build(t)
+                .key(format!("settings.price.{model}.remove"))
+                .into()],
+            Reveal::Always,
+        );
+    let mut under = Vec::new();
+    if parse_card(raw).is_none() {
+        under.push(
+            Notice::warn(
+                format!("settings.price.{model}.invalid"),
                 "This saved override is invalid. Complete every rate to repair it, or remove it.",
-                t,
             )
-        }))
-        .child(row().gap(space::S2).wrap().children(rates))
-        .children(refusal)
+            .build(t),
+        );
+    }
+    under.push(rates(format!("settings.price.{model}.rates"), fields));
+    under.extend(
+        refusal.map(|refusal| Block::custom(format!("settings.price.{model}.refused"), refusal)),
+    );
+    (row, under)
 }
 
-fn billed_as_select(state: &State) -> Select {
+fn billed_as(state: &State) -> String {
     let draft = state.window.settings.autosave.draft(BILLED_AS).trim();
-    let selected = if draft.is_empty() {
-        AUTO_REVIEW_DEFAULT
+    if draft.is_empty() {
+        AUTO_REVIEW_DEFAULT.to_owned()
     } else {
-        draft
-    };
+        draft.to_owned()
+    }
+}
+
+fn billed_as_options(selected: &str) -> Vec<String> {
     let mut options: Vec<String> = Vec::new();
     if !BILLING_MODELS.contains(&selected) {
         options.push(selected.to_owned());
@@ -363,19 +367,26 @@ fn billed_as_select(state: &State) -> Select {
             (*m).to_owned()
         }
     }));
-    let current = options
+    options
+}
+
+fn billed_as_shown(selected: &str, options: &[String]) -> Option<String> {
+    options
         .iter()
         .find(|o| o.strip_suffix(DEFAULT_SUFFIX).unwrap_or(o) == selected)
-        .cloned();
+        .cloned()
+}
+
+fn billed_as_select(state: &State) -> Select {
+    let selected = billed_as(state);
+    let options = billed_as_options(&selected);
+    let current = billed_as_shown(&selected, &options);
     Select::new(BILLED_AS_SELECT, &options)
         .appearance(SelectAppearance::Field)
-        .label("Codex auto-review billed as")
+        .label(BILLED_AS_LABEL)
         .current(current.as_deref())
         .open(state.window.settings.agents.pricing.billed_as_open)
-        .on_toggle(|state: &mut State| {
-            let pricing = &mut state.window.settings.agents.pricing;
-            pricing.billed_as_open = !pricing.billed_as_open;
-        })
+        .on_toggle(toggle_billed_as)
         .on_close(|state: &mut State| state.window.settings.agents.pricing.billed_as_open = false)
         .on_choose(|state: &mut State, option: &str, tx: &mut Tx| {
             state.window.settings.agents.pricing.billed_as_open = false;
@@ -389,156 +400,139 @@ fn billed_as_select(state: &State) -> Select {
         })
 }
 
+fn toggle_billed_as(state: &mut State) {
+    let pricing = &mut state.window.settings.agents.pricing;
+    pricing.billed_as_open = !pricing.billed_as_open;
+}
+
+const BILLED_AS_LABEL: &str = "Codex auto-review billed as";
+
+/// The field that opens the billed-as list, keyed as the list's anchor.
+fn billed_as_field(state: &State, t: &Tokens) -> Block {
+    let selected = billed_as(state);
+    let shown = billed_as_shown(&selected, &billed_as_options(&selected)).unwrap_or(selected);
+    let trigger = Trigger::new(
+        format!("{BILLED_AS_SELECT}-trigger"),
+        BILLED_AS_LABEL,
+        words(shown.clone(), Type::Body, t.text_primary).truncate(),
+    )
+    .look(TriggerLook::Field)
+    .value(shown)
+    .open(state.window.settings.agents.pricing.billed_as_open)
+    .build(t, |state: &mut State, _: &mut Tx| toggle_billed_as(state));
+    Field::new(BILLED_AS_SELECT, BILLED_AS_LABEL)
+        .control(El::from(trigger).role("combobox"))
+        .hint("Codex reports its auto-review reviewer as codex-auto-review and picks the real model on its servers. Guardian usage is priced at this model's rates.")
+        .build(t)
+}
+
 /// The billed-as list over the page, while it is open.
 pub(super) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let pricing = &state.window.settings.agents.pricing;
     if pricing.open && pricing.billed_as_open {
-        billed_as_select(state).build(crate::settings::pages::kit(t), layers);
+        billed_as_select(state).build(attn_ui::kit(t), layers);
     }
 }
 
-fn new_form(state: &State, t: &Tokens) -> El {
+fn new_form(state: &State, t: &Tokens) -> Block {
     let new = &state.window.settings.agents.pricing.new;
     let model = new.model.text.trim();
     let card = card_from(&typed(new));
     let exists = !model.is_empty() && overrides(state).iter().any(|(m, _)| m == model);
-    let rates = RATES.iter().enumerate().map(|(i, (rate, label))| {
+    let fields = RATES.iter().enumerate().map(|(i, (rate, label))| {
+        let input_key = format!("{NEW}{rate}");
         let input = TextInput::new(&new.rates[i])
-            .key(format!("{NEW}{rate}"))
+            .key(input_key.clone())
             .on_edit(move |state: &mut State| {
                 &mut state.window.settings.agents.pricing.new.rates[i]
             })
             .on_submit(add)
             .on_blur(add);
-        rate_input(label, input, t)
+        rate_field(input_key, label, input, t)
     });
     let failure = new
         .adding
         .as_ref()
         .and_then(|(key, _)| refusal_beside(state, key, NEW_MODEL.to_owned(), t));
-    col()
-        .key("settings.price-new")
-        .role("group")
-        .label("New override")
-        .w_full()
-        .gap(space::S2)
-        .padding(space::S3)
-        .radius(6.0)
-        .border(1.0, t.border_subtle)
-        .child(
-            col()
-                .gap(space::S1)
-                .child(text("Exact model ID").font(CAPTION).color(t.text_secondary))
-                .child(
-                    El::from(line_box(
-                        TextInput::new(&new.model)
-                            .key(NEW_MODEL)
-                            .label("Exact model ID")
-                            .placeholder("provider-model-id")
-                            .on_edit(|state: &mut State| {
-                                &mut state.window.settings.agents.pricing.new.model
-                            })
-                            .on_submit(add)
-                            .on_blur(add),
-                        FieldState::Ready,
-                        t,
-                    ))
-                    .w(280.0),
-                ),
-        )
-        .child(row().gap(space::S2).wrap().children(rates))
-        .children(exists.then(|| {
-            warning(
-                "settings.price-new.exists",
-                "That model already has an override above.",
-                t,
-            )
-        }))
-        .children(failure)
-        .children((!model.is_empty() && card.is_none()).then(|| {
-            text("Complete every rate with a non-negative number.")
-                .key("settings.price-new.incomplete")
-                .label("Complete every rate with a non-negative number.")
-                .font(CAPTION)
-                .color(t.text_tertiary)
-                .wrap()
-        }))
-        .child(hint(
-            "The override is added automatically when the model ID and every rate are filled. Use 0 for unused rates.",
+    let model_field = Field::new(NEW_MODEL, "Exact model ID")
+        .control(line_box(
+            TextInput::new(&new.model)
+                .key(NEW_MODEL)
+                .label("Exact model ID")
+                .placeholder("provider-model-id")
+                .on_edit(|state: &mut State| &mut state.window.settings.agents.pricing.new.model)
+                .on_submit(add)
+                .on_blur(add),
+            FieldState::Ready,
             t,
         ))
-}
-
-pub(super) fn page(state: &State, t: &Tokens) -> El {
-    let pricing = &state.window.settings.agents.pricing;
-    let k = crate::settings::pages::kit(t);
-    let mut body = col()
-        .key("settings.prices")
-        .w_full()
-        .gap(space::S3)
-        .child(hint(
-            "Add exact model IDs that are missing from the built-in price table, or correct stale rates. Every field is USD per million tokens; cache reads and writes keep their own rates.",
-            t,
-        ));
-    if pricing.open {
-        body = body
-            .child(
-                col()
-                    .gap(space::S1)
-                    .child(
-                        text("Codex auto-review billed as")
-                            .font(type_::LABEL)
-                            .color(t.text_primary),
-                    )
-                    .child(billed_as_select(state).trigger(k))
-                    .child(hint(
-                        "Codex reports its auto-review reviewer as codex-auto-review and picks the real model on its servers. Guardian usage is priced at this model's rates.",
-                        t,
-                    )),
+        .build(t);
+    let mut section = Section::new("settings.price-new", "New override")
+        .heading(words("New override", Type::Name, t.text_primary))
+        .push(model_field)
+        .push(rates("settings.price-new.rates".to_owned(), fields));
+    if exists {
+        section = section.push(
+            Notice::warn(
+                "settings.price-new.exists",
+                "That model already has an override above.",
             )
-            .children(
-                overrides(state)
-                    .iter()
-                    .map(|(model, raw)| existing(state, model, raw, t)),
-            )
-            .child(new_form(state, t));
+            .build(t),
+        );
     }
-    col()
-        .w_full()
-        .mt(24.0)
-        .pb(S4)
-        .child(
-            disclosure(
-                "settings.pricing",
-                "Model pricing overrides",
-                pricing.open,
-                None,
-                &[],
-                false,
-                false,
-                t,
-                |state: &mut State, _: &mut Tx| {
-                    let pricing = &mut state.window.settings.agents.pricing;
-                    pricing.open = !pricing.open;
-                },
+    if let Some(failure) = failure {
+        section = section.push(Block::custom("settings.price-new.refused", failure));
+    }
+    if !model.is_empty() && card.is_none() {
+        section = section.push(
+            Prose::hint(
+                "settings.price-new.incomplete",
+                "Complete every rate with a non-negative number.",
             )
-            .into(),
+            .build(t),
+        );
+    }
+    section
+        .push(
+            Prose::hint(
+                "settings.price-new.hint",
+                "The override is added automatically when the model ID and every rate are filled. Use 0 for unused rates.",
+            )
+            .build(t),
         )
-        .children(pricing.open.then_some(body))
+        .build(t)
 }
 
-fn warning(key: &str, said: &str, t: &Tokens) -> El {
-    text(said.to_owned())
-        .key(key.to_owned())
-        .label(said.to_owned())
-        .font(CAPTION)
-        .color(t.warning)
-        .wrap()
-}
-
-fn hint(said: &str, t: &Tokens) -> El {
-    text(said.to_owned())
-        .font(CAPTION)
-        .color(t.text_tertiary)
-        .wrap()
+pub(super) fn page(state: &State, t: &Tokens) -> Block {
+    let mut part = Disclosure::new(
+        "settings.pricing",
+        "Model pricing overrides",
+        state.window.settings.agents.pricing.open,
+        |state: &mut State, _: &mut Tx| {
+            let pricing = &mut state.window.settings.agents.pricing;
+            pricing.open = !pricing.open;
+        },
+    )
+    .push(
+        Prose::hint(
+            "settings.prices.lead",
+            "Add exact model IDs that are missing from the built-in price table, or correct stale rates. Every field is USD per million tokens; cache reads and writes keep their own rates.",
+        )
+        .build(t),
+    )
+    .push(billed_as_field(state, t));
+    let saved = overrides(state);
+    if !saved.is_empty() {
+        part = part.push(
+            saved
+                .iter()
+                .map(|(model, raw)| existing(state, model, raw, t))
+                .fold(
+                    List::new("settings.prices.saved", "Saved overrides").heading(),
+                    |list, (row, under)| list.row_with(row, under),
+                )
+                .build(t),
+        );
+    }
+    part.push(new_form(state, t)).build(t)
 }

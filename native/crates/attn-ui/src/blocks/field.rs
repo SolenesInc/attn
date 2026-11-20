@@ -87,6 +87,16 @@ impl Field {
     }
 
     pub fn build(self, t: &Tokens) -> Block {
+        Block::new(Kind::Field, self.laid(t).w_full())
+    }
+
+    /// The field on its own, as wide as what it holds, for fields that share a line, such as
+    /// the rates of one price.
+    pub fn el(self, t: &Tokens) -> El {
+        self.laid(t)
+    }
+
+    fn laid(self, t: &Tokens) -> El {
         let label = door::gaps(
             row()
                 .key(format!("{}.label", self.key))
@@ -134,7 +144,6 @@ impl Field {
         }
         let field = col()
             .key(format!("{}.field", self.key))
-            .w_full()
             .max_w(FIELD)
             .child(label)
             .children(controls)
@@ -152,6 +161,6 @@ impl Field {
                     .key(format!("{}.hint", self.key))
                     .wrap()
             }));
-        Block::new(Kind::Field, door::gap(field, Space::S6))
+        door::gap(field, Space::S6)
     }
 }
