@@ -154,10 +154,13 @@ impl GroupHead {
             .children(name.map(|name| name.single_line().truncate().shrink()))
             .children(self.asides)
             .child(el().grow(1.0).h(1.0).fill(t.border_subtle))
-            .children(
-                self.keys
-                    .map(|keys| words(keys, Type::Mono, t.text_dimmed).key(keys_key)),
-            );
+            .children(self.keys.map(|keys| {
+                words(keys, Type::Mono, t.text_dimmed)
+                    .key(keys_key)
+                    .single_line()
+                    .truncate()
+                    .shrink()
+            }));
         let content = door::gap(content, Space::S6);
         let content = if hovering {
             door::fade_before_hover(content, Space::S16, reach)

@@ -1,4 +1,4 @@
-use rune::Color;
+use rune::{Color, El};
 
 use super::{Control, Radius, Size, Space, Type, door, words};
 use crate::Tokens;
@@ -20,6 +20,18 @@ const WASH: f32 = 0.10;
 pub(crate) fn tag_height() -> f32 {
     door::line_height(Type::Tag) + 2.0 * Space::S2.pt()
 }
+
+/// What pressing the row it sits in does, such as "Set up ⏎": brand words on a brand wash,
+/// round.
+pub fn pill(key: impl Into<String>, said: &str, t: &Tokens) -> El {
+    let pill = words(said, Type::Control, t.brand)
+        .key(key.into())
+        .single_line()
+        .fill(t.brand.alpha(PILL_WASH));
+    door::corner(door::inset(pill, Space::S6, Space::S0), Radius::Round)
+}
+
+const PILL_WASH: f32 = 0.14;
 
 pub fn tag(key: impl Into<String>, said: &str, tone: Tone, t: &Tokens) -> Control {
     let (ink, edge, fill) = match tone {
