@@ -40,11 +40,11 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
 
 fn flag(state: &State, feature: &Feature, t: &Tokens) -> Block {
     SettingRow::new(
+        format!("settings.flag.{}", feature.key),
         feature.name,
         feature.summary,
         feature_switch(state, feature.key, false, t),
     )
-    .key(format!("settings.flag.{}", feature.key))
     .note(feature_note(state, feature.key, t))
     .build(t)
 }

@@ -49,6 +49,15 @@ pub fn words(words: impl Into<String>, kind: Type, ink: Color) -> El {
     door::font(rich(shown.clone(), spans).label(shown), kind).color(ink)
 }
 
+/// `said`, then `code` in `Mono`, both read as written: a value such as a path is never taken
+/// for markup, however it is spelled.
+pub(crate) fn words_and_code(said: &str, code: &str, kind: Type, ink: Color) -> El {
+    let shown = format!("{said} {code}");
+    let start = said.len() + 1;
+    let span = door::mono_span(Span::new(start, shown.len()));
+    door::font(rich(shown.clone(), vec![span]).label(shown), kind).color(ink)
+}
+
 fn commands_in(words: &str) -> (String, Vec<(usize, usize)>) {
     let mut shown = String::with_capacity(words.len());
     let mut commands = Vec::new();

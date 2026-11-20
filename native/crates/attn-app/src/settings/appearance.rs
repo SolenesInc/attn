@@ -149,6 +149,7 @@ fn custom_colors(state: &State, t: &Tokens) -> Option<Block> {
         .map_or("", String::as_str);
     has_overrides(overrides).then(|| {
         SettingRow::new(
+            "settings.color-overrides",
             "Custom colors",
             "Your own colors replace parts of the scheme.",
             Button::new("Reset")
@@ -159,7 +160,6 @@ fn custom_colors(state: &State, t: &Tokens) -> Option<Block> {
                 .key("settings.color-overrides.reset")
                 .label("Reset"),
         )
-        .key("settings.color-overrides")
         .build(t)
     })
 }
@@ -220,14 +220,10 @@ fn theme(state: &State, t: &Tokens) -> Section {
     };
     Section::new("settings.block.theme", "Theme")
         .description("Choose the appearance and the color scheme of attn and its terminals.")
-        .push(Block::control(segmented(
-            THEME,
-            "Theme preference",
-            THEMES,
-            theme,
-            t,
-            choose_theme,
-        )))
+        .push(Block::control(
+            "settings.choice.theme.block",
+            segmented(THEME, "Theme preference", THEMES, theme, t, choose_theme),
+        ))
         .push(color_schemes(state, t))
         .push_all(custom_colors(state, t))
 }
@@ -254,6 +250,7 @@ fn font_size(state: &State, t: &Tokens) -> Section {
         )
         .push(
             SettingRow::new(
+                "settings.row.scale.app",
                 "App",
                 app_copy,
                 scale_control(
@@ -270,6 +267,7 @@ fn font_size(state: &State, t: &Tokens) -> Section {
         )
         .push(
             SettingRow::new(
+                "settings.row.scale.garden",
                 "The garden",
                 "Seeds, plots, and their logs. Matches the app size until you change it.",
                 scale_control(
@@ -307,6 +305,7 @@ fn layout(state: &State, t: &Tokens) -> Section {
         .description("How wide tiles and the sidebar get.")
         .push(
             SettingRow::new(
+                "settings.row.narrowest-tile-cols",
                 "Narrowest tile width (columns)",
                 "A tile never gets narrower than this. A narrower width fits more tiles in the row.",
                 number_field(
@@ -322,6 +321,7 @@ fn layout(state: &State, t: &Tokens) -> Section {
         )
         .push(
             SettingRow::new(
+                "settings.row.sidebar-width",
                 "Sidebar width (pixels)",
                 format!(
                     "The open sidebar's width, from {} to {}. Empty uses the default of {}.",

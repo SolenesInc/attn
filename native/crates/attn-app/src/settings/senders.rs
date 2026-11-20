@@ -134,6 +134,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
         )
     } else {
         section.push(Block::custom(
+            "settings.senders.list.block",
             col()
                 .key("settings.senders.list")
                 .role("list")

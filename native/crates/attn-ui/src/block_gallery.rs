@@ -219,6 +219,7 @@ fn number_field(s: &Blocks, key: &str, t: &Tokens) -> El {
 fn rows(s: &Blocks, t: &Tokens) -> Vec<Block> {
     vec![
         SettingRow::new(
+            "row.stepper",
             title(s, "App"),
             copy(s, "The whole interface, including terminals."),
             Inline::loose()
@@ -243,16 +244,16 @@ fn rows(s: &Blocks, t: &Tokens) -> Vec<Block> {
                         .into(),
                 ),
         )
-        .key("row.stepper")
         .build(t),
         SettingRow::new(
+            "row.number",
             title(s, "Sidebar width (pixels)"),
             copy(s, "The open sidebar's width, from 200 to 600."),
             number_field(s, "row.number.control", t),
         )
-        .key("row.number")
         .build(t),
         SettingRow::new(
+            "row.switch",
             title(s, "Sent files open"),
             copy(s, "Open a file an agent sends as soon as it arrives."),
             switch(
@@ -265,9 +266,9 @@ fn rows(s: &Blocks, t: &Tokens) -> Vec<Block> {
                 |s: &mut Blocks, _: &mut Tx| s.on = !s.on,
             ),
         )
-        .key("row.switch")
         .build(t),
         SettingRow::new(
+            "row.button",
             title(s, "Custom colors"),
             copy(s, "Your own colors replace parts of the scheme."),
             Button::new("Reset")
@@ -276,7 +277,6 @@ fn rows(s: &Blocks, t: &Tokens) -> Vec<Block> {
                 .build(t)
                 .key("row.button.control"),
         )
-        .key("row.button")
         .build(t),
     ]
 }
@@ -289,6 +289,7 @@ fn setting_rows(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
 
 fn theme(s: &Blocks, t: &Tokens) -> Block {
     Block::control(
+        "section.theme.block",
         Segmented::new("section.theme", "Theme")
             .options(
                 ["Dark", "Light", "System"]
@@ -586,14 +587,13 @@ fn actions(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
         .build(&t)
         .key(key.to_owned())
     };
-    let block = Actions::new()
+    let block = Actions::new("actions")
         .push(button("actions.save", "Save", Look::Primary))
         .push(button("actions.cancel", "Cancel", Look::Plain))
         .then_end()
         .push(button("actions.delete", "Delete", Look::Danger))
         .build();
-    let wrapped = col().key("actions").w_full().child(block.el);
-    stage(s, cx, &t, vec![Block::custom(wrapped)])
+    stage(s, cx, &t, vec![block])
 }
 
 fn field_state(s: &Blocks) -> FieldState {

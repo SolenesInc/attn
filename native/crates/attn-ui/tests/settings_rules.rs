@@ -99,3 +99,192 @@ fn a_fields_label_runs_to_the_fields_measure_before_it_wraps() {
         );
     }
 }
+
+#[derive(Default)]
+struct Sibling {
+    notice: bool,
+    list: bool,
+    on: bool,
+}
+
+fn sibling_view(state: &Sibling, cx: &mut Cx<Sibling>) -> El {
+    use attn_ui::blocks::{Actions, Block, Notice, Page, Section, SettingRow};
+    use attn_ui::system::{Button, Type, switch, words};
+    let t = attn_ui::colors::scheme_for(None)
+        .colors(cx.system_dark())
+        .ui;
+    let mut section = Section::new("section", "Pairing");
+    if state.notice {
+        section =
+            section.push(Notice::warn("notice", "The code expired; show a new one.").build(&t));
+    }
+    if state.list {
+        section = section.push(Block::custom(
+            "list.block",
+            words("A list that comes and goes", Type::Body, t.text_primary),
+        ));
+    }
+    let section = section
+        .push(Block::custom(
+            "code.block",
+            Button::new("Copy")
+                .on_press_tx(|_: &mut Sibling, _: &mut rune::Tx| {})
+                .build(&t)
+                .key("copy")
+                .into(),
+        ))
+        .push(
+            Actions::new("actions")
+                .push(
+                    Button::new("Pair")
+                        .on_press_tx(|_: &mut Sibling, _: &mut rune::Tx| {})
+                        .build(&t)
+                        .key("pair"),
+                )
+                .build(),
+        )
+        .push(
+            SettingRow::new(
+                "row",
+                "Auto-approve",
+                "Changed here or by another client.",
+                switch(
+                    "switch",
+                    "Auto-approve",
+                    state.on,
+                    false,
+                    false,
+                    &t,
+                    |state: &mut Sibling, _: &mut rune::Tx| state.on = !state.on,
+                ),
+            )
+            .build(&t),
+        )
+        .build(&t);
+    Page::new().push(section).build("page", &t)
+}
+
+fn sibling(dark: bool) -> Runtime<Sibling> {
+    let mut rt = App::new(AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..AppSpec::new("sibling", (600.0, 400.0), Sibling::default, sibling_view)
+    })
+    .headless_runtime((600.0, 400.0), Env::new(dark, SCALE));
+    while rt.frame(1.0 / 60.0) {}
+    rt
+}
+
+fn focused(rt: &Runtime<Sibling>) -> Option<String> {
+    rt.elements()
+        .into_iter()
+        .find(|e| e.focused)
+        .and_then(|e| e.key)
+}
+
+#[test]
+fn a_focused_control_keeps_the_keyboard_when_a_block_appears_or_goes_above_it() {
+    for (focus, above) in [("pair", "a notice"), ("copy", "a custom block")] {
+        let mut rt = sibling(true);
+        rt.update(move |_, tx| tx.focus(focus, true));
+        while rt.frame(1.0 / 60.0) {}
+        assert_eq!(focused(&rt).as_deref(), Some(focus));
+        for shown in [true, false] {
+            let custom = above == "a custom block";
+            rt.update(move |state, _| {
+                if custom {
+                    state.list = shown;
+                } else {
+                    state.notice = shown;
+                }
+            });
+            rt.frame(1.0 / 60.0);
+            assert_eq!(
+                focused(&rt).as_deref(),
+                Some(focus),
+                "{above} {} above {focus}",
+                if shown { "appears" } else { "goes" }
+            );
+        }
+    }
+}
+
+#[test]
+fn a_switch_moves_its_thumb_and_colours_in_step_and_comes_to_rest() {
+    for dark in [true, false] {
+        let mut rt = sibling(dark);
+        let look = |rt: &Runtime<Sibling>| {
+            let all = rt.elements();
+            let part = |key: &str| {
+                all.iter()
+                    .find(|e| e.key.as_deref() == Some(key))
+                    .cloned()
+                    .unwrap_or_else(|| panic!("the switch's {key} is drawn"))
+            };
+            let (thumb, track) = (part("thumb"), part("control"));
+            let rgb = |c: rune::Color| [c.r, c.g, c.b];
+            (thumb.rect[0], rgb(thumb.fill), rgb(track.fill))
+        };
+        for cause in ["outside", "press", "outside", "press"] {
+            let from = look(&rt);
+            if cause == "press" {
+                let [x, y, w, h] = rt
+                    .elements()
+                    .into_iter()
+                    .find(|e| e.key.as_deref() == Some("switch"))
+                    .expect("the switch is drawn")
+                    .rect;
+                rt.pointer_down(x + w / 2.0, y + h / 2.0);
+                rt.pointer_up(x + w / 2.0, y + h / 2.0);
+            } else {
+                rt.update(|state, _| state.on = !state.on);
+            }
+            let mut frames = Vec::new();
+            for _ in 0..240 {
+                let more = rt.frame(1.0 / 60.0);
+                frames.push(look(&rt));
+                if !more {
+                    break;
+                }
+            }
+            assert!(
+                !rt.frame(1.0 / 60.0),
+                "dark {dark}, {cause}: the switch still repaints after it settles"
+            );
+            let to = look(&rt);
+            let progress = |a: f32, b: f32, now: f32| {
+                if (b - a).abs() < 1e-4 {
+                    None
+                } else {
+                    Some((now - a) / (b - a))
+                }
+            };
+            for (n, now) in frames.iter().enumerate() {
+                let mut parts: Vec<(&str, f32)> = Vec::new();
+                parts.extend(progress(from.0, to.0, now.0).map(|p| ("thumb", p)));
+                for c in 0..3 {
+                    parts.extend(
+                        progress(from.1[c], to.1[c], now.1[c]).map(|p| ("thumb colour", p)),
+                    );
+                    parts.extend(
+                        progress(from.2[c], to.2[c], now.2[c]).map(|p| ("track colour", p)),
+                    );
+                }
+                let done = parts
+                    .iter()
+                    .filter(|(_, p)| *p >= 0.99)
+                    .map(|(n, _)| *n)
+                    .collect::<Vec<_>>();
+                let unmoved = parts
+                    .iter()
+                    .filter(|(_, p)| *p <= 0.01)
+                    .map(|(n, _)| *n)
+                    .collect::<Vec<_>>();
+                assert!(
+                    done.is_empty() || unmoved.is_empty(),
+                    "dark {dark}, {cause}, frame {n}: {done:?} arrived while {unmoved:?} had not started"
+                );
+            }
+        }
+    }
+}

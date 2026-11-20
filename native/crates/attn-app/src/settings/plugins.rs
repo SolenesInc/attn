@@ -455,7 +455,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
                     .key("settings.plugins.browse"),
             )
             .build(t),
-        Actions::new()
+        Actions::new("settings.plugins.actions")
             .push(
                 Button::new("Install Plugin")
                     .look(Look::Primary)
@@ -482,6 +482,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
         page.push(Prose::empty("settings.plugins.empty", "No plugins installed.").build(t));
     } else {
         page.push(Block::custom(
+            "settings.plugins.list.block",
             col()
                 .key("settings.plugins.list")
                 .w_full()

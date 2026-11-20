@@ -48,11 +48,9 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
         .get(NOTEBOOK_ROOT_EFFECTIVE)
         .filter(|root| !root.is_empty())
         .map(|root| {
-            Prose::hint(
-                "settings.notebook.effective",
-                format!("This profile uses: `{root}`"),
-            )
-            .build(t)
+            Prose::hint("settings.notebook.effective", "This profile uses:")
+                .code(root.clone())
+                .build(t)
         });
     vec![
         Section::new("settings.block.locations", "Locations")
@@ -83,6 +81,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
             .description("Reclaims worktrees whose work has landed. A worktree is only removed when it has been idle for 14 days, has no uncommitted or stashed changes, has nothing unpushed beyond what merged, holds no live session or open seed, and its branch is on the repository's integration branch — as a merged pull request, as an ancestor, or with an identical tree. Everything it keeps says why, and every removal lands in the sweep log and as a note on the seeds that worked there. On by default.")
             .push(
                 SettingRow::new(
+                    "settings.row.worktree-sweep",
                     "Reclaim merged worktrees in the background",
                     "Turning it off stops removals; the daemon keeps refreshing worktree state so the Worktrees list in the ledger surface stays accurate, and the keep pins you set stay set.",
                     setting_switch(
@@ -99,6 +98,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
             .description("When an agent hands you a file with its send-file tool, attn opens the ones it can show as desktop tiles. On by default.")
             .push(
                 SettingRow::new(
+                    "settings.row.sent-files",
                     "Open files agents send you",
                     "A markdown file an agent sends opens as a live-reloading tile beside its terminal, so you see it without hunting through the transcript. File types attn cannot show are left alone.",
                     setting_switch(state, OPEN_SENT_FILES, "Open files agents send you", t),

@@ -119,6 +119,7 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<Block> {
         }];
     }
     vec![Block::custom(
+        "settings.tasks.block",
         col()
             .key("settings.tasks")
             .role("list")

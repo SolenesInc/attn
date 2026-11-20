@@ -364,6 +364,7 @@ fn session_defaults(state: &State, t: &Tokens) -> Block {
     section
         .push(
             SettingRow::new(
+                "settings.row.default-agent",
                 "Default agent",
                 "Used for new sessions and opening PRs.",
                 default_agent(state, t),
@@ -372,6 +373,7 @@ fn session_defaults(state: &State, t: &Tokens) -> Block {
         )
         .push(
             SettingRow::new(
+                "settings.row.auto-approve",
                 "Auto-approve",
                 "Let Claude and Codex review approval requests automatically. On by default for new sessions; YOLO sessions already bypass approval.",
                 setting_toggle(AUTO_APPROVE, "Auto-approve", false, t, state),
@@ -379,12 +381,13 @@ fn session_defaults(state: &State, t: &Tokens) -> Block {
             .build(t),
         )
         .push(
-            SettingRow::new(asks.name, asks.summary, feature_switch(state, ASKS, false, t))
+            SettingRow::new("settings.row.asks",asks.name, asks.summary, feature_switch(state, ASKS, false, t))
                 .note(feature_note(state, ASKS, t))
                 .build(t),
         )
         .push(
             SettingRow::new(
+                "settings.row.direct-launch",
                 "Direct agent launches",
                 "Start agents without an attn process beside each one, which uses less memory. On by default; applies to new and reloaded agents.",
                 setting_toggle(DIRECT_LAUNCH, "Direct agent launches", false, t, state),
@@ -393,6 +396,7 @@ fn session_defaults(state: &State, t: &Tokens) -> Block {
         )
         .push(
             SettingRow::new(
+                "settings.row.shared-host",
                 "Shared terminal host",
                 "Run terminals in one shared process, which uses less memory, and stream output only to the terminals the window shows. On by default; applies to new and reloaded terminals.",
                 setting_toggle(SHARED_HOST, "Shared terminal host", !migrating, t, state),
@@ -461,7 +465,9 @@ fn seeds_on_standby(state: &State, t: &Tokens) -> Block {
     .description(own_comments);
     Section::new("settings.block.seeds-on-standby", "Seeds on standby")
         .description("Resume a closed agent when mail reaches its seed.")
-        .push(Block::control(segmented(
+        .push(Block::control(
+            "settings.standby.resume",
+            segmented(
             TENDER_RESUME,
             "Resume for",
             RESUME_CHOICES,
@@ -470,6 +476,7 @@ fn seeds_on_standby(state: &State, t: &Tokens) -> Block {
             |state, value, tx| autosave::apply(state, TENDER_RESUME, value, tx),
         )))
         .push(Block::custom(
+            "settings.standby.cases.block",
             Stack::tight()
                 .key("settings.standby.cases")
                 .role("list")
@@ -483,7 +490,7 @@ fn seeds_on_standby(state: &State, t: &Tokens) -> Block {
             )
             .build(t),
         )
-        .push(SettingRow::new("Ring on my own PR comments", own_comments, ring_switch).build(t))
+        .push(SettingRow::new("settings.row.own-pr-comments","Ring on my own PR comments", own_comments, ring_switch).build(t))
         .build(t)
 }
 
@@ -745,12 +752,13 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
         session_defaults(state, t),
         seeds_on_standby(state, t),
         Block::custom(
+            "settings.agents.list.block",
             col()
                 .key("settings.agents.list")
                 .w_full()
                 .gap(12.0)
                 .children(agents.iter().map(|agent| agent_group(state, agent, t))),
         ),
-        Block::custom(pricing::page(state, t)),
+        Block::custom("settings.pricing.block", pricing::page(state, t)),
     ]
 }

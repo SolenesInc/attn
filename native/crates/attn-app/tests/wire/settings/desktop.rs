@@ -317,3 +317,16 @@ fn a_refusal_that_arrives_after_the_keyboard_moved_on_leaves_the_page_where_the_
     );
     rest(&mut world);
 }
+
+#[test]
+fn a_notebook_folder_with_a_backtick_in_its_name_reads_whole() {
+    let root = "/Users/me/notes `draft` folder";
+    let (daemon, _) = accepting(&[("notebook.root.effective", root)]);
+    let mut world = World::start(daemon);
+    on_desktop(&mut world);
+    assert_eq!(
+        named(&world, "settings.notebook.effective").as_deref(),
+        Some("This profile uses: /Users/me/notes `draft` folder")
+    );
+    rest(&mut world);
+}

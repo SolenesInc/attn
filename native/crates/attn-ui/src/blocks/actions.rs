@@ -4,16 +4,22 @@ use super::block::{Block, Kind};
 use crate::system::{Space, door};
 
 /// A line of buttons. Those pushed after [`Actions::then_end`] sit at its far end.
-#[derive(Default)]
 pub struct Actions {
+    key: String,
     start: Vec<El>,
     end: Vec<El>,
     at_end: bool,
 }
 
 impl Actions {
-    pub fn new() -> Actions {
-        Actions::default()
+    /// A line of buttons keyed `key`.
+    pub fn new(key: impl Into<String>) -> Actions {
+        Actions {
+            key: key.into(),
+            start: Vec::new(),
+            end: Vec::new(),
+            at_end: false,
+        }
     }
 
     pub fn push(mut self, button: impl Into<El>) -> Self {
@@ -39,7 +45,7 @@ impl Actions {
             .children(self.end);
         Block::new(
             Kind::Actions,
-            door::gaps(line.flex_wrap(), Space::S8, Space::S8),
+            door::gaps(line.key(self.key).flex_wrap(), Space::S8, Space::S8),
         )
     }
 }

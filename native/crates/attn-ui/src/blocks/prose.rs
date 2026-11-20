@@ -1,7 +1,7 @@
 use super::block::{Block, Kind};
 use super::measure::READING;
 use crate::Tokens;
-use crate::system::{Type, words};
+use crate::system::{Type, words, words_and_code};
 
 /// Reading text, at the reading measure.
 pub struct Prose {
@@ -9,6 +9,7 @@ pub struct Prose {
     said: String,
     quiet: bool,
     kind: Type,
+    code: Option<String>,
 }
 
 impl Prose {
@@ -19,6 +20,7 @@ impl Prose {
             said: said.into(),
             quiet: false,
             kind: Type::Body,
+            code: None,
         }
     }
 
@@ -41,6 +43,12 @@ impl Prose {
         self
     }
 
+    /// A value after the words, such as a path, set in Mono and read exactly as given.
+    pub fn code(mut self, value: impl Into<String>) -> Self {
+        self.code = Some(value.into());
+        self
+    }
+
     pub fn build(self, t: &Tokens) -> Block {
         let ink = if self.quiet {
             t.text_tertiary
@@ -49,10 +57,13 @@ impl Prose {
         };
         Block::new(
             Kind::Prose,
-            words(self.said, self.kind, ink)
-                .key(self.key)
-                .wrap()
-                .max_w(READING),
+            match self.code {
+                Some(code) => words_and_code(&self.said, &code, self.kind, ink),
+                None => words(self.said, self.kind, ink),
+            }
+            .key(self.key)
+            .wrap()
+            .max_w(READING),
         )
     }
 }

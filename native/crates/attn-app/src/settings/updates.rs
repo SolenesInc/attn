@@ -92,8 +92,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let kind = get("update_install_kind");
     let commit: String = get("update_current_commit").chars().take(9).collect();
     let mut page = vec![
-        Facts::new()
-            .key("settings.updates")
+        Facts::new("settings.updates")
             .fact(
                 "settings.updates.install",
                 "Installed as",
@@ -114,7 +113,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     if updatable(settings) {
         let running = running(state);
         page.push(
-            Actions::new()
+            Actions::new("settings.updates.actions")
                 .push(
                     Button::new(if running {
                         "Updating…"

@@ -136,6 +136,7 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<Block> {
     }
     if !status.health.is_empty() {
         page.push(Block::custom(
+            "settings.bus.health.block",
             Stack::tight()
                 .key("settings.bus.health")
                 .role("list")
@@ -168,14 +169,20 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<Block> {
         ));
     }
     page.push(summary(status, now_ms, t));
-    page.extend(producers(bus, status, t).into_iter().map(Block::custom));
+    page.extend(
+        producers(bus, status, t)
+            .into_iter()
+            .enumerate()
+            .map(|(i, el)| Block::custom(format!("settings.bus.producers.part{i}"), el)),
+    );
     page.extend(
         consumers(bus, status, now_ms, t)
             .into_iter()
-            .map(Block::custom),
+            .enumerate()
+            .map(|(i, el)| Block::custom(format!("settings.bus.consumers.part{i}"), el)),
     );
     page.push(
-        Actions::new()
+        Actions::new("settings.bus.actions")
             .push(
                 system::Button::new(if bus.loading { "Reading…" } else { "Refresh" })
                     .disabled(bus.loading)
@@ -219,7 +226,7 @@ fn summary(status: &BusStatusResultMessage, now_ms: i64, t: &Tokens) -> Block {
     stats
         .into_iter()
         .fold(
-            Facts::new().key("settings.bus.summary").tiles(),
+            Facts::new("settings.bus.summary").tiles(),
             |facts, (key, label, value)| {
                 facts.code(format!("settings.bus.summary.{key}"), label, value)
             },

@@ -615,7 +615,7 @@ fn add_form(state: &State, t: &Tokens) -> Block {
                 .build(t),
         )
         .push(
-            Actions::new()
+            Actions::new("settings.outposts.add.actions")
                 .push(
                     Button::new("Add outpost")
                         .look(Look::Primary)
@@ -643,6 +643,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
         Prose::empty("settings.outposts.empty", "No outposts added.").build(t)
     } else {
         Block::custom(
+            "settings.outposts.list.block",
             col()
                 .key("settings.outposts.list")
                 .role("list")

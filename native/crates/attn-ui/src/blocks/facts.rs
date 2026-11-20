@@ -9,7 +9,7 @@ use crate::system::{Radius, Space, Tone, Type, door, words};
 /// value sits beside its name and moves under it where it would get narrower than it reads. As
 /// tiles, each name sits over its value on a quiet card, the cards in equal columns that wrap.
 pub struct Facts {
-    key: Option<String>,
+    key: String,
     tiles: bool,
     facts: Vec<Fact>,
 }
@@ -24,9 +24,10 @@ struct Fact {
 }
 
 impl Facts {
-    pub fn new() -> Facts {
+    /// Facts keyed `key`.
+    pub fn new(key: impl Into<String>) -> Facts {
         Facts {
-            key: None,
+            key: key.into(),
             tiles: false,
             facts: Vec::new(),
         }
@@ -43,11 +44,6 @@ impl Facts {
         if let Some(fact) = self.facts.last_mut() {
             fact.tone = tone;
         }
-        self
-    }
-
-    pub fn key(mut self, key: impl Into<String>) -> Self {
-        self.key = Some(key.into());
         self
     }
 
@@ -114,9 +110,7 @@ impl Facts {
         } else {
             door::gap(col().w_full(), Space::S4)
         };
-        if let Some(key) = self.key {
-            list = list.key(key);
-        }
+        list = list.key(self.key);
         let tiles = self.tiles;
         Block::new(
             Kind::Facts,
@@ -126,12 +120,6 @@ impl Facts {
                     .map(|fact| if tiles { fact.tile(t) } else { fact.line(t) }),
             ),
         )
-    }
-}
-
-impl Default for Facts {
-    fn default() -> Self {
-        Facts::new()
     }
 }
 

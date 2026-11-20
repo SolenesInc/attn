@@ -23,22 +23,39 @@ pub(crate) enum Kind {
 pub struct Block {
     pub(crate) kind: Kind,
     pub(crate) el: El,
+    slot: Option<String>,
 }
 
 impl Block {
+    /// A block whose element carries its key, which keeps what it holds, such as the keyboard,
+    /// when a sibling appears or goes above it.
     pub(crate) fn new(kind: Kind, el: El) -> Block {
-        Block { kind, el }
+        Block {
+            kind,
+            el,
+            slot: None,
+        }
     }
 
-    /// A control on a line of its own, such as a segmented choice, at its own width.
-    pub fn control(control: impl Into<El>) -> Block {
-        Block::new(Kind::Control, control.into().self_start())
+    /// A control on a line of its own, such as a segmented choice, at its own width, held in
+    /// a slot keyed `key`.
+    pub fn control(key: impl Into<String>, control: impl Into<El>) -> Block {
+        Block {
+            kind: Kind::Control,
+            el: control.into().self_start(),
+            slot: Some(key.into()),
+        }
     }
 
     /// A piece no block fits, built in its feature from controls inside a rhythm
-    /// ([`super::Inline`], [`super::Stack`]).
-    pub fn custom(el: El) -> Block {
-        Block::new(Kind::Custom, el)
+    /// ([`super::Inline`], [`super::Stack`]), held in a slot keyed `key`, which leaves any key
+    /// the piece carries to its caller.
+    pub fn custom(key: impl Into<String>, el: El) -> Block {
+        Block {
+            kind: Kind::Custom,
+            el,
+            slot: Some(key.into()),
+        }
     }
 }
 
@@ -74,7 +91,10 @@ pub(crate) fn spaced(blocks: Vec<Block>, gap: fn(Kind, Kind) -> Space, rule: Opt
             (Some(above), _) => door::above(block.el, gap(above, block.kind)),
         };
         last = Some(block.kind);
-        out = out.child(el);
+        out = out.child(match block.slot {
+            Some(key) => col().key(key).w_full().child(el),
+            None => el,
+        });
     }
     out
 }

@@ -28,7 +28,9 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
                     .iter()
                     .map(|host| words(host.clone(), Type::Mono, t.text_primary).role("listitem")),
             );
-        section.push(Block::custom(hosts)).push(hint(t))
+        section
+            .push(Block::custom("settings.github.hosts.block", hosts))
+            .push(hint(t))
     };
     vec![section.build(t)]
 }

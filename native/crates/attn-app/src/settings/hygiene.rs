@@ -122,7 +122,10 @@ fn muted_list(
     t: &Tokens,
     unmute: fn(&mut State, &str),
 ) -> Block {
-    Block::custom(muted_rows(kind, title, names, empty, t, unmute))
+    Block::custom(
+        format!("settings.muted.{kind}.block"),
+        muted_rows(kind, title, names, empty, t, unmute),
+    )
 }
 
 fn muted_rows(
@@ -188,7 +191,13 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let settle = shortcut(state, &Action::SessionSettle);
     let keep = shortcut(state, &Action::SessionCancelCountdown);
     let switch_row = |key: &'static str, title: &str, copy: &str| {
-        SettingRow::new(title, copy, setting_switch(state, key, title, t)).build(t)
+        SettingRow::new(
+            format!("settings.row.{key}"),
+            title,
+            copy,
+            setting_switch(state, key, title, t),
+        )
+        .build(t)
     };
     vec![
         Section::new("settings.block.auto-settle", "Auto-settle")

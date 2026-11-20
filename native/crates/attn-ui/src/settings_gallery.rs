@@ -41,11 +41,11 @@ fn aside(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
     let row =
         |key: &str, name: &'static str, summary: &'static str, note: Option<&str>, on: bool| {
             SettingRow::new(
+                key.to_owned(),
                 name,
                 summary,
                 switch(format!("{key}.switch"), name, on, false, false, &t, noop),
             )
-            .key(key.to_owned())
             .note(note.map(|n| words(n, Type::Small, t.text_muted).wrap()))
             .build(&t)
         };
@@ -83,8 +83,7 @@ fn facts(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
         "0.13.0 (abcdef123)"
     };
     let blocks = vec![
-        Facts::new()
-            .key("facts")
+        Facts::new("facts")
             .fact("facts.install", "Installed as", "Release app")
             .code("facts.build", "Build", build)
             .fact("facts.host", "Shared terminal host", "Not installed")
@@ -105,8 +104,7 @@ fn facts(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
                     .child(Button::new("Copy").size(Size::Compact).on_press_tx(noop).build(&t).key("facts.path.copy").into()),
             )
             .build(&t),
-        Facts::new()
-            .key("facts.tiles")
+        Facts::new("facts.tiles")
             .tiles()
             .code("facts.tiles.events", "Events", if s.long { "1,048,576" } else { "1,204" })
             .code("facts.tiles.weight", "Weight", "3.2 MB")
@@ -120,6 +118,9 @@ fn facts(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
             .tone(Some(Tone::Warn))
             .build(&t),
         Prose::hint("facts.hint", "Add hosts with `gh auth login --hostname <host>`.").build(&t),
+        Prose::hint("facts.code", "This profile uses:")
+            .code(if s.long { LONG_PATH } else { "/Users/me/notes `draft`" })
+            .build(&t),
     ];
     stage(s, cx, &t, blocks)
 }

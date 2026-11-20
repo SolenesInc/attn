@@ -495,7 +495,10 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
         .map(|h| harness_block(state, h, &entries, t))
         .chain(missing_harnesses(&listed, &entries, t))
         .collect();
-    out.extend(blocks(harness_blocks, t).into_iter().map(Block::custom));
+    out.push(Block::custom(
+        "settings.models.harnesses",
+        col().w_full().children(blocks(harness_blocks, t)),
+    ));
     out
 }
 

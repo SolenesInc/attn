@@ -349,6 +349,7 @@ fn pairing_code(state: &State, code: &PhonePairingCode, profile: &Profile, t: &T
                 .pixels(pixels)
         });
     Block::custom(
+        format!("{key}.block"),
         Stack::tight()
             .key(key.clone())
             .children(image)
@@ -394,6 +395,7 @@ fn profile_block(
     .description("A phone you pair here sees this profile's agents and nothing else.");
     if !paired.is_empty() {
         section = section.push(Block::custom(
+            format!("settings.phones.{}.list.block", profile.id),
             col()
                 .key(format!("settings.phones.{}.list", profile.id))
                 .role("list")
@@ -418,7 +420,7 @@ fn profile_block(
     let id = profile.id.clone();
     section
         .push(
-            Actions::new()
+            Actions::new(format!("settings.phones.{}.actions", profile.id))
                 .push(
                     attn_ui::system::Button::new(if code.is_some() {
                         "Show a new pairing code"

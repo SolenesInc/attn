@@ -365,3 +365,30 @@ fn reads_the_phones_again_after_the_connection_comes_back() {
     );
     assert_eq!(world.daemon.sent_of("phones_get").len(), 2);
 }
+
+#[test]
+fn the_pair_button_keeps_the_keyboard_when_the_code_arrives() {
+    let (daemon, _) = home(phones(vec![], vec![]));
+    daemon.on("phone_pair_begin", |_| {
+        vec![
+            message(PhonePairBeginResultMessage {
+                success: true,
+                pairing_code: Some(code()),
+                ..PhonePairBeginResultMessage::new()
+            }),
+            message(phones(vec![code()], vec![])),
+        ]
+    });
+    let mut world = World::start(daemon);
+    on_phones(&mut world);
+    super::tab_to(&mut world, PAIR);
+    press(&mut world, Key::Text(" ".into()));
+    assert!(shows(&world, QR), "the code shows");
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some(PAIR),
+        "the keyboard stays on the pair button"
+    );
+    press(&mut world, Key::Text(" ".into()));
+    assert_eq!(world.daemon.sent_of("phone_pair_begin").len(), 2);
+}

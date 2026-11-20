@@ -415,6 +415,7 @@ fn session_activity(state: &State, t: &Tokens) -> Block {
         .description("Summarize each session on Home using its transcript. This sends transcript excerpts to the selected model and incurs usage costs. Updates run only while you use attn.")
         .push(
             SettingRow::new(
+                "settings.row.activity",
                 "Generate activity lines",
                 "Off by default. Choose an agent below to enable.",
                 toggle,
@@ -432,7 +433,9 @@ fn session_activity(state: &State, t: &Tokens) -> Block {
     }
     section
         .push_all(harnesses::failure_notice(state, "activity", t))
-        .push(Block::custom(route::chip(
+        .push(Block::custom(
+            "settings.route.activity.block",
+            route::chip(
             state,
             t,
             target(ACTIVITY_ROUTE),
@@ -480,13 +483,16 @@ fn garden_advisor(state: &State, t: &Tokens) -> Block {
     }
     section
         .push_all(harnesses::failure_notice(state, "garden-advisor", t))
-        .push(Block::custom(route::chip(
-            state,
-            t,
-            target(ADVISOR_ROUTE),
-            "Garden advisor model",
-            true,
-        )))
+        .push(Block::custom(
+            "settings.route.garden-advisor.block",
+            route::chip(
+                state,
+                t,
+                target(ADVISOR_ROUTE),
+                "Garden advisor model",
+                true,
+            ),
+        ))
         .build(t)
 }
 

@@ -9,7 +9,7 @@ use crate::system::{Radius, Size, Space, Type, door, words};
 /// right. Where the words would get narrower than they read, the control moves under them, and
 /// the words then wrap to the card however narrow it is.
 pub struct SettingRow {
-    key: Option<String>,
+    key: String,
     title: String,
     copy: String,
     note: Option<El>,
@@ -17,19 +17,20 @@ pub struct SettingRow {
 }
 
 impl SettingRow {
-    pub fn new(title: impl Into<String>, copy: impl Into<String>, control: impl Into<El>) -> Self {
+    /// One setting keyed `key`.
+    pub fn new(
+        key: impl Into<String>,
+        title: impl Into<String>,
+        copy: impl Into<String>,
+        control: impl Into<El>,
+    ) -> Self {
         SettingRow {
-            key: None,
+            key: key.into(),
             title: title.into(),
             copy: copy.into(),
             note: None,
             control: control.into(),
         }
-    }
-
-    pub fn key(mut self, key: impl Into<String>) -> Self {
-        self.key = Some(key.into());
-        self
     }
 
     /// Small print under the copy, such as what else the setting does or a shortcut.
@@ -55,9 +56,7 @@ impl SettingRow {
             .border(1.0, t.border_subtle)
             .child(said)
             .child(self.control);
-        if let Some(key) = self.key {
-            card = card.key(key);
-        }
+        card = card.key(self.key);
         let card = door::gaps(
             door::inset(card, Space::S16, Space::S12),
             Space::S12,
