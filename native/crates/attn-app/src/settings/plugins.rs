@@ -473,7 +473,7 @@ pub(super) fn pills(state: &State, t: &Tokens) -> Vec<El> {
         .role("status"),
         n => El::from(tag(
             "settings.pill.plugins.health",
-            &format!("{n} issue{}", if n == 1 { "" } else { "s" }),
+            format!("{n} issue{}", if n == 1 { "" } else { "s" }),
             Tone::Bad,
             t,
         ))
@@ -483,7 +483,7 @@ pub(super) fn pills(state: &State, t: &Tokens) -> Vec<El> {
         health,
         El::from(tag(
             "settings.pill.plugins.running",
-            &format!("{running}/{} running", listed.plugins.len()),
+            format!("{running}/{} running", listed.plugins.len()),
             Tone::Neutral,
             t,
         ))

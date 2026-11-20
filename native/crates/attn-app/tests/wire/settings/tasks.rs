@@ -2,7 +2,9 @@ use attn_protocol::{Task, TaskListResultMessage, TaskRetryResultMessage, TasksCh
 use attn_testkit::{Request, Target, World, message};
 use serde_json::Value;
 
-use super::{accepting, click, open};
+use rune::Key;
+
+use super::{accepting, click, open, press, rest};
 
 const AT: &str = "2026-05-16T16:00:00Z";
 
@@ -184,4 +186,61 @@ fn an_empty_runner_says_so() {
             .as_deref(),
         Some("No background tasks.")
     );
+}
+
+#[test]
+fn opening_a_tasks_diagnostic_output_by_keyboard_shows_it_with_the_control_in_the_smallest_window()
+{
+    let (daemon, _) = accepting(&[("uiScale", "1.5")]);
+    daemon.on(
+        "task_list",
+        listing(vec![Task {
+            last_error: Some(
+                "The agent process exited with status 2 after the provider refused its \
+                 credentials three times in a row, while the daemon was still pairing."
+                    .into(),
+            ),
+            last_diagnostic: Some("stderr: authentication failed\nstderr: token expired".into()),
+            ..task("1", "dead")
+        }]),
+    );
+    let mut world = World::start(daemon);
+    world.resize((800.0, 600.0));
+    on_task_runner(&mut world);
+    let control = "settings.task.1.diagnostics";
+    for _ in 0..60 {
+        if world.screen().focused().and_then(|n| n.key).as_deref() == Some(control) {
+            break;
+        }
+        press(&mut world, Key::Tab);
+    }
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some(control),
+        "Tab reaches Diagnostic output"
+    );
+    press(&mut world, Key::Text(" ".into()));
+    let body = world.rect("settings.body");
+    let shown = world.rect(control);
+    assert!(
+        shown[1] >= body[1] && shown[1] + shown[3] <= body[1] + body[3],
+        "the opened control at {shown:?} lies inside the page's view {body:?}"
+    );
+    let output = world
+        .automate(
+            "find",
+            serde_json::json!({"target": {"key": "settings.task.1.diagnostic"}}),
+        )
+        .expect("the output is on the page")["rect"]
+        .as_array()
+        .map(|r| {
+            r.iter()
+                .filter_map(serde_json::Value::as_f64)
+                .collect::<Vec<_>>()
+        });
+    assert!(
+        output.as_ref().is_some_and(|r| r[1] < body[1] + body[3]),
+        "the output at {output:?} begins inside the page's view {body:?}"
+    );
+    rest(&mut world);
 }

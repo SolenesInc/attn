@@ -196,6 +196,7 @@ fn row_of(tasks: &Tasks, task: &Task, now_ms: i64, t: &Tokens) -> (El, Vec<Block
         .filter(|d| !d.is_empty())
         .map(|d| {
             let id = task.id.clone();
+            let part = format!("{key}.diagnostics.part");
             Disclosure::new(
                 format!("{key}.diagnostics"),
                 "Diagnostic output",
@@ -205,6 +206,7 @@ fn row_of(tasks: &Tasks, task: &Task, now_ms: i64, t: &Tokens) -> (El, Vec<Block
                     let shown = &mut state.window.settings.tasks.diagnostics_shown;
                     if !shown.remove(&id) {
                         shown.insert(id.clone());
+                        tx.scroll_into_view_in(super::BODY, part.clone());
                     }
                 },
             )
