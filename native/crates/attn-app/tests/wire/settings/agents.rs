@@ -1017,3 +1017,38 @@ fn a_long_refusal_keeps_the_refused_executable_in_view_in_the_smallest_window() 
     );
     rest(&mut world);
 }
+
+#[test]
+fn an_unavailable_switch_is_still_heard_with_its_name_and_value_and_takes_no_tab_or_press() {
+    let mut world = on_agents(&[]);
+    let host = toggle("pty_shared_host_enabled");
+    let switch = node(&world, &host);
+    assert_eq!(switch.role, "switch");
+    assert_eq!(switch.name.as_deref(), Some("Shared terminal host"));
+    assert!(switch.is("checked"), "the switch says it is on");
+    assert!(switch.is("disabled"), "the switch says it is unavailable");
+
+    let mut seen = Vec::new();
+    loop {
+        press(&mut world, Key::Tab);
+        let focused = world.screen().focused().and_then(|n| n.key);
+        assert_ne!(
+            focused.as_deref(),
+            Some(host.as_str()),
+            "Tab stops on the unavailable switch"
+        );
+        if seen.contains(&focused) {
+            break;
+        }
+        seen.push(focused);
+    }
+
+    let _refused = world.automate("press", json!({"target": {"key": host}}));
+    world.settle();
+    assert!(
+        writes(&world).is_empty(),
+        "pressing the unavailable switch saved {:?}",
+        writes(&world)
+    );
+    assert!(node(&world, &host).is("checked"));
+}
