@@ -2632,3 +2632,155 @@ fn the_harness_toggle_takes_no_tab_stop_and_alt_with_its_letter_chooses() {
         "Alt and a harness's number choose it"
     );
 }
+
+const SHOP_REPO: &str = "/home/me/projects/shop";
+
+/// The picker's chooser on a repository whose worktrees' branches are long, at `window` and
+/// 150% text.
+fn chooser_with_long_branches(worktrees: usize, window: (f32, f32)) -> World {
+    let id = "work/desktop_1";
+    let daemon = Daemon::scripted().state(InitialStateMessage {
+        selected_profile_id: Some("work".into()),
+        profiles: Some(vec![Profile {
+            id: "work".into(),
+            name: "Work".into(),
+            current_desktop_id: id.into(),
+            ..Profile::default()
+        }]),
+        desktops: Some(vec![Desktop {
+            id: id.into(),
+            name: "Desktop 1".into(),
+            profile_id: "work".into(),
+            active_pane_id: "p1".into(),
+            panes: vec![pane(id, "p1")],
+            ..Desktop::default()
+        }]),
+        settings: Some(
+            [
+                ("uiScale".into(), "1.5".into()),
+                ("new_session_launcher_enabled".into(), "false".into()),
+            ]
+            .into(),
+        ),
+        ..InitialStateMessage::new()
+    });
+    daemon
+        .on("inspect_path", |req: &Request| {
+            let path = req["path"].as_str().unwrap().to_owned();
+            message(InspectPathResultMessage {
+                success: true,
+                inspection: Some(PathInspection {
+                    exists: true,
+                    is_directory: true,
+                    input_path: path.clone(),
+                    resolved_path: path,
+                    repo_root: Some(SHOP_REPO.into()),
+                    home_path: Some(HOME.into()),
+                }),
+                ..InspectPathResultMessage::new()
+            })
+        })
+        .on("get_repo_info", move |_| {
+            message(GetRepoInfoResultMessage {
+                success: true,
+                info: Some(RepoInfo {
+                    repo: SHOP_REPO.into(),
+                    default_branch: "main".into(),
+                    current_branch: "feature".into(),
+                    worktrees: (0..worktrees)
+                        .map(|i| Worktree {
+                            path: format!("{SHOP_REPO}--hotfix-{i}"),
+                            main_repo: SHOP_REPO.into(),
+                            branch: format!(
+                                "release/東京本番の権限を移行する作業ツリー-stage-west-2026.21-hotfix-{i}"
+                            ),
+                            ..Worktree::default()
+                        })
+                        .collect(),
+                    ..RepoInfo::default()
+                }),
+                ..GetRepoInfoResultMessage::new()
+            })
+        });
+    let mut world = World::start_sized(daemon, window);
+    world.open_desktop();
+    let Some(Binding::Chord(chord)) =
+        Keymap::from_setting(None, KeyPlatform::current()).binding(&Action::SessionNew)
+    else {
+        panic!("New session has no chord")
+    };
+    world.gesture(|app| app.key(key_event(&chord)));
+    world.gesture(|app| app.type_text(SHOP_REPO));
+    world.advance(Duration::from_millis(200));
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Enter,
+            mods: Mods::default(),
+        })
+    });
+    world
+}
+
+#[test]
+fn start_from_holds_its_form_and_place_while_the_arrows_move_through_long_branches() {
+    for window in [(800.0, 600.0), (1600.0, 1000.0)] {
+        let mut world = chooser_with_long_branches(5, window);
+        let options = ["default", "current"].map(|s| format!("new-session.repo.start.{s}"));
+        world.gesture(|app| {
+            app.key(KeyEvent {
+                key: Key::Down,
+                mods: Mods::default(),
+            })
+        });
+        let form = |r: [[f32; 4]; 2]| {
+            (
+                r[0][0],
+                r[0][2],
+                r[0][3],
+                r[1][0],
+                r[1][2],
+                r[1][3],
+                r[1][1] - r[0][1],
+            )
+        };
+        let at_rest = form(
+            options
+                .clone()
+                .map(|k| world.screen().bounds(Target::key(&k)).unwrap()),
+        );
+        for step in 0..5 {
+            let rec = world.record(60.0, 0.25, |_, app| {
+                app.key(KeyEvent {
+                    key: Key::Down,
+                    mods: Mods::default(),
+                })
+            });
+            for key in &options {
+                let track = rec
+                    .tracks
+                    .iter()
+                    .find(|t| t.path.ends_with(&format!("/{key}")))
+                    .unwrap_or_else(|| panic!("{key} is drawn"));
+                let places: Vec<[f32; 4]> = track
+                    .frames
+                    .iter()
+                    .filter(|(k, _)| *k >= rec.start)
+                    .map(|(_, s)| s.rect)
+                    .collect();
+                assert!(
+                    places.iter().skip(1).all(|p| *p == places[1]),
+                    "{window:?} step {step}: {key} eases across frames: {places:?}"
+                );
+            }
+            let now = form(
+                options
+                    .clone()
+                    .map(|k| world.screen().bounds(Target::key(&k)).unwrap()),
+            );
+            assert_eq!(
+                now, at_rest,
+                "{window:?} step {step}: Start from changed form or place under the arrows"
+            );
+        }
+    }
+}

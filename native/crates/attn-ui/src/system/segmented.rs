@@ -1,6 +1,8 @@
-use rune::{Color, El, Tx, row};
+use rune::{Color, El, Tx, col, row};
 
-use super::{Control, Radius, Said, Size, Space, Type, disabled, door, focus, layers, words};
+use super::{
+    Control, Radius, Said, Size, Space, Type, disabled, door, focus, layers, width_of, words,
+};
 use crate::Tokens;
 
 /// One choice among a few, all in view: the arrow keys move it. Where its options don't fit on
@@ -23,6 +25,7 @@ pub struct Segment {
     missing: bool,
     cut_middle: bool,
     help: Option<String>,
+    room: Option<Said>,
     trailing: Option<El>,
     press: Option<Box<dyn FnOnce(El) -> El>>,
 }
@@ -37,6 +40,7 @@ impl Segment {
             missing: false,
             cut_middle: false,
             help: None,
+            room: None,
             trailing: None,
             press: None,
         }
@@ -67,6 +71,16 @@ impl Segment {
     }
 
     /// Why it is the way it is, as a tooltip and its accessible description.
+    /// Lays the option out as wide as the widest of `names`, so a name that follows a selection
+    /// elsewhere, such as the branch a highlighted row starts from, keeps the control in one
+    /// form and one width while the selection moves.
+    pub fn room_for<N: Into<Said>>(mut self, names: impl IntoIterator<Item = N>) -> Self {
+        self.room = names.into_iter().map(Into::into).max_by(|a, b| {
+            width_of(a.clone(), Type::Control).total_cmp(&width_of(b.clone(), Type::Control))
+        });
+        self
+    }
+
     pub fn help(mut self, help: impl Into<String>) -> Self {
         self.help = Some(help.into());
         self
@@ -113,12 +127,13 @@ impl Segment {
             .min_w(0.0)
             .center()
             .fill(fill)
-            .child(
+            .child(room_for(
                 cut_name_help(name, &self.name, self.help.as_deref())
                     .shrink()
                     .min_w(0.0)
                     .a11y_hidden(),
-            )
+                self.room,
+            ))
             .children(self.trailing);
         let option = door::inset(option, Size::Compact.inset(), Space::S4);
         let option = door::gap(door::corner(option, Radius::Control), Space::S4);
@@ -143,6 +158,22 @@ impl Segment {
             Some(press) => press(option),
             None => option,
         }
+    }
+}
+
+/// `name` over an unseen line of `room`, which only gives it width.
+fn room_for(name: El, room: Option<Said>) -> El {
+    match room {
+        Some(room) => col().shrink().min_w(0.0).items_center().child(name).child(
+            words(room, Type::Control, Color::TRANSPARENT)
+                .truncate()
+                .shrink()
+                .min_w(0.0)
+                .h(0.0)
+                .opacity(0.0)
+                .a11y_hidden(),
+        ),
+        None => name,
     }
 }
 
@@ -194,6 +225,7 @@ impl Segmented {
         let n = self.options.len();
         let track = row()
             .row_or_column()
+            .instant_changes()
             .shrink()
             .min_w(0.0)
             .max_w_frac(1.0)

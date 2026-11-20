@@ -625,11 +625,21 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
                         format!("Start from {}", chooser.info.default_branch),
                         "default",
                     ))
-                    .option(start(
-                        Start::Current,
-                        format!("Start from {}", chooser.current_branch()),
-                        "current",
-                    ))
+                    .option(
+                        start(
+                            Start::Current,
+                            format!("Start from {}", chooser.current_branch()),
+                            "current",
+                        )
+                        .room_for(
+                            chooser
+                                .destinations()
+                                .into_iter()
+                                .map(|d| d.branch)
+                                .filter(|b| !b.is_empty())
+                                .map(|b| format!("Start from {b}")),
+                        ),
+                    )
                     .build(t),
             )
             .self_start(),

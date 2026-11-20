@@ -1170,6 +1170,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("system::said::Said::then_code(code)", false),
     ("system::segmented::Segment::new(name)", true),
     ("system::segmented::Segment::help(help)", false),
+    ("system::segmented::Segment::room_for(names)", true),
     ("system::segmented::Segmented::new(label)", false),
     ("system::stepper::stepper(what)", false),
     ("system::stepper::stepper(value)", true),
