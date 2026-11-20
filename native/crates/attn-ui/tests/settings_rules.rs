@@ -808,6 +808,178 @@ fn every_block_draws_and_reads_text_from_data_as_written_and_parses_its_own_copy
 /// parameter is text when its type names `Said`, `String` or `str`, directly or through a
 /// generic bound. Keys, ids, accessibility roles and glyph names are names, not text; colour
 /// settings and the appearance setting are parsed, not drawn.
+/// `text` cut at its commas that lie outside any brackets.
+fn split_top(text: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let (mut depth, mut current) = (0, String::new());
+    for c in text.chars() {
+        match c {
+            '<' | '(' | '[' => depth += 1,
+            '>' | ')' | ']' => depth -= 1,
+            _ => {}
+        }
+        if c == ',' && depth == 0 {
+            parts.push(std::mem::take(&mut current));
+        } else {
+            current.push(c);
+        }
+    }
+    parts.push(current);
+    parts
+}
+
+/// The public text inputs `source`, the file of `module`, declares, each with whether it takes
+/// `Said`.
+fn text_inputs_in(source: &str, module: &str) -> Vec<(String, bool)> {
+    let mut inputs = Vec::new();
+    let mut owner: Option<String> = None;
+    let mut at = 0;
+    for line in source.split_inclusive('\n') {
+        let start = at;
+        at += line.len();
+        let trimmed = line.trim_start();
+        if line.starts_with('}') {
+            owner = None;
+        }
+        if line.starts_with("impl") && line.trim_end().ends_with('{') {
+            let head = line.trim_end().trim_end_matches('{');
+            let head = head.rsplit(" for ").next().unwrap();
+            let head = head.trim_start_matches("impl").trim();
+            let head = if head.starts_with('<') {
+                &head[head.find('>').unwrap() + 1..]
+            } else {
+                head
+            };
+            owner = Some(head.trim().split(['<', ' ']).next().unwrap().to_owned());
+            continue;
+        }
+        let Some(rest) = trimmed.strip_prefix("pub fn ") else {
+            continue;
+        };
+        let fn_name: String = rest
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        let open = start + line.len() - rest.len() + fn_name.len();
+        let bytes = source.as_bytes();
+        let mut generics = String::new();
+        let mut i = open;
+        if bytes[i] == b'<' {
+            let mut depth = 0;
+            loop {
+                match bytes[i] {
+                    b'<' => depth += 1,
+                    b'>' => depth -= 1,
+                    _ => {}
+                }
+                generics.push(bytes[i] as char);
+                i += 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+        }
+        assert_eq!(
+            bytes[i], b'(',
+            "{module}::{fn_name}: no parameters where expected"
+        );
+        let mut depth = 0;
+        let mut params = String::new();
+        loop {
+            let c = bytes[i] as char;
+            match c {
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                _ => {}
+            }
+            i += 1;
+            if depth == 0 {
+                break;
+            }
+            if !(c == '(' && depth == 1) {
+                params.push(c);
+            }
+        }
+        let mut tail = String::new();
+        let mut depth = 0;
+        while i < bytes.len() {
+            let c = bytes[i] as char;
+            match c {
+                '<' | '(' | '[' => depth += 1,
+                '>' | ')' | ']' => depth -= 1,
+                '{' | ';' if depth == 0 => break,
+                _ => {}
+            }
+            tail.push(c);
+            i += 1;
+        }
+        let inline = generics
+            .strip_prefix('<')
+            .and_then(|g| g.strip_suffix('>'))
+            .unwrap_or("");
+        let clauses = tail.split_once("where").map_or("", |(_, w)| w);
+        let bounds: Vec<(String, String)> = split_top(inline)
+            .into_iter()
+            .chain(split_top(clauses))
+            .filter_map(|g| {
+                g.split_once(':')
+                    .map(|(name, bound)| (name.trim().to_owned(), bound.to_owned()))
+            })
+            .collect();
+        let mut parts = Vec::new();
+        let (mut depth, mut current) = (0, String::new());
+        for c in params.chars() {
+            match c {
+                '<' | '(' | '[' => depth += 1,
+                '>' | ')' | ']' => depth -= 1,
+                _ => {}
+            }
+            if c == ',' && depth == 0 {
+                parts.push(std::mem::take(&mut current));
+            } else {
+                current.push(c);
+            }
+        }
+        parts.push(current);
+        for part in parts {
+            let Some((param, ty)) = part.split_once(':') else {
+                continue;
+            };
+            let param = param.trim().trim_start_matches("mut ").trim();
+            let ty = ty.split_whitespace().collect::<Vec<_>>().join(" ");
+            if param.contains("self")
+                || ["key", "id", "role", "select_role", "mark"].contains(&param)
+                || param.ends_with("_key")
+                || param.ends_with("_id")
+                || ty.contains("Fn(")
+                || ty.contains("Tokens")
+            {
+                continue;
+            }
+            let bound = bounds
+                .iter()
+                .filter(|(g, _)| {
+                    ty.split(|c: char| !c.is_alphanumeric() && c != '_')
+                        .any(|w| w == g)
+                })
+                .map(|(_, b)| b.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let seen = format!("{ty} {bound}");
+            let text = ["Said", "String", "str"]
+                .iter()
+                .any(|w| seen.split(|c: char| !c.is_alphanumeric()).any(|x| x == *w));
+            if !text {
+                continue;
+            }
+            let said = seen.contains("Said") || seen.contains("'static str");
+            let owner = owner.as_ref().map_or(String::new(), |o| format!("{o}::"));
+            inputs.push((format!("{module}::{owner}{fn_name}({param})"), said));
+        }
+    }
+    inputs
+}
+
 fn public_text_inputs() -> Vec<(String, bool)> {
     fn files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
         let mut entries: Vec<_> = std::fs::read_dir(dir)
@@ -839,128 +1011,7 @@ fn public_text_inputs() -> Vec<(String, bool)> {
             continue;
         }
         let source = std::fs::read_to_string(&path).unwrap();
-        let mut owner: Option<String> = None;
-        let mut at = 0;
-        for line in source.split_inclusive('\n') {
-            let start = at;
-            at += line.len();
-            let trimmed = line.trim_start();
-            if line.starts_with('}') {
-                owner = None;
-            }
-            if line.starts_with("impl") && line.trim_end().ends_with('{') {
-                let head = line.trim_end().trim_end_matches('{');
-                let head = head.rsplit(" for ").next().unwrap();
-                let head = head.trim_start_matches("impl").trim();
-                let head = if head.starts_with('<') {
-                    &head[head.find('>').unwrap() + 1..]
-                } else {
-                    head
-                };
-                owner = Some(head.trim().split(['<', ' ']).next().unwrap().to_owned());
-                continue;
-            }
-            let Some(rest) = trimmed.strip_prefix("pub fn ") else {
-                continue;
-            };
-            let fn_name: String = rest
-                .chars()
-                .take_while(|c| c.is_alphanumeric() || *c == '_')
-                .collect();
-            let open = start + line.len() - rest.len() + fn_name.len();
-            let bytes = source.as_bytes();
-            let mut generics = String::new();
-            let mut i = open;
-            if bytes[i] == b'<' {
-                let mut depth = 0;
-                loop {
-                    match bytes[i] {
-                        b'<' => depth += 1,
-                        b'>' => depth -= 1,
-                        _ => {}
-                    }
-                    generics.push(bytes[i] as char);
-                    i += 1;
-                    if depth == 0 {
-                        break;
-                    }
-                }
-            }
-            assert_eq!(
-                bytes[i], b'(',
-                "{module}::{fn_name}: no parameters where expected"
-            );
-            let mut depth = 0;
-            let mut params = String::new();
-            loop {
-                let c = bytes[i] as char;
-                match c {
-                    '(' => depth += 1,
-                    ')' => depth -= 1,
-                    _ => {}
-                }
-                i += 1;
-                if depth == 0 {
-                    break;
-                }
-                if !(c == '(' && depth == 1) {
-                    params.push(c);
-                }
-            }
-            let mut parts = Vec::new();
-            let (mut depth, mut current) = (0, String::new());
-            for c in params.chars() {
-                match c {
-                    '<' | '(' | '[' => depth += 1,
-                    '>' | ')' | ']' => depth -= 1,
-                    _ => {}
-                }
-                if c == ',' && depth == 0 {
-                    parts.push(std::mem::take(&mut current));
-                } else {
-                    current.push(c);
-                }
-            }
-            parts.push(current);
-            for part in parts {
-                let Some((param, ty)) = part.split_once(':') else {
-                    continue;
-                };
-                let param = param.trim().trim_start_matches("mut ").trim();
-                let ty = ty.split_whitespace().collect::<Vec<_>>().join(" ");
-                if param.contains("self")
-                    || ["key", "id", "role", "select_role", "mark"].contains(&param)
-                    || param.ends_with("_key")
-                    || param.ends_with("_id")
-                    || ty.contains("Fn(")
-                    || ty.contains("Tokens")
-                {
-                    continue;
-                }
-                let inner = generics
-                    .strip_prefix('<')
-                    .and_then(|g| g.strip_suffix('>'))
-                    .unwrap_or("");
-                let bound = inner
-                    .split(',')
-                    .filter_map(|g| g.split_once(':'))
-                    .find(|(g, _)| {
-                        ty.split(|c: char| !c.is_alphanumeric())
-                            .any(|w| w == g.trim())
-                    })
-                    .map_or(String::new(), |(_, b)| b.to_owned());
-                let seen = format!("{ty} {bound}");
-                let text = ["Said", "String", "str"]
-                    .iter()
-                    .any(|w| seen.split(|c: char| !c.is_alphanumeric()).any(|x| x == *w));
-                if !text {
-                    continue;
-                }
-                let said = seen.contains("Said") || seen.contains("'static str");
-                let owner = owner.as_ref().map_or(String::new(), |o| format!("{o}::"));
-                inputs.push((format!("{module}::{owner}{fn_name}({param})"), said));
-            }
-        }
+        inputs.extend(text_inputs_in(&source, &module));
     }
     inputs
 }
@@ -968,7 +1019,9 @@ fn public_text_inputs() -> Vec<(String, bool)> {
 /// How each public text input draws: `Said` takes authored copy parsed and data as written;
 /// `Plain` draws whatever it is given as written. Every input whose words went through
 /// `words()` on main, and so parsed, is `Said`; keys and key labels, paths given as data and
-/// names read only by assistive tools are `Plain`.
+/// names read only by assistive tools are `Plain`. The table is checked against the `pub fn`
+/// signatures in attn-ui's source, inline and where-clause bounds included; it does not see
+/// text that reaches a draw another way, which `Said` guards: only authored copy is parsed.
 const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::banner::Banner::new(label)", false),
     ("blocks::banner::Banner::value(value)", false),
