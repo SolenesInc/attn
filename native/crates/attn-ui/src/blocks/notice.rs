@@ -16,6 +16,7 @@ pub struct Notice {
     said: Said,
     tone: Tone,
     action: Option<El>,
+    bare: bool,
 }
 
 impl Notice {
@@ -37,12 +38,20 @@ impl Notice {
             said: said.into(),
             tone,
             action: None,
+            bare: false,
         }
     }
 
     /// The button that deals with it, such as Retry, at the line's end.
     pub fn action(mut self, button: impl Into<El>) -> Self {
         self.action = Some(button.into());
+        self
+    }
+
+    /// The notice as its mark and words alone, with no card, for one that sits under what it
+    /// is about, as a refusal under the strip that counts what was refused.
+    pub fn bare(mut self) -> Self {
+        self.bare = true;
         self
     }
 
@@ -58,19 +67,29 @@ impl Notice {
             Tone::Bad | Tone::Warn => "alert",
             Tone::Good | Tone::Neutral | Tone::Accent => "status",
         };
+        let band = if self.bare {
+            door::line_height(Type::Small)
+        } else {
+            Size::Regular.height()
+        };
         let mark = row()
-            .h(Size::Regular.height())
+            .h(band)
             .items_center()
             .child(dot(tone_ink(self.tone, t)));
         let said = words(self.said.clone(), Type::Small, ink)
             .wrap_anywhere()
             .a11y_hidden();
+        let said = if self.bare {
+            said
+        } else {
+            door::on_band(said, Type::Small, Size::Regular)
+        };
         let said = door::gaps(
             row().grow(1.0).min_w(0.0).flex_wrap().items_start(),
             Space::S8,
             Space::S8,
         )
-        .child(door::on_band(said, Type::Small, Size::Regular).grow_from(1.0, COPY_FLOOR))
+        .child(said.grow_from(1.0, COPY_FLOOR))
         .children(self.action);
         let line = row()
             .key(self.key)
@@ -78,10 +97,12 @@ impl Notice {
             .label(self.said.text())
             .w_full()
             .items_start()
-            .fill(fill)
-            .border(1.0, edge)
             .child(mark)
             .child(said);
+        if self.bare {
+            return Block::new(Kind::Notice, door::gap(line, Space::S8));
+        }
+        let line = line.fill(fill).border(1.0, edge);
         let line = door::gap(door::inset(line, Space::S12, Space::S8), Space::S8);
         Block::new(Kind::Notice, door::corner(line, Radius::Card))
     }

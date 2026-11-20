@@ -17,11 +17,9 @@ const WIDEST: f32 = 380.0;
 /// `width: 30%`.
 const SHARE: f32 = 0.3;
 
-/// In a page, of the room a list and its inspector share past their floors, the parts each
-/// takes: the inspector three to the list's one, the split main's Analytics page drew at 1380
-/// points (a 395 point list beside a 623 point inspector).
-const LIST_PARTS: f32 = 1.0;
-const INSPECTOR_PARTS: f32 = 3.0;
+/// In a page, the width of the list beside an inspector: main's Analytics list's `min_w(300)`,
+/// all it drew at the page's 800 point measure, the inspector taking the rest.
+const LIST_WIDTH: f32 = 300.0;
 
 /// The column beside a list that reads its chosen row: the row's name, a line under it that
 /// says what it is, then the facts known about it and what acts on it, in a column that scrolls.
@@ -104,7 +102,7 @@ impl Inspector {
             .key(key)
             .role("complementary")
             .label(label)
-            .grow_from(INSPECTOR_PARTS, NARROWEST)
+            .grow_from(1.0, NARROWEST)
             .border_sides([0.0, 0.0, 0.0, 1.0], t.border_subtle)
             .child(column)
     }
@@ -167,7 +165,7 @@ pub fn beside_list(key: impl Into<String>, list: super::Block, inspector: El) ->
             .w_full()
             .flex_wrap()
             .items_start()
-            .child(list.el.grow_from(LIST_PARTS, NARROWEST))
+            .child(list.el.grow_from(0.0, LIST_WIDTH))
             .child(inspector),
     )
 }

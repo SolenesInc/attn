@@ -69,9 +69,11 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<Block> {
             t,
             machine_toggle(page, t),
         ))
-        .push_all(
-            warning.map(|w| Notice::warn("settings.analytics.refusal", w.to_owned()).build(t)),
-        )
+        .push_all(warning.map(|w| {
+            Notice::warn("settings.analytics.refusal", w.to_owned())
+                .bare()
+                .build(t)
+        }))
         .push_all(outposts_note)
         .push_all(page.machine.then(|| machine(state, page, sharing, t)))
         .push(views(state, page.view, t))

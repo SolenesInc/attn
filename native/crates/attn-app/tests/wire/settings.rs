@@ -1202,8 +1202,8 @@ fn on_a_wide_window_a_page_runs_its_800_point_measure_and_the_dialog_ends_with_i
         );
     }
     assert!(
-        (body[0] + body[2] - edge - (32.0 + 8.0)).abs() < 0.5,
-        "the dialog's page ends at {}, {} past the blocks' edge at {edge}, not its side and bar",
+        (body[0] + body[2] - edge - 32.0).abs() < 0.5,
+        "the dialog's page ends at {}, {} past the blocks' edge at {edge}, not its side, which the bar draws over",
         body[0] + body[2],
         body[0] + body[2] - edge
     );

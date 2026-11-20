@@ -24,7 +24,7 @@ pub fn scroll_bar(t: &Tokens) -> ScrollBarStyle {
 /// on it moves sideways when a part opens.
 pub fn page_scroll_bar(t: &Tokens) -> ScrollBarStyle {
     ScrollBarStyle::native(t.scrollbar_thumb, t.scrollbar_hover)
-        .webkit_parts(8.0, 0.0, 0.0)
+        .webkit_parts(BAR, 0.0, 0.0)
         .always()
 }
 

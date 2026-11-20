@@ -18,8 +18,9 @@ pub struct Page {
 }
 
 impl Page {
-    /// The widest a page draws: its measure between its sides, and its scroll bar.
-    pub const WIDEST: f32 = MEASURE + 2.0 * SIDE.pt() + crate::scroll_bar::BAR;
+    /// The widest a page draws: its measure between its sides, its scroll bar drawn over the
+    /// side.
+    pub const WIDEST: f32 = MEASURE + 2.0 * SIDE.pt();
 
     pub fn new() -> Page {
         Page::default()

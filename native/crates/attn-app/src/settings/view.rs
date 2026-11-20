@@ -294,12 +294,6 @@ fn status(state: &State, t: &Tokens) -> (&'static str, Vec<El>) {
 }
 
 fn page(state: &State, section: Section, t: &Tokens) -> Vec<Block> {
-    let legacy = |els: Vec<El>| {
-        vec![Block::custom(
-            "settings.legacy",
-            col().w_full().children(els),
-        )]
-    };
     match section {
         Section::General => appearance::page(state, t),
         Section::Connectivity => github::page(state, t),
