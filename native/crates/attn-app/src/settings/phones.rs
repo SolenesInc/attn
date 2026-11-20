@@ -10,14 +10,11 @@ use attn_protocol::{
     PhonePairingRevokeMessage, PhonesGetMessage, Profile,
 };
 use attn_ui::Tokens;
-use attn_ui::blocks::{Actions, Block, Notice, Section, Stack, Status};
-use attn_ui::system::{Type, words};
-use attn_ui::type_;
+use attn_ui::blocks::{Actions, Block, List, Notice, Section, Stack, Status};
+use attn_ui::system::{Button, ListRow, Reveal, Size, Type, words};
 use qrcodegen::{QrCode, QrCodeEcc, QrSegment, Version};
-use rune::tok::space;
-use rune::{El, Pixels, Tx, col, row, text};
+use rune::{El, Pixels, Tx};
 
-use super::pages::CAPTION;
 use crate::State;
 use crate::sidebar::queue::epoch_ms;
 
@@ -284,43 +281,22 @@ fn paired_phone(pairing: &PhonePairing, t: &Tokens) -> El {
         pairing.profile_id, pairing.device_id
     );
     let (device, profile) = (pairing.device_id.clone(), pairing.profile_id.clone());
-    row()
-        .key(key.clone())
-        .role("listitem")
-        .label(pairing.name.clone())
-        .w_full()
-        .gap(space::S3)
-        .items_center()
-        .padding(space::S3)
-        .radius(6.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
-        .child(
-            col()
-                .grow(1.0)
-                .min_w(0.0)
-                .gap(space::S1)
-                .child(
-                    text(pairing.name.clone())
-                        .font(type_::LABEL)
-                        .color(t.text_primary),
-                )
-                .child(
-                    text(seen.clone())
-                        .key(format!("{key}.seen"))
-                        .label(seen)
-                        .font(CAPTION)
-                        .color(t.text_tertiary),
-                ),
-        )
-        .child(El::from(
-            attn_ui::system::Button::new("Revoke")
+    ListRow::new(key.clone(), pairing.name.clone())
+        .still()
+        .title(pairing.name.clone())
+        .subtitle_keyed(format!("{key}.seen"), seen, t)
+        .controls(
+            [Button::new("Revoke")
+                .size(Size::Compact)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     revoke(state, &device, &profile, tx)
                 })
                 .build(t)
-                .key(format!("{key}.revoke")),
-        ))
+                .key(format!("{key}.revoke"))
+                .into()],
+            Reveal::Always,
+        )
+        .build(t)
 }
 
 fn pairing_code(state: &State, code: &PhonePairingCode, profile: &Profile, t: &Tokens) -> Block {
@@ -363,7 +339,7 @@ fn pairing_code(state: &State, code: &PhonePairingCode, profile: &Profile, t: &T
             )
             .child(
                 El::from(
-                    attn_ui::system::Button::new("Cancel")
+                    Button::new("Cancel")
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| cancel(state, &id, tx))
                         .build(t)
                         .key(format!("{key}.cancel")),
@@ -394,16 +370,14 @@ fn profile_block(
     )
     .description("A phone you pair here sees this profile's agents and nothing else.");
     if !paired.is_empty() {
-        section = section.push(Block::custom(
-            format!("settings.phones.{}.list.block", profile.id),
-            col()
-                .key(format!("settings.phones.{}.list", profile.id))
-                .role("list")
-                .label(format!("Phones paired with {}", profile.name))
-                .w_full()
-                .gap(space::S2)
-                .children(paired.into_iter().map(|p| paired_phone(p, t))),
-        ));
+        section = section.push(
+            List::new(
+                format!("settings.phones.{}.list", profile.id),
+                format!("Phones paired with {}", profile.name),
+            )
+            .rows(paired.into_iter().map(|p| paired_phone(p, t)))
+            .build(t),
+        );
     }
     if let Some(code) = code {
         section = section.push(pairing_code(state, code, profile, t));
@@ -422,7 +396,7 @@ fn profile_block(
         .push(
             Actions::new(format!("settings.phones.{}.actions", profile.id))
                 .push(
-                    attn_ui::system::Button::new(if code.is_some() {
+                    Button::new(if code.is_some() {
                         "Show a new pairing code"
                     } else {
                         "Pair a phone"

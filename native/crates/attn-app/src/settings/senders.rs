@@ -4,12 +4,10 @@
 use attn_client::{Connection, Slices};
 use attn_protocol::{PairedSender, SenderUnpairMessage, SendersGetMessage};
 use attn_ui::Tokens;
-use attn_ui::blocks::{Block, Notice, Prose, Section, Status};
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Tx, col, row, text};
+use attn_ui::blocks::{Block, List, Notice, Prose, Section, Status};
+use attn_ui::system::{Button, ListRow, Reveal, Size};
+use rune::{El, Tx};
 
-use super::pages::CAPTION;
 use crate::State;
 use crate::sidebar::queue::epoch_ms;
 
@@ -79,41 +77,20 @@ fn paired_sender(sender: &PairedSender, t: &Tokens) -> El {
     let copy = format!("Paired {} · {used}", when(&sender.created_at));
     let key = format!("settings.sender.{}", sender.id);
     let id = sender.id.clone();
-    row()
-        .key(key.clone())
-        .role("listitem")
-        .label(sender.name.clone())
-        .w_full()
-        .gap(space::S3)
-        .items_center()
-        .padding(space::S3)
-        .radius(6.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
-        .child(
-            col()
-                .grow(1.0)
-                .min_w(0.0)
-                .gap(space::S1)
-                .child(
-                    text(sender.name.clone())
-                        .font(type_::LABEL)
-                        .color(t.text_primary),
-                )
-                .child(
-                    text(copy.clone())
-                        .key(format!("{key}.copy"))
-                        .label(copy)
-                        .font(CAPTION)
-                        .color(t.text_tertiary),
-                ),
-        )
-        .child(El::from(
-            attn_ui::system::Button::new("Remove")
+    ListRow::new(key.clone(), sender.name.clone())
+        .still()
+        .title(sender.name.clone())
+        .subtitle_keyed(format!("{key}.copy"), copy, t)
+        .controls(
+            [Button::new("Remove")
+                .size(Size::Compact)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| remove(state, &id, tx))
                 .build(t)
-                .key(format!("{key}.remove")),
-        ))
+                .key(format!("{key}.remove"))
+                .into()],
+            Reveal::Always,
+        )
+        .build(t)
 }
 
 pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
@@ -133,16 +110,11 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
             .build(t),
         )
     } else {
-        section.push(Block::custom(
-            "settings.senders.list.block",
-            col()
-                .key("settings.senders.list")
-                .role("list")
-                .label("Paired senders")
-                .w_full()
-                .gap(space::S2)
-                .children(senders.iter().map(|s| paired_sender(s, t))),
-        ))
+        section.push(
+            List::new("settings.senders.list", "Paired senders")
+                .rows(senders.iter().map(|s| paired_sender(s, t)))
+                .build(t),
+        )
     };
     if let Some(error) = &state.window.settings.senders.error {
         section = section.push(Notice::warn("settings.senders.error", error.clone()).build(t));

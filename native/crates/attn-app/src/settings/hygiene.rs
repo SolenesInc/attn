@@ -5,13 +5,11 @@ use std::collections::BTreeSet;
 
 use attn_protocol::{MuteAuthorMessage, MuteRepoMessage};
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, col, row, text};
+use rune::El;
 
-use attn_ui::system::{Button, Tone, tag};
+use attn_ui::system::{Button, ListRow, Reveal, Size, Tone, tag};
 
-use attn_ui::blocks::{Block, Section, SettingRow};
+use attn_ui::blocks::{Block, List, Section, SettingRow};
 
 use super::controls::{SettingField, setting_switch};
 use crate::action::Action;
@@ -122,61 +120,28 @@ fn muted_list(
     t: &Tokens,
     unmute: fn(&mut State, &str),
 ) -> Block {
-    Block::custom(
-        format!("settings.muted.{kind}.block"),
-        muted_rows(kind, title, names, empty, t, unmute),
-    )
-}
-
-fn muted_rows(
-    kind: &str,
-    title: &str,
-    names: Vec<String>,
-    empty: &str,
-    t: &Tokens,
-    unmute: fn(&mut State, &str),
-) -> El {
-    if names.is_empty() {
-        return text(empty.to_owned())
-            .key(format!("settings.muted.{kind}.empty"))
-            .font(type_::BODY)
-            .color(t.text_tertiary);
-    }
-    col()
-        .key(format!("settings.muted.{kind}"))
-        .role("list")
-        .label(title.to_owned())
-        .w_full()
-        .gap(space::S1)
-        .children(names.into_iter().map(|name| {
+    List::new(format!("settings.muted.{kind}"), title)
+        .rows(names.into_iter().map(|name| {
             let pressed = name.clone();
-            row()
-                .key(format!("settings.muted.{kind}.{name}"))
-                .role("listitem")
-                .label(name.clone())
-                .w_full()
-                .gap(space::S2)
-                .items_center()
-                .padding(space::S2)
-                .radius(6.0)
-                .fill(t.bg_panel)
-                .child(
-                    text(name.clone())
-                        .font(type_::BODY)
-                        .color(t.text_primary)
-                        .grow(1.0)
-                        .min_w(0.0),
-                )
-                .child(El::from(
-                    Button::new("Unmute")
+            ListRow::new(format!("settings.muted.{kind}.{name}"), name.clone())
+                .still()
+                .title(name.clone())
+                .controls(
+                    [Button::new("Unmute")
+                        .size(Size::Compact)
                         .on_press_tx(move |state: &mut State, _: &mut rune::Tx| {
                             unmute(state, &pressed)
                         })
                         .build(t)
                         .key(format!("settings.unmute.{kind}.{name}"))
-                        .label("Unmute"),
-                ))
+                        .label("Unmute")
+                        .into()],
+                    Reveal::Always,
+                )
+                .build(t)
         }))
+        .empty(format!("settings.muted.{kind}.empty"), empty, None)
+        .build(t)
 }
 
 fn shortcut(state: &State, action: &Action) -> String {
