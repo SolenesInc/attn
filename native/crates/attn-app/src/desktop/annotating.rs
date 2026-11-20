@@ -465,7 +465,7 @@ fn compose(id: &str, popup: &Popup, mark: &crate::terminal::Annotation, t: &Toke
     );
     let (removed, gone, dismissed, saved) =
         (id.to_owned(), mark.id.clone(), id.to_owned(), id.to_owned());
-    let actions = Inline::line()
+    let actions = Inline::joined()
         .w_full()
         .child(
             SystemButton::new("Remove")
@@ -598,7 +598,7 @@ fn panel(
                 Some(key) => send.trailing(words(key.to_owned(), Type::Small, t.text_tertiary)),
                 None => send,
             };
-            Inline::line()
+            Inline::joined()
                 .w_full()
                 .child(
                     words(

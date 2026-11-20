@@ -1552,7 +1552,15 @@ fn at_large_text_in_the_smallest_window_a_refusal_keeps_start_in_reach_for_the_r
             ..CrewSetResultMessage::new()
         })
     });
-    press_in_window(&mut world, PRIMARY);
+    let [x, y, w, h] = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some(PRIMARY))
+        .expect("Start is drawn")
+        .rect;
+    let rec = world.record(60.0, 0.5, |_, app| app.click_at((x + w / 2.0, y + h / 2.0)));
+    crate::wire::whole_on_its_first_frame(&rec, "chief-setup.alert");
     let alert = world
         .runtime()
         .elements()

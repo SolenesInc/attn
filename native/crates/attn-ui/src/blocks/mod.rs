@@ -83,7 +83,7 @@ pub use lane::{Lane, board, lanes};
 pub use list::List;
 pub use menu::Menu;
 pub use miniature::Miniature;
-pub use notice::{Notice, Refusal, Status, saved};
+pub use notice::{Notice, Refusal, Status, saved, show_refusal};
 pub use page::{Head, Page};
 pub use pane::Pane;
 pub use pill::pill;

@@ -581,7 +581,7 @@ fn annotations_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
         .on_press_tx(pressed)
         .build(&t)
         .key("story.tile.panel.send");
-    let foot = Inline::line()
+    let foot = Inline::joined()
         .w_full()
         .child(words("2 annotations", Type::Small, t.text_secondary).grow(1.0))
         .child(send.into());

@@ -352,7 +352,13 @@ pub(crate) fn set_up(
             if let Some(why) = refused {
                 if is_current(state, &key) {
                     state.window.chief.error = Some((key.clone(), why));
-                    tx.scroll_into_view(format!("{}.alert", setup::POP));
+                    let at = tx.focused().map(str::to_owned);
+                    attn_ui::blocks::show_refusal(
+                        tx,
+                        &format!("{}.body", setup::POP),
+                        format!("{}.alert", setup::POP),
+                        at.as_deref(),
+                    );
                 }
                 settle(state, &key);
                 return;

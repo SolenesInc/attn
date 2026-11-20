@@ -120,7 +120,7 @@ fn shelf(s: &Desk, cx: &mut Cx<Desk>) -> El {
         }))
     };
     let face = |label: &str| {
-        Inline::line().w_full().child(marks(2)).child(
+        Inline::joined().w_full().child(marks(2)).child(
             words(label.to_owned(), Type::Small, t.text_secondary)
                 .single_line()
                 .truncate()
@@ -176,7 +176,7 @@ fn overview(s: &Desk, cx: &mut Cx<Desk>) -> El {
             .control("button", title)
             .standing(standing)
             .push(
-                Inline::line()
+                Inline::joined()
                     .w_full()
                     .child(words("⌘1", Type::Mono, t.text_secondary))
                     .child(

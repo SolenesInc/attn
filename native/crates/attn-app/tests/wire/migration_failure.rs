@@ -140,3 +140,27 @@ fn copy_details_puts_every_fact_on_the_clipboard() {
         Some("Copied")
     );
 }
+
+#[test]
+fn a_path_with_backticks_is_drawn_and_named_as_written() {
+    let path = "/Users/u/.attn/attn`previous`.db";
+    let world = launch(Marker::Text(&format!(
+        r#"{{"error":"conversion aborted","database_path":"{path}"}}"#
+    )));
+
+    let drawn = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .filter(|e| e.path.contains("migration-failure.fact.0/"))
+        .filter_map(|e| e.text)
+        .collect::<Vec<_>>();
+    assert_eq!(drawn.last().map(String::as_str), Some(path), "{drawn:?}");
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("migration-failure.fact.0"))
+            .and_then(|n| n.name),
+        Some(format!("Database: {path}"))
+    );
+}

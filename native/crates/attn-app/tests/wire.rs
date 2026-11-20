@@ -6,6 +6,25 @@ mod wire {
         rune::KeyPlatform::current() == rune::KeyPlatform::Mac
     }
 
+    /// Asserts that the element keyed `key`, mounted by the recorded cause, is opaque and
+    /// unclipped on the first frame it is drawn: a refusal the person caused is seen at once.
+    pub(crate) fn whole_on_its_first_frame(rec: &rune::motion_gate::Recording, key: &str) {
+        let suffix = format!("/{key}");
+        let track = rec
+            .tracks
+            .iter()
+            .find(|t| t.path.ends_with(&suffix))
+            .unwrap_or_else(|| panic!("{key} is never drawn"));
+        let (frame, first) = &track.frames[0];
+        assert!(
+            first.op > 0.99 && first.rect[3] > 0.0 && (first.vis[3] - first.rect[3]).abs() < 0.5,
+            "{key} on its first frame ({frame}): opacity {}, {} of its {} points show",
+            first.op,
+            first.vis[3],
+            first.rect[3]
+        );
+    }
+
     /// The room a finder's list leaves between its rows and its edges.
     const FINDER_INSET: f32 = 8.0;
 

@@ -50,8 +50,9 @@ pub(crate) struct Field {
     /// refused value it still holds.
     attempting: Option<String>,
     pending: bool,
-    /// The draft changed while a write was out: write again when it lands.
-    requested: bool,
+    /// The draft changed while a write was out: write it again when that one lands, for what
+    /// caused the change.
+    requested: Option<Cause>,
     pub(crate) error: Option<String>,
     confirmed: bool,
     /// The field's Saved mark shows until this time.
@@ -67,7 +68,7 @@ impl Default for Field {
             actual: String::new(),
             attempting: None,
             pending: false,
-            requested: false,
+            requested: None,
             error: None,
             confirmed: false,
             saved_mark: None,
@@ -192,14 +193,62 @@ pub(crate) fn apply(state: &mut State, key: &str, value: &str, tx: &mut Tx) {
     commit(state, key, tx);
 }
 
+/// What caused a save: the person acting, with the control to show beside a refusal and how
+/// many inputs they had given by then (`Tx::inputs`), or leaving a field for somewhere else.
+#[derive(Clone)]
+pub(crate) enum Cause {
+    At {
+        control: Option<String>,
+        inputs: u64,
+    },
+    Left,
+}
+
+impl Cause {
+    /// The person acting in `control`.
+    pub(crate) fn at(control: impl Into<String>, tx: &Tx) -> Cause {
+        Cause::At {
+            control: Some(control.into()),
+            inputs: tx.inputs(),
+        }
+    }
+
+    /// The person acting where the focus is.
+    pub(crate) fn here(tx: &Tx) -> Cause {
+        Cause::At {
+            control: tx.focused().map(str::to_owned),
+            inputs: tx.inputs(),
+        }
+    }
+
+    /// Lands the refusal keyed `refusal` at once. When the person has done nothing since they
+    /// acted, it shows them the refusal and the control they acted in; when they have, or
+    /// caused it by leaving a field, the control they are in now stays where it shows.
+    pub(crate) fn show(&self, refusal: String, tx: &mut Tx) {
+        match self {
+            Cause::At { control, inputs } if *inputs == tx.inputs() => {
+                attn_ui::blocks::show_refusal(tx, super::BODY, refusal, control.as_deref())
+            }
+            _ => {
+                tx.instant();
+                tx.keep_focus_on_screen();
+            }
+        }
+    }
+}
+
 /// Saves what the field holds, when it differs from what the daemon has.
 pub(crate) fn commit(state: &mut State, key: &str, tx: &mut Tx) {
+    send(state, key, Cause::here(tx), tx);
+}
+
+fn send(state: &mut State, key: &str, cause: Cause, tx: &mut Tx) {
     let Some(field) = autosave(state).fields.get_mut(key) else {
         return;
     };
     if field.pending {
         if field.attempting.as_deref() != Some(field.draft.text.as_str()) {
-            field.requested = true;
+            field.requested = Some(cause);
         }
         return;
     }
@@ -214,7 +263,7 @@ pub(crate) fn commit(state: &mut State, key: &str, tx: &mut Tx) {
         Err(reason) => {
             field.error = Some(reason);
             field.confirmed = false;
-            show_refusal(key, tx);
+            cause.show(refusal_key(key), tx);
             super::flushed(state, tx);
             return;
         }
@@ -232,7 +281,7 @@ pub(crate) fn commit(state: &mut State, key: &str, tx: &mut Tx) {
         },
         move |state, answer, tx| {
             let outcome = answer.outcome().map(|_| ());
-            landed(state, &key, draft, outcome, tx);
+            landed(state, &key, draft, outcome, cause, tx);
         },
         tx,
     );
@@ -249,10 +298,21 @@ pub(crate) fn commit_on_leave(state: &mut State, key: &str, tx: &mut Tx) {
     if field.error.is_some() && field.attempting.as_deref() == Some(field.draft.text.as_str()) {
         return;
     }
-    commit(state, key, tx);
+    send(state, key, Cause::Left, tx);
 }
 
-fn landed(state: &mut State, key: &str, draft: String, outcome: Result<(), String>, tx: &mut Tx) {
+fn refusal_key(key: &str) -> String {
+    format!("settings.refusal.{key}")
+}
+
+fn landed(
+    state: &mut State,
+    key: &str,
+    draft: String,
+    outcome: Result<(), String>,
+    cause: Cause,
+    tx: &mut Tx,
+) {
     let now = tx.clock();
     let Some(field) = autosave(state).fields.get_mut(key) else {
         return;
@@ -273,31 +333,14 @@ fn landed(state: &mut State, key: &str, draft: String, outcome: Result<(), Strin
     }
     tx.instant();
     let refused = field.error.is_some();
-    let requested = std::mem::take(&mut field.requested);
+    let requested = field.requested.take();
     if refused {
-        show_refusal(key, tx);
+        cause.show(refusal_key(key), tx);
     }
-    if requested {
-        commit(state, key, tx);
+    if let Some(requested) = requested {
+        send(state, key, requested, tx);
     }
     super::flushed(state, tx);
-}
-
-/// Lands `key`'s refusal on its frame, then shows it as far as the control that holds the
-/// keyboard stays in view: each by the least movement, the focused control last.
-fn show_refusal(key: &str, tx: &mut Tx) {
-    show_reply(format!("settings.refusal.{key}"), tx);
-}
-
-/// Lands a reply keyed `reply`, such as the reason a removal was refused, on its frame, then
-/// shows it as far as the control that holds the keyboard stays in view: each by the least
-/// movement, the focused control last.
-pub(super) fn show_reply(reply: String, tx: &mut Tx) {
-    tx.instant();
-    tx.scroll_into_view_in(super::BODY, reply);
-    if let Some(focused) = tx.focused().map(str::to_owned) {
-        tx.scroll_into_view_in(super::BODY, focused);
-    }
 }
 
 /// Commits every field: before the dialog closes or changes page.

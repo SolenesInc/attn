@@ -276,7 +276,7 @@ fn ask_row(item: &AskItem<'_>, t: &Tokens) -> El {
     ListRow::new(key.clone(), format!("{}: {}", item.from, item.ask.subject))
         .lead(system::glyph("?", IconSize::Regular, t.accent))
         .title_el(
-            Inline::line()
+            Inline::joined()
                 .grow(1.0)
                 .child(
                     words(item.from.clone(), Type::Body, t.text_primary)

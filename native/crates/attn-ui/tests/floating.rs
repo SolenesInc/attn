@@ -434,3 +434,332 @@ fn a_popovers_actions_stay_whole_in_the_window_and_its_body_scrolls_however_long
         );
     }
 }
+
+/// A dialog of each size whose body opens and ends with a field, `lines` lines apart.
+#[derive(Clone, Copy)]
+struct Fielding {
+    size: attn_ui::blocks::DialogSize,
+    lines: usize,
+    lead: bool,
+}
+
+thread_local! {
+    static FIELDED: std::cell::Cell<Option<Fielding>> = const { std::cell::Cell::new(None) };
+}
+
+struct Fielded {
+    case: Fielding,
+    first: rune::TextEdit,
+    last: rune::TextEdit,
+}
+
+fn fielded(state: &Fielded, _: &mut Cx<Fielded>) -> El {
+    use attn_ui::blocks::{Actions, Dialog, Field, Prose};
+    use attn_ui::system::{Button, FieldState, line_box};
+    let t = attn_ui::colors::scheme_for(None).colors(true).ui;
+    let field = |key: &str, edit: &rune::TextEdit, at: fn(&mut Fielded) -> &mut rune::TextEdit| {
+        let input = rune_kit::TextInput::new(edit)
+            .key(key.to_owned())
+            .label(key.to_owned())
+            .on_edit(at);
+        Field::new(key, "Cap in tokens")
+            .control(line_box(input, FieldState::Ready, &t))
+            .build(&t)
+    };
+    let mut layer = Vec::new();
+    Dialog::new("rule", "Context window cap")
+        .lead(if state.case.lead {
+            "Cap the agent’s context window so it compacts at this many tokens. Blank means no cap. Saving reloads the agent to apply it."
+        } else {
+            ""
+        })
+        .size(state.case.size)
+        .on_close(|_: &mut Fielded| {})
+        .push(field("rule.first", &state.first, |s| &mut s.first))
+        .push_all((0..state.case.lines).map(|i| {
+            Prose::lead(format!("rule.line.{i}"), "Cap the agent’s context window.").build(&t)
+        }))
+        .push(field("rule.last", &state.last, |s| &mut s.last))
+        .actions(
+            Actions::new("rule.actions")
+                .then_end()
+                .push(Button::new("Save").build(&t).key("rule.confirm")),
+        )
+        .build(&t, &mut layer);
+    rune::col().w_full().h_full().children(layer)
+}
+
+#[test]
+fn a_focused_field_at_either_end_of_a_dialogs_body_has_its_whole_ring() {
+    use attn_ui::blocks::DialogSize;
+    let t = attn_ui::colors::scheme_for(None).colors(true).ui;
+    let warm = [t.warning.r, t.warning.g, t.warning.b].map(rune::theme::srgb_encode);
+    for size in [
+        DialogSize::Prompt,
+        DialogSize::Form,
+        DialogSize::Sheet,
+        DialogSize::Tour,
+    ] {
+        for lines in [0, 40] {
+            FIELDED.with(|f| {
+                f.set(Some(Fielding {
+                    size,
+                    lines,
+                    lead: false,
+                }))
+            });
+            let mut rt = App::new(AppSpec {
+                fonts: attn_ui::FONTS,
+                families: attn_ui::FAMILIES,
+                ..AppSpec::new(
+                    "floating",
+                    SMALLEST_LARGE_TEXT,
+                    || Fielded {
+                        case: FIELDED.with(|f| f.get()).expect("a case"),
+                        first: rune::TextEdit::default(),
+                        last: rune::TextEdit::default(),
+                    },
+                    fielded,
+                )
+            })
+            .headless_runtime(SMALLEST_LARGE_TEXT, Env::new(true, 1.0));
+            rt.set_full_keyboard_access(true);
+            rt.frame(0.0);
+            for key in ["rule.first", "rule.last"] {
+                for _ in 0..6 {
+                    if rt
+                        .elements()
+                        .iter()
+                        .any(|e| e.focused && e.focus_visible && e.key.as_deref() == Some(key))
+                    {
+                        break;
+                    }
+                    rt.key(rune::KeyEvent {
+                        key: rune::Key::Tab,
+                        mods: rune::Mods::default(),
+                    });
+                    rt.settle_all();
+                    rt.frame(0.0);
+                }
+                let all = rt.elements();
+                let editor = all
+                    .iter()
+                    .find(|e| e.focused && e.focus_visible)
+                    .unwrap_or_else(|| panic!("{size:?}, {lines} lines: nothing shows focus"));
+                assert_eq!(editor.key.as_deref(), Some(key), "{size:?}, {lines} lines");
+                let [x, y, w, h] = editor.rect;
+                let ring = rt
+                    .instances
+                    .iter()
+                    .find(|i| {
+                        let [ix, iy, iw, ih] = i.rect;
+                        ix <= x
+                            && iy <= y
+                            && ix + iw >= x + w
+                            && iy + ih >= y + h
+                            && i.params[0] > 0.0
+                            && (0..3).all(|c| (i.border[c] - warm[c]).abs() < 0.01)
+                    })
+                    .unwrap_or_else(|| panic!("{size:?}, {lines} lines: {key} draws no ring"));
+                let [rx, ry, rw, rh] = ring.rect;
+                let [cx, cy, cr, cb] = ring.clip;
+                assert!(
+                    rx >= cx - 0.5 && ry >= cy - 0.5 && rx + rw <= cr + 0.5 && ry + rh <= cb + 0.5,
+                    "{size:?}, {lines} lines: {key}'s ring {:?} is cut by its clip {:?}; editor {:?} body {:?}",
+                    ring.rect,
+                    ring.clip,
+                    editor.rect,
+                    all.iter()
+                        .find(|e| e.key.as_deref() == Some("rule.body"))
+                        .map(|b| (b.rect, b.visible))
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_scrolled_dialog_body_draws_nothing_over_the_lead() {
+    use attn_ui::blocks::DialogSize;
+    for size in [
+        DialogSize::Prompt,
+        DialogSize::Form,
+        DialogSize::Sheet,
+        DialogSize::Tour,
+    ] {
+        FIELDED.with(|f| {
+            f.set(Some(Fielding {
+                size,
+                lines: 40,
+                lead: true,
+            }))
+        });
+        let mut rt = App::new(AppSpec {
+            fonts: attn_ui::FONTS,
+            families: attn_ui::FAMILIES,
+            ..AppSpec::new(
+                "floating",
+                SMALLEST_LARGE_TEXT,
+                || Fielded {
+                    case: FIELDED.with(|f| f.get()).expect("a case"),
+                    first: rune::TextEdit::default(),
+                    last: rune::TextEdit::default(),
+                },
+                fielded,
+            )
+        })
+        .headless_runtime(SMALLEST_LARGE_TEXT, Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.update(|_, tx| tx.scroll_to_bottom_instant("rule.body"));
+        rt.settle_all();
+        rt.frame(0.0);
+        let all = rt.elements();
+        let lead = all
+            .iter()
+            .find(|e| e.key.as_deref() == Some("lead"))
+            .expect("the lead");
+        let body = all
+            .iter()
+            .find(|e| e.key.as_deref() == Some("rule.body"))
+            .expect("the body");
+        let [lx, ly, lw, lh] = lead.rect;
+        let inside = format!("{}/", body.path);
+        for e in all.iter().filter(|e| e.path.starts_with(&inside)) {
+            let [x, y, w, h] = e.visible;
+            let overlaps =
+                w > 0.0 && h > 0.0 && x < lx + lw && lx < x + w && y < ly + lh && ly < y + h;
+            assert!(
+                !overlaps,
+                "{size:?}: {} shows {:?} over the lead {:?}; body {:?}",
+                e.path, e.visible, lead.rect, body.rect
+            );
+        }
+    }
+}
+
+struct Refusing {
+    value: rune::TextEdit,
+    refused: bool,
+}
+
+fn refusing(state: &Refusing, _: &mut Cx<Refusing>) -> El {
+    use attn_ui::blocks::Field;
+    use attn_ui::system::{FieldState, line_box};
+    let t = attn_ui::colors::scheme_for(None).colors(true).ui;
+    let input = rune_kit::TextInput::new(&state.value)
+        .key("rule.value")
+        .label("Priority")
+        .on_edit(|s: &mut Refusing| &mut s.value)
+        .on_submit(|s: &mut Refusing, _| s.refused = true);
+    let field = Field::new("rule", "Priority")
+        .control(line_box(input, FieldState::failed_if(state.refused), &t))
+        .error(
+            state
+                .refused
+                .then_some("Plugin priority must be an integer"),
+        )
+        .build(&t);
+    let mut layer = Vec::new();
+    attn_ui::blocks::Dialog::new("refusing", "Plugin")
+        .on_close(|_: &mut Refusing| {})
+        .push(field)
+        .build(&t, &mut layer);
+    rune::col().w_full().h_full().children(layer)
+}
+
+#[test]
+fn a_fields_error_is_whole_on_the_frame_it_appears() {
+    let mut rt = App::new(AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..AppSpec::new(
+            "floating",
+            SMALLEST_LARGE_TEXT,
+            || Refusing {
+                value: rune::TextEdit::new("1.5"),
+                refused: false,
+            },
+            refusing,
+        )
+    })
+    .headless_runtime(SMALLEST_LARGE_TEXT, Env::new(true, 1.0));
+    rt.frame(0.0);
+    rt.update(|_, tx| tx.focus("rule.value", true));
+    rt.settle_all();
+    rt.frame(0.0);
+    rt.key(rune::KeyEvent {
+        key: rune::Key::Enter,
+        mods: rune::Mods::default(),
+    });
+    rt.frame(1.0 / 60.0);
+    let error = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("rule.error"))
+        .expect("the error shows");
+    assert_eq!(error.opacity, 1.0, "the error starts whole, not fading in");
+    assert_eq!(
+        error.visible[3], error.rect[3],
+        "the error starts unclipped"
+    );
+}
+
+#[test]
+fn a_shown_refusal_leaves_a_horizontal_viewport_without_the_focus_where_it_was() {
+    fn view(refused: &bool, _: &mut Cx<bool>) -> El {
+        rune::col()
+            .key("body")
+            .size(320.0, 240.0)
+            .scroll(rune::ScrollSpec {
+                stick_bottom: false,
+            })
+            .child(
+                rune::row()
+                    .key("strip")
+                    .size(320.0, 100.0)
+                    .scroll_x()
+                    .children((0..20).map(|i| el().key(format!("cell{i}")).size(80.0, 100.0))),
+            )
+            .child(el().key("field").w_full().h(30.0).focusable(true))
+            .child(el().w_full().h(100.0))
+            .children(refused.then(|| el().key("refusal").w_full().h(20.0)))
+    }
+    let mut rt = Runtime::new(false, view, (320.0, 240.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    rt.update(|_, tx| tx.focus("field", true));
+    rt.settle_all();
+    rt.frame(0.0);
+    rt.wheel_xy(100.0, 50.0, -580.0, 0.0);
+    rt.settle_all();
+    rt.frame(0.0);
+    let strip_offset = |rt: &Runtime<bool>| {
+        rt.elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some("cell0"))
+            .expect("the strip's first cell")
+            .scrolled[0]
+    };
+    let wheeled = strip_offset(&rt);
+    assert!(wheeled > 0.0, "the wheel moved the strip");
+
+    rt.update(|refused, tx| {
+        *refused = true;
+        attn_ui::blocks::show_refusal(tx, "body", "refusal", Some("field"));
+    });
+    rt.frame(0.0);
+
+    let refusal = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("refusal"))
+        .expect("the refusal");
+    assert_eq!(
+        refusal.visible[3], refusal.rect[3],
+        "the refusal shows whole"
+    );
+    assert_eq!(
+        strip_offset(&rt),
+        wheeled,
+        "the strip stays where the wheel put it"
+    );
+}

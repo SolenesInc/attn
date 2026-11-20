@@ -15,6 +15,7 @@ use attn_ui::system::{Button, ListRow, Reveal, Size, Type, words};
 use qrcodegen::{QrCode, QrCodeEcc, QrSegment, Version};
 use rune::{El, Pixels, Tx};
 
+use super::autosave::Cause;
 use crate::State;
 use crate::sidebar::queue::epoch_ms;
 
@@ -169,20 +170,21 @@ pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {
         .min()
 }
 
-fn failed(state: &mut State, profile_id: &str, why: String, tx: &mut Tx) {
+fn failed(state: &mut State, profile_id: &str, why: String, cause: &Cause, tx: &mut Tx) {
     state
         .window
         .settings
         .phones
         .errors
         .insert(profile_id.to_owned(), why);
-    super::autosave::show_reply(format!("settings.phones.{profile_id}.error"), tx);
+    cause.show(format!("settings.phones.{profile_id}.error"), tx);
 }
 
 fn pair(state: &mut State, profile_id: &str, tx: &mut Tx) {
     state.window.settings.phones.errors.remove(profile_id);
     let profile = profile_id.to_owned();
     let answered = profile.clone();
+    let cause = Cause::here(tx);
     state.ask(
         |request_id| PhonePairBeginMessage {
             profile_id: profile,
@@ -192,7 +194,7 @@ fn pair(state: &mut State, profile_id: &str, tx: &mut Tx) {
         move |state, answer, tx| match answer.outcome() {
             Ok(_) if !shown(state) => cancel_quietly(state, answered, tx),
             Ok(_) => {}
-            Err(why) => failed(state, &answered, why, tx),
+            Err(why) => failed(state, &answered, why, &cause, tx),
         },
         tx,
     );
@@ -201,6 +203,7 @@ fn pair(state: &mut State, profile_id: &str, tx: &mut Tx) {
 fn cancel(state: &mut State, profile_id: &str, tx: &mut Tx) {
     let profile = profile_id.to_owned();
     let answered = profile.clone();
+    let cause = Cause::here(tx);
     state.ask(
         |request_id| PhonePairCancelMessage {
             profile_id: profile,
@@ -209,7 +212,7 @@ fn cancel(state: &mut State, profile_id: &str, tx: &mut Tx) {
         },
         move |state, answer, tx| {
             if let Err(why) = answer.outcome() {
-                failed(state, &answered, why, tx);
+                failed(state, &answered, why, &cause, tx);
             }
         },
         tx,
@@ -227,6 +230,7 @@ fn revoke(state: &mut State, device_id: &str, profile_id: &str, tx: &mut Tx) {
     }
     let (device, profile) = (device_id.to_owned(), profile_id.to_owned());
     let answered = profile.clone();
+    let cause = Cause::here(tx);
     state.ask(
         |request_id| PhonePairingRevokeMessage {
             device_id: device,
@@ -236,7 +240,7 @@ fn revoke(state: &mut State, device_id: &str, profile_id: &str, tx: &mut Tx) {
         },
         move |state, answer, tx| {
             if let Err(why) = answer.outcome() {
-                failed(state, &answered, why, tx);
+                failed(state, &answered, why, &cause, tx);
             }
         },
         tx,

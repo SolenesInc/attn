@@ -387,6 +387,67 @@ fn cancelling_the_save_dialog_keeps_the_report_open_and_says_why() {
 }
 
 #[test]
+fn a_save_that_fails_below_a_long_pane_list_shows_why_beside_the_save() {
+    let desktops = (0..4u8)
+        .map(|n| {
+            let id = format!("desk{n}");
+            let mut d = desktop(
+                (n * 4 + 1..=n * 4 + 4)
+                    .map(|p| DesktopPane {
+                        desktop_id: id.clone(),
+                        ..pane(p)
+                    })
+                    .collect(),
+            );
+            d.active_pane_id = d.panes[0].pane_id.clone();
+            d.id = id;
+            d.name = format!("Project {n}");
+            d
+        })
+        .collect();
+    let d = super::palette::daemon(
+        InitialStateMessage {
+            selected_profile_id: Some("work".into()),
+            profiles: Some(vec![Profile {
+                current_desktop_id: "desk0".into(),
+                ..profile()
+            }]),
+            desktops: Some(desktops),
+            sessions: Some((1..=16).map(session).collect()),
+            daemon_instance_id: Some("daemon-home".into()),
+            ..InitialStateMessage::new()
+        },
+        Vec::new(),
+    );
+    let mut world = World::start_sized(answering(d), (1000.0, 640.0));
+    world.open_desktop();
+    world.use_folders(Folders::default());
+    create_report(&mut world);
+    save(&mut world);
+
+    let rec = world.record(60.0, 0.5, |_, app| {
+        app.runtime
+            .resolve_file_dialog(None)
+            .expect("a file dialog is open")
+    });
+    crate::wire::whole_on_its_first_frame(&rec, "diagnostic-report.error");
+
+    let shown = |key: &str| {
+        let e = world
+            .runtime()
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("no {key}"));
+        (e.visible[3], e.rect[3])
+    };
+    let (error, whole) = shown("diagnostic-report.error");
+    assert_eq!(error, whole, "the reason the save failed is in view");
+    let (save, whole) = shown("diagnostic-report.save");
+    assert_eq!(save, whole, "Save report stays in view beside it");
+}
+
+#[test]
 fn it_uses_the_downloads_folder_in_the_home_folder_when_the_platform_names_none() {
     let mut world = on_the_desktop(answering(daemon()));
     let home = world.files().join("home");

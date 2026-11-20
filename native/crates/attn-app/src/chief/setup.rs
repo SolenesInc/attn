@@ -680,7 +680,7 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .label("Choose the Notebook folder");
             popover = popover.push(Block::custom(
                 format!("{POP}.folder.block"),
-                Inline::line()
+                Inline::joined()
                     .key(format!("{POP}.folder-field"))
                     .w_full()
                     .child(words("Notebook", Type::Label, t.text_tertiary))

@@ -1681,9 +1681,8 @@ fn a_crew_member_between_sessions_names_the_desktop_it_starts_on_beside_its_stat
     );
 }
 
-#[test]
-fn the_palette_caps_the_context_window_of_a_claude_agent_and_shows_the_daemons_refusal() {
-    let world_daemon = daemon(one_agent(&[]), vec![]);
+fn capping(settings: &[(&str, &str)]) -> attn_testkit::Daemon {
+    let world_daemon = daemon(one_agent(settings), vec![]);
     world_daemon.on("set_session_context_window_cap", |r| {
         let cap = r["cap"].as_i64().unwrap();
         let fits = cap == 0 || cap >= 10_000;
@@ -1696,7 +1695,12 @@ fn the_palette_caps_the_context_window_of_a_claude_agent_and_shows_the_daemons_r
             ..attn_protocol::SessionContextWindowCapResultMessage::new()
         })
     });
-    let mut world = World::start(world_daemon);
+    world_daemon
+}
+
+#[test]
+fn the_palette_caps_the_context_window_of_a_claude_agent_and_shows_the_daemons_refusal() {
+    let mut world = World::start(capping(&[]));
     world.open_desktop();
 
     run_command(&mut world, "cap s1");
@@ -1741,6 +1745,25 @@ fn the_palette_caps_the_context_window_of_a_claude_agent_and_shows_the_daemons_r
             .find(Target::key("context-cap-dialog"))
             .is_none()
     );
+    rest(&mut world);
+}
+
+#[test]
+fn a_refused_cap_is_whole_on_the_frame_it_appears_in_the_smallest_window_at_the_largest_text() {
+    let mut world = World::start_sized(capping(&[("uiScale", "1.5")]), (800.0, 600.0));
+    world.open_desktop();
+    run_command(&mut world, "cap s1");
+
+    for typed in ["lots", "500"] {
+        retype_field(&mut world, "context-cap.field", typed);
+        let rec = world.record(60.0, 0.5, |_, app| {
+            app.key(rune::KeyEvent {
+                key: Key::Enter,
+                mods: rune::Mods::default(),
+            })
+        });
+        crate::wire::whole_on_its_first_frame(&rec, "context-cap.field.error");
+    }
     rest(&mut world);
 }
 

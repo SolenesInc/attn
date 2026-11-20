@@ -1172,7 +1172,7 @@ fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
         .busy(view.discovered.loading)
     });
     let mut main = Stack::loose().grow(1.0).min_w(0.0).min_h(0.0).child(
-        Inline::line()
+        Inline::joined()
             .w_full()
             .child(kicker("Model", t).grow(1.0))
             .children(refresh),

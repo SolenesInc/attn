@@ -19,11 +19,15 @@ use attn_ui::system::{
     words,
 };
 
+use super::autosave::Cause;
 use crate::State;
 use crate::requests::Answer;
 
 const SAVED_MARK_SECONDS: f64 = 1.6;
 const INSTALL: &str = "install";
+const SET_PRIORITY: &str = "set_priority";
+const REMOVE: &str = "remove";
+const INSTALL_BUTTON: &str = "settings.plugins.install";
 const PRIORITY_PREFIX: &str = "settings.plugin.";
 const PRIORITY_SUFFIX: &str = ".priority";
 
@@ -33,13 +37,23 @@ pub(crate) struct Plugins {
     /// Each plugin's priority as typed, seeded from each list the page reads.
     priorities: BTreeMap<String, TextEdit>,
     loading: bool,
-    error: Option<String>,
+    refused: Option<Refused>,
     /// What is mid-flight: an install, or the plugin a removal or priority change is for.
     busy: Option<String>,
     /// The change that finishes once the list it read again lands, and whose priority it set.
     finishing: Option<Option<String>>,
     /// Each plugin whose priority just saved, and until when its Saved mark shows.
     saved: BTreeMap<String, f64>,
+}
+
+/// What the daemon or the page refused, and where the person sees why.
+enum Refused {
+    /// Above the list: reading it, or an install.
+    Page(String),
+    /// Under the plugin's row, beside its Remove.
+    Removal { plugin: String, why: String },
+    /// Under the plugin's priority field.
+    Priority { plugin: String, why: String },
 }
 
 fn panel(state: &mut State) -> &mut Plugins {
@@ -55,7 +69,7 @@ pub(super) fn open(state: &mut State, tx: &mut Tx) {
 fn refresh(state: &mut State, tx: &mut Tx) {
     let plugins = panel(state);
     plugins.loading = true;
-    plugins.error = None;
+    plugins.refused = None;
     if state
         .requests
         .waits_for(|command| command["cmd"] == LIST_PLUGINS)
@@ -84,12 +98,12 @@ fn listed(state: &mut State, answer: Answer, tx: &mut Tx) {
                 .collect();
         }
         None => {
-            plugins.error = Some(
+            plugins.refused = Some(Refused::Page(
                 answer
                     .outcome()
                     .err()
                     .unwrap_or_else(|| "Failed to load plugins".into()),
-            );
+            ));
         }
     }
     if let Some(saved) = plugins.finishing.take() {
@@ -109,12 +123,14 @@ fn run<M: serde::Serialize>(
     action: &str,
     command: M,
     saved: Option<String>,
+    cause: Cause,
     tx: &mut Tx,
 ) {
-    let plugins = panel(state);
-    plugins.error = None;
-    plugins.busy = Some(busy);
     let installing = action == INSTALL;
+    let (action_of, plugin) = (action.to_owned(), busy.clone());
+    let plugins = panel(state);
+    plugins.refused = None;
+    plugins.busy = Some(busy);
     state.ask_as(
         plugin_action(action),
         &command,
@@ -128,9 +144,13 @@ fn run<M: serde::Serialize>(
                 refresh(state, tx);
             }
             Err(why) => {
-                let plugins = panel(state);
-                plugins.busy = None;
-                plugins.error = Some(why);
+                panel(state).busy = None;
+                let refused = match action_of.as_str() {
+                    SET_PRIORITY => Refused::Priority { plugin, why },
+                    REMOVE => Refused::Removal { plugin, why },
+                    _ => Refused::Page(why),
+                };
+                refuse(state, refused, cause, tx);
             }
         },
         tx,
@@ -140,14 +160,35 @@ fn run<M: serde::Serialize>(
 fn install(state: &mut State, tx: &mut Tx) {
     let source = panel(state).source.text.trim().to_owned();
     if source.is_empty() {
-        panel(state).error = Some("Plugin source is required".into());
+        let refused = Refused::Page("Plugin source is required".into());
+        refuse(state, refused, Cause::at(INSTALL_BUTTON, tx), tx);
         return;
     }
     let command = InstallPluginMessage {
         source,
         ..InstallPluginMessage::new()
     };
-    run(state, INSTALL.into(), INSTALL, command, None, tx);
+    run(
+        state,
+        INSTALL.into(),
+        INSTALL,
+        command,
+        None,
+        Cause::at(INSTALL_BUTTON, tx),
+        tx,
+    );
+}
+
+/// Lands a refusal the person's install, removal or priority caused, shown to them while they
+/// are still where they acted.
+fn refuse(state: &mut State, refused: Refused, cause: Cause, tx: &mut Tx) {
+    let shown = match &refused {
+        Refused::Page(_) => "settings.plugins.error".to_owned(),
+        Refused::Removal { plugin, .. } => format!("{PRIORITY_PREFIX}{plugin}.error"),
+        Refused::Priority { plugin, .. } => format!("{}.error", priority_key(plugin)),
+    };
+    panel(state).refused = Some(refused);
+    cause.show(shown, tx);
 }
 
 fn remove(state: &mut State, name: &str, tx: &mut Tx) {
@@ -155,7 +196,15 @@ fn remove(state: &mut State, name: &str, tx: &mut Tx) {
         name: name.to_owned(),
         ..RemovePluginMessage::new()
     };
-    run(state, name.to_owned(), "remove", command, None, tx);
+    run(
+        state,
+        name.to_owned(),
+        REMOVE,
+        command,
+        None,
+        Cause::at(format!("{PRIORITY_PREFIX}{name}.remove"), tx),
+        tx,
+    );
 }
 
 /// A priority as JavaScript's `Number` reads the typed text, so an empty field is 0.
@@ -169,7 +218,7 @@ fn parse_priority(raw: &str) -> Option<i64> {
         .map(|n| n as i64)
 }
 
-fn commit_priority(state: &mut State, name: &str, tx: &mut Tx) {
+fn commit_priority(state: &mut State, name: &str, cause: Cause, tx: &mut Tx) {
     let Some(current) = state
         .facts
         .plugins
@@ -186,10 +235,17 @@ fn commit_priority(state: &mut State, name: &str, tx: &mut Tx) {
         .get(name)
         .map_or_else(|| current.to_string(), |d| d.text.trim().to_owned());
     if raw == current.to_string() {
+        if matches!(&plugins.refused, Some(Refused::Priority { plugin, .. }) if plugin == name) {
+            plugins.refused = None;
+        }
         return;
     }
     let Some(priority) = parse_priority(&raw) else {
-        plugins.error = Some("Plugin priority must be an integer".into());
+        let refused = Refused::Priority {
+            plugin: name.to_owned(),
+            why: "Plugin priority must be an integer".into(),
+        };
+        refuse(state, refused, cause, tx);
         return;
     };
     let command = SetPluginPriorityMessage {
@@ -200,9 +256,10 @@ fn commit_priority(state: &mut State, name: &str, tx: &mut Tx) {
     run(
         state,
         name.to_owned(),
-        "set_priority",
+        SET_PRIORITY,
         command,
         Some(name.to_owned()),
+        cause,
         tx,
     );
 }
@@ -290,13 +347,24 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> (ListRow, Vec<Block>)
         })
         .on_submit({
             let name = name.clone();
-            move |state: &mut State, tx: &mut Tx| commit_priority(state, &name, tx)
+            move |state: &mut State, tx: &mut Tx| {
+                commit_priority(state, &name, Cause::at(priority_key(&name), tx), tx)
+            }
         })
         .on_blur({
             let name = name.clone();
-            move |state: &mut State, tx: &mut Tx| commit_priority(state, &name, tx)
+            move |state: &mut State, tx: &mut Tx| commit_priority(state, &name, Cause::Left, tx)
         });
-    let priority = number_box(priority, FieldState::disabled_if(busy), t);
+    let why = match &plugins.refused {
+        Some(Refused::Priority { plugin, why }) if *plugin == name => Some(why.clone()),
+        _ => None,
+    };
+    let field_state = if busy {
+        FieldState::Disabled
+    } else {
+        FieldState::failed_if(why.is_some())
+    };
+    let priority = number_box(priority, field_state, t);
     let saved = plugins.saved.contains_key(&name).then(|| {
         words("Saved", Type::Small, t.success)
             .key(id("saved"))
@@ -305,6 +373,11 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> (ListRow, Vec<Block>)
     });
     let removing = name.clone();
     let mut under: Vec<Block> = Vec::new();
+    if let Some(Refused::Removal { plugin, why }) = &plugins.refused
+        && *plugin == name
+    {
+        under.push(Notice::error(id("error"), why.clone()).build(t));
+    }
     if let Some(description) = plugin.description.as_ref().filter(|d| !d.is_empty()) {
         under.push(Prose::hint(id("description"), description.clone()).build(t));
     }
@@ -332,6 +405,7 @@ fn card(state: &State, plugin: &PluginInfo, t: &Tokens) -> (ListRow, Vec<Block>)
     under.push(
         Field::new(priority_key(&name), "Priority")
             .control(priority)
+            .error(why)
             .mark(saved)
             .build(t),
     );
@@ -414,12 +488,12 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
                     .disabled(busy)
                     .on_press_tx(install)
                     .build(t)
-                    .key("settings.plugins.install"),
+                    .key(INSTALL_BUTTON),
             )
             .build(),
     ];
-    if let Some(error) = &plugins.error {
-        page.push(Notice::warn("settings.plugins.error", error.clone()).build(t));
+    if let Some(Refused::Page(why)) = &plugins.refused {
+        page.push(Notice::error("settings.plugins.error", why.clone()).build(t));
     }
     page.extend(listed.issues.iter().map(|issue| {
         Notice::warn(

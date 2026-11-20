@@ -482,3 +482,64 @@ fn a_refused_revoke_in_the_smallest_window_shows_its_whole_reason_and_keeps_the_
         "Revoke keeps the keyboard through the refusal"
     );
 }
+
+#[test]
+fn a_revoke_refused_after_the_keyboard_moved_on_leaves_the_page_where_the_person_is() {
+    let ipad = PhonePairing {
+        device_id: "device-2".into(),
+        name: "iPad".into(),
+        ..phone(false)
+    };
+    let daemon = Daemon::scripted().state(InitialStateMessage {
+        selected_profile_id: Some("work".into()),
+        profiles: Some(vec![Profile {
+            id: "work".into(),
+            name: "Work".into(),
+            ..Profile::default()
+        }]),
+        settings: Some(
+            [
+                ("phone_access_enabled".into(), "true".into()),
+                ("uiScale".into(), "1.5".into()),
+            ]
+            .into(),
+        ),
+        ..InitialStateMessage::new()
+    });
+    let listed = phones(vec![], vec![phone(true), ipad]);
+    daemon.on("phones_get", move |_| message(listed.clone()));
+    daemon.on("phone_pairing_revoke", |_| ());
+    let mut world = World::start(daemon);
+    world.resize((800.0, 600.0));
+    on_phones(&mut world);
+    tab_to(&mut world, "settings.phone.work.device-1.revoke");
+    press(&mut world, Key::Text(" ".into()));
+    press(&mut world, Key::Tab);
+    let moved_on = world
+        .screen()
+        .focused()
+        .and_then(|n| n.key)
+        .expect("Tab moves on from Revoke");
+    let before = world.rect(&moved_on);
+    let sent = world.daemon.sent_of("phone_pairing_revoke");
+    let request = sent.last().expect("the revoke was sent");
+    world.daemon.emit(PhonePairingRevokeResultMessage {
+        request_id: request["request_id"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned(),
+        success: false,
+        error: Some("the phone was already revoked".into()),
+        ..PhonePairingRevokeResultMessage::new()
+    });
+    world.settle();
+    assert!(
+        named(&world, "settings.phones.work.error").is_some(),
+        "the refusal shows"
+    );
+    assert_eq!(
+        world.rect(&moved_on),
+        before,
+        "{moved_on}, where the keyboard went, stays where it showed"
+    );
+}

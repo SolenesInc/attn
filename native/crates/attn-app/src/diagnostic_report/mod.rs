@@ -295,7 +295,7 @@ fn write(state: &mut State, tx: &mut Tx) {
     state.window.diagnostic_report = Some(draft);
     let contents = match built {
         Ok(contents) => contents,
-        Err(why) => return failed(state, why),
+        Err(why) => return failed(state, why, tx),
     };
     let name = save::file_name(created_at);
     let folder = save::downloads(&crate::frame::folders());
@@ -326,10 +326,10 @@ fn ask_where(
     tx.save_file(options, move |state: &mut State, chosen, tx| match chosen {
         Ok(Some(path)) => match std::fs::write(&path, &contents) {
             Ok(()) => saved_to(state, path, tx),
-            Err(why) => failed(state, why.to_string()),
+            Err(why) => failed(state, why.to_string(), tx),
         },
-        Ok(None) => failed(state, automatic),
-        Err(why) => failed(state, why.to_string()),
+        Ok(None) => failed(state, automatic, tx),
+        Err(why) => failed(state, why.to_string(), tx),
     });
 }
 
@@ -341,10 +341,17 @@ fn saved_to(state: &mut State, path: PathBuf, tx: &mut Tx) {
     let _ = tx.reveal_path(&path.to_string_lossy());
 }
 
-fn failed(state: &mut State, why: String) {
+fn failed(state: &mut State, why: String, tx: &mut Tx) {
     if let Some(draft) = &mut state.window.diagnostic_report {
         draft.saving = false;
         draft.error = Some(why);
+        let at = tx.focused().map(str::to_owned);
+        attn_ui::blocks::show_refusal(
+            tx,
+            &format!("{DIALOG}.body"),
+            "diagnostic-report.error",
+            at.as_deref(),
+        );
     }
 }
 

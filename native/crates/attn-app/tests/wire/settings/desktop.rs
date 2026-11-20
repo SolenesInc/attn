@@ -1,6 +1,6 @@
 use attn_protocol::SettingsUpdatedMessage;
 use attn_testkit::{Target, World};
-use rune::{FileDialogKind, Key};
+use rune::{FileDialogKind, Key, KeyEvent, Mods, PhysicalInput, PhysicalKeyCode};
 
 use super::{accepting, click, field, keeping, named, open, press, rest, retype, value, writes};
 
@@ -263,7 +263,13 @@ fn a_refused_notebook_folder_shows_its_refusal_in_view_in_the_smallest_window_at
     world.resize((800.0, 600.0));
     on_desktop(&mut world);
     retype(&mut world, &field("notebook.root"), "~/elsewhere");
-    press(&mut world, Key::Enter);
+    let rec = world.record(60.0, 0.5, |_, app| {
+        app.key(rune::KeyEvent {
+            key: Key::Enter,
+            mods: rune::Mods::default(),
+        })
+    });
+    crate::wire::whole_on_its_first_frame(&rec, "settings.refusal.notebook.root");
     let body = world.rect("settings.body");
     let refusal = world.rect("settings.refusal.notebook.root");
     assert!(
@@ -278,8 +284,43 @@ fn a_refused_notebook_folder_shows_its_refusal_in_view_in_the_smallest_window_at
     rest(&mut world);
 }
 
+/// A key pressed and let go as a window reports it: by its code, with the key it types.
+fn press_as_a_window_does(world: &mut World, key: Key) {
+    let code = match key {
+        Key::Enter => PhysicalKeyCode::Enter,
+        Key::Tab => PhysicalKeyCode::Tab,
+        _ => unreachable!("{key:?}"),
+    };
+    world.gesture(|app| {
+        for pressed in [true, false] {
+            app.runtime.physical_key_input(
+                PhysicalInput::Key {
+                    key: code,
+                    mods: Mods::default(),
+                    pressed,
+                    repeat: false,
+                },
+                KeyEvent {
+                    key: key.clone(),
+                    mods: Mods::default(),
+                },
+                None,
+            );
+        }
+    });
+}
+
 #[test]
 fn a_refusal_that_arrives_after_the_keyboard_moved_on_leaves_the_page_where_the_person_is() {
+    for (keys, press) in [
+        ("keys", press as fn(&mut World, Key)),
+        ("keys as a window reports them", press_as_a_window_does),
+    ] {
+        moved_on_with(keys, press);
+    }
+}
+
+fn moved_on_with(keys: &str, press: fn(&mut World, Key)) {
     let (daemon, _) = accepting(&[("uiScale", "1.5")]);
     daemon.on("set_setting", |_| ());
     let mut world = World::start(daemon);
@@ -293,7 +334,7 @@ fn a_refusal_that_arrives_after_the_keyboard_moved_on_leaves_the_page_where_the_
     assert_eq!(
         world.screen().focused().and_then(|n| n.key).as_deref(),
         Some(switch),
-        "Tab reaches the sweep switch"
+        "{keys}: Tab reaches the sweep switch"
     );
     let sent = world.daemon.sent_of("set_setting");
     let request = sent.last().expect("the notebook folder was sent");
@@ -313,7 +354,7 @@ fn a_refusal_that_arrives_after_the_keyboard_moved_on_leaves_the_page_where_the_
     let focused = world.rect(switch);
     assert!(
         focused[1] >= body[1] && focused[1] + focused[3] <= body[1] + body[3],
-        "the focused switch at {focused:?} stays inside the page's view {body:?}"
+        "{keys}: the focused switch at {focused:?} stays inside the page's view {body:?}"
     );
     rest(&mut world);
 }
@@ -329,4 +370,166 @@ fn a_notebook_folder_with_a_backtick_in_its_name_reads_whole() {
         Some("This profile uses: /Users/me/notes `draft` folder")
     );
     rest(&mut world);
+}
+
+/// Where the page and the newly focused control stand after the person types into the
+/// Notebook folder field at the smallest window with the largest text and leaves it by
+/// `leave`, when the daemon `refuses` the folder or saves it.
+fn left_notebook_folder(
+    refuses: bool,
+    leave: fn(&mut World),
+) -> (String, [f32; 2], [f32; 4], [f32; 4]) {
+    let (daemon, _) = super::keeping(&[("uiScale", "1.5")], move |key, _| {
+        (refuses && key == "notebook.root")
+            .then(|| "cannot create directory: permission denied".to_owned())
+    });
+    let mut world = World::start(daemon);
+    world.resize((800.0, 600.0));
+    on_desktop(&mut world);
+    retype(&mut world, &field("notebook.root"), "~/elsewhere");
+    leave(&mut world);
+    world.settle();
+    assert_eq!(
+        named(&world, "settings.refusal.notebook.root").is_some(),
+        refuses,
+        "the refusal stands under the field that was left"
+    );
+    let focused = world
+        .screen()
+        .focused()
+        .and_then(|n| n.key)
+        .expect("the person's destination holds the focus");
+    let e = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some(focused.as_str()))
+        .expect("the destination is drawn");
+    rest(&mut world);
+    (focused, e.scrolled, e.rect, e.visible)
+}
+
+#[test]
+fn leaving_a_refused_field_by_tab_or_click_keeps_the_page_where_the_person_went() {
+    fn by_tab(world: &mut World) {
+        press(world, Key::Tab);
+    }
+    fn by_click(world: &mut World) {
+        let find = |world: &World, key: &str| {
+            world
+                .runtime()
+                .elements()
+                .into_iter()
+                .find(|e| e.key.as_deref() == Some(key))
+                .unwrap_or_else(|| panic!("no {key}"))
+                .rect
+        };
+        let body = find(world, "settings.body");
+        world.gesture(|app| {
+            app.runtime
+                .wheel(body[0] + body[2] / 2.0, body[1] + body[3] / 2.0, -2000.0)
+        });
+        world.settle();
+        let [x, y, w, h] = find(world, "settings.search.field");
+        world.gesture(|app| app.click_at((x + w / 2.0, y + h / 2.0)));
+    }
+    for (how, leave) in [("Tab", by_tab as fn(&mut World)), ("a click", by_click)] {
+        let (saved_on, saved_offset, _, _) = left_notebook_folder(false, leave);
+        let (on, offset, rect, visible) = left_notebook_folder(true, leave);
+        assert_eq!(on, saved_on, "{how}: the focus went where it would have");
+        assert_eq!(
+            offset, saved_offset,
+            "{how}: the page stands where the save would have left it"
+        );
+        assert!(
+            (visible[3] - rect[3]).abs() < 0.5,
+            "{how}: {on} shows {} of its {} points",
+            visible[3],
+            rect[3]
+        );
+    }
+}
+
+/// Where the focus stands when the answer to a Notebook folder save the person made with Enter
+/// lands after they clicked `went_to` at the top of the page; the page stays there.
+fn answered_after_going_to(went_to: &str, answer: fn(&mut World)) -> Option<String> {
+    let (daemon, _) = accepting(&[("uiScale", "1.5")]);
+    daemon.on("set_setting", |_| ());
+    let mut world = World::start(daemon);
+    world.resize((800.0, 600.0));
+    on_desktop(&mut world);
+    retype(&mut world, &field("notebook.root"), "~/first");
+    press(&mut world, Key::Enter);
+    retype(&mut world, &field("notebook.root"), "~/second");
+    let find = |world: &World, key: &str| {
+        world
+            .runtime()
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("no {key}"))
+    };
+    let body = find(&world, "settings.body").rect;
+    world.gesture(|app| {
+        app.runtime
+            .wheel(body[0] + body[2] / 2.0, body[1] + body[3] / 2.0, 2000.0)
+    });
+    world.settle();
+    let [x, y, w, h] = find(&world, went_to).rect;
+    world.gesture(|app| app.click_at((x + w / 2.0, y + h / 2.0)));
+    let before = find(&world, &field("notebook.root")).scrolled;
+    answer(&mut world);
+    world.settle();
+    let after = find(&world, &field("notebook.root")).scrolled;
+    assert_eq!(before, after, "the page stays where the person went");
+    let focus = world.screen().focused().and_then(|n| n.key);
+    rest(&mut world);
+    focus
+}
+
+fn refuse(world: &mut World, request: &serde_json::Value) {
+    world.daemon.emit(SettingsUpdatedMessage {
+        request_id: request["request_id"].as_str().map(str::to_owned),
+        changed_key: Some("notebook.root".into()),
+        success: Some(false),
+        error: Some("cannot create directory: permission denied".into()),
+        ..SettingsUpdatedMessage::new()
+    });
+}
+
+#[test]
+fn a_refusal_that_lands_after_the_person_went_elsewhere_leaves_the_page_where_they_are() {
+    let late: fn(&mut World) = |world| {
+        let first = world.daemon.sent_of("set_setting").remove(0);
+        refuse(world, &first);
+    };
+    let queued: fn(&mut World) = |world| {
+        let first = world.daemon.sent_of("set_setting").remove(0);
+        world.daemon.emit(SettingsUpdatedMessage {
+            request_id: first["request_id"].as_str().map(str::to_owned),
+            changed_key: Some("notebook.root".into()),
+            success: Some(true),
+            ..SettingsUpdatedMessage::new()
+        });
+        world.settle();
+        let second = world.daemon.sent_of("set_setting").remove(1);
+        assert_eq!(
+            second["value"], "~/second",
+            "the draft queued by leaving is sent"
+        );
+        refuse(world, &second);
+    };
+    let lost: fn(&mut World) = |world| world.daemon.disconnect();
+    for (how, answer) in [
+        ("a late refusal", late),
+        ("a queued save", queued),
+        ("a lost daemon", lost),
+    ] {
+        assert_eq!(
+            answered_after_going_to("settings.search.field", answer).as_deref(),
+            Some("settings.search.field"),
+            "{how}: the focus stays in search"
+        );
+    }
+    answered_after_going_to("settings.heading", late);
 }

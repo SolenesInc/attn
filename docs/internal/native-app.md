@@ -273,8 +273,22 @@ choices once for the whole app:
   built from controls inside the rhythms `Inline` and `Stack`. A section that
   is a form says so with `Section::form`, and assistive tools then find a form
   named by its heading, not a group. A `Refusal`, why a control's value was
-  refused, is not a block: it goes beside that control. The parent spaces its
-  blocks by what they are: 32 and a rule between sections, 12 around a
+  refused, is not a block: it goes beside that control. A refusal the person
+  caused while staying where they are (Enter in a field, a button's press, a
+  dialog's Save), whether a `Refusal`, an error `Notice` or a `Field`'s error,
+  is seen at once: the handler or the daemon's reply that sets it calls
+  `blocks::show_refusal` with the body that scrolls it, which lands it whole on
+  the frame it appears and then shows the control the person acted in, whole.
+  The person stayed when they gave no other input between the action and the
+  refusal: the action reads `Tx::inputs` and a later reply compares it, since
+  keyboard focus does not say where they are. A refusal caused by leaving a
+  field for somewhere else, or one that lands after the person did something
+  else, does not move the page: the control they are in stays where it shows
+  (`Tx::keep_focus_on_screen`), and the refusal stands under what caused it,
+  with the field's invalid state, for when they look back. A refusal that
+  arrives unattended, from a poll, a load, a timer, a reconnect or the
+  daemon's own data, never moves the page the person is reading. The parent
+  spaces its blocks by what they are: 32 and a rule between sections, 12 around a
   notice and above a status, 16 otherwise; inside a section or a disclosure, 8
   between setting rows, 16 between fields, 12 otherwise. A page runs to 800
   points between its sides, room for a setting row with a full reading line

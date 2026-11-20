@@ -79,6 +79,7 @@ fn submit(state: &mut State, tx: &mut Tx) {
         typed.parse::<i64>().ok().filter(|cap| *cap >= 0)
     }) else {
         prompt.refused = Some("Enter a whole number of tokens, or leave blank for no cap".into());
+        show_refused(tx);
         return;
     };
     if cap == prompt.current {
@@ -96,7 +97,7 @@ fn submit(state: &mut State, tx: &mut Tx) {
     state.ask_as(
         attn_client::context_cap_id(&session),
         &command,
-        move |state, answer, _| {
+        move |state, answer, tx| {
             let refused = match answer.parse::<SessionContextWindowCapResultMessage>() {
                 Some(r) if r.success => None,
                 r => Some(
@@ -118,10 +119,21 @@ fn submit(state: &mut State, tx: &mut Tx) {
                 Some(why) => {
                     prompt.saving = false;
                     prompt.refused = Some(why);
+                    show_refused(tx);
                 }
             }
         },
         tx,
+    );
+}
+
+fn show_refused(tx: &mut Tx) {
+    let at = tx.focused().map(str::to_owned);
+    attn_ui::blocks::show_refusal(
+        tx,
+        &format!("{KEY}.body"),
+        format!("{KEY}.field.error"),
+        at.as_deref(),
     );
 }
 

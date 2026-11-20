@@ -603,7 +603,7 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
             tx.focus(repo::name_key(which), false);
         })
         .child(
-            Inline::line()
+            Inline::joined()
                 .w_full()
                 .child(
                     finder::query_box(

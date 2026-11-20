@@ -215,7 +215,8 @@ impl Status {
     }
 }
 
-/// Why a value was refused, beside the control that holds it, with a way to try again.
+/// Why a value was refused, beside the control that holds it, with a way to try again. The
+/// person's own action that caused it shows it with [`show_refusal`].
 pub struct Refusal {
     key: String,
     reason: Said,
@@ -253,6 +254,28 @@ impl Refusal {
             .child(said.grow_from(1.0, COPY_FLOOR))
             .children(self.retry);
         door::gaps(line, Space::S8, Space::S8)
+    }
+}
+
+/// Shows a refusal the person caused while staying where they are: Enter in a field, a button's
+/// press, a dialog's Save. It lands whole on the frame it appears, and the scrolling body keyed
+/// `body_key` moves the least it can to show it, then to show `control_key`, the control the
+/// person acted in, whole, on both axes, so they see why and keep their place. A refusal caused
+/// by leaving a field for somewhere else never calls this, nor does one whose answer lands after
+/// the person went elsewhere: the page stays where they are, and the refusal stands under what
+/// caused it for when they look back. Nor does one that arrives unattended, from a poll, a load,
+/// a timer, a reconnect or the daemon's own data: it never moves the page the person is reading.
+/// `refusal_key` keys a [`Refusal`], an error [`Notice`] or a [`super::Field`]'s error.
+pub fn show_refusal(
+    tx: &mut rune::Tx,
+    body_key: &str,
+    refusal_key: impl Into<String>,
+    control_key: Option<&str>,
+) {
+    tx.instant();
+    tx.scroll_into_view_in(body_key, refusal_key);
+    if let Some(control) = control_key {
+        tx.scroll_into_view_in(body_key, control);
     }
 }
 

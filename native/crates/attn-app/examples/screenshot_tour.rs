@@ -2714,10 +2714,9 @@ fn settings_models(dark: bool) {
     });
 }
 
-/// The diagnostic report's choices, its Save the primary action.
-fn diagnostic_report(dark: bool) {
-    let mut world = with_document(dark);
-    world.daemon.on("support_snapshot", |_: &Request| {
+/// The daemon's answer to the report's request for its evidence, with nothing to report.
+fn snapshot_answer(daemon: &Daemon) {
+    daemon.on("support_snapshot", |_: &Request| {
         json!({
             "event": "support_snapshot_result",
             "protocol_version": "1",
@@ -2732,8 +2731,106 @@ fn diagnostic_report(dark: bool) {
             "runtimes": [],
         })
     });
+}
+
+/// The diagnostic report's choices, its Save the primary action.
+fn diagnostic_report(dark: bool) {
+    let mut world = with_document_and(dark, snapshot_answer);
     run(&mut world, Action::CreateDiagnosticReport);
     snap(&mut world, "diagnostic-report", dark);
+}
+
+/// A daemon listing one plugin whose provider fails, under a long name, and a folder that failed
+/// to load.
+fn failing_plugin(daemon: &Daemon) {
+    daemon.on("list_plugins", |_| {
+            message(attn_protocol::PluginsUpdatedMessage {
+                plugins: vec![attn_protocol::PluginInfo {
+                    name: "services-pilot-worktrees-with-a-long-provider-name".into(),
+                    version: "0.1.0".into(),
+                    dir: "/Users/someone/src/attn-plugins/services-pilot-worktrees-with-a-long-provider-name".into(),
+                    priority: 10,
+                    runtime_state: "failed".into(),
+                    health_status: Some("unhealthy".into()),
+                    last_exit: Some("exit status 1: could not reach the provider's API at https://pilot.example.com/v2/worktrees after 3 attempts".into()),
+                    can_uninstall: true,
+                    ..attn_protocol::PluginInfo::default()
+                }],
+                issues: Some(vec![attn_protocol::PluginIssue {
+                    path: "/Users/someone/src/attn-plugins/broken-plugin/attn-plugin.json".into(),
+                    error: "manifest names a harness that no binary on PATH provides".into(),
+                }]),
+                ..attn_protocol::PluginsUpdatedMessage::new()
+            })
+        });
+}
+
+/// The Plugins page in the smallest window at the largest text, after the daemon refused a
+/// priority typed into the plugin's field.
+fn settings_plugin_priority_refused(dark: bool) {
+    let mut world = settings_world(
+        dark,
+        "plugins",
+        "plugins",
+        &[("uiScale", "1.5")],
+        |_| {},
+        |daemon| {
+            failing_plugin(daemon);
+            daemon.on("set_plugin_priority", |r| {
+                message(attn_protocol::PluginActionResultMessage {
+                    action: "set_priority".into(),
+                    name: r["name"].as_str().map(str::to_owned),
+                    success: false,
+                    error: Some("plugin priority must be between -1000000 and 1000000".into()),
+                    ..attn_protocol::PluginActionResultMessage::new()
+                })
+            });
+        },
+    );
+    world.resize((800.0, 600.0));
+    let field = "settings.plugin.services-pilot-worktrees-with-a-long-provider-name.priority";
+    world.gesture(|app| app.update(|_, tx| tx.scroll_into_view(field)));
+    world.gesture(|app| app.click(Target::key(field)));
+    for key in [Key::End, Key::Backspace, Key::Backspace] {
+        world.gesture(|app| {
+            app.key(KeyEvent {
+                key,
+                mods: Mods::default(),
+            })
+        });
+    }
+    world.gesture(|app| app.type_text("1000001"));
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Enter,
+            mods: Mods::default(),
+        })
+    });
+    snap(
+        &mut world,
+        "settings-smallest-plugins-priority-refused",
+        dark,
+    );
+}
+
+/// The diagnostic report in the smallest window at the largest text, after the person cancelled
+/// the save picker: why the save failed shows, though it lands below the pane list.
+fn diagnostic_report_save_failed(dark: bool) {
+    let mut world = popover_world(
+        dark,
+        |state| {
+            if let Some(settings) = state.settings.as_mut() {
+                settings.insert("uiScale".into(), SMALLEST_TEXT.into());
+            }
+        },
+        snapshot_answer,
+    );
+    world.resize((800.0, 600.0));
+    world.use_folders(attn_app::Folders::default());
+    run(&mut world, Action::CreateDiagnosticReport);
+    world.gesture(|app| app.click(Target::key("diagnostic-report.save")));
+    world.answer_file_dialog(None);
+    snap(&mut world, "diagnostic-report-save-failed", dark);
 }
 
 /// Quick Capture open on an empty message, so Send is unavailable. It keeps drafts only for a
@@ -4100,35 +4197,7 @@ fn settings_smallest_pages(dark: bool) {
             });
         },
     );
-    settings_smallest_page(
-        dark,
-        "plugins",
-        "plugins",
-        &[],
-        |_| {},
-        |daemon| {
-            daemon.on("list_plugins", |_| {
-            message(attn_protocol::PluginsUpdatedMessage {
-                plugins: vec![attn_protocol::PluginInfo {
-                    name: "services-pilot-worktrees-with-a-long-provider-name".into(),
-                    version: "0.1.0".into(),
-                    dir: "/Users/someone/src/attn-plugins/services-pilot-worktrees-with-a-long-provider-name".into(),
-                    priority: 10,
-                    runtime_state: "failed".into(),
-                    health_status: Some("unhealthy".into()),
-                    last_exit: Some("exit status 1: could not reach the provider's API at https://pilot.example.com/v2/worktrees after 3 attempts".into()),
-                    can_uninstall: true,
-                    ..attn_protocol::PluginInfo::default()
-                }],
-                issues: Some(vec![attn_protocol::PluginIssue {
-                    path: "/Users/someone/src/attn-plugins/broken-plugin/attn-plugin.json".into(),
-                    error: "manifest names a harness that no binary on PATH provides".into(),
-                }]),
-                ..attn_protocol::PluginsUpdatedMessage::new()
-            })
-        });
-        },
-    );
+    settings_smallest_page(dark, "plugins", "plugins", &[], |_| {}, failing_plugin);
     settings_smallest_page(
         dark,
         "models",
@@ -7643,6 +7712,9 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("settings_route_picker", || settings_route_picker(dark));
         scene("settings_refused_rows", || settings_refused_rows(dark));
         scene("settings_smallest_pages", || settings_smallest_pages(dark));
+        scene("settings_plugin_priority_refused", || {
+            settings_plugin_priority_refused(dark)
+        });
         scene("automation_new", || automation_new(dark));
         scene("automations_empty", || automations_empty(dark));
         scene("automations_listed", || automations_listed(dark));
@@ -7655,6 +7727,9 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("automations_failed", || automations_failed(dark));
         scene("automation_load_failed", || automation_load_failed(dark));
         scene("diagnostic_report", || diagnostic_report(dark));
+        scene("diagnostic_report_save_failed", || {
+            diagnostic_report_save_failed(dark)
+        });
         scene("quick_capture_empty", || quick_capture_empty(dark));
         scene("quick_capture", || quick_capture(dark));
         scene("quick_capture_mailboxes", || quick_capture_mailboxes(dark));

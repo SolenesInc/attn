@@ -231,3 +231,50 @@ fn a_refused_removal_in_the_smallest_window_shows_its_whole_reason_and_keeps_the
     );
     rest(&mut world);
 }
+
+#[test]
+fn a_removal_refused_after_the_keyboard_moved_on_leaves_the_page_where_the_person_is() {
+    let ci = PairedSender {
+        id: "sender-2".into(),
+        name: "ci".into(),
+        ..deploy_bot(None)
+    };
+    let (daemon, _) = accepting(&[("uiScale", "1.5")]);
+    let listed = vec![deploy_bot(None), ci];
+    daemon.on("senders_get", move |_| listing(listed.clone()));
+    daemon.on("sender_unpair", |_| ());
+    let mut world = World::start(daemon);
+    world.resize((800.0, 600.0));
+    on_senders(&mut world);
+    tab_to(&mut world, &format!("{ROW}.remove"));
+    press(&mut world, Key::Text(" ".into()));
+    press(&mut world, Key::Tab);
+    let moved_on = world
+        .screen()
+        .focused()
+        .and_then(|n| n.key)
+        .expect("Tab moves on from Remove");
+    let before = world.rect(&moved_on);
+    let sent = world.daemon.sent_of("sender_unpair");
+    let request = sent.last().expect("the removal was sent");
+    world.daemon.emit(SenderUnpairResultMessage {
+        request_id: request["request_id"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned(),
+        success: false,
+        error: Some("the sender was already removed".into()),
+        ..SenderUnpairResultMessage::new()
+    });
+    world.settle();
+    assert!(
+        named(&world, "settings.senders.error").is_some(),
+        "the refusal shows"
+    );
+    assert_eq!(
+        world.rect(&moved_on),
+        before,
+        "{moved_on}, where the keyboard went, stays where it showed"
+    );
+    rest(&mut world);
+}

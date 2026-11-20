@@ -275,7 +275,7 @@ impl Hint {
 pub fn footer(t: &Tokens, finder: &str, hints: Vec<Hint>) -> El {
     let hint = |(i, h): (usize, Hint)| {
         let said = h.said();
-        Inline::line()
+        Inline::joined()
             .key(format!("{finder}.hint.{i}"))
             .role("note")
             .label(said)

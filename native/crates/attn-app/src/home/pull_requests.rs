@@ -351,7 +351,7 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
     )
     .key(format!("{key}.open"))
     .label(format!("{named}: {}", pr.title));
-    let top = Inline::line()
+    let top = Inline::joined()
         .w_full()
         .child(
             words(role.emoji(), Type::Small, t.text_primary)
@@ -419,7 +419,7 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
         .key(format!("{key}.mute-author"))
         .label(format!("Mute all PRs by {}", pr.author))
     });
-    let footer = Inline::line()
+    let footer = Inline::joined()
         .w_full()
         .child(
             words(

@@ -420,7 +420,7 @@ pub(crate) fn note_line(tile: &str, nav: &Nav, t: &Tokens) -> Option<El> {
     if let Some((answer, _)) = &nav.offer {
         let (said, take) = answer.offer();
         return Some(
-            Inline::line()
+            Inline::joined()
                 .key("review.nav.offer")
                 .role("status")
                 .label("Offered answer")
@@ -475,7 +475,7 @@ pub fn places_built() -> usize {
 fn place_row(tile: &str, l: &CodeNavLocation, i: usize, picked: bool, t: &Tokens) -> El {
     PLACES_BUILT.with(|n| n.set(n.get() + 1));
     let outside = if l.outside { " outside" } else { "" };
-    let line = Inline::line()
+    let line = Inline::joined()
         .w_full()
         .child(
             words(

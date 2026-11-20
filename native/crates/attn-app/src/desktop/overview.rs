@@ -283,7 +283,7 @@ fn card(
     let layout = mini(desktop, t);
     let empty = layout.is_none();
     let id = desktop.id.clone();
-    let head = Inline::line()
+    let head = Inline::joined()
         .w_full()
         .children(slot.map(|keys| keycaps([keys], t)))
         .child(

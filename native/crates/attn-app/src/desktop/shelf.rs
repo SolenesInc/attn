@@ -480,7 +480,7 @@ fn chip_button(
     .map(|(_, words)| *words)
     .collect::<Vec<_>>()
     .join(", ");
-    let face = Inline::line()
+    let face = Inline::joined()
         .w_full()
         .child(blocks::Shelf::marks(marks))
         .child(

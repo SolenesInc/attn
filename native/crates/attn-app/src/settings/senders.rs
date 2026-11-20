@@ -8,6 +8,7 @@ use attn_ui::blocks::{Block, List, Notice, Prose, Section, Status};
 use attn_ui::system::{Button, ListRow, Reveal, Size};
 use rune::{El, Tx};
 
+use super::autosave::Cause;
 use crate::State;
 use crate::sidebar::queue::epoch_ms;
 
@@ -54,16 +55,17 @@ fn remove(state: &mut State, id: &str, tx: &mut Tx) {
         return;
     }
     let sender = id.to_owned();
+    let cause = Cause::here(tx);
     state.ask(
         |request_id| SenderUnpairMessage {
             sender,
             request_id: Some(request_id),
             ..SenderUnpairMessage::new()
         },
-        |state, answer, tx| {
+        move |state, answer, tx| {
             state.window.settings.senders.error = answer.outcome().err();
             if state.window.settings.senders.error.is_some() {
-                super::autosave::show_reply("settings.senders.error".into(), tx);
+                cause.show("settings.senders.error".into(), tx);
             } else {
                 tx.instant();
             }

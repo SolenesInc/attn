@@ -162,6 +162,7 @@ impl Field {
             .children(value)
             .children(self.error.map(|e| {
                 words(e.clone(), Type::Small, t.error)
+                    .transition(rune::Transition::none())
                     .key(format!("{}.error", self.key))
                     .role("alert")
                     .label(e.text())

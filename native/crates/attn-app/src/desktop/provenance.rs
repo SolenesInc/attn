@@ -203,7 +203,7 @@ pub(crate) fn run(session: &Session) -> Option<Run> {
 }
 
 pub(crate) fn run_view(row_key: &str, run: &Run, t: &Tokens) -> El {
-    Inline::line()
+    Inline::joined()
         .key(format!("{row_key}.run"))
         .role("img")
         .label(run.said.clone())

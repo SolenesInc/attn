@@ -214,7 +214,7 @@ fn section_of(key: String, parts: &[(String, bool)], t: &Tokens) -> El {
         .map(|(said, _)| said.as_str())
         .collect::<Vec<_>>()
         .join(" ");
-    let line = parts.iter().fold(Inline::line(), |line, (said, gives)| {
+    let line = parts.iter().fold(Inline::joined(), |line, (said, gives)| {
         let part = words(said.clone(), Type::Label, t.text_tertiary).single_line();
         line.child(if *gives {
             part.truncate().shrink().min_w(0.0)
@@ -408,7 +408,7 @@ fn location_row(
             };
             let name = machine_name(outposts, host);
             let shown = host.map(|h| outpost(outposts, h).map_or("lost", |o| o.state.as_str()));
-            Inline::line()
+            Inline::joined()
                 .key(format!("{w}.row.{i}.machine"))
                 .label(name.clone())
                 .description(reach_word)
@@ -518,7 +518,7 @@ fn new_worktree_section(key: String, name: &str, typed: bool, t: &Tokens) -> El 
     } else {
         format!("New worktree · {name} · type to rename")
     };
-    let said = Inline::line()
+    let said = Inline::joined()
         .child(words("New worktree", Type::Label, t.text_tertiary).single_line())
         .child(words("·", Type::Small, t.text_tertiary))
         .child(
