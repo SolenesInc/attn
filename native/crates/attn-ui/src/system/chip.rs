@@ -105,18 +105,17 @@ pub fn slot_badge(
 }
 
 /// `face`, such as a number chip, as a button keyed `key` and read as `label`: a square of
-/// `size` at least, filled while it is `selected`. A chip in a list's rows is `Small`; one in a
-/// bar of controls is as tall as they are.
+/// `size` at least, whose face alone says whether it is current. A chip in a list's rows is
+/// `Small`; one in a bar of controls is as tall as they are.
 pub fn chip_button(
     key: impl Into<String>,
     label: impl Into<String>,
     face: El,
-    selected: bool,
     size: super::Size,
     t: &Tokens,
 ) -> El {
     let side = size.height();
-    let rest = if selected { t.bg_elevated } else { t.bg_panel };
+    let rest = t.bg_panel;
     let button = row()
         .key(key.into())
         .role("button")
