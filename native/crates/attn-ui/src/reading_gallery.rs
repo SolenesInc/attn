@@ -144,7 +144,8 @@ fn stage(s: &Reading, cx: &mut Cx<Reading>, t: &Tokens, content: El) -> El {
     if s.rings {
         cx.force_focus_rings();
     }
-    el().w_full().h_full().fill(t.bg_panel).child(
+    let ground = el().w_full().h_full().fill(t.bg_panel);
+    door::inset(ground, Space::S0, Space::S16).child(
         col()
             .w_full()
             .h_full()
