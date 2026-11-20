@@ -1100,11 +1100,21 @@ fn shelf(dark: bool, hovered: bool) {
     );
 }
 
+/// Gives the review the keyboard as a click on its key line does: on "? all keys", which ends
+/// the line's first row however the line fits, clear of the frame tabs.
+fn focus_review(world: &mut World) {
+    let [x, y, w, _] = world
+        .screen()
+        .bounds(Target::key("tile.m.review.keys"))
+        .expect("the review's key line");
+    world.gesture(|app| app.click_at((x + w - 12.0, y + 12.0)));
+}
+
 fn review_stop(dark: bool) {
     let daemon = scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
     let mut world = start(daemon);
     deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
-    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    focus_review(&mut world);
     snap(&mut world, "review-stop", dark);
 }
 
@@ -3163,7 +3173,7 @@ fn review_file(dark: bool) {
     serve_totals(&daemon);
     let mut world = start(daemon);
     deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
-    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    focus_review(&mut world);
     tap(&mut world, Key::Right);
     tap(&mut world, Key::Enter);
     snap(&mut world, "review-file", dark);
@@ -3173,7 +3183,7 @@ fn review_keys(dark: bool) {
     let daemon = scripted().state(initial(dark, document_tile("m", "/repo/review.md"), vec![]));
     let mut world = start(daemon);
     deliver(&mut world, "/repo/review.md", REVIEW, Some(review()));
-    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    focus_review(&mut world);
     world.gesture(|app| app.type_text("?"));
     snap(&mut world, "review-keys", dark);
 }
@@ -3183,7 +3193,7 @@ fn review_keys(dark: bool) {
 fn review_alone(dark: bool) -> World {
     let mut world = review_beside_agent(dark);
     world.gesture(|app| app.click(Target::key("tile.m.focus")));
-    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    focus_review(&mut world);
     world
 }
 
@@ -3206,7 +3216,7 @@ fn review_beside_agent(dark: bool) -> World {
 
 fn review_beside(dark: bool) {
     let mut world = review_beside_agent(dark);
-    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    focus_review(&mut world);
     snap(&mut world, "review-beside", dark);
 }
 
