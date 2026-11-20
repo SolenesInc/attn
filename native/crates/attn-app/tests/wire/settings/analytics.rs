@@ -1093,21 +1093,68 @@ fn a_vent_that_arrives_shows_at_once_without_reading_records() {
     assert!(world.daemon.sent_of("list_analytics_records").is_empty());
 }
 
-/// The options of the list, in order, each with whether it reads as selected.
-fn selection(world: &World) -> Vec<bool> {
+/// The options of the list, in order, each with whether it reads as selected or unselected.
+fn selection(world: &World) -> Vec<&'static str> {
     world
         .screen()
         .descendants(Target::key("settings.analytics.list"))
         .into_iter()
         .filter(|n| n.role == "list-box-option")
-        .map(|n| n.is("selected"))
+        .map(|n| match (n.is("selected"), n.is("unselected")) {
+            (true, _) => "selected",
+            (_, true) => "unselected",
+            _ => "neither",
+        })
         .collect()
+}
+
+fn tab_once(world: &mut World) {
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Tab,
+            mods: Mods::default(),
+        })
+    });
+}
+
+fn focused(world: &World) -> Option<String> {
+    world.screen().focused().and_then(|n| n.key)
 }
 
 #[test]
 fn the_chosen_row_reads_as_selected_and_moves_with_the_keys() {
     let mut world = triage();
-    assert_eq!(selection(&world), [true, false]);
+    assert_eq!(selection(&world), ["selected", "unselected"]);
     press(&mut world, "j");
-    assert_eq!(selection(&world), [false, true]);
+    assert_eq!(selection(&world), ["unselected", "selected"]);
+}
+
+#[test]
+fn tab_from_the_view_tabs_stops_on_the_list_before_what_the_chosen_row_holds() {
+    let mut world = triage();
+    let tab = "settings.analytics.views.vents";
+    for _ in 0..40 {
+        if focused(&world).as_deref() == Some(tab) {
+            break;
+        }
+        tab_once(&mut world);
+    }
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some(tab),
+        "Tab reaches the view tabs"
+    );
+    let mut order = Vec::new();
+    for _ in 0..12 {
+        tab_once(&mut world);
+        order.extend(focused(&world));
+    }
+    let list = order.iter().position(|k| k == "settings.analytics.list");
+    let inspector = order
+        .iter()
+        .position(|k| k.starts_with("settings.analytics.vent."));
+    assert!(
+        list.is_some_and(|l| inspector.is_none_or(|i| l < i)),
+        "Tab stops on the list before the chosen row's actions: {order:?}"
+    );
 }

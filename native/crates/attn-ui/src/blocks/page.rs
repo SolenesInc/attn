@@ -59,7 +59,8 @@ impl Page {
         self
     }
 
-    /// The page in a column keyed `key` that scrolls, inset from its edges.
+    /// The page in a column keyed `key` that scrolls, inset from its edges at both ends of the
+    /// scroll. A control it reveals keeps its focus ring in view.
     pub fn build(self, key: impl Into<String>, t: &Tokens) -> El {
         let first = self.blocks.first().map(|b| b.kind);
         let head = self
@@ -89,23 +90,24 @@ impl Page {
         if self.dimmed {
             body = body.opacity(DIMMED).inert();
         }
-        let page = col()
-            .key(key.into())
-            .grow(1.0)
-            .min_w(0.0)
-            .h_full()
-            .fill(t.bg_panel);
         let measured = col()
             .w_full()
             .max_w(MEASURE)
             .children(head)
             .children(status)
             .child(body);
-        door::frame(page, Space::S24, SIDE, Space::S32)
+        let content = door::frame(col().w_full(), Space::S24, SIDE, Space::S32).child(measured);
+        col()
+            .key(key.into())
+            .grow(1.0)
+            .min_w(0.0)
+            .h_full()
+            .fill(t.bg_panel)
             .scroll(rune::ScrollSpec {
                 stick_bottom: false,
             })
-            .child(measured)
+            .scroll_margin(crate::system::RING_REACH)
+            .child(content)
             .scroll_bar_styled(crate::scroll_bar(t))
     }
 }

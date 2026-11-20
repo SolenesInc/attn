@@ -36,8 +36,8 @@ impl<S: 'static> Group<S> {
         self
     }
 
-    /// The option keyed `key` is the current one while the focus rests on the group, as a list
-    /// box that keeps the keyboard reads its chosen option.
+    /// The group is one stop of Tab that holds the options in it, the one keyed `key` read as
+    /// the current one, as a list box that keeps the keyboard reads its chosen option.
     pub fn active(mut self, key: Option<String>) -> Self {
         self.active = key;
         self
@@ -64,7 +64,7 @@ impl<S: 'static> Group<S> {
                 .on_key(move |s: &mut S, ev: &KeyEvent, tx: &mut Tx| keys(s, ev, tx));
         }
         if let Some(active) = self.active {
-            el = el.active_descendant(active);
+            el = el.focusable(true).focus_group().active_descendant(active);
         }
         Block::new(Kind::Custom, el)
     }

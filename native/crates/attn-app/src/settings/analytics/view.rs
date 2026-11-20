@@ -58,9 +58,14 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     });
     let group = Group::new(PAGE, "Analytics records and vents")
         .keys(super::key)
-        .active((!items.is_empty()).then(|| format!("item{index}")))
-        .push(stats(state, page, sharing, unreachable.len(), t))
-        .push(machine_toggle(page, t))
+        .push(stats(
+            state,
+            page,
+            sharing,
+            unreachable.len(),
+            t,
+            machine_toggle(page, t),
+        ))
         .push_all(
             warning.map(|w| Notice::warn("settings.analytics.refusal", w.to_owned()).build(t)),
         )
@@ -98,7 +103,14 @@ pub(in crate::settings) fn toast(state: &State, t: &Tokens) -> Option<El> {
 }
 
 /// Sharing, the vents, what is kept here and the outposts, as tiles.
-fn stats(state: &State, page: &Analytics, sharing: bool, unreachable: usize, t: &Tokens) -> Block {
+fn stats(
+    state: &State,
+    page: &Analytics,
+    sharing: bool,
+    unreachable: usize,
+    t: &Tokens,
+    toggle: El,
+) -> Block {
     let status = page.status.as_ref();
     let vents = &state.facts.vents;
     let sent = vents
@@ -138,30 +150,26 @@ fn stats(state: &State, page: &Analytics, sharing: bool, unreachable: usize, t: 
             .code(key("outposts"), "Outposts", value)
             .tone((unreachable > 0).then_some(Tone::Warn));
     }
-    facts.build(t)
+    facts.after(toggle).build(t)
 }
 
 /// The button that opens the machine settings and closes them again.
-fn machine_toggle(page: &Analytics, t: &Tokens) -> Block {
+fn machine_toggle(page: &Analytics, t: &Tokens) -> El {
     let word = if page.machine {
         "Done"
     } else {
         "Machine settings"
     };
-    Actions::new("settings.analytics.actions")
-        .push(
-            El::from(
-                system::Button::new(word)
-                    .expanded(page.machine)
-                    .trailing(keycap::Keys::ledged(&["m"]).build(t).a11y_hidden())
-                    .on_press(super::toggle_machine)
-                    .build(t)
-                    .key("settings.analytics.machine-toggle"),
-            )
-            .help(shortcut_tip(word, "m"))
-            .shortcut_hint("M"),
-        )
-        .build()
+    El::from(
+        system::Button::new(word)
+            .expanded(page.machine)
+            .trailing(keycap::Keys::ledged(&["m"]).build(t).a11y_hidden())
+            .on_press(super::toggle_machine)
+            .build(t)
+            .key("settings.analytics.machine-toggle"),
+    )
+    .help(shortcut_tip(word, "m"))
+    .shortcut_hint("M")
 }
 
 fn sharing_stat(sharing: bool, status: Option<&GetAnalyticsStatusResultMessage>) -> String {
@@ -327,6 +335,7 @@ fn rows(state: &State, page: &Analytics, items: &[Item], index: usize, t: &Token
             })
         };
         return Group::<State>::new(LIST, name)
+            .active((!items.is_empty()).then(|| format!("item{index}")))
             .push_all(part("new", "New", new))
             .push_all(part("done", "Done", done))
             .build(t);
@@ -337,6 +346,7 @@ fn rows(state: &State, page: &Analytics, items: &[Item], index: usize, t: &Token
         _ => "Reading the record…",
     };
     Group::<State>::new(LIST, name)
+        .active((!items.is_empty()).then(|| format!("item{index}")))
         .push(
             List::new(format!("{LIST}.rows"), name)
                 .listbox()
@@ -420,7 +430,7 @@ fn selected(
             ),
         None => column,
     }
-    .build(t)
+    .in_page(t)
 }
 
 /// A fact of the selected row: its label, and its value keyed `key` as the value alone.

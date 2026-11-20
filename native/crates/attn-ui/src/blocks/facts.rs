@@ -13,6 +13,7 @@ pub struct Facts {
     tiles: bool,
     list: Option<String>,
     facts: Vec<Fact>,
+    after: Option<El>,
 }
 
 struct Fact {
@@ -33,6 +34,7 @@ impl Facts {
             tiles: false,
             list: None,
             facts: Vec::new(),
+            after: None,
         }
     }
 
@@ -127,12 +129,22 @@ impl Facts {
         self
     }
 
+    /// A control after the tiles, in their row and with a tile's room, such as the button that
+    /// opens what they sum up.
+    pub fn after(mut self, control: impl Into<El>) -> Self {
+        self.after = Some(control.into());
+        self
+    }
+
     pub fn build(self, t: &Tokens) -> Block {
         Block::new(Kind::Facts, self.el(t))
     }
 
     /// The facts on their own, for a place that is not a page, such as a document's card.
     pub fn el(self, t: &Tokens) -> El {
+        let after = self
+            .after
+            .map(|control| control.grow_from(1.0, FACT_TILE_FLOOR));
         let mut list = if self.tiles {
             door::gaps(
                 row().w_full().flex_wrap().items_start(),
@@ -157,6 +169,7 @@ impl Facts {
                 fact
             }
         }))
+        .children(after)
     }
 }
 

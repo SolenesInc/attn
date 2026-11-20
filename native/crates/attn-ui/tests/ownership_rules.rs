@@ -111,15 +111,10 @@ fn opening_view(state: &Opening, cx: &mut Cx<Opening>) -> El {
         ),
     ))
     .build(&t);
-    col()
-        .key("view")
-        .w_full()
-        .h_full()
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .child(col().h(VIEW.1 - 60.0))
-        .child(attn_ui::blocks::Page::new().push(part).build("page", &t))
+    attn_ui::blocks::Page::new()
+        .push(Block::custom("above", col().h(VIEW.1 - 60.0)))
+        .push(part)
+        .build("view", &t)
 }
 
 fn opened() -> Runtime<Opening> {
@@ -206,4 +201,81 @@ fn an_opened_part_with_a_region_name_is_a_landmark_holding_what_it_holds() {
         parent = all[p].parent;
     }
     panic!("the first line lies outside the region");
+}
+
+fn beside_view(_: &(), cx: &mut Cx<()>) -> El {
+    use attn_ui::blocks::{Inspector, inspector};
+    let t = tokens(cx);
+    let list = List::new("list", "Rows")
+        .rows((0..3).map(|i| {
+            ListRow::new(format!("row{i}"), format!("Row {i}"))
+                .still()
+                .title(format!("Row {i}"))
+                .build(&t)
+        }))
+        .build(&t);
+    let held = (1..=LINES).fold(Inspector::side("inspector", "Selected"), |column, n| {
+        column.push(words(
+            format!("line {n} of what the row holds"),
+            Type::Body,
+            t.text_primary,
+        ))
+    });
+    let column = held
+        .push(El::from(Button::new("Send").build(&t)).key("send"))
+        .in_page(&t);
+    attn_ui::blocks::Page::new()
+        .push(inspector::beside_list(list, column))
+        .build("view", &t)
+}
+
+#[test]
+fn an_inspector_in_a_page_scrolls_with_the_page_and_tab_shows_its_last_control_whole() {
+    let mut rt = App::new(AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..AppSpec::new("beside", VIEW, || (), beside_view)
+    })
+    .headless_runtime(VIEW, Env::new(true, SCALE));
+    rt.frame(1.0);
+    rt.set_full_keyboard_access(true);
+    for _ in 0..20 {
+        if rt
+            .elements()
+            .iter()
+            .any(|e| e.focused && e.key.as_deref() == Some("send"))
+        {
+            break;
+        }
+        rt.key(KeyEvent {
+            key: Key::Tab,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0);
+    }
+    let rt = settled(rt);
+    let all = rt.elements();
+    let rect = |key: &str| {
+        all.iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("no {key}"))
+            .rect
+    };
+    assert!(
+        all.iter()
+            .any(|e| e.focused && e.key.as_deref() == Some("send")),
+        "Tab reaches the inspector's last control"
+    );
+    let (view, column, send) = (rect("view"), rect("inspector"), rect("send"));
+    assert!(
+        column[3] > 10.0 * view[3],
+        "the inspector stands at its full height, {} against a view of {}, scrolling with the page",
+        column[3],
+        view[3]
+    );
+    let ring = 4.0;
+    assert!(
+        send[1] - ring >= view[1] - 0.5 && send[1] + send[3] + ring <= view[1] + view[3] + 0.5,
+        "the focused control at {send:?}, ring and all, lies in the view {view:?}"
+    );
 }

@@ -71,6 +71,39 @@ impl Inspector {
     }
 
     pub fn build(self, t: &Tokens) -> El {
+        let (key, label) = (self.key.clone(), self.label.clone());
+        let column = self.column(t);
+        col()
+            .key(key)
+            .role("complementary")
+            .label(label)
+            .w_frac(SHARE)
+            .min_w(NARROWEST)
+            .max_w(WIDEST)
+            .h_full()
+            .border_sides([0.0, 0.0, 0.0, 1.0], t.border_subtle)
+            .scroll(rune::ScrollSpec {
+                stick_bottom: false,
+            })
+            .child(column)
+            .scroll_bar_styled(crate::scroll_bar(t))
+    }
+
+    /// The column as part of a page that scrolls, with no scroll of its own: the page reveals
+    /// what the column holds, so a control in it is never focused out of view.
+    pub fn in_page(self, t: &Tokens) -> El {
+        let (key, label) = (self.key.clone(), self.label.clone());
+        let column = self.column(t);
+        col()
+            .key(key)
+            .role("complementary")
+            .label(label)
+            .grow_from(1.0, NARROWEST)
+            .border_sides([0.0, 0.0, 0.0, 1.0], t.border_subtle)
+            .child(column)
+    }
+
+    fn column(self, t: &Tokens) -> El {
         let head = self.title.map(|title| {
             door::gap(col().w_full(), Space::S4)
                 .child(
@@ -84,21 +117,7 @@ impl Inspector {
         let column = door::gap(col().w_full(), Space::S12)
             .children(head)
             .children(self.parts);
-        let column = door::frame(column, Space::S12, Space::S16, Space::S16);
-        col()
-            .key(self.key)
-            .role("complementary")
-            .label(self.label)
-            .w_frac(SHARE)
-            .min_w(NARROWEST)
-            .max_w(WIDEST)
-            .h_full()
-            .border_sides([0.0, 0.0, 0.0, 1.0], t.border_subtle)
-            .scroll(rune::ScrollSpec {
-                stick_bottom: false,
-            })
-            .child(column)
-            .scroll_bar_styled(crate::scroll_bar(t))
+        door::frame(column, Space::S12, Space::S16, Space::S16)
     }
 }
 
@@ -128,8 +147,9 @@ pub fn beside(list: El, inspector: El) -> El {
 }
 
 /// A list built as a block, such as one that holds more than one list, with its inspector
-/// beside it while both fit, the list no narrower than an inspector gets, and under it where
-/// they don't.
+/// beside it in a page that scrolls: the two share the row while both fit, neither narrower
+/// than an inspector gets, and the inspector goes under the list where they don't. Give it an
+/// inspector built [`Inspector::in_page`], so the page is the one thing that scrolls.
 pub fn beside_list(list: super::Block, inspector: El) -> super::Block {
     super::Block::new(
         super::block::Kind::Custom,
