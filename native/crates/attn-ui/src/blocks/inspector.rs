@@ -126,3 +126,8 @@ pub fn beside(list: El, inspector: El) -> El {
         .child(list.grow(1.0).min_w(0.0))
         .child(inspector)
 }
+
+/// [`beside`] for a list built as a block, such as one that holds more than one list.
+pub fn beside_list(list: super::Block, inspector: El) -> super::Block {
+    super::Block::new(super::block::Kind::Custom, beside(list.el, inspector))
+}
