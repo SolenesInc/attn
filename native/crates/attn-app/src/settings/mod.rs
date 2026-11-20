@@ -18,7 +18,6 @@ mod harnesses;
 mod hygiene;
 mod models;
 pub(crate) mod outposts;
-mod pages;
 pub(crate) mod phones;
 mod plugins;
 pub(crate) mod route;
@@ -438,5 +437,14 @@ pub(crate) fn automation_state(state: &State) -> serde_json::Value {
         "search": dialog.search.text,
         "saving": dialog.autosave.saving(),
         "refusals": dialog.autosave.refusals().map(|(k, r)| serde_json::json!({"key": k, "reason": r})).collect::<Vec<_>>(),
+    })
+}
+
+/// The kit the settings pages build their rune-kit controls with: the Tauri app's settings
+/// paint primary actions in `warning`, where the rest of the app paints them in `brand`.
+pub(in crate::settings) fn kit(t: &attn_ui::Tokens) -> &'static rune_kit::Kit {
+    attn_ui::kit(&attn_ui::Tokens {
+        brand: t.warning,
+        ..*t
     })
 }

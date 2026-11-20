@@ -100,7 +100,7 @@ try {
   await runner.step('search_leaves_the_sections_whose_words_match', async () => {
     await driver.typeInto({ key: 'settings.search.field' }, 'sweep');
     await driver.state('settings', { expect: { search: 'sweep' } });
-    const nav = (await nodes()).filter((n) => n.key?.startsWith('settings.nav.')).map((n) => n.name);
+    const nav = (await nodes()).filter((n) => n.role === 'button' && n.key?.startsWith('settings.nav.')).map((n) => n.name);
     runner.assert(nav.length === 1 && nav[0] === 'Files and locations', 'only Files and locations holds the sweep', nav);
     await replaceText('settings.search.field', '');
     await driver.waitFor({ key: 'settings.nav.general' });

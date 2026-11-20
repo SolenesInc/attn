@@ -213,9 +213,10 @@ fn nav(world: &World) -> Vec<String> {
         .descendants(Target::key("settings.nav"))
         .into_iter()
         .filter(|n| {
-            n.key
-                .as_deref()
-                .is_some_and(|k| k.starts_with("settings.nav."))
+            n.role == "button"
+                && n.key
+                    .as_deref()
+                    .is_some_and(|k| k.starts_with("settings.nav."))
         })
         .filter_map(|n| n.name)
         .collect()
@@ -430,6 +431,7 @@ fn every_section_is_headed_by_its_navigation_name() {
         .screen()
         .descendants(Target::key("settings.nav"))
         .into_iter()
+        .filter(|n| n.role == "button")
         .filter_map(|n| Some((n.key?, n.name?)))
         .filter(|(key, _)| key.starts_with("settings.nav."))
         .collect();

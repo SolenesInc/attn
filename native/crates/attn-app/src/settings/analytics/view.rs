@@ -103,7 +103,7 @@ pub(in crate::settings) fn toast(state: &State, t: &Tokens) -> Option<El> {
         return None;
     }
     let said = state.window.settings.analytics.said.as_ref()?;
-    let k = crate::settings::pages::kit(t);
+    let k = crate::settings::kit(t);
     let mut toast = Toast::new("settings.analytics.toast", said.title.clone());
     if let Some(detail) = &said.detail {
         toast = toast.description(detail.clone());

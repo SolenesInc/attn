@@ -560,7 +560,7 @@ fn role_editor(state: &State, role: &DelegationRole, t: &Tokens) -> Vec<Block> {
                 };
                 commit(state, table::with_icon(&preferences, &id, which), tx);
             })
-            .build(crate::settings::pages::kit(t))
+            .build(crate::settings::kit(t))
             .key(format!(
                 "settings.delegation.role.{}.icon.{}",
                 role.id,
@@ -995,7 +995,7 @@ fn adoption_panel(
     t: &Tokens,
 ) -> Block {
     let open = page_state(state).adoption_open.as_deref();
-    let k = crate::settings::pages::kit(t);
+    let k = crate::settings::kit(t);
     Section::new("settings.delegation.adoption", "Adopt maintained roles")
         .description("Some Attn roles look like roles you already have. Choose whether to add them beside your custom rows or replace one. Replacing keeps that row's model choices and on/off state.")
         .push_all(missing.iter().zip(names).map(|(template, name)| {
@@ -1048,5 +1048,5 @@ pub(in crate::settings) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<E
     };
     let name = table::label(table::view(expanded, template));
     adoption_select(preferences, adoption, open, &name, true)
-        .build(crate::settings::pages::kit(t), layers);
+        .build(crate::settings::kit(t), layers);
 }

@@ -11,6 +11,7 @@ use crate::{Backdrop, Frame, Tokens, glyph};
 enum Height {
     Fit(Option<f32>),
     Window(f32),
+    Fill(f32),
 }
 
 /// How big a dialog is, by what it holds. A dialog also stops at the window: past it, its body
@@ -31,6 +32,10 @@ pub enum DialogSize {
     /// says (the drawing's 250, the title, three lines, a button and a line of keys), so the foot
     /// holds still from step to step.
     Tour,
+    /// A surface of its own, such as Settings: its navigation, [`Dialog::NAVIGATION`] wide,
+    /// beside the widest page, filling the window down to 880 tall, its lead quiet on the
+    /// title's line so the page keeps the height.
+    Workspace,
 }
 
 /// A tour's drawing: the width its scenes are painted at.
@@ -43,6 +48,7 @@ impl DialogSize {
             DialogSize::Form => 620.0,
             DialogSize::Sheet => 760.0,
             DialogSize::Tour => TOUR_DRAWING + 2.0 * Space::S24.pt(),
+            DialogSize::Workspace => Dialog::NAVIGATION + super::page::Page::WIDEST,
         }
     }
 
@@ -51,6 +57,7 @@ impl DialogSize {
             DialogSize::Prompt | DialogSize::Tour => Height::Fit(None),
             DialogSize::Form => Height::Fit(Some(760.0)),
             DialogSize::Sheet => Height::Window(0.84),
+            DialogSize::Workspace => Height::Fill(880.0),
         }
     }
 
@@ -79,6 +86,8 @@ pub struct Dialog {
     close: Option<(Wrap, Wrap)>,
     keys: Option<Wrap>,
     close_button: bool,
+    autofocus: bool,
+    over: Option<El>,
 }
 
 impl Dialog {
@@ -99,7 +108,26 @@ impl Dialog {
             close: None,
             keys: None,
             close_button: false,
+            autofocus: false,
+            over: None,
         }
+    }
+
+    /// How wide a [`DialogSize::Workspace`] dialog's navigation stands: "Files and locations"
+    /// on one line in `Body` inside a list row's insets.
+    pub const NAVIGATION: f32 = 258.0;
+
+    /// The focus rests on the dialog itself when it opens, so the first Tab goes to its first
+    /// control.
+    pub fn autofocus(mut self) -> Self {
+        self.autofocus = true;
+        self
+    }
+
+    /// What stands over the dialog's surface, such as the toast that says what an action did.
+    pub fn over(mut self, el: Option<El>) -> Self {
+        self.over = el;
+        self
     }
 
     /// What the dialog asks or is for, under its title; it also describes the dialog. Text
@@ -211,7 +239,14 @@ impl Dialog {
         let bodied = ruled || !self.body.is_empty();
         let footed = self.actions.is_some();
         let head = door::frame(
-            head(&self.title, self.lead.clone(), self.aside, closer, t),
+            head(
+                &self.title,
+                self.lead.clone(),
+                self.size == DialogSize::Workspace,
+                self.aside,
+                closer,
+                t,
+            ),
             Space::S24,
             Space::S24,
             match (ruled, bodied || footed) {
@@ -278,6 +313,12 @@ impl Dialog {
                 body.map(|b| b.grow(1.0).min_h(0.0)),
                 door::inset(col(), Space::S16, Space::S0),
             ),
+            Height::Fill(tallest) => (
+                col().h_full().max_h(tallest),
+                inside.grow(1.0).min_h(0.0),
+                body.map(|b| b.grow(1.0).min_h(0.0)),
+                door::inset(col(), Space::S16, Space::S16),
+            ),
         };
         let panel = Frame::dialog(t)
             .draw_clipped(panel)
@@ -288,7 +329,13 @@ impl Dialog {
             .w_full()
             .max_w(self.size.width())
             .child(inside.children(body).children(foot))
+            .children(self.over)
             .token_motion(k.motion.overlay);
+        let panel = if self.autofocus {
+            panel.autofocus()
+        } else {
+            panel
+        };
         let panel = match self.keys {
             Some(keys) => keys(panel),
             None => panel,
@@ -313,7 +360,14 @@ impl Dialog {
 
 /// The dialog's head: its title and lead, then what goes beside the title, each centred on the
 /// title's first line.
-fn head(title: &Said, lead: Option<Said>, aside: Vec<El>, closer: Option<El>, t: &Tokens) -> El {
+fn head(
+    title: &Said,
+    lead: Option<Said>,
+    lead_beside: bool,
+    aside: Vec<El>,
+    closer: Option<El>,
+    t: &Tokens,
+) -> El {
     let band = if !aside.is_empty() {
         Some(Size::Regular)
     } else if closer.is_some() {
@@ -329,14 +383,27 @@ fn head(title: &Said, lead: Option<Said>, aside: Vec<El>, closer: Option<El>, t:
         Some(size) => door::on_band(title, Type::Heading, size),
         None => title,
     };
-    let said = door::gap(col().grow(1.0).min_w(0.0), Space::S8)
-        .child(title)
-        .children(lead.map(|lead| {
-            words(lead, Type::Body, t.text_secondary)
-                .key("lead")
-                .wrap()
-                .max_w(READING)
-        }));
+    let said = if lead_beside {
+        door::gap(row().grow(1.0).min_w(0.0).items_center(), Space::S16)
+            .child(title)
+            .children(lead.map(|lead| {
+                words(lead, Type::Body, t.text_tertiary)
+                    .key("lead")
+                    .single_line()
+                    .truncate()
+                    .shrink()
+                    .min_w(0.0)
+            }))
+    } else {
+        door::gap(col().grow(1.0).min_w(0.0), Space::S8)
+            .child(title)
+            .children(lead.map(|lead| {
+                words(lead, Type::Body, t.text_secondary)
+                    .key("lead")
+                    .wrap()
+                    .max_w(READING)
+            }))
+    };
     let beside = door::gap(row().items_center(), Space::S8)
         .children(aside)
         .children(closer);
