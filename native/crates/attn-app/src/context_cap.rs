@@ -3,7 +3,7 @@
 
 use attn_protocol::{SessionContextWindowCapResultMessage, SetSessionContextWindowCapMessage};
 use attn_ui::blocks::{Actions, Field};
-use attn_ui::system::{Button, FieldState, Look, line_box};
+use attn_ui::system::{Button, FieldState, Look, Part, Said, line_box};
 use attn_ui::{Dialog, Tokens};
 use rune::{El, TextEdit, Tx};
 use rune_kit::TextInput;
@@ -127,12 +127,16 @@ pub(crate) fn view(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let Some(prompt) = &state.window.context_cap else {
         return;
     };
-    let lead = format!(
-        "Cap `{}`’s context window so it compacts at this many tokens. Blank means no cap. \
-         Saving reloads the agent to apply it: the conversation is resumed, but anything \
-         mid-turn is lost.",
-        prompt.name
-    );
+    let lead = Said::parts([
+        Part::Text("Cap ".to_owned()),
+        Part::Code(prompt.name.clone()),
+        Part::Text(
+            "’s context window so it compacts at this many tokens. Blank means no cap. \
+             Saving reloads the agent to apply it: the conversation is resumed, but anything \
+             mid-turn is lost."
+                .to_owned(),
+        ),
+    ]);
     let saving = prompt.saving;
     let input = TextInput::new(&prompt.edit)
         .key(format!("{KEY}.field"))

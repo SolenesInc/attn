@@ -1,7 +1,7 @@
 use attn_ui::blocks::{Block, Inline, Notice, Prose, Status};
 use attn_ui::finder::{self, FinderSize, Hint};
 use attn_ui::system::{
-    DotShape, DotSize, GroupHead, IconSize, ListRow, Tone, Type, dot, icon, tag, words,
+    DotShape, DotSize, GroupHead, IconSize, ListRow, Part, Said, Tone, Type, dot, icon, tag, words,
 };
 use attn_ui::{Tokens, icon};
 use rune::{El, KeyPlatform, Span, Tx, col, row};
@@ -367,18 +367,25 @@ fn location_row(
         _ => r.name.clone(),
     };
     let detail = match r.kind {
-        Kind::Recent => Some(format!("`{}`", launcher.display(state, &r.path, host))),
-        Kind::Machine => Some(format!(
-            "{} · Tab browses `{}`",
-            host.and_then(|h| outpost(outposts, h))
-                .map(|o| o.state.clone())
-                .unwrap_or_default(),
-            address_of(&machine_of(outposts, host), "~/")
-        )),
-        Kind::Elsewhere => Some(format!(
-            "Enter browses `{}`",
-            address_of(&machine_of(outposts, host), &format!("{}/", r.path))
-        )),
+        Kind::Recent => Some(Said::parts([Part::Code(
+            launcher.display(state, &r.path, host),
+        )])),
+        Kind::Machine => Some(Said::parts([
+            Part::Text(format!(
+                "{} · Tab browses ",
+                host.and_then(|h| outpost(outposts, h))
+                    .map(|o| o.state.clone())
+                    .unwrap_or_default()
+            )),
+            Part::Code(address_of(&machine_of(outposts, host), "~/")),
+        ])),
+        Kind::Elsewhere => Some(Said::parts([
+            Part::Text("Enter browses ".to_owned()),
+            Part::Code(address_of(
+                &machine_of(outposts, host),
+                &format!("{}/", r.path),
+            )),
+        ])),
         Kind::Folder => None,
     };
     let badge_key = format!("{w}.row.{i}.badge");
@@ -444,7 +451,7 @@ fn location_row(
             super::pick(state, which, i, picked.clone(), tx)
         });
     let row_el = match detail {
-        Some(detail) => row_el.description(detail.replace('`', "")),
+        Some(detail) => row_el.description(detail.text()),
         None => row_el,
     };
     if highlighted {

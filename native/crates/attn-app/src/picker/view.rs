@@ -1,8 +1,8 @@
 use attn_ui::blocks::{Actions, Block, DialogSize, Field as FieldBlock, Inline, Notice, Stack};
 use attn_ui::finder::{self, FinderSize, Hint};
 use attn_ui::system::{
-    GroupHead, IconSize, ListRow, Look, Segment, Segmented, Size, Type, icon, icon_button,
-    press_area, words,
+    GroupHead, IconSize, ListRow, Look, Part, Said, Segment, Segmented, Size, Type, icon,
+    icon_button, press_area, words,
 };
 use attn_ui::{Dialog, Tokens, glyph};
 use rune::{El, Tx, col, el};
@@ -360,14 +360,21 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
     let mut said = Vec::new();
     if let Some(dir) = &picker.browsing {
         said.push(
-            words(format!("Browsing: `{dir}`"), Type::Small, t.text_tertiary)
-                .key(format!("{w}.browsing")),
+            words(
+                Said::parts([Part::Text("Browsing: ".to_owned()), Part::Code(dir.clone())]),
+                Type::Small,
+                t.text_tertiary,
+            )
+            .key(format!("{w}.browsing")),
         );
     }
     if let Some((operation, path)) = &picker.operation {
         said.push(
             words(
-                format!("{} `{path}`", operation.label()),
+                Said::parts([
+                    Part::Text(format!("{} ", operation.label())),
+                    Part::Code(path.clone()),
+                ]),
                 Type::Small,
                 t.text_secondary,
             )
@@ -474,7 +481,7 @@ fn location_row(picker: &Picker, i: usize, r: &super::Row, t: &Tokens) -> El {
         ))
         .title(r.name.clone());
     if let Some(shown) = &r.shown_path {
-        line = line.subtitle(format!("`{shown}`"), t);
+        line = line.subtitle(Said::parts([Part::Code(shown.clone())]), t);
     }
     let option = line
         .build(t)
