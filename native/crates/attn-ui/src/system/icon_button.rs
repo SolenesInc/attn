@@ -6,10 +6,8 @@ use super::{
 };
 use crate::{Glyph, Tokens};
 
-/// How much of the accent tints a counted button, and the same button while what it opens is
-/// open.
+/// How much of the accent tints a counted button while what it opens is closed.
 const TINT: f32 = 0.22;
-const TINT_OPEN: f32 = 0.34;
 /// A dot's side, and the ring of the ground around it that keeps it apart from the icon.
 const DOT: f32 = super::DotSize::Small.side();
 const DOT_RING: f32 = super::dot::RING;
@@ -95,7 +93,8 @@ impl IconButton {
     }
 
     /// How many things wait behind the button, beside the icon and never over it: the button
-    /// becomes a pill around both, tinted with the accent.
+    /// becomes a pill around both, tinted with the accent, and takes the selected fill while what
+    /// it opens is open.
     pub fn count(mut self, count: Option<String>) -> Self {
         self.count = count;
         self
@@ -171,9 +170,13 @@ impl IconButton {
         let counted = self.count.is_some();
         let (fill, ink) = match (counted, self.open) {
             (true, open) => {
-                let tint = if open { TINT_OPEN } else { TINT };
                 let ink = if t.dark { t.accent } else { t.text_primary };
-                (crate::colors::mix_srgb(t.bg_panel, t.accent, tint), ink)
+                let fill = if open {
+                    t.bg_selected
+                } else {
+                    crate::colors::mix_srgb(t.bg_panel, t.accent, TINT)
+                };
+                (fill, ink)
             }
             (false, true) => (t.bg_selected, t.text_primary),
             (false, false) => (Color::TRANSPARENT, t.text_secondary),
