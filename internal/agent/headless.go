@@ -61,6 +61,7 @@ func runHeadlessCommand(
 	ctx context.Context,
 	executable string,
 	args []string,
+	prompt string,
 	workDir string,
 	provider string,
 	reportedFailure func(stdout []byte) string,
@@ -76,6 +77,7 @@ func runHeadlessCommand(
 		cmd.Dir = dir
 	}
 	cmd.Env = headlessEnvironment(provider)
+	cmd.Stdin = strings.NewReader(prompt)
 	var stdout, stderr boundedHeadlessOutput
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -186,6 +188,8 @@ func headlessEnvironment(provider string) []string {
 func classifyHeadlessFailure(output string) string {
 	lower := strings.ToLower(output)
 	switch {
+	case strings.Contains(lower, "input_too_large"):
+		return "headless agent input is longer than the harness accepts"
 	case strings.Contains(lower, "connection refused"),
 		strings.Contains(lower, "connection_failed"):
 		return "headless agent could not reach its model provider"

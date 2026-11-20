@@ -78,9 +78,7 @@ func runClaude(cfg config) int {
 
 func claudePrint(args parsedArgs) headlessRun {
 	run := headlessRun{harness: Claude, model: args.value("--model"), effort: args.value("--effort")}
-	if len(args.positionals) > 0 {
-		run.prompt = joinSystemPrompt(args.value("--system-prompt"), args.positionals[len(args.positionals)-1])
-	}
+	run.prompt = joinSystemPrompt(args.value("--system-prompt"), headlessPrompt(args.positionals))
 	if args.has("--mcp-config") {
 		run.refusal = "claude --print with MCP tool servers"
 	}

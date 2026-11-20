@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -159,6 +160,14 @@ func (run headlessRun) serve(cfg config) int {
 		return 1
 	}
 	return 0
+}
+
+func headlessPrompt(positionals []string) string {
+	if n := len(positionals); n > 0 && positionals[n-1] != "-" {
+		return positionals[n-1]
+	}
+	prompt, _ := io.ReadAll(os.Stdin)
+	return string(prompt)
 }
 
 func joinSystemPrompt(system, prompt string) string {

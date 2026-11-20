@@ -161,3 +161,45 @@ Read in the source at openai/codex rust-v0.163.0 and probed on 0.162.1 and
   - brew cask, read in its source only: `brew upgrade` renames
     `Caskroom/codex/<old>` aside before installing and deletes it once the new
     version is in.
+
+## Headless runs
+
+attn runs `codex exec` for headless tasks and cold model calls
+(`internal/agent/codex.go`). Probed on 0.167.0 with attn's arguments, a
+loopback Responses API set as `openai_base_url`, and the model catalog of a
+signed-in `CODEX_HOME` passed as `model_catalog_json`, 2026-11-20 (seed
+`s-63n4ng`, `codex-capture-round1.tgz` and `c13-capture.tgz`):
+
+- `codex exec -` reads the prompt from stdin. A prompt of 1,048,576
+  characters is sent whole as the user message. One character more fails
+  before any request with `input_too_large`: "Input exceeds the maximum length
+  of 1048576 characters".
+- `-c instructions="..."` replaces Codex's base instructions. The request
+  carries them as its first developer message; the top-level `instructions`
+  field stays empty, as it does for Codex's own prompt. With the settings below
+  the request holds only that developer message and the user message.
+- Tools travel in an `additional_tools` input item, not the top-level `tools`
+  array, which stays empty. Before the settings below, a tool-free run on
+  gpt-5.6-terra declared `exec`, `wait`, `request_user_input` and six
+  multi-agent tools; gpt-6.2-sol added `request_user_input_async`,
+  `send_message_to_user_async` and `sleep`.
+- These remove tools or context blocks: `features.view_image=false`,
+  `features.sleep_tool=false`,
+  `tools.experimental_request_user_input.enabled=false`, `agents.enabled=false`
+  (the multi-agent tools), `skills.include_instructions=false` (the skills
+  list, which names the user's skill folders), and
+  `include_permissions_instructions`, `include_apps_instructions`,
+  `include_collaboration_mode_instructions` and `include_environment_context`
+  set to `false`.
+- What no setting removes comes from the model catalog. Every model there has
+  `tool_mode: code_mode_only`, so every request declares `exec` and `wait`.
+  `exec` runs JavaScript in a V8 isolate with no file system, network or
+  console, and calls only nested tools, of which a tool-free run has none.
+  gpt-6.2-sol and gpt-6.2-astra list `send_message_to_user_async` in
+  `experimental_supported_tools`. Under `codex exec` that tool's call returns
+  `{"accepted":true}` and prints its message as an `agent_message` line on
+  stdout; the provider saw nothing else. A catalog entry with
+  `tool_mode: direct`, no `experimental_supported_tools` and no
+  `apply_patch_tool_type` declares no tools, but attn would have to rewrite
+  Codex's private model cache to get it, so attn accepts the residual tools
+  (plot `s-jhntry`, D7).

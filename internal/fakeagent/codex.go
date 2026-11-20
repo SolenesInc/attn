@@ -1,6 +1,7 @@
 package fakeagent
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -107,14 +108,18 @@ func codexPermissionOverride(args parsedArgs) bool {
 
 func codexExec(args parsedArgs) headlessRun {
 	run := headlessRun{harness: Codex, model: args.value("-m", "--model")}
-	if len(args.positionals) > 0 {
-		run.prompt = args.positionals[len(args.positionals)-1]
-	}
+	instructions := ""
 	for _, override := range args.values["-c"] {
 		if effort, ok := strings.CutPrefix(override, "model_reasoning_effort="); ok {
 			run.effort = strings.Trim(effort, `"`)
 		}
+		if quoted, ok := strings.CutPrefix(override, "instructions="); ok {
+			if err := json.Unmarshal([]byte(quoted), &instructions); err != nil {
+				run.refusal = "codex exec with instructions that are not a TOML string: " + quoted
+			}
+		}
 	}
+	run.prompt = joinSystemPrompt(instructions, headlessPrompt(args.positionals))
 	if servers, ok := codexToolServers(args.values["-c"]); ok {
 		run.tools = servers
 	} else {

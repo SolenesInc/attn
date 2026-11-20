@@ -162,7 +162,7 @@ var claudeNativeDefaultTools = []string{"Read", "Write", "Edit", "Grep", "Glob"}
 func (c *Claude) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest) (HeadlessTaskResult, error) {
 	args := claudeHeadlessArgs(request)
 
-	result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, request.WorkDir, "claude", claudeReportedFailure)
+	result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, request.Prompt, request.WorkDir, "claude", claudeReportedFailure)
 	if err != nil {
 		if text := parseClaudeFinalText(stdout); text != "" {
 			result.FailureOutput = strings.TrimSpace("result: " + text + "\n" + result.FailureOutput)
@@ -288,7 +288,6 @@ func claudeHeadlessArgs(request HeadlessTaskRequest) []string {
 	args = append(args,
 		"--permission-mode", "dontAsk",
 		"--output-format", "json",
-		request.Prompt,
 	)
 	return args
 }

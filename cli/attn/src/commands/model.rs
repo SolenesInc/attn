@@ -18,8 +18,8 @@ pub const HELP: &str = r#"usage: attn model call --token-stdin
 call
 Call a model through attn, as a program the user paired with attn send pair.
 attn runs your instructions and input unchanged on a harness's model, with no
-tools and no memory of other calls, and prints the model's answer. It needs
-headless tasks on.
+tool that reaches outside the call and no memory of other calls, and prints
+the model's answer. It needs headless tasks on.
 
   --token-stdin  read the paired sender's token from the first line of stdin
                  and one JSON request from the rest
@@ -33,7 +33,8 @@ The request:
 
   purpose   a short label for the call, shown in attn's log
   system    the instructions: the model's system prompt
-  input     the text the model answers
+  input     the text the model answers. Codex takes at most 1,048,576
+            characters
   limit_ms  how long to wait for the answer, in milliseconds. Required
   harness   optional: claude or codex. Default: the model_calls.agent setting,
             or the harness for new sessions when that is empty

@@ -177,8 +177,9 @@ must be on. Run `attn refine --help` for the details.
 A program you paired, as in [Send files to an agent from outside
 Attn](#send-files-to-an-agent-from-outside-attn), can call a model through
 Attn with its own instructions and input. Attn runs them unchanged, with no
-tools and no memory of other calls, on your harness's sign-in. Give the token on
-the first line of stdin and one JSON request after it:
+tool that reaches outside the call and no memory of other calls, on your
+harness's sign-in. Give the token on the first line of stdin and one JSON
+request after it:
 
 ```sh
 { echo "$TOKEN"
@@ -194,7 +195,8 @@ harness (empty uses the harness for new sessions), and `model_calls.model`, a
 tier or a model id (empty uses `standard`). A tier picks that harness's model
 for the tier, as the `model_tier_overrides` setting adjusts. When the call fails or passes `limit_ms`,
 the line has `error` instead of `text`, and the command exits 1. Stopping the
-command ends the call. Headless tasks must be on.
+command ends the call. Headless tasks must be on. Codex takes an input of at
+most 1,048,576 characters.
 
 While a paired program exists and you used Attn or made a model call in the
 last 4 hours, Attn keeps one Claude process started and waiting, so a call

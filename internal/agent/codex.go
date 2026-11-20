@@ -134,8 +134,11 @@ func (c *Codex) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest
 	if request.DisableTools {
 		args = codexToolFreeHeadlessArgs(request, window)
 	}
-	args = addCodexOutputSchema(args, schemaPath)
-	result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, request.WorkDir, "codex", codexReportedFailure)
+	if schemaPath != "" {
+		args = append(args, "--output-schema", schemaPath)
+	}
+	args = append(args, codexPromptFromStdin)
+	result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, request.Prompt, request.WorkDir, "codex", codexReportedFailure)
 	if err != nil {
 		return result, err
 	}
@@ -165,14 +168,7 @@ func writeCodexOutputSchema(request HeadlessTaskRequest) (string, func(), error)
 	return path, remove, nil
 }
 
-func addCodexOutputSchema(args []string, schemaPath string) []string {
-	if schemaPath == "" || len(args) == 0 {
-		return args
-	}
-	prompt := args[len(args)-1]
-	args = append(args[:len(args)-1], "--output-schema", schemaPath)
-	return append(args, prompt)
-}
+const codexPromptFromStdin = "-"
 
 func codexFeatureLocks() []string {
 	return []string{
@@ -274,16 +270,20 @@ func codexHeadlessArgs(request HeadlessTaskRequest, window int) []string {
 	}
 	args = append(args, codexFeatureLocks()...)
 	args = append(args, codexContextWindowCapArgs(window)...)
-	args = append(args, codexPrompt(request))
-	return args
+	return append(args, codexInstructionsArgs(request)...)
 }
 
-func codexPrompt(request HeadlessTaskRequest) string {
+func codexInstructionsArgs(request HeadlessTaskRequest) []string {
 	system := strings.TrimSpace(request.SystemPrompt)
 	if system == "" {
-		return request.Prompt
+		return nil
 	}
-	return system + "\n\n" + request.Prompt
+	return []string{"-c", "instructions=" + tomlString(system)}
+}
+
+func tomlString(value string) string {
+	quoted, _ := json.Marshal(value)
+	return string(quoted)
 }
 
 func codexToolFreeHeadlessArgs(request HeadlessTaskRequest, window int) []string {
@@ -301,14 +301,22 @@ func codexToolFreeHeadlessArgs(request HeadlessTaskRequest, window int) []string
 		"-c", "features.shell_tool=false",
 		"-c", "features.unified_exec=false",
 		"-c", `web_search="disabled"`,
+		"-c", "features.view_image=false",
+		"-c", "features.sleep_tool=false",
+		"-c", "tools.experimental_request_user_input.enabled=false",
+		"-c", "agents.enabled=false",
+		"-c", "skills.include_instructions=false",
+		"-c", "include_permissions_instructions=false",
+		"-c", "include_apps_instructions=false",
+		"-c", "include_collaboration_mode_instructions=false",
+		"-c", "include_environment_context=false",
 	}
 	if effort := strings.TrimSpace(request.ReasoningEffort); effort != "" {
 		args = append(args, "-c", `model_reasoning_effort="`+effort+`"`)
 	}
 	args = append(args, codexFeatureLocks()...)
 	args = append(args, codexContextWindowCapArgs(window)...)
-	args = append(args, codexPrompt(request))
-	return args
+	return append(args, codexInstructionsArgs(request)...)
 }
 
 func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
