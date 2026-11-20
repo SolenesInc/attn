@@ -11,18 +11,20 @@ trends and fail nothing.
 Every CLI command and agent hook runs package init before doing anything else.
 `TestEveryCommandStartsWithoutPayingForInitItNeverUses` runs on every Go land
 and fails when `attn version` makes more than `maxPackageInitAllocs` init
-allocations, naming the heaviest packages. `lint-go` also refuses jsonschema
-and Prometheus, which the start work dropped, so either one fails by name
-instead of as a count.
+allocations, naming the heaviest packages. `lint-go` also refuses
+santhosh-tekuri's jsonschema and Prometheus, which the start work dropped, so
+either one fails by name instead of as a count.
 
 | `GODEBUG=inittrace=1 attn version`, Linux unless named | Init allocations |
 | --- | --- |
-| Today, with ask image discovery on goldmark's parser alone | 3,664 |
+| Today, with the MCP SDK that serves `/mcp` (encoding/gob 372, jsonschema-go 296, go-sdk/mcp 183, oauthex 27) | 5,046 |
+| Before the MCP SDK, cac9c2fbe | 4,141 |
+| With ask image discovery on goldmark's parser alone | 3,664 |
 | With regexps, migrations and garden events built on first use | 5,877 |
 | Before that, 5db0778fa | 10,373 |
 | macOS arm64, 25c2331c | 10,537 |
 | 5db0778fa plus Prometheus | 11,802 |
-| 5db0778fa plus jsonschema | 32,725 |
+| 5db0778fa plus santhosh-tekuri's jsonschema | 32,725 |
 | Before the start work, 6496f367b | 39,179 |
 
 The count moves by a few allocations between runs, even at load 16, while init

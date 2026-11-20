@@ -211,6 +211,13 @@ type SpawnOpts struct {
 	CodexRemote string
 
 	ClaudeMod ClaudeMod
+
+	AgentTools *AgentTools
+}
+
+type AgentTools struct {
+	URL        string
+	Credential string
 }
 
 const (

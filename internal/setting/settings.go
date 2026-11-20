@@ -77,6 +77,15 @@ var (
 		Since:   "2026-11-10",
 		Search:  "review diff change walkthrough attn review",
 	})
+	AgentToolsEnabled = feature("agent_tools_enabled", "Serve attn's commands to agents as MCP tools: true or false. Experimental; off by default.", Info{
+		Name:    "Agent tools",
+		Summary: "Agents call attn through MCP tools instead of the attn CLI.",
+		Group:   Agents,
+		Applies: NewAgents,
+		Stage:   Experimental,
+		Since:   "2026-11-21",
+		Search:  "mcp tools seed agent credential",
+	})
 	SigmaEnabled = feature("sigma_enabled", "Offer Sigma as a harness: true or false. Experimental; off by default; open Sigma sessions keep working when it is turned off.", Info{
 		Name:    "Sigma",
 		Summary: "Offer Sigma as a harness for new agents and delegations.",

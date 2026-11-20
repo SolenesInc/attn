@@ -128,6 +128,8 @@ type Daemon struct {
 	dataRoot            string
 	daemonInstanceID    string
 	clientToken         string
+	agentKey            agentKey
+	agentToolSet        agentToolServers
 	store               *store.Store
 	gardenSeeds         store.DocumentsMemo[gardenSeeds]
 	// Serializes PR fetches with review-request edge reconciliation.
@@ -701,6 +703,10 @@ func (d *Daemon) Start() error {
 			return fmt.Errorf("ensure client token: %w", err)
 		}
 		d.clientToken = token
+	}
+	d.agentKey = loadAgentKey(d.dataRoot)
+	if d.agentKey.err != nil {
+		d.logf("agent tools refuse every call: %v", d.agentKey.err)
 	}
 	if err := d.dropStaleCopy(); err != nil {
 		d.logf("drop the copy of terminals run for another home: %v", err)
@@ -2397,6 +2403,7 @@ func (d *Daemon) initHTTPServer() {
 	mux.HandleFunc("/ws", d.handleWS)
 	mux.HandleFunc("/health", d.handleHealth)
 	mux.HandleFunc("/agents", d.handleAgents)
+	mux.Handle("/mcp", d.agentToolsHandler())
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, _ *http.Request) {
 		setNoStoreHeaders(w.Header())
 		w.WriteHeader(http.StatusNoContent)

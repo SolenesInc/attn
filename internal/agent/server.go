@@ -9,19 +9,20 @@ import (
 const ServerProtocol = "attn-app-server-v1"
 
 type ServerDeclaration struct {
-	Protocol              string          `json:"protocol"`
-	Executable            string          `json:"executable"`
-	ExecutableEnv         string          `json:"executable_env,omitempty"`
-	ServeArgs             []string        `json:"serve_args"`
-	HomeEnv               string          `json:"home_env"`
-	DefaultHome           string          `json:"default_home"`
-	SocketName            string          `json:"socket_name"`
-	Initialize            ServerHandshake `json:"initialize"`
-	CallerConversationEnv string          `json:"caller_conversation_env"`
-	OnClose               string          `json:"on_close"`
-	Recovery              string          `json:"recovery"`
-	Targets               bool            `json:"targets,omitempty"`
-	SigmaWire             bool            `json:"-"`
+	Protocol                 string          `json:"protocol"`
+	Executable               string          `json:"executable"`
+	ExecutableEnv            string          `json:"executable_env,omitempty"`
+	ServeArgs                []string        `json:"serve_args"`
+	HomeEnv                  string          `json:"home_env"`
+	DefaultHome              string          `json:"default_home"`
+	SocketName               string          `json:"socket_name"`
+	Initialize               ServerHandshake `json:"initialize"`
+	CallerConversationEnv    string          `json:"caller_conversation_env"`
+	CallerConversationHeader string          `json:"caller_conversation_header,omitempty"`
+	OnClose                  string          `json:"on_close"`
+	Recovery                 string          `json:"recovery"`
+	Targets                  bool            `json:"targets,omitempty"`
+	SigmaWire                bool            `json:"-"`
 }
 
 type ServerHandshake struct {
@@ -83,6 +84,9 @@ func (p *ServerDeclaration) Validate() error {
 	if !strings.HasSuffix(p.CallerConversationEnv, "_ROOT_CONVERSATION") || len(p.CallerConversationEnv) == len("_ROOT_CONVERSATION") {
 		return fmt.Errorf("server caller_conversation_env must be named <NAME>_ROOT_CONVERSATION")
 	}
+	if p.CallerConversationHeader != "" && !validHeaderName(p.CallerConversationHeader) {
+		return fmt.Errorf("server caller_conversation_header %q is not an HTTP header name", p.CallerConversationHeader)
+	}
 	if p.DefaultHome == "" || !StaysInside(p.DefaultHome) {
 		return fmt.Errorf("server default_home must be relative to the user's home")
 	}
@@ -100,4 +104,13 @@ func (p *ServerDeclaration) Validate() error {
 		return fmt.Errorf("unsupported server recovery %q", p.Recovery)
 	}
 	return nil
+}
+
+func validHeaderName(name string) bool {
+	for _, r := range name {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-') {
+			return false
+		}
+	}
+	return name != ""
 }

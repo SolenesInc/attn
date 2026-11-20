@@ -83,14 +83,16 @@ func (r *Router) Forward(frame []byte, caller protocol.SessionID, input forwardI
 	inputEnded := make(chan struct{})
 	goTransport(func() {
 		defer close(inputEnded)
-		if _, err := channel.Write(frame); err == nil {
+		if _, err := channel.Write(frame); err == nil && input != nil {
 			_, _ = io.Copy(channel, input)
 		}
 		_ = channel.CloseWrite()
 	})
 	defer func() {
 		_ = channel.Close()
-		_ = input.SetReadDeadline(time.Now())
+		if input != nil {
+			_ = input.SetReadDeadline(time.Now())
+		}
 		<-inputEnded
 	}()
 	reader := bufio.NewReader(channel)

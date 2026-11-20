@@ -51,6 +51,9 @@ func writeCatalog(cliRoot, referencesDir, goRoot string) error {
 	if err := writeCommandTables(c, cliRoot, goRoot); err != nil {
 		return err
 	}
+	if err := writeTools(c, goRoot); err != nil {
+		return err
+	}
 	for _, out := range []familyOutput{{group: "seed", rustHelp: "commands/seed/help_generated.rs"}} {
 		group, ok := c.Group(out.group)
 		if !ok {

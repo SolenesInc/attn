@@ -172,6 +172,13 @@ func (l *serverLink) callerConversationEnv() string {
 	return ""
 }
 
+func (l *serverLink) callerConversationHeader() string {
+	if p := l.b.declaration.Load(); p != nil {
+		return p.CallerConversationHeader
+	}
+	return ""
+}
+
 func (l *serverLink) validateServerInfo(hello effectrpc.ServerInfo, socket string) error {
 	p := l.b.declaration.Load()
 	if p == nil {

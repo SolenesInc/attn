@@ -45,18 +45,19 @@ func (s *Sigma) Capabilities() Capabilities {
 
 func (s *Sigma) Server() ServerDeclaration {
 	return ServerDeclaration{
-		Protocol:              ServerProtocol,
-		Executable:            s.DefaultExecutable(),
-		ExecutableEnv:         s.ExecutableEnvVar(),
-		ServeArgs:             []string{"serve"},
-		HomeEnv:               "SIGMA_HOME",
-		DefaultHome:           ".sigma",
-		SocketName:            "sigma.sock",
-		Initialize:            ServerHandshake{Protocol: ServerProtocolVersion{Min: 1}},
-		CallerConversationEnv: "SIGMA_ROOT_CONVERSATION",
-		OnClose:               "interrupt",
-		Recovery:              "last-run",
-		SigmaWire:             true,
+		Protocol:                 ServerProtocol,
+		Executable:               s.DefaultExecutable(),
+		ExecutableEnv:            s.ExecutableEnvVar(),
+		ServeArgs:                []string{"serve"},
+		HomeEnv:                  "SIGMA_HOME",
+		DefaultHome:              ".sigma",
+		SocketName:               "sigma.sock",
+		Initialize:               ServerHandshake{Protocol: ServerProtocolVersion{Min: 1}},
+		CallerConversationEnv:    "SIGMA_ROOT_CONVERSATION",
+		CallerConversationHeader: "Sigma-Root-Conversation",
+		OnClose:                  "interrupt",
+		Recovery:                 "last-run",
+		SigmaWire:                true,
 	}
 }
 

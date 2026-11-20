@@ -48,6 +48,7 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		SelfReportPullRequests: launch.SelfReportPullRequests,
 		CodexRemote:            opts.CodexRemote,
 		ClaudeMod:              claudeMod,
+		AgentTools:             d.agentTools(terminal),
 	}
 	if unattended := opts.UnattendedLaunch; !unattended.IsZero() {
 		spawn.AutoApprove = true
