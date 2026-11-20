@@ -66,6 +66,12 @@ pub(crate) fn hang_left(e: El, by: Space) -> El {
     e.ml(-by.pt())
 }
 
+/// `e` reaching out by `by` past both sides of its column, so what it sets in by `by` lines up
+/// with the column.
+pub(crate) fn hang(e: El, by: Space) -> El {
+    e.ml(-by.pt()).mr(-by.pt())
+}
+
 pub(crate) fn corner(e: El, radius: Radius) -> El {
     e.radius(radius.pt())
 }

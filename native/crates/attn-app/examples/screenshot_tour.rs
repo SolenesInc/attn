@@ -2440,6 +2440,38 @@ fn ledger(dark: bool) {
 /// The ledger with a working, a waiting, an idle and a closed agent, the waiting one selected:
 /// its inspector names the seed it tends, its usage, its conversation and Focus.
 fn ledger_seeded(dark: bool) {
+    let mut world = ledger_seeded_world(dark, false);
+    snap(&mut world, "ledger-seeded", dark);
+    world.gesture(|app| app.click(Target::key("ledger.row.s1.more")));
+    snap(&mut world, "ledger-menu", dark);
+    world.gesture(|app| app.press("escape"));
+    world.gesture(|app| app.click(Target::key("ledger.keys")));
+    snap(&mut world, "ledger-keys", dark);
+}
+
+/// The seeded ledger in the smallest window at 150% text, with the longest session name.
+fn ledger_smallest(dark: bool) {
+    let mut world = ledger_seeded_world(dark, true);
+    snap(&mut world, "ledger-smallest", dark);
+}
+
+/// The ledger when the daemon could not list the sessions.
+fn ledger_failed(dark: bool) {
+    let daemon = scripted().state(initial(dark, document_tile("m", "/repo/plan.md"), vec![]));
+    daemon.on("session_list", |r: &Request| {
+        message(SessionListResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: false,
+            error: Some("session_list failed: database is locked".into()),
+            ..SessionListResultMessage::new()
+        })
+    });
+    let mut world = start(daemon);
+    press(&mut world, Action::SessionsOpen);
+    snap(&mut world, "ledger-failed", dark);
+}
+
+fn ledger_seeded_world(dark: bool, smallest: bool) -> World {
     let tended = Seed {
         claimed: true,
         tender: Some(PartyView {
@@ -2449,11 +2481,11 @@ fn ledger_seeded(dark: bool) {
         }),
         ..seed("s-one", "Colors in one place", "growing", None)
     };
-    let daemon = scripted().state(initial(
-        dark,
-        document_tile("m", "/repo/plan.md"),
-        vec![tended],
-    ));
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![tended]);
+    if smallest && let Some(settings) = state.settings.as_mut() {
+        settings.insert("uiScale".into(), "1.5".into());
+    }
+    let daemon = scripted().state(state);
     let entry = |id: &str, label: &str, state: &str, seen: &str| SessionLedgerEntry {
         id: id.into(),
         label: label.into(),
@@ -2484,6 +2516,12 @@ fn ledger_seeded(dark: bool) {
             ..entry("s1", "reviewer", "waiting_input", "2026-11-17T08:58:00Z")
         },
         entry("s4", "docs", "idle", "2026-11-17T08:40:00Z"),
+        entry(
+            "s5",
+            "observability-dashboard-migration-for-international-engineering",
+            "working",
+            "2026-11-17T08:30:00Z",
+        ),
         SessionLedgerEntry {
             closed_at: Some("2026-11-17T07:00:00Z".into()),
             closed_by: Some("user".into()),
@@ -2502,9 +2540,12 @@ fn ledger_seeded(dark: bool) {
         })
     });
     let mut world = start(daemon);
+    if smallest {
+        world.resize((800.0, 600.0));
+    }
     press(&mut world, Action::SessionsOpen);
     world.gesture(|app| app.click(Target::key("ledger.row.s1")));
-    snap(&mut world, "ledger-seeded", dark);
+    world
 }
 
 /// The ledger's Worktrees list with no worktrees: its scopes, its filter and its refresh.
@@ -3043,6 +3084,111 @@ fn automation_advanced(dark: bool) {
     snap(&mut world, "automation-advanced", dark);
 }
 
+/// Automations in trouble: one that works in a pull request's worktree, asked to run with no
+/// pull request given, and one whose guard and last run failed, with a fix offered.
+fn troubled_automations() -> Vec<AutomationDefinitionSummary> {
+    vec![
+        AutomationDefinitionSummary {
+            id: 1,
+            profile_id: PROFILE.into(),
+            name: "Nightly dependency upgrade across every service repository".into(),
+            enabled: true,
+            revision: 1,
+            trigger_type: "manual".into(),
+            location_type: Some("repository_worktree".into()),
+            updated_at: "2030-06-01T07:00:00Z".into(),
+            ..AutomationDefinitionSummary::default()
+        },
+        AutomationDefinitionSummary {
+            guard_check: Some(attn_protocol::AutomationGuardCheck {
+                outcome: "failed".into(),
+                checked_at: "2030-06-01T06:58:00Z".into(),
+                checks_since_run: 3,
+                detail: Some("git rev-parse HEAD: fatal: not a git repository (or any of the parent directories): .git".into()),
+            }),
+            last_run: Some(AutomationRunSummary {
+                id: "r9".into(),
+                definition_id: 2,
+                state: "failed".into(),
+                created_at: "2030-06-01T07:00:00Z".into(),
+                updated_at: "2030-06-01T07:00:00Z".into(),
+                last_error: Some("Codex does not trust /home/someone/projects/InternationalEngineeringObservability".into()),
+                fix: Some(attn_protocol::AutomationRunFix {
+                    agent: "codex".into(),
+                    directory: "/home/someone/projects/InternationalEngineeringObservability".into(),
+                }),
+                ..AutomationRunSummary::default()
+            }),
+            ..scheduled_automation()
+        },
+    ]
+}
+
+/// The drawer's rows in trouble, with Run now's pull request prompt refused for want of a URL.
+fn automations_troubled(world: &mut World, name: &str, dark: bool) {
+    for key in ["automations.run-now.1", "automations.pr-run.1"] {
+        world.gesture(|app| app.click(Target::key(key)));
+    }
+    snap(world, name, dark);
+}
+
+fn automations_trouble(dark: bool) {
+    let mut world = automations_open(dark, troubled_automations());
+    automations_troubled(&mut world, "automations-trouble", dark);
+}
+
+/// The smallest window at 150% text, where a drawer keeps 420 of 533 points: the rows in
+/// trouble, then a new scheduled automation's form.
+fn automations_smallest(dark: bool) {
+    let mut daemon = automations_daemon(dark, troubled_automations());
+    daemon = daemon.state({
+        let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+        if let Some(set) = state.settings.as_mut() {
+            set.insert("uiScale".into(), "1.5".into());
+        }
+        state
+    });
+    let mut world = start(daemon);
+    world.resize((800.0, 600.0));
+    world.gesture(|app| app.click(Target::key("titlebar.automations")));
+    automations_troubled(&mut world, "automations-smallest", dark);
+    for key in ["automations.new", "automations.form.trigger-scheduled"] {
+        world.gesture(|app| app.click(Target::key(key)));
+    }
+    snap(&mut world, "automation-smallest", dark);
+}
+
+/// The drawer when the daemon could not list the automations.
+fn automations_failed(dark: bool) {
+    let daemon = automations_daemon(dark, Vec::new());
+    daemon.on("automation_definitions_get", |_: &Request| {
+        message(AutomationDefinitionsResultMessage {
+            success: false,
+            error: Some("automation_definitions_get failed: database is locked".into()),
+            ..AutomationDefinitionsResultMessage::new()
+        })
+    });
+    let mut world = start(daemon);
+    world.gesture(|app| app.click(Target::key("titlebar.automations")));
+    snap(&mut world, "automations-failed", dark);
+}
+
+/// An automation's form when the daemon could not read it, with Retry.
+fn automation_load_failed(dark: bool) {
+    let daemon = automations_daemon(dark, automations());
+    daemon.on("automation_definition_get", |_: &Request| {
+        message(AutomationDefinitionResultMessage {
+            success: false,
+            error: Some("automation_definition_get failed: no automation 2 in this profile".into()),
+            ..AutomationDefinitionResultMessage::new()
+        })
+    });
+    let mut world = start(daemon);
+    world.gesture(|app| app.click(Target::key("titlebar.automations")));
+    world.gesture(|app| app.click(Target::key("automations.edit.2")));
+    snap(&mut world, "automation-load-failed", dark);
+}
+
 /// The Chief before its setup, and a member between sessions.
 fn crew() -> Vec<CrewMember> {
     let member = |id: &str, name: &str, chief: bool| CrewMember {
@@ -3103,7 +3249,22 @@ fn manage_crew(dark: bool, member: &str, tab: &str, name: &str) {
 
 /// Manage crew open, over a daemon that also lists the desktops a member can launch on.
 fn crew_page(dark: bool) -> World {
+    crew_page_with(dark, false)
+}
+
+/// Manage crew in the smallest window at 150% text, then renaming a member there.
+fn crew_smallest(dark: bool) {
+    let mut world = crew_page_with(dark, true);
+    snap(&mut world, "crew-smallest", dark);
+    world.gesture(|app| app.click(Target::key("crew.rename")));
+    snap(&mut world, "crew-renaming", dark);
+}
+
+fn crew_page_with(dark: bool, smallest: bool) -> World {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    if smallest && let Some(settings) = state.settings.as_mut() {
+        settings.insert("uiScale".into(), "1.5".into());
+    }
     state.crew = Some(
         crew()
             .into_iter()
@@ -3178,6 +3339,9 @@ fn crew_page(dark: bool) -> World {
             })
         });
     let mut world = start(daemon);
+    if smallest {
+        world.resize((800.0, 600.0));
+    }
     run(&mut world, Action::OpenCrew);
     world
 }
@@ -3730,6 +3894,80 @@ fn session_seed_context(dark: bool) {
     world.gesture(|app| app.type_text("Show working agent's seeds"));
     world.gesture(|app| app.press("enter"));
     snap(&mut world, "session-seed-context", dark);
+}
+
+/// A critical failure with its evidence and actions, a warning and a read notice; then the
+/// failure opened.
+fn notifications_listed(dark: bool) {
+    let notification = |id: &str, severity: &str, title: &str| attn_protocol::Notification {
+        id: id.into(),
+        kind: "task_failed".into(),
+        severity: severity.into(),
+        title: title.into(),
+        body: "The nightly dependency upgrade stopped before it opened its pull request.".into(),
+        created_at: "2030-06-01T07:00:00Z".into(),
+        ..attn_protocol::Notification::default()
+    };
+    let failed = attn_protocol::Notification {
+        trigger: "Scheduled run of Nightly dependency upgrade".into(),
+        impact: "No pull request was opened for the services repository tonight.".into(),
+        cause: "Codex does not trust /home/someone/projects/InternationalEngineeringObservability"
+            .into(),
+        diagnostic: "stderr: error: this folder is not trusted; run codex trust to allow it".into(),
+        actions: Some(vec![attn_protocol::NotificationAction {
+            kind: "retry_task".into(),
+            label: "Retry".into(),
+            target_id: "task-1".into(),
+        }]),
+        ..notification("failed", "critical", "Nightly dependency upgrade failed")
+    };
+    let feed = vec![
+        failed,
+        notification("warn", "warning", "Disk is 92% full on studio"),
+        attn_protocol::Notification {
+            read_at: "2030-06-01T07:05:00Z".into(),
+            ..notification("info", "info", "Codex 0.42 is ready to install")
+        },
+    ];
+    let mut world = popover_world(
+        dark,
+        |_| {},
+        move |daemon| {
+            let feed = feed.clone();
+            daemon.on("notification_list", move |r: &Request| {
+                message(NotificationListResultMessage {
+                    request_id: request_id(r),
+                    success: true,
+                    notifications: Some(feed.clone()),
+                    ..NotificationListResultMessage::new()
+                })
+            });
+        },
+    );
+    world.gesture(|app| app.click(Target::key("titlebar.notifications")));
+    snap(&mut world, "notifications-listed", dark);
+    world.gesture(|app| app.click(Target::key("notifications.row.failed.head")));
+    snap(&mut world, "notifications-open", dark);
+}
+
+/// The panel when the daemon could not list the notifications.
+fn notifications_failed(dark: bool) {
+    let mut world = popover_world(
+        dark,
+        |_| {},
+        |daemon| {
+            daemon.on("notification_list", |r: &Request| {
+                message(NotificationListResultMessage {
+                    request_id: request_id(r),
+                    success: false,
+                    error: Some("notification_list failed: database is locked".into()),
+                    ..NotificationListResultMessage::new()
+                })
+            });
+        },
+    );
+    world.gesture(|app| app.click(Target::key("titlebar.notifications")));
+    snap(&mut world, "notifications-failed", dark);
 }
 
 fn notifications_empty(dark: bool) {
@@ -4581,6 +4819,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("review_send_sheet", || review_send_sheet(dark));
         scene("ledger_seeded", || ledger_seeded(dark));
         scene("ledger_worktrees", || ledger_worktrees(dark));
+        scene("ledger_smallest", || ledger_smallest(dark));
+        scene("ledger_failed", || ledger_failed(dark));
         scene("chief_setup", || chief_setup(dark));
         scene("home", || home(dark));
         scene("home_empty", || home_empty(dark));
@@ -4622,6 +4862,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("session_usage", || session_usage(dark));
         scene("session_seed_context", || session_seed_context(dark));
         scene("notifications_empty", || notifications_empty(dark));
+        scene("notifications_listed", || notifications_listed(dark));
+        scene("notifications_failed", || notifications_failed(dark));
         scene("desktop_overview", || desktop_overview(dark));
         scene("settings_delegation", || settings_delegation(dark));
         scene("settings_section", || {
@@ -4666,6 +4908,10 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("automation_edit", || automation_edit(dark));
         scene("automation_github", || automation_github(dark));
         scene("automation_advanced", || automation_advanced(dark));
+        scene("automations_trouble", || automations_trouble(dark));
+        scene("automations_smallest", || automations_smallest(dark));
+        scene("automations_failed", || automations_failed(dark));
+        scene("automation_load_failed", || automation_load_failed(dark));
         scene("diagnostic_report", || diagnostic_report(dark));
         scene("quick_capture_empty", || quick_capture_empty(dark));
         scene("quick_capture", || quick_capture(dark));
@@ -4678,6 +4924,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("notebook_tile_finder", || notebook_tile_finder(dark));
         scene("merge_confirmation", || merge_confirmation(dark));
         scene("desktop_naming", || desktop_naming(dark));
+        scene("crew_smallest", || crew_smallest(dark));
         scene("shared_codex_restart", || shared_codex_restart(dark));
         scene("session_not_created", || session_not_created(dark));
         scene("outposts_banners", || outposts_banners(dark));

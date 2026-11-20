@@ -2,7 +2,7 @@
 //! reads the daemon's ledger a page at a time, keeps the page current as sessions close, and
 //! reopens a closed session under its own id.
 
-mod parts;
+mod mark;
 pub(crate) mod query;
 mod view;
 

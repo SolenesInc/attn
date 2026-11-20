@@ -33,13 +33,13 @@ mod type_role;
 
 pub use button::{Button, Look};
 pub use chip::{chip_button, count_badge, keycaps, keys_hint, number_chip, slot_badge};
-pub use choice::{Choice, choices};
+pub use choice::{Choice, checks, choices};
 pub use control::Control;
 pub use disclosure::disclosure;
 pub use dot::{DotShape, DotSize, dot};
 pub use drop_zone::drop_zone;
 pub use expander::{expander, opens_in_place};
-pub use field_box::{FieldState, area_box, line_box, number_box};
+pub use field_box::{FieldState, area_box, code_box, line_box, number_box};
 pub use focus::RING_REACH;
 pub use group_head::GroupHead;
 pub use icon_box::icon_box;

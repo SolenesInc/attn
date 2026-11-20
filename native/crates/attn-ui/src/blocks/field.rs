@@ -21,7 +21,8 @@ pub struct Field {
 }
 
 impl Field {
-    /// `key` names the field, its label `{key}.label` and the value it shows `{key}.value`.
+    /// `key` names what the field holds, such as the input inside it: the field is `{key}.field`,
+    /// its label `{key}.label`, the value it shows `{key}.value` and its error `{key}.error`.
     pub fn new(key: impl Into<String>, label: impl Into<String>) -> Field {
         Field {
             key: key.into(),
@@ -124,16 +125,19 @@ impl Field {
             );
         }
         let field = col()
-            .key(self.key)
+            .key(format!("{}.field", self.key))
             .w_full()
             .max_w(FIELD)
             .child(label)
             .children(controls)
             .children(value)
-            .children(
-                self.error
-                    .map(|e| words(e, Type::Small, t.error).role("alert").wrap()),
-            )
+            .children(self.error.map(|e| {
+                words(e.clone(), Type::Small, t.error)
+                    .key(format!("{}.error", self.key))
+                    .role("alert")
+                    .label(e)
+                    .wrap()
+            }))
             .children(self.refusal)
             .children(
                 self.hint

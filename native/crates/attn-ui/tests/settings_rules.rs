@@ -80,8 +80,8 @@ fn a_fields_label_runs_to_the_fields_measure_before_it_wraps() {
         let all = rt.elements();
         let field = all
             .iter()
-            .find(|e| e.key.as_deref() == Some(key))
-            .unwrap_or_else(|| panic!("{variant}: no {key}"));
+            .find(|e| e.key.as_deref() == Some(format!("{key}.field").as_str()))
+            .unwrap_or_else(|| panic!("{variant}: no {key}.field"));
         let label = all
             .iter()
             .find(|e| e.key.as_deref() == Some(format!("{key}.label").as_str()))

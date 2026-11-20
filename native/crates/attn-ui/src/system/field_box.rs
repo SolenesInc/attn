@@ -40,12 +40,18 @@ impl FieldState {
 
 /// A one-line text field filling its column.
 pub fn line_box(input: TextInput, state: FieldState, t: &Tokens) -> Control {
-    single_line(input.width(None), state, t)
+    single_line(input.width(None), Type::Body, state, t)
+}
+
+/// A one-line text field filling its column whose value is code, such as a command or a cron
+/// expression: the same box as [`line_box`], its value set in `Mono`.
+pub fn code_box(input: TextInput, state: FieldState, t: &Tokens) -> Control {
+    single_line(input.width(None), Type::Mono, state, t)
 }
 
 /// A field that holds a number, at the one width every number field takes.
 pub fn number_box(input: TextInput, state: FieldState, t: &Tokens) -> Control {
-    single_line(input.width(Some(NUMBER_WIDTH)), state, t)
+    single_line(input.width(Some(NUMBER_WIDTH)), Type::Body, state, t)
 }
 
 /// A text field of several lines, filling its column.
@@ -61,9 +67,9 @@ pub fn area_box(area: TextArea, state: FieldState, t: &Tokens) -> Control {
     Control::new(boxed(area, state, t), size)
 }
 
-fn single_line(input: TextInput, state: FieldState, t: &Tokens) -> Control {
+fn single_line(input: TextInput, value: Type, state: FieldState, t: &Tokens) -> Control {
     let size = Size::Regular;
-    let field = door::line(input, Type::Body)
+    let field = door::line(input, value)
         .height(size.height())
         .fade_overflow()
         .disabled_ink(t.text_primary)

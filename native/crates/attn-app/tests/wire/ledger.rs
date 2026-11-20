@@ -861,6 +861,41 @@ fn the_inspector_says_when_a_session_was_seen_and_what_it_spent_as_the_header_ba
 }
 
 #[test]
+fn choosing_a_row_or_a_list_lays_the_panel_out_at_once_and_nothing_moves_after() {
+    let mut world = world();
+    open(&mut world);
+    let held = |world: &mut World, keys: &[&str]| {
+        let at: Vec<[f64; 4]> = keys.iter().map(|k| world.rect(k)).collect();
+        world.advance(std::time::Duration::from_millis(400));
+        let after: Vec<[f64; 4]> = keys.iter().map(|k| world.rect(k)).collect();
+        assert_eq!(at, after, "{keys:?} moved after the press");
+    };
+    let still = |world: &World, after: &str| {
+        assert!(
+            world.runtime_is_at_rest(),
+            "the panel still moves after {after}"
+        );
+    };
+    click(&mut world, "ledger.row.docs");
+    still(&world, "choosing a row");
+    held(
+        &mut world,
+        &["ledger.inspector", "ledger.row.docs", "ledger.list"],
+    );
+    click(&mut world, "ledger.tab.worktrees");
+    still(&world, "showing worktrees");
+    held(
+        &mut world,
+        &["ledger.inspector", "ledger.list", "ledger.status"],
+    );
+    click(&mut world, "ledger.tab.sessions");
+    held(
+        &mut world,
+        &["ledger.inspector", "ledger.list", "ledger.status"],
+    );
+}
+
+#[test]
 fn the_keys_walk_rows_open_the_menu_copy_the_path_and_back_out_one_layer_at_a_time() {
     let mut world = world();
     open(&mut world);

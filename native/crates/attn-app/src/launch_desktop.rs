@@ -7,6 +7,7 @@ use attn_client::Desktop;
 use attn_protocol::{
     LaunchDesktopGetMessage, LaunchDesktopKind, LaunchDesktopResultMessage, LaunchDesktopSetting,
 };
+use attn_ui::system::{Trigger, TriggerLook, Type, words};
 use attn_ui::type_;
 use attn_ui::{Dialog, DialogFrame, Tokens};
 use rune::{El, Key, KeyEvent, TextEdit, Tx, col, text};
@@ -30,13 +31,11 @@ pub(crate) struct Field {
     pub(crate) default_name: String,
     pub(crate) value: Option<LaunchDesktopSetting>,
     pub(crate) disabled: bool,
-    /// The select's height in points, as the owner's Tauri form draws it.
-    pub(crate) height: f32,
     pub(crate) on_change: Change,
 }
 
 impl Field {
-    fn select_key(&self) -> String {
+    pub(crate) fn select_key(&self) -> String {
         format!("{}.desktop", self.key)
     }
 }
@@ -180,7 +179,6 @@ fn select(state: &State, field: &Field) -> Select {
     Select::new(field.select_key(), &labels)
         .label("Desktop")
         .appearance(SelectAppearance::Field)
-        .height(field.height)
         .current(current.as_deref())
         .disabled(field.disabled)
         .open(is_open(state, field))
@@ -302,37 +300,36 @@ fn cancel_name(state: &mut State, tx: &mut Tx) {
 }
 
 /// The select as its owner lays it out, with why the desktops could not be read.
-pub(crate) fn field(state: &State, t: &Tokens, field: &Field) -> El {
-    let mut unused = Vec::new();
-    let trigger = select(state, field)
-        .build(attn_ui::kit(t), &mut unused)
-        .w_full()
-        .fill(t.bg_button);
+/// The desktop choice as a field that opens its list, keyed as the list's anchor, and why the
+/// desktops could not be read.
+pub(crate) fn trigger(state: &State, t: &Tokens, field: &Field) -> (El, Option<String>) {
+    let options = options(state, field);
+    let current = selected(field.value.as_ref());
+    let shown = options
+        .iter()
+        .find(|(_, c)| *c == current)
+        .map(|(l, _)| l.clone())
+        .unwrap_or_default();
+    let toggled = field.clone();
+    let trigger = Trigger::new(
+        format!("{}-trigger", field.select_key()),
+        "Desktop",
+        words(shown.clone(), Type::Body, t.text_primary).truncate(),
+    )
+    .look(TriggerLook::Field)
+    .value(shown)
+    .open(is_open(state, field))
+    .disabled(field.disabled)
+    .build(t, move |state: &mut State, _: &mut Tx| {
+        toggle(state, &toggled)
+    });
     let error = state
         .window
         .launch_desktop
         .reads
         .get(&field.select_key())
         .and_then(|r| r.error.clone());
-    col()
-        .w_full()
-        .gap(6.0)
-        .child(
-            text("Desktop")
-                .font(rune::TextStyle::new(12.0, 400.0))
-                .color(t.text_primary)
-                .a11y_hidden(),
-        )
-        .child(trigger)
-        .children(error.map(|why| {
-            text(why.clone())
-                .key(format!("{}.error", field.select_key()))
-                .role("alert")
-                .label(why)
-                .font(type_::LABEL)
-                .color(t.error)
-                .wrap()
-        }))
+    (El::from(trigger).role("combobox"), error)
 }
 
 /// The open select's list and the new desktop's name, over the owner's layer.

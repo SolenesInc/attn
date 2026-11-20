@@ -6,6 +6,7 @@ pub mod block_gallery;
 pub mod blocks;
 pub mod chrome_gallery;
 pub mod colors;
+pub mod panel_gallery;
 mod scroll_bar;
 pub mod settings_gallery;
 pub mod system;

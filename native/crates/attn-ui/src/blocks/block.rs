@@ -13,6 +13,7 @@ pub(crate) enum Kind {
     Field,
     Actions,
     Disclosure,
+    List,
     Facts,
     Control,
     Custom,

@@ -1,19 +1,19 @@
 use std::rc::Rc;
 
-use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens, glyph};
-use rune::tok::space;
-use rune::{Align, El, Key, KeyEvent, Side, TextEdit, Tx, col, row, text};
-use rune_kit::ScrollBar;
-use rune_kit::{
-    Button, ButtonVariant, Checkbox, ControlSize, Placement, PopupItem, PopupList, Select,
-    TextArea, TextInput,
+use attn_ui::blocks::{
+    Actions, Block, Disclosure, Field as FieldBlock, Inline, Notice, Prose, Refusal, Sheet, Stack,
 };
+use attn_ui::system::{
+    Button, FieldState, IconSize, Look, Segment, Segmented, Size, Trigger, TriggerLook, Type,
+    area_box, code_box, icon_button, line_box, switch, words,
+};
+use attn_ui::{Tokens, glyph};
+use rune::{Align, El, Key, KeyEvent, Side, TextEdit, Tx};
+use rune_kit::{Placement, PopupItem, PopupList, Select, TextArea, TextInput};
 
-use super::model::{CatchUp, Continuity, Field, Location, Trigger};
+use super::model::{CatchUp, Continuity, Field, Location, Trigger as Starts};
 use super::{Form, KEY, Load, ZoneSuggestions, field_key, form, form_mut};
 use crate::State;
-use crate::automations::look::{self, Look};
 use crate::automations::schedule::{ALL_DAYS, Friendly, Tab, Unit, WEEKDAYS};
 use crate::settings::{Route, RouteHarness, RouteTarget, Rules};
 
@@ -38,9 +38,6 @@ const MONTHS: [&str; 12] = [
 const WEEKDAY_NAMES: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 /// The prompt's least height, the Tauri app's `.automation-form__textarea { min-height: 120px }`.
 const PROMPT_HEIGHT: f32 = 120.0;
-/// The Tauri form's unstyled Desktop `<select>`, a macOS pop-up button: 20 points tall in
-/// the pixel audit's automations-notebook-21 crop.
-const DESKTOP_SELECT_HEIGHT: f32 = 20.0;
 /// attn checks schedules once a minute.
 const SCHEDULER_TICK_MS: i64 = 60_000;
 
@@ -52,84 +49,14 @@ fn key(name: &str) -> String {
     format!("{KEY}.{name}")
 }
 
-fn hint(words: impl Into<String>, t: &Tokens) -> El {
-    text(words.into())
-        .font(look::SMALL)
-        .color(t.text_tertiary)
-        .wrap()
+fn field_error(f: &Form, field: Field) -> Option<String> {
+    f.errors.get(&field).cloned()
 }
 
-fn label(words: &str, t: &Tokens) -> El {
-    text(words.to_owned())
-        .font(look::SMALL)
-        .color(t.text_secondary)
-}
-
-/// The Tauri app's `.schedule-composer__quiet` buttons: underlined words.
-fn link(words: &str, t: &Tokens) -> El {
-    let ink = t.text_tertiary;
-    look::quiet(words, ink, t).spans([rune::Span::new(0, words.len()).underline(ink)])
-}
-
-/// A fact about the trigger, as the Tauri app's `.automation-form__fact-chip`: a pill.
-fn fact(words: &str, t: &Tokens) -> El {
-    text(words.to_owned())
-        .font(look::SMALL)
-        .color(t.text_secondary)
-        .self_start()
-        .px(12.0)
-        .py(4.0)
-        .radius(20.0)
-        .fill(t.bg_elevated)
-}
-
-/// What always holds, as the Tauri app's `.automation-form__invariant`: a box with a brand dot.
-fn invariant(words: &str, t: &Tokens) -> El {
-    row()
-        .w_full()
-        .gap(space::S2)
-        .items_center()
-        .px(12.0)
-        .py(8.0)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .child(rune::el().size(6.0, 6.0).radius(3.0).fill(t.brand))
-        .child(
-            text(words.to_owned())
-                .font(look::SMALL)
-                .color(t.text_secondary)
-                .wrap()
-                .grow(1.0),
-        )
-}
-
-fn error(field_key: String, words: &str, t: &Tokens) -> El {
-    text(words.to_owned())
-        .key(format!("{field_key}.error"))
-        .role("alert")
-        .font(look::SMALL)
-        .color(t.error)
-        .wrap()
-}
-
-const SECTION_LABEL: rune::TextStyle = rune::TextStyle {
-    weight: 600.0,
-    ..type_::SANS_CAPS
-};
-
-fn section(label: &str, t: &Tokens) -> El {
-    col()
-        .w_full()
-        .gap(space::S2)
-        .pb(14.0)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-        .child(type_::upper(label, SECTION_LABEL).color(t.text_tertiary))
-}
-
-fn field_error(f: &Form, field: Field, t: &Tokens) -> Option<El> {
-    f.errors
-        .get(&field)
-        .map(|words| error(field_key(field), words, t))
+fn edited(state: &mut State, checked: Option<fn(&Field) -> bool>) {
+    if let (Some(f), Some(which)) = (form_mut(state), checked) {
+        f.edited(which);
+    }
 }
 
 fn input(
@@ -141,25 +68,39 @@ fn input(
     on_edit: fn(&mut State) -> &mut TextEdit,
     t: &Tokens,
 ) -> El {
+    text_field(f, edit, field_key, label, placeholder, on_edit, line_box, t)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn text_field(
+    f: &Form,
+    edit: &TextEdit,
+    field_key: String,
+    label: &str,
+    placeholder: &str,
+    on_edit: fn(&mut State) -> &mut TextEdit,
+    shown: fn(TextInput, FieldState, &Tokens) -> attn_ui::system::Control,
+    t: &Tokens,
+) -> El {
     let checked = super::field_of_key(&field_key);
-    let invalid = checked.is_some_and(|which| f.errors.keys().any(which));
-    TextInput::new(edit)
+    let refused = checked.is_some_and(|which| f.errors.keys().any(which));
+    let input = TextInput::new(edit)
         .key(field_key)
         .label(label)
         .placeholder(placeholder)
-        .invalid(invalid)
         .spellcheck(false)
-        .disabled(f.saving)
         .on_edit(on_edit)
-        .on_change(move |state: &mut State, _: &mut Tx| {
-            if let (Some(f), Some(which)) = (form_mut(state), checked) {
-                f.edited(which);
-            }
-        })
-        .on_submit(super::save)
-        .build(kit(t))
-        .fill(t.bg_elevated)
-        .w_full()
+        .on_change(move |state: &mut State, _: &mut Tx| edited(state, checked))
+        .on_submit(super::save);
+    shown(input, state_of(f, refused), t).into()
+}
+
+fn state_of(f: &Form, refused: bool) -> FieldState {
+    if f.saving {
+        FieldState::Disabled
+    } else {
+        FieldState::failed_if(refused)
+    }
 }
 
 fn field_of(state: &mut State, pick: impl FnOnce(&mut Form) -> &mut TextEdit) -> &mut TextEdit {
@@ -179,228 +120,159 @@ pub(crate) fn view(state: &State, f: &Form, t: &Tokens) -> El {
     } else {
         "New automation"
     };
-    let mut header = row()
-        .key(key("header"))
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .pb(8.0)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
-        .child(
-            text(title)
-                .font(type_::TITLE)
-                .color(t.text_primary)
-                .grow(1.0),
+    let close = icon_button(key("close"), "Close", glyph::TIMES, IconSize::Large)
+        .on_press_tx(super::close)
+        .build(t);
+    let mut sheet = Sheet::new(KEY, title);
+    if let (Some(id), Load::Ready) = (f.id, &f.load) {
+        let said = format!("ID: {id}");
+        sheet = sheet.aside(
+            words(said.clone(), Type::Small, t.text_tertiary)
+                .key(key("id"))
+                .label(said),
         );
+    }
     if let (Some(enabled), Load::Ready) = (f.enabled, &f.load) {
         let word = if enabled { "Enabled" } else { "Disabled" };
-        let (edge, ink) = if enabled {
-            (t.brand, t.brand)
-        } else {
-            (t.border_subtle, t.text_secondary)
-        };
-        header = header.child(
-            row()
-                .key(key("enabled"))
-                .role("switch")
-                .label(word)
-                .checked(enabled)
-                .focusable(true)
-                .focus_ring(2.0, 2.0, t.brand)
-                .px(10.0)
-                .py(3.0)
-                .radius(999.0)
-                .fill(t.bg_elevated)
-                .border(1.0, edge)
-                .hover(t.bg_selected)
-                .child(text(word).font(look::SMALL).color(ink).a11y_hidden())
-                .on_press_tx(super::toggle_enabled),
+        sheet = sheet.aside(
+            Inline::loose()
+                .child(words(word, Type::Control, t.text_secondary).a11y_hidden())
+                .child(El::from(switch(
+                    key("enabled"),
+                    word,
+                    enabled,
+                    false,
+                    false,
+                    t,
+                    |state: &mut State, tx: &mut Tx| super::toggle_enabled(state, tx),
+                ))),
         );
     }
-    header = header.child(
-        GlyphButton::new(glyph::TIMES, "Close")
-            .font(glyph::SMALL)
-            .color(t.text_secondary)
-            .side(19.0)
-            .on_press_tx(super::close)
-            .build(kit(t))
-            .key(key("close")),
-    );
-    let body = match &f.load {
-        Load::Loading => text("Loading…")
-            .font(look::REGULAR)
-            .color(t.text_tertiary)
-            .py(16.0),
-        Load::Failed(why) => error(key("load"), why, t),
-        Load::Ready => fields(state, f, t),
+    let sheet = sheet.close(close);
+    let sheet = match &f.load {
+        Load::Loading => sheet.push(Prose::lead(key("loading"), "Loading…").quiet(true).build(t)),
+        Load::Failed(why) => sheet.push(
+            Notice::error(format!("{}.error", key("load")), why.clone())
+                .action(
+                    Button::new("Retry")
+                        .on_press_tx(super::reload)
+                        .build(t)
+                        .key(key("retry")),
+                )
+                .build(t),
+        ),
+        Load::Ready => {
+            let mut sheet = sheet.push_all(fields(state, f, t));
+            for block in footer(f, t) {
+                sheet = sheet.footer(block);
+            }
+            sheet
+        }
     };
-    let mut form_el = col()
-        .key(KEY)
-        .role("form")
-        .label(title)
-        .w_full()
-        .grow(1.0)
-        .min_h(0.0)
-        .gap(10.0)
-        .padding(16.0)
-        .child(header)
-        .child(
-            col()
-                .key(key("body"))
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .pl(2.0)
-                .pr(2.0)
-                .scroll(rune::ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(body)
-                .scroll_bar_styled(attn_ui::scroll_bar(t)),
-        );
-    if f.load == Load::Ready {
-        form_el = form_el.child(actions(f, t));
-    }
-    form_el
+    sheet.build(t).role("form").label(title)
 }
 
-fn fields(state: &State, f: &Form, t: &Tokens) -> El {
-    let mut body = col().w_full().gap(18.0);
+fn fields(state: &State, f: &Form, t: &Tokens) -> Vec<Block> {
+    let mut out = Vec::new();
     if f.saving {
-        body = body.child(hint("Saving…", t).key(key("saving")));
+        out.push(Prose::lead(key("saving"), "Saving…").quiet(true).build(t));
     }
-    body.child(name(f, t))
-        .child(trigger(f, t))
-        .child(launch(state, f, t))
-        .child(prompt(f, t))
-        .child(advanced(f, t))
-}
-
-fn name(f: &Form, t: &Tokens) -> El {
-    let mut s = section("Name", t)
-        .child(input(
-            f,
-            &f.name,
-            field_key(Field::Name),
-            "Name",
-            "Automation name",
-            |s| field_of(s, |f| &mut f.name),
-            t,
-        ))
-        .children(field_error(f, Field::Name, t));
-    if let Some(id) = f.id {
-        s = s.child(hint(format!("ID: {id}"), t).key(key("id")));
+    out.push(
+        FieldBlock::new(field_key(Field::Name), "Name")
+            .control(input(
+                f,
+                &f.name,
+                field_key(Field::Name),
+                "Name",
+                "Automation name",
+                |s| field_of(s, |f| &mut f.name),
+                t,
+            ))
+            .error(field_error(f, Field::Name))
+            .build(t),
+    );
+    let mut starts = FieldBlock::new(key("triggers"), "Trigger").control(trigger(f, t));
+    if f.trigger == Starts::Manual {
+        starts = starts.hint("Fresh worker each run");
     }
-    s
+    out.push(starts.build(t));
+    match f.trigger {
+        Starts::Manual => {
+            if f.location == Location::Directory {
+                out.push(directory(f, t));
+            }
+        }
+        Starts::Scheduled => {
+            out.extend(schedule(f, t));
+            out.push(
+                FieldBlock::new(key("guard"), "Only run if")
+                    .control(text_field(
+                        f,
+                        &f.guard,
+                        key("guard"),
+                        "Only run if",
+                        "git rev-parse HEAD",
+                        |s| field_of(s, |f| &mut f.guard),
+                        code_box,
+                        t,
+                    ))
+                    .hint("Runs in the folder before each scheduled run. The agent starts only when the command prints something new.")
+                    .build(t),
+            );
+            out.push(directory(f, t));
+        }
+        Starts::GitHub => out.extend(github(f, t)),
+    }
+    out.extend(launch(state, f, t));
+    out.push(prompt(f, t));
+    out.push(advanced(f, t));
+    out
 }
 
 fn trigger(f: &Form, t: &Tokens) -> El {
-    let cards = [
-        (Trigger::Manual, "manual", "Manual"),
-        (Trigger::Scheduled, "scheduled", "Scheduled"),
-        (Trigger::GitHub, "github", "PR review requested"),
+    let starts = [
+        (Starts::Manual, "manual", "Manual"),
+        (Starts::Scheduled, "scheduled", "Scheduled"),
+        (Starts::GitHub, "github", "PR review requested"),
     ];
-    let s = section("Trigger", t).child(
-        row()
-            .key(key("triggers"))
-            .role("group")
-            .label("Trigger")
-            .w_full()
-            .gap(space::S2)
-            .children(cards.into_iter().map(|(trigger, id, label)| {
-                let chosen = f.trigger == trigger;
-                let (fill, edge, ink) = if chosen {
-                    (t.brand.alpha(0.15), t.brand, t.text_primary)
-                } else {
-                    (t.bg_elevated, t.border, t.text_secondary)
-                };
-                Button::new(label)
-                    .variant(ButtonVariant::Ghost)
-                    .control_size(ControlSize::Small)
-                    .label_with(move |font, _| text(label).font(font).color(ink))
-                    .disabled(f.saving)
-                    .on_press(move |state: &mut State| super::choose_trigger(state, trigger))
-                    .build(kit(t))
-                    .key(key(&format!("trigger-{id}")))
-                    .checked(chosen)
-                    .radius(6.0)
-                    .fill(fill)
-                    .border(1.0, edge)
-                    .grow(1.0)
-            })),
-    );
-    let mut details = col().w_full().gap(10.0).pt(4.0);
-    match f.trigger {
-        Trigger::Manual => {
-            details = details.child(fact("Fresh worker each run", t));
-            if f.location == Location::Directory {
-                details = details.child(directory(f, t));
-            }
-        }
-        Trigger::Scheduled => {
-            details = details
-                .child(schedule(f, t))
-                .child(
-                    col()
-                        .w_full()
-                        .gap(space::S1)
-                        .child(label("Only run if", t))
-                        .child(input(
-                            f,
-                            &f.guard,
-                            key("guard"),
-                            "Only run if",
-                            "git rev-parse HEAD",
-                            |s| field_of(s, |f| &mut f.guard),
-                            t,
-                        ))
-                        .child(hint(
-                            "Runs in the folder before each scheduled run. The agent starts only when the command prints something new.",
-                            t,
-                        )),
-                )
-                .child(directory(f, t));
-        }
-        Trigger::GitHub => details = details.child(github(f, t)),
-    }
-    s.child(details)
-}
-
-fn directory(f: &Form, t: &Tokens) -> El {
-    col()
-        .w_full()
-        .gap(space::S1)
-        .child(label("Folder", t))
-        .child(
-            row()
-                .w_full()
-                .gap(space::S2)
-                .items_stretch()
-                .child(
-                    input(
-                        f,
-                        &f.directory,
-                        field_key(Field::DirectoryPath),
-                        "Folder",
-                        "/absolute/path",
-                        |s| field_of(s, |f| &mut f.directory),
-                        t,
-                    )
-                    .grow(1.0),
-                )
-                .child(
-                    look::button("Browse", Look::Neutral, t, |b| {
-                        b.disabled(f.saving)
-                            .on_press_tx(|_: &mut State, tx: &mut Tx| super::browse(tx))
+    El::from(
+        Segmented::new(key("triggers"), "Trigger")
+            .disabled(f.saving)
+            .options(starts.into_iter().map(|(trigger, id, label)| {
+                Segment::new(key(&format!("trigger-{id}")), label)
+                    .chosen(f.trigger == trigger)
+                    .on_press_tx(move |state: &mut State, _: &mut Tx| {
+                        super::choose_trigger(state, trigger)
                     })
-                    .key(key("browse"))
-                    .h_full(),
-                ),
-        )
-        .children(field_error(f, Field::DirectoryPath, t))
+            }))
+            .build(t),
+    )
+    .self_start()
 }
 
-fn repository_list(f: &Form, exclude: bool, t: &Tokens) -> El {
+fn directory(f: &Form, t: &Tokens) -> Block {
+    FieldBlock::new(field_key(Field::DirectoryPath), "Folder")
+        .control(input(
+            f,
+            &f.directory,
+            field_key(Field::DirectoryPath),
+            "Folder",
+            "/absolute/path",
+            |s| field_of(s, |f| &mut f.directory),
+            t,
+        ))
+        .action(
+            Button::new("Browse")
+                .disabled(f.saving)
+                .on_press_tx(|_: &mut State, tx: &mut Tx| super::browse(tx))
+                .build(t)
+                .key(key("browse")),
+        )
+        .error(field_error(f, Field::DirectoryPath))
+        .build(t)
+}
+
+fn repository_list(f: &Form, exclude: bool, t: &Tokens) -> Block {
     let (list, draft, name, label) = if exclude {
         (
             &f.exclude,
@@ -423,35 +295,31 @@ fn repository_list(f: &Form, exclude: bool, t: &Tokens) -> El {
     };
     let input_key = key(&format!("repositories-{name}"));
     let chips = list.iter().enumerate().map(|(i, repository)| {
-        let invalid = f.errors.contains_key(&field(i));
-        row()
+        let refused = f.errors.contains_key(&field(i));
+        let remove = icon_button(
+            key(&format!("repositories-{name}-remove.{i}")),
+            format!("Remove {repository}"),
+            glyph::TIMES,
+            IconSize::Small,
+        )
+        .on_press(move |state: &mut State| {
+            super::remove_repository(state, exclude, i);
+        })
+        .build(t);
+        Inline::tight()
             .key(key(&format!("repositories-{name}-chip.{i}")))
-            .gap(space::S1)
-            .items_center()
-            .px(space::S2)
-            .radius(4.0)
-            .fill(t.bg_elevated)
-            .child(
-                text(repository.clone())
-                    .font(look::SMALL)
-                    .color(if invalid { t.error } else { t.text_primary }),
-            )
-            .child(
-                GlyphButton::new(glyph::TIMES, format!("Remove {repository}"))
-                    .side(18.0)
-                    .on_press(move |state: &mut State| {
-                        super::remove_repository(state, exclude, i);
-                    })
-                    .build(kit(t))
-                    .key(key(&format!("repositories-{name}-remove.{i}"))),
-            )
+            .child(words(
+                repository.clone(),
+                Type::Small,
+                if refused { t.error } else { t.text_primary },
+            ))
+            .child(remove.into())
     });
-    let field_input = TextInput::new(draft)
-        .key(input_key)
+    let draft_input = TextInput::new(draft)
+        .key(input_key.clone())
         .label(label)
         .placeholder("host/owner/repository")
         .spellcheck(false)
-        .disabled(f.saving)
         .on_edit(move |state: &mut State| {
             field_of(state, |f| {
                 if exclude {
@@ -478,42 +346,42 @@ fn repository_list(f: &Form, exclude: bool, t: &Tokens) -> El {
             let last = list.len() - 1;
             super::remove_repository(state, exclude, last);
             true
-        })
-        .build(kit(t))
-        .fill(t.bg_elevated)
-        .w_full();
+        });
     let errors = f
         .errors
         .iter()
         .filter(|(fl, _)| (0..list.len()).any(|i| **fl == field(i)))
         .map(|(_, words)| words.clone())
         .collect::<std::collections::BTreeSet<_>>();
-    col()
-        .w_full()
-        .gap(space::S1)
-        .child(self::label(label, t))
-        .child(row().w_full().gap(space::S1).flex_wrap().children(chips))
-        .child(field_input)
-        .children(
-            errors
-                .into_iter()
-                .map(|words| error(key(&format!("repositories-{name}")), &words, t)),
-        )
+    let mut out = FieldBlock::new(input_key, label);
+    if !list.is_empty() {
+        out = out.control(Inline::tight().children(chips));
+    }
+    out.control(line_box(draft_input, state_of(f, false), t))
+        .error((!errors.is_empty()).then(|| errors.into_iter().collect::<Vec<_>>().join(" ")))
+        .build(t)
 }
 
-fn github(f: &Form, t: &Tokens) -> El {
-    col()
-        .w_full()
-        .gap(space::S2)
-        .child(repository_list(f, false, t))
-        .child(repository_list(f, true, t))
-        .child(fact("One reviewer per PR — later request cycles return to it", t))
-        .child(fact("Existing requests are left alone when enabled", t))
-        .child(fact("Missed while attn was off: latest request still runs", t))
-        .child(invariant(
+fn github(f: &Form, t: &Tokens) -> Vec<Block> {
+    let facts = [
+        "One reviewer per PR — later request cycles return to it.",
+        "Existing requests are left alone when enabled.",
+        "Missed while attn was off: the latest request still runs.",
+    ];
+    vec![
+        repository_list(f, false, t),
+        repository_list(f, true, t),
+        Block::custom(key("github-facts.block"), 
+            Stack::tight()
+                .key(key("github-facts"))
+                .children(facts.map(|fact| words(fact, Type::Small, t.text_secondary).wrap())),
+        ),
+        Notice::info(
+            key("github-worktree"),
             "Reviews always run in a fresh worktree checked out at the PR's head commit — your existing clone is never touched.",
-            t,
-        ))
+        )
+        .build(t),
+    ]
 }
 
 pub(super) fn route_target() -> RouteTarget {
@@ -560,7 +428,7 @@ fn write_route(state: &mut State, _: &str, route: Route, _: &mut Tx) {
     }
 }
 
-fn launch(state: &State, f: &Form, t: &Tokens) -> El {
+fn launch(state: &State, f: &Form, t: &Tokens) -> Vec<Block> {
     let desktop = crate::launch_desktop::Field {
         key: match f.id {
             Some(id) => format!("{KEY}.{id}"),
@@ -572,156 +440,82 @@ fn launch(state: &State, f: &Form, t: &Tokens) -> El {
         default_name: f.name.text.clone(),
         value: f.launch_desktop.clone(),
         disabled: f.saving,
-        height: DESKTOP_SELECT_HEIGHT,
         on_change: super::choose_desktop,
     };
-    let mut s = section("Runs as", t)
-        .child(crate::launch_desktop::field(state, t, &desktop))
-        .child(crate::settings::route_chip(
-            state,
-            t,
-            route_target(),
-            "Automation model",
-        ));
+    let (choice, unread) = crate::launch_desktop::trigger(state, t, &desktop);
+    let mut hint =
+        "Automation sessions always run unattended with the agent's automatic approval mode."
+            .to_owned();
     if overridden(f) {
-        s = s.child(invariant(
-            "Use model and effort IDs accepted by the executable override.",
-            t,
-        ));
+        hint.push_str(" Use model and effort IDs accepted by the executable override.");
     }
-    s.child(invariant(
-        "Automation sessions always run unattended with the agent's automatic approval mode.",
-        t,
-    ))
+    vec![
+        FieldBlock::new(desktop.select_key(), "Desktop")
+            .control(choice)
+            .error(unread)
+            .build(t),
+        FieldBlock::new(key("runs-as"), "Runs as")
+            .control(crate::settings::route_chip(
+                state,
+                t,
+                route_target(),
+                "Automation model",
+            ))
+            .hint(hint)
+            .build(t),
+    ]
 }
 
-fn prompt(f: &Form, t: &Tokens) -> El {
+fn prompt(f: &Form, t: &Tokens) -> Block {
     let checked = super::field_of_key(&field_key(Field::Prompt));
-    section("Prompt", t)
-        .child(
-            col().w_full().child(
-                TextArea::new(&f.prompt)
-                    .key(field_key(Field::Prompt))
-                    .label("Prompt")
-                    .spellcheck(true)
-                    .min_height(PROMPT_HEIGHT)
-                    .resizable()
-                    .on_edit(|s: &mut State| field_of(s, |f| &mut f.prompt))
-                    .on_change(move |state: &mut State, _: &mut Tx| {
-                        if let (Some(f), Some(which)) = (form_mut(state), checked) {
-                            f.edited(which);
-                        }
-                    })
-                    .build(kit(t))
-                    .fill(t.bg_elevated)
-                    .invalid(f.errors.contains_key(&Field::Prompt))
-                    .w_full(),
-            ),
-        )
-        .child(hint(
-            "This is the instruction the agent receives. Trigger details arrive separately as structured context — they can never rewrite this prompt.",
-            t,
-        ))
-        .children(field_error(f, Field::Prompt, t))
+    let area = TextArea::new(&f.prompt)
+        .key(field_key(Field::Prompt))
+        .label("Prompt")
+        .spellcheck(true)
+        .min_height(PROMPT_HEIGHT)
+        .resizable()
+        .on_edit(|s: &mut State| field_of(s, |f| &mut f.prompt))
+        .on_change(move |state: &mut State, _: &mut Tx| edited(state, checked));
+    FieldBlock::new(field_key(Field::Prompt), "Prompt")
+        .control(area_box(area, state_of(f, f.errors.contains_key(&Field::Prompt)), t))
+        .hint("This is the instruction the agent receives. Trigger details arrive separately as structured context — they can never rewrite this prompt.")
+        .error(field_error(f, Field::Prompt))
+        .build(t)
 }
 
 fn segments<T: Copy + PartialEq + 'static>(
     name: &str,
     label: &str,
     current: T,
-    options: &[(T, &str, &str)],
+    options: &[(T, &str)],
     pick: fn(&mut Form, T),
     t: &Tokens,
 ) -> El {
-    let labels: Vec<&str> = options.iter().map(|(_, _, l)| *l).collect();
-    let values: Vec<T> = options.iter().map(|(v, ..)| *v).collect();
-    col()
-        .w_full()
-        .gap(space::S1)
-        .child(self::label(label, t))
-        .child(
-            segmented(
-                &labels,
-                options.iter().position(|(v, ..)| *v == current),
-                label,
-                move |state: &mut State, i: usize| {
-                    if let Some(f) = form_mut(state) {
-                        pick(f, values[i]);
-                    }
-                },
-                t,
-            )
-            .key(key(name)),
-        )
-}
-
-/// The Tauri app's `.automation-form__segmented`: joined segments at their own width, the chosen
-/// one in brand on a brand tint.
-fn segmented(
-    labels: &[&str],
-    chosen: Option<usize>,
-    label: &str,
-    pick: impl Fn(&mut State, usize) + Clone + 'static,
-    t: &Tokens,
-) -> El {
-    let last = labels.len().saturating_sub(1);
-    row()
-        .role("radiogroup")
-        .label(label.to_owned())
-        .focus_group()
-        .self_start()
-        .children(labels.iter().enumerate().map(|(i, words)| {
-            let on = chosen == Some(i);
-            let (fill, ink) = if on {
-                (t.brand.alpha(0.15), t.brand)
-            } else {
-                (t.bg_elevated, t.text_secondary)
-            };
-            let radius = match i {
-                0 => [6.0, 0.0, 0.0, 6.0],
-                i if i == last => [0.0, 6.0, 6.0, 0.0],
-                _ => [0.0; 4],
-            };
-            let edges = if i == 0 {
-                [1.0, 1.0, 1.0, 1.0]
-            } else {
-                [1.0, 1.0, 1.0, 0.0]
-            };
-            let pick = pick.clone();
-            row()
-                .key(format!("segment{i}"))
-                .role("radio")
-                .label((*words).to_owned())
-                .checked(on)
-                .position_in_set(i + 1, labels.len())
-                .focusable(true)
-                .focus_selected(on)
-                .focus_ring(2.0, 0.0, t.brand)
-                .px(12.0)
-                .py(5.0)
-                .corners(radius)
-                .fill(fill)
-                .border_sides(edges, t.border)
-                .hover(if on { fill } else { t.bg_selected })
-                .on_press(move |state: &mut State| pick(state, i))
-                .child(
-                    text((*words).to_owned())
-                        .font(look::SMALL)
-                        .color(ink)
-                        .a11y_hidden(),
-                )
-        }))
+    El::from(
+        Segmented::new(key(name), label)
+            .options(options.iter().enumerate().map(|(i, &(value, words))| {
+                Segment::new(format!("segment{i}"), words)
+                    .chosen(value == current)
+                    .on_press_tx(move |state: &mut State, _: &mut Tx| {
+                        if let Some(f) = form_mut(state) {
+                            pick(f, value);
+                        }
+                    })
+            }))
+            .build(t),
+    )
+    .self_start()
 }
 
 fn advanced_chips(f: &Form) -> Vec<String> {
     let mut chips = Vec::new();
-    if f.trigger == Trigger::Scheduled && f.continuity == Continuity::Singleton {
+    if f.trigger == Starts::Scheduled && f.continuity == Continuity::Singleton {
         chips.push("Same agent".into());
     }
-    if f.trigger == Trigger::Scheduled && f.catch_up == CatchUp::Skip {
+    if f.trigger == Starts::Scheduled && f.catch_up == CatchUp::Skip {
         chips.push("Skip missed runs".into());
     }
-    if f.trigger == Trigger::Manual && f.location == Location::Worktree {
+    if f.trigger == Starts::Manual && f.location == Location::Worktree {
         chips.push("Pull request worktree".into());
     }
     let clones = f.overrides.len();
@@ -738,333 +532,299 @@ fn advanced_chips(f: &Form) -> Vec<String> {
     chips
 }
 
-fn advanced(f: &Form, t: &Tokens) -> El {
+fn advanced(f: &Form, t: &Tokens) -> Block {
     let failed = f.errors.keys().any(|field| {
         matches!(
             field,
             Field::CatchUp | Field::OverrideRepository(_) | Field::OverridePath(_)
         )
     });
-    let ink = if failed { t.error } else { t.text_secondary };
-    let chips = advanced_chips(f);
-    let toggle = row()
-        .key(key("advanced"))
-        .role("button")
-        .label("Advanced")
-        .description(chips.join(", "))
-        .expanded(f.advanced)
-        .focusable(true)
-        .focus_ring(2.0, 2.0, t.brand)
-        .self_start()
-        .gap(space::S2)
-        .items_center()
-        .on_press(|state: &mut State| {
+    let mut part = Disclosure::new(
+        key("advanced"),
+        "Advanced",
+        f.advanced,
+        |state: &mut State, _: &mut Tx| {
             if let Some(f) = form_mut(state) {
                 f.advanced = !f.advanced;
             }
-        })
-        .child(
-            text(if f.advanced {
-                "▼ Advanced"
-            } else {
-                "▶ Advanced"
-            })
-            .font(look::SMALL)
-            .color(ink)
-            .a11y_hidden(),
-        )
-        .children(chips.iter().map(|chip| {
-            text(chip.clone())
-                .font(look::SMALL)
-                .color(t.text_secondary)
-                .px(7.0)
-                .py(1.0)
-                .radius(999.0)
-                .border(1.0, t.border_subtle)
-                .a11y_hidden()
-        }));
-    let mut s = col().w_full().gap(12.0).child(toggle);
-    if !f.advanced {
-        return s;
+        },
+    )
+    .tags(advanced_chips(f))
+    .failed(failed);
+    if f.trigger == Starts::Scheduled {
+        part = part
+            .push(
+                FieldBlock::new(key("continuity-field"), "Agent")
+                    .control(segments(
+                        "continuity",
+                        "Agent",
+                        f.continuity,
+                        &[
+                            (Continuity::Fresh, "New each run"),
+                            (Continuity::Singleton, "Same agent"),
+                        ],
+                        |f, v| f.continuity = v,
+                        t,
+                    ))
+                    .hint(match f.continuity {
+                        Continuity::Fresh => "Every run starts a new agent.",
+                        Continuity::Singleton => {
+                            "Every run goes to one agent, and it resumes if closed. Changing the prompt, model or folder starts a replacement."
+                        }
+                    })
+                    .build(t),
+            )
+            .push(
+                FieldBlock::new(field_key(Field::CatchUp), "Missed runs")
+                    .control(segments(
+                        "catchup",
+                        "Missed runs",
+                        f.catch_up,
+                        &[(CatchUp::Latest, "Run latest"), (CatchUp::Skip, "Skip")],
+                        |f, v| {
+                            f.catch_up = v;
+                            f.check(|field| *field == Field::CatchUp);
+                        },
+                        t,
+                    ))
+                    .hint(match f.catch_up {
+                        CatchUp::Skip => {
+                            "A missed time still runs if attn notices within 5 minutes. Older ones are dropped."
+                        }
+                        _ => "After downtime, one run for the most recent missed time.",
+                    })
+                    .error(field_error(f, Field::CatchUp))
+                    .build(t),
+            );
     }
-    if f.trigger == Trigger::Scheduled {
-        s = s
-            .child(segments(
-                "continuity",
-                "Agent",
-                f.continuity,
-                &[
-                    (Continuity::Fresh, "fresh", "New each run"),
-                    (Continuity::Singleton, "singleton", "Same agent"),
-                ],
-                |f, v| f.continuity = v,
-                t,
-            ))
-            .child(hint(
-                match f.continuity {
-                    Continuity::Fresh => "Every run starts a new agent.",
-                    Continuity::Singleton => {
-                        "Every run goes to one agent, and it resumes if closed. Changing the prompt, model or folder starts a replacement."
-                    }
-                },
-                t,
-            ))
-            .child(segments(
-                "catchup",
-                "Missed runs",
-                f.catch_up,
-                &[
-                    (CatchUp::Latest, "latest", "Run latest"),
-                    (CatchUp::Skip, "skip", "Skip"),
-                ],
-                |f, v| {
-                    f.catch_up = v;
-                    f.check(|field| *field == Field::CatchUp);
-                },
-                t,
-            ))
-            .child(hint(
-                match f.catch_up {
-                    CatchUp::Skip => {
-                        "A missed time still runs if attn notices within 5 minutes. Older ones are dropped."
-                    }
-                    _ => "After downtime, one run for the most recent missed time.",
-                },
-                t,
-            ))
-            .children(field_error(f, Field::CatchUp, t));
-    }
-    if f.trigger == Trigger::Manual {
-        s = s
-            .child(segments(
-                "location",
-                "Works in",
-                f.location,
-                &[
-                    (Location::Directory, "directory", "Folder"),
-                    (Location::Worktree, "worktree", "Pull request worktree"),
-                ],
-                |f, v| f.location = v,
-                t,
-            ))
-            .child(hint(
-                match f.location {
+    if f.trigger == Starts::Manual {
+        part = part.push(
+            FieldBlock::new(key("location-field"), "Works in")
+                .control(segments(
+                    "location",
+                    "Works in",
+                    f.location,
+                    &[
+                        (Location::Directory, "Folder"),
+                        (Location::Worktree, "Pull request worktree"),
+                    ],
+                    |f, v| f.location = v,
+                    t,
+                ))
+                .hint(match f.location {
                     Location::Directory => "The agent works in the folder above.",
                     Location::Worktree => {
                         "Run now asks for a pull request, and the agent works in a fresh worktree at its head."
                     }
-                },
-                t,
-            ));
+                })
+                .build(t),
+        );
     }
     if f.values().uses_worktree() {
-        s = s.child(overrides(f, t));
+        part = part.push(overrides(f, t));
     }
     if f.agent != "codex" {
-        s = s.child(input(
-            f,
-            &f.executable,
-            key("executable"),
-            "Executable",
-            "Default from PATH",
-            |s| field_of(s, |f| &mut f.executable),
-            t,
-        ));
+        part = part.push(
+            FieldBlock::new(key("executable"), "Executable")
+                .control(input(
+                    f,
+                    &f.executable,
+                    key("executable"),
+                    "Executable",
+                    "Default from PATH",
+                    |s| field_of(s, |f| &mut f.executable),
+                    t,
+                ))
+                .build(t),
+        );
     }
     if !f.yaml.is_empty() {
-        s = s.child(definition(f, t));
+        part = definition(f, t)
+            .into_iter()
+            .fold(part, |part, block| part.push(block));
     }
-    s
+    part.build(t)
 }
 
-fn overrides(f: &Form, t: &Tokens) -> El {
-    let rows = f
-        .overrides
-        .iter()
-        .enumerate()
-        .map(|(i, (repository, path))| {
-            let repo_key = field_key(Field::OverrideRepository(i));
-            let path_key = field_key(Field::OverridePath(i));
-            col()
+fn overrides(f: &Form, t: &Tokens) -> Block {
+    let clone_input = |edit: &TextEdit,
+                       field: Field,
+                       label: &str,
+                       placeholder: &str,
+                       on_edit: Box<dyn Fn(&mut State) -> &mut TextEdit>| {
+        let input = TextInput::new(edit)
+            .key(field_key(field))
+            .label(label)
+            .placeholder(placeholder)
+            .spellcheck(false)
+            .on_edit(move |s: &mut State| on_edit(s));
+        El::from(line_box(
+            input,
+            state_of(f, f.errors.contains_key(&field)),
+            t,
+        ))
+    };
+    let mut part = FieldBlock::new(key("overrides"), "Local clones");
+    let mut refusals = Vec::new();
+    for (i, (repository, path)) in f.overrides.iter().enumerate() {
+        part = part.control(
+            Inline::loose()
+                .key(key(&format!("override.{i}")))
                 .w_full()
-                .gap(space::S1)
                 .child(
-                    row()
-                        .key(key(&format!("override.{i}")))
-                        .w_full()
-                        .gap(space::S2)
-                        .items_center()
-                        .child(
-                            TextInput::new(repository)
-                                .key(repo_key)
-                                .label("Repository")
-                                .placeholder("host/owner/repository")
-                                .spellcheck(false)
-                                .invalid(f.errors.contains_key(&Field::OverrideRepository(i)))
-                                .on_edit(move |s: &mut State| {
-                                    field_of(s, |f| &mut f.overrides[i].0)
-                                })
-                                .build(kit(t))
-                                .fill(t.bg_elevated)
-                                .grow(1.0),
-                        )
-                        .child(
-                            TextInput::new(path)
-                                .key(path_key)
-                                .label("Path")
-                                .placeholder("/absolute/path")
-                                .spellcheck(false)
-                                .invalid(f.errors.contains_key(&Field::OverridePath(i)))
-                                .on_edit(move |s: &mut State| {
-                                    field_of(s, |f| &mut f.overrides[i].1)
-                                })
-                                .build(kit(t))
-                                .fill(t.bg_elevated)
-                                .grow(1.0),
-                        )
-                        .child(
-                            Button::new("Remove")
-                                .variant(ButtonVariant::GhostMuted)
-                                .control_size(ControlSize::Small)
-                                .on_press(move |state: &mut State| super::remove_override(state, i))
-                                .build(kit(t))
-                                .key(key(&format!("overrides-remove.{i}"))),
-                        ),
+                    clone_input(
+                        repository,
+                        Field::OverrideRepository(i),
+                        "Repository",
+                        "host/owner/repository",
+                        Box::new(move |s: &mut State| field_of(s, |f| &mut f.overrides[i].0)),
+                    )
+                    .grow(1.0),
                 )
-                .children(field_error(f, Field::OverrideRepository(i), t))
-                .children(field_error(f, Field::OverridePath(i), t))
-        });
-    col()
-        .w_full()
-        .gap(space::S2)
-        .child(label("Local clones", t))
-        .children(rows)
-        .child(
-            Button::new("Add override")
-                .control_size(ControlSize::Small)
-                .on_press_tx(super::add_override)
-                .build(kit(t))
-                .key(key("overrides-add")),
-        )
+                .child(
+                    clone_input(
+                        path,
+                        Field::OverridePath(i),
+                        "Path",
+                        "/absolute/path",
+                        Box::new(move |s: &mut State| field_of(s, |f| &mut f.overrides[i].1)),
+                    )
+                    .grow(1.0),
+                )
+                .child(
+                    Button::new("Remove")
+                        .look(Look::Quiet)
+                        .on_press(move |state: &mut State| super::remove_override(state, i))
+                        .build(t)
+                        .key(key(&format!("overrides-remove.{i}")))
+                        .into(),
+                ),
+        );
+        for field in [Field::OverrideRepository(i), Field::OverridePath(i)] {
+            if let Some(why) = field_error(f, field) {
+                refusals.push(Refusal::new(format!("{}.error", field_key(field)), why).build(t));
+            }
+        }
+    }
+    for refusal in refusals {
+        part = part.control(refusal);
+    }
+    part.control(
+        Button::new("Add override")
+            .on_press_tx(super::add_override)
+            .build(t)
+            .key(key("overrides-add")),
+    )
+    .build(t)
 }
 
-fn definition(f: &Form, t: &Tokens) -> El {
-    let mut s = row().gap(space::S2).child(
+fn definition(f: &Form, t: &Tokens) -> Vec<Block> {
+    let mut actions = Actions::new(key("definition.actions")).push(
         Button::new(if f.definition_shown {
             "Hide definition"
         } else {
             "Show definition"
         })
-        .variant(ButtonVariant::GhostMuted)
-        .control_size(ControlSize::Small)
+        .look(Look::Quiet)
         .expanded(f.definition_shown)
         .on_press(|state: &mut State| {
             if let Some(f) = form_mut(state) {
                 f.definition_shown = !f.definition_shown;
             }
         })
-        .build(kit(t))
+        .build(t)
         .key(key("definition-toggle")),
     );
     if f.definition_shown {
         let yaml = f.yaml.clone();
-        s = s.child(
+        actions = actions.push(
             Button::new(if f.copied { "Copied" } else { "Copy" })
-                .variant(ButtonVariant::GhostMuted)
-                .control_size(ControlSize::Small)
+                .look(Look::Quiet)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     tx.copy(yaml.clone());
                     if let Some(f) = form_mut(state) {
                         f.copied = true;
                     }
                 })
-                .build(kit(t))
+                .build(t)
                 .key(key("definition-copy")),
         );
     }
-    let mut c = col().w_full().gap(space::S1).child(s);
+    let mut out = vec![actions.build()];
     if f.definition_shown {
-        c = c.child(
-            text(f.yaml.clone())
+        out.push(Block::custom(
+            key("definition.block"),
+            words(f.yaml.clone(), Type::Mono, t.text_secondary)
                 .key(key("definition"))
-                .font(type_::MONO_CAPTION)
-                .color(t.text_secondary)
+                .label(f.yaml.clone())
                 .wrap(),
-        );
+        ));
     }
-    c
+    out
 }
 
-fn actions(f: &Form, t: &Tokens) -> El {
-    let mut c = col().key(key("actions")).w_full().gap(space::S2);
+fn footer(f: &Form, t: &Tokens) -> Vec<Block> {
+    let mut out = Vec::new();
     if f.stale {
-        c = c.child(
-            row()
-                .key(key("stale"))
-                .role("alert")
-                .w_full()
-                .gap(12.0)
-                .items_center()
-                .px(12.0)
-                .py(8.0)
-                .radius(6.0)
-                .fill(t.warning.alpha(0.12))
-                .border(1.0, t.warning.alpha(0.4))
-                .child(
-                    text("This automation changed elsewhere while you were editing. Reload to pick up the latest revision — your unsaved edits will be replaced.")
-                        .font(look::SMALL)
-                        .color(t.warning)
-                        .wrap()
-                        .grow(1.0),
-                )
-                .child(
-                    look::button("Reload", Look::Neutral, t, |b| b.on_press_tx(super::reload))
-                        .key(key("reload")),
-                ),
+        out.push(
+            Notice::warn(
+                key("stale"),
+                "This automation changed elsewhere while you were editing. Reload to pick up the latest revision — your unsaved edits will be replaced.",
+            )
+            .action(
+                Button::new("Reload")
+                    .on_press_tx(super::reload)
+                    .build(t)
+                    .key(key("reload")),
+            )
+            .build(t),
         );
     } else if let Some(why) = &f.save_error {
-        c = c.child(
-            error(key("save"), why, t)
-                .w_full()
-                .px(12.0)
-                .py(8.0)
-                .radius(6.0)
-                .fill(t.error.alpha(0.12))
-                .border(1.0, t.error.alpha(0.4)),
-        );
+        out.push(Notice::error(format!("{}.error", key("save")), why.clone()).build(t));
     }
-    let mut bar = row().w_full().gap(space::S2).items_center();
+    let mut actions = Actions::new(key("actions"));
     if f.id.is_some() {
-        let (words, look) = if f.delete_armed {
-            ("Confirm delete", Look::Armed)
+        let words_shown = if f.delete_armed {
+            "Confirm delete"
         } else {
-            ("Delete", Look::Danger)
+            "Delete"
         };
-        bar = bar.child(look::button(words, look, t, |b| b.on_press_tx(super::delete)).key(DELETE));
+        actions = actions.push(
+            Button::new(words_shown)
+                .look(Look::Danger)
+                .on_press_tx(super::delete)
+                .build(t)
+                .key(DELETE),
+        );
         if f.delete_armed {
-            bar = bar.child(hint("Existing seeds and run history are kept.", t));
+            actions = actions.push(words(
+                "Existing seeds and run history are kept.",
+                Type::Small,
+                t.text_tertiary,
+            ));
         }
     }
-    bar = bar
-        .child(row().grow(1.0))
-        .child(
-            look::button("Cancel", Look::Neutral, t, |b| b.on_press_tx(super::close))
-                .key(key("cancel")),
-        )
-        .child(
-            look::button(
-                if f.saving { "Saving…" } else { "Save" },
-                Look::Save,
-                t,
-                |b| {
-                    b.disabled(f.save_blocked())
-                        .shortcut("mod+enter")
-                        .on_press_tx(super::save)
-                },
+    out.push(
+        actions
+            .then_end()
+            .push(
+                Button::new("Cancel")
+                    .on_press_tx(super::close)
+                    .build(t)
+                    .key(key("cancel")),
             )
-            .key(key("save")),
-        );
-    c.child(bar)
+            .push(
+                Button::new(if f.saving { "Saving…" } else { "Save" })
+                    .look(Look::Primary)
+                    .disabled(f.save_blocked())
+                    .shortcut("mod+enter")
+                    .on_press_tx(super::save)
+                    .build(t)
+                    .key(key("save")),
+            )
+            .build(),
+    );
+    out
 }
 
 /// What a schedule control does with the option picked, by its place in the list.
@@ -1346,7 +1106,7 @@ fn zone_suggestions(f: &Form, t: &Tokens, layers: &mut Vec<El>) {
     PopupList::new(TIME_ZONES, TIME_ZONE)
         .label("Time zones")
         .side(Side::Bottom)
-        .align(Align::End)
+        .align(Align::Start)
         .items(zones.iter().map(|zone| PopupItem::new(*zone, *zone)))
         .active(active)
         .on_active(|state: &mut State, i| {
@@ -1396,139 +1156,149 @@ fn day_buttons(schedule: &Friendly, t: &Tokens) -> El {
         let on = days.contains(&day);
         let schedule = schedule.clone();
         let current = days.clone();
-        let (fill, edge, ink) = if on {
-            (t.brand.alpha(0.15), t.brand, t.brand)
-        } else {
-            (rune::Color::TRANSPARENT, t.border_subtle, t.text_tertiary)
-        };
-        Button::new(name)
-            .variant(ButtonVariant::Ghost)
-            .control_size(ControlSize::Small)
-            .label_with(move |font, _| text(letter).font(font).color(ink))
-            .on_press(move |state: &mut State| {
-                if on && current.len() == 1 {
-                    return;
-                }
-                let next = if on {
-                    current.iter().copied().filter(|d| *d != day).collect()
-                } else {
-                    let mut next = current.clone();
-                    next.push(day);
-                    next
-                };
-                super::set_schedule(state, with_days(&schedule, next));
-            })
-            .build(kit(t))
-            .key(key(&format!("schedule-day.{day}")))
-            .checked(on)
-            .size(28.0, 26.0)
-            .radius(5.0)
-            .fill(fill)
-            .border(1.0, edge)
+        El::from(
+            Button::new(letter)
+                .size(Size::Compact)
+                .look(Look::Quiet)
+                .chosen(on)
+                .on_press(move |state: &mut State| {
+                    if on && current.len() == 1 {
+                        return;
+                    }
+                    let next = if on {
+                        current.iter().copied().filter(|d| *d != day).collect()
+                    } else {
+                        let mut next = current.clone();
+                        next.push(day);
+                        next
+                    };
+                    super::set_schedule(state, with_days(&schedule, next));
+                })
+                .build(t)
+                .key(key(&format!("schedule-day.{day}")))
+                .label(name),
+        )
+        .checked(on)
     });
-    let preset = |label: &'static str, name: &str, days: &[u8]| {
+    let preset = |label: &'static str, name: &str, days: &[u8]| -> El {
         let schedule = schedule.clone();
         let days = days.to_vec();
-        link(label, t)
+        Button::new(label)
+            .size(Size::Compact)
+            .look(Look::Quiet)
             .on_press(move |state: &mut State| {
                 super::set_schedule(state, with_days(&schedule, days.clone()));
             })
+            .build(t)
             .key(key(name))
+            .into()
     };
-    row()
-        .w_full()
-        .gap(7.0)
-        .items_center()
-        .flex_wrap()
-        .child(row().role("group").label("Days").gap(3.0).children(buttons))
+    Inline::loose()
+        .child(
+            Inline::tight()
+                .role("group")
+                .label("Days")
+                .children(buttons),
+        )
         .child(preset("Every day", "schedule-every-day", &ALL_DAYS))
         .child(preset("Weekdays", "schedule-weekdays", &WEEKDAYS))
 }
 
-fn friendly_controls(f: &Form, schedule: &Friendly, t: &Tokens) -> El {
-    let k = kit(t);
+/// The field that opens a schedule control's list, keyed as the list's anchor.
+fn choice_trigger(f: &Form, c: &Choice, t: &Tokens) -> El {
+    let open = f.open_select.as_deref() == Some(c.key.as_str());
+    let shown = c.options.get(c.current).cloned().unwrap_or_default();
+    let toggled = c.key.clone();
+    El::from(
+        Trigger::new(
+            format!("{}-trigger", c.key),
+            c.label,
+            words(shown.clone(), Type::Body, t.text_primary),
+        )
+        .look(TriggerLook::Field)
+        .value(shown)
+        .open(open)
+        .disabled(f.saving)
+        .build(t, move |state: &mut State, _: &mut Tx| {
+            if let Some(f) = form_mut(state) {
+                f.open_select = match f.open_select.take() {
+                    Some(open) if open == toggled => None,
+                    _ => Some(toggled.clone()),
+                };
+            }
+        }),
+    )
+    .role("combobox")
+}
+
+fn friendly_controls(f: &Form, schedule: &Friendly, t: &Tokens) -> Vec<El> {
     let mut triggers = choices(schedule)
         .into_iter()
-        .map(|c| (c.key.clone(), select(f, c).trigger(k)));
-    let mut next = || triggers.next().map(|(_, el)| el).unwrap_or_else(row);
-    let words = |w: &str| {
-        text(w.to_owned())
-            .font(look::REGULAR)
-            .color(t.text_secondary)
-    };
-    let boxed = |inner: El| {
-        row()
-            .items_center()
-            .px(2.0)
-            .radius(6.0)
-            .fill(t.bg_elevated)
-            .border(1.0, t.border)
-            .child(inner)
-    };
-    let line = || row().w_full().gap(7.0).items_center().flex_wrap();
+        .map(|c| choice_trigger(f, &c, t))
+        .collect::<Vec<_>>()
+        .into_iter();
+    let mut next = || triggers.next().unwrap_or_else(rune::el);
+    let said = |w: &str| words(w.to_owned(), Type::Body, t.text_secondary);
     let twelve = crate::calendar::hour_cycle() == crate::calendar::HourCycle::Twelve;
-    let clock = |next: &mut dyn FnMut() -> El| {
-        row()
-            .items_center()
-            .child(next())
-            .child(words(":"))
+    let clock = |line: El, next: &mut dyn FnMut() -> El| {
+        line.child(next())
+            .child(said(":"))
             .child(next())
             .children(twelve.then(next))
     };
     match schedule {
         Friendly::Every { unit, window, .. } => {
-            let mut first = line()
-                .child(words("Every"))
-                .child(boxed(next()))
-                .child(boxed(next()));
+            let mut first = Inline::loose()
+                .child(said("Every"))
+                .child(next())
+                .child(next());
             if *unit == Unit::Hours {
-                first = first.child(words("at minute")).child(boxed(next()));
+                first = first.child(said("at minute")).child(next());
             }
             let on = window.is_some();
             let schedule_now = schedule.clone();
-            let mut second = line().child(
-                Checkbox::new(on)
-                    .label("Only between")
-                    .on_toggle(move |state: &mut State| {
-                        let mut s = schedule_now.clone();
-                        if let Friendly::Every { window, .. } = &mut s {
-                            *window = if on { None } else { Some((9, 17)) };
-                        }
-                        super::set_schedule(state, s);
-                    })
-                    .build(k)
-                    .key(key("schedule-window")),
-            );
+            let mut second = Inline::loose().child(El::from(switch(
+                key("schedule-window"),
+                "Only between",
+                on,
+                false,
+                false,
+                t,
+                move |state: &mut State, _: &mut Tx| {
+                    let mut s = schedule_now.clone();
+                    if let Friendly::Every { window, .. } = &mut s {
+                        *window = if on { None } else { Some((9, 17)) };
+                    }
+                    super::set_schedule(state, s);
+                },
+            )));
+            second = second.child(said("Only between").a11y_hidden());
             if on {
-                second = second
-                    .child(boxed(next()))
-                    .child(words("and"))
-                    .child(boxed(next()));
+                second = second.child(next()).child(said("and")).child(next());
             }
-            col()
-                .w_full()
-                .gap(space::S2)
-                .child(first)
-                .child(second)
-                .child(day_buttons(schedule, t))
+            vec![first, second, day_buttons(schedule, t)]
         }
-        Friendly::Days { .. } => col()
-            .w_full()
-            .gap(space::S2)
-            .child(day_buttons(schedule, t))
-            .child(line().child(words("at")).child(boxed(clock(&mut next)))),
+        Friendly::Days { .. } => vec![
+            day_buttons(schedule, t),
+            clock(Inline::loose().child(said("at")), &mut next),
+        ],
         Friendly::Monthly { day, .. } => {
-            let mut c = col().w_full().gap(space::S2).child(
-                line()
-                    .child(words("On day"))
-                    .child(boxed(next()))
-                    .child(words("at"))
-                    .child(boxed(clock(&mut next))),
+            let line = clock(
+                Inline::loose()
+                    .child(said("On day"))
+                    .child(next())
+                    .child(said("at")),
+                &mut next,
             );
+            let mut out = vec![line];
             if *day > 28 {
-                c = c.child(hint("Months without this day are skipped.", t));
+                out.push(words(
+                    "Months without this day are skipped.",
+                    Type::Small,
+                    t.text_tertiary,
+                ));
             }
-            c
+            out
         }
     }
 }
@@ -1567,7 +1337,7 @@ fn until(at_ms: i64, now_ms: i64) -> String {
     }
 }
 
-fn next_runs(f: &Form, t: &Tokens) -> El {
+fn next_runs(f: &Form, t: &Tokens) -> Vec<Block> {
     let zone = f.time_zone.text.trim();
     let elsewhere = zone != super::local_zone();
     let times: Vec<(String, i64)> = f
@@ -1576,141 +1346,133 @@ fn next_runs(f: &Form, t: &Tokens) -> El {
         .iter()
         .filter_map(|time| Some((time.clone(), crate::calendar::ms_of_rfc3339(time)?)))
         .collect();
-    let mut c = col().key(key("next-runs")).w_full().gap(space::S1).child(
-        row()
-            .w_full()
-            .gap(space::S2)
-            .items_center()
-            .child(
-                text(if f.guard.text.trim().is_empty() {
-                    "Next runs"
-                } else {
-                    "Next checks"
-                })
-                .font(look::SMALL)
-                .color(t.text_secondary)
-                .grow(1.0),
-            )
-            .child(
-                text("Time zone")
-                    .font(look::SMALL)
-                    .color(t.text_tertiary)
-                    .a11y_hidden(),
-            )
-            .child(
-                TextInput::new(&f.time_zone)
-                    .key(TIME_ZONE)
-                    .label("Time zone")
-                    .spellcheck(false)
-                    .active_descendant(active_zone(f).map(zone_option_key))
-                    .on_edit(|s: &mut State| field_of(s, |f| &mut f.time_zone))
-                    .on_change(|s: &mut State, tx: &mut Tx| {
-                        if let Some(f) = form_mut(s) {
-                            f.zone_suggestions = ZoneSuggestions::Shown { active: None };
-                        }
-                        super::follow_preview(s, tx);
-                    })
-                    .on_key(zone_keys)
-                    .build(kit(t))
-                    .fill(t.bg_elevated)
-                    .w(200.0),
-            ),
-    );
+    let zone_input = TextInput::new(&f.time_zone)
+        .key(TIME_ZONE)
+        .label("Time zone")
+        .spellcheck(false)
+        .active_descendant(active_zone(f).map(zone_option_key))
+        .on_edit(|s: &mut State| field_of(s, |f| &mut f.time_zone))
+        .on_change(|s: &mut State, tx: &mut Tx| {
+            if let Some(f) = form_mut(s) {
+                f.zone_suggestions = ZoneSuggestions::Shown { active: None };
+            }
+            super::follow_preview(s, tx);
+        })
+        .on_key(zone_keys);
+    let mut zone = FieldBlock::new(TIME_ZONE, "Time zone").control(line_box(
+        zone_input,
+        state_of(f, false),
+        t,
+    ));
     if let [first, second, ..] = times.as_slice()
         && second.1 - first.1 < SCHEDULER_TICK_MS
     {
-        c = c.child(hint(
-            "attn checks schedules once a minute, so this runs at most once a minute.",
-            t,
-        ));
+        zone =
+            zone.hint("attn checks schedules once a minute, so this runs at most once a minute.");
     }
-    let list = col()
+    let list = Stack::tight()
+        .key(key("next-runs"))
         .role("list")
+        .label(if f.guard.text.trim().is_empty() {
+            "Next runs"
+        } else {
+            "Next checks"
+        })
         .w_full()
-        .gap(3.0)
         .children(times.iter().map(|(time, ms)| {
             let mut when = long_date(time).unwrap_or_else(|| time.clone());
             if elsewhere {
                 when = format!("{when} ({} here)", here(*ms));
             }
-            row()
+            Inline::loose()
                 .role("listitem")
                 .w_full()
-                .gap(12.0)
-                .child(
-                    text(when)
-                        .font(look::REGULAR)
-                        .color(t.text_secondary)
-                        .grow(1.0),
-                )
-                .child(
-                    text(until(*ms, f.preview.at_ms))
-                        .font(look::SMALL)
-                        .color(t.text_tertiary),
-                )
+                .child(words(when, Type::Body, t.text_secondary).grow(1.0))
+                .child(words(
+                    until(*ms, f.preview.at_ms),
+                    Type::Small,
+                    t.text_tertiary,
+                ))
         }));
-    c.child(list)
+    let next = FieldBlock::new(
+        key("next-runs-field"),
+        if f.guard.text.trim().is_empty() {
+            "Next runs"
+        } else {
+            "Next checks"
+        },
+    )
+    .control(list);
+    vec![zone.build(t), next.build(t)]
 }
 
-fn schedule(f: &Form, t: &Tokens) -> El {
+fn schedule(f: &Form, t: &Tokens) -> Vec<Block> {
     let (tab, friendly) = f.schedule();
-    let tabs: Vec<&str> = Tab::ALL.iter().map(|(_, _, label)| *label).collect();
-    let mut c = col().key(key("schedule")).w_full().gap(9.0).child(
-        segmented(
-            &tabs,
-            Tab::ALL.iter().position(|(t, ..)| *t == tab),
-            "Schedule type",
-            |state: &mut State, i: usize| super::choose_tab(state, Tab::ALL[i].0),
-            t,
+    let mut field = FieldBlock::new(key("schedule"), "Schedule").control(
+        El::from(
+            Segmented::new(key("schedule-tabs"), "Schedule type")
+                .disabled(f.saving)
+                .options(Tab::ALL.iter().enumerate().map(|(i, &(each, _, label))| {
+                    Segment::new(format!("segment{i}"), label)
+                        .chosen(each == tab)
+                        .on_press_tx(move |state: &mut State, _: &mut Tx| {
+                            super::choose_tab(state, each)
+                        })
+                }))
+                .build(t),
         )
-        .key(key("schedule-tabs")),
+        .self_start(),
     );
     match (&friendly, tab) {
-        (Some(schedule), tab) if tab != Tab::Cron => c = c.child(friendly_controls(f, schedule, t)),
+        (Some(schedule), tab) if tab != Tab::Cron => {
+            for line in friendly_controls(f, schedule, t) {
+                field = field.control(line);
+            }
+        }
         (None, _) if !f.cron.text.trim().is_empty() => {
-            c = c.child(hint(
-                "This schedule is kept as written. The controls can't express it.",
-                t,
-            ));
+            field = field.hint("This schedule is kept as written. The controls can't express it.");
         }
         _ => {}
     }
     if let Some(replaced) = &f.replaced {
-        c = c.child(
-            row()
+        field = field.control(
+            Inline::loose()
                 .key(key("schedule-replaced"))
-                .gap(space::S2)
-                .items_center()
-                .child(hint(format!("Replaced {replaced}."), t))
+                .child(words(
+                    format!("Replaced {replaced}."),
+                    Type::Small,
+                    t.text_tertiary,
+                ))
                 .child(
-                    link("Undo", t)
+                    Button::new("Undo")
+                        .size(Size::Compact)
+                        .look(Look::Quiet)
                         .on_press(super::undo_replace)
-                        .key(key("schedule-undo")),
+                        .build(t)
+                        .key(key("schedule-undo"))
+                        .into(),
                 ),
         );
     }
-    c = c.child(label("Cron", t)).child(
-        TextInput::new(&f.cron)
-            .key(key("cron"))
-            .label("Cron")
-            .text_style(kit(t).ty.ui_compact.mono())
-            .spellcheck(false)
-            .invalid(f.preview.error.is_some())
-            .on_edit(|s: &mut State| field_of(s, |f| &mut f.cron))
-            .on_change(|state: &mut State, tx: &mut Tx| {
-                if let Some(f) = form_mut(state) {
-                    f.replaced = None;
-                }
-                super::follow_preview(state, tx);
-            })
-            .build(kit(t))
-            .fill(t.bg_elevated)
-            .w_full(),
-    );
-    if let Some(why) = &f.preview.error {
-        c = c.child(error(key("schedule"), why, t));
-    }
-    c.child(next_runs(f, t))
+    let cron = TextInput::new(&f.cron)
+        .key(key("cron"))
+        .label("Cron")
+        .spellcheck(false)
+        .on_edit(|s: &mut State| field_of(s, |f| &mut f.cron))
+        .on_change(|state: &mut State, tx: &mut Tx| {
+            if let Some(f) = form_mut(state) {
+                f.replaced = None;
+            }
+            super::follow_preview(state, tx);
+        });
+    let mut out = vec![
+        field.error(f.preview.error.clone()).build(t),
+        FieldBlock::new(key("cron"), "Cron")
+            .control(code_box(cron, state_of(f, f.preview.error.is_some()), t))
+            .build(t),
+    ];
+    out.extend(next_runs(f, t));
+    out
 }
 
 #[cfg(test)]

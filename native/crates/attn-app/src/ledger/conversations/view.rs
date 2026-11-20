@@ -1,96 +1,77 @@
 use attn_protocol::KeptConversationRow;
-use rune::{El, Key, KeyEvent, Tx, col, row, text, text_input};
+use attn_ui::Tokens;
+use attn_ui::blocks::inspector::{aside, lines, value};
+use attn_ui::blocks::{Block, Facts, Inline, Inspector, List};
+use attn_ui::system::{IconSize, ListRow, Look, Reveal, Type, icon_button, switch, words};
+use rune::{El, Key, KeyEvent, Tx};
 
-use super::super::parts::{self, Glyph, Ink, body, field, group, muted};
+use super::super::mark::{Glyph, mark};
+use super::super::view::{link, query_field, row_verb, status_text, toolbar_line, verb_button};
 use super::super::{LIST, Note, QUERY};
 use super::{Verb, amount, date, deleted, key, letter_label, retention, verbs};
 use crate::State;
-use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune_kit::Checkbox;
-use rune_kit::ScrollBar;
+use attn_ui::system::DotSize;
+
+fn field_key(label: &str) -> String {
+    format!(
+        "ledger.inspector.{}",
+        label.to_lowercase().replace(' ', "-")
+    )
+}
 
 pub(crate) fn toolbar(state: &State, t: &Tokens) -> El {
     let kept = &state.window.ledger.conversations;
     let include = kept.include_deleted;
-    let field = text_input(&kept.query, type_::MONO_CAPTION)
-        .key(QUERY)
-        .single_line()
-        .label("Filter")
-        .placeholder("title  seed  pinned  pending  words", t.text_muted)
-        .on_edit(|state: &mut State| &mut state.window.ledger.conversations.query)
-        .on_input_change(|state: &mut State, _: &mut Tx| super::query_edited(state))
-        .on_input_key(query_key)
-        .grow(1.0)
-        .min_w(0.0)
-        .color(t.text_primary);
-    parts::toolbar(
-        vec![
-            Checkbox::new(include)
-                .label("Show deleted")
-                .on_toggle_tx(move |state: &mut State, tx: &mut Tx| {
-                    super::set_include_deleted(state, !include, tx)
-                })
-                .build(attn_ui::kit(t))
-                .key("ledger.deleted"),
-            parts::query_well(field, Vec::new(), t),
-        ],
+    let field = query_field(
+        &kept.query,
+        "title  seed  pinned  pending  words",
+        |state: &mut State| &mut state.window.ledger.conversations.query,
+        |state: &mut State, _: &mut Tx| super::query_edited(state),
+        query_key,
         t,
-    )
+    );
+    let deleted = Inline::loose()
+        .child(El::from(switch(
+            "ledger.deleted",
+            "Show deleted",
+            include,
+            false,
+            false,
+            t,
+            move |state: &mut State, tx: &mut Tx| super::set_include_deleted(state, !include, tx),
+        )))
+        .child(words("Show deleted", Type::Control, t.text_secondary).a11y_hidden());
+    toolbar_line(vec![deleted, field], Vec::new(), t)
 }
 
 pub(crate) fn list(state: &State, rows: &[&KeptConversationRow], t: &Tokens) -> El {
     let kept = &state.window.ledger.conversations;
-    let list = col()
-        .key(LIST)
-        .role("listbox")
-        .label("Rows")
-        .focusable(true)
-        .grow(1.0)
-        .min_w(0.0)
-        .h_full()
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .py(space::S1);
-    if rows.is_empty() {
-        let words = match (kept.error(), kept.result()) {
-            (Some(error), _) => error.to_owned(),
-            (None, None) => "Reading kept conversations…".into(),
-            (None, Some(_)) => "No conversations match this view.".into(),
-        };
-        return list
-            .child(
-                text(words.clone())
-                    .key("ledger.empty")
-                    .role(if kept.error().is_some() {
-                        "alert"
-                    } else {
-                        "note"
-                    })
-                    .label(words)
-                    .font(type_::BODY)
-                    .color(if kept.error().is_some() {
-                        t.error
-                    } else {
-                        t.text_tertiary
-                    })
-                    .wrap()
-                    .padding(space::S6),
-            )
-            .scroll_bar_styled(attn_ui::scroll_bar(t));
-    }
+    let said = match (kept.error(), kept.result()) {
+        (Some(error), _) => error.to_owned(),
+        (None, None) => "Reading kept conversations…".into(),
+        (None, Some(_)) => "No conversations match this view.".into(),
+    };
     let chosen = super::selected(state, rows).map(key);
-    parts::on_chosen_row(list, chosen.as_deref())
-        .children(
-            rows.iter()
-                .map(|r| list_row(state, r, chosen.as_deref() == Some(key(r).as_str()), t)),
+    rows.iter()
+        .fold(
+            List::new(LIST, "Rows").chooser(chosen.as_ref().map(|k| format!("ledger.row.{k}"))),
+            |list, r| {
+                let (row, under) =
+                    list_row(state, r, chosen.as_deref() == Some(key(r).as_str()), t);
+                list.row_with(row, under)
+            },
         )
-        .scroll_bar_styled(attn_ui::scroll_bar(t))
+        .failed(kept.error().is_some())
+        .empty("ledger.empty", said, None)
+        .scrolling(t)
 }
 
-fn list_row(state: &State, r: &KeptConversationRow, selected: bool, t: &Tokens) -> El {
+fn list_row(
+    state: &State,
+    r: &KeptConversationRow,
+    selected: bool,
+    t: &Tokens,
+) -> (El, Vec<Block>) {
     let kept = &state.window.ledger.conversations;
     let k = key(r);
     let note = kept.note(&k);
@@ -111,32 +92,34 @@ fn list_row(state: &State, r: &KeptConversationRow, selected: bool, t: &Tokens) 
     };
     let primary = verbs.first().map(|verb| {
         let (k, verb) = (k.clone(), *verb);
-        let words = match note {
+        let said = match note {
             Some(Note::Busy(busy)) => busy.clone(),
             _ => verb.label().into(),
         };
-        parts::row_verb(format!("ledger.row.{k}.verb"), &words, selected, t)
+        row_verb(format!("ledger.row.{k}.verb"), &said, t)
             .on_press_tx(move |state: &mut State, tx: &mut Tx| super::run(state, &k, verb, tx))
     });
     let more = (verbs.len() > 1 && !busy).then(|| {
         let k = k.clone();
-        parts::row_more(format!("ledger.row.{k}.more"), selected, t)
-            .label(format!("More for {title_words}"))
-            .a11y_value(if menu_open { "expanded" } else { "" })
-            .on_press_tx(move |state: &mut State, _: &mut Tx| open_menu(state, &k))
+        icon_button(
+            format!("ledger.row.{k}.more"),
+            format!("More for {title_words}"),
+            "···",
+            IconSize::Small,
+        )
+        .expanded(menu_open)
+        .on_press_tx(move |state: &mut State, _: &mut Tx| open_menu(state, &k))
     });
-    let note_line = match note {
-        Some(Note::Refused(words)) => Some(
-            text(words.clone())
+    let under = match note {
+        Some(Note::Refused(said)) => vec![Block::custom(
+            format!("ledger.row.{k}.note.block"),
+            words(said.clone(), Type::Small, t.warning)
                 .key(format!("ledger.row.{k}.note"))
                 .role("status")
-                .label(words.clone())
-                .font(parts::META)
-                .color(t.warning)
-                .single_line()
-                .truncate(),
-        ),
-        _ => None,
+                .label(said.clone())
+                .wrap(),
+        )],
+        _ => Vec::new(),
     };
     let glyph = if deleted(r) {
         Glyph::Removed
@@ -148,27 +131,27 @@ fn list_row(state: &State, r: &KeptConversationRow, selected: bool, t: &Tokens) 
         Glyph::Clean
     };
     let chosen = k.clone();
-    let body = parts::row_body(
-        title_words.clone(),
-        deleted(r),
-        parts::meta([r.agent.clone(), copy, retention(r)].join("  ·  "))
-            .key(format!("ledger.row.{k}.meta")),
-        note_line,
-        t,
-    );
-    parts::list_row(
-        format!("ledger.row.{k}"),
-        title_words,
-        selected,
-        glyph,
-        body,
-        primary.into_iter().chain(more).collect(),
-        t,
-    )
-    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-        super::select(state, &chosen);
-        tx.focus(LIST, false);
-    })
+    let row = ListRow::new(format!("ledger.row.{k}"), title_words.clone())
+        .lead(mark(glyph, DotSize::Regular, t))
+        .title(title_words)
+        .subtitle_keyed(
+            format!("ledger.row.{k}.meta"),
+            [r.agent.clone(), copy, retention(r)].join("  ·  "),
+            t,
+        )
+        .controls(primary, Reveal::Quiet)
+        .hover_controls(more)
+        .dimmed(deleted(r))
+        .in_view(selected)
+        .role("option")
+        .unfocusable()
+        .build(t)
+        .a11y_value(if selected { "selected" } else { "" })
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            super::select(state, &chosen);
+            tx.focus(LIST, false);
+        });
+    (row, under)
 }
 
 pub(crate) fn row_menu(state: &State, t: &Tokens) -> Vec<El> {
@@ -224,71 +207,81 @@ pub(crate) fn inspector(state: &State, selected: Option<&KeptConversationRow>, t
         .filter(|w| !w.is_empty());
     let resume = r.resume_id.clone();
     let letters = r.crew_letters.clone().unwrap_or_default();
-    let mut fields = vec![
-        field("Retention", &retention(r), t),
-        group("copy", "attn’s copy", t)
-            .child(body(&copy, t))
-            .children(pending.map(|w| muted(&w, t))),
-    ];
+    let mut facts = Facts::new("ledger.inspector.facts")
+        .fact(field_key("Retention"), "Retention", retention(r))
+        .item(
+            "ledger.inspector.copy",
+            "attn’s copy",
+            lines(std::iter::once(value(&copy, t)).chain(pending.map(|w| aside(&w, t)))),
+        );
     if let Some(c) = &r.kept {
         let at = crate::sidebar::queue::epoch_ms(&c.copied_at).unwrap_or_default();
-        fields.push(field(
+        facts = facts.fact(
+            field_key("Last copied"),
             "Last copied",
-            &super::super::query::full_stamp(at),
-            t,
-        ));
+            super::super::query::full_stamp(at),
+        );
     }
     if let Some(bytes) = r.source_bytes {
-        fields.push(field("Source at last copy", &amount(bytes), t));
+        facts = facts.fact(
+            field_key("Source at last copy"),
+            "Source at last copy",
+            amount(bytes),
+        );
     }
-    fields.push(group("conversation", "Conversation", t).child(
-        parts::link("ledger.inspector.conversation.copy", &resume, t).on_press_tx(
+    facts = facts.control(
+        "ledger.inspector.conversation",
+        "Conversation",
+        link(
+            "ledger.inspector.conversation.copy",
+            &resume.clone(),
+            t,
             move |state: &mut State, tx: &mut Tx| super::super::copy(state, resume.clone(), tx),
         ),
-    ));
+    );
     if !r.seeds.is_empty() {
-        fields.push(
-            col()
-                .key("ledger.inspector.seeds")
-                .role("group")
-                .label("Open seeds")
-                .gap(2.0)
-                .child(parts::label("Open seeds", t))
-                .children(r.seeds.iter().map(|seed| {
-                    let id = seed.id.clone();
-                    let words = if seed.slug.is_empty() {
-                        &seed.title
-                    } else {
-                        &seed.slug
-                    };
-                    parts::link(format!("ledger.inspector.seed.{}", seed.id), words, t).on_press_tx(
-                        move |state: &mut State, tx: &mut Tx| {
-                            super::super::open_seed(state, id.clone(), tx)
-                        },
-                    )
-                }))
-                .child(muted(
-                    "Harvest or wither these seeds before forgetting the copy.",
-                    t,
-                )),
+        facts = facts.control(
+            "ledger.inspector.seeds",
+            "Open seeds",
+            lines(
+                r.seeds
+                    .iter()
+                    .map(|seed| {
+                        let id = seed.id.clone();
+                        let words = if seed.slug.is_empty() {
+                            &seed.title
+                        } else {
+                            &seed.slug
+                        };
+                        link(
+                            &format!("ledger.inspector.seed.{}", seed.id),
+                            words,
+                            t,
+                            move |state: &mut State, tx: &mut Tx| {
+                                super::super::open_seed(state, id.clone(), tx)
+                            },
+                        )
+                    })
+                    .chain(std::iter::once(aside(
+                        "Harvest or wither these seeds before forgetting the copy.",
+                        t,
+                    ))),
+            ),
         );
     }
     if !letters.is_empty() {
-        fields.push(
-            col()
-                .key("ledger.inspector.letters")
-                .role("group")
-                .label("Crew letters")
-                .gap(2.0)
-                .child(parts::label("Crew letters", t))
-                .children(letters.iter().map(|l| body(&letter_label(l), t))),
+        facts = facts.item(
+            "ledger.inspector.letters",
+            "Crew letters",
+            lines(letters.iter().map(|l| value(letter_label(l), t))),
         );
     }
+    let mut fields = Vec::new();
     if confirming {
         let bytes = r.kept.as_ref().map_or(0, |c| c.bytes);
         fields.push(
-            body(
-                &format!(
+            value(
+                format!(
                     "Delete attn’s copy of {name} ({})? Claude’s own files are not touched.",
                     amount(bytes)
                 ),
@@ -299,8 +292,8 @@ pub(crate) fn inspector(state: &State, selected: Option<&KeptConversationRow>, t
         if !letters.is_empty() {
             let names: Vec<String> = letters.iter().map(letter_label).collect();
             fields.push(
-                body(
-                    &format!(
+                value(
+                    format!(
                         "These letters stay, but will no longer point to this transcript: {}.",
                         names.join(", ")
                     ),
@@ -310,33 +303,31 @@ pub(crate) fn inspector(state: &State, selected: Option<&KeptConversationRow>, t
             );
         }
     }
-    if let Some(Note::Refused(words)) = note {
+    if let Some(Note::Refused(said)) = note {
         fields.push(
-            text(words.clone())
+            words(said.clone(), Type::Small, t.warning)
                 .key("ledger.inspector.note")
                 .role("status")
-                .label(words.clone())
-                .font(parts::META)
-                .color(t.warning)
+                .label(said.clone())
                 .wrap(),
         );
     }
     let busy = matches!(note, Some(Note::Busy(_)));
     fields.push(
-        row().gap(6.0).children(
+        Inline::tight().children(
             verbs(r, confirming)
                 .into_iter()
                 .enumerate()
                 .map(|(at, verb)| {
                     let k = k.clone();
-                    let ink = match verb {
-                        Verb::Forget | Verb::ForgetNow => Ink::Danger,
-                        _ => Ink::Quiet,
+                    let look = match verb {
+                        Verb::Forget | Verb::ForgetNow => Look::Danger,
+                        _ => Look::Quiet,
                     };
-                    let el = parts::verb(
-                        format!("ledger.inspector.action.{at}"),
+                    let el = verb_button(
+                        &format!("ledger.inspector.action.{at}"),
                         verb.label(),
-                        ink,
+                        look,
                         t,
                     );
                     if busy {
@@ -349,15 +340,15 @@ pub(crate) fn inspector(state: &State, selected: Option<&KeptConversationRow>, t
                 }),
         ),
     );
-    parts::inspector(
-        parts::head(
-            &name,
-            Some(muted(&format!("{} conversation", r.agent), t)),
-            t,
-        ),
-        fields,
-        t,
-    )
+    fields
+        .into_iter()
+        .fold(
+            Inspector::new("ledger.inspector", name.clone())
+                .kicker(aside(format!("{} conversation", r.agent), t))
+                .block(facts.build(t)),
+            Inspector::push,
+        )
+        .build(t)
 }
 
 pub(crate) fn status(state: &State, t: &Tokens) -> Vec<El> {
@@ -365,14 +356,14 @@ pub(crate) fn status(state: &State, t: &Tokens) -> Vec<El> {
     let mut out = Vec::new();
     if let Some(error) = kept.error() {
         out.push(
-            parts::status_text(error.to_owned(), t.error)
+            status_text(error.to_owned(), t.error)
                 .key("ledger.error")
                 .role("alert"),
         );
     }
     if let Some(result) = kept.result() {
         out.push(
-            parts::status_text(
+            status_text(
                 format!("{} kept  ·  {}", result.count, amount(result.stored_bytes)),
                 t.text_tertiary,
             )
@@ -380,13 +371,13 @@ pub(crate) fn status(state: &State, t: &Tokens) -> Vec<El> {
         );
         if result.pending_count > 0 {
             out.push(
-                parts::status_text(format!("{} pending", result.pending_count), t.text_tertiary)
+                status_text(format!("{} pending", result.pending_count), t.text_tertiary)
                     .key("ledger.pending"),
             );
         }
         if let Some(next) = &result.next_delete_after {
             out.push(
-                parts::status_text(format!("next deletion {}", date(next)), t.text_tertiary)
+                status_text(format!("next deletion {}", date(next)), t.text_tertiary)
                     .key("ledger.next-deletion"),
             );
         }

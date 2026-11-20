@@ -1778,6 +1778,33 @@ fn an_icon_only_button_gives_its_large_icon_four_points_on_every_side() {
     }
 }
 
+#[test]
+fn a_tag_beside_a_choices_name_sits_on_its_line_after_it() {
+    for dark in [true, false] {
+        let rt = story(dark, "Library/Choice", "Recommended");
+        let all = rt.elements();
+        let tag = inside(&rt, "choice.0", "choice.0.recommended");
+        let index = all.iter().position(|e| e.path == tag.path).unwrap();
+        let name = all
+            .iter()
+            .find(|e| e.parent == all[index].parent && e.path != tag.path)
+            .expect("the tag shares its line with the choice's name");
+        let middle = |r: [f32; 4]| r[1] + r[3] / 2.0;
+        assert!(
+            (middle(name.rect) - middle(tag.rect)).abs() <= 1.0,
+            "the tag's middle is at {}, the name's at {}",
+            middle(tag.rect),
+            middle(name.rect)
+        );
+        assert!(
+            tag.rect[0] >= name.rect[0] + name.rect[2],
+            "the tag starts at {}, before the name ends at {}",
+            tag.rect[0],
+            name.rect[0] + name.rect[2]
+        );
+    }
+}
+
 const SMALL_ICON: f32 = 14.0;
 const REGULAR_HEIGHT: f32 = 32.0;
 

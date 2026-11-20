@@ -1,10 +1,14 @@
 use attn_protocol::{CrewMember, Seed};
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{Color, El, Key, KeyEvent, Tx, col, row, text};
-use rune_kit::ScrollBar;
-use rune_kit::{Button, ButtonVariant, TextArea, TextInput};
+use attn_ui::blocks::{
+    Actions, Block, Field, Head, Inline, List, Notice, Page, Prose, Refusal, Section, Sheet, Stack,
+};
+use attn_ui::system::{
+    Button, DotShape, DotSize, FieldState, ListRow, Look, Size, Tone, Type, area_box, dot,
+    line_box, tag, words,
+};
+use rune::{El, Key, KeyEvent, Tx, col, row};
+use rune_kit::{TextArea, TextInput};
 
 use super::autosave::Phase;
 use super::handoffs::Reading;
@@ -15,96 +19,68 @@ use crate::settings::RouteTarget;
 
 pub(crate) const RENAME: &str = "crew.rename";
 pub(crate) const RENAME_FIELD: &str = "crew.rename.field";
+/// A member's presence mark, as large as a row's state mark.
 const FIND: &str = "crew.find";
 const CHARTER: &str = "crew.charter.editor";
-/// The charter editor's height, as the Tauri app's `.crew-charter-editor`; a longer charter
-/// scrolls inside it.
+/// The charter editor's height: about twenty lines of a charter show at once, and a longer
+/// charter scrolls inside it.
 const CHARTER_HEIGHT: f32 = 390.0;
-/// The Tauri app's `.crew-launch-fields select { height: 38px }`.
-const LAUNCH_FIELD_HEIGHT: f32 = 38.0;
 const SEED_FIND: &str = "crew.seeds.find";
+/// The width of the list of a member's letters: a row gives its words all but its 16 of insets,
+/// and its longest line, "Latest · 09:58 UTC", measures 107 in `Small`.
+const INDEX_WIDTH: f32 = 150.0;
+/// The narrowest the member's details get beside the roster: its tabs on one line measure
+/// 303 (crew.tabs, Control at 12), and the page's sides take 32 each. Narrower, the roster
+/// stands above the details.
+const DETAIL_FLOOR: f32 = 368.0;
+/// The tallest the roster stands above the details: three rows of two lines and its heading.
+const STACKED_ROSTER: f32 = 200.0;
+/// The roster's width: a row gives its words all but 56 (the initial, the insets and the
+/// presence mark), and the longest line a member shows here, "Between sessions · Default ›
+/// assistant", measures 216 in `Small`.
+const ROSTER_WIDTH: f32 = 272.0;
 pub(crate) const PAGE: &str = "crew.page";
 
-/// The Tauri app's small print in Manage crew, its 9–11 px regular text, at the native app's
-/// 12 px.
-const NOTE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
-const TITLE: rune::TextStyle = rune::TextStyle::new(16.0, 650.0).tracking(-0.3);
-const ROSTER_NAME: rune::TextStyle = rune::TextStyle::new(13.0, 580.0);
-const AVATAR: rune::TextStyle = rune::TextStyle::new(13.0, 650.0);
-const LARGE_AVATAR: rune::TextStyle = rune::TextStyle::new(19.0, 650.0);
-const RENAME_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 500.0);
-const NAME: rune::TextStyle = rune::TextStyle::new(22.0, 650.0).tracking(-0.55);
-const SECTION: rune::TextStyle = rune::TextStyle::new(14.0, 620.0);
-const DOCUMENT: rune::TextStyle = rune::TextStyle::new(15.0, 620.0);
-const SEEDS: rune::TextStyle = rune::TextStyle::new(16.0, 620.0);
-/// The widest the launch card, the start row and the seeds run, as the Tauri app's
-/// `min(720px, 100%)`; the charter and the handoffs run to `WIDE`.
-const NARROW: f32 = 720.0;
-const WIDE: f32 = 900.0;
-
-fn caption(key: impl Into<String>, words: impl Into<String>, t: &Tokens) -> El {
-    text(words.into())
-        .key(key.into())
-        .font(NOTE)
-        .color(t.text_muted)
-}
-
-fn kicker(words: &str, t: &Tokens) -> El {
-    type_::caps(words).color(t.text_muted)
-}
-
-/// The file bar joined to the top of the charter editor, as the Tauri app's
-/// `.crew-charter-meta`: the file at its left and its language at its right.
-fn charter_bar(t: &Tokens) -> El {
-    row()
-        .key("crew.charter.meta")
-        .label("CHARTER.md · Markdown")
-        .w_full()
-        .h(28.0)
-        .items_center()
-        .px(space::S3)
-        .fill(t.bg_elevated)
-        .border_sides([1.0, 1.0, 0.0, 1.0], t.border)
-        .corners([7.0, 7.0, 0.0, 0.0])
-        .child(
-            text("CHARTER.md")
-                .font(type_::MONO_CAPTION)
-                .color(t.text_muted)
-                .grow(1.0),
-        )
-        .child(
-            text("Markdown")
-                .font(type_::MONO_CAPTION)
-                .color(t.text_muted),
-        )
-}
-
-fn status(key: &str, words: impl Into<String>, color: rune::Color) -> El {
-    let words = words.into();
-    text(words.clone())
-        .key(key.to_owned())
-        .role("status")
-        .label(words)
-        .font(NOTE)
-        .color(color)
-}
-
-fn alert(key: &str, words: impl Into<String>, t: &Tokens) -> El {
-    let words = words.into();
-    text(words.clone())
-        .key(key.to_owned())
-        .role("alert")
-        .label(words)
-        .font(type_::LABEL)
-        .color(t.error)
-        .wrap()
-        .w_full()
-}
-
 /// Manage crew, while it is open: a page in place of the window's main area, beside the
-/// sidebar, that holds the keyboard until it closes, as the Tauri app's `.crew-panel`.
+/// sidebar, that holds the keyboard until it closes.
 pub(crate) fn page(state: &State, t: &Tokens) -> El {
-    col()
+    let close = El::from(
+        Button::new("Close")
+            .size(Size::Compact)
+            .look(Look::Quiet)
+            .trailing(attn_ui::keycap::Keys::ledged(&["esc"]).build(t))
+            .on_press_tx(|state: &mut State, tx: &mut Tx| super::close(state, tx))
+            .build(t)
+            .key("crew.close-page"),
+    );
+    let stacked = state
+        .window
+        .crew
+        .width
+        .is_some_and(|w| w < ROSTER_WIDTH + DETAIL_FLOOR);
+    let shell = if stacked {
+        col()
+            .child(roster(state, t, true))
+            .child(detail(state, t).grow(1.0).min_h(0.0))
+    } else {
+        row().child(roster(state, t, false)).child(detail(state, t))
+    };
+    let shell = shell
+        .key("crew.shell")
+        .w_full()
+        .h_full()
+        .min_h(0.0)
+        .on_layout_tx(|state: &mut State, [_, _, w, _], tx: &mut Tx| {
+            if state.window.crew.width == Some(w) {
+                tx.live_only();
+                return;
+            }
+            state.window.crew.width = Some(w);
+        });
+    Sheet::new("crew.sheet", "Manage crew")
+        .close(close)
+        .fill(shell)
+        .build(t)
         .key(PAGE)
         .role("dialog")
         .label("Manage crew")
@@ -113,19 +89,7 @@ pub(crate) fn page(state: &State, t: &Tokens) -> El {
         })
         .grow(1.0)
         .min_w(0.0)
-        .h_full()
-        .min_h(0.0)
         .fill(t.bg_panel)
-        .child(bar(t))
-        .child(
-            row()
-                .key("crew.shell")
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .child(roster(state, t))
-                .child(detail(state, t)),
-        )
 }
 
 /// The pickers Manage crew opens over itself.
@@ -134,101 +98,21 @@ pub(crate) fn overlays(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     crate::launch_desktop::overlay(state, t, layers);
 }
 
-fn bar(t: &Tokens) -> El {
-    row()
-        .key("crew.bar")
-        .w_full()
-        .min_h(53.0)
-        .items_center()
-        .gap(16.0)
-        .px(22.0)
-        .py(10.0)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
-        .child(
-            col()
-                .grow(1.0)
-                .gap(1.0)
-                .child(kicker("Crew", t))
-                .child(text("Manage crew").font(TITLE).color(t.text_primary)),
-        )
-        .child(
-            bordered("crew.close-page", t)
-                .on_press_tx(|state: &mut State, tx: &mut Tx| super::close(state, tx))
-                .label("Close")
-                .gap(7.0)
-                .px(9.0)
-                .py(6.0)
-                .radius(7.0)
-                .child(text("Close").font(type_::BODY).color(t.text_secondary))
-                .child(text("Esc").font(type_::MONO_CAPTION).color(t.text_muted)),
-        )
+/// The member's initial, leading its row.
+fn avatar(name: &str, t: &Tokens) -> El {
+    let initial: String = name.chars().take(1).flat_map(char::to_uppercase).collect();
+    words(initial, Type::Name, t.success).a11y_hidden()
 }
 
-/// The Tauri app's small bordered buttons in Manage crew: the elevated fill, a hairline and
-/// secondary ink.
-fn bordered(key: impl Into<String>, t: &Tokens) -> El {
-    row()
-        .key(key.into())
-        .role("button")
-        .focusable(true)
-        .focus_ring(2.0, 2.0, t.brand)
-        .items_center()
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .hover(t.bg_button)
-        .border(1.0, t.border)
-}
-
-/// A [`bordered`] button that says `label`, unusable while `disabled`.
-fn button(
-    key: impl Into<String>,
-    label: &str,
-    disabled: bool,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    let shown = bordered(key, t)
-        .label(label.to_owned())
-        .px(8.0)
-        .py(5.0)
-        .child(text(label.to_owned()).font(NOTE).color(t.text_secondary));
-    if disabled {
-        shown.disabled(true).opacity(0.45)
+fn presence_mark(member: &CrewMember, t: &Tokens) -> El {
+    if member.binding_session.is_some() {
+        dot(t.success, DotShape::Filled, DotSize::Regular)
     } else {
-        shown.on_press_tx(press)
+        dot(t.text_dimmed, DotShape::Hollow, DotSize::Regular)
     }
 }
 
-/// The member's initial on its green tile, as the Tauri app's `.crew-avatar`.
-fn avatar(name: &str, side: f32, corner: f32, font: rune::TextStyle, t: &Tokens) -> El {
-    let initial: String = name.chars().take(1).flat_map(char::to_uppercase).collect();
-    col()
-        .size(side, side)
-        .center()
-        .radius(corner)
-        .fill(attn_ui::colors::mix_srgb(t.bg_elevated, t.success, 0.14))
-        .border(1.0, t.text_primary.alpha(0.08))
-        .child(text(initial).font(font).color(attn_ui::colors::mix_srgb(
-            t.text_primary,
-            t.success,
-            0.72,
-        )))
-        .a11y_hidden()
-}
-
-fn presence_dot(member: &CrewMember, t: &Tokens) -> El {
-    rune::el()
-        .size(6.0, 6.0)
-        .radius(3.0)
-        .fill(if member.binding_session.is_some() {
-            t.success
-        } else {
-            t.text_dimmed
-        })
-        .a11y_hidden()
-}
-
-fn roster(state: &State, t: &Tokens) -> El {
+fn roster(state: &State, t: &Tokens, stacked: bool) -> El {
     let members = super::members(state);
     let selected = super::selected(state).map(|m| m.id.clone());
     let filter = state
@@ -239,53 +123,29 @@ fn roster(state: &State, t: &Tokens) -> El {
         .text
         .trim()
         .to_lowercase();
-    let mut aside = col()
-        .key("crew.roster")
-        .role("complementary")
-        .label("Crew roster")
-        .w(226.0)
-        .h_full()
-        .gap(12.0)
-        .px(10.0)
-        .py(18.0)
-        .border_sides([0.0, 1.0, 0.0, 0.0], t.border)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .child(
-            row()
-                .w_full()
-                .px(9.0)
-                .child(kicker("Members", t).grow(1.0))
-                .child(
-                    text(members.len().to_string())
-                        .key("crew.roster.count")
-                        .font(type_::CAPS)
-                        .color(t.text_muted),
-                ),
-        );
-    if members.len() > 5 {
-        aside = aside.child(
-            TextInput::new(&state.window.crew.place.roster_filter)
-                .key(FIND)
-                .label("Find a member")
-                .placeholder("Find a member…")
-                .width(None)
-                .on_edit(|state: &mut State| &mut state.window.crew.place.roster_filter)
-                .build(attn_ui::kit(t)),
-        );
-    }
+    let count = members.len();
+    let find = (count > 5).then(|| {
+        let input = TextInput::new(&state.window.crew.place.roster_filter)
+            .key(FIND)
+            .label("Find a member")
+            .placeholder("Find a member…")
+            .on_edit(|state: &mut State| &mut state.window.crew.place.roster_filter);
+        El::from(line_box(input, FieldState::Ready, t))
+    });
     let visible: Vec<&CrewMember> = members
         .into_iter()
         .filter(|m| filter.is_empty() || m.name.to_lowercase().contains(&filter))
         .collect();
     let ids: Vec<String> = visible.iter().map(|m| m.id.clone()).collect();
-    let list = col()
-        .key("crew.roster.list")
-        .role("list")
-        .label("Members")
-        .w_full()
-        .gap(5.0)
+    let list = visible
+        .iter()
+        .fold(
+            List::new("crew.roster.list", "Members")
+                .heading()
+                .count(count),
+            |list, m| list.row(roster_row(state, m, selected.as_deref(), t)),
+        )
+        .scrolling(t)
         .focusable(true)
         .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
             let step = match ev.key {
@@ -301,13 +161,29 @@ fn roster(state: &State, t: &Tokens) -> El {
                 super::navigate(state, Nav::Member(id.clone()), tx);
             }
             true
-        })
-        .children(
-            visible
-                .iter()
-                .map(|m| roster_row(state, m, selected.as_deref(), t)),
-        );
-    aside.child(list).scroll_bar_styled(attn_ui::scroll_bar(t))
+        });
+    let list = if stacked {
+        list.shrink().min_h(0.0)
+    } else {
+        list.grow(1.0).min_h(0.0)
+    };
+    let shown = Stack::tight()
+        .key("crew.roster")
+        .role("complementary")
+        .label("Crew roster")
+        .children(find)
+        .child(list);
+    if stacked {
+        shown
+            .w_full()
+            .max_h(STACKED_ROSTER)
+            .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+    } else {
+        shown
+            .w(ROSTER_WIDTH)
+            .h_full()
+            .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
+    }
 }
 
 fn presence(member: &CrewMember) -> &'static str {
@@ -330,344 +206,420 @@ fn roster_row(state: &State, member: &CrewMember, selected: Option<&str>, t: &To
         .and_then(|d| d.label.clone())
         .filter(|d| !d.is_empty());
     let presence = presence(member);
-    let identity = col()
-        .grow(1.0)
-        .min_w(0.0)
-        .gap(3.0)
-        .child(
-            text(member.name.clone())
-                .font(ROSTER_NAME)
-                .color(t.text_primary)
-                .single_line()
-                .truncate()
-                .mb(3.0),
-        )
-        .children(desktop.map(|d| text(d).font(NOTE).color(t.text_muted)))
-        .child(
-            row()
-                .gap(6.0)
-                .items_center()
-                .child(presence_dot(member, t))
-                .child(text(presence).font(NOTE).color(t.text_muted)),
+    let line = match desktop {
+        Some(desktop) => format!("{presence} · {desktop}"),
+        None => presence.to_owned(),
+    };
+    let mut row = ListRow::new(
+        format!("crew.roster.{}", member.id),
+        format!("{} {presence}", member.name),
+    )
+    .lead(avatar(&member.name, t))
+    .title(member.name.clone())
+    .subtitle(line, t)
+    .aside(presence_mark(member, t))
+    .selected(is_selected);
+    if let Some((said, failed)) = save {
+        row = row.tag(
+            tag(
+                format!("crew.roster.{}.save", member.id),
+                if failed { "Not saved" } else { "Saving" },
+                if failed { Tone::Bad } else { Tone::Neutral },
+                t,
+            )
+            .label(said),
         );
-    let mut shown = row()
-        .key(format!("crew.roster.{}", member.id))
-        .role("button")
-        .label(format!("{} {presence}", member.name))
-        .focusable(true)
-        .focus_ring(2.0, 2.0, t.brand)
-        .w_full()
-        .items_start()
-        .gap(10.0)
-        .px(9.0)
-        .py(11.0)
-        .radius(7.0)
-        .border(1.0, Color::TRANSPARENT)
-        .child(avatar(&member.name, 30.0, 8.0, AVATAR, t))
-        .child(identity)
-        .children(save.map(|(words, failed)| {
-            rune::el()
-                .label(words)
-                .size(6.0, 6.0)
-                .mt(4.0)
-                .radius(3.0)
-                .fill(if failed { t.error } else { t.brand })
-        }))
+    }
+    row.build(t)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            tx.instant();
             super::navigate(state, Nav::Member(id.clone()), tx)
         })
         .focus_selected(is_selected)
-        .checked(is_selected);
-    shown = if is_selected {
-        shown
-            .border(1.0, attn_ui::colors::mix_srgb(t.border, t.brand, 0.32))
-            .fill(attn_ui::colors::mix_srgb(t.bg_elevated, t.brand, 0.09))
-            .box_shadow(rune::Shadow {
-                x: 2.0,
-                color: t.brand,
-                inset: true,
-                ..rune::Shadow::default()
-            })
-    } else {
-        shown.hover(t.text_primary.alpha(0.05))
-    };
-    shown
+        .checked(is_selected)
 }
 
 fn detail(state: &State, t: &Tokens) -> El {
-    let main = col()
-        .key("crew.detail")
-        .grow(1.0)
-        .min_w(0.0)
-        .h_full()
-        .min_h(0.0)
-        .fill(t.bg_app)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        });
     let Some(member) = super::selected(state) else {
-        return main
-            .child(
-                caption("crew.empty", "No crew members.", t)
-                    .px(28.0)
-                    .py(40.0),
+        return Page::new()
+            .push(
+                Prose::lead("crew.empty", "No crew members.")
+                    .quiet(true)
+                    .build(t),
             )
-            .scroll_bar_styled(attn_ui::scroll_bar(t));
+            .build("crew.detail", t);
     };
     let tab = state.window.crew.place.tab;
-    main.child(heading(state, member, t))
-        .child(tabs(tab, t))
-        .child(
-            col()
-                .key("crew.tab")
-                .w_full()
-                .px(28.0)
-                .pt(22.0)
-                .pb(32.0)
-                .children(match tab {
-                    Tab::Launch => launch_tab(state, member, t),
-                    Tab::Charter => vec![charter_tab(state, member, t)],
-                    Tab::Handoffs => vec![handoffs_tab(state, member, t)],
-                    Tab::Seeds => vec![seeds_tab(state, member, t)],
-                }),
-        )
-        .scroll_bar_styled(attn_ui::scroll_bar(t))
+    let blocks = match tab {
+        Tab::Launch => launch_tab(state, member, t),
+        Tab::Charter => charter_tab(state, member, t),
+        Tab::Handoffs => handoffs_tab(state, member, t),
+        Tab::Seeds => seeds_tab(state, member, t),
+    };
+    Page::new()
+        .head(heading(state, member, t))
+        .push(Block::control("crew.tabs.block", tabs(tab, t)))
+        .push_all(blocks)
+        .build("crew.detail", t)
 }
 
-fn heading(state: &State, member: &CrewMember, t: &Tokens) -> El {
+fn heading(state: &State, member: &CrewMember, t: &Tokens) -> Head {
     let renaming = state
         .window
         .crew
         .rename
         .as_ref()
         .filter(|r| r.member == member.id);
-    let name: El = match renaming {
-        Some(rename) => col()
-            .gap(space::S1)
-            .child(
-                TextInput::new(&rename.edit)
-                    .key(RENAME_FIELD)
-                    .label(format!("New name for {}", member.name))
-                    .disabled(rename.saving)
-                    .width(Some(240.0))
-                    .on_edit(|state: &mut State| {
-                        let rename = state
-                            .window
-                            .crew
-                            .rename
-                            .as_mut()
-                            .expect("the rename field shows only while renaming");
-                        &mut rename.edit
-                    })
-                    .on_change(|state: &mut State, _: &mut Tx| {
-                        if let Some(rename) = state.window.crew.rename.as_mut() {
-                            rename.error = None;
-                        }
-                    })
-                    .on_submit(super::submit_rename)
-                    .on_key(|state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-                        if ev.key != Key::Escape {
-                            return false;
-                        }
-                        if state.window.crew.rename.as_ref().is_some_and(|r| !r.saving) {
-                            super::cancel_rename(state, tx);
-                        }
-                        true
-                    })
-                    .build(attn_ui::kit(t)),
+    let in_session = member.binding_session.is_some();
+    let presence_tag = El::from(tag(
+        "crew.presence.pill",
+        presence(member),
+        if in_session {
+            Tone::Good
+        } else {
+            Tone::Neutral
+        },
+        t,
+    ))
+    .a11y_hidden();
+    let head = Head::new("crew.heading", member.name.clone())
+        .note(
+            words(presence(member), Type::Small, t.text_tertiary)
+                .key("crew.presence")
+                .label(presence(member)),
+        )
+        .aside(presence_tag);
+    match renaming {
+        Some(rename) => {
+            let input = TextInput::new(&rename.edit)
+                .key(RENAME_FIELD)
+                .label(format!("New name for {}", member.name))
+                .on_edit(|state: &mut State| {
+                    let rename = state
+                        .window
+                        .crew
+                        .rename
+                        .as_mut()
+                        .expect("the rename field shows only while renaming");
+                    &mut rename.edit
+                })
+                .on_change(|state: &mut State, _: &mut Tx| {
+                    if let Some(rename) = state.window.crew.rename.as_mut() {
+                        rename.error = None;
+                    }
+                })
+                .on_submit(super::submit_rename)
+                .on_key(|state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+                    if ev.key != Key::Escape {
+                        return false;
+                    }
+                    if state.window.crew.rename.as_ref().is_some_and(|r| !r.saving) {
+                        super::cancel_rename(state, tx);
+                    }
+                    true
+                });
+            let field = line_box(
+                input,
+                if rename.saving {
+                    FieldState::Disabled
+                } else {
+                    FieldState::failed_if(rename.error.is_some())
+                },
+                t,
+            );
+            head.aside(
+                Stack::tight().child(field.into()).children(
+                    rename
+                        .error
+                        .as_ref()
+                        .map(|why| Refusal::new("crew.rename.error", why.clone()).build(t)),
+                ),
             )
-            .children(
-                rename
-                    .error
-                    .as_ref()
-                    .map(|why| alert("crew.rename.error", why.clone(), t)),
-            ),
+        }
         None => {
             let id = member.id.clone();
-            row()
-                .gap(space::S2)
-                .items_center()
-                .child(
-                    text(member.name.clone())
-                        .key("crew.heading")
-                        .role("heading")
-                        .label(member.name.clone())
-                        .font(NAME)
-                        .color(t.text_primary),
-                )
-                .child(
-                    bordered(RENAME, t)
-                        .label("Rename")
-                        .ml(10.0)
-                        .px(7.0)
-                        .py(2.0)
-                        .child(text("Rename").font(RENAME_TYPE).color(t.text_secondary))
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            super::begin_rename(state, &id, tx)
-                        }),
-                )
+            head.aside(
+                Button::new("Rename")
+                    .size(Size::Compact)
+                    .look(Look::Quiet)
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                        super::begin_rename(state, &id, tx)
+                    })
+                    .build(t)
+                    .key(RENAME),
+            )
         }
-    };
-    let in_session = member.binding_session.is_some();
-    let pill = row()
-        .key("crew.presence.pill")
-        .px(8.0)
-        .py(4.0)
-        .radius(999.0);
-    let pill = if in_session {
-        pill.fill(t.success.alpha(0.08))
-            .border(1.0, attn_ui::colors::mix_srgb(t.border, t.success, 0.35))
-            .child(text(presence(member)).font(NOTE).color(t.success))
-    } else {
-        pill.border(1.0, t.border)
-            .child(text(presence(member)).font(NOTE).color(t.text_muted))
-    };
-    row()
-        .key("crew.member")
-        .w_full()
-        .items_center()
-        .gap(18.0)
-        .px(28.0)
-        .pt(20.0)
-        .pb(18.0)
-        .fill(t.bg_app)
-        .linear_gradient(
-            110f32.to_radians(),
-            [
-                (0.0, attn_ui::colors::mix_srgb(t.bg_panel, t.brand, 0.05)),
-                (0.68, t.bg_app),
-            ],
-        )
-        .child(
-            row()
-                .grow(1.0)
-                .min_w(0.0)
-                .items_center()
-                .gap(13.0)
-                .child(avatar(&member.name, 43.0, 11.0, LARGE_AVATAR, t))
-                .child(col().min_w(0.0).gap(4.0).child(name).child(caption(
-                    "crew.presence",
-                    presence(member),
-                    t,
-                ))),
-        )
-        .child(pill.a11y_hidden())
+    }
 }
 
-/// The member's details, as the Tauri app's `.crew-member-tabs`: underlined words on the panel,
-/// the open one in primary ink over the brand.
+/// The member's details: one button per tab, the shown one raised.
 fn tabs(shown: Tab, t: &Tokens) -> El {
-    row()
+    Inline::tight()
         .key("crew.tabs")
         .role("navigation")
         .label("Member details")
-        .w_full()
-        .gap(24.0)
-        .px(28.0)
-        .fill(t.bg_panel)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
         .children(Tab::ALL.into_iter().map(|tab| {
-            underlined(
+            tab_button(
                 format!("crew.tab.{}", tab.id()),
-                tab.label().to_owned(),
+                tab.label(),
                 None,
                 tab == shown,
-                [11.0, 12.0],
-                2.0,
                 t,
             )
             .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                tx.instant();
                 super::navigate(state, Nav::Tab(tab), tx)
             })
         }))
 }
 
-/// One of the Tauri app's underline tabs: `words` and a dimmed `count`, muted until chosen,
-/// when primary ink sits over a `rule`-thick brand line. `pad` is its top and bottom padding.
-fn underlined(
-    key: String,
-    words: String,
-    count: Option<String>,
-    chosen: bool,
-    [top, bottom]: [f32; 2],
-    rule: f32,
-    t: &Tokens,
-) -> El {
+/// A tab's button, `said` and a `count` after it, raised and read as chosen while shown.
+fn tab_button(key: String, said: &str, count: Option<String>, chosen: bool, t: &Tokens) -> El {
     let label = match &count {
-        Some(n) => format!("{words} {n}"),
-        None => words.clone(),
+        Some(n) => format!("{said} {n}"),
+        None => said.to_owned(),
     };
-    row()
-        .key(key)
-        .role("button")
-        .label(label)
-        .focusable(true)
-        .focus_ring(2.0, 2.0, t.brand)
-        .items_end()
-        .gap(4.0)
-        .pt(top)
-        .pb(bottom - rule)
-        .border_sides(
-            [0.0, 0.0, rule, 0.0],
-            if chosen { t.brand } else { Color::TRANSPARENT },
-        )
-        .mb(-1.0)
-        .child(
-            text(words)
-                .font(NOTE)
-                .color(if chosen { t.text_primary } else { t.text_muted }),
-        )
-        .children(count.map(|n| text(n).font(type_::MONO_CAPTION).color(t.text_dimmed)))
-        .checked(chosen)
-}
-
-/// A bordered card on the panel, as the Tauri app's `.crew-running`.
-fn card(key: &str, t: &Tokens) -> El {
-    col()
-        .key(key.to_owned())
-        .w_full()
-        .max_w(NARROW)
-        .gap(space::S2)
-        .px(16.0)
-        .py(13.0)
-        .radius(8.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border)
-}
-
-/// A row under a hairline: what it does on the left and its button on the right, as the
-/// Tauri app's `.crew-session-action`.
-fn action_row(key: &str, t: &Tokens) -> El {
-    row()
-        .key(key.to_owned())
-        .w_full()
-        .max_w(NARROW)
-        .items_center()
-        .gap(16.0)
-        .mt(16.0)
-        .pt(14.0)
-        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-}
-
-/// The action row's button: the bordered button in primary ink.
-fn action_button(
-    key: &str,
-    label: &str,
-    disabled: bool,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    let shown = bordered(key, t)
-        .label(label.to_owned())
-        .px(10.0)
-        .py(7.0)
-        .radius(7.0)
-        .child(text(label.to_owned()).font(NOTE).color(t.text_primary));
-    if disabled {
-        shown.disabled(true).opacity(0.45)
-    } else {
-        shown.on_press_tx(press)
+    let mut button =
+        Button::new(said)
+            .size(Size::Compact)
+            .look(if chosen { Look::Plain } else { Look::Quiet });
+    if let Some(n) = count {
+        button = button.trailing(words(n, Type::Mono, t.text_dimmed));
     }
+    El::from(button.build(t).key(key).label(label)).checked(chosen)
+}
+
+fn status_line(key: &str, said: impl Into<String>, ink: rune::Color) -> El {
+    let said = said.into();
+    words(said.clone(), Type::Small, ink)
+        .key(key.to_owned())
+        .role("status")
+        .label(said)
+        .wrap()
+}
+
+fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
+    let Some(shown) = launch::shown(state, &member.id) else {
+        return Vec::new();
+    };
+    let connected = state.facts.connection == attn_client::Connection::Connected;
+    let in_session = member.binding_session.is_some();
+    let mut tab = Vec::new();
+    if let Some(session) = &member.binding_session {
+        let running = state
+            .facts
+            .sessions
+            .iter()
+            .find(|s| &s.id == session)
+            .map(|s| s.agent.clone())
+            .unwrap_or_default();
+        let harness = if running.is_empty() {
+            "Harness not reported".to_owned()
+        } else {
+            harness_name(state, &running)
+        };
+        let short: String = session.chars().take(8).collect();
+        let said = format!("{harness} · Model not reported · Effort not reported · {short}");
+        tab.push(
+            Section::new("crew.running", "Running now")
+                .control(words(short, Type::Mono, t.text_muted))
+                .push(Block::custom(
+                    "crew.running.route.block",
+                    words(said.clone(), Type::Body, t.text_primary)
+                        .key("crew.running.route")
+                        .label(said)
+                        .wrap(),
+                ))
+                .build(t),
+        );
+    }
+    let catalog_error = crate::settings::harnesses_error(state);
+    let follows = launch::followed_harness(&shown);
+    let unavailable = !follows.is_empty()
+        && !crate::settings::listed_harnesses(state)
+            .iter()
+            .any(|h| h.id == follows && h.available);
+    let warning = catalog_error
+        .clone()
+        .or_else(|| unavailable.then(|| "This harness is unavailable on this daemon.".to_owned()));
+    let id = member.id.clone();
+    let ack = &shown.acknowledged;
+    let (agent, model, effort) = (
+        ack.resolved_agent.as_str(),
+        ack.resolved_model.as_deref().unwrap_or_default(),
+        ack.resolved_effort.as_deref().unwrap_or_default(),
+    );
+    let acknowledged = route_words(state, agent, model, effort);
+    let acknowledged_route = crate::settings::route::Route::stored(agent, model, effort);
+    let save = launch::status(&shown);
+    let save_ink = if shown.error.is_some() {
+        t.error
+    } else if shown.saving {
+        t.brand
+    } else {
+        t.text_muted
+    };
+    let desktop = crate::launch_desktop::Field {
+        key: format!("crew.launch.{}", member.id),
+        kind: "crew".into(),
+        item_id: member.id.clone(),
+        profile_id: member.profile_id.clone(),
+        default_name: if member.name.is_empty() {
+            member.id.clone()
+        } else {
+            member.name.clone()
+        },
+        value: shown.draft.launch_desktop.clone(),
+        disabled: false,
+        on_change: launch::choose_desktop,
+    };
+    let (choice, unread) = crate::launch_desktop::trigger(state, t, &desktop);
+    let mut launch_section = Section::new("crew.launch", "Launch settings")
+        .description("The next session starts with these.")
+        .control(status_line("crew.launch.status", save, save_ink));
+    if shown.error.is_some() {
+        let id = id.clone();
+        launch_section = launch_section.control(
+            Button::new("Retry")
+                .size(Size::Compact)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| launch::pump(state, &id, tx))
+                .build(t)
+                .key("crew.launch.retry"),
+        );
+    }
+    launch_section = launch_section
+        .push(
+            Field::new(desktop.select_key(), "Desktop")
+                .control(choice)
+                .error(unread)
+                .build(t),
+        )
+        .push(
+            Field::new("crew.launch.route", "Runs as")
+                .control(crate::settings::route_chip(
+                    state,
+                    t,
+                    route_target(&member.id),
+                    "Crew launch model",
+                ))
+                .build(t),
+        );
+    if let Some(warning) = warning {
+        let mut notice = Notice::warn("crew.launch.warning", warning);
+        if catalog_error.is_some() {
+            notice = notice.action(
+                Button::new("Retry harness discovery")
+                    .size(Size::Compact)
+                    .on_press_tx(crate::settings::read_harnesses)
+                    .build(t)
+                    .key("crew.launch.rediscover"),
+            );
+        }
+        launch_section = launch_section.push(notice.build(t));
+    }
+    launch_section = launch_section.push(Block::custom(
+        "crew.acknowledged.block",
+        Inline::loose()
+            .key("crew.acknowledged")
+            .role("group")
+            .label(format!("Acknowledged next session {acknowledged}"))
+            .w_full()
+            .child(
+                words("Acknowledged next session", Type::Small, t.text_tertiary)
+                    .key("crew.acknowledged.title"),
+            )
+            .child(crate::settings::route::badge(state, t, &acknowledged_route).a11y_hidden()),
+    ));
+    if let Some(why) = shown.error.clone() {
+        launch_section = launch_section.push(Notice::error("crew.launch.error", why).build(t));
+    }
+    tab.push(launch_section.build(t));
+    if in_session {
+        let applying = state.window.crew.applying.as_deref() == Some(member.id.as_str());
+        let applied = state
+            .window
+            .crew
+            .applied
+            .as_ref()
+            .filter(|a| a.member == member.id);
+        let id = member.id.clone();
+        let mut apply = Section::new("crew.apply.section", "Apply settings now")
+            .description("The same harness reloads in place and keeps the conversation. A new harness starts after the member files its letter.")
+            .control(
+                Button::new(if applying { "Applying…" } else { "Apply" })
+                    .size(Size::Compact)
+                    .disabled(!connected || !shown.saved || applying)
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| super::apply(state, &id, tx))
+                    .build(t)
+                    .key("crew.apply"),
+            );
+        if member.switch_pending == Some(true) {
+            apply = apply.push(Block::custom(
+                "crew.switch-pending.block",
+                status_line(
+                    "crew.switch-pending",
+                    format!(
+                        "Waiting for {}’s letter to continue on {}.",
+                        if member.name.is_empty() {
+                            &member.id
+                        } else {
+                            &member.name
+                        },
+                        member.resolved_agent
+                    ),
+                    t.text_secondary,
+                ),
+            ));
+        }
+        if let Some(a) = applied {
+            apply = apply.push(Block::custom(
+                "crew.apply.outcome.block",
+                status_line(
+                    "crew.apply.outcome",
+                    a.text.clone(),
+                    if a.failed { t.error } else { t.text_secondary },
+                ),
+            ));
+        }
+        tab.push(apply.build(t));
+    }
+    let id = member.id.clone();
+    let (key, label, disabled) = if in_session {
+        ("crew.close", "Close", !connected)
+    } else {
+        ("crew.start", "Start", !connected || !shown.saved)
+    };
+    tab.push(
+        Section::new(
+            "crew.session",
+            if in_session {
+                "Close session"
+            } else {
+                "Start session"
+            },
+        )
+        .control(
+            Button::new(label)
+                .size(Size::Compact)
+                .look(if in_session {
+                    Look::Plain
+                } else {
+                    Look::Primary
+                })
+                .disabled(disabled)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    if in_session {
+                        super::ask_to_close(state, &id, tx)
+                    } else {
+                        super::start(state, &id, tx)
+                    }
+                })
+                .build(t)
+                .key(key),
+        )
+        .build(t),
+    );
+    tab
 }
 
 fn route_target(member: &str) -> RouteTarget {
@@ -709,314 +661,36 @@ fn route_words(state: &State, agent: &str, model: &str, effort: &str) -> String 
     words
 }
 
-fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<El> {
-    let Some(shown) = launch::shown(state, &member.id) else {
-        return Vec::new();
-    };
-    let connected = state.facts.connection == attn_client::Connection::Connected;
-    let in_session = member.binding_session.is_some();
-    let mut tab = Vec::new();
-    if let Some(session) = &member.binding_session {
-        let running = state
-            .facts
-            .sessions
-            .iter()
-            .find(|s| &s.id == session)
-            .map(|s| s.agent.clone())
-            .unwrap_or_default();
-        let harness = if running.is_empty() {
-            "Harness not reported".to_owned()
-        } else {
-            harness_name(state, &running)
-        };
-        let short: String = session.chars().take(8).collect();
-        let words = format!("{harness} · Model not reported · Effort not reported · {short}");
-        tab.push(
-            card("crew.running", t)
-                .role("group")
-                .label("Running now")
-                .mb(15.0)
-                .child(
-                    row()
-                        .w_full()
-                        .child(kicker("Running now", t).grow(1.0))
-                        .child(text(short).font(type_::MONO_CAPTION).color(t.text_muted)),
-                )
-                .child(
-                    text(words.clone())
-                        .key("crew.running.route")
-                        .label(words)
-                        .font(NOTE)
-                        .color(t.text_primary),
-                ),
-        );
-    }
-    let catalog_error = crate::settings::harnesses_error(state);
-    let follows = launch::followed_harness(&shown);
-    let unavailable = !follows.is_empty()
-        && !crate::settings::listed_harnesses(state)
-            .iter()
-            .any(|h| h.id == follows && h.available);
-    let warning = catalog_error
-        .clone()
-        .or_else(|| unavailable.then(|| "This harness is unavailable on this daemon.".to_owned()));
-    let id = member.id.clone();
-    let ack = &shown.acknowledged;
-    let (agent, model, effort) = (
-        ack.resolved_agent.as_str(),
-        ack.resolved_model.as_deref().unwrap_or_default(),
-        ack.resolved_effort.as_deref().unwrap_or_default(),
-    );
-    let acknowledged = route_words(state, agent, model, effort);
-    let acknowledged_route = crate::settings::route::Route::stored(agent, model, effort);
-    let save = launch::status(&shown);
-    let save_ink = if shown.error.is_some() {
-        t.error
-    } else if shown.saving {
-        t.brand
-    } else {
-        t.text_muted
-    };
-    let mut launch_card = col()
-        .key("crew.launch")
-        .role("group")
-        .label("Launch settings")
-        .w_full()
-        .max_w(NARROW)
-        .radius(9.0)
-        .fill(t.bg_panel)
-        .border(1.0, attn_ui::colors::mix_srgb(t.border, t.brand, 0.25))
-        .box_shadow(rune::Shadow {
-            y: 5.0,
-            blur: 24.0,
-            color: t.shadow.alpha(0.08),
-            ..rune::Shadow::default()
-        })
-        .child(
-            row()
-                .w_full()
-                .items_center()
-                .gap(space::S2)
-                .px(17.0)
-                .pt(14.0)
-                .child(
-                    col()
-                        .grow(1.0)
-                        .gap(3.0)
-                        .child(kicker("Next session", t))
-                        .child(
-                            text("Launch settings")
-                                .role("heading")
-                                .font(SECTION)
-                                .color(t.text_primary),
-                        ),
-                )
-                .child(status("crew.launch.status", save, save_ink))
-                .children(shown.error.is_some().then(|| {
-                    let id = id.clone();
-                    button("crew.launch.retry", "Retry", false, t, move |state, tx| {
-                        launch::pump(state, &id, tx)
-                    })
-                })),
-        )
-        .child(
-            row()
-                .key("crew.launch.fields")
-                .w_full()
-                .gap(13.0)
-                .px(17.0)
-                .py(16.0)
-                .items_start()
-                .child(
-                    col()
-                        .grow(1.0)
-                        .w(0.0)
-                        .min_w(0.0)
-                        .child(crate::launch_desktop::field(
-                            state,
-                            t,
-                            &crate::launch_desktop::Field {
-                                key: format!("crew.launch.{}", member.id),
-                                kind: "crew".into(),
-                                item_id: member.id.clone(),
-                                profile_id: member.profile_id.clone(),
-                                default_name: if member.name.is_empty() {
-                                    member.id.clone()
-                                } else {
-                                    member.name.clone()
-                                },
-                                value: shown.draft.launch_desktop.clone(),
-                                disabled: false,
-                                height: LAUNCH_FIELD_HEIGHT,
-                                on_change: launch::choose_desktop,
-                            },
-                        )),
-                )
-                .child(
-                    col()
-                        .grow(1.0)
-                        .w(0.0)
-                        .min_w(0.0)
-                        .child(crate::settings::route_chip(
-                            state,
-                            t,
-                            route_target(&member.id),
-                            "Crew launch model",
-                        )),
-                )
-                .child(col().grow(1.0).w(0.0).min_w(0.0)),
-        );
-    if let Some(warning) = warning {
-        launch_card = launch_card.child(
-            row()
-                .w_full()
-                .gap(12.0)
-                .px(17.0)
-                .pb(11.0)
-                .items_center()
-                .child(alert("crew.launch.warning", warning, t))
-                .children(catalog_error.is_some().then(|| {
-                    button(
-                        "crew.launch.rediscover",
-                        "Retry harness discovery",
-                        false,
-                        t,
-                        crate::settings::read_harnesses,
-                    )
-                })),
-        );
-    }
-    launch_card = launch_card
-        .child(
-            row()
-                .key("crew.acknowledged")
-                .role("group")
-                .label(format!("Acknowledged next session {acknowledged}"))
-                .w_full()
-                .items_center()
-                .gap(12.0)
-                .px(17.0)
-                .py(11.0)
-                .fill(t.bg_app.alpha(0.45))
-                .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-                .corners([0.0, 0.0, 9.0, 9.0])
-                .child(caption("crew.acknowledged.title", "Acknowledged next session", t).grow(1.0))
-                .child(crate::settings::route::badge(state, t, &acknowledged_route).a11y_hidden()),
-        )
-        .children(
-            shown
-                .error
-                .clone()
-                .map(|why| alert("crew.launch.error", why, t).px(17.0).pb(11.0)),
-        );
-    tab.push(launch_card);
-    if in_session {
-        let applying = state.window.crew.applying.as_deref() == Some(member.id.as_str());
-        let applied = state
-            .window
-            .crew
-            .applied
-            .as_ref()
-            .filter(|a| a.member == member.id);
-        let id = member.id.clone();
-        tab.push(
-            action_row("crew.apply.section", t)
-                .child(
-                    col()
-                        .grow(1.0)
-                        .min_w(0.0)
-                        .gap(4.0)
-                        .child(text("Apply settings now").role("heading").font(SECTION).color(t.text_primary))
-                        .child(
-                            text("The same harness reloads in place and keeps the conversation. A new harness starts after the member files its letter.")
-                                .font(NOTE)
-                                .color(t.text_secondary)
-                                .wrap()
-                                .w_full(),
-                        )
-                        .children((member.switch_pending == Some(true)).then(|| {
-                            status(
-                                "crew.switch-pending",
-                                format!(
-                                    "Waiting for {}’s letter to continue on {}.",
-                                    if member.name.is_empty() { &member.id } else { &member.name },
-                                    member.resolved_agent
-                                ),
-                                t.text_secondary,
-                            )
-                        }))
-                        .children(applied.map(|a| {
-                            status(
-                                "crew.apply.outcome",
-                                a.text.clone(),
-                                if a.failed { t.error } else { t.text_secondary },
-                            )
-                        })),
-                )
-                .child(action_button(
-                    "crew.apply",
-                    if applying { "Applying…" } else { "Apply" },
-                    !connected || !shown.saved || applying,
-                    t,
-                    move |state, tx| super::apply(state, &id, tx),
-                )),
-        );
-    }
-    let id = member.id.clone();
-    let (key, label, disabled) = if in_session {
-        ("crew.close", "Close", !connected)
-    } else {
-        ("crew.start", "Start", !connected || !shown.saved)
-    };
-    tab.push(
-        action_row("crew.session", t)
-            .child(
-                text(if in_session {
-                    "Close session"
-                } else {
-                    "Start session"
-                })
-                .role("heading")
-                .font(SECTION)
-                .color(t.text_primary)
-                .grow(1.0),
-            )
-            .child(action_button(key, label, disabled, t, move |state, tx| {
-                if in_session {
-                    super::ask_to_close(state, &id, tx)
-                } else {
-                    super::start(state, &id, tx)
-                }
-            })),
-    );
-    tab
-}
-
-fn charter_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
+fn charter_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
     let charters = &state.window.crew.charters;
     let edit = charters.edits.get(&member.id);
     let id = member.id.clone();
     let Some(edit) = edit.filter(|e| e.phase != Phase::Loading || e.acknowledged.is_some()) else {
-        return caption("crew.charter.loading", "Loading charter…", t);
+        return vec![
+            Prose::lead("crew.charter.loading", "Loading charter…")
+                .quiet(true)
+                .build(t),
+        ];
     };
     if edit.acknowledged.is_none() {
-        return row()
-            .gap(space::S2)
-            .items_center()
-            .child(alert(
+        return vec![
+            Notice::error(
                 "crew.charter.load-error",
                 edit.error
                     .clone()
                     .unwrap_or_else(|| "The charter could not be loaded.".into()),
-                t,
-            ))
-            .child(button(
-                "crew.charter.load-retry",
-                "Retry",
-                false,
-                t,
-                move |state, tx| charter::load(state, &id, tx),
-            ));
+            )
+            .action(
+                Button::new("Retry")
+                    .size(Size::Compact)
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                        charter::load(state, &id, tx)
+                    })
+                    .build(t)
+                    .key("crew.charter.load-retry"),
+            )
+            .build(t),
+        ];
     }
     let field = charters
         .fields
@@ -1031,7 +705,6 @@ fn charter_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
         .max_height(CHARTER_HEIGHT)
         .resizable()
         .spellcheck(true)
-        .width(None)
         .on_edit(move |state: &mut State| state.window.crew.charters.field_mut(&edited))
         .on_change({
             let id = member.id.clone();
@@ -1040,98 +713,85 @@ fn charter_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
         .on_blur({
             let id = member.id.clone();
             move |state: &mut State, tx: &mut Tx| charter::flush(state, &id, tx)
-        })
-        .build(attn_ui::kit(t));
+        });
     let save_ink = match edit.phase {
         Phase::Saving | Phase::Dirty => t.brand,
         Phase::Error | Phase::Conflict => t.error,
         Phase::Loading | Phase::Saved => t.text_muted,
     };
-    let mut section = col()
-        .key("crew.charter")
-        .role("group")
-        .label("Charter editor")
+    let file = Inline::loose()
+        .key("crew.charter.meta")
+        .label("CHARTER.md · Markdown")
         .w_full()
-        .max_w(WIDE)
-        .child(document_heading("Charter", t).child(status(
+        .child(words("CHARTER.md", Type::Mono, t.text_muted).grow(1.0))
+        .child(words("Markdown", Type::Mono, t.text_muted));
+    let mut section = Section::new("crew.charter", "Charter")
+        .control(status_line(
             "crew.charter.status",
             charter::status(edit.phase),
             save_ink,
-        )))
-        .child(col().w_full().child(charter_bar(t)).child(editor));
+        ))
+        .push(Block::custom(
+            "crew.charter.editor.block",
+            Stack::tight()
+                .w_full()
+                .child(file)
+                .child(area_box(editor, FieldState::Ready, t).into()),
+        ));
     if edit.phase == Phase::Error {
         let id = member.id.clone();
-        section = section.child(
-            row()
-                .gap(space::S2)
-                .items_center()
-                .child(alert(
-                    "crew.charter.error",
-                    edit.error.clone().unwrap_or_else(|| {
-                        "The charter was not saved. Your edit is still here.".into()
-                    }),
-                    t,
-                ))
-                .child(button(
-                    "crew.charter.retry",
-                    "Retry",
-                    false,
-                    t,
-                    move |state, tx| charter::flush(state, &id, tx),
-                )),
+        section = section.push(
+            Notice::error(
+                "crew.charter.error",
+                edit.error.clone().unwrap_or_else(|| {
+                    "The charter was not saved. Your edit is still here.".into()
+                }),
+            )
+            .action(
+                Button::new("Retry")
+                    .size(Size::Compact)
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                        charter::flush(state, &id, tx)
+                    })
+                    .build(t)
+                    .key("crew.charter.retry"),
+            )
+            .build(t),
         );
     }
     if edit.phase == Phase::Conflict && edit.conflict.is_some() {
         let (file, mine) = (member.id.clone(), member.id.clone());
-        section = section.child(
-            col()
-                .key("crew.charter.conflict")
-                .role("alert")
-                .label("The file changed outside this editor.")
-                .gap(space::S1)
-                .child(
-                    text("The file changed outside this editor.")
-                        .font(type_::TITLE)
-                        .color(t.text_primary),
+        section = section
+            .push(
+                Notice::warn(
+                    "crew.charter.conflict",
+                    "The file changed outside this editor. Your edit is still here. Choose which version should become canonical.",
                 )
-                .child(
-                    text("Your edit is still here. Choose which version should become canonical.")
-                        .font(type_::LABEL)
-                        .color(t.text_secondary),
-                )
-                .child(
-                    row()
-                        .gap(space::S2)
-                        .child(button(
-                            "crew.charter.use-file",
-                            "Use file version",
-                            false,
-                            t,
-                            move |state, _| charter::use_file(state, &file),
-                        ))
-                        .child(button(
-                            "crew.charter.keep-mine",
-                            "Keep my edit",
-                            false,
-                            t,
-                            move |state, tx| charter::keep_mine(state, &mine, tx),
-                        )),
-                ),
-        );
+                .build(t),
+            )
+            .push(
+                Actions::new("crew.charter.conflict.actions")
+                    .push(
+                        Button::new("Use file version")
+                            .size(Size::Compact)
+                            .on_press(move |state: &mut State| charter::use_file(state, &file))
+                            .build(t)
+                            .key("crew.charter.use-file"),
+                    )
+                    .push(
+                        Button::new("Keep my edit")
+                            .size(Size::Compact)
+                            .look(Look::Primary)
+                            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                                charter::keep_mine(state, &mine, tx)
+                            })
+                            .build(t)
+                            .key("crew.charter.keep-mine"),
+                    )
+                    .build(),
+            );
     }
-    section
-}
-
-/// A tab's document heading, as the Tauri app's `.crew-document-heading`: its title on the
-/// left and what goes with it on the right.
-fn document_heading(title: &str, t: &Tokens) -> El {
-    row().w_full().items_start().gap(18.0).mb(16.0).child(
-        text(title.to_owned())
-            .role("heading")
-            .font(DOCUMENT)
-            .color(t.text_primary)
-            .grow(1.0),
-    )
+    vec![section.build(t)]
 }
 
 fn day_and_time(iso: &str) -> (String, String) {
@@ -1139,115 +799,100 @@ fn day_and_time(iso: &str) -> (String, String) {
     (day.to_owned(), rest.chars().take(5).collect())
 }
 
-fn handoffs_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
+fn handoffs_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
     let history = state.window.crew.handoffs.by_member.get(&member.id);
     let id = member.id.clone();
     let Some(history) = history.filter(|h| h.reading != Reading::Loading) else {
-        return caption("crew.handoffs.loading", "Loading handoffs…", t);
+        return vec![
+            Prose::lead("crew.handoffs.loading", "Loading handoffs…")
+                .quiet(true)
+                .build(t),
+        ];
     };
     if history.reading == Reading::Failed {
-        return row()
-            .gap(space::S2)
-            .items_center()
-            .child(alert(
+        return vec![
+            Notice::error(
                 "crew.handoffs.error",
                 history.error.clone().unwrap_or_default(),
-                t,
-            ))
-            .child(button(
-                "crew.handoffs.retry",
-                "Retry",
-                false,
-                t,
-                move |state, tx| handoffs::load(state, &id, true, tx),
-            ));
+            )
+            .action(
+                Button::new("Retry")
+                    .size(Size::Compact)
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                        handoffs::load(state, &id, true, tx)
+                    })
+                    .build(t)
+                    .key("crew.handoffs.retry"),
+            )
+            .build(t),
+        ];
     }
     let refresh_id = member.id.clone();
-    let head = document_heading("Handoffs", t).child(
-        row()
-            .gap(9.0)
-            .items_center()
-            .children((!history.handoffs.is_empty()).then(|| {
-                type_::caps("Read only")
-                    .key("crew.handoffs.read-only")
-                    .color(t.text_muted)
-            }))
-            .child(button(
-                "crew.handoffs.refresh",
-                "Refresh",
-                false,
-                t,
-                move |state, tx| handoffs::load(state, &refresh_id, true, tx),
-            )),
+    let mut section = Section::new("crew.handoffs", "Handoffs");
+    if !history.handoffs.is_empty() {
+        section = section.control(El::from(tag(
+            "crew.handoffs.read-only",
+            "Read only",
+            Tone::Neutral,
+            t,
+        )));
+    }
+    section = section.control(
+        Button::new("Refresh")
+            .size(Size::Compact)
+            .look(Look::Quiet)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                handoffs::load(state, &refresh_id, true, tx)
+            })
+            .build(t)
+            .key("crew.handoffs.refresh"),
     );
-    let section = col().key("crew.handoffs").w_full().max_w(WIDE).child(head);
     let Some(shown) = history.shown() else {
-        return section.child(
-            col()
-                .key("crew.handoffs.none")
-                .w_full()
-                .items_center()
-                .px(15.0)
-                .py(60.0)
-                .radius(8.0)
-                .border(1.0, t.border)
-                .child(caption("crew.handoffs.empty", "No handoffs recorded.", t)),
-        );
+        return vec![
+            section
+                .push(
+                    Prose::lead("crew.handoffs.empty", "No handoffs recorded.")
+                        .quiet(true)
+                        .build(t),
+                )
+                .build(t),
+        ];
     };
     let count = history.handoffs.len();
-    let index = col()
+    let letters = history.handoffs.iter().enumerate().map(|(at, h)| {
+        let (day, time) = day_and_time(&h.occurred_at);
+        let latest = if at == 0 { "Latest · " } else { "" };
+        let (member, file) = (member.id.clone(), h.filename.clone());
+        let current = h.filename == shown.filename;
+        ListRow::new(
+            format!("crew.handoff.{at}"),
+            format!("{day} {latest}{time} UTC"),
+        )
+        .title(day)
+        .subtitle(format!("{latest}{time} UTC"), t)
+        .selected(current)
+        .build(t)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            tx.instant();
+            handoffs::select(state, &member, &file, tx)
+        })
+        .checked(current)
+    });
+    let index = Stack::tight()
         .key("crew.handoffs.index")
         .role("navigation")
         .label(format!("{} handoffs", member.name))
-        .w(150.0)
-        .gap(2.0)
-        .px(8.0)
-        .py(13.0)
-        .border_sides([0.0, 1.0, 0.0, 0.0], t.border)
+        .w(INDEX_WIDTH)
+        .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
         .child(
-            type_::upper(
-                &format!("{count} {}", if count == 1 { "letter" } else { "letters" }),
-                type_::MONO_CAPTION,
+            words(
+                format!("{count} {}", if count == 1 { "letter" } else { "letters" }),
+                Type::Label,
+                t.text_muted,
             )
-            .key("crew.handoffs.count")
-            .color(t.text_muted)
-            .px(7.0)
-            .pb(8.0),
+            .key("crew.handoffs.count"),
         )
-        .children(history.handoffs.iter().enumerate().map(|(at, h)| {
-            let (day, time) = day_and_time(&h.occurred_at);
-            let latest = if at == 0 { "Latest · " } else { "" };
-            let (member, file) = (member.id.clone(), h.filename.clone());
-            let current = h.filename == shown.filename;
-            let entry = col()
-                .key(format!("crew.handoff.{at}"))
-                .role("button")
-                .label(format!("{day} {latest}{time} UTC"))
-                .focusable(true)
-                .focus_ring(2.0, 2.0, t.brand)
-                .w_full()
-                .gap(4.0)
-                .px(8.0)
-                .py(9.0)
-                .radius(6.0)
-                .child(text(day).font(NOTE).color(t.text_secondary))
-                .child(
-                    text(format!("{latest}{time} UTC"))
-                        .font(NOTE)
-                        .color(t.text_muted),
-                )
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    handoffs::select(state, &member, &file, tx)
-                })
-                .checked(current);
-            if current {
-                entry
-                    .fill(t.brand.alpha(0.08))
-                    .border(1.0, attn_ui::colors::mix_srgb(t.border, t.brand, 0.28))
-            } else {
-                entry.border(1.0, Color::TRANSPARENT)
-            }
-        }));
+        .children(letters);
     let letter = history
         .letter
         .as_ref()
@@ -1278,60 +923,53 @@ fn handoffs_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
         }
         Some(l) if l.reading == Reading::Failed => {
             let (member, file) = (member.id.clone(), l.filename.clone());
-            row()
-                .gap(space::S2)
-                .child(alert(
-                    "crew.handoff.letter-error",
-                    l.error
-                        .clone()
-                        .unwrap_or_else(|| "The letter could not be read.".into()),
-                    t,
-                ))
-                .child(button(
-                    "crew.handoff.letter-retry",
-                    "Retry",
-                    false,
-                    t,
-                    move |state, tx| handoffs::load_letter(state, &member, &file, tx),
-                ))
+            Refusal::new(
+                "crew.handoff.letter-error",
+                l.error
+                    .clone()
+                    .unwrap_or_else(|| "The letter could not be read.".into()),
+            )
+            .retry(
+                Button::new("Retry")
+                    .size(Size::Compact)
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                        handoffs::load_letter(state, &member, &file, tx)
+                    })
+                    .build(t)
+                    .key("crew.handoff.letter-retry"),
+            )
+            .build(t)
         }
-        _ => caption("crew.handoff.loading", "Loading letter…", t),
+        _ => words("Loading letter…", Type::Small, t.text_muted).key("crew.handoff.loading"),
     };
-    let reader = col()
+    let reader = Stack::tight()
         .key("crew.handoff.reader")
         .role("article")
         .label(shown.filename.clone())
         .grow(1.0)
         .min_w(0.0)
         .child(
-            row()
-                .w_full()
-                .gap(12.0)
-                .px(15.0)
-                .py(11.0)
-                .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
-                .child(
-                    caption(
-                        "crew.handoff.date",
-                        format!("{day} {time} UTC · {}", shown.filename),
-                        t,
-                    )
-                    .color(t.text_secondary),
-                ),
+            words(
+                format!("{day} {time} UTC · {}", shown.filename),
+                Type::Small,
+                t.text_secondary,
+            )
+            .key("crew.handoff.date"),
         )
-        .child(col().w_full().padding(15.0).child(body));
-    section.child(
-        row()
-            .key("crew.handoffs.letters")
-            .w_full()
-            .min_h(420.0)
-            .items_stretch()
-            .radius(8.0)
-            .fill(t.bg_panel)
-            .border(1.0, t.border)
-            .child(index)
-            .child(reader),
-    )
+        .child(body);
+    vec![
+        section
+            .push(Block::custom(
+                "crew.handoffs.letters.block",
+                Inline::loose()
+                    .key("crew.handoffs.letters")
+                    .w_full()
+                    .items_start()
+                    .child(index)
+                    .child(reader),
+            ))
+            .build(t),
+    ]
 }
 
 fn state_label(status: &str) -> &'static str {
@@ -1345,7 +983,7 @@ fn state_label(status: &str) -> &'static str {
     }
 }
 
-fn seeds_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
+fn seeds_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
     let garden = &state.facts.garden;
     let all = garden.of(&state.facts.profiles.selected);
     let tended = seeds::tended(all, member);
@@ -1354,13 +992,10 @@ fn seeds_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
     let filter = place.seed_filter;
     let capped = garden.total > all.len() as i64;
     let suffix = if capped { "+" } else { "" };
-    let filters = row()
+    let filters = Inline::tight()
         .key("crew.seeds.filters")
         .role("group")
         .label("Seed ownership")
-        .w_full()
-        .gap(20.0)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
         .children(
             [
                 (SeedFilter::Tending, "tending", "Tending", tended.len()),
@@ -1368,44 +1003,25 @@ fn seeds_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
             ]
             .into_iter()
             .map(|(f, id, label, count)| {
-                underlined(
+                tab_button(
                     format!("crew.seeds.{id}"),
-                    label.to_owned(),
+                    label,
                     Some(format!("{count}{suffix}")),
                     f == filter,
-                    [8.0, 10.0],
-                    1.0,
                     t,
                 )
-                .px(1.0)
-                .on_press_tx(move |state: &mut State, _: &mut Tx| {
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    tx.instant();
                     state.window.crew.place.seed_filter = f
                 })
             }),
         );
-    let mut section = col()
-        .key("crew.seeds")
-        .role("group")
-        .label("Seeds")
-        .w_full()
-        .max_w(NARROW)
-        .child(
-            col()
-                .gap(3.0)
-                .mt(3.0)
-                .mb(12.0)
-                .child(kicker("Garden", t))
-                .child(
-                    text("Seeds")
-                        .role("heading")
-                        .font(SEEDS)
-                        .color(t.text_primary),
-                ),
-        )
-        .child(filters);
+    let mut section = Section::new("crew.seeds", "Seeds")
+        .push(Block::control("crew.seeds.filters.block", filters));
     if capped {
-        section = section.child(
-            status(
+        section = section.push(Block::custom(
+            "crew.seeds.cap.block",
+            status_line(
                 "crew.seeds.cap",
                 format!(
                     "Showing matches in the newest {} of {} seeds.",
@@ -1413,71 +1029,71 @@ fn seeds_tab(state: &State, member: &CrewMember, t: &Tokens) -> El {
                     garden.total
                 ),
                 t.warning,
-            )
-            .mt(10.0),
-        );
+            ),
+        ));
     }
     let rows = match filter {
         SeedFilter::Tending => &tended,
         SeedFilter::Planted => &planted,
     };
     if rows.is_empty() {
-        return section.child(
-            col()
-                .key("crew.seeds.none")
-                .w_full()
-                .items_center()
-                .gap(10.0)
-                .px(12.0)
-                .py(40.0)
-                .child(caption(
-                    "crew.seeds.empty",
-                    seeds::empty(&member.name, filter, capped),
-                    t,
-                ))
-                .children(
-                    (filter == SeedFilter::Tending && !planted.is_empty()).then(|| {
-                        text("See planted seeds")
-                            .key("crew.seeds.see-planted")
-                            .role("button")
-                            .label("See planted seeds")
-                            .focusable(true)
-                            .font(NOTE)
-                            .color(t.brand)
-                            .on_press_tx(|state: &mut State, _: &mut Tx| {
-                                state.window.crew.place.seed_filter = SeedFilter::Planted
-                            })
-                    }),
-                ),
+        let mut section = section.push(
+            Prose::lead(
+                "crew.seeds.empty",
+                seeds::empty(&member.name, filter, capped),
+            )
+            .quiet(true)
+            .build(t),
         );
+        if filter == SeedFilter::Tending && !planted.is_empty() {
+            section = section.push(Block::control(
+                "crew.seeds.planted.block",
+                Button::new("See planted seeds")
+                    .size(Size::Compact)
+                    .look(Look::Quiet)
+                    .on_press(|state: &mut State| {
+                        state.window.crew.place.seed_filter = SeedFilter::Planted
+                    })
+                    .build(t)
+                    .key("crew.seeds.see-planted"),
+            ));
+        }
+        return vec![section.build(t)];
     }
     let query = place.seed_query.text.clone();
     let visible: Vec<&&Seed> = rows.iter().filter(|s| seeds::matches(s, &query)).collect();
-    section = section.child(
-        TextInput::new(&place.seed_query)
-            .key(SEED_FIND)
-            .label("Find a seed")
-            .placeholder("Find a seed…")
-            .width(None)
-            .on_edit(|state: &mut State| &mut state.window.crew.place.seed_query)
-            .build(attn_ui::kit(t)),
-    );
+    let find = TextInput::new(&place.seed_query)
+        .key(SEED_FIND)
+        .label("Find a seed")
+        .placeholder("Find a seed…")
+        .on_edit(|state: &mut State| &mut state.window.crew.place.seed_query);
+    section = section.push(Block::custom(
+        "crew.seeds.find.block",
+        line_box(find, FieldState::Ready, t).into(),
+    ));
     if visible.is_empty() {
-        return section.child(caption("crew.seeds.no-match", "No matching seeds.", t));
+        return vec![
+            section
+                .push(
+                    Prose::lead("crew.seeds.no-match", "No matching seeds.")
+                        .quiet(true)
+                        .build(t),
+                )
+                .build(t),
+        ];
     }
-    section.child(
-        col()
-            .key("crew.seeds.list")
-            .role("list")
-            .focus_group()
-            .label(match filter {
+    let list = visible.into_iter().fold(
+        List::new(
+            "crew.seeds.list",
+            match filter {
                 SeedFilter::Tending => "Tended seeds",
                 SeedFilter::Planted => "Planted seeds",
-            })
-            .w_full()
-            .gap(2.0)
-            .children(visible.into_iter().map(|seed| seed_row(seed, all, t))),
-    )
+            },
+        )
+        .roving(),
+        |list, seed| list.row(seed_row(seed, all, t)),
+    );
+    vec![section.push(list.build(t)).build(t)]
 }
 
 fn seed_row(seed: &Seed, all: &[std::sync::Arc<Seed>], t: &Tokens) -> El {
@@ -1517,33 +1133,12 @@ fn seed_row(seed: &Seed, all: &[std::sync::Arc<Seed>], t: &Tokens) -> El {
         .collect();
     let label = format!("{title} {} {state_words}", meta.join(" "));
     let id = seed.id.clone();
-    let (primary, tertiary, secondary) = (t.text_primary, t.text_tertiary, t.text_secondary);
-    Button::new(label)
-        .variant(ButtonVariant::Ghost)
-        .label_with(move |font, _| {
-            row()
-                .w_full()
-                .gap(space::S2)
-                .items_center()
-                .child(
-                    col()
-                        .grow(1.0)
-                        .min_w(0.0)
-                        .child(text(title).font(font).color(primary))
-                        .child(text(meta.join(" · ")).font(type_::LABEL).color(tertiary)),
-                )
-                .child(text(state_words).font(type_::LABEL).color(secondary))
-        })
+    ListRow::new(format!("crew.seed.{}", seed.id), label)
+        .title(title)
+        .subtitle(meta.join(" · "), t)
+        .aside(words(state_words, Type::Small, t.text_secondary))
+        .build(t)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             super::navigate(state, Nav::Seed(id.clone()), tx)
         })
-        .build(attn_ui::kit(t))
-        .key(format!("crew.seed.{}", seed.id))
-        .w_full()
-        .h(row_height(1, t))
-}
-
-/// The height of a list row whose name sits over `notes` lines of small print.
-fn row_height(notes: usize, t: &Tokens) -> f32 {
-    attn_ui::kit(t).ty.ui_medium.line_px() + notes as f32 * type_::LABEL.line_px() + 2.0 * space::S2
 }

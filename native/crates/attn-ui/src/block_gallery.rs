@@ -64,7 +64,12 @@ pub const BLOCK_SUBJECTS: &[(&str, &[&str])] = &[
     ),
     (
         "Blocks/Field",
-        &["field.name", "field.path", "field.read", "field.count"],
+        &[
+            "field.name.field",
+            "field.path.field",
+            "field.read.field",
+            "field.count.field",
+        ],
     ),
     (
         "Blocks/Notice and status",
@@ -418,12 +423,12 @@ fn page(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
 fn fields(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
     let t = tokens(cx);
     let name = TextInput::new(&s.line)
-        .key("field.name.input")
+        .key("field.name")
         .label("Name")
         .placeholder("Automation name")
         .on_edit(|s: &mut Blocks| &mut s.line);
     let path = TextInput::new(&s.number)
-        .key("field.path.input")
+        .key("field.path")
         .label("Folder")
         .placeholder("~/projects")
         .on_edit(|s: &mut Blocks| &mut s.number);

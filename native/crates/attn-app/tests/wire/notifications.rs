@@ -549,3 +549,32 @@ fn tab_reaches_every_button_of_the_panel() {
         Vec::<String>::new()
     );
 }
+
+#[test]
+fn an_opened_notifications_tag_stands_as_the_others_do_on_its_titles_line() {
+    let mut world = start(vec![
+        notification("n1", "critical", "Nightly dependency upgrade"),
+        notification("n2", "warning", "Disk is 92% full on studio"),
+        notification("n3", "info", "Codex 0.42 is ready to install"),
+    ]);
+    open(&mut world);
+    expand(&mut world, "n1");
+    let tag = |world: &mut World, id: &str| world.rect(&format!("{}.severity", row(id)));
+    let opened = tag(&mut world, "n1");
+    for id in ["n2", "n3"] {
+        let closed = tag(&mut world, id);
+        assert_eq!(
+            opened[3], closed[3],
+            "the opened row's tag stands {} tall, {id}'s {}",
+            opened[3], closed[3]
+        );
+    }
+    let title = world.rect(&format!("{}.title", row("n1")));
+    let middle = |r: [f64; 4]| r[1] + r[3] / 2.0;
+    assert!(
+        (middle(opened) - middle(title)).abs() <= 1.0,
+        "the opened row's tag centres at {}, its title at {}",
+        middle(opened),
+        middle(title)
+    );
+}

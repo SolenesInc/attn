@@ -8,8 +8,8 @@ use crate::blocks::{Banner, BannerTone};
 use crate::colors::scheme_for;
 use crate::system::{
     Button as Action, Choice, FieldState, IconSize, Look, Segment, Segmented, Size, Space, Tone,
-    Trigger, TriggerLook, Type, area_box, arrows, choices, disclosure, door, expander, icon,
-    icon_box, line_box, number_box, press_area, stepper, switch, tag, words,
+    Trigger, TriggerLook, Type, area_box, arrows, checks, choices, code_box, disclosure, door,
+    expander, icon, icon_box, line_box, number_box, press_area, stepper, switch, tag, words,
 };
 use crate::{Dialog, DialogFrame, Tokens, kit};
 
@@ -43,8 +43,8 @@ pub fn playground<S: 'static>() -> Playground<S> {
         Playground::new().shortcut(None).bar(false),
         |playground, &(name, view)| playground.story(Story::new(name, Showcase::default, view)),
     );
-    crate::chrome_gallery::stories(crate::settings_gallery::stories(
-        crate::block_gallery::stories(library(components)),
+    crate::panel_gallery::stories(crate::chrome_gallery::stories(
+        crate::settings_gallery::stories(crate::block_gallery::stories(library(components))),
     ))
 }
 
@@ -59,8 +59,10 @@ pub struct Library {
     pub disabled: bool,
     pub failed: bool,
     pub narrow: bool,
+    pub many: bool,
     pub banner: BannerCase,
     pub line: TextEdit,
+    pub code: TextEdit,
     pub number: TextEdit,
     pub area: TextEdit,
 }
@@ -75,7 +77,7 @@ pub const BUTTONS: [(&str, Look); 4] = [
 pub const SIZES: [(&str, Size); 2] = [("regular", Size::Regular), ("compact", Size::Compact)];
 
 /// The field boxes a field story draws, by key.
-pub const FIELD_BOXES: [&str; 3] = ["field.line", "field.number", "field.area"];
+pub const FIELD_BOXES: [&str; 4] = ["field.line", "field.code", "field.number", "field.area"];
 
 const LONG: &str = "An exceptionally long value that a person pasted without stopping to think about the box it lands in";
 
@@ -150,7 +152,9 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Second chosen", |s| s.chosen = 1)
                 .variant("Focus", |s| s.rings = true)
                 .variant("Disabled", |s| s.disabled = true)
-                .variant("Narrow", |s| s.narrow = true),
+                .variant("Narrow", |s| s.narrow = true)
+                .variant("Recommended", |s| s.open = true)
+                .variant("Many", |s| s.many = true),
         )
         .story(
             Story::new("Library/Press area", Library::default, press_areas)
@@ -226,6 +230,7 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Empty", |_| {})
                 .variant("Filled", |s| {
                     s.line = TextEdit::new("api-review");
+                    s.code = TextEdit::new("0 9 * * 1-5");
                     s.number = TextEdit::new("600");
                     s.area = TextEdit::new(
                         "Review the change against the plan.\nReport P0 and P1 only.",
@@ -234,12 +239,14 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Failed", |s| {
                     s.failed = true;
                     s.line = TextEdit::new("api review");
+                    s.code = TextEdit::new("0 9 * * 8");
                     s.number = TextEdit::new("6O0");
                     s.area = TextEdit::new("Review the change against the plan.");
                 })
                 .variant("Disabled", |s| {
                     s.disabled = true;
                     s.line = TextEdit::new("api-review");
+                    s.code = TextEdit::new("0 9 * * 1-5");
                     s.number = TextEdit::new("600");
                     s.area = TextEdit::new(
                         "Review the change against the plan.\nReport P0 and P1 only.",
@@ -253,6 +260,7 @@ fn library<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 })
                 .variant("Long text", |s| {
                     s.line = TextEdit::new(LONG);
+                    s.code = TextEdit::new(LONG);
                     s.number = TextEdit::new("123456789012");
                     s.area = TextEdit::new(LONG);
                 })
@@ -411,6 +419,11 @@ fn field_boxes(s: &Library, cx: &mut Cx<Library>) -> El {
         .label("Name")
         .placeholder("Automation name")
         .on_edit(|s: &mut Library| &mut s.line);
+    let code = TextInput::new(&s.code)
+        .key("field.code.input")
+        .label("Cron")
+        .placeholder("0 9 * * 1-5")
+        .on_edit(|s: &mut Library| &mut s.code);
     let number = TextInput::new(&s.number)
         .key("field.number.input")
         .label("Sidebar width")
@@ -425,6 +438,7 @@ fn field_boxes(s: &Library, cx: &mut Cx<Library>) -> El {
     let column = door::gap(col(), Space::S16)
         .w(if s.narrow { 160.0 } else { 280.0 })
         .child(line_box(line, field, &t).key("field.line").into())
+        .child(code_box(code, field, &t).key("field.code").into())
         .child(number_box(number, field, &t).key("field.number").into())
         .child(area_box(area, field, &t).key("field.area").into());
     library_stage(&t, column)
@@ -1031,16 +1045,34 @@ fn choice_list(s: &Library, cx: &mut Cx<Library>) -> El {
         ),
     ];
     let n = options.len();
-    let list = choices("choices", "Agent")
-        .w(if s.narrow { 220.0 } else { 420.0 })
-        .children(options.iter().enumerate().map(|(i, (name, note))| {
-            Choice::new(format!("choice.{i}"), *name)
-                .note(*note)
-                .chosen(i == s.chosen)
-                .disabled(s.disabled)
-                .build((i, n), &t, move |s: &mut Library, _: &mut Tx| s.chosen = i)
-                .into()
-        }));
+    let group = if s.many {
+        checks("choices", "Agent")
+    } else {
+        choices("choices", "Agent")
+    };
+    let list =
+        group
+            .w(if s.narrow { 220.0 } else { 420.0 })
+            .children(options.iter().enumerate().map(|(i, (name, note))| {
+                let choice = Choice::new(format!("choice.{i}"), *name)
+                    .note(*note)
+                    .many(s.many)
+                    .chosen(if s.many { i != 1 } else { i == s.chosen })
+                    .disabled(s.disabled);
+                let choice = if s.open && i == 0 {
+                    choice.tag(tag(
+                        "choice.0.recommended",
+                        "Recommended",
+                        Tone::Neutral,
+                        &t,
+                    ))
+                } else {
+                    choice
+                };
+                choice
+                    .build((i, n), &t, move |s: &mut Library, _: &mut Tx| s.chosen = i)
+                    .into()
+            }));
     library_stage(&t, list)
 }
 

@@ -40,7 +40,6 @@ pub fn switch<S: 'static>(
         .label(label.to_owned())
         .checked(on)
         .focusable(true)
-        .self_start()
         .items_center();
     let state_word = show_state.then(|| {
         words(

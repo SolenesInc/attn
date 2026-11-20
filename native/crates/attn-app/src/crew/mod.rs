@@ -106,6 +106,9 @@ pub(crate) struct Panel {
     pub(crate) back: Option<Back>,
     /// The control that opened the panel from a menu, which takes the focus back on close.
     pub(crate) opener: Option<String>,
+    /// How wide the page was laid out last, which decides whether the roster stands beside
+    /// the member's details or above them.
+    pub(crate) width: Option<f32>,
 }
 
 /// Addresses a member by its permanent key; a bare word would be read as a name.

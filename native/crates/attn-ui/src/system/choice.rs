@@ -1,6 +1,8 @@
 use rune::{Color, El, Tx, col, el, row};
 
-use super::{Control, Radius, Size, Space, Type, disabled, door, focus, layers, words};
+use super::{
+    Control, IconSize, Radius, Size, Space, Type, disabled, door, focus, glyph, layers, words,
+};
 use crate::Tokens;
 
 const DOT: f32 = 14.0;
@@ -15,6 +17,8 @@ pub struct Choice {
     name: String,
     note: Option<String>,
     leading: Option<El>,
+    tag: Option<El>,
+    many: bool,
     chosen: bool,
     disabled: bool,
 }
@@ -26,6 +30,8 @@ impl Choice {
             name: name.into(),
             note: None,
             leading: None,
+            tag: None,
+            many: false,
             chosen: false,
             disabled: false,
         }
@@ -39,6 +45,19 @@ impl Choice {
     /// What marks it before its name, such as a swatch.
     pub fn leading(mut self, mark: El) -> Self {
         self.leading = Some(mark);
+        self
+    }
+
+    /// A tag after its name, such as the one it is recommended to choose.
+    pub fn tag(mut self, tag: impl Into<El>) -> Self {
+        self.tag = Some(tag.into());
+        self
+    }
+
+    /// Any number of its list may be chosen, not only one: a box that takes a check, read as a
+    /// checkbox, in place of a dot.
+    pub fn many(mut self, many: bool) -> Self {
+        self.many = many;
         self
     }
 
@@ -70,22 +89,36 @@ impl Choice {
         } else {
             t.bg_panel
         };
-        let dot = door::corner(el().size(DOT, DOT), Radius::Round)
-            .border(
-                if self.chosen { 4.0 } else { 1.0 },
-                match (warm, self.chosen) {
-                    (true, _) => t.warning,
-                    (false, true) => t.text_tertiary,
-                    (false, false) => t.border_hover,
-                },
-            )
+        let mark_ink = match (warm, self.chosen) {
+            (true, _) => t.warning,
+            (false, true) => t.text_tertiary,
+            (false, false) => t.border_hover,
+        };
+        let dot = if self.many {
+            let square = door::corner(el().size(DOT, DOT).center(), Radius::Tag);
+            if self.chosen {
+                square
+                    .fill(mark_ink)
+                    .child(glyph(crate::glyph::CHECK, IconSize::Small, t.bg_app))
+            } else {
+                square.border(1.0, mark_ink)
+            }
+        } else {
+            door::corner(el().size(DOT, DOT), Radius::Round)
+                .border(if self.chosen { 4.0 } else { 1.0 }, mark_ink)
+        }
+        .a11y_hidden();
+        let name = words(self.name.clone(), Type::Name, ink)
+            .wrap()
             .a11y_hidden();
+        let name = match self.tag {
+            Some(tag) => door::gaps(row().flex_wrap().items_center(), Space::S2, Space::S8)
+                .child(name.shrink())
+                .child(tag),
+            None => name,
+        };
         let named = door::gap(col().grow_from(1.0, NAME_FLOOR), Space::S2)
-            .child(
-                words(self.name.clone(), Type::Name, ink)
-                    .wrap()
-                    .a11y_hidden(),
-            )
+            .child(name)
             .children(self.note.map(|note| {
                 words(note, Type::Small, t.text_tertiary)
                     .wrap()
@@ -100,7 +133,7 @@ impl Choice {
         .child(named);
         let row = row()
             .key(self.key)
-            .role("radio")
+            .role(if self.many { "checkbox" } else { "radio" })
             .label(self.name)
             .checked(self.chosen)
             .focusable(true)
@@ -125,6 +158,17 @@ impl Choice {
         let row = layers::pressable(row, fill, t).on_press_tx(press);
         Control::new(focus::ring_on_edge(row, t), Size::Regular)
     }
+}
+
+/// The group that holds a list of choices any number of which may be on: each is a stop of Tab
+/// of its own.
+pub fn checks(key: impl Into<String>, label: &str) -> El {
+    let group = col()
+        .key(key.into())
+        .role("group")
+        .label(label.to_owned())
+        .w_full();
+    door::gap(group, Space::S4)
 }
 
 /// The group that holds a list of choices: the arrows move the choice.

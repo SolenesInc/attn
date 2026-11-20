@@ -206,7 +206,7 @@ fn pick_opus(world: &mut World) {
 }
 
 #[test]
-fn a_roster_row_grows_with_the_lines_it_shows_and_no_row_covers_the_next() {
+fn a_roster_row_names_its_launch_desktop_and_no_row_covers_the_next() {
     let with_desktop = |m| {
         with(m, |m| {
             m.launch_desktop = Some(LaunchDesktopSetting {
@@ -236,13 +236,12 @@ fn a_roster_row_grows_with_the_lines_it_shows_and_no_row_covers_the_next() {
                 .unwrap_or_else(|| panic!("{id}'s row is drawn"))
         })
         .collect();
-    assert!(
-        rows[1][3] > rows[0][3],
-        "a row with its launch desktop is taller than one without: {rows:?}"
-    );
+    let said = |id: &str| super::ledger::text_in(&world, &format!("crew.roster.{id}"));
+    assert!(said("birch").contains("2 · Review"), "{}", said("birch"));
+    assert!(!said("ash").contains("2 · Review"), "{}", said("ash"));
     for pair in rows.windows(2) {
         assert!(
-            pair[0][1] + pair[0][3] <= pair[1][1],
+            pair[0][1] + pair[0][3] <= pair[1][1] + 0.1,
             "a row ends before the next starts: {rows:?}"
         );
     }
@@ -2810,4 +2809,40 @@ fn a_seed_link_in_a_letter_opens_the_seed_beside_the_session_of_a_member_in_sess
     let opened = letter_opens_its_seed_link(in_session(member("fern", 1), "s-fern"));
     assert_eq!(opened["session_id"], "s-fern");
     assert!(opened.get("standalone").is_none_or(Value::is_null));
+}
+
+#[test]
+fn a_narrow_page_stands_the_roster_above_the_details_and_keeps_every_tab_whole() {
+    const TABS: [&str; 4] = [
+        "crew.tab.launch",
+        "crew.tab.charter",
+        "crew.tab.handoffs",
+        "crew.tab.seeds",
+    ];
+    let mut wide = World::start_sized(
+        daemon(vec![member("keel", 1)], Vec::new(), Vec::new()),
+        (1600.0, 1000.0),
+    );
+    open(&mut wide);
+    let whole: Vec<f64> = TABS.iter().map(|key| wide.rect(key)[2]).collect();
+
+    let mut world = World::start_sized(
+        daemon(vec![member("keel", 1)], Vec::new(), Vec::new()),
+        (560.0, 700.0),
+    );
+    open(&mut world);
+    let roster = world.rect("crew.roster");
+    let detail = world.rect("crew.detail");
+    let keel = world.rect("crew.roster.keel");
+    assert!(
+        roster[1] + roster[3] <= detail[1] + 0.1,
+        "the roster at {roster:?} stands above the details at {detail:?}"
+    );
+    assert!(
+        keel[3] > 0.0 && keel[1] >= roster[1] && keel[1] + keel[3] <= roster[1] + roster[3] + 0.1,
+        "the member's row at {keel:?} shows inside the roster at {roster:?}"
+    );
+    for (key, width) in TABS.iter().zip(whole) {
+        assert_eq!(world.rect(key)[2], width, "{key} keeps its whole word");
+    }
 }

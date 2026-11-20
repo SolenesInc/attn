@@ -33,6 +33,7 @@ pub struct Button {
     size: Size,
     disabled: bool,
     open: bool,
+    chosen: bool,
     trailing: Option<El>,
     press: Option<Press>,
     button: KitButton,
@@ -60,6 +61,7 @@ impl Button {
             size: Size::Regular,
             disabled: false,
             open: false,
+            chosen: false,
             trailing: None,
             press: None,
         }
@@ -103,8 +105,21 @@ impl Button {
         self
     }
 
+    /// The button is one of a set that is on, such as a chosen day: the selected fill a chosen
+    /// segment has, read as checked.
+    pub fn chosen(mut self, chosen: bool) -> Self {
+        self.chosen = chosen;
+        self
+    }
+
     pub fn help(mut self, help: impl Into<String>) -> Self {
         self.button = self.button.help(help);
+        self
+    }
+
+    /// The keys that press it too, as its help reads them.
+    pub fn shortcut(mut self, keys: impl Into<String>) -> Self {
+        self.button = self.button.shortcut(keys);
         self
     }
 
@@ -124,8 +139,12 @@ impl Button {
             look => look,
         };
         let (fill, edge, ink) = match look {
-            Look::Plain if self.open => (t.bg_selected, t.border_hover, t.text_primary),
-            Look::Quiet if self.open => (t.bg_selected, Color::TRANSPARENT, t.text_primary),
+            Look::Plain if self.open || self.chosen => {
+                (t.bg_selected, t.border_hover, t.text_primary)
+            }
+            Look::Quiet if self.open || self.chosen => {
+                (t.bg_selected, Color::TRANSPARENT, t.text_primary)
+            }
             Look::Primary => (t.warning, t.warning, crate::warning_ink(t)),
             Look::Plain => (t.bg_button, t.border_hover, t.text_primary),
             Look::Quiet => (Color::TRANSPARENT, Color::TRANSPARENT, t.text_secondary),
@@ -168,6 +187,11 @@ impl Button {
         } else {
             let surface = if fill.a > 0.0 { fill } else { t.bg_panel };
             layers::pressable(button, surface, t)
+        };
+        let button = if self.chosen {
+            button.checked(true)
+        } else {
+            button
         };
         Control::new(button, self.size)
     }

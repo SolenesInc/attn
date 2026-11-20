@@ -1,18 +1,21 @@
 use attn_protocol::SessionLedgerEntry;
-use attn_ui::Tokens;
-use attn_ui::keycap;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Key, KeyEvent, Tx, col, el, row, text, text_input};
-use rune_kit::ScrollBar;
-use rune_kit::{Button, ButtonVariant, ControlSize, Menu, MenuItem};
+use attn_ui::blocks::inspector::{self, aside, lines, value};
+use attn_ui::blocks::{Block, Facts, Inline, Inspector, List, Sheet, Stack};
+use attn_ui::system::{
+    Button, FieldState, IconSize, ListRow, Look, Reveal, Size, Type, icon_button, line_box,
+    press_area, words,
+};
+use attn_ui::{Tokens, glyph, keycap};
+use rune::{El, Key, KeyEvent, Tx, el};
+use rune_kit::{Menu, MenuItem, TextInput};
 
-use super::parts::{self, Glyph, Ink, body, field, group, muted};
+use super::mark::{Glyph, mark};
 use super::query::{self, Scope, is_closed};
 use super::{LIST, Note, QUERY, Row, Tab, Verb, conversations, worktrees};
 use crate::State;
 use crate::desktop::usage;
 use crate::sidebar::model::AgentState;
+use attn_ui::system::DotSize;
 
 const INSET: f32 = 10.0;
 
@@ -103,121 +106,131 @@ fn digit_index(ev: &KeyEvent) -> Option<usize> {
 }
 
 pub(crate) fn view(state: &State, t: &Tokens) -> El {
-    let (toolbar, body, status) = match state.window.ledger.tab {
+    let (toolbar, body, counts) = match state.window.ledger.tab {
         Tab::Sessions => {
             let rows = super::rows(state);
             let selected = super::selected(state, &rows);
             (
                 toolbar(state, t),
-                row()
-                    .w_full()
-                    .grow(1.0)
-                    .min_h(0.0)
-                    .child(list(state, &rows, selected, t))
-                    .child(inspector(state, selected, t)),
-                status(state, session_counts(state, &rows, t), t),
+                inspector::beside(
+                    list(state, &rows, selected, t),
+                    self::inspector(state, selected, t),
+                ),
+                session_counts(state, &rows, t),
             )
         }
         Tab::Worktrees => (
             worktrees::toolbar(state, t),
-            row()
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .child(worktrees::list(state, t))
-                .child(worktrees::inspector(state, t)),
-            status(state, worktrees::status(state, t), t),
+            inspector::beside(worktrees::list(state, t), worktrees::inspector(state, t)),
+            worktrees::status(state, t),
         ),
         Tab::Conversations => {
             let rows = conversations::rows(state);
             let selected = conversations::selected(state, &rows);
             (
                 conversations::toolbar(state, t),
-                row()
-                    .w_full()
-                    .grow(1.0)
-                    .min_h(0.0)
-                    .child(conversations::list(state, &rows, t))
-                    .child(conversations::inspector(state, selected, t)),
-                status(state, conversations::status(state, t), t),
+                inspector::beside(
+                    conversations::list(state, &rows, t),
+                    conversations::inspector(state, selected, t),
+                ),
+                conversations::status(state, t),
             )
         }
     };
-    let panel = col()
+    let panel = Sheet::new("ledger.sheet", "Sessions, worktrees and conversations")
+        .framed()
+        .head(tabs(state, t))
+        .close(
+            keyed("ledger.close", "Close", "esc", Look::Quiet, t)
+                .on_press_tx(|state: &mut State, tx: &mut Tx| super::close(state, tx)),
+        )
+        .top(toolbar)
+        .fill(body)
+        .footer(Block::custom(
+            "ledger.status.block",
+            status(state, counts, t),
+        ))
+        .build(t)
         .key("ledger.panel")
         .role("dialog")
         .label("Sessions, worktrees and conversations")
         .modal_tx(true, |state: &mut State, tx: &mut Tx| {
             super::close(state, tx)
         })
-        .on_key(panel_key)
-        .w_full()
-        .h_full()
-        .radius(8.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border)
-        .child(header(state, t))
-        .child(toolbar)
-        .child(body)
-        .child(status);
+        .on_key(panel_key);
     crate::shell::under_title_bar("ledger", INSET, panel, t)
 }
 
-fn header(state: &State, t: &Tokens) -> El {
+fn tabs(state: &State, t: &Tokens) -> El {
     let shown = state.window.ledger.tab;
-    row()
-        .w_full()
-        .h(44.0)
-        .items_center()
-        .gap(space::S2)
-        .pl(10.0)
-        .pr(14.0)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-        .child(
-            row()
-                .role("navigation")
-                .label("Which list")
-                .grow(1.0)
-                .gap(2.0)
-                .children(Tab::ALL.map(|tab| {
-                    parts::tab(
-                        format!("ledger.tab.{}", tab.label().to_lowercase()),
-                        tab.label(),
-                        tab == shown,
-                        t,
-                    )
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        super::show_tab(state, tab, tx)
-                    })
-                })),
-        )
-        .child(
-            keyed("ledger.close", "Close", "esc", Keyed::Quiet, t)
-                .on_press_tx(|state: &mut State, tx: &mut Tx| super::close(state, tx)),
-        )
+    Inline::tight()
+        .role("navigation")
+        .label("Which list")
+        .children(Tab::ALL.map(|tab| {
+            chosen(
+                format!("ledger.tab.{}", tab.label().to_lowercase()),
+                tab.label(),
+                tab == shown,
+                Size::Compact,
+                t,
+            )
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                tx.instant();
+                super::show_tab(state, tab, tx)
+            })
+        }))
+}
+
+/// One of a few choices shown as buttons, the chosen one raised and read as pressed.
+pub(super) fn chosen(key: String, said: &str, on: bool, size: Size, t: &Tokens) -> El {
+    El::from(
+        Button::new(said)
+            .size(size)
+            .look(if on { Look::Plain } else { Look::Quiet })
+            .build(t)
+            .key(key),
+    )
+    .a11y_value(if on { "pressed" } else { "" })
+}
+
+/// The query field, its chips after it.
+pub(super) fn query_field(
+    edit: &rune::TextEdit,
+    placeholder: &str,
+    on_edit: fn(&mut State) -> &mut rune::TextEdit,
+    on_change: fn(&mut State, &mut Tx),
+    on_key: fn(&mut State, &KeyEvent, &mut Tx) -> bool,
+    t: &Tokens,
+) -> El {
+    let input = TextInput::new(edit)
+        .key(QUERY)
+        .label("Filter")
+        .placeholder(placeholder)
+        .spellcheck(false)
+        .on_edit(on_edit)
+        .on_change(on_change)
+        .on_key(on_key);
+    El::from(line_box(input, FieldState::Ready, t))
+        .grow(1.0)
+        .min_w(0.0)
 }
 
 fn toolbar(state: &State, t: &Tokens) -> El {
     let ledger = &state.window.ledger;
-    let scopes = parts::segmented(
-        "ledger.scope",
-        "group",
-        "Which sessions",
-        Scope::ALL
-            .map(|scope| {
-                parts::segment(
-                    format!("ledger.scope.{}", scope.label().to_lowercase()),
-                    scope.label(),
-                    ledger.filters.scope == scope,
-                    t,
-                )
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    super::set_scope(state, scope, tx)
-                })
-            })
-            .into(),
-        t,
-    );
+    let scopes = Inline::tight()
+        .key("ledger.scope")
+        .role("group")
+        .label("Which sessions")
+        .children(Scope::ALL.map(|scope| {
+            chosen(
+                format!("ledger.scope.{}", scope.label().to_lowercase()),
+                scope.label(),
+                ledger.filters.scope == scope,
+                Size::Compact,
+                t,
+            )
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| super::set_scope(state, scope, tx))
+        }));
     let unresolved = {
         let facets = ledger.read_facets();
         let profiles =
@@ -240,88 +253,65 @@ fn toolbar(state: &State, t: &Tokens) -> El {
             let token = token.to_owned();
             let lost = unresolved.contains(&token);
             let removed = token.clone();
-            let gives_way = token.chars().count() > SHORT_TOKEN;
-            let face = format!("{token} ×");
-            let ink = if lost { t.warning } else { t.text_secondary };
-            let chip = Button::new(token.clone())
-                .control_size(ControlSize::Mini)
-                .label_with(move |_, _| {
-                    text(face)
-                        .font(type_::MONO_CAPTION)
-                        .color(ink)
-                        .single_line()
-                        .truncate_middle()
-                        .shrink()
-                })
-                .help(format!("Remove {token}"))
-                .build(attn_ui::kit(t))
-                .key(format!("ledger.chip.{at}"))
-                .a11y_value(if lost { "unresolved" } else { "" })
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    let text = query::remove_token(&state.window.ledger.query.text, &removed);
-                    state.window.ledger.query = rune::TextEdit::new(text);
-                    super::query_edited(state, tx);
-                });
-            if gives_way { chip.shrink() } else { chip }
-        })
-        .collect::<Vec<_>>();
-    let field = text_input(&ledger.query, type_::MONO_CAPTION)
-        .key(QUERY)
-        .single_line()
-        .label("Filter")
-        .placeholder(
-            "repo:attn  profile:name  7d  from:2026-09-01  dir:~/x  words",
-            t.text_muted,
-        )
-        .on_edit(|state: &mut State| &mut state.window.ledger.query)
-        .on_input_change(|state: &mut State, tx: &mut Tx| super::query_edited(state, tx))
-        .on_input_key(query_key)
-        .grow(1.0)
-        .min_w(QUERY_ROOM)
-        .color(t.text_primary);
-    parts::toolbar(vec![scopes, parts::query_well(field, chips, t)], t)
+            let chip = El::from(
+                Button::new(format!("{token} ×"))
+                    .size(Size::Compact)
+                    .look(if lost { Look::Danger } else { Look::Quiet })
+                    .help(format!("Remove {token}"))
+                    .build(t)
+                    .key(format!("ledger.chip.{at}"))
+                    .label(token.clone()),
+            )
+            .a11y_value(if lost { "unresolved" } else { "" })
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                let text = query::remove_token(&state.window.ledger.query.text, &removed);
+                state.window.ledger.query = rune::TextEdit::new(text);
+                super::query_edited(state, tx);
+            });
+            if token.chars().count() > SHORT_TOKEN {
+                chip.shrink()
+            } else {
+                chip
+            }
+        });
+    let field = query_field(
+        &ledger.query,
+        "repo:attn  profile:name  7d  from:2026-09-01  dir:~/x  words",
+        |state: &mut State| &mut state.window.ledger.query,
+        |state: &mut State, tx: &mut Tx| super::query_edited(state, tx),
+        query_key,
+        t,
+    );
+    toolbar_line(vec![scopes, field], chips.collect(), t)
+}
+
+/// A list's toolbar: its controls, then the chips of its query.
+pub(super) fn toolbar_line(controls: Vec<El>, chips: Vec<El>, _t: &Tokens) -> El {
+    Stack::tight()
+        .w_full()
+        .child(Inline::loose().w_full().children(controls))
+        .children((!chips.is_empty()).then(|| Inline::tight().children(chips)))
 }
 
 fn list(state: &State, rows: &[Row<'_>], selected: Option<&Row<'_>>, t: &Tokens) -> El {
     let ledger = &state.window.ledger;
-    let list = col()
-        .key(LIST)
-        .role("listbox")
-        .label("Rows")
-        .focusable(true)
-        .grow(1.0)
-        .min_w(0.0)
-        .h_full()
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
+    let chosen = selected.map(|r| format!("ledger.row.{}", r.entry.id));
+    let chosen_id = selected.map(|r| r.entry.id.as_str());
+    rows.iter()
+        .fold(List::new(LIST, "Rows").chooser(chosen), |list, r| {
+            let (row, under) = list_row(state, r, Some(r.entry.id.as_str()) == chosen_id, t);
+            list.row_with(row, under)
         })
-        .py(space::S1);
-    if rows.is_empty() {
-        let failed = ledger.failed(state.window.now_ms);
-        let words = ledger.empty_message(state.window.now_ms);
-        return list
-            .child(
-                text(words.clone())
-                    .key("ledger.empty")
-                    .role(if failed { "alert" } else { "note" })
-                    .label(words)
-                    .font(type_::BODY)
-                    .color(if failed { t.error } else { t.text_tertiary })
-                    .wrap()
-                    .padding(space::S6),
-            )
-            .scroll_bar_styled(attn_ui::scroll_bar(t));
-    }
-    let chosen = selected.map(|r| r.entry.id.as_str());
-    parts::on_chosen_row(list, chosen)
-        .children(
-            rows.iter()
-                .map(|r| list_row(state, r, Some(r.entry.id.as_str()) == chosen, t)),
+        .failed(ledger.failed(state.window.now_ms))
+        .empty(
+            "ledger.empty",
+            ledger.empty_message(state.window.now_ms),
+            None,
         )
-        .scroll_bar_styled(attn_ui::scroll_bar(t))
+        .scrolling(t)
 }
 
-fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> El {
+fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> (El, Vec<Block>) {
     let ledger = &state.window.ledger;
     let entry = r.entry;
     let closed = is_closed(entry);
@@ -333,76 +323,76 @@ fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> El {
     let stamp = query::relative_stamp(at_ms, state.window.now_ms);
     let primary = r.verbs.first().map(|verb| {
         let (id, verb) = (entry.id.clone(), verb.clone());
-        let words = match note {
+        let said = match note {
             Some(Note::Busy(busy)) => busy.clone(),
             _ => verb.label(),
         };
-        parts::row_verb(format!("ledger.row.{}.verb", entry.id), &words, selected, t).on_press_tx(
+        row_verb(format!("ledger.row.{}.verb", entry.id), &said, t).on_press_tx(
             move |state: &mut State, tx: &mut Tx| super::run(state, &id, verb.clone(), tx),
         )
     });
     let more = (r.verbs.len() > 1 && !busy).then(|| {
         let id = entry.id.clone();
-        parts::row_more(format!("ledger.row.{}.more", entry.id), selected, t)
-            .label(format!("More for {}", r.title))
-            .a11y_value(if menu_open { "expanded" } else { "" })
-            .on_press_tx(move |state: &mut State, _: &mut Tx| open_menu(state, &id))
+        icon_button(
+            format!("ledger.row.{}.more", entry.id),
+            format!("More for {}", r.title),
+            "···",
+            IconSize::Small,
+        )
+        .expanded(menu_open)
+        .on_press_tx(move |state: &mut State, _: &mut Tx| open_menu(state, &id))
     });
-    let note_line = match note {
-        Some(Note::Refused(words)) => Some(
-            text(words.clone())
+    let row = ListRow::new(format!("ledger.row.{}", entry.id), r.title.clone())
+        .lead(mark(glyph(entry, r.live, t), DotSize::Regular, t))
+        .title(r.title.clone())
+        .subtitle_keyed(
+            format!("ledger.row.{}.meta", entry.id),
+            format!("{stamp}  ·  {}", meta_line(meta(state, r))),
+            t,
+        )
+        .controls(primary, Reveal::Quiet)
+        .hover_controls(more)
+        .dimmed(closed)
+        .in_view(selected)
+        .role("option")
+        .unfocusable()
+        .build(t)
+        .a11y_value(if selected { "selected" } else { "" })
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            super::select(state, &id);
+            tx.focus(LIST, false);
+        });
+    let under = match note {
+        Some(Note::Refused(said)) => vec![Block::custom(
+            format!("ledger.row.{}.note.block", entry.id),
+            words(said.clone(), Type::Small, t.warning)
                 .key(format!("ledger.row.{}.note", entry.id))
                 .role("status")
-                .label(words.clone())
-                .font(parts::META)
-                .color(t.warning)
-                .single_line()
-                .truncate(),
-        ),
-        _ => None,
+                .label(said.clone())
+                .wrap(),
+        )],
+        _ => Vec::new(),
     };
-    let body = parts::row_body(
-        r.title.clone(),
-        closed,
-        meta_line(meta(state, r))
-            .key(format!("ledger.row.{}.meta", entry.id))
-            .font(parts::META),
-        note_line,
-        t,
-    );
-    parts::list_row(
-        format!("ledger.row.{}", entry.id),
-        r.title.clone(),
-        selected,
-        glyph(entry, r.live, t),
-        body,
-        std::iter::once(parts::stamp(stamp, t))
-            .chain(primary)
-            .chain(more)
-            .collect(),
-        t,
-    )
-    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-        super::select(state, &id);
-        tx.focus(LIST, false);
-    })
+    (row, under)
 }
 
-/// A row's meta line, its parts apart by dots and its directory in monospace, as the Tauri
-/// app's `.ledger-path`.
-fn meta_line(parts: Vec<(String, bool)>) -> El {
-    let mut line = String::new();
-    let mut spans = Vec::new();
-    for (i, (part, path)) in parts.into_iter().enumerate() {
-        if i > 0 {
-            line.push_str("  ·  ");
-        }
-        if path {
-            spans.push(rune::Span::new(line.len(), line.len() + part.len()).mono());
-        }
-        line.push_str(&part);
-    }
-    rune::rich(line, spans)
+/// A verb on a row: a quiet compact button.
+pub(super) fn row_verb(key: String, said: &str, t: &Tokens) -> El {
+    Button::new(said)
+        .size(Size::Compact)
+        .look(Look::Quiet)
+        .build(t)
+        .key(key)
+        .into()
+}
+
+/// A row's meta line, its parts apart by dots and its directory in monospace.
+fn meta_line(parts: Vec<(String, bool)>) -> String {
+    parts
+        .into_iter()
+        .map(|(part, path)| if path { format!("`{part}`") } else { part })
+        .collect::<Vec<_>>()
+        .join("  ·  ")
 }
 
 fn meta(state: &State, r: &Row<'_>) -> Vec<(String, bool)> {
@@ -514,60 +504,76 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
     }
     let profile = profile_text(entry);
     let at_ms = crate::sidebar::queue::epoch_ms(query::instant(entry)).unwrap_or_default();
-    let mut fields = vec![
-        field(
-            "Profile",
-            if profile.is_empty() { "—" } else { &profile },
-            t,
-        ),
-        directory_field(entry, verdict, ledger.copied.as_deref(), t),
-    ];
+    let mut facts = Facts::new("ledger.inspector.facts").fact(
+        "ledger.inspector.profile",
+        "Profile",
+        if profile.is_empty() { "—" } else { &profile },
+    );
+    facts = directory_field(facts, entry, verdict, ledger.copied.as_deref(), t);
     let branch_state = verdict
         .and_then(|v| v.branch_state.as_deref())
         .map(query::branch_state_label);
     if entry.branch.as_deref().is_some_and(|b| !b.is_empty()) || branch_state.is_some() {
-        fields.push(
-            field(
-                "Branch",
-                entry
-                    .branch
-                    .as_deref()
-                    .filter(|b| !b.is_empty())
-                    .unwrap_or("—"),
-                t,
-            )
-            .children(branch_state.map(|s| muted(s, t))),
+        let branch = entry
+            .branch
+            .as_deref()
+            .filter(|b| !b.is_empty())
+            .unwrap_or("—");
+        facts = facts.item(
+            "ledger.inspector.branch",
+            "Branch",
+            lines(std::iter::once(value(branch, t)).chain(branch_state.map(|s| aside(s, t)))),
         );
     }
     let instant = if closed { "Closed" } else { "Last seen" };
-    fields.push(
-        group(&instant.to_lowercase().replace(' ', "-"), instant, t)
-            .child(parts::value_with(
+    facts = facts.item(
+        format!(
+            "ledger.inspector.{}",
+            instant.to_lowercase().replace(' ', "-")
+        ),
+        instant,
+        lines(
+            std::iter::once(value_with(
                 &query::full_stamp(at_ms),
                 &format!("({})", query::relative_stamp(at_ms, state.window.now_ms)),
                 t,
             ))
-            .children(closed.then(|| muted(&closed_line(state, entry)["closed ".len()..], t))),
+            .chain(closed.then(|| aside(&closed_line(state, entry)["closed ".len()..], t))),
+        ),
     );
     let usage = (!closed)
         .then(|| state.facts.sessions.iter().find(|s| s.id == entry.id))
         .flatten()
         .and_then(|s| s.usage.as_ref())
         .or(entry.usage.as_ref());
-    fields.extend(usage.map(|usage| usage_field(usage, t)));
+    if let Some(usage) = usage {
+        facts = facts.item(
+            "ledger.inspector.usage",
+            "Usage",
+            lines(usage_field(usage, t)),
+        );
+    }
     if let Some((seed, title)) = r.verbs.iter().find_map(|v| match v {
         Verb::Seed { title, .. } => Some((v.clone(), title.clone())),
         _ => None,
     }) {
         let id = entry.id.clone();
-        fields.push(group("seed", "Seed", t).child(
-            parts::link("ledger.inspector.seed.open", &title, t).on_press_tx(
+        facts = facts.control(
+            "ledger.inspector.seed",
+            "Seed",
+            link(
+                "ledger.inspector.seed.open",
+                &title,
+                t,
                 move |state: &mut State, tx: &mut Tx| super::run(state, &id, seed.clone(), tx),
             ),
-        ));
+        );
     }
+    let mut shown = Inspector::new("ledger.inspector", r.title.clone())
+        .kicker(kicker_line(glyph(entry, r.live, t), &kicker.join(" · "), t))
+        .block(facts.build(t));
     if closed {
-        fields.push(reopen_verdict(state, r, t));
+        shown = shown.push(reopen_verdict(state, r, t));
     }
     if super::keeps_conversation(entry) {
         let keep = entry.conversation_pinned_at.is_none();
@@ -580,108 +586,149 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
             "Kept forever"
         };
         let refused = match state.window.ledger.note(entry) {
-            Some(Note::Refused(words)) if !closed => Some(
-                text(words.clone())
+            Some(Note::Refused(said)) if !closed => Some(
+                words(said.clone(), Type::Small, t.warning)
                     .key("ledger.inspector.keep-note")
                     .role("status")
-                    .font(parts::META)
-                    .color(t.warning)
                     .wrap(),
             ),
             _ => None,
         };
-        fields.push(
-            group("conversation", "Conversation", t)
-                .child(muted(pin, t))
-                .children(refused)
-                .child(
-                    parts::verb("ledger.inspector.keep", &verb.label(), Ink::Quiet, t)
-                        .a11y_value(if busy { "busy" } else { "" })
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            super::run(state, &id, Verb::Keep(keep), tx)
-                        }),
-                ),
+        let keep_button = El::from(press_area(
+            "ledger.inspector.keep",
+            &verb.label(),
+            false,
+            false,
+            words(verb.label(), Type::Control, t.text_secondary),
+            t,
+            move |state: &mut State, tx: &mut Tx| super::run(state, &id, Verb::Keep(keep), tx),
+        ))
+        .a11y_value(if busy { "busy" } else { "" });
+        shown = shown.block(
+            Facts::new("ledger.inspector.keeping")
+                .item(
+                    "ledger.inspector.conversation",
+                    "Conversation",
+                    lines(
+                        std::iter::once(aside(pin, t))
+                            .chain(refused)
+                            .chain(std::iter::once(keep_button)),
+                    ),
+                )
+                .build(t),
         );
     }
     if r.live {
         let id = entry.id.clone();
-        fields.push(
-            keyed("ledger.inspector.focus", "Focus", "↵", Keyed::Primary, t).on_press_tx(
+        shown = shown.push(
+            keyed("ledger.inspector.focus", "Focus", "↵", Look::Primary, t).on_press_tx(
                 move |state: &mut State, tx: &mut Tx| super::run(state, &id, Verb::Focus, tx),
             ),
         );
     }
-    parts::inspector(
-        parts::head(
-            &r.title,
-            Some(parts::kicker(
-                glyph(entry, r.live, t),
-                &kicker.join(" · "),
-                t,
-            )),
-            t,
-        ),
-        fields,
-        t,
-    )
+    shown.build(t)
 }
 
 /// The inspector while no row is chosen.
 pub(super) fn nothing_selected(hint: &str, t: &Tokens) -> El {
-    parts::inspector(
-        parts::head("Nothing selected", None, t),
-        vec![body(hint, t).color(t.text_tertiary)],
-        t,
-    )
+    Inspector::new("ledger.inspector", "Nothing selected")
+        .push(aside(hint, t))
+        .build(t)
 }
 
-/// What a session spent, as the Tauri app's usage field: the header's badge, then the whole
-/// count beside a price; the whole count alone while the measurement is incomplete.
-fn usage_field(u: &attn_protocol::SessionUsage, t: &Tokens) -> El {
+/// What the chosen row is, under its name: its mark, then its words.
+pub(super) fn kicker_line(g: Glyph, said: &str, t: &Tokens) -> El {
+    Inline::tight()
+        .key("ledger.inspector.kicker")
+        .child(mark(g, DotSize::Small, t))
+        .child(words(said.to_owned(), Type::Small, t.text_tertiary).wrap())
+}
+
+/// A value with an aside after it in quieter text, as a date and its age.
+pub(super) fn value_with(said: &str, after: &str, t: &Tokens) -> El {
+    Inline::loose().child(value(said, t)).child(aside(after, t))
+}
+
+/// A link to something the chosen row names, such as its seed: its words in the link ink, on
+/// the line of the words around it.
+pub(super) fn link(
+    key: &str,
+    said: &str,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    press_area(
+        key,
+        said,
+        false,
+        false,
+        words(said.to_owned(), Type::Body, t.accent).wrap_anywhere(),
+        t,
+        press,
+    )
+    .into()
+}
+
+/// A verb in the inspector, at its own width.
+pub(super) fn verb_button(key: &str, said: &str, look: Look, t: &Tokens) -> El {
+    El::from(
+        Button::new(said)
+            .size(Size::Compact)
+            .look(look)
+            .build(t)
+            .key(key.to_owned()),
+    )
+    .self_start()
+}
+
+/// What a session spent: the header's badge, then the whole count beside a price; the whole
+/// count alone while the measurement is incomplete.
+fn usage_field(u: &attn_protocol::SessionUsage, t: &Tokens) -> Vec<El> {
     let tokens = format!("{} tokens", usage::grouped(u.total_tokens));
-    let shown = group("usage", "Usage", t);
     if !usage::measured(u) {
-        return shown.child(body(&tokens, t)).children(
-            u.measurement_incomplete
-                .unwrap_or_default()
-                .then(|| muted("Measurement incomplete; some usage may be missing.", t)),
-        );
+        return std::iter::once(value(&tokens, t))
+            .chain(
+                u.measurement_incomplete
+                    .unwrap_or_default()
+                    .then(|| aside("Measurement incomplete; some usage may be missing.", t)),
+            )
+            .collect();
     }
     let badge = usage::badge_of(u);
-    let line = row()
-        .items_center()
-        .child(
-            text(badge.text)
-                .label(badge.label)
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-                .px(3.0),
-        )
-        .children(
-            u.cost_usd
-                .is_some()
-                .then(|| muted(&format!(" · {tokens}"), t)),
-        );
-    shown.child(line)
+    vec![
+        Inline::loose()
+            .child(words(badge.text, Type::Body, t.text_primary).label(badge.label))
+            .children(
+                u.cost_usd
+                    .is_some()
+                    .then(|| aside(format!("· {tokens}"), t)),
+            ),
+    ]
 }
 
 fn directory_field(
+    facts: Facts,
     entry: &SessionLedgerEntry,
     verdict: Option<&query::Verdict>,
     copied: Option<&str>,
     t: &Tokens,
-) -> El {
+) -> Facts {
     let directory = entry.directory.clone();
     let copied = copied == Some(entry.directory.as_str());
-    group("directory", "Directory", t)
-        .child(copy_path(
-            "ledger.inspector.directory.copy",
-            &query::tilde_path(&entry.directory),
-            copied,
-            t,
-            move |state: &mut State, tx: &mut Tx| super::copy(state, directory.clone(), tx),
-        ))
-        .children(verdict.map(|v| muted(query::directory_state_label(&v.directory_state), t)))
+    facts.control(
+        "ledger.inspector.directory",
+        "Directory",
+        lines(
+            std::iter::once(copy_path(
+                "ledger.inspector.directory.copy",
+                &query::tilde_path(&entry.directory),
+                copied,
+                t,
+                move |state: &mut State, tx: &mut Tx| super::copy(state, directory.clone(), tx),
+            ))
+            .chain(verdict.map(|v| aside(query::directory_state_label(&v.directory_state), t))),
+        ),
+    )
 }
 
 fn reopen_verdict(state: &State, r: &Row<'_>, t: &Tokens) -> El {
@@ -691,43 +738,37 @@ fn reopen_verdict(state: &State, r: &Row<'_>, t: &Tokens) -> El {
     let note = ledger.note(entry);
     let busy = matches!(note, Some(Note::Busy(_)));
     let deleted = entry.profile_deleted.unwrap_or_default();
-    let mut block = col()
-        .key("ledger.inspector.reopen")
-        .gap(space::S1)
-        .child(parts::label("Reopen", t));
+    let mut parts = vec![words("Reopen", Type::Label, t.text_tertiary)];
     if deleted {
-        block = block.child(body(
+        parts.push(value(
             "Its profile was deleted. This session cannot be reopened.",
             t,
         ));
     } else if let Some(v) = verdict {
-        block = block
-            .child(body(
-                &name_ids(
-                    state,
-                    &query::compact_paths(
-                        v.reason
-                            .as_deref()
-                            .unwrap_or("It can be reopened where it ran."),
-                    ),
+        parts.push(value(
+            name_ids(
+                state,
+                &query::compact_paths(
+                    v.reason
+                        .as_deref()
+                        .unwrap_or("It can be reopened where it ran."),
                 ),
-                t,
-            ))
-            .children(
-                v.warning
-                    .as_deref()
-                    .map(|w| muted(&name_ids(state, &query::compact_paths(w)), t)),
-            )
-            .child(muted(v.placement(), t));
+            ),
+            t,
+        ));
+        parts.extend(
+            v.warning
+                .as_deref()
+                .map(|w| aside(name_ids(state, &query::compact_paths(w)), t)),
+        );
+        parts.push(aside(v.placement(), t));
     }
-    if let Some(Note::Refused(words)) = note {
-        block = block.child(
-            text(words.clone())
+    if let Some(Note::Refused(said)) = note {
+        parts.push(
+            words(said.clone(), Type::Small, t.warning)
                 .key("ledger.inspector.note")
                 .role("status")
-                .label(words.clone())
-                .font(parts::META)
-                .color(t.warning)
+                .label(said.clone())
                 .wrap(),
         );
     }
@@ -744,22 +785,30 @@ fn reopen_verdict(state: &State, r: &Row<'_>, t: &Tokens) -> El {
         } else {
             (at + 1).to_string()
         };
-        let words = match note {
+        let said = match note {
             Some(Note::Busy(busy)) if at == 0 => busy.clone(),
             _ => verb.label(),
         };
-        parts::verb(
-            format!("ledger.inspector.action.{at}"),
-            &format!("{hint}  {words}"),
-            if at == 0 { Ink::Primary } else { Ink::Quiet },
-            t,
+        El::from(
+            Button::new(said)
+                .size(Size::Compact)
+                .look(if at == 0 { Look::Primary } else { Look::Quiet })
+                .trailing(keycap::Keys::ledged(&[hint.as_str()]).build(t))
+                .build(t)
+                .key(format!("ledger.inspector.action.{at}"))
+                .label(verb.label()),
         )
-        .label(verb.label())
         .a11y_value(if busy { "busy" } else { "" })
         .on_press_tx(move |state: &mut State, tx: &mut Tx| super::run(state, &id, verb.clone(), tx))
     });
-    let none = (actions.is_empty()).then(|| muted("Nothing here brings it back.", t));
-    block.child(row().gap(space::S1).children(buttons).children(none))
+    let none = actions
+        .is_empty()
+        .then(|| aside("Nothing here brings it back.", t));
+    parts.push(Inline::tight().children(buttons).children(none));
+    Stack::tight()
+        .key("ledger.inspector.reopen")
+        .w_full()
+        .children(parts)
 }
 
 fn session_counts(state: &State, rows: &[Row<'_>], t: &Tokens) -> Vec<El> {
@@ -782,17 +831,32 @@ fn session_counts(state: &State, rows: &[Row<'_>], t: &Tokens) -> Vec<El> {
         counts.push(format!("{hidden} hidden by the query"));
     }
     let older = (ledger.omitted() > 0).then(|| {
-        let words = if ledger.loading_more() {
+        let said = if ledger.loading_more() {
             "loading…".to_owned()
         } else {
             format!("{} older ↓", ledger.omitted())
         };
-        parts::status_link("ledger.older", words, t)
+        status_link("ledger.older", said, t)
             .on_press_tx(|state: &mut State, tx: &mut Tx| super::load_more(state, tx))
     });
-    std::iter::once(parts::status_text(counts.join("  ·  "), t.text_tertiary).key("ledger.counts"))
+    std::iter::once(status_text(counts.join("  ·  "), t.text_tertiary).key("ledger.counts"))
         .chain(older)
         .collect()
+}
+
+/// Words of the status line.
+pub(super) fn status_text(said: String, ink: rune::Color) -> El {
+    words(said, Type::Mono, ink).single_line()
+}
+
+/// A press in the status line.
+pub(super) fn status_link(key: &str, said: String, t: &Tokens) -> El {
+    Button::new(said)
+        .size(Size::Compact)
+        .look(Look::Quiet)
+        .build(t)
+        .key(key.to_owned())
+        .into()
 }
 
 fn status(state: &State, counts: Vec<El>, t: &Tokens) -> El {
@@ -800,25 +864,18 @@ fn status(state: &State, counts: Vec<El>, t: &Tokens) -> El {
     let copied = ledger
         .copied
         .as_ref()
-        .map(|_| parts::status_text("copied".into(), t.success).key("ledger.copied"));
+        .map(|_| status_text("copied".into(), t.success).key("ledger.copied"));
     let legend = ledger.legend.then(|| legend(t));
-    row()
+    Inline::loose()
         .key("ledger.status")
         .role("status")
         .w_full()
-        .h(30.0)
-        .items_center()
-        .gap(12.0)
-        .px(12.0)
-        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-        .child(parts::status_line(
-            counts.into_iter().chain(copied).collect(),
-            t,
-        ))
+        .children(counts)
+        .children(copied)
         .child(el().grow(1.0))
         .children(legend)
         .child(
-            keyed("ledger.keys", "keys", "?", Keyed::Mono, t)
+            keyed("ledger.keys", "keys", "?", Look::Quiet, t)
                 .label("Keys")
                 .a11y_value(if ledger.legend { "expanded" } else { "" })
                 .on_press_tx(|state: &mut State, _: &mut Tx| {
@@ -838,24 +895,16 @@ fn legend(t: &Tokens) -> El {
         ("y", "copy path"),
         ("esc", "back out"),
     ];
-    row()
+    Inline::loose()
         .key("ledger.legend")
         .role("dialog")
         .label("Keys")
-        .gap(space::S3)
         .children(KEYS.map(|(keys, does)| {
             let caps: Vec<&str> = keys.split(' ').collect();
-            row()
+            Inline::tight()
                 .label(format!("{keys} {does}"))
-                .gap(4.0)
-                .items_center()
                 .child(keycap::Keys::ledged(&caps).build(t).a11y_hidden())
-                .child(
-                    text(does)
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary)
-                        .a11y_hidden(),
-                )
+                .child(words(does, Type::Small, t.text_tertiary).a11y_hidden())
         }))
 }
 
@@ -962,68 +1011,18 @@ fn query_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
-/// How a [`keyed`] button reads: Close's quiet word after which its key sits, the status bar's
-/// monospace word, or the inspector's primary verb, raised on its own frame.
-#[derive(Clone, Copy, PartialEq)]
-enum Keyed {
-    Quiet,
-    Mono,
-    Primary,
+/// A button that shows its key beside its word.
+fn keyed(key: &str, said: &'static str, cap: &'static str, look: Look, t: &Tokens) -> El {
+    El::from(
+        Button::new(said)
+            .size(Size::Compact)
+            .look(look)
+            .trailing(keycap::Keys::ledged(&[cap]).build(t))
+            .build(t)
+            .key(key.to_owned()),
+    )
+    .self_start()
 }
-
-/// A button that shows its key as a keycap beside its word, as Tauri's ledger buttons do: the
-/// key first for a verb, after the word otherwise.
-fn keyed(key: &str, word: &'static str, cap: &'static str, ink: Keyed, t: &Tokens) -> El {
-    let t = *t;
-    let button = Button::new(word)
-        .variant(ButtonVariant::GhostMuted)
-        .control_size(ControlSize::Small)
-        .label_with(move |font, _| {
-            let (font, color) = match ink {
-                Keyed::Quiet => (
-                    rune::TextStyle {
-                        weight: 400.0,
-                        ..font
-                    },
-                    t.text_tertiary,
-                ),
-                Keyed::Mono => (
-                    rune::TextStyle {
-                        weight: 400.0,
-                        ..font
-                    }
-                    .mono(),
-                    t.text_tertiary,
-                ),
-                Keyed::Primary => (
-                    rune::TextStyle {
-                        weight: 400.0,
-                        ..font
-                    },
-                    t.text_primary,
-                ),
-            };
-            let cap = keycap::Keys::ledged(&[cap]).build(&t).a11y_hidden();
-            let word = text(word).font(font).color(color);
-            if ink == Keyed::Quiet {
-                row().gap(6.0).items_center().child(word).child(cap)
-            } else {
-                row().gap(6.0).items_center().child(cap).child(word)
-            }
-        })
-        .build(attn_ui::kit(&t))
-        .key(key.to_owned());
-    match ink {
-        Keyed::Primary => button
-            .self_start()
-            .fill(t.bg_elevated)
-            .border(1.0, t.border),
-        Keyed::Quiet | Keyed::Mono => button,
-    }
-}
-
-/// The width the filter field keeps beside its chips, as Tauri's ledger keeps for its input.
-const QUERY_ROOM: f32 = 80.0;
 
 /// The longest token that keeps its whole chip: a date bound such as `from:2026-09-01` is 15.
 const SHORT_TOKEN: usize = 16;
@@ -1036,23 +1035,23 @@ pub(super) fn copy_path(
     t: &Tokens,
     copy: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    row()
+    Inline::tight()
         .w_full()
-        .gap(space::S1)
         .child(
-            text(format!("{path}{}", if copied { "  copied" } else { "" }))
-                .key(format!("{key}.text"))
-                .font(type_::MONO_CAPTION)
-                .color(t.text_primary)
-                .wrap()
-                .grow(1.0)
-                .min_w(0.0),
+            words(
+                format!("{path}{}", if copied { "  copied" } else { "" }),
+                Type::Mono,
+                t.text_primary,
+            )
+            .key(format!("{key}.text"))
+            .wrap()
+            .grow(1.0)
+            .min_w(0.0),
         )
         .child(
-            attn_ui::GlyphButton::new(attn_ui::glyph::COPY, "Copy the path (y)")
-                .side(18.0)
+            icon_button(key, "Copy the path (y)", glyph::COPY, IconSize::Small)
                 .on_press_tx(copy)
-                .build(attn_ui::kit(t))
-                .key(key.to_owned()),
+                .build(t)
+                .into(),
         )
 }
