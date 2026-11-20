@@ -348,6 +348,15 @@ const NESTED_PATH: Failure = Failure::WriteError(
 /// The index, a long note, open in `document`, scrolled far down with the caret at the end of
 /// the line a third down the view, typed into, and its save held: the line the caret is on.
 fn typed_far_down(world_of: impl FnOnce(&Disk) -> World, document: &str) -> (Disk, World, String) {
+    typed_far_down_at(world_of, document, 1.0 / 3.0)
+}
+
+/// [`typed_far_down`] with the caret on the first whole line `down` of the way down the view.
+fn typed_far_down_at(
+    world_of: impl FnOnce(&Disk) -> World,
+    document: &str,
+    down: f32,
+) -> (Disk, World, String) {
     let disk = Disk::with(&[(NOTE, &twice_titled_note())]);
     let mut world = world_of(&disk);
     let scroll = Target::key(format!("{document}.scroll"));
@@ -362,9 +371,9 @@ fn typed_far_down(world_of: impl FnOnce(&Disk) -> World, document: &str) -> (Dis
         .find(|key| {
             screen
                 .bounds(Target::key(key))
-                .is_some_and(|[_, top, _, _]| top >= y + h / 3.0)
+                .is_some_and(|[_, top, _, _]| top >= y + h * down)
         })
-        .expect("a line a third down the view");
+        .expect("a line that far down the view");
     world
         .daemon
         .answer_in_turn("fs_write", [Answer::Hold, Answer::Hold]);
@@ -707,4 +716,20 @@ fn tab_reaches_a_conflicts_recovery_before_find_in_note_in_an_editor_tile() {
         "notebook.tile.n",
         tile(WIDE),
     );
+}
+
+/// The caret's line at the top of the view, where a conflict's notice comes to stand: it
+/// shows just under the notice, at the view's new top, from the first frame.
+#[test]
+fn a_conflict_over_the_caret_s_line_leaves_it_just_under_the_notice() {
+    let (disk, mut world, line) = typed_far_down_at(fullscreen(WIDE), "notebook", 0.0);
+    let held = world.daemon.sent_of("fs_write").pop().unwrap();
+    let arrived = world.record(60.0, 0.5, |daemon, _| {
+        fail(daemon, &held, &disk, &Failure::Conflict)
+    });
+    let [_, view_top, _, _] = world
+        .screen()
+        .bounds(Target::key("notebook.scroll"))
+        .unwrap();
+    stays_where_it_shows(&world, &arrived, "notebook", &line, view_top);
 }
