@@ -714,6 +714,15 @@ fn shows_the_advisors_progress_without_making_the_user_wait_to_act() {
         "You can choose an action now. Advice will appear here if it arrives first."
     ));
     assert!(shows(&world, "Advice ready for 0 of 1 seeds."));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("garden.review.waiting.track"))
+            .name
+            .as_deref(),
+        Some("Advice ready for 0 of 1 seeds."),
+        "the progress track says how far the advice has come"
+    );
     assert!(has(&world, "Harvest"));
     assert!(has(&world, "Handover"));
     assert!(world.runtime_is_at_rest());

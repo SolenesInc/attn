@@ -1338,9 +1338,11 @@ fn progress(state: &State, shown: &GardenReview, item: &GardenReviewItem, t: &To
         ))
         .push(Block::custom(
             "garden.review.waiting.track.block",
-            meter(shown.items.iter().map(|c| (1.0, track_color(c, t))))
+            row()
                 .key("garden.review.waiting.track")
-                .label(ready),
+                .role("group")
+                .label(ready)
+                .child(meter(shown.items.iter().map(|c| (1.0, track_color(c, t))))),
         ))
         .push(Block::custom(
             "garden.review.waiting.detail.block",
