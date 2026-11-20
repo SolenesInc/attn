@@ -1749,3 +1749,16 @@ fn an_assistive_scroll_moves_the_list_of_asks_when_it_overflows_as_on_main() {
         );
     });
 }
+
+#[test]
+fn the_other_answer_sits_in_its_question_s_group_of_answers_as_on_main() {
+    let mut world = start(vec![cache_store()], vec![api_working()]);
+    open_drawer(&mut world);
+    let answers = world.screen().descendants(Target::key("asks.q.q1.choices"));
+    assert!(
+        answers
+            .iter()
+            .any(|n| n.key.as_deref() == Some("asks.q.q1.other.field")),
+        "the Other field is outside the question's answers"
+    );
+}

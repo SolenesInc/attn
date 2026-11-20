@@ -631,10 +631,7 @@ fn choice_list(
             Some(El::from(line_box(input, FieldState::Ready, t)))
         }
     };
-    Stack::tight()
-        .w_full()
-        .child(group.children(options))
-        .children(other)
+    group.children(options).children(other)
 }
 
 fn replied_text(key: String, label: &str, value: &str, t: &Tokens) -> El {
