@@ -10,7 +10,6 @@ use attn_protocol::{
 };
 use base64::Engine;
 use pulldown_cmark::{Event, Parser, Tag};
-use rune::tok::radius;
 use rune::{El, Icon, Image, ImageCache, Tx, el};
 use rune_kit::{ImageZoom, Preview, image_zoom};
 
@@ -626,13 +625,13 @@ fn preview(state: &State, reduced_motion: bool, t: &attn_ui::Tokens) -> Option<E
         }
         Shown::Diagram { source } => {
             let drawing = super::natural(source, t)?;
-            let drawn = el()
-                .key("diagram-preview.drawing")
-                .size(drawing.size[0], drawing.size[1])
-                .radius(radius::MD)
-                .border(1.0, drawing.surface_border)
-                .fill(drawing.surface)
-                .child(drawing.el);
+            let drawn = attn_ui::blocks::Surface::ground(
+                el().key("diagram-preview.drawing")
+                    .size(drawing.size[0], drawing.size[1])
+                    .child(drawing.el),
+                drawing.surface,
+                drawing.surface_border,
+            );
             Preview::new(lens, drawing.size, drawn)
                 .scale_content()
                 .actual_size("Actual size")

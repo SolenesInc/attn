@@ -1140,11 +1140,17 @@ fn garden_world(dark: bool, seeds: Vec<Seed>) -> World {
 
 /// [`garden_world`], its daemon also answering what `answers` registers.
 fn garden_world_and(dark: bool, seeds: Vec<Seed>, answers: impl FnOnce(&Daemon)) -> World {
-    let daemon = scripted().state(initial(
-        dark,
-        document_tile("m", "/repo/plan.md"),
-        seeds.clone(),
-    ));
+    garden_world_beside(dark, document_tile("m", "/repo/plan.md"), seeds, answers)
+}
+
+/// [`garden_world_and`] with `tile` beside terminal `a` in place of the document.
+fn garden_world_beside(
+    dark: bool,
+    tile: Value,
+    seeds: Vec<Seed>,
+    answers: impl FnOnce(&Daemon),
+) -> World {
+    let daemon = scripted().state(initial(dark, tile, seeds.clone()));
     answers(&daemon);
     let known = seeds;
     daemon.on("seed_document_get", move |r: &Request| {
@@ -1240,6 +1246,68 @@ fn garden_dock_plot(dark: bool) {
     press(&mut world, Action::BoardOpen);
     world.gesture(|app| app.click(Target::key("garden.row.s-plot")));
     snap(&mut world, "garden-dock-plot", dark);
+}
+
+/// The garden as a board of lanes, expanded.
+fn garden_board(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::BoardOpen);
+    world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
+    world.gesture(|app| app.click(Target::key("garden.view.board")));
+    snap(&mut world, "garden-board", dark);
+}
+
+/// The board with a card picked, its move menu open under it.
+fn garden_board_menu(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::BoardOpen);
+    world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
+    world.gesture(|app| app.click(Target::key("garden.view.board")));
+    world.gesture(|app| app.click(Target::key("garden.board.card.s-loose")));
+    snap(&mut world, "garden-board-menu", dark);
+}
+
+/// A search in the docked garden whose answers fill the list and run past it.
+fn garden_dock_search_full(dark: bool) {
+    let many = (0..40)
+        .map(|n| {
+            seed(
+                &format!("s-row{n:02}"),
+                &format!("Every row of the list reads its state from one place, part {n}"),
+                if n % 3 == 0 { "growing" } else { "planted" },
+                None,
+            )
+        })
+        .collect();
+    let mut world = garden_world(dark, many);
+    press(&mut world, Action::BoardOpen);
+    world.gesture(|app| app.click(Target::key("garden.search.field")));
+    world.gesture(|app| app.type_text("row"));
+    snap(&mut world, "garden-dock-search-full", dark);
+}
+
+/// A search in the docked garden: its answers with what matched, then a filter being typed.
+fn garden_dock_search(dark: bool) {
+    let mut world = with_document(dark);
+    press(&mut world, Action::BoardOpen);
+    world.gesture(|app| app.click(Target::key("garden.search.field")));
+    world.gesture(|app| app.type_text("row"));
+    snap(&mut world, "garden-dock-search", dark);
+    world.gesture(|app| app.type_text(" is:"));
+    snap(&mut world, "garden-dock-search-filter", dark);
+}
+
+/// A seed's page as a tile beside the agent.
+fn garden_seed_tile(dark: bool) {
+    let tile = json!({
+        "type": "tile",
+        "tile_id": "seed",
+        "tile_kind": "seed",
+        "tile_params": "s-one",
+        "tile_session_id": "s0",
+    });
+    let mut world = garden_world_beside(dark, tile, seeds(), |_| {});
+    snap(&mut world, "garden-seed-tile", dark);
 }
 
 /// A garden review of two seeds, the first `s-one`, advised or with its advisor still running.
@@ -5200,6 +5268,11 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("garden_dock_seed", || garden_dock_seed(dark));
         scene("garden_empty", || garden_empty(dark));
         scene("garden_dock_empty", || garden_dock_empty(dark));
+        scene("garden_board", || garden_board(dark));
+        scene("garden_dock_search", || garden_dock_search(dark));
+        scene("garden_dock_search_full", || garden_dock_search_full(dark));
+        scene("garden_board_menu", || garden_board_menu(dark));
+        scene("garden_seed_tile", || garden_seed_tile(dark));
         scene("garden_review_screen", || {
             garden_review_screen(dark, true, true, "garden-review")
         });

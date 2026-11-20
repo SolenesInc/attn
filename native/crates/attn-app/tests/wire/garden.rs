@@ -237,7 +237,39 @@ fn open_row(world: &mut World, title: &str) {
 }
 
 fn click(world: &mut World, name: &str) {
-    world.gesture(|app| app.click(Target::role("button").name(name)));
+    let target = Target::role("button").name(name);
+    bring_into_view(world, &target);
+    world.gesture(|app| app.click(target));
+}
+
+/// Wheels the garden's page until `target` is wholly in its view, as a person scrolls to what
+/// they are about to press; a target outside the page stays where it is.
+pub(super) fn bring_into_view(world: &mut World, target: &Target) {
+    let Some([x, y, w, h]) = world.screen().bounds(Target::key("garden.viewport")) else {
+        return;
+    };
+    let mut last = None;
+    for _ in 0..40 {
+        let Some([tx, top, _, height]) = world.screen().bounds(target.clone()) else {
+            return;
+        };
+        if tx < x || tx > x + w || last == Some(top) {
+            return;
+        }
+        last = Some(top);
+        let dy = if top < y {
+            60.0
+        } else if top + height > y + h {
+            -60.0
+        } else {
+            return;
+        };
+        let at = (x + w / 2.0, y + h / 2.0);
+        world.gesture(|app| {
+            app.runtime
+                .wheel_event(rune::WheelEvent::new(0.0, dy).at(at.0, at.1))
+        });
+    }
 }
 
 fn heading(world: &World) -> Option<String> {
@@ -653,7 +685,7 @@ fn names_the_way_in_when_the_garden_is_empty_and_the_way_into_an_empty_plot() {
 
     assert!(shows(
         &world,
-        "attn seed plant \"what this is\" --part-of s-crown9"
+        "Nothing planted in this plot yet. attn seed plant \"what this is\" --part-of s-crown9 puts something in it."
     ));
     assert!(world.runtime_is_at_rest());
 }

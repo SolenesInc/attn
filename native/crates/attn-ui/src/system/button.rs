@@ -32,6 +32,7 @@ pub struct Button {
     look: Look,
     size: Size,
     disabled: bool,
+    unavailable: bool,
     open: bool,
     chosen: Option<bool>,
     trailing: Option<El>,
@@ -60,6 +61,7 @@ impl Button {
             look: Look::Plain,
             size: Size::Regular,
             disabled: false,
+            unavailable: false,
             open: false,
             chosen: None,
             trailing: None,
@@ -109,6 +111,15 @@ impl Button {
     /// segment has, read as checked; off, read as unchecked.
     pub fn chosen(mut self, chosen: bool) -> Self {
         self.chosen = Some(chosen);
+        self
+    }
+
+    /// The button can't act now, for `reason`: drawn as disabled, it keeps its stop on Tab so
+    /// the keyboard can reach it and read why.
+    pub fn unavailable(mut self, reason: impl Into<String>) -> Self {
+        self.disabled = true;
+        self.unavailable = true;
+        self.button = self.button.unavailable(reason);
         self
     }
 
@@ -182,7 +193,11 @@ impl Button {
             door::inset(button, self.size.inset(), Space::S0)
         };
         let button = focus::ring(door::corner(button, Radius::Control), t);
-        let button = if self.disabled && self.look == Look::Primary {
+        let button = if self.unavailable && self.look == Look::Primary {
+            button
+        } else if self.unavailable {
+            focus::ring(disabled::faded(button), t)
+        } else if self.disabled && self.look == Look::Primary {
             disabled::unavailable(button)
         } else if self.disabled {
             disabled::dim(button)

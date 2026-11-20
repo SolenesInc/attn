@@ -4,9 +4,10 @@
 
 use attn_protocol::{MarkdownAnnotation, MarkdownAnnotationAnchor, ReviewRow};
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::{radius, space};
-use rune::{El, Key, KeyEvent, TextEdit, Tx, col, row, text};
+use attn_ui::blocks::{Inline, Remark, Stack, Voice, key_choice};
+use attn_ui::system::{Reading, Type, keys_hint, read_as, words};
+use rune::tok::space;
+use rune::{El, Key, KeyEvent, TextEdit, Tx, col, text};
 use rune_kit::TextArea;
 
 use crate::State;
@@ -153,42 +154,26 @@ pub(crate) fn mark_row(mark: &MarkdownAnnotation, t: &Tokens) -> El {
     let text_ = mark.text.clone().unwrap_or_default();
     let range = range(mark.anchor.as_ref());
     let answer = question.then(|| match mark.answer.as_deref().filter(|a| !a.is_empty()) {
-        Some(answer) => text(answer.to_owned())
+        Some(answer) => words(answer.to_owned(), Type::Body, t.text_primary)
             .key(format!("review.mark.{}.answer", mark.id))
             .role("note")
             .label(format!("answer: {answer}"))
-            .font(type_::BODY)
-            .color(t.text_primary)
             .wrap(),
-        None => text("Asked — waiting for the answer")
-            .font(type_::LABEL)
-            .color(t.text_tertiary),
+        None => words(
+            "Asked — waiting for the answer",
+            Type::Small,
+            t.text_tertiary,
+        ),
     });
-    col()
+    let remark = Remark::new(who, range, text_)
+        .voice(Voice::Yours)
         .key(format!("review.mark.{}", mark.id))
-        .role("note")
-        .label(format!("{who} {range}: {text_}"))
-        .w_full()
-        .padding(space::S1)
-        .gap(2.0)
-        .radius(radius::SM)
-        .fill(t.success.alpha(0.08))
-        .border_sides([0.0, 0.0, 0.0, 2.0], t.success)
-        .child(
-            row()
-                .gap(space::S2)
-                .child(text(who).font(type_::LABEL).color(t.success))
-                .child(text(range).font(type_::LABEL).color(t.text_secondary))
-                .child(
-                    text(text_)
-                        .font(type_::BODY)
-                        .color(t.text_primary)
-                        .wrap()
-                        .grow(1.0),
-                )
-                .child(remove(&mark.id, "Remove", t)),
-        )
-        .children(answer)
+        .control(remove(&mark.id, "Remove", t));
+    match answer {
+        Some(answer) => remark.under(answer),
+        None => remark,
+    }
+    .build(t)
 }
 
 fn remove(id: &str, help: &'static str, t: &Tokens) -> El {
@@ -209,39 +194,18 @@ fn remove(id: &str, help: &'static str, t: &Tokens) -> El {
 fn edit_row(mark: &MarkdownAnnotation, t: &Tokens) -> El {
     let range = range(mark.anchor.as_ref());
     let was = mark.edit_was.clone().unwrap_or_default();
-    col()
+    Remark::new("you edited", range.clone(), "Saved to the file. It was:")
+        .voice(Voice::Edited)
         .key(format!("review.mark.{}", mark.id))
-        .role("note")
         .label(format!("you edited {range}: it was {was}"))
-        .w_full()
-        .padding(space::S1)
-        .gap(2.0)
-        .radius(radius::SM)
-        .fill(t.accent.alpha(0.08))
-        .border_sides([0.0, 0.0, 0.0, 2.0], t.accent)
-        .child(
-            row()
-                .gap(space::S2)
-                .child(text("you edited").font(type_::LABEL).color(t.accent))
-                .child(text(range).font(type_::LABEL).color(t.text_secondary))
-                .child(
-                    text("Saved to the file. It was:")
-                        .font(type_::LABEL)
-                        .color(t.text_secondary),
-                )
-                .child(text("u undo").font(type_::LABEL).color(t.text_tertiary))
-                .child(remove(
-                    &mark.id,
-                    "Drop from the review; the file stays as it is",
-                    t,
-                )),
-        )
-        .child(
-            text(was)
-                .font(type_::MONO_CAPTION)
-                .color(t.text_primary)
-                .wrap(),
-        )
+        .control(words("u undo", Type::Small, t.text_tertiary))
+        .control(remove(
+            &mark.id,
+            "Drop from the review; the file stays as it is",
+            t,
+        ))
+        .under(words(was, Type::Mono, t.text_primary).wrap())
+        .build(t)
 }
 
 /// A note or question being written on `anchor`, in review tile `tile`.
@@ -337,7 +301,7 @@ fn save(state: &mut State, tx: &mut Tx) {
 }
 
 /// The box over tile `composer.tile`, naming where the mark goes.
-pub(crate) fn composer_view(composer: &Composer, words: &TextEdit, t: &Tokens) -> El {
+pub(crate) fn composer_view(composer: &Composer, written: &TextEdit, t: &Tokens) -> El {
     let (title, hint) = match composer.kind {
         Kind::Note => ("Write a note", "Waits for the send."),
         Kind::Question => ("Ask a question", "Sent at once."),
@@ -351,7 +315,7 @@ pub(crate) fn composer_view(composer: &Composer, words: &TextEdit, t: &Tokens) -
         composer.anchor.file.clone().unwrap_or_default(),
         range(Some(&composer.anchor))
     );
-    let area = TextArea::new(words)
+    let area = TextArea::new(written)
         .key(FIELD)
         .width(None)
         .resizable()
@@ -372,15 +336,19 @@ pub(crate) fn composer_view(composer: &Composer, words: &TextEdit, t: &Tokens) -
         .w_full()
         .max_w(560.0)
         .padding(space::S3)
-        .gap(space::S2)
-        .child(text(title).font(type_::TITLE).color(t.text_primary))
-        .child(text(place).font(type_::LABEL).color(t.text_secondary))
-        .child(text(hint).font(type_::LABEL).color(t.text_tertiary))
-        .child(area)
         .child(
-            text("↵ save · ⇧↵ new line · esc cancel")
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
+            Stack::tight()
+                .w_full()
+                .child(words(title, Type::Heading, t.text_primary))
+                .child(words(place, Type::Small, t.text_secondary))
+                .child(words(hint, Type::Small, t.text_tertiary))
+                .child(area)
+                .child(
+                    Inline::loose()
+                        .child(keys_hint(["↵"], "save", t))
+                        .child(keys_hint(["⇧", "↵"], "new line", t))
+                        .child(keys_hint(["esc"], "cancel", t)),
+                ),
         );
     rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0)
 }
@@ -432,29 +400,30 @@ pub(crate) fn sheet(
         .filter(|m| m.r#type == "edit")
         .enumerate()
         .map(|(i, m)| {
-            text(format!(
-                "edit {} {}: it was {} · it is now {}",
-                i + 1,
-                sent_place(m),
-                m.edit_was.clone().unwrap_or_default(),
-                m.edit_now.clone().unwrap_or_default()
-            ))
-            .role("listitem")
-            .font(type_::BODY)
-            .color(t.text_primary)
+            words(
+                format!(
+                    "edit {} {}: it was {} · it is now {}",
+                    i + 1,
+                    sent_place(m),
+                    m.edit_was.clone().unwrap_or_default(),
+                    m.edit_now.clone().unwrap_or_default()
+                ),
+                Type::Body,
+                t.text_primary,
+            )
             .wrap()
+            .role("listitem")
         })
         .collect();
     let edits = (!edited.is_empty()).then(|| {
-        col()
+        Stack::tight()
             .role("list")
             .label("Your edits, saved to the files")
-            .gap(space::S1)
-            .child(
-                text("Your edits, saved to the files")
-                    .font(type_::LABEL)
-                    .color(t.text_secondary),
-            )
+            .child(words(
+                "Your edits, saved to the files",
+                Type::Small,
+                t.text_secondary,
+            ))
             .children(edited)
     });
     let entries = marks.iter().filter(|m| m.r#type != "edit").map(|m| {
@@ -463,32 +432,32 @@ pub(crate) fn sheet(
             "deletion" => "remove",
             _ => "note",
         };
-        let words = m
+        let said = m
             .text
             .clone()
             .or_else(|| m.anchor.as_ref().map(|a| a.exact.clone()))
             .unwrap_or_default();
-        text(format!("{kind} {}: {words}", sent_place(m)))
-            .role("listitem")
-            .font(type_::BODY)
-            .color(t.text_primary)
-            .wrap()
+        words(
+            format!("{kind} {}: {said}", sent_place(m)),
+            Type::Body,
+            t.text_primary,
+        )
+        .role("listitem")
+        .wrap()
     });
     let alone = marks.is_empty().then(|| {
-        text("No notes: the verdict goes alone.")
-            .font(crate::markdown::font(t, None))
+        read_as(text("No notes: the verdict goes alone."), Reading::Text, t)
             .color(t.text_primary.alpha(0.9))
     });
     let problem = unsent(sent).map(|why| {
-        text(why)
+        let ink = if matches!(sent, Some(Sent::Sending)) {
+            t.text_secondary
+        } else {
+            t.warning
+        };
+        words(why, Type::Small, ink)
             .key("review.send.status")
             .role("status")
-            .font(type_::LABEL)
-            .color(if matches!(sent, Some(Sent::Sending)) {
-                t.text_secondary
-            } else {
-                t.warning
-            })
             .wrap()
     });
     let choices = [Verdict::Approve, Verdict::RequestChanges, Verdict::Comment].map(|v| {
@@ -498,7 +467,7 @@ pub(crate) fn sheet(
             Verdict::Comment => "c",
         };
         let picked = v == verdict;
-        let choice = button(key, v.title(), picked, t)
+        let choice = key_choice(key, v.title(), picked, t)
             .role("radio")
             .label(v.name())
             .key(format!("review.send.verdict.{key}"))
@@ -519,7 +488,7 @@ pub(crate) fn sheet(
         ),
     };
     let send = super::send_press(
-        button("↵", "Send", false, t)
+        key_choice("↵", "Send", false, t)
             .key("review.send.go")
             .role("button")
             .label("Send"),
@@ -533,43 +502,26 @@ pub(crate) fn sheet(
         .max_w(640.0)
         .px(20.0)
         .py(16.0)
-        .gap(space::S2)
-        .child(text(title).font(type_::TITLE).color(t.text_primary))
-        .children(onto.map(|o| text(o).font(type_::BODY).color(t.text_secondary)))
-        .children(problem_to.map(|p| text(p).font(type_::BODY).color(t.warning).wrap()))
         .child(
-            col()
-                .role("list")
-                .label("Marks")
-                .gap(space::S1)
-                .children(entries),
-        )
-        .children(edits)
-        .children(alone)
-        .child(
-            row()
-                .role("radiogroup")
-                .label("Verdict")
-                .gap(space::S2)
-                .children(choices),
-        )
-        .children(problem)
-        .child(
-            row()
-                .mt(4.0)
-                .gap(space::S2)
-                .items_center()
-                .child(send)
+            Stack::tight()
+                .w_full()
+                .child(words(title, Type::Heading, t.text_primary))
+                .children(onto.map(|o| words(o, Type::Body, t.text_secondary)))
+                .children(problem_to.map(|p| words(p, Type::Body, t.warning).wrap()))
+                .child(Stack::tight().role("list").label("Marks").children(entries))
+                .children(edits)
+                .children(alone)
                 .child(
-                    row()
-                        .gap(4.0)
-                        .items_center()
-                        .child(super::keys::caps("esc", t))
-                        .child(
-                            text("keep reviewing")
-                                .font(type_::LABEL)
-                                .color(t.text_muted),
-                        ),
+                    Inline::joined()
+                        .role("radiogroup")
+                        .label("Verdict")
+                        .children(choices),
+                )
+                .children(problem)
+                .child(
+                    Inline::joined()
+                        .child(send)
+                        .child(keys_hint(["esc"], "keep reviewing", t)),
                 ),
         );
     rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0)
@@ -604,37 +556,4 @@ pub(crate) fn send(
         },
         tx,
     );
-}
-
-/// A button of the send sheet: its key's cap and what it does, bordered, in the accent when
-/// `picked`, as the Tauri sheet's verdicts and Send.
-fn button(key: &str, what: &str, picked: bool, t: &Tokens) -> El {
-    let cap = super::keys::caps(key, t).a11y_hidden();
-    let words = text(what.to_owned())
-        .font(type_::BODY)
-        .color(if picked {
-            t.text_primary
-        } else {
-            t.text_secondary
-        })
-        .a11y_hidden();
-    let (first, second) = if key == "↵" {
-        (words, cap)
-    } else {
-        (cap, words)
-    };
-    row()
-        .gap(6.0)
-        .items_center()
-        .px(10.0)
-        .py(4.0)
-        .radius(6.0)
-        .border(1.0, if picked { t.accent } else { t.border })
-        .fill(if picked {
-            t.accent.alpha(0.14)
-        } else {
-            rune::Color::TRANSPARENT
-        })
-        .child(first)
-        .child(second)
 }

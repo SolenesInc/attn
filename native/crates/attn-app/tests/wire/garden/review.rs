@@ -448,6 +448,26 @@ fn lays_the_expanded_review_out_as_the_seeds_it_holds_beside_the_seed_and_the_de
 }
 
 #[test]
+fn the_expanded_reviews_seed_body_starts_under_the_seeds_title() {
+    let (mut world, _) = open_review(item(), vec![reviewed()]);
+    click(&mut world, "Expand the garden");
+
+    let screen = world.screen();
+    let [title, ..] = screen
+        .bounds(Target::role("heading").name(SEED))
+        .expect("the seed's title");
+    let [body, _, body_w, _] = screen
+        .bounds(Target::role("label").name(BODY_TEXT))
+        .expect("the seed's body");
+    assert_eq!(body, title, "the body starts at the title's edge");
+    assert!(
+        body_w <= attn_ui::blocks::DOCUMENT,
+        "the body keeps the document measure: {body_w}"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn opens_the_review_the_daemon_shows_and_takes_its_progressive_updates() {
     let mut world = reviewing(item());
     assert!(advice(&world).iter().any(|w| w == "Park"));
@@ -1234,4 +1254,22 @@ fn a_profile_switch_drops_the_review_another_profile_was_shown() {
     assert_eq!(prompt(&world), None);
     assert!(!has(&world, "Continue review"));
     assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn each_way_to_decide_a_seed_opens_a_form_named_for_its_decision() {
+    for (action, form) in [
+        ("Park", "Park"),
+        ("Wither", "Wither"),
+        ("Handover", "Handover"),
+        ("Send to Chief", "Send to Chief"),
+    ] {
+        let mut world = handover_review(item(), saved("reuse_cwd"));
+        click(&mut world, action);
+        let screen = world.screen();
+        assert!(
+            screen.find(Target::role("form").name(form)).is_some(),
+            "{action} opens no form named {form}:\n{screen}"
+        );
+    }
 }

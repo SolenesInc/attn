@@ -16,6 +16,7 @@ pub struct Section {
     aside: Option<Said>,
     controls: Vec<El>,
     found_as: FoundAs,
+    reachable: bool,
     blocks: Vec<Block>,
 }
 
@@ -36,6 +37,7 @@ impl Section {
             aside: None,
             controls: Vec::new(),
             found_as: FoundAs::Group,
+            reachable: false,
             blocks: Vec::new(),
         }
     }
@@ -78,6 +80,13 @@ impl Section {
         self
     }
 
+    /// A control elsewhere on the page goes to this section: its heading takes the keyboard
+    /// without being a stop on Tab.
+    pub fn reachable(mut self) -> Self {
+        self.reachable = true;
+        self
+    }
+
     pub fn push(mut self, block: Block) -> Self {
         self.blocks.push(block);
         self
@@ -99,17 +108,23 @@ impl Section {
             FoundAs::Region(name) => ("region", name),
         };
         let heading_key = format!("{}.heading", self.key);
+        let heading = match self.heading {
+            Some(heading) => heading.shrink().min_w(0.0),
+            None => words(self.title.clone(), Type::Heading, t.text_primary)
+                .key(heading_key)
+                .role("heading")
+                .level(2)
+                .label(self.title.text())
+                .wrap()
+                .shrink(),
+        };
+        let heading = if self.reachable {
+            heading.focusable(true).tab_index(-1)
+        } else {
+            heading
+        };
         let title = door::gaps(row().flex_wrap().items_end(), Space::S2, Space::S8)
-            .child(match self.heading {
-                Some(heading) => heading.shrink().min_w(0.0),
-                None => words(self.title.clone(), Type::Heading, t.text_primary)
-                    .key(heading_key)
-                    .role("heading")
-                    .level(2)
-                    .label(self.title.text())
-                    .wrap()
-                    .shrink(),
-            })
+            .child(heading)
             .children(
                 self.aside
                     .map(|aside| words(aside, Type::Small, t.text_tertiary)),

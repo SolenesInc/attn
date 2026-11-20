@@ -9,6 +9,7 @@ pub struct Prose {
     said: Said,
     quiet: bool,
     kind: Type,
+    note: bool,
     code: Option<String>,
 }
 
@@ -20,13 +21,17 @@ impl Prose {
             said: said.into(),
             quiet: false,
             kind: Type::Body,
+            note: false,
             code: None,
         }
     }
 
-    /// That a list or a part of a page has nothing in it yet.
+    /// That a list or a part of a page has nothing in it yet, read as a note.
     pub fn empty(key: impl Into<String>, said: impl Into<Said>) -> Prose {
-        Prose::lead(key, said).quiet(true)
+        Prose {
+            note: true,
+            ..Prose::lead(key, said).quiet(true)
+        }
     }
 
     /// Small print about the blocks above it, such as how to add to a list.
@@ -50,20 +55,23 @@ impl Prose {
     }
 
     pub fn build(self, t: &Tokens) -> Block {
+        Block::new(Kind::Prose, self.el(t))
+    }
+
+    /// The words on their own, for a place that is not a page.
+    pub fn el(self, t: &Tokens) -> rune::El {
         let ink = if self.quiet {
             t.text_tertiary
         } else {
             t.text_secondary
         };
-        Block::new(
-            Kind::Prose,
-            match self.code {
-                Some(code) => words(self.said.then_code(code), self.kind, ink),
-                None => words(self.said, self.kind, ink),
-            }
-            .key(self.key)
-            .wrap()
-            .max_w(READING),
-        )
+        let said = match self.code {
+            Some(code) => words(self.said.then_code(code), self.kind, ink),
+            None => words(self.said, self.kind, ink),
+        }
+        .key(self.key)
+        .wrap()
+        .max_w(READING);
+        if self.note { said.role("note") } else { said }
     }
 }

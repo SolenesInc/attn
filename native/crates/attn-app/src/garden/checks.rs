@@ -2,15 +2,16 @@ use attn_protocol::{
     ActorView, Seed, SeedCheck, SeedCheckEvidence, SeedCheckMessage, SeedDocument, SeedSharedCheck,
 };
 use attn_ui::GlyphButton;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, KeyEvent, Tx, col, row, text, text_input};
+use attn_ui::blocks::{Block, Inline, Refusal, Stack, rail};
+use attn_ui::system::{FieldState, Type, line_box, words};
+use rune::{El, KeyEvent, Tx};
+use rune_kit::TextInput;
 
 use super::CheckFocus;
 use super::model::{self, SessionNames};
-use super::sheet::{Sheet, meta_word};
+use super::sheet::Sheet;
 use super::spot::{Sends, Spot};
-use super::view::kit_button;
+use super::view::quiet;
 use crate::State;
 
 fn box_glyph(state: &str) -> &'static str {
@@ -21,6 +22,9 @@ fn box_glyph(state: &str) -> &'static str {
         _ => "",
     }
 }
+
+/// How wide a check's box is: a glyph button's side, so a removed check's mark lines up with it.
+const CHECK_BOX: f32 = 22.0;
 
 fn judgeable(state: &str) -> bool {
     !matches!(state, "confirmed" | "rejected")
@@ -61,7 +65,7 @@ impl Sheet<'_> {
     /// The seed's checks, as the daemon's reading of the seed the garden holds has them, each
     /// with the moves that judge it, then the checks it shares with every child, then the
     /// removed ones while shown.
-    pub(super) fn checks(&self, here: &Seed, document: Option<&SeedDocument>) -> Option<El> {
+    pub(super) fn checks(&self, here: &Seed, document: Option<&SeedDocument>) -> Option<Block> {
         let here = document
             .map(|d| &d.seed)
             .filter(|s| s.id == here.id && s.rev == here.rev)
@@ -72,23 +76,34 @@ impl Sheet<'_> {
             return None;
         }
         let t = self.t;
-        let mut list = super::sheet::section_gone_to(&self.key("checks"), "Checks", t);
+        let mut list = self.section("checks", "Checks").reachable();
         if let Some(tally) = model::tally_of(checks.iter().copied()) {
-            list = list.child(
-                text(model::tally_words(&tally))
+            list = list.control(
+                words(model::tally_words(&tally), Type::Small, t.text_tertiary)
                     .key(self.key("checks.tally"))
-                    .label(format!("Checks: {}", model::tally_sentence(&tally)))
-                    .font(type_::LABEL)
-                    .color(t.text_secondary),
+                    .label(format!("Checks: {}", model::tally_sentence(&tally))),
             );
         }
         let live = checks.iter().filter(|c| !c.removed);
-        list = list.children(live.map(|c| self.check_row(here, document, c)));
+        list = list.push_all(live.map(|c| {
+            Block::custom(
+                self.key(&format!("check.{}.block", c.id)),
+                self.check_row(here, document, c),
+            )
+        }));
         let live_shared: Vec<_> = shared.iter().filter(|c| !c.removed).collect();
         if !live_shared.is_empty() {
             list = list
-                .child(meta_word("Shared by every child", t))
-                .children(live_shared.into_iter().map(|c| self.shared_row(c)));
+                .push(Block::custom(
+                    self.key("checks.shared"),
+                    words("Shared by every child", Type::Label, t.text_tertiary),
+                ))
+                .push_all(live_shared.into_iter().map(|c| {
+                    Block::custom(
+                        self.key(&format!("shared.{}.block", c.id)),
+                        self.shared_row(c),
+                    )
+                }));
         }
         let removed = checks.iter().filter(|c| c.removed).count()
             + shared.iter().filter(|c| c.removed).count();
@@ -96,30 +111,31 @@ impl Sheet<'_> {
             let fold = self.key(&format!("checks.removed.{}", here.id));
             let open = self.garden.folds.contains(&fold);
             let toggled = fold.clone();
-            list = list.child(
-                kit_button(format!("{removed} removed"))
+            list = list.push(Block::control(
+                self.key("checks.removed.block"),
+                quiet(format!("{removed} removed"))
                     .expanded(open)
                     .on_press_tx(move |state: &mut State, _: &mut Tx| toggle_fold(state, &toggled))
-                    .build(attn_ui::kit(t))
+                    .build(t)
                     .key(self.key("checks.removed")),
-            );
+            ));
             if open {
                 list = list
-                    .children(
-                        checks
-                            .iter()
-                            .filter(|c| c.removed)
-                            .map(|c| self.check_row(here, document, c)),
-                    )
-                    .children(
-                        shared
-                            .iter()
-                            .filter(|c| c.removed)
-                            .map(|c| self.shared_row(c)),
-                    );
+                    .push_all(checks.iter().filter(|c| c.removed).map(|c| {
+                        Block::custom(
+                            self.key(&format!("check.{}.block", c.id)),
+                            self.check_row(here, document, c),
+                        )
+                    }))
+                    .push_all(shared.iter().filter(|c| c.removed).map(|c| {
+                        Block::custom(
+                            self.key(&format!("shared.{}.block", c.id)),
+                            self.shared_row(c),
+                        )
+                    }));
             }
         }
-        Some(list)
+        Some(list.build(t))
     }
 
     fn check_row(&self, here: &Seed, document: Option<&SeedDocument>, check: &SeedCheck) -> El {
@@ -130,11 +146,9 @@ impl Sheet<'_> {
         let (busy, rejecting) = (shown.busy, shown.words);
         let state = check.state.as_str();
         let mark = if check.removed {
-            text(box_glyph(state))
+            words(box_glyph(state), Type::Label, t.text_secondary)
                 .label(state.to_owned())
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .min_w(22.0)
+                .min_w(CHECK_BOX)
         } else {
             let confirm = judgeable(state);
             let (verb, word) = if confirm {
@@ -159,29 +173,21 @@ impl Sheet<'_> {
                 .key(spot.key("box"))
                 .border(1.0, t.border)
         };
-        let mut line = row()
-            .w_full()
-            .gap(space::S2)
+        let mut line = Inline::top()
+            .child(words(check.id.clone(), Type::Mono, t.text_tertiary))
             .child(
-                text(check.id.clone())
-                    .font(type_::MONO_CAPTION)
-                    .color(t.text_tertiary),
-            )
-            .child(
-                text(check.text.clone())
-                    .font(type_::BODY)
-                    .color(t.text_primary)
+                words(check.text.clone(), Type::Body, t.text_primary)
                     .wrap()
                     .grow(1.0)
                     .min_w(0.0),
             );
         if let Some(from) = &check.from {
-            line = line.child(meta_word(format!("from {from}"), t));
+            line = line.child(words(format!("from {from}"), Type::Small, t.text_tertiary));
         }
         if check.removed {
-            line = line.child(meta_word("removed", t));
+            line = line.child(words("removed", Type::Small, t.text_tertiary));
         }
-        let mut main = col().grow(1.0).min_w(0.0).gap(2.0).child(line);
+        let mut main = Stack::tight().grow(1.0).min_w(0.0).child(line);
         if let Some(report) = &check.report {
             let mut words = format!("report: {}", report.summary);
             if report.detail == Some(true) {
@@ -198,11 +204,8 @@ impl Sheet<'_> {
             }
             words.push_str(&format!(" · {}", author(&report.by, self.names)));
             main = main.child(
-                text(words.clone())
+                attn_ui::system::words(words, Type::Small, t.text_secondary)
                     .key(self.key(&format!("check.{}.report", check.id)))
-                    .label(words)
-                    .font(type_::LABEL)
-                    .color(t.text_secondary)
                     .wrap(),
             );
             if !report.evidence.is_empty() {
@@ -226,69 +229,58 @@ impl Sheet<'_> {
                 words.push_str(" · no report");
             }
             main = main.child(
-                text(words.clone())
-                    .key(self.key(&format!("check.{}.verdict", check.id)))
-                    .label(words)
-                    .font(type_::LABEL)
-                    .color(if verdict.confirmed {
+                attn_ui::system::words(
+                    words,
+                    Type::Small,
+                    if verdict.confirmed {
                         t.success
                     } else {
                         t.error
-                    })
-                    .wrap(),
+                    },
+                )
+                .key(self.key(&format!("check.{}.verdict", check.id)))
+                .wrap(),
             );
         }
         if let Some(written) = rejecting {
             let (typed, edited) = (spot.clone(), spot.clone());
-            main = main.child(
-                text_input(written, type_::BODY)
-                    .key(spot.field())
-                    .single_line()
-                    .label(format!("Reject {}: what would prove it", check.id))
-                    .placeholder("what would prove it", t.text_muted)
-                    .on_edit(move |state: &mut State| edited.words_mut(state))
-                    .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-                        let home = typed.key("box");
-                        typed.field_key(
-                            state,
-                            ev,
-                            (&home, Sends::Return),
-                            |s, w, tx| reject(&typed, s, w, tx),
-                            tx,
-                        )
-                    })
-                    .w_full()
-                    .color(t.text_primary)
-                    .fill(t.bg_input)
-                    .border(1.0, t.accent)
-                    .radius(4.0)
-                    .padding(space::S1),
-            );
+            let input = TextInput::new(written)
+                .key(spot.field())
+                .label(format!("Reject {}: what would prove it", check.id))
+                .placeholder("what would prove it")
+                .on_edit(move |state: &mut State| edited.words_mut(state))
+                .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+                    let home = typed.key("box");
+                    typed.field_key(
+                        state,
+                        ev,
+                        (&home, Sends::Return),
+                        |s, w, tx| reject(&typed, s, w, tx),
+                        tx,
+                    )
+                });
+            main = main.child(El::from(line_box(input, FieldState::Ready, t)));
         }
         if let Some(failure) = shown.failure.map(str::to_owned) {
             main = main.child(
-                text(failure.clone())
-                    .key(self.key(&format!("check.{}.error", check.id)))
-                    .role("alert")
-                    .label(failure)
-                    .font(type_::LABEL)
-                    .color(t.error)
-                    .wrap(),
+                Refusal::new(self.key(&format!("check.{}.error", check.id)), failure).build(t),
             );
         }
-        let mut actions = row().gap(space::S1);
+        let mut actions = Inline::tight();
         if !check.removed && rejecting.is_none() {
-            let action = |word: &str, verb: &'static str, name: String, part: &str| {
+            let action = |word: &'static str, verb: &'static str, name: String, part: &str| {
                 let pressed = spot.clone();
-                kit_button(word)
-                    .disabled(busy)
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| match verb {
-                        "reject" => pressed.write(state, "", tx),
-                        verb => judge(&pressed, state, verb, None, tx),
-                    })
-                    .build(kit)
-                    .key(self.key(&format!("check.{}.{part}", check.id)))
-                    .label(name)
+                El::from(
+                    quiet(word)
+                        .disabled(busy)
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| match verb {
+                            "reject" => pressed.write(state, "", tx),
+                            verb => judge(&pressed, state, verb, None, tx),
+                        })
+                        .build(t)
+                        .key(self.key(&format!("check.{}.{part}", check.id)))
+                        .label(name),
+                )
             };
             if state == "rejected" {
                 actions = actions.child(action("Uncheck", "uncheck", "Uncheck".into(), "uncheck"));
@@ -310,12 +302,10 @@ impl Sheet<'_> {
                 ));
             }
         }
-        row()
+        Inline::top()
             .key(self.key(&format!("check.{}", check.id)))
             .role("listitem")
             .label(format!("{} {} · {}", check.id, check.text, check.state))
-            .w_full()
-            .gap(space::S2)
             .child(mark)
             .child(main)
             .child(actions)
@@ -323,26 +313,25 @@ impl Sheet<'_> {
 
     fn shared_row(&self, check: &SeedSharedCheck) -> El {
         let t = self.t;
-        let kit = attn_ui::kit(t);
         let key = self.key(&format!("shared.{}", check.id));
         let open = self.garden.folds.contains(&key);
         let rollup = model::tally_states(check.seeds.iter().map(|s| s.state.as_str()))
             .map(|tally| model::tally_sentence(&tally))
             .unwrap_or_default();
         let toggled = key.clone();
-        let mut item = col().w_full().gap(2.0).child(
-            kit_button(format!("{} {} · {rollup}", check.id, check.text))
+        let mut item = Stack::tight().w_full().child(
+            quiet(format!("{} {} · {rollup}", check.id, check.text))
                 .expanded(open)
                 .on_press_tx(move |state: &mut State, _: &mut Tx| toggle_fold(state, &toggled))
-                .build(kit)
-                .key(key.clone()),
+                .build(t)
+                .key(key.clone())
+                .into(),
         );
         if open {
-            let mut seeds = col()
+            let mut seeds = Stack::tight()
                 .key(format!("{key}.seeds"))
                 .role("list")
-                .label(format!("Seeds that prove {}", check.id))
-                .pl(space::S3);
+                .label(format!("Seeds that prove {}", check.id));
             for entry in &check.seeds {
                 let held = self.seeds.iter().find(|s| s.id == entry.seed_id);
                 let title = held.map_or(entry.seed_id.as_str(), |s| s.title.as_str());
@@ -355,11 +344,7 @@ impl Sheet<'_> {
                 );
                 let mark = box_glyph(&entry.state);
                 seeds = seeds.child(
-                    kit_button(format!("{title} · {status} · {}", entry.state))
-                        .label_with({
-                            let words = format!("{mark} {title} · {status}");
-                            move |font, ink| text(words).font(font).color(ink)
-                        })
+                    quiet(format!("{mark} {title} · {status}"))
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             state.window.garden.check_focus = Some(CheckFocus {
                                 sheet: focus.0.clone(),
@@ -368,11 +353,13 @@ impl Sheet<'_> {
                             });
                             go.to(state, &id, tx)
                         })
-                        .build(kit)
-                        .key(format!("{key}.{}", entry.seed_id)),
+                        .build(t)
+                        .key(format!("{key}.{}", entry.seed_id))
+                        .label(format!("{title} · {status} · {}", entry.state))
+                        .into(),
                 );
             }
-            item = item.child(seeds);
+            item = item.child(rail(seeds, false, t));
         }
         item
     }
@@ -432,20 +419,20 @@ impl Sheet<'_> {
         check: &str,
         evidence: &[SeedCheckEvidence],
     ) -> El {
-        let kit = attn_ui::kit(self.t);
-        let mut shown = row().flex_wrap().gap(space::S1);
+        let mut shown = Inline::tight();
         for (n, piece) in evidence.iter().enumerate() {
             let Some(opens) = super::artifacts::opens(piece, document) else {
                 continue;
             };
             let seed = here.id.clone();
             shown = shown.child(
-                kit_button(evidence_label(piece))
+                quiet(evidence_label(piece))
                     .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                         super::artifacts::open_evidence(state, &seed, &opens, tx)
                     })
-                    .build(kit)
-                    .key(self.key(&format!("check.{check}.evidence.{n}"))),
+                    .build(self.t)
+                    .key(self.key(&format!("check.{check}.evidence.{n}")))
+                    .into(),
             );
         }
         shown

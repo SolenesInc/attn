@@ -6,7 +6,7 @@ publish = false
 
 [dependencies]
 rune.workspace = true
-rune-kit.workspace = true
+rune-kit = { workspace = true, features = ["markdown"] }
 serde_json = "1.0.154"
 
 [lints]

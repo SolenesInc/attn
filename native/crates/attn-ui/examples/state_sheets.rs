@@ -15,6 +15,7 @@ use attn_ui::colors::scheme_for;
 use attn_ui::floating_gallery::FLOATING_SUBJECTS;
 use attn_ui::gallery::{BANNERS, BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
 use attn_ui::panel_gallery::{PANEL_SUBJECTS, PANEL_VARIANTS};
+use attn_ui::reading_gallery::READING_SUBJECTS;
 use attn_ui::settings_gallery::{SETTINGS_SUBJECTS, SETTINGS_VARIANTS};
 use attn_ui::system::{Type, words};
 use rune::render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer, write_png};
@@ -679,10 +680,14 @@ fn main() {
             shoot(&sheet, dark, &out);
         }
     }
-    let blocks = BLOCK_SUBJECTS.iter().zip(BLOCK_VARIANTS);
-    let settings = SETTINGS_SUBJECTS.iter().zip(SETTINGS_VARIANTS);
-    let panels = PANEL_SUBJECTS.iter().zip(PANEL_VARIANTS);
-    for (&(story, keys), &(_, extra)) in blocks.chain(settings).chain(panels) {
+    let blocks = BLOCK_SUBJECTS
+        .iter()
+        .zip(BLOCK_VARIANTS)
+        .chain(SETTINGS_SUBJECTS.iter().zip(SETTINGS_VARIANTS))
+        .chain(PANEL_SUBJECTS.iter().zip(PANEL_VARIANTS))
+        .map(|(&(story, keys), &(_, extra))| (story, keys, extra))
+        .chain(READING_SUBJECTS.iter().copied());
+    for (story, keys, extra) in blocks {
         if !wanted(&block_sheet(story)) {
             continue;
         }

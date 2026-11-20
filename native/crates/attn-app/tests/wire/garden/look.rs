@@ -133,3 +133,36 @@ fn every_action_beside_a_long_title_stays_inside_the_docked_page() {
     assert!(title_w >= 160.0, "the title keeps room to read: {title_w}");
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_related_seeds_state_stays_inside_the_docked_page_beside_a_long_title() {
+    let plot_title = "Move every reading surface onto blocks so the garden, the review reader and the markdown reader share one system";
+    let plot = with(plot("s-plot01", plot_title, ""), |s| {
+        s.status = "growing".into()
+    });
+    let child = part_of("s-plot01", "s-part01", "One part");
+    let mut world = open_garden(vec![plot, child]);
+    open_row(&mut world, plot_title);
+    open_row(&mut world, "One part");
+
+    let [page_x, _, page_w, _] = bounds(&world, "garden.page");
+    let screen = world.screen();
+    let shown: Vec<_> = screen
+        .descendants(Target::key("garden.page"))
+        .into_iter()
+        .filter(|n| n.role == "label")
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(shown.iter().any(|n| n == "growing"), "{shown:?}");
+    for name in shown {
+        let [x, _, w, _] = screen
+            .bounds(Target::role("label").name(&name))
+            .expect("a label on screen");
+        assert!(
+            x >= page_x - 0.5 && x + w <= page_x + page_w + 0.5,
+            "{name} spans {x}..{} outside the page {page_x}..{}",
+            x + w,
+            page_x + page_w
+        );
+    }
+}

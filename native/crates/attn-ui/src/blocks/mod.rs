@@ -4,44 +4,66 @@
 
 mod actions;
 mod banner;
+mod bar;
 mod block;
+mod byline;
+mod card;
 mod choices;
 mod columns;
 mod dialog;
 mod disclosure;
+mod entry;
 mod facts;
 mod field;
 pub mod inspector;
+mod key_line;
+mod lane;
 mod list;
 mod measure;
 mod menu;
 mod notice;
 mod page;
+mod pane;
+mod place;
 mod popover;
 mod prose;
 mod rail;
+mod reader;
+mod remark;
 mod rhythm;
 mod section;
 mod setting_row;
 mod sheet;
+mod surface;
+mod trail;
 
 pub use actions::Actions;
 pub use banner::{Banner, BannerTone};
+pub use bar::Bar;
 pub use block::Block;
+pub use byline::Byline;
+pub use card::{Card, Standing};
 pub use choices::{Choices, swatches};
 pub use columns::Columns;
 pub use dialog::{Dialog, DialogSize, TOUR_DRAWING};
 pub use disclosure::Disclosure;
+pub use entry::{Entry, entries, rail};
 pub use facts::Facts;
 pub use field::Field;
 pub use inspector::Inspector;
+pub use key_line::{KeyFit, KeyLine, key_choice, key_tab};
+pub use lane::{Lane, board, lanes};
 pub use list::List;
 pub use menu::Menu;
 pub use notice::{Notice, Refusal, Status, saved};
 pub use page::{Head, Page};
+pub use pane::Pane;
+pub use place::{edged, here, here_tint, place, raised_here_tint};
 pub use popover::Popover;
 pub use prose::Prose;
 pub use rail::Rail;
+pub use reader::{Reader, Room};
+pub use remark::{Remark, Voice};
 pub use rhythm::{Inline, Stack};
 pub use section::Section;
 pub use setting_row::SettingRow;
@@ -51,3 +73,7 @@ pub use sheet::Sheet;
 pub(crate) fn stacked(blocks: Vec<Block>) -> rune::El {
     block::spaced(blocks, block::inner_gap, None)
 }
+pub use surface::Surface;
+pub use trail::Trail;
+
+pub use measure::{DOCUMENT, DOCUMENT_EDGE, DOCUMENT_GUTTER, document_inset, document_inside};

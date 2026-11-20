@@ -8,6 +8,7 @@ pub mod chrome_gallery;
 pub mod colors;
 pub mod floating_gallery;
 pub mod panel_gallery;
+pub mod reading_gallery;
 mod scroll_bar;
 pub mod settings_gallery;
 pub mod system;

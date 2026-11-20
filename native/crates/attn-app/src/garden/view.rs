@@ -3,18 +3,20 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use attn_protocol::Seed;
-use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens};
-use rune::tok::space;
-use rune::{
-    El, GrowthSpec, ScrollSpec, Span, TextStyle, Tx, col, memo, rich, row, text, text_input,
+use attn_ui::blocks::{
+    Actions, Bar, Block, Byline, Inline, Pane, Prose, Reader, Room, Section, Surface, Trail,
 };
-use rune_kit::ScrollBar;
-use rune_kit::{Button, ButtonVariant, ControlSize};
+use attn_ui::system::{
+    Button, DotShape, DotSize, Link, ListRow, Look as ButtonLook, Part, Said, Size, Type, dot,
+    marked, search_field, words,
+};
+use attn_ui::{GlyphButton, Tokens};
+use rune::{El, GrowthSpec, ScrollSpec, Tx, col, memo, row};
+use rune_kit::{ScrollBar, TextInput};
 
 use super::model::{self, Index, SessionNames};
 use super::search::{self, Lookups, Match, Partial, Query};
-use super::sheet::{Go, Sheet, note, page_section};
+use super::sheet::{Go, Sheet};
 use super::{BODY, Mode, SEARCH_FIELD};
 use crate::State;
 
@@ -26,28 +28,12 @@ pub(super) const ROW_PREFIX: &str = "garden.row.";
 const COLUMNS_MIN: f32 = 1160.0;
 const THIRD_COLUMN_MIN: f32 = 1460.0;
 const FULL_INSET: f32 = 12.0;
-const ROW_HEIGHT: f32 = 48.0;
-/// A list column's width, the Tauri garden's `.garden-columns` tracks.
+/// A list column's width.
 const COLUMN_WIDTH: f32 = 300.0;
-/// How wide the reader beside the columns lets a seed's page grow, as `.garden-column--reader
-/// .garden-page`.
+/// How wide the reader beside the columns lets a seed's page grow.
 const READER_MAX_WIDTH: f32 = 760.0;
-/// How wide the expanded garden's root list grows before it centers, as `.garden-columns
-/// [data-panes='1'] .garden-list`.
+/// How wide the expanded garden's root list grows before it centers.
 const ROOT_MAX_WIDTH: f32 = 880.0;
-/// The space between the parts of a page, `.garden-page`'s gap.
-const PAGE_GAP: f32 = 16.0;
-/// The state pip that starts a seed's row and its page's state line.
-const PIP: f32 = 6.0;
-/// A row's title, `.garden-row__title`.
-const ROW_TITLE: TextStyle = type_::BODY.lh(18.0);
-/// The search line's prompt, `.garden-search__glyph`.
-const SLASH: TextStyle = TextStyle::new(13.0, 400.0).mono();
-/// How far a row's content sits in from its highlight, so a list widened by it lines its
-/// content up with what stands above it, as the Tauri garden's `.garden-section .garden-list`.
-const ROW_INSET: f32 = space::S2;
-/// The stacked walk's side padding, the Tauri garden's `.garden-page`.
-const PAGE_INSET: f32 = 16.0;
 
 pub(super) fn row_key(id: &str) -> String {
     format!("{ROW_PREFIX}{id}")
@@ -305,11 +291,8 @@ pub(super) fn full_frame(_state: &State, t: &Tokens, content: El) -> El {
         .modal_tx(true, |state: &mut State, _: &mut Tx| super::close(state))
         .w_full()
         .h_full()
-        .radius(8.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border)
         .child(content);
-    crate::shell::under_title_bar("garden.full", FULL_INSET, dialog, t)
+    crate::shell::under_title_bar("garden.full", FULL_INSET, Surface::panel(dialog, t), t)
 }
 
 fn body(state: &State, t: &Tokens) -> El {
@@ -357,30 +340,28 @@ fn body(state: &State, t: &Tokens) -> El {
         .child(content)
 }
 
-pub(super) fn button(key: String, label: impl Into<String>, t: &Tokens) -> El {
-    kit_button(label).build(attn_ui::kit(t)).key(key)
+/// One of the garden's quiet buttons, keyed `key`.
+pub(super) fn button(key: impl Into<String>, label: impl Into<Said>, t: &Tokens) -> El {
+    quiet(label).build(t).key(key).into()
 }
 
-pub(super) fn kit_button(label: impl Into<String>) -> Button {
+/// A quiet compact button, to give a press and build.
+pub(super) fn quiet(label: impl Into<Said>) -> Button {
     Button::new(label)
-        .variant(ButtonVariant::GhostMuted)
-        .control_size(ControlSize::Small)
+        .look(ButtonLook::Quiet)
+        .size(Size::Compact)
+}
+
+/// A bordered compact button beside a seed's title.
+pub(super) fn plain(label: impl Into<Said>) -> Button {
+    Button::new(label).size(Size::Compact)
 }
 
 fn chrome(state: &State, place: &Place, t: &Tokens) -> El {
     let full = super::mode(state) == Mode::Full;
-    let mut bar = row()
-        .key("garden.chrome")
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .px(PAGE_INSET)
-        .pt(10.0)
-        .pb(9.0)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-        .child(trail_nav(state, place, t).grow(1.0));
+    let mut bar = Bar::new("garden.chrome").lead(trail_nav(state, place, t));
     if full {
-        bar = bar.child(view_switch(state, t));
+        bar = bar.push(view_switch(state, t));
     }
     if let Some((count, on)) = closed_toggle(place) {
         let label = match (on, count) {
@@ -388,19 +369,17 @@ fn chrome(state: &State, place: &Place, t: &Tokens) -> El {
             (true, n) => format!("hide {n} closed"),
             (false, n) => format!("{n} closed"),
         };
-        bar = bar.child(
-            text_button(
-                "garden.closed".into(),
-                label,
-                (
-                    type_::CAPTION,
-                    if on { t.text_secondary } else { t.text_muted },
-                ),
-                t,
-            )
-            .a11y_value(if on { "pressed" } else { "" })
-            .on_press_tx(super::toggle_closed),
-        );
+        let toggle = Button::new(label)
+            .look(if on {
+                ButtonLook::Plain
+            } else {
+                ButtonLook::Quiet
+            })
+            .size(Size::Compact)
+            .on_press_tx(super::toggle_closed)
+            .build(t)
+            .key("garden.closed");
+        bar = bar.push(El::from(toggle).a11y_value(if on { "pressed" } else { "" }));
     }
     let frame_label = if full {
         "Return the garden to the dock"
@@ -412,52 +391,43 @@ fn chrome(state: &State, place: &Place, t: &Tokens) -> El {
     } else {
         &attn_ui::icon::FRAME_OUT
     };
-    bar.child(
+    bar.push(
         GlyphButton::new(frame_glyph, frame_label)
-            .icon_size(12.0)
             .color(t.text_muted)
             .on_press_tx(super::toggle_frame)
             .build(attn_ui::kit(t))
             .key("garden.frame-button"),
     )
-    .child(
-        GlyphButton::new(attn_ui::glyph::TIMES, "Close")
-            .font(attn_ui::glyph::REGULAR)
+    .push(
+        GlyphButton::new(&rune_kit::glyphs::CLOSE, "Close")
             .color(t.text_muted)
             .on_press(super::close)
             .build(attn_ui::kit(t))
             .key("garden.close"),
     )
+    .build(t)
 }
 
 pub(super) fn view_switch(state: &State, t: &Tokens) -> El {
     let board = super::shows_board(state);
-    let choice = |name: &'static str, on: bool, pick: bool| {
-        text_button(
-            format!("garden.view.{name}"),
-            name.to_owned(),
-            (
-                type_::CAPTION,
-                if on { t.text_primary } else { t.text_muted },
-            ),
-            t,
-        )
-        .border_sides(
-            [0.0, 0.0, 1.0, 0.0],
-            if on {
-                t.brand
+    let choice = |name: &'static str, on: bool, pick: bool| -> El {
+        let button: El = Button::new(name)
+            .look(if on {
+                ButtonLook::Plain
             } else {
-                rune::Color::TRANSPARENT
-            },
-        )
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| super::choose_board(state, pick, tx))
-        .a11y_value(if on { "pressed" } else { "" })
+                ButtonLook::Quiet
+            })
+            .size(Size::Compact)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| super::choose_board(state, pick, tx))
+            .build(t)
+            .key(format!("garden.view.{name}"))
+            .into();
+        button.a11y_value(if on { "pressed" } else { "" })
     };
-    row()
+    Inline::tight()
         .key("garden.view")
         .role("group")
         .label("Garden view")
-        .gap(space::S2)
         .child(choice("list", !board, false))
         .child(choice("board", board, true))
 }
@@ -490,24 +460,16 @@ fn closed_toggle(place: &Place) -> Option<(usize, bool)> {
 
 fn trail_nav(state: &State, place: &Place, t: &Tokens) -> El {
     let trail = &place.trail;
-    let nav = row()
-        .key("garden.trail")
-        .role("navigation")
-        .label(if place.wide {
+    let nav = Trail::new(
+        "garden.trail",
+        if place.wide {
             "Standing here, searching the whole garden"
         } else {
             "The way back"
-        })
-        .items_center()
-        .gap(5.0)
-        .min_w(0.0);
+        },
+    );
     let Some(here) = place.here() else {
-        return nav.child(
-            text("The garden")
-                .key("garden.trail.here")
-                .font(type_::CAPTION)
-                .color(t.text_secondary),
-        );
+        return nav.here("garden.trail.here", "The garden", t).build(t);
     };
     let first_visible = if columns(state) && !place.query.searches {
         let levels = place.levels().len();
@@ -529,28 +491,15 @@ fn trail_nav(state: &State, place: &Place, t: &Tokens) -> El {
     };
     let folded = ancestors.len() - shown.len();
     let step = |key: String, label: String, depth: usize| {
-        text_button(key, label, (type_::CAPTION, t.text_tertiary), t)
-            .max_w(200.0)
-            .shrink()
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| super::climb_to(state, depth, tx))
+        let link: El = Link::new(key, label).build(t).into();
+        link.on_press_tx(move |state: &mut State, tx: &mut Tx| super::climb_to(state, depth, tx))
     };
-    let sep = || {
-        text("›")
-            .font(type_::CAPTION)
-            .color(t.text_dimmed)
-            .a11y_hidden()
-    };
-    let mut nav = nav.child(step("garden.trail.0".into(), "Garden".into(), 0));
+    let mut nav = nav.step(step("garden.trail.0".into(), "Garden".into(), 0));
     if fold {
-        nav = nav.child(sep()).child(
-            text_button(
-                "garden.trail.fold".into(),
-                "…".into(),
-                (type_::CAPTION, t.text_tertiary),
-                t,
-            )
-            .label(format!("Show {folded} more steps"))
-            .on_press(|state: &mut State| state.window.garden.trail_open = true),
+        let link: El = Link::new("garden.trail.fold", "…").build(t).into();
+        nav = nav.step(
+            link.label(format!("Show {folded} more steps"))
+                .on_press(|state: &mut State| state.window.garden.trail_open = true),
         );
     }
     for (offset, id) in shown.iter().enumerate() {
@@ -560,20 +509,12 @@ fn trail_nav(state: &State, place: &Place, t: &Tokens) -> El {
             .by_id
             .get(id)
             .map_or_else(|| id.clone(), |s| s.title.clone());
-        nav = nav
-            .child(sep())
-            .child(step(format!("garden.trail.{depth}"), title, depth));
+        nav = nav.step(step(format!("garden.trail.{depth}"), title, depth));
     }
     if place.query.searches {
-        nav = nav.child(sep()).child(
-            text(here.title.clone())
-                .key("garden.trail.here")
-                .font(type_::CAPTION)
-                .color(t.text_secondary)
-                .truncate(),
-        );
+        nav = nav.here("garden.trail.here", here.title.clone(), t);
     }
-    nav
+    nav.build(t)
 }
 
 fn search_line(state: &State, place: &Place, t: &Tokens) -> El {
@@ -584,43 +525,37 @@ fn search_line(state: &State, place: &Place, t: &Tokens) -> El {
     } else {
         "the garden"
     };
-    let field = text_input(&garden.query, type_::BODY)
-        .key(SEARCH_FIELD)
-        .single_line()
-        .label(format!("Search {place_word}"))
-        .placeholder("search — or is:ready, tender:…", t.text_muted)
-        .on_edit(|state: &mut State| &mut state.window.garden.query)
-        .on_input_key(super::field_key)
-        .grow(1.0)
-        .color(t.text_primary);
     let found = place
         .query
         .searches
         .then(|| place.answers.get(place.active(state)))
         .flatten();
-    let field = match found {
-        Some(m) => field.active_descendant(row_key(&m.seed.id)),
-        None => field,
-    };
-    let mut meta = row()
-        .key("garden.search.meta")
-        .items_center()
-        .gap(space::S1);
+    let field: El = search_field(
+        TextInput::new(&garden.query)
+            .key(SEARCH_FIELD)
+            .label(format!("Search {place_word}"))
+            .placeholder("search — or is:ready, tender:…")
+            .active_descendant(found.map(|m| row_key(&m.seed.id)))
+            .on_edit(|state: &mut State| &mut state.window.garden.query)
+            .on_key(super::field_key),
+        t,
+    )
+    .into();
+    let mut meta = Vec::new();
     let q = &place.query;
     if !q.unknown.is_empty() {
-        meta = meta.child(
-            text(format!("no filter called {}", q.unknown.join(" ")))
+        let said = format!("no filter called {}", q.unknown.join(" "));
+        meta.push(
+            words(said.clone(), Type::Small, t.warning)
                 .key("garden.search.unknown")
                 .role("status")
-                .label(format!("no filter called {}", q.unknown.join(" ")))
-                .font(type_::LABEL)
-                .color(t.warning),
+                .label(said),
         );
     } else if let Some(partial) = q.partial {
         match partial {
             Partial::Is => {
                 for value in search::IS_VALUES {
-                    meta = meta.child(
+                    meta.push(
                         button(format!("garden.search.is.{value}"), value, t).on_press_tx(
                             move |state: &mut State, tx: &mut Tx| {
                                 let raw = state.window.garden.query.text.clone();
@@ -632,18 +567,18 @@ fn search_line(state: &State, place: &Place, t: &Tokens) -> El {
                 }
             }
             Partial::Tender => {
-                meta = meta.child(
-                    text("a crew member or session")
-                        .font(type_::LABEL)
-                        .color(t.text_muted),
-                );
+                meta.push(words(
+                    "a crew member or session",
+                    Type::Small,
+                    t.text_tertiary,
+                ));
             }
         }
     } else if q.active && plot {
         if !place.wide && place.outside > 0 {
-            meta = meta.child(
+            meta.push(
                 button(
-                    "garden.search.widen".into(),
+                    "garden.search.widen",
                     format!("+{} in the whole garden", place.outside),
                     t,
                 )
@@ -651,9 +586,9 @@ fn search_line(state: &State, place: &Place, t: &Tokens) -> El {
             );
         }
         if place.wide {
-            meta = meta.child(
+            meta.push(
                 button(
-                    "garden.search.widen".into(),
+                    "garden.search.widen",
                     format!("{} in this plot", place.in_plot),
                     t,
                 )
@@ -661,23 +596,20 @@ fn search_line(state: &State, place: &Place, t: &Tokens) -> El {
             );
         }
     }
-    row()
-        .key("garden.search")
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .pr(PAGE_INSET)
-        .pt(2.0)
-        .pb(6.0)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-        .child(
-            row()
-                .w(PAGE_INSET - space::S2)
+    let prompt = words("/", Type::Mono, t.text_dimmed).a11y_hidden();
+    Bar::new("garden.search")
+        .start(prompt)
+        .lead(field)
+        .push(
+            Inline::tight()
+                .key("garden.search.meta")
+                .grow(1.0)
+                .shrink()
+                .min_w(0.0)
                 .justify_end()
-                .child(text("/").font(SLASH).color(t.text_dimmed).a11y_hidden()),
+                .children(meta),
         )
-        .child(field)
-        .child(meta)
+        .build(t)
 }
 
 /// How a row's press acts where it shows.
@@ -757,18 +689,10 @@ fn list(key: &str, role: &'static str, label: &str, specs: Vec<RowSpec>, t: &Tok
         .growth(GrowthSpec::default())
         .virtual_rows(
             specs.len(),
-            ROW_HEIGHT,
+            ListRow::two_line_height(),
             move |_: &State, i| row_key(&keys[i].seed.id).into(),
             move |_: &State, i| seed_row(&specs[i], &t),
         )
-}
-
-fn marked(text_: &str, ranges: &[search::Range], color: rune::Color, t: &Tokens) -> El {
-    let spans = ranges
-        .iter()
-        .map(|&(from, to)| Span::new(from, to).color(t.brand).weight(600.0))
-        .collect();
-    rich(text_.to_owned(), spans).font(ROW_TITLE).color(color)
 }
 
 fn seed_row(spec: &RowSpec, t: &Tokens) -> El {
@@ -779,157 +703,104 @@ fn seed_row(spec: &RowSpec, t: &Tokens) -> El {
         ROWS_BUILT.with(|n| n.set(n.get() + 1));
         let closed = model::is_closed(seed);
         let armed = model::harvest_when(seed);
-        let mut primary = row().w_full().items_start().gap(space::S2).child(
-            marked(
-                &seed.title,
-                &look.title_ranges,
-                if closed && !look.selected {
-                    t.text_muted
-                } else {
-                    t.text_primary
-                },
-                t,
+        let ink = if closed && !look.selected {
+            t.text_tertiary
+        } else {
+            t.text_primary
+        };
+        let title = marked(&seed.title, &look.title_ranges, Type::Name, ink, t.brand)
+            .single_line()
+            .truncate()
+            .shrink();
+        let mut row = ListRow::new(key.clone(), seed.title.clone())
+            .lead(
+                dot(
+                    state_color(&seed.status, t),
+                    DotShape::Filled,
+                    DotSize::Regular,
+                )
+                .a11y_hidden(),
             )
-            .wrap()
-            .grow(1.0)
-            .min_w(0.0),
-        );
+            .title_el(title)
+            .selected(look.selected || look.active);
         if let Some(standby) = &look.standby {
-            primary = primary.child(
-                text(standby.word())
-                    .key(format!("{key}.standby"))
-                    .help(standby.details())
-                    .font(type_::CAPTION)
-                    .color(if standby.resume_blocked.is_empty() {
+            row = row.aside(
+                words(
+                    standby.word(),
+                    Type::Small,
+                    if standby.resume_blocked.is_empty() {
                         t.brand
                     } else {
                         t.warning
-                    }),
+                    },
+                )
+                .key(format!("{key}.standby"))
+                .help(standby.details()),
             );
         } else if let Some((signal, tone)) = model::signal(seed, look.blockers)
             && !(armed.is_some() && signal == "parked")
         {
-            primary = primary.child(text(signal).font(type_::CAPTION).color(tone_color(tone, t)));
+            row = row.aside(words(signal, Type::Small, tone_color(tone, t)));
         }
         if let Some((sentence, marker)) = &armed {
-            primary = primary.child(
-                text(marker.clone())
-                    .help(sentence.clone())
-                    .font(type_::CAPTION)
-                    .color(t.text_tertiary),
-            );
+            row = row
+                .aside(words(marker.clone(), Type::Small, t.text_tertiary).help(sentence.clone()));
         }
-        let id = text(seed.id.clone())
-            .font(type_::MONO_CAPTION)
-            .color(if look.id_hit { t.brand } else { t.text_muted });
-        let mut said = Vec::new();
-        if seed.standby.is_some() && look.blockers > 0 {
-            said.push(format!("blocked by {}", look.blockers));
-        }
-        if !look.tender.is_empty() {
-            said.push(format!("tended by {}", look.tender));
-        }
-        if let Some(home) = &look.home {
-            said.push(format!("in {home}"));
-        }
-        if let Some(tally) = model::check_tally(seed) {
-            said.push(model::tally_words(&tally));
-        }
-        let mut content = col()
-            .grow(1.0)
-            .min_w(0.0)
-            .gap(2.0)
-            .child(primary)
-            .child(meta_line(id, said, t));
-        if let Some(snippet) = &look.snippet {
-            content = content.child(
-                marked(&snippet.text, &snippet.ranges, t.text_tertiary, t)
-                    .font(type_::CAPTION)
-                    .truncate(),
-            );
-        }
-        let mut line = row()
-            .w_full()
-            .items_start()
-            .gap(10.0)
-            .child(pip(&seed.status, t).mt(ROW_TITLE.line_height / 2.0 - PIP / 2.0))
-            .child(content);
+        let line = match &look.snippet {
+            Some(snippet) => marked(
+                &snippet.text,
+                &snippet.ranges,
+                Type::Small,
+                t.text_tertiary,
+                t.brand,
+            ),
+            None => {
+                let mut facts = Byline::new().id(
+                    seed.id.clone(),
+                    if look.id_hit {
+                        t.brand
+                    } else {
+                        t.text_tertiary
+                    },
+                );
+                if seed.standby.is_some() && look.blockers > 0 {
+                    facts = facts.said(format!("blocked by {}", look.blockers), t);
+                }
+                if !look.tender.is_empty() {
+                    facts = facts.said(format!("tended by {}", look.tender), t);
+                }
+                if let Some(home) = &look.home {
+                    facts = facts.said(format!("in {home}"), t);
+                }
+                if let Some(tally) = model::check_tally(seed) {
+                    facts = facts.said(model::tally_words(&tally), t);
+                }
+                facts.build(t)
+            }
+        };
+        row = row.subtitle_el(line);
         if let Some(progress) = &seed.plot_progress {
-            line = line.child(
-                row()
-                    .h(ROW_TITLE.line_height)
-                    .items_center()
-                    .gap(6.0)
-                    .child(
-                        text(format!("{}/{}", progress.done, progress.total))
-                            .font(type_::CAPTION)
-                            .color(t.text_tertiary),
-                    )
-                    .child(
-                        text("›")
-                            .font(type_::CAPTION)
-                            .color(t.text_muted)
-                            .a11y_hidden(),
-                    ),
-            );
+            row = row
+                .aside(words(
+                    format!("{}/{}", progress.done, progress.total),
+                    Type::Small,
+                    t.text_tertiary,
+                ))
+                .aside(words("›", Type::Small, t.text_tertiary).a11y_hidden());
         }
         let id = seed.id.clone();
         let pick = look.pick;
         let found = pick == Pick::Found;
-        line.key(key)
-            .role(if found { "option" } else { "button" })
-            .focus_selected(found && look.active)
-            .label(seed.title.clone())
+        row.role(if found { "option" } else { "button" })
+            .build(t)
             .a11y_value(seed.status.clone())
-            .focusable(true)
-            .w_full()
-            .pt(7.0)
-            .pb(ROW_INSET)
-            .px(ROW_INSET)
-            .radius(4.0)
-            .fill(if look.selected || look.active {
-                t.bg_selected
-            } else {
-                rune::Color::TRANSPARENT
-            })
-            .hover(t.bg_elevated)
+            .focus_selected(found && look.active)
             .on_press_tx(move |state: &mut State, tx: &mut Tx| match pick {
                 Pick::Drill => super::drill(state, &id, tx),
                 Pick::Level(level) => super::select_at(state, level, &id, tx),
                 Pick::Found => super::open_found(state, &id, tx),
             })
     })
-}
-
-/// A seed's id, then what else a row says of it, each after a dimmed middle dot.
-fn meta_line(id: El, said: Vec<String>, t: &Tokens) -> El {
-    let mut meta = row().min_w(0.0).gap(space::S2).child(id);
-    for words in said {
-        meta = meta
-            .child(
-                text("·")
-                    .font(type_::CAPTION)
-                    .color(t.text_dimmed)
-                    .a11y_hidden(),
-            )
-            .child(
-                text(words)
-                    .font(type_::CAPTION)
-                    .color(t.text_tertiary)
-                    .truncate()
-                    .shrink(),
-            );
-    }
-    meta
-}
-
-/// The dot a seed's state colors, as the Tauri garden's `.garden-row__pip`.
-pub(super) fn pip(status: &str, t: &Tokens) -> El {
-    rune::el()
-        .size(PIP, PIP)
-        .radius(PIP / 2.0)
-        .fill(state_color(status, t))
-        .a11y_hidden()
 }
 
 pub(super) fn state_color(status: &str, t: &Tokens) -> rune::Color {
@@ -952,43 +823,6 @@ fn tone_color(tone: &str, t: &Tokens) -> rune::Color {
     }
 }
 
-/// One of the garden's quiet controls, such as a step of the trail or the closed toggle: words
-/// in `(font, ink)` with no padding of its own, as the Tauri garden's text buttons.
-pub(super) fn text_button(
-    key: String,
-    label: String,
-    (font, ink): (TextStyle, rune::Color),
-    t: &Tokens,
-) -> El {
-    let words = label.clone();
-    kit_button(label)
-        .variant(ButtonVariant::Ghost)
-        .label_with(move |_, _| text(words).font(font).color(ink).truncate())
-        .build(attn_ui::kit(t))
-        .key(key)
-        .h(ROW_TITLE.line_height)
-        .px(0.0)
-        .radius(3.0)
-        .fill(rune::Color::TRANSPARENT)
-        .hover(rune::Color::TRANSPARENT)
-}
-
-/// `button` showing `shown` as one of the bordered buttons beside a seed's title, as the Tauri
-/// garden's `.garden-head__actions button`.
-pub(super) fn head_button(button: Button, shown: impl Into<String>, t: &Tokens) -> El {
-    let (shown, ink) = (shown.into(), t.text_secondary);
-    button
-        .variant(ButtonVariant::Ghost)
-        .label_with(move |_, _| text(shown).font(type_::CAPTION).color(ink))
-        .build(attn_ui::kit(t))
-        .h(21.0)
-        .px(space::S2)
-        .radius(5.0)
-        .fill(t.bg_button)
-        .border(1.0, t.border)
-        .hover(t.bg_elevated)
-}
-
 fn capped(state: &State, place: &Place, t: &Tokens) -> Option<El> {
     let shown = super::seeds(state).len() as i64;
     let total = state.facts.garden.total_of(&state.facts.profiles.selected);
@@ -998,32 +832,8 @@ fn capped(state: &State, place: &Place, t: &Tokens) -> Option<El> {
         } else {
             format!("The garden holds {total} seeds; this panel has the newest {shown}.")
         };
-        empty("garden.capped", &words, None, t)
+        Prose::empty("garden.capped", words).el(t)
     })
-}
-
-/// What a list says in its place, as the Tauri garden's `.garden-empty`: a sentence in the
-/// tertiary color, with `command`, a part of it set apart by spaces, as inline code.
-fn empty(key: &str, words: &str, command: Option<&str>, t: &Tokens) -> El {
-    let spans = command
-        .and_then(|command| words.find(&format!(" {command} ")))
-        .map(|at| {
-            Span::new(at, at + command.map_or(0, str::len) + 2)
-                .mono()
-                .size(12.0)
-                .color(t.text_secondary)
-                .bg(t.bg_elevated, 2.0)
-        })
-        .into_iter()
-        .collect();
-    rich(words.to_owned(), spans)
-        .key(key.to_owned())
-        .role("note")
-        .label(words.to_owned())
-        .font(type_::BODY.lh(20.8))
-        .color(t.text_tertiary)
-        .wrap()
-        .w_full()
 }
 
 fn nothing_found(state: &State, place: &Place, t: &Tokens) -> El {
@@ -1034,11 +844,11 @@ fn nothing_found(state: &State, place: &Place, t: &Tokens) -> El {
         "the garden"
     };
     let query = state.window.garden.query.text.trim().to_owned();
-    let mut moves = col().key("garden.nothing.moves").gap(space::S1);
+    let mut moves = Actions::new("garden.moves");
     if plot && !place.wide && place.outside > 0 {
-        moves = moves.child(
+        moves = moves.push(
             button(
-                "garden.nothing.widen".into(),
+                "garden.nothing.widen",
                 format!("Search the whole garden {}", place.outside),
                 t,
             )
@@ -1046,9 +856,9 @@ fn nothing_found(state: &State, place: &Place, t: &Tokens) -> El {
         );
     }
     if plot && place.wide {
-        moves = moves.child(
+        moves = moves.push(
             button(
-                "garden.nothing.narrow".into(),
+                "garden.nothing.narrow",
                 format!("Search this plot only {}", place.in_plot),
                 t,
             )
@@ -1056,31 +866,30 @@ fn nothing_found(state: &State, place: &Place, t: &Tokens) -> El {
         );
     }
     if place.hidden_closed > 0 {
-        moves = moves.child(
+        moves = moves.push(
             button(
-                "garden.nothing.closed".into(),
+                "garden.nothing.closed",
                 format!("Include closed seeds {}", place.hidden_closed),
                 t,
             )
             .on_press_tx(super::toggle_closed),
         );
     }
-    moves = moves.child(
-        button("garden.nothing.clear".into(), "Clear the search", t).on_press_tx(
+    moves = moves.push(
+        button("garden.nothing.clear", "Clear the search", t).on_press_tx(
             |state: &mut State, tx: &mut Tx| super::set_query(state, String::new(), tx),
         ),
     );
-    col()
-        .key("garden.nothing")
-        .w_full()
-        .padding(space::S2)
-        .gap(space::S2)
-        .child(note(
-            "garden.nothing.line",
-            format!("Nothing in {where_} matches {query}."),
-            t,
-        ))
-        .child(moves)
+    Reader::new()
+        .push(
+            Prose::empty(
+                "garden.nothing.line",
+                format!("Nothing in {where_} matches {query}."),
+            )
+            .build(t),
+        )
+        .push(moves.build().key("garden.nothing.moves"))
+        .build("garden.nothing", Room::Narrow, t)
 }
 
 fn results(state: &State, place: &Place, t: &Tokens) -> El {
@@ -1112,7 +921,7 @@ pub(super) fn scroll(key: &str, content: El, t: &Tokens) -> El {
         .scroll_bar_styled(attn_ui::scroll_bar(t))
 }
 
-fn root_list(state: &State, place: &Place, pick: Pick, t: &Tokens) -> El {
+fn root_list(state: &State, place: &Place, pick: Pick, t: &Tokens) -> Vec<Block> {
     let roots = place.lens(&place.index.roots);
     let closed = place
         .index
@@ -1121,29 +930,33 @@ fn root_list(state: &State, place: &Place, pick: Pick, t: &Tokens) -> El {
         .filter(|s| model::is_closed(s))
         .count();
     let stacked = pick == Pick::Drill;
-    let mut page = col()
-        .w_full()
-        .gap(PAGE_GAP)
-        .children(capped(state, place, t));
+    let mut page: Vec<Block> = capped(state, place, t)
+        .map(|capped| Block::custom("garden.capped.block", capped))
+        .into_iter()
+        .collect();
     if roots.is_empty() && closed > 0 {
-        page = page.child(empty("garden.empty", &hidden_closed_words(closed), None, t));
+        page.push(Prose::empty("garden.empty", hidden_closed_words(closed)).build(t));
     } else if roots.is_empty() && stacked {
-        page = page.child(empty(
-            "garden.empty",
-            "The garden is empty. attn seed plant \"what this is\" puts something in it.",
-            Some("attn seed plant \"what this is\""),
-            t,
-        ));
+        page.push(
+            Prose::empty(
+                "garden.empty",
+                "The garden is empty. `attn seed plant \"what this is\"` puts something in it.",
+            )
+            .build(t),
+        );
     } else if roots.is_empty() {
-        page = page.child(empty("garden.empty", "Nothing here yet.", None, t));
+        page.push(Prose::empty("garden.empty", "Nothing here yet.").build(t));
     } else {
         let selected = place.trail.first().map_or("", String::as_str);
-        page = page.child(list(
-            "garden.list",
-            "list",
-            "Seeds",
-            row_specs(&roots, place, pick, selected, None),
-            t,
+        page.push(Block::custom(
+            "garden.list.block",
+            list(
+                "garden.list",
+                "list",
+                "Seeds",
+                row_specs(&roots, place, pick, selected, None),
+                t,
+            ),
         ));
     }
     page
@@ -1158,46 +971,30 @@ fn hidden_closed_words(closed: usize) -> String {
 
 fn stack_view(state: &State, place: &Place, t: &Tokens) -> El {
     let content = if place.query.searches {
-        col()
-            .w_full()
-            .children(capped(state, place, t))
-            .child(results(state, place, t))
+        Reader::new()
+            .push_all(
+                capped(state, place, t).map(|capped| Block::custom("garden.capped.block", capped)),
+            )
+            .push(Block::custom(
+                "garden.results.block",
+                results(state, place, t),
+            ))
     } else {
         match place.here() {
-            None => root_list(state, place, Pick::Drill, t),
+            None => Reader::new().push_all(root_list(state, place, Pick::Drill, t)),
             Some(here) => page(state, place, here, true, t),
         }
     };
     scroll(
         "garden.viewport",
-        content
-            .key("garden.page")
-            .px(PAGE_INSET)
-            .pt(14.0)
-            .pb(40.0)
-            .gap(PAGE_GAP),
+        content.build("garden.page", Room::Narrow, t),
         t,
     )
 }
 
 fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
     let mut columns = row().key("garden.columns").w_full().grow(1.0).min_h(0.0);
-    let column = |key: String, content: El| {
-        col()
-            .key(key)
-            .w(COLUMN_WIDTH)
-            .h_full()
-            .min_h(0.0)
-            .pt(10.0)
-            .px(ROW_INSET)
-            .pb(40.0)
-            .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
-            .scroll(ScrollSpec {
-                stick_bottom: false,
-            })
-            .child(content)
-            .scroll_bar_styled(attn_ui::thin_scroll_bar(t))
-    };
+    let column = |key: String, content: El| Pane::new(key, content).width(COLUMN_WIDTH).build(t);
     if place.query.searches {
         columns = columns.child(column(
             "garden.column.results".into(),
@@ -1207,24 +1004,10 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
                 .child(results(state, place, t)),
         ));
     } else if place.here().is_none() {
-        let root = root_list(state, place, Pick::Level(0), t);
-        let root = if place.lens(&place.index.roots).is_empty() {
-            root
-        } else {
-            root.max_w(ROOT_MAX_WIDTH).pt(ROW_INSET)
-        };
+        let root =
+            blocks_column(root_list(state, place, Pick::Level(0), t), t).max_w(ROOT_MAX_WIDTH);
         return columns.child(
-            col()
-                .key("garden.column.0")
-                .w_full()
-                .h_full()
-                .min_h(0.0)
-                .items_center()
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(root)
-                .scroll_bar_styled(attn_ui::thin_scroll_bar(t)),
+            Pane::new("garden.column.0", col().w_full().items_center().child(root)).build(t),
         );
     } else {
         let levels = place.levels();
@@ -1236,9 +1019,9 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
         let first = levels.len().saturating_sub(max);
         for (level, (seeds, selected)) in levels.iter().enumerate().skip(first) {
             let content = if level == 0 {
-                root_list(state, place, Pick::Level(0), t)
+                blocks_column(root_list(state, place, Pick::Level(0), t), t)
             } else if seeds.is_empty() {
-                empty("garden.column.empty", "Nothing here yet.", None, t)
+                Prose::empty("garden.column.empty", "Nothing here yet.").el(t)
             } else {
                 list(
                     &format!("garden.list.{level}"),
@@ -1264,11 +1047,8 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
                 })
                 .child(
                     page(state, place, here, false, t)
-                        .key("garden.page")
-                        .max_w(READER_MAX_WIDTH)
-                        .pt(24.0)
-                        .px(32.0)
-                        .pb(72.0),
+                        .build("garden.page", Room::Wide, t)
+                        .max_w(READER_MAX_WIDTH),
                 )
                 .scroll_bar_styled(attn_ui::thin_scroll_bar(t)),
         );
@@ -1276,9 +1056,14 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
     columns
 }
 
+/// Blocks one under another as a page spaces them, inside a pane that insets them itself.
+fn blocks_column(blocks: Vec<Block>, t: &Tokens) -> El {
+    Reader::new().push_all(blocks).bare(t)
+}
+
 /// The opened seed: its state and who tends it, why it closed, its plot's progress, its plan,
 /// its checks, its plot's children while the walk stacks, its relations, artifacts and log.
-fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Tokens) -> El {
+fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Tokens) -> Reader {
     let (document, error) = super::reading(&state.window.garden, &here.id);
     let sheet = Sheet {
         prefix: "garden".into(),
@@ -1299,75 +1084,71 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
         now_ms: state.window.now_ms,
         t,
     };
-    let mut page = col()
-        .w_full()
-        .gap(PAGE_GAP)
-        .child(
-            sheet.head(
-                here,
-                row()
-                    .gap(space::S1)
-                    .child(open_as_tile(&here.id, t))
-                    .children(sheet.continuation(Some(here), document)),
-                sheet.continuation_notes(here, document),
-            ),
-        )
-        .children(sheet.handover_form(document))
-        .children(sheet.chief_form(document))
-        .child(sheet.authorization(here))
-        .child(sheet.plan(here))
-        .children(sheet.checks(here, document));
+    let mut actions = vec![open_as_tile(&here.id, t)];
+    actions.extend(sheet.continuation(Some(here), document));
+    let mut page = Reader::new()
+        .head(sheet.head(here, actions, sheet.continuation_notes(here, document)))
+        .push_all(sheet.head_after(here))
+        .push_all(sheet.handover_form(document))
+        .push_all(sheet.chief_form(document))
+        .push(sheet.authorization(here))
+        .push(sheet.plan(here))
+        .push_all(sheet.checks(here, document));
     if stacked && model::is_plot(here) {
-        page = page.child(plot_children(place, here, t));
+        page = page.push(plot_children(place, here, t));
     }
-    page.children(sheet.seeds("related", "Related", place.index.relations(&here.id)))
-        .children(sheet.artifacts(document))
-        .child(sheet.log(document, error))
+    page.push_all(sheet.seeds("related", "Related", place.index.relations(&here.id)))
+        .push_all(sheet.artifacts(document))
+        .push(sheet.log(document, error))
 }
 
 fn open_as_tile(id: &str, t: &Tokens) -> El {
     let id = id.to_owned();
-    head_button(
-        kit_button("Open as tile").on_press_tx(move |state: &mut State, tx: &mut Tx| {
+    plain("Open as tile")
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             super::close(state);
             super::open_tile(state, &id, tx)
-        }),
-        "Open as tile",
-        t,
-    )
-    .key("garden.open-tile")
+        })
+        .build(t)
+        .key("garden.open-tile")
+        .into()
 }
 
-fn plot_children(place: &Place, here: &Arc<Seed>, t: &Tokens) -> El {
+fn plot_children(place: &Place, here: &Arc<Seed>, t: &Tokens) -> Block {
     let children = place.index.children_of(&here.id);
     let open = place.lens(children);
     let closed = children.iter().filter(|s| model::is_closed(s)).count();
-    let plot = page_section("garden.plot", "Plot", t);
+    let plot = Section::new("garden.plot", "Plot").region("Plot");
     if open.is_empty() && closed > 0 {
-        return plot.child(empty(
-            "garden.plot.empty",
-            &hidden_closed_words(closed),
-            None,
-            t,
-        ));
+        return plot
+            .push(Prose::empty("garden.plot.empty", hidden_closed_words(closed)).build(t))
+            .build(t);
     }
     if open.is_empty() {
         let command = format!("attn seed plant \"what this is\" --part-of {}", here.id);
-        return plot.child(empty(
-            "garden.plot.empty",
-            &format!("Nothing planted in this plot yet. {command} puts something in it."),
-            Some(&command),
-            t,
-        ));
+        return plot
+            .push(
+                Prose::empty(
+                    "garden.plot.empty",
+                    Said::parts([
+                        Part::Text("Nothing planted in this plot yet. ".to_owned()),
+                        Part::Code(command),
+                        Part::Text(" puts something in it.".to_owned()),
+                    ]),
+                )
+                .build(t),
+            )
+            .build(t);
     }
-    plot.child(
+    plot.push(Block::custom(
+        "garden.plot.list.block",
         list(
             "garden.plot.list",
             "list",
             "Plot",
             row_specs(&open, place, Pick::Drill, "", None),
             t,
-        )
-        .mx(-ROW_INSET),
-    )
+        ),
+    ))
+    .build(t)
 }

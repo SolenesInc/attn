@@ -1,9 +1,9 @@
-//! A document's YAML front matter as the Tauri reader shows it (frontmatter.ts,
-//! FrontmatterCard): a card of its top-level `key: value` lines, lists as tags.
+//! A document's YAML front matter: a card of its top-level `key: value` lines, lists as tags.
 
 use attn_ui::Tokens;
-use rune::tok::{radius, space};
-use rune::{El, TextStyle, col, el, row, text};
+use attn_ui::blocks::{Facts, Inline, Surface};
+use attn_ui::system::{Tone, tag};
+use rune::{El, el};
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Value {
@@ -101,59 +101,30 @@ fn unquoted(value: &str) -> &str {
         .unwrap_or(value)
 }
 
-const SMALL: TextStyle = TextStyle::new(14.0, 400.0);
-const KEY: TextStyle = TextStyle::new(14.0, 500.0);
-const TAG: TextStyle = TextStyle::new(12.0, 400.0);
-const KEY_WIDTH: f32 = 80.0;
-
 /// The card `yaml` shows as; nothing for front matter with no top-level keys.
 pub(crate) fn card(yaml: &str, t: &Tokens) -> El {
     let entries = entries(yaml);
     if entries.is_empty() {
         return el().w_full().h(0.0);
     }
-    col()
+    let facts = entries.into_iter().enumerate().fold(
+        Facts::new("front-matter.fields"),
+        |facts, (n, (key, value))| {
+            let at = format!("front-matter.{n}");
+            match value {
+                Value::Text(value) => facts.fact(at, key, value),
+                Value::List(items) => {
+                    let tags = items.iter().enumerate().map(|(i, item)| {
+                        El::from(tag(format!("{at}.{i}"), item, Tone::Neutral, t))
+                    });
+                    facts.item(at.clone(), key, Inline::tight().children(tags))
+                }
+            }
+        },
+    );
+    Surface::figure(facts.el(t), t.bg_elevated.alpha(0.3), t.border.alpha(0.5))
         .key("front-matter")
         .role("note")
         .label("Front matter")
         .w_full()
-        .mt(0.0)
-        .mb(space::S6)
-        .padding(16.0)
-        .gap(space::S2)
-        .radius(radius::MD)
-        .fill(t.bg_elevated.alpha(0.3))
-        .border(1.0, t.border.alpha(0.5))
-        .children(entries.into_iter().map(|(key, value)| {
-            let value = match value {
-                Value::Text(value) => text(value)
-                    .font(SMALL)
-                    .color(t.text_primary)
-                    .wrap()
-                    .shrink(),
-                Value::List(items) => {
-                    row()
-                        .wrap()
-                        .gap(space::S1)
-                        .shrink()
-                        .children(items.into_iter().map(|item| {
-                            el().px(6.0)
-                                .py(2.0)
-                                .radius(4.0)
-                                .fill(t.accent.alpha(0.1))
-                                .child(text(item).font(TAG).color(t.accent))
-                        }))
-                }
-            };
-            row()
-                .w_full()
-                .gap(space::S2)
-                .child(
-                    text(format!("{key}:"))
-                        .font(KEY)
-                        .color(t.text_secondary)
-                        .min_w(KEY_WIDTH),
-                )
-                .child(value)
-        }))
 }

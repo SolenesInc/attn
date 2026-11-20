@@ -322,6 +322,14 @@ fn section(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
             .build(&t),
         Section::new("section.second", title(s, "Font Size"))
             .description(copy(s, "Scale text across attn."))
+            .control(
+                Button::new("Reset")
+                    .look(Look::Quiet)
+                    .size(Size::Compact)
+                    .on_press_tx(noop)
+                    .build(&t)
+                    .key("section.second.reset"),
+            )
             .push_all(rows(s, &t).into_iter().take(2))
             .build(&t),
     ];

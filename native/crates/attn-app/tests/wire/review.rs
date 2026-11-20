@@ -159,6 +159,11 @@ fn start_with_session(session: Option<&str>) -> World {
 /// The fixture's desktop: agent `a`, then `tiles`.
 fn start_with_tiles(tiles: Vec<serde_json::Value>) -> World {
     let tree = row(std::iter::once(pane("a")).chain(tiles).collect::<Vec<_>>());
+    start_with_tree(tree, (1600.0, 900.0))
+}
+
+/// The fixture's desktop as `tree`, in a window `size` across.
+fn start_with_tree(tree: serde_json::Value, size: (f32, f32)) -> World {
     let daemon = Daemon::scripted().state(InitialStateMessage {
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![Profile {
@@ -194,7 +199,7 @@ fn start_with_tiles(tiles: Vec<serde_json::Value>) -> World {
         }]),
         ..InitialStateMessage::new()
     });
-    let mut world = World::start_sized(daemon, (1600.0, 900.0));
+    let mut world = World::start_sized(daemon, size);
     world.open_desktop();
     world
 }
@@ -4186,7 +4191,11 @@ fn a_table_in_a_review_takes_the_cards_width_while_its_prose_keeps_the_reviews_m
     let [px, _, prose, _] = screen
         .bounds(Target::role("label").name("Add used to return its sum directly."))
         .unwrap();
-    assert_eq!(prose, 644.0, "the review's prose keeps its measure");
+    assert_eq!(
+        prose,
+        attn_ui::blocks::DOCUMENT,
+        "the review's prose keeps the document measure"
+    );
     let [tx, _, tw, _] = screen.bounds(Target::role("table")).unwrap();
     assert!(
         (px + prose / 2.0 - (tx + tw / 2.0)).abs() < 1.0,
@@ -6944,4 +6953,110 @@ fn a_document_shown_alone_among_others_tabs_each_and_a_tab_shows_its_document_al
         world.screen().find(Target::key("tile.m")).is_none(),
         "the tab shows its document alone"
     );
+}
+
+#[test]
+fn the_answer_a_search_stands_on_is_drawn_apart_from_the_raised_list_it_lies_on() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    serve_search(&world);
+    type_key(&mut world, "/");
+    let fill = |key: &str| {
+        world
+            .runtime()
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("no {key} on screen"))
+            .fill
+            .hex()
+    };
+    let (current, next, list) = (
+        fill("review.search.option.0"),
+        fill("review.search.option.1"),
+        fill("review.search"),
+    );
+    assert_ne!(current, list, "the current answer's fill is the list's own");
+    assert_ne!(current, next);
+}
+
+/// The rows the review's key line draws its words on, top first, each with its words.
+fn key_line_rows(world: &World) -> Vec<Vec<String>> {
+    let elements = world.runtime().elements();
+    let line = elements
+        .iter()
+        .find(|e| e.key.as_deref() == Some("tile.m.review.keys"))
+        .expect("the key line")
+        .rect;
+    let inside = |r: [f32; 4]| {
+        r[0] >= line[0]
+            && r[0] + r[2] <= line[0] + line[2] + 0.5
+            && r[1] >= line[1]
+            && r[1] < line[1] + line[3]
+    };
+    let mut rows: Vec<(f32, Vec<String>)> = Vec::new();
+    for e in elements
+        .iter()
+        .filter(|e| e.text.is_some() && inside(e.rect))
+    {
+        assert_eq!(
+            e.visible[2].round(),
+            e.rect[2].round(),
+            "{:?} is cut on the key line",
+            e.text
+        );
+        let middle = e.rect[1] + e.rect[3] / 2.0;
+        match rows.iter_mut().find(|(y, _)| (y - middle).abs() < 6.0) {
+            Some((_, words)) => words.push(e.text.clone().unwrap()),
+            None => rows.push((middle, vec![e.text.clone().unwrap()])),
+        }
+    }
+    rows.sort_by(|a, b| a.0.total_cmp(&b.0));
+    rows.into_iter().map(|(_, words)| words).collect()
+}
+
+fn review_in(tree: serde_json::Value, size: (f32, f32), scale: Option<&str>) -> World {
+    let mut world = start_with_tree(tree, size);
+    if let Some(scale) = scale {
+        world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+            settings: Some([("uiScale".to_owned(), scale.to_owned())].into()),
+            ..attn_protocol::SettingsUpdatedMessage::new()
+        });
+        world.settle();
+    }
+    let _calc = serve(&world);
+    deliver(&mut world, DOCUMENT, Some(bundle()));
+    world.settle();
+    world
+}
+
+#[test]
+fn the_key_line_keeps_its_frame_tabs_and_all_keys_on_one_line_and_never_takes_over_the_review() {
+    let beside = row(vec![pane("a"), document_tile("m", DOC, None)]);
+    let world = review_in(beside, (1600.0, 900.0), None);
+    let rows = key_line_rows(&world);
+    assert!(
+        rows.len() <= 3,
+        "beside an agent the key line takes {} lines: {rows:?}",
+        rows.len()
+    );
+    for word in ["Brief", "Walkthrough", "all keys"] {
+        assert!(
+            rows[0].iter().any(|w| w == word),
+            "{word} is not on the first line: {rows:?}"
+        );
+    }
+    assert!(
+        rows.concat().iter().any(|w| w == "line"),
+        "the hints are gone: {rows:?}"
+    );
+
+    for (size, scale) in [((800.0, 900.0), None), ((800.0, 600.0), Some("1.5"))] {
+        let world = review_in(row(vec![document_tile("m", DOC, None)]), size, scale);
+        let rows = key_line_rows(&world);
+        assert_eq!(
+            rows,
+            vec![vec!["1", "Brief", "2", "Walkthrough", "?", "all keys"]],
+            "at {size:?} and {scale:?} the key line is not the tabs and all keys alone"
+        );
+    }
 }

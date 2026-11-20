@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use attn_protocol::{DesktopUpdateTileMessage, Seed, SeedCheckTally, SeedDocument};
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{Color, El, KeyEvent, TextEdit, TextStyle, Tx, col, memo, row, text};
-use rune_kit::{MarkdownStyle, TextArea};
+use attn_ui::blocks::{Block, Byline, Entry, Head, Inline, Prose, Section, Stack, entries};
+use attn_ui::system::{FieldState, Link, Said, Type, area_box, dot_on_line, meter, words};
+use rune::{El, KeyEvent, TextEdit, Tx, col, memo, row};
+use rune_kit::TextArea;
 
 use super::model::{self, Relation, SessionNames};
 use crate::State;
@@ -71,149 +71,117 @@ impl Sheet<'_> {
         format!("{}.{part}", self.prefix)
     }
 
-    /// What a part of the page says when it has nothing to show, as the Tauri garden's
-    /// `.garden-note-empty`.
-    pub(super) fn note(&self, part: &str, words: impl Into<String>) -> El {
-        quiet_note(&self.key(part), words, self.t.text_muted)
+    /// What a part of the page says when it has nothing to show.
+    pub(super) fn note(&self, part: &str, words: impl Into<Said>) -> Block {
+        Prose::empty(self.key(part), words).build(self.t)
     }
 
-    pub(super) fn section(&self, part: &str, title: &str) -> El {
-        page_section(&self.key(part), title, self.t)
+    /// A short note that goes with something above it, such as why a seed cannot resume.
+    pub(super) fn small_note(&self, part: &str, said: impl Into<String>) -> El {
+        let said = said.into();
+        words(said, Type::Small, self.t.text_tertiary)
+            .key(self.key(part))
+            .role("note")
+            .wrap()
     }
 
-    /// The seed's title beside `action`, then [`Sheet::head_under`]'s facts.
-    pub(super) fn head(&self, here: &Seed, action: El, notes: Vec<El>) -> El {
+    pub(super) fn section(&self, part: &str, title: &str) -> Section {
+        Section::new(self.key(part), title.to_owned()).region(title)
+    }
+
+    /// The seed's title beside `aside`, over its state, who tends it, its checks, its age and
+    /// id, then `notes`.
+    pub(super) fn head(&self, here: &Seed, aside: Vec<El>, notes: Vec<El>) -> Head {
         let t = self.t;
-        let title = row()
-            .w_full()
-            .items_start()
-            .gap(16.0)
-            .child(
-                text(here.title.clone())
-                    .key(self.key("head.title"))
-                    .role("heading")
-                    .label(here.title.clone())
-                    .font(PAGE_TITLE)
-                    .color(t.text_primary)
-                    .wrap()
-                    .grow(1.0)
-                    .min_w(TITLE_MIN_WIDTH),
-            )
-            .child(
-                action
-                    .gap(6.0)
-                    .mt(1.0)
-                    .flex_wrap()
-                    .justify_end()
-                    .shrink()
-                    .min_w(0.0),
-            );
-        self.head_under(title, here, notes)
-    }
-
-    /// `title`, then the seed's state, who tends it, its checks, its age and id, then `notes`,
-    /// why it closed and its plot's progress.
-    pub(super) fn head_under(&self, title: El, here: &Seed, notes: Vec<El>) -> El {
-        let t = self.t;
-        let mut head = col().key(self.key("head")).w_full().gap(7.0).child(title);
-        let mut meta = row()
-            .key(self.key("head.meta"))
-            .w_full()
-            .flex_wrap()
-            .items_center()
-            .gap(12.0)
-            .child(
-                row()
-                    .items_center()
-                    .gap(6.0)
-                    .child(super::view::pip(&here.status, t))
-                    .child(said(here.status.clone(), t)),
-            );
+        let mut facts = Byline::new().key(self.key("head.meta")).wrap().push(
+            Inline::loose()
+                .child(dot_on_line(
+                    super::view::state_color(&here.status, t),
+                    Type::Small,
+                ))
+                .child(said(here.status.clone(), t)),
+        );
         if let Some((sentence, _)) = model::harvest_when(here) {
-            meta = meta.child(self.harvest_when(here, sentence));
+            facts = facts.push(self.harvest_when(here, sentence));
         }
         let tender = model::tender_of(here, self.names);
         if !tender.is_empty() {
-            meta = meta.child(said(format!("tended by {tender}"), t));
+            facts = facts.said(format!("tended by {tender}"), t);
         }
         if here.planter.r#ref.starts_with("member:") {
-            meta = meta.child(said(format!("by {}", here.planter.name), t));
+            facts = facts.said(format!("by {}", here.planter.name), t);
         }
         if !model::is_plot(here)
             && let Some(tally) = model::check_tally(here)
         {
-            meta = meta.child(self.tally(here, &tally));
+            facts = facts.push(self.tally(here, &tally));
         }
-        meta = meta
-            .child(said(model::ago(&here.created_at, self.now_ms), t))
-            .child(
-                text(here.id.clone())
-                    .font(type_::MONO_CAPTION)
-                    .color(t.text_muted),
-            );
-        head = head.child(meta).children(notes);
-        if let Some(reason) = here.reason.as_ref().filter(|r| !r.is_empty()) {
-            head = head.child(
-                text(reason.clone())
-                    .key(self.key("head.reason"))
-                    .role("note")
-                    .label(reason.clone())
-                    .font(type_::BODY)
-                    .color(t.text_secondary)
-                    .wrap()
-                    .mt(6.0),
-            );
-        }
-        if model::is_plot(here) {
-            head = head.child(
-                row()
-                    .key(self.key("head.progress"))
-                    .items_center()
-                    .gap(10.0)
-                    .children(progress_bar(here, t))
-                    .child(
-                        said(model::progress_words(here), t)
-                            .key(self.key("head.progress.words"))
-                            .role("note")
-                            .label(model::progress_words(here)),
-                    )
-                    .children(model::check_tally(here).map(|tally| self.tally(here, &tally))),
-            );
-        }
+        let facts = facts
+            .said(model::ago(&here.created_at, self.now_ms), t)
+            .id(here.id.clone(), t.text_tertiary)
+            .build(t);
         let gone_to = self
             .garden
             .check_focus
             .as_ref()
             .is_some_and(|f| f.sheet == self.prefix && f.seed == here.id);
-        if !gone_to {
-            return head;
+        let facts = if gone_to {
+            facts.on_layout_tx(|state: &mut State, _, tx: &mut Tx| {
+                if let Some(focus) = state.window.garden.check_focus.take() {
+                    tx.scroll_center(focus.check_box.clone());
+                    tx.focus(&focus.check_box, false);
+                }
+            })
+        } else {
+            facts
+        };
+        let head = Head::new(self.key("head.title"), here.title.clone())
+            .note(Stack::tight().child(facts).children(notes));
+        aside.into_iter().fold(head, Head::aside)
+    }
+
+    /// Why the seed closed, and how far its plot has drained: what the head says after its
+    /// facts.
+    pub(super) fn head_after(&self, here: &Seed) -> Vec<Block> {
+        let t = self.t;
+        let mut after = Vec::new();
+        if let Some(reason) = here.reason.as_ref().filter(|r| !r.is_empty()) {
+            after.push(Prose::empty(self.key("head.reason"), reason.clone()).build(t));
         }
-        head.on_layout_tx(|state: &mut State, _, tx: &mut Tx| {
-            if let Some(focus) = state.window.garden.check_focus.take() {
-                tx.scroll_center(focus.check_box.clone());
-                tx.focus(&focus.check_box, false);
-            }
-        })
+        if model::is_plot(here) {
+            let progress = Inline::loose()
+                .key(self.key("head.progress"))
+                .children(progress_meter(here, t))
+                .child(
+                    said(model::progress_words(here), t)
+                        .key(self.key("head.progress.words"))
+                        .role("note")
+                        .label(model::progress_words(here)),
+                )
+                .children(model::check_tally(here).map(|tally| self.tally(here, &tally)));
+            after.push(Block::custom(self.key("head.progress"), progress));
+        }
+        after
     }
 
     /// The seed's check tally, which goes to its checks when it has checks of its own.
     fn tally(&self, here: &Seed, tally: &SeedCheckTally) -> El {
-        let (words, sentence) = (model::tally_words(tally), model::tally_sentence(tally));
+        let (said_words, sentence) = (model::tally_words(tally), model::tally_sentence(tally));
         let own = here.checks.as_ref().is_some_and(|c| !c.is_empty())
             || here.shared_checks.as_ref().is_some_and(|c| !c.is_empty());
         if !own {
-            return said(words, self.t).help(format!("checks: {sentence}"));
+            return said(said_words, self.t).help(format!("checks: {sentence}"));
         }
         let (checks, heading) = (self.key("checks"), self.key("checks.heading"));
-        said(words, self.t)
-            .key(self.key("head.tally"))
-            .role("button")
-            .focusable(true)
-            .on_press_tx(move |_: &mut State, tx: &mut Tx| {
-                tx.scroll_into_view(checks.clone());
-                tx.focus(&heading, false);
-            })
-            .label(format!("Checks: {sentence}"))
+        let link: El = Link::new(self.key("head.tally"), said_words)
+            .ink(self.t.text_tertiary)
+            .build(self.t)
+            .into();
+        link.on_press_tx(move |_: &mut State, tx: &mut Tx| {
+            tx.scroll_into_view(checks.clone());
+            tx.focus(&heading, false);
+        })
+        .label(format!("Checks: {sentence}"))
     }
 
     /// What the seed harvests on, a link to its pull request when the daemon knows where it is.
@@ -226,8 +194,11 @@ impl Sheet<'_> {
         if url.is_empty() {
             return said(sentence, self.t);
         }
-        super::view::kit_button(format!("{sentence} ↗"))
-            .help(url.clone())
+        let link: El = Link::new(self.key("head.harvest-when"), format!("{sentence} ↗"))
+            .ink(self.t.text_tertiary)
+            .build(self.t)
+            .into();
+        link.help(url.clone())
             .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                 if let Err(why) = tx.open_url(&url) {
                     state
@@ -235,8 +206,6 @@ impl Sheet<'_> {
                         .notify(format!("Could not open {url}: {why}"), tx);
                 }
             })
-            .build(attn_ui::kit(self.t))
-            .key(self.key("head.harvest-when"))
             .role("link")
             .label(sentence)
     }
@@ -265,7 +234,7 @@ impl Sheet<'_> {
                     std::rc::Rc::default(),
                     kept,
                     None,
-                    body_look(t.text_secondary, &t),
+                    attn_ui::system::note_style(t.text_secondary, &t),
                     &t,
                 )
             },
@@ -273,7 +242,7 @@ impl Sheet<'_> {
     }
 
     /// The seed's body, read where the sheet scrolls.
-    pub(super) fn plan(&self, here: &Seed) -> El {
+    pub(super) fn plan(&self, here: &Seed) -> Block {
         if here.body.trim().is_empty() {
             return self.note("body.empty", "No body — the title is the whole seed.");
         }
@@ -285,13 +254,18 @@ impl Sheet<'_> {
         let in_card = matches!(self.go, Go::Tile { .. });
         let width = kept.width.map(|w| w as f32);
         let (padding, text_width) = if in_card {
-            let (padding, text) = crate::markdown::card_inside(width.unwrap_or(0.0));
+            let (padding, text) = attn_ui::blocks::document_inside(width.unwrap_or(0.0));
             (padding, width.map(|_| text))
         } else {
-            (0.0, width)
+            (Default::default(), width)
         };
         let style = {
-            let look = body_look(t.text_primary.alpha(0.9), &t);
+            let look = attn_ui::system::note_style(t.text_primary, &t);
+            let look = if in_card {
+                look.prose_measure(attn_ui::blocks::DOCUMENT)
+            } else {
+                look
+            };
             match text_width {
                 Some(width) => look.text_width(width),
                 None => look,
@@ -322,7 +296,7 @@ impl Sheet<'_> {
                 )
             }
         };
-        let plan = |reading: El| {
+        let plan = move |reading: El| {
             col()
                 .key(key)
                 .role("document")
@@ -337,7 +311,7 @@ impl Sheet<'_> {
                 .child(if in_card {
                     crate::markdown::card(padding, reading, &t)
                 } else {
-                    reading
+                    reading.max_w(attn_ui::blocks::DOCUMENT)
                 })
         };
         if let (Go::Tile { tile, .. }, Some(drafts)) = (&self.go, self.drafts) {
@@ -345,21 +319,21 @@ impl Sheet<'_> {
                 (drafts, self.readings),
                 tile,
                 &here.id,
-                (&body, &view, &kept, pictured, t),
+                (&body, &self.view, &kept, pictured, t),
                 read,
                 &t,
             );
-            return plan(reading).children(over);
+            return Block::part(plan(reading).children(over));
         }
-        memo(
+        Block::part(memo(
             self.key(&format!("plan.{}", here.id)),
-            (body.clone(), view.clone(), kept.clone(), pictured, t),
+            (body.clone(), self.view.clone(), kept.clone(), pictured, t),
             move || plan(read(None)),
-        )
+        ))
     }
 
     /// The seeds `rows` name, each a button that goes to it beside its state, under `title`.
-    pub(super) fn seeds(&self, part: &str, title: &str, rows: Vec<Relation>) -> Option<El> {
+    pub(super) fn seeds(&self, part: &str, title: &str, rows: Vec<Relation>) -> Option<Block> {
         self.seeds_saying(part, title, rows, |seed| Some(seed.status.clone()))
     }
 
@@ -370,109 +344,93 @@ impl Sheet<'_> {
         title: &str,
         rows: Vec<Relation>,
         says: impl Fn(&Seed) -> Option<String>,
-    ) -> Option<El> {
+    ) -> Option<Block> {
         if rows.is_empty() {
             return None;
         }
         let t = self.t;
-        let mut list = col().w_full().gap(4.0);
+        let mut list = Stack::tight().w_full();
         for relation in rows {
             let other: Arc<Seed> = relation.seed.clone();
             let go = self.go.clone();
             let id = other.id.clone();
-            let mut line = row().w_full().gap(10.0).items_center();
-            if !relation.label.is_empty() {
-                line = line.child(
-                    text(relation.label)
-                        .font(type_::CAPTION)
-                        .color(t.text_muted)
-                        .w(84.0),
-                );
-            }
             let key = if relation.label.is_empty() {
                 self.key(&format!("{part}.{}", other.id))
             } else {
                 self.key(&format!("{part}.{}.{}", relation.label, other.id))
             };
-            list = list.child(
-                line.child(
-                    super::view::text_button(
-                        key,
-                        other.title.clone(),
-                        (type_::BODY, t.text_primary),
-                        t,
-                    )
-                    .grow(1.0)
-                    .justify_start()
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| go.to(state, &id, tx)),
+            let link: El = Link::new(key, other.title.clone())
+                .kind(Type::Body)
+                .ink(t.text_primary)
+                .build(t)
+                .into();
+            let line = row()
+                .w_full()
+                .items_center()
+                .justify_between()
+                .child(
+                    Inline::loose()
+                        .children((!relation.label.is_empty()).then(|| {
+                            words(relation.label, Type::Small, t.text_tertiary).w(RELATION_LABEL)
+                        }))
+                        .child(link.on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            go.to(state, &id, tx)
+                        }))
+                        .w(0.0)
+                        .grow(1.0)
+                        .min_w(0.0),
                 )
-                .children(says(&other).map(|words| said(words, t))),
-            );
+                .children(says(&other).map(|words| said(words, t)));
+            list = list.child(line);
         }
-        let list = self.section(part, title).child(list);
-        Some(list)
+        Some(
+            self.section(part, title)
+                .push(Block::custom(self.key(&format!("{part}.list")), list))
+                .build(t),
+        )
     }
 
-    pub(super) fn log(&self, document: Option<&SeedDocument>, error: Option<&str>) -> El {
+    pub(super) fn log(&self, document: Option<&SeedDocument>, error: Option<&str>) -> Block {
         let t = self.t;
-        let mut log = self.section("log", "Log");
+        let log = self.section("log", "Log");
         if let Some(error) = error {
-            return log.child(self.note("log.error", error.to_owned()));
+            return log.push(self.note("log.error", error.to_owned())).build(t);
         }
         let Some(document) = document else {
-            return log;
+            return log.build(t);
         };
+        let mut log = log;
         if document.notes.is_empty() {
-            log = log.child(self.note("log.empty", "Nothing on this seed’s log yet."));
+            log = log.push(self.note("log.empty", "Nothing on this seed’s log yet."));
         }
         let spoken = document
             .notes
             .iter()
             .filter(|n| n.kind != "attach" && n.kind != "detach");
-        let mut entries = col().w_full().gap(12.0);
-        for entry in spoken {
-            let who = model::who_name(&entry.author.r#ref, &entry.author.name, self.names);
-            let mut head = row()
-                .w_full()
-                .items_center()
-                .gap(space::S2)
-                .child(text(who).font(type_::CAPTION).color(t.text_secondary));
-            if entry.kind != "note" {
-                head = head.child(
-                    text(entry.kind.clone())
-                        .font(type_::CAPTION)
-                        .color(t.text_tertiary),
-                );
-            }
-            head = head.child(rune::el().grow(1.0)).child(
-                text(model::ago(&entry.created_at, self.now_ms))
-                    .font(type_::CAPTION)
-                    .color(t.text_muted),
-            );
-            let mut item = col()
-                .key(self.key(&format!("log.{}", entry.id)))
-                .role("listitem")
-                .w_full()
-                .gap(4.0)
-                .pl(10.0)
-                .border_sides(
-                    [0.0, 0.0, 0.0, 2.0],
-                    if entry.kind == "handoff" {
-                        t.brand
-                    } else {
-                        t.border_subtle
-                    },
+        let shown: Vec<El> = spoken
+            .map(|entry| {
+                let who = model::who_name(&entry.author.r#ref, &entry.author.name, self.names);
+                let mut item = Entry::new(
+                    self.key(&format!("log.{}", entry.id)),
+                    who,
+                    model::ago(&entry.created_at, self.now_ms),
                 )
-                .child(head);
-            if !entry.body.is_empty() {
-                item = item.child(self.log_body(&entry.id, &entry.body));
-            }
-            entries = entries.child(item);
+                .accent(entry.kind == "handoff");
+                if entry.kind != "note" {
+                    item = item.kind(entry.kind.clone());
+                }
+                if !entry.body.is_empty() {
+                    item = item.body(self.log_body(&entry.id, &entry.body));
+                }
+                item.build(t)
+            })
+            .collect();
+        if !shown.is_empty() {
+            log = log.push(Block::custom(self.key("log.entries"), entries(shown)));
         }
-        log = log.child(entries);
         let withheld = (document.notes_total - document.notes.len() as i64).max(0);
         if withheld > 0 {
-            log = log.child(self.note(
+            log = log.push(self.note(
                 "log.withheld",
                 format!(
                     "{withheld} more {} on the log.",
@@ -480,147 +438,55 @@ impl Sheet<'_> {
                 ),
             ));
         }
-        log
+        log.build(t)
     }
 }
 
-/// The page's title, `.garden-head__title`.
-const PAGE_TITLE: TextStyle = TextStyle::new(18.0, 600.0).lh(22.5);
+/// How wide the name of a relation runs before the seed it names: "discovered from", the
+/// longest, in `Small`.
+const RELATION_LABEL: f32 = 96.0;
 
-/// How narrow a seed's title gets before its actions wrap under one another instead.
-const TITLE_MIN_WIDTH: f32 = 160.0;
-
-/// A section's heading on a seed's page, `.garden-section h3`.
-const HEADING: TextStyle = TextStyle::new(12.0, 600.0).tracking(0.72);
-
-/// A seed's body and its log entries' words in `ink`, as the Tauri garden reads them: the
-/// file reader's document, in the garden's 13 points with narrower lists.
-fn body_look(ink: rune::Color, t: &Tokens) -> MarkdownStyle {
-    let body = TextStyle {
-        size: 13.0,
-        line_height: 21.1,
-        ..type_::BODY
-    };
-    crate::markdown::look(t)
-        .body_font(body)
-        .list_font(body)
-        .list(21.0, 4.0)
-        .text(ink)
-        .deep_heading(ink)
-}
-
-/// How far a plot has drained, as the Tauri garden's `.garden-progress`: a 160 point bar in
-/// segments for done, growing, parked and withered children and the rest.
-fn progress_bar(here: &Seed, t: &Tokens) -> Option<El> {
+/// How far a plot has drained: done, growing, parked and withered children and the rest.
+fn progress_meter(here: &Seed, t: &Tokens) -> Option<El> {
     let p = here.plot_progress.as_ref().filter(|p| p.total > 0)?;
     let rest = (p.total - p.done - p.growing - p.parked - p.withered).max(0);
-    let segments = [
-        (p.done - p.withered, t.text_muted),
-        (p.growing, t.brand),
-        (p.parked, t.warning),
-        (p.withered, t.error),
-        (rest, t.accent.alpha(0.5)),
-    ];
-    Some(
-        row()
-            .w(160.0)
-            .h(3.0)
-            .clip_rounded(2.0)
-            .gap(1.0)
-            .a11y_hidden()
-            .children(
-                segments
-                    .into_iter()
-                    .filter(|(count, _)| *count > 0)
-                    .map(|(count, color)| rune::el().h_full().grow(count as f32).fill(color)),
-            ),
-    )
+    Some(meter([
+        ((p.done - p.withered) as f32, t.text_muted),
+        (p.growing as f32, t.brand),
+        (p.parked as f32, t.warning),
+        (p.withered as f32, t.error),
+        (rest as f32, t.accent.alpha(0.5)),
+    ]))
 }
 
-/// What a seed's page says about it in passing, as the Tauri garden's `.garden-head__meta`.
-pub(super) fn said(words: impl Into<String>, t: &Tokens) -> El {
-    text(words.into())
-        .font(type_::CAPTION)
-        .color(t.text_tertiary)
+/// What a seed's page says about it in passing.
+pub(super) fn said(said: impl Into<Said>, t: &Tokens) -> El {
+    words(said, Type::Small, t.text_tertiary)
 }
 
-pub(super) fn quiet_note(key: &str, words: impl Into<String>, ink: rune::Color) -> El {
-    let words = words.into();
-    text(words.clone())
-        .key(key.to_owned())
-        .role("note")
-        .label(words)
-        .font(type_::CAPTION)
-        .color(ink)
-        .wrap()
-}
-
-/// How a seed page's words field draws: its type, its padding inside its 1 pt border, its least
-/// height, its corner radius, and its border's colour at rest and in focus.
-pub(super) struct FieldLook {
-    pub font: TextStyle,
-    pub padding: (f32, f32),
-    pub min_height: f32,
-    pub radius: f32,
-    pub edge: fn(&Tokens) -> (Color, Color),
-}
-
-pub(super) const FORM_FIELD: FieldLook = FieldLook {
-    font: type_::BODY,
-    padding: (space::S1, space::S1),
-    min_height: 56.0,
-    radius: 4.0,
-    edge: |t| (t.border, t.brand),
-};
-
-/// The field's 1 pt border draws inside its box and takes no layout room, so the padding holds it.
-const FIELD_EDGE: f32 = 1.0;
-
-/// A seed page's form field for words, which its grip drags taller.
-#[allow(clippy::too_many_arguments)]
+/// A field for words that its grip drags taller.
 pub(super) fn words_field(
-    words: &TextEdit,
+    written: &TextEdit,
     key: String,
     label: &str,
     placeholder: &str,
-    look: &FieldLook,
     lens: impl for<'a> Fn(&'a mut State) -> &'a mut TextEdit + 'static,
     keyed: impl Fn(&mut State, &KeyEvent, &mut Tx) -> bool + 'static,
     t: &Tokens,
 ) -> El {
-    let (rest, focused) = (look.edge)(t);
-    TextArea::new(words)
+    let area = TextArea::new(written)
         .key(key)
-        .width(None)
-        .font(look.font)
-        .padding(look.padding.0 + FIELD_EDGE, look.padding.1 + FIELD_EDGE)
-        .rows(1)
-        .min_height(look.min_height)
+        .rows(2)
         .resizable()
         .label(label.to_owned())
         .placeholder(placeholder.to_owned())
-        .placeholder_ink(t.text_muted)
-        .edge(rest, focused)
         .on_edit(lens)
-        .on_key(keyed)
-        .build(attn_ui::kit(t))
-        .radius(look.radius)
-        .fill(t.bg_input)
-}
-
-pub(super) fn note(key: &str, words: impl Into<String>, t: &Tokens) -> El {
-    let words = words.into();
-    text(words.clone())
-        .key(key.to_owned())
-        .role("note")
-        .label(words)
-        .font(type_::BODY)
-        .color(t.text_secondary)
-        .padding(space::S2)
+        .on_key(keyed);
+    area_box(area, FieldState::Ready, t).into()
 }
 
 /// `body` with each single newline outside a code fence made a hard break, so the lines a log
-/// entry was written in stay lines, as the Tauri log reads it with `breaks`.
+/// entry was written in stay lines.
 fn line_breaks(body: &str) -> String {
     let mut fence: Option<&str> = None;
     let lines: Vec<&str> = body.lines().collect();
@@ -642,44 +508,4 @@ fn line_breaks(body: &str) -> String {
         out.push('\n');
     }
     out
-}
-
-/// A section of a seed's page, as the Tauri garden's `.garden-section`: a rule above it and
-/// its heading in small capitals.
-pub(super) fn page_section(key: &str, title: &str, t: &Tokens) -> El {
-    page_region(key, title, t).child(page_heading(title, t))
-}
-
-/// A section of a seed's page that a control elsewhere on it goes to: its heading takes the
-/// keyboard without being a stop on Tab.
-pub(super) fn section_gone_to(key: &str, title: &str, t: &Tokens) -> El {
-    page_region(key, title, t).child(
-        page_heading(title, t)
-            .key(format!("{key}.heading"))
-            .focusable(true)
-            .tab_index(-1),
-    )
-}
-
-pub(super) fn page_region(key: &str, title: &str, t: &Tokens) -> El {
-    col()
-        .key(key.to_owned())
-        .role("region")
-        .label(title.to_owned())
-        .w_full()
-        .gap(space::S2)
-        .pt(14.0)
-        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-}
-
-pub(super) fn page_heading(title: &str, t: &Tokens) -> El {
-    type_::upper(title, HEADING)
-        .role("heading")
-        .color(t.text_muted)
-}
-
-pub(super) fn meta_word(words: impl Into<String>, t: &Tokens) -> El {
-    text(words.into())
-        .font(type_::LABEL)
-        .color(t.text_secondary)
 }

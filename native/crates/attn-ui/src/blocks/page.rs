@@ -59,14 +59,9 @@ impl Page {
     /// The page in a column keyed `key` that scrolls, inset from its edges.
     pub fn build(self, key: impl Into<String>, t: &Tokens) -> El {
         let first = self.blocks.first().map(|b| b.kind);
-        let head = self.head.map(|head| {
-            let gap = if first == Some(Kind::Prose) {
-                Space::S8
-            } else {
-                Space::S24
-            };
-            door::below(head.build(t), gap)
-        });
+        let head = self
+            .head
+            .map(|head| door::below(head.build(t), head_gap(first)));
         let status = self.status.map(|(key, said, parts)| {
             let shown = !parts.is_empty();
             let line = door::gaps(
@@ -108,11 +103,21 @@ impl Page {
     }
 }
 
+/// The space between a page's head and its first block: a lead reads with the head.
+pub(super) fn head_gap(first: Option<Kind>) -> Space {
+    if first == Some(Kind::Prose) {
+        Space::S8
+    } else {
+        Space::S24
+    }
+}
+
 /// How strongly the blocks of a page whose feature is off are drawn.
 const DIMMED: f32 = 0.45;
 
 /// The head of a page: its title, what the page is for, small print under that, and controls
-/// beside the title, such as the switch that turns the page's feature on.
+/// beside the title, such as the switch that turns the page's feature on. A head with no lead
+/// keeps its controls beside a title that fits on one line beside them.
 pub struct Head {
     key: String,
     title: Said,
@@ -151,7 +156,13 @@ impl Head {
         self
     }
 
-    fn build(self, t: &Tokens) -> El {
+    pub(super) fn build(self, t: &Tokens) -> El {
+        let floor = match &self.lead {
+            None => rune::text::advance(&self.title.text(), door::style(Type::PageTitle))
+                .ceil()
+                .min(COPY_FLOOR),
+            Some(_) => COPY_FLOOR,
+        };
         let title = words(self.title.clone(), Type::PageTitle, t.text_primary)
             .wrap()
             .key(self.key)
@@ -163,7 +174,7 @@ impl Head {
                 .wrap()
                 .max_w(READING)
         });
-        let said = door::gap(col().grow_from(1.0, COPY_FLOOR), Space::S8)
+        let said = door::gap(col().grow_from(1.0, floor), Space::S8)
             .child(title)
             .children(lead)
             .children(self.note.map(|note| note.max_w(READING)));

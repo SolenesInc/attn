@@ -15,12 +15,15 @@ pub(crate) mod sending;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use attn_ui::type_;
+use attn_ui::blocks::{DOCUMENT_EDGE, DOCUMENT_GUTTER, Inline, Stack, Surface, document_inset};
+use attn_ui::system::{
+    Button as AttnButton, Reading, Size, Type, dot_on_line, read_as as set_in, read_aside,
+    words as attn_words,
+};
 use attn_ui::{GlyphButton, Tokens, glyph};
-use rune::tok::{radius, space};
-use rune::{Color, El, Image, LinkPaint, ScrollSpec, Span, TextStyle, Tx, col, memo, text};
+use rune::tok::space;
+use rune::{Color, El, Image, LinkPaint, ScrollSpec, Span, Tx, col, memo, text};
 use rune_kit::ScrollBar;
-use rune_kit::syntax::Syntax;
 use rune_kit::{CodeFrame, ImageFrame, Markdown, MarkdownStyle, MissingImage};
 
 use crate::State;
@@ -31,48 +34,23 @@ pub use images::Pictures;
 pub(crate) use images::{follow as follow_images, over as with_image_preview};
 pub(crate) use links::Document;
 
-/// The widest paragraphs, lists, quotes and headings run, as the Tauri reader's
-/// `--md-prose-measure` caps them; tables, code, diagrams and front matter take the card.
-const PROSE_MEASURE: f32 = 760.0;
-const CARD_BORDER: f32 = 1.0;
-
-/// The Tauri reader's card padding for the room inside the tile's gutter: 1.25rem, then 2, 2.5
-/// and 3rem from 768, 1024 and 1280 points (its CSS container queries, at a 14 point rem).
-fn card_padding(room: f32) -> f32 {
-    match room {
-        r if r >= 1280.0 => 42.0,
-        r if r >= 1024.0 => 35.0,
-        r if r >= 768.0 => 28.0,
-        _ => 17.5,
-    }
-}
-
+/// The widest paragraphs, lists, quotes and headings run; tables, code, diagrams and front
+/// matter take the card.
+const PROSE_MEASURE: f32 = attn_ui::blocks::DOCUMENT;
 /// The reader's card around `reading`, `padding` inside its border.
 pub(crate) fn card(padding: f32, reading: El, t: &Tokens) -> El {
-    col()
-        .w_full()
-        .padding(padding)
-        .radius(radius::LG)
-        .fill(t.bg_panel)
-        .border(CARD_BORDER, t.border.alpha(0.5))
-        .child(reading)
-}
-
-/// The padding of a card `width` points across and the text column it leaves.
-pub(crate) fn card_inside(width: f32) -> (f32, f32) {
-    let padding = card_padding(width);
-    (padding, (width - 2.0 * (padding + CARD_BORDER)).max(0.0))
+    Surface::document(reading, padding, t)
 }
 
 /// The card's padding and the text column inside it, in a document view `area` points across,
 /// for a card at most `widest` points wide.
 fn card_fit(area: Option<u32>, widest: f32) -> (f32, Option<f32>) {
     let Some(area) = area else {
-        return (card_padding(0.0), None);
+        return (document_inset(0.0), None);
     };
-    let room = area as f32 - 2.0 * space::S3;
-    let padding = card_padding(room);
-    let text = room.min(widest) - 2.0 * (padding + CARD_BORDER);
+    let room = area as f32 - 2.0 * DOCUMENT_GUTTER;
+    let padding = document_inset(room);
+    let text = room.min(widest) - 2.0 * (padding + DOCUMENT_EDGE);
     (padding, Some(text.max(0.0)))
 }
 
@@ -114,7 +92,7 @@ pub(crate) fn body(
     let marks = annotating::highlights(drafts.get(&uri), readings.tiles.get(tile), tile, t);
     let kept = readings.kept(&view);
     let (widest, measure) = if content.review.is_some() {
-        (crate::review::CARD_MAX_WIDTH, crate::review::PROSE_MEASURE)
+        (crate::review::CARD_MAX_WIDTH, PROSE_MEASURE)
     } else {
         (f32::INFINITY, PROSE_MEASURE)
     };
@@ -143,12 +121,7 @@ pub(crate) fn body(
             .items_center()
             .child(card)
             .scroll_bar_styled(attn_ui::document_scroll_bar(t));
-        col()
-            .key(gutter.clone())
-            .w_full()
-            .grow(1.0)
-            .min_h(0.0)
-            .padding(space::S3)
+        Surface::gutter(col().key(gutter.clone()).w_full().grow(1.0).min_h(0.0))
             .on_layout_tx({
                 let view = view.clone();
                 move |state: &mut State, [_, _, w, _], tx: &mut Tx| {
@@ -437,127 +410,9 @@ fn details_order(source: &str) -> Rc<dyn Fn(usize) -> usize> {
     Rc::new(move |at| starts.partition_point(|&start| start < at))
 }
 
-/// The Tauri reader's type, colours, marks and spacing (MarkdownReader.css, at its 14 point
-/// rem): 15 point paragraphs and 14 point list items at 90% of the text colour, headings
-/// stepping from the full colour down to 80%, list markers in the accent, ring checkboxes and
-/// struck finished tasks, italic quotes on an accent bar, 13 point code in GitHub's colours on
-/// a half-tinted card that scrolls sideways, tables across the text with 1 point rules, and
-/// diagrams in mermaid's 16 point labels. Blocks space by the stylesheet's margins.
+/// How the reader draws a document.
 pub(crate) fn look(t: &Tokens) -> MarkdownStyle {
-    let kit = attn_ui::kit(t);
-    let text = t.text_primary.alpha(0.9);
-    let body = font(t, None);
-    let small = TextStyle {
-        size: 14.0,
-        line_height: 22.75,
-        ..body
-    };
-    let code = attn_ui::colors::syntax(t.dark);
-    MarkdownStyle::from_kit(kit)
-        .prose_measure(PROSE_MEASURE)
-        .text(text)
-        .body_font(body)
-        .heading_font(1, font(t, Some(1)))
-        .heading_font(2, font(t, Some(2)))
-        .heading_font(3, font(t, Some(3)))
-        .heading_font(4, font(t, Some(4)))
-        .heading_text(1, t.text_primary)
-        .heading_text(2, text)
-        .heading_text(3, t.text_primary.alpha(0.8))
-        .deep_heading(t.text_primary)
-        .paragraph_margin(14.0)
-        .heading_margin(1, 21.0, 14.0)
-        .heading_margin(2, 28.0, 10.5)
-        .heading_margin(3, 21.0, 7.0)
-        .heading_margin(4, 14.0, 7.0)
-        .heading_margins_collapse(true)
-        .list_font(small)
-        .list_marker(t.accent.alpha(0.6))
-        .list(21.0, 5.25)
-        .list_margin(5.25, 5.25)
-        .list_markers_outside(true)
-        .list_marker_gap(9.0)
-        .list_tabular_figures(true)
-        .link_underline(Color::TRANSPARENT)
-        .inline_code_size(12.25)
-        .inline_code_font(1.0, 400.0)
-        .inline_code_pad(5.25)
-        .inline_code_pad_y(1.75)
-        .inline_code_bg(t.bg_elevated)
-        .code_block_font(TextStyle {
-            size: 13.0,
-            line_height: 20.0,
-            ..kit.ty.mono
-        })
-        .code_block(t.bg_elevated.alpha(0.5), t.border.alpha(0.3))
-        .code_block_padding(16.0, 12.0)
-        .code_margin(17.5, 17.5)
-        .code_block_text(code.color(Syntax::Variable))
-        .syntax_theme(code)
-        .quote(t.accent.alpha(0.5), 2.0, 14.0, t.text_secondary)
-        .quote_italic(true)
-        .quote_margin(14.0, 14.0)
-        .rule(t.border.alpha(0.3))
-        .rule_margin(28.0, 28.0)
-        .lines(1.0)
-        .table_font(TextStyle {
-            line_height: 21.0,
-            ..small
-        })
-        .table_outline(None)
-        .table_header_rule(t.border)
-        .table_rules(t.border.alpha(0.5))
-        .table_header_fill(t.bg_elevated.alpha(0.3))
-        .table_header_text(text)
-        .table_text(t.text_primary.alpha(0.8))
-        .table_header_weight(600.0)
-        .table_cell_padding(10.5, 7.0)
-        .table_margin(14.0, 14.0)
-        .table_full_width(true)
-        .table_scroll_bar(t.border, t.text_tertiary)
-        .code_scroll_bar(attn_ui::code_scroll_bar(t))
-        .diagram_font(TextStyle {
-            size: 16.0,
-            line_height: 24.0,
-            ..body
-        })
-        .task_checkbox(
-            16.0,
-            8.0,
-            8.0,
-            None,
-            Color::TRANSPARENT,
-            t.success,
-            Color::TRANSPARENT,
-            t.text_secondary.alpha(0.5),
-        )
-        .task_checked(Color::TRANSPARENT, t.success, t.success)
-        .task_ring(2.0, 11.0)
-        .task_done(t.text_secondary)
-}
-
-/// The reader's paragraph font, or its font for headings of `level`: the `h1` set tight.
-pub(crate) fn font(t: &Tokens, level: Option<u8>) -> TextStyle {
-    let body = TextStyle {
-        size: 15.0,
-        line_height: 24.4,
-        ..attn_ui::kit(t).ty.body
-    };
-    let heading = |size: f32, weight: f32, line_height: f32| TextStyle {
-        size,
-        weight,
-        line_height,
-        ..body
-    };
-    match level {
-        None => body,
-        Some(1) => TextStyle {
-            tracking: -0.025 * 19.25,
-            ..heading(19.25, 700.0, 25.0)
-        },
-        Some(2) => heading(16.625, 600.0, 23.3),
-        Some(_) => heading(14.0, 600.0, 21.7),
-    }
+    attn_ui::system::document_style(t)
 }
 
 /// An image with no picture to show, in the Tauri reader's words: for a document's local file,
@@ -579,13 +434,7 @@ fn missing(image: &MissingImage<'_>, failed: Option<bool>, t: &Tokens) -> El {
             format!("[blocked image: {named}]")
         }
     };
-    text(words)
-        .font(TextStyle {
-            size: 15.0,
-            line_height: 24.4,
-            italic: true,
-            ..attn_ui::kit(t).ty.body
-        })
+    read_aside(text(words), Reading::Text, t)
         .color(t.text_tertiary)
         .wrap()
 }
@@ -642,14 +491,9 @@ fn with_copy(card: El, frame: &CodeFrame<'_>, view: &str, copied: Option<usize>,
 
 /// A diagram that cannot draw, shown as its source under a note that says so.
 fn not_drawn(source: El, t: &Tokens) -> El {
-    col()
+    Stack::tight()
         .w_full()
-        .gap(space::S1)
-        .child(
-            text("Diagram failed to render")
-                .font(type_::LABEL)
-                .color(t.error),
-        )
+        .child(attn_words("Diagram failed to render", Type::Small, t.error))
         .child(source)
 }
 
@@ -677,54 +521,45 @@ fn framed(card: El, frame: &rune_kit::DiagramFrame<'_>, bars: &str, t: &Tokens) 
         .flatten()
         .filter(|fitted| fitted.scale < LEAST_FIT)
         .and_then(|_| natural(frame.source, t));
-    let label = text("diagram")
-        .font(TextStyle {
-            size: 12.0,
-            line_height: 16.0,
-            tracking: 0.2,
-            ..attn_ui::kit(t).ty.mono
-        })
-        .color(t.text_tertiary);
+    let label = attn_words("diagram", Type::Mono, t.text_tertiary);
     let Some(drawing) = large else {
-        return col().w_full().gap(space::S1).child(label).child(card);
+        return Stack::tight().w_full().child(label).child(card);
     };
     let (source, size) = (frame.source.to_owned(), drawing.size);
-    let bar = rune::row()
-        .w_full()
+    let bar = Inline::top()
         .items_center()
-        .gap(space::S2)
         .child(label.grow(1.0))
         .child(
-            rune::row()
-                .items_center()
-                .gap(space::S1)
-                .child(rune::el().size(6.0, 6.0).radius(3.0).fill(t.warning))
-                .child(
-                    text("Large diagram · 100%")
-                        .font(TextStyle::new(12.0, 400.0))
-                        .color(t.text_tertiary),
-                ),
+            Inline::joined()
+                .child(dot_on_line(t.warning, Type::Small))
+                .child(attn_words(
+                    "Large diagram · 100%",
+                    Type::Small,
+                    t.text_tertiary,
+                )),
         )
         .child(
-            rune_kit::Button::new("Focus diagram")
+            AttnButton::new("Focus diagram")
+                .size(Size::Compact)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     images::show_diagram(state, &source, size, tx)
                 })
-                .build(attn_ui::kit(t))
-                .key("focus"),
+                .build(t)
+                .key("focus")
+                .into(),
         );
-    let scrolled = col()
-        .key(format!("{bars}diagram-{}", frame.index))
-        .w_full()
-        .max_h(LARGE_HEIGHT)
-        .padding(16.0)
-        .radius(radius::MD)
-        .border(1.0, drawing.surface_border)
-        .fill(drawing.surface)
-        .scroll_xy()
-        .child(drawing.el)
-        .scroll_bar_styled(attn_ui::document_scroll_bar(t).both_ways());
-    col().w_full().gap(space::S1).child(bar).child(scrolled)
+    let scrolled = Surface::figure(
+        col()
+            .key(format!("{bars}diagram-{}", frame.index))
+            .w_full()
+            .max_h(LARGE_HEIGHT)
+            .scroll_xy()
+            .child(drawing.el),
+        drawing.surface,
+        drawing.surface_border,
+    )
+    .scroll_bar_styled(attn_ui::document_scroll_bar(t).both_ways());
+    Stack::tight().w_full().child(bar).child(scrolled)
 }
 
 /// A drawn diagram, with what it leaves out because it cannot read it said under it.
@@ -737,40 +572,32 @@ fn leaves_out(card: El, frame: &rune_kit::DiagramFrame<'_>, t: &Tokens) -> El {
     if skipped.is_empty() {
         return card;
     }
-    col()
+    Stack::tight()
         .w_full()
-        .gap(space::S1)
         .child(card)
-        .child(
-            text("This diagram leaves out what it cannot read:")
-                .font(type_::LABEL)
-                .color(t.error),
-        )
+        .child(attn_words(
+            "This diagram leaves out what it cannot read:",
+            Type::Small,
+            t.error,
+        ))
         .children(
             skipped
                 .into_iter()
-                .map(|statement| text(statement).font(type_::MONO_CAPTION).color(t.error)),
+                .map(|statement| attn_words(statement, Type::Mono, t.error)),
         )
 }
 
 /// What the tile body says in place of a document, where the document's first line would
 /// start: the Tauri tile's italic quiet note, or its error in a softened red.
 fn message(t: &Tokens, message: &str, error: bool) -> El {
-    let (italic, color) = if error {
-        (
-            false,
-            attn_ui::colors::mix_srgb(t.error, Color::WHITE, 0.24),
-        )
+    let said = if error {
+        set_in(text(message), Reading::Text, t).color(attn_ui::colors::mix_srgb(
+            t.error,
+            Color::WHITE,
+            0.24,
+        ))
     } else {
-        (true, t.text_tertiary)
+        read_aside(text(message), Reading::Text, t).color(t.text_tertiary)
     };
-    col().w_full().h_full().pt(16.0).px(space::S3).child(
-        text(message)
-            .font(TextStyle {
-                italic,
-                ..type_::BODY
-            })
-            .color(color)
-            .wrap(),
-    )
+    Surface::gutter(col().w_full().h_full().child(said.wrap()))
 }

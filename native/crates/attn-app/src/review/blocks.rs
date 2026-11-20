@@ -6,9 +6,9 @@ use std::rc::Rc;
 
 use attn_protocol::{MarkdownAnnotation, ReviewRow, ReviewStop};
 use attn_ui::Tokens;
-use attn_ui::type_;
+use attn_ui::blocks::{Stack, edged};
+use attn_ui::system::{Reading, read_as};
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd, TextMergeStream};
-use rune::tok::{radius, space};
 use rune::{El, Image, Link, Span, col, text};
 use rune_kit::markdown::Markdown;
 
@@ -444,7 +444,7 @@ fn worded(ops: &[(Op, Word)], key: String, document: &Document, t: &Tokens) -> E
         spans.push(span);
     }
     let document = document.clone();
-    linked
+    let worded = linked
         .into_iter()
         .map(|(range, href)| Link::new(range, href))
         .fold(text(said), El::link)
@@ -459,12 +459,12 @@ fn worded(ops: &[(Op, Word)], key: String, document: &Document, t: &Tokens) -> E
             added.join(" "),
             removed.join(" ")
         ))
-        .font(type_::BODY)
         .color(t.text_primary)
         .spans(spans)
         .strikes(strikes)
         .span_radius(3.0)
-        .wrap()
+        .wrap();
+    read_as(worded, Reading::Text, t)
 }
 
 /// The file a stop is on, which its blocks' links and images resolve from, and the pictures
@@ -479,21 +479,24 @@ fn drawn(source: &str, (document, pictures): File, t: &Tokens) -> El {
         pictures.clone(),
         t,
     )
+    .style(crate::markdown::look(t))
     .build(attn_ui::kit(t))
 }
 
 /// Markdown a block was, drawn as the document drew it, dimmed in a removed frame.
 fn was(source: &str, key: String, file: File, t: &Tokens) -> El {
-    col()
-        .key(key)
-        .role("group")
-        .description("removed")
-        .w_full()
-        .px(space::S2)
-        .border_sides([0.0, 0.0, 0.0, 2.0], t.error)
-        .fill(t.error.alpha(0.06))
-        .opacity(0.7)
-        .child(drawn(source, file, t))
+    edged(
+        col().w_full().child(drawn(source, file, t)),
+        t.error,
+        false,
+        t,
+    )
+    .key(key)
+    .role("group")
+    .description("removed")
+    .w_full()
+    .fill(t.error.alpha(0.06))
+    .opacity(0.7)
 }
 
 /// A stop on a markdown file keyed `key`, drawn as its blocks, with the cursor on block
@@ -517,7 +520,7 @@ pub(super) fn view(
                 .iter()
                 .any(|b| n.now_from > 0 && within(b, n.now_to))
         })
-        .map(|n| super::stop::note(n, super::stop::note_indent(t), t));
+        .map(|n| super::stop::note(n, super::stop::note_indent(), t));
     let shown = read.blocks.iter().enumerate().flat_map(|(i, b)| {
         let keyed = super::stop::row_key(key, i);
         let before = b
@@ -526,8 +529,7 @@ pub(super) fn view(
             .map(|d| was(d, format!("{keyed}.deleted"), file, t));
         let body = match rewording(b) {
             Some(ops) => col().child(worded(&ops, format!("{keyed}.words"), file.0, t)),
-            None => col()
-                .gap(space::S1)
+            None => Stack::tight()
                 .children(
                     b.was
                         .as_deref()
@@ -536,7 +538,14 @@ pub(super) fn view(
                 .child(drawn(&b.source, file, t)),
         };
         let in_range = b.from <= stop.now_to && b.to >= stop.now_from;
-        let block = body
+        let edge = if b.changed {
+            t.success
+        } else if in_range {
+            t.border
+        } else {
+            t.border.alpha(0.0)
+        };
+        let block = edged(body.w_full(), edge, cursor == Some(i), t)
             .key(keyed.clone())
             .role("group")
             .label(format!(
@@ -549,36 +558,19 @@ pub(super) fn view(
                     b.from.to_string()
                 }
             ))
-            .w_full()
-            .px(space::S2)
-            .py(space::S1)
-            .radius(radius::SM)
-            .border_sides(
-                [0.0, 0.0, 0.0, 3.0],
-                if b.changed {
-                    t.success
-                } else if in_range {
-                    t.border
-                } else {
-                    t.border.alpha(0.0)
-                },
-            );
+            .w_full();
         let block = match selected {
             Some((a, b)) if i >= a && i <= b && cursor != Some(i) => {
                 block.fill(t.accent.alpha(0.1))
             }
             _ => block,
         };
-        let block = super::place_press(
-            super::cursor_frame(block, cursor == Some(i), t),
-            tile,
-            keyed,
-        );
+        let block = super::place_press(block, tile, keyed);
         let notes = stop
             .notes
             .iter()
             .filter(move |n| n.now_from > 0 && within(b, n.now_to))
-            .map(|n| super::stop::note(n, super::stop::note_indent(t), t));
+            .map(|n| super::stop::note(n, super::stop::note_indent(), t));
         let marked = marks
             .iter()
             .filter(move |(at, _)| within(b, *at))
@@ -594,8 +586,8 @@ pub(super) fn view(
         .removed_after
         .as_deref()
         .map(|d| was(d, format!("{key}.removed"), file, t));
-    let empty =
-        (read.blocks.is_empty() && read.removed_after.is_none()).then(|| super::stop::empty(t));
+    let empty = (read.blocks.is_empty() && read.removed_after.is_none())
+        .then(|| super::stop::empty(key, t));
     let first = read
         .blocks
         .iter()
@@ -616,6 +608,7 @@ pub(super) fn view(
     });
     super::stop::card(key, stop, rows, t)
         .child(super::stop::header(
+            key,
             stop,
             rows,
             editor.into_iter().chain([source]),

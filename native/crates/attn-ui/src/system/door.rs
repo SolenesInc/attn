@@ -46,6 +46,11 @@ pub(crate) fn mono_span(span: Span) -> Span {
     span.mono().size(style(Type::Mono).size)
 }
 
+/// `e` inset by a reading measure that has its own receipt, such as a document card's.
+pub(crate) fn padded(e: El, points: f32) -> El {
+    e.padding(points)
+}
+
 pub(crate) fn gap(e: El, gap: Space) -> El {
     e.gap(gap.pt())
 }
@@ -116,6 +121,16 @@ pub(crate) fn frame(e: El, top: Space, x: Space, bottom: Space) -> El {
     e.pt(top.pt()).px(x.pt()).pb(bottom.pt())
 }
 
+/// `e` starting `points` before its parent's start, where a clipping parent hides it.
+pub(crate) fn behind_start(e: El, points: f32) -> El {
+    e.ml(-points)
+}
+
+/// `e` drawing nothing past its box.
+pub(crate) fn clip(e: El) -> El {
+    e.clip_rounded(0.0)
+}
+
 pub(crate) fn clip_corner(e: El, radius: Radius) -> El {
     e.clip_rounded(radius.pt())
 }
@@ -179,6 +194,12 @@ pub(crate) fn width(said: &str, kind: Type) -> f32 {
 /// How wide a mark of text stands at `size`.
 pub(crate) fn mark_width(said: &str, size: super::IconSize) -> f32 {
     rune::text::measure(said, &[], mark(size), None).0
+}
+
+/// `e` inset by `inset` on both sides and reaching out by as much, so what it holds stays on
+/// the column's line while its box spans the inset.
+pub(crate) fn reach(e: El, inset: Space) -> El {
+    e.px(inset.pt()).ml(-inset.pt()).mr(-inset.pt())
 }
 
 pub(crate) fn mark_text(said: String, size: super::IconSize) -> El {

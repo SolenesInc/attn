@@ -128,6 +128,11 @@ impl Facts {
     }
 
     pub fn build(self, t: &Tokens) -> Block {
+        Block::new(Kind::Facts, self.el(t))
+    }
+
+    /// The facts on their own, for a place that is not a page, such as a document's card.
+    pub fn el(self, t: &Tokens) -> El {
         let mut list = if self.tiles {
             door::gaps(
                 row().w_full().flex_wrap().items_start(),
@@ -143,18 +148,15 @@ impl Facts {
             list = list.role("list").label(name);
         }
         let tiles = self.tiles;
-        Block::new(
-            Kind::Facts,
-            list.children(self.facts.into_iter().map(|fact| {
-                let said = fact.said();
-                let fact = if tiles { fact.tile(t) } else { fact.line(t) };
-                if items {
-                    fact.role("listitem").label(said)
-                } else {
-                    fact
-                }
-            })),
-        )
+        list.children(self.facts.into_iter().map(|fact| {
+            let said = fact.said();
+            let fact = if tiles { fact.tile(t) } else { fact.line(t) };
+            if items {
+                fact.role("listitem").label(said)
+            } else {
+                fact
+            }
+        }))
     }
 }
 

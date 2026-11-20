@@ -748,12 +748,11 @@ fn a_documents_front_matter_shows_as_a_card_of_its_top_level_fields() {
     assert_eq!(
         card,
         [
-            "title:",
-            "Launch plan",
-            "tags:",
+            "title Launch plan",
+            "tags",
             "native",
             "reader",
-            "owners:",
+            "owners",
             "ana",
             "bo"
         ]
@@ -790,10 +789,10 @@ fn a_long_front_matter_value_wraps_inside_its_card() {
     world.settle();
     let screen = world.screen();
     let [_, _, _, line] = screen
-        .bounds(Target::role("label").name("brief"))
+        .bounds(Target::key("front-matter.0"))
         .expect("a short value");
     let [_, _, _, value] = screen
-        .bounds(Target::role("label").name(repository))
+        .bounds(Target::key("front-matter.1"))
         .expect("the repository value");
     assert!(
         value > line * 1.5,
@@ -1344,15 +1343,18 @@ fn a_wide_document_tile_centers_prose_at_its_reading_measure_and_wide_blocks_acr
     }
     assert_eq!(
         prose.iter().map(|[_, w]| *w).collect::<Vec<_>>(),
-        [760.0; 3],
-        "prose keeps the reading measure"
+        [attn_ui::blocks::DOCUMENT; 3],
+        "prose keeps the document measure"
     );
     let axis = x + document / 2.0;
     centered_on(&prose, axis);
     centered_on(&wide, axis);
 
     let (prose, wide, [x, document]) = measured_at(900.0);
-    assert!(document < 760.0, "the tile is narrow: {document}");
+    assert!(
+        document < attn_ui::blocks::DOCUMENT,
+        "the tile is narrow: {document}"
+    );
     let text = wide[0][1];
     for [_, w] in prose.iter().chain(&wide) {
         assert!(

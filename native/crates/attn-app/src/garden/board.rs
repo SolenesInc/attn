@@ -2,12 +2,13 @@ use std::sync::Arc;
 
 use attn_protocol::{Seed, SeedNoteMessage, SeedTransitionMessage, SeedTransitionResultMessage};
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{
-    El, Key, KeyEvent, Phase, ScrollSpec, TextEdit, Tx, col, el, memo, row, text, text_input,
+use attn_ui::blocks::{
+    Bar, Byline, Card, Inline, Lane, Prose, Stack, Standing, Surface, Trail, board as board_body,
+    lanes,
 };
-use rune_kit::ScrollBar;
+use attn_ui::system::{FieldState, Link, ListRow, Type, line_box, words};
+use rune::{El, Key, KeyEvent, Phase, TextEdit, Tx, col, el, memo};
+use rune_kit::TextInput;
 
 use super::model::{self, SessionNames};
 use crate::State;
@@ -267,43 +268,32 @@ fn slot(column: Column) -> usize {
 }
 
 fn standby_marker(standby: &model::Standby, t: &Tokens) -> El {
-    let quiet = |words: String| text(words).font(type_::LABEL).color(t.text_secondary);
-    let line = row()
-        .items_center()
-        .gap(space::S2)
+    let quiet = |said: String| words(said, Type::Small, t.text_secondary);
+    let line = Byline::new()
         .wrap()
-        .child(text("standby").font(type_::LABEL).color(t.warning))
-        .children(standby.pull_requests.iter().map(|pr| {
+        .push(words("standby", Type::Small, t.warning))
+        .push_all(standby.pull_requests.iter().map(|pr| {
             let ready = pr.word == "ready";
-            text(format!("{} {}", pr.number, pr.word))
-                .help(pr.title.clone())
-                .font(if ready {
-                    rune::TextStyle {
-                        weight: 600.0,
-                        ..type_::LABEL
-                    }
-                } else {
-                    type_::LABEL
-                })
-                .color(if ready { t.success } else { t.text_secondary })
+            words(
+                format!("{} {}", pr.number, pr.word),
+                if ready { Type::Name } else { Type::Small },
+                if ready { t.success } else { t.text_secondary },
+            )
+            .help(pr.title.clone())
         }))
-        .children(standby.reminder_words().map(quiet));
-    col()
-        .gap(2.0)
+        .push_all(standby.reminder_words().map(quiet))
+        .build(t);
+    Stack::tight()
         .child(line)
         .children((!standby.note.is_empty()).then(|| {
-            text(standby.note.clone())
+            words(standby.note.clone(), Type::Small, t.text_secondary)
                 .help(standby.note.clone())
-                .font(type_::LABEL)
-                .color(t.text_secondary)
                 .single_line()
                 .truncate()
         }))
-        .children(standby.blocked_words().map(|words| {
-            text(words)
+        .children(standby.blocked_words().map(|said| {
+            words(said, Type::Small, t.warning)
                 .help(standby.resume_blocked.clone())
-                .font(type_::LABEL)
-                .color(t.warning)
                 .single_line()
                 .truncate()
         }))
@@ -338,9 +328,9 @@ fn age(iso: &str, now_ms: i64) -> String {
     }
 }
 
-fn plot_counts(seed: &Seed) -> String {
+fn plot_counts(seed: &Seed) -> Vec<String> {
     let Some(p) = &seed.plot_progress else {
-        return String::new();
+        return Vec::new();
     };
     let mut parts = Vec::new();
     for (count, word) in [
@@ -354,7 +344,7 @@ fn plot_counts(seed: &Seed) -> String {
         }
     }
     parts.push(format!("{}/{} done", p.done, p.total));
-    parts.join(" · ")
+    parts
 }
 
 fn empty_line(column: Column, place: &Place) -> String {
@@ -807,70 +797,44 @@ pub(super) fn view(state: &State, t: &Tokens) -> El {
         .min_h(0.0)
         .on_key(key)
         .child(header(state, &place, t));
-    if !place.trail.is_empty() {
-        page = page.child(trail(&place, t));
-    }
     if let Some(error) = &walk.error {
         page = page.child(
-            row()
-                .key("garden.board.error")
-                .role("alert")
-                .label(error.clone())
-                .gap(space::S2)
-                .padding(space::S2)
-                .items_center()
-                .child(
-                    text(error.clone())
-                        .font(type_::BODY)
-                        .color(t.error)
-                        .grow(1.0),
+            Bar::new("garden.board.error")
+                .lead(words(error.clone(), Type::Body, t.error).wrap())
+                .push(
+                    super::view::quiet("Dismiss")
+                        .on_press(|state: &mut State| board(state).error = None)
+                        .build(t)
+                        .key("garden.board.error.dismiss"),
                 )
-                .child(
-                    super::view::button("garden.board.error.dismiss".into(), "Dismiss", t)
-                        .on_press(|state: &mut State| board(state).error = None),
-                ),
+                .build(t)
+                .role("alert")
+                .label(error.clone()),
         );
     }
+    let mut parts = Vec::new();
     if seeds.is_empty() {
-        page = page.child(
-            text("The garden is empty. attn seed plant \"what this is\" puts something in it.")
-                .key("garden.board.empty")
-                .role("note")
-                .label(
-                    "The garden is empty. attn seed plant \"what this is\" puts something in it.",
-                )
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .padding(space::S3),
+        parts.push(
+            Prose::empty(
+                "garden.board.empty",
+                "The garden is empty. `attn seed plant \"what this is\"` puts something in it.",
+            )
+            .el(t),
         );
     } else {
-        let mut columns = row()
-            .key("garden.board.columns")
-            .w_full()
-            .grow(1.0)
-            .min_h(0.0)
-            .gap(space::S2)
-            .padding(space::S2);
-        for column in COLUMNS {
-            columns = columns.child(column_view(state, &place, &names, column, t));
-        }
-        page = page.child(columns);
+        parts.push(lanes(
+            "garden.board.columns",
+            COLUMNS.map(|column| column_view(state, &place, &names, column, t)),
+        ));
     }
     if total > seeds.len() as i64 {
-        let words = format!(
+        let said = format!(
             "The garden holds {total} seeds; this board has the newest {}.",
             seeds.len()
         );
-        page = page.child(
-            text(words.clone())
-                .key("garden.board.capped")
-                .role("note")
-                .label(words)
-                .font(type_::LABEL)
-                .color(t.text_muted)
-                .padding(space::S2),
-        );
+        parts.push(Prose::empty("garden.board.capped", said).el(t));
     }
+    page = page.child(board_body("garden.board.page", parts));
     let mut layer = el().w_full().h_full().child(page);
     if let Some(carry) = carry(walk, t) {
         layer = layer.child(carry);
@@ -879,44 +843,36 @@ pub(super) fn view(state: &State, t: &Tokens) -> El {
 }
 
 fn header(state: &State, place: &Place, t: &Tokens) -> El {
-    row()
-        .key("garden.board.header")
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .padding(space::S2)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-        .child(
-            text("The garden")
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .grow(1.0),
+    let lead = if place.trail.is_empty() {
+        words("The garden", Type::Small, t.text_secondary)
+    } else {
+        trail(place, t)
+    };
+    Bar::new("garden.board.header")
+        .lead(lead)
+        .push(super::view::view_switch(state, t))
+        .push(
+            words(place.scoped.to_string(), Type::Small, t.text_tertiary).key("garden.board.total"),
         )
-        .child(super::view::view_switch(state, t))
-        .child(
-            text(place.scoped.to_string())
-                .key("garden.board.total")
-                .font(type_::LABEL)
-                .color(t.text_muted),
+        .push(
+            super::view::quiet("Close")
+                .on_press(|state: &mut State| super::close(state))
+                .build(t)
+                .key("garden.board.close"),
         )
-        .child(
-            super::view::button("garden.board.close".into(), "Close", t)
-                .on_press(|state: &mut State| super::close(state)),
-        )
+        .build(t)
 }
 
 fn trail(place: &Place, t: &Tokens) -> El {
-    let mut nav = row()
-        .key("garden.board.trail")
-        .role("navigation")
-        .label("Where you are")
-        .items_center()
-        .gap(space::S1)
-        .padding(space::S2)
-        .child(
-            super::view::button("garden.board.trail.0".into(), "Garden", t)
-                .on_press_tx(|state: &mut State, tx: &mut Tx| climb_to(state, 0, tx)),
-        );
+    let step = |key: String, said: String, depth: usize| -> El {
+        let link: El = Link::new(key, said).build(t).into();
+        link.on_press_tx(move |state: &mut State, tx: &mut Tx| climb_to(state, depth, tx))
+    };
+    let mut nav = Trail::new("garden.board.trail", "Where you are").step(step(
+        "garden.board.trail.0".into(),
+        "Garden".into(),
+        0,
+    ));
     let last = place.trail.len() - 1;
     for (depth, id) in place.trail.iter().enumerate() {
         let title = place
@@ -924,25 +880,14 @@ fn trail(place: &Place, t: &Tokens) -> El {
             .by_id
             .get(id)
             .map_or_else(|| id.clone(), |s| s.title.clone());
-        nav = nav.child(
-            text("›")
-                .font(type_::LABEL)
-                .color(t.text_muted)
-                .a11y_hidden(),
-        );
-        let step = super::view::kit_button(title)
-            .disabled(depth == last)
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| climb_to(state, depth + 1, tx));
-        nav = nav.child(
-            step.build(attn_ui::kit(t))
-                .key(format!("garden.board.trail.{}", depth + 1)),
-        );
+        let key = format!("garden.board.trail.{}", depth + 1);
+        nav = nav.step(if depth == last {
+            El::from(Link::new(key, title).ink(t.text_primary).build(t)).disabled(true)
+        } else {
+            step(key, title, depth + 1)
+        });
     }
-    nav.child(
-        text(place.trail[last].clone())
-            .font(type_::LABEL)
-            .color(t.text_muted),
-    )
+    nav.build(t)
 }
 
 fn column_view(
@@ -960,52 +905,42 @@ fn column_view(
     let zones = dragging.map_or_else(Vec::new, |d| legal_verbs(&d.seed.status, column));
     let hovered = dragging.is_some_and(|d| d.column == Some(column)) && !zones.is_empty();
     let count = place.count(column);
-    let mut head = row()
-        .items_center()
-        .gap(space::S2)
-        .child(
-            text(column.label())
-                .role("heading")
-                .label(column.label())
-                .font(type_::SECTION)
-                .color(t.text_primary),
-        )
-        .child(
-            text(count.to_string())
-                .font(type_::LABEL)
-                .color(t.text_muted),
-        );
+    let mut lane = Lane::new(
+        format!("{COLUMN_PREFIX}{}", column.name()),
+        format!("garden.board.body.{}", column.name()),
+        column.label(),
+        count,
+    )
+    .lit(hovered)
+    .faded(dragging.is_some() && zones.is_empty());
     if column == Column::Closed && !cards.is_empty() {
-        head = head.child(
-            super::view::button(
-                "garden.board.closed.reveal".into(),
-                if walk.closed_open { "hide" } else { "show" },
-                t,
-            )
-            .expanded(walk.closed_open)
-            .on_press(|state: &mut State| {
-                let walk = board(state);
-                walk.closed_open = !walk.closed_open;
-            }),
+        lane = lane.aside(
+            super::view::quiet(if walk.closed_open { "hide" } else { "show" })
+                .expanded(walk.closed_open)
+                .on_press(|state: &mut State| {
+                    let walk = board(state);
+                    walk.closed_open = !walk.closed_open;
+                })
+                .build(t)
+                .key("garden.board.closed.reveal"),
         );
     }
-    let mut body = col().w_full().gap(space::S1);
     if let Some(compose) = composing {
-        body = body.child(composer(compose, &walk.words, names, t));
+        lane = lane.push(composer(compose, &walk.words, names, t));
     }
     if collapsed {
         let harvested = cards.iter().filter(|s| s.status == "harvested").count();
         let withered = cards.len() - harvested;
-        let words = if cards.is_empty() {
+        let said = if cards.is_empty() {
             "Nothing has finished here yet.".to_owned()
         } else if withered > 0 {
             format!("{harvested} harvested · {withered} withered")
         } else {
             format!("{harvested} harvested")
         };
-        body = body.child(note("garden.board.closed.summary", words, t));
+        lane = lane.push(note("garden.board.closed.summary", said, t));
     } else if cards.is_empty() {
-        body = body.child(note(
+        lane = lane.push(note(
             &format!("garden.board.empty.{}", column.name()),
             empty_line(column, place),
             t,
@@ -1013,88 +948,44 @@ fn column_view(
     } else {
         for (row_at, seed) in cards.iter().enumerate() {
             if column == Column::Ready && row_at == place.ready && place.ready < cards.len() {
-                body = body.child(
-                    text(format!("{} not ready yet", cards.len() - place.ready))
-                        .font(type_::LABEL)
-                        .color(t.text_muted)
-                        .a11y_hidden(),
+                lane = lane.push(
+                    words(
+                        format!("{} not ready yet", cards.len() - place.ready),
+                        Type::Small,
+                        t.text_tertiary,
+                    )
+                    .a11y_hidden(),
                 );
             }
-            body = body.child(card(state, place, names, column, seed, t));
+            lane = lane.push(card(state, place, names, column, seed, t));
         }
     }
     if hovered && let Some(held) = dragging {
         for verb in &zones {
-            body = body.child(
-                row()
-                    .key(format!("{ZONE_PREFIX}{}", verb.name()))
-                    .role("button")
-                    .label(format!("{} {}", verb.label(), held.seed.id))
-                    .padding(space::S2)
-                    .gap(space::S2)
-                    .radius(6.0)
-                    .border(
-                        1.0,
-                        if held.zone == Some(*verb) {
-                            t.accent
-                        } else {
-                            t.border
-                        },
-                    )
-                    .fill(if held.zone == Some(*verb) {
-                        t.bg_selected
+            lane = lane.push(
+                Card::new(format!("{ZONE_PREFIX}{}", verb.name()))
+                    .control("button", format!("{} {}", verb.label(), held.seed.id))
+                    .standing(if held.zone == Some(*verb) {
+                        Standing::Picked
                     } else {
-                        t.bg_panel
+                        Standing::Resting
                     })
-                    .child(text(verb.label()).font(type_::BODY).color(t.text_primary))
-                    .child(
-                        text(held.seed.id.clone())
-                            .font(type_::LABEL)
-                            .color(t.text_muted),
-                    ),
+                    .push(words(verb.label(), Type::Body, t.text_primary))
+                    .push(words(held.seed.id.clone(), Type::Mono, t.text_tertiary))
+                    .build(t),
             );
         }
     }
-    col()
-        .key(format!("{COLUMN_PREFIX}{}", column.name()))
-        .role("region")
-        .label(format!("{}, {count}", column.label()))
-        .w(0.0)
-        .grow(1.0)
-        .h_full()
-        .min_h(0.0)
-        .gap(space::S2)
-        .padding(space::S2)
-        .radius(6.0)
-        .fill(if hovered { t.bg_selected } else { t.bg_app })
-        .opacity(if dragging.is_some() && zones.is_empty() {
-            0.5
-        } else {
-            1.0
-        })
-        .child(head)
-        .child(
-            col()
-                .key(format!("garden.board.body.{}", column.name()))
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(body)
-                .scroll_bar_styled(attn_ui::scroll_bar(t)),
-        )
+    lane.build(t)
 }
 
-fn note(key: &str, words: impl Into<String>, t: &Tokens) -> El {
-    let words = words.into();
-    text(words.clone())
+fn note(key: &str, said: impl Into<String>, t: &Tokens) -> El {
+    let said = said.into();
+    words(said.clone(), Type::Small, t.text_tertiary)
         .key(key.to_owned())
         .role("note")
-        .label(words)
-        .font(type_::LABEL)
-        .color(t.text_muted)
+        .label(said)
+        .wrap()
 }
 
 fn card(
@@ -1152,73 +1043,59 @@ fn card_face(seed: &Arc<Seed>, look: &CardLook, t: &Tokens) -> El {
     let id = seed.id.clone();
     let pressed = seed.id.clone();
     let dragged = seed.id.clone();
-    let mut meta = row()
-        .items_center()
-        .gap(space::S2)
-        .wrap()
-        .children(card_meta(look, seed, t));
+    let mut facts = Byline::new().wrap().push_all(card_meta(look, seed, t));
     if let Some(tally) = model::check_tally(seed) {
-        meta = meta.child(
-            text(model::tally_words(&tally))
-                .font(type_::LABEL)
-                .color(t.text_secondary),
-        );
+        facts = facts.push(words(
+            model::tally_words(&tally),
+            Type::Small,
+            t.text_secondary,
+        ));
     }
-    meta = meta
-        .child(text(seed.id.clone()).font(type_::LABEL).color(t.text_muted))
-        .child(
-            text(look.age.clone())
-                .font(type_::LABEL)
-                .color(t.text_muted),
-        );
-    let mut face = col()
-        .key(card_key(&seed.id))
-        .role("button")
-        .label(seed.title.clone())
-        .focusable(true)
+    let facts = facts
+        .id(seed.id.clone(), t.text_tertiary)
+        .said(look.age.clone(), t);
+    let face = Card::new(card_key(&seed.id))
+        .control("button", seed.title.clone())
+        .standing(if selected {
+            Standing::Picked
+        } else {
+            Standing::Resting
+        })
+        .push(words(seed.title.clone(), Type::Body, t.text_primary).wrap())
+        .push_all(look.standby.as_ref().map(|s| standby_marker(s, t)))
+        .push(facts.build(t))
+        .build(t)
         .expanded(menu_open)
-        .w_full()
-        .gap(space::S1)
-        .padding(space::S2)
-        .radius(6.0)
-        .fill(if selected { t.bg_selected } else { t.bg_panel })
-        .border(1.0, if selected { t.accent } else { t.border_subtle })
-        .hover(t.bg_elevated)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| press_card(state, &pressed, tx))
         .on_drag(move |state: &mut State, d: &mut rune::Drag, tx: &mut Tx| {
             drag(state, &dragged, d, tx)
-        })
-        .child(
-            text(seed.title.clone())
-                .font(type_::BODY)
-                .color(t.text_primary),
-        );
-    if let Some(standby) = &look.standby {
-        face = face.child(standby_marker(standby, t));
-    }
-    face = face.child(meta);
-    let mut card = col().w_full().gap(space::S1).child(face);
-    let mut actions = row().gap(space::S1);
+        });
+    let mut card = Stack::tight().w_full().child(face);
+    let mut actions = Inline::tight();
     if model::is_plot(seed) {
         let drilled = id.clone();
         actions = actions.child(
-            super::view::button(
-                format!("garden.board.drill.{id}"),
-                format!("Open the plot under {}", seed.title),
-                t,
+            El::from(
+                super::view::quiet("Open the plot")
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| drill(state, &drilled, tx))
+                    .build(t)
+                    .key(format!("garden.board.drill.{id}")),
             )
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| drill(state, &drilled, tx)),
+            .label(format!("Open the plot under {}", seed.title)),
         );
     }
     if !menu_open && selected && !verbs.is_empty() {
         let shown = id.clone();
         actions = actions.child(
-            super::view::button(
-                format!("garden.board.more.{id}"),
-                format!("Move {}", seed.title),
-                t,
+            El::from(
+                super::view::quiet("Move")
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                        toggle_menu(state, &shown, tx)
+                    })
+                    .build(t)
+                    .key(format!("garden.board.more.{id}")),
             )
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| toggle_menu(state, &shown, tx)),
+            .label(format!("Move {}", seed.title)),
         );
     }
     card = card.child(actions);
@@ -1229,9 +1106,12 @@ fn card_face(seed: &Arc<Seed>, look: &CardLook, t: &Tokens) -> El {
 }
 
 fn card_meta(look: &CardLook, seed: &Seed, t: &Tokens) -> Vec<El> {
-    let word = |words: String, color| text(words).font(type_::LABEL).color(color);
+    let word = |said: String, color| words(said, Type::Small, color);
     if model::is_plot(seed) {
-        return vec![word(plot_counts(seed), t.text_secondary)];
+        return plot_counts(seed)
+            .into_iter()
+            .map(|count| word(count, t.text_secondary))
+            .collect();
     }
     let marker = model::harvest_when(seed)
         .map(|(sentence, marker)| word(marker, t.text_secondary).help(sentence));
@@ -1280,105 +1160,70 @@ fn card_meta(look: &CardLook, seed: &Seed, t: &Tokens) -> Vec<El> {
 }
 
 fn menu(seed: &Arc<Seed>, verbs: &[Verb], t: &Tokens) -> El {
-    let mut menu = col()
+    let menu = ListRow::column()
         .key(format!("garden.board.menu-of.{}", seed.id))
         .role("menu")
-        .label(format!("Move {}", seed.title))
-        .gap(space::S1)
-        .padding(space::S1)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border);
+        .label(format!("Move {}", seed.title));
     if verbs.is_empty() {
-        let words = format!("Nothing moves a {} seed from here.", seed.status);
-        return menu.child(note("garden.board.menu.empty", words, t));
+        let said = format!("Nothing moves a {} seed from here.", seed.status);
+        return Surface::raised(menu.child(note("garden.board.menu.empty", said, t)), t);
     }
-    for verb in verbs {
+    let menu = menu.children(verbs.iter().map(|verb| {
         let (verb, chosen) = (*verb, seed.clone());
-        menu = menu.child(
-            row()
-                .key(format!("{MENU_PREFIX}{}", verb.name()))
-                .role("menuitem")
-                .label(verb.label())
-                .focusable(true)
-                .padding(space::S1)
-                .radius(4.0)
-                .hover(t.bg_selected)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    begin_verb(state, chosen.clone(), verb, tx)
-                })
-                .child(
-                    text(format!("{}…", verb.label()))
-                        .font(type_::BODY)
-                        .color(t.text_primary),
-                ),
-        );
-    }
-    menu
+        ListRow::new(format!("{MENU_PREFIX}{}", verb.name()), verb.label())
+            .title(format!("{}…", verb.label()))
+            .role("menuitem")
+            .on(t.bg_elevated)
+            .build(t)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                begin_verb(state, chosen.clone(), verb, tx)
+            })
+    }));
+    Surface::raised(menu, t)
 }
 
-fn composer(compose: &Compose, words: &TextEdit, names: &SessionNames, t: &Tokens) -> El {
+fn composer(compose: &Compose, written: &TextEdit, names: &SessionNames, t: &Tokens) -> El {
     let verb = compose.verb;
     let placeholder = if verb.required() {
         verb.prompt().to_owned()
     } else {
         format!("{} — optional", verb.prompt())
     };
-    let mut line = col()
-        .key("garden.board.compose")
-        .w_full()
-        .gap(space::S1)
-        .padding(space::S2)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.accent)
-        .child(
-            row()
-                .gap(space::S2)
-                .items_center()
-                .child(
-                    text(verb.label().to_lowercase())
-                        .font(type_::LABEL)
-                        .color(t.accent),
-                )
-                .child(
-                    text(compose.seed.id.clone())
-                        .font(type_::LABEL)
-                        .color(t.text_muted),
-                ),
-        )
-        .child(
-            text_input(words, type_::BODY)
-                .key(COMPOSE_FIELD)
-                .single_line()
-                .label(format!(
-                    "{} {}: {}",
-                    verb.label(),
-                    compose.seed.id,
-                    verb.prompt()
-                ))
-                .placeholder(placeholder, t.text_muted)
-                .on_edit(|state: &mut State| &mut board(state).words)
-                .on_input_key(compose_key)
-                .w_full()
-                .color(t.text_primary),
-        );
-    if !verb.reason_on_seed() {
-        line = line.child(
-            text("goes on the log")
-                .font(type_::LABEL)
-                .color(t.text_muted),
-        );
-    }
+    let field: El = line_box(
+        TextInput::new(written)
+            .key(COMPOSE_FIELD)
+            .label(format!(
+                "{} {}: {}",
+                verb.label(),
+                compose.seed.id,
+                verb.prompt()
+            ))
+            .placeholder(placeholder)
+            .on_edit(|state: &mut State| &mut board(state).words)
+            .on_key(compose_key),
+        FieldState::Ready,
+        t,
+    )
+    .into();
     let taken = held_by_other(&compose.seed, names);
-    if !taken.is_empty() {
-        line = line.child(
-            text(format!("takes it from {taken}"))
-                .font(type_::LABEL)
-                .color(t.warning),
-        );
-    }
-    line
+    Card::new("garden.board.compose")
+        .standing(Standing::Lifted)
+        .push(
+            Byline::new()
+                .push(words(verb.label().to_lowercase(), Type::Small, t.accent))
+                .id(compose.seed.id.clone(), t.text_tertiary)
+                .build(t),
+        )
+        .push(field)
+        .push_all(
+            (!verb.reason_on_seed())
+                .then(|| words("goes on the log", Type::Small, t.text_tertiary)),
+        )
+        .push_all(
+            (!taken.is_empty())
+                .then(|| words(format!("takes it from {taken}"), Type::Small, t.warning)),
+        )
+        .build(t)
 }
 
 fn compose_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
@@ -1399,24 +1244,13 @@ fn compose_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 fn carry(walk: &Board, t: &Tokens) -> Option<El> {
     let held = walk.drag.as_ref().filter(|d| d.armed)?;
     Some(
-        col()
-            .key("garden.board.carry")
+        Card::new("garden.board.carry")
+            .standing(Standing::Lifted)
+            .push(words(held.seed.title.clone(), Type::Body, t.text_primary))
+            .push(words(held.seed.id.clone(), Type::Mono, t.text_tertiary))
+            .build(t)
             .absolute(held.at[0] + CARRY_OFFSET, held.at[1] + CARRY_OFFSET)
             .w(CARRY_WIDTH)
-            .padding(space::S2)
-            .radius(6.0)
-            .fill(t.bg_elevated)
-            .border(1.0, t.accent)
-            .a11y_hidden()
-            .child(
-                text(held.seed.title.clone())
-                    .font(type_::BODY)
-                    .color(t.text_primary),
-            )
-            .child(
-                text(held.seed.id.clone())
-                    .font(type_::LABEL)
-                    .color(t.text_muted),
-            ),
+            .a11y_hidden(),
     )
 }

@@ -16,3 +16,8 @@ pub(crate) fn dim(e: El) -> El {
 pub(crate) fn unavailable(e: El) -> El {
     e.disabled(true).inert()
 }
+
+/// Drawn as [`dim`] draws, while it keeps its place on Tab and its accessible state.
+pub(crate) fn faded(e: El) -> El {
+    e.layer_opacity(STRENGTH)
+}

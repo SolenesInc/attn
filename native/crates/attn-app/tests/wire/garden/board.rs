@@ -173,11 +173,9 @@ fn names_active_work_in_progress_and_counts_a_plot_in_motion() {
         .filter_map(|n| n.name)
         .collect();
     assert_eq!(headings, ["Ready", "In progress", "Parked", "Closed"]);
-    assert!(card_says(
-        world,
-        "a plot in motion",
-        "1 in progress · 1 ready · 1/3 done"
-    ));
+    for count in ["1 in progress", "1 ready", "1/3 done"] {
+        assert!(card_says(world, "a plot in motion", count), "{count}");
+    }
     assert_eq!(column(world, "In progress"), ["owned work"]);
     assert!(card_says(world, "owned work", "Trellis"));
     assert!(world.runtime_is_at_rest());
@@ -647,4 +645,52 @@ fn tab_reaches_every_button_of_the_board_with_a_cards_menu_open() {
         Vec::<String>::new()
     );
     assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_plot_cards_counts_wrap_inside_it_in_the_smallest_window_at_the_largest_text() {
+    let mut world = open_garden_sized(daemon(garden(), Vec::new()), (800.0, 600.0));
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some([("uiScale".to_owned(), "1.5".to_owned())].into()),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    world.gesture(|app| app.key(board()));
+    click(&mut world, "board");
+    let key = card_key(&world, "a plot in motion");
+    let screen = world.screen();
+    assert!(
+        screen
+            .find(Target::role("button").name("Open the plot under a plot in motion"))
+            .is_some(),
+        "the plot's action keeps its name:\n{screen}"
+    );
+    let [x, _, w, _] = screen.bounds(Target::key(&key)).expect("the plot's card");
+    for count in ["1 in progress", "1 ready", "1/3 done"] {
+        let [px, _, pw, _] = screen
+            .bounds(Target::role("label").name(count))
+            .unwrap_or_else(|| panic!("no {count}:\n{screen}"));
+        assert!(
+            px >= x - 0.5 && px + pw <= x + w + 0.5,
+            "{count} at {px}+{pw} runs past its card at {x}+{w}"
+        );
+    }
+}
+
+#[test]
+fn a_cards_open_menu_lies_on_its_own_raised_surface_apart_from_its_lane() {
+    let mut world = open_board(garden(), Vec::new());
+    select_card(&mut world, "pick this up");
+    let elements = world.runtime().elements();
+    let fill_of = |key: &str| {
+        elements
+            .iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("no {key} on screen"))
+            .fill
+            .hex()
+    };
+    let menu = fill_of("garden.board.menu-of.s-ready1");
+    assert_ne!(&menu[7..], "00", "the menu has no surface of its own");
+    assert_ne!(menu, fill_of("garden.board.column.ready"));
 }

@@ -7,9 +7,9 @@ use attn_protocol::{
     SetSettingMessage,
 };
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Tx, row, text};
+use attn_ui::blocks::Inline;
+use attn_ui::system::{Type, words};
+use rune::{El, Tx};
 
 use super::nav::Note;
 use crate::State;
@@ -127,7 +127,7 @@ pub(crate) fn states(
     }
     let candidate = to_set_up(bundle, servers.sessions);
     let offering = offered(bundle, host, servers);
-    let label = |s: String| text(s).font(type_::LABEL);
+    let label = |s: String| words(s, Type::Small, t.text_secondary);
     let entries = bundle.navigation.iter().map(|n| {
         let language = &n.language;
         if let Some(agent) = setting_up(n, servers.sessions) {
@@ -193,17 +193,15 @@ pub(crate) fn states(
                 vec![press("x", "offer setup", "offer", toggle).color(t.text_tertiary)]
             }
         });
-        row()
-            .gap(space::S2)
+        Inline::loose()
             .child(said)
             .children(keys.into_iter().flatten())
     });
     Some(
-        row()
+        Inline::loose()
             .key(format!("{}.servers", super::prefix(tile)))
             .role("group")
             .label("Language servers")
-            .gap(16.0)
             .children(entries),
     )
 }

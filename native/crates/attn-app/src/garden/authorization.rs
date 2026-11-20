@@ -1,151 +1,120 @@
 use attn_protocol::{Seed, SeedAuthorization, SeedAuthorizationMessage};
-use attn_ui::type_;
-use rune::{El, KeyEvent, Tx, row, text};
+use attn_ui::blocks::{Block, Prose, Refusal, Section, Stack, rail};
+use attn_ui::system::{Type, words};
+use rune::{El, KeyEvent, Tx};
 
 use super::model;
-use super::sheet::{
-    FORM_FIELD, FieldLook, Sheet, meta_word, page_heading, page_region, words_field,
-};
+use super::sheet::{Sheet, words_field};
 use super::spot::{Sends, Spot};
-use super::view::kit_button;
+use super::view::quiet;
 use crate::State;
-
-/// `.seed-authorization__input`: its border takes the focus colour, not the brand.
-const AUTHORIZATION_FIELD: FieldLook = FieldLook {
-    edge: |t| (t.border, t.border_focus),
-    ..FORM_FIELD
-};
 
 impl Sheet<'_> {
     /// What the user lets agents do on this seed beyond the project's guidance, who set it and
     /// whether its tender has been told, with the controls that set, change and clear it.
-    pub(super) fn authorization(&self, here: &Seed) -> El {
+    pub(super) fn authorization(&self, here: &Seed) -> Block {
         let t = self.t;
-        let kit = attn_ui::kit(t);
         let spot = Spot::new(&self.prefix, &here.id, "authorization");
         let shown = self.garden.shown(&spot);
         let authorization = here.authorization.as_ref();
-        let words = authorization.map_or("", |a| a.text.as_str()).to_owned();
-        let mut head = row()
-            .w_full()
-            .items_center()
-            .gap(10.0)
-            .child(page_heading("Authorization", t));
-        let action = |label: &'static str| {
-            let ink = t.text_muted;
-            kit_button(label)
-                .disabled(shown.busy)
-                .variant(rune_kit::ButtonVariant::Ghost)
-                .label_with(move |_, _| text(label).font(type_::CAPTION).color(ink))
-        };
-        let quiet = |button: El| {
-            button
-                .h(18.0)
-                .px(6.0)
-                .radius(4.0)
-                .fill(rune::Color::TRANSPARENT)
-                .hover(t.bg_button)
-        };
+        let written = authorization.map_or("", |a| a.text.as_str()).to_owned();
+        let mut section: Section = self.section("authorization", "Authorization");
         if !shown.writing {
-            let opened = (spot.clone(), words.clone());
-            let mut actions = row().gap(4.0).child(quiet(
-                action(if words.is_empty() { "Set" } else { "Change" })
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        opened.0.write(state, &opened.1, tx)
-                    })
-                    .build(kit)
-                    .key(spot.key("edit")),
-            ));
-            if !words.is_empty() {
+            let opened = (spot.clone(), written.clone());
+            let edit: El = quiet(if written.is_empty() { "Set" } else { "Change" })
+                .disabled(shown.busy)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    opened.0.write(state, &opened.1, tx)
+                })
+                .build(t)
+                .key(spot.key("edit"))
+                .into();
+            section = section.control(edit);
+            if !written.is_empty() {
                 let cleared = spot.clone();
-                actions = actions.child(quiet(
-                    action("Clear")
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            authorize(&cleared, state, None, tx)
-                        })
-                        .build(kit)
-                        .key(spot.key("clear")),
-                ));
+                let clear: El = quiet("Clear")
+                    .disabled(shown.busy)
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                        authorize(&cleared, state, None, tx)
+                    })
+                    .build(t)
+                    .key(spot.key("clear"))
+                    .into();
+                section = section.control(clear);
             }
-            head = head.child(actions);
         }
-        let mut section = page_region(&self.key("authorization"), "Authorization", t)
-            .gap(6.0)
-            .child(head);
-        if !words.is_empty() {
-            section = section.child(
-                text(words.clone())
-                    .key(spot.key("text"))
-                    .label(words.clone())
-                    .font(type_::BODY)
-                    .color(t.text_primary)
-                    .wrap()
-                    .mx(2.0)
-                    .pl(9.0)
-                    .border_sides([0.0, 0.0, 0.0, 2.0], t.brand),
-            );
+        if !written.is_empty() {
+            section = section.push(Block::custom(
+                spot.key("text.block"),
+                rail(
+                    words(written.clone(), Type::Body, t.text_primary)
+                        .key(spot.key("text"))
+                        .wrap(),
+                    true,
+                    t,
+                ),
+            ));
         } else if !shown.writing {
-            section = section.child(
-                super::sheet::quiet_note(
-                    &self.key("authorization.empty"),
+            section = section.push(
+                Prose::empty(
+                    self.key("authorization.empty"),
                     "No authorization from the user for this task.",
-                    t.text_dimmed,
                 )
-                .mx(2.0),
+                .build(t),
             );
         }
         if let Some(authorization) = authorization {
             let said = self.said(authorization);
-            section = section.child(
-                text(said.clone())
+            section = section.push(Block::custom(
+                spot.key("meta.block"),
+                words(said, Type::Small, t.text_tertiary)
                     .key(spot.key("meta"))
-                    .label(said)
-                    .font(type_::CAPTION)
-                    .color(t.text_dimmed)
-                    .wrap()
-                    .mx(2.0),
-            );
+                    .wrap(),
+            ));
         }
-        if let Some(written) = shown.words {
+        if let Some(written_now) = shown.words {
             let (typed, edited) = (spot.clone(), spot.clone());
-            section = section
-                .child(words_field(
-                    written,
-                    spot.field(),
-                    &format!(
-                        "Authorize {}: the steps agents take beyond the project's guidance, and where they stop",
-                        here.id
-                    ),
-                    "Land on main once the checks pass. Ask me before releasing.",
-                    &AUTHORIZATION_FIELD,
-                    move |state: &mut State| edited.words_mut(state),
-                    move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-                        let home = typed.key("edit");
-                        let had = !words.is_empty();
-                        typed.field_key(
-                            state,
-                            ev,
-                            (&home, Sends::Return),
-                            |state, words, tx| commit(&typed, state, words, had, tx),
-                            tx,
-                        )
-                    },
-                    t,
-                ))
-                .child(meta_word("⏎ save · ⇧⏎ new line · esc cancel", t).a11y_hidden());
+            let field = words_field(
+                written_now,
+                spot.field(),
+                &format!(
+                    "Authorize {}: the steps agents take beyond the project's guidance, and where they stop",
+                    here.id
+                ),
+                "Land on main once the checks pass. Ask me before releasing.",
+                move |state: &mut State| edited.words_mut(state),
+                move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+                    let home = typed.key("edit");
+                    let had = !written.is_empty();
+                    typed.field_key(
+                        state,
+                        ev,
+                        (&home, Sends::Return),
+                        |state, words, tx| commit(&typed, state, words, had, tx),
+                        tx,
+                    )
+                },
+                t,
+            );
+            section = section.push(Block::custom(
+                spot.key("edit.block"),
+                Stack::tight().w_full().child(field).child(
+                    words(
+                        "⏎ save · ⇧⏎ new line · esc cancel",
+                        Type::Small,
+                        t.text_tertiary,
+                    )
+                    .a11y_hidden(),
+                ),
+            ));
         }
         if let Some(failure) = shown.failure {
-            section = section.child(
-                text(failure.to_owned())
-                    .key(spot.key("error"))
-                    .role("alert")
-                    .label(failure.to_owned())
-                    .font(type_::LABEL)
-                    .color(t.error)
-                    .wrap(),
-            );
+            section = section.push(Block::custom(
+                spot.key("error.block"),
+                Refusal::new(spot.key("error"), failure.to_owned()).build(t),
+            ));
         }
-        section
+        section.build(t)
     }
 
     /// Who set the authorization or cleared it, when, and whether its tender has it yet.

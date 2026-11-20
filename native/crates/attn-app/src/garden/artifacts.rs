@@ -5,13 +5,13 @@ use attn_protocol::{
     SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedCheckEvidence, SeedDocument,
     SeedNoteMessage,
 };
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, FileDialogOptions, Tx, col, row, text};
+use attn_ui::blocks::{Block, Inline, Refusal, Stack};
+use attn_ui::system::{Link, Type, words};
+use rune::{El, FileDialogOptions, Tx};
 
-use super::sheet::{Sheet, meta_word};
+use super::sheet::{Sheet, said};
 use super::spot::Spot;
-use super::view::kit_button;
+use super::view::quiet;
 use crate::State;
 use crate::requests::Refused;
 
@@ -132,72 +132,71 @@ impl Sheet<'_> {
     /// The files the seed keeps, with Open for a document or image, Reveal and Move out, then
     /// what it links to: files, with Move and Copy into the seed and Remove link, notebook
     /// documents, and pages, which open in the browser.
-    pub(super) fn artifacts(&self, document: Option<&SeedDocument>) -> Option<El> {
+    pub(super) fn artifacts(&self, document: Option<&SeedDocument>) -> Option<Block> {
         let document = document?;
         if document.artifacts.is_empty() && document.references.is_empty() {
             return None;
         }
         let id = &document.seed.id;
         let missing = super::missing(self.garden, id);
-        let mut list = col().role("list").w_full().gap(space::S1);
+        let mut list = Stack::tight().role("list").w_full();
         for artifact in &document.artifacts {
             list = list.child(self.kept(id, artifact));
         }
         for (n, reference) in document.references.iter().enumerate() {
             list = list.child(self.linked(id, n, reference, missing));
         }
-        Some(self.section("artifacts", "Artifacts").child(list))
+        Some(
+            self.section("artifacts", "Artifacts")
+                .push(Block::custom(self.key("artifacts.list"), list))
+                .build(self.t),
+        )
     }
 
     fn kept(&self, id: &str, artifact: &SeedArtifact) -> El {
         let t = self.t;
-        let kit = attn_ui::kit(t);
         let spot = Spot::new(&self.prefix, id, &format!("artifact.{}", artifact.filename));
         let shown = self.garden.shown(&spot);
-        let mut actions = row().gap(space::S1);
+        let mut actions = Inline::tight();
         let target = artifact.relative_target.clone();
         if crate::markdown::links::is_safe_local(&artifact.filename) {
             let (opened, target) = (spot.clone(), target.clone());
             actions = actions.child(
-                kit_button("Open")
+                quiet("Open")
                     .disabled(shown.busy)
                     .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                         open_kept(&opened, state, &target, Show::Open, tx)
                     })
-                    .build(kit)
-                    .key(spot.key("open")),
+                    .build(t)
+                    .key(spot.key("open"))
+                    .into(),
             );
         }
         let revealed = spot.clone();
         actions = actions.child(
-            kit_button("Reveal")
+            quiet("Reveal")
                 .disabled(shown.busy)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     open_kept(&revealed, state, &target, Show::Reveal, tx)
                 })
-                .build(kit)
-                .key(spot.key("reveal")),
+                .build(t)
+                .key(spot.key("reveal"))
+                .into(),
         );
         let (moved, filename) = (spot.clone(), artifact.filename.clone());
         actions = actions.child(
-            kit_button("Move out")
+            quiet("Move out")
                 .disabled(shown.busy)
                 .on_press_tx(move |_: &mut State, tx: &mut Tx| move_out(&moved, &filename, tx))
-                .build(kit)
-                .key(spot.key("move-out")),
+                .build(t)
+                .key(spot.key("move-out"))
+                .into(),
         );
-        let line = row()
+        let line = Inline::loose()
             .w_full()
-            .flex_wrap()
-            .items_center()
-            .gap(space::S2)
-            .child(meta_word("file", t))
-            .child(
-                text(artifact.filename.clone())
-                    .font(type_::BODY)
-                    .color(t.text_primary),
-            )
-            .child(meta_word(bytes(artifact.size), t))
+            .child(said("file", t))
+            .child(words(artifact.filename.clone(), Type::Body, t.text_primary))
+            .child(said(bytes(artifact.size), t))
             .child(actions);
         let named = format!("{} · {}", artifact.filename, bytes(artifact.size));
         self.artifact_row(&spot, &named, line, shown.failure)
@@ -211,86 +210,83 @@ impl Sheet<'_> {
         missing: Option<&HashSet<String>>,
     ) -> El {
         let t = self.t;
-        let kit = attn_ui::kit(t);
         let spot = Spot::new(&self.prefix, id, &format!("reference.{n}"));
         let shown = self.garden.shown(&spot);
         let shown_as = present(reference);
         let gone = !shown_as.path.is_empty() && missing.is_some_and(|m| m.contains(&shown_as.path));
-        let mut line = row()
+        let mut line = Inline::loose()
             .w_full()
-            .flex_wrap()
-            .items_center()
-            .gap(space::S2)
-            .child(meta_word(shown_as.kind.clone(), t));
+            .child(said(shown_as.kind.clone(), t));
         let primary = if !shown_as.href.is_empty() {
             let href = shown_as.href.clone();
-            kit_button(shown_as.primary.clone())
-                .help(href.clone())
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    if let Err(why) = tx.open_url(&href) {
-                        state
-                            .window
-                            .notify(format!("Could not open {href}: {why}"), tx);
-                    }
-                })
-                .build(kit)
-                .key(spot.key("open"))
-                .role("link")
+            El::from(
+                Link::new(spot.key("open"), shown_as.primary.clone())
+                    .kind(Type::Body)
+                    .ink(t.text_primary)
+                    .build(t),
+            )
+            .help(href.clone())
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                if let Err(why) = tx.open_url(&href) {
+                    state
+                        .window
+                        .notify(format!("Could not open {href}: {why}"), tx);
+                }
+            })
+            .role("link")
         } else if !shown_as.path.is_empty() && !gone {
             let path = shown_as.path.clone();
-            kit_button(shown_as.primary.clone())
-                .help(path.clone())
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    crate::opener::open_markdown(state, path.clone(), None, None, tx)
-                })
-                .build(kit)
-                .key(spot.key("open"))
+            El::from(
+                Link::new(spot.key("open"), shown_as.primary.clone())
+                    .kind(Type::Body)
+                    .ink(t.text_primary)
+                    .build(t),
+            )
+            .help(path.clone())
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                crate::opener::open_markdown(state, path.clone(), None, None, tx)
+            })
         } else {
-            text(shown_as.primary.clone())
-                .font(type_::BODY)
-                .color(t.text_primary)
+            words(shown_as.primary.clone(), Type::Body, t.text_primary)
         };
         line = line.child(primary);
         if !shown_as.secondary.is_empty() {
-            line = line.child(meta_word(shown_as.secondary.clone(), t));
+            line = line.child(said(shown_as.secondary.clone(), t));
         }
         if gone {
-            line = line.child(
-                text("not on disk")
-                    .key(spot.key("gone"))
-                    .font(type_::LABEL)
-                    .color(t.error),
-            );
+            line = line.child(words("not on disk", Type::Small, t.error).key(spot.key("gone")));
         }
         if !shown_as.href.is_empty() {
-            line = line.child(meta_word("↗", t).label("opens outside attn"));
+            line = line.child(said("↗", t).label("opens outside attn"));
         }
         if reference.kind == "markdown_file" {
-            let mut actions = row().gap(space::S1);
+            let mut actions = Inline::tight();
             for (label, part, operation) in [
                 ("Move into seed", "move-in", "move"),
                 ("Copy into seed", "copy-in", "copy"),
             ] {
                 let (brought, reference) = (spot.clone(), reference.clone());
                 actions = actions.child(
-                    kit_button(label)
+                    quiet(label)
                         .disabled(shown.busy)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             bring_in(&brought, state, &reference, operation, tx)
                         })
-                        .build(kit)
-                        .key(spot.key(part)),
+                        .build(t)
+                        .key(spot.key(part))
+                        .into(),
                 );
             }
             let (removed, reference) = (spot.clone(), reference.clone());
             actions = actions.child(
-                kit_button("Remove link")
+                quiet("Remove link")
                     .disabled(shown.busy)
                     .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                         remove_link(&removed, state, &reference, tx)
                     })
-                    .build(kit)
-                    .key(spot.key("remove")),
+                    .build(t)
+                    .key(spot.key("remove"))
+                    .into(),
             );
             line = line.child(actions);
         }
@@ -305,23 +301,14 @@ impl Sheet<'_> {
     }
 
     fn artifact_row(&self, spot: &Spot, name: &str, line: El, failure: Option<&str>) -> El {
-        let mut item = col()
+        let mut item = Stack::tight()
             .key(spot.key("row"))
             .role("listitem")
             .label(name.to_owned())
             .w_full()
-            .gap(2.0)
             .child(line);
         if let Some(failure) = failure {
-            item = item.child(
-                text(failure.to_owned())
-                    .key(spot.key("error"))
-                    .role("alert")
-                    .label(failure.to_owned())
-                    .font(type_::LABEL)
-                    .color(self.t.error)
-                    .wrap(),
-            );
+            item = item.child(Refusal::new(spot.key("error"), failure.to_owned()).build(self.t));
         }
         item
     }

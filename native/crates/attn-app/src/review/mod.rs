@@ -35,9 +35,6 @@ use frames::{Frame, MapPlace, Side};
 
 /// The review's card, as the Tauri review reader widens the markdown reader's.
 pub(crate) const CARD_MAX_WIDTH: f32 = 1180.0;
-/// The widest the review's prose and headings run, as the Tauri review reader's
-/// `--md-prose-measure` caps them.
-pub(crate) const PROSE_MEASURE: f32 = 644.0;
 /// The frames the reader draws.
 const BUILT: [Frame; 3] = [Frame::Brief, Frame::Walkthrough, Frame::Map];
 /// The Walkthrough's script column is this wide, at most this share of the tile.
@@ -118,6 +115,8 @@ pub(crate) struct Review {
     nav: nav::Nav,
     /// The verdict picked in the send sheet, kept until the review goes.
     verdict: Option<marks::Verdict>,
+    /// How wide the key line laid out, in whole points, once it has.
+    keys_room: Option<u32>,
     /// Counts the reads the tile asks for, so an answer to an older read of a file or a stop
     /// never lands over a newer one.
     asked: u64,
@@ -170,6 +169,18 @@ pub struct Reviews {
 }
 
 impl Reviews {
+    /// Tile `tile`'s key line laid out `width` points across.
+    pub(crate) fn keys_measured(&mut self, tile: &str, width: f32, tx: &mut Tx) -> bool {
+        let width = Some(width.round() as u32);
+        let review = self.tiles.entry(tile.to_owned()).or_default();
+        if review.keys_room == width {
+            tx.live_only();
+            return false;
+        }
+        review.keys_room = width;
+        true
+    }
+
     /// Each widened stop, by its tile, path and first line, with the lines it was widened by.
     pub(crate) fn widenings(&self) -> Vec<(&str, &str, i64, usize)> {
         let mut all: Vec<_> = self
@@ -657,7 +668,7 @@ pub(crate) fn body(
                         .max_w(prose_width(*kind))
                         .self_center()
                         .child(block);
-                    cursor_frame(
+                    attn_ui::blocks::here(
                         place_press(el, tile, key).role("group"),
                         current.is_some(),
                         t,
@@ -937,14 +948,16 @@ pub(crate) fn body(
         )
         .child(keys::key_line(
             tile,
-            reading.frame,
-            &offered,
+            (reading.frame, &offered),
             (
                 sides,
                 !review.files.is_empty() && reading.frame != Frame::Walkthrough,
                 !read_only,
             ),
-            setup::states(tile, bundle, host, servers, t),
+            (
+                setup::states(tile, bundle, host, servers, t),
+                review.keys_room,
+            ),
             t,
         ))
         .children(
@@ -1023,7 +1036,7 @@ fn spaced(parts: impl Iterator<Item = ((f32, f32), El)>) -> Vec<El> {
 fn prose_width(block: document::Prose) -> f32 {
     match block {
         document::Prose::Other => f32::INFINITY,
-        _ => PROSE_MEASURE,
+        _ => attn_ui::blocks::DOCUMENT,
     }
 }
 
@@ -1194,29 +1207,6 @@ fn participant(flow: &ReviewFlow, id: &str) -> String {
     let lower = label.to_ascii_lowercase();
     let end = lower.find("<br").unwrap_or(label.len());
     label[..end].trim().to_owned()
-}
-
-/// A place's element, marked when the cursor stands on it: the Tauri review's accent tint
-/// over whatever fills it, with an accent bar inside its left edge.
-pub(crate) fn cursor_frame(el: El, current: bool, t: &Tokens) -> El {
-    if current {
-        let tint = cursor_tint(t);
-        el.gradient(tint, tint)
-            .border_sides([0.0, 0.0, 0.0, 2.0], t.accent)
-            .focus_selected(true)
-    } else {
-        el
-    }
-}
-
-/// The tint that marks the place the cursor is on, a search result picked or lines selected.
-pub(crate) fn cursor_tint(t: &Tokens) -> rune::Color {
-    t.accent.alpha(0.22)
-}
-
-/// The quieter tint of a picked frame or side, as the Tauri review's range color.
-pub(crate) fn range_tint(t: &Tokens) -> rune::Color {
-    t.accent.alpha(0.08)
 }
 
 /// The send key on a review tile that holds the keyboard: the send sheet opens with the
