@@ -5,15 +5,11 @@ use std::collections::HashSet;
 
 use attn_protocol::{Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage};
 use attn_ui::Tokens;
-use attn_ui::blocks::{Block, Notice, Prose, Status};
-use attn_ui::system::Button;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Tx, col, row, text};
-use rune_kit::{Badge, BadgeVariant, Collapsible};
+use attn_ui::blocks::{Block, Disclosure, List, Notice, Prose, Status};
+use attn_ui::system::{Button, ListRow, Reveal, Size, Tone, Type, tag, words};
+use rune::{El, Tx};
 
 use super::Section;
-use super::pages::CAPTION;
 use crate::State;
 use crate::requests::Answer;
 
@@ -97,7 +93,6 @@ fn retry(state: &mut State, id: String, tx: &mut Tx) {
 }
 
 pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<Block> {
-    let k = crate::settings::pages::kit(t);
     let tasks = &state.window.settings.tasks;
     if let Some(error) = &tasks.error {
         return vec![
@@ -118,124 +113,102 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<Block> {
             Prose::empty("settings.tasks.empty", "No background tasks.").build(t)
         }];
     }
-    vec![Block::custom(
-        "settings.tasks.block",
-        col()
-            .key("settings.tasks")
-            .role("list")
-            .label("Background tasks")
-            .w_full()
-            .gap(space::S2)
-            .children(
-                tasks
-                    .list
-                    .iter()
-                    .map(|task| row_of(tasks, task, now_ms, t, k)),
-            ),
-    )]
+    vec![
+        tasks
+            .list
+            .iter()
+            .map(|task| row_of(tasks, task, now_ms, t))
+            .fold(
+                List::new("settings.tasks", "Background tasks"),
+                |list, (row, under)| list.row_with(row, under),
+            )
+            .build(t),
+    ]
 }
 
-fn row_of(tasks: &Tasks, task: &Task, now_ms: i64, t: &Tokens, k: &rune_kit::Kit) -> El {
-    let id = task.id.clone();
+fn tone_of(state: &str) -> Tone {
+    match state {
+        "running" => Tone::Good,
+        "failed" | "dead" => Tone::Bad,
+        _ => Tone::Neutral,
+    }
+}
+
+/// A task's row, with what went wrong and its diagnostic output under it.
+fn row_of(tasks: &Tasks, task: &Task, now_ms: i64, t: &Tokens) -> (El, Vec<Block>) {
+    let key = format!("settings.task.{}", task.id);
     let subject = format!("{}:{}", task.kind, task.subject);
-    let badge = Badge::new(task.state.clone())
-        .variant(match task.state.as_str() {
-            "running" => BadgeVariant::Accent,
-            "queued" => BadgeVariant::Subtle,
-            _ => BadgeVariant::Neutral,
-        })
-        .build(k);
     let retrying = tasks.retrying.contains(&task.id);
     let can_retry = matches!(task.state.as_str(), "failed" | "dead");
-    let head = row()
-        .w_full()
-        .gap(space::S2)
-        .items_center()
-        .child(badge)
-        .child(
-            text(subject.clone())
-                .font(type_::MONO_CAPTION)
-                .color(t.text_primary)
-                .truncate()
-                .grow(1.0)
-                .min_w(0.0),
-        )
-        .children(can_retry.then(|| {
-            let id = id.clone();
-            El::from(
-                Button::new(if retrying { "Retrying…" } else { "Retry" })
-                    .disabled(retrying)
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| retry(state, id.clone(), tx))
-                    .build(t)
-                    .key(format!("settings.task.{}.retry", task.id))
-                    .label("Retry"),
-            )
-        }));
     let next = (!matches!(task.state.as_str(), "done" | "dead"))
         .then(|| next_attempt(&task.next_attempt_at, now_ms))
         .flatten();
-    let meta = row()
-        .gap(space::S3)
-        .child(
-            text(format!("attempts: {}", task.attempts))
-                .font(CAPTION)
-                .color(t.text_tertiary),
+    let tries = [
+        Some(format!("attempts: {}", task.attempts)),
+        next.map(|next| format!("next: {next}")),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" · ");
+    let id = task.id.clone();
+    let row = ListRow::new(key.clone(), subject.clone())
+        .still()
+        .title_el(words(subject, Type::Mono, t.text_primary).truncate())
+        .tag(tag(
+            format!("{key}.state"),
+            &task.state,
+            tone_of(&task.state),
+            t,
+        ))
+        .subtitle(tries, t)
+        .controls(
+            can_retry.then(|| {
+                Button::new(if retrying { "Retrying…" } else { "Retry" })
+                    .size(Size::Compact)
+                    .disabled(retrying)
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| retry(state, id.clone(), tx))
+                    .build(t)
+                    .key(format!("{key}.retry"))
+                    .label("Retry")
+                    .into()
+            }),
+            Reveal::Always,
         )
-        .children(next.map(|next| {
-            text(format!("next: {next}"))
-                .font(CAPTION)
-                .color(t.text_tertiary)
-        }));
+        .build(t);
     let error = task
         .last_error
         .as_deref()
         .filter(|e| !e.is_empty())
-        .map(|e| {
-            text(e.to_owned())
-                .key(format!("settings.task.{}.error", task.id))
-                .font(CAPTION)
-                .color(t.error)
-                .wrap()
-        });
+        .map(|e| Notice::error(format!("{key}.error"), e.to_owned()).build(t));
     let diagnostic = task
         .last_diagnostic
         .as_deref()
         .filter(|d| !d.is_empty())
         .map(|d| {
-            let open = tasks.diagnostics_shown.contains(&task.id);
-            let id = id.clone();
-            Collapsible::new("Diagnostic output", open)
-                .ghost()
-                .child(
-                    text(d.to_owned())
-                        .key(format!("settings.task.{}.diagnostic", task.id))
-                        .font(type_::MONO_CAPTION)
-                        .color(t.text_secondary)
-                        .wrap(),
-                )
-                .on_toggle(move |state: &mut State| {
+            let id = task.id.clone();
+            Disclosure::new(
+                format!("{key}.diagnostics"),
+                "Diagnostic output",
+                tasks.diagnostics_shown.contains(&task.id),
+                move |state: &mut State, tx: &mut Tx| {
+                    tx.instant();
                     let shown = &mut state.window.settings.tasks.diagnostics_shown;
                     if !shown.remove(&id) {
                         shown.insert(id.clone());
                     }
-                })
-                .build(k)
-                .key(format!("settings.task.{}.diagnostics", task.id))
+                },
+            )
+            .push(Block::custom(
+                format!("{key}.diagnostic.block"),
+                words(d.to_owned(), Type::Mono, t.text_secondary)
+                    .key(format!("{key}.diagnostic"))
+                    .label(d.to_owned())
+                    .wrap_anywhere(),
+            ))
+            .build(t)
         });
-    col()
-        .key(format!("settings.task.{}", task.id))
-        .role("listitem")
-        .label(subject)
-        .w_full()
-        .gap(space::S1)
-        .padding(space::S3)
-        .radius(8.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
-        .child(head)
-        .child(meta)
-        .children(error)
-        .children(diagnostic)
+    (row, error.into_iter().chain(diagnostic).collect())
 }
 
 /// When a task next runs, said as the Tauri app says it: "now" within five seconds, else "in 3m"
