@@ -439,7 +439,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .click_outside(!saving)
         .on_close_tx(close)
         .push(
-            Notice::info(
+            Prose::lead(
                 "diagnostic-report.included",
                 "Included automatically: app and daemon versions, session and pane metadata, \
                  shortened working directories, and the daemon's terminal health. Environment \

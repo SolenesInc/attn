@@ -58,6 +58,7 @@ pub struct ListRow {
     lead: Option<El>,
     title: Option<Title>,
     cut_middle: bool,
+    value: Option<String>,
     subtitle: Option<El>,
     subtitle_key: Option<String>,
     tags: Vec<El>,
@@ -95,6 +96,7 @@ impl ListRow {
             lead: None,
             title: None,
             cut_middle: false,
+            value: None,
             subtitle: None,
             subtitle_key: None,
             tags: Vec::new(),
@@ -390,6 +392,12 @@ impl ListRow {
         self
     }
 
+    /// What the row's button reads as its value, such as "current" on the profile in use.
+    pub fn value(mut self, value: impl Into<String>) -> Self {
+        self.value = Some(value.into());
+        self
+    }
+
     /// The row's ground takes `tint`, such as the error colour while its machine is unreachable.
     pub fn tint(mut self, tint: Option<Color>) -> Self {
         self.tint = tint;
@@ -674,6 +682,10 @@ impl ListRow {
             .children(bar);
         let line = match self.expanded {
             Some(open) => line.expanded(open),
+            None => line,
+        };
+        let line = match self.value {
+            Some(value) => line.a11y_value(value),
             None => line,
         };
         let line = match (wraps || tagged, two_lines) {

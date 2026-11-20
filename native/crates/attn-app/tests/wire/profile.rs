@@ -750,3 +750,18 @@ fn the_window_ends_on_the_profile_whose_arrangement_arrived_last() {
     assert_eq!(selected(&mut world), "home");
     rest(&mut world);
 }
+
+#[test]
+fn the_profile_in_use_reads_as_current_in_the_switcher() {
+    let mut world = three("work");
+    open_switcher(&mut world);
+    let value = |id: &str| {
+        world
+            .screen()
+            .get(Target::key(format!("profile-switcher.choose.{id}")))
+            .value
+            .unwrap_or_default()
+    };
+    assert_eq!(value("work"), "current");
+    assert_eq!(value("home"), "");
+}

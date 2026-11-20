@@ -763,3 +763,17 @@ fn after_the_close_button_tab_reaches_clear_before_the_first_pane() {
         "after the close button Tab went {reached:?}"
     );
 }
+
+#[test]
+fn what_the_report_includes_on_its_own_is_said_once_and_not_announced() {
+    let mut world = on_the_desktop(answering(daemon()));
+    create_report(&mut world);
+    let included = world
+        .screen()
+        .get(Target::key("diagnostic-report.included"));
+    assert_ne!(
+        included.role, "status",
+        "a status is announced as the report opens"
+    );
+    assert_ne!(included.role, "alert");
+}

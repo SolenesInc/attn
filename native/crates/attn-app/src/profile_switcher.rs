@@ -498,6 +498,7 @@ fn profile_row(profile: &Profile, current: bool, lit: bool, t: &Tokens) -> El {
         })
         .title(name.clone())
         .selected(lit)
+        .value(if current { "current" } else { "" })
         .controls([El::from(rename), El::from(delete)], Reveal::Always)
         .select_role("menuitem")
         .select(format!("{CHOOSE}{id}"), name, {
