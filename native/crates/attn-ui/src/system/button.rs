@@ -2,7 +2,7 @@ use rune::{Color, El, Tx, row};
 use rune_kit::{Button as KitButton, ButtonVariant};
 
 use super::{
-    Control, IconSize, Radius, Said, Size, Space, Type, disabled, door, focus, kit, layers,
+    Control, IconSize, Join, Radius, Said, Size, Space, Type, disabled, door, focus, kit, layers,
     width_of, words,
 };
 use crate::Tokens;
@@ -49,6 +49,7 @@ pub struct Button {
     unavailable: bool,
     open: bool,
     chosen: Option<bool>,
+    joined: Option<Join>,
     leading: Option<El>,
     trailing: Option<El>,
     whole: bool,
@@ -80,6 +81,7 @@ impl Button {
             unavailable: false,
             open: false,
             chosen: None,
+            joined: None,
             leading: None,
             trailing: None,
             whole: false,
@@ -110,6 +112,12 @@ impl Button {
 
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    /// The button is one half of a [`super::split`], square on the side `join` meets the other.
+    pub fn joined(mut self, join: Join) -> Self {
+        self.joined = Some(join);
         self
     }
 
@@ -233,7 +241,11 @@ impl Button {
         } else {
             door::inset(button, self.size.inset(), Space::S0)
         };
-        let button = focus::ring(door::corner(button, Radius::Control), t);
+        let button = match self.joined {
+            Some(join) => door::corner_joined(button, Radius::Control, join),
+            None => door::corner(button, Radius::Control),
+        };
+        let button = focus::ring(button, t);
         let button = if self.unavailable && self.look == Look::Primary {
             button
         } else if self.unavailable {

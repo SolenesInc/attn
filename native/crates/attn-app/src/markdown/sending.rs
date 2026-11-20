@@ -5,6 +5,8 @@
 
 use attn_client::Desktop;
 use attn_protocol::{DesktopUpdateTileMessage, MarkdownAnnotation, Session};
+use attn_ui::blocks::Inline;
+use attn_ui::system::{Button as UiButton, IconSize, Join, Look, Said, Size, Type, icon_button};
 use attn_ui::type_;
 use attn_ui::{GlyphButton, Tokens};
 use rune::{Cx, El, Tx, col, el, row, text};
@@ -108,54 +110,42 @@ pub(crate) fn controls(
     let any = !desktop_sessions(desktop, sessions).is_empty();
     let noting = matches!(kind, Kind::Seed { tender: None, .. });
     let room = Room::of(tile);
-    let place = |button: Button, part: &str| {
-        button
-            .build(attn_ui::kit(t))
-            .key(key(tile, part))
-            .h(CONTROL_H)
-            .radius(5.0)
-    };
-    let quiet = |label: String, face: El| {
-        Button::new(label)
-            .variant(ButtonVariant::GhostMuted)
-            .label_with(move |_, _| face)
-    };
-    let words = |words: String| text(words).font(type_::LABEL).color(t.text_secondary);
+    let quiet = |words: String| UiButton::new(words).look(Look::Quiet).size(Size::Compact);
     let (overall_tile, overall_uri) = (tile.to_owned(), uri.to_owned());
     let notes_tile = tile.to_owned();
     let mut parts: Vec<El> = Vec::new();
     if room == Room::Wide {
         parts.push(
-            place(
-                quiet("Overall note".into(), words("Overall note".into()))
-                    .help("Add an overall note")
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        super::annotating::compose_overall(state, &overall_tile, &overall_uri, tx)
-                    }),
-                "overall",
-            )
-            .px(8.0),
+            quiet("Overall note".to_owned())
+                .help("Add an overall note")
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    super::annotating::compose_overall(state, &overall_tile, &overall_uri, tx)
+                })
+                .build(t)
+                .key(key(tile, "overall"))
+                .into(),
         );
     }
-    let notes_face = match room {
-        Room::Narrow => row()
-            .gap(3.0)
-            .items_center()
-            .child(rune::icon(&attn_ui::icon::REVIEW_NOTES, 14.0).color(t.text_secondary))
-            .child(words(count.to_string())),
-        Room::Medium | Room::Wide => words(format!("Notes {count}")),
-    };
-    parts.push(
-        place(
-            quiet(format!("Notes {count}"), notes_face)
-                .help("Show review notes")
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    open_notes(state, &notes_tile, tx)
-                }),
-            "notes",
+    let open_notes_here = move |state: &mut State, tx: &mut Tx| open_notes(state, &notes_tile, tx);
+    parts.push(match room {
+        Room::Narrow => icon_button(
+            key(tile, "notes"),
+            format!("Notes {count}"),
+            &attn_ui::icon::REVIEW_NOTES,
+            IconSize::Small,
         )
-        .px(if room == Room::Narrow { 4.0 } else { 8.0 }),
-    );
+        .count(Some(count.to_string()))
+        .help("Show review notes")
+        .on_press_tx(open_notes_here)
+        .build(t)
+        .into(),
+        Room::Medium | Room::Wide => quiet(format!("Notes {count}"))
+            .help("Show review notes")
+            .on_press_tx(open_notes_here)
+            .build(t)
+            .key(key(tile, "notes"))
+            .into(),
+    });
     let done = |noted: bool| if noted { "Noted ✓" } else { "Sent ✓" };
     let status = match &sent {
         Some(Sent::Done { kept, noted, .. }) if *kept > 0 => {
@@ -166,54 +156,43 @@ pub(crate) fn controls(
         Some(Sent::Warning(why) | Sent::Failed(why)) => Some(why.clone()),
         Some(Sent::Sending) | None => None,
     };
-    let caret = |label: &str| {
-        let (tile, ink) = (tile.to_owned(), t.text_primary);
-        place(
-            Button::new(label.to_owned())
-                .variant(ButtonVariant::Neutral)
-                .label_with(move |_, _| caret_mark(ink))
-                .on_press(move |state: &mut State| toggle_menu(state, &tile)),
-            "send.menu",
-        )
-        .w(CONTROL_H)
-        .ml(-1.0)
-        .corners([0.0, 5.0, 5.0, 0.0])
-        .fill(t.bg_button)
-        .border(1.0, t.border)
+    let opens = |label: &str| {
+        let pressed = tile.to_owned();
+        UiButton::mark(attn_ui::glyph::CARET_DOWN, IconSize::Small)
+            .size(Size::Compact)
+            .joined(Join::Previous)
+            .on_press(move |state: &mut State| toggle_menu(state, &pressed))
+            .build(t)
+            .key(key(tile, "send.menu"))
+            .label(label.to_owned())
     };
     let review = matches!(kind, Kind::File { review: true, .. });
     let idle = count == 0 && sent.is_none() && !review;
     if idle && matches!(kind, Kind::File { .. }) {
         let tile_menu = tile.to_owned();
-        let face = row()
-            .gap(4.0)
-            .items_center()
-            .children((room != Room::Narrow).then(|| words("To".into())))
-            .child(
-                words(name.clone())
-                    .single_line()
-                    .truncate()
-                    .max_w(target_name_max(room)),
-            )
-            .child(caret_mark(t.text_secondary));
+        let words = if room == Room::Narrow {
+            name.clone()
+        } else {
+            format!("To {name}")
+        };
         parts.push(
-            place(
-                Button::new(format!("Annotation destination: {name}"))
-                    .variant(ButtonVariant::GhostMuted)
-                    .label_with(move |_, _| face)
-                    .help(format!("Annotations will be sent to {name}"))
-                    .disabled(!any)
-                    .on_press(move |state: &mut State| toggle_menu(state, &tile_menu)),
-                "send.to",
-            )
-            .px(7.0)
-            .border(1.0, t.border),
+            UiButton::new(words)
+                .size(Size::Compact)
+                .trailing(words_in(attn_ui::glyph::CARET_DOWN, t.text_secondary))
+                .help(format!("Annotations will be sent to {name}"))
+                .disabled(!any)
+                .on_press(move |state: &mut State| toggle_menu(state, &tile_menu))
+                .build(t)
+                .key(key(tile, "send.to"))
+                .label(format!("Annotation destination: {name}"))
+                .into(),
         );
     } else if !idle {
         let action = match &sent {
             Some(Sent::Sending) if noting => "Noting…".to_owned(),
             Some(Sent::Sending) => "Sending…".to_owned(),
-            Some(Sent::Done { noted, .. }) => done(*noted).to_owned(),
+            Some(Sent::Done { noted: true, .. }) => "Noted".to_owned(),
+            Some(Sent::Done { .. }) => "Sent".to_owned(),
             Some(Sent::Skipped) => "Approval needed".to_owned(),
             Some(Sent::Warning(_)) => "Needs attention".to_owned(),
             Some(Sent::Failed(_)) => "Send failed".to_owned(),
@@ -222,6 +201,10 @@ pub(crate) fn controls(
             None if review => "Review".to_owned(),
             None => format!("Send {count}"),
         };
+        let shown_action = match &sent {
+            Some(Sent::Done { noted, .. }) => done(*noted).to_owned(),
+            _ => action.clone(),
+        };
         let quiet_status = matches!(sent, Some(Sent::Sending | Sent::Done { .. }));
         let problem = matches!(
             sent,
@@ -229,8 +212,8 @@ pub(crate) fn controls(
         );
         let target = (!quiet_status && matches!(kind, Kind::File { .. })).then(|| name.clone());
         let label = match &target {
-            Some(name) => format!("{action} to {name}"),
-            None => action.clone(),
+            Some(name) => format!("{shown_action} to {name}"),
+            None => shown_action,
         };
         let label = if problem { format!("! {label}") } else { label };
         let chord = send_key
@@ -265,90 +248,50 @@ pub(crate) fn controls(
             _ => None,
         };
         let send_tile = tile.to_owned();
-        let ink = match &sent {
-            Some(Sent::Done { .. }) => t.success,
-            _ => t.text_primary,
+        let mark = match &sent {
+            Some(Sent::Done { .. }) => Some(words_in("✓", t.success)),
+            _ if problem => Some(words_in("!", t.warning)),
+            _ => None,
         };
-        let face = row()
-            .gap(4.0)
-            .items_center()
-            .children(problem.then(|| text("!").font(SEND).color(t.warning)))
-            .child(text(action).font(SEND).color(ink))
-            .children(target.map(|name| {
-                row()
-                    .gap(3.0)
-                    .items_center()
-                    .min_w(0.0)
-                    .child(text("to").font(type_::LABEL).color(t.text_secondary))
-                    .child(
-                        text(name)
-                            .font(type_::LABEL)
-                            .color(t.text_secondary)
-                            .single_line()
-                            .truncate()
-                            .max_w(82.0),
-                    )
-            }));
-        let edge = if problem {
-            attn_ui::colors::mix_srgb(t.border, t.warning, 0.48)
-        } else {
-            t.border
+        let button = UiButton::new(action).size(Size::Compact);
+        let button = match mark {
+            Some(mark) => button.leading(mark),
+            None => button,
         };
-        let button = place(
-            Button::new(label)
-                .variant(ButtonVariant::Neutral)
-                .label_with(move |_, _| face)
-                .help(title)
-                .disabled(disabled)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| send(state, &send_tile, tx)),
-            "send",
-        )
-        .px(10.0)
-        .fill(t.bg_button)
-        .border(1.0, edge)
-        .live_region(rune::LiveRegion::Polite);
+        let button = match target {
+            Some(name) => button.trailing(words_in(format!("to {name}"), t.text_secondary)),
+            None => button,
+        };
         let button = if split.is_some() {
-            button.corners([5.0, 0.0, 0.0, 5.0])
+            button.joined(Join::Next)
         } else {
             button
         };
-        parts.push(match status {
+        let button: El = button
+            .help(title)
+            .disabled(disabled)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| send(state, &send_tile, tx))
+            .build(t)
+            .key(key(tile, "send"))
+            .label(label)
+            .into();
+        let button = button.live_region(rune::LiveRegion::Polite);
+        let button = match status {
             Some(status) => button.description(status),
             None => button,
+        };
+        parts.push(match split {
+            Some(label) => attn_ui::system::split(button, opens(label)),
+            None => button,
         });
-        if let Some(label) = split {
-            parts.push(caret(label));
-        }
     }
-    row()
-        .key(key(tile, "controls"))
-        .items_center()
-        .gap(2.0)
-        .children(parts)
+    Inline::line().key(key(tile, "controls")).children(parts)
 }
 
-/// The Tauri tile header's controls, `.desktop-dock-tile-send-button` and its kin, are 24 points
-/// high; a tile 720 points across or less has no room for "Overall note".
-const CONTROL_H: f32 = 24.0;
-
-/// How long the target session's name may run, as `.desktop-dock-tile-send-target-name` at each
-/// width.
-fn target_name_max(room: Room) -> f32 {
-    match room {
-        Room::Wide => 82.0,
-        Room::Medium => 64.0,
-        Room::Narrow => 48.0,
-    }
+/// Words of a header control in `ink`, as long as they run.
+fn words_in(said: impl Into<Said>, ink: rune::Color) -> El {
+    attn_ui::system::words(said, Type::Control, ink).truncate()
 }
-
-/// The ▾ a header control opens its menu with.
-fn caret_mark(ink: rune::Color) -> El {
-    rune::icon(&attn_ui::icon::DISCLOSE_OPEN, 12.0).color(ink)
-}
-const SEND: rune::TextStyle = rune::TextStyle {
-    weight: 600.0,
-    ..type_::LABEL
-};
 
 /// A document tile: the desktop it is on, its document, and where its marks go.
 struct Tiled<'a> {

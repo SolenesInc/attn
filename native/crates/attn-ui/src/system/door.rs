@@ -114,6 +114,20 @@ pub(crate) fn corner(e: El, radius: Radius) -> El {
     e.radius(radius.pt())
 }
 
+/// `e` rounded at `radius` but square on the side where it meets the control it is joined to.
+pub(crate) fn corner_joined(e: El, radius: Radius, join: super::Join) -> El {
+    let r = radius.pt();
+    e.corners(match join {
+        super::Join::Next => [r, 0.0, 0.0, r],
+        super::Join::Previous => [0.0, r, r, 0.0],
+    })
+}
+
+/// `e` laid over the edge of the control before it, so the two edges read as one.
+pub(crate) fn over_previous_edge(e: El) -> El {
+    e.ml(-1.0)
+}
+
 pub(crate) fn line(input: rune_kit::TextInput, kind: Type) -> rune_kit::TextInput {
     input.text_style(style(kind))
 }
