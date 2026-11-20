@@ -312,6 +312,11 @@ sign-in and synthetic text, 2026-11-19 (plot `s-jhntry`, F2 to F5):
   spare used 0.00 s of CPU over 10 idle minutes. When its daemon was killed
   with SIGKILL, the stopped spare was gone within 200 ms: its process group
   is orphaned with a stopped member, so the kernel sends SIGHUP and SIGCONT.
+- A spare still answers after 2 hours idle (2.1.329, seed `s-jwy81g`). Left
+  running, one took its instructions and model and answered in 1,241 ms,
+  1,121 ms of it the model's, having used 15.6 s of CPU in those 2 hours. Stopped with
+  SIGSTOP from `session.start`, one used 0.00 s of CPU in 2 hours and, after
+  SIGCONT, answered with 52 ms beyond the model's time.
 - A process started with no model and no instructions takes both afterwards:
   a `control_request` with `subtype: initialize` and `systemPrompt`, then one
   with `subtype: set_model`. Each answers a `control_response` with
