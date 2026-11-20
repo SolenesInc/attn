@@ -183,7 +183,7 @@ fn surface_view(
             }
         })
         .w_full()
-        .h_full()
+        .grow(1.0)
         .min_h(0.0)
         .children(tree_open.then(|| tree(id, surface, t)))
         .child(document(id, surface, find, folds, t))

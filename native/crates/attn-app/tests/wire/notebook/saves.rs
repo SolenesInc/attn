@@ -593,6 +593,13 @@ fn a_failed_save_leaves_three_lines_in_the_smallest_window(
         let screen = world.screen();
         let scroll = Target::key(format!("{document}.scroll"));
         let [_, y, _, h] = screen.bounds(scroll.clone()).unwrap();
+        let [_, wy, _, wh] = screen.bounds(Target::key("window")).unwrap();
+        assert!(
+            y >= wy && y + h <= wy + wh + 0.5,
+            "the note's view at {:?} runs out of the window {:?}",
+            [y, h],
+            [wy, wh]
+        );
         let whole = screen
             .descendants(scroll)
             .into_iter()
