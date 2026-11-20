@@ -100,7 +100,13 @@ pub const SUBJECTS: &[(&str, &[&str])] = &[
     ("Library/Expander", &["expander"]),
     (
         "Library/Tag",
-        &["tag.neutral", "tag.warn", "tag.bad", "tag.good"],
+        &[
+            "tag.neutral",
+            "tag.warn",
+            "tag.bad",
+            "tag.good",
+            "tag.accent",
+        ],
     ),
     ("Library/Icon box", &["icon.filled", "icon.dashed"]),
     ("Library/Choice", &["choices"]),
@@ -977,6 +983,7 @@ fn tags(s: &Library, cx: &mut Cx<Library>) -> El {
             tag("tag.warn", said("Needs a model"), Tone::Warn, &t).into(),
             tag("tag.bad", said("Failed"), Tone::Bad, &t).into(),
             tag("tag.good", said("Live"), Tone::Good, &t).into(),
+            tag("tag.accent", said("Recommended"), Tone::Accent, &t).into(),
         ],
     )
 }

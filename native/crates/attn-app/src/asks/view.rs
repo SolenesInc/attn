@@ -2,13 +2,17 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use attn_protocol::{Ask, AskAnswer, AskQuestion, AskSeedMention, Session};
-use attn_ui::Tokens;
-use attn_ui::keycap;
+use attn_ui::blocks::{Block, Inline, List, Section, Sheet, Stack};
+use attn_ui::system::{
+    Button, Choice, DotShape, DotSize, FieldState, IconSize, ListRow, Look, Size, Tone, Type,
+    area_box, checks, choices, count_badge, dot, icon_button, keycaps, keys_hint, line_box, tag,
+    words,
+};
 use attn_ui::type_;
+use attn_ui::{Tokens, glyph};
 use rune::tok::space;
-use rune::{El, Image, Key, KeyEvent, Side, Tx, col, el, row, text, text_input};
-use rune_kit::ScrollBar;
-use rune_kit::{Button, ButtonVariant, ControlSize, ImageFrame, Markdown, TextArea};
+use rune::{El, Image, Key, KeyEvent, Side, Tx, col, row, text};
+use rune_kit::{ImageFrame, Markdown, TextArea, TextInput};
 
 use super::{Chip, Item, Kind, Lists, mentions, questions};
 use crate::State;
@@ -19,6 +23,10 @@ use crate::sidebar::queue;
 pub(super) const SNOOZE: &str = "asks.snooze";
 const OPEN_SEED: &str = "asks.open-seed";
 const LIST: &str = "asks.list";
+
+/// How many asks the list shows before it scrolls: three, and half of the next, so it reads as
+/// a list that goes on and leaves the drawer to the ask it shows.
+const SHOWN_ASKS: f32 = 3.5;
 
 pub(super) fn choice_key(question: &str, i: usize) -> String {
     format!("asks.q.{question}.choice.{i}")
@@ -50,7 +58,33 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
     let asks = &state.window.asks;
     let items = lists.shown(asks.show_replied);
     let shown = state.shown_ask().map(|(id, _)| id);
-    let frame = col()
+    let close = icon_button("asks.close", "Close asks", glyph::TIMES, IconSize::Large)
+        .on_press_tx(super::close)
+        .build(t);
+    let mut sheet = Sheet::new("asks.sheet", "Asks");
+    if live > 0 {
+        sheet = sheet.badge(
+            count_badge(live, t.accent, t.bg_app)
+                .key("asks.count")
+                .role("status")
+                .label(format!("{live} open")),
+        );
+    }
+    let sheet = sheet
+        .aside(replied_toggle(replied, asks.show_replied, t))
+        .close(close);
+    let sheet = match shown.and_then(|id| items.iter().position(|i| i.ask.id == id)) {
+        None => sheet.push(empty(replied, t)),
+        Some(at) => {
+            let item = &items[at];
+            sheet
+                .top(list(&items, &item.ask.id, state.window.now_ms, t))
+                .article("asks.ask", item.ask.subject.clone())
+                .push_all(article(state, item, t))
+                .footer(footer(state, item, items.len() > 1, t))
+        }
+    };
+    col()
         .key(super::DRAWER)
         .role("region")
         .label("Asks")
@@ -59,130 +93,54 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
         .on_key(drawer_key)
         .h_full()
         .min_h(0.0)
-        .child(header(live, replied, asks.show_replied, t));
-    let Some(at) = shown.and_then(|id| items.iter().position(|i| i.ask.id == id)) else {
-        return frame.child(empty(replied, t));
-    };
-    frame
-        .child(list(&items, &items[at].ask.id, state.window.now_ms, t))
-        .child(article(state, &items[at], t))
-        .child(footer(state, &items[at], items.len() > 1, t))
+        .child(sheet.build(t))
 }
 
-fn header(live: usize, replied: usize, show_replied: bool, t: &Tokens) -> El {
-    row()
-        .key("asks.header")
-        .w_full()
-        .items_center()
-        .gap(10.0)
-        .px(18.0)
-        .pt(16.0)
-        .pb(12.0)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-        .child(type_::upper("Asks", type_::DRAWER_TITLE).color(t.text_muted))
-        .children((live > 0).then(|| {
-            text(live.to_string())
-                .key("asks.count")
-                .role("status")
-                .label(format!("{live} open"))
-                .font(COUNT_TYPE)
-                .color(t.bg_app)
-                .min_w(20.0)
-                .px(8.0)
-                .py(2.0)
-                .align(rune::Align::Center)
-                .radius(10.0)
-                .fill(t.accent)
-        }))
-        .child(el().grow(1.0))
-        .child(replied_toggle(replied, show_replied, t))
-        .child(
-            attn_ui::GlyphButton::new(attn_ui::glyph::TIMES, "Close asks")
-                .font(attn_ui::glyph::LARGE)
-                .color(t.text_dimmed)
-                .on_press_tx(super::close)
-                .build(attn_ui::kit(t))
-                .key("asks.close"),
-        )
-}
-
-/// The Tauri app's `.asks-count`: the open asks' number on the accent pill.
-const COUNT_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 700.0).mono();
-
-/// The Tauri app's `--font-size-xs` and `--font-size-sm` text, at the native app's sizes.
-const SMALL: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
-
-/// The Tauri app's `.asks-replied-toggle`: an outlined button that reads as pressed while the
-/// replied asks show.
+/// Shows or hides the asks replied to in the last day, reading as pressed while they show.
 fn replied_toggle(replied: usize, on: bool, t: &Tokens) -> El {
-    let label = if on {
+    let help = if on {
         "Hide the asks you replied to in the last day (r)"
     } else {
         "Show the asks you replied to in the last day (r)"
     };
-    let ink = if on { t.text_primary } else { t.text_dimmed };
-    row()
-        .key("asks.replied")
-        .role("button")
-        .label(if replied > 0 {
-            format!("Replied {replied}")
-        } else {
-            "Replied".to_owned()
-        })
-        .help(label)
-        .checked(on)
-        .focusable(true)
-        .focus_ring(2.0, 2.0, t.accent)
-        .items_center()
-        .gap(6.0)
-        .px(8.0)
-        .py(3.0)
-        .radius(6.0)
-        .border(1.0, if on { t.border } else { t.border_subtle })
-        .fill(if on {
-            t.bg_selected
-        } else {
-            rune::Color::TRANSPARENT
-        })
-        .hover(t.bg_elevated)
+    let said = if replied > 0 {
+        format!("Replied {replied}")
+    } else {
+        "Replied".to_owned()
+    };
+    Button::new(said)
+        .size(Size::Compact)
+        .look(Look::Quiet)
+        .chosen(on)
+        .help(help)
         .on_press_tx(toggle_replied)
-        .child(text("Replied").font(SMALL).color(ink).a11y_hidden())
-        .children((replied > 0).then(|| {
-            text(replied.to_string())
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary)
-                .a11y_hidden()
-        }))
+        .build(t)
+        .key("asks.replied")
+        .into()
 }
 
-fn empty(replied: usize, t: &Tokens) -> El {
+fn empty(replied: usize, t: &Tokens) -> Block {
     let replies = match replied {
         0 => None,
         1 => Some("r shows the one you replied to in the last day".to_owned()),
         n => Some(format!("r shows the {n} you replied to in the last day")),
     };
-    let line = |words: String, style: rune::TextStyle, ink: rune::Color| {
-        text(words)
-            .font(style)
-            .color(ink)
-            .align(rune::Align::Center)
-            .wrap()
+    Block::custom(
+        "asks.empty.block",
+        Stack::tight()
+            .key("asks.empty")
             .w_full()
-    };
-    col()
-        .key("asks.empty")
-        .w_full()
-        .items_center()
-        .px(24.0)
-        .py(60.0)
-        .gap(6.0)
-        .child(line("No open asks.".into(), type_::BODY, t.text_tertiary))
-        .child(line(
-            "When an agent needs a decision from you, its ask lands here.".into(),
-            SMALL,
-            t.text_dimmed,
-        ))
-        .children(replies.map(|r| line(r, SMALL, t.text_dimmed)))
+            .child(words("No open asks.", Type::Body, t.text_tertiary).wrap())
+            .child(
+                words(
+                    "When an agent needs a decision from you, its ask lands here.",
+                    Type::Small,
+                    t.text_tertiary,
+                )
+                .wrap(),
+            )
+            .children(replies.map(|r| words(r, Type::Small, t.text_tertiary).wrap())),
+    )
 }
 
 fn list(items: &[Item<'_>], shown: &str, now_ms: i64, t: &Tokens) -> El {
@@ -191,51 +149,36 @@ fn list(items: &[Item<'_>], shown: &str, now_ms: i64, t: &Tokens) -> El {
     for (at, item) in items.iter().enumerate() {
         let before = at.checked_sub(1).map(|b| &items[b]);
         if item.snoozed_until.is_some() && before.is_none_or(|b| b.snoozed_until.is_none()) {
-            rows.push(divider("Snoozed", t));
+            rows.push(divider("asks.list.snoozed", "Snoozed", t));
         }
         if item.ask.reply.is_some() && before.is_none_or(|b| b.ask.reply.is_none()) {
-            rows.push(divider("Replied in the last day", t));
+            rows.push(divider("asks.list.replied", "Replied in the last day", t));
         }
         rows.push(list_row(item, item.ask.id == shown, now_ms, t));
     }
-    col()
-        .key(LIST)
-        .role("listbox")
-        .label(if replied {
-            "Open and replied asks"
-        } else {
-            "Open asks"
-        })
-        .w_full()
-        .max_h(180.0)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .padding(8.0)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-        .children(rows)
-        .scroll_bar_styled(attn_ui::asks_scroll_bar(t))
+    let label = if replied {
+        "Open and replied asks"
+    } else {
+        "Open asks"
+    };
+    List::new(LIST, label)
+        .listbox()
+        .rows(rows)
+        .scrolling_up_to(ListRow::two_line_height() * SHOWN_ASKS, t)
 }
 
-fn divider(words: &'static str, t: &Tokens) -> El {
-    text(words)
-        .role("listitem")
-        .label(words)
-        .font(SMALL)
-        .color(t.text_dimmed)
-        .px(10.0)
-        .pt(10.0)
-        .pb(4.0)
+fn divider(key: &str, said: &'static str, t: &Tokens) -> El {
+    ListRow::note(key, said, Type::Label, t.text_tertiary).role("listitem")
 }
 
 fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
     let ask = item.ask;
-    let mut words = vec![item.from.clone(), ask.subject.clone()];
+    let mut about = vec![item.from.clone()];
     if item.questions > 1 {
-        words.push(format!("{} questions", item.questions));
+        about.push(format!("{} questions", item.questions));
     }
     if let Some(until) = item.snoozed_until {
-        words.push(format!(
+        about.push(format!(
             "until {}",
             queue::wake_time_short(Some(until), now_ms)
         ));
@@ -243,92 +186,40 @@ fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
     let waiting = ask.reply.is_none()
         && item.snoozed_until.is_none()
         && item.holder.is_some_and(|s| s.turn_owed == Some(true));
-    if waiting {
-        words.push("Waiting on you".into());
-    }
     if ask.reply.is_some() {
-        words.push("replied".into());
+        about.push("replied".into());
     }
     let age = queue::turn_age(Some(super::age_from(ask)), now_ms);
-    let dimmed = ask.reply.is_some() || item.snoozed_until.is_some();
+    let mut said = vec![item.from.clone(), ask.subject.clone()];
+    said.extend(about[1..].iter().cloned());
+    if waiting {
+        said.push("Waiting on you".into());
+    }
     let id = ask.id.clone();
-    let tags: Vec<String> = words[2..].to_vec();
-    row()
-        .key(format!("asks.row.{}", ask.id))
-        .role("option")
-        .label(format!("{} {age}", words.join(" · ")))
+    let row = ListRow::new(
+        format!("asks.row.{}", ask.id),
+        format!("{} {age}", said.join(" · ")),
+    );
+    let row = if waiting {
+        row.aside(dot(t.accent, DotShape::Filled, DotSize::Small))
+    } else {
+        row
+    };
+    row.role("option")
+        .unfocusable()
+        .title(ask.subject.clone())
+        .subtitle(about.join(" · "), t)
+        .aside(words(age, Type::Mono, t.text_tertiary))
+        .selected(selected)
+        .dimmed(ask.reply.is_some() || item.snoozed_until.is_some())
+        .build(t)
         .a11y_value(if selected { "current" } else { "" })
-        .w_full()
-        .items_center()
-        .gap(10.0)
-        .px(10.0)
-        .py(7.0)
-        .radius(6.0)
-        .border(
-            1.0,
-            if selected {
-                t.border
-            } else {
-                rune::Color::TRANSPARENT
-            },
-        )
-        .fill(if selected {
-            t.bg_selected
-        } else {
-            rune::Color::TRANSPARENT
-        })
-        .hover(t.bg_elevated)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             state.window.asks.selected = Some(id.clone());
             state.window.asks.error = None;
             super::follow(state, tx);
         })
-        .child(
-            text(item.from.clone())
-                .font(SMALL_STRONG)
-                .color(if dimmed && !selected {
-                    t.text_tertiary
-                } else {
-                    t.text_primary
-                })
-                .single_line()
-                .truncate()
-                .max_w(110.0),
-        )
-        .child(
-            text(ask.subject.clone())
-                .font(SMALL)
-                .color(if dimmed && !selected {
-                    t.text_tertiary
-                } else if selected {
-                    t.text_primary
-                } else {
-                    t.text_secondary
-                })
-                .single_line()
-                .truncate()
-                .grow(1.0)
-                .min_w(0.0),
-        )
-        .children(tags.into_iter().map(|tag| {
-            let waiting = tag == "Waiting on you";
-            if waiting {
-                el().w(6.0).h(6.0).radius(3.0).fill(t.accent)
-            } else {
-                text(tag).font(SMALL).color(t.text_dimmed)
-            }
-        }))
-        .child(
-            text(age)
-                .font(type_::MONO_CAPTION)
-                .color(t.text_dimmed)
-                .min_w(24.0)
-                .align(rune::Align::End),
-        )
 }
-
-/// The Tauri app's semibold `--font-size-sm` names: the agent an ask comes from.
-const SMALL_STRONG: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
 
 /// How an ask's words show: the seeds they name as links that open them, and its pictures,
 /// read from the copy of them the home keeps.
@@ -388,19 +279,16 @@ impl<'a> Prose<'a> {
     }
 }
 
-fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
+fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
     let ask = item.ask;
-    let replied = ask.reply.is_some();
     let prose = Prose::of(state, ask, t);
     let snoozable = item
         .holder
         .filter(|s| !crate::outpost::offline(s, &state.facts.outposts));
     let snoozed = snoozable
         .is_some_and(|s| queue::is_snoozed(s.turn_snoozed_until.as_deref(), state.window.now_ms));
-    let from = row()
+    let from = Inline::loose()
         .w_full()
-        .items_center()
-        .gap(space::S2)
         .children(item.holder.map(|s| {
             crate::sidebar::lead(
                 "asks.from",
@@ -410,141 +298,123 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
             )
         }))
         .child(
-            text(item.from.clone())
+            words(item.from.clone(), Type::Name, t.text_primary)
                 .key("asks.from")
-                .font(SMALL_STRONG)
-                .color(t.text_primary)
                 .grow(1.0)
                 .min_w(0.0)
-                .single_line()
                 .truncate(),
         )
         .children(item.holder.map(|s| open_agent(s, &item.from, t)))
         .children(snoozable.map(|_| snooze_button(snoozed, &item.from, t)));
-    let seed = ask.seed_id.as_ref().map(|seed| {
+    let mut blocks = vec![Block::custom("asks.from.block", from)];
+    if let Some(seed) = &ask.seed_id {
         let id = seed.clone();
-        row()
-            .key("asks.seed")
-            .w_full()
-            .items_center()
-            .gap(space::S2)
-            .child(
-                text(ask.seed_slug.clone().unwrap_or_else(|| seed.clone()))
-                    .font(type_::MONO_CAPTION)
-                    .color(t.text_tertiary),
-            )
-            .child(
-                text(ask.seed_title.clone().unwrap_or_default())
-                    .font(SMALL)
-                    .color(t.text_secondary)
+        blocks.push(Block::custom(
+            "asks.seed.block",
+            Inline::loose()
+                .key("asks.seed")
+                .w_full()
+                .child(words(
+                    ask.seed_slug.clone().unwrap_or_else(|| seed.clone()),
+                    Type::Mono,
+                    t.text_tertiary,
+                ))
+                .child(
+                    words(
+                        ask.seed_title.clone().unwrap_or_default(),
+                        Type::Small,
+                        t.text_secondary,
+                    )
                     .grow(1.0)
                     .min_w(0.0)
-                    .single_line()
                     .truncate(),
-            )
-            .child(
-                ask_button(
+                )
+                .child(ask_button(
                     OPEN_SEED,
                     "Open in Garden",
                     "Open the seed in the garden (g)",
                     t,
-                )
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    super::open_seed(state, &id, tx)
-                }),
-            )
-    });
+                    move |state: &mut State, tx: &mut Tx| super::open_seed(state, &id, tx),
+                )),
+        ));
+    }
+    blocks.push(Block::custom(
+        "asks.subject.block",
+        prose.text(
+            words(ask.subject.clone(), Type::Heading, t.text_primary)
+                .role("heading")
+                .wrap(),
+            &ask.subject,
+        ),
+    ));
     let draft = state.window.asks.drafts.get(&ask.id);
     let reply_answers = ask.reply.as_ref().map(|r| r.answers.as_slice());
     let mut index = 0;
-    let parts = ask
-        .parts
-        .iter()
-        .enumerate()
-        .map(|(at, part)| match &part.question {
+    for (at, part) in ask.parts.iter().enumerate() {
+        blocks.push(match &part.question {
             Some(question) => {
                 index += 1;
                 let answer = match reply_answers {
                     Some(answers) => Shown::Replied(answers.iter().find(|a| a.key == question.key)),
                     None => Shown::Draft(draft.and_then(|d| d.answers.get(&question.key))),
                 };
-                question_card(&ask.id, index, question, answer, &prose, t)
+                question_section(&ask.id, index, question, answer, &prose, t)
             }
-            None => col()
-                .key(format!("asks.part.{at}"))
-                .w_full()
-                .child(prose.markdown(part.markdown.as_deref().unwrap_or_default())),
+            None => Block::custom(
+                format!("asks.part.{at}.block"),
+                col()
+                    .key(format!("asks.part.{at}"))
+                    .w_full()
+                    .child(prose.markdown(part.markdown.as_deref().unwrap_or_default())),
+            ),
         });
+    }
     let note_placeholder = if item.holder.is_some() || ask.seed_id.is_none() {
         format!("Anything else for {}?", item.from)
     } else {
         "Anything else for its next tender?".to_owned()
     };
-    let note = match &ask.reply {
-        Some(reply) => reply
-            .note
-            .as_ref()
-            .filter(|n| !n.is_empty())
-            .map(|n| replied_text("asks.note".into(), "Note", n, t)),
+    match &ask.reply {
+        Some(reply) => blocks.extend(reply.note.as_ref().filter(|n| !n.is_empty()).map(|n| {
+            Block::custom(
+                "asks.note.block",
+                replied_text("asks.note".into(), "Note", n, t),
+            )
+        })),
         None => {
-            let edit = draft.map(|d| &d.note);
             let id = ask.id.clone();
-            Some(written_field(
-                edit,
-                NOTE,
-                "Note",
-                &note_placeholder,
-                move |state: &mut State| state.note(&id),
-                t,
-            ))
+            blocks.push(Block::custom(
+                "asks.note.block",
+                written_field(
+                    draft.map(|d| &d.note),
+                    NOTE,
+                    "Note",
+                    &note_placeholder,
+                    move |state: &mut State| state.note(&id),
+                    t,
+                ),
+            ));
         }
-    };
-    let error = state
-        .window
-        .asks
-        .error
-        .as_ref()
-        .filter(|(id, _)| *id == ask.id)
-        .map(|(_, why)| {
-            text(why.clone())
-                .key("asks.error")
-                .role("alert")
-                .label(why.clone())
-                .font(type_::LABEL)
-                .color(t.error)
-                .wrap()
-        });
-    col()
-        .key("asks.ask")
-        .role("article")
-        .label(ask.subject.clone())
-        .a11y_value(if replied { "replied" } else { "" })
-        .w_full()
-        .grow(1.0)
-        .min_h(0.0)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .px(20.0)
-        .pt(16.0)
-        .pb(20.0)
-        .gap(14.0)
-        .child(from)
-        .children(seed)
-        .child(
-            prose.text(
-                text(ask.subject.clone())
-                    .role("heading")
-                    .font(SUBJECT_TYPE)
-                    .color(t.text_primary)
-                    .wrap(),
-                &ask.subject,
-            ),
-        )
-        .children(parts)
-        .children(note)
-        .children(error)
-        .scroll_bar_styled(attn_ui::asks_scroll_bar(t))
+    }
+    blocks.extend(
+        state
+            .window
+            .asks
+            .error
+            .as_ref()
+            .filter(|(id, _)| *id == ask.id)
+            .map(|(_, why)| {
+                Block::custom(
+                    "asks.error.block",
+                    words(why.clone(), Type::Small, t.error)
+                        .key("asks.error")
+                        .role("alert")
+                        .label(why.clone())
+                        .wrap(),
+                )
+            }),
+    );
+    blocks
 }
 
 fn open_agent(session: &Session, from: &str, t: &Tokens) -> El {
@@ -554,48 +424,36 @@ fn open_agent(session: &Session, from: &str, t: &Tokens) -> El {
         "Open agent",
         &format!("Open {from} (o)"),
         t,
+        move |state: &mut State, tx: &mut Tx| super::open_agent(state, &id, tx),
     )
-    .on_press_tx(move |state: &mut State, tx: &mut Tx| super::open_agent(state, &id, tx))
 }
 
 fn snooze_button(snoozed: bool, from: &str, t: &Tokens) -> El {
-    let (words, hint) = if snoozed {
+    let (said, help) = if snoozed {
         ("Wake", format!("Wake {from} (s)"))
     } else {
         ("Snooze", format!("Snooze {from} and its asks (s)"))
     };
-    ask_button(SNOOZE, words, &hint, t).on_press_tx(super::toggle_snooze)
+    ask_button(SNOOZE, said, &help, t, super::toggle_snooze)
 }
 
-fn small_button(key: &str, words: &str, hint: &str, t: &Tokens) -> El {
-    let button = Button::new(words).control_size(ControlSize::Small);
-    let button = if hint.is_empty() {
-        button
-    } else {
-        button.help(hint)
-    };
-    button.build(attn_ui::kit(t)).key(key.to_owned())
-}
-
-/// The Tauri app's `.asks-ask-open`: Open agent, Snooze and Open in Garden, as small bordered
-/// buttons in the secondary color.
-fn ask_button(key: &str, words: &str, hint: &str, t: &Tokens) -> El {
-    let (ink, label) = (t.text_secondary, words.to_owned());
-    Button::new(words)
-        .variant(ButtonVariant::Ghost)
-        .control_size(ControlSize::Small)
-        .help(hint)
-        .label_with(move |_, _| text(label).font(SMALL).color(ink))
-        .build(attn_ui::kit(t))
+/// Open agent, Snooze and Open in Garden: what to do with the ask besides answering it.
+fn ask_button(
+    key: &str,
+    said: &str,
+    help: &str,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    Button::new(said)
+        .size(Size::Compact)
+        .look(Look::Plain)
+        .help(help)
+        .on_press_tx(press)
+        .build(t)
         .key(key.to_owned())
-        .px(10.0)
-        .radius(6.0)
-        .fill(t.bg_button)
-        .border(1.0, t.border)
+        .into()
 }
-
-/// The Tauri app's `.asks-ask-subject`: the ask's heading, at `--font-size-lg`.
-const SUBJECT_TYPE: rune::TextStyle = rune::TextStyle::new(18.0, 600.0);
 
 enum Shown<'a> {
     Draft(Option<&'a super::Answer>),
@@ -611,81 +469,53 @@ impl Shown<'_> {
     }
 }
 
-fn question_card(
+/// A question, numbered, its words linking the seeds they name, then what it says about itself
+/// and the choices or the field that answer it.
+fn question_section(
     ask: &str,
     index: usize,
     question: &AskQuestion,
     answer: Shown<'_>,
     prose: &Prose<'_>,
     t: &Tokens,
-) -> El {
+) -> Block {
     let kind = Kind::of(question);
-    let number = index.to_string();
-    let natural = crate::desktop::text_w(&number, INDEX_TYPE)
-        + space::S2
-        + crate::desktop::text_w(&question.prompt, PROMPT_TYPE);
-    let legend = row()
+    let heading = Inline::joined()
         .key(format!("asks.q.{}.prompt", question.key))
-        .grow(1.0)
-        .min_w(0.0)
-        .max_w(natural.ceil())
-        .gap(space::S2)
-        .fill(t.bg_panel)
-        .child(text(number).font(INDEX_TYPE).color(t.text_dimmed))
+        .items_start()
+        .child(words(index.to_string(), Type::Mono, t.text_tertiary))
         .child(
             prose.text(
-                text(question.prompt.clone())
-                    .font(PROMPT_TYPE)
-                    .color(t.text_primary)
+                words(question.prompt.clone(), Type::Name, t.text_primary)
                     .wrap()
                     .grow(1.0)
                     .min_w(0.0),
                 &question.prompt,
             ),
         );
-    let legend = row()
-        .w_full()
-        .mt(-(PROMPT_TYPE.line_height + 1.0) / 2.0)
-        .mb(PADDING_Y - QUESTION_GAP)
-        .child(legend);
     let context = question
         .context
         .as_ref()
         .filter(|c| !c.is_empty())
-        .map(|c| prose.markdown(c).w_full());
+        .map(|c| {
+            Block::custom(
+                format!("asks.q.{}.context", question.key),
+                prose.markdown(c).w_full(),
+            )
+        });
     let body = match kind {
         Kind::Text => written(ask, question, &answer, t),
-        Kind::One | Kind::Any => choices(ask, question, kind, &answer, t),
+        Kind::One | Kind::Any => choice_list(ask, question, kind, &answer, t),
     };
-    col()
-        .key(format!("asks.q.{}", question.key))
-        .role("group")
-        .label(question.prompt.clone())
-        .w_full()
-        .mt((PROMPT_TYPE.line_height - 1.0) / 2.0)
-        .gap(QUESTION_GAP)
-        .px(16.0)
-        .pb(PADDING_Y)
-        .radius(10.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border)
-        .child(legend)
-        .children(context)
-        .child(body)
+    Section::new(format!("asks.q.{}", question.key), question.prompt.clone())
+        .heading(heading)
+        .push_all(context)
+        .push(Block::custom(
+            format!("asks.q.{}.answer", question.key),
+            body,
+        ))
+        .build(t)
 }
-
-/// The Tauri app's `.ask-question`, a fieldset whose prompt is its legend: the legend sits on
-/// the top border, which breaks around it.
-const PROMPT_TYPE: rune::TextStyle = rune::TextStyle {
-    line_height: 18.0,
-    ..rune::TextStyle::new(13.0, 600.0)
-};
-const INDEX_TYPE: rune::TextStyle = rune::TextStyle {
-    line_height: 18.0,
-    ..rune::TextStyle::new(13.0, 500.0).mono()
-};
-const PADDING_Y: f32 = 14.0;
-const QUESTION_GAP: f32 = 10.0;
 
 fn written(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) -> El {
     let key = question.key.clone();
@@ -704,10 +534,9 @@ fn written(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) ->
                 _ => "Your answer…".to_owned(),
             };
             let (ask_id, q) = (ask.to_owned(), key.clone());
-            let field_key = text_key(&key);
             let field = written_field(
                 edit,
-                &field_key,
+                &text_key(&key),
                 &question.prompt,
                 &placeholder,
                 move |state: &mut State| &mut state.answer(&ask_id, &q).text,
@@ -719,90 +548,64 @@ fn written(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) ->
                 .filter(|r| !r.is_empty() && empty)
                 .map(|r| {
                     let (ask_id, q) = (ask.to_owned(), key.clone());
-                    small_button(
-                        &format!("asks.q.{key}.suggestion"),
-                        "Use the suggestion",
-                        "",
-                        t,
+                    El::from(
+                        Button::new("Use the suggestion")
+                            .size(Size::Compact)
+                            .look(Look::Plain)
+                            .on_press(move |state: &mut State| {
+                                let answer = state.answer(&ask_id, &q);
+                                answer.text = super::rewritten(&answer.text, r.clone());
+                            })
+                            .build(t)
+                            .key(format!("asks.q.{key}.suggestion")),
                     )
-                    .on_press(move |state: &mut State| {
-                        let answer = state.answer(&ask_id, &q);
-                        answer.text = super::rewritten(&answer.text, r.clone());
-                    })
+                    .self_start()
                 });
-            col()
-                .w_full()
-                .gap(space::S1)
-                .child(field)
-                .children(suggestion)
+            Stack::tight().w_full().child(field).children(suggestion)
         }
     }
 }
 
-fn choices(ask: &str, question: &AskQuestion, kind: Kind, answer: &Shown<'_>, t: &Tokens) -> El {
+fn choice_list(
+    ask: &str,
+    question: &AskQuestion,
+    kind: Kind,
+    answer: &Shown<'_>,
+    t: &Tokens,
+) -> El {
     let replied = matches!(answer, Shown::Replied(_));
-    let rows = question.choices.iter().enumerate().map(|(i, choice)| {
-        let picked = answer.picked(&choice.label);
+    let many = kind == Kind::Any;
+    let n = question.choices.len();
+    let options = question.choices.iter().enumerate().map(|(i, choice)| {
         let recommended = question.recommended.as_deref() == Some(choice.label.as_str());
         let (ask_id, q, label) = (ask.to_owned(), question.key.clone(), choice.label.clone());
-        let el = row()
-            .key(choice_key(&question.key, i))
-            .role(if kind == Kind::One {
-                "radio"
-            } else {
-                "checkbox"
-            })
-            .label(choice.label.clone())
-            .checked(picked)
-            .disabled(replied)
-            .focusable(!replied)
-            .w_full()
-            .items_start()
-            .gap(10.0)
-            .px(10.0)
-            .py(8.0)
-            .radius(8.0)
-            .border(1.0, if picked { t.accent } else { t.border_subtle })
-            .fill(if picked {
-                t.accent.alpha(0.08)
-            } else {
-                rune::Color::TRANSPARENT
-            })
-            .hover(t.bg_elevated)
-            .child(choice_mark(kind, picked, t))
-            .child(
-                col()
-                    .grow(1.0)
-                    .min_w(0.0)
-                    .gap(2.0)
-                    .child(
-                        row()
-                            .items_center()
-                            .gap(8.0)
-                            .child(
-                                text(choice.label.clone())
-                                    .font(type_::BODY)
-                                    .color(t.text_primary)
-                                    .wrap()
-                                    .shrink()
-                                    .min_w(0.0),
-                            )
-                            .children(recommended.then(|| recommended_tag(t))),
-                    )
-                    .children(
-                        choice
-                            .description
-                            .clone()
-                            .filter(|d| !d.is_empty())
-                            .map(|d| text(d).font(SMALL).color(t.text_tertiary).wrap()),
-                    ),
-            );
-        if replied {
-            el
-        } else {
-            el.on_press(move |state: &mut State| super::pick(state, &ask_id, &q, kind, &label))
+        let mut shown = Choice::new(choice_key(&question.key, i), choice.label.clone())
+            .many(many)
+            .chosen(answer.picked(&choice.label))
+            .disabled(replied);
+        if let Some(note) = choice.description.clone().filter(|d| !d.is_empty()) {
+            shown = shown.note(note);
         }
+        if recommended {
+            shown = shown.tag(tag(
+                format!("{}.recommended", choice_key(&question.key, i)),
+                "Recommended",
+                Tone::Accent,
+                t,
+            ));
+        }
+        El::from(
+            shown.build((i, n), t, move |state: &mut State, _: &mut Tx| {
+                super::pick(state, &ask_id, &q, kind, &label)
+            }),
+        )
     });
+    let group_key = format!("asks.q.{}.choices", question.key);
+    let group = if many {
+        checks(group_key, &question.prompt)
+    } else {
+        choices(group_key, &question.prompt)
+    };
     let label = format!("Other answer to {}", question.prompt);
     let other = match answer {
         Shown::Replied(a) => a
@@ -811,81 +614,24 @@ fn choices(ask: &str, question: &AskQuestion, kind: Kind, answer: &Shown<'_>, t:
             .map(|o| replied_text(format!("asks.q.{}.other", question.key), &label, o, t)),
         Shown::Draft(draft) => {
             let (ask_id, q) = (ask.to_owned(), question.key.clone());
-            Some(
-                field(
-                    draft.map(|a| &a.other),
-                    &other_key(&question.key),
-                    &label,
-                    "Other…",
-                    t,
-                )
-                .single_line()
-                .min_h(35.0)
-                .on_edit({
-                    let (ask_id, q) = (ask_id.clone(), q.clone());
-                    move |state: &mut State| &mut state.answer(&ask_id, &q).other
-                })
-                .on_input_change(move |state: &mut State, _: &mut Tx| {
+            let edit_of = (ask_id.clone(), q.clone());
+            let empty = rune::TextEdit::default();
+            let input = TextInput::new(draft.map(|a| &a.other).unwrap_or(&empty))
+                .key(other_key(&question.key))
+                .label(label)
+                .placeholder("Other…")
+                .on_edit(move |state: &mut State| &mut state.answer(&edit_of.0, &edit_of.1).other)
+                .on_change(move |state: &mut State, _: &mut Tx| {
                     super::other_edited(state, &ask_id, &q, kind)
-                }),
-            )
+                })
+                .on_key(field_key);
+            Some(El::from(line_box(input, FieldState::Ready, t)))
         }
     };
-    col()
-        .key(format!("asks.q.{}.choices", question.key))
-        .role(if kind == Kind::One {
-            "radiogroup"
-        } else {
-            "group"
-        })
-        .label(question.prompt.clone())
+    Stack::tight()
         .w_full()
-        .gap(6.0)
-        .children(rows)
+        .child(group.children(options))
         .children(other)
-}
-
-/// The Tauri app's `.ask-recommended`: a small tag on the accent's tint.
-fn recommended_tag(t: &Tokens) -> El {
-    text("recommended")
-        .font(TAG_TYPE)
-        .color(t.accent)
-        .px(6.0)
-        .py(1.0)
-        .radius(4.0)
-        .fill(t.accent.alpha(0.15))
-}
-
-const TAG_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 500.0);
-
-/// A choice's radio or checkbox: a ring or box with a thin gray edge, filled with the accent once
-/// picked, as wide as the small check mark it holds and centred 9 below the top of its label's
-/// first line.
-fn choice_mark(kind: Kind, picked: bool, t: &Tokens) -> El {
-    let edge = attn_ui::colors::rgb(if t.dark {
-        [0x9a, 0x9a, 0x9a]
-    } else {
-        [0x80, 0x80, 0x80]
-    });
-    let radius = if kind == Kind::One { 7.0 } else { 3.0 };
-    let mark = el()
-        .w(14.0)
-        .h(14.0)
-        .mt(2.0)
-        .center()
-        .radius(radius)
-        .a11y_hidden();
-    match (kind, picked) {
-        (_, false) => mark.border(1.0, edge),
-        (Kind::One, true) => mark
-            .fill(t.accent)
-            .child(el().w(4.0).h(4.0).radius(2.0).fill(t.bg_app)),
-        (_, true) => mark.fill(t.accent).child(
-            text(attn_ui::glyph::CHECK)
-                .font(attn_ui::glyph::SMALL)
-                .color(t.bg_app),
-        ),
-    }
 }
 
 fn replied_text(key: String, label: &str, value: &str, t: &Tokens) -> El {
@@ -901,41 +647,20 @@ fn replied_text(key: String, label: &str, value: &str, t: &Tokens) -> El {
         .a11y_value(shown.to_owned())
         .w_full()
         .child(
-            text(shown.to_owned())
-                .font(type_::BODY)
-                .color(if value.is_empty() {
-                    t.text_muted
+            words(
+                shown.to_owned(),
+                Type::Body,
+                if value.is_empty() {
+                    t.text_tertiary
                 } else {
                     t.text_secondary
-                })
-                .wrap(),
+                },
+            )
+            .wrap(),
         )
 }
 
-fn field(
-    edit: Option<&rune::TextEdit>,
-    key: &str,
-    label: &str,
-    placeholder: &str,
-    t: &Tokens,
-) -> El {
-    let empty = rune::TextEdit::default();
-    text_input(edit.unwrap_or(&empty), type_::BODY)
-        .key(key.to_owned())
-        .return_breaks_line()
-        .label(label.to_owned())
-        .placeholder(placeholder.to_owned(), t.text_muted)
-        .w_full()
-        .px(10.0)
-        .py(8.0)
-        .radius(8.0)
-        .fill(t.bg_input)
-        .border(1.0, t.border)
-        .color(t.text_primary)
-        .on_input_key(field_key)
-}
-
-/// The Tauri app's `.asks-note`, a `textarea rows={3}` with `resize: vertical`.
+/// A field of several lines that starts three lines high and that its grip drags taller.
 fn written_field(
     edit: Option<&rune::TextEdit>,
     key: &str,
@@ -945,31 +670,15 @@ fn written_field(
     t: &Tokens,
 ) -> El {
     let empty = rune::TextEdit::default();
-    TextArea::new(edit.unwrap_or(&empty))
+    let area = TextArea::new(edit.unwrap_or(&empty))
         .key(key.to_owned())
-        .width(None)
-        .font(WRITTEN_TYPE)
-        .padding(10.0 + EDGE, 8.0 + EDGE)
-        .min_height(0.0)
-        .resizable()
         .label(label.to_owned())
         .placeholder(placeholder.to_owned())
-        .placeholder_ink(t.text_muted)
+        .resizable()
         .on_edit(lens)
-        .on_key(field_key)
-        .build(attn_ui::kit(t))
-        .radius(8.0)
-        .fill(t.bg_input)
+        .on_key(field_key);
+    area_box(area, FieldState::Ready, t).into()
 }
-
-/// The Tauri field's 1 px border, which the kit draws as a ring outside the box's layout.
-const EDGE: f32 = 1.0;
-
-/// `--font-size-md` at the Tauri field's `line-height: 1.4`.
-const WRITTEN_TYPE: rune::TextStyle = rune::TextStyle {
-    line_height: 18.0,
-    ..type_::BODY
-};
 
 /// A drawer field's keys it does not take as text: ⌘↩ sends and Escape closes.
 fn field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
@@ -983,7 +692,7 @@ fn field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
-fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> El {
+fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
     let ask = item.ask;
     let snoozable = item
         .holder
@@ -1006,25 +715,30 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> El {
     let accept =
         (ask.reply.is_none() && super::recommended(ask).len() > 1 && !sending).then(|| {
             let id = ask.id.clone();
-            small_button("asks.accept", "Accept all recommended a", "", t)
-                .on_press(move |state: &mut State| super::accept_recommended(state, &id))
+            El::from(
+                Button::new("Accept all recommended")
+                    .size(Size::Compact)
+                    .look(Look::Plain)
+                    .trailing(keycaps(["a"], t))
+                    .on_press(move |state: &mut State| super::accept_recommended(state, &id))
+                    .build(t)
+                    .key("asks.accept"),
+            )
+            .label("Accept all recommended a")
         });
     let action = match &ask.reply {
         Some(reply) => {
             let age = queue::turn_age(Some(&reply.answered_at), state.window.now_ms);
-            let words = if age == "now" {
+            let said = if age == "now" {
                 "Replied just now".to_owned()
             } else {
                 format!("Replied {age} ago")
             };
-            text(words.clone())
+            words(said.clone(), Type::Small, t.text_tertiary)
                 .key("asks.replied-when")
-                .label(words)
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
+                .label(said)
         }
         None => {
-            let tokens = *t;
             let sendable = !sending
                 && state
                     .window
@@ -1032,69 +746,42 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> El {
                     .drafts
                     .get(&ask.id)
                     .is_some_and(|d| d.sendable(ask));
-            let word = if sending { "Sending…" } else { "Send" };
-            let edge = t.bg_app.alpha(0.4);
-            let ink = t.bg_app;
-            Button::new(format!("{word} {}", send_chord()))
-                .variant(ButtonVariant::Neutral)
-                .disabled(!sendable)
-                .on_press_tx(super::send)
-                .label_with(move |font, _| {
-                    row()
-                        .gap(4.0)
-                        .items_center()
-                        .child(text(word).font(font).color(ink))
-                        .child(
-                            keycap::Keys::outlined(&[send_chord()])
-                                .colors(ink, edge, rune::Color::TRANSPARENT)
-                                .build(&tokens),
-                        )
-                })
-                .build(attn_ui::kit(t))
-                .key("asks.send")
-                .fill(t.accent)
-                .radius(8.0)
-                .h(27.0)
-                .px(14.0)
+            let said = if sending { "Sending…" } else { "Send" };
+            El::from(
+                Button::new(said)
+                    .look(Look::Primary)
+                    .disabled(!sendable)
+                    .trailing(keycaps([send_chord()], t))
+                    .on_press_tx(super::send)
+                    .build(t)
+                    .key("asks.send"),
+            )
+            .label(format!("{said} {}", send_chord()))
         }
     };
-    row()
-        .key("asks.footer")
-        .w_full()
-        .items_center()
-        .gap(12.0)
-        .px(18.0)
-        .py(12.0)
-        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-        .child(
-            row()
-                .key("asks.hints")
-                .label(
-                    hints
-                        .iter()
-                        .map(|(keys, words)| format!("{} {words}", keys.join(" ")))
-                        .collect::<Vec<_>>()
-                        .join(" · "),
-                )
-                .grow(1.0)
-                .min_w(0.0)
-                .flex_wrap()
-                .gaps(4.0, 14.0)
-                .children(hints.into_iter().map(|(keys, words)| {
-                    row()
-                        .gap(4.0)
-                        .items_center()
-                        .a11y_hidden()
-                        .child(
-                            keycap::Keys::outlined(keys)
-                                .colors(t.text_dimmed, t.border, rune::Color::TRANSPARENT)
-                                .build(t),
-                        )
-                        .child(text(words).font(type_::LABEL).color(t.text_dimmed))
-                })),
-        )
-        .children(accept)
-        .child(action)
+    let hints_said = hints
+        .iter()
+        .map(|(keys, said)| format!("{} {said}", keys.join(" ")))
+        .collect::<Vec<_>>()
+        .join(" · ");
+    Block::custom(
+        "asks.footer.block",
+        Inline::loose()
+            .key("asks.footer")
+            .w_full()
+            .child(
+                Inline::loose()
+                    .key("asks.hints")
+                    .label(hints_said)
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .children(hints.into_iter().map(|(keys, said)| {
+                        keys_hint(keys.iter().copied(), said, t).a11y_hidden()
+                    })),
+            )
+            .children(accept)
+            .child(action),
+    )
 }
 
 fn toggle_replied(state: &mut State, tx: &mut Tx) {
@@ -1188,9 +875,6 @@ fn ask_mark(glyph: String, t: &Tokens) -> El {
 /// The ask mark's width: its 6-point insets round "?", which measures 7.2 in `MARKER_TYPE`.
 const MARK_W: f32 = 19.2;
 
-/// The Tauri app's `.title-bar-count-badge`: the open asks' count over the button's corner.
-const BADGE_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 700.0).mono();
-
 /// The Tauri app's `.ask-marker`: bold monospace on the accent pill.
 const MARKER_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 700.0).mono();
 
@@ -1220,7 +904,7 @@ pub(crate) fn chip(leaf: &str, session: &str, chip: &Chip, level: ChipLevel, t: 
     let tertiary = t.text_tertiary;
     let more = (chip.more > 0 && level != ChipLevel::Icon).then(|| format!("+{}", chip.more));
     let mark = ask_mark("?".to_owned(), t);
-    let el = Button::new(label)
+    let el = rune_kit::Button::new(label)
         .label_with(move |_, _| {
             row()
                 .items_center()
@@ -1353,11 +1037,18 @@ pub(crate) fn preview(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
             )
             .children(questions)
             .child(
-                small_button(&format!("asks.preview.{}.answer", ask.id), "Answer", "", t)
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        header_pop::close(state);
-                        super::show(state, Some(&id), tx)
-                    }),
+                El::from(
+                    Button::new("Answer")
+                        .size(Size::Compact)
+                        .look(Look::Plain)
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            header_pop::close(state);
+                            super::show(state, Some(&id), tx)
+                        })
+                        .build(t)
+                        .key(format!("asks.preview.{}.answer", ask.id)),
+                )
+                .self_start(),
             )
     });
     Some(
@@ -1397,38 +1088,19 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> Option<El> {
         n => format!("{n} open asks{keys}"),
     };
     let open = state.window.shows(crate::shell::Drawer::Asks);
-    let tokens = *t;
-    let button = Button::new(label)
-        .variant(ButtonVariant::GhostMuted)
-        .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
-        .label_with(move |_, _| {
-            row()
-                .items_center()
-                .child(rune::icon(&attn_ui::icon::ASKS, 13.0).color(tokens.text_secondary))
-                .children((count > 0).then(|| {
-                    row()
-                        .pin(None, Some(-10.5), Some(-10.5), None)
-                        .min_w(19.0)
-                        .h(19.0)
-                        .px(6.0)
-                        .center()
-                        .radius(999.0)
-                        .fill(tokens.accent)
-                        .border(2.0, tokens.bg_panel)
-                        .inert()
-                        .child(
-                            text(count.to_string())
-                                .font(BADGE_TYPE)
-                                .color(tokens.bg_app),
-                        )
-                }))
-        })
-        .build(attn_ui::kit(t))
-        .key("titlebar.asks")
-        .a11y_value(count.to_string())
-        .h(crate::sidebar::TITLE_BUTTON)
-        .min_w(crate::sidebar::TITLE_BUTTON)
-        .radius(6.0)
-        .hover(t.bg_elevated);
-    Some(crate::sidebar::opens(button, open, t))
+    Some(
+        El::from(
+            icon_button(
+                "titlebar.asks",
+                label,
+                &attn_ui::icon::ASKS,
+                IconSize::Large,
+            )
+            .expanded(open)
+            .count((count > 0).then(|| count.to_string()))
+            .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
+            .build(t),
+        )
+        .a11y_value(count.to_string()),
+    )
 }

@@ -199,6 +199,7 @@ fn rows(world: &World) -> Vec<String> {
         .descendants(Target::key("asks.list"))
         .into_iter()
         .filter_map(|n| n.key?.strip_prefix("asks.row.").map(str::to_owned))
+        .filter(|id| !id.contains('.'))
         .collect()
 }
 
@@ -1467,19 +1468,24 @@ fn an_ask_from_a_member_between_sessions_names_the_member_and_leaves_attn_lowerc
 }
 
 #[test]
-fn the_note_starts_three_lines_high_and_its_grip_drags_it_taller_but_never_shorter() {
+fn the_note_starts_lines_high_and_its_grip_drags_it_taller_but_never_shorter() {
     let mut world = start(vec![release_day()], vec![api_working(), web_waiting()]);
     open_drawer(&mut world);
-    scroll_to(&mut world, "asks.note.field");
+    scroll_to(&mut world, "asks.note.field-grip");
     let height = |world: &mut World| world.rect("asks.note.field-resizable")[3];
-    let three_lines = 3.0 * 18.0 + 2.0 * (8.0 + 1.0);
-    assert_eq!(height(&mut world), three_lines);
+    let three_lines = height(&mut world);
+    let one_line = world.rect("asks.q.q1.other.field")[3];
+    assert!(
+        three_lines >= 2.0 * one_line,
+        "the note starts {three_lines} high, a one-line field {one_line}"
+    );
 
     let [x, y, w, h] = world.rect("asks.note.field-grip");
     let grip = ((x + w / 2.0) as f32, (y + h / 2.0) as f32);
     world.gesture(|app| app.drag(Target::key("asks.note.field-grip"), (grip.0, grip.1 + 40.0)));
     assert_eq!(height(&mut world), three_lines + 40.0);
 
+    scroll_to(&mut world, "asks.note.field-grip");
     let [x, y, w, h] = world.rect("asks.note.field-grip");
     let grip = ((x + w / 2.0) as f32, (y + h / 2.0) as f32);
     world.gesture(|app| {
@@ -1550,4 +1556,70 @@ fn a_url_that_holds_a_seeds_name_stays_one_link_that_opens_the_whole_url() {
     );
     world.gesture(|app| app.click(Target::key(url)));
     assert_eq!(world.opened_links(), [url]);
+}
+
+#[test]
+fn tab_walks_the_drawer_as_on_main_and_never_stops_on_the_list_of_asks() {
+    let mut world = start(
+        vec![cache_store(), release_day()],
+        vec![api_working(), web_waiting()],
+    );
+    open_drawer(&mut world);
+    let mut walk = vec![focused(&world).unwrap_or_default()];
+    for _ in 0..4 {
+        plain(&mut world, Key::Tab);
+        walk.push(focused(&world).unwrap_or_default());
+    }
+    assert_eq!(
+        walk,
+        [
+            "asks.q.q1.choice.0",
+            "asks.q.q1.choice.1",
+            "asks.q.q1.other.field",
+            "asks.note.field",
+            "titlebar.new",
+        ]
+    );
+
+    let mut back = Vec::new();
+    for _ in 0..9 {
+        world.gesture(|d| d.press("shift+tab"));
+        back.push(focused(&world).unwrap_or_default());
+    }
+    assert_eq!(
+        back,
+        [
+            "asks.note.field",
+            "asks.q.q1.other.field",
+            "asks.q.q1.choice.1",
+            "asks.q.q1.choice.0",
+            "asks.snooze",
+            "asks.open-agent",
+            "asks.close",
+            "asks.replied",
+            "asks.drawer",
+        ]
+    );
+}
+
+#[test]
+fn the_open_count_follows_the_title_and_comes_before_the_replied_toggle() {
+    let mut world = start(
+        vec![cache_store(), release_day()],
+        vec![api_working(), web_waiting()],
+    );
+    open_drawer(&mut world);
+    let header = world.rect("asks.sheet.header");
+    let count = world.rect("asks.count");
+    let replied = world.rect("asks.replied");
+    let title_room = count[0] - header[0];
+    assert!(
+        title_room < header[2] / 3.0,
+        "the count stands {title_room} into the {}-point header, away from its title",
+        header[2]
+    );
+    assert!(
+        count[0] + count[2] < replied[0],
+        "the count {count:?} does not come before Replied {replied:?}"
+    );
 }

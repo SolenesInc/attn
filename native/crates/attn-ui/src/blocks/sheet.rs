@@ -11,6 +11,7 @@ use crate::system::{Radius, Said, Space, Type, door, words};
 pub struct Sheet {
     key: String,
     title: Said,
+    badge: Option<El>,
     aside: Vec<El>,
     close: Option<El>,
     head: Option<El>,
@@ -30,6 +31,7 @@ impl Sheet {
         Sheet {
             key: key.into(),
             title: title.into(),
+            badge: None,
             aside: Vec::new(),
             close: None,
             head: None,
@@ -44,6 +46,12 @@ impl Sheet {
     }
 
     /// A control after the title, such as a count or a switch.
+    /// A mark right after the title that sums the sheet up, such as how many are open.
+    pub fn badge(mut self, badge: impl Into<El>) -> Self {
+        self.badge = Some(badge.into());
+        self
+    }
+
     pub fn aside(mut self, control: impl Into<El>) -> Self {
         self.aside.push(control.into());
         self
@@ -122,8 +130,15 @@ impl Sheet {
                 .role("heading")
                 .label(label.clone())
                 .truncate()
-                .grow(1.0)
                 .min_w(0.0),
+        };
+        let title = match self.badge {
+            Some(badge) => door::gap(row().items_center(), Space::S8)
+                .grow(1.0)
+                .min_w(0.0)
+                .child(title.shrink())
+                .child(badge),
+            None => title.grow(1.0),
         };
         let header = door::gap(row().w_full().items_center(), Space::S8)
             .key(format!("{key}.header"))

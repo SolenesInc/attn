@@ -99,8 +99,7 @@ impl Choice {
         };
         let mark_ink = match (warm, self.chosen) {
             (true, _) => t.warning,
-            (false, true) => t.text_tertiary,
-            (false, false) => t.border_hover,
+            (false, _) => t.text_tertiary,
         };
         let dot = if self.many {
             let square = door::corner(el().size(DOT, DOT).center(), Radius::Tag);
@@ -115,6 +114,7 @@ impl Choice {
             door::corner(el().size(DOT, DOT), Radius::Round)
                 .border(if self.chosen { 4.0 } else { 1.0 }, mark_ink)
         }
+        .key(format!("{}.mark", self.key))
         .a11y_hidden();
         let name = words(self.name.clone(), Type::Name, ink)
             .wrap()

@@ -1719,7 +1719,7 @@ const TAG_HEIGHT: f32 = 18.0;
 fn a_tag_is_one_height_with_its_words_centred_in_it() {
     for variant in ["Rest", "Long"] {
         let rt = story(true, "Library/Tag", variant);
-        for tone in ["neutral", "warn", "bad", "good"] {
+        for tone in ["neutral", "warn", "bad", "good", "accent"] {
             let key = format!("tag.{tone}");
             let tag = element(&rt, &key);
             let all = rt.elements();
@@ -1870,5 +1870,31 @@ fn a_steppers_minus_and_plus_are_small_marks_on_square_buttons_in_its_tab_order(
             ],
             "dark={dark}: Tab through the steppers"
         );
+    }
+}
+
+const CONTROL_EDGE: f32 = 3.0;
+
+#[test]
+fn an_unchosen_choices_mark_stands_a_controls_step_from_its_ground() {
+    for dark in [true, false] {
+        let t = tokens(dark);
+        for (variant, key) in [("First chosen", "choice.1"), ("Second chosen", "choice.0")] {
+            let rt = story(dark, "Library/Choice", variant);
+            let choice = element(&rt, key);
+            let mark = element(&rt, &format!("{key}.mark"));
+            let ground = surface(&rt, &choice, t.bg_panel);
+            let ring = rt
+                .instances
+                .iter()
+                .find(|i| near(i.rect, device(mark.rect)) && i.params[0] > 0.0)
+                .unwrap_or_else(|| panic!("{key}, dark={dark}: the mark draws no ring"))
+                .border;
+            let apart = contrast([ring[0], ring[1], ring[2]], ground);
+            assert!(
+                apart >= CONTROL_EDGE - ROUNDING,
+                "{key}, dark={dark}: the mark's ring stands {apart:.2}:1 from its ground, under {CONTROL_EDGE}:1"
+            );
+        }
     }
 }

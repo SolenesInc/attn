@@ -151,7 +151,6 @@ pub(crate) fn view(notebook: &super::Notebook, id: &SurfaceId, t: &Tokens) -> Op
     };
     let list = finder::list("notebook.finder.list")
         .label(LABEL)
-        .gap(2.0)
         .children(
             rows.iter()
                 .enumerate()

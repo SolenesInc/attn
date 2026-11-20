@@ -48,7 +48,7 @@ thread_local! {
     static ROWS_BUILT: Cell<usize> = const { Cell::new(0) };
 }
 
-pub(crate) use chrome::{TITLE_BUTTON, framed, opens, title_panels, title_tools};
+pub(crate) use chrome::{framed, title_panels, title_tools};
 pub(crate) use queue_view::AgentLine;
 
 /// The window's sidebar for its flow: the queue sidebar in queue flow, the desktop sidebar

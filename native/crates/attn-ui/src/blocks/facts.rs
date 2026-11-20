@@ -171,6 +171,7 @@ impl Fact {
             Some(Tone::Bad) => t.error,
             Some(Tone::Warn) => t.warning,
             Some(Tone::Good) => t.success,
+            Some(Tone::Accent) => t.accent,
             Some(Tone::Neutral) => t.text_secondary,
             None => t.text_primary,
         }

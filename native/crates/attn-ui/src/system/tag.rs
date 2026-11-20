@@ -10,6 +10,8 @@ pub enum Tone {
     Warn,
     Bad,
     Good,
+    /// What the interface suggests rather than a state, such as the recommended answer.
+    Accent,
 }
 
 const EDGE: f32 = 0.45;
@@ -40,6 +42,7 @@ pub fn tag(key: impl Into<String>, said: impl Into<Said>, tone: Tone, t: &Tokens
         Tone::Warn => (t.warning, t.warning.alpha(EDGE), t.warning.alpha(WASH)),
         Tone::Bad => (t.error, t.error.alpha(EDGE), t.error.alpha(WASH)),
         Tone::Good => (t.success, t.success.alpha(EDGE), t.success.alpha(WASH)),
+        Tone::Accent => (t.accent, t.accent.alpha(EDGE), t.accent.alpha(WASH)),
     };
     let tag = words(said, Type::Tag, ink)
         .key(key.into())

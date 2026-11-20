@@ -1341,7 +1341,7 @@ fn the_tree_lists_a_folder_once_however_often_it_folds_marks_the_open_file_and_s
     assert!(
         world
             .screen()
-            .find(Target::role("label").name("permission denied"))
+            .find(Target::role("list-item").name("permission denied"))
             .is_some()
     );
     world.advance(Duration::from_secs(1));

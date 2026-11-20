@@ -3,7 +3,7 @@
 budget	attn-app/src/*.rs	110
 budget	attn-ui/src	17
 budget	attn-app/src/annotations	0
-budget	attn-app/src/asks	127
+budget	attn-app/src/asks	22
 budget	attn-app/src/automations	0
 budget	attn-app/src/browser	7
 budget	attn-app/src/chief	0
@@ -15,7 +15,7 @@ budget	attn-app/src/home	101
 budget	attn-app/src/launcher	0
 budget	attn-app/src/ledger	0
 budget	attn-app/src/markdown	110
-budget	attn-app/src/notebook	117
+budget	attn-app/src/notebook	29
 budget	attn-app/src/notifications	0
 budget	attn-app/src/opener	0
 budget	attn-app/src/palette	0

@@ -51,11 +51,12 @@ impl Notice {
             Tone::Bad => (t.text_primary, t.error.alpha(EDGE), t.error.alpha(WASH)),
             Tone::Warn => (t.text_primary, t.warning.alpha(EDGE), t.warning.alpha(WASH)),
             Tone::Good => (t.text_primary, t.success.alpha(EDGE), t.success.alpha(WASH)),
+            Tone::Accent => (t.text_primary, t.accent.alpha(EDGE), t.accent.alpha(WASH)),
             Tone::Neutral => (t.text_secondary, t.border, t.bg_elevated),
         };
         let role = match self.tone {
             Tone::Bad | Tone::Warn => "alert",
-            Tone::Good | Tone::Neutral => "status",
+            Tone::Good | Tone::Neutral | Tone::Accent => "status",
         };
         let mark = row()
             .h(Size::Regular.height())
@@ -189,6 +190,7 @@ fn tone_ink(tone: Tone, t: &Tokens) -> Color {
         Tone::Bad => t.error,
         Tone::Warn => t.warning,
         Tone::Good => t.success,
+        Tone::Accent => t.accent,
         Tone::Neutral => t.text_tertiary,
     }
 }
