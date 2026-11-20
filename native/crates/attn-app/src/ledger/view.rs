@@ -2,8 +2,8 @@ use attn_protocol::SessionLedgerEntry;
 use attn_ui::blocks::inspector::{self, aside, lines, value};
 use attn_ui::blocks::{Block, Facts, Inline, Inspector, List, Sheet, Stack};
 use attn_ui::system::{
-    Button, FieldState, IconSize, ListRow, Look, Reveal, Size, Type, icon_button, line_box,
-    press_area, words,
+    Button, FieldState, IconSize, ListRow, Look, Part, Reveal, Said, Size, Type, icon_button,
+    line_box, press_area, words,
 };
 use attn_ui::{Tokens, glyph, keycap};
 use rune::{El, Key, KeyEvent, Tx, el};
@@ -347,7 +347,11 @@ fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> (El, Vec<
         .title(r.title.clone())
         .subtitle_keyed(
             format!("ledger.row.{}.meta", entry.id),
-            format!("{stamp}  ·  {}", meta_line(meta(state, r))),
+            meta_line(
+                std::iter::once((stamp, false))
+                    .chain(meta(state, r))
+                    .collect(),
+            ),
             t,
         )
         .controls(primary, Reveal::Quiet)
@@ -386,13 +390,18 @@ pub(super) fn row_verb(key: String, said: &str, t: &Tokens) -> El {
         .into()
 }
 
-/// A row's meta line, its parts apart by dots and its directory in monospace.
-fn meta_line(parts: Vec<(String, bool)>) -> String {
-    parts
-        .into_iter()
-        .map(|(part, path)| if path { format!("`{part}`") } else { part })
-        .collect::<Vec<_>>()
-        .join("  ·  ")
+/// A row's meta line, its parts apart by dots and its directory in monospace, each drawn as
+/// written.
+fn meta_line(parts: Vec<(String, bool)>) -> Said {
+    Said::parts(parts.into_iter().enumerate().flat_map(|(i, (part, path))| {
+        let gap = (i > 0).then(|| Part::Text("  ·  ".to_owned()));
+        let part = if path {
+            Part::Code(part)
+        } else {
+            Part::Text(part)
+        };
+        gap.into_iter().chain(std::iter::once(part))
+    }))
 }
 
 fn meta(state: &State, r: &Row<'_>) -> Vec<(String, bool)> {
@@ -507,7 +516,11 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
     let mut facts = Facts::new("ledger.inspector.facts").fact(
         "ledger.inspector.profile",
         "Profile",
-        if profile.is_empty() { "—" } else { &profile },
+        if profile.is_empty() {
+            "—".to_owned()
+        } else {
+            profile.clone()
+        },
     );
     facts = directory_field(facts, entry, verdict, ledger.copied.as_deref(), t);
     let branch_state = verdict
@@ -522,7 +535,10 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
         facts = facts.item(
             "ledger.inspector.branch",
             "Branch",
-            lines(std::iter::once(value(branch, t)).chain(branch_state.map(|s| aside(s, t)))),
+            lines(
+                std::iter::once(value(branch.to_owned(), t))
+                    .chain(branch_state.map(|s| aside(s.to_owned(), t))),
+            ),
         );
     }
     let instant = if closed { "Closed" } else { "Last seen" };
@@ -538,7 +554,9 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
                 &format!("({})", query::relative_stamp(at_ms, state.window.now_ms)),
                 t,
             ))
-            .chain(closed.then(|| aside(&closed_line(state, entry)["closed ".len()..], t))),
+            .chain(
+                closed.then(|| aside(closed_line(state, entry)["closed ".len()..].to_owned(), t)),
+            ),
         ),
     );
     let usage = (!closed)
@@ -632,7 +650,7 @@ fn inspector(state: &State, selected: Option<&Row<'_>>, t: &Tokens) -> El {
 /// The inspector while no row is chosen.
 pub(super) fn nothing_selected(hint: &str, t: &Tokens) -> El {
     Inspector::new("ledger.inspector", "Nothing selected")
-        .push(aside(hint, t))
+        .push(aside(hint.to_owned(), t))
         .build(t)
 }
 
@@ -646,7 +664,9 @@ pub(super) fn kicker_line(g: Glyph, said: &str, t: &Tokens) -> El {
 
 /// A value with an aside after it in quieter text, as a date and its age.
 pub(super) fn value_with(said: &str, after: &str, t: &Tokens) -> El {
-    Inline::loose().child(value(said, t)).child(aside(after, t))
+    Inline::loose()
+        .child(value(said.to_owned(), t))
+        .child(aside(after.to_owned(), t))
 }
 
 /// A link to something the chosen row names, such as its seed: its words in the link ink, on
@@ -726,7 +746,12 @@ fn directory_field(
                 t,
                 move |state: &mut State, tx: &mut Tx| super::copy(state, directory.clone(), tx),
             ))
-            .chain(verdict.map(|v| aside(query::directory_state_label(&v.directory_state), t))),
+            .chain(verdict.map(|v| {
+                aside(
+                    query::directory_state_label(&v.directory_state).to_owned(),
+                    t,
+                )
+            })),
         ),
     )
 }

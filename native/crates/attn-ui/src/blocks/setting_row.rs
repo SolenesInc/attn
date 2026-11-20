@@ -3,15 +3,15 @@ use rune::{El, col, row};
 use super::block::{Block, Kind};
 use super::measure::COPY_FLOOR;
 use crate::Tokens;
-use crate::system::{Radius, Size, Space, Type, door, words};
+use crate::system::{Radius, Said, Size, Space, Type, door, words};
 
 /// One setting on a raised card: its name and what it does on the left, its control on the
 /// right. Where the words would get narrower than they read, the control moves under them, and
 /// the words then wrap to the card however narrow it is.
 pub struct SettingRow {
     key: String,
-    title: String,
-    copy: String,
+    title: Said,
+    copy: Said,
     note: Option<El>,
     control: El,
 }
@@ -20,8 +20,8 @@ impl SettingRow {
     /// One setting keyed `key`.
     pub fn new(
         key: impl Into<String>,
-        title: impl Into<String>,
-        copy: impl Into<String>,
+        title: impl Into<Said>,
+        copy: impl Into<Said>,
         control: impl Into<El>,
     ) -> Self {
         SettingRow {

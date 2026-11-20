@@ -89,7 +89,10 @@ fn list(automations: &Automations, t: &Tokens) -> El {
 }
 
 fn refusal(key: String, said: &str, t: &Tokens) -> Block {
-    Block::custom(format!("{key}.block"), Refusal::new(key, said).build(t))
+    Block::custom(
+        format!("{key}.block"),
+        Refusal::new(key, said.to_owned()).build(t),
+    )
 }
 
 fn note(key: String, said: String, t: &Tokens) -> Block {

@@ -3,7 +3,7 @@ use rune::{Color, El, el, row};
 use super::block::{Block, Kind};
 use super::measure::COPY_FLOOR;
 use crate::Tokens;
-use crate::system::{Radius, Size, Space, Tone, Type, door, verbatim, words};
+use crate::system::{Radius, Said, Size, Space, Tone, Type, door, words};
 
 const DOT: f32 = 6.0;
 const EDGE: f32 = 0.45;
@@ -13,25 +13,25 @@ const WASH: f32 = 0.08;
 /// about it.
 pub struct Notice {
     key: String,
-    said: String,
+    said: Said,
     tone: Tone,
     action: Option<El>,
 }
 
 impl Notice {
-    pub fn error(key: impl Into<String>, said: impl Into<String>) -> Notice {
+    pub fn error(key: impl Into<String>, said: impl Into<Said>) -> Notice {
         Notice::new(key, said, Tone::Bad)
     }
 
-    pub fn warn(key: impl Into<String>, said: impl Into<String>) -> Notice {
+    pub fn warn(key: impl Into<String>, said: impl Into<Said>) -> Notice {
         Notice::new(key, said, Tone::Warn)
     }
 
-    pub fn info(key: impl Into<String>, said: impl Into<String>) -> Notice {
+    pub fn info(key: impl Into<String>, said: impl Into<Said>) -> Notice {
         Notice::new(key, said, Tone::Neutral)
     }
 
-    fn new(key: impl Into<String>, said: impl Into<String>, tone: Tone) -> Notice {
+    fn new(key: impl Into<String>, said: impl Into<Said>, tone: Tone) -> Notice {
         Notice {
             key: key.into(),
             said: said.into(),
@@ -61,7 +61,7 @@ impl Notice {
             .h(Size::Regular.height())
             .items_center()
             .child(dot(tone_ink(self.tone, t)));
-        let said = verbatim(self.said.clone(), Type::Small, ink)
+        let said = words(self.said.clone(), Type::Small, ink)
             .wrap_anywhere()
             .a11y_hidden();
         let said = door::gaps(
@@ -74,7 +74,7 @@ impl Notice {
         let line = row()
             .key(self.key)
             .role(role)
-            .label(self.said.clone())
+            .label(self.said.text())
             .w_full()
             .items_start()
             .fill(fill)
@@ -90,13 +90,13 @@ impl Notice {
 /// at its end.
 pub struct Status {
     key: String,
-    said: String,
+    said: Said,
     live: bool,
-    aside: Option<String>,
+    aside: Option<Said>,
 }
 
 impl Status {
-    pub fn new(key: impl Into<String>, said: impl Into<String>, live: bool) -> Status {
+    pub fn new(key: impl Into<String>, said: impl Into<Said>, live: bool) -> Status {
         Status {
             key: key.into(),
             said: said.into(),
@@ -105,7 +105,7 @@ impl Status {
         }
     }
 
-    pub fn aside(mut self, aside: impl Into<String>) -> Self {
+    pub fn aside(mut self, aside: impl Into<Said>) -> Self {
         self.aside = Some(aside.into());
         self
     }
@@ -114,7 +114,7 @@ impl Status {
         let said = row()
             .key(self.key)
             .role("status")
-            .label(self.said.clone())
+            .label(self.said.text())
             .grow(1.0)
             .min_w(0.0)
             .items_center()
@@ -138,12 +138,12 @@ impl Status {
 /// Why a value was refused, beside the control that holds it, with a way to try again.
 pub struct Refusal {
     key: String,
-    reason: String,
+    reason: Said,
     retry: Option<El>,
 }
 
 impl Refusal {
-    pub fn new(key: impl Into<String>, reason: impl Into<String>) -> Refusal {
+    pub fn new(key: impl Into<String>, reason: impl Into<Said>) -> Refusal {
         Refusal {
             key: key.into(),
             reason: reason.into(),
@@ -157,7 +157,7 @@ impl Refusal {
     }
 
     pub fn build(self, t: &Tokens) -> El {
-        let said = verbatim(self.reason.clone(), Type::Small, t.error).wrap_anywhere();
+        let said = words(self.reason.clone(), Type::Small, t.error).wrap_anywhere();
         let said = if self.retry.is_some() {
             door::on_band(said, Type::Small, Size::Regular)
         } else {
@@ -166,7 +166,7 @@ impl Refusal {
         let line = row()
             .key(self.key)
             .role("alert")
-            .label(self.reason)
+            .label(self.reason.text())
             .w_full()
             .flex_wrap()
             .items_start()

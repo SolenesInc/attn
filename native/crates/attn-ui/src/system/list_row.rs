@@ -1,6 +1,6 @@
 use rune::{Color, El, Tx, col, el, row};
 
-use super::{IconButton, Radius, Size, Space, Type, door, focus, layers, words};
+use super::{IconButton, Radius, Said, Size, Space, Type, door, focus, layers, words};
 use crate::Tokens;
 
 /// The column a row's lead stands in: a regular icon, the size beside `Body` text.
@@ -185,13 +185,13 @@ impl ListRow {
     }
 
     /// The row's name.
-    pub fn title(mut self, title: impl Into<String>) -> Self {
+    pub fn title(mut self, title: impl Into<Said>) -> Self {
         self.title = Some(Title::Words(title.into(), false));
         self
     }
 
     /// The row's name, secondary until the row is current: a place rather than a thing.
-    pub fn quiet_title(mut self, title: impl Into<String>) -> Self {
+    pub fn quiet_title(mut self, title: impl Into<Said>) -> Self {
         self.title = Some(Title::Words(title.into(), true));
         self
     }
@@ -209,9 +209,10 @@ impl ListRow {
         self
     }
 
-    /// A line under the title, such as where the thing is or what it last did. Text between
-    /// backticks is set in `Mono`.
-    pub fn subtitle(mut self, subtitle: impl Into<String>, t: &Tokens) -> Self {
+    /// A line under the title, such as where the thing is or what it last did. Copy written in
+    /// the source sets what stands between backticks in `Mono`; a [`Said`] of parts sets its
+    /// values in `Mono`.
+    pub fn subtitle(mut self, subtitle: impl Into<Said>, t: &Tokens) -> Self {
         self.subtitle = Some(words(subtitle, Type::Small, t.text_tertiary));
         self
     }
@@ -226,7 +227,7 @@ impl ListRow {
     pub fn subtitle_keyed(
         mut self,
         key: impl Into<String>,
-        subtitle: impl Into<String>,
+        subtitle: impl Into<Said>,
         t: &Tokens,
     ) -> Self {
         self.subtitle_key = Some(key.into());
@@ -729,6 +730,6 @@ impl ListRow {
 }
 
 enum Title {
-    Words(String, bool),
+    Words(Said, bool),
     Built(El),
 }

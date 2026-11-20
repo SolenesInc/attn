@@ -364,8 +364,11 @@ fn interval_field(state: &State, part: &'static str, label: &str, t: &Tokens) ->
         .autosave
         .field(ACTIVITY_INTERVALS)
         .is_some_and(|f| f.error.is_some());
-    let mut field = Field::new(super::part_field_key(ACTIVITY_INTERVALS, part), label)
-        .control(number_box(input, FieldState::failed_if(refused), t));
+    let mut field = Field::new(
+        super::part_field_key(ACTIVITY_INTERVALS, part),
+        label.to_owned(),
+    )
+    .control(number_box(input, FieldState::failed_if(refused), t));
     if part == "watching" {
         field = field.mark(saved_mark(state, ACTIVITY_INTERVALS, t));
     } else {

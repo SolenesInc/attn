@@ -12,7 +12,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
         "Authenticated hosts used by PR actions, review lookup, and repository metadata.",
     );
     let section = if let Some(reason) = github.polling_off_reason.as_deref() {
-        section.push(Notice::warn("settings.github.polling-off", reason).build(t))
+        section.push(Notice::warn("settings.github.polling-off", reason.to_owned()).build(t))
     } else if github.hosts.is_empty() {
         section
             .push(Prose::empty("settings.github.none", "No authenticated hosts detected.").build(t))

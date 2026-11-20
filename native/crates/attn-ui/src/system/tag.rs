@@ -1,6 +1,6 @@
 use rune::{Color, El};
 
-use super::{Control, Radius, Size, Space, Type, door, words};
+use super::{Control, Radius, Said, Size, Space, Type, door, words};
 use crate::Tokens;
 
 /// How a tag reads.
@@ -24,7 +24,7 @@ pub(crate) fn tag_height() -> f32 {
 /// What pressing the row it sits in does, such as "Set up ⏎": primary words on the brand mixed
 /// into the panel, round. Its ground is its own, so the words read the same on a row at rest,
 /// hovered or pressed.
-pub fn pill(key: impl Into<String>, said: &str, t: &Tokens) -> El {
+pub fn pill(key: impl Into<String>, said: impl Into<Said>, t: &Tokens) -> El {
     let pill = words(said, Type::Control, t.text_primary)
         .key(key.into())
         .single_line()
@@ -34,7 +34,7 @@ pub fn pill(key: impl Into<String>, said: &str, t: &Tokens) -> El {
 
 const PILL_WASH: f32 = 0.14;
 
-pub fn tag(key: impl Into<String>, said: &str, tone: Tone, t: &Tokens) -> Control {
+pub fn tag(key: impl Into<String>, said: impl Into<Said>, tone: Tone, t: &Tokens) -> Control {
     let (ink, edge, fill) = match tone {
         Tone::Neutral => (t.text_secondary, t.border_hover, Color::TRANSPARENT),
         Tone::Warn => (t.warning, t.warning.alpha(EDGE), t.warning.alpha(WASH)),

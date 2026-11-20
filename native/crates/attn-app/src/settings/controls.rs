@@ -227,7 +227,7 @@ pub(super) fn refusal_beside(state: &State, key: &str, focus: String, t: &Tokens
 
 fn refusal_line(key: String, reason: &str, t: &Tokens) -> El {
     let retried = key.clone();
-    Refusal::new(format!("settings.refusal.{key}"), reason)
+    Refusal::new(format!("settings.refusal.{key}"), reason.to_owned())
         .retry(
             Button::new("Retry")
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {

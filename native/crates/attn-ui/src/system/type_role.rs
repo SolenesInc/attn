@@ -1,6 +1,7 @@
 use rune::{Color, El, Span, rich, text};
 
 use super::door;
+use super::said::Said;
 
 /// What a run of text is, which decides its face, size, weight and case.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,78 +34,45 @@ impl Type {
     }
 }
 
-/// `words` set as `kind` in `ink`, upper-cased where the role is and read as written. Text
-/// between backticks is set in `Mono`.
-pub fn words(words: impl Into<String>, kind: Type, ink: Color) -> El {
+/// `words` set as `kind` in `ink`, upper-cased where the role is. Copy written into the source
+/// sets what stands between backticks in `Mono`; text built at run time is drawn as written.
+pub fn words(words: impl Into<Said>, kind: Type, ink: Color) -> El {
     let words = words.into();
+    let (shown, code) = words.shown();
+    let shown = shown.into_owned();
     if kind.upper() {
-        return door::font(text(words.to_uppercase()).label(words), kind).color(ink);
+        return door::font(text(shown.to_uppercase()).label(shown), kind).color(ink);
     }
-    if !words.contains('`') {
-        return door::font(text(words.clone()).label(words), kind).color(ink);
+    if code.is_empty() {
+        return door::font(text(shown.clone()).label(shown), kind).color(ink);
     }
-    let (shown, commands) = commands_in(&words);
-    let spans: Vec<Span> = commands
+    let spans: Vec<Span> = code
         .into_iter()
         .map(|(start, end)| door::mono_span(Span::new(start, end)))
         .collect();
     door::font(rich(shown.clone(), spans).label(shown), kind).color(ink)
 }
 
-/// `words` set as `kind` in `ink` exactly as written, backticks and all: text that comes from
-/// outside, such as an error, a name or a path, is never taken for markup.
-pub fn verbatim(words: impl Into<String>, kind: Type, ink: Color) -> El {
-    let words = words.into();
-    let shown = if kind.upper() {
-        words.to_uppercase()
-    } else {
-        words.clone()
-    };
-    door::font(text(shown).label(words), kind).color(ink)
-}
-
-/// `said`, then `code` in `Mono`, both read as written: a value such as a path is never taken
-/// for markup, however it is spelled.
-pub(crate) fn words_and_code(said: &str, code: &str, kind: Type, ink: Color) -> El {
-    let shown = format!("{said} {code}");
-    let start = said.len() + 1;
-    let span = door::mono_span(Span::new(start, shown.len()));
-    door::font(rich(shown.clone(), vec![span]).label(shown), kind).color(ink)
-}
-
 /// How wide `words` set as `kind` stand on one line, as [`words`] draws them.
-pub(crate) fn width_of(words: &str, kind: Type) -> f32 {
-    measured(words, kind, None).0
+pub(crate) fn width_of(words: impl Into<Said>, kind: Type) -> f32 {
+    measured(&words.into(), kind, None).0
 }
 
 /// How many lines `words` set as `kind` take wrapped at `width`, as [`words`] draws them.
-pub(crate) fn lines_at(words: &str, kind: Type, width: f32) -> f32 {
-    (measured(words, kind, Some(width)).1 / door::style(kind).line_px()).round()
+pub(crate) fn lines_at(words: impl Into<Said>, kind: Type, width: f32) -> f32 {
+    (measured(&words.into(), kind, Some(width)).1 / door::style(kind).line_px()).round()
 }
 
-fn measured(words: &str, kind: Type, width: Option<f32>) -> (f32, f32) {
-    let (shown, commands) = commands_in(words);
+fn measured(words: &Said, kind: Type, width: Option<f32>) -> (f32, f32) {
+    let (shown, code) = words.shown();
     let shown = if kind.upper() {
         shown.to_uppercase()
     } else {
-        shown
+        shown.into_owned()
     };
-    let spans: Vec<Span> = commands
+    let spans: Vec<Span> = code
         .into_iter()
         .map(|(start, end)| door::mono_span(Span::new(start, end)))
         .collect();
     rune::text::measure(&shown, &spans, door::style(kind), width)
-}
-
-fn commands_in(words: &str) -> (String, Vec<(usize, usize)>) {
-    let mut shown = String::with_capacity(words.len());
-    let mut commands = Vec::new();
-    for (i, part) in words.split('`').enumerate() {
-        let start = shown.len();
-        shown.push_str(part);
-        if i % 2 == 1 && !part.is_empty() {
-            commands.push((start, shown.len()));
-        }
-    }
-    (shown, commands)
 }

@@ -44,10 +44,11 @@ pub fn count_badge(count: usize, fill: Color, ink: Color) -> El {
 /// Keys drawn as keys: an outlined cap for each, in the order they are pressed together.
 pub fn keycaps(keys: impl IntoIterator<Item = impl Into<String>>, t: &Tokens) -> El {
     door::gap(row().items_center(), Space::S2).children(keys.into_iter().map(|key| {
-        let cap =
-            row()
-                .border(1.0, t.border_subtle)
-                .child(words(key, Type::Mono, t.text_secondary));
+        let cap = row().border(1.0, t.border_subtle).child(words(
+            key.into(),
+            Type::Mono,
+            t.text_secondary,
+        ));
         door::corner(door::inset(cap, Space::S4, Space::S0), Radius::Tag)
     }))
 }
@@ -75,7 +76,7 @@ pub fn slot_badge(
 ) -> El {
     let badge = row()
         .fill(ground)
-        .child(words(slot, Type::Tag, t.text_dimmed).key(key.into()));
+        .child(words(slot.into(), Type::Tag, t.text_dimmed).key(key.into()));
     door::corner(door::inset(badge, Space::S2, Space::S0), Radius::Tag)
 }
 

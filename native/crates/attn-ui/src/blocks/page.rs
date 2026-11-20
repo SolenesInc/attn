@@ -4,14 +4,14 @@ use rune_kit::ScrollBar;
 use super::block::{Block, Kind, page_gap, spaced};
 use super::measure::{COPY_FLOOR, READING};
 use crate::Tokens;
-use crate::system::{Space, Type, door, words};
+use crate::system::{Said, Space, Type, door, words};
 
 /// A page: its head, then its blocks in order, each spaced from the one above by what both are,
 /// in a column that scrolls.
 #[derive(Default)]
 pub struct Page {
     head: Option<Head>,
-    status: Option<(String, String, Vec<El>)>,
+    status: Option<(String, Said, Vec<El>)>,
     group: Option<(String, String)>,
     dimmed: bool,
     blocks: Vec<Block>,
@@ -29,12 +29,7 @@ impl Page {
 
     /// What the page is doing, such as saving, under its head: always there for assistive tools
     /// to read, and taking room only while `parts` say something.
-    pub fn status(
-        mut self,
-        key: impl Into<String>,
-        said: impl Into<String>,
-        parts: Vec<El>,
-    ) -> Self {
+    pub fn status(mut self, key: impl Into<String>, said: impl Into<Said>, parts: Vec<El>) -> Self {
         self.status = Some((key.into(), said.into(), parts));
         self
     }
@@ -81,7 +76,7 @@ impl Page {
             )
             .key(key)
             .role("status")
-            .label(said)
+            .label(said.text())
             .children(parts);
             if shown {
                 door::below(line, Space::S16)
@@ -120,15 +115,15 @@ const DIMMED: f32 = 0.45;
 /// beside the title, such as the switch that turns the page's feature on.
 pub struct Head {
     key: String,
-    title: String,
-    lead: Option<String>,
+    title: Said,
+    lead: Option<Said>,
     note: Option<El>,
     aside: Vec<El>,
 }
 
 impl Head {
     /// `key` names the title, which reads as the page's heading.
-    pub fn new(key: impl Into<String>, title: impl Into<String>) -> Head {
+    pub fn new(key: impl Into<String>, title: impl Into<Said>) -> Head {
         Head {
             key: key.into(),
             title: title.into(),
@@ -138,7 +133,7 @@ impl Head {
         }
     }
 
-    pub fn lead(mut self, lead: impl Into<String>) -> Self {
+    pub fn lead(mut self, lead: impl Into<Said>) -> Self {
         let lead = lead.into();
         self.lead = (!lead.is_empty()).then_some(lead);
         self
@@ -162,7 +157,7 @@ impl Head {
             .key(self.key)
             .role("heading")
             .level(1)
-            .label(self.title);
+            .label(self.title.text());
         let lead = self.lead.map(|lead| {
             words(lead, Type::Body, t.text_secondary)
                 .wrap()

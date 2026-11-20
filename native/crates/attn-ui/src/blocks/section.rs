@@ -3,17 +3,17 @@ use rune::{El, col, row};
 use super::block::{Block, Kind, inner_gap, spaced};
 use super::measure::READING;
 use crate::Tokens;
-use crate::system::{Space, Type, door, verbatim, words};
+use crate::system::{Said, Space, Type, door, words};
 
 /// A titled part of a page: its name, what it is for, then its blocks. Sections that follow
 /// each other on a page are set apart by a rule. Its title is a heading under the page's, keyed
 /// `{key}.heading`.
 pub struct Section {
     key: String,
-    title: String,
+    title: Said,
     heading: Option<El>,
-    description: String,
-    aside: Option<String>,
+    description: Said,
+    aside: Option<Said>,
     controls: Vec<El>,
     found_as: FoundAs,
     blocks: Vec<Block>,
@@ -27,12 +27,12 @@ enum FoundAs {
 }
 
 impl Section {
-    pub fn new(key: impl Into<String>, title: impl Into<String>) -> Section {
+    pub fn new(key: impl Into<String>, title: impl Into<Said>) -> Section {
         Section {
             key: key.into(),
             title: title.into(),
             heading: None,
-            description: String::new(),
+            description: Said::default(),
             aside: None,
             controls: Vec::new(),
             found_as: FoundAs::Group,
@@ -47,14 +47,14 @@ impl Section {
         self
     }
 
-    pub fn description(mut self, said: impl Into<String>) -> Self {
+    pub fn description(mut self, said: impl Into<Said>) -> Self {
         self.description = said.into();
         self
     }
 
     /// A quiet word beside the title that sums the section up, such as how many are on. The
     /// section is announced with it.
-    pub fn aside(mut self, said: impl Into<String>) -> Self {
+    pub fn aside(mut self, said: impl Into<Said>) -> Self {
         self.aside = Some(said.into());
         self
     }
@@ -90,8 +90,8 @@ impl Section {
 
     pub fn build(self, t: &Tokens) -> Block {
         let label = match &self.aside {
-            Some(aside) => format!("{}, {aside}", self.title),
-            None => self.title.clone(),
+            Some(aside) => format!("{}, {}", self.title.text(), aside.text()),
+            None => self.title.text(),
         };
         let (role, label) = match self.found_as {
             FoundAs::Group => ("group", label),
@@ -102,17 +102,17 @@ impl Section {
         let title = door::gaps(row().flex_wrap().items_end(), Space::S2, Space::S8)
             .child(match self.heading {
                 Some(heading) => heading.shrink().min_w(0.0),
-                None => verbatim(self.title.clone(), Type::Heading, t.text_primary)
+                None => words(self.title.clone(), Type::Heading, t.text_primary)
                     .key(heading_key)
                     .role("heading")
                     .level(2)
-                    .label(self.title)
+                    .label(self.title.text())
                     .wrap()
                     .shrink(),
             })
             .children(
                 self.aside
-                    .map(|aside| verbatim(aside, Type::Small, t.text_tertiary)),
+                    .map(|aside| words(aside, Type::Small, t.text_tertiary)),
             );
         let title = if self.controls.is_empty() {
             title

@@ -46,7 +46,7 @@ fn aside(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
                 summary,
                 switch(format!("{key}.switch"), name, on, false, false, &t, noop),
             )
-            .note(note.map(|n| words(n, Type::Small, t.text_muted).wrap()))
+            .note(note.map(|n| words(n.to_owned(), Type::Small, t.text_muted).wrap()))
             .build(&t)
         };
     let blocks = vec![

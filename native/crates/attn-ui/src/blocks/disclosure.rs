@@ -4,13 +4,13 @@ use rune::{El, Tx, col};
 
 use super::block::{Block, Kind, Press, inner_gap, spaced};
 use crate::Tokens;
-use crate::system::{Space, disclosure, door};
+use crate::system::{Said, Space, disclosure, door};
 
 /// A part of a page that opens and closes, with tags that say what it holds while closed. `key`
 /// names its control; `{key}.part` names the whole part, a group read as its label.
 pub struct Disclosure<S> {
     key: String,
-    label: String,
+    label: Said,
     open: bool,
     beside: Option<(El, String)>,
     tags: Vec<String>,
@@ -23,7 +23,7 @@ pub struct Disclosure<S> {
 impl<S: 'static> Disclosure<S> {
     pub fn new(
         key: impl Into<String>,
-        label: impl Into<String>,
+        label: impl Into<Said>,
         open: bool,
         toggle: impl Fn(&mut S, &mut Tx) + 'static,
     ) -> Disclosure<S> {
@@ -71,10 +71,10 @@ impl<S: 'static> Disclosure<S> {
     pub fn build(self, t: &Tokens) -> Block {
         let toggle = self.toggle;
         let part = format!("{}.part", self.key);
-        let label = self.label.clone();
+        let label = self.label.text();
         let control = disclosure(
             self.key,
-            &self.label,
+            self.label,
             self.open,
             self.beside,
             &self.tags,

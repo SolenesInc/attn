@@ -224,7 +224,7 @@ fn detail(state: &State, n: &Notification, key: &str, t: &Tokens) -> Vec<Block> 
             Stack::tight()
                 .key(format!("{key}.{part}"))
                 .w_full()
-                .children(heading.map(|h| words(h, Type::Label, t.text_tertiary)))
+                .children(heading.map(|h| words(h.to_owned(), Type::Label, t.text_tertiary)))
                 .child(words(said.to_owned(), Type::Body, t.text_primary).wrap_anywhere()),
         )
     };

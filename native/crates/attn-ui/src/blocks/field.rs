@@ -3,19 +3,19 @@ use rune::{El, col, row};
 use super::block::{Block, Kind};
 use super::measure::FIELD;
 use crate::Tokens;
-use crate::system::{Radius, Size, Space, Type, door, words};
+use crate::system::{Radius, Said, Size, Space, Type, door, words};
 
 /// A labelled control: its name above it, a note beside the name, and a hint and an error under
 /// it. A field runs no longer than the field measure.
 pub struct Field {
     key: String,
-    label: String,
-    note: Option<String>,
+    label: Said,
+    note: Option<Said>,
     controls: Vec<El>,
     action: Option<El>,
-    value: Option<String>,
-    hint: Option<String>,
-    error: Option<String>,
+    value: Option<Said>,
+    hint: Option<Said>,
+    error: Option<Said>,
     mark: Option<El>,
     refusal: Option<El>,
 }
@@ -24,7 +24,7 @@ impl Field {
     /// `key` is the key of the input the field holds, so the two never share one: the field is
     /// `{key}.field`, its label `{key}.label`, the value it shows `{key}.value`, its hint
     /// `{key}.hint` and its error `{key}.error`.
-    pub fn new(key: impl Into<String>, label: impl Into<String>) -> Field {
+    pub fn new(key: impl Into<String>, label: impl Into<Said>) -> Field {
         Field {
             key: key.into(),
             label: label.into(),
@@ -52,23 +52,23 @@ impl Field {
     }
 
     /// A value read but not changed here, in place of a control.
-    pub fn value(mut self, value: impl Into<String>) -> Self {
+    pub fn value(mut self, value: impl Into<Said>) -> Self {
         self.value = Some(value.into());
         self
     }
 
-    pub fn note(mut self, note: impl Into<String>) -> Self {
+    pub fn note(mut self, note: impl Into<Said>) -> Self {
         self.note = Some(note.into());
         self
     }
 
-    pub fn hint(mut self, hint: impl Into<String>) -> Self {
+    pub fn hint(mut self, hint: impl Into<Said>) -> Self {
         self.hint = Some(hint.into());
         self
     }
 
     pub fn error(mut self, error: Option<String>) -> Self {
-        self.error = error;
+        self.error = error.map(Said::from);
         self
     }
 
@@ -104,7 +104,7 @@ impl Field {
         let value = self.value.map(|v| {
             let shown = words(v.clone(), Type::Body, t.text_secondary)
                 .key(format!("{}.value", self.key))
-                .label(v)
+                .label(v.text())
                 .wrap()
                 .w_full()
                 .min_h(Size::Regular.height())
@@ -136,7 +136,7 @@ impl Field {
                 words(e.clone(), Type::Small, t.error)
                     .key(format!("{}.error", self.key))
                     .role("alert")
-                    .label(e)
+                    .label(e.text())
                     .wrap()
             }))
             .children(self.refusal)

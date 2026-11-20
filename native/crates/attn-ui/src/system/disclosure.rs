@@ -2,7 +2,7 @@ use rune::{Color, El, Tx, row};
 
 use super::expander::opens_in_place;
 use super::{
-    Control, Radius, Size, Space, Tone, Type, disabled, door, focus, layers, tag, verbatim,
+    Control, Radius, Said, Size, Space, Tone, Type, disabled, door, focus, layers, tag, words,
 };
 use crate::Tokens;
 
@@ -12,7 +12,7 @@ use crate::Tokens;
 #[allow(clippy::too_many_arguments)]
 pub fn disclosure<S: 'static>(
     key: impl Into<String>,
-    label: &str,
+    label: impl Into<Said>,
     open: bool,
     beside: Option<(El, String)>,
     chips: &[String],
@@ -23,6 +23,7 @@ pub fn disclosure<S: 'static>(
 ) -> Control {
     let size = Size::Compact;
     let key = key.into();
+    let label = label.into();
     let ink = if failed { t.error } else { t.text_secondary };
     let fill = if open {
         t.bg_selected
@@ -47,7 +48,7 @@ pub fn disclosure<S: 'static>(
         Space::S8,
     )
     .child(
-        verbatim(label, Type::Control, ink)
+        words(label.clone(), Type::Control, ink)
             .wrap_anywhere()
             .shrink()
             .min_w(0.0)
@@ -58,7 +59,7 @@ pub fn disclosure<S: 'static>(
     let line = row()
         .key(key.clone())
         .role("button")
-        .label(label.to_owned())
+        .label(label.text())
         .description(description)
         .expanded(open)
         .focusable(true)

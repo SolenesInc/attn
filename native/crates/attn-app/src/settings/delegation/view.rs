@@ -428,7 +428,7 @@ fn who(
             row()
                 .gap(space::S2)
                 .items_center()
-                .child(system::words(name, Type::Name, t.text_primary))
+                .child(system::words(name.to_owned(), Type::Name, t.text_primary))
                 .children(tags.into_iter().map(|tag| {
                     let ink = if tag == "Needs a model" {
                         t.warning

@@ -268,7 +268,7 @@ fn row(s: &Panels, t: &Tokens, i: usize, name: &str, selected: bool) -> (El, Vec
             .into(),
     ];
     let mut row = ListRow::new(format!("list.row{i}"), title)
-        .title(title)
+        .title(title.to_owned())
         .subtitle(
             if s.long {
                 LONG_LINE

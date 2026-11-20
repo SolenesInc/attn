@@ -193,8 +193,8 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let switch_row = |key: &'static str, title: &str, copy: &str| {
         SettingRow::new(
             format!("settings.row.{key}"),
-            title,
-            copy,
+            title.to_owned(),
+            copy.to_owned(),
             setting_switch(state, key, title, t),
         )
         .build(t)
@@ -285,14 +285,14 @@ pub(super) fn pills(state: &State, t: &Tokens) -> Vec<El> {
         El::from(tag("settings.pill.hygiene.auto-settle", settle, tone, t)).role("status"),
         El::from(tag(
             "settings.pill.hygiene.repos",
-            &format!("{} repos", muted_repos(state).len()),
+            format!("{} repos", muted_repos(state).len()),
             Tone::Neutral,
             t,
         ))
         .role("status"),
         El::from(tag(
             "settings.pill.hygiene.authors",
-            &format!("{} authors", muted_authors(state).len()),
+            format!("{} authors", muted_authors(state).len()),
             Tone::Neutral,
             t,
         ))

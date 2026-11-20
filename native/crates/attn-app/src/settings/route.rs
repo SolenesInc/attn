@@ -743,7 +743,7 @@ fn route_field(
         }
         col()
             .gap(4.0)
-            .child(words(name, Type::Label, t.text_tertiary))
+            .child(words(name.to_owned(), Type::Label, t.text_tertiary))
             .child(shown)
     };
     let (effort, line): (Vec<_>, Vec<_>) =

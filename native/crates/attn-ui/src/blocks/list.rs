@@ -3,7 +3,7 @@ use rune_kit::ScrollBar;
 
 use super::block::{Block, Kind, inner_gap, spaced};
 use crate::Tokens;
-use crate::system::{Radius, Size, Space, Type, door, words};
+use crate::system::{Radius, Said, Size, Space, Type, door, words};
 
 /// A list of things, one [`crate::system::ListRow`] each with what it says under it, set apart
 /// by rules, bare on its surface or on a card; or what to say when there are none. Bare, a row's
@@ -21,7 +21,7 @@ pub struct List {
     keys: Option<Box<dyn FnOnce(El) -> El>>,
     find: Option<El>,
     items: Vec<(El, Option<String>, Vec<Block>)>,
-    empty: Option<(String, String, Option<El>)>,
+    empty: Option<(String, Said, Option<El>)>,
 }
 
 impl List {
@@ -140,7 +140,7 @@ impl List {
     pub fn empty(
         mut self,
         key: impl Into<String>,
-        said: impl Into<String>,
+        said: impl Into<Said>,
         action: Option<El>,
     ) -> Self {
         self.empty = Some((key.into(), said.into(), action));
@@ -205,7 +205,7 @@ impl List {
                     door::gap(col().w_full().items_start(), Space::S12)
                         .key(key)
                         .role(role)
-                        .label(said.clone())
+                        .label(said.text())
                         .child(words(said, Type::Body, ink).wrap().a11y_hidden())
                         .children(action),
                 )

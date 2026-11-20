@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use attn_protocol::StartUpdateMessage;
 use attn_ui::Tokens;
 use attn_ui::blocks::{Actions, Block, Facts, Notice};
-use attn_ui::system::{Button, Look};
+use attn_ui::system::{Button, Look, Said};
 use rune::Tx;
 
 use crate::State;
@@ -26,15 +26,15 @@ pub(super) fn arrive(state: &mut State) {
     }
 }
 
-fn install_label(kind: &str) -> &str {
+fn install_label(kind: &str) -> Said {
     match kind {
-        "release_app" => "Release app",
-        "release_binary" => "Release binary",
-        "source" => "Built from source",
-        "named_instance" => "Named instance",
-        "outpost" => "Outpost",
-        "unknown" => "Unknown",
-        other => other,
+        "release_app" => "Release app".into(),
+        "release_binary" => "Release binary".into(),
+        "source" => "Built from source".into(),
+        "named_instance" => "Named instance".into(),
+        "outpost" => "Outpost".into(),
+        "unknown" => "Unknown".into(),
+        other => other.to_owned().into(),
     }
 }
 

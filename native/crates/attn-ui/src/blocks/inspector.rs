@@ -2,7 +2,7 @@ use rune::{El, col, row};
 use rune_kit::ScrollBar;
 
 use crate::Tokens;
-use crate::system::{Space, Type, door, words};
+use crate::system::{Said, Space, Type, door, words};
 
 /// The narrowest an inspector gets: the Tauri app's `.ledger-inspector { min-width: 280px }`,
 /// which holds a session's longest field, a full stamp with its age ("Tue, Nov 17 at 09:58
@@ -108,12 +108,12 @@ pub fn lines(parts: impl IntoIterator<Item = El>) -> El {
 }
 
 /// A line of a fact's value: `said` as body text, a long path broken where it must.
-pub fn value(said: impl Into<String>, t: &Tokens) -> El {
+pub fn value(said: impl Into<Said>, t: &Tokens) -> El {
     words(said, Type::Body, t.text_primary).wrap_anywhere()
 }
 
 /// What a fact says about its value, quieter than it.
-pub fn aside(said: impl Into<String>, t: &Tokens) -> El {
+pub fn aside(said: impl Into<Said>, t: &Tokens) -> El {
     words(said, Type::Small, t.text_tertiary).wrap_anywhere()
 }
 

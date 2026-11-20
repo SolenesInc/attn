@@ -1,12 +1,12 @@
 use super::block::{Block, Kind};
 use super::measure::READING;
 use crate::Tokens;
-use crate::system::{Type, words, words_and_code};
+use crate::system::{Said, Type, words};
 
 /// Reading text, at the reading measure.
 pub struct Prose {
     key: String,
-    said: String,
+    said: Said,
     quiet: bool,
     kind: Type,
     code: Option<String>,
@@ -14,7 +14,7 @@ pub struct Prose {
 
 impl Prose {
     /// What a page or a part of it is for.
-    pub fn lead(key: impl Into<String>, said: impl Into<String>) -> Prose {
+    pub fn lead(key: impl Into<String>, said: impl Into<Said>) -> Prose {
         Prose {
             key: key.into(),
             said: said.into(),
@@ -25,12 +25,12 @@ impl Prose {
     }
 
     /// That a list or a part of a page has nothing in it yet.
-    pub fn empty(key: impl Into<String>, said: impl Into<String>) -> Prose {
+    pub fn empty(key: impl Into<String>, said: impl Into<Said>) -> Prose {
         Prose::lead(key, said).quiet(true)
     }
 
     /// Small print about the blocks above it, such as how to add to a list.
-    pub fn hint(key: impl Into<String>, said: impl Into<String>) -> Prose {
+    pub fn hint(key: impl Into<String>, said: impl Into<Said>) -> Prose {
         Prose {
             kind: Type::Small,
             ..Prose::lead(key, said).quiet(true)
@@ -58,7 +58,7 @@ impl Prose {
         Block::new(
             Kind::Prose,
             match self.code {
-                Some(code) => words_and_code(&self.said, &code, self.kind, ink),
+                Some(code) => words(self.said.then_code(code), self.kind, ink),
                 None => words(self.said, self.kind, ink),
             }
             .key(self.key)

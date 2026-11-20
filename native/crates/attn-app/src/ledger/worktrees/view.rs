@@ -426,7 +426,7 @@ fn worktree_inspector(state: &State, w: &Worktree, copied: Option<&str>, t: &Tok
             },
             t,
         ))
-        .chain((!detached && !sha.is_empty()).then(|| aside(short, t))),
+        .chain((!detached && !sha.is_empty()).then(|| aside(short.to_owned(), t))),
     );
     let words = state_words(w);
     let observed = match w.observed_at.as_deref().and_then(epoch_ms) {

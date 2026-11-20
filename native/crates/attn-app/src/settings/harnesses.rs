@@ -443,7 +443,7 @@ pub(super) fn failure_notice(
 ) -> Option<attn_ui::blocks::Block> {
     let error = failure(state)?;
     Some(
-        attn_ui::blocks::Notice::error(format!("settings.{block}.harness-error"), error)
+        attn_ui::blocks::Notice::error(format!("settings.{block}.harness-error"), error.to_owned())
             .action(
                 attn_ui::system::Button::new("Retry")
                     .on_press_tx(retry)

@@ -464,7 +464,7 @@ fn named(
     if k == items.len() {
         return (items.into_iter().flatten().collect(), None, false);
     }
-    let counted = |left: usize| width_of(&counting(left), Type::Body).min(width);
+    let counted = |left: usize| width_of(counting(left), Type::Body).min(width);
     while k > 0 && !fits(&[whole_items(k), vec![counted(items.len() - k)]].concat()) {
         k -= 1;
     }
@@ -594,7 +594,7 @@ fn actions(
 /// enough to show it within its lines when its own width can, so actions move under it before
 /// they would cut it short.
 fn least_width(said: &str, natural: f32) -> f32 {
-    let fits = |w: f32| lines_at(said, Type::Name, w) <= LINES as f32;
+    let fits = |w: f32| lines_at(said.to_owned(), Type::Name, w) <= LINES as f32;
     if natural <= READABLE || fits(READABLE) {
         return natural.min(READABLE);
     }

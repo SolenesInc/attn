@@ -3,14 +3,14 @@ use rune_kit::ScrollBar;
 
 use super::block::{Block, inner_gap, page_gap, spaced};
 use crate::Tokens;
-use crate::system::{Radius, Space, Type, door, words};
+use crate::system::{Radius, Said, Space, Type, door, words};
 
 /// A panel beside the content, such as a drawer or a form: its title with controls beside it
 /// and its close button, then its blocks in a column that scrolls, and a footer that stays in
 /// view under them.
 pub struct Sheet {
     key: String,
-    title: String,
+    title: Said,
     aside: Vec<El>,
     close: Option<El>,
     head: Option<El>,
@@ -26,7 +26,7 @@ pub struct Sheet {
 impl Sheet {
     /// `key` names the sheet, `{key}.header` its title line, `{key}.body` the column that
     /// scrolls and `{key}.actions` its footer.
-    pub fn new(key: impl Into<String>, title: impl Into<String>) -> Sheet {
+    pub fn new(key: impl Into<String>, title: impl Into<Said>) -> Sheet {
         Sheet {
             key: key.into(),
             title: title.into(),
@@ -115,7 +115,7 @@ impl Sheet {
 
     pub fn build(self, t: &Tokens) -> El {
         let key = self.key;
-        let label = self.title.clone();
+        let label = self.title.text();
         let title = match self.head {
             Some(head) => head.grow(1.0).min_w(0.0),
             None => words(self.title, Type::PageTitle, t.text_primary)

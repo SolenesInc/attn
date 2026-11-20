@@ -496,53 +496,198 @@ fn a_sections_title_is_a_heading_under_the_pages() {
     }
 }
 
-const OUTSIDE: &str = "/opt/agents/codex-`canary` not found";
+const MARKED: &str = "a `b` *c* _d_ \\`e\\`";
 
-fn outside_view(_: &(), cx: &mut Cx<()>) -> El {
-    use attn_ui::blocks::{Facts, Notice, Page, Section};
+/// Every block that takes text, keyed `key`, saying `said`.
+fn every_block(key: &str, said: attn_ui::system::Said, t: &attn_ui::Tokens) -> Vec<El> {
+    use attn_ui::blocks::{
+        Disclosure, Facts, Field, Head, List, Notice, Page, Prose, Refusal, Section, SettingRow,
+        Status,
+    };
+    use attn_ui::system::{ListRow, Tone, disclosure, tag, words};
+    let page = |name: &str, block: attn_ui::blocks::Block| {
+        Page::new().push(block).build(format!("{key}.{name}"), t)
+    };
+    let refusal = Refusal::new(format!("{key}.refusal.line"), said.clone()).build(t);
+    vec![
+        page(
+            "section",
+            Section::new(format!("{key}.section.part"), said.clone()).build(t),
+        ),
+        page(
+            "aside",
+            Section::new(format!("{key}.aside.part"), "Title")
+                .aside(said.clone())
+                .build(t),
+        ),
+        page(
+            "notice",
+            Notice::warn(format!("{key}.notice.line"), said.clone()).build(t),
+        ),
+        page(
+            "status",
+            Status::new(format!("{key}.status.line"), said.clone(), true).build(t),
+        ),
+        page(
+            "refusal",
+            attn_ui::blocks::Block::custom(format!("{key}.refusal.slot"), refusal),
+        ),
+        page(
+            "prose",
+            Prose::hint(format!("{key}.prose.line"), said.clone()).build(t),
+        ),
+        page(
+            "facts",
+            Facts::new(format!("{key}.facts.list"))
+                .fact(format!("{key}.facts.fact"), "Path", said.clone())
+                .build(t),
+        ),
+        page(
+            "field",
+            Field::new(format!("{key}.field.part"), "Name")
+                .value(said.clone())
+                .build(t),
+        ),
+        page(
+            "row",
+            SettingRow::new(
+                format!("{key}.row.part"),
+                said.clone(),
+                "Copy",
+                words("x", attn_ui::system::Type::Small, t.text_primary),
+            )
+            .build(t),
+        ),
+        page(
+            "list",
+            List::new(format!("{key}.list.part"), "List")
+                .empty(format!("{key}.list.empty"), said.clone(), None)
+                .build(t),
+        ),
+        page(
+            "disclosure",
+            Disclosure::new(
+                format!("{key}.disclosure.part"),
+                said.clone(),
+                false,
+                |_: &mut (), _| {},
+            )
+            .build(t),
+        ),
+        Page::new()
+            .head(Head::new(format!("{key}.head.title"), said.clone()))
+            .build(format!("{key}.head"), t),
+        rune::col().key(format!("{key}.listrow")).child(
+            ListRow::new(format!("{key}.listrow.row"), "row")
+                .title(said.clone())
+                .build(t),
+        ),
+        rune::col().key(format!("{key}.subtitle")).child(
+            ListRow::new(format!("{key}.subtitle.row"), "row")
+                .title("Row")
+                .subtitle(said.clone(), t)
+                .build(t),
+        ),
+        rune::col().key(format!("{key}.tag")).child(El::from(tag(
+            format!("{key}.tag.word"),
+            said.clone(),
+            Tone::Neutral,
+            t,
+        ))),
+        rune::col()
+            .key(format!("{key}.control"))
+            .child(El::from(disclosure(
+                format!("{key}.control.line"),
+                said.clone(),
+                false,
+                None,
+                &[],
+                false,
+                false,
+                t,
+                |_: &mut (), _| {},
+            ))),
+    ]
+}
+
+const BLOCKS: [&str; 16] = [
+    "section",
+    "aside",
+    "notice",
+    "status",
+    "refusal",
+    "prose",
+    "facts",
+    "field",
+    "row",
+    "list",
+    "disclosure",
+    "head",
+    "listrow",
+    "subtitle",
+    "tag",
+    "control",
+];
+
+fn every_block_view(_: &(), cx: &mut Cx<()>) -> El {
     let t = attn_ui::colors::scheme_for(None)
         .colors(cx.system_dark())
         .ui;
-    let plain = OUTSIDE.replace('`', "");
-    let mut page = Page::new();
-    for (suffix, said) in [("", OUTSIDE.to_owned()), (".plain", plain)] {
-        page = page
-            .push(Section::new(format!("section{suffix}"), said.clone()).build(&t))
-            .push(Notice::warn(format!("notice{suffix}"), said.clone()).build(&t))
-            .push(
-                Facts::new(format!("facts{suffix}"))
-                    .code(format!("facts.path{suffix}"), "Path", said)
-                    .build(&t),
-            );
-    }
-    page.build("page", &t)
+    let data = attn_ui::system::Said::from(MARKED.to_owned());
+    let plain = attn_ui::system::Said::from(MARKED.replace('`', ""));
+    rune::col()
+        .w_full()
+        .children(every_block("data", data, &t))
+        .children(every_block("plain", plain, &t))
+        .children(every_block("copy", MARKED.into(), &t))
 }
 
 #[test]
-fn text_from_outside_is_drawn_as_written_backticks_and_all() {
+fn every_block_draws_and_reads_text_from_data_as_written_and_parses_its_own_copy() {
+    let size = (900.0, 9000.0);
     let mut rt = App::new(AppSpec {
         fonts: attn_ui::FONTS,
         families: attn_ui::FAMILIES,
-        ..AppSpec::new("outside", (900.0, 900.0), || (), outside_view)
+        ..AppSpec::new("every block", size, || (), every_block_view)
     })
-    .headless_runtime((900.0, 900.0), Env::new(true, SCALE));
+    .headless_runtime(size, Env::new(true, SCALE));
     while rt.frame(1.0 / 60.0) {}
-    let glyphs = |key: &str| {
-        let rect = rt
-            .elements()
-            .into_iter()
+    let all = rt.elements();
+    let rect = |key: &str| {
+        all.iter()
             .find(|e| e.key.as_deref() == Some(key))
             .unwrap_or_else(|| panic!("no {key}"))
-            .rect;
-        glyphs_in(&rt, rect).len()
+            .rect
     };
-    let backticks = OUTSIDE.matches('`').count();
-    for key in ["section", "notice", "facts.path"] {
-        let (with, without) = (glyphs(key), glyphs(&format!("{key}.plain")));
+    let glyphs = |key: &str| glyphs_in(&rt, rect(key)).len();
+    let inside = |outer: [f32; 4], inner: [f32; 4]| {
+        inner[0] >= outer[0] - 0.5
+            && inner[1] >= outer[1] - 0.5
+            && inner[0] + inner[2] <= outer[0] + outer[2] + 0.5
+            && inner[1] + inner[3] <= outer[1] + outer[3] + 0.5
+    };
+    let backticks = MARKED.matches('`').count();
+    for block in BLOCKS {
+        let (data, plain, copy) = (
+            glyphs(&format!("data.{block}")),
+            glyphs(&format!("plain.{block}")),
+            glyphs(&format!("copy.{block}")),
+        );
         assert_eq!(
-            with - without,
+            data - plain,
             backticks,
-            "{key} draws {with} glyphs for {OUTSIDE:?} and {without} without its backticks"
+            "{block} draws {data} glyphs for {MARKED:?} as data and {plain} without its backticks"
+        );
+        assert!(
+            copy <= plain,
+            "{block} draws {copy} glyphs for {MARKED:?} as its own copy, so it did not read its backticks"
+        );
+        let outer = rect(&format!("data.{block}"));
+        assert!(
+            all.iter()
+                .any(|e| e.label.as_deref().is_some_and(|l| l.contains(MARKED))
+                    && inside(outer, e.rect)),
+            "{block} is not read as {MARKED:?}"
         );
     }
 }

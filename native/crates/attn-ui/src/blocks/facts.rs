@@ -3,7 +3,7 @@ use rune::{Color, El, col, row};
 use super::block::{Block, Kind};
 use super::measure::{FACT_LABEL, FACT_TILE_FLOOR, FACT_VALUE_FLOOR};
 use crate::Tokens;
-use crate::system::{Radius, Size, Space, Tone, Type, door, verbatim, words};
+use crate::system::{Radius, Said, Size, Space, Tone, Type, door, words};
 
 /// What something is, read and not changed here: names, each with its value. As a list, each
 /// value sits beside its name and moves under it where it would get narrower than it reads. As
@@ -16,8 +16,8 @@ pub struct Facts {
 
 struct Fact {
     key: String,
-    label: String,
-    value: String,
+    label: Said,
+    value: Said,
     kind: Type,
     band: f32,
     tone: Option<Tone>,
@@ -52,8 +52,8 @@ impl Facts {
     pub fn fact(
         self,
         key: impl Into<String>,
-        label: impl Into<String>,
-        value: impl Into<String>,
+        label: impl Into<Said>,
+        value: impl Into<Said>,
     ) -> Self {
         self.push(key, label, value, Type::Body)
     }
@@ -62,8 +62,8 @@ impl Facts {
     pub fn code(
         self,
         key: impl Into<String>,
-        label: impl Into<String>,
-        value: impl Into<String>,
+        label: impl Into<Said>,
+        value: impl Into<Said>,
     ) -> Self {
         self.push(key, label, value, Type::Mono)
     }
@@ -71,8 +71,8 @@ impl Facts {
     fn push(
         mut self,
         key: impl Into<String>,
-        label: impl Into<String>,
-        value: impl Into<String>,
+        label: impl Into<Said>,
+        value: impl Into<Said>,
         kind: Type,
     ) -> Self {
         self.facts.push(Fact {
@@ -90,27 +90,27 @@ impl Facts {
     /// A fact whose value is not plain words, such as a link, a value with a quiet line under it,
     /// a list, or a path with its copy button. The fact is keyed `key` and named by its label;
     /// `value` is read as it is.
-    pub fn item(self, key: impl Into<String>, label: impl Into<String>, value: El) -> Self {
+    pub fn item(self, key: impl Into<String>, label: impl Into<Said>, value: El) -> Self {
         self.shown(key, label, value, door::line_height(Type::Body))
     }
 
     /// A fact whose value starts with a control of the regular size, such as a path pressed to
     /// copy it. Its label lines up with the control's words.
-    pub fn control(self, key: impl Into<String>, label: impl Into<String>, value: El) -> Self {
+    pub fn control(self, key: impl Into<String>, label: impl Into<Said>, value: El) -> Self {
         self.shown(key, label, value, Size::Regular.height())
     }
 
     fn shown(
         mut self,
         key: impl Into<String>,
-        label: impl Into<String>,
+        label: impl Into<Said>,
         value: El,
         band: f32,
     ) -> Self {
         self.facts.push(Fact {
             key: key.into(),
             label: label.into(),
-            value: String::new(),
+            value: Said::default(),
             kind: Type::Body,
             band,
             tone: None,
@@ -157,9 +157,9 @@ impl Fact {
         let ink = self.ink(t);
         let value = match self.shown {
             Some(shown) => shown.key(self.key),
-            None => verbatim(self.value.clone(), self.kind, ink)
+            None => words(self.value.clone(), self.kind, ink)
                 .key(self.key)
-                .label(self.value)
+                .label(self.value.text())
                 .truncate(),
         };
         let tile = door::gap(col().grow_from(1.0, FACT_TILE_FLOOR), Space::S2)
@@ -176,12 +176,12 @@ impl Fact {
             .a11y_hidden();
         let label = door::first_line_in(label, Type::Small, self.band).grow_from(0.0, FACT_LABEL);
         let (value, said) = match self.shown {
-            Some(shown) => (shown, self.label),
+            Some(shown) => (shown, self.label.text()),
             None => (
-                verbatim(self.value.clone(), self.kind, self.ink(t))
+                words(self.value.clone(), self.kind, self.ink(t))
                     .wrap_anywhere()
                     .a11y_hidden(),
-                format!("{} {}", self.label, self.value),
+                format!("{} {}", self.label.text(), self.value.text()),
             ),
         };
         let line = row()
