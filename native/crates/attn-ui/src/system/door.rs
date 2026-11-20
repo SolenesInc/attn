@@ -120,6 +120,13 @@ pub(crate) fn on_band(e: El, kind: Type, size: super::Size) -> El {
     first_line_in(e, kind, size.height()).pb(room)
 }
 
+/// `e` with as much room above as below, so a band `band` tall at its top stands in the middle of
+/// a control of `size`.
+pub(crate) fn around_band(e: El, band: f32, size: super::Size) -> El {
+    let room = ((size.height() - band) / 2.0).max(0.0);
+    e.pt(room).pb(room)
+}
+
 /// How tall one line of `kind` stands.
 pub(crate) fn line_height(kind: Type) -> f32 {
     style(kind).line_px()

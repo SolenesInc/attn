@@ -1063,3 +1063,45 @@ fn a_rows_asides_take_at_most_half_of_the_whole_row_and_keep_what_fits_in_it() {
         "asides of 400 take {capped} of a {row} row"
     );
 }
+
+fn one_line_rows(_: &(), _: &mut Cx<()>) -> El {
+    let t = tokens(true);
+    let row = |key: &str| {
+        ListRow::new(key, "Reload this agent")
+            .lead(el().size(14.0, 14.0))
+            .title("Reload this agent")
+    };
+    rune::row().child(
+        rune::col()
+            .w(ROW_WIDTH)
+            .child(row("rule.plain").build(&t))
+            .child(
+                row("rule.tagged")
+                    .tag(attn_ui::system::words(
+                        "Restart the agent in its current pane",
+                        attn_ui::system::Type::Small,
+                        t.text_tertiary,
+                    ))
+                    .build(&t),
+            ),
+    )
+}
+
+#[test]
+fn a_one_line_row_with_a_tag_stands_as_tall_as_one_without() {
+    let mut rt = App::new(AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..AppSpec::new("chrome-rules", WINDOW, || (), one_line_rows)
+    })
+    .headless_runtime(WINDOW, Env::new(true, 1.0));
+    rt.frame(0.0);
+    let all = rt.elements();
+    let height = |k: &str| {
+        all.iter()
+            .find(|e| e.key.as_deref() == Some(k))
+            .unwrap_or_else(|| panic!("no {k}"))
+            .rect[3]
+    };
+    assert_eq!(height("rule.tagged"), height("rule.plain"));
+}

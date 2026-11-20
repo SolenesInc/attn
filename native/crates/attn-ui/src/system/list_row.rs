@@ -397,14 +397,20 @@ impl ListRow {
         let size = Size::Compact;
         let two_lines = self.subtitle.is_some();
         let wraps = self.wrap;
-        let (height, band, kind) = match (two_lines, wraps) {
-            (true, false) => (Self::two_line_height(), Self::title_band(), Type::Name),
-            (true, true) => (
+        let on_its_line = wraps || (!two_lines && !self.tags.is_empty());
+        let (height, band, kind) = match (two_lines, on_its_line) {
+            (true, true) if wraps => (
                 Self::two_line_height(),
                 door::line_height(Type::Name),
                 Type::Name,
             ),
-            (false, true) => (Self::height(), door::line_height(Type::Body), Type::Body),
+            (true, _) => (Self::two_line_height(), Self::title_band(), Type::Name),
+            (false, true) if wraps => (Self::height(), door::line_height(Type::Body), Type::Body),
+            (false, true) => (
+                Self::height(),
+                door::line_height(Type::Body).max(super::tag::tag_height()),
+                Type::Body,
+            ),
             (false, false) => (Self::height(), Self::height(), Type::Body),
         };
         let below = self.surface.unwrap_or(t.bg_panel);
@@ -661,7 +667,8 @@ impl ListRow {
         let line = match (wraps || tagged, two_lines) {
             (false, _) => line.h(height),
             (true, true) => line.min_h(height),
-            (true, false) => door::on_band(line.min_h(height), Type::Body, Size::Regular),
+            (true, false) if wraps => door::on_band(line.min_h(height), Type::Body, Size::Regular),
+            (true, false) => door::around_band(line, band, Size::Regular),
         };
         let line = door::sides(line, Space::S0, size.inset());
         let line = door::indented(line, size.inset(), Space::S12, self.depth);
