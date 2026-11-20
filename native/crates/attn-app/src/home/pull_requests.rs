@@ -704,7 +704,7 @@ pub(crate) fn rate_limit_notice(state: &State, t: &Tokens) -> Option<Block> {
     let left_ms = rate_limit_left_ms(&state.facts, state.window.now_ms)?;
     let (minutes, seconds) = (left_ms / 60_000, left_ms % 60_000 / 1000);
     Some(
-        Notice::warn(
+        Notice::info(
             "home.rate-limit",
             format!("GitHub rate limited. Resuming in {minutes}m {seconds}s"),
         )
