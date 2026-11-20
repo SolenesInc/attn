@@ -287,6 +287,8 @@ fn folder_rows(
                 error.clone(),
                 Type::Small,
                 t.error,
+                None,
+                t,
             )
             .role("listitem"),
         ),

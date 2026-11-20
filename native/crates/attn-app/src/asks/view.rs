@@ -171,7 +171,7 @@ fn list(items: &[Item<'_>], shown: &str, now_ms: i64, t: &Tokens) -> El {
 }
 
 fn divider(key: &str, said: &'static str, t: &Tokens) -> El {
-    ListRow::note(key, said, Type::Label, t.text_tertiary).role("listitem")
+    ListRow::note(key, said, Type::Label, t.text_tertiary, None, t).role("listitem")
 }
 
 fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
