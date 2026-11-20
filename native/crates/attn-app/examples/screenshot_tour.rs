@@ -2941,10 +2941,12 @@ fn long_note() -> String {
 enum Failure {
     Conflict,
     WriteError,
+    LongWriteError,
 }
 
 /// `index.md`, a long note, in the fullscreen notebook or editor tile `n` alone, scrolled far
-/// down and typed into there, after the save of that edit found the file changed on disk or could not write it.
+/// down and typed into there, after the save of that edit found the file changed on disk or could
+/// not write it, with a short error or one naming a long nested path.
 fn notebook_failed_save(dark: bool, tile: bool, failure: Failure) {
     let daemon = notebook_daemon(dark, (!tile).then(|| document_tile("m", "/repo/plan.md")));
     daemon
@@ -2957,6 +2959,8 @@ fn notebook_failed_save(dark: bool, tile: bool, failure: Failure) {
                 "result": { "path": req["path"], "conflict": true, "current_hash": "h2" } }),
             Failure::WriteError => json!({ "event": "fs_write_result", "success": false,
                 "error": "fs_write: no space left on device" }),
+            Failure::LongWriteError => json!({ "event": "fs_write_result", "success": false,
+                "error": "open /tmp/notebook-save-review.WzYy6o/notebook-2693475008/engineering-platform-and-infrastructure/production-rollout-and-deployment/customer-migration-and-backfill/architecture-review-and-acceptance/europe-stockholm-hardware-replacement/dependencies-and-migration-state/release-coordination-and-communications/team-ownership-and-followup/本番環境のクラスタにおけるバックアップと復旧手順/内部インフラのリリース運用変更の検証タスク一覧/東京リージョン向けの障害復旧と段階的な移行作業/operator-guides-and-incident-reports/shift-handoff-and-investigation-notes/.index.md.tmp.1716.1795179264032749842: permission denied" }),
         });
     let mut world = start(daemon);
     let notebook = if tile {
@@ -3005,6 +3009,8 @@ fn notebook_failed_save(dark: bool, tile: bool, failure: Failure) {
         (false, Failure::WriteError) => "notebook-save-error",
         (true, Failure::Conflict) => "notebook-tile-conflict",
         (true, Failure::WriteError) => "notebook-tile-save-error",
+        (false, Failure::LongWriteError) => "notebook-long-save-error",
+        (true, Failure::LongWriteError) => "notebook-tile-long-save-error",
     };
     snap(&mut world, name, dark);
 }
@@ -7619,6 +7625,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
             (false, Failure::WriteError),
             (true, Failure::Conflict),
             (true, Failure::WriteError),
+            (false, Failure::LongWriteError),
+            (true, Failure::LongWriteError),
         ] {
             scene("notebook_failed_save", || {
                 notebook_failed_save(dark, tile, failure)
