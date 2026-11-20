@@ -2,8 +2,8 @@ use rune::{Color, El, Tx, row};
 use rune_kit::{Button as KitButton, ButtonVariant};
 
 use super::{
-    Control, IconSize, Radius, Size, Space, Type, disabled, door, focus, kit, layers, width_of,
-    words,
+    Control, IconSize, Radius, Said, Size, Space, Type, disabled, door, focus, kit, layers,
+    width_of, words,
 };
 use crate::Tokens;
 
@@ -22,7 +22,7 @@ pub enum Look {
 
 /// What a button shows: words, or one mark of [`crate::glyph`].
 enum Shown {
-    Words(String),
+    Words(Said),
     Mark(&'static str, IconSize),
 }
 
@@ -42,9 +42,9 @@ pub struct Button {
 type Press = Box<dyn FnOnce(KitButton) -> KitButton>;
 
 impl Button {
-    pub fn new(words: impl Into<String>) -> Button {
+    pub fn new(words: impl Into<Said>) -> Button {
         let words = words.into();
-        Button::showing(KitButton::new(words.clone()), Shown::Words(words))
+        Button::showing(KitButton::new(words.text()), Shown::Words(words))
     }
 
     /// A button that shows `mark` `size` high in place of words, square at its size's height.

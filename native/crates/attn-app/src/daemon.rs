@@ -22,6 +22,9 @@ pub fn ensure() -> Result<(), String> {
     ))
 }
 
+/// The command that installs the app with its daemon beside it.
+pub(crate) const INSTALL: &str = "make install INSTANCE=<name> APP=native";
+
 fn bundled_attnd() -> Result<PathBuf, String> {
     let exe =
         std::env::current_exe().map_err(|error| format!("locate this executable: {error}"))?;
@@ -30,7 +33,7 @@ fn bundled_attnd() -> Result<PathBuf, String> {
         Ok(attnd)
     } else {
         Err(format!(
-            "no attnd beside {}; install the app with `make install INSTANCE=<name> APP=native`",
+            "no attnd beside {}; install the app with {INSTALL}",
             exe.display()
         ))
     }

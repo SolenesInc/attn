@@ -1,6 +1,6 @@
 use rune::{Color, El, row};
 
-use super::{Radius, Space, Type, door, words};
+use super::{Radius, Said, Space, Type, door, words};
 use crate::Tokens;
 
 /// A number in a small frame: a desktop's, filled with the brand while it is the current one and
@@ -56,13 +56,13 @@ pub fn keycaps(keys: impl IntoIterator<Item = impl Into<String>>, t: &Tokens) ->
 /// What the keys `keys` do, said after their caps, read as one name.
 pub fn keys_hint(
     keys: impl IntoIterator<Item = impl Into<String>>,
-    what: impl Into<String>,
+    what: impl Into<Said>,
     t: &Tokens,
 ) -> El {
     let keys: Vec<String> = keys.into_iter().map(Into::into).collect();
     let what = what.into();
     door::gap(row().items_center(), Space::S6)
-        .label(format!("{} {what}", keys.join(" ")))
+        .label(format!("{} {}", keys.join(" "), what.text()))
         .child(keycaps(keys, t).a11y_hidden())
         .child(words(what, Type::Small, t.text_tertiary).a11y_hidden())
 }

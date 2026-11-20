@@ -136,12 +136,12 @@ impl ListRow {
 
     /// A line of a list that is not a row, such as what an empty list says, at the inset rows
     /// set their words.
-    pub fn note(key: impl Into<String>, said: impl Into<String>, kind: Type, ink: Color) -> El {
+    pub fn note(key: impl Into<String>, said: impl Into<Said>, kind: Type, ink: Color) -> El {
         let said = said.into();
         door::sides(
             row()
                 .key(key.into())
-                .label(said.clone())
+                .label(said.text())
                 .h(Self::height())
                 .items_center(),
             Size::Compact.inset(),

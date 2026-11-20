@@ -10,7 +10,7 @@ use crate::system::{Radius, Said, Size, Space, Type, door, words};
 /// words start on the column's line and its box reaches out past it by the row's own inset.
 pub struct List {
     key: String,
-    label: String,
+    label: Said,
     card: bool,
     heading: bool,
     count: Option<usize>,
@@ -26,7 +26,7 @@ pub struct List {
 
 impl List {
     /// `key` names the list, which assistive tools read as `label`.
-    pub fn new(key: impl Into<String>, label: impl Into<String>) -> List {
+    pub fn new(key: impl Into<String>, label: impl Into<Said>) -> List {
         List {
             key: key.into(),
             label: label.into(),
@@ -267,7 +267,7 @@ impl List {
             } else {
                 "list"
             })
-            .label(self.label)
+            .label(self.label.text())
             .w_full()
             .children(items)
             .children(empty);

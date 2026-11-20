@@ -1,6 +1,6 @@
 use rune::{Color, El, Tx, row};
 
-use super::{Control, Radius, Size, Space, Type, disabled, door, focus, layers, words};
+use super::{Control, Radius, Said, Size, Space, Type, disabled, door, focus, layers, words};
 use crate::Tokens;
 
 /// One choice among a few, all in view: Left and Right move it.
@@ -15,7 +15,7 @@ pub struct Segmented {
 /// One option of a [`Segmented`].
 pub struct Segment {
     key: String,
-    name: String,
+    name: Said,
     chosen: bool,
     disabled: bool,
     help: Option<String>,
@@ -24,7 +24,7 @@ pub struct Segment {
 }
 
 impl Segment {
-    pub fn new(key: impl Into<String>, name: impl Into<String>) -> Segment {
+    pub fn new(key: impl Into<String>, name: impl Into<Said>) -> Segment {
         Segment {
             key: key.into(),
             name: name.into(),
@@ -73,7 +73,7 @@ impl Segment {
         let option = row()
             .key(self.key)
             .role("radio")
-            .label(self.name.clone())
+            .label(self.name.text())
             .checked(self.chosen)
             .position_in_set(i + 1, n)
             .focusable(tab_stop)

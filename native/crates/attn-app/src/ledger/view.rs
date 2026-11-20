@@ -182,7 +182,7 @@ fn tabs(state: &State, t: &Tokens) -> El {
 }
 
 /// One of a few choices shown as buttons, the chosen one raised and read as pressed.
-pub(super) fn chosen(key: String, said: &str, on: bool, size: Size, t: &Tokens) -> El {
+pub(super) fn chosen(key: String, said: &'static str, on: bool, size: Size, t: &Tokens) -> El {
     El::from(
         Button::new(said)
             .size(size)
@@ -327,7 +327,7 @@ fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> (El, Vec<
             Some(Note::Busy(busy)) => busy.clone(),
             _ => verb.label(),
         };
-        row_verb(format!("ledger.row.{}.verb", entry.id), &said, t).on_press_tx(
+        row_verb(format!("ledger.row.{}.verb", entry.id), said, t).on_press_tx(
             move |state: &mut State, tx: &mut Tx| super::run(state, &id, verb.clone(), tx),
         )
     });
@@ -381,7 +381,7 @@ fn list_row(state: &State, r: &Row<'_>, selected: bool, t: &Tokens) -> (El, Vec<
 }
 
 /// A verb on a row: a quiet compact button.
-pub(super) fn row_verb(key: String, said: &str, t: &Tokens) -> El {
+pub(super) fn row_verb(key: String, said: impl Into<attn_ui::system::Said>, t: &Tokens) -> El {
     Button::new(said)
         .size(Size::Compact)
         .look(Look::Quiet)
@@ -690,7 +690,12 @@ pub(super) fn link(
 }
 
 /// A verb in the inspector, at its own width.
-pub(super) fn verb_button(key: &str, said: &str, look: Look, t: &Tokens) -> El {
+pub(super) fn verb_button(
+    key: &str,
+    said: impl Into<attn_ui::system::Said>,
+    look: Look,
+    t: &Tokens,
+) -> El {
     El::from(
         Button::new(said)
             .size(Size::Compact)

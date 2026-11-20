@@ -96,7 +96,7 @@ fn list_row(
             Some(Note::Busy(busy)) => busy.clone(),
             _ => verb.label().into(),
         };
-        row_verb(format!("ledger.row.{k}.verb"), &said, t)
+        row_verb(format!("ledger.row.{k}.verb"), said, t)
             .on_press_tx(move |state: &mut State, tx: &mut Tx| super::run(state, &k, verb, tx))
     });
     let more = (verbs.len() > 1 && !busy).then(|| {

@@ -53,12 +53,12 @@ pub(crate) fn said(state: &State) -> Option<Banner> {
     let mut banner = Banner::new("daemon-warnings", "Daemon warnings", BannerTone::Warn);
     let mut parts = pieces(&text).into_iter().enumerate().peekable();
     if let Some((_, Piece::Words(first))) = parts.next_if(|(_, p)| matches!(p, Piece::Words(_))) {
-        banner = banner.says("daemon-warnings.text", first);
+        banner = banner.says("daemon-warnings.text", first.to_owned());
     }
     for (i, piece) in parts {
         let key = format!("daemon-warnings.{i}");
         banner = match piece {
-            Piece::Words(said) => banner.note(key, said),
+            Piece::Words(said) => banner.note(key, said.to_owned()),
             Piece::Link(url) => {
                 let (url, shown) = (url.to_owned(), shown(url));
                 banner.link(

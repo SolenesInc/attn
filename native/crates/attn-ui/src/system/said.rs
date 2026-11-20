@@ -110,6 +110,12 @@ impl From<&String> for Said {
     }
 }
 
+impl From<&Said> for Said {
+    fn from(said: &Said) -> Said {
+        said.clone()
+    }
+}
+
 impl Default for Said {
     fn default() -> Said {
         Said(Kind::Copy(""))

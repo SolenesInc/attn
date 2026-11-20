@@ -344,7 +344,7 @@ fn status(key: String, said: String, t: &Tokens) -> El {
 
 fn action(
     key: String,
-    label: &str,
+    label: impl Into<attn_ui::system::Said>,
     disabled: bool,
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
@@ -495,7 +495,7 @@ fn card(state: &State, outpost: &OutpostInfo, t: &Tokens) -> El {
         let id = id.clone();
         actions.push(action(
             part("remove"),
-            &remove_label,
+            remove_label,
             !online,
             t,
             move |state, _| remove(state, &id),

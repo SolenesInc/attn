@@ -480,7 +480,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
 fn quiet(
     key: String,
     label: &str,
-    shown: &str,
+    shown: &'static str,
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {

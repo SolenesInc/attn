@@ -382,7 +382,13 @@ fn tabs(shown: Tab, t: &Tokens) -> El {
 }
 
 /// A tab's button, `said` and a `count` after it, raised and read as chosen while shown.
-fn tab_button(key: String, said: &str, count: Option<String>, chosen: bool, t: &Tokens) -> El {
+fn tab_button(
+    key: String,
+    said: &'static str,
+    count: Option<String>,
+    chosen: bool,
+    t: &Tokens,
+) -> El {
     let label = match &count {
         Some(n) => format!("{said} {n}"),
         None => said.to_owned(),

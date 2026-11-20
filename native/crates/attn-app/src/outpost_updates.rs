@@ -261,7 +261,9 @@ pub(crate) fn said(state: &State) -> Option<blocks::Banner> {
         }
     }
     if let Some(error) = crate::settings::outposts::command_error(state) {
-        banner = banner.item().note("outpost-updates.error", error);
+        banner = banner
+            .item()
+            .note("outpost-updates.error", error.to_owned());
     }
     if !updates.different.is_empty() {
         let busy = updates.busy();

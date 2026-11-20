@@ -238,7 +238,7 @@ fn worktree_row(state: &State, w: &Worktree, selected: bool, t: &Tokens) -> (El,
             Some(Note::Busy(busy)) => busy.clone(),
             _ => verb.label(),
         };
-        row_verb(format!("ledger.row.{path}.verb"), &said, t).on_press_tx(
+        row_verb(format!("ledger.row.{path}.verb"), said, t).on_press_tx(
             move |state: &mut State, tx: &mut Tx| super::run(state, &p, verb.clone(), tx),
         )
     });
@@ -383,7 +383,7 @@ pub(crate) fn inspector(state: &State, t: &Tokens) -> El {
                 if let Some(reason) = &e.reason {
                     facts = facts.fact("ledger.inspector.why", "Why", reason);
                 }
-                return Inspector::new("ledger.inspector", base_name(&e.path))
+                return Inspector::new("ledger.inspector", base_name(&e.path).to_owned())
                     .kicker(kicker_line(Glyph::Removed, &e.action, t))
                     .block(facts.build(t))
                     .build(t);
@@ -527,7 +527,7 @@ fn worktree_inspector(state: &State, w: &Worktree, copied: Option<&str>, t: &Tok
             Verb::Keep(_) => Look::Primary,
             _ => Look::Quiet,
         };
-        let el = verb_button(&format!("ledger.inspector.action.{at}"), &words, look, t)
+        let el = verb_button(&format!("ledger.inspector.action.{at}"), words, look, t)
             .label(verb.label());
         if busy && verb != Verb::Cancel {
             el.a11y_value("disabled").opacity(0.5)
@@ -560,7 +560,7 @@ fn worktree_inspector(state: &State, w: &Worktree, copied: Option<&str>, t: &Tok
         .into_iter()
         .chain([actions])
         .fold(
-            Inspector::new("ledger.inspector", base_name(&path))
+            Inspector::new("ledger.inspector", base_name(&path).to_owned())
                 .kicker(kicker_line(glyph(state, w), &kicker.join(" · "), t))
                 .block(facts.build(t)),
             Inspector::push,

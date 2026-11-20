@@ -499,7 +499,17 @@ fn a_sections_title_is_a_heading_under_the_pages() {
 const MARKED: &str = "a `b` *c* _d_ \\`e\\`";
 
 /// Every block that takes text, keyed `key`, saying `said`.
-fn every_block(key: &str, said: attn_ui::system::Said, t: &attn_ui::Tokens) -> Vec<El> {
+fn every_block(
+    key: &str,
+    said: attn_ui::system::Said,
+    t: &attn_ui::Tokens,
+    cx: &Cx<()>,
+) -> Vec<El> {
+    use attn_ui::blocks::{Banner, BannerTone, Inspector};
+    use attn_ui::system::{
+        Button, Choice, GroupHead, Segment, Segmented, Type, expander, keys_hint,
+    };
+    let held = |name: &str, e: El| rune::col().key(format!("{key}.{name}")).child(e);
     use attn_ui::blocks::{
         Disclosure, Facts, Field, Head, List, Notice, Page, Prose, Refusal, Section, SettingRow,
         Status,
@@ -607,10 +617,99 @@ fn every_block(key: &str, said: attn_ui::system::Said, t: &attn_ui::Tokens) -> V
                 t,
                 |_: &mut (), _| {},
             ))),
+        held(
+            "banner",
+            Banner::new(format!("{key}.banner.bar"), "Banner", BannerTone::Calm)
+                .says(format!("{key}.banner.said"), said.clone())
+                .build(t, cx),
+        ),
+        held(
+            "bannernote",
+            Banner::new(format!("{key}.bannernote.bar"), "Banner", BannerTone::Calm)
+                .says(format!("{key}.bannernote.said"), "Sentence")
+                .note(format!("{key}.bannernote.note"), said.clone())
+                .build(t, cx),
+        ),
+        held(
+            "inspector",
+            Inspector::new(format!("{key}.inspector.column"), said.clone()).build(t),
+        ),
+        held(
+            "listnote",
+            ListRow::note(
+                format!("{key}.listnote.line"),
+                said.clone(),
+                Type::Body,
+                t.text_primary,
+            ),
+        ),
+        held("button", El::from(Button::new(said.clone()).build(t))),
+        held(
+            "segment",
+            El::from(
+                Segmented::new(format!("{key}.segment.group"), "Segments")
+                    .option(Segment::new(format!("{key}.segment.one"), said.clone()))
+                    .build(t),
+            ),
+        ),
+        held(
+            "choice",
+            El::from(
+                Choice::new(format!("{key}.choice.one"), said.clone()).build(
+                    (0, 1),
+                    t,
+                    |_: &mut (), _| {},
+                ),
+            ),
+        ),
+        held(
+            "choicenote",
+            El::from(
+                Choice::new(format!("{key}.choicenote.one"), "Name")
+                    .note(said.clone())
+                    .build((0, 1), t, |_: &mut (), _| {}),
+            ),
+        ),
+        held(
+            "expander",
+            El::from(expander(
+                format!("{key}.expander.control"),
+                said.clone(),
+                false,
+                false,
+                t,
+                |_: &mut (), _| {},
+            )),
+        ),
+        held(
+            "grouphead",
+            GroupHead::new(format!("{key}.grouphead.head"), "Group")
+                .name(said.clone())
+                .build(t),
+        ),
+        held(
+            "groupsection",
+            GroupHead::new(format!("{key}.groupsection.head"), "Group")
+                .section(said.clone())
+                .build(t),
+        ),
+        held("keyshint", keys_hint(["K"], said.clone(), t)),
+        page(
+            "listheading",
+            List::new(format!("{key}.listheading.list"), said.clone())
+                .heading()
+                .row(
+                    ListRow::new(format!("{key}.listheading.row"), "Row")
+                        .still()
+                        .title("Row")
+                        .build(t),
+                )
+                .build(t),
+        ),
     ]
 }
 
-const BLOCKS: [&str; 16] = [
+const BLOCKS: [&str; 29] = [
     "section",
     "aside",
     "notice",
@@ -627,6 +726,19 @@ const BLOCKS: [&str; 16] = [
     "subtitle",
     "tag",
     "control",
+    "banner",
+    "bannernote",
+    "inspector",
+    "listnote",
+    "button",
+    "segment",
+    "choice",
+    "choicenote",
+    "expander",
+    "grouphead",
+    "groupsection",
+    "keyshint",
+    "listheading",
 ];
 
 fn every_block_view(_: &(), cx: &mut Cx<()>) -> El {
@@ -637,9 +749,9 @@ fn every_block_view(_: &(), cx: &mut Cx<()>) -> El {
     let plain = attn_ui::system::Said::from(MARKED.replace('`', ""));
     rune::col()
         .w_full()
-        .children(every_block("data", data, &t))
-        .children(every_block("plain", plain, &t))
-        .children(every_block("copy", MARKED.into(), &t))
+        .children(every_block("data", data, &t, cx))
+        .children(every_block("plain", plain, &t, cx))
+        .children(every_block("copy", MARKED.into(), &t, cx))
 }
 
 #[test]

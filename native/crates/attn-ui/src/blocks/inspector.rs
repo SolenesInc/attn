@@ -21,7 +21,7 @@ const SHARE: f32 = 0.3;
 /// says what it is, then the facts known about it and what acts on it, in a column that scrolls.
 pub struct Inspector {
     key: String,
-    title: Option<String>,
+    title: Option<Said>,
     label: String,
     kicker: Option<El>,
     parts: Vec<El>,
@@ -29,7 +29,7 @@ pub struct Inspector {
 
 impl Inspector {
     /// `key` names the column, which assistive tools read as its details.
-    pub fn new(key: impl Into<String>, title: impl Into<String>) -> Inspector {
+    pub fn new(key: impl Into<String>, title: impl Into<Said>) -> Inspector {
         Inspector {
             key: key.into(),
             title: Some(title.into()),
@@ -74,9 +74,9 @@ impl Inspector {
         let head = self.title.map(|title| {
             door::gap(col().w_full(), Space::S4)
                 .child(
-                    words(title.clone(), Type::Heading, t.text_primary)
+                    words(&title, Type::Heading, t.text_primary)
                         .role("heading")
-                        .label(title)
+                        .label(title.text())
                         .wrap(),
                 )
                 .children(self.kicker)

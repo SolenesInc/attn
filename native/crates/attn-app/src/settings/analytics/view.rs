@@ -618,7 +618,7 @@ fn vent_detail(
     detail
 }
 
-fn action(label: &str, key: &'static str, t: &Tokens) -> El {
+fn action(label: &'static str, key: &'static str, t: &Tokens) -> El {
     El::from(
         system::Button::new(label)
             .size(system::Size::Compact)
@@ -745,7 +745,7 @@ fn warning(said: &str, t: &Tokens) -> El {
     text(said.to_owned()).font(CAPTION).color(t.warning).wrap()
 }
 
-fn confirming(yes: &str, on_yes: fn(&mut State, &mut Tx), t: &Tokens) -> El {
+fn confirming(yes: &'static str, on_yes: fn(&mut State, &mut Tx), t: &Tokens) -> El {
     row()
         .gap(space::S2)
         .child(
@@ -765,7 +765,7 @@ fn confirming(yes: &str, on_yes: fn(&mut State, &mut Tx), t: &Tokens) -> El {
         )
 }
 
-fn asking(label: &str, confirm: Confirm, t: &Tokens) -> El {
+fn asking(label: &'static str, confirm: Confirm, t: &Tokens) -> El {
     system::Button::new(label)
         .look(Look::Danger)
         .on_press(move |state: &mut State| state.window.settings.analytics.confirm = Some(confirm))

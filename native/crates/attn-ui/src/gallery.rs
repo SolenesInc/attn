@@ -824,7 +824,7 @@ fn segmented(s: &Library, cx: &mut Cx<Library>) -> El {
     }
     let t = library_tokens(cx);
     let pick = |i: usize| move |s: &mut Library, _: &mut Tx| s.chosen = i;
-    let track = |key: &str, label: &str, names: &[&str]| -> El {
+    let track = |key: &str, label: &str, names: &[&'static str]| -> El {
         Segmented::new(key, label)
             .options(names.iter().enumerate().map(|(i, name)| {
                 Segment::new(format!("segment{i}"), *name)

@@ -1,13 +1,13 @@
 use rune::{El, Spring, Tx};
 
-use super::{Button, Control, IconSize, Look, Size, door, kit};
+use super::{Button, Control, IconSize, Look, Said, Size, door, kit};
 use crate::Tokens;
 
 /// A quiet control that opens and closes something nearby: its words and the mark of a control
 /// that opens in place.
 pub fn expander<S: 'static>(
     key: impl Into<String>,
-    said: impl Into<String>,
+    said: impl Into<Said>,
     open: bool,
     disabled: bool,
     t: &Tokens,

@@ -201,7 +201,7 @@ pub(in crate::settings) fn pill(state: &State, t: &Tokens) -> Option<El> {
 }
 
 fn button(
-    label: impl Into<String>,
+    label: impl Into<attn_ui::system::Said>,
     look: Look,
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,

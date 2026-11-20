@@ -1,7 +1,7 @@
 use rune::{El, el, row};
 
 use super::{
-    IconButton, IconSize, Radius, Size, Space, Type, disabled, door, focus, layers, words,
+    IconButton, IconSize, Radius, Said, Size, Space, Type, disabled, door, focus, layers, words,
 };
 use crate::Tokens;
 
@@ -23,8 +23,8 @@ pub struct GroupHead {
 }
 
 enum Name {
-    Small(String),
-    Section(String),
+    Small(Said),
+    Section(Said),
     Built(El),
 }
 
@@ -56,13 +56,13 @@ impl GroupHead {
     }
 
     /// The group's own name, such as a desktop's.
-    pub fn name(mut self, name: impl Into<String>) -> Self {
+    pub fn name(mut self, name: impl Into<Said>) -> Self {
         self.name = Some(Name::Small(name.into()));
         self
     }
 
     /// The name of a kind of thing the group holds, such as Crew or Automations.
-    pub fn section(mut self, name: impl Into<String>) -> Self {
+    pub fn section(mut self, name: impl Into<Said>) -> Self {
         self.name = Some(Name::Section(name.into()));
         self
     }
@@ -141,7 +141,7 @@ impl GroupHead {
         });
         let name = self.name.map(|name| match name {
             Name::Small(name) => words(name, Type::Small, t.text_muted),
-            Name::Section(name) => words(name.to_uppercase(), Type::Label, t.text_tertiary),
+            Name::Section(name) => words(name, Type::Label, t.text_tertiary),
             Name::Built(name) => name,
         });
         let content = row()

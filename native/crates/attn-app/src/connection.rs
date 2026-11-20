@@ -1,5 +1,6 @@
 use attn_client::Refusal;
 use attn_ui::Tokens;
+use attn_ui::system::{Part, Said, Type, words};
 use attn_ui::type_;
 use rune::tok::space;
 use rune::{El, col, text};
@@ -14,17 +15,23 @@ pub(crate) fn connecting(t: &Tokens) -> El {
 
 pub(crate) fn reconnecting(t: &Tokens, start_failed: Option<&str>) -> El {
     let status = match start_failed {
-        None => "The daemon is not answering. Reconnecting.".to_string(),
+        None => Said::from("The daemon is not answering. Reconnecting."),
         Some(reason) => {
-            format!("The daemon is not answering, and starting it failed: {reason}. Retrying.")
+            let failed = "The daemon is not answering, and starting it failed: ";
+            match reason.strip_suffix(crate::daemon::INSTALL) {
+                Some(before) => Said::parts([
+                    Part::Text(format!("{failed}{before}")),
+                    Part::Code(crate::daemon::INSTALL.to_owned()),
+                    Part::Text(". Retrying.".to_owned()),
+                ]),
+                None => Said::from(format!("{failed}{reason}. Retrying.")),
+            }
         }
     };
-    text(status)
+    words(status, Type::Body, t.text_secondary)
         .key("connection.reconnecting")
         .role("status")
         .wrap()
-        .font(type_::BODY)
-        .color(t.text_secondary)
         .padding(space::S2)
 }
 

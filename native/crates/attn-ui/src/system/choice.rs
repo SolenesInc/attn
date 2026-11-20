@@ -1,7 +1,7 @@
 use rune::{Color, El, Tx, col, el, row};
 
 use super::{
-    Control, IconSize, Radius, Size, Space, Type, disabled, door, focus, glyph, layers, words,
+    Control, IconSize, Radius, Said, Size, Space, Type, disabled, door, focus, glyph, layers, words,
 };
 use crate::Tokens;
 
@@ -14,8 +14,8 @@ const NAME_FLOOR: f32 = 80.0;
 /// One option of a list of choices: a row with its mark, its name and a note under it.
 pub struct Choice {
     key: String,
-    name: String,
-    note: Option<String>,
+    name: Said,
+    note: Option<Said>,
     leading: Option<El>,
     tag: Option<El>,
     many: bool,
@@ -25,7 +25,7 @@ pub struct Choice {
 }
 
 impl Choice {
-    pub fn new(key: impl Into<String>, name: impl Into<String>) -> Choice {
+    pub fn new(key: impl Into<String>, name: impl Into<Said>) -> Choice {
         Choice {
             key: key.into(),
             name: name.into(),
@@ -39,7 +39,7 @@ impl Choice {
         }
     }
 
-    pub fn note(mut self, note: impl Into<String>) -> Self {
+    pub fn note(mut self, note: impl Into<Said>) -> Self {
         self.note = Some(note.into());
         self
     }
@@ -142,7 +142,7 @@ impl Choice {
         let row = row()
             .key(self.key)
             .role(if self.many { "checkbox" } else { "radio" })
-            .label(self.name)
+            .label(self.name.text())
             .checked(self.chosen)
             .focusable(true)
             .focus_selected(self.chosen)

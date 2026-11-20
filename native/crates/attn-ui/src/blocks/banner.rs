@@ -6,8 +6,8 @@ use rune_kit::ScrollBar;
 
 use crate::dialog::Dialog;
 use crate::system::{
-    Button, IconSize, Look, RING_REACH, Radius, Size, Space, Type, door, focus, layers, lines_at,
-    width_of, words,
+    Button, IconSize, Look, RING_REACH, Radius, Said, Size, Space, Type, door, focus, layers,
+    lines_at, width_of, words,
 };
 use crate::{DialogFrame, Tokens, colors, icon};
 
@@ -34,17 +34,17 @@ type OnPress<S> = Box<dyn Fn(&mut S, &mut Tx)>;
 
 struct Sentence {
     key: String,
-    said: String,
+    said: Said,
 }
 
 enum Note {
     Words {
         key: String,
-        said: String,
+        said: Said,
     },
     Link {
         key: String,
-        shown: String,
+        shown: Said,
         label: String,
         press: Acts<El>,
     },
@@ -121,7 +121,7 @@ impl Banner {
     }
 
     /// What the banner says. A sentence longer than its lines ends in an ellipsis.
-    pub fn says(mut self, key: impl Into<String>, sentence: impl Into<String>) -> Self {
+    pub fn says(mut self, key: impl Into<String>, sentence: impl Into<Said>) -> Self {
         self.sentence = Some(Sentence {
             key: key.into(),
             said: sentence.into(),
@@ -157,7 +157,7 @@ impl Banner {
     /// together to lines of their own under the sentence, and a note longer than a line ends
     /// in an ellipsis. The bar names the items that fit its lines, the first at least in part,
     /// and counts the rest.
-    pub fn note(mut self, key: impl Into<String>, said: impl Into<String>) -> Self {
+    pub fn note(mut self, key: impl Into<String>, said: impl Into<Said>) -> Self {
         self.push(Note::Words {
             key: key.into(),
             said: said.into(),
@@ -169,7 +169,7 @@ impl Banner {
     pub fn link<S: 'static>(
         mut self,
         key: impl Into<String>,
-        shown: impl Into<String>,
+        shown: impl Into<Said>,
         label: impl Into<String>,
         press: impl Fn(&mut S, &mut Tx) + 'static,
     ) -> Self {
@@ -484,7 +484,7 @@ fn named(
     let left = widths.len() - named;
     let more = (left > 0).then(|| Note::Words {
         key: format!("{key}.more"),
-        said: counting(left),
+        said: counting(left).into(),
     });
     (shown, more, true)
 }
@@ -593,8 +593,8 @@ fn actions(
 /// The least width a sentence `natural` wide keeps beside its actions: readable, and wide
 /// enough to show it within its lines when its own width can, so actions move under it before
 /// they would cut it short.
-fn least_width(said: &str, natural: f32) -> f32 {
-    let fits = |w: f32| lines_at(said.to_owned(), Type::Name, w) <= LINES as f32;
+fn least_width(said: &Said, natural: f32) -> f32 {
+    let fits = |w: f32| lines_at(said, Type::Name, w) <= LINES as f32;
     if natural <= READABLE || fits(READABLE) {
         return natural.min(READABLE);
     }

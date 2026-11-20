@@ -487,7 +487,7 @@ fn segments<T: Copy + PartialEq + 'static>(
     name: &str,
     label: &str,
     current: T,
-    options: &[(T, &str)],
+    options: &[(T, &'static str)],
     pick: fn(&mut Form, T),
     t: &Tokens,
 ) -> El {
