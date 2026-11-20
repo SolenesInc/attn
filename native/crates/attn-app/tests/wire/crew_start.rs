@@ -221,7 +221,7 @@ fn starting_takes_a_second_click_that_says_so_and_shows_the_session_the_daemon_n
         Some("Start Trellis — click again to confirm")
     );
     assert!(shows(&world, &format!("{}.confirm", row("trellis"))));
-    let armed_sun = world.screen().get(Target::key(&sun("trellis")));
+    let armed_sun = world.screen().get(Target::key(sun("trellis")));
     assert!(
         !armed_sun.is("expanded") && !armed_sun.is("collapsed"),
         "the armed start opens nothing, yet says {:?}",

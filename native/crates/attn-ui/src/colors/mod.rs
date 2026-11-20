@@ -253,29 +253,6 @@ fn c(value: &str) -> Color {
     rune::color::hex(value).unwrap_or_else(|| panic!("token {value:?} is not a hex color"))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn every_scheme_file_is_a_scheme_attn_first_then_by_id() {
-        let dir = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../../internal/colors/schemes"
-        );
-        let mut files: Vec<String> = std::fs::read_dir(dir)
-            .unwrap()
-            .filter_map(|e| {
-                let name = e.unwrap().file_name().into_string().unwrap();
-                name.strip_suffix(".json").map(str::to_owned)
-            })
-            .collect();
-        files.sort_by_key(|id| (id != "attn", id.clone()));
-        let schemes: Vec<&str> = SCHEMES.iter().map(|s| s.id).collect();
-        assert_eq!(schemes, files);
-    }
-}
-
 /// `moving`, taken toward `toward` only as far as it needs to read on `against` or against it,
 /// at the 4.5:1 body text needs: a fill deepened under its words, or words deepened on a wash.
 pub fn moved_until_it_reads(moving: Color, toward: Color, against: Color) -> Color {
@@ -301,3 +278,26 @@ pub fn contrast(a: Color, b: Color) -> f32 {
 }
 
 const READS: f32 = 4.5;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_scheme_file_is_a_scheme_attn_first_then_by_id() {
+        let dir = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../internal/colors/schemes"
+        );
+        let mut files: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .filter_map(|e| {
+                let name = e.unwrap().file_name().into_string().unwrap();
+                name.strip_suffix(".json").map(str::to_owned)
+            })
+            .collect();
+        files.sort_by_key(|id| (id != "attn", id.clone()));
+        let schemes: Vec<&str> = SCHEMES.iter().map(|s| s.id).collect();
+        assert_eq!(schemes, files);
+    }
+}
