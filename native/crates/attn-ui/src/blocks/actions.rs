@@ -63,12 +63,14 @@ impl Actions {
                 .child(side(self.end).justify_end());
             return Block::new(Kind::Actions, line.key(self.key));
         }
-        let line = row()
-            .w_full()
-            .items_center()
-            .children(self.start)
-            .child(row().grow(1.0))
-            .children(self.end);
+        let line = row().w_full().items_center();
+        let line = if self.start.is_empty() {
+            line.justify_end().children(self.end)
+        } else {
+            line.children(self.start)
+                .child(row().grow(1.0))
+                .children(self.end)
+        };
         Block::new(
             Kind::Actions,
             door::gaps(line.key(self.key).flex_wrap(), Space::S8, Space::S8),
