@@ -578,3 +578,34 @@ fn an_opened_notifications_tag_stands_as_the_others_do_on_its_titles_line() {
         middle(title)
     );
 }
+
+#[test]
+fn a_tag_that_drops_under_a_long_title_adds_only_its_height_and_one_inner_gap_to_the_row() {
+    let mut world = start(vec![
+        notification(
+            "n1",
+            "critical",
+            "Nightly dependency upgrade failed on the services repository tonight",
+        ),
+        notification("n2", "warning", "Disk is 92% full on studio"),
+    ]);
+    open(&mut world);
+    expand(&mut world, "n1");
+    let dropped = world.rect(&row("n1"));
+    let one_line = world.rect(&row("n2"));
+    let title = world.rect(&format!("{}.title", row("n1")));
+    let tag = world.rect(&format!("{}.severity", row("n1")));
+    assert!(
+        tag[1] >= title[1] + title[3],
+        "the tag stands at {}, inside its title's line ending at {}",
+        tag[1],
+        title[1] + title[3]
+    );
+    const INNER_GAP: f64 = 6.0;
+    let grown = dropped[3] - one_line[3];
+    assert!(
+        (grown - (tag[3] + INNER_GAP)).abs() <= 0.5,
+        "the row grows {grown} for a tag {} tall",
+        tag[3]
+    );
+}

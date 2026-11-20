@@ -142,11 +142,10 @@ fn roster(state: &State, t: &Tokens, stacked: bool) -> El {
         .fold(
             List::new("crew.roster.list", "Members")
                 .heading()
-                .count(count),
+                .count(count)
+                .find(find),
             |list, m| list.row(roster_row(state, m, selected.as_deref(), t)),
         )
-        .scrolling(t)
-        .focusable(true)
         .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
             let step = match ev.key {
                 Key::Down => 1,
@@ -161,7 +160,8 @@ fn roster(state: &State, t: &Tokens, stacked: bool) -> El {
                 super::navigate(state, Nav::Member(id.clone()), tx);
             }
             true
-        });
+        })
+        .scrolling(t);
     let list = if stacked {
         list.shrink().min_h(0.0)
     } else {
@@ -171,7 +171,6 @@ fn roster(state: &State, t: &Tokens, stacked: bool) -> El {
         .key("crew.roster")
         .role("complementary")
         .label("Crew roster")
-        .children(find)
         .child(list);
     if stacked {
         shown

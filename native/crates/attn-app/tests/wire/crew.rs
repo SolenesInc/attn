@@ -350,6 +350,48 @@ fn a_reconnect_whose_initial_state_carries_no_crew_empties_the_roster() {
 }
 
 #[test]
+fn every_tab_stop_on_the_page_has_a_key_and_a_name_and_the_roster_is_its_named_list() {
+    let names = ["ash", "birch", "cedar", "dahlia", "elm", "fern"];
+    let mut world = start(names.iter().map(|n| member(n, 1)).collect());
+    open(&mut world);
+    click(&mut world, "crew.find");
+    let mut stops = Vec::new();
+    for _ in 0..40 {
+        let node = world.screen().focused().expect("the keyboard is somewhere");
+        if stops
+            .iter()
+            .any(|seen: &attn_testkit::Node| seen.key == node.key && seen.key.is_some())
+        {
+            break;
+        }
+        stops.push(node);
+        press(&mut world, Key::Tab);
+    }
+    let on_page: Vec<_> = stops
+        .iter()
+        .filter(|n| {
+            !n.key
+                .as_deref()
+                .is_some_and(|k| k.starts_with("titlebar.") || k.starts_with("sidebar."))
+        })
+        .collect();
+    for node in &on_page {
+        assert!(
+            node.key.is_some() && node.name.as_deref().is_some_and(|n| !n.is_empty()),
+            "a Tab stop without a key or a name: {node:?}"
+        );
+    }
+    let roster = on_page
+        .iter()
+        .find(|n| n.key.as_deref() == Some("crew.roster.list"))
+        .unwrap_or_else(|| panic!("the roster takes no Tab stop: {on_page:?}"));
+    assert_eq!(
+        (roster.role.as_str(), roster.name.as_deref()),
+        ("list", Some("Members"))
+    );
+}
+
+#[test]
 fn past_five_members_a_find_field_narrows_the_roster_by_name_and_the_arrows_walk_it() {
     let names = ["ash", "birch", "cedar", "dahlia", "elm", "fern"];
     let mut world = start(names.iter().map(|n| member(n, 1)).collect());

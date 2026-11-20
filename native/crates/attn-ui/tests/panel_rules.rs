@@ -1,7 +1,7 @@
 //! The rules the blocks of panels and drawers hold, read from the panel gallery's stories.
 
 use attn_ui::panel_gallery::{PANEL_SUBJECTS, PANEL_VARIANTS};
-use rune::{App, AppSpec, Cx, El, ElementInfo, Env, Runtime, el};
+use rune::{App, AppSpec, Cx, El, ElementInfo, Env, Key, KeyEvent, Mods, Runtime, el};
 
 const WINDOW: (f32, f32) = (1400.0, 800.0);
 const SCALE: f32 = 2.0;
@@ -241,5 +241,51 @@ fn a_control_in_an_inspector_sets_its_words_where_a_facts_words_start() {
             (words - value).abs() <= SLACK,
             "{variant}: the link's words start at {words}, a fact's value at {value}"
         );
+    }
+}
+
+#[test]
+fn every_tab_stop_in_a_panel_has_a_key_and_a_name() {
+    for (story_name, _) in PANEL_SUBJECTS {
+        for variant in variants(story_name) {
+            let mut rt = story(story_name, variant);
+            rt.set_full_keyboard_access(true);
+            let stage = rt
+                .elements()
+                .into_iter()
+                .find(|e| e.path.ends_with("playground-stage-1"))
+                .expect("the story has a stage");
+            let (x, y) = (stage.rect[0] + 2.0, stage.rect[1] + 2.0);
+            rt.pointer_down(x, y);
+            rt.pointer_up(x, y);
+            rt.pointer_leave();
+            rt.frame(1.0);
+            let mut seen: Vec<String> = Vec::new();
+            for _ in 0..40 {
+                rt.key(KeyEvent {
+                    key: Key::Tab,
+                    mods: Mods::default(),
+                });
+                rt.frame(1.0);
+                let Some(stop) = rt
+                    .elements()
+                    .into_iter()
+                    .find(|e| e.focused && e.path.starts_with(&stage.path))
+                else {
+                    continue;
+                };
+                if seen.contains(&stop.path) {
+                    break;
+                }
+                assert!(
+                    stop.key.is_some() && stop.label.as_deref().is_some_and(|l| !l.is_empty()),
+                    "{story_name} {variant}: a Tab stop with no key or no name: {} {:?} {:?}",
+                    stop.role,
+                    stop.key,
+                    stop.label
+                );
+                seen.push(stop.path);
+            }
+        }
     }
 }

@@ -481,7 +481,7 @@ impl ListRow {
                     .flex_wrap()
                     .items_center()
                     .children(title.map(|title| on_band(title).shrink().min_w(0.0)))
-                    .children(self.tags.into_iter().map(on_band)),
+                    .children(self.tags),
                 None,
             ),
             (false, false, _) => (title_line.h(band).items_center().children(title), None),

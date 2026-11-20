@@ -158,6 +158,11 @@ impl Refusal {
 
     pub fn build(self, t: &Tokens) -> El {
         let said = words(self.reason.clone(), Type::Small, t.error).wrap_anywhere();
+        let said = if self.retry.is_some() {
+            door::on_band(said, Type::Small, Size::Regular)
+        } else {
+            said
+        };
         let line = row()
             .key(self.key)
             .role("alert")
@@ -165,7 +170,7 @@ impl Refusal {
             .w_full()
             .flex_wrap()
             .items_start()
-            .child(door::on_band(said, Type::Small, Size::Regular).grow_from(1.0, COPY_FLOOR))
+            .child(said.grow_from(1.0, COPY_FLOOR))
             .children(self.retry);
         door::gaps(line, Space::S8, Space::S8)
     }

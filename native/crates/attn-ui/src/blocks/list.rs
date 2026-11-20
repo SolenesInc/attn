@@ -1,4 +1,4 @@
-use rune::{El, col, row};
+use rune::{El, KeyEvent, Tx, col, row};
 use rune_kit::ScrollBar;
 
 use super::block::{Block, Kind, inner_gap, spaced};
@@ -18,6 +18,8 @@ pub struct List {
     roving: bool,
     listbox: bool,
     failed: bool,
+    keys: Option<Box<dyn FnOnce(El) -> El>>,
+    find: Option<El>,
     items: Vec<(El, Option<String>, Vec<Block>)>,
     empty: Option<(String, String, Option<El>)>,
 }
@@ -35,6 +37,8 @@ impl List {
             roving: false,
             listbox: false,
             failed: false,
+            keys: None,
+            find: None,
             items: Vec::new(),
             empty: None,
         }
@@ -70,6 +74,23 @@ impl List {
     /// Return presses.
     pub fn roving(mut self) -> Self {
         self.roving = true;
+        self
+    }
+
+    /// The list is one stop of Tab and answers the keys itself, such as Up and Down choosing
+    /// the next row.
+    pub fn on_key<S: 'static>(
+        mut self,
+        keys: impl Fn(&mut S, &KeyEvent, &mut Tx) -> bool + 'static,
+    ) -> Self {
+        self.keys = Some(Box::new(move |list: El| list.focusable(true).on_key(keys)));
+        self
+    }
+
+    /// A field above the rows that narrows them, where there is one: on the rows' line, staying
+    /// while they scroll.
+    pub fn find(mut self, field: Option<El>) -> Self {
+        self.find = field;
         self
     }
 
@@ -132,23 +153,35 @@ impl List {
 
     /// The list as a column of its own that scrolls, filling the height it is given, as beside
     /// an inspector.
-    pub fn scrolling(self, t: &Tokens) -> El {
-        let list = door::frame(self.laid(t), Space::S8, Space::S8, Space::S8);
-        col()
+    pub fn scrolling(mut self, t: &Tokens) -> El {
+        let find = self
+            .find
+            .take()
+            .map(|find| door::frame(find, Space::S8, Space::S16, Space::S0));
+        let list = door::frame(self.laid(t), Space::S8, Space::S16, Space::S8);
+        let rows = col()
             .w_full()
-            .h_full()
             .min_w(0.0)
             .scroll(rune::ScrollSpec {
                 stick_bottom: false,
             })
             .child(list)
-            .scroll_bar_styled(crate::scroll_bar(t))
+            .scroll_bar_styled(crate::scroll_bar(t));
+        match find {
+            Some(find) => col()
+                .w_full()
+                .h_full()
+                .min_w(0.0)
+                .child(find)
+                .child(rows.grow(1.0).min_h(0.0)),
+            None => rows.h_full(),
+        }
     }
 
     /// The list as a column of its own as tall as its rows, up to `tallest`, past which it
     /// scrolls, as above what the rows choose between.
     pub fn scrolling_up_to(self, tallest: f32, t: &Tokens) -> El {
-        let list = door::frame(self.laid(t), Space::S8, Space::S8, Space::S8);
+        let list = door::frame(self.laid(t), Space::S8, Space::S16, Space::S8);
         col()
             .w_full()
             .max_h(tallest)
@@ -242,6 +275,10 @@ impl List {
             list.focus_group()
         } else {
             list
+        };
+        let list = match self.keys {
+            Some(keys) => keys(list),
+            None => list,
         };
         let list = match self.chooser {
             Some(Some(chosen)) => list.focusable(true).active_descendant(chosen),

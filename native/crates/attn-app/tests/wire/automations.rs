@@ -235,6 +235,42 @@ fn each_definition_says_what_triggers_it_and_offers_run_now() {
 }
 
 #[test]
+fn a_failed_rows_reasons_stand_one_inner_gap_apart_under_it() {
+    let failed = AutomationDefinitionSummary {
+        trigger_type: "scheduled".into(),
+        guard_check: Some(AutomationGuardCheck {
+            outcome: "failed".into(),
+            checked_at: ago(1),
+            checks_since_run: 2,
+            detail: Some("git rev-parse failed: not a git repository".into()),
+        }),
+        last_run: Some(AutomationRunSummary {
+            state: "failed".into(),
+            last_error: Some("Codex does not trust the directory".into()),
+            ..run("r1")
+        }),
+        ..definition(1, "PR reviewer")
+    };
+    let mut world = opened(&Scene::of(vec![failed]));
+    let guard = world.rect("automations.guard-error.1");
+    let last = world.rect("automations.last-error.1");
+    const INNER_GAP: f64 = 12.0;
+    const SMALL_LINE: f64 = 16.25;
+    for (key, reason) in [("guard", guard), ("last", last)] {
+        assert!(
+            reason[3] <= SMALL_LINE + 0.5,
+            "the {key} reason, one line with no Retry, stands {} tall",
+            reason[3]
+        );
+    }
+    let between = last[1] - (guard[1] + guard[3]);
+    assert!(
+        (between - INNER_GAP).abs() <= 0.5,
+        "the reasons stand {between} apart"
+    );
+}
+
+#[test]
 fn a_failed_last_run_marks_its_definition_with_the_reason() {
     let failed = AutomationDefinitionSummary {
         last_run: Some(AutomationRunSummary {

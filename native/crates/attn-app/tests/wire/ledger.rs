@@ -382,6 +382,27 @@ fn words_and_dir_narrow_the_page_without_asking_the_daemon() {
 }
 
 #[test]
+fn the_list_and_what_it_says_when_empty_start_on_the_line_of_the_tabs_above_it() {
+    let mut world = world();
+    open(&mut world);
+    let line = world.rect("ledger.tab.sessions")[0];
+    let row = world.rect("ledger.row.api");
+    const ROW_INSET: f64 = 8.0;
+    assert_eq!(
+        row[0],
+        line - ROW_INSET,
+        "a row's box reaches out by its inset from the line at {line}"
+    );
+    type_query(&mut world, "from:2026-09-03 to:2026-09-01");
+    type_query(&mut world, " ");
+    assert_eq!(
+        world.rect("ledger.empty")[0],
+        line,
+        "the empty list's words start on the line"
+    );
+}
+
+#[test]
 fn a_backwards_custom_range_says_why_and_reads_nothing() {
     let mut world = world();
     open(&mut world);

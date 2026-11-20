@@ -1,7 +1,7 @@
 //! The gallery's stories for the blocks of panels and drawers: one story per block, a variant per
 //! state.
 
-use rune::{Cx, El, Playground, Story, TextEdit, Tx, col, el};
+use rune::{Cx, El, KeyEvent, Playground, Story, TextEdit, Tx, col, el};
 use rune_kit::TextInput;
 
 use crate::Tokens;
@@ -23,6 +23,7 @@ pub struct Panels {
     pub failed: bool,
     pub empty: bool,
     pub bare: bool,
+    pub keys: bool,
     pub on: bool,
     pub line: TextEdit,
 }
@@ -61,7 +62,7 @@ pub const PANEL_SUBJECTS: &[(&str, &[&str])] = &[
 /// The variants each panel story has beyond the common ones, as the state sheets draw them.
 pub const PANEL_VARIANTS: &[(&str, &[&str])] = &[
     ("Panels/Sheet", &["Loading", "Failed"]),
-    ("Panels/List", &["Empty", "Failed", "Bare"]),
+    ("Panels/List", &["Empty", "Failed", "Bare", "Keys"]),
     ("Panels/Inspector", &["Empty"]),
 ];
 
@@ -88,7 +89,8 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
             common(Story::new("Panels/List", Panels::default, list))
                 .variant("Empty", |s| s.empty = true)
                 .variant("Failed", |s| s.failed = true)
-                .variant("Bare", |s| s.bare = true),
+                .variant("Bare", |s| s.bare = true)
+                .variant("Keys", |s| s.keys = true),
         )
 }
 
@@ -331,8 +333,16 @@ fn list(s: &Panels, cx: &mut Cx<Panels>) -> El {
                     .key("list.new")
                     .into(),
             ),
+        );
+    let list = if s.keys {
+        Block::custom(
+            "list.column",
+            list.on_key(|_: &mut Panels, _: &KeyEvent, _: &mut Tx| false)
+                .scrolling(&t),
         )
-        .build(&t);
+    } else {
+        list.build(&t)
+    };
     let panel = Sheet::new("list.sheet", "Automations")
         .close(close(&t))
         .push(list)
