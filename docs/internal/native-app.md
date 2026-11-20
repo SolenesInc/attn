@@ -287,16 +287,19 @@ choices once for the whole app:
   has one, so no control a row gives goes undrawn. Every line of a table, its
   head, rows, sub-rows and details, lays the mark and the name the same way,
   so they wrap at one width and start on one edge. The name keeps 200 before
-  the fixed columns wrap under it. Past that, the button follows the row onto
-  a line of its own, and below the mark and those 200 the name takes a line of
-  its own under the mark. A row's name opens it, and an open row shows its
-  details, its sub-rows on a rail and its actions on the name column. Opening
-  a row springs the rows below it into place, as Rune springs any layout
-  change a press makes; the Delegation page's rows moved this way before they
-  were a `Table`. A table that is switched off fades its head and what its
-  rows say, and keeps every control's colour, since each control still works;
-  its empty state and its footer keep their colour too. An empty table's
-  actions wrap one under the other when they do not fit side by side.
+  the fixed columns wrap under it, and a wrapped line of columns starts on the
+  names' edge, leaving the mark column empty beside it. The row's button ends
+  the last column's line at the row's trailing edge, or goes under that line at
+  the same edge when the line cannot hold it, and below the mark and those 200
+  the name takes a line of its own under the mark. A row's name opens it, and
+  an open row shows its details, its sub-rows on a rail and its actions on the
+  name column. A closed sub-row shows its note, what the person wrote, on up to
+  two lines. Opening a row springs the rows below it into place, as Rune springs
+  any layout change a press makes; the Delegation page's rows moved this way
+  before they were a `Table`. A table that is switched off fades its head and
+  what its rows say, and keeps every control's colour, since each control
+  still works; its empty state and its footer keep their colour too. An empty
+  table's actions wrap one under the other when they do not fit side by side.
 - **The banner.** `attn_ui::blocks::Banner` is the bar under the title bar
   that outpost updates, an update run and shared Codex draw. A view gives its
   tone (`Warn`, `Calm`, `Good` or `Bad`), its sentence, its notes, its actions,
@@ -366,13 +369,16 @@ choices once for the whole app:
   aside and keeping its line, a choice's name whole, no part of a block past
   its sides, and a control's box and ring taking in everything it draws, at
   any width the stories draw, the smallest included. A table's rules: a row's
-  parts on its first line, its controls on one left edge, a sub-row 12 from
-  its rail, the head, a row's name and its details on one edge at every width
-  from 160 to 800, an open row's details ending with the name column, a narrow
-  table's head naming only the columns on its line, the footer on the name
-  column, a tag's edge a hover step from its row at rest, hovered, pressed and
-  open, and a switched-off table's words at half strength while its controls,
-  its rings and what its empty state offers draw as when it is on.
+  parts on one band, its button ending its control's line or the block under
+  it at the trailing edge, an alternative's remove button the same, a closed
+  alternative's condition on two lines at most, a row's controls on one left
+  edge, a sub-row 12 from its rail, the head, a row's name, its details and a
+  wrapped line of its controls on one edge at every width from 160 to 800, an
+  open row's details ending with the name column, a narrow table's head naming
+  only the columns on its line, the footer on the name column, a tag's edge a
+  hover step from its row at rest, hovered, pressed and open, and a
+  switched-off table's words at half strength while its controls, its rings
+  and what its empty state offers draw as when it is on.
   `attn-ui/tests/chrome_rules.rs` holds the chrome's: one height for every list
   row of one line and one start for every title, nothing past a row's sides, a
   row's hover controls whole on the first frame on the row's own ground with

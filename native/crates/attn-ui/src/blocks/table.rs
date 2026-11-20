@@ -41,6 +41,14 @@ impl TableColumns {
 const ROW_INSET: Space = Space::S16;
 const COLUMN_GAP: Space = Space::S12;
 
+/// How the name grows against the last column's cell, which grows by 1: on a line they share
+/// the cell takes a ten-thousandth of the spare room, under 0.1 point at the widest dialog, and
+/// on a line of its own it takes the whole line, so the row's button ends at its trailing edge.
+const NAME_GROW: f32 = 1e4;
+
+/// The most lines a closed sub-row gives its note, the one place it shows what the person wrote.
+const NOTE_LINES: usize = 2;
+
 /// A table of rows that open: each row's name opens it, and an open row shows its details, its
 /// sub-rows and its actions on the table's columns. A narrow table wraps its fixed columns under
 /// the name, and its head then names only the columns still on its line.
@@ -163,44 +171,81 @@ impl Grid {
 
     /// One line on the columns: `who` over the mark and name columns, `fixed` giving each fixed
     /// column its content, and `end` in the action column. Below the name's floor the fixed
-    /// columns wrap under the name, and the end follows the line.
+    /// columns wrap under the name, starting on the names' edge, and the end follows the line.
     fn line(&self, who: El, mut fixed: impl FnMut(Column) -> El, end: Option<El>) -> El {
-        let who = row().grow_from(1.0, self.name_floor()).child(who.grow(1.0));
-        let fixed = self.fixed.iter().enumerate().map(|(i, &(_, w))| {
-            row()
-                .grow_from(0.0, w)
-                .child(fixed(Column(i)).shrink().max_w(w))
-        });
-        let middle = door::gaps(
-            row()
+        let side = Size::Regular.height();
+        let mark = self.mark_column();
+        let who = door::drawn_back(row(), mark)
+            .grow_from(NAME_GROW, self.name_floor())
+            .child(who.grow(1.0));
+        let end_room = if self.action {
+            COLUMN_GAP.pt() + side
+        } else {
+            0.0
+        };
+        let mut at_end = end.map(|end| row().grow_from(1.0, side).justify_end().child(end));
+        let last = self.fixed.len().checked_sub(1);
+        let cells: Vec<El> = self
+            .fixed
+            .iter()
+            .enumerate()
+            .map(|(i, &(_, w))| {
+                let content = fixed(Column(i)).shrink().max_w(w);
+                if Some(i) == last {
+                    door::gaps(
+                        row().items_start().flex_wrap().grow_from(1.0, w + end_room),
+                        Space::S4,
+                        COLUMN_GAP,
+                    )
+                    .child(content)
+                    .children(at_end.take())
+                } else {
+                    row().grow_from(0.0, w).child(content)
+                }
+            })
+            .collect();
+        let columns_width = self.fixed.iter().map(|&(_, w)| w).sum::<f32>()
+            + COLUMN_GAP.pt() * self.fixed.len().saturating_sub(1) as f32
+            + end_room;
+        let columns = door::gaps(
+            row().items_start().flex_wrap().grow_from(1.0, FLEX_FLOOR),
+            Space::S0,
+            COLUMN_GAP,
+        )
+        .children(cells)
+        .children(at_end);
+        let columns = door::gaps(
+            door::drawn_back(row(), mark)
                 .items_start()
                 .flex_wrap()
-                .grow_from(1.0, self.name_floor()),
+                .grow_from(1.0, mark + columns_width),
+            Space::S0,
+            COLUMN_GAP,
+        )
+        .children(self.lead.then(|| row().w(side).min_w(side)))
+        .child(columns);
+        let line = door::gaps(
+            door::inset_start(row().items_start().flex_wrap().w_full(), mark),
             Space::S0,
             COLUMN_GAP,
         )
         .child(who)
-        .children(fixed);
-        let side = Size::Regular.height();
-        let end = self.action.then(|| row().w(side).min_w(side).children(end));
-        let line = door::gaps(
-            row().items_start().flex_wrap().w_full(),
-            Space::S4,
-            COLUMN_GAP,
-        )
-        .child(middle)
-        .children(end);
-        door::sides(line, ROW_INSET, ROW_INSET)
+        .child(columns);
+        door::sides(row().w_full().child(line), ROW_INSET, ROW_INSET)
+    }
+
+    /// How far the names start from the row's start: past the mark column, when there is one.
+    fn mark_column(&self) -> f32 {
+        if self.lead {
+            Size::Regular.height() + COLUMN_GAP.pt()
+        } else {
+            0.0
+        }
     }
 
     /// The width the mark and the name column need on one line.
     fn name_floor(&self) -> f32 {
-        let lead = if self.lead {
-            Size::Regular.height() + COLUMN_GAP.pt()
-        } else {
-            0.0
-        };
-        lead + FLEX_FLOOR
+        self.mark_column() + FLEX_FLOOR
     }
 
     /// The head on the columns, one line high, so a narrow table names only the columns on it.
@@ -597,11 +642,16 @@ impl<S: 'static> SubRow<S> {
         } else {
             t.text_secondary
         };
-        let note = door::gap(row().w_full().min_w(0.0), Space::S4)
-            .child(words(self.note_label, Type::Small, t.text_tertiary))
+        let note = door::gap(row().w_full().min_w(0.0).items_start(), Space::S4)
+            .child(
+                words(self.note_label, Type::Small, t.text_tertiary)
+                    .key(format!("{}.note.label", self.key)),
+            )
             .child(
                 words(self.note.clone(), Type::Small, note_ink)
-                    .truncate()
+                    .key(format!("{}.note", self.key))
+                    .max_lines(NOTE_LINES)
+                    .shrink()
                     .min_w(0.0),
             );
         let said = door::gap(col().w_full().min_w(0.0).items_start(), Space::S2)

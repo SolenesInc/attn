@@ -87,6 +87,7 @@ pub const BLOCK_SUBJECTS: &[(&str, &[&str])] = &[
 ];
 
 const LONG_COPY: &str = "Every agent attn starts on this machine, including the ones that run on a schedule and the ones another agent delegates to, reads this before its first turn, so a long value here reaches all of them.";
+const LONG_WHEN: &str = "Small edits with one clear answer, such as a rename, a typo or a moved import, where nothing needs a design call or a second opinion";
 const LONG_TITLE: &str = "Narrowest tile width before tiles stack into a column (columns)";
 
 pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
@@ -178,6 +179,11 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Open, window wide", |s| {
                     s.open = true;
                     s.width = Width::Window;
+                })
+                .variant("Open smallest long", |s| {
+                    s.open = true;
+                    s.width = Width::Smallest;
+                    s.long = true;
                 })
                 .variant("Open narrow", |s| {
                     s.open = true;
@@ -814,7 +820,11 @@ fn table(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
             .sub_row(alternative(
                 "fast",
                 "Fast",
-                "Small edits with a clear answer",
+                if s.long {
+                    LONG_WHEN
+                } else {
+                    "Small edits with a clear answer"
+                },
                 s.chosen == 1,
             ))
             .sub_row(alternative("unnamed", "Unnamed alternative", "", false))

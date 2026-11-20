@@ -2044,25 +2044,102 @@ fn middle(e: &ElementInfo) -> f32 {
 
 #[test]
 fn a_table_rows_parts_share_its_first_line() {
-    for variant in ["Rest", "Long", "Narrow", "Narrow long", "Open"] {
+    for variant in [
+        "Rest",
+        "Long",
+        "Narrow",
+        "Narrow long",
+        "Open",
+        "Smallest long",
+    ] {
         let rt = block_story(true, "Blocks/Table", variant);
+        let trailing = right(&element(&rt, "table")) - ROW_INSET;
         for row in TABLE_ROWS {
             let who = element(&rt, row);
-            let band = who.rect[1] + 16.0;
-            let more = element(&rt, &format!("{row}.more"));
-            assert!(
-                (middle(&more) - band).abs() < 0.5,
-                "{variant} {row}: its more button centres at {} off its first line at {band}",
-                middle(&more)
-            );
             let model = element(&rt, &format!("{row}.model"));
-            if model.rect[0] > right(&who) {
+            let beside = model.rect[0] > right(&who);
+            let band = if beside { who.rect[1] } else { model.rect[1] } + 16.0;
+            if beside {
                 assert!(
                     (middle(&model) - band).abs() < 0.5,
                     "{variant} {row}: its control centres at {} off its first line at {band}",
                     middle(&model)
                 );
             }
+            let more = element(&rt, &format!("{row}.more"));
+            let under = !beside && more.rect[1] >= bottom(&model);
+            assert!(
+                (middle(&more) - band).abs() < 0.5 || under,
+                "{variant} {row}: its more button centres at {}, neither on its control's line \
+                 at {band} nor under it",
+                middle(&more)
+            );
+            assert!(
+                (right(&more) - trailing).abs() < 0.5 && (under || more.rect[0] > right(&model)),
+                "{variant} {row}: its more button ends at {}, not after its control at the row's \
+                 trailing edge {trailing}",
+                right(&more)
+            );
+        }
+    }
+}
+
+/// How far a table's rows keep their parts from its sides.
+const ROW_INSET: f32 = 16.0;
+
+const ALTERNATIVES: [&str; 2] = ["table.alt.fast", "table.alt.unnamed"];
+
+#[test]
+fn an_alternatives_remove_button_ends_its_model_line_or_the_block_under_it() {
+    for variant in ["Open", "Open narrow", "Open smallest long"] {
+        let rt = block_story(true, "Blocks/Table", variant);
+        let trailing = right(&element(&rt, "table")) - ROW_INSET;
+        for alt in ALTERNATIVES {
+            let model = element(&rt, &format!("{alt}.model"));
+            let remove = element(&rt, &format!("{alt}.remove"));
+            let on_its_line = (middle(&remove) - middle(&model)).abs() < 0.5;
+            let under_it = remove.rect[1] >= bottom(&model);
+            assert!(
+                on_its_line || under_it,
+                "{variant} {alt}: its remove button at {:?} is neither on its model's line nor \
+                 under it, the model at {:?}",
+                remove.rect,
+                model.rect
+            );
+            assert!(
+                (right(&remove) - trailing).abs() < 0.5,
+                "{variant} {alt}: its remove button ends at {}, not at the trailing edge {trailing}",
+                right(&remove)
+            );
+        }
+    }
+}
+
+#[test]
+fn a_closed_alternatives_condition_wraps_to_two_lines_and_no_further() {
+    for variant in ["Open", "Open narrow", "Open smallest long"] {
+        let rt = block_story(true, "Blocks/Table", variant);
+        let one_line = element(&rt, "table.alt.fast.note.label").rect[3];
+        let note = element(&rt, "table.alt.fast.note");
+        let lines = (note.rect[3] / one_line).round();
+        let glyph_rows = {
+            let mut centres: Vec<f32> = shown_glyphs(&rt, note.rect)
+                .iter()
+                .map(|g| g[1] + g[3] / 2.0)
+                .collect();
+            centres.sort_by(f32::total_cmp);
+            centres.dedup_by(|a, b| (*a - *b).abs() < one_line / 2.0);
+            centres.len()
+        };
+        assert!(
+            lines <= 2.0 && glyph_rows as f32 == lines,
+            "{variant}: the condition stands {lines} lines high and draws {glyph_rows}, past 2"
+        );
+        if variant == "Open smallest long" {
+            assert_eq!(
+                lines, 2.0,
+                "{variant}: a long condition keeps one line where it has room for two"
+            );
         }
     }
 }
@@ -2312,7 +2389,7 @@ fn a_tags_edge_stands_a_hover_step_from_every_fill_it_sits_on() {
 const TABLE_SWEEP: std::ops::RangeInclusive<u32> = 160..=800;
 
 #[test]
-fn a_tables_head_names_and_details_start_on_one_edge_at_every_width() {
+fn a_tables_head_names_details_and_wrapped_controls_start_on_one_edge_at_every_width() {
     let mut rt = block_story(true, "Blocks/Table", "Open, window wide");
     let page_sides = 2.0 * 32.0;
     for content in TABLE_SWEEP {
@@ -2338,6 +2415,28 @@ fn a_tables_head_names_and_details_start_on_one_edge_at_every_width() {
             (title - head).abs() < 0.5 && (details - head).abs() < 0.5,
             "at {content} wide: the head starts at {head}, the title at {title}, the details at {details}"
         );
+        for (row, control, said) in [
+            (
+                "table.builder",
+                "table.builder.model",
+                "Claude · Opus · high",
+            ),
+            ("table.alt.fast", "table.alt.fast.model", "Codex · gpt-5"),
+            (
+                "table.alt.unnamed",
+                "table.alt.unnamed.model",
+                "Codex · gpt-5",
+            ),
+        ] {
+            if element(&rt, control).rect[1] > element(&rt, row).rect[1] + 0.5 {
+                let words = within(control, said);
+                assert!(
+                    (words - title).abs() < 0.5,
+                    "at {content} wide: {control} wraps under its row with its words at {words}, \
+                     off the names' edge at {title}"
+                );
+            }
+        }
     }
 }
 

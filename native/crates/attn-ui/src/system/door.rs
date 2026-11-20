@@ -176,6 +176,11 @@ pub(crate) fn styled(e: El, style: TextStyle) -> El {
     e.font(style)
 }
 
+/// `e` starting `points` before where its line places it.
+pub(crate) fn drawn_back(e: El, points: f32) -> El {
+    e.ml(-points)
+}
+
 /// `e` with its content `points` in from its start.
 pub(crate) fn inset_start(e: El, points: f32) -> El {
     e.pl(points)
