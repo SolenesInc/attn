@@ -1,4 +1,4 @@
-use rune::{Color, Tx, row};
+use rune::{Beat, Color, El, Sequence, Tx, el, row};
 use rune_kit::{Button as KitButton, ButtonVariant};
 
 use super::{
@@ -27,6 +27,7 @@ pub struct IconButton {
     count: Option<String>,
     keys: Option<String>,
     dot: Option<Color>,
+    busy: bool,
     button: KitButton,
 }
 
@@ -48,6 +49,7 @@ pub fn icon_button(
         count: None,
         keys: None,
         dot: None,
+        busy: false,
         button: KitButton::new(label),
     }
 }
@@ -102,6 +104,14 @@ impl IconButton {
     /// notifications.
     pub fn dot(mut self, dot: Option<Color>) -> Self {
         self.dot = dot;
+        self
+    }
+
+    /// What the button does is under way: three dots bounce where its icon was, in the same box
+    /// with the same help, and it takes no press until the work ends.
+    pub fn busy(mut self, busy: bool) -> Self {
+        self.busy = busy;
+        self.disabled |= busy;
         self
     }
 
@@ -166,7 +176,11 @@ impl IconButton {
         let keys_ink = t.text_dimmed;
         let ground = if fill.a > 0.0 { fill } else { t.bg_panel };
         let dot = self.dot;
+        let busy = self.busy;
         let label = move |_, _| {
+            if busy {
+                return busy_dots(ink);
+            }
             let mark = match glyph {
                 Glyph::Icon(drawn) => door::icon(drawn, icon).color(ink),
                 Glyph::Text(said) => door::mark_text(said, icon).color(ink),
@@ -207,4 +221,21 @@ impl IconButton {
         };
         Control::new(button, self.size)
     }
+}
+
+/// A busy button's dots: three, 4 points across and 2 apart, each bouncing from 0.6 scale and
+/// half opacity to whole and back over 1.4 s, 0.16 s after the one before.
+fn busy_dots(ink: Color) -> El {
+    const SIDE: f32 = 4.0;
+    const BOUNCE: &[Beat] = &[
+        Beat::new(0.0).opacity(0.5).scale(0.6),
+        Beat::new(0.56),
+        Beat::new(1.12).opacity(0.5).scale(0.6),
+        Beat::new(1.4).opacity(0.5).scale(0.6),
+    ];
+    door::gap(row().items_center(), Space::S2).children([0.0, 0.16, 0.32].map(|delay| {
+        door::corner(el().size(SIDE, SIDE), Radius::Round)
+            .fill(ink)
+            .sequence(Sequence::new(BOUNCE).delay(delay).repeat())
+    }))
 }

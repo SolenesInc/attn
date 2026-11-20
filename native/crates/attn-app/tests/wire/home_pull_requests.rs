@@ -292,6 +292,26 @@ fn a_refresh_shows_dots_until_github_answers_and_a_failed_one_says_why_on_its_bu
 }
 
 #[test]
+fn a_running_refresh_keeps_its_buttons_box_and_help_so_the_pointer_still_finds_it() {
+    let mut world = start(one_desktop(vec![]), vec![]);
+    press(&mut world, Action::SessionGoToDashboard);
+    let idle = world
+        .screen()
+        .bounds(Target::key("home.prs.refresh"))
+        .unwrap();
+    let idle_help = description(&world, "home.prs.refresh");
+
+    world.gesture(|app| app.key(chord(Action::SessionRefreshPrs)));
+    let screen = world.screen();
+    assert_eq!(
+        screen.bounds(Target::key("home.prs.refresh")).unwrap(),
+        idle,
+        "the running refresh stands in the idle button's box"
+    );
+    assert_eq!(description(&world, "home.prs.refresh"), idle_help);
+}
+
+#[test]
 fn the_refresh_dots_bounce_in_scale_and_opacity_as_the_tauri_dots_do() {
     let mut world = start(one_desktop(vec![]), vec![]);
     press(&mut world, Action::SessionGoToDashboard);

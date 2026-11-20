@@ -14,7 +14,7 @@ use attn_ui::system::{
     icon_button, tag, words,
 };
 use attn_ui::{Dialog, Tokens, glyph, icon};
-use rune::{Beat, Color, El, Sequence, Tx, memo};
+use rune::{El, Tx, memo};
 
 use crate::State;
 use crate::requests::Answer;
@@ -667,35 +667,23 @@ fn refresh_button(refresh: &Refresh, idle_help: String, t: &Tokens) -> El {
         Refresh::Running => (&icon::REFRESH, t.brand, idle_help),
         Refresh::Failed(why) => (&icon::REFRESH_FAILED, t.error, why.clone()),
     };
-    if *refresh == Refresh::Running {
-        return refresh_dots(ink)
-            .key("home.prs.refresh")
-            .role("button")
-            .label("Refreshing PRs")
-            .help(help)
-            .disabled(true);
-    }
-    icon_button("home.prs.refresh", "Refresh PRs", glyph, IconSize::Regular)
-        .ink(ink)
-        .help(help)
-        .on_press_tx(self::refresh)
-        .build(t)
-        .into()
-}
-
-/// `.refresh-dots`: three dots bouncing 0.16 s apart over 1.4 s, each from scale 0.6 and half
-/// opacity to full and back, as the Tauri app's `dot-bounce` keyframes.
-fn refresh_dots(ink: Color) -> El {
-    const BOUNCE: &[Beat] = &[
-        Beat::new(0.0).opacity(0.5).scale(0.6),
-        Beat::new(0.56),
-        Beat::new(1.12).opacity(0.5).scale(0.6),
-        Beat::new(1.4).opacity(0.5).scale(0.6),
-    ];
-    Inline::joined().children([0.0, 0.16, 0.32].map(|delay| {
-        system::dot(ink, DotShape::Filled, DotSize::Small)
-            .sequence(Sequence::new(BOUNCE).delay(delay).repeat())
-    }))
+    let running = *refresh == Refresh::Running;
+    icon_button(
+        "home.prs.refresh",
+        if running {
+            "Refreshing PRs"
+        } else {
+            "Refresh PRs"
+        },
+        glyph,
+        IconSize::Regular,
+    )
+    .ink(ink)
+    .busy(running)
+    .help(help)
+    .on_press_tx(self::refresh)
+    .build(t)
+    .into()
 }
 
 /// The notice above Home's cards while GitHub holds the daemon's polls back, counting down to
