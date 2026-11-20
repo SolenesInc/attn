@@ -33,7 +33,9 @@ pub(crate) fn ring_on_edge(e: El, t: &Tokens) -> El {
 }
 
 /// The ring of a control joined to a neighbour that shares its edge, drawn just inside its own
-/// edge, where the neighbour never paints over it.
+/// edge, where the neighbour never paints over it: the one ring that does not stand outside its
+/// control as every other control's does, until a focused half can paint above its neighbour
+/// (seed s-d03z9v).
 pub(crate) fn ring_inside(e: El, t: &Tokens) -> El {
     e.focus_ring(WIDTH, -(WIDTH + EDGE), t.warning)
 }

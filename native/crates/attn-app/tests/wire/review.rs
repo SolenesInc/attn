@@ -7356,3 +7356,93 @@ fn a_narrow_reviews_key_line_keeps_its_language_servers_and_their_setup_in_reach
         json!("s-setup")
     );
 }
+
+const LONG_PATH: &str = "native/crates/attn-app/src/review/reading-surfaces/smallest/calc.go";
+
+/// The file view's head and the path in it, opened on [`LONG_PATH`] at 150% text in its tile
+/// alone in a window `size` across, or in a tile window of its own that size when `popped`: its
+/// path's bounds, its head's, and whether its back and close show.
+fn long_path_head(size: (f32, f32), popped: bool) -> ([f32; 4], [f32; 4], bool, bool) {
+    let mut tile = document_tile("m", DOC, None);
+    if popped {
+        tile["window"] = json!({"x": 60.0, "y": 60.0, "width": size.0, "height": size.1});
+    }
+    let mut world = start_with_tree(row(vec![tile]), if popped { (1600.0, 900.0) } else { size });
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some([("uiScale".to_owned(), "1.5".to_owned())].into()),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    let _calc = serve(&world);
+    let mut long = bundle();
+    long.stops[0].path = LONG_PATH.into();
+    deliver(&mut world, DOCUMENT, Some(long));
+    let window = popped.then(|| world.tile_windows()[0].key.clone());
+    let screen = |world: &World| match &window {
+        Some(window) => world.tile_screen(window),
+        None => world.screen(),
+    };
+    let stop = screen(&world)
+        .descendants(Target::key("tile.m.document"))
+        .into_iter()
+        .find(|n| n.role == "group" && n.name.as_deref().is_some_and(|l| l.starts_with(LONG_PATH)))
+        .and_then(|n| n.key)
+        .expect("the review shows the stop");
+    let file = Target::key(format!("{stop}.file"));
+    match &window {
+        Some(window) => {
+            let [x, y, w, h] = screen(&world)
+                .bounds(Target::key("tile.m.document"))
+                .unwrap();
+            for _ in 0..40 {
+                let below = screen(&world)
+                    .bounds(file.clone())
+                    .is_some_and(|[_, top, _, tall]| top + tall > y + h);
+                if !below {
+                    break;
+                }
+                world.tile_gesture(window, |d| d.runtime.wheel(x + w / 2.0, y + h / 2.0, -20.0));
+            }
+            world.tile_gesture(window, |d| d.click(file));
+        }
+        None => click(&mut world, file),
+    }
+    let screen = screen(&world);
+    let path = screen
+        .bounds(Target::role("label").name(LONG_PATH))
+        .expect("the head shows the path");
+    let head = screen
+        .bounds(Target::key("tile.m.review.view.head"))
+        .expect("the file view has its head");
+    let shows = |key: &str| screen.find(Target::key(key)).is_some();
+    (
+        path,
+        head,
+        shows("tile.m.review.view.back"),
+        shows("tile.m.review.view.close"),
+    )
+}
+
+#[test]
+fn the_file_views_head_keeps_its_path_on_one_line_and_its_key_hints_give_way_first() {
+    let (whole, ..) = long_path_head((1600.0, 900.0), false);
+    for (size, popped) in [((800.0, 600.0), false), ((320.0, 200.0), true)] {
+        let (path, head, back, close) = long_path_head(size, popped);
+        let room = head[2] - 32.0;
+        assert!(
+            path[2] + 0.5 >= whole[2].min(room),
+            "{size:?}: the path stands {} wide of {} whole in {room} of room",
+            path[2],
+            whole[2]
+        );
+        assert!(
+            head[3] <= whole[3] + 11.5,
+            "{size:?}: the head {head:?} is taller than one line of its path {whole:?}"
+        );
+        assert_eq!(back, close, "{size:?}: back and close give way together");
+        assert!(
+            path[0] + path[2] <= head[0] + head[2] + 0.5,
+            "{size:?}: the path {path:?} runs past its head {head:?}"
+        );
+    }
+}

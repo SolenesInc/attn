@@ -11,6 +11,7 @@ pub struct Bar {
     start: Vec<El>,
     lead: Option<El>,
     items: Vec<El>,
+    slim: bool,
 }
 
 impl Bar {
@@ -20,6 +21,7 @@ impl Bar {
             start: Vec::new(),
             lead: None,
             items: Vec::new(),
+            slim: false,
         }
     }
 
@@ -32,6 +34,18 @@ impl Bar {
     /// A mark before the lead, such as a search field's prompt.
     pub fn start(mut self, mark: El) -> Self {
         self.start.push(mark);
+        self
+    }
+
+    /// No taller than what it holds, such as the head over a file view, which leaves the file
+    /// the room.
+    pub fn slim(mut self) -> Self {
+        self.slim = true;
+        self
+    }
+
+    pub fn start_all(mut self, marks: impl IntoIterator<Item = El>) -> Self {
+        self.start.extend(marks);
         self
     }
 
@@ -49,12 +63,17 @@ impl Bar {
         let bar = row()
             .key(self.key)
             .w_full()
-            .min_h(Size::Compact.height())
+            .min_h(if self.slim {
+                0.0
+            } else {
+                Size::Compact.height()
+            })
             .items_center()
             .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
             .children(self.start)
             .children(self.lead.map(|lead| lead.grow(1.0).min_w(0.0)))
             .children(self.items);
-        door::gap(door::inset(bar, Space::S16, Space::S6), Space::S8)
+        let tall = if self.slim { Space::S0 } else { Space::S6 };
+        door::gap(door::inset(bar, Space::S16, tall), Space::S8)
     }
 }

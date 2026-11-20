@@ -158,6 +158,13 @@ impl Sheet {
         self
     }
 
+    /// Buttons that act on the whole sheet, such as adding to it or clearing it, on a line under
+    /// the title and any notices that wraps when the sheet is narrow: Tab reaches them after the
+    /// title's controls and the notices' actions, before the body.
+    pub fn top_actions(self, actions: Block) -> Self {
+        self.top(actions.el)
+    }
+
     pub fn push(mut self, block: Block) -> Self {
         self.blocks.push(block);
         self

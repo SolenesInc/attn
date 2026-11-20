@@ -88,8 +88,9 @@ impl Kind {
     }
 }
 
-/// How long the destination session's name may run on the header's picker in `room`, so the
-/// picker gives way before the document's title, as the reader before this one measured them.
+/// How long the destination session's name may run on the header's picker or its Send in
+/// `room`, so they give way before the document's title, as the reader before this one measured
+/// them.
 fn name_at_most(room: Room) -> f32 {
     match room {
         Room::Wide => 82.0,
@@ -275,7 +276,9 @@ pub(crate) fn controls(
             None => button,
         };
         let button = match target {
-            Some(name) => button.then_quiet(format!("to {name}")),
+            Some(name) => button
+                .then_quiet("to", name)
+                .words_at_most(name_at_most(room)),
             None => button,
         };
         let button = if split.is_some() {
@@ -791,8 +794,8 @@ fn notes(
         .close(close)
         .body_key(key(tile, "notes.list"))
         .framed()
-        .push(body)
-        .footer(actions.build());
+        .top_actions(actions.build())
+        .push(body);
     sheet
         .build(t)
         .role("dialog")

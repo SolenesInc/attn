@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use attn_protocol::{ReviewFileMessage, ReviewFileResultMessage, ReviewNote, ReviewRow};
 use attn_ui::Tokens;
-use attn_ui::blocks::{Bar, Inline, Pane, Stack, Tray, key_choice};
+use attn_ui::blocks::{Bar, Hints, Inline, Pane, Tray, key_hint};
 use attn_ui::system::{Type, words};
 use rune::tok::space;
 use rune::{El, GrowthSpec, Live, ScrollPos, ScrollSpec, Tx, col};
@@ -242,15 +242,25 @@ pub(super) fn view(
     t: &Tokens,
 ) -> El {
     let can_go_back = depth > 1;
-    let back = key_choice("⌃o", "back", false, t)
-        .role("button")
-        .label(if can_go_back {
-            "← back ⌃o"
-        } else {
-            "← back"
-        })
-        .key(format!("{prefix}.view.back"));
-    let back = super::file_view_press(back, tile, stage, false);
+    let room = rune::memo::layout_with(&format!("{prefix}.view"), |[_, _, w, _]| w)
+        .unwrap_or(f32::INFINITY);
+    let choices: &[(&str, &str)] = if stage {
+        &[("⌃o", "back")]
+    } else {
+        &[("⌃o", "back"), ("esc", "close")]
+    };
+    let fit = Hints::in_room(room, (&file.target.path, Type::Mono), choices);
+    let back = key_hint("⌃o", "back", fit.hints, t).map(|back| {
+        let back = back
+            .role("button")
+            .label(if can_go_back {
+                "← back ⌃o"
+            } else {
+                "← back"
+            })
+            .key(format!("{prefix}.view.back"));
+        super::file_view_press(back, tile, stage, false)
+    });
     let lines = file
         .rows
         .as_ref()
@@ -259,32 +269,37 @@ pub(super) fn view(
         .target
         .outside
         .then(|| words("outside the repository · read-only", Type::Small, t.warning).truncate());
-    let facts = (lines.is_some() || outside.is_some()).then(|| {
-        Inline::line()
-            .children(lines.map(|l| words(l, Type::Small, t.text_muted).truncate()))
-            .children(outside)
-    });
-    let place = Stack::tight()
-        .min_w(0.0)
-        .child(words(file.target.path.clone(), Type::Mono, t.text_primary).truncate_middle())
-        .children(facts)
+    let place = Inline::line()
+        .child(
+            words(file.target.path.clone(), Type::Mono, t.text_primary)
+                .truncate_middle()
+                .min_w(fit.kept),
+        )
+        .children((!fit.cut).then_some(outside).flatten())
         .children(
-            file.problem
-                .clone()
-                .map(|p| words(p, Type::Small, t.warning).wrap().role("status")),
+            lines
+                .filter(|_| !fit.cut)
+                .map(|l| words(l, Type::Small, t.text_muted).truncate()),
         );
-    let close = (!stage).then(|| {
-        let close = key_choice("esc", "close", false, t)
-            .role("button")
-            .label("close esc")
-            .key(format!("{prefix}.view.close"));
-        super::file_view_press(close, tile, stage, true)
-    });
+    let close = key_hint("esc", "close", fit.hints, t)
+        .filter(|_| !stage)
+        .map(|close| {
+            let close = close
+                .role("button")
+                .label("close esc")
+                .key(format!("{prefix}.view.close"));
+            super::file_view_press(close, tile, stage, true)
+        });
     let header = Bar::new(format!("{prefix}.view.head"))
-        .start(back)
+        .slim()
+        .start_all(back)
         .lead(place)
         .push_all(close)
         .build(t);
+    let problem = file
+        .problem
+        .clone()
+        .map(|p| words(p, Type::Small, t.warning).wrap().role("status"));
     let body = match (&file.rows, &file.error) {
         (_, Some(error)) => message(
             prefix,
@@ -338,6 +353,7 @@ pub(super) fn view(
         .fill(t.bg_tile)
         .border_sides([0.0, 0.0, 0.0, 1.0], t.border)
         .child(header)
+        .children(problem)
         .child(body)
         .children(strip)
 }

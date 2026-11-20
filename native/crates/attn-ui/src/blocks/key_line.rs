@@ -17,12 +17,83 @@ pub fn key_choice(keys: &str, name: &str, on: bool, t: &Tokens) -> El {
             )
             .a11y_hidden(),
         );
-    let choice = door::corner(door::inset(choice, Space::S8, Space::S2), Radius::Tag);
+    let choice = choice_box(choice);
     if on {
         choice.border(1.0, t.border).fill(t.accent.alpha(0.08))
     } else {
         choice.border(1.0, Color::TRANSPARENT)
     }
+}
+
+fn choice_box(choice: El) -> El {
+    door::corner(door::inset(choice, Space::S8, Space::S2), Radius::Tag)
+}
+
+/// How much of its key choices a bar shows beside what it keeps whole, such as a file's path:
+/// their keys and names, then their keys alone, then none, their keys still working.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Hints {
+    Words,
+    Keys,
+    Gone,
+}
+
+/// How a bar lays out in the room it has: how much of its key choices it shows, how wide what it
+/// keeps stands, and whether even alone it is cut short.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct HintFit {
+    pub hints: Hints,
+    pub kept: f32,
+    pub cut: bool,
+}
+
+impl Hints {
+    /// The fit of a [`Bar`](super::Bar) `room` points wide that keeps `kept` set as its type
+    /// whole beside its key `choices`, each keys and a name: the most of the choices that leaves
+    /// room for it.
+    pub fn in_room(room: f32, kept: (&str, Type), choices: &[(&str, &str)]) -> HintFit {
+        let inside = room - 2.0 * Space::S16.pt();
+        let whole = door::width(kept.0, kept.1);
+        let beside = |width: &dyn Fn(&str, &str) -> f32| {
+            choices
+                .iter()
+                .map(|(keys, name)| Space::S8.pt() + width(keys, name))
+                .sum::<f32>()
+        };
+        let hints = [
+            (Hints::Words, beside(&key_choice_width)),
+            (Hints::Keys, beside(&|keys, _| keys_choice_width(keys))),
+        ]
+        .into_iter()
+        .find(|(_, beside)| whole + beside <= inside)
+        .map_or(Hints::Gone, |(hints, _)| hints);
+        HintFit {
+            hints,
+            kept: whole.min(inside).max(0.0),
+            cut: whole > inside,
+        }
+    }
+}
+
+/// [`key_choice`] as much as `hints` shows of it: its keys and name, its keys alone, or nothing.
+pub fn key_hint(keys: &str, name: &str, hints: Hints, t: &Tokens) -> Option<El> {
+    match hints {
+        Hints::Words => Some(key_choice(keys, name, false, t)),
+        Hints::Keys => Some(
+            choice_box(
+                row()
+                    .items_center()
+                    .label(format!("{keys} {name}"))
+                    .child(keycaps(keys.split(' '), t).a11y_hidden()),
+            )
+            .border(1.0, Color::TRANSPARENT),
+        ),
+        Hints::Gone => None,
+    }
+}
+
+fn keys_choice_width(keys: &str) -> f32 {
+    2.0 * Space::S8.pt() + keycaps_width(keys.split(' '))
 }
 
 /// How wide [`key_choice`] draws `keys` and `name`.

@@ -51,7 +51,7 @@ pub struct Button {
     chosen: Option<bool>,
     joined: Option<Join>,
     leading: Option<El>,
-    quiet: Option<Said>,
+    quiet: Option<(Said, Said)>,
     at_most: Option<f32>,
     trailing: Option<El>,
     whole: bool,
@@ -138,15 +138,17 @@ impl Button {
         self
     }
 
-    /// Quieter words after the button's own, such as whom it sends to: they give way first
-    /// when the button is short of room, and the button's own words stay whole.
-    pub fn then_quiet(mut self, said: impl Into<Said>) -> Self {
-        self.quiet = Some(said.into());
+    /// Quieter words after the button's own, `said` after `lead`, such as "to" and whom it sends
+    /// to: `said` gives way first when the button is short of room, and the button's own words
+    /// and `lead` stay whole.
+    pub fn then_quiet(mut self, lead: impl Into<Said>, said: impl Into<Said>) -> Self {
+        self.quiet = Some((lead.into(), said.into()));
         self
     }
 
-    /// Its words stand at most `width` wide and are cut short past it, such as a session's name
-    /// on a picker, so the button gives way before what stands beside it.
+    /// Its words, or its quieter words when it has them, stand at most `width` wide and are cut
+    /// short past it, such as a session's name, so the button gives way before what stands
+    /// beside it.
     pub fn words_at_most(mut self, width: f32) -> Self {
         self.at_most = Some(width);
         self
@@ -226,10 +228,18 @@ impl Button {
         let (leading, trailing) = (self.leading, self.trailing);
         let role = self.look.words();
         let whole = self.whole;
-        let quiet = self
-            .quiet
-            .map(|said| words(said, role, t.text_secondary).truncate());
         let at_most = self.at_most;
+        let most = move |e: El| match at_most {
+            Some(width) => e.max_w(width),
+            None => e,
+        };
+        let quiet = self.quiet.map(|(lead, said)| {
+            door::gap(row().items_center(), Space::S4)
+                .shrink()
+                .min_w(0.0)
+                .child(words(lead, role, t.text_secondary))
+                .child(most(words(said, role, t.text_secondary).truncate()))
+        });
         let label = move |_, _| match shown {
             Shown::Words(shown) => door::gap(row().items_center(), Space::S4)
                 .shrink()
@@ -245,13 +255,7 @@ impl Button {
                             .child(quiet)
                     }
                     None if whole => words(shown, role, ink),
-                    None => {
-                        let shown = words(shown, role, ink).truncate();
-                        match at_most {
-                            Some(width) => shown.max_w(width),
-                            None => shown,
-                        }
-                    }
+                    None => most(words(shown, role, ink).truncate()),
                 })
                 .children(trailing),
             Shown::Mark(mark, size) => door::control_mark(mark, size).color(ink),

@@ -5,10 +5,9 @@ use rune::{Cx, El, Playground, Story, Tx, col, el, row};
 
 use crate::Tokens;
 use crate::blocks::{
-    Bar, Block, Byline, Card, Entry, Figure, Head, Inline, KeyFit, KeyLine, Lane, Pane, Prose,
-    Reader, Remark, Room, Section, Stack, Standing, Surface, Toolbar, Trail, Tray, Voice, board,
-    entries,
-    key_tab, lanes, place, rail,
+    Bar, Block, Byline, Card, Entry, Figure, Head, Hints, Inline, KeyFit, KeyLine, Lane, Pane,
+    Prose, Reader, Remark, Room, Section, Stack, Standing, Surface, Toolbar, Trail, Tray, Voice,
+    board, entries, key_hint, key_tab, lanes, place, rail,
 };
 use crate::colors::scheme_for;
 use crate::system::{
@@ -80,6 +79,7 @@ pub const READING_SUBJECTS: &[(&str, &[&str], &[&str])] = &[
 ];
 
 const LONG_TITLE: &str = "Move the reading surfaces onto blocks so the garden, the review reader and the markdown reader share one system";
+const TRAY_LONG_PATH: &str = "native/crates/attn-app/src/review/reading-surfaces/totals.rs";
 const LONG_SAID: &str = "Every agent that reads this seed's log sees this note before its first turn, so a long note here reaches all of them and wraps across the reader.";
 
 pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
@@ -501,13 +501,26 @@ fn tray_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
             .key(format!("tray.{n}"))
             .build(&t)
     };
+    let path = if s.long { TRAY_LONG_PATH } else { "totals.rs" };
+    let fit = Hints::in_room(
+        s.width.points(),
+        (path, Type::Mono),
+        &[("⌃o", "back"), ("esc", "close")],
+    );
     let panel = col()
         .key("tray.panel")
         .w_full()
         .child(
             Bar::new("tray.head")
-                .lead(words("totals.rs", Type::Mono, t.text_primary).key("tray.path"))
-                .push(quiet("tray.close", "close", &t))
+                .slim()
+                .start_all(key_hint("⌃o", "back", fit.hints, &t).map(|b| b.key("tray.back")))
+                .lead(
+                    words(path, Type::Mono, t.text_primary)
+                        .truncate_middle()
+                        .min_w(fit.kept)
+                        .key("tray.path"),
+                )
+                .push_all(key_hint("esc", "close", fit.hints, &t).map(|c| c.key("tray.close")))
                 .build(&t),
         )
         .child(el().w_full().h(120.0))
@@ -695,11 +708,14 @@ fn split_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
     };
     let send: El = Button::new("Send 3")
         .size(Size::Compact)
-        .then_quiet(if s.long {
-            "to the session with the longest name"
-        } else {
-            "to Alder"
-        })
+        .then_quiet(
+            "to",
+            if s.long {
+                "the session with the longest name"
+            } else {
+                "Alder"
+            },
+        )
         .joined(Join::Next)
         .disabled(s.off == Off::Both)
         .on_press_tx(noop)
@@ -709,7 +725,7 @@ fn split_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
     let failed: El = Button::new("Send failed")
         .size(Size::Compact)
         .leading(words("!", Type::Control, t.warning))
-        .then_quiet("to Alder")
+        .then_quiet("to", "Alder")
         .joined(Join::Next)
         .on_press_tx(noop)
         .build(&t)

@@ -6,6 +6,8 @@ use rune::{App, AppSpec, Cx, El, ElementInfo, Env, Runtime, el};
 const WINDOW: (f32, f32) = (1500.0, 1100.0);
 const SCALE: f32 = 2.0;
 const WIDTHS: [&str; 5] = ["Rest", "Long", "Narrow", "Narrow long", "Smallest long"];
+/// How far a bar sets what it holds in from each side.
+const BAR_SIDE: f32 = 16.0;
 /// The farthest a reading part's box hangs past the text around it: a list row's inset.
 const HANG: f32 = 8.0;
 
@@ -392,7 +394,10 @@ fn a_trays_parts_line_up_with_its_panels_bar_and_its_rule_spans_the_panel() {
         let panel = element(&rt, "tray.panel").rect;
         let tray = element(&rt, "tray").rect;
         let first = element(&rt, "tray.0").rect;
-        let path = element(&rt, "tray.path").rect[0];
+        let path = rt
+            .playground_element("tray.back")
+            .unwrap_or_else(|| element(&rt, "tray.path"))
+            .rect[0];
         assert!(
             (tray[0] - panel[0]).abs() < 0.5 && (tray[2] - panel[2]).abs() < 0.5,
             "{variant}: the tray {tray:?} does not span its panel {panel:?}"
@@ -402,5 +407,35 @@ fn a_trays_parts_line_up_with_its_panels_bar_and_its_rule_spans_the_panel() {
             "{variant}: the tray's first part starts at {}, its bar's at {path}",
             first[0]
         );
+    }
+}
+
+#[test]
+fn a_slim_bars_key_hints_give_way_before_its_path_and_it_stays_one_line() {
+    let whole = element(&story("Blocks/Tray", "Long"), "tray.path").rect[2];
+    for variant in ["Rest", "Long", "Narrow long", "Smallest long"] {
+        let rt = story("Blocks/Tray", variant);
+        let head = element(&rt, "tray.head").rect;
+        let path = element(&rt, "tray.path").rect;
+        let room = head[2] - 2.0 * BAR_SIDE;
+        let whole = if variant == "Rest" { path[2] } else { whole };
+        assert!(
+            path[2] + 0.5 >= whole.min(room),
+            "{variant}: the path stands {} wide in {room} of room, whole {whole}",
+            path[2]
+        );
+        assert!(
+            head[3] <= path[3] + 11.5,
+            "{variant}: the head {head:?} stands taller than one line of its path {path:?}"
+        );
+        for hint in ["tray.back", "tray.close"] {
+            if let Some(h) = rt.playground_element(hint) {
+                assert!(
+                    h.rect[0] >= head[0] && h.rect[0] + h.rect[2] <= head[0] + head[2] + 0.5,
+                    "{variant}: {hint} {:?} stands outside its head {head:?}",
+                    h.rect
+                );
+            }
+        }
     }
 }

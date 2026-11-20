@@ -38,6 +38,11 @@ struct Kept {
 
 type Shared = Arc<Mutex<Kept>>;
 
+/// A session whose name is longer than any header has room for.
+const LONG_NAMED: &str = "s-long";
+const LONG_NAME: &str =
+    "reading-surfaces-annotations-and-review-file-layout-at-the-smallest-supported-size";
+
 fn start() -> (World, Shared) {
     start_with(DOC, Kept::default())
 }
@@ -56,6 +61,10 @@ fn start_with(doc: &str, kept: Kept) -> (World, Shared) {
                 ("s-a", "Agent a", "idle"),
                 ("s-b", "Agent b", "pending_approval"),
             ]
+            .into_iter()
+            .chain(
+                (kept.bound == Some(LONG_NAMED)).then_some((LONG_NAMED, LONG_NAME, "idle")),
+            )
             .map(|(id, label, state)| Session {
                 id: id.into(),
                 label: label.into(),
@@ -64,7 +73,7 @@ fn start_with(doc: &str, kept: Kept) -> (World, Shared) {
                 profile_id: "work".into(),
                 ..Session::default()
             })
-            .to_vec(),
+            .collect(),
         ),
         desktops: Some(vec![desktop(
             row([pane("a"), pane("b")]
@@ -1700,4 +1709,78 @@ fn a_document_whose_file_went_missing_keeps_its_header_controls() {
             "{part}: {screen}"
         );
     }
+}
+
+#[test]
+fn the_send_menu_and_the_notes_count_stay_whole_beside_a_long_named_session_in_the_smallest_window()
+{
+    for marks in [
+        Vec::new(),
+        vec![held("early", "deletion", "tile layout", None)],
+    ] {
+        let noted = !marks.is_empty();
+        let (world, _) = start_with(
+            DOC,
+            Kept {
+                smallest: true,
+                bound: Some(LONG_NAMED),
+                ..holding(marks)
+            },
+        );
+        let screen = world.screen();
+        let [tx, _, tw, _] = screen.bounds(Target::key("tile.m")).unwrap();
+        let inside = |part: &str| {
+            let [x, _, w, h] = screen
+                .bounds(Target::key(format!("tile.m.document.{part}")))
+                .unwrap_or_else(|| panic!("noted {noted}: no {part}:\n{screen}"));
+            assert!(
+                x >= tx && x + w <= tx + tw + 0.5,
+                "noted {noted}: {part} at {x}+{w} stands outside the tile at {tx}+{tw}"
+            );
+            (w, h)
+        };
+        if noted {
+            let (w, h) = inside("send.menu");
+            assert!(w + 0.5 >= h, "the send's menu half stands {w} of {h} wide");
+            inside("send");
+            inside("notes");
+        } else {
+            inside("send.to");
+        }
+    }
+}
+
+#[test]
+fn tab_from_the_notes_close_reaches_overall_note_and_clear_all_before_forty_cards() {
+    let marks = (0..40)
+        .map(|n| held(&format!("n{n}"), "comment", "tile layout", Some("why")))
+        .collect();
+    let (mut world, _) = start_with(DOC, holding(marks));
+    pause(&mut world);
+    click(&mut world, "notes");
+    let tab = |world: &mut World, shift: bool| {
+        world.gesture(|app| {
+            app.key(rune::KeyEvent {
+                key: rune::Key::Tab,
+                mods: rune::Mods {
+                    shift,
+                    ..rune::Mods::default()
+                },
+            })
+        });
+        world.settle();
+        world
+            .screen()
+            .focused()
+            .and_then(|n| n.key)
+            .unwrap_or_default()
+    };
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some("tile.m.document.notes.close")
+    );
+    assert_eq!(tab(&mut world, false), "tile.m.document.notes.overall");
+    assert_eq!(tab(&mut world, false), "tile.m.document.notes.clear");
+    assert_eq!(tab(&mut world, true), "tile.m.document.notes.overall");
+    assert_eq!(tab(&mut world, true), "tile.m.document.notes.close");
 }

@@ -80,7 +80,9 @@ pub use grid::Grid;
 pub use group::Group;
 pub use header_piece::HeaderPiece;
 pub use inspector::Inspector;
-pub use key_line::{KeyFit, KeyLine, key_choice, key_choice_width, key_tab};
+pub use key_line::{
+    HintFit, Hints, KeyFit, KeyLine, key_choice, key_choice_width, key_hint, key_tab,
+};
 pub use lane::{Lane, board, lanes};
 pub use list::List;
 pub use menu::Menu;
