@@ -3247,6 +3247,86 @@ fn settings_refused_rows(dark: bool) {
     snap(&mut world, "settings-phones-refused", dark);
 }
 
+/// Claude's route picker on the Agents page: as it opens on its discovered models, the longest
+/// real model id among them; with a filter that matches nothing; and with an exact model id typed.
+fn settings_route_picker(dark: bool) {
+    const LONG_MODEL: &str =
+        "anthropic.claude-opus-5-5-20261101-v1:0-with-extended-thinking-eu-north-1";
+    let shots: [(&str, Option<&str>); 3] = [
+        ("settings-route-picker", None),
+        ("settings-route-picker-no-match", Some("zz-no-such-model")),
+        ("settings-route-picker-exact", Some(LONG_MODEL)),
+    ];
+    for (name, typed) in shots {
+        let mut world = settings_world(
+            dark,
+            "agents",
+            "agents",
+            &[],
+            |_| {},
+            |daemon| {
+                daemon.on("delegation_preferences_get", |r: &Request| {
+                    let harness = |id: &str, name: &str| Harness {
+                        id: id.into(),
+                        name: name.into(),
+                        available: true,
+                        model_pin: true,
+                        effort_pin: true,
+                        discovery: true,
+                    };
+                    message(DelegationPreferencesResultMessage {
+                        request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                        success: true,
+                        preferences: Some(DelegationPreferences::default()),
+                        harnesses: Some(vec![
+                            harness("claude", "Claude Code"),
+                            harness("codex", "Codex"),
+                        ]),
+                        templates: Some(Vec::new()),
+                        expanded_roles: Some(Vec::new()),
+                        ..DelegationPreferencesResultMessage::new()
+                    })
+                });
+                daemon.on("harness_models", |r: &Request| {
+                    let model = |id: &str, name: &str, tier: &str| HarnessModel {
+                        harness: "claude".into(),
+                        id: id.into(),
+                        name: name.into(),
+                        access: "unknown".into(),
+                        effort_support: "supported".into(),
+                        effort_levels: ["low", "medium", "high"].map(String::from).to_vec(),
+                        tier: Some(tier.into()),
+                        shipped_tier: Some(tier.into()),
+                        tier_source: "shipped".into(),
+                        ..HarnessModel::default()
+                    };
+                    message(HarnessModelsResultMessage {
+                        request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                        success: true,
+                        models: vec![
+                            model("opus", "Opus 5.5", "deep"),
+                            model("sonnet", "Sonnet 5.5", "standard"),
+                            model(LONG_MODEL, LONG_MODEL, "deep"),
+                        ],
+                        ..HarnessModelsResultMessage::new()
+                    })
+                });
+            },
+        );
+        let chip = "settings.route.default-claude";
+        world.gesture(|app| app.update(|_, tx| tx.scroll_center_in_instant("settings.body", chip)));
+        world.gesture(move |app| app.update(move |_, tx| tx.focus(chip.to_owned(), true)));
+        tap(&mut world, Key::Text(" ".into()));
+        if let Some(typed) = typed {
+            world.gesture(|app| {
+                app.update(|_, tx| tx.focus("settings.route-picker.filter".to_owned(), true))
+            });
+            world.gesture(|app| app.type_text(typed));
+        }
+        snap(&mut world, name, dark);
+    }
+}
+
 /// The structural states of the Settings pages that have them: a refused field, a list with
 /// its rows, a list with none, a refused action, and each long page's end.
 fn settings_page_states(dark: bool) {
@@ -6930,6 +7010,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         });
         scene("settings_page_states", || settings_page_states(dark));
         scene("settings_pricing", || settings_pricing(dark));
+        scene("settings_route_picker", || settings_route_picker(dark));
         scene("settings_refused_rows", || settings_refused_rows(dark));
         scene("settings_smallest_pages", || settings_smallest_pages(dark));
         scene("automation_new", || automation_new(dark));
