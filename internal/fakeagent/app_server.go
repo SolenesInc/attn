@@ -24,17 +24,18 @@ import (
 )
 
 const (
-	Sigma                 = Harness("sigma")
-	SampleServer          = Harness("sample-server")
-	serverIdleGrace       = 300 * time.Millisecond
-	methodServerFakeReply = "attn-fake/reply"
-	methodAwaitInterrupt  = "await_interrupt"
-	methodFailRun         = "fail_run"
-	methodServerStarted   = "started"
-	methodLoseNextSubmit  = "lose_next_submit"
-	methodSubmissions     = "submissions"
-	methodCompactions     = "compactions"
-	methodAnswerCompact   = "answer_compact"
+	Sigma                  = Harness("sigma")
+	SampleServer           = Harness("sample-server")
+	serverIdleGrace        = 300 * time.Millisecond
+	methodServerFakeReply  = "attn-fake/reply"
+	methodAwaitInterrupt   = "await_interrupt"
+	methodFailRun          = "fail_run"
+	methodServerStarted    = "started"
+	methodLoseNextSubmit   = "lose_next_submit"
+	methodSubmissions      = "submissions"
+	methodCompactions      = "compactions"
+	methodAnswerCompact    = "answer_compact"
+	methodReplyWorkerWaits = "reply_while_a_worker_waits"
 )
 
 type appServerFlavor struct {
@@ -627,6 +628,15 @@ func (s *appServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (a
 		return struct{}{}, failure(s.end(p.ThreadID, map[string]any{"outcome": "answered", "said": p.Text}))
 	case methodFailRun:
 		return struct{}{}, failure(s.end(p.ThreadID, map[string]any{"outcome": "failed", "message": p.Text}))
+	case methodReplyWorkerWaits:
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		conv := s.convs[p.ThreadID]
+		if conv == nil {
+			return nil, fmt.Errorf("no conversation %s", p.ThreadID)
+		}
+		s.statusLocked(conv, "waiting", s.endedLocked(conv, map[string]any{"outcome": "answered", "said": p.Text}))
+		return struct{}{}, nil
 	case methodAskApproval, methodWork, methodLoseNextSubmit, methodSubmissions, methodServerStarted, methodCompactions, methodAnswerCompact:
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -728,6 +738,13 @@ func (s *AppServer) Prompted(conversation string) ServerSubmission {
 func (s *AppServer) Reply(conversation, text string) {
 	s.t.Helper()
 	s.call(methodReply, serverThreadParams{ThreadID: conversation, Text: text}, nil)
+}
+
+// ReplyWhileAWorkerWaits ends the conversation's own run with an answer while a worker under it waits on a person,
+// so its tree stays waiting.
+func (s *AppServer) ReplyWhileAWorkerWaits(conversation, text string) {
+	s.t.Helper()
+	s.call(methodReplyWorkerWaits, serverThreadParams{ThreadID: conversation, Text: text}, nil)
 }
 
 func (s *AppServer) Fail(conversation, message string) {

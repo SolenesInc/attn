@@ -302,7 +302,7 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		return deferred(errInitialPrompt)
 	}
 	phaseErr := allowedForPhase(delivery.Placement, m.state.State, m.reason)
-	duringQuestion := errors.Is(phaseErr, ErrBlockedByApproval) && l.questionInTurn && allowedForPhase(delivery.Placement, protocol.SessionStateWorking, "") == nil
+	duringQuestion := errors.Is(phaseErr, ErrBlockedByApproval) && allowedForPhase(delivery.Placement, protocol.SessionStateWorking, "") == nil
 	if phaseErr != nil && !duringQuestion {
 		return deferred(phaseErr)
 	}
@@ -313,20 +313,20 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	if !m.deliveryTargetMatchesLocked(delivery) {
 		return Attempt{Stage: Failed, Err: errors.New("the input's driver run or native conversation has ended")}, runRef{}
 	}
-	steering := l.run != nil || l.questionInTurn
+	steering := l.run != nil || duringQuestion
 	epochAtPlacing := l.epoch
 	var attempt Attempt
 	handled := false
 	attempt, handled = l.placeOverLinkLocked(ctx, delivery, duringQuestion)
+	if !handled && duringQuestion {
+		return deferred(ErrBlockedByApproval)
+	}
 	if !handled && delivery.Compact {
 		return Attempt{Stage: Failed, Err: errors.New("the session has no link that compacts its conversation")}, runRef{}
 	}
 	if !handled {
 		if !m.deliveryTargetMatchesLocked(delivery) {
 			return Attempt{Stage: Failed, Err: errors.New("the input target changed before terminal delivery")}, runRef{}
-		}
-		if duringQuestion {
-			return deferred(ErrBlockedByApproval)
 		}
 		attempt = l.placePTYLocked(ctx, delivery)
 		attempt.steered = l.run != nil
@@ -392,9 +392,10 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 	}
 	var link harness.Link
 	var custody harness.Custody
+	askedInTurn := l.questionInTurn
 	l.unlockedWhilePlacing(func() {
 		link = l.monitor.registry.host.Link(l.monitor, voice)
-		if _, safe := link.(harness.QuestionSafeLink); duringQuestion && !safe {
+		if safe, ok := link.(harness.QuestionSafeLink); duringQuestion && !(ok && safe.SafeDuringQuestion(askedInTurn)) {
 			link = nil
 		}
 		in := harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice, Ring: delivery.Ring, ExpectedDriverRun: delivery.ExpectedDriverRun, ExpectedConversation: delivery.ExpectedConversation}

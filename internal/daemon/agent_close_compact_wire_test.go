@@ -67,6 +67,31 @@ func TestASharedCodexSessionThatClosesCompactingCompactsOnceItsTurnEndsAndThenCl
 	}
 }
 
+func TestACompactingCloseAskedDuringAnApprovalCompactsOnceTheTurnEnds(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "auto_approve_enabled", "false")
+	session, codex := sharedCodexInATurn(t, w, app)
+	conversation := codex.ConversationID
+	working := queriedSession(t, cli, session)
+	codex.AskApproval()
+	asking := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
+
+	closeCompacting(t, cli, session)
+	stillOpen(t, cli, session, "during the approval")
+
+	codex.Dismiss()
+	testworld.AwaitStateAfter(app, asking, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	codex.Reply("Fixed and closing. <!-- attn:state=idle -->")
+	closed := awaitClosed(app, session)
+	if protocol.Deref(closed.CloseReason) != compactReason {
+		t.Errorf("ledger entry = %+v, want it closed for %q", closed, compactReason)
+	}
+	if got := w.CodexServer().Compactions(conversation); got != 1 {
+		t.Errorf("the conversation compacted %d times before the close, want once after the approval", got)
+	}
+}
+
 func TestSeedStandbyCompactsTheSharedCodexTenderBeforeItCloses(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()

@@ -89,10 +89,13 @@ Annotations, messages from other agents and inbox notifications reach the
 conversation as follow-ups through the server, never typed into the terminal.
 What you send arrives under your user name, and what Attn and other agents send
 arrives from `attn`. An annotation sent while a run works reaches that run at
-its next step, as a steer; one sent while a call waits for your approval waits
-in Sigma until you answer the approval, and never answers it. Messages from
-other agents and inbox notifications wait for the run to end, as they do for
-other harnesses. Whatever arrives while no run works starts one. A retried
+its next step, as a steer. An annotation never answers an approval. While the
+conversation's own run waits for your approval, the annotation waits in Sigma
+until you answer. While only a subagent waits, the conversation is free: the
+annotation reaches its run at the next step, or starts a run if the
+conversation's run had ended, and the subagent's approval stays open. Messages
+from other agents and inbox notifications wait for the run to end, as they do
+for other harnesses. Whatever arrives while no run works starts one. A retried
 delivery is one follow-up.
 
 ## Closing and resuming

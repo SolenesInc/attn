@@ -46,10 +46,11 @@ type Link interface {
 	Deliver(ctx context.Context, in Input) Custody
 }
 
-// QuestionSafeLink is a Link whose delivery cannot answer a permission question, so it may deliver while the running turn waits on one.
+// QuestionSafeLink is a Link whose delivery cannot answer a permission question. It says whether it may deliver while
+// the session waits on one, given whether attn saw the question come from a running turn.
 type QuestionSafeLink interface {
 	Link
-	SafeDuringQuestion()
+	SafeDuringQuestion(askedInTurn bool) bool
 }
 
 // Compactor is a Link that can compact the conversation it delivers to, in the harness's own way.

@@ -20,7 +20,7 @@ func (claudeModLink) Voices() []harness.Voice {
 	return []harness.Voice{harness.VoiceUser, harness.VoiceAttn}
 }
 
-func (claudeModLink) SafeDuringQuestion() {}
+func (claudeModLink) SafeDuringQuestion(askedInTurn bool) bool { return askedInTurn }
 
 func (l claudeModLink) Deliver(ctx context.Context, in harness.Input) harness.Custody {
 	return l.hand(ctx, &claudeModDelivery{session: l.session, input: in, answer: make(chan harness.Custody, 1)})

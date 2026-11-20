@@ -22,7 +22,7 @@ type pluginLink struct {
 
 type questionSafePluginLink struct{ pluginLink }
 
-func (questionSafePluginLink) SafeDuringQuestion() {}
+func (questionSafePluginLink) SafeDuringQuestion(askedInTurn bool) bool { return askedInTurn }
 
 func (pluginLink) Voices() []harness.Voice {
 	return []harness.Voice{harness.VoiceUser, harness.VoiceAttn}

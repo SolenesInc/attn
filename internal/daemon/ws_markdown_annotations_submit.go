@@ -113,14 +113,8 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 		payload = formatMarkdownAnnotationPayload(source, machine, annotations, orphaned)
 	}
 	if targetSession != "" {
-		session := d.store.Get(targetSession)
-		if session == nil {
+		if d.store.Get(targetSession) == nil {
 			fail(string("session not found: " + targetSession))
-			return
-		}
-		if !sessionmonitor.PhaseAllows(sessionmonitor.AtTurnBoundary, session.State) {
-			result.Status = annotationSubmitStatusSkipped
-			d.sendToClient(client, result)
 			return
 		}
 		delivery := sessionmonitor.ComposedInput(msg.RequestID, payload)

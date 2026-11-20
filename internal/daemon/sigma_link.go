@@ -10,7 +10,7 @@ import (
 
 type sigmaSessionLink struct{ serverSessionLink }
 
-func (sigmaSessionLink) SafeDuringQuestion() {}
+func (sigmaSessionLink) SafeDuringQuestion(bool) bool { return true }
 
 type sigmaCompaction struct {
 	Outcome string `json:"outcome"`
