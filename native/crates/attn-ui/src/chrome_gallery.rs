@@ -193,6 +193,11 @@ fn tokens(cx: &Cx<Chrome>) -> Tokens {
     scheme_for(None).colors(cx.system_dark()).ui
 }
 
+/// Why a piece the story draws disabled is unavailable, and no words while it is available.
+fn unavailable_because(s: &Chrome, why: &'static str) -> &'static str {
+    if s.disabled { why } else { "" }
+}
+
 fn press(s: &mut Chrome, _: &mut Tx) {
     s.presses += 1;
 }
@@ -265,7 +270,8 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             .in_view(s.lit)
             .disabled(s.disabled)
             .build(&t)
-            .on_press_tx(press),
+            .on_press_tx(press)
+            .help(unavailable_because(s, "chrome's machine is offline")),
         ListRow::new("row.nav", "Home")
             .lead(crate::system::icon(
                 &icon::HOME,
@@ -462,6 +468,7 @@ fn icon_buttons(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
         icon_button(key, key, glyph, size)
             .expanded(s.open)
             .disabled(s.disabled)
+            .help(unavailable_because(s, "Nothing waits here yet"))
             .on_press_tx(press)
     };
     let items = vec![
@@ -520,7 +527,11 @@ fn group_heads(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             .controls(row_controls("head.empty"))
             .disabled(s.disabled)
             .build(&t)
-            .on_press_tx(press),
+            .on_press_tx(press)
+            .help(unavailable_because(
+                s,
+                "Desktop 12 is on a machine that is offline",
+            )),
         GroupHead::new("head.section", "Crew")
             .heading()
             .section("Crew")

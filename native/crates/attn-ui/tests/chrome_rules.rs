@@ -681,6 +681,102 @@ fn a_disabled_piece_takes_no_tab_stop_and_no_press_on_any_part_of_it() {
     }
 }
 
+/// Every story that draws pieces disabled, chrome and library alike, and the variant that does.
+/// The library's Segmented story dims its missing agent in every variant.
+const DIMMED: &[(&str, &str)] = &[
+    ("Chrome/List row", "Disabled"),
+    ("Chrome/Group head", "Disabled"),
+    ("Chrome/Icon button", "Disabled"),
+    ("Library/Button", "Disabled"),
+    ("Library/Switch", "Disabled"),
+    ("Library/Segmented", "Rest"),
+    ("Library/Segmented", "Disabled"),
+    ("Library/Stepper", "Disabled"),
+    ("Library/Expander", "Disabled"),
+    ("Library/Choice", "Disabled"),
+    ("Library/Press area", "Disabled"),
+    ("Library/Disclosure", "Disabled"),
+    ("Library/Trigger", "Disabled"),
+    ("Library/Field box", "Disabled"),
+];
+
+/// Disabled pieces the stories give an explanation, so the rule below has something to hold.
+const EXPLAINED: [&str; 4] = ["row.agent", "head.empty", "icon.16-in-32", "segment2"];
+
+fn rest_on(rt: &mut Runtime<()>, at: (f32, f32)) -> Option<String> {
+    rt.pointer_move(at.0, at.1);
+    rt.frame(1.0 / 60.0);
+    rt.frame(1.0);
+    rt.help_tooltip().map(|(words, _)| words.to_owned())
+}
+
+#[test]
+fn a_disabled_piece_says_why_under_the_pointer_and_takes_no_press_focus_or_tab_stop() {
+    let mut explained = Vec::new();
+    for &(name, variant) in DIMMED {
+        let shown = story(true, name, variant);
+        let pieces: Vec<ElementInfo> = shown
+            .elements()
+            .into_iter()
+            .filter(|e| e.inert && e.help.is_some() && e.rect[2] > 0.0 && e.rect[3] > 0.0)
+            .collect();
+        for piece in pieces {
+            let mut rt = story(true, name, variant);
+            assert_eq!(
+                rest_on(&mut rt, middle(&piece)),
+                piece.help,
+                "{name}, {variant}: the pointer resting on disabled {:?} shows no explanation",
+                piece.key
+            );
+
+            rt.pointer_down(middle(&piece).0, middle(&piece).1);
+            rt.frame(1.0 / 60.0);
+            let held = rt
+                .elements()
+                .into_iter()
+                .find(|e| e.path == piece.path)
+                .expect("the piece is still drawn");
+            assert_eq!(
+                (held.hover, held.press),
+                (0.0, 0.0),
+                "{name}, {variant}: disabled {:?} answers the pointer",
+                piece.key
+            );
+            rt.pointer_up(middle(&piece).0, middle(&piece).1);
+            rt.frame(1.0 / 60.0);
+
+            rt.set_full_keyboard_access(true);
+            for _ in 0..40 {
+                let all = rt.elements();
+                let inside = all.iter().find(|e| {
+                    e.focused
+                        && (e.path == piece.path
+                            || std::iter::successors(e.parent, |&p| all[p].parent)
+                                .any(|p| all[p].path == piece.path))
+                });
+                assert!(
+                    inside.is_none(),
+                    "{name}, {variant}: focus lands in disabled {:?} on {:?}",
+                    piece.key,
+                    inside.and_then(|e| e.key.clone())
+                );
+                rt.key(KeyEvent {
+                    key: Key::Tab,
+                    mods: Mods::default(),
+                });
+                rt.frame(1.0);
+            }
+            explained.extend(piece.key);
+        }
+    }
+    for key in EXPLAINED {
+        assert!(
+            explained.iter().any(|k| k == key),
+            "disabled {key} carries no explanation, so the rule proves nothing for it; found {explained:?}"
+        );
+    }
+}
+
 thread_local! {
     static PILL_TOKENS: std::cell::Cell<Option<Tokens>> = const { std::cell::Cell::new(None) };
 }

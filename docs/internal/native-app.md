@@ -109,7 +109,7 @@ a review shown alone beside a second document, with its Walkthrough, search and
 send sheet, the Garden fullscreen on a plot and on a seed's page, in the dock at
 its root, on a plot and on a seed's page, and empty in both, the garden review
 expanded with its advice and while its advisor runs, and in the dock, the Chief's setup,
-Settings on Appearance, Agents and its end, Analytics, Delegation, Outposts,
+Settings on Appearance, Agents, its end and a missing agent's tooltip, Analytics, Delegation, Outposts,
 Experimental and its end, Phones, Plugins, Updates, Event bus, Files and locations, Attention
 queue, Background agents, Task runner, GitHub hosts and Models, Quick Capture with a
 message typed and with its mailbox list open, the shortcut editor
@@ -233,7 +233,8 @@ choices once for the whole app:
   rest look at half strength, every part alike, the strength rune-kit draws a
   disabled field at. A warm part first turns neutral, so no disabled control
   reads as the page's one warm action. A disabled control draws no layer and
-  no ring and takes no press.
+  no ring and takes no press, focus or Tab stop, whoever attached them, but
+  its tooltip still says why it is unavailable.
 - **Blocks.** A page is a `Page`: its `Head` (the title, its lead and an
   aside), the line that says it is saving, then its `Block`s in order. A
   `Block` knows what it is, and each of these builds one: `Section`,

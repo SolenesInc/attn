@@ -1283,6 +1283,26 @@ fn settings_agents(dark: bool) {
     snap(&mut world, "settings-agents", dark);
 }
 
+/// The Agents page with Claude missing and Codex installed, the pointer resting on the dimmed
+/// Claude option until its tooltip says why it is unavailable.
+fn settings_agents_missing_hovered(dark: bool) {
+    let missing = [
+        ("new_session_agent", "codex"),
+        ("claude_available", "false"),
+        ("codex_available", "true"),
+    ];
+    let mut world = settings_world(dark, "agents", "agents", &missing, |_| {}, |_| {});
+    world.gesture(|app| {
+        let claude = app
+            .runtime
+            .find("settings.default-agent.claude")
+            .expect("the Claude option is laid out");
+        app.move_to(claude);
+    });
+    world.advance(std::time::Duration::from_secs(2));
+    snap(&mut world, "settings-agents-missing-hovered", dark);
+}
+
 fn shortcut_editor(dark: bool) {
     let mut world = with_document(dark);
     run(&mut world, Action::OpenShortcutEditor);
@@ -4782,6 +4802,9 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         });
         scene("settings_page", || settings_page(dark));
         scene("settings_agents", || settings_agents(dark));
+        scene("settings_agents_missing_hovered", || {
+            settings_agents_missing_hovered(dark)
+        });
         scene("shortcut_editor", || shortcut_editor(dark));
         scene("close_desktop", || close_desktop(dark));
         scene("palette", || palette(dark));

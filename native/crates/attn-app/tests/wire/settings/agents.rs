@@ -606,6 +606,60 @@ fn an_agent_missing_from_path_cannot_be_the_default_and_none_found_says_so() {
 }
 
 #[test]
+fn a_missing_agent_says_why_under_the_pointer_and_takes_no_press_or_tab_stop() {
+    let mut world = on_agents(&[
+        ("new_session_agent", "codex"),
+        ("claude_available", "false"),
+        ("codex_available", "true"),
+    ]);
+    let claude = "settings.default-agent.claude";
+    assert!(node(&world, claude).is("disabled"));
+    assert!(!shows(&world, "settings.agents.none"));
+
+    let [x, y, w, h] = world.screen().bounds(Target::key(claude)).unwrap();
+    world.gesture(|app| app.move_to((x + w / 2.0, y + h / 2.0)));
+    world.advance(std::time::Duration::from_secs(2));
+    assert!(
+        world
+            .screen()
+            .find(Target::role("tooltip").name("Claude CLI not found in PATH"))
+            .is_some(),
+        "the dimmed Claude option says why it is unavailable:\n{}",
+        world.screen()
+    );
+
+    world.gesture(|app| app.click(Target::key(claude)));
+    world.settle();
+    assert!(
+        writes(&world).is_empty(),
+        "pressing the missing agent saved {:?}",
+        writes(&world)
+    );
+    assert!(node(&world, "settings.default-agent.codex").is("checked"));
+    assert_ne!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some(claude),
+        "the press focused the missing agent"
+    );
+
+    let mut seen = Vec::new();
+    loop {
+        press(&mut world, Key::Tab);
+        let focused = world.screen().focused().and_then(|n| n.key);
+        assert_ne!(
+            focused.as_deref(),
+            Some(claude),
+            "Tab stops on the missing agent"
+        );
+        if seen.contains(&focused) {
+            break;
+        }
+        seen.push(focused);
+    }
+    rest(&mut world);
+}
+
+#[test]
 fn a_plugin_agent_shows_its_declared_name() {
     let mut world = on_agents(&[
         ("snipe_available", "true"),
