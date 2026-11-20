@@ -12,9 +12,7 @@ use crate::palette::Row;
 
 pub(crate) const PILL: &str = "queue-bar.pill";
 pub(crate) const RUNS: &str = "queue-bar.runs";
-/// The Tauri app's 600, widened so a row's half for its columns holds a desktop's key in words
-/// (`Ctrl+Shift+2`, 96.5) beside the widest state and the age: at 600 that half left it 88.
-const WIDTH: f32 = 640.0;
+const WIDTH: f32 = 600.0;
 /// The room between the anchor and the peek, a bridge inside the peek's hover region so the
 /// pointer crosses it without closing the peek.
 const GAP: f32 = 6.0;

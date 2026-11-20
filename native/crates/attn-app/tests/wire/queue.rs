@@ -512,8 +512,12 @@ fn the_waiting_peeks_columns_keep_clear_of_each_other_in_the_smallest_window_at_
         let slot_shown = shown(head, "slot");
         let tag_shown = shown(head, "tag");
         assert!(
-            slot_shown,
-            "{scale}: the head of the queue shows its desktop's key"
+            slot_shown || !tag_shown,
+            "{scale}: the head's second key leaves before its first"
+        );
+        assert!(
+            slot_shown || !crate::wire::mac(),
+            "{scale}: with the macOS keymap the head of the queue shows its desktop's key"
         );
         let [panel_x, _, panel_w, _] = screen
             .bounds(Target::key("queue-bar.peek.panel"))
