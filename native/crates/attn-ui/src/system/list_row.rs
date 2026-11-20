@@ -537,6 +537,7 @@ impl ListRow {
             .grow(1.0)
             .min_w(0.0)
             .items_start()
+            .children(lead)
             .child(words)
             .children(asides)
             .children(badges);
@@ -594,7 +595,6 @@ impl ListRow {
             .w_full()
             .min_w(0.0)
             .items_start()
-            .children(lead)
             .child(fading)
             .children(anchor)
             .children(inline);

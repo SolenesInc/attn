@@ -1008,3 +1008,58 @@ fn a_select_rows_title_keeps_its_floor_under_its_controls_at_its_narrowest_real_
         );
     }
 }
+
+fn row_with_asides(asides: &f32, _: &mut Cx<f32>) -> El {
+    let t = tokens(true);
+    rune::row().child(
+        rune::col().w(ROW_WIDTH).child(
+            ListRow::new("rule.row", "shop")
+                .lead(el().size(16.0, 16.0))
+                .title("shop")
+                .aside(
+                    el().key("rule.asides")
+                        .h(10.0)
+                        .w(*asides)
+                        .shrink()
+                        .min_w(0.0),
+                )
+                .build(&t),
+        ),
+    )
+}
+
+/// A recent place's row at 150% text in the smallest window.
+const ROW_WIDTH: f32 = 477.0;
+
+fn asides_width(asides: fn() -> f32) -> (f32, f32) {
+    let mut rt = App::new(AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..AppSpec::new("chrome-rules", WINDOW, asides, row_with_asides)
+    })
+    .headless_runtime(WINDOW, Env::new(true, 1.0));
+    rt.frame(0.0);
+    let all = rt.elements();
+    let key = |k: &str| {
+        all.iter()
+            .find(|e| e.key.as_deref() == Some(k))
+            .unwrap_or_else(|| panic!("no {k}"))
+            .rect[2]
+    };
+    (key("rule.asides"), key("rule.row"))
+}
+
+#[test]
+fn a_rows_asides_take_at_most_half_of_the_whole_row_and_keep_what_fits_in_it() {
+    let (kept, row) = asides_width(|| 227.0);
+    assert_eq!(row, ROW_WIDTH);
+    assert!(
+        kept >= 226.5,
+        "asides of 227 in a {row} row are cut to {kept}, short of half the row"
+    );
+    let (capped, row) = asides_width(|| 400.0);
+    assert!(
+        capped <= row / 2.0 + 0.5,
+        "asides of 400 take {capped} of a {row} row"
+    );
+}
