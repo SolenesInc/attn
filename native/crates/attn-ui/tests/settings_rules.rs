@@ -288,3 +288,35 @@ fn a_switch_moves_its_thumb_and_colours_in_step_and_comes_to_rest() {
         }
     }
 }
+
+fn sections_view(_: &(), cx: &mut Cx<()>) -> El {
+    use attn_ui::blocks::{Page, Section};
+    let t = attn_ui::colors::scheme_for(None)
+        .colors(cx.system_dark())
+        .ui;
+    Page::new()
+        .push(Section::new("plain", "Pairing").build(&t))
+        .push(Section::new("adding", "Add an outpost").form().build(&t))
+        .build("page", &t)
+}
+
+#[test]
+fn a_section_marked_as_a_form_is_a_form_named_by_its_heading() {
+    let mut rt = App::new(AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..AppSpec::new("sections", (600.0, 400.0), || (), sections_view)
+    })
+    .headless_runtime((600.0, 400.0), Env::new(true, SCALE));
+    while rt.frame(1.0 / 60.0) {}
+    let section = |key: &str| {
+        let e = rt
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("no section {key}"));
+        (e.role, e.label)
+    };
+    assert_eq!(section("adding"), ("form", Some("Add an outpost".into())));
+    assert_eq!(section("plain"), ("group", Some("Pairing".into())));
+}

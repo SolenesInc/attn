@@ -12,6 +12,7 @@ pub struct Section {
     title: String,
     description: String,
     aside: Option<String>,
+    form: bool,
     blocks: Vec<Block>,
 }
 
@@ -22,6 +23,7 @@ impl Section {
             title: title.into(),
             description: String::new(),
             aside: None,
+            form: false,
             blocks: Vec::new(),
         }
     }
@@ -35,6 +37,12 @@ impl Section {
     /// section is announced with it.
     pub fn aside(mut self, said: impl Into<String>) -> Self {
         self.aside = Some(said.into());
+        self
+    }
+
+    /// Assistive tools find the section as a form named by its heading, not as a group.
+    pub fn form(mut self) -> Self {
+        self.form = true;
         self
     }
 
@@ -72,7 +80,7 @@ impl Section {
         );
         let section = col()
             .key(self.key)
-            .role("group")
+            .role(if self.form { "form" } else { "group" })
             .label(label)
             .w_full()
             .child(head)

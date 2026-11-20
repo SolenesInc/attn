@@ -231,8 +231,10 @@ choices once for the whole app:
   `SettingRow`, `Field`, `Notice`, `Status`, `Choices`, `Disclosure`, `Actions`
   and `Prose`. `Block::control` puts a control on a line of its own at its own
   width, and `Block::custom` takes a piece no block fits, built from controls
-  inside the rhythms `Inline` and `Stack`. A `Refusal`, why a control's value
-  was refused, is not a block: it goes beside that control. The parent spaces
+  inside the rhythms `Inline` and `Stack`. A section that is a form says so
+  with `Section::form`, and assistive tools then find a form named by its
+  heading, not a group. A `Refusal`, why a control's value was refused, is not
+  a block: it goes beside that control. The parent spaces
   its blocks by what they are: 32 and a rule between sections, 12 around a
   notice and above a status, 16 otherwise; inside a section or a disclosure, 8
   between setting rows, 16 between fields, 12 otherwise. Reading text wraps

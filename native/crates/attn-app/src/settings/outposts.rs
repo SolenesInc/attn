@@ -584,7 +584,8 @@ fn add_form(state: &State, t: &Tokens) -> Block {
     } else {
         destination
     };
-    Section::new("settings.block.outposts.add", "Add an outpost")
+    Section::new("settings.outposts.add", "Add an outpost")
+        .form()
         .description("Add the destination you use with ssh. attn installs your home's build there and pins its identity on first contact.")
         .push(
             Field::new("settings.outposts.add.name", "Name")

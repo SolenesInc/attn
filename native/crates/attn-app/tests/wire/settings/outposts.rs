@@ -151,6 +151,26 @@ fn turning_outposts_on_shows_the_empty_list_and_off_marks_the_page_again() {
 }
 
 #[test]
+fn the_add_fields_and_button_sit_in_a_form_named_add_an_outpost() {
+    let mut world = World::start(home(vec![]));
+    on_outposts(&mut world);
+    let screen = world.screen();
+    let form = screen.get(Target::role("form").name("Add an outpost"));
+    assert_eq!(form.key.as_deref(), Some("settings.outposts.add"));
+    let inside: Vec<Option<String>> = screen
+        .descendants(Target::key("settings.outposts.add"))
+        .into_iter()
+        .map(|node| node.key)
+        .collect();
+    for key in [NAME, DESTINATION, SUBMIT] {
+        assert!(
+            inside.contains(&Some(key.into())),
+            "{key} is not in the form"
+        );
+    }
+}
+
+#[test]
 fn adds_by_name_and_ssh_destination_and_keeps_the_draft_until_a_list_holds_it() {
     let mut world = World::start(home(vec![]));
     on_outposts(&mut world);
