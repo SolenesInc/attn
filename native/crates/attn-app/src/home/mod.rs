@@ -1,12 +1,13 @@
 mod model;
 pub(crate) mod pull_requests;
 
-use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens};
-use rune::tok::space;
-use rune::{El, Image, ScrollSpec, Tx, col, el, memo, row, text};
-use rune_kit::ScrollBar;
-use rune_kit::{Button, ButtonVariant};
+use attn_ui::Tokens;
+use attn_ui::blocks::{Block, Board, BoardCard, Card, Inline, Prose, Stack};
+use attn_ui::system::{
+    self, Button, Check, DotSize, GroupHead, IconSize, ListRow, Look, Reveal, Size, Type,
+    icon_button, words,
+};
+use rune::{El, Image, Tx, col, el, memo};
 
 use crate::asks::Item as AskItem;
 use crate::sidebar::{open_agent, state_mark};
@@ -18,6 +19,10 @@ pub(crate) use model::next_change;
 /// attn's app icon, the cat on its tile, at twice the size the header draws it.
 pub(crate) const LOGO: &[u8] = include_bytes!("../../../../../app/src/assets/icon.png");
 const LOGO_SIDE: f32 = 64.0;
+
+/// How narrow a Home card gets before the other card moves under it, and how short it stands
+/// with nothing in it, as the Tauri app's `.dashboard-card`.
+pub(crate) const CARD_LEAST: (f32, f32) = (300.0, 200.0);
 
 pub(crate) fn view(state: &State, t: &Tokens) -> El {
     let facts = &state.facts;
@@ -39,560 +44,328 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         state.pictures.logo().map(Image::id),
         *t,
     );
-    let top = memo("home.top", reads, || {
-        let home = model::home(facts, window.now_ms);
-        col()
-            .w_full()
-            .child(header(state.pictures.logo(), t).mb(24.0))
-            .children(crate::whats_new::banner(state, t).map(|banner| banner.mb(20.0)))
-            .children(
-                home.all_settled
-                    .as_ref()
-                    .map(|running| all_settled(running, window.follow_next_turn, t).mb(20.0)),
-            )
-    });
+    let home = model::home(facts, window.now_ms);
+    let mut board = Board::new("home", "Home").brand(
+        logo(state.pictures.logo()),
+        "attn",
+        "attention hub",
+        settings(t),
+    );
+    if let Some(banner) = crate::whats_new::banner(state, t) {
+        board = board.top(banner);
+    }
+    if let Some(running) = &home.all_settled {
+        board = board.top(Block::custom(
+            "home.all-settled.slot",
+            all_settled(running, window.follow_next_turn, t),
+        ));
+    }
+    if let Some(limited) = pull_requests::rate_limit_notice(state, t) {
+        board = board.top(limited);
+    }
     let sessions = memo("home.sessions", reads, || {
-        let home = model::home(facts, window.now_ms);
         let asks = crate::asks::Lists::of(facts, window.now_ms).live;
         sessions_card(&home, &asks, window.home_snoozed_open, t)
     });
-    col()
-        .key("home")
-        .role("main")
-        .label("Home")
-        .grow(1.0)
-        .h_full()
-        .min_w(0.0)
-        .py(24.0)
-        .px(28.0)
-        .fill(t.bg_app)
-        .child(top)
-        .children(pull_requests::rate_limit_banner(state, t).map(|banner| banner.mb(20.0)))
-        .child(
-            col()
-                .key("home.cards.scroll")
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(
-                    row()
-                        .key("home.cards")
-                        .w_full()
-                        .gap(16.0)
-                        .flex_wrap()
-                        .child(sessions)
-                        .child(pull_requests::home_card(state, t)),
-                )
-                .scroll_bar_styled(attn_ui::scroll_bar(t)),
-        )
+    board
+        .card(sessions)
+        .card(pull_requests::home_card(state, t))
+        .build(t)
 }
 
-fn header(logo: Option<&Image>, t: &Tokens) -> El {
-    row()
-        .key("home.header")
-        .w_full()
-        .items_center()
-        .gap(10.0)
-        .children(logo.map(|logo| {
-            el().key("home.logo")
-                .role("image")
-                .label("attn")
-                .size(LOGO_SIDE, LOGO_SIDE)
-                .pixels(logo.pixels())
-        }))
-        .child(
-            col()
-                .grow(1.0)
-                .child(
-                    text("attn")
-                        .font(rune::TextStyle::new(24.0, 700.0).mono())
-                        .color(t.brand),
-                )
-                .child(type_::sans_caps("attention hub").color(t.text_dimmed)),
-        )
-        .child(
-            GlyphButton::new(&attn_ui::icon::SETTINGS, "Settings")
-                .icon_size(16.0)
-                .color(t.text_dimmed)
-                .side(32.0)
-                .on_press_tx(|state: &mut State, tx: &mut Tx| {
-                    crate::dispatch(state, Action::UiOpenSettings, tx);
-                })
-                .build(attn_ui::kit(t))
-                .key("home.settings")
-                .self_start()
-                .radius(6.0)
-                .hover(t.bg_elevated),
-        )
+fn logo(logo: Option<&Image>) -> Option<El> {
+    logo.map(|logo| {
+        el().key("home.logo")
+            .role("image")
+            .label("attn")
+            .size(LOGO_SIDE, LOGO_SIDE)
+            .pixels(logo.pixels())
+    })
 }
+
+fn settings(t: &Tokens) -> El {
+    icon_button(
+        "home.settings",
+        "Settings",
+        &attn_ui::icon::SETTINGS,
+        IconSize::Large,
+    )
+    .on_press_tx(|state: &mut State, tx: &mut Tx| {
+        crate::dispatch(state, Action::UiOpenSettings, tx);
+    })
+    .build(t)
+    .into()
+}
+
+const FOLLOW: &str = "Take me to the next agent that needs you";
 
 fn all_settled(running: &str, follow: bool, t: &Tokens) -> El {
-    row()
-        .key("home.all-settled")
+    Card::new("home.all-settled")
+        .push(
+            Inline::top()
+                .child(system::glyph(
+                    attn_ui::glyph::CHECK,
+                    IconSize::Regular,
+                    t.success,
+                ))
+                .child(
+                    Stack::tight()
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .child(words("All settled", Type::Name, t.text_primary))
+                        .child(
+                            words(running.to_owned(), Type::Small, t.text_tertiary)
+                                .key("home.all-settled.running"),
+                        )
+                        .child(El::from(
+                            Check::new("home.follow", FOLLOW).checked(follow).build(
+                                t,
+                                |state: &mut State, _: &mut Tx| {
+                                    state.window.follow_next_turn = !state.window.follow_next_turn
+                                },
+                            ),
+                        )),
+                ),
+        )
+        .build(t)
         .role("group")
         .label("All settled")
-        .w_full()
-        .padding(space::S3)
-        .gap(space::S3)
-        .radius(6.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
-        .child(text("✓").font(type_::TITLE).color(t.success))
-        .child(
-            col()
-                .gap(space::S1)
-                .grow(1.0)
-                .child(
-                    text("All settled")
-                        .font(type_::SECTION)
-                        .color(t.text_primary),
-                )
-                .child(
-                    text(running.to_owned())
-                        .key("home.all-settled.running")
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary),
-                )
-                .child(follow_check(follow, t)),
-        )
-}
-
-fn follow_check(follow: bool, t: &Tokens) -> El {
-    const LABEL: &str = "Take me to the next agent that needs you";
-    row()
-        .key("home.follow")
-        .role("checkbox")
-        .label(LABEL)
-        .checked(follow)
-        .focusable(true)
-        .preserve_focus_on_press(true)
-        .items_center()
-        .gap(space::S2)
-        .on_press(|state: &mut State| {
-            state.window.follow_next_turn = !state.window.follow_next_turn
-        })
-        .child(
-            text(if follow {
-                attn_ui::glyph::CHECKED
-            } else {
-                attn_ui::glyph::UNCHECKED
-            })
-            .font(type_::BODY)
-            .color(if follow { t.accent } else { t.text_tertiary }),
-        )
-        .child(text(LABEL).font(type_::LABEL).color(t.text_secondary))
 }
 
 fn sessions_card(home: &Home, asks: &[AskItem<'_>], snoozed_open: bool, t: &Tokens) -> El {
-    let mut body = col().key("home.sessions.body").w_full().gap(16.0);
-    if !asks.is_empty() {
-        body = body.child(
-            col()
-                .key("home.group.asks")
-                .role("list")
-                .label("Asks")
-                .w_full()
-                .gap(0.0)
-                .child(
-                    group_label("home.group.asks", "Asks", Some(asks.len()), None, t).mb(space::S2),
-                )
-                .children(asks.iter().map(|item| ask_row(item, t))),
+    let mut card = BoardCard::new("home.sessions", "Sessions")
+        .least(CARD_LEAST.0, CARD_LEAST.1)
+        .action(
+            Button::new("New")
+                .look(Look::Plain)
+                .size(Size::Compact)
+                .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                    crate::dispatch(state, Action::SessionNew, tx);
+                })
+                .build(t)
+                .key("home.new")
+                .label("New session"),
         );
+    if !asks.is_empty() {
+        card = card.push(group(
+            "home.group.asks",
+            "Asks",
+            Some(asks.len()),
+            None,
+            asks.iter().map(|item| ask_row(item, t)).collect(),
+            t,
+        ));
     }
     if home.empty {
-        body = body.child(card_empty("home.empty", "No active sessions", t));
-    } else {
-        if !home.turns.is_empty() {
-            let unreachable = home.turns.iter().filter(|a| a.agent.offline).count();
-            body = body.child(group(
-                "home.group.turns",
-                "Your turn",
-                Some(home.turns.len() - unreachable),
-                (unreachable > 0).then(|| format!("{unreachable} unreachable")),
-                &home.turns,
-                t,
-            ));
-        }
-        if home.settled_heading {
-            body = body.child(
-                type_::upper(
-                    "Settled",
-                    rune::TextStyle {
-                        weight: 600.0,
-                        ..type_::SANS_CAPS
-                    },
-                )
-                .key("home.settled")
-                .role("heading")
-                .color(t.text_muted)
-                .w_full()
-                .mt(4.0)
-                .px(space::S2)
-                .pb(6.0)
-                .border_sides([0.0, 0.0, 1.0, 0.0], t.border),
-            );
-        }
-        body = body.children(home.groups.iter().map(|Group { key, label, rows }| {
-            group(&format!("home.group.{key}"), label, None, None, rows, t)
-        }));
-        if !home.snoozed.is_empty() {
-            body = body.child(snoozed(&home.snoozed, snoozed_open, t));
-        }
+        return card
+            .push(Block::custom(
+                "home.empty.slot",
+                Prose::empty("home.empty", "No active sessions").el(t),
+            ))
+            .build(t);
     }
-    card(
-        "home.sessions",
-        "Sessions",
-        vec![card_action(
-            "home.new",
-            "New session",
-            "+ New",
+    if !home.turns.is_empty() {
+        let unreachable = home.turns.iter().filter(|a| a.agent.offline).count();
+        card = card.push(group(
+            "home.group.turns",
+            "Your turn",
+            Some(home.turns.len() - unreachable),
+            (unreachable > 0).then(|| format!("{unreachable} unreachable")),
+            home.turns.iter().map(|a| session_row(a, t)).collect(),
             t,
-            |state, tx| {
-                crate::dispatch(state, Action::SessionNew, tx);
-            },
-        )],
-        body,
-        t,
-    )
+        ));
+    }
+    if home.settled_heading {
+        card = card.push(Block::custom(
+            "home.settled.slot",
+            GroupHead::new("home.settled", "Settled")
+                .name_el(words("Settled", Type::Name, t.text_secondary))
+                .heading()
+                .build(t),
+        ));
+    }
+    for Group { key, label, rows } in &home.groups {
+        card = card.push(group(
+            &format!("home.group.{key}"),
+            label,
+            None,
+            None,
+            rows.iter().map(|a| session_row(a, t)).collect(),
+            t,
+        ));
+    }
+    if !home.snoozed.is_empty() {
+        card = card.push(snoozed(&home.snoozed, snoozed_open, t));
+    }
+    card.build(t)
 }
 
-/// A Home card, as the Tauri app's `.dashboard-card`: a header band holding the heading and
-/// `actions`, ruled off from `body`. The cards share a row of the grid, so each is as tall as
-/// the taller one's content, and never under 200 points.
-pub(crate) fn card(key: &str, heading: &str, actions: Vec<El>, body: El, t: &Tokens) -> El {
-    col()
-        .key(key.to_owned())
-        .role("region")
-        .label(heading.to_owned())
-        .grow(1.0)
-        .min_w(300.0)
-        .min_h(200.0)
-        .radius(8.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border)
-        .child(
-            row()
-                .key(format!("{key}.header"))
-                .w_full()
-                .items_center()
-                .gap(space::S2)
-                .padding(16.0)
-                .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
-                .child(
-                    type_::caps(heading)
-                        .role("heading")
-                        .color(t.text_dimmed)
-                        .grow(1.0),
-                )
-                .children(actions),
-        )
-        .child(body.padding(12.0))
+/// What a group's head says after its name: a count, and what the count leaves out.
+fn said_after(key: &str, count: Option<usize>, apart: Option<String>, t: &Tokens) -> Vec<El> {
+    let said = |key: String, said: String| {
+        words(said.clone(), Type::Mono, t.text_tertiary)
+            .key(key)
+            .label(said)
+    };
+    count
+        .map(|n| said(format!("{key}.count"), n.to_string()))
+        .into_iter()
+        .chain(apart.map(|apart| said(format!("{key}.apart"), apart)))
+        .collect()
 }
 
-/// What a card says when it has nothing to list, as the Tauri app's `.card-empty`.
-pub(crate) fn card_empty(key: &str, said: &str, t: &Tokens) -> El {
-    text(said.to_owned())
-        .key(key.to_owned())
-        .font(type_::BODY)
-        .color(t.text_dimmed)
-        .align(rune::Align::Center)
-        .wrap()
-        .w_full()
-        .padding(20.0)
-}
-
-/// A card's count, as the Tauri app's `.card-count`: a brand pill.
-pub(crate) fn card_count(key: &str, count: usize, label: String, t: &Tokens) -> El {
-    text(count.to_string())
-        .key(key.to_owned())
-        .role("status")
-        .label(label)
-        .font(rune::TextStyle {
-            weight: 700.0,
-            ..type_::CAPTION
-        })
-        .color(t.on_brand)
-        .py(2.0)
-        .px(8.0)
-        .radius(10.0)
-        .fill(t.brand)
-}
-
-/// A bordered button in a card's header, as the Tauri app's `.card-action`.
-fn card_action(
-    key: &str,
-    label: &str,
-    shown: &str,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    let (shown, ink) = (shown.to_owned(), t.text_tertiary);
-    Button::new(label)
-        .variant(ButtonVariant::Ghost)
-        .label_with(move |_, _| text(shown).font(type_::CAPTION).color(ink))
-        .on_press_tx(press)
-        .build(attn_ui::kit(t))
-        .key(key.to_owned())
-        .h(22.0)
-        .px(10.0)
-        .radius(4.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .hover(t.border)
-}
-
-/// A group of agents under its label, its count and what that count leaves out.
+/// A group of rows under its heading, its count and what that count leaves out.
 fn group(
     key: &str,
     label: &str,
     count: Option<usize>,
     apart: Option<String>,
-    rows: &[HomeAgent],
+    rows: Vec<El>,
     t: &Tokens,
-) -> El {
-    col()
-        .key(key.to_owned())
-        .role("list")
-        .label(label.to_owned())
-        .w_full()
-        .gap(0.0)
-        .child(group_label(key, label, count, apart, t).mb(space::S2))
-        .children(rows.iter().map(|agent| session_row(agent, t)))
+) -> Block {
+    let mut head = GroupHead::new(format!("{key}.head"), label)
+        .section(label.to_owned())
+        .heading();
+    for aside in said_after(key, count, apart, t) {
+        head = head.aside(aside);
+    }
+    Block::custom(
+        format!("{key}.slot"),
+        col()
+            .key(key.to_owned())
+            .role("list")
+            .label(label.to_owned())
+            .w_full()
+            .child(head.build(t))
+            .children(rows),
+    )
 }
 
-fn group_label(
-    key: &str,
-    label: &str,
-    count: Option<usize>,
-    apart: Option<String>,
-    t: &Tokens,
-) -> El {
-    let caption = |key: String, said: String| {
-        text(said.clone())
+fn snoozed(rows: &[HomeAgent], open: bool, t: &Tokens) -> Block {
+    let key = "home.group.snoozed";
+    let mut head = GroupHead::new(format!("{key}.toggle"), "Snoozed")
+        .section("Snoozed")
+        .open(open);
+    for aside in said_after(key, Some(rows.len()), None, t) {
+        head = head.aside(aside);
+    }
+    Block::custom(
+        format!("{key}.slot"),
+        col()
             .key(key)
-            .label(said)
-            .font(type_::MONO_CAPTION)
-            .color(t.text_tertiary)
-    };
-    row()
-        .gap(space::S2)
-        .px(space::S2)
-        .items_center()
-        .child(type_::sans_caps(label).color(t.text_muted))
-        .children(count.map(|n| caption(format!("{key}.count"), n.to_string())))
-        .children(apart.map(|said| caption(format!("{key}.apart"), said)))
+            .role("list")
+            .label("Snoozed")
+            .w_full()
+            .child(head.build(t).on_press(|state: &mut State| {
+                state.window.home_snoozed_open = !state.window.home_snoozed_open
+            }))
+            .children(
+                open.then(|| rows.iter().map(|agent| session_row(agent, t)))
+                    .into_iter()
+                    .flatten(),
+            ),
+    )
 }
 
-fn snoozed(rows: &[HomeAgent], open: bool, t: &Tokens) -> El {
-    let (tokens, count) = (*t, rows.len());
-    col()
-        .key("home.group.snoozed")
-        .role("list")
-        .label("Snoozed")
-        .w_full()
-        .gap(0.0)
-        .child(
-            Button::new("Snoozed")
-                .variant(ButtonVariant::Ghost)
-                .on_press(|state: &mut State| {
-                    state.window.home_snoozed_open = !state.window.home_snoozed_open
-                })
-                .label_with(move |_, _| {
-                    row()
-                        .gap(space::S1)
-                        .items_center()
-                        .child(
-                            text(if open {
-                                attn_ui::glyph::CARET_DOWN
-                            } else {
-                                attn_ui::glyph::CARET_RIGHT
-                            })
-                            .font(type_::LABEL)
-                            .color(tokens.text_tertiary),
-                        )
-                        .child(group_label(
-                            "home.group.snoozed",
-                            "Snoozed",
-                            Some(count),
-                            None,
-                            &tokens,
-                        ))
-                })
-                .build(attn_ui::kit(t))
-                .expanded(open)
-                .key("home.group.snoozed.toggle")
-                .h(20.0)
-                .px(0.0)
-                .self_start()
-                .radius(4.0)
-                .hover(t.bg_elevated),
-        )
-        .children(
-            open.then(|| rows.iter().map(|agent| session_row(agent, t)))
-                .into_iter()
-                .flatten(),
-        )
-}
+/// The most of an ask's line the asker's name takes, leaving the rest to what is asked.
+const ASKER_SHARE: f32 = 0.5;
 
 fn ask_row(item: &AskItem<'_>, t: &Tokens) -> El {
     let id = item.ask.id.clone();
-    row()
-        .key(format!("home.ask.{id}"))
-        .role("button")
-        .focusable(true)
-        .label(format!("{}: {}", item.from, item.ask.subject))
-        .w_full()
-        .min_h(ROW_HEIGHT)
-        .px(12.0)
-        .gap(10.0)
-        .items_center()
-        .radius(6.0)
-        .hover(t.bg_elevated)
+    let key = format!("home.ask.{id}");
+    ListRow::new(key.clone(), format!("{}: {}", item.from, item.ask.subject))
+        .lead(system::glyph("?", IconSize::Regular, t.accent))
+        .title_el(
+            Inline::line()
+                .grow(1.0)
+                .child(
+                    words(item.from.clone(), Type::Body, t.text_primary)
+                        .key(format!("{key}.from"))
+                        .single_line()
+                        .truncate()
+                        .max_w_frac(ASKER_SHARE),
+                )
+                .child(
+                    words(item.ask.subject.clone(), Type::Body, t.text_secondary)
+                        .key(format!("{key}.subject"))
+                        .single_line()
+                        .truncate()
+                        .shrink()
+                        .min_w(0.0),
+                ),
+        )
+        .build(t)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| crate::asks::show(state, Some(&id), tx))
-        .child(
-            text("?")
-                .font(rune::TextStyle {
-                    weight: 700.0,
-                    ..type_::BODY
-                })
-                .color(t.accent)
-                .w(8.0),
-        )
-        .child(
-            text(item.from.clone())
-                .key(format!("home.ask.{}.from", item.ask.id))
-                .font(type_::BODY)
-                .color(t.text_primary)
-                .grow(1.0)
-                .min_w(0.0)
-                .single_line()
-                .truncate(),
-        )
-        .child(
-            text(item.ask.subject.clone())
-                .key(format!("home.ask.{}.subject", item.ask.id))
-                .font(type_::BODY)
-                .color(t.text_secondary)
-                .grow(1.0)
-                .min_w(0.0)
-                .single_line()
-                .truncate(),
-        )
-}
-
-/// A row of the sessions card, as the Tauri app's `.session-row`: 10 points of padding over
-/// and under a line of text.
-const ROW_HEIGHT: f32 = 36.0;
-
-/// An agent's state dot on the card, as the Tauri app's `.state-dot`: 6 points across, or the
-/// sidebar's struck-through ring while its machine is unreachable.
-fn dot(key: &str, a: &HomeAgent, t: &Tokens) -> El {
-    state_mark(key, &a.agent, attn_ui::system::DotSize::Small, t)
 }
 
 fn session_row(a: &HomeAgent, t: &Tokens) -> El {
     let key = format!("home.session.{}", a.agent.id);
     memo(key.clone(), (a, *t), || {
         let id = a.agent.id.clone();
-        let unsnooze = (!a.snoozed_until.is_empty() && !a.agent.offline).then(|| {
-            let id = id.clone();
-            button(
-                &format!("{key}.unsnooze"),
-                &format!("Unsnooze {}", a.agent.name),
-                "↩",
-                t,
-                move |state, _| crate::sidebar::wake(state, &id),
-            )
-        });
-        let trailing = [&a.age, &a.snoozed_until]
+        let name_kind = if a.activity.is_some() {
+            Type::Name
+        } else {
+            Type::Body
+        };
+        let name = crate::sidebar::flagged(&key, &a.agent, t).shrink().child(
+            words(a.agent.name.clone(), name_kind, t.text_primary)
+                .single_line()
+                .truncate()
+                .shrink(),
+        );
+        let mut row = ListRow::new(key.clone(), format!("Open {}", a.agent.name))
+            .lead(state_mark(&key, &a.agent, DotSize::Small, t))
+            .title_el(name)
+            .tint(a.agent.offline.then_some(t.error));
+        if let Some(activity) = &a.activity {
+            let said = match &activity.stale_since {
+                Some(at) => format!("{}, as of {at}", activity.line),
+                None => activity.line.clone(),
+            };
+            let ink = if activity.stale_since.is_some() {
+                t.text_muted
+            } else {
+                t.text_tertiary
+            };
+            row = row.subtitle_el(
+                rune::row().min_w(0.0).child(
+                    words(activity.line.clone(), Type::Small, ink)
+                        .key(format!("{key}.activity"))
+                        .label(said)
+                        .single_line()
+                        .truncate()
+                        .shrink(),
+                ),
+            );
+        }
+        if a.chief {
+            row = row.aside(words("chief", Type::Mono, t.accent).key(format!("{key}.chief")));
+        }
+        if let Some(when) = [&a.age, &a.snoozed_until]
             .into_iter()
             .find(|s| !s.is_empty())
-            .cloned();
-        row()
-            .key(key.clone())
-            .role("button")
-            .focusable(true)
-            .label(format!("Open {}", a.agent.name))
+        {
+            row = row
+                .aside(words(when.clone(), Type::Mono, t.text_dimmed).key(format!("{key}.when")));
+        }
+        if !a.snoozed_until.is_empty() && !a.agent.offline {
+            let id = id.clone();
+            row = row.controls(
+                [icon_button(
+                    format!("{key}.unsnooze"),
+                    format!("Unsnooze {}", a.agent.name),
+                    "↩",
+                    IconSize::Regular,
+                )
+                .size(Size::Small)
+                .on_press(move |state: &mut State| crate::sidebar::wake(state, &id))
+                .build(t)
+                .into()],
+                Reveal::Always,
+            );
+        }
+        row.build(t)
             .a11y_value(a.agent.state.wire())
-            .w_full()
-            .min_h(ROW_HEIGHT)
-            .px(12.0)
-            .gap(10.0)
-            .items_center()
-            .radius(6.0)
-            .fill(if a.agent.offline {
-                t.error.alpha(0.07)
-            } else {
-                rune::Color::TRANSPARENT
-            })
-            .hover(t.bg_elevated)
             .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx))
-            .child(dot(&key, a, t))
-            .child(
-                col()
-                    .grow(1.0)
-                    .min_w(0.0)
-                    .child(
-                        crate::sidebar::flagged(&key, &a.agent, t).child(
-                            text(a.agent.name.clone())
-                                .font(type_::BODY)
-                                .color(t.text_primary)
-                                .single_line()
-                                .truncate()
-                                .shrink(),
-                        ),
-                    )
-                    .children(a.activity.as_ref().map(|activity| {
-                        let said = match &activity.stale_since {
-                            Some(at) => format!("{}, as of {at}", activity.line),
-                            None => activity.line.clone(),
-                        };
-                        text(activity.line.clone())
-                            .key(format!("{key}.activity"))
-                            .label(said)
-                            .font(type_::LABEL)
-                            .color(if activity.stale_since.is_some() {
-                                t.text_muted
-                            } else {
-                                t.text_tertiary
-                            })
-                            .single_line()
-                            .truncate()
-                    })),
-            )
-            .children(a.chief.then(|| {
-                text("chief")
-                    .key(format!("{key}.chief"))
-                    .font(type_::MONO_CAPTION)
-                    .color(t.accent)
-            }))
-            .children(trailing.map(|when| {
-                text(when)
-                    .key(format!("{key}.when"))
-                    .font(type_::MONO_CAPTION)
-                    .color(t.text_dimmed)
-            }))
-            .children(unsnooze)
     })
-}
-
-fn button(
-    key: &str,
-    label: &str,
-    glyph: &str,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    GlyphButton::new(glyph, label)
-        .font(type_::LABEL)
-        .side(24.0)
-        .on_press_tx(press)
-        .build(attn_ui::kit(t))
-        .key(key.to_owned())
-        .px(space::S2)
-        .radius(4.0)
-        .hover(t.bg_elevated)
 }

@@ -377,7 +377,7 @@ fn each_pr_opens_with_its_role_and_names_its_host_when_its_repo_spans_two() {
 fn home_counts_down_to_when_github_lets_the_daemon_poll_again() {
     let mut world = start(one_desktop(vec![]), vec![]);
     press(&mut world, Action::SessionGoToDashboard);
-    let banner = |world: &World| name(world, "home.rate-limit.text");
+    let banner = |world: &World| name(world, "home.rate-limit");
     world.daemon.emit(RateLimitedMessage {
         rate_limit_resource: "search".into(),
         rate_limit_reset_at: "2026-11-12T08:59:00Z".into(),

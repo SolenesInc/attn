@@ -4136,6 +4136,135 @@ fn home_empty(dark: bool) {
     snap(&mut world, "home-empty", dark);
 }
 
+/// When a time stands `minutes` before the tour's clock, as the daemon writes it.
+fn minutes_ago(minutes: i64) -> String {
+    let at = attn_testkit::WALL_START_MS / 1000 - minutes * 60;
+    let (days, secs) = (at.div_euclid(86_400), at.rem_euclid(86_400));
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z",
+        secs / 3600,
+        secs / 60 % 60,
+        secs % 60
+    )
+}
+
+/// Home at its fullest: an ask, an agent whose machine is unreachable, a fresh and a stale
+/// activity line, the Chief, the snoozed group open with Unsnooze, and pull requests with every
+/// mark, one repository folded away.
+fn home_full(dark: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    state.crew = Some(crew());
+    let sessions = state.sessions.get_or_insert_default();
+    sessions[0].activity = Some("running the frontend test suite".into());
+    sessions[0].activity_at = Some(minutes_ago(0));
+    sessions[4].activity = Some("waiting on the review of the landing".into());
+    sessions[4].activity_at = Some(minutes_ago(45));
+    sessions.push(Session {
+        crew_member: Some("chief".into()),
+        chief_of_staff: Some(true),
+        ..session("chief", "working")
+    });
+    sessions.push(Session {
+        turn_owed: Some(true),
+        turn_opened_at: Some(minutes_ago(30)),
+        turn_snoozed_until: Some(minutes_ago(-90)),
+        ..session("nap", "idle")
+    });
+    state.desktops.get_or_insert_default().push(desktop(
+        "work/desktop_home",
+        "9",
+        row(vec![pane("pc"), pane("pn")]),
+        vec![
+            agent_pane("work/desktop_home", "pc", "chief"),
+            agent_pane("work/desktop_home", "pn", "nap"),
+        ],
+    ));
+    state.asks = Some(vec![Ask {
+        id: "a-cache".into(),
+        session_id: "s0".into(),
+        subject: "Which store should keep the cache once deploys stop emptying it?".into(),
+        base_dir: "/repo".into(),
+        created_at: "2026-11-17T09:00:00Z".into(),
+        ..Ask::default()
+    }]);
+    let pr = |id: &str, number: i64, role: &str, repo: &str, title: &str| PR {
+        id: id.into(),
+        number,
+        role: role.into(),
+        title: title.into(),
+        repo: repo.into(),
+        author: if role == "author" { "me" } else { "someone" }.into(),
+        reason: if role == "author" {
+            "ready_to_merge"
+        } else {
+            "review_requested"
+        }
+        .into(),
+        url: format!("https://github.com/{repo}/pull/{number}"),
+        host: "github.com".into(),
+        state: "waiting".into(),
+        ..PR::default()
+    };
+    state.prs = Some(vec![
+        PR {
+            has_new_changes: true,
+            ci_status: Some("failure".into()),
+            ..pr(
+                "a1",
+                7,
+                "author",
+                "victorarias/attn",
+                "Route every key through the keymap, so a rebinding reaches the palette, the \
+                 sidebar and every dialog that answers a key of its own",
+            )
+        },
+        PR {
+            approved_by_me: true,
+            ci_status: Some("success".into()),
+            ..pr("r1", 12, "reviewer", "org/shop", "Cache the catalog")
+        },
+        PR {
+            has_new_changes: true,
+            approved_by_me: true,
+            ci_status: Some("pending".into()),
+            ..pr("r2", 13, "reviewer", "org/shop", "Bump serde")
+        },
+        pr("r3", 4, "reviewer", "org/api", "Add the orders endpoint"),
+    ]);
+    let mut world = World::start_sized(scripted().state(state), window());
+    press(&mut world, Action::SessionGoToDashboard);
+    world.gesture(|app| app.click(Target::key("home.group.snoozed.toggle")));
+    world.gesture(|app| app.click(Target::key("home.prs.repo.org/api.fold")));
+    world.gesture(|app| app.move_to((1.0, 1.0)));
+    snap(&mut world, "home-full", dark);
+}
+
+/// Home on the first launch of a release whose tour the user already met: the notice that
+/// offers it again, over the crew's Home.
+fn home_whats_new(dark: bool) {
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    state.crew = Some(crew());
+    let mut prefs = rune::prefs::Prefs::memory();
+    prefs
+        .set(
+            attn_app::whats_new::SEEN_PREF,
+            &attn_app::whats_new::RELEASE.to_owned(),
+        )
+        .expect("memory prefs keep every value");
+    let mut world = World::start_sized_with_prefs(scripted().state(state), window(), prefs);
+    press(&mut world, Action::SessionGoToDashboard);
+    snap(&mut world, "home-whats-new", dark);
+}
+
 /// Manage crew with the Chief and scout, open on `member` at `tab`: a daemon that lists Claude
 /// Code and Codex, and holds an empty charter and no handoffs.
 fn manage_crew(dark: bool, member: &str, tab: &str, name: &str) {
@@ -5902,6 +6031,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("home", || home(dark));
         scene("home_empty", || home_empty(dark));
         scene("home_pull_requests", || home_pull_requests(dark));
+        scene("home_full", || home_full(dark));
+        scene("home_whats_new", || home_whats_new(dark));
         scene("palette_chief", || palette_chief(dark));
         scene("manage_crew", || {
             manage_crew(dark, "chief", "launch", "crew-launch")

@@ -1,13 +1,11 @@
 //! What's new: a short tour of the release's ideas, one step at a time, shown on the first
 //! launch of a release, replayable from the command palette and from Home's banner.
 
-use attn_ui::blocks::{Actions, Block, DialogSize, Inline, Stack};
+use attn_ui::blocks::{Actions, Block, DialogSize, Inline, Notice, Stack};
 use attn_ui::keycap;
-use attn_ui::system::{Button, Look, Size, Type, pager, words};
-use attn_ui::{Dialog, Tokens, type_};
-use rune::tok::space;
-use rune::{El, Key, KeyEvent, Mods, Tx, col, row, text};
-use rune_kit::{ButtonVariant, ControlSize};
+use attn_ui::system::{Button, IconSize, Look, Size, Type, icon_button, pager, words};
+use attn_ui::{Dialog, Tokens};
+use rune::{El, Key, KeyEvent, Mods, Tx, col};
 
 use crate::State;
 use crate::action::Action;
@@ -195,56 +193,40 @@ impl Tour {
     }
 }
 
-/// Home's banner offering the tour again, until the user dismisses it for this release.
-pub(crate) fn banner(state: &State, t: &Tokens) -> Option<El> {
+/// Home's notice offering the tour again, until the user dismisses it for this release.
+pub(crate) fn banner(state: &State, t: &Tokens) -> Option<Block> {
     if state.window.whats_new.banner_dismissed {
         return None;
     }
-    let k = attn_ui::kit(t);
+    let show = El::from(
+        Button::new("Show me")
+            .look(Look::Primary)
+            .size(Size::Compact)
+            .on_press_tx(open)
+            .build(t),
+    )
+    .key("home.intro-banner.replay");
+    let dismiss = El::from(
+        icon_button(
+            "home.intro-banner.dismiss",
+            "Dismiss the intro banner",
+            attn_ui::glyph::TIMES,
+            IconSize::Regular,
+        )
+        .help("Dismiss the intro banner")
+        .on_press(|state: &mut State| {
+            state.window.whats_new.banner_dismissed = true;
+            crate::frame::set_pref_string(BANNER_PREF, RELEASE);
+        })
+        .build(t),
+    );
     Some(
-        row()
-            .key("home.intro-banner")
-            .role("group")
-            .label("New in attn")
-            .w_full()
-            .items_center()
-            .gap(space::S3)
-            .padding(space::S2)
-            .pl(space::S6)
-            .radius(6.0)
-            .fill(t.brand.alpha(0.06))
-            .border(1.0, t.brand.alpha(0.22))
-            .child(
-                row()
-                    .grow(1.0)
-                    .min_w(0.0)
-                    .gap(space::S1)
-                    .child(text("New in attn:").font(type_::SECTION).color(t.brand))
-                    .child(
-                        text("a new look, and how to switch back.")
-                            .font(type_::BODY)
-                            .color(t.text_secondary)
-                            .wrap(),
-                    ),
-            )
-            .child(
-                rune_kit::Button::new("Show me")
-                    .variant(ButtonVariant::Submit)
-                    .control_size(ControlSize::Small)
-                    .on_press_tx(open)
-                    .build(k)
-                    .key("home.intro-banner.replay"),
-            )
-            .child(
-                attn_ui::GlyphButton::new(attn_ui::glyph::TIMES, "Dismiss the intro banner")
-                    .help("Dismiss the intro banner")
-                    .on_press(|state: &mut State| {
-                        state.window.whats_new.banner_dismissed = true;
-                        crate::frame::set_pref_string(BANNER_PREF, RELEASE);
-                    })
-                    .build(k)
-                    .key("home.intro-banner.dismiss"),
-            ),
+        Notice::info(
+            "home.intro-banner",
+            "New in attn: a new look, and how to switch back.",
+        )
+        .action(Inline::joined().child(show).child(dismiss))
+        .build(t),
     )
 }
 

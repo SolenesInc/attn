@@ -11,7 +11,7 @@ budget	attn-app/src/crew	0
 budget	attn-app/src/desktop	395
 budget	attn-app/src/diagnostic_report	0
 budget	attn-app/src/garden	0
-budget	attn-app/src/home	100
+budget	attn-app/src/home	0
 budget	attn-app/src/launcher	0
 budget	attn-app/src/ledger	0
 budget	attn-app/src/markdown	72
@@ -25,7 +25,7 @@ budget	attn-app/src/review	97
 budget	attn-app/src/settings	171
 budget	attn-app/src/sidebar	53
 budget	attn-app/src/terminal	0
-budget	attn-app/src/whats_new	7
+budget	attn-app/src/whats_new	0
 allow	native/crates/attn-ui/src/colors/mod.rs
 allow	native/crates/attn-ui/src/system/door.rs
 allow	native/crates/attn-app/src/terminal/input_trace.rs

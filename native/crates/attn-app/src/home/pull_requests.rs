@@ -8,13 +8,13 @@ use attn_protocol::{
     ApprovePRMessage, MergePRMessage, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, PR,
     PRVisitedMessage, RefreshPRsMessage,
 };
-use attn_ui::blocks::Actions;
-use attn_ui::system::Look;
-use attn_ui::type_;
-use attn_ui::{Dialog, GlyphButton, Tokens, glyph, icon};
-use rune::tok::space;
-use rune::{Beat, Color, El, Sequence, TextStyle, Tx, col, el, memo, row, text};
-use rune_kit::{Button, ButtonVariant, ControlSize};
+use attn_ui::blocks::{Actions, Block, BoardCard, Card, Inline, Notice, Prose, Stack};
+use attn_ui::system::{
+    self, Button, DotShape, DotSize, GroupHead, IconSize, Look, Size, Tone, Type, count_badge,
+    icon_button, tag, words,
+};
+use attn_ui::{Dialog, Tokens, glyph, icon};
+use rune::{Beat, Color, El, Sequence, Tx, memo};
 
 use crate::State;
 use crate::requests::Answer;
@@ -124,12 +124,6 @@ pub(crate) struct PullRequests {
     folded_repos: HashSet<String>,
     refresh: Refresh,
 }
-
-const SECTION_TITLE: rune::TextStyle = rune::TextStyle {
-    weight: 500.0,
-    tracking: 1.4,
-    ..type_::CAPS
-};
 
 /// The pull requests nobody muted, not the pull request, its repository or its author, and not
 /// merged here.
@@ -285,24 +279,25 @@ fn cancel_merge(state: &mut State, tx: &mut Tx) {
     end_merge(state, tx);
 }
 
-fn section(key: &str, title: &str, count: usize, rows: Vec<El>, t: &Tokens) -> El {
-    col()
-        .key(key.to_owned())
-        .role("group")
-        .label(title)
-        .w_full()
-        .gap(space::S1)
-        .child(
-            row()
-                .gap(space::S2)
-                .child(type_::upper(title, SECTION_TITLE).color(t.text_dimmed))
-                .child(
-                    text(count.to_string())
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary),
-                ),
+fn section(key: &str, title: &str, count: usize, parts: Vec<El>, t: &Tokens) -> Block {
+    let head = GroupHead::new(format!("{key}.head"), title)
+        .section(title.to_owned())
+        .aside(
+            words(count.to_string(), Type::Mono, t.text_tertiary)
+                .key(format!("{key}.count"))
+                .label(count.to_string()),
         )
-        .children(rows)
+        .heading();
+    Block::custom(
+        format!("{key}.slot"),
+        Stack::tight()
+            .key(key.to_owned())
+            .role("group")
+            .label(title)
+            .w_full()
+            .child(head.build(t))
+            .children(parts),
+    )
 }
 
 /// A pull request by its repository's name and number: "attn #20".
@@ -322,7 +317,6 @@ struct Heading {
 }
 
 fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t: &Tokens) -> El {
-    let k = attn_ui::kit(t);
     let Heading {
         said: heading,
         host,
@@ -334,59 +328,37 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
         Some(host) => format!("{heading} on {host}"),
         None => heading.clone(),
     };
-    let open = Button::new(format!("{named}: {}", pr.title))
-        .variant(ButtonVariant::GhostMuted)
-        .control_size(ControlSize::Small)
-        .help(format!("Open {heading} on GitHub"))
-        .label_with({
-            let heading = heading.clone();
-            let host_ink = t.text_tertiary;
-            let host_fill = t.bg_selected;
-            move |font, ink| {
-                row()
-                    .grow(1.0)
-                    .min_w(0.0)
-                    .items_center()
-                    .gap(space::S2)
-                    .child(text(heading.clone()).font(font).color(ink))
-                    .children(host.clone().map(|host| {
-                        text(host.to_lowercase())
-                            .font(TextStyle::new(12.0, 400.0).mono())
-                            .single_line()
-                            .truncate()
-                            .shrink()
-                            .min_w(0.0)
-                            .color(host_ink)
-                            .fill(host_fill)
-                            .px(6.0)
-                            .py(2.0)
-                            .radius(3.0)
-                    }))
-            }
-        })
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            visit(state, &visited);
-            open_url(state, &url, tx)
-        })
-        .build(k)
-        .key(format!("{key}.open"))
-        .grow(1.0);
-    let top = row()
+    let open = El::from(
+        Button::new(heading.clone())
+            .look(Look::Quiet)
+            .size(Size::Compact)
+            .help(format!("Open {heading} on GitHub"))
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                visit(state, &visited);
+                open_url(state, &url, tx)
+            })
+            .build(t),
+    )
+    .key(format!("{key}.open"))
+    .label(format!("{named}: {}", pr.title));
+    let top = Inline::line()
         .w_full()
-        .items_center()
-        .gap(space::S1)
         .child(
-            text(role.emoji())
+            words(role.emoji(), Type::Small, t.text_primary)
                 .key(format!("{key}.role"))
                 .role("img")
-                .label(role.said())
-                .font(type_::LABEL),
+                .label(role.said()),
         )
         .child(open)
+        .children(host.map(|host| {
+            words(host.to_lowercase(), Type::Mono, t.text_tertiary)
+                .single_line()
+                .truncate()
+                .shrink()
+                .a11y_hidden()
+        }))
         .children(marks(pr, &key, t));
-    let title = text(pr.title.clone())
-        .font(type_::BODY)
-        .color(t.text_primary)
+    let title = words(pr.title.clone(), Type::Body, t.text_primary)
         .wrap()
         .w_full()
         .a11y_hidden();
@@ -404,78 +376,93 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
         let id = pr.id.clone();
         let button = format!("{key}.{}", chosen.wire());
         let asking = button.clone();
-        GlyphButton::new(glyph, label)
-            .help(label)
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| match chosen {
-                Act::Approve => act(state, Act::Approve, &id, tx),
-                Act::Merge => ask_merge(state, &id, number, asking.clone()),
-            })
-            .build(k)
-            .key(button)
+        El::from(
+            icon_button(button, label, glyph, IconSize::Regular)
+                .help(label)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| match chosen {
+                    Act::Approve => act(state, Act::Approve, &id, tx),
+                    Act::Merge => ask_merge(state, &id, number, asking.clone()),
+                })
+                .build(t),
+        )
     };
     let mute_id = pr.id.clone();
-    let new_session = {
+    let new_session: El = {
         let pr = pr.clone();
-        GlyphButton::new(glyph::POP_OUT, "New worktree session")
-            .help("New worktree session")
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                crate::picker::pull_request::open_in_worktree(state, &pr, tx)
-            })
-            .build(k)
-            .key(format!("{key}.new"))
+        icon_button(
+            format!("{key}.new"),
+            "New worktree session",
+            glyph::POP_OUT,
+            IconSize::Regular,
+        )
+        .help("New worktree session")
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            crate::picker::pull_request::open_in_worktree(state, &pr, tx)
+        })
+        .build(t)
+        .into()
     };
     let mute_author = (!pr.author.is_empty()).then(|| {
         let author = pr.author.clone();
-        Button::new(author.clone())
-            .variant(ButtonVariant::GhostMuted)
-            .control_size(ControlSize::Small)
-            .help(format!("Mute all PRs by {author}"))
-            .on_press(move |state: &mut State| mute_author(state, &author))
-            .build(k)
-            .key(format!("{key}.mute-author"))
-            .label(format!("Mute all PRs by {}", pr.author))
+        El::from(
+            Button::new(author.clone())
+                .look(Look::Quiet)
+                .size(Size::Compact)
+                .help(format!("Mute all PRs by {author}"))
+                .on_press(move |state: &mut State| mute_author(state, &author))
+                .build(t),
+        )
+        .key(format!("{key}.mute-author"))
+        .label(format!("Mute all PRs by {}", pr.author))
     });
-    let footer = row()
+    let footer = Inline::line()
         .w_full()
-        .items_center()
-        .gap(space::S1)
         .child(
-            text(if yours {
-                pr.reason.replace('_', " ")
-            } else {
-                String::new()
-            })
+            words(
+                if yours {
+                    pr.reason.replace('_', " ")
+                } else {
+                    String::new()
+                },
+                Type::Small,
+                t.text_tertiary,
+            )
             .key(format!("{key}.reason"))
-            .font(type_::LABEL)
-            .color(t.text_tertiary)
+            .single_line()
+            .truncate()
+            .shrink()
             .grow(1.0),
         )
         .child(new_session)
         .child(action(Act::Approve))
         .child(action(Act::Merge))
         .child(
-            GlyphButton::new(glyph::BELL_SLASH, "Mute this PR")
-                .help("Mute this PR")
-                .on_press(move |state: &mut State| mute(state, &mute_id))
-                .build(k)
-                .key(format!("{key}.mute")),
+            icon_button(
+                format!("{key}.mute"),
+                "Mute this PR",
+                glyph::BELL_SLASH,
+                IconSize::Regular,
+            )
+            .help("Mute this PR")
+            .on_press(move |state: &mut State| mute(state, &mute_id))
+            .build(t)
+            .into(),
         )
         .children(mute_author);
     let settled = pr.approved_by_me && !pr.has_new_changes;
-    col()
-        .key(key)
+    Card::new(key)
+        .push(top)
+        .push(title)
+        .push(footer)
+        .build(t)
         .role("group")
         .label(heading)
-        .w_full()
-        .gap(space::S1)
-        .padding(space::S2)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .opacity(if settled { 0.5 } else { 1.0 })
-        .child(top)
-        .child(title)
-        .child(footer)
+        .opacity(if settled { SETTLED } else { 1.0 })
 }
+
+/// How strongly a pull request the user approved, with nothing new since, draws: it needs
+/// nothing more of them.
+const SETTLED: f32 = 0.5;
 
 /// What changed on a pull request at a glance: new commits or comments since the user's last
 /// visit, the user's approval, and how its CI went.
@@ -483,27 +470,19 @@ fn marks(pr: &PR, key: &str, t: &Tokens) -> Vec<El> {
     let mut marks = Vec::new();
     if pr.has_new_changes {
         marks.push(
-            text("UPDATED")
-                .key(format!("{key}.updated"))
+            El::from(tag(format!("{key}.updated"), "Updated", Tone::Accent, t))
                 .role("status")
                 .label("Updated")
-                .help("New commits/comments since your last visit")
-                .font(type_::SECTION)
-                .color(t.accent)
-                .px(space::S1)
-                .radius(3.0)
-                .fill(t.bg_selected),
+                .help("New commits/comments since your last visit"),
         );
     }
     if pr.approved_by_me {
         marks.push(
-            text(glyph::CHECK)
+            system::glyph(glyph::CHECK, IconSize::Small, t.success)
                 .key(format!("{key}.approved"))
                 .role("status")
                 .label("Approved")
-                .help("You approved this PR")
-                .font(type_::LABEL)
-                .color(t.success),
+                .help("You approved this PR"),
         );
     }
     let ci = pr
@@ -518,14 +497,12 @@ fn marks(pr: &PR, key: &str, t: &Tokens) -> Vec<El> {
             _ => t.text_tertiary,
         };
         marks.push(
-            el().key(format!("{key}.ci"))
+            rune::row()
+                .child(system::dot(color, DotShape::Filled, DotSize::Small))
+                .key(format!("{key}.ci"))
                 .role("status")
                 .label(format!("CI {ci}"))
-                .help(format!("CI {ci}"))
-                .w(6.0)
-                .h(6.0)
-                .radius(3.0)
-                .fill(color),
+                .help(format!("CI {ci}")),
         );
     }
     marks
@@ -620,15 +597,23 @@ fn pr_card(state: &State, t: &Tokens) -> El {
         said,
         host: (hosts.get(pr.repo.as_str()).map_or(0, HashSet::len) > 1).then(|| pr.host.clone()),
     };
-    let mut body = col().key("home.prs.body").w_full().gap(14.0);
-    let empty = |said: &str| crate::home::card_empty("home.prs.empty", said, t).role("status");
+    let mut card = BoardCard::new("home.prs", "Pull Requests")
+        .least(crate::home::CARD_LEAST.0, crate::home::CARD_LEAST.1);
+    let empty = |said: &str| {
+        Block::custom(
+            "home.prs.empty.slot",
+            Prose::empty("home.prs.empty", said.to_owned())
+                .el(t)
+                .role("status"),
+        )
+    };
     if let Some(reason) = &facts.github.polling_off_reason {
-        body = body.child(empty(reason));
+        card = card.push(empty(reason));
     } else if active.is_empty() {
-        body = body.child(empty("No PRs need attention"));
+        card = card.push(empty("No PRs need attention"));
     } else {
         if !yours.is_empty() {
-            body = body.child(section(
+            card = card.push(section(
                 "home.prs.yours",
                 "Yours",
                 yours.len(),
@@ -648,7 +633,7 @@ fn pr_card(state: &State, t: &Tokens) -> El {
                 .iter()
                 .map(|(repo, prs)| repo_group(state, repo, prs, &heading, t))
                 .collect();
-            body = body.child(section(
+            card = card.push(section(
                 "home.prs.review",
                 "Review requested",
                 count,
@@ -661,18 +646,16 @@ fn pr_card(state: &State, t: &Tokens) -> El {
         Some(keys) => format!("Refresh PRs ({keys})"),
         None => "Refresh PRs".to_owned(),
     };
-    let actions = [refresh_button(&tracked.refresh, refresh_help, t)]
-        .into_iter()
-        .chain(facts.github.polling_off_reason.is_none().then(|| {
-            crate::home::card_count(
-                "home.prs.count",
-                needing,
-                format!("{needing} need attention"),
-                t,
-            )
-        }))
-        .collect();
-    crate::home::card("home.prs", "Pull Requests", actions, body, t)
+    card = card.action(refresh_button(&tracked.refresh, refresh_help, t));
+    if facts.github.polling_off_reason.is_none() {
+        card = card.action(
+            count_badge(needing, t.brand, t.on_brand)
+                .key("home.prs.count")
+                .role("status")
+                .label(format!("{needing} need attention")),
+        );
+    }
+    card.build(t)
 }
 
 /// The card's refresh button: dots while the poll the user asked for runs, an error mark whose
@@ -683,32 +666,24 @@ fn refresh_button(refresh: &Refresh, idle_help: String, t: &Tokens) -> El {
         Refresh::Running => (&icon::REFRESH, t.brand, idle_help),
         Refresh::Failed(why) => (&icon::REFRESH_FAILED, t.error, why.clone()),
     };
-    let running = *refresh == Refresh::Running;
-    Button::new(if running {
-        "Refreshing PRs"
-    } else {
-        "Refresh PRs"
-    })
-    .variant(ButtonVariant::GhostMuted)
-    .help(help)
-    .on_press_tx(self::refresh)
-    .label_with(move |_, _| {
-        if running {
-            refresh_dots(ink)
-        } else {
-            rune::icon(glyph, 12.0).color(ink)
-        }
-    })
-    .build(attn_ui::kit(t))
-    .key("home.prs.refresh")
-    .h(20.0)
-    .min_w(20.0)
-    .px(0.0)
-    .disabled(running)
+    if *refresh == Refresh::Running {
+        return refresh_dots(ink)
+            .key("home.prs.refresh")
+            .role("button")
+            .label("Refreshing PRs")
+            .help(help)
+            .disabled(true);
+    }
+    icon_button("home.prs.refresh", "Refresh PRs", glyph, IconSize::Regular)
+        .ink(ink)
+        .help(help)
+        .on_press_tx(self::refresh)
+        .build(t)
+        .into()
 }
 
-/// `.refresh-dots`: three 4 point dots bouncing 0.16 s apart over 1.4 s, each from scale 0.6 and
-/// half opacity to full and back, as the Tauri app's `dot-bounce` keyframes.
+/// `.refresh-dots`: three dots bouncing 0.16 s apart over 1.4 s, each from scale 0.6 and half
+/// opacity to full and back, as the Tauri app's `dot-bounce` keyframes.
 fn refresh_dots(ink: Color) -> El {
     const BOUNCE: &[Beat] = &[
         Beat::new(0.0).opacity(0.5).scale(0.6),
@@ -716,44 +691,23 @@ fn refresh_dots(ink: Color) -> El {
         Beat::new(1.12).opacity(0.5).scale(0.6),
         Beat::new(1.4).opacity(0.5).scale(0.6),
     ];
-    row()
-        .gap(2.0)
-        .items_center()
-        .children([0.0, 0.16, 0.32].map(|delay| {
-            el().w(4.0)
-                .h(4.0)
-                .radius(2.0)
-                .fill(ink)
-                .sequence(Sequence::new(BOUNCE).delay(delay).repeat())
-        }))
+    Inline::joined().children([0.0, 0.16, 0.32].map(|delay| {
+        system::dot(ink, DotShape::Filled, DotSize::Small)
+            .sequence(Sequence::new(BOUNCE).delay(delay).repeat())
+    }))
 }
 
-/// The band above Home's cards while GitHub holds the daemon's polls back, counting down to when
-/// they resume, as the Tauri app's `.rate-limit-banner`.
-pub(crate) fn rate_limit_banner(state: &State, t: &Tokens) -> Option<El> {
+/// The notice above Home's cards while GitHub holds the daemon's polls back, counting down to
+/// when they resume, as the Tauri app's `.rate-limit-banner`.
+pub(crate) fn rate_limit_notice(state: &State, t: &Tokens) -> Option<Block> {
     let left_ms = rate_limit_left_ms(&state.facts, state.window.now_ms)?;
     let (minutes, seconds) = (left_ms / 60_000, left_ms % 60_000 / 1000);
     Some(
-        row()
-            .key("home.rate-limit")
-            .role("status")
-            .w_full()
-            .items_center()
-            .gap(8.0)
-            .px(16.0)
-            .py(10.0)
-            .radius(6.0)
-            .fill(t.brand.alpha(0.10))
-            .border(1.0, t.brand.alpha(0.30))
-            .child(rune::icon(&icon::RATE_LIMITED, 16.0).color(t.brand))
-            .child(
-                text(format!(
-                    "GitHub rate limited. Resuming in {minutes}m {seconds}s"
-                ))
-                .key("home.rate-limit.text")
-                .font(type_::BODY)
-                .color(t.brand),
-            ),
+        Notice::info(
+            "home.rate-limit",
+            format!("GitHub rate limited. Resuming in {minutes}m {seconds}s"),
+        )
+        .build(t),
     )
 }
 
@@ -776,55 +730,47 @@ fn repo_group(
     heading: &dyn Fn(&PR, String) -> Heading,
     t: &Tokens,
 ) -> El {
-    let k = attn_ui::kit(t);
     let folded = state.window.pull_requests.folded_repos.contains(repo);
     let key = format!("home.prs.repo.{repo}");
     let name = repo_name(repo);
     let (fold_repo_id, mute_repo_id) = (repo.to_owned(), repo.to_owned());
-    let header = row()
+    let head = GroupHead::new(
+        format!("{key}.fold"),
+        format!("{name}, {} review", prs.len()),
+    )
+    .name(name.to_owned())
+    .aside(words(
+        format!("{} review", prs.len()),
+        Type::Mono,
+        t.text_tertiary,
+    ))
+    .open(!folded)
+    .build(t)
+    .a11y_value(if folded { "collapsed" } else { "expanded" })
+    .on_press(move |state: &mut State| fold_repo(state, &fold_repo_id));
+    let head = rune::row()
         .w_full()
         .items_center()
-        .gap(space::S1)
+        .child(head.grow(1.0).min_w(0.0))
         .child(
-            Button::new(format!("{name}, {} review", prs.len()))
-                .variant(ButtonVariant::GhostMuted)
-                .control_size(ControlSize::Small)
-                .label_with({
-                    let said = format!(
-                        "{} {name}  {} review",
-                        if folded {
-                            glyph::CARET_RIGHT
-                        } else {
-                            glyph::CARET_DOWN
-                        },
-                        prs.len()
-                    );
-                    move |font, ink| {
-                        row()
-                            .grow(1.0)
-                            .child(text(said.clone()).font(font).color(ink))
-                    }
-                })
-                .on_press(move |state: &mut State| fold_repo(state, &fold_repo_id))
-                .build(k)
-                .key(format!("{key}.fold"))
-                .a11y_value(if folded { "collapsed" } else { "expanded" })
-                .grow(1.0),
-        )
-        .child(
-            GlyphButton::new(glyph::BAN, "Mute all PRs from this repo")
-                .help("Mute all PRs from this repo")
-                .on_press(move |state: &mut State| mute_repo(state, &mute_repo_id))
-                .build(k)
-                .key(format!("{key}.mute")),
+            icon_button(
+                format!("{key}.mute"),
+                "Mute all PRs from this repo",
+                glyph::BAN,
+                IconSize::Regular,
+            )
+            .size(Size::Small)
+            .help("Mute all PRs from this repo")
+            .on_press(move |state: &mut State| mute_repo(state, &mute_repo_id))
+            .build(t)
+            .into(),
         );
-    col()
+    Stack::tight()
         .key(key)
         .role("group")
         .label(name.to_owned())
         .w_full()
-        .gap(space::S1)
-        .child(header)
+        .child(head)
         .children(
             (!folded)
                 .then(|| {

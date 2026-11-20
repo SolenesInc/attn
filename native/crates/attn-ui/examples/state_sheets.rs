@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use attn_ui::block_gallery::BLOCK_SUBJECTS;
+use attn_ui::board_gallery::BOARD_SUBJECTS;
 use attn_ui::chrome_gallery::CHROME_SHEETS;
 use attn_ui::colors::scheme_for;
 use attn_ui::floating_gallery::FLOATING_SUBJECTS;
@@ -767,6 +768,7 @@ fn main() {
         .chain(
             READING_SUBJECTS
                 .iter()
+                .chain(BOARD_SUBJECTS)
                 .map(|&(story, keys, extra)| (story, keys, at_rest(extra))),
         );
     for (story, keys, extra) in blocks {
