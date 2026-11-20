@@ -1500,7 +1500,7 @@ fn press_in_window(world: &mut World, key: &str) {
 #[test]
 fn at_large_text_in_the_smallest_window_a_long_name_still_starts_by_a_click() {
     let mut world =
-        smallest_at_large_text("Release Engineering Captain", "~/projects/attn-notebook");
+        smallest_at_large_text("Release-Engineering-Captain", "~/projects/attn-notebook");
     press_in_window(&mut world, PRIMARY);
     assert_eq!(sent(&world, "crew_set").len(), 1);
 }

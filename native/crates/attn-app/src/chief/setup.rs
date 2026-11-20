@@ -547,13 +547,10 @@ fn radios(group: Group, choices: &[Choice], busy: bool, t: &Tokens) -> El {
             let n = choices.len();
             attn_ui::system::choices(&key, group.label()).children(choices.iter().enumerate().map(
                 |(i, c)| {
-                    let mut choice = ChoiceRow::new(c.key.clone(), c.label.clone())
+                    let choice = ChoiceRow::new(c.key.clone(), label(c))
                         .chosen(c.checked)
                         .disabled(busy);
-                    if let Some(mark) = &c.mark {
-                        choice = choice.note(mark.clone());
-                    }
-                    El::from(choice.build((i, n), t, press(c)).label(label(c)))
+                    El::from(choice.build((i, n), t, press(c)))
                 },
             ))
         }
@@ -683,13 +680,17 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .label("Choose the Notebook folder");
             popover = popover.push(Block::custom(
                 format!("{POP}.folder.block"),
-                Inline::loose()
+                Inline::line()
                     .key(format!("{POP}.folder-field"))
+                    .w_full()
                     .child(words("Notebook", Type::Label, t.text_tertiary))
                     .child(
                         words(form.folder.clone(), Type::Mono, t.text_secondary)
                             .key(format!("{POP}.folder"))
-                            .wrap_anywhere()
+                            .label(form.folder.clone())
+                            .single_line()
+                            .truncate_middle()
+                            .grow(1.0)
                             .shrink()
                             .min_w(0.0),
                     )
