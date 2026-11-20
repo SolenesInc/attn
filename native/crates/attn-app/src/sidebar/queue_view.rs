@@ -638,7 +638,10 @@ pub(super) fn crew_rule(key: String, t: &Tokens) -> El {
 }
 
 fn rule(key: String, label: &str, t: &Tokens) -> El {
-    GroupHead::new(key, label).heading().section(label).build(t)
+    GroupHead::new(key, label)
+        .heading()
+        .section(label.to_owned())
+        .build(t)
 }
 
 fn keys_of(state: &State, action: &Action) -> Option<String> {

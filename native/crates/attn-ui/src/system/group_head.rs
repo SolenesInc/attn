@@ -30,7 +30,7 @@ pub struct GroupHead {
 
 struct Action {
     key: String,
-    said: String,
+    said: Said,
     button: KitButton,
 }
 
@@ -109,7 +109,7 @@ impl GroupHead {
     pub fn action<S: 'static>(
         mut self,
         key: impl Into<String>,
-        said: impl Into<String>,
+        said: impl Into<Said>,
         label: impl Into<String>,
         press: impl Fn(&mut S, &mut Tx) + 'static,
     ) -> Self {

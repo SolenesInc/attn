@@ -331,7 +331,7 @@ fn nav_row(
     };
     let row = ListRow::new(key, label)
         .lead(system::glyph(glyph, IconSize::Regular, ink))
-        .quiet_title(label)
+        .quiet_title(label.to_owned())
         .keys(keys.clone(), t)
         .current(selected)
         .build(t);
