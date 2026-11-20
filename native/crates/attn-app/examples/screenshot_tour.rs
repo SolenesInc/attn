@@ -871,8 +871,9 @@ fn in_field(elements: &[rune::ElementInfo], mut at: usize) -> bool {
 }
 
 /// Text a clip cuts across its line, or whose glyphs run past its own box: what it says and how
-/// many points of it the clip hides or its glyphs spill. Text that truncates fits its box and is
-/// never cut, and text scrolled partly out of view is cut only top or bottom. Text under a modal
+/// many points of its ink the clip hides or its box does not hold. Text that truncates fits its
+/// box and is never cut, text scrolled partly out of view is cut only top or bottom, and text a
+/// clip hides whole, its padding showing at most, is not drawn, so it is not cut. Text under a modal
 /// is left out, as it is judged where it is in front, and so is text in a field. Text inside a view
 /// that scrolls sideways is wider on purpose, and is left out: a scroll view with room to scroll
 /// sideways, which `sideways` lists by key and box, as accessibility offers it scrolling left.
@@ -907,7 +908,12 @@ fn cut_text(elements: &[rune::ElementInfo], sideways: &[(String, [f32; 4])]) -> 
             if scrolls_sideways(at) || in_field(elements, at) {
                 return None;
             }
-            let hidden = (vx - x).max(0.0) + ((x + w) - (vx + vw)).max(0.0) + e.text_overflow;
+            let [ix, _, iw, _] = e.text_ink.unwrap_or(e.rect);
+            let across = |from: f32, to: f32| (ix + iw).min(to) - ix.max(from);
+            if across(vx, vx + vw) <= 0.5 {
+                return None;
+            }
+            let hidden = iw - across(vx.max(x), (vx + vw).min(x + w)).max(0.0);
             (hidden > 0.5).then(|| (said.clone(), hidden))
         })
         .collect()

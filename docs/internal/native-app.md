@@ -144,8 +144,9 @@ world draws its text too. Beside the pictures, `cost.tsv` lists each screen's
 layout nodes and draw instances, so a change reports what a screen costs before
 and after, `clips.tsv` lists each screen's count of text that a clip cuts
 across its line without an ellipsis or whose glyphs run past its own box, then
-each such text with the points it loses or spills. Text in a view that scrolls
-sideways is left out, and so is text in a field, which scrolls under its caret,
+each such text with the points it loses or spills, measured on the box its
+lines cover rather than its padded box. Text a clip hides whole is not drawn, so
+it is not listed. Text in a view that scrolls sideways is left out, and so is text in a field, which scrolls under its caret,
 and text under a modal, which counts on the screens where it is in front. `overlaps.tsv` lists each screen's count of texts drawn
 over one another, then each pair: two texts whose boxes cross with nothing
 filled or blurred between them, so a sheet or popover over the window pairs with
@@ -179,7 +180,7 @@ something else, the scene fails instead of drawing a state it did not reach.
 `shoot`
 with a revision checks it out, with this checkout's tour, in the checkout's base
 worktree, `native/target/screenshot-tour-base`; a revision that pins a Rune without
-`ElementInfo::text_overflow` fails to build with this tour. The base worktree stays between
+`ElementInfo::text_ink` fails to build with this tour. The base worktree stays between
 runs with its own build directory, so each run compiles only what changed since
 the last. `diff` writes an image of each changed screen, with
 the changed pixels in red, and fails when any pixel differs or when the after

@@ -10,7 +10,7 @@
 #   scripts/native-screenshot-tour diff BASE AFTER DIFF
 #
 # shoot REV checks REV out in this checkout's base worktree, native/target/screenshot-tour-base,
-# with this checkout's tour; a revision that pins a Rune without ElementInfo::text_overflow fails
+# with this checkout's tour; a revision that pins a Rune without ElementInfo::text_ink fails
 # to build with it. The base worktree stays between runs with its own build directory, so a run
 # compiles only what changed since the last. diff writes one image per changed screen to DIFF,
 # each changed pixel in red, and exits 1 when any pixel differs or AFTER's clips.tsv or
