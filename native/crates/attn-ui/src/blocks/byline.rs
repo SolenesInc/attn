@@ -84,7 +84,7 @@ impl Byline {
                 .items_center()
                 .min_w(0.0)
                 .max_w_frac(1.0)
-                .child(row().w(SEPARATOR).justify_center().child(separator(t)))
+                .child(door::sides(separator(t), Space::S6, Space::S6))
                 .child(item)
         });
         let line =
