@@ -4,6 +4,7 @@
 
 use attn_protocol::HarnessModel;
 use attn_ui::Tokens;
+use attn_ui::blocks::{Inline, Stack};
 use attn_ui::system::{self, Control, Look, Size, Trigger, TriggerLook, Type, words};
 use attn_ui::type_;
 use rune::tok::space;
@@ -544,9 +545,8 @@ pub(crate) fn field_chip(state: &State, t: &Tokens, target: Target, label: &str)
     let Some((chip, recommended)) = trigger(state, t, target, label, true) else {
         return row();
     };
-    col()
+    Stack::tight()
         .w_full()
-        .gap(6.0)
         .child(El::from(chip).w_full())
         .children(recommended)
 }
@@ -608,10 +608,12 @@ fn trigger(
         .then_some(rules.tier)
         .flatten()
         .map(|tier| {
-            text(format!("{} recommended", tier_label(tier)))
-                .key(format!("{key}.recommended"))
-                .font(CAPTION)
-                .color(t.warning)
+            words(
+                format!("{} recommended", tier_label(tier)),
+                Type::Small,
+                t.warning,
+            )
+            .key(format!("{key}.recommended"))
         });
     let press = move |state: &mut State, tx: &mut Tx| toggle(state, opener.clone(), tx);
     if field {
@@ -628,11 +630,8 @@ fn trigger(
     } else {
         t.accent
     };
-    let content = row()
+    let content = Inline::loose()
         .min_w(0.0)
-        .gap(8.0)
-        .items_center()
-        .flex_wrap()
         .children(parts.into_iter().map(|(name, v)| {
             let part = match name {
                 "Harness" => words(
@@ -719,8 +718,8 @@ pub(crate) fn badge(state: &State, t: &Tokens, value: &Route) -> El {
     )
 }
 
-/// The Tauri app's `.route-field`: harness and model on one line beside the caret, and the
-/// effort under a hairline, each under its label.
+/// A route in a form: the harness and the model under their labels, side by side as fields are
+/// with the model given the most room, and the effort under them.
 fn route_field(
     parts: Vec<(&str, String)>,
     tier: Option<(String, Color)>,
@@ -739,42 +738,30 @@ fn route_field(
         } else {
             Type::Body
         };
-        let mut shown = row()
+        let mut shown = Inline::tight()
             .min_w(0.0)
-            .gap(4.0)
             .items_end()
-            .flex_wrap()
             .child(words(value, kind, ink).wrap_anywhere().shrink());
         if let ("Model", Some((mark, mark_ink))) = (name, &tier) {
             shown = shown.child(words(mark.clone(), Type::Small, *mark_ink));
         }
-        col()
-            .gap(4.0)
+        Stack::tight()
             .child(words(name.to_owned(), Type::Label, t.text_tertiary))
             .child(shown)
     };
     let (effort, line): (Vec<_>, Vec<_>) =
         parts.into_iter().partition(|(name, _)| *name == "Effort");
-    col()
+    Stack::loose()
         .w_full()
-        .gap(10.0)
         .child(
-            row()
+            Inline::fields()
                 .w_full()
-                .gaps(10.0, 16.0)
-                .flex_wrap()
-                .items_start()
                 .children(line.into_iter().map(|(name, v)| {
                     let grow = if name == "Model" { 2.0 } else { 1.0 };
                     part(name, v).grow(grow)
                 })),
         )
-        .children(effort.into_iter().map(|(name, v)| {
-            part(name, v)
-                .w_full()
-                .pt(8.0)
-                .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-        }))
+        .children(effort.into_iter().map(|(name, v)| part(name, v)))
 }
 
 /// The harnesses whose models the page's chips and the open picker want discovered.
