@@ -767,7 +767,49 @@ fn snap(world: &mut World, name: &str, dark: bool) {
     record_cuts(name, dark, &cut);
     if dark && let Some(reach) = reach {
         record_reach(name, &reach);
+        record_a11y(name, &world.screen().to_string());
     }
+}
+
+/// Each screen's accessibility tree as assistive technology reads it, one keyed node a line:
+/// key, role, name, value, description, states and level, in `a11y/NAME.tsv`, for diffing two
+/// tours beyond what `reach` holds.
+fn record_a11y(name: &str, tree: &str) {
+    let tree: Value = serde_json::from_str(tree).unwrap_or_else(|e| panic!("{name}: {e}"));
+    let mut lines = Vec::new();
+    let mut stack = vec![&tree];
+    while let Some(node) = stack.pop() {
+        let field = |f: &str| {
+            node.get(f)
+                .map(|v| v.as_str().map_or_else(|| v.to_string(), str::to_owned))
+                .unwrap_or_else(|| "-".to_owned())
+                .replace(['\n', '\t'], " ")
+        };
+        if node.get("key").is_some() {
+            lines.push(
+                [
+                    "key",
+                    "role",
+                    "name",
+                    "value",
+                    "description",
+                    "states",
+                    "level",
+                ]
+                .map(field)
+                .join("\t"),
+            );
+        }
+        if let Some(children) = node.get("children").and_then(Value::as_array) {
+            stack.extend(children.iter().rev());
+        }
+    }
+    lines.sort();
+    let dir = OUT.with_borrow(|out| out.join("a11y"));
+    std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display()));
+    let path = dir.join(format!("{name}.tsv"));
+    std::fs::write(&path, lines.join("\n") + "\n")
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
 }
 
 /// Text a clip cuts across its line: what it says and how many points of it the clip hides.
