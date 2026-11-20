@@ -772,14 +772,15 @@ fn snap(world: &mut World, name: &str, dark: bool) {
 }
 
 /// Each screen's accessibility tree as assistive technology reads it, one keyed node a line:
-/// key, role, name, value, description, states, level and the actions it answers, such as
-/// scrolling, in `a11y/NAME.tsv`, for diffing two
-/// tours beyond what `reach` holds.
+/// key, role, name, value, description, states, level, the actions it answers, such as
+/// scrolling, and the key of its nearest keyed ancestor and the role and name of its nearest
+/// named one, so a node that leaves its item or its region shows, in `a11y/NAME.tsv`, for
+/// diffing two tours beyond what `reach` holds.
 fn record_a11y(name: &str, tree: &str) {
     let tree: Value = serde_json::from_str(tree).unwrap_or_else(|e| panic!("{name}: {e}"));
     let mut lines = Vec::new();
-    let mut stack = vec![&tree];
-    while let Some(node) = stack.pop() {
+    let mut stack = vec![(&tree, "-".to_owned(), "-".to_owned())];
+    while let Some((node, keyed, named)) = stack.pop() {
         let field = |f: &str| {
             node.get(f)
                 .map(|v| v.as_str().map_or_else(|| v.to_string(), str::to_owned))
@@ -787,23 +788,36 @@ fn record_a11y(name: &str, tree: &str) {
                 .replace(['\n', '\t'], " ")
         };
         if node.get("key").is_some() {
-            lines.push(
-                [
-                    "key",
-                    "role",
-                    "name",
-                    "value",
-                    "description",
-                    "states",
-                    "level",
-                    "actions",
-                ]
-                .map(field)
-                .join("\t"),
-            );
+            let mut line = [
+                "key",
+                "role",
+                "name",
+                "value",
+                "description",
+                "states",
+                "level",
+                "actions",
+            ]
+            .map(field)
+            .to_vec();
+            line.push(keyed.clone());
+            line.push(named.clone());
+            lines.push(line.join("\t"));
         }
+        let keyed = node
+            .get("key")
+            .and_then(Value::as_str)
+            .map_or(keyed, str::to_owned);
+        let named = node.get("name").and_then(Value::as_str).map_or(named, |n| {
+            format!("{} {}", field("role"), n.replace(['\n', '\t'], " "))
+        });
         if let Some(children) = node.get("children").and_then(Value::as_array) {
-            stack.extend(children.iter().rev());
+            stack.extend(
+                children
+                    .iter()
+                    .rev()
+                    .map(|child| (child, keyed.clone(), named.clone())),
+            );
         }
     }
     lines.sort();
