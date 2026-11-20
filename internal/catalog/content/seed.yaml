@@ -133,7 +133,7 @@ commands:
       - {name: part_of, type: seed, cli: "--part-of", placeholder: "<plot>", doc: "plant under a plot"}
       - {name: discovered_from, type: seed, cli: "--discovered-from", placeholder: "<seed>", doc: "record the seed this work came from"}
       - {name: checks, type: check_definition, list: true, cli: "--check", doc: "a check the seed must prove; attn picks the id unless C#= names it; repeats"}
-    result: SeedPlantResult
+    result: Seed
     examples:
       - {title: "Retry the uploader on 503", part_of: s-p4k2m1, checks: ["A 503 is retried three times"]}
 
@@ -271,7 +271,7 @@ commands:
       - {name: text, type: markdown, required: true, cli: "-m", stdin: true, placeholder: '"<what happened>"', doc: "markdown, or - to read stdin; empty stdin is refused"}
       - {name: handoff, type: bool, cli: "--handoff", doc: "write a note to whoever tends the seed next"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this note lands, and print who gets it"}
-    result: SeedNoteResult
+    result: SeedNote
     examples:
       - {seed: s-7k3f9m, text: "The parser change passes focused checks. Integration verification remains."}
 
@@ -537,7 +537,7 @@ commands:
     args:
       - {name: seed, type: seed, required: true, cli: pos}
       - {name: out, type: path, cli: "--out", doc: "file to write; - writes to stdout"}
-    result: SeedShowResult
+    result: SeedExportResult
 
   - name: seed edit
     summary: save an edited body
@@ -589,7 +589,7 @@ commands:
       - {name: mode, type: text, cli: "--move|--copy", values: [move, copy], doc: "move transfers a local file into seed ownership; copy snapshots it"}
       - {name: repo, type: name, cli: "--repo", placeholder: "<repository>", doc: "the repository that path lives in"}
       - {name: note, type: text, cli: "-m", stdin: true, placeholder: '"<note>"', doc: "a note on the log for an association"}
-    result: SeedArtifactTransferResult
+    result: SeedArtifactResult
     examples:
       - {seed: s-7k3f9m, path: retry.log, mode: move}
       - {seed: s-7k3f9m, path: plan.md, mode: copy}
@@ -611,7 +611,7 @@ commands:
       - {name: reference, type: bool, cli: "--reference", doc: "remove an old linked path association"}
       - {name: repo, type: name, cli: "--repo", placeholder: "<repository>", doc: "the repository that path lives in"}
       - {name: note, type: text, cli: "-m", stdin: true, placeholder: '"<note>"', doc: "a note on the log for an association"}
-    result: SeedArtifactTransferResult
+    result: SeedArtifactResult
     examples:
       - {seed: s-7k3f9m, path: retry.log, to: ./retry.log}
       - {seed: s-7k3f9m, path: notes.md, reference: true}

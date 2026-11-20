@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "e61c8011f700";
+pub const PROTOCOL_VERSION: &str = "ea82fac77940";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -9972,6 +9972,38 @@ pub struct SeedArtifactReference {
     pub url: Option<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SeedArtifactResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact: Option<SeedAttachedArtifact>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<ActorView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub destination_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovered: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relative_target: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replaced: Option<bool>,
+    pub seed_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seq: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedArtifactTargetMessage {
     pub cmd: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -10104,6 +10136,27 @@ impl SeedArtifactTransferResultMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SeedAttachedArtifact {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filename: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modified_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notebook_document_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relative_target: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedAuthorization {
@@ -10449,6 +10502,12 @@ pub struct SeedEditResult {
     pub new_bytes: i64,
     pub previous_bytes: i64,
     pub seed: Seed,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SeedExportResult {
+    pub bytes: i64,
+    pub path: String,
+    pub seed_id: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedHandoverRequest {

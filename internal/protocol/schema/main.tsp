@@ -6780,6 +6780,13 @@ model SeedShowMessage {
   "since"?: safeint;
 }
 
+// What seed export prints when it writes the body to a file.
+model SeedExportResult {
+  "seed_id": string;
+  "path": string;
+  "bytes": safeint;
+}
+
 model SeedShowResult {
   "seed": Seed;
   // The event log head, taken before any document was read. Passing it as
@@ -7059,6 +7066,22 @@ model SeedArtifactTransferResult {
   // True when the seed already had a file by this name and this transfer
   // replaced it.
   "replaced"?: boolean;
+}
+
+// What seed attach and detach print: the transfer receipt when a managed file
+// moves in or out, or the log entry when an association is added or dropped.
+model SeedArtifactResult {
+  "seed_id": string;
+  ...OptionalProperties<OmitProperties<SeedArtifactTransferResult, "seed_id" | "artifact">>;
+  ...OptionalProperties<OmitProperties<SeedNote, "seed_id" | "artifact">>;
+  "artifact"?: SeedAttachedArtifact;
+}
+
+// A managed file's fields or an association's reference, whichever the result
+// carries.
+model SeedAttachedArtifact {
+  ...OptionalProperties<SeedArtifact>;
+  ...OptionalProperties<SeedArtifactReference>;
 }
 
 model SeedArtifactTransferResultMessage {

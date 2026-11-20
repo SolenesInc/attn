@@ -82,6 +82,18 @@ func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
 	}
 }
 
+func TestAReviewOfAGardenWithNothingToReviewListsNoCandidates(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	cli := w.Client()
+	started := gardenReviewStart(t, cli)
+	if started.Run.Status != "complete" || started.Run.CandidateIds == nil || len(started.Run.CandidateIds) != 0 {
+		t.Errorf("starting a review of an empty garden = %+v, want it complete with an empty candidate list", started.Run)
+	}
+	if shown := gardenReviewShow(t, cli, started.Run.ID).Review; shown.Run.CandidateIds == nil {
+		t.Errorf("showing that review = %+v, want an empty candidate list, not null", shown.Run)
+	}
+}
+
 func TestReviewActionsResolveTheirItems(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()

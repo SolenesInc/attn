@@ -10716,6 +10716,53 @@ type SeedArtifactReference struct {
 	URL *string `json:"url,omitempty,omitzero"`
 }
 
+type SeedArtifactResult struct {
+	// Artifact corresponds to the JSON schema field "artifact".
+	Artifact *SeedAttachedArtifact `json:"artifact,omitempty,omitzero"`
+
+	// Author corresponds to the JSON schema field "author".
+	Author *ActorView `json:"author,omitempty,omitzero"`
+
+	// Body corresponds to the JSON schema field "body".
+	Body *string `json:"body,omitempty,omitzero"`
+
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt *string `json:"created_at,omitempty,omitzero"`
+
+	// DestinationPath corresponds to the JSON schema field "destination_path".
+	DestinationPath *string `json:"destination_path,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID *string `json:"id,omitempty,omitzero"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind *string `json:"kind,omitempty,omitzero"`
+
+	// Operation corresponds to the JSON schema field "operation".
+	Operation *string `json:"operation,omitempty,omitzero"`
+
+	// OperationID corresponds to the JSON schema field "operation_id".
+	OperationID *string `json:"operation_id,omitempty,omitzero"`
+
+	// Recovered corresponds to the JSON schema field "recovered".
+	Recovered *bool `json:"recovered,omitempty,omitzero"`
+
+	// RelativeTarget corresponds to the JSON schema field "relative_target".
+	RelativeTarget *string `json:"relative_target,omitempty,omitzero"`
+
+	// Replaced corresponds to the JSON schema field "replaced".
+	Replaced *bool `json:"replaced,omitempty,omitzero"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// Seq corresponds to the JSON schema field "seq".
+	Seq *int `json:"seq,omitempty,omitzero"`
+
+	// SourcePath corresponds to the JSON schema field "source_path".
+	SourcePath *string `json:"source_path,omitempty,omitzero"`
+}
+
 type SeedArtifactTargetMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -10860,6 +10907,35 @@ type SeedArtifactTransferResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+}
+
+type SeedAttachedArtifact struct {
+	// Filename corresponds to the JSON schema field "filename".
+	Filename *string `json:"filename,omitempty,omitzero"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind *string `json:"kind,omitempty,omitzero"`
+
+	// ModifiedAt corresponds to the JSON schema field "modified_at".
+	ModifiedAt *string `json:"modified_at,omitempty,omitzero"`
+
+	// NotebookDocumentID corresponds to the JSON schema field "notebook_document_id".
+	NotebookDocumentID *string `json:"notebook_document_id,omitempty,omitzero"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path *string `json:"path,omitempty,omitzero"`
+
+	// RelativeTarget corresponds to the JSON schema field "relative_target".
+	RelativeTarget *string `json:"relative_target,omitempty,omitzero"`
+
+	// Repository corresponds to the JSON schema field "repository".
+	Repository *string `json:"repository,omitempty,omitzero"`
+
+	// Size corresponds to the JSON schema field "size".
+	Size *int `json:"size,omitempty,omitzero"`
+
+	// URL corresponds to the JSON schema field "url".
+	URL *string `json:"url,omitempty,omitzero"`
 }
 
 type SeedAuthorization struct {
@@ -11315,6 +11391,17 @@ type SeedEditResult struct {
 
 	// Seed corresponds to the JSON schema field "seed".
 	Seed Seed `json:"seed"`
+}
+
+type SeedExportResult struct {
+	// Bytes corresponds to the JSON schema field "bytes".
+	Bytes int `json:"bytes"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
 }
 
 type SeedHandoverRequest struct {

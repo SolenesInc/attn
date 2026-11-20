@@ -20,7 +20,7 @@ func gardenReviewToProtocol(run garden.ReviewRun, items []garden.ReviewItem) pro
 
 func gardenReviewRunToProtocol(run garden.ReviewRun) protocol.GardenReviewRun {
 	wire := protocol.GardenReviewRun{
-		ProfileID: run.ProfileID, ID: run.ID, CandidateIds: run.CandidateIDs,
+		ProfileID: run.ProfileID, ID: run.ID, CandidateIds: append([]string{}, run.CandidateIDs...),
 		Recipe: protocol.GardenReviewRecipe{
 			Agent: run.Recipe.Agent, Model: run.Recipe.Model,
 		},
