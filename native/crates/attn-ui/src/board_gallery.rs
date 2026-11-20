@@ -47,8 +47,9 @@ pub const BOARD_SUBJECTS: &[(&str, &[&str], &[&str])] = &[("Blocks/Board", &["bo
 /// The least size a card of the story keeps, as Home's cards do.
 pub const CARD_LEAST: (f32, f32) = (300.0, 200.0);
 
+/// The longest name a row meets: a session named after its worktree's folder.
 const LONG_NAME: &str =
-    "build-and-release-platform-本番の権限を移行する作業ツリー-tokyo-region-primary";
+    "build-and-release-platform-migrate-production-permissions-worktree-tokyo-region-primary";
 
 pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
     playground.story(
