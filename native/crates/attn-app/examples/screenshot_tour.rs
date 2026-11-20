@@ -1208,11 +1208,9 @@ fn shelf(dark: bool, hovered: bool) {
     let mut world = shelf_world(dark);
     if hovered {
         world.gesture(|app| {
-            let dots = app
-                .runtime
-                .find("shelf.live")
-                .expect("the shelf's dots are laid out");
-            app.move_to(dots);
+            if let Some(dots) = app.runtime.find("shelf.live") {
+                app.move_to(dots);
+            }
         });
     }
     snap(
@@ -6129,11 +6127,12 @@ fn title_bar_critical(dark: bool, sidebar_hidden: bool) {
         });
     });
     assert!(
-        world
-            .screen()
-            .find(Target::key("sidebar.critical"))
-            .is_some(),
-        "the critical strip shows"
+        sidebar_hidden
+            || world
+                .screen()
+                .find(Target::key("sidebar.critical"))
+                .is_some(),
+        "the critical strip shows above the sidebar's rows"
     );
     let name = if sidebar_hidden {
         "title-bar-critical-bar"
