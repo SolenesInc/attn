@@ -7,14 +7,19 @@ use rune_kit::TextInput;
 
 use crate::Tokens;
 use crate::blocks::{
-    Inline, Notice, Tabs, TerminalBar, drag_ghost, drop_target, terminal_notices, terminal_status,
+    Inline, Notice, Settling, SettlingChip, Tabs, TerminalBar, TileHeader, drag_ghost, drop_target,
+    terminal_notices, terminal_status,
 };
 use crate::colors::scheme_for;
-use crate::system::{Button, IconSize, Look, Size, Space, door, icon_button};
+use crate::system::{
+    Button, DotShape, DotSize, IconSize, Look, Size, Space, Type, door, dot, icon_button, words,
+};
 
 /// What a tile story shows: the state its variant sets.
 #[derive(Default)]
 pub struct Tiles {
+    pub settling: Option<Settling>,
+    pub mark_only: bool,
     pub on: bool,
     pub long: bool,
     pub empty: bool,
@@ -79,6 +84,13 @@ pub const TILE_SUBJECTS: &[TileSubject] = &[
         Some(".tab.1"),
     ),
     (
+        "tile-header",
+        "Tiles/Header",
+        &["story.agent", "story.doc"],
+        &["Rest", "Focus", "Paused", "Kept", "Long", "Smallest long"],
+        Some(".popout"),
+    ),
+    (
         "tile-drag",
         "Tiles/Drag",
         &["story.tile"],
@@ -124,6 +136,13 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
         ))
         .story(common(
             Story::new("Tiles/Tabs", Tiles::default, tabs_story).variant("Rest", |_| {}),
+        ))
+        .story(common(
+            Story::new("Tiles/Header", Tiles::default, header_story)
+                .variant("Rest", |s| s.settling = Some(Settling::Counting))
+                .variant("Focus", |s| s.settling = Some(Settling::Counting))
+                .variant("Paused", |s| s.settling = Some(Settling::Paused))
+                .variant("Kept", |s| s.settling = Some(Settling::Kept)),
         ))
         .story(
             Story::new("Tiles/Drag", Tiles::default, drag_story)
@@ -387,4 +406,116 @@ fn drag_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
         .h(TERMINAL_H);
     let ghost = drag_ghost("story.tile.ghost", name, &t).absolute(120.0, 120.0);
     terminal(s, &t, vec![target, ghost])
+}
+
+const LONG_AGENT: &str =
+    "attn--ds-page-blocks-delegation-appearance-landing-two · 本番の権限を移行する作業ツリー";
+
+fn header_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
+    let t = tokens(cx);
+    let width = if s.smallest { SMALLEST } else { WIDE };
+    let name = if s.long { LONG_AGENT } else { "reviewer" };
+    let button =
+        |key: &str, label: &str, icon: &'static rune::Icon, size: Size, glyph: IconSize| -> El {
+            icon_button(key, label, icon, glyph)
+                .size(size)
+                .ink(t.text_dimmed)
+                .on_press_tx(pressed)
+                .build(&t)
+                .into()
+        };
+    let stands = s.settling.unwrap_or(Settling::Counting);
+    let (said, verb) = match stands {
+        Settling::Counting => ("SETTLING…", "keep"),
+        Settling::Paused => ("SETTLING PAUSED", "keep"),
+        Settling::Kept => ("TURN KEPT", "undo"),
+    };
+    let chip = SettlingChip::new("story.agent.settling", "Keep this turn", said, stands)
+        .keys(Some(("Ctrl+K".to_owned(), verb)))
+        .mark_only(s.smallest)
+        .build(&t, |s: &mut Tiles| s.presses += 1);
+    let piece = |said: &str| words(said.to_owned(), Type::Small, t.text_secondary).single_line();
+    let agent = TileHeader::agent("story.agent")
+        .mark(dot(t.state_working, DotShape::Filled, DotSize::Small))
+        .title(name, t.text_primary)
+        .hover(
+            vec![
+                button(
+                    "story.agent.rename",
+                    "Rename session",
+                    &crate::icon::PENCIL,
+                    Size::Small,
+                    IconSize::Small,
+                ),
+                button(
+                    "story.agent.popout",
+                    "Pop out tile",
+                    &crate::icon::POP_OUT,
+                    Size::Small,
+                    IconSize::Small,
+                ),
+            ],
+            t.bg_tile,
+        )
+        .push(chip)
+        .subline(
+            "story.agent.subline",
+            vec![
+                piece("s-bbdh9w"),
+                piece("Builder"),
+                piece("ai-sandbox"),
+                piece("d8d9038a"),
+            ],
+            1.0,
+        )
+        .track(el().w_full().h_full().fill(t.settle.alpha(0.4)))
+        .build();
+    let doc = TileHeader::tile("story.doc")
+        .title(
+            if s.long { LONG_AGENT } else { "plan.md" },
+            t.text_secondary,
+        )
+        .actions(vec![
+            Button::new("Focus")
+                .look(Look::Plain)
+                .size(Size::Compact)
+                .on_press_tx(pressed)
+                .build(&t)
+                .key("story.doc.focus")
+                .into(),
+            button(
+                "story.doc.popout",
+                "Pop out tile",
+                &crate::icon::POP_OUT,
+                Size::Compact,
+                IconSize::Regular,
+            ),
+            icon_button(
+                "story.doc.close",
+                "Close tile",
+                crate::glyph::TIMES,
+                IconSize::Regular,
+            )
+            .size(Size::Compact)
+            .ink(t.text_muted)
+            .on_press_tx(pressed)
+            .build(&t)
+            .into(),
+        ])
+        .build();
+    let tile = |key: &str, header: El| {
+        col()
+            .key(key)
+            .w(width)
+            .fill(t.bg_tile)
+            .border(1.0, t.border)
+            .child(header.fill(t.bg_elevated))
+            .child(el().h(60.0))
+    };
+    stage(
+        &t,
+        door::gap(col(), Space::S24)
+            .child(tile("story.agent", agent))
+            .child(tile("story.doc", doc)),
+    )
 }

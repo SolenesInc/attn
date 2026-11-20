@@ -849,10 +849,8 @@ fn a_document_headers_focus_pill_folds_to_its_corners_at_720_points_or_less() {
             screen.get(Target::key("tile.m.focus")).name.as_deref(),
             Some("Focus document")
         );
-        (
-            tile_width(world),
-            screen.bounds(Target::key("tile.m.focus")).unwrap()[2],
-        )
+        let [_, _, w, h] = screen.bounds(Target::key("tile.m.focus")).unwrap();
+        (tile_width(world), w, h)
     };
     let wide = focus(&mut world, 2700.0);
     let medium = focus(&mut world, 2200.0);
@@ -861,8 +859,8 @@ fn a_document_headers_focus_pill_folds_to_its_corners_at_720_points_or_less() {
         "{wide:?} {medium:?}"
     );
     assert!(
-        wide.1 > 24.0 && medium.1 == 24.0,
-        "Focus folds to its 24 pt icon: {wide:?} {medium:?}"
+        wide.1 > wide.2 && (medium.1 - medium.2).abs() < 0.5,
+        "Focus folds to its square icon: {wide:?} {medium:?}"
     );
 }
 

@@ -1,12 +1,11 @@
 use attn_client::Desktop;
 use attn_protocol::{DesktopPane, Session};
 use attn_term::mouse;
-use attn_ui::blocks::Tabs;
+use attn_ui::Tokens;
+use attn_ui::blocks::{Settling, SettlingChip, Tabs, TileHeader};
 use attn_ui::colors::TerminalColors;
-use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens};
-use rune::tok::space;
-use rune::{Drag, El, Mods, PointerButton, Tx, col, el, memo, row, text};
+use attn_ui::system::{Button as SystemButton, IconSize, Look, Size, icon_button};
+use rune::{Drag, El, Mods, PointerButton, Tx, col, el, memo, text};
 use rune_kit::{Button, ButtonVariant};
 
 use super::Area;
@@ -24,24 +23,7 @@ pub(super) const DIVIDER_PX: f32 = 9.0;
 /// The rows a terminal keeps clear under the notices over it: three whole rows, main's at the
 /// smallest window with the largest text, and the one the band's foot may cut.
 const ROWS_UNDER_NOTICES: f32 = 4.0;
-/// `.desktop-pane-headline`, the agent header's first line.
-const HEADLINE_PX: f32 = 30.0;
-const HEADLINE_PAD: f32 = 10.0;
-/// `.desktop-pane-subline`, pulled up into the headline.
-const SUBLINE_PX: f32 = 16.0;
-const SUBLINE_PULL: f32 = 6.0;
-/// The line that closes a header off from the tile's body.
-const HEADER_RULE_PX: f32 = 1.0;
-const AGENT_HEADER_PX: f32 = HEADLINE_PX + SUBLINE_PX - SUBLINE_PULL + HEADER_RULE_PX;
-/// `.desktop-dock-tile-header`: 24 pt controls in 6 pt of padding, inset 12 pt at its start
-/// and 8 pt at its end.
-const TILE_HEADLINE_PX: f32 = 24.0 + 2.0 * 6.0;
-const TILE_HEADER_PX: f32 = TILE_HEADLINE_PX + HEADER_RULE_PX;
-const TILE_HEADER_START: f32 = 12.0;
-const TILE_HEADER_END: f32 = 8.0;
-const TILE_TITLE: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
 const SUBLINE_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
-const SETTLING_TRACK_PX: f32 = 2.0;
 
 /// What an agent's header says about its turn settling on its own.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -101,7 +83,8 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         .as_ref()
         .and_then(|d| d.dragging())
         .map(str::to_owned);
-    let sublines = desktop.map_or_else(Vec::new, |d| sublines(d, facts, desk));
+    let keep = header_keys(state).keep;
+    let sublines = desktop.map_or_else(Vec::new, |d| sublines(d, facts, desk, keep.as_deref()));
     let focus_style = super::FocusStyle::chosen();
     let reads = (
         version(&facts.desktops),
@@ -207,7 +190,6 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         .w_full()
         .grow(1.0)
         .min_h(0.0)
-        .clip_rounded(0.0)
         .on_layout_tx(|state: &mut State, rect, tx: &mut Tx| {
             let area = Some(Area::at(rect, state.terminals.metrics().cell_w));
             if state.window.desk.reported_area == area {
@@ -223,7 +205,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         .min_w(0.0)
         .h_full()
         .children(tabs)
-        .child(tiles)
+        .child(attn_ui::blocks::tile_area(tiles))
 }
 
 /// A tab for each document on `desktop` while one of them is shown alone and it holds more
@@ -299,9 +281,6 @@ impl Subline {
     }
 }
 
-/// The room a headline's controls take besides its chips: its side padding, the pop-out
-/// button and the gaps beside it.
-const HEADLINE_CONTROLS: f32 = 2.0 * HEADLINE_PAD + 24.0 + space::S2;
 /// The state dot at the headline's start.
 const HEADLINE_DOT: f32 = attn_ui::system::DotSize::Small.side();
 
@@ -331,16 +310,13 @@ impl Room {
     }
 }
 
-const SUBLINE_GAP: f32 = 10.0;
-const SUBLINE_LEFT: f32 = 24.0;
-const SUBLINE_RIGHT: f32 = 10.0;
-
 /// Each agent pane's subline, fitted to its tile's width. A piece whose popover is open keeps
 /// its place, so the popover keeps its anchor.
 fn sublines(
     desktop: &Desktop,
     facts: &attn_client::Facts,
     desk: &super::Desk,
+    keep_key: Option<&str>,
 ) -> Vec<(String, Subline)> {
     let settles = settles(desktop, facts);
     let seeds = facts.garden.of(&facts.profiles.selected);
@@ -375,7 +351,7 @@ fn sublines(
                 .map(|(_, s)| s);
             if let Some(tile_w) = tile_w {
                 let pieces: Vec<(Piece, Widths)> = [
-                    settle.map(|settle| (Piece::Settling, settling_widths(settle))),
+                    settle.map(|settle| (Piece::Settling, settling_widths(settle, keep_key))),
                     sub.ask
                         .as_ref()
                         .map(|chip| (Piece::Ask, crate::asks::chip_widths(chip))),
@@ -384,15 +360,15 @@ fn sublines(
                 .flatten()
                 .collect();
                 sub.headline = fit(&Row {
-                    available: tile_w - HEADLINE_CONTROLS,
-                    gap: space::S2,
+                    available: TileHeader::headline_room(tile_w),
+                    gap: TileHeader::headline_gap(),
                     fixed: &[HEADLINE_DOT, super::fit::TITLE_MINIMUM],
                     pieces: &pieces,
                     rank: super::fit::HEADLINE_RANK,
                     keep: &[],
                 });
             }
-            let available = tile_w.map(|w| w - SUBLINE_LEFT - SUBLINE_RIGHT);
+            let available = tile_w.map(TileHeader::subline_room);
             if let Some(available) = available {
                 let pieces: Vec<(Piece, Widths)> = [
                     sub.seed
@@ -437,7 +413,7 @@ fn sublines(
                     .collect();
                 sub.levels = fit(&Row {
                     available,
-                    gap: SUBLINE_GAP,
+                    gap: TileHeader::subline_gap(),
                     fixed: &[],
                     pieces: &pieces,
                     rank: super::fit::SUBLINE_RANK,
@@ -517,7 +493,12 @@ pub(super) fn lone(
     let settles = settles(desktop, &state.facts);
     let keys = header_keys(state);
     let unsent = state.window.desk.peeks.unsent();
-    let sublines = sublines(desktop, &state.facts, &state.window.desk);
+    let sublines = sublines(
+        desktop,
+        &state.facts,
+        &state.window.desk,
+        keys.keep.as_deref(),
+    );
     let seeds = seed_reads(state);
     let terminal_colors = crate::color_scheme(&state.facts.settings)
         .colors(t.dark)
@@ -1084,19 +1065,19 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
         .on_press_within(move |state: &mut State, tx: &mut Tx| press_tile(state, &holder, tx))
         .transition(tile_transition(&leaf.kind));
     let key = format!("tile.{}", leaf.id);
-    let below = header_height(pane_of(desktop, &leaf.id).is_some());
+    let below = TileHeader::height(pane_of(desktop, &leaf.id).is_some());
     let content = col()
         .key(format!("{key}.content"))
         .w_full()
         .grow(1.0)
         .min_h(0.0)
-        .clip_rounded(0.0)
         .child(header(leaf, &title, &look, cx))
         .child(body)
         .children(look.veil(&key, below, t))
         .children(look.marks(&key, t))
         .children(super::arrival::overlay(cx.rings, &leaf.id, t));
-    look.frame(frame, t).child(content)
+    look.frame(frame, t)
+        .child(attn_ui::blocks::tile_content(content))
 }
 
 fn browser_page(desktop: &Desktop, leaf: &Leaf) -> attn_client::TileKey {
@@ -1182,14 +1163,6 @@ fn document_controls(leaf: &Leaf, cx: &TileCx) -> Option<El> {
         cx.keys.send_marks.as_deref(),
         cx.t,
     ))
-}
-
-fn header_height(agent: bool) -> f32 {
-    if agent {
-        AGENT_HEADER_PX
-    } else {
-        TILE_HEADER_PX
-    }
 }
 
 /// The spring the Tauri app moves a row's tiles on.
@@ -1303,82 +1276,58 @@ fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) 
     let session = pane.and_then(|p| cx.sessions.iter().find(|s| s.id == p.session_id));
     let focused = cx.focused == Some(leaf.id.as_str());
     let popped = leaf.window.is_some();
-    let actions = row()
-        .key(format!("{key}.actions"))
-        .pin(None, Some(0.0), Some(0.0), Some(0.0))
-        .items_center()
-        .gap(2.0)
-        .pl(space::S1)
-        .fill(look.header_under(t))
-        .group_opacity(0.0, 1.0)
-        .children(session.map(|s| rename_button(&key, s, title, t)))
-        .children(
-            (pane.is_some() && !focused && !popped)
-                .then(|| focus_button(&key, &cx.desktop.id, &leaf.id, title, cx)),
-        )
-        .children(pane.is_some().then(|| {
-            pop_out_button(
-                &cx.desktop.id,
-                &leaf.id,
-                popped,
-                HeaderLook::agent(cx.t),
-                cx,
-            )
-        }));
-    let headline = row().w_full().items_center().gap(space::S2);
-    let headline = match pane {
-        Some(_) => headline.h(HEADLINE_PX).px(HEADLINE_PAD),
-        None => headline
-            .h(TILE_HEADLINE_PX)
-            .pl(TILE_HEADER_START)
-            .pr(TILE_HEADER_END),
-    };
-    let headline = headline
-        .children(session.map(|s| {
-            crate::sidebar::state_mark(
-                &key,
-                &crate::sidebar::AgentRow::of(s, cx.outposts, false),
-                attn_ui::system::DotSize::Small,
-                t,
-            )
-        }))
-        .child(
-            row()
-                .grow(1.0)
-                .min_w(0.0)
-                .h_full()
-                .items_center()
-                .child(match &leaf.kind {
-                    LeafKind::Tile { kind, params, .. } if kind == crate::browser::KIND => {
-                        crate::browser::address_field(
-                            cx.browsers,
-                            &browser_page(cx.desktop, leaf),
-                            params.as_deref().unwrap_or(""),
-                            t,
-                        )
-                    }
-                    _ if pane.is_none() => text(title.to_owned())
-                        .font(TILE_TITLE)
-                        .color(look.title(t))
-                        .single_line()
-                        .truncate()
-                        .grow(1.0),
-                    _ => text(title.to_owned())
-                        .font(type_::LABEL)
-                        .color(look.title(t))
-                        .single_line()
-                        .truncate()
-                        .grow(1.0),
-                })
-                .children(pane.is_some().then_some(actions)),
-        );
     let sub = cx
         .sublines
         .iter()
         .find(|(pane, _)| *pane == leaf.id)
         .map(|(_, sub)| sub);
-    let headline = match (settle, pane) {
-        (Some(settle), Some(pane)) => headline.child(settling_chip(
+    let header = match pane {
+        Some(_) => TileHeader::agent(&key),
+        None => TileHeader::tile(&key),
+    }
+    .leading(cx.chrome_leading);
+    let header = match session {
+        Some(s) => header.mark(crate::sidebar::state_mark(
+            &key,
+            &crate::sidebar::AgentRow::of(s, cx.outposts, false),
+            attn_ui::system::DotSize::Small,
+            t,
+        )),
+        None => header,
+    };
+    let header = match &leaf.kind {
+        LeafKind::Tile { kind, params, .. } if kind == crate::browser::KIND => header
+            .title_control(crate::browser::address_field(
+                cx.browsers,
+                &browser_page(cx.desktop, leaf),
+                params.as_deref().unwrap_or(""),
+                t,
+            )),
+        _ => header.title(title.to_owned(), look.title(t)),
+    };
+    let header = match pane {
+        Some(_) => header.hover(
+            [
+                session.map(|s| rename_button(&key, s, title, t)),
+                (!focused && !popped)
+                    .then(|| focus_button(&key, &cx.desktop.id, &leaf.id, title, cx)),
+                Some(pop_out_button(
+                    &cx.desktop.id,
+                    &leaf.id,
+                    popped,
+                    Place::Agent,
+                    cx,
+                )),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
+            look.header_under(t),
+        ),
+        None => header,
+    };
+    let header = match (settle, pane) {
+        (Some(settle), Some(pane)) => header.push(settling_chip(
             &leaf.id,
             settle,
             &pane.session_id,
@@ -1386,9 +1335,9 @@ fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) 
             sub.is_some_and(|sub| sub.headline_level(Piece::Settling) == Level::Icon),
             t,
         )),
-        _ => headline,
+        _ => header,
     };
-    let headline = headline.children(sub.zip(pane).and_then(|(sub, pane)| {
+    let header = header.push_all(sub.zip(pane).and_then(|(sub, pane)| {
         let chip = sub.ask.as_ref()?;
         let level = match sub.headline_level(Piece::Ask) {
             Level::Icon | Level::Hidden => crate::asks::ChipLevel::Icon,
@@ -1406,25 +1355,8 @@ fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) 
     let is_tile = matches!(leaf.kind, LeafKind::Tile { .. });
     let is_document =
         matches!(&leaf.kind, LeafKind::Tile { kind, .. } if kind == "markdown" || kind == "seed");
-    let tile_actions =
-        row()
-            .items_center()
-            .gap(2.0)
-            .children(focused.then(|| return_to_row(&key, &cx.desktop.id, cx)))
-            .children(
-                (is_document && !focused && !popped)
-                    .then(|| focus_document_button(&key, &cx.desktop.id, &leaf.id, cx)),
-            )
-            .children(
-                matches!(&leaf.kind, LeafKind::Tile { kind, .. } if kind == crate::browser::KIND)
-                    .then(|| crate::browser::reload_button(&browser_page(cx.desktop, leaf), cx.t)),
-            )
-            .children(is_tile.then(|| {
-                pop_out_button(&cx.desktop.id, &leaf.id, popped, HeaderLook::tile(cx.t), cx)
-            }))
-            .children(is_tile.then(|| close_tile_button(&key, &cx.desktop.id, &leaf.id, cx.t)));
-    let headline = headline
-        .children(match &leaf.kind {
+    let header = header
+        .push_all(match &leaf.kind {
             LeafKind::Tile { kind, params, .. } if kind == "notebook" => {
                 Some(crate::notebook::root_picker(
                     cx.facts,
@@ -1437,47 +1369,48 @@ fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) 
             }
             _ => None,
         })
-        .children(document_controls(leaf, cx))
-        .children((is_tile || focused).then_some(tile_actions));
-    let height = header_height(pane.is_some());
-    let track = match (settle, pane) {
-        (Some(settle), Some(pane)) => settling_track(
-            &leaf.id,
-            settle,
-            cx.drains.get(&pane.session_id),
-            height,
-            cx.t,
-        ),
-        _ => None,
+        .push_all(document_controls(leaf, cx));
+    let header = if is_tile || focused {
+        header.actions(
+            [
+                focused.then(|| return_to_row(&key, &cx.desktop.id, cx)),
+                (is_document && !focused && !popped)
+                    .then(|| focus_document_button(&key, &cx.desktop.id, &leaf.id, cx)),
+                matches!(&leaf.kind, LeafKind::Tile { kind, .. } if kind == crate::browser::KIND)
+                    .then(|| crate::browser::reload_button(&browser_page(cx.desktop, leaf), cx.t)),
+                is_tile.then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, Place::Tile, cx)),
+                is_tile.then(|| close_tile_button(&key, &cx.desktop.id, &leaf.id, cx.t)),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
+        )
+    } else {
+        header
     };
-    let header = col()
-        .key(format!("{key}.header"))
-        .keeps_press_from_within()
-        .w_full()
-        .h(height)
-        .pl(cx.chrome_leading)
-        .hover_group();
-    look.header(header, t)
-        .child(headline)
-        .children(pane.map(|pane| {
-            subline(
-                &key,
-                &leaf.id,
-                &pane.session_id,
-                cx.sublines
-                    .iter()
-                    .find(|(pane, _)| *pane == leaf.id)
-                    .map(|(_, sub)| sub),
-                t,
-            )
-            .opacity(look.subline_opacity())
-        }))
-        .children(track)
+    let header = match pane {
+        Some(pane) => header.subline(
+            format!("{key}.subline"),
+            subline(&key, &leaf.id, &pane.session_id, sub, t),
+            look.subline_opacity(),
+        ),
+        None => header,
+    };
+    let header = match (settle, pane) {
+        (Some(settle), Some(pane)) => {
+            match settling_track(&leaf.id, settle, cx.drains.get(&pane.session_id), cx.t) {
+                Some(track) => header.track(track),
+                None => header,
+            }
+        }
+        _ => header,
+    };
+    look.header(header.build(), t)
 }
 
 /// The agent header's second line: its seed, its delegation role, the machine it runs on, its usage, where
 /// it came from, and its short id, which copies the whole id.
-fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Tokens) -> El {
+fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Tokens) -> Vec<El> {
     let short = short_id(session);
     let id = session.to_owned();
     let at = |piece| sub.and_then(|sub| sub.shows(piece));
@@ -1530,22 +1463,10 @@ fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Toke
         ))
     });
     let shows_id = sub.is_none_or(|sub| sub.shows(Piece::Id).is_some());
-    row()
-        .key(format!("{key}.subline"))
-        .w_full()
-        .h(SUBLINE_PX)
-        .mt(-SUBLINE_PULL)
-        .clip_rounded(0.0)
-        .items_center()
-        .gap(SUBLINE_GAP)
-        .pl(SUBLINE_LEFT)
-        .pr(SUBLINE_RIGHT)
-        .children(seed)
-        .children(role)
-        .children(host)
-        .children(usage)
-        .children(provenance)
-        .children(shows_id.then(|| {
+    [seed, role, host, usage, provenance]
+        .into_iter()
+        .flatten()
+        .chain(shows_id.then(|| {
             let face = short.clone();
             Button::new(format!("Copy session id {short}"))
                 .variant(ButtonVariant::GhostFaint)
@@ -1556,6 +1477,7 @@ fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Toke
                 .h(SUBLINE_TYPE.line_px())
                 .px(0.0)
         }))
+        .collect()
 }
 
 /// The header's pencil, which renames the agent's session.
@@ -1565,7 +1487,7 @@ fn rename_button(key: &str, session: &Session, title: &str, t: &Tokens) -> El {
         under.clone(),
         format!("Rename session {title}"),
         &attn_ui::icon::PENCIL,
-        HeaderLook::agent(t),
+        Place::Agent,
         t,
         move |state, tx| {
             let opener = crate::sidebar::rename::Opener::Control(under.clone());
@@ -1581,77 +1503,55 @@ fn focus_button(key: &str, desktop: &str, leaf: &str, title: &str, cx: &TileCx) 
         format!("{key}.focus"),
         with_key(&format!("Focus agent {title}"), cx.keys.focus.as_ref()),
         &attn_ui::icon::FOCUS_AGENT,
-        HeaderLook::agent(cx.t),
+        Place::Agent,
         cx.t,
         move |state, tx| super::actions::focus_leaf(state, &desktop, &leaf, tx),
     )
 }
 
-/// The header's button that shows this document alone on its desktop: a Focus pill, or its
-/// corners alone in a square where the header has less room.
+/// The header's button that shows this document alone on its desktop: Focus in words, or its
+/// corners alone where the header has less room.
 fn focus_document_button(key: &str, desktop: &str, leaf: &str, cx: &TileCx) -> El {
     let room = Room::of(leaf);
     let (desktop, leaf) = (desktop.to_owned(), leaf.to_owned());
-    let (ink, hovered_ink) = (cx.t.text_secondary, cx.t.text_primary);
-    let button = Button::new("Focus document")
-        .variant(ButtonVariant::Ghost)
-        .label_with(move |_, _| {
-            match room {
-                Room::Wide => text("Focus").font(FOCUS_PILL_TYPE).color(ink),
-                Room::Medium | Room::Narrow => {
-                    rune::icon(&attn_ui::icon::FOCUS_DOCUMENT, 14.0).color(ink)
-                }
-            }
-            .group_color(hovered_ink)
-        })
-        .help(with_key("Focus document", cx.keys.focus.as_ref()))
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            super::actions::focus_leaf(state, &desktop, &leaf, tx)
-        })
-        .build(attn_ui::kit(cx.t))
-        .key(format!("{key}.focus"))
-        .h(24.0)
-        .border(1.0, cx.t.brand.alpha(0.36))
-        .fill(cx.t.brand.alpha(0.08))
-        .hover(cx.t.brand.alpha(raise_tint(0.08, 0.15)))
-        .hover_border(cx.t.brand.alpha(0.58));
-    match room {
-        Room::Wide => button.px(9.0).radius(12.0),
-        Room::Medium | Room::Narrow => button.w(24.0).px(0.0).center().radius(5.0),
-    }
+    let help = with_key("Focus document", cx.keys.focus.as_ref());
+    let press = move |state: &mut State, tx: &mut Tx| {
+        super::actions::focus_leaf(state, &desktop, &leaf, tx)
+    };
+    let button: El = match room {
+        Room::Wide => SystemButton::new("Focus")
+            .look(Look::Plain)
+            .size(Size::Compact)
+            .help(help)
+            .on_press_tx(press)
+            .build(cx.t)
+            .into(),
+        Room::Medium | Room::Narrow => icon_button(
+            format!("{key}.focus"),
+            "Focus document",
+            &attn_ui::icon::FOCUS_DOCUMENT,
+            IconSize::Regular,
+        )
+        .size(Size::Compact)
+        .help(help)
+        .on_press_tx(press)
+        .build(cx.t)
+        .into(),
+    };
+    button.key(format!("{key}.focus")).label("Focus document")
 }
-
-/// The alpha of a colour laid over a tint of itself at `rest` that shows it at `raised`, as a
-/// CSS hover that swaps the tint does over a hover overlay.
-fn raise_tint(rest: f32, raised: f32) -> f32 {
-    1.0 - (1.0 - raised) / (1.0 - rest)
-}
-
-/// The Focus pill's words: semibold, at attn's least text size.
-const FOCUS_PILL_TYPE: rune::TextStyle = rune::TextStyle {
-    size: 12.0,
-    weight: 600.0,
-    ..type_::LABEL
-};
 
 /// The header's button that takes the document or browser tile off its desktop.
 fn close_tile_button(key: &str, desktop: &str, leaf: &str, t: &Tokens) -> El {
     let (desktop, leaf) = (desktop.to_owned(), leaf.to_owned());
-    GlyphButton::new(attn_ui::glyph::TIMES, "Close tile")
-        .variant(ButtonVariant::GhostFaint)
-        .color(t.text_muted)
-        .font(rune::TextStyle {
-            size: 15.0,
-            weight: 400.0,
-            ..type_::LABEL
-        })
-        .side(24.0)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            super::actions::remove_tile(state, desktop.clone(), leaf.clone(), tx)
-        })
-        .build(attn_ui::kit(t))
-        .key(format!("{key}.close"))
-        .radius(4.0)
+    header_button(
+        format!("{key}.close"),
+        "Close tile".to_owned(),
+        attn_ui::glyph::TIMES,
+        Place::Tile,
+        t,
+        move |state, tx| super::actions::remove_tile(state, desktop.clone(), leaf.clone(), tx),
+    )
 }
 
 /// The header's button that puts the tile shown alone back in its row.
@@ -1661,67 +1561,42 @@ fn return_to_row(key: &str, desktop: &str, cx: &TileCx) -> El {
         format!("{key}.return"),
         with_key("Return to row", cx.keys.focus.as_ref()),
         &attn_ui::icon::UNFOCUS,
-        HeaderLook {
-            side: 22.0,
-            icon: 14.0,
-            ink: cx.t.text_secondary,
-        },
+        Place::Tile,
         cx.t,
         move |state, tx| super::actions::return_to_row(state, &desktop, tx),
     )
 }
 
-/// How big a header button and its icon are, and the icon's colour, as the Tauri app's
-/// header CSS sets each.
+/// Which header a button stands in, which sets its size: an agent's beside its name, a
+/// document's or a browser's at the header's end.
 #[derive(Clone, Copy)]
-struct HeaderLook {
-    side: f32,
-    icon: f32,
-    ink: rune::Color,
-}
-
-impl HeaderLook {
-    /// An agent header's button: `.desktop-pane-focus-btn`.
-    fn agent(t: &Tokens) -> HeaderLook {
-        HeaderLook {
-            side: 20.0,
-            icon: 14.0,
-            ink: t.text_dimmed,
-        }
-    }
-
-    /// A document or browser tile's button: `.desktop-dock-tile-action`.
-    fn tile(t: &Tokens) -> HeaderLook {
-        HeaderLook {
-            side: 24.0,
-            icon: 16.0,
-            ink: t.text_muted,
-        }
-    }
+enum Place {
+    Agent,
+    Tile,
 }
 
 fn header_button(
     key: String,
     label: String,
     glyph: impl Into<attn_ui::Glyph>,
-    look: HeaderLook,
+    place: Place,
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    GlyphButton::new(glyph, label)
-        .variant(ButtonVariant::GhostFaint)
-        .font(type_::LABEL)
-        .icon_size(look.icon)
-        .color(look.ink)
-        .side(look.side)
+    let (size, icon, ink) = match place {
+        Place::Agent => (Size::Small, IconSize::Small, t.text_dimmed),
+        Place::Tile => (Size::Compact, IconSize::Regular, t.text_muted),
+    };
+    icon_button(key, label, glyph, icon)
+        .size(size)
+        .ink(ink)
         .on_press_tx(press)
-        .build(attn_ui::kit(t))
-        .key(key)
-        .radius(4.0)
+        .build(t)
+        .into()
 }
 
 /// The header's button that pops the tile out into its own window, or brings it back.
-fn pop_out_button(desktop: &str, leaf: &str, popped: bool, look: HeaderLook, cx: &TileCx) -> El {
+fn pop_out_button(desktop: &str, leaf: &str, popped: bool, place: Place, cx: &TileCx) -> El {
     let (label, glyph) = if popped {
         ("Bring back tile", &attn_ui::icon::BRING_BACK)
     } else {
@@ -1732,7 +1607,7 @@ fn pop_out_button(desktop: &str, leaf: &str, popped: bool, look: HeaderLook, cx:
         format!("tile.{leaf}.popout"),
         with_key(label, cx.keys.pop_out.as_ref()),
         glyph,
-        look,
+        place,
         cx.t,
         move |state, tx| super::windows::toggle_leaf(state, &desktop, &leaf_id, tx),
     )
@@ -1740,21 +1615,39 @@ fn pop_out_button(desktop: &str, leaf: &str, popped: bool, look: HeaderLook, cx:
 
 /// The header's mark of a turn that settles on its own, or that the person kept; pressing it
 /// keeps the turn, or undoes keeping it.
+fn settling_said(settle: &Settle) -> (&'static str, &'static str, &'static str, Settling) {
+    match settle {
+        Settle::Counting(_) => ("Keep this turn", "SETTLING…", "keep", Settling::Counting),
+        Settle::Held => (
+            "Keep this turn",
+            "SETTLING PAUSED",
+            "keep",
+            Settling::Paused,
+        ),
+        Settle::Kept => (
+            "Turn kept; undo to let it auto-settle again",
+            "TURN KEPT",
+            "undo",
+            Settling::Kept,
+        ),
+        Settle::Frozen => (
+            "Settling paused while the host is unreachable",
+            "SETTLING PAUSED",
+            "",
+            Settling::Paused,
+        ),
+    }
+}
+
 /// The widths of the settling chip in full and as its mark alone.
-fn settling_widths(settle: &Settle) -> Widths {
-    let words = match settle {
-        Settle::Counting(_) => "SETTLING…",
-        Settle::Held | Settle::Frozen => "SETTLING PAUSED",
-        Settle::Kept => "TURN KEPT",
-    };
-    let font = rune::TextStyle {
-        size: 12.0,
-        weight: 600.0,
-        ..type_::LABEL
-    };
-    let mark = 6.0 + 2.0 * 9.0 + 2.0;
+fn settling_widths(settle: &Settle, keep_key: Option<&str>) -> Widths {
+    let (_, said, verb, _) = settling_said(settle);
+    let keys = keep_key
+        .filter(|_| *settle != Settle::Frozen)
+        .map(|key| (key, verb));
+    let (full, mark) = SettlingChip::widths(said, keys);
     Widths {
-        full: mark + 7.0 + super::fit::text_w(words, font) + 7.0 + 60.0,
+        full,
         short: None,
         icon: Some(mark),
     }
@@ -1768,100 +1661,23 @@ fn settling_chip(
     icon: bool,
     t: &Tokens,
 ) -> El {
-    let (label, words, verb, fill, edge, ink) = match settle {
-        Settle::Counting(_) => (
-            "Keep this turn",
-            "SETTLING…",
-            "keep",
-            0.16,
-            0.55,
-            t.settle_ink,
-        ),
-        Settle::Held => (
-            "Keep this turn",
-            "SETTLING PAUSED",
-            "keep",
-            0.10,
-            0.35,
-            t.settle_ink_quiet,
-        ),
-        Settle::Kept => (
-            "Turn kept; undo to let it auto-settle again",
-            "TURN KEPT",
-            "undo",
-            0.09,
-            0.40,
-            t.settle_ink_quiet,
-        ),
-        Settle::Frozen => (
-            "Settling paused while the host is unreachable",
-            "SETTLING PAUSED",
-            "",
-            0.10,
-            0.35,
-            t.settle_ink_quiet,
-        ),
-    };
-    let mark = el().w(6.0).h(6.0).fill(t.settle);
-    let mark = match settle {
-        Settle::Counting(_) => mark.radius(3.0),
-        Settle::Held | Settle::Frozen => mark.radius(3.0).opacity(0.55),
-        Settle::Kept => mark.radius(1.0).opacity(0.7),
-    };
-    let font = rune::TextStyle {
-        size: 12.0,
-        weight: 600.0,
-        ..type_::LABEL
-    };
+    let (label, said, verb, stands) = settling_said(settle);
     let session = session.to_owned();
     let frozen = *settle == Settle::Frozen;
-    let keep_key = keep_key.filter(|_| !icon && !frozen).map(str::to_owned);
-    let face_h = match (icon, &keep_key) {
-        (true, _) => 6.0,
-        (false, None) => font.line_px(),
-        (false, Some(_)) => font.line_px() + 4.0,
-    };
-    Button::new(label)
-        .variant(ButtonVariant::Ghost)
+    SettlingChip::new(format!("tile.{leaf}.settling"), label, said, stands)
+        .keys(
+            keep_key
+                .filter(|_| !frozen)
+                .map(|key| (key.to_owned(), verb)),
+        )
+        .mark_only(icon)
         .disabled(frozen)
-        .on_press(move |state: &mut State| {
+        .build(t, move |state: &mut State| {
             let _ = state.daemon.send(&attn_protocol::CancelCountdownMessage {
                 session_id: session.clone(),
                 ..attn_protocol::CancelCountdownMessage::new()
             });
         })
-        .label_with(move |_, _| {
-            row()
-                .items_center()
-                .gap(7.0)
-                .child(mark)
-                .children((!icon).then(|| text(words).font(font).color(ink).single_line()))
-                .children(keep_key.map(|key| {
-                    row()
-                        .items_center()
-                        .gap(4.0)
-                        .opacity(0.8)
-                        .child(
-                            row().px(4.0).py(2.0).radius(3.0).border(1.0, ink).child(
-                                text(key)
-                                    .font(rune::TextStyle {
-                                        weight: 700.0,
-                                        ..font
-                                    })
-                                    .color(ink),
-                            ),
-                        )
-                        .child(text(verb).font(font).color(ink))
-                }))
-        })
-        .build(attn_ui::kit(t))
-        .key(format!("tile.{leaf}.settling"))
-        .h(face_h + 4.0)
-        .px(9.0)
-        .radius(5.0)
-        .fill(t.settle.alpha(fill))
-        .border(1.0, t.settle.alpha(edge))
-        .hover(t.settle.alpha(0.12))
 }
 
 /// The hairline along the header's foot that drains to the countdown's deadline, or stands
@@ -1870,7 +1686,6 @@ fn settling_track(
     leaf: &str,
     settle: &Settle,
     drain: Option<&crate::sidebar::Countdown>,
-    header: f32,
     t: &Tokens,
 ) -> Option<El> {
     if *settle == Settle::Kept {
@@ -1886,15 +1701,14 @@ fn settling_track(
     let fill = rune::canvas(line)
         .key(format!("tile.{leaf}.settling.track"))
         .w_full()
-        .h(SETTLING_TRACK_PX);
+        .h_full();
     let fill = match (settle, drain) {
         (Settle::Counting(_), Some(c)) => fill.live_trim(&c.drain),
         _ => fill.opacity(0.45),
     };
     Some(
-        el().absolute(0.0, header - SETTLING_TRACK_PX)
-            .w_full()
-            .h(SETTLING_TRACK_PX)
+        el().w_full()
+            .h_full()
             .fill(t.settle.alpha(0.16))
             .child(fill),
     )
@@ -1915,27 +1729,17 @@ fn ime_caret(terminals: &Terminals, runtime_id: &str, theme: &TerminalColors) ->
     };
     let caret = el().key(key).absolute(0.0, 0.0).live_rect(at).ime_cursor();
     let color = attn_ui::colors::rgb;
-    let font = rune::TextStyle {
-        size,
-        line_height: h,
-        family: rune::Family::Mono,
-        ..type_::BODY
-    };
     Some(
         caret.child(
-            text(preedit)
-                .key(format!("terminal.{runtime_id}.preedit"))
-                .absolute(0.0, 0.0)
-                .fill(color(theme.bg))
-                .font(font)
-                .color(color(theme.fg))
-                .single_line()
-                .decorations(vec![rune::Span {
-                    start: 0,
-                    end: preedit.len() as u32,
-                    underline: Some(color(theme.fg)),
-                    ..rune::Span::default()
-                }]),
+            attn_ui::blocks::preedit(
+                preedit.to_owned(),
+                size,
+                h,
+                color(theme.fg),
+                color(theme.bg),
+            )
+            .key(format!("terminal.{runtime_id}.preedit"))
+            .absolute(0.0, 0.0),
         ),
     )
 }

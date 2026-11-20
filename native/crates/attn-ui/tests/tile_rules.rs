@@ -203,6 +203,91 @@ fn a_long_tab_gives_way_before_it_crowds_the_others_out() {
     }
 }
 
+const HEADERS: [&str; 6] = ["Rest", "Paused", "Kept", "Long", "Smallest long", "Focus"];
+
+#[test]
+fn a_headlines_parts_centre_on_one_line_and_never_overlap_down_to_the_narrowest_tile() {
+    for variant in HEADERS {
+        let rt = story("Tiles/Header", variant);
+        let header = element(&rt, "story.agent.header");
+        let parts: Vec<ElementInfo> = ["story.agent.settling"]
+            .iter()
+            .map(|key| element(&rt, key))
+            .collect();
+        let title_line = header.rect[1] + 15.0;
+        for part in &parts {
+            assert!(
+                (middle(part) - title_line).abs() < 0.5,
+                "{variant}: {:?} centres at {}, the headline at {title_line}",
+                part.key,
+                middle(part)
+            );
+            assert!(
+                right(part) <= right(&header) + 0.5,
+                "{variant}: {:?} ends at {}, past the header at {}",
+                part.key,
+                right(part),
+                right(&header)
+            );
+        }
+        let subline = element(&rt, "story.agent.subline");
+        let first = rt
+            .elements()
+            .into_iter()
+            .filter(|e| e.path.starts_with(&subline.path) && e.path != subline.path)
+            .filter(|e| e.rect[2] > 0.0)
+            .map(|e| left(&e))
+            .fold(f32::MAX, f32::min);
+        let title = rt
+            .elements()
+            .into_iter()
+            .find(|e| {
+                e.text.as_deref().is_some_and(|said| {
+                    said.starts_with(if variant.contains("ong") {
+                        "attn--"
+                    } else {
+                        "reviewer"
+                    })
+                })
+            })
+            .expect("the title");
+        assert!(
+            (first - left(&title)).abs() < 0.5,
+            "{variant}: the subline starts at {first}, its title at {}",
+            left(&title)
+        );
+        assert!(
+            top(&subline) >= top(&header) + 24.0 - 0.5 && bottom(&subline) <= bottom(&header) + 0.5,
+            "{variant}: the subline at {:?} stands outside its header at {:?}",
+            subline.rect,
+            header.rect
+        );
+    }
+}
+
+#[test]
+fn a_documents_header_buttons_stand_whole_with_room_for_their_focus_ring() {
+    let reach = attn_ui::system::RING_REACH;
+    for variant in HEADERS {
+        let rt = story("Tiles/Header", variant);
+        let header = element(&rt, "story.doc.header");
+        for key in ["story.doc.focus", "story.doc.popout", "story.doc.close"] {
+            let button = element(&rt, key);
+            assert!(
+                top(&button) - reach >= top(&header) - 0.5
+                    && bottom(&button) + reach <= bottom(&header) - 1.0 + 0.5,
+                "{variant}: {key} at {:?} leaves its ring no room in the header at {:?}",
+                button.rect,
+                header.rect
+            );
+            assert!(
+                right(&button) <= right(&header) + 0.5,
+                "{variant}: {key} ends past the header"
+            );
+        }
+    }
+}
+
 #[test]
 fn a_notice_over_a_terminal_stands_on_an_opaque_ground() {
     for variant in ["Rest", "Long", "Smallest long"] {

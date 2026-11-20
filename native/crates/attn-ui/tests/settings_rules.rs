@@ -1235,6 +1235,13 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::terminal_bar::TerminalBar::line(said)", false),
     ("blocks::terminal_status::terminal_status(label)", false),
     ("blocks::terminal_status::terminal_status(said)", false),
+    ("blocks::preedit::preedit(said)", false),
+    ("blocks::tile_header::TileHeader::title(said)", false),
+    ("blocks::tile_header::SettlingChip::new(label)", false),
+    ("blocks::tile_header::SettlingChip::new(said)", true),
+    ("blocks::tile_header::SettlingChip::keys(keys)", true),
+    ("blocks::tile_header::SettlingChip::widths(said)", false),
+    ("blocks::tile_header::SettlingChip::widths(keys)", false),
 ];
 
 #[test]
