@@ -7219,6 +7219,80 @@ fn a_long_search_limit_gives_way_before_the_results_do() {
     );
 }
 
+/// The review alone at 800 x 600 with 150% text, holding the keyboard.
+fn narrow_review() -> World {
+    let mut world = review_in(
+        row(vec![document_tile("m", DOC, None)]),
+        (800.0, 600.0),
+        Some("1.5"),
+    );
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+    world
+}
+
+/// Whether the element keyed `key` shows whole and ends above the review's key line.
+fn whole_above_the_key_line(world: &World, key: &str) -> Result<(), String> {
+    let find = |key: &str| {
+        world
+            .runtime()
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .ok_or_else(|| format!("no {key} on screen"))
+    };
+    let (shown, keys) = (find(key)?, find("tile.m.review.keys")?);
+    let whole = shown.visible[3] >= shown.rect[3] - 0.5;
+    let above = shown.rect[1] + shown.rect[3] <= keys.rect[1] + 0.5;
+    if whole && above {
+        Ok(())
+    } else {
+        Err(format!(
+            "{key} at {:?} shows {:?}, the key line at {:?}",
+            shown.rect, shown.visible, keys.rect
+        ))
+    }
+}
+
+#[test]
+fn the_edit_box_keeps_save_and_cancel_above_the_key_line_in_the_smallest_window() {
+    let mut world = narrow_review();
+    world.daemon.on("review_edit", |_| {
+        json!({"event": "review_edit_result", "success": false,
+            "error": "cannot write calc.go: permission denied: the app server exited with status 1 before it answered its first request, after loading a configuration it could not read from ~/.config/attn/outposts/build-and-release-platform-tokyo-region-primary.toml"})
+    });
+    press(&mut world, Key::Right);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Enter);
+    type_key(&mut world, "i");
+    append(&mut world, " // named");
+    press(&mut world, Key::Enter);
+    world.settle();
+    assert!(edit_box(&world).is_some(), "the edit box stays open");
+    for key in ["review.edit.save", "review.edit.cancel"] {
+        whole_above_the_key_line(&world, key).unwrap();
+    }
+}
+
+#[test]
+fn the_list_of_places_keeps_its_close_and_its_list_above_the_key_line_in_the_smallest_window() {
+    let mut world = narrow_review();
+    world.daemon.on("code_nav", |_| {
+        nav_answer(
+            (0..40)
+                .map(|i| place(&format!("pkg{i}.go"), i + 1, 2, "\tAdd(1, 2)"))
+                .collect(),
+        )
+    });
+    press(&mut world, Key::Right);
+    type_key(&mut world, "r");
+    type_key(&mut world, "s");
+    world.settle();
+    for key in ["review.nav.panel.close", "tile.m.review.nav.list"] {
+        whole_above_the_key_line(&world, key).unwrap();
+    }
+}
+
 #[test]
 fn a_narrow_reviews_key_line_keeps_its_language_servers_and_their_setup_in_reach() {
     let narrow = || {

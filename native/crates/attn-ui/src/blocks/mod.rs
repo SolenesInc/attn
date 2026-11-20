@@ -69,7 +69,7 @@ pub use menu::Menu;
 pub use notice::{Notice, Refusal, Status, saved};
 pub use page::{Head, Page};
 pub use pane::Pane;
-pub use place::{edged, here, here_tint, place, raised_here_tint};
+pub use place::{edged, here, here_tint, place, raised_here_tint, raised_place};
 pub use popover::Popover;
 pub use prose::Prose;
 pub use rail::Rail;

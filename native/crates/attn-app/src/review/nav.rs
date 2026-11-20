@@ -3,9 +3,9 @@
 
 use attn_protocol::{CodeNavLocation, CodeNavMessage, CodeNavResultMessage};
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::{radius, space};
-use rune::{El, Key, KeyEvent, Tx, col, row, text};
+use attn_ui::blocks::{Block, Inline, Popover, raised_place};
+use attn_ui::system::{Type, keys_hint, words};
+use rune::{El, Key, KeyEvent, Tx, col};
 use rune_kit::ScrollBar;
 
 use crate::State;
@@ -409,16 +409,18 @@ pub(crate) fn panel_key(tile: &str, panel: &mut Answer, ev: &KeyEvent, tx: &mut 
 pub(crate) fn note_line(tile: &str, nav: &Nav, t: &Tokens) -> Option<El> {
     if let Some((kind, ..)) = &nav.picking {
         return Some(
-            text(format!("{} esc cancels.", kind.picking()))
-                .role("status")
-                .font(type_::LABEL)
-                .color(t.text_secondary),
+            words(
+                format!("{} esc cancels.", kind.picking()),
+                Type::Small,
+                t.text_secondary,
+            )
+            .role("status"),
         );
     }
     if let Some((answer, _)) = &nav.offer {
         let (said, take) = answer.offer();
         return Some(
-            row()
+            Inline::line()
                 .key("review.nav.offer")
                 .role("status")
                 .label("Offered answer")
@@ -426,18 +428,12 @@ pub(crate) fn note_line(tile: &str, nav: &Nav, t: &Tokens) -> Option<El> {
                     let tile = tile.to_owned();
                     move |state: &mut State, tx: &mut Tx| super::take_offer(state, &tile, tx)
                 })
+                .child(words(format!("{said} · ↵ {take}"), Type::Small, t.accent))
                 .child(
-                    text(format!("{said} · ↵ {take}"))
-                        .font(type_::LABEL)
-                        .color(t.accent),
-                )
-                .child(
-                    text("esc")
+                    keys_hint(["esc"], "drop", t)
                         .key("review.nav.offer.drop")
                         .role("button")
                         .label("Drop the offered answer")
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary)
                         .on_press_tx({
                             let tile = tile.to_owned();
                             move |state: &mut State, _: &mut Tx| super::drop_offer(state, &tile)
@@ -450,17 +446,21 @@ pub(crate) fn note_line(tile: &str, nav: &Nav, t: &Tokens) -> Option<El> {
         Note::Alert(s) => (s.clone(), true),
     };
     Some(
-        text(said)
-            .key("review.nav.note")
-            .role(if alert { "alert" } else { "status" })
-            .font(type_::LABEL)
-            .color(if alert { t.error } else { t.text_secondary })
-            .wrap(),
+        words(
+            said,
+            Type::Small,
+            if alert { t.error } else { t.text_secondary },
+        )
+        .key("review.nav.note")
+        .role(if alert { "alert" } else { "status" })
+        .wrap(),
     )
 }
 
-/// A row of the list of places is about this tall.
-const PLACE_HEIGHT: f32 = 15.0;
+/// As tall as a list of places gets before it scrolls: 18 places.
+const LIST_HEIGHT: f32 = 360.0;
+/// A place's height: a line of `Mono`, 15, in a place's insets of 2, rounded up.
+const PLACE_HEIGHT: f32 = 20.0;
 
 thread_local! {
     static PLACES_BUILT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -475,121 +475,131 @@ pub fn places_built() -> usize {
 fn place_row(tile: &str, l: &CodeNavLocation, i: usize, picked: bool, t: &Tokens) -> El {
     PLACES_BUILT.with(|n| n.set(n.get() + 1));
     let outside = if l.outside { " outside" } else { "" };
-    let el = row()
+    let line = Inline::line()
+        .w_full()
+        .child(
+            words(
+                format!("{}:{}", l.path, l.line),
+                Type::Mono,
+                t.text_secondary,
+            )
+            .single_line()
+            .truncate()
+            .shrink()
+            .a11y_hidden(),
+        )
+        .children(l.outside.then(|| {
+            words("outside", Type::Small, t.warning)
+                .single_line()
+                .a11y_hidden()
+        }))
+        .child(
+            words(l.text.trim().to_owned(), Type::Mono, t.text_primary)
+                .single_line()
+                .truncate()
+                .shrink()
+                .a11y_hidden(),
+        );
+    raised_place(line, picked, t)
         .key(place_key(i))
         .role("option")
         .label(format!("{}:{}{outside} {}", l.path, l.line, l.text.trim()))
         .w_full()
-        .gap(space::S2)
-        .px(space::S2)
-        .child(
-            text(format!("{}:{}", l.path, l.line))
-                .font(type_::LABEL)
-                .color(t.text_secondary),
-        )
-        .children(
-            l.outside
-                .then(|| text("outside").font(type_::LABEL).color(t.warning)),
-        )
-        .child(
-            text(l.text.trim().to_owned())
-                .font(type_::MONO_CAPTION)
-                .color(t.text_primary),
-        )
+        .h(PLACE_HEIGHT)
         .on_press_tx({
             let tile = tile.to_owned();
             move |state: &mut State, tx: &mut Tx| super::open_answer_place(state, &tile, i, tx)
-        });
-    if picked {
-        el.fill(t.bg_selected).focus_selected(true)
-    } else {
-        el
-    }
+        })
 }
 
 /// The list of places an answer gives, or the type it reads.
 pub(crate) fn panel_view(tile: &str, answer: &Answer, t: &Tokens) -> El {
     let title = answer.kind.title(&answer.name);
-    let panel = col()
-        .key("review.nav.panel")
-        .role("dialog")
-        .label(title.clone())
-        .w_full()
-        .max_w(720.0)
-        .padding(space::S3)
-        .gap(space::S2)
-        .radius(radius::LG)
-        .child(
-            row()
-                .gap(space::S3)
-                .child(text(title.clone()).font(type_::TITLE).color(t.text_primary))
-                .children((answer.kind != Kind::Type).then(|| {
-                    text(answer.locations.len().to_string())
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary)
-                }))
-                .child(col().grow(1.0))
-                .children(
-                    (!answer.locations.is_empty())
-                        .then(|| text("↵ open").font(type_::LABEL).color(t.text_tertiary)),
-                )
-                .child(
-                    text("esc close")
-                        .key("review.nav.panel.close")
-                        .role("button")
-                        .label("Close")
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary)
-                        .on_press_tx({
-                            let tile = tile.to_owned();
-                            move |state: &mut State, _: &mut Tx| super::close_panel(state, &tile)
-                        }),
-                ),
+    let count = (answer.kind != Kind::Type).then(|| {
+        words(
+            answer.locations.len().to_string(),
+            Type::Small,
+            t.text_tertiary,
         )
-        .children(answer.text.clone().map(|t_| {
-            text(t_)
-                .font(type_::MONO_CAPTION)
-                .color(t.text_primary)
-                .wrap()
-        }))
-        .children((!answer.locations.is_empty()).then(|| {
-            let shown = tile.to_owned();
-            let tokens = *t;
-            let places = col()
-                .w_full()
-                .growth(rune::GrowthSpec::default())
-                .virtual_rows(
-                    answer.locations.len(),
-                    PLACE_HEIGHT,
-                    |_: &State, i| place_key(i).into(),
-                    move |state: &State, i| {
-                        let answer = state
-                            .readings
-                            .reviews
-                            .tiles
-                            .get(&shown)
-                            .and_then(|r| r.nav.panel.as_ref());
-                        match answer.and_then(|a| Some((a, a.locations.get(i)?))) {
-                            Some((answer, l)) => {
-                                place_row(&shown, l, i, i == answer.cursor, &tokens)
-                            }
-                            None => col().key(place_key(i)),
-                        }
-                    },
-                );
+    });
+    let open = (!answer.locations.is_empty()).then(|| keys_hint(["↵"], "open", t));
+    let close = keys_hint(["esc"], "close", t)
+        .key("review.nav.panel.close")
+        .role("button")
+        .label("Close")
+        .on_press_tx({
+            let tile = tile.to_owned();
+            move |state: &mut State, _: &mut Tx| super::close_panel(state, &tile)
+        });
+    let reads = answer.text.clone().map(|read| {
+        Block::custom(
+            "review.nav.panel.type",
+            words(read, Type::Mono, t.text_primary).wrap(),
+        )
+    });
+    let places = (!answer.locations.is_empty()).then(|| {
+        let shown = tile.to_owned();
+        let tokens = *t;
+        let places = col()
+            .w_full()
+            .growth(rune::GrowthSpec::default())
+            .virtual_rows(
+                answer.locations.len(),
+                PLACE_HEIGHT,
+                |_: &State, i| place_key(i).into(),
+                move |state: &State, i| {
+                    let answer = state
+                        .readings
+                        .reviews
+                        .tiles
+                        .get(&shown)
+                        .and_then(|r| r.nav.panel.as_ref());
+                    match answer.and_then(|a| Some((a, a.locations.get(i)?))) {
+                        Some((answer, l)) => place_row(&shown, l, i, i == answer.cursor, &tokens),
+                        None => col().key(place_key(i)),
+                    }
+                },
+            );
+        Block::custom(
+            "review.nav.panel.places",
             col()
                 .key(list_key(tile))
                 .role("listbox")
-                .label(title)
+                .label(title.clone())
                 .w_full()
-                .max_h(360.0)
+                .max_h(list_height(tile))
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
                 .child(places)
-                .scroll_bar_styled(attn_ui::scroll_bar(t))
-        }));
-    rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0)
+                .scroll_bar_styled(attn_ui::scroll_bar(t)),
+        )
+    });
+    let popover = Popover::new(PANEL, title)
+        .reading()
+        .push_all(reads)
+        .push_all(places);
+    let popover = count.into_iter().chain(open).fold(popover, Popover::aside);
+    popover
+        .aside(close)
+        .build(t)
+        .max_h(super::search::room_above_key_line(tile, PANEL).unwrap_or(f32::INFINITY))
+}
+
+const PANEL: &str = "review.nav.panel";
+
+/// As tall as the list of places in tile `tile` may stand: [`LIST_HEIGHT`], or less where the
+/// panel, bounded above the key line, leaves less room under the list's top and over the room
+/// the panel keeps under its body.
+fn list_height(tile: &str) -> f32 {
+    let bottom = |key: &str| rune::memo::layout_with(key, |[_, y, _, h]| y + h);
+    let foot = bottom(PANEL)
+        .zip(bottom(&format!("{PANEL}.body")))
+        .map(|(p, b)| p - b);
+    let room = super::search::room_above_key_line(tile, &list_key(tile));
+    room.zip(foot).map_or(LIST_HEIGHT, |(room, foot)| {
+        (room - foot).clamp(0.0, LIST_HEIGHT)
+    })
 }
 
 #[cfg(test)]

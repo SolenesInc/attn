@@ -10,6 +10,17 @@ pub fn place(content: El, current: bool, t: &Tokens) -> El {
     here(door::inset(content, Space::S6, Space::S2), current, t)
 }
 
+/// A place in a list raised over the window, such as the uses of a name: set in as [`place`]
+/// sets in, and while the cursor is on it, on [`raised_here_tint`] with the brand bar.
+pub fn raised_place(content: El, current: bool, t: &Tokens) -> El {
+    marked(
+        door::inset(content, Space::S6, Space::S2),
+        current,
+        raised_here_tint(t),
+        t,
+    )
+}
+
 /// A place with a mark of change down its left edge in `edge`, such as a block a review changed
 /// or removed: set in as [`place`] sets in, and while the cursor is on it, the cursor's bar takes
 /// the edge.
@@ -24,10 +35,13 @@ pub fn edged(content: El, edge: rune::Color, current: bool, t: &Tokens) -> El {
 /// The mark of where the cursor stands, on a part that sets its own insets, such as a line of
 /// code: drawn while `current`.
 pub fn here(content: El, current: bool, t: &Tokens) -> El {
+    marked(content, current, here_tint(t), t)
+}
+
+fn marked(content: El, current: bool, tint: rune::Color, t: &Tokens) -> El {
     if !current {
         return content;
     }
-    let tint = here_tint(t);
     content
         .gradient(tint, tint)
         .border_sides([0.0, 0.0, 0.0, RAIL], t.brand)

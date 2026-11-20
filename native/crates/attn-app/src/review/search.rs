@@ -398,6 +398,14 @@ pub(crate) fn view(search: &Search, query: &TextEdit, bundle: &ReviewBundle, t: 
         .child(el().h(key_line_height(&search.tile)))
 }
 
+/// How far a panel keyed `panel` over review tile `tile` may reach down before the tile's key
+/// line, from its top: its height at most, so the key line stays in view under it.
+pub(super) fn room_above_key_line(tile: &str, panel: &str) -> Option<f32> {
+    let top = rune::memo::layout_with(panel, |[_, y, _, _]| y)?;
+    let keys = rune::memo::layout_with(&format!("{}.keys", super::prefix(tile)), |[_, y, _, _]| y)?;
+    Some((keys - top).max(0.0))
+}
+
 /// How tall the key line along the bottom of review tile `tile` stands, which the search leaves
 /// in view under it.
 fn key_line_height(tile: &str) -> f32 {

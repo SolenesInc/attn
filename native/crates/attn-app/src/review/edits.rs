@@ -6,9 +6,9 @@ use attn_protocol::{
     ReviewRow,
 };
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Key, KeyEvent, TextEdit, Tx, col, text};
+use attn_ui::blocks::{Actions, Block, Popover};
+use attn_ui::system::{Type, keys_hint, words};
+use rune::{El, Key, KeyEvent, TextEdit, Tx};
 use rune_kit::TextArea;
 use rune_kit::syntax::{Paint, Syntax, highlight, lang_for_path};
 
@@ -529,8 +529,8 @@ fn first_changed_line(was: &str, now: &str) -> i64 {
 }
 
 /// The edit box over its tile.
-pub(crate) fn view(open: &Open, words: &TextEdit, t: &Tokens) -> El {
-    let area = TextArea::new(words)
+pub(crate) fn view(open: &Open, words_: &TextEdit, t: &Tokens) -> El {
+    let area = TextArea::new(words_)
         .key(FIELD)
         .width(None)
         .resizable()
@@ -546,55 +546,49 @@ pub(crate) fn view(open: &Open, words: &TextEdit, t: &Tokens) -> El {
         "↵".to_owned()
     };
     let problem = open.problem.clone().map(|p| {
-        text(p)
-            .role("alert")
-            .font(type_::LABEL)
-            .color(t.error)
-            .wrap()
-    });
-    let panel = col()
-        .key("review.edit")
-        .role("dialog")
-        .label("Edit the file")
-        .modal_tx(false, close)
-        .w_full()
-        .max_w(720.0)
-        .padding(space::S3)
-        .gap(space::S2)
-        .child(
-            text(format!("Editing {}: {}", open.path, open.describe()))
-                .font(type_::LABEL)
-                .color(t.text_secondary),
+        Block::custom(
+            "review.edit.problem",
+            words(p, Type::Small, t.error).role("alert").wrap(),
         )
-        .child(area)
-        .children(problem)
-        .child(
-            rune::row()
-                .gap(space::S2)
-                .child(
-                    text(format!("{save} save"))
-                        .key("review.edit.save")
-                        .role("button")
-                        .font(type_::LABEL)
-                        .color(t.text_secondary)
-                        .on_press_tx(self::save),
-                )
-                .child(
-                    text("esc cancel")
-                        .key("review.edit.cancel")
-                        .role("button")
-                        .font(type_::LABEL)
-                        .color(t.text_secondary)
-                        .on_press_tx(close),
-                )
-                .child(
-                    text("⌥↑ ⌥↓ take in a line · saved to the file and listed in the review")
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary)
-                        .wrap(),
-                ),
-        );
-    rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0)
+    });
+    let hint = |keys: &str, what: &str, key: &str| {
+        keys_hint([keys.to_owned()], what.to_owned(), t)
+            .key(key.to_owned())
+            .role("button")
+    };
+    Popover::new("review.edit", "Edit the file")
+        .reading()
+        .push(Block::custom(
+            "review.edit.place",
+            words(
+                format!("Editing {}: {}", open.path, open.describe()),
+                Type::Small,
+                t.text_secondary,
+            )
+            .wrap(),
+        ))
+        .push(Block::custom("review.edit.input", area))
+        .push_all(problem)
+        .push(Block::custom(
+            "review.edit.lands",
+            words(
+                "Saved to the file and listed in the review.",
+                Type::Small,
+                t.text_tertiary,
+            )
+            .wrap(),
+        ))
+        .actions(
+            Actions::new("review.edit.keys")
+                .push(hint(&save, "save", "review.edit.save").on_press_tx(self::save))
+                .push(hint("esc", "cancel", "review.edit.cancel").on_press_tx(close))
+                .push(keys_hint(["⌥↑", "⌥↓"], "take in a line", t)),
+        )
+        .build(t)
+        .modal_tx(false, close)
+        .max_h(
+            super::search::room_above_key_line(&open.tile, "review.edit").unwrap_or(f32::INFINITY),
+        )
 }
 
 /// Undoes the newest edit `mark` of file `path`: reads the file, finds the edit's text where it
