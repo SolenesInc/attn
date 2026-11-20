@@ -10,6 +10,7 @@ import { createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
+/** How far, in one colour channel, the primary action's fill stands from the panel and from Cancel. */
 const PRIMARY_LEAD = 40;
 
 const options = parseCommonArgs(process.argv.slice(2));
@@ -92,10 +93,24 @@ try {
     const image = PNG.sync.read(fs.readFileSync(confirmation));
     const window = await driver.find({ key: 'window' });
     const scale = Math.max(1, Math.round(image.width / window.rect[2]));
-    const [x, y, , h] = (await driver.find({ key: 'close_desktop.confirm' })).rect;
-    const at = (Math.round((y + h / 2) * scale) * image.width + Math.round((x + 4) * scale)) * 4;
-    const [r, g, b] = image.data.subarray(at, at + 3);
-    runner.assert(r - b >= PRIMARY_LEAD, `the confirm button fills with the primary action's orange, its red ${PRIMARY_LEAD} levels or more above blue`, { scale, fill: [r, g, b] });
+    const fillAt = (x, y) => {
+      const at = (Math.round(y * scale) * image.width + Math.round(x * scale)) * 4;
+      return [...image.data.subarray(at, at + 3)];
+    };
+    const buttonFill = async (key) => {
+      const [x, y, , h] = (await driver.find({ key })).rect;
+      return fillAt(x + 4, y + h / 2);
+    };
+    const confirm = await buttonFill('close_desktop.confirm');
+    const cancel = await buttonFill('close_desktop.cancel');
+    const [dx, dy, dw] = (await driver.find({ key: 'close_desktop-dialog' })).rect;
+    const panel = fillAt(dx + dw / 2, dy + 6);
+    const apart = (a, b) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));
+    runner.assert(
+      apart(confirm, panel) >= PRIMARY_LEAD && apart(confirm, cancel) >= PRIMARY_LEAD,
+      `the confirm button is the filled primary action, ${PRIMARY_LEAD} levels or more apart in a channel from the panel and from Cancel`,
+      { scale, confirm, cancel, panel },
+    );
     const ended = observer.waitForMessage((message) => message.event === 'session_unregistered' && message.session?.id === id && message, 'the shell ended');
     await driver.click({ key: 'close_desktop.confirm' });
     await observer.waitFor(() => !observer.desktop(desktop.id), 'the desktop closed');
