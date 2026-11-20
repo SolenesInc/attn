@@ -35,7 +35,7 @@ func (s *Sigma) Capabilities() Capabilities {
 	return Capabilities{
 		HasResume:             true,
 		HasYolo:               true,
-		HasUnattendedApproval: true,
+		HasAutoApprove:        true,
 		HasInitialPrompt:      true,
 		HasLaunchInstructions: true,
 		HasModelPin:           true,

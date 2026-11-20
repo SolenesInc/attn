@@ -61,8 +61,6 @@ type Capabilities struct {
 
 	HasAutoApprove bool
 
-	HasUnattendedApproval bool
-
 	HasInitialPrompt bool
 
 	HasLaunchInstructions bool

@@ -42,7 +42,7 @@ func (d *Daemon) validateAutomationSpec(raw string) (automation.DefinitionSpec, 
 	if err := d.validateHarnessModelEffort(spec.Launch.Driver, spec.Launch.Model, spec.Launch.Effort); err != nil {
 		return spec, nil, err
 	}
-	if !agentdriver.EffectiveCapabilities(agentdriver.Get(spec.Launch.Driver)).HasUnattendedApproval {
+	if !agentdriver.EffectiveCapabilities(agentdriver.Get(spec.Launch.Driver)).HasAutoApprove {
 		return spec, nil, fmt.Errorf("agent %q does not support automation automatic approval", spec.Launch.Driver)
 	}
 	for identity, source := range spec.Location.RepositorySources.Overrides {

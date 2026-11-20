@@ -43,7 +43,7 @@ func TestAutoApproveDefaultsOnAndRespectsAnExplicitChoice(t *testing.T) {
 				if got := w.App().Initial.Settings["auto_approve_enabled"]; got != strconv.FormatBool(on) {
 					t.Errorf("direct=%s stored=%q: settings report auto-approve %q, want %t", launch.direct, launch.stored, got, on)
 				}
-				want := on && agent != fakeagent.Sigma
+				want := on
 				run := w.Launched(w.Spawn(app, agent, w.Path("shop")))
 				mode, _ := flagValue(run.Argv, "--permission-mode")
 				auto := mode == "auto"
