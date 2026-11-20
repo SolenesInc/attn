@@ -57,4 +57,24 @@ impl Stack {
     pub fn loose() -> El {
         door::gap(col(), Space::S8)
     }
+
+    /// Further apart: the parts of a column that each stand on their own, such as diagrams.
+    pub fn apart() -> El {
+        door::gap(col(), Space::S12)
+    }
+
+    /// The parts of a document one under another, each given as the room it wants above and
+    /// below it: two parts stand as far apart as the larger of the room between them wants, and
+    /// the first stands at the top.
+    pub fn flowing(parts: impl IntoIterator<Item = ((f32, f32), El)>) -> Vec<El> {
+        let mut below = None;
+        parts
+            .into_iter()
+            .map(|((above, after), part)| {
+                let room = below.map_or(0.0, |b: f32| b.max(above));
+                below = Some(after);
+                door::room_before(part, room)
+            })
+            .collect()
+    }
 }

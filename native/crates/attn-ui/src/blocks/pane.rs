@@ -13,13 +13,20 @@ pub struct Pane {
     content: El,
 }
 
+const SIDE: Space = Space::S16;
+
 enum Width {
     Fixed(f32),
     Share { share: f32, least: f32 },
     Rest,
+    Above(f32),
 }
 
 impl Pane {
+    /// How much narrower what a ruled pane holds stands than the pane: its two sides and its
+    /// rule.
+    pub const SIDES: f32 = 2.0 * SIDE.pt() + 1.0;
+
     pub fn new(key: impl Into<String>, content: El) -> Pane {
         Pane {
             key: key.into(),
@@ -43,7 +50,15 @@ impl Pane {
         self
     }
 
-    /// A rule down the pane's right side, between it and the pane after it.
+    /// The pane stands above the one after it, across the reader, as tall as what it holds and
+    /// at most `most`, for a reader too narrow to lay them side by side.
+    pub fn above(mut self, most: f32) -> Self {
+        self.width = Width::Above(most);
+        self
+    }
+
+    /// A rule between the pane and the one after it: down its right side, or along its foot
+    /// when it stands above.
     pub fn ruled(mut self) -> Self {
         self.ruled = true;
         self
@@ -55,20 +70,21 @@ impl Pane {
     }
 
     pub fn build(self, t: &Tokens) -> El {
-        self.framed(t, (Space::S12, Space::S16, Space::S32))
+        self.framed(t, (Space::S12, SIDE, Space::S32))
     }
 
     fn framed(self, t: &Tokens, (top, x, bottom): (Space, Space, Space)) -> El {
-        let pane = col().key(self.key).h_full().min_h(0.0);
+        let pane = col().key(self.key).min_h(0.0);
         let pane = match self.width {
-            Width::Fixed(width) => pane.w(width).min_w(width),
-            Width::Share { share, least } => pane.w(0.0).grow(share).min_w(least),
-            Width::Rest => pane.grow(1.0).min_w(0.0),
+            Width::Fixed(width) => pane.h_full().w(width).min_w(width),
+            Width::Share { share, least } => pane.h_full().w(0.0).grow(share).min_w(least),
+            Width::Rest => pane.h_full().grow(1.0).min_w(0.0),
+            Width::Above(most) => pane.w_full().max_h(most),
         };
-        let pane = if self.ruled {
-            pane.border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
-        } else {
-            pane
+        let pane = match (&self.width, self.ruled) {
+            (Width::Above(_), true) => pane.border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle),
+            (_, true) => pane.border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle),
+            (_, false) => pane,
         };
         door::frame(pane, top, x, bottom)
             .scroll(ScrollSpec {

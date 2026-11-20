@@ -240,6 +240,11 @@ pub(crate) fn room_after(e: El, points: f32) -> El {
     e.mr(points)
 }
 
+/// `e` with `points` of empty room above it.
+pub(crate) fn room_before(e: El, points: f32) -> El {
+    e.mt(points)
+}
+
 /// How wide `said` stands in `kind`, as the runtime lays it out.
 pub(crate) fn width(said: &str, kind: Type) -> f32 {
     rune::text::measure(said, &[], style(kind), None).0

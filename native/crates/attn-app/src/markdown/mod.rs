@@ -168,7 +168,7 @@ pub(crate) fn body(
             read_source(&content.content[part.clone()], Some(part.start), marking)
         };
         let card = crate::review::card_key(tile);
-        let marking = annotating::in_document(readings, tile, &card, 0.0, t);
+        let marking = annotating::in_document(readings, tile, &card, padding, t);
         return crate::review::body(
             (tile, &view, title, padding, held),
             (&content.content, bundle, *revision),

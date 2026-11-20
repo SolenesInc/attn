@@ -24,9 +24,10 @@ use std::rc::Rc;
 
 use attn_protocol::{ReviewBundle, ReviewFlow, ReviewRow};
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::{radius, space};
-use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, memo, row, text};
+use attn_ui::blocks::{Bar, Inline, Pane, Stack, Surface, Tray};
+use attn_ui::system::{Type, words};
+use rune::tok::space;
+use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, memo, row};
 use rune_kit::ScrollBar;
 
 use crate::State;
@@ -35,6 +36,8 @@ use frames::{Frame, MapPlace, Side};
 
 /// The review's card, as the Tauri review reader widens the markdown reader's.
 pub(crate) const CARD_MAX_WIDTH: f32 = 1180.0;
+/// How far the moved notes stand under the review's last part, at least.
+const MOVED_ABOVE: f32 = 21.0;
 /// The frames the reader draws.
 const BUILT: [Frame; 3] = [Frame::Brief, Frame::Walkthrough, Frame::Map];
 /// The Walkthrough's script column is this wide, at most this share of the tile.
@@ -790,56 +793,56 @@ pub(crate) fn body(
                     });
                     let switch = (sides && flow.side.is_some())
                         .then(|| side_switch(&format!("{key}.side"), tile, reading.side, t));
-                    col().w_full().gap(space::S1).children(switch).child(drawn)
+                    Stack::tight().w_full().children(switch).child(drawn)
                 }
             },
         ))
     });
-    let card = col()
-        .key(card_key(tile))
-        .w_full()
-        .max_w(CARD_MAX_WIDTH)
-        .padding(padding)
-        .radius(radius::LG)
-        .fill(t.bg_panel)
-        .border(1.0, t.border.alpha(0.5))
-        .children(spaced(parts))
-        .children((!moved.is_empty()).then(|| {
-            col()
-                .key(format!("{prefix}.moved"))
-                .mt(21.0)
-                .role("region")
-                .label("Moved notes")
-                .w_full()
-                .gap(space::S1)
-                .child(text("Moved notes").font(type_::TITLE).color(t.text_primary))
-                .child(
-                    text("The lines these were written on changed. They still go with the review, marked as moved.")
-                        .font(type_::BODY)
-                        .color(t.text_secondary)
-                        .wrap(),
+    let moved = (!moved.is_empty()).then(|| {
+        let notes = Stack::tight()
+            .key(format!("{prefix}.moved"))
+            .role("region")
+            .label("Moved notes")
+            .w_full()
+            .child(words("Moved notes", Type::Name, t.text_primary))
+            .child(
+                words(
+                    "The lines these were written on changed. They still go with the review, marked as moved.",
+                    Type::Body,
+                    t.text_secondary,
                 )
-                .children(moved.iter().map(|m| marks::mark_row(m, t)))
-        }))
-        .children(marking);
-    let mut document = col()
-        .key(view)
-        .role("document")
-        .label(title)
-        .holds_keys(held)
-        .min_h(0.0)
-        .scroll(ScrollSpec {
-            stick_bottom: false,
-        })
-        .padding(space::S3)
-        .items_center()
-        .on_layout_tx({
-            let view = view.to_owned();
-            move |state: &mut State, [_, _, w, _], tx: &mut Tx| {
-                state.readings.measured(&view, w, tx)
-            }
-        })
-        .child(card);
+                .wrap(),
+            )
+            .children(moved.iter().map(|m| marks::mark_row(m, t)));
+        ((MOVED_ABOVE, 0.0), notes)
+    });
+    let card = Surface::document(
+        col()
+            .key(card_key(tile))
+            .w_full()
+            .children(Stack::flowing(parts.chain(moved))),
+        padding,
+        t,
+    )
+    .max_w(CARD_MAX_WIDTH)
+    .children(marking);
+    let mut document = Surface::gutter(
+        col()
+            .key(view)
+            .role("document")
+            .label(title)
+            .holds_keys(held)
+            .min_h(0.0)
+            .scroll(ScrollSpec {
+                stick_bottom: false,
+            }),
+    )
+    .items_center()
+    .on_layout_tx({
+        let view = view.to_owned();
+        move |state: &mut State, [_, _, w, _], tx: &mut Tx| state.readings.measured(&view, w, tx)
+    })
+    .child(card);
     if let Some(key) = cursor_key {
         document = document.active_descendant(key);
     }
@@ -940,7 +943,11 @@ pub(crate) fn body(
         .grow(1.0)
         .min_h(0.0)
         .child(frame)
-        .children(nav::note_line(tile, &review.nav, t).map(|n| n.px(space::S3)))
+        .children(nav::note_line(tile, &review.nav, t).map(|n| {
+            Tray::new(format!("{prefix}.nav.note"), "Finding")
+                .push(n)
+                .build(t)
+        }))
         .children(
             review.nav.panel.as_ref().map(|p| {
                 nav::panel_view(tile, p, t).pin(Some(0.0), Some(space::S6), Some(0.0), None)
@@ -1018,19 +1025,6 @@ pub(crate) fn body(
         }))
 }
 
-/// Each part with the space above it that its margins and the margins of the part before it
-/// collapse into; the first part starts at the card's padding.
-fn spaced(parts: impl Iterator<Item = ((f32, f32), El)>) -> Vec<El> {
-    let mut below = None;
-    parts
-        .map(|((top, bottom), el)| {
-            let gap = below.map_or(0.0, |b: f32| b.max(top));
-            below = Some(bottom);
-            el.mt(gap)
-        })
-        .collect()
-}
-
 /// How wide a prose part of kind `block` runs, centered in the card: the review's measure for
 /// the text blocks the Tauri review caps; a code block, table or anything else takes the card.
 fn prose_width(block: document::Prose) -> f32 {
@@ -1054,24 +1048,25 @@ fn floating(panel: El, down: f32, width: f32, share: f32) -> El {
 fn side_switch(key: &str, tile: &str, side: Side, t: &Tokens) -> El {
     let tab = |s: Side, name: &str| {
         let on = s == side;
-        text(name.to_owned())
-            .key(format!("{key}.{}", s.name()))
-            .font(type_::LABEL)
-            .color(if on { t.text_primary } else { t.text_tertiary })
-            .role("tab")
-            .label(name.to_owned())
-            .focus_selected(on)
-            .on_press_tx(pressed(tile, move |state, tile, _, tx| {
-                pick_side(state, tile, s, tx)
-            }))
+        words(
+            name.to_owned(),
+            Type::Control,
+            if on { t.text_primary } else { t.text_tertiary },
+        )
+        .key(format!("{key}.{}", s.name()))
+        .role("tab")
+        .label(name.to_owned())
+        .focus_selected(on)
+        .on_press_tx(pressed(tile, move |state, tile, _, tx| {
+            pick_side(state, tile, s, tx)
+        }))
     };
-    row()
+    Inline::loose()
         .role("tablist")
         .label("Sides")
-        .gap(space::S2)
         .child(tab(Side::Before, "Before"))
         .child(tab(Side::After, "After"))
-        .child(text("b").font(type_::LABEL).color(t.text_tertiary))
+        .child(words("b", Type::Small, t.text_tertiary))
 }
 
 /// The Map: the diagrams with the arrow it stands on, the Not shown list under them and a line
@@ -1117,41 +1112,33 @@ fn map(tile: &str, reading: &Reading, document: El, revision: u64, t: &Tokens) -
                 participant(c.flow, &c.message.from),
                 participant(c.flow, &c.message.to)
             );
-            col()
+            Stack::tight()
                 .key(format!("{prefix}.map.arrow"))
                 .role("region")
                 .label("The arrow")
-                .gap(2.0)
-                .child(
-                    text(format!("Arrow {} of {count}{sided}", index + 1))
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary),
-                )
-                .child(
-                    text(c.message.text.clone())
-                        .font(type_::TITLE)
-                        .color(t.text_primary)
-                        .wrap(),
-                )
-                .child(text(route).font(type_::LABEL).color(t.text_secondary))
+                .child(words(
+                    format!("Arrow {} of {count}{sided}", index + 1),
+                    Type::Small,
+                    t.text_tertiary,
+                ))
+                .child(words(c.message.text.clone(), Type::Name, t.text_primary).wrap())
+                .child(words(route, Type::Small, t.text_secondary))
         }
-        None => text("No arrow in this diagram is tied to a stop.")
-            .font(type_::BODY)
-            .color(t.text_tertiary),
+        None => words(
+            "No arrow in this diagram is tied to a stop.",
+            Type::Body,
+            t.text_tertiary,
+        ),
     };
     let not_shown = (!bundle.not_shown.is_empty())
         .then(|| keys::not_shown((None, &format!("{prefix}.map.not-shown")), bundle, None, t));
     let sides = frames::has_sides(bundle)
         .then(|| side_switch(&format!("{prefix}.map.side"), tile, reading.side, t));
-    let diagrams = col()
-        .key(format!("{prefix}.map"))
-        .role("region")
-        .label("Map")
-        .gap(space::S3)
-        .padding(space::S3)
+    let diagrams = Stack::apart()
         .children(sides)
         .children(diagrams)
         .children(not_shown);
+    let map = |pane: Pane| pane.build(t).role("region").label("Map");
     let widest = bundle
         .flows
         .iter()
@@ -1163,37 +1150,26 @@ fn map(tile: &str, reading: &Reading, document: El, revision: u64, t: &Tokens) -
         .w_full()
         .grow(1.0)
         .min_h(0.0)
-        .child(col().px(space::S3).pt(space::S2).child(arrow))
+        .child(Bar::new(format!("{prefix}.map.where")).lead(arrow).build(t))
         .child(document);
-    if width * DIAGRAM_SHARE - 25.0 >= widest {
+    let beside = width * DIAGRAM_SHARE;
+    if beside - Pane::SIDES >= widest {
         row()
             .w_full()
             .grow(1.0)
             .min_h(0.0)
-            .child(
-                diagrams
-                    .w(width * DIAGRAM_SHARE)
-                    .h_full()
-                    .scroll(ScrollSpec {
-                        stick_bottom: false,
-                    })
-                    .scroll_bar_styled(attn_ui::scroll_bar(t)),
-            )
+            .child(map(
+                Pane::new(format!("{prefix}.map"), diagrams).width(beside)
+            ))
             .child(step)
     } else {
         col()
             .w_full()
             .grow(1.0)
             .min_h(0.0)
-            .child(
-                diagrams
-                    .w_full()
-                    .max_h(width.max(320.0) * 0.6)
-                    .scroll(ScrollSpec {
-                        stick_bottom: false,
-                    })
-                    .scroll_bar_styled(attn_ui::scroll_bar(t)),
-            )
+            .child(map(Pane::new(format!("{prefix}.map"), diagrams)
+                .above(width.max(320.0) * 0.6)
+                .ruled()))
             .child(step)
     }
 }
