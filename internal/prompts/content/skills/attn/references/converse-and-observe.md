@@ -148,8 +148,8 @@ right after the command. You get no turn after the compact. If the compact
 fails, you still close, and the reason says the compact did not run. The harness
 decides what the compact keeps, so put what your next turn needs in a seed note
 or the standby note. `--compact` goes only with `--self`. Claude Code sessions
-with the Claude mod and Codex sessions on the shared app server compact on the
-home machine or an outpost, and Sigma sessions on the home machine. Plugin
+with the Claude mod, Codex sessions on the shared app server and Sigma
+sessions compact on the home machine or an outpost. Plugin
 sessions compact on the home machine when
 their driver supports native compaction. attn refuses a session without a
 compaction path, and the refusal says why. Compact when you will resume as yourself.

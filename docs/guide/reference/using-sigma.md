@@ -58,7 +58,10 @@ refuses its registration, because Attn has the harness of that name.
 - Attn holds one connection to the server while any Sigma session is open. When
   the last session closes, Attn closes the connection, and the server exits on
   its own once no client is left and no run is working.
-- Sigma sessions run at the home. Attn refuses to start one on an outpost.
+- A Sigma session on an outpost runs on that outpost's own Sigma server, which
+  the outpost starts and stops the same way. Its model list comes from that
+  server. Install Sigma and sign in to its providers on the outpost. See
+  [Using outposts](using-outposts.md#run-agents-on-an-outpost).
 
 ## State
 

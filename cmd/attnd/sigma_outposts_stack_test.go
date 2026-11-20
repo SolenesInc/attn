@@ -45,7 +45,6 @@ func spawnOnOutpost(pair *testworld.OutpostPair, h fakeagent.Harness) string {
 	return pair.Home.Spawn(pair.App, h, pair.Outpost.Path("agent"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
 }
 
-// Mirrors TestOutpostAgentsRunOnTheirMachineAndReportToTheHome.
 func TestAnOutpostSigmaSessionRunsOnTheOutpostsServerAndReportsToTheHome(t *testing.T) {
 	pair := sigmaOutpostPair(t)
 	id, server, conversation := outpostSigmaAtWork(t, pair)
@@ -60,7 +59,6 @@ func TestAnOutpostSigmaSessionRunsOnTheOutpostsServerAndReportsToTheHome(t *test
 	t.Logf("sigma terminal=%s host=%s conversation=%s state=%s; the outpost's server took the prompt, the home started none", pair.App.Terminal(id), pair.Host, conversation, session.State)
 }
 
-// Mirrors TestOutpostAgentsQueueMessagesOfflineAndRecoverAcrossBothRestarts.
 func TestAMessageForAnOfflineOutpostSigmaSessionArrivesAfterItReconnects(t *testing.T) {
 	pair := sigmaOutpostPair(t)
 	app := pair.App
@@ -81,13 +79,13 @@ func TestAMessageForAnOfflineOutpostSigmaSessionArrivesAfterItReconnects(t *test
 	if prompt := server.Prompted(conversation).Text; !strings.Contains(prompt, "attn") {
 		t.Fatalf("queued inbox ring = %q", prompt)
 	}
+	testworld.AwaitSessionSince(app, mark, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	server.Reply(conversation, "Connected. <!-- attn:state=waiting_input -->")
 	testworld.AwaitSessionSince(app, mark, id, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
 	requireNoHomeSigmaServer(t, pair)
 	t.Logf("offline message: %s; the ring reached the outpost's Sigma server after it reconnected", message.Detail)
 }
 
-// Mirrors the home restart of TestOutpostAgentsQueueMessagesOfflineAndRecoverAcrossBothRestarts.
 func TestAHomeRestartWhileAnOutpostSigmaSessionWorksStartsNoHomeSigmaServer(t *testing.T) {
 	pair := sigmaOutpostPair(t)
 	id, server, conversation := outpostSigmaAtWork(t, pair)
@@ -110,7 +108,6 @@ func TestAHomeRestartWhileAnOutpostSigmaSessionWorksStartsNoHomeSigmaServer(t *t
 	t.Log("the home came back, the outpost's server kept the run and took the next prompt, and the home started no Sigma server")
 }
 
-// Mirrors TestClosingAnOutpostAgentDrainsItsFinalCostAndLeavesItsTranscriptReadable.
 func TestClosingAnOutpostSigmaSessionInterruptsItsRunOnTheOutpostsServer(t *testing.T) {
 	pair := sigmaOutpostPair(t)
 	id, server, conversation := outpostSigmaAtWork(t, pair)
@@ -123,6 +120,28 @@ func TestClosingAnOutpostSigmaSessionInterruptsItsRunOnTheOutpostsServer(t *test
 	server.AwaitInterrupted(conversation)
 	requireNoHomeSigmaServer(t, pair)
 	t.Logf("closing %s at the home interrupted conversation %s on the outpost's Sigma server", id, conversation)
+}
+
+func TestAnOutpostSigmaSessionThatClosesCompactingCompactsOnTheOutpostsServerAndThenCloses(t *testing.T) {
+	pair := sigmaOutpostPair(t)
+	id, server, conversation := outpostSigmaAtWork(t, pair)
+	server.AnswerNextCompaction(conversation, fakeagent.ServerCompaction{Outcome: "compacted"})
+	asked := pair.Outpost.Run(testworld.Invocation{Args: []string{"agent", "close", "--self", "--compact", "-m", compactOutpostReason}, Terminal: pair.App.Terminal(id)})
+	if asked.Code != 0 {
+		t.Fatalf("agent close --self --compact on the outpost exited %d: %s%s", asked.Code, asked.Stdout, asked.Stderr)
+	}
+	server.Reply(conversation, "Fixed and closing. <!-- attn:state=idle -->")
+	closed := testworld.Await(pair.App, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
+		return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == id
+	})
+	if got := protocol.Deref(closed.SessionLedgerEntry.CloseReason); got != compactOutpostReason {
+		t.Fatalf("the session closed for %q, want %q", got, compactOutpostReason)
+	}
+	if compacted, duringARun := server.Compactions(conversation); compacted != 1 || duringARun != 0 {
+		t.Fatalf("the outpost's Sigma server compacted %d times, %d during a run, want once after the run", compacted, duringARun)
+	}
+	requireNoHomeSigmaServer(t, pair)
+	t.Logf("%s compacted once on the outpost's Sigma server after its run, then closed for %q", id, compactOutpostReason)
 }
 
 func TestTheSigmaModelListForAnOutpostComesFromTheOutpostsServer(t *testing.T) {

@@ -169,9 +169,8 @@ Install and log in to Claude Code, Codex or Sigma on the outpost. Each machine u
 Attn starts a harness on an outpost when that outpost offers it, and refuses
 the start, naming the outpost, when it doesn't. An outpost offers the harnesses
 it finds, the same way the home does. A plugin harness also needs its plugin at
-the home, because the home builds every launch. A Sigma session on an outpost
-uses that outpost's Sigma server, which the outpost starts in its own terminal,
-and its model list comes from that server.
+the home, because the home builds every launch. A harness that runs on a shared
+server, such as Sigma, uses the outpost's own server.
 
 An agent starts on an outpost once the first sync of its profile's Notebook
 folder finishes. Attn refuses an earlier start and names the folder and the
