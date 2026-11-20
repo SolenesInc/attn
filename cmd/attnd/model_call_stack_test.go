@@ -215,6 +215,102 @@ func TestTheSpareEndsWhenModelCallsAreOutOfUse(t *testing.T) {
 	spare.AwaitExited()
 }
 
+func TestTheModelLogListsEachCallsFactsAndNothingOfItsContent(t *testing.T) {
+	s, lens := modelCallStack(t)
+	home := s.TrustedApp().SelectedProfile()
+	notes := pairSender(t, s, "Notes")
+	side := testworld.Request(s.TrustedApp(), protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"},
+		protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
+	if !side.Success {
+		t.Fatalf("create Side: %+v", side)
+	}
+	other := pairSender(t, s, "Other", side.Profile.ID)
+	s.Spare()
+
+	content := map[string]any{"system": "SECRET-INSTRUCTIONS", "input": "SECRET-INPUT"}
+	answeredCall := callModel(s, lens, content)
+	s.HeadlessTask().Answer("SECRET-ANSWER")
+	answered(t, answeredCall.Wait())
+
+	codex := callModel(s, notes, map[string]any{"purpose": "notes-title", "harness": "codex", "tier": "light"})
+	codexTask := s.HeadlessTask()
+	codexTask.Answer("a title")
+	answered(t, codex.Wait())
+
+	limited := callModel(s, lens, map[string]any{"purpose": "slow", "limit_ms": 25000})
+	s.AwaitTimer(daemon.ModelCallLimitTimer)
+	slow := s.HeadlessTask()
+	s.Advance(25 * time.Second)
+	limited.Wait()
+	slow.AwaitExited()
+	slow.Answer("too late")
+
+	stopped := callModel(s, notes, map[string]any{"purpose": "abandoned"})
+	abandoned := s.HeadlessTask()
+	stopped.Kill()
+	abandoned.AwaitExited()
+	abandoned.Answer("never read")
+
+	elsewhere := callModel(s, other, map[string]any{"purpose": "side-call"})
+	s.HeadlessTask().Answer("ok")
+	answered(t, elsewhere.Wait())
+	s.AwaitJobsSettled()
+
+	listed := s.Attn("model", "log", "--profile", home, "--json")
+	if strings.Contains(listed.Stdout, "SECRET") {
+		t.Fatalf("attn model log holds a call's content: %s", listed.Stdout)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(listed.Stdout), &rows); err != nil {
+		t.Fatalf("attn model log --json printed %q: %v (stderr %q)", listed.Stdout, err, listed.Stderr)
+	}
+	facts := []string{"at", "sender", "purpose", "harness", "model", "took_ms", "model_ms", "tokens_in", "tokens_out", "cost_usd", "outcome"}
+	for _, row := range rows {
+		for field := range row {
+			if !slices.Contains(facts, field) {
+				t.Errorf("a model log row has %q; a row holds only %v", field, facts)
+			}
+		}
+	}
+	type summary struct {
+		sender, purpose, harness, model, outcome string
+		tookMs, modelMs, tokensIn, tokensOut     float64
+	}
+	var got []summary
+	for _, row := range rows {
+		modelMs, _ := row["model_ms"].(float64)
+		got = append(got, summary{row["sender"].(string), row["purpose"].(string), row["harness"].(string), row["model"].(string), row["outcome"].(string),
+			row["took_ms"].(float64), modelMs, row["tokens_in"].(float64), row["tokens_out"].(float64)})
+	}
+	want := []summary{
+		{"Notes", "abandoned", "claude", "claude-sonnet-fake", "stopped", 0, 0, 0, 0},
+		{"Lens", "slow", "claude", "claude-sonnet-fake", "limit", 25000, 0, 0, 0},
+		{"Notes", "notes-title", "codex", codexTask.Model, "answered", 0, 0, 0, 0},
+		{"Lens", "test", "claude", "claude-sonnet-fake", "answered", 0, fakeagent.FakeModelMs, 661, 12},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("attn model log --json = %+v, want newest first %+v", got, want)
+	}
+	for _, row := range rows {
+		if _, err := time.Parse(time.RFC3339, row["at"].(string)); err != nil {
+			t.Errorf("a model log row's at %q is not a time: %v", row["at"], err)
+		}
+	}
+
+	if onlyNotes := s.Attn("model", "log", "--profile", home, "--sender", "notes", "--json"); strings.Count(onlyNotes.Stdout, `"sender":"Notes"`) != 2 || strings.Contains(onlyNotes.Stdout, "Lens") {
+		t.Fatalf("attn model log --sender notes = %s, want Notes's two calls only", onlyNotes.Stdout)
+	}
+	if sides := s.Attn("model", "log", "--profile", "Side", "--json"); !strings.Contains(sides.Stdout, `"purpose":"side-call"`) || strings.Count(sides.Stdout, `"sender"`) != 1 {
+		t.Fatalf("attn model log for Side = %s, want only Other's call", sides.Stdout)
+	}
+
+	s.Advance(31 * 24 * time.Hour)
+	s.AwaitJobsSettled()
+	if kept := s.Attn("model", "log", "--profile", home, "--json"); strings.TrimSpace(kept.Stdout) != "[]" {
+		t.Fatalf("31 days on, attn model log = %s, want the calls pruned", kept.Stdout)
+	}
+}
+
 func containsRun(args []string, run ...string) bool {
 	for i := range args {
 		if slices.Equal(args[i:min(i+len(run), len(args))], run) {

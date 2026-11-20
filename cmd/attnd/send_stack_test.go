@@ -32,7 +32,7 @@ type sendOutput struct {
 	} `json:"attachments"`
 }
 
-func pairSender(t *testing.T, s *testworld.Stack, name string) string {
+func pairSender(t *testing.T, s *testworld.Stack, name string, profileID ...string) string {
 	t.Helper()
 	pairing := s.Launch(testworld.Invocation{Args: []string{"send", "pair", "--name", name, "--json"}})
 	pairing.AwaitStdout(`"code"`)
@@ -41,7 +41,7 @@ func pairSender(t *testing.T, s *testworld.Stack, name string) string {
 	if err := json.Unmarshal([]byte(strings.SplitN(stdout, "\n", 2)[0]), &printed); err != nil {
 		t.Fatalf("send pair first line %q: %v", stdout, err)
 	}
-	app := s.TrustedApp()
+	app := s.TrustedApp(profileID...)
 	shown := testworld.Request(app, protocol.SendersGetMessage{Cmd: protocol.CmdSendersGet}, protocol.EventSendersUpdated, func(m protocol.SendersUpdatedMessage) bool { return m.Request != nil })
 	if *shown.Request != printed || len(printed.Code) != 4 || printed.Name != name {
 		t.Fatalf("the app shows %+v; the program printed %+v", shown.Request, printed)

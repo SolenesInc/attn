@@ -90,6 +90,14 @@ func (d *Daemon) startJobQueue(home bool) error {
 		}
 	}
 	if !runner.Disabled() && home {
+		if err := runner.RegisterCron(
+			modelCallLogPruneKind,
+			modelCallLogPruneInterval,
+			d.modelCallLogPruneHandler,
+			jobs.HandlerConfig{Timeout: modelCallLogPruneTimeout},
+		); err != nil {
+			d.logf("model call log: register prune tick: %v", err)
+		}
 
 		if err := d.registerTaskWithFailureRenderer(
 			runner,

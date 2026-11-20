@@ -584,6 +584,9 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, members int) (p
 		if _, err = tx.Exec(`DELETE FROM paired_senders WHERE profile_id = ?`, id); err != nil {
 			return err
 		}
+		if _, err = tx.Exec(`DELETE FROM model_calls WHERE profile_id = ?`, id); err != nil {
+			return err
+		}
 		if _, err = tx.Exec(`DELETE FROM phone_pairings WHERE profile_id = ?`, id); err != nil {
 			return err
 		}

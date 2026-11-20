@@ -58,8 +58,8 @@ const LISTED: &[Listed] = &[
     },
     Listed {
         name: "model",
-        args: "call --token-stdin",
-        summary: "call a model through attn as a paired sender",
+        args: "<command>",
+        summary: "call a model through attn as a paired sender; log",
     },
     Listed {
         name: "refine",

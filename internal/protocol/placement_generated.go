@@ -136,6 +136,7 @@ var Placements = map[string][]Placement{
 	"launch_desktop_set":               {Placement{LocatorHome, ""}},
 	"link_rename":                      {Placement{LocatorSession, "session_id"}},
 	"list_worktrees":                   {Placement{LocatorHere, ""}},
+	"model_call_log":                   {Placement{LocatorHome, ""}},
 	"monitor_assistant_window":         {Placement{LocatorSession, "session_id"}},
 	"monitor_command":                  {Placement{LocatorSession, "session_id"}},
 	"monitor_last_assistant":           {Placement{LocatorSession, "session_id"}},
@@ -1634,6 +1635,18 @@ func (m ListWorktreesMessage) Placement() Placement {
 }
 
 func (m ListWorktreesMessage) Locate() string {
+	return ""
+}
+
+func (ModelCallLogMessage) CommandName() string {
+	return "model_call_log"
+}
+
+func (m ModelCallLogMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m ModelCallLogMessage) Locate() string {
 	return ""
 }
 

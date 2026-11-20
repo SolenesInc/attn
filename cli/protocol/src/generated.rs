@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "03d9c68d7faf";
+pub const PROTOCOL_VERSION: &str = "e61c8011f700";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -7107,6 +7107,40 @@ impl MigrationUndoMessage {
         }
     }
 }
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ModelCall {
+    pub at: String,
+    pub cost_usd: f64,
+    pub harness: String,
+    pub model: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_ms: Option<i64>,
+    pub outcome: ModelCallOutcome,
+    pub purpose: String,
+    pub sender: String,
+    pub tokens_in: i64,
+    pub tokens_out: i64,
+    pub took_ms: i64,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ModelCallLogMessage {
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sender: Option<String>,
+}
+
+impl ModelCallLogMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "model_call_log".to_string(),
+            ..Self::default()
+        }
+    }
+}
+pub type ModelCallOutcome = String;
 pub type ModelCapabilitySupport = String;
 pub type ModelTier = String;
 pub type ModelTierSource = String;
@@ -9330,6 +9364,8 @@ pub struct Response {
     pub kept_conversation_forget_result: Option<KeptConversationForgetResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kept_conversation_list_result: Option<KeptConversationListResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_calls: Option<Vec<ModelCall>>,
     pub ok: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub onboarding_result: Option<OnboardingResult>,

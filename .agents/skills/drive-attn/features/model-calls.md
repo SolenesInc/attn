@@ -15,6 +15,7 @@ only for the model. Attn Lens refines dictation this way.
 - `model-call-refusals`: tier and model both named, an unknown tier, a harness that is not installed, a ninth call while eight run, headless tasks off, and a token attn does not know, each one line on stderr and exit 1.
 - `model-call-spare`: one `claude` with stream-json input and no tools, started while a sender is paired, headless tasks are on, the default harness is Claude, and the user was present or a call arrived within 4 hours. A call takes it, and attn starts the next one at once. Codex answers cold.
 - `model-call-log`: one daemon log line per call, `model call: sender=... purpose=... harness=... model=... spare=... took=... model_ms=... tokens_in=... tokens_out=... cost_usd=... outcome=...`, with no instructions, input or answer.
+- `model-log`: `attn model log [--sender <name>] [--profile <name|id>] [--json]` lists the profile's calls from the `model_calls` table, newest first: `at`, `sender`, `purpose`, `harness`, `model`, `took_ms`, `model_ms` (absent when not reported), `tokens_in`, `tokens_out`, `cost_usd`, `outcome` (`answered`, `failed`, `limit`, `stopped`). One row per call that ran, written when it ends; refused calls have none. Rows older than 30 days are pruned hourly (`model_call_log_prune`), and deleting the profile deletes its rows.
 
 ## How to get to it
 
@@ -45,6 +46,7 @@ Recipes:
 - **Limit.** `"system":"Write a 2000-word essay.","limit_ms":1500` prints `{"error":"the model did not answer within 1.5s","harness":"claude","limit_ms":1500,"model":"sonnet"}` and exits 1; no claude is left running for it.
 - **Refusals.** `"tier":"light","model":"opus"` gives `model call: name a tier or a model, not both`; `"harness":"gemini"` gives `model call: no harness named "gemini" is installed; installed: claude, codex`.
 - **Headless tasks off.** Replace `ATTN_HEADLESS_TASKS=on` with `off` in the env file, quit the app with `./attn instance stop-app`, stop the daemon with `"$(./attn instance resolve --field appDaemon)" daemon stop`, and launch again. The spare does not start, and a call prints `model call: ` and the headless-tasks refusal, exit 1.
+- **The log.** After the calls above, `./attn model log` prints a table with `TIME SENDER PURPOSE HARNESS MODEL TOOK MODEL TIME TOKENS IN TOKENS OUT COST OUTCOME`, newest first: the limit call says `limit`, a call whose command you stopped with ctrl-c says `stopped`, and a refused call has no row. `--json` prints the same rows as one array; `grep` it for the call's input text to see it absent. `--sender Probe` keeps that sender's rows.
 - **Proof.** Keep each command, its output and exit code, and the log lines.
 
 ## Contexts
@@ -64,4 +66,5 @@ Recipes:
 - `ATTN_HEADLESS_TASKS` in the daemon's environment beats the `headless_tasks.enabled` setting, so turn tasks off in the env file, not with `attn settings set`.
 - A change to `internal/claudemod/mod` reaches the spare too: each spare runs a copy of the mod from its scratch directory, with `ATTN_MODEL_CALL_SPARE_STARTED` set, so the mod only reports the start and never polls attn.
 - `tokens_in` counts cached input too, as Claude reports it in `usage`.
-- Working but wrong: a caller's text in the daemon log, or a spare that holds a second call's conversation. Each spare answers once and exits.
+- `attn model log` outside a session with two profiles needs `--profile`, as `attn send senders` does.
+- Working but wrong: a caller's text in the daemon log or the model log, or a spare that holds a second call's conversation. Each spare answers once and exits.

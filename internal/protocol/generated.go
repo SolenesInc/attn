@@ -7487,6 +7487,59 @@ type MigrationUndoMessage struct {
 	RequestID string `json:"request_id"`
 }
 
+type ModelCall struct {
+	// At corresponds to the JSON schema field "at".
+	At string `json:"at"`
+
+	// CostUsd corresponds to the JSON schema field "cost_usd".
+	CostUsd float64 `json:"cost_usd"`
+
+	// Harness corresponds to the JSON schema field "harness".
+	Harness string `json:"harness"`
+
+	// Model corresponds to the JSON schema field "model".
+	Model string `json:"model"`
+
+	// ModelMs corresponds to the JSON schema field "model_ms".
+	ModelMs *int `json:"model_ms,omitempty,omitzero"`
+
+	// Outcome corresponds to the JSON schema field "outcome".
+	Outcome ModelCallOutcome `json:"outcome"`
+
+	// Purpose corresponds to the JSON schema field "purpose".
+	Purpose string `json:"purpose"`
+
+	// Sender corresponds to the JSON schema field "sender".
+	Sender string `json:"sender"`
+
+	// TokensIn corresponds to the JSON schema field "tokens_in".
+	TokensIn int `json:"tokens_in"`
+
+	// TokensOut corresponds to the JSON schema field "tokens_out".
+	TokensOut int `json:"tokens_out"`
+
+	// TookMs corresponds to the JSON schema field "took_ms".
+	TookMs int `json:"took_ms"`
+}
+
+type ModelCallLogMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// Sender corresponds to the JSON schema field "sender".
+	Sender *string `json:"sender,omitempty,omitzero"`
+}
+
+type ModelCallOutcome string
+
+const ModelCallOutcomeAnswered ModelCallOutcome = "answered"
+const ModelCallOutcomeFailed ModelCallOutcome = "failed"
+const ModelCallOutcomeLimit ModelCallOutcome = "limit"
+const ModelCallOutcomeStopped ModelCallOutcome = "stopped"
+
 type ModelCapabilitySupport string
 
 const ModelCapabilitySupportSupported ModelCapabilitySupport = "supported"
@@ -9836,6 +9889,9 @@ type Response struct {
 	// KeptConversationListResult corresponds to the JSON schema field
 	// "kept_conversation_list_result".
 	KeptConversationListResult *KeptConversationListResult `json:"kept_conversation_list_result,omitempty,omitzero"`
+
+	// ModelCalls corresponds to the JSON schema field "model_calls".
+	ModelCalls []ModelCall `json:"model_calls,omitempty,omitzero"`
 
 	// Ok corresponds to the JSON schema field "ok".
 	Ok bool `json:"ok"`

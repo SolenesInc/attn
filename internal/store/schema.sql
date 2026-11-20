@@ -45,6 +45,7 @@ CREATE UNIQUE INDEX idx_vents_one_per_turn ON vents(session_id, turn) WHERE with
 CREATE INDEX idx_vents_profile ON vents(profile_id, created_at);
 CREATE INDEX idx_worktree_sweep_log_at ON worktree_sweep_log(at DESC, id DESC);
 CREATE INDEX launch_desktops_desktop ON launch_desktops(desktop_id);
+CREATE INDEX model_calls_profile_at ON model_calls(profile_id, at);
 CREATE INDEX outpost_outbox_host ON outpost_outbox (host, id);
 CREATE INDEX quick_captures_recent ON quick_captures(profile_id,created_at DESC,id DESC);
 CREATE TABLE analytics_builds ( id INTEGER PRIMARY KEY, build TEXT NOT NULL UNIQUE );
@@ -83,6 +84,7 @@ CREATE TABLE kept_conversation_pins ( agent TEXT NOT NULL, resume_id TEXT NOT NU
 CREATE TABLE kept_conversations ( resume_id TEXT NOT NULL, agent TEXT NOT NULL, source_path TEXT NOT NULL, bytes INTEGER NOT NULL, stored_bytes INTEGER NOT NULL, copied_at TEXT NOT NULL, released_at TEXT NOT NULL DEFAULT '', deleted_at TEXT NOT NULL DEFAULT '', deleted_by TEXT NOT NULL DEFAULT '', PRIMARY KEY (agent, resume_id) );
 CREATE TABLE launch_desktops ( kind TEXT NOT NULL CHECK(kind IN ('automation', 'crew')), item_id TEXT NOT NULL, desktop_id TEXT NOT NULL, confirmed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (kind, item_id) );
 CREATE TABLE "markdown_annotation_drafts" ( path TEXT NOT NULL, annotations_json TEXT NOT NULL, generation INTEGER NOT NULL, tombstone_generation INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL, host TEXT NOT NULL DEFAULT '', PRIMARY KEY (host, path) );
+CREATE TABLE model_calls ( id INTEGER PRIMARY KEY, profile_id TEXT NOT NULL, at TEXT NOT NULL, sender TEXT NOT NULL COLLATE NOCASE, purpose TEXT NOT NULL, harness TEXT NOT NULL, model TEXT NOT NULL, took_ms INTEGER NOT NULL, model_ms INTEGER NOT NULL, tokens_in INTEGER NOT NULL, tokens_out INTEGER NOT NULL, cost_usd REAL NOT NULL, outcome TEXT NOT NULL );
 CREATE TABLE monitored_worktree_repositories ( main_repo TEXT PRIMARY KEY NOT NULL );
 CREATE TABLE notifications ( id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', detail TEXT NOT NULL DEFAULT '', source_kind TEXT NOT NULL DEFAULT '', source_id TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, read_at TEXT NOT NULL DEFAULT '' , severity TEXT NOT NULL DEFAULT 'info', trigger TEXT NOT NULL DEFAULT '', impact TEXT NOT NULL DEFAULT '', cause TEXT NOT NULL DEFAULT '', diagnostic TEXT NOT NULL DEFAULT '', actions_json TEXT NOT NULL DEFAULT '', profile_id TEXT NOT NULL DEFAULT '');
 CREATE TABLE "outpost_outbox" ( id INTEGER PRIMARY KEY AUTOINCREMENT, host TEXT NOT NULL, tbl TEXT NOT NULL, key TEXT NOT NULL, UNIQUE (host, tbl, key) );

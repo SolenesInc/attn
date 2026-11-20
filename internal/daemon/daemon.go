@@ -3111,6 +3111,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleSenderSessions(conn, msg.(*protocol.SenderSessionsMessage))
 	case protocol.CmdSenderRefine:
 		d.handleSenderRefine(conn, msg.(*protocol.SenderRefineMessage))
+	case protocol.CmdModelCallLog:
+		d.handleModelCallLog(conn, msg.(*protocol.ModelCallLogMessage), caller)
 	case protocol.CmdSenderModelCall:
 		d.handleSenderModelCall(conn, msg.(*protocol.SenderModelCallMessage))
 	case protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList:

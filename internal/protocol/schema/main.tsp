@@ -7754,6 +7754,7 @@ model Response {
   sender_sessions?: SenderSession[];
   sender_refine_result?: SenderRefineResult;
   sender_model_call_result?: SenderModelCallResult;
+  model_calls?: ModelCall[];
   agent_inbox_result?: AgentPeerMessage;
   agent_inbox_item_result?: AgentInboxItem;
   agent_inbox_batch_result?: AgentInboxBatchResult;
@@ -9446,6 +9447,38 @@ model SenderModelCallResult {
   model_ms?: safeint;
   error?: string;
   limit_ms?: safeint;
+}
+
+// Lists the model calls the profile's paired senders made, newest first, for
+// as long as attn keeps them. profile_id as in sender_list. sender: only the
+// calls of the paired sender with this name.
+@extension("x-on", #{ home: true })
+model ModelCallLogMessage {
+  cmd: "model_call_log";
+  profile_id?: string;
+  sender?: string;
+}
+
+// How a model call ended: the model answered, the call ran and failed, it
+// passed limit_ms, or its caller stopped it.
+enum ModelCallOutcome { answered, failed, limit, stopped }
+
+// One model call's facts. attn keeps no instructions, input or answer.
+model ModelCall {
+  // When the call arrived.
+  at: string;
+  sender: string;
+  purpose: string;
+  harness: string;
+  `model`: string;
+  // From the call's arrival to its end.
+  took_ms: safeint;
+  // The model's own time; absent when the harness did not report it.
+  model_ms?: safeint;
+  tokens_in: safeint;
+  tokens_out: safeint;
+  cost_usd: float64;
+  outcome: ModelCallOutcome;
 }
 
 model SenderSession {

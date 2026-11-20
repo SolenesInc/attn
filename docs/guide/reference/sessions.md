@@ -200,9 +200,17 @@ While a paired program exists and you used Attn or made a model call in the
 last 4 hours, Attn keeps one Claude process started and waiting, so a call
 waits only for the model. It holds 200 to 300 MB of memory and uses no CPU
 while it waits. A call to Codex, or to Claude when no process is waiting,
-starts its process when the call arrives and waits for that start too. Attn's log records each call's sender, purpose, harness,
-model, time and outcome, never its instructions, input or answer. Run
+starts its process when the call arrives and waits for that start too. Run
 `attn model call --help` for the details.
+
+`attn model log` lists the calls your paired programs made in the last 30
+days, newest first: when each arrived, the program, its purpose, the harness
+and model, how long it took and how much of that was the model's, the tokens
+in and out, the cost, and whether it was answered, failed, passed its limit or
+was stopped. Attn keeps no instructions, input or answer, in the log or
+anywhere else. `--sender <name>` lists one program's calls, `--profile`
+chooses the profile outside a session, and `--json` prints the calls as JSON.
+Deleting a profile deletes its calls.
 
 ## Details
 

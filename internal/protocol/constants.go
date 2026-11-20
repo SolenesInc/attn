@@ -90,6 +90,7 @@ const (
 	CmdSenderSessions                = "sender_sessions"
 	CmdSenderRefine                  = "sender_refine"
 	CmdSenderModelCall               = "sender_model_call"
+	CmdModelCallLog                  = "model_call_log"
 	CmdSendersGet                    = "senders_get"
 	CmdSenderPairDecide              = "sender_pair_decide"
 	CmdPlantVentSeed                 = "plant_vent_seed"

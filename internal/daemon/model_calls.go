@@ -16,13 +16,22 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/headless"
+	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/stepclock"
+	"github.com/victorarias/attn/internal/store"
 )
 
 const ModelCallLimitTimer stepclock.Name = "model-call-limit"
+
+const (
+	modelCallLogPruneKind     = "model_call_log_prune"
+	modelCallLogPruneInterval = time.Hour
+	modelCallLogPruneTimeout  = time.Minute
+	modelCallLogRetention     = 30 * 24 * time.Hour
+)
 
 // Each running call holds a harness process of 200 to 300 MB; healthy use is
 // one dictation at a time, and six ran in parallel in the probes (plot
@@ -164,7 +173,7 @@ type modelCallOutcome struct {
 }
 
 func (d *Daemon) handleSenderModelCall(conn net.Conn, msg *protocol.SenderModelCallMessage) {
-	arrived := time.Now()
+	arrived := d.clock.Now()
 	sender, err := d.requirePairedSender(msg.SenderToken)
 	if err != nil {
 		d.sendError(conn, err.Error())
@@ -183,6 +192,7 @@ func (d *Daemon) handleSenderModelCall(conn net.Conn, msg *protocol.SenderModelC
 		return
 	}
 	defer d.modelCallsRunning.done()
+	defer d.clock.Hold()()
 	limit := time.Duration(msg.LimitMs) * time.Millisecond
 	deadline := d.clock.NewTimer(ModelCallLimitTimer, limit)
 	defer deadline.Stop()
@@ -217,21 +227,29 @@ func (d *Daemon) handleSenderModelCall(conn net.Conn, msg *protocol.SenderModelC
 	if resolved := target.Load(); resolved != nil {
 		outcome.target = *resolved
 	}
-	d.logModelCall(sender.Name, msg.Purpose, outcome.target, bySpare.Load(), time.Since(arrived), outcome)
+	took := d.clock.Now().Sub(arrived)
+	d.logModelCall(sender.Name, msg.Purpose, outcome.target, bySpare.Load(), took, outcome)
+	ended := protocol.ModelCallOutcomeFailed
 	response := protocol.SenderModelCallResult{Harness: outcome.target.harness, Model: outcome.target.model}
 	switch {
 	case outcome.err == nil:
+		ended = protocol.ModelCallOutcomeAnswered
 		response.Text = protocol.Ptr(outcome.result.Text)
 		if outcome.result.ModelTime > 0 {
 			response.ModelMs = protocol.Ptr(int(outcome.result.ModelTime.Milliseconds()))
 		}
 	case passedLimit:
+		ended = protocol.ModelCallOutcomeLimit
 		response.Error = protocol.Ptr(outcome.err.Error())
 		response.LimitMs = protocol.Ptr(msg.LimitMs)
 	case ctx.Err() != nil:
-		return
+		ended = protocol.ModelCallOutcomeStopped
 	default:
 		response.Error = protocol.Ptr(outcome.err.Error())
+	}
+	d.recordModelCall(sender, msg.Purpose, outcome, arrived, took, ended)
+	if ended == protocol.ModelCallOutcomeStopped {
+		return
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SenderModelCallResult: &response})
 }
@@ -279,4 +297,46 @@ func (d *Daemon) logModelCall(sender, purpose string, target modelCallTarget, by
 	d.logf("model call: sender=%q purpose=%q harness=%s model=%s spare=%t took=%s model_ms=%d tokens_in=%d tokens_out=%d cost_usd=%.4f outcome=%s",
 		sender, purpose, target.harness, target.model, bySpare, took.Round(time.Millisecond), outcome.result.ModelTime.Milliseconds(),
 		outcome.result.InputTokens, outcome.result.OutputTokens, outcome.result.CostUSD, result)
+}
+
+func (d *Daemon) recordModelCall(sender *store.PairedSender, purpose string, outcome modelCallOutcome, arrived time.Time, took time.Duration, ended protocol.ModelCallOutcome) {
+	call := protocol.ModelCall{
+		At:        store.ModelCallTime(arrived),
+		Sender:    sender.Name,
+		Purpose:   purpose,
+		Harness:   outcome.target.harness,
+		Model:     outcome.target.model,
+		TookMs:    int(took.Milliseconds()),
+		TokensIn:  outcome.result.InputTokens,
+		TokensOut: outcome.result.OutputTokens,
+		CostUsd:   outcome.result.CostUSD,
+		Outcome:   ended,
+	}
+	if outcome.result.ModelTime > 0 {
+		call.ModelMs = protocol.Ptr(int(outcome.result.ModelTime.Milliseconds()))
+	}
+	if err := d.store.AddModelCall(sender.ProfileID, call); err != nil {
+		d.logf("model call: record the call in the model call log: %v", err)
+	}
+}
+
+func (d *Daemon) handleModelCallLog(conn net.Conn, msg *protocol.ModelCallLogMessage, caller protocol.SessionID) {
+	profile, err := d.resolveGardenProfile(caller, protocol.Deref(msg.ProfileID), "")
+	var calls []protocol.ModelCall
+	if err == nil {
+		calls, err = d.store.ModelCalls(profile.ID, strings.TrimSpace(protocol.Deref(msg.Sender)))
+	}
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, ModelCalls: calls})
+}
+
+func (d *Daemon) modelCallLogPruneHandler(_ context.Context, _ *jobs.Job) (any, error) {
+	pruned, err := d.store.PruneModelCalls(d.clock.Now().Add(-modelCallLogRetention))
+	if err != nil {
+		return nil, fmt.Errorf("pruning the model call log: %w", err)
+	}
+	return map[string]any{"pruned": pruned}, nil
 }
