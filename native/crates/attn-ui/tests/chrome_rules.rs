@@ -1305,9 +1305,11 @@ fn a_hovered_rows_title_is_whole_up_to_eight_points_before_its_controls_and_neve
 
 const COMING_AND_GOING: [&str; 3] = ["hover", "badge", "tag"];
 
+type RowKind = fn(ListRow, &Tokens) -> ListRow;
+
 fn rows_that_change(shown: &u8, _: &mut Cx<u8>) -> El {
     let t = tokens(true);
-    let kinds: [(&str, fn(ListRow, &Tokens) -> ListRow); 4] = [
+    let kinds: [(&str, RowKind); 4] = [
         ("rule.line", |row, _| row),
         ("rule.wrap", |row, _| row.wrap()),
         ("rule.two", |row, t| row.subtitle("Waiting since noon", t)),
