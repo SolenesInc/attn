@@ -31,8 +31,8 @@ use attn_protocol::{
     SeedPlotProgress, SeedReviewResultMessage, Session, SessionAnnotationsGetResultMessage,
     SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
     SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionUsage,
-    SessionUsageModel, SharedCodexBlocker, SharedCodexState, UpdateOutpostProgress, UpdateRun,
-    Worktree, WorktreeListResult, WorktreeListResultEvent,
+    SessionUsageModel, SharedCodexBlocker, SharedCodexState, UpdateChangedMessage,
+    UpdateOutpostProgress, UpdateRun, Worktree, WorktreeListResult, WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Metrics};
 use attn_testkit::tree::{pane, row};
@@ -4059,6 +4059,13 @@ fn could_not_stage(hosts: &[&str]) -> UpdateRun {
     }
 }
 
+/// Presses `key` when the window shows it, as a revision without that control leaves it out.
+fn press_if_shown(world: &mut World, key: &str) {
+    if world.screen().find(Target::key(key)).is_some() {
+        world.gesture(|app| app.click(Target::key(key)));
+    }
+}
+
 fn smallest_update_banner(dark: bool, name: &str, hosts: &[&str], open: bool) {
     let run = could_not_stage(hosts);
     let mut world = popover_world(
@@ -4070,18 +4077,118 @@ fn smallest_update_banner(dark: bool, name: &str, hosts: &[&str], open: bool) {
         |_| {},
     );
     world.resize((800.0, 600.0));
-    if open
-        && world
-            .screen()
-            .find(Target::key("update-run.details"))
-            .is_some()
-    {
-        world.gesture(|app| app.click(Target::key("update-run.details")));
+    if open {
+        press_if_shown(&mut world, "update-run.details");
+    }
+    snap(&mut world, name, dark);
+}
+
+/// An open run at the smallest window, its outposts as `outposts` says.
+fn smallest_open_run(dark: bool, name: &str, phase: &str, outposts: Vec<UpdateOutpostProgress>) {
+    let run = UpdateRun {
+        id: "u1".into(),
+        install_kind: "release_app".into(),
+        log_path: "/tmp/u1.log".into(),
+        phase: phase.into(),
+        outposts,
+        ..UpdateRun::default()
+    };
+    let mut world = start(popover_daemon(dark, at_the_smallest_window, |_| {}));
+    world.resize((800.0, 600.0));
+    world.daemon.emit(UpdateChangedMessage {
+        run,
+        ..UpdateChangedMessage::new()
+    });
+    world.settle();
+    snap(&mut world, name, dark);
+}
+
+/// `count` outposts that each failed for a reason of its own.
+fn distinct_errors(count: usize) -> Vec<UpdateOutpostProgress> {
+    (1..=count)
+        .map(|n| UpdateOutpostProgress {
+            id: format!("o{n}"),
+            name: format!("ci-runner-{n:02}.build-and-validation.platform.example.org"),
+            state: "failed".into(),
+            detail: Some(format!(
+                "ssh: connect to host ci-runner-{n:02}.example.org port 22: Connection timed out"
+            )),
+        })
+        .collect()
+}
+
+/// The shared Codex restart waiting on `count` sessions still starting, each named by a long
+/// worktree, at the smallest window; with `open`, its details too.
+fn smallest_codex_wait(dark: bool, name: &str, count: usize, open: bool) {
+    let mut world = start(popover_daemon(
+        dark,
+        |state| {
+            at_the_smallest_window(state);
+            let sessions = state.sessions.get_or_insert_default();
+            let template = sessions[0].clone();
+            sessions.clear();
+            let mut blockers = Vec::new();
+            for n in 1..=count {
+                let id = format!("waiting-{n}");
+                sessions.push(Session {
+                    id: id.clone(),
+                    label: format!(
+                        "attn--fix-native-terminal-focus-when-reopening-an-old-codex-session-{n}"
+                    ),
+                    ..template.clone()
+                });
+                blockers.push(SharedCodexBlocker {
+                    session_id: id,
+                    reason: "starting".into(),
+                });
+            }
+            state.shared_codex = Some(SharedCodexState {
+                blockers: Some(blockers),
+                ..codex("pending")
+            });
+        },
+        |_| {},
+    ));
+    world.resize((800.0, 600.0));
+    if open {
+        press_if_shown(&mut world, "codex-updates.details");
     }
     snap(&mut world, name, dark);
 }
 
 fn smallest_banners(dark: bool) {
+    for count in [1, 12, 18, 100] {
+        smallest_open_run(
+            dark,
+            &format!("banner-update-errors-{count}-smallest"),
+            "outposts",
+            distinct_errors(count),
+        );
+    }
+    smallest_open_run(
+        dark,
+        "banner-update-staging-smallest",
+        "staging",
+        [
+            "connecting",
+            "building",
+            "downloading",
+            "sending",
+            "verifying",
+        ]
+        .iter()
+        .enumerate()
+        .map(|(i, step)| UpdateOutpostProgress {
+            id: format!("o{i}"),
+            name: format!("ci-runner-{i:02}.build-and-validation.platform.example.org"),
+            state: "staging".into(),
+            detail: Some((*step).into()),
+        })
+        .collect(),
+    );
+    smallest_codex_wait(dark, "banner-codex-1-smallest", 1, false);
+    smallest_codex_wait(dark, "banner-codex-12-smallest", 12, false);
+    smallest_codex_wait(dark, "banner-codex-12-open-smallest", 12, true);
     let many = [
         "build-linux-primary.us-east-1.example.dev",
         "ci-runner-07.build-and-validation.platform.example.org",
@@ -4125,7 +4232,7 @@ fn smallest_banners(dark: bool) {
     );
     world.resize((800.0, 600.0));
     snap(&mut world, "banner-codex-many-smallest", dark);
-    world.gesture(|app| app.click(Target::key("codex-updates.details")));
+    press_if_shown(&mut world, "codex-updates.details");
     for _ in 0..40 {
         let focused = world.screen().focused().and_then(|n| n.key);
         if focused.is_some_and(|k| k.ends_with(".go") && k.contains("-4.")) {
@@ -4191,7 +4298,7 @@ fn smallest_banners(dark: bool) {
         );
         world.resize((800.0, 600.0));
         if open {
-            world.gesture(|app| app.click(Target::key("daemon-warnings.details")));
+            press_if_shown(&mut world, "daemon-warnings.details");
         }
         snap(&mut world, name, dark);
     }
