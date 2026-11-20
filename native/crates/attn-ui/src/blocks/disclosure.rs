@@ -7,7 +7,9 @@ use crate::Tokens;
 use crate::system::{Said, Space, disclosure, door};
 
 /// A part of a page that opens and closes, with tags that say what it holds while closed. `key`
-/// names its control; `{key}.part` names the whole part, a group read as its label.
+/// names its control; `{key}.part` names the whole part, a group read as its label. Opening it
+/// lands at once and shows its control and the start of what it holds, moving the view no more
+/// than that needs.
 pub struct Disclosure<S> {
     key: String,
     label: Said,
@@ -71,6 +73,9 @@ impl<S: 'static> Disclosure<S> {
     pub fn build(self, t: &Tokens) -> Block {
         let toggle = self.toggle;
         let part = format!("{}.part", self.key);
+        let body_key = format!("{}.body", self.key);
+        let (shown_body, shown_control) = (body_key.clone(), format!("{}.reach", self.key));
+        let opening = !self.open;
         let label = self.label.text();
         let control = disclosure(
             self.key,
@@ -81,10 +86,18 @@ impl<S: 'static> Disclosure<S> {
             self.failed,
             self.disabled,
             t,
-            move |s: &mut S, tx: &mut Tx| toggle(s, tx),
+            move |s: &mut S, tx: &mut Tx| {
+                tx.instant();
+                toggle(s, tx);
+                if opening {
+                    tx.scroll_into_view(shown_body.clone());
+                    tx.scroll_into_view(shown_control.clone());
+                }
+            },
         );
         let body = (self.open && !self.blocks.is_empty()).then(|| {
             door::sides(spaced(self.blocks, inner_gap, None), Space::S16, Space::S0)
+                .key(body_key)
                 .border_sides([0.0, 0.0, 0.0, 1.0], t.border)
         });
         let el = col()

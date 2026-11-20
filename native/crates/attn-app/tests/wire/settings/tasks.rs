@@ -188,9 +188,9 @@ fn an_empty_runner_says_so() {
     );
 }
 
-#[test]
-fn opening_a_tasks_diagnostic_output_by_keyboard_shows_it_with_the_control_in_the_smallest_window()
-{
+/// Opens a dead task's diagnostic output by keyboard in the smallest window at the largest text,
+/// and finds its control, ring and all, and the start of the output in the page's view.
+fn opens_in_view(diagnostic: String) {
     let (daemon, _) = accepting(&[("uiScale", "1.5")]);
     daemon.on(
         "task_list",
@@ -200,7 +200,7 @@ fn opening_a_tasks_diagnostic_output_by_keyboard_shows_it_with_the_control_in_th
                  credentials three times in a row, while the daemon was still pairing."
                     .into(),
             ),
-            last_diagnostic: Some("stderr: authentication failed\nstderr: token expired".into()),
+            last_diagnostic: Some(diagnostic),
             ..task("1", "dead")
         }]),
     );
@@ -221,10 +221,11 @@ fn opening_a_tasks_diagnostic_output_by_keyboard_shows_it_with_the_control_in_th
     );
     press(&mut world, Key::Text(" ".into()));
     let body = world.rect("settings.body");
+    let ring = 2.0;
     let shown = world.rect(control);
     assert!(
-        shown[1] >= body[1] && shown[1] + shown[3] <= body[1] + body[3],
-        "the opened control at {shown:?} lies inside the page's view {body:?}"
+        shown[1] - ring >= body[1] && shown[1] + shown[3] + ring <= body[1] + body[3],
+        "the opened control at {shown:?}, with its ring, lies inside the page's view {body:?}"
     );
     let output = world
         .automate(
@@ -239,8 +240,28 @@ fn opening_a_tasks_diagnostic_output_by_keyboard_shows_it_with_the_control_in_th
                 .collect::<Vec<_>>()
         });
     assert!(
-        output.as_ref().is_some_and(|r| r[1] < body[1] + body[3]),
-        "the output at {output:?} begins inside the page's view {body:?}"
+        output
+            .as_ref()
+            .is_some_and(|r| r[1] >= shown[1] + shown[3] && r[1] < body[1] + body[3]),
+        "the output at {output:?} starts under the control and inside the page's view {body:?}"
     );
     rest(&mut world);
+}
+
+#[test]
+fn opening_a_short_diagnostic_by_keyboard_shows_its_control_and_output_in_the_smallest_window() {
+    opens_in_view("stderr: authentication failed\nstderr: token expired".into());
+}
+
+#[test]
+fn opening_a_diagnostic_taller_than_the_view_shows_its_control_and_where_it_starts() {
+    let lines: Vec<String> = (1..=200)
+        .map(|n| format!("stderr: line {n}: retrying the provider handshake after a refusal"))
+        .collect();
+    let diagnostic = lines.join("\n");
+    assert!(
+        diagnostic.len() < 16 * 1024,
+        "under the daemon's diagnostic cap"
+    );
+    opens_in_view(diagnostic);
 }

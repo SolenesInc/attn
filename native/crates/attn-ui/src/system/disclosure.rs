@@ -77,5 +77,13 @@ pub fn disclosure<S: 'static>(
         let surface = if open { fill } else { t.bg_panel };
         focus::ring(layers::pressable(line, surface, t).on_press_tx(press), t)
     };
-    Control::new(row().w_full().child(line.shrink()), size)
+    Control::new(
+        door::ring_room(
+            row()
+                .key(format!("{key}.reach"))
+                .w_full()
+                .child(line.shrink()),
+        ),
+        size,
+    )
 }

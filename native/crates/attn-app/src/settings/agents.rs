@@ -526,8 +526,7 @@ fn advanced(state: &State, agent: &str, overrides: bool, open: bool, t: &Tokens)
         format!("settings.agent.{agent}.advanced"),
         "Advanced",
         open,
-        move |state: &mut State, tx: &mut Tx| {
-            tx.instant();
+        move |state: &mut State, _: &mut Tx| {
             let advanced = &mut state.window.settings.agents.advanced;
             if !advanced.remove(&toggled) {
                 advanced.insert(toggled.clone());
@@ -575,8 +574,7 @@ fn agent_group(state: &State, agent: &str, t: &Tokens) -> Block {
         format!("settings.agent.{agent}.toggle"),
         label.clone(),
         open,
-        move |state: &mut State, tx: &mut Tx| {
-            tx.instant();
+        move |state: &mut State, _: &mut Tx| {
             let was = state
                 .window
                 .settings

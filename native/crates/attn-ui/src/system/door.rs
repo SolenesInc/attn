@@ -63,6 +63,13 @@ pub(crate) fn sides(e: El, left: Space, right: Space) -> El {
     e.pl(left.pt()).pr(right.pt())
 }
 
+/// `e`'s box grown by the focus ring's reach above and below, its layout unchanged, so revealing
+/// it shows the ring whole.
+pub(crate) fn ring_room(e: El) -> El {
+    let reach = super::focus::RING_REACH;
+    e.mt(-reach).mb(-reach).pt(reach).pb(reach)
+}
+
 pub(crate) fn hang_left(e: El, by: Space) -> El {
     e.ml(-by.pt())
 }
