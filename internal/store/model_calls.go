@@ -11,8 +11,9 @@ const modelCallTimeLayout = "2006-01-02T15:04:05.000Z"
 func (s *Store) AddModelCall(profileID string, call protocol.ModelCall) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec(`INSERT INTO model_calls(profile_id, at, sender, purpose, harness, model, took_ms, model_ms, tokens_in, tokens_out, cost_usd, outcome) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
-		profileID, call.At, call.Sender, call.Purpose, call.Harness, call.Model, call.TookMs, protocol.Deref(call.ModelMs), call.TokensIn, call.TokensOut, call.CostUsd, string(call.Outcome))
+	_, err := s.db.Exec(`INSERT INTO model_calls(profile_id, at, sender, purpose, harness, model, took_ms, model_ms, tokens_in, tokens_out, cost_usd, outcome)
+		SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM profiles WHERE id = ? AND deleted_at = '')`,
+		profileID, call.At, call.Sender, call.Purpose, call.Harness, call.Model, call.TookMs, protocol.Deref(call.ModelMs), call.TokensIn, call.TokensOut, call.CostUsd, string(call.Outcome), profileID)
 	return err
 }
 
