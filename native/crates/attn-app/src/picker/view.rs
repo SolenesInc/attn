@@ -617,20 +617,22 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
                 .child(El::from(reroll)),
         )
         .child(
-            Segmented::new(format!("{w}.repo.start"), "Start from")
-                .without_tab_stops()
-                .option(start(
-                    Start::Default,
-                    format!("Start from {}", chooser.info.default_branch),
-                    "default",
-                ))
-                .option(start(
-                    Start::Current,
-                    format!("Start from {}", chooser.current_branch()),
-                    "current",
-                ))
-                .build(t)
-                .into(),
+            El::from(
+                Segmented::new(format!("{w}.repo.start"), "Start from")
+                    .without_tab_stops()
+                    .option(start(
+                        Start::Default,
+                        format!("Start from {}", chooser.info.default_branch),
+                        "default",
+                    ))
+                    .option(start(
+                        Start::Current,
+                        format!("Start from {}", chooser.current_branch()),
+                        "current",
+                    ))
+                    .build(t),
+            )
+            .self_start(),
         )
         .child(
             words(
