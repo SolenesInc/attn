@@ -607,8 +607,8 @@ pub(crate) fn set_query(state: &mut State, text: String, tx: &mut Tx) {
     focus_search(state, tx);
 }
 
-/// The search field's keys: the arrows walk the answers while there are some, Return opens
-/// the one reached, and Alt+Return widens the scope out of the plot or back.
+/// The search field's keys: the arrows walk the answers while there are some and show the one
+/// reached whole, Return opens it, and Alt+Return widens the scope out of the plot or back.
 pub(crate) fn field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let answers = view::answers(state);
     match ev.key {
@@ -621,6 +621,7 @@ pub(crate) fn field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
                 at.saturating_sub(1)
             };
             state.window.garden.walked = (answers.question, next);
+            tx.scroll_into_view_in(view::RESULTS, view::row_key(&answers.ids[next]));
             true
         }
         Key::Down | Key::Up => walk_rows(state, ev.key == Key::Down, tx),

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use attn_protocol::Seed;
 use attn_ui::blocks::{
-    Actions, Bar, Block, Byline, Inline, Pane, Prose, Reader, Room, Section, Surface, Trail,
+    Actions, Bar, Block, Byline, Inline, Pane, Prose, Reader, Room, Section, Stack, Surface, Trail,
 };
 use attn_ui::system::{
     Button, DotShape, DotSize, Link, ListRow, Look as ButtonLook, Part, Said, Size, Type, dot,
@@ -25,6 +25,8 @@ thread_local! {
 }
 
 pub(super) const ROW_PREFIX: &str = "garden.row.";
+/// The list a search's answers stand in.
+pub(super) const RESULTS: &str = "garden.results";
 const COLUMNS_MIN: f32 = 1160.0;
 const THIRD_COLUMN_MIN: f32 = 1460.0;
 const FULL_INSET: f32 = 12.0;
@@ -695,6 +697,10 @@ fn list(key: &str, role: &'static str, label: &str, specs: Vec<RowSpec>, t: &Tok
         )
 }
 
+/// A seed's row: its title, then its facts. A search answer's facts wrap whole, so its plot tells
+/// it apart, and the passage of its body that answered stands under them inside the same option.
+/// The passage is not a List row's lower block, which lies outside the row's press target and
+/// selected fill and needs a List, where these rows are built virtually as they scroll in.
 fn seed_row(spec: &RowSpec, t: &Tokens) -> El {
     let seed = &spec.seed;
     let look = &spec.look;
@@ -747,39 +753,59 @@ fn seed_row(spec: &RowSpec, t: &Tokens) -> El {
             row = row
                 .aside(words(marker.clone(), Type::Small, t.text_tertiary).help(sentence.clone()));
         }
-        let line = match &look.snippet {
-            Some(snippet) => marked(
-                &snippet.text,
-                &snippet.ranges,
-                Type::Small,
-                t.text_tertiary,
-                t.brand,
-            ),
-            None => {
-                let mut facts = Byline::new().id(
-                    seed.id.clone(),
-                    if look.id_hit {
-                        t.brand
-                    } else {
-                        t.text_tertiary
-                    },
-                );
-                if seed.standby.is_some() && look.blockers > 0 {
-                    facts = facts.said(format!("blocked by {}", look.blockers), t);
-                }
-                if !look.tender.is_empty() {
-                    facts = facts.said(format!("tended by {}", look.tender), t);
-                }
-                if let Some(home) = &look.home {
-                    facts = facts.said(format!("in {home}"), t);
-                }
-                if let Some(tally) = model::check_tally(seed) {
-                    facts = facts.said(model::tally_words(&tally), t);
-                }
-                facts.build(t)
-            }
+        let found = look.pick == Pick::Found;
+        let mut facts = Byline::new().id(
+            seed.id.clone(),
+            if look.id_hit {
+                t.brand
+            } else {
+                t.text_tertiary
+            },
+        );
+        let mut say = |fact: String| {
+            facts = if found {
+                std::mem::take(&mut facts).push(
+                    words(fact, Type::Small, t.text_tertiary)
+                        .wrap()
+                        .shrink()
+                        .min_w(0.0),
+                )
+            } else {
+                std::mem::take(&mut facts).said(fact, t)
+            };
         };
-        row = row.subtitle_el(line);
+        if seed.standby.is_some() && look.blockers > 0 {
+            say(format!("blocked by {}", look.blockers));
+        }
+        if !look.tender.is_empty() {
+            say(format!("tended by {}", look.tender));
+        }
+        if let Some(home) = &look.home {
+            say(format!("in {home}"));
+        }
+        if let Some(tally) = model::check_tally(seed) {
+            say(model::tally_words(&tally));
+        }
+        let line = if found {
+            facts.wrap().build(t)
+        } else {
+            facts.build(t)
+        };
+        row = row.subtitle_el(match &look.snippet {
+            Some(snippet) => Stack::tight().w_full().min_w(0.0).child(line).child(
+                marked(
+                    &snippet.text,
+                    &snippet.ranges,
+                    Type::Small,
+                    t.text_tertiary,
+                    t.brand,
+                )
+                .key(format!("{key}.excerpt"))
+                .wrap()
+                .w_full(),
+            ),
+            None => line,
+        });
         if let Some(progress) = &seed.plot_progress {
             row = row
                 .aside(words(
@@ -791,7 +817,12 @@ fn seed_row(spec: &RowSpec, t: &Tokens) -> El {
         }
         let id = seed.id.clone();
         let pick = look.pick;
-        let found = pick == Pick::Found;
+        if found {
+            row = row.description(match &look.home {
+                Some(home) => format!("{} in {home}", seed.id),
+                None => seed.id.clone(),
+            });
+        }
         row.role(if found { "option" } else { "button" })
             .build(t)
             .a11y_value(seed.status.clone())
@@ -906,7 +937,7 @@ fn results(state: &State, place: &Place, t: &Tokens) -> El {
         "",
         Some((&place.answers, active)),
     );
-    list("garden.results", "listbox", "Results", specs, t)
+    list(RESULTS, "listbox", "Results", specs, t)
 }
 
 pub(super) fn scroll(key: &str, content: El, t: &Tokens) -> El {

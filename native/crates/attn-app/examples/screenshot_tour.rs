@@ -28,11 +28,11 @@ use attn_protocol::{
     PhoneLink, PhonesUpdatedMessage, Profile, RateLimitedMessage, RecentFilesResultMessage,
     RecentLocation, RecentLocationsResultMessage, RecordCommandUsageResultMessage,
     RefreshPRsResultMessage, RepoInfo, ReviewBundle, ReviewFile, ReviewNotShown, ReviewNote,
-    ReviewRow, ReviewStop, Seed, SeedDocument, SeedDocumentGetResultMessage, SeedEdge, SeedNote,
-    SeedPlotProgress, SeedReviewResultMessage, Session, SessionAnnotationsGetResultMessage,
-    SessionAnnotationsSaveResultMessage, SessionLedgerEntry, SessionListResult,
-    SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage, SessionUsage,
-    SessionUsageModel, SharedCodexBlocker, SharedCodexState, UpdateChangedMessage,
+    ReviewRow, ReviewStop, Seed, SeedCheck, SeedDocument, SeedDocumentGetResultMessage, SeedEdge,
+    SeedNote, SeedPlotProgress, SeedReviewResultMessage, Session,
+    SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
+    SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
+    SessionUsage, SessionUsageModel, SharedCodexBlocker, SharedCodexState, UpdateChangedMessage,
     UpdateOutpostProgress, UpdateRun, Worktree, WorktreeListResult, WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Metrics};
@@ -1303,6 +1303,86 @@ fn garden_dock_search(dark: bool) {
     snap(&mut world, "garden-dock-search", dark);
     world.gesture(|app| app.type_text(" is:"));
     snap(&mut world, "garden-dock-search-filter", dark);
+}
+
+/// Two plots named alike up to their region, each with a child "Verify the rollout" whose body
+/// answers "smoke", and a long passage and a CJK one beside them, so each answer shows which seed
+/// and plot it is.
+fn body_answers() -> Vec<Seed> {
+    let check = |id: &str, state: &str| SeedCheck {
+        id: id.into(),
+        state: state.into(),
+        text: "The smoke test passes on the new build.".into(),
+        ..SeedCheck::default()
+    };
+    vec![
+        seed(
+            "s-cache",
+            "Roll out the cache to the production region in Tokyo 東京本番環境",
+            "growing",
+            None,
+        ),
+        seed(
+            "s-queue",
+            "Roll out the cache to the production region in Osaka 大阪本番環境",
+            "growing",
+            None,
+        ),
+        Seed {
+            body: "Run the smoke test".into(),
+            tender: Some(PartyView {
+                name: "Builder".into(),
+                r#ref: "session:s0".into(),
+                session_id: Some("s0".into()),
+            }),
+            checks: Some(vec![check("C1", "confirmed"), check("C2", "open")]),
+            ..seed("s-twinc", "Verify the rollout", "growing", Some("s-cache"))
+        },
+        Seed {
+            body: "Run the smoke test".into(),
+            ..seed("s-twinq", "Verify the rollout", "planted", Some("s-queue"))
+        },
+        Seed {
+            body: "Before the switch, every region drains its old workers, and the deploy waits \
+                   on the health endpoint for each of them. Then the smoke test runs against the \
+                   canary for ten minutes, reading error rates, cold-start latency and the \
+                   cache's hit ratio from the dashboards before anyone widens the rollout."
+                .into(),
+            ..seed(
+                "s-canary",
+                "Canary the new region before the whole fleet moves",
+                "planted",
+                Some("s-cache"),
+            )
+        },
+        Seed {
+            body: "切换之前，每个区域先排空旧的工作进程，部署会等待每个实例的健康检查通过。\
+                   然后对金丝雀实例运行 smoke 测试十分钟，并从仪表盘读取错误率、冷启动延迟\
+                   和缓存命中率，确认无误后才扩大发布范围。"
+                .into(),
+            ..seed("s-cjk", "区域发布检查", "planted", Some("s-queue"))
+        },
+    ]
+}
+
+/// A search answered from seeds' bodies, docked or expanded.
+fn garden_search_body(dark: bool, expanded: bool) {
+    let mut world = garden_world(dark, body_answers());
+    press(&mut world, Action::BoardOpen);
+    if expanded {
+        world.gesture(|app| app.click(Target::role("button").name("Expand the garden")));
+    }
+    world.gesture(|app| app.click(Target::key("garden.search.field")));
+    world.gesture(|app| app.type_text("smoke"));
+    snap(
+        &mut world,
+        if expanded {
+            "garden-search-body"
+        } else {
+            "garden-dock-search-body"
+        },
+        dark,
+    );
 }
 
 /// A seed's page as a tile beside the agent.
@@ -5480,6 +5560,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("garden_board", || garden_board(dark));
         scene("garden_dock_search", || garden_dock_search(dark));
         scene("garden_dock_search_full", || garden_dock_search_full(dark));
+        scene("garden_search_body", || garden_search_body(dark, false));
+        scene("garden_search_body", || garden_search_body(dark, true));
         scene("garden_board_menu", || garden_board_menu(dark));
         scene("garden_seed_tile", || garden_seed_tile(dark));
         scene("garden_review_screen", || {
