@@ -2331,6 +2331,15 @@ fn settings_smallest_pages(dark: bool) {
         &[
             ("claude_available", "checking"),
             ("codex_available", "false"),
+            (
+                "default_model_claude",
+                "anthropic.claude-opus-5-5-20261101-v1:0-with-extended-thinking-eu-north-1",
+            ),
+            ("snipe_available", "true"),
+            (
+                "snipe_display_name",
+                "Engineering observability staging review agent with a long name",
+            ),
         ],
         |_| {},
         |_| {},
@@ -2452,7 +2461,7 @@ fn settings_smallest_pages(dark: bool) {
                     return message(HarnessModelsResultMessage {
                         request_id,
                         success: false,
-                        error: Some("codex models: exec: \"codex\": executable file not found in $PATH while listing the provider catalog".into()),
+                        error: Some("codex models: exec: /opt/agents/codex-`canary`: executable file not found in $PATH while listing the provider catalog".into()),
                         ..HarnessModelsResultMessage::new()
                     });
                 }
