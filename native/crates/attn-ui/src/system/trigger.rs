@@ -27,6 +27,7 @@ pub struct Trigger {
     open: bool,
     unset: bool,
     disabled: bool,
+    size: Size,
 }
 
 impl Trigger {
@@ -41,6 +42,7 @@ impl Trigger {
             open: false,
             unset: false,
             disabled: false,
+            size: Size::Regular,
         }
     }
 
@@ -71,12 +73,18 @@ impl Trigger {
         self
     }
 
+    /// A trigger a compact control high, for a bar such as the title bar.
+    pub fn compact(mut self) -> Self {
+        self.size = Size::Compact;
+        self
+    }
+
     pub fn build<S: 'static>(
         self,
         t: &Tokens,
         press: impl Fn(&mut S, &mut Tx) + 'static,
     ) -> Control {
-        let size = Size::Regular;
+        let size = self.size;
         let open = self.open && !self.disabled;
         let unset = self.unset && !open && !self.disabled;
         let (fill, edge) = match (open, self.look) {

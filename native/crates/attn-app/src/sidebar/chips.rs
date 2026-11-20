@@ -3,8 +3,7 @@ use std::collections::{HashMap, HashSet};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Inline, Rail};
 use attn_ui::system::{self, IconSize, ListRow, Type, words};
-use attn_ui::type_;
-use rune::{El, Tx, el, row, text};
+use rune::{El, Tx, row};
 use rune_kit::ScrollBar;
 
 use super::model::{desktop_number, desktop_title, ordered_desktops};
@@ -447,78 +446,45 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
     if more > 0 {
         said.push_str(&format!(" +{more}"));
     }
-    let sep = |glyph: &str| {
-        text(glyph.to_owned())
-            .font(type_::LABEL)
-            .color(t.text_dimmed)
-    };
+    let sep = |glyph: &str| words(glyph.to_owned(), Type::Label, t.text_dimmed);
     let mut trail = Vec::new();
     for (n, crumb) in crumbs.into_iter().enumerate() {
         trail.push(sep(if n == 0 { "·" } else { "›" }));
         trail.push(
-            text(crumb)
-                .font(type_::LABEL)
-                .color(t.text_secondary)
+            words(crumb, Type::Label, t.text_secondary)
                 .single_line()
                 .truncate()
                 .shrink(),
         );
     }
     if more > 0 {
-        trail.push(
-            text(format!("+{more}"))
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
-        );
+        trail.push(words(format!("+{more}"), Type::Label, t.text_tertiary));
     }
-    let pill = row()
-        .key("queue-bar.pill")
-        .role("button")
-        .focusable(true)
-        .label(said)
-        .a11y_value(owed.0.to_string())
-        .on_press_tx(|state: &mut State, tx: &mut Tx| {
-            super::bar_peek::dismiss(state);
-            crate::dispatch(state, crate::Action::UiActionMenu, tx);
-        })
-        .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
-            super::bar_peek::anchor_hovered(state, super::bar_peek::Anchor::Waiting, inside)
-        })
-        .shrink()
-        .min_w(124.0)
-        .max_w(640.0)
-        .h(24.0)
-        .px(12.0)
-        .gap(8.0)
-        .items_center()
-        .radius(999.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .child(
-            row()
-                .items_center()
-                .gap(6.0)
-                .child(el().size(7.0, 7.0).radius(3.5).fill(if owed.0 > 0 {
-                    t.warning
-                } else {
-                    t.text_dimmed
-                }))
-                .child(
-                    text(count)
-                        .font(rune::TextStyle {
-                            weight: 600.0,
-                            ..type_::LABEL
-                        })
-                        .color(t.text_primary)
-                        .single_line(),
-                ),
-        )
-        .children(trail)
-        .child(
-            text(attn_ui::glyph::CARET_DOWN)
-                .font(rune::TextStyle::new(12.0, 400.0))
-                .color(t.text_dimmed),
-        );
+    let waiting = system::dot(
+        if owed.0 > 0 { t.warning } else { t.text_dimmed },
+        system::DotShape::Filled,
+        system::DotSize::Regular,
+    );
+    let content = Inline::line()
+        .child(waiting)
+        .child(words(count, Type::Name, t.text_primary).single_line())
+        .children(trail);
+    let pill = El::from(
+        system::Trigger::new("queue-bar.pill", said, content)
+            .compact()
+            .open(crate::palette::shows_agents(state))
+            .value(owed.0.to_string())
+            .build(t, |state: &mut State, tx: &mut Tx| {
+                super::bar_peek::dismiss(state);
+                crate::dispatch(state, crate::Action::UiActionMenu, tx);
+            }),
+    )
+    .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
+        super::bar_peek::anchor_hovered(state, super::bar_peek::Anchor::Waiting, inside)
+    })
+    .shrink()
+    .min_w(PILL_MIN_W)
+    .max_w(PILL_MAX_W);
     let crowded = super::crowding::crowded(state);
     row()
         .key("queue-bar")
@@ -608,6 +574,11 @@ fn runs_chip(state: &State, t: &Tokens) -> Option<El> {
             .description(says.join(" · ")),
     )
 }
+
+/// The queue bar pill's narrowest and widest, as the Tauri app's `.queue-bar-pill`: the count
+/// whole, and the crumbs cut before the pill crowds the desktops.
+const PILL_MIN_W: f32 = 124.0;
+const PILL_MAX_W: f32 = 640.0;
 
 /// How far the bar's waiting count hangs past its chip's corner, as the Tauri app's
 /// `.queue-bar-desktop-waiting` at -6.
