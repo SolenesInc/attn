@@ -29,6 +29,14 @@ pub(crate) const fn mark(size: IconSize) -> TextStyle {
     TextStyle::new(size.pt(), 400.0).lh(size.pt())
 }
 
+/// `mark` drawn as text inside a control: `size` high, as heavy as a control's words.
+pub(crate) fn control_mark(mark: &'static str, size: IconSize) -> El {
+    rune::text(mark).label(mark).font(TextStyle {
+        weight: style(Type::Control).weight,
+        ..self::mark(size)
+    })
+}
+
 pub(crate) fn font(e: El, kind: Type) -> El {
     e.font(style(kind))
 }

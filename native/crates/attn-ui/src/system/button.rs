@@ -1,7 +1,9 @@
 use rune::{Color, El, Tx, row};
 use rune_kit::{Button as KitButton, ButtonVariant};
 
-use super::{Control, Radius, Size, Space, Type, disabled, door, focus, kit, layers, words};
+use super::{
+    Control, IconSize, Radius, Size, Space, Type, disabled, door, focus, kit, layers, words,
+};
 use crate::Tokens;
 
 /// How a button reads.
@@ -17,9 +19,15 @@ pub enum Look {
     Danger,
 }
 
+/// What a button shows: words, or one mark of [`crate::glyph`].
+enum Shown {
+    Words(String),
+    Mark(&'static str, IconSize),
+}
+
 /// attn's button: one shape for every look and size.
 pub struct Button {
-    shown: String,
+    shown: Shown,
     look: Look,
     size: Size,
     disabled: bool,
@@ -32,10 +40,20 @@ pub struct Button {
 type Press = Box<dyn FnOnce(KitButton) -> KitButton>;
 
 impl Button {
-    pub fn new(shown: impl Into<String>) -> Button {
-        let shown = shown.into();
+    pub fn new(words: impl Into<String>) -> Button {
+        let words = words.into();
+        Button::showing(KitButton::new(words.clone()), Shown::Words(words))
+    }
+
+    /// A button that shows `mark` `size` high in place of words, square at its size's height.
+    /// Name what it does with `.label` on the built control.
+    pub fn mark(mark: &'static str, size: IconSize) -> Button {
+        Button::showing(KitButton::new(mark), Shown::Mark(mark, size))
+    }
+
+    fn showing(button: KitButton, shown: Shown) -> Button {
         Button {
-            button: KitButton::new(shown.clone()),
+            button,
             shown,
             look: Look::Plain,
             size: Size::Regular,
@@ -103,14 +121,16 @@ impl Button {
             Look::Quiet => (Color::TRANSPARENT, Color::TRANSPARENT, t.text_secondary),
             Look::Danger => (t.bg_button, t.error.alpha(0.45), t.error),
         };
+        let square = matches!(self.shown, Shown::Mark(..));
         let shown = self.shown;
         let trailing = self.trailing;
-        let label = move |_, _| {
-            door::gap(row().items_center(), Space::S4)
+        let label = move |_, _| match shown {
+            Shown::Words(shown) => door::gap(row().items_center(), Space::S4)
                 .shrink()
                 .min_w(0.0)
                 .child(words(shown, Type::Control, ink).truncate())
-                .children(trailing)
+                .children(trailing),
+            Shown::Mark(mark, size) => door::control_mark(mark, size).color(ink),
         };
         let button = match self.press {
             Some(attach) if !self.disabled => attach(self.button),
@@ -126,7 +146,12 @@ impl Button {
             .justify_center()
             .fill(fill)
             .border(1.0, edge);
-        let button = door::inset(button, self.size.inset(), Space::S0);
+        let button = if square {
+            let side = self.size.height();
+            button.w(side).min_w(side)
+        } else {
+            door::inset(button, self.size.inset(), Space::S0)
+        };
         let button = focus::ring(door::corner(button, Radius::Control), t);
         let button = if self.disabled {
             disabled::dim(button)

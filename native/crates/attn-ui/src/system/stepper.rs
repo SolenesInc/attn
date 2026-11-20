@@ -3,7 +3,7 @@ use rune::{El, Tx, col, row};
 use super::{
     Button, Control, IconSize, Radius, Size, Space, Type, disabled, door, kit, layers, words,
 };
-use crate::Tokens;
+use crate::{Tokens, glyph};
 
 type Press<S> = Box<dyn Fn(&mut S, &mut Tx)>;
 
@@ -22,16 +22,15 @@ pub fn stepper<S: 'static>(
     down: impl Fn(&mut S, &mut Tx) + 'static,
     up: impl Fn(&mut S, &mut Tx) + 'static,
 ) -> Control {
-    let step = |dir: &str, said: &str, mark: &str, press: Press<S>| {
+    let step = |dir: &str, said: &str, mark: &'static str, press: Press<S>| {
         El::from(
-            Button::new(mark)
+            Button::mark(mark, IconSize::Small)
                 .disabled(disabled)
                 .on_press_tx(move |s: &mut S, tx: &mut Tx| press(s, tx))
                 .build(t)
                 .key(format!("{key}.{dir}"))
                 .label(format!("{said} {what}")),
         )
-        .min_w(Size::Regular.height())
     };
     let shown = words(value.clone(), Type::Name, t.text_primary)
         .key(format!("{key}.value"))
@@ -47,9 +46,9 @@ pub fn stepper<S: 'static>(
     };
     let line = door::gap(row().key(key.to_owned()).items_center(), Space::S4)
         .max_w_frac(1.0)
-        .child(step("down", "Decrease", "−", Box::new(down)))
+        .child(step("down", "Decrease", glyph::MINUS, Box::new(down)))
         .child(shown)
-        .child(step("up", "Increase", "+", Box::new(up)));
+        .child(step("up", "Increase", glyph::PLUS, Box::new(up)));
     Control::new(line, Size::Regular)
 }
 

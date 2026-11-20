@@ -14,6 +14,8 @@ pub const REGULAR: TextStyle = door::mark(IconSize::Regular);
 pub const LARGE: TextStyle = door::mark(IconSize::Large);
 
 pub const TIMES: &str = "×";
+pub const MINUS: &str = "−";
+pub const PLUS: &str = "+";
 pub const PREVIOUS: &str = "▲";
 pub const NEXT: &str = "▼";
 pub const SUNRISE: &str = "☀";

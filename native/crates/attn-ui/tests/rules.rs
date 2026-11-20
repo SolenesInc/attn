@@ -1550,3 +1550,71 @@ fn an_icon_only_button_gives_its_large_icon_four_points_on_every_side() {
         );
     }
 }
+
+const SMALL_ICON: f32 = 14.0;
+const REGULAR_HEIGHT: f32 = 32.0;
+
+#[test]
+fn a_steppers_minus_and_plus_are_small_marks_on_square_buttons_in_its_tab_order() {
+    for dark in [true, false] {
+        let mut rt = story(dark, "Library/Stepper", "Rest");
+        let all = rt.elements();
+        for (dir, mark) in [("down", "−"), ("up", "+")] {
+            let button = element(&rt, &format!("stepper.scale.{dir}"));
+            let drawn = all
+                .iter()
+                .find(|e| {
+                    e.text.as_deref() == Some(mark)
+                        && std::iter::successors(e.parent, |&p| all[p].parent)
+                            .any(|p| all[p].path == button.path)
+                })
+                .unwrap_or_else(|| panic!("stepper.scale.{dir} draws no {mark}"));
+            assert!(
+                (drawn.rect[3] - SMALL_ICON).abs() < 0.25,
+                "dark={dark}: {mark} is drawn {} high, not IconSize::Small",
+                drawn.rect[3]
+            );
+            assert!(
+                [button.rect[2], button.rect[3]]
+                    .iter()
+                    .all(|side| (side - REGULAR_HEIGHT).abs() < 0.25),
+                "dark={dark}: stepper.scale.{dir} presses over {:?}, not {REGULAR_HEIGHT} square",
+                button.rect
+            );
+            let centre = |r: [f32; 4]| [r[0] + r[2] / 2.0, r[1] + r[3] / 2.0];
+            let (a, b) = (centre(drawn.rect), centre(button.rect));
+            assert!(
+                (a[0] - b[0]).abs() < 0.5 && (a[1] - b[1]).abs() < 0.5,
+                "dark={dark}: {mark} is centred at {a:?} in a button centred at {b:?}"
+            );
+        }
+        let stepper = element(&rt, "stepper.scale");
+        assert!(
+            (stepper.rect[2] - (2.0 * REGULAR_HEIGHT + 2.0 * 4.0 + 80.0)).abs() < 0.25
+                && (stepper.rect[3] - REGULAR_HEIGHT).abs() < 0.25,
+            "dark={dark}: the stepper is {:?}",
+            stepper.rect
+        );
+        tab_into(&mut rt, "stepper.scale.down");
+        let mut stops = vec!["stepper.scale.down".to_owned()];
+        for _ in 0..3 {
+            rt.key(KeyEvent {
+                key: Key::Tab,
+                mods: Mods::default(),
+            });
+            rt.frame(1.0);
+            let focused = rt.elements().into_iter().find(|e| e.focused);
+            stops.push(focused.and_then(|e| e.key).unwrap_or_default());
+        }
+        assert_eq!(
+            stops,
+            [
+                "stepper.scale.down",
+                "stepper.scale.up",
+                "stepper.match.down",
+                "stepper.match.up"
+            ],
+            "dark={dark}: Tab through the steppers"
+        );
+    }
+}

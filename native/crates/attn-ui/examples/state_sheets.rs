@@ -133,7 +133,15 @@ fn sheets() -> Vec<Sheet> {
         .map(|(&(story, keys), &(name, variants))| {
             let mut columns: Vec<Column> = Vec::new();
             columns.push(column(variants[0], variants[0], Gesture::None));
-            if !still.contains(&name) {
+            if name == "stepper" {
+                for (hover, pressed, aim) in [
+                    ("Hover down", "Pressed down", ".down"),
+                    ("Hover up", "Pressed up", ".up"),
+                ] {
+                    columns.push(aimed(hover, variants[0], Gesture::Hover, aim));
+                    columns.push(aimed(pressed, variants[0], Gesture::Press, aim));
+                }
+            } else if !still.contains(&name) {
                 columns.push(column("Hover", variants[0], Gesture::Hover));
                 columns.push(column("Pressed", variants[0], Gesture::Press));
             }
