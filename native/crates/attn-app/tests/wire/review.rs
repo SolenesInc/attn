@@ -7641,3 +7641,44 @@ fn the_note_box_stays_inside_its_tile_in_the_smallest_window_at_large_text() {
         tx + tw
     );
 }
+
+#[test]
+fn the_smallest_popped_out_review_at_the_largest_text_keeps_its_document_in_view() {
+    for servers in [
+        Vec::new(),
+        vec![server("rust", "missing")],
+        vec![server("rust", "missing"), server("go", "ready")],
+    ] {
+        let count = servers.len();
+        let mut tile = document_tile("m", DOC, None);
+        tile["window"] = json!({"x": 60.0, "y": 60.0, "width": 320.0, "height": 200.0});
+        let mut world = start_with_tree(row(vec![pane("a"), tile]), (1400.0, 900.0));
+        world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+            settings: Some([("uiScale".to_owned(), "1.5".to_owned())].into()),
+            ..attn_protocol::SettingsUpdatedMessage::new()
+        });
+        world.settle();
+        let _calc = serve(&world);
+        let mut bundle = map_bundle("brief");
+        bundle.navigation = servers;
+        deliver(&mut world, &map_document(), Some(bundle));
+        let window = world.tile_windows()[0].key.clone();
+        let screen = world.tile_screen(&window);
+        let bounds = |key: &str| {
+            screen
+                .bounds(Target::key(key))
+                .unwrap_or_else(|| panic!("no {key} with {count} servers:\n{screen}"))
+        };
+        let [_, tile_y, _, tile_h] = bounds("tile.m");
+        let [_, _, _, document_h] = bounds("tile.m.document");
+        let [_, line_y, _, line_h] = bounds("tile.m.review.keys");
+        assert!(
+            line_y + line_h <= tile_y + tile_h + 0.5,
+            "with {count} servers the key line runs below its window: {line_y}+{line_h} in {tile_y}+{tile_h}"
+        );
+        assert!(
+            document_h > 0.0,
+            "with {count} servers the document has no room: {document_h}"
+        );
+    }
+}

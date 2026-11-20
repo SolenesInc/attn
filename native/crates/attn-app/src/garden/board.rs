@@ -380,6 +380,7 @@ fn drill(state: &mut State, id: &str, tx: &mut Tx) {
     walk.selected = None;
     walk.menu_for = None;
     walk.trail.push(id.to_owned());
+    tx.instant();
     tx.focus(BOARD, false);
 }
 
@@ -388,6 +389,7 @@ fn climb_to(state: &mut State, depth: usize, tx: &mut Tx) {
     walk.selected = None;
     walk.menu_for = None;
     walk.trail.truncate(depth);
+    tx.instant();
     tx.focus(BOARD, false);
 }
 

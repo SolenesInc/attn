@@ -158,7 +158,7 @@ impl KeyFit {
 
 /// The line under a reader that names its keys: tabs and hints, and one hint at its end, such as
 /// the key that shows them all. The tabs and the end always share a line, and the end never
-/// gives way: in a line too narrow for both, the tabs wrap in the room it leaves.
+/// gives way: in a line too narrow for both, the tabs scroll sideways in the room it leaves.
 pub struct KeyLine {
     key: String,
     label: String,
@@ -214,7 +214,12 @@ impl KeyLine {
         let set_off = self.fit == KeyFit::Line;
         let tabs = (!self.tabs.is_empty()).then(|| {
             let tabs = door::gaps(
-                row().role("tablist").label("Frames").flex_wrap().shrink(),
+                row()
+                    .role("tablist")
+                    .label("Frames")
+                    .scroll_x()
+                    .scroll_edge_fade(Space::S16.pt())
+                    .shrink(),
                 Space::S2,
                 Space::S2,
             );

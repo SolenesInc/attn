@@ -493,6 +493,55 @@ fn tab_after_opening_a_plot_reaches_the_views_and_close_before_the_way_back() {
 }
 
 #[test]
+fn opening_a_plot_and_climbing_back_put_the_board_in_place_on_the_frame_of_the_key() {
+    let world = &mut open_board(
+        vec![
+            plot("s-crown1", "the migration", ""),
+            with(part_of("s-crown1", "s-part11", "one panel"), |s| {
+                s.status = "growing".into()
+            }),
+        ],
+        Vec::new(),
+    );
+    key(world, Key::Down);
+    for (way, step) in [("in", Key::Right), ("back", Key::Left)] {
+        let lane = "garden.board.column.ready";
+        let recording = world.record(60.0, 0.5, |_, app| {
+            app.key(KeyEvent {
+                key: step,
+                mods: Mods::default(),
+            })
+        });
+        let settled = world.rect(lane);
+        let suffix = format!("/{lane}");
+        let track = recording
+            .tracks
+            .iter()
+            .find(|t| t.path.ends_with(&suffix))
+            .unwrap_or_else(|| panic!("the ready lane was not drawn going {way}"));
+        let pressed = recording.inputs[0].0;
+        let moved: Vec<_> = track
+            .frames
+            .iter()
+            .filter(|(frame, at)| {
+                *frame >= pressed
+                    && at
+                        .rect
+                        .iter()
+                        .zip(settled)
+                        .any(|(drawn, still)| (f64::from(*drawn) - still).abs() > 0.5)
+            })
+            .map(|(frame, at)| (*frame, at.rect))
+            .collect();
+        assert!(
+            moved.is_empty(),
+            "going {way}, the ready lane moves on its way to {settled:?}: {moved:?}"
+        );
+    }
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn puts_away_the_compose_line_then_the_menu_then_the_garden_with_escape() {
     let world = &mut open_board(garden(), Vec::new());
 
