@@ -158,3 +158,13 @@ types:
     json: {type: string, enum: [attn, tools]}
     doc: "What the vent is about: attn for attn itself, including attn blocked inside your harness, or tools for your other tooling (skills, other CLIs or MCP servers, harness permissions)."
     placeholder: "attn|tools"
+  milliseconds:
+    json: {type: integer, minimum: 0}
+    placeholder: "<ms>"
+  pixels:
+    json: {type: integer}
+    placeholder: "<px>"
+  typed_text:
+    json: {type: string}
+    clears: true
+    placeholder: "<text>"

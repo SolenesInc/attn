@@ -43,7 +43,6 @@ var Placements = map[string][]Placement{
 	"automation_set_enabled":           {Placement{LocatorHome, ""}},
 	"automation_validate":              {Placement{LocatorHome, ""}},
 	"browse_directory":                 {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"browser_control":                  {Placement{LocatorHome, ""}},
 	"caller_session":                   {Placement{LocatorHere, ""}},
 	"checkout_inspect":                 {Placement{LocatorMachine, "host"}},
 	"claude_mod_reach":                 {Placement{LocatorSession, "session_id"}},
@@ -122,7 +121,6 @@ var Placements = map[string][]Placement{
 	"mute_repo":                        {Placement{LocatorHome, ""}},
 	"notebook_folders":                 {Placement{LocatorHere, ""}},
 	"notebook_sync_report":             {Placement{LocatorHome, ""}},
-	"open_browser":                     {Placement{LocatorHome, ""}},
 	"open_markdown":                    {Placement{LocatorHome, ""}},
 	"open_seed":                        {Placement{LocatorHome, ""}},
 	"open_sent_files":                  {Placement{LocatorTerminal, "terminal_id"}, Placement{LocatorHome, ""}},
@@ -432,18 +430,6 @@ func (m BrowseDirectoryMessage) Locate() string {
 	if m.Host != nil {
 		return string(*m.Host)
 	}
-	return ""
-}
-
-func (BrowserControlMessage) CommandName() string {
-	return "browser_control"
-}
-
-func (m BrowserControlMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m BrowserControlMessage) Locate() string {
 	return ""
 }
 
@@ -1416,18 +1402,6 @@ func (m NotebookSyncReportMessage) Placement() Placement {
 }
 
 func (m NotebookSyncReportMessage) Locate() string {
-	return ""
-}
-
-func (OpenBrowserMessage) CommandName() string {
-	return "open_browser"
-}
-
-func (m OpenBrowserMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m OpenBrowserMessage) Locate() string {
 	return ""
 }
 

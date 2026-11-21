@@ -3033,14 +3033,6 @@ model MarkdownAnnotationsSubmitResultMessage {
   generation?: int32;
 }
 
-// Open or retarget the docked browser tile. Sent by `attn browser open`.
-// When session_id is empty the daemon targets the currently selected session.
-@extension("x-on", #{ home: true })
-model OpenBrowserMessage {
-  cmd: "open_browser";
-  url: string;
-  session_id?: SessionID;
-}
 
 model CalloutShowStep { anchor: string; text: string; }
 model CalloutShowResult { steps: int32; }
@@ -3088,17 +3080,13 @@ model AppPerformance {
 // Milliseconds from a drawn frame's start until its commands were submitted.
 model FrameTimes { p50: float64; p95: float64; p99: float64; max: float64; }
 
-// Ask the visible in-app browser host to perform an action. Sent by the CLI
-// over the unix socket; the daemon brokers it to a capable Tauri client.
-@extension("x-on", #{ home: true })
-model BrowserControlMessage {
-  cmd: "browser_control";
-  action: string;
-  params?: string;
-  selector?: string;
-  text?: string;
-  session_id?: SessionID;
-}
+
+// What a browser command answered: the host's data for an action.
+model BrowserResult { data: string; }
+// The URL the browser tile opened.
+model BrowserOpenResult { url: string; }
+// Where a screenshot or PDF of the page was saved.
+model BrowserFileResult { path: string; }
 
 // Return a browser-host action result from the Tauri client to the daemon.
 model BrowserControlResultMessage {

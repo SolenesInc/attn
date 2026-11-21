@@ -109,10 +109,7 @@ fn native_command(name: &str, verb: Option<&str>, argv: &[OsString]) -> Option<N
         ("review", _) => native(review::run, true),
         ("nav", _) => native(nav::run, true),
         ("open", _) => native(open::run, true),
-        ("browser", _) => Native {
-            help: Some(browser::USAGE),
-            ..native(browser::run, true)
-        },
+        ("browser", _) => native(browser::run, true),
         ("instance-env", _) => Native {
             checks: Checks::Nothing,
             ..native(instance_env::run, false)

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "cd50ae3c91fa";
+pub const PROTOCOL_VERSION: &str = "e603051db205";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -1339,29 +1339,6 @@ impl BrowseDirectoryResultMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct BrowserControlMessage {
-    pub action: String,
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub params: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub selector: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<SessionID>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub text: Option<String>,
-}
-
-impl BrowserControlMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "browser_control".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BrowserControlRequestMessage {
     pub action: String,
     pub desktop_id: String,
@@ -1404,6 +1381,18 @@ impl BrowserControlResultMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BrowserFileResult {
+    pub path: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BrowserOpenResult {
+    pub url: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BrowserResult {
+    pub data: String,
 }
 pub type BuiltinDelegationRole = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -7139,23 +7128,6 @@ pub struct OnboardingResult {
     pub configured: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending: Option<OnboardingPath>,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct OpenBrowserMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<SessionID>,
-    pub url: String,
-}
-
-impl OpenBrowserMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "open_browser".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OpenMarkdownMessage {
