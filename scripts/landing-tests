@@ -137,6 +137,8 @@ go ./cmd/attnd TestHelpListsEveryCommandAndReferenceAndEachCommandExplainsItself
 group cli-help ^cli/|^internal/prompttest/
 go ./cmd/attnd TestPRWaitReadyReportsEachActionableUpdateOnceAcrossInvocations
 go ./cmd/attnd TestSettingsCLIDiscoversReadsAndSavesDaemonSettings
+go ./cmd/attnd TestTheCLIWarnsWhenItsReleaseDiffersFromTheRunningDaemons
+go ./cmd/attnd TestTheCLINamesThePathItSearchedWhenAttndIsMissing
 
 group clickhouse ^internal/daemon/analytics|^internal/analytics/|^internal/ingest/|^cmd/attn-ingest/|^internal/testworld/ingest\.go$|^internal/fakeclickhouse/
 go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall

@@ -28,7 +28,7 @@ func TestTheCLINamesThePathItSearchedWhenAttndIsMissing(t *testing.T) {
 	}
 
 	var stderr bytes.Buffer
-	command := exec.Command(alone, "list")
+	command := exec.Command(alone, "version")
 	command.Stderr = &stderr
 	var exit *exec.ExitError
 	if err := command.Run(); !errors.As(err, &exit) || exit.ExitCode() != 127 {
