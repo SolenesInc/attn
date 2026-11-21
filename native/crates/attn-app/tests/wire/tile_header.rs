@@ -14,6 +14,8 @@ use rune::{Key, KeyEvent, KeyPlatform, Mods, WheelEvent};
 
 const SIZE: (f32, f32) = (1600.0, 900.0);
 const DESKTOP: &str = "work/desktop_1";
+/// How far an agent header's second line keeps its pieces from the tile's end.
+const SUBLINE_END: f32 = 8.0;
 
 fn session(id: &str, label: &str, usage: Option<SessionUsage>) -> Session {
     Session {
@@ -310,13 +312,13 @@ fn the_usage_breakdown_counts_each_model_exactly_with_the_guardian_beside_the_ag
         "$1.23*",
         "claude-opus-5",
         "184,321 tokens · $1.23*",
-        "12,345",
-        "6,789",
-        "150,000",
-        "187",
+        "Input 12,345",
+        "Output 6,789",
+        "Cache read 150,000",
+        "Cache write, unknown 187",
         "Guardian · claude-opus-5",
         "1,876 tokens · <$0.01",
-        "1,746",
+        "Input 1,746",
         "* Cache write duration is unavailable.",
     ] {
         assert!(shown.lines().any(|l| l == line), "{line:?} in {shown}");
@@ -1564,7 +1566,7 @@ fn fitted(world: &World) -> Fitted {
 fn overflow(world: &World) -> Option<String> {
     let rect = |key: &str| world.runtime().presented(key).map(|(r, ..)| r);
     let [x, _, w, _] = rect("tile.a.subline")?;
-    let inner = x + w - 10.0;
+    let inner = x + w - SUBLINE_END;
     ["role", "host", "usage", "provenance", "id"]
         .into_iter()
         .filter_map(|piece| Some((piece, rect(&format!("tile.a.{piece}"))?)))

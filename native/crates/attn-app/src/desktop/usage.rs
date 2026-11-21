@@ -1,7 +1,8 @@
 use attn_protocol::{Session, SessionUsage, SessionUsageModel};
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::{El, Tx, col, row, text};
+use attn_ui::blocks::{Actions, Block, Card, Facts, HeaderPiece, Inline, Popover};
+use attn_ui::system::{Type, keys_hint, words};
+use rune::{El, Tx};
 use rune_kit::Placement;
 
 use super::header_pop::{self, Pop, What};
@@ -97,98 +98,83 @@ pub(crate) fn grouped(n: i64) -> String {
 
 /// The usage badge in the header of `leaf`, which previews the breakdown on hover and pins it
 /// on a press, lit while its breakdown is open.
-pub(crate) fn piece(
-    leaf: &str,
-    session: &str,
-    badge: &Badge,
-    open: bool,
-    font: rune::TextStyle,
-    t: &Tokens,
-) -> El {
+pub(crate) fn piece(leaf: &str, session: &str, badge: &Badge, open: bool, t: &Tokens) -> El {
     let pressed = (leaf.to_owned(), session.to_owned());
     let ink = if open {
         t.text_primary
     } else {
         t.text_tertiary
     };
-    let badge = header_pop::link(
-        badge.label.clone(),
-        badge.text.clone(),
-        font,
-        ink,
-        t,
-        move |state, tx| header_pop::press(state, &pressed.0, &pressed.1, What::Usage, tx),
-    )
-    .key(header_pop::anchor(leaf, What::Usage))
-    .expanded(open);
+    let badge = HeaderPiece::new()
+        .words(badge.text.clone(), ink)
+        .button(
+            header_pop::anchor(leaf, What::Usage),
+            badge.label.clone(),
+            t,
+        )
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            header_pop::press(state, &pressed.0, &pressed.1, What::Usage, tx)
+        })
+        .expanded(open);
     let badge = if open { badge.fill(t.bg_button) } else { badge };
     header_pop::hovers(badge, leaf, session, What::Usage)
 }
 
-/// The badge's width in `font`.
-pub(super) fn width(badge: &Badge, font: rune::TextStyle) -> super::fit::Widths {
+/// The badge's width.
+pub(super) fn width(badge: &Badge) -> super::fit::Widths {
     super::fit::Widths {
-        full: super::fit::text_w(&badge.text, font),
+        full: HeaderPiece::new()
+            .words(badge.text.clone(), rune::Color::TRANSPARENT)
+            .button_width(),
         short: None,
         icon: None,
     }
 }
 
-/// The weight of `.session-usage-summary strong` and `.session-usage-model header strong`.
-const STRONG: rune::TextStyle = rune::TextStyle {
-    weight: 600.0,
-    ..type_::LABEL
-};
+/// How wide the breakdown stands: its counts in two columns, "Cache write, unknown" beside a
+/// count of seven digits, keep one line each.
+const BREAKDOWN_W: f32 = 390.0;
 
 /// The breakdown of the open usage popover, under its badge.
 pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     let session = state.facts.sessions.iter().find(|s| s.id == pop.session)?;
     let usage = shown(session)?;
-    let summary = row()
-        .w_full()
-        .padding(10.0)
-        .gap(12.0)
-        .child(
-            col()
-                .grow(1.0)
-                .gap(4.0)
-                .child(text("Session usage").font(STRONG).color(t.text_primary))
-                .child(caption(
-                    &format!("{} tokens", grouped(usage.total_tokens)),
-                    t,
-                )),
-        )
-        .children(usage.cost_usd.map(|cost| {
-            text(format!(
+    let key = pop.surface();
+    let total = words(
+        format!("{} tokens", grouped(usage.total_tokens)),
+        Type::Small,
+        t.text_tertiary,
+    );
+    let mut breakdown = Popover::new(key.clone(), "Session usage")
+        .push(Block::custom(format!("{key}.total"), total))
+        .push_all(
+            usage
+                .models
+                .iter()
+                .enumerate()
+                .map(|(i, m)| model(&format!("{key}.model.{i}"), m, t)),
+        );
+    if let Some(cost) = usage.cost_usd {
+        breakdown = breakdown.aside(words(
+            format!(
                 "{}{}",
                 dollars(cost),
                 unpriced_mark(usage.has_unpriced_usage)
-            ))
-            .font(STRONG)
-            .color(t.text_primary)
-        }));
-    let surface = col()
-        .key(pop.surface())
-        .role("dialog")
+            ),
+            Type::Name,
+            t.text_primary,
+        ));
+    }
+    if pop.pinned {
+        breakdown = breakdown.actions(Actions::new("close").push(keys_hint(["esc"], "close", t)));
+    }
+    let surface = breakdown
+        .build(t)
         .label("Session usage breakdown")
-        .w(390.0)
-        .padding(6.0)
-        .focusable(true)
-        .no_focus_ring()
+        .w(BREAKDOWN_W)
         .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
             header_pop::hover_popover(state, inside, tx)
-        })
-        .child(summary)
-        .child(
-            col()
-                .w_full()
-                .gap(6.0)
-                .children(usage.models.iter().map(|m| model(m, t))),
-        )
-        .children(
-            pop.pinned
-                .then(|| caption("esc close", t).pt(8.0).px(10.0).pb(3.0)),
-        );
+        });
     let surface = if pop.pinned {
         surface
             .modal_tx(true, |state: &mut State, _: &mut Tx| {
@@ -200,16 +186,15 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     };
     Some(rune_kit::popover::anchored(
         attn_ui::kit(t),
-        attn_ui::Frame::panel(t).draw(surface),
+        surface,
         &pop.anchor(),
         Placement::BottomEnd,
         4.0,
     ))
 }
 
-/// One model's card, `.session-usage-model`: its name and total over its counts in two
-/// columns.
-fn model(model: &SessionUsageModel, t: &Tokens) -> El {
+/// One model's card: its name and total over its counts in two columns.
+fn model(key: &str, model: &SessionUsageModel, t: &Tokens) -> Block {
     let name = if model.purpose == "guardian" {
         format!("Guardian · {}", model.model)
     } else {
@@ -225,81 +210,67 @@ fn model(model: &SessionUsageModel, t: &Tokens) -> El {
             )
         })
         .unwrap_or_default();
-    let count = |label: &str, value: i64| {
-        row()
-            .w_frac(0.5)
-            .shrink()
-            .min_w(0.0)
-            .gap(8.0)
-            .child(
-                text(label.to_owned())
-                    .font(type_::LABEL)
-                    .color(t.text_tertiary)
-                    .grow(1.0),
-            )
-            .child(
-                text(grouped(value))
-                    .font(type_::LABEL)
-                    .color(t.text_secondary),
-            )
-    };
-    let pair = |left: El, right: El| row().w_full().gap(18.0).child(left).child(right);
-    col()
+    let head = Inline::loose()
         .w_full()
-        .padding(10.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border_subtle)
-        .radius(7.0)
         .child(
-            row()
-                .w_full()
-                .items_center()
-                .gap(12.0)
-                .child(
-                    text(name)
-                        .font(STRONG)
-                        .color(t.text_primary)
-                        .truncate()
-                        .grow(1.0),
+            words(name, Type::Name, t.text_primary)
+                .single_line()
+                .truncate()
+                .grow(1.0)
+                .min_w(0.0),
+        )
+        .child(words(
+            format!("{} tokens{cost}", grouped(model.total_tokens)),
+            Type::Small,
+            t.text_tertiary,
+        ));
+    let counts = |name: &str, rows: [(&str, i64); 3]| {
+        let facts = rows.into_iter().fold(
+            Facts::new(format!("{key}.{name}")),
+            |facts, (label, value)| {
+                facts.fact(
+                    format!("{key}.{}", label.to_lowercase().replace([',', ' '], "-")),
+                    label.to_owned(),
+                    grouped(value),
                 )
-                .child(caption(
-                    &format!("{} tokens{cost}", grouped(model.total_tokens)),
-                    t,
-                )),
-        )
-        .child(
-            col()
-                .w_full()
-                .mt(10.0)
-                .gap(7.0)
-                .child(pair(
-                    count("Input", model.input_tokens),
-                    count("Output", model.output_tokens),
-                ))
-                .child(pair(
-                    count("Cache read", model.cache_read_tokens),
-                    count("Cache write, 5m", model.cache_write_5m_tokens),
-                ))
-                .child(pair(
-                    count("Cache write, 1h", model.cache_write_1h_tokens),
-                    count(
-                        "Cache write, unknown",
-                        model.cache_write_unclassified_tokens,
-                    ),
-                )),
-        )
-        .children(model.has_unpriced_usage.then(|| {
-            let reason = model
-                .unpriced_reason
-                .as_deref()
-                .filter(|r| !r.is_empty())
-                .unwrap_or("Some usage has no price.");
-            caption(&format!("* {reason}"), t).mt(9.0)
-        }))
-}
-
-fn caption(words: &str, t: &Tokens) -> El {
-    text(words.to_owned())
-        .font(attn_ui::kit(t).ty.caption())
-        .color(t.text_tertiary)
+            },
+        );
+        facts.el(t).grow(1.0).min_w(0.0)
+    };
+    let columns = Inline::loose()
+        .key(format!("{key}.counts"))
+        .w_full()
+        .child(counts(
+            "left",
+            [
+                ("Input", model.input_tokens),
+                ("Cache read", model.cache_read_tokens),
+                ("Cache write, 1h", model.cache_write_1h_tokens),
+            ],
+        ))
+        .child(counts(
+            "right",
+            [
+                ("Output", model.output_tokens),
+                ("Cache write, 5m", model.cache_write_5m_tokens),
+                (
+                    "Cache write, unknown",
+                    model.cache_write_unclassified_tokens,
+                ),
+            ],
+        ));
+    let unpriced = model.has_unpriced_usage.then(|| {
+        let reason = model
+            .unpriced_reason
+            .as_deref()
+            .filter(|r| !r.is_empty())
+            .unwrap_or("Some usage has no price.");
+        words(format!("* {reason}"), Type::Small, t.text_tertiary).wrap()
+    });
+    let card = Card::new(key)
+        .push(head)
+        .push(columns)
+        .push_all(unpriced)
+        .build(t);
+    Block::custom(format!("{key}.card"), card)
 }

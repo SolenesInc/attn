@@ -5,7 +5,7 @@ use attn_ui::blocks::{Actions, Block, HeaderPiece, Popover, Prose};
 use attn_ui::system::{
     DotShape, DotSize, IconSize, ListRow, Type, dot, icon_button, keys_hint, words,
 };
-use attn_ui::{Tokens, glyph, type_};
+use attn_ui::{Tokens, glyph};
 use rune::{Color, El, Key, KeyEvent, Tx, col};
 use rune_kit::Placement;
 
@@ -24,8 +24,6 @@ pub struct Trigger {
     mark: Mark,
     leads: bool,
 }
-
-const MARK_PX: f32 = 14.0;
 
 fn dispatched_by_party(session: &Session) -> bool {
     session
@@ -147,8 +145,7 @@ fn ink(trigger: &Trigger, t: &Tokens) -> Color {
 
 /// The role at `level` in `ink`, its name keyed `name_key`.
 fn face(trigger: &Trigger, name_key: String, level: Level, ink: Color) -> HeaderPiece {
-    let mark = trigger.mark.el(MARK_PX, type_::CAPTION, ink);
-    let piece = HeaderPiece::new().drawn(mark, trigger.mark.width(MARK_PX, type_::CAPTION));
+    let piece = HeaderPiece::new().mark(trigger.mark.glyph(), ink);
     if level == Level::Full {
         piece.words_keyed(name_key, trigger.text.clone(), ink, None)
     } else {

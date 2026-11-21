@@ -2,11 +2,10 @@ use attn_client::Desktop;
 use attn_protocol::{DesktopPane, Session};
 use attn_term::mouse;
 use attn_ui::Tokens;
-use attn_ui::blocks::{Settling, SettlingChip, Tabs, TileHeader};
+use attn_ui::blocks::{HeaderPiece, Settling, SettlingChip, Tabs, TileHeader};
 use attn_ui::colors::TerminalColors;
 use attn_ui::system::{Button as SystemButton, IconSize, Look, Size, icon_button};
-use rune::{Drag, El, Mods, PointerButton, Tx, col, el, memo, text};
-use rune_kit::{Button, ButtonVariant};
+use rune::{Drag, El, Mods, PointerButton, Tx, col, el, memo};
 
 use super::Area;
 use super::fit::{Level, Piece, Row, Widths, fit};
@@ -23,7 +22,6 @@ pub(super) const DIVIDER_PX: f32 = 9.0;
 /// The rows a terminal keeps clear under the notices over it: three whole rows, main's at the
 /// smallest window with the largest text, and the one the band's foot may cut.
 const ROWS_UNDER_NOTICES: f32 = 4.0;
-const SUBLINE_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
 
 /// What an agent's header says about its turn settling on its own.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -382,7 +380,7 @@ fn sublines(
                         .map(|h| (Piece::Host, super::host::widths(h))),
                     sub.usage
                         .as_ref()
-                        .map(|u| (Piece::Usage, super::usage::width(u, SUBLINE_TYPE))),
+                        .map(|u| (Piece::Usage, super::usage::width(u))),
                     sub.provenance
                         .as_ref()
                         .map(|l| (Piece::Provenance, super::provenance::widths(l))),
@@ -426,9 +424,13 @@ fn short_id(session: &str) -> String {
     session.chars().take(8).collect()
 }
 
+fn id_face(short: String, ink: rune::Color) -> HeaderPiece {
+    HeaderPiece::new().words(short, ink)
+}
+
 fn id_width(session: &str) -> Widths {
     Widths {
-        full: super::fit::text_w(&short_id(session), SUBLINE_TYPE.mono()),
+        full: id_face(short_id(session), rune::Color::TRANSPARENT).button_width(),
         short: None,
         icon: None,
     }
@@ -1442,7 +1444,6 @@ fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Toke
             session,
             sub.usage.as_ref()?,
             sub.usage_open,
-            SUBLINE_TYPE,
             t,
         ))
     });
@@ -1461,15 +1462,9 @@ fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Toke
         .into_iter()
         .flatten()
         .chain(shows_id.then(|| {
-            let face = short.clone();
-            Button::new(format!("Copy session id {short}"))
-                .variant(ButtonVariant::GhostFaint)
+            id_face(short.clone(), t.text_tertiary)
+                .button(format!("{key}.id"), format!("Copy session id {short}"), t)
                 .on_press_tx(move |_: &mut State, tx: &mut Tx| tx.copy(id.clone()))
-                .label_with(move |_, ink| text(face).font(SUBLINE_TYPE.mono()).color(ink))
-                .build(attn_ui::kit(t))
-                .key(format!("{key}.id"))
-                .h(SUBLINE_TYPE.line_px())
-                .px(0.0)
         }))
         .collect()
 }

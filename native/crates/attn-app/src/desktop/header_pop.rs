@@ -1,6 +1,4 @@
-use attn_ui::Tokens;
-use rune::{Color, El, TextStyle, Tx, text};
-use rune_kit::{Button, ButtonVariant};
+use rune::{El, Tx};
 
 use crate::State;
 
@@ -127,24 +125,6 @@ pub(crate) struct HeaderPop {
 /// `piece` opens the popover of `what` when the pointer moves onto it, as the shelf's peek does,
 /// so a popover closed under a still pointer stays closed, and lets it go once the pointer
 /// leaves.
-/// A header piece that reads as text in `font` and `ink` and is pressed as a button named `label`.
-pub(crate) fn link(
-    label: String,
-    face: String,
-    font: TextStyle,
-    ink: Color,
-    t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
-) -> El {
-    Button::new(label)
-        .variant(ButtonVariant::GhostMuted)
-        .on_press_tx(press)
-        .label_with(move |_, _| text(face).font(font).color(ink).single_line())
-        .build(attn_ui::kit(t))
-        .h(font.line_px())
-        .px(0.0)
-}
-
 pub(crate) fn hovers(piece: El, leaf: &str, session: &str, what: What) -> El {
     hovers_on(piece, Host::Tile(leaf.to_owned()), session, what)
 }

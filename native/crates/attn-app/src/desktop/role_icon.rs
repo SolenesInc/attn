@@ -1,5 +1,6 @@
 use attn_protocol::SessionDelegationRole;
-use rune::{Color, El, Icon, TextStyle, icon, text};
+use attn_ui::Glyph;
+use rune::Icon;
 
 macro_rules! stroked {
     ($name:literal, $body:literal) => {
@@ -110,27 +111,17 @@ impl Mark {
         }
     }
 
-    pub(crate) fn width(&self, size: f32, font: TextStyle) -> f32 {
+    pub(crate) fn glyph(&self) -> Glyph {
         match self {
-            Mark::Letter(letter) => super::fit::text_w(letter, font),
-            _ => size,
-        }
-    }
-
-    pub(crate) fn el(&self, size: f32, font: TextStyle, color: Color) -> El {
-        let glyph = match self {
-            Mark::Chain => &CHAIN,
-            Mark::Icon(name) => {
+            Mark::Chain => Glyph::Icon(&CHAIN),
+            Mark::Icon(name) => Glyph::Icon(
                 &ICONS
                     .iter()
                     .find(|(n, _)| n == name)
                     .expect("a known icon")
-                    .1
-            }
-            Mark::Letter(letter) => {
-                return text(letter.clone()).font(font).color(color).single_line();
-            }
-        };
-        icon(glyph, size).color(color)
+                    .1,
+            ),
+            Mark::Letter(letter) => Glyph::Text(letter.clone()),
+        }
     }
 }

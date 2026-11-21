@@ -108,11 +108,6 @@ pub(super) fn fit(row: &Row) -> Vec<(Piece, Level)> {
     levels
 }
 
-/// The width `s` lays out at in `font`, on one line.
-pub(crate) fn text_w(s: &str, font: rune::TextStyle) -> f32 {
-    rune::text::measure(s, &[], font, None).0
-}
-
 /// A host's short mark: the first letter of each dash-separated word, then its trailing digits.
 pub(super) fn host_mark(host: &str) -> String {
     let digits_at = host.trim_end_matches(|c: char| c.is_ascii_digit()).len();
