@@ -1620,6 +1620,9 @@ type AutomationRunSummary struct {
 	// DeliveredAt corresponds to the JSON schema field "delivered_at".
 	DeliveredAt *string `json:"delivered_at,omitempty,omitzero"`
 
+	// FailedAttempts corresponds to the JSON schema field "failed_attempts".
+	FailedAttempts *int `json:"failed_attempts,omitempty,omitzero"`
+
 	// Fix corresponds to the JSON schema field "fix".
 	Fix *AutomationRunFix `json:"fix,omitempty,omitzero"`
 

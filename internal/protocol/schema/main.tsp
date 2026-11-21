@@ -5067,6 +5067,7 @@ model AutomationRunSummary {
   definition_id: safeint;
   state: string;
   last_error?: string;
+  failed_attempts?: int32;
   fix?: AutomationRunFix;
   cancel_reason?: string;
   seed_id?: string;

@@ -381,6 +381,9 @@ func (d *Daemon) automationRunSummary(run store.AutomationRunWithOccurrenceKey) 
 	if run.LastError != "" {
 		summary.LastError = protocol.Ptr(run.LastError)
 	}
+	if run.Attempts > 0 {
+		summary.FailedAttempts = protocol.Ptr(run.Attempts)
+	}
 	if run.Fix != nil {
 		summary.Fix = &protocol.AutomationRunFix{Agent: run.Fix.Agent, Directory: run.Fix.Directory}
 	}

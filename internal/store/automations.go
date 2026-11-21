@@ -1356,7 +1356,7 @@ func (s *Store) MarkAutomationRunDeliveredWithEvent(
 	stamp := formatStoredTime(now)
 	result, err := tx.Exec(`
 		UPDATE automation_runs
-		SET state=?, last_error='', resolved_location_json=?, updated_at=?, delivered_at=?
+		SET state=?, last_error='', attempts=0, resolved_location_json=?, updated_at=?, delivered_at=?
 		WHERE id=? AND state=?
 	`, AutomationRunStateDelivered, resolved, stamp, stamp, id, AutomationRunStatePending)
 	if err != nil {
@@ -1402,6 +1402,16 @@ func (s *Store) MarkAutomationRunDeliveredWithEvent(
 	}
 	return seq, true, nil
 }
+func (s *Store) RecordAutomationRunRetryableFailure(id, message string, now time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return errors.New("automation persistence unavailable")
+	}
+	_, err := s.db.Exec(`UPDATE automation_runs SET attempts=attempts+1,last_error=?,updated_at=? WHERE id=? AND state=?`, message, formatStoredTime(now), id, AutomationRunStatePending)
+	return err
+}
+
 func (s *Store) MarkAutomationRunFailed(id, message string, fix *AutomationRunFix, releaseUnstartedBinding bool, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

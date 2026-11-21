@@ -41,9 +41,15 @@ func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliver
 	message := strings.ToLower(deliveryErr.Error())
 	diskFull := errors.Is(deliveryErr, syscall.ENOSPC) || store.IsStorageFull(deliveryErr) || strings.Contains(message, "no space left on device") || strings.Contains(message, "database or disk is full")
 	// A delivery cut short by shutdown stays pending, and the next start delivers it again.
-	if !diskFull && (errors.As(deliveryErr, &retryable) || d.stopping()) {
+	if !diskFull && d.stopping() {
 		current, err := d.store.GetAutomationRun(run.ID)
 		return current, errors.Join(deliveryErr, err)
+	}
+	if !diskFull && errors.As(deliveryErr, &retryable) {
+		recordErr := d.store.RecordAutomationRunRetryableFailure(run.ID, deliveryErr.Error(), time.Now())
+		d.broadcastAutomationsChanged(run.DefinitionID)
+		current, err := d.store.GetAutomationRun(run.ID)
+		return current, errors.Join(deliveryErr, recordErr, err)
 	}
 	var persistErr error
 	if err := d.recordAutomationRunSeedOutcome(run, automationFailureComment(run, deliveryErr.Error())); err != nil {

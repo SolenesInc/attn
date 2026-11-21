@@ -221,6 +221,53 @@ func TestTheAutomationRunToolAnswersOnceTheRunIsRecordedAndTheRunIsDeliveredAfte
 	r.w.Launched(string(reviewer.ID))
 }
 
+func TestAPendingRunShowsItsLastRetryableFailureUntilARetryDeliversIt(t *testing.T) {
+	r := newAutomationReviewWorld(t)
+	setSetting(t, r.app, "agent_tools_enabled", "true")
+	applyAutomation(t, r.cli, automationReviewSpec("manual-review", "manual", automationReviewOverride(r.clone)))
+	agent := agentToolsCaller{w: r.w, bearer: terminalCredential(t, r.w, r.app.Terminal(r.w.Spawn(r.app, fakeagent.Claude, r.clone)))}
+	pushed := filepath.Join(t.TempDir(), "pushed")
+	runGit(t, filepath.Dir(r.clone), "clone", "--quiet", r.clone, pushed)
+	head := commitFile(t, pushed, "unfetched.go", "package unfetched\n")
+	input := automationReviewInput(42, head)
+
+	answered := agent.mustCall(t, "automation_run", map[string]any{"id": 2, "input": json.RawMessage(input), "request_id": "unfetched"})
+	run, _ := answered.StructuredContent.(map[string]any)
+	if answered.IsError || run["state"] != "pending" {
+		t.Fatalf("automation_run answered %v, want the run pending", answered.StructuredContent)
+	}
+	failedOnce := r.awaitRuns(2, func(runs []protocol.AutomationRunSummary) bool {
+		return len(runs) == 1 && protocol.Deref(runs[0].FailedAttempts) == 1
+	})
+	if failedOnce[0].State != "pending" || !strings.Contains(protocol.Deref(failedOnce[0].LastError), "fetch pull request head") {
+		t.Errorf("after its first delivery failed the run is %s with last_error %q, want pending with the fetch failure", failedOnce[0].State, protocol.Deref(failedOnce[0].LastError))
+	}
+
+	if _, err := r.cli.AutomationRun(2, "unfetched", input); err == nil || !strings.Contains(err.Error(), "fetch pull request head") {
+		t.Fatalf("a retry of the undeliverable run answered %v, want the fetch failure", err)
+	}
+	tools := agent.mustCall(t, "automation_runs", map[string]any{"id": 2}).StructuredContent.(map[string]any)["runs"].([]any)
+	listed := tools[0].(map[string]any)
+	if listed["id"] != run["id"] || listed["state"] != "pending" || listed["failed_attempts"] != float64(2) || !strings.Contains(fmt.Sprint(listed["last_error"]), "fetch pull request head") {
+		t.Errorf("automation_runs lists %v, want the run pending after two failed attempts with the fetch failure", listed)
+	}
+	shown := testworld.Request(r.app, protocol.AutomationRunsGetMessage{Cmd: protocol.CmdAutomationRunsGet, DefinitionID: 2, RequestID: protocol.Ptr("runs")}, protocol.EventAutomationRunsResult, automationAnswer[protocol.AutomationRunsResultMessage]("runs"))
+	if len(shown.Runs) != 1 || protocol.Deref(shown.Runs[0].FailedAttempts) != 2 || !strings.Contains(protocol.Deref(shown.Runs[0].LastError), "fetch pull request head") {
+		t.Errorf("the app reads runs %+v, want the pending run with its two failed attempts and the fetch failure", shown.Runs)
+	}
+
+	runGit(t, r.clone, "fetch", "--quiet", pushed, "HEAD")
+	delivered, err := r.cli.AutomationRun(2, "unfetched", input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.w.Launched(string(protocol.Deref(delivered.SessionID)))
+	after := automationRuns(t, r.cli, 2)
+	if len(after) != 1 || after[0].State != "delivered" || after[0].LastError != nil || after[0].FailedAttempts != nil {
+		t.Errorf("once a retry delivers it the run lists as %+v, want delivered with no failure left", after)
+	}
+}
+
 func TestEveryAutomationCommandRefusesAnIDBelowOne(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
