@@ -11,17 +11,26 @@ import (
 
 func (d *Daemon) presenceCommands() map[string]command.Handler {
 	return map[string]command.Handler{
-		"presence": command.Typed(func(_ context.Context, c command.Caller, _ command.PresenceArgs) (any, error) {
-			return d.presence(c)
-		}),
+		"presence": command.Typed(d.runPresence),
 	}
 }
 
-func (d *Daemon) presence(c command.Caller) (protocol.PresenceResult, error) {
-	result := protocol.PresenceResult{SessionID: c.Session, SeedIds: []string{}}
-	if c.Session == "" {
+func (d *Daemon) runPresence(_ context.Context, c command.Caller, a command.PresenceArgs) (any, error) {
+	if c.Session == "" || a.SessionOnly {
+		return protocol.PresenceResult{SessionID: c.Session, SeedIds: []string{}}, nil
+	}
+	if !d.enrollmentStatus().IsHome() {
+		result, refusal := d.forwardCommand(c, "presence", map[string]any{})
+		if refusal != nil {
+			return nil, refusal
+		}
 		return result, nil
 	}
+	return d.presenceWithSeeds(c)
+}
+
+func (d *Daemon) presenceWithSeeds(c command.Caller) (protocol.PresenceResult, error) {
+	result := protocol.PresenceResult{SessionID: c.Session, SeedIds: []string{}}
 	if session := d.store.Get(c.Session); session != nil {
 		if stake, ok := d.gardenDispatchCrown(c.Session); ok && stake != "" {
 			if seed, _, err := d.readSeed(stake); err == nil && seed.ProfileID == session.ProfileID {

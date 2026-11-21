@@ -80,7 +80,7 @@ var CommandRuns = map[string]Locator{
 	"pr watch":                LocatorHome,
 	"pr unwatch":              LocatorHome,
 	"pr status":               LocatorHome,
-	"presence":                LocatorHome,
+	"presence":                LocatorHere,
 	"review start":            LocatorHere,
 	"review check":            LocatorHere,
 	"review answer":           LocatorHome,

@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	_ "embed"
@@ -305,7 +304,7 @@ func (d *Daemon) runAgentCommand(ctx context.Context, call *agentCall, name stri
 		return nil, command.AsRefusal(err)
 	}
 	if protocol.CommandRuns[name] == protocol.LocatorHome && !d.enrollmentStatus().IsHome() {
-		return d.forwardAgentCommand(call.caller, name, decoded)
+		return d.forwardCommand(call.caller, name, decoded)
 	}
 	result, refusal := d.commandLayer().Run(ctx, call.caller, name, args)
 	if then, ok := result.(command.Then); ok {
@@ -313,42 +312,4 @@ func (d *Daemon) runAgentCommand(ctx context.Context, call *agentCall, name stri
 		return then.Result, nil
 	}
 	return result, refusal
-}
-
-func (d *Daemon) forwardAgentCommand(c command.Caller, name string, args map[string]any) (any, *command.Refusal) {
-	msg := protocol.RunCommandMessage{Cmd: protocol.CmdRunCommand, Command: name, Args: protocol.RecordUnknown(args)}
-	if c.Session != "" {
-		msg.SessionID = protocol.Ptr(c.Session)
-	}
-	if c.Profile != "" {
-		msg.ProfileID = protocol.Ptr(c.Profile)
-	}
-	if c.Terminal != "" {
-		msg.CallerID = protocol.Ptr(c.Terminal)
-	}
-	frame, err := json.Marshal(msg)
-	if err != nil {
-		return nil, command.AsRefusal(err)
-	}
-	var out bytes.Buffer
-	if err := d.router().Forward(append(frame, '\n'), c.Session, nil, &out); err != nil {
-		return nil, homeForwardRefusal(err)
-	}
-	var reply protocol.Response
-	scanner := bufio.NewScanner(&out)
-	scanner.Buffer(nil, protocol.MaxSocketFrameBytes)
-	for scanner.Scan() {
-		reply = protocol.Response{}
-		if err := json.Unmarshal(scanner.Bytes(), &reply); err != nil {
-			return nil, command.AsRefusal(fmt.Errorf("the home's reply to %s: %w", name, err))
-		}
-	}
-	switch {
-	case reply.Ok:
-		return reply.CommandResult, nil
-	case reply.CommandRefusal != nil:
-		return nil, &command.Refusal{Code: reply.CommandRefusal.Code, Message: reply.CommandRefusal.Message, Fix: protocol.Deref(reply.CommandRefusal.Fix)}
-	default:
-		return nil, &command.Refusal{Code: string(protocol.RefusalUnclassified), Message: protocol.Deref(reply.Error)}
-	}
 }

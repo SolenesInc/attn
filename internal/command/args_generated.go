@@ -659,8 +659,9 @@ type PRStatusArgs struct {
 }
 
 type PresenceArgs struct {
-	SessionID bool `json:"session_id,omitempty"`
-	SeedIds   bool `json:"seed_ids,omitempty"`
+	SessionID   bool `json:"session_id,omitempty"`
+	SeedIds     bool `json:"seed_ids,omitempty"`
+	SessionOnly bool `json:"session_only,omitempty"`
 }
 
 type ReviewStartArgs struct {

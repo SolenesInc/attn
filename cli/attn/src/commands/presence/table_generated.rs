@@ -16,6 +16,7 @@ pub const COMMANDS: &[Command] = &[
         args: &[
             Arg { name: "session_id", cli: Cli::Flag("session-id"), value: Value::Bool, source: Source::Given, required: false, list: false },
             Arg { name: "seed_ids", cli: Cli::Flag("seed-ids"), value: Value::Bool, source: Source::Given, required: false, list: false },
+            Arg { name: "session_only", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
         ],
     },
 ];

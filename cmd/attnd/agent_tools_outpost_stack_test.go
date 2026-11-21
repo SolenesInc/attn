@@ -307,3 +307,20 @@ func TestASharedCodexOnAnOutpostRunsHomeToolsAsTheSessionShowingItsConversation(
 	}
 	o.requireNoteBy(session, "Noted by the outpost's Codex")
 }
+
+func TestThePresenceToolOnAnOutpostNamesTheHomesSeedsAndRefusesWhileTheHomeIsDown(t *testing.T) {
+	o := newOutpostTools(t, fakeagent.Claude)
+	session, claude := o.spawn(fakeagent.Claude, o.outpost.Path("work"))
+	tools := claudeToolEndpoint(t, claude)
+	tools.structured(t, "seed_tend", map[string]any{"seed": o.seed}, &protocol.SeedTransitionResult{})
+	var present protocol.PresenceResult
+	tools.structured(t, "presence", map[string]any{}, &present)
+	if present.SessionID != protocol.SessionID(session) || !slices.Equal(present.SeedIds, []string{o.seed}) {
+		t.Fatalf("presence on the outpost answered %+v, want session %s tending %s", present, session, o.seed)
+	}
+
+	o.home.Stop()
+	if answer := tools.call(t, "presence", map[string]any{}); !answer.IsError || !strings.Contains(answer.Text, "unreachable") {
+		t.Errorf("presence on the outpost while the home is down answered %+v, want a refusal naming the unreachable home", answer)
+	}
+}

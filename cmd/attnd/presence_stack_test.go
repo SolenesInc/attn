@@ -64,3 +64,39 @@ func TestPresenceNamesEverySeedASessionWorksOn(t *testing.T) {
 		t.Errorf("a session that tends two seeds: %+v, want both %v", got, want)
 	}
 }
+
+func TestAnOutpostSessionKnowsItselfWhileTheHomeIsDown(t *testing.T) {
+	home := testworld.NewStack(t)
+	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	id := home.Spawn(pair.App, fakeagent.Claude, outpost.Path("work"), func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
+	terminal := pair.App.Terminal(id)
+	outpost.LaunchedCarrying(terminal)
+	presence := func(flags ...string) testworld.Result {
+		t.Helper()
+		return outpost.Run(testworld.Invocation{Terminal: terminal, Args: append([]string{"presence"}, flags...)})
+	}
+	planted, err := home.Client().SeedPlant(protocol.SessionID(id), "Remote work", "Work on the outpost.", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tend := outpost.Run(testworld.Invocation{Terminal: terminal, Args: []string{"seed", "tend", planted.ID}}); tend.Code != 0 {
+		t.Fatalf("tend: %+v", tend)
+	}
+	if got := presence("--seed-ids"); got.Code != 0 || got.Stdout != planted.ID+"\n" {
+		t.Fatalf("the outpost session's seeds while the home is up: %+v, want %s", got, planted.ID)
+	}
+
+	home.Stop()
+	if got := presence(); got.Code != 0 || got.Stdout != "running inside attn (session "+id+")\n" {
+		t.Errorf("presence while the home is down: %+v, want session %s", got, id)
+	}
+	if got := presence("--session-id"); got.Code != 0 || got.Stdout != id+"\n" {
+		t.Errorf("presence --session-id while the home is down: %+v, want %s", got, id)
+	}
+	if got := presence("--seed-ids"); got.Code != 1 || got.Stdout != "" || !strings.Contains(got.Stderr, "unreachable") {
+		t.Errorf("presence --seed-ids while the home is down: %+v, want exit 1 naming the unreachable home", got)
+	}
+}

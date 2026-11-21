@@ -10,7 +10,7 @@ groups:
 commands:
   - name: presence
     summary: whether you run inside attn, your session and the seeds you work on
-    runs: home
+    runs: here
     grant: full
     read_only: true
     doc: |
@@ -18,4 +18,5 @@ commands:
     args:
       - {name: session_id, type: bool, cli: "--session-id", cli_only: true, one_of: only, doc: "print only the session id; exits 1 outside a session"}
       - {name: seed_ids, type: bool, cli: "--seed-ids", cli_only: true, one_of: only, doc: "print only the ids of the seeds the session works on, one a line; exits 1 when there is none"}
+      - {name: session_only, type: bool, cli: internal, doc: "answer the session alone, without asking the home for its seeds; the CLI sets it when it prints no seed"}
     result: PresenceResult

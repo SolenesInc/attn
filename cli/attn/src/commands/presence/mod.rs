@@ -5,6 +5,7 @@ use super::{Run, Stop, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
 use attn_protocol::PresenceResult;
+use serde_json::Value as Json;
 
 struct Presence;
 
@@ -81,6 +82,11 @@ impl Family for Presence {
             }
             print_stdout("running inside attn\n");
             return Err(Stop(0));
+        }
+        if !parsed.json && !seed_ids {
+            parsed
+                .args
+                .insert("session_only".to_string(), Json::from(true));
         }
         Ok(())
     }
