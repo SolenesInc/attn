@@ -1030,6 +1030,8 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::banner::Banner::announces(sentence)", true),
     ("blocks::banner::Banner::says(sentence)", true),
     ("blocks::banner::Banner::note(said)", true),
+    ("blocks::banner::Banner::gist(gist)", true),
+    ("blocks::banner::Banner::gist(whole)", true),
     ("blocks::banner::Banner::link(shown)", true),
     ("blocks::banner::Banner::link(label)", false),
     ("blocks::banner::Banner::note_button(label)", false),
