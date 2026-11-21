@@ -33,8 +33,6 @@ func topLevelCommands() []topLevelCommand {
 	return []topLevelCommand{
 		{names: []string{"pr"}, run: runPRCommand},
 
-		{names: []string{"presence"}, run: runPresence,
-			help: func(w io.Writer) { fmt.Fprintln(w, "usage: attn presence [--session-id | --seed-ids]") }},
 		{names: []string{"preflight"}, run: runPreflight, banner: true},
 		{names: []string{"update"}, run: runUpdate, banner: true,
 			help: func(w io.Writer) { fmt.Fprintln(w, updateUsage) }},

@@ -21,6 +21,7 @@ pub mod nav;
 pub mod onboarding;
 pub mod open;
 pub mod pr;
+pub mod presence;
 pub mod review;
 pub mod seed;
 pub mod send;

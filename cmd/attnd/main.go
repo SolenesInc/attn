@@ -11,18 +11,14 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"slices"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
-	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/daemonctl"
-	"github.com/victorarias/attn/internal/garden"
-	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/probetui"
 	"github.com/victorarias/attn/internal/protocol"
@@ -366,98 +362,6 @@ func runDaemonStop(endTerminals bool) {
 	if pids := runningTerminalRuntimes(config.DataDir()); len(pids) > 0 {
 		fmt.Printf("terminals keep running in pids %v so they come back with the daemon; `attn daemon stop %s` ends them\n", pids, stopTerminalsFlag)
 	}
-}
-
-func detectPresence() (sessionID string, present bool, err error) {
-	terminal, err := harness.ResolveTerminalFromEnv()
-	if err != nil {
-		return "", false, err
-	}
-	if os.Getenv("ATTN_INSIDE_APP") != "1" && !strings.HasPrefix(string(terminal), "server-env:") {
-		return "", false, nil
-	}
-	session, err := currentSession(client.New(""))
-	return string(session), true, err
-}
-
-func runPresence() {
-	fs := flag.NewFlagSet("presence", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	bareSessionID := fs.Bool("session-id", false, "print only the session id")
-	bareSeedIDs := fs.Bool("seed-ids", false, "print only the ids of the seeds the session works on")
-	if err := parseFlags(fs, os.Args[2:]); err != nil || fs.NArg() != 0 || (*bareSessionID && *bareSeedIDs) {
-		fmt.Fprintln(os.Stderr, "usage: attn presence [--session-id | --seed-ids]")
-		exit(2)
-	}
-	warnIfDaemonVersionMismatch()
-	sessionID, present, err := detectPresence()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "attn: resolve current session: %v\n", err)
-		exit(1)
-		return
-	}
-	switch {
-	case *bareSessionID:
-		printLinesOrExit([]string{sessionID})
-		return
-	case *bareSeedIDs:
-		printLinesOrExit(seedsOfSessionOrExit(protocol.SessionID(sessionID)))
-		return
-	}
-	if !present {
-		fmt.Println("not running inside attn")
-		exit(1)
-	}
-	if sessionID == "" {
-		fmt.Println("running inside attn")
-		return
-	}
-	fmt.Printf("running inside attn (session %s)\n", sessionID)
-}
-
-func printLinesOrExit(ids []string) {
-	ids = slices.DeleteFunc(ids, func(id string) bool { return id == "" })
-	if len(ids) == 0 {
-		exit(1)
-	}
-	for _, id := range ids {
-		fmt.Println(id)
-	}
-}
-
-func seedsOfSessionOrExit(sessionID protocol.SessionID) []string {
-	if sessionID == "" {
-		return nil
-	}
-	seedIDs, err := seedsOfSession(client.New(""), sessionID)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "attn: resolve the session's seeds: %v\n", err)
-		exit(1)
-	}
-	return seedIDs
-}
-
-func seedsOfSession(c *client.Client, sessionID protocol.SessionID) ([]string, error) {
-	listed, err := c.List("")
-	if err != nil {
-		return nil, err
-	}
-	var seedIDs []string
-	for _, session := range listed.Sessions {
-		if session.ID == sessionID && protocol.Deref(session.SeedID) != "" {
-			seedIDs = append(seedIDs, protocol.Deref(session.SeedID))
-		}
-	}
-	seeds, err := c.SeedList(sessionID, false, 0)
-	if err != nil {
-		return nil, err
-	}
-	for _, seed := range seeds.Seeds {
-		if seed.Tender != nil && protocol.Deref(seed.Tender.SessionID) == sessionID && seed.Status == garden.StatusGrowing && !slices.Contains(seedIDs, seed.ID) {
-			seedIDs = append(seedIDs, seed.ID)
-		}
-	}
-	return seedIDs, nil
 }
 
 func hasHelpFlag(args []string) bool {

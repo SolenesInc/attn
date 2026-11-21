@@ -155,12 +155,10 @@ func TestAnInstalledServerPluginKeepsConversationOwnershipThroughRegistrationAnd
 			if got := server.Prompted(conversation); got.Author != "attn" {
 				t.Fatalf("notice: %+v", got)
 			}
-			for _, binary := range []string{testworld.AttnBinary(t), filepath.Join(filepath.Dir(testworld.AttnBinary(t)), "attnd")} {
-				got := strings.TrimSpace(server.RunTool(conversation, fmt.Sprintf("%q presence", binary)))
-				t.Logf("%s presence from external server tool: %s", filepath.Base(binary), got)
-				if got != "running inside attn (session "+session+")" {
-					t.Fatalf("%s caller: %q", filepath.Base(binary), got)
-				}
+			presence := strings.TrimSpace(server.RunTool(conversation, fmt.Sprintf("%q presence", testworld.AttnBinary(t))))
+			t.Logf("attn presence from external server tool: %s", presence)
+			if presence != "running inside attn (session "+session+")" {
+				t.Fatalf("caller: %q", presence)
 			}
 
 			side := addProfile(t, app, "Side")
@@ -317,11 +315,8 @@ func TestAPlainShellCommandDoesNotReadTheHarnessCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, binary := range []string{testworld.AttnBinary(t), filepath.Join(filepath.Dir(testworld.AttnBinary(t)), "attnd")} {
-		result := s.Run(testworld.Invocation{Binary: binary, Args: []string{"presence"}, Env: []string{"ATTN_WS_PORT=" + address.Port(), "ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_INSIDE_APP=", "CODEX_THREAD_ID=", "ATTN_CODEX_SHARED_PROFILE="}})
-		if !strings.Contains(result.Stdout+result.Stderr, "not running inside attn") {
-			t.Fatalf("plain-shell %s: %+v", binary, result)
-		}
+	if result := s.Run(testworld.Invocation{Args: []string{"presence"}, Env: []string{"ATTN_WS_PORT=" + address.Port(), "ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_INSIDE_APP=", "CODEX_THREAD_ID=", "ATTN_CODEX_SHARED_PROFILE="}}); !strings.Contains(result.Stdout+result.Stderr, "not running inside attn") {
+		t.Fatalf("plain-shell presence: %+v", result)
 	}
 	for _, command := range []struct {
 		binary string
@@ -329,7 +324,7 @@ func TestAPlainShellCommandDoesNotReadTheHarnessCatalog(t *testing.T) {
 	}{
 		{testworld.AttnBinary(t), []string{"terminal", "ls"}},
 		{testworld.AttnBinary(t), []string{"seed", "ls", "--profile", "Other"}},
-		{filepath.Join(filepath.Dir(testworld.AttnBinary(t)), "attnd"), []string{"presence"}},
+		{testworld.AttnBinary(t), []string{"presence"}},
 	} {
 		env := []string{"ATTN_WS_PORT=" + address.Port(), "ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_INSIDE_APP=", "CODEX_THREAD_ID=", "ATTN_CODEX_SHARED_PROFILE=", "FIRST_ROOT_CONVERSATION=outer", "SECOND_ROOT_CONVERSATION=inner"}
 		got := s.Run(testworld.Invocation{Binary: command.binary, Args: command.args, Env: env})
