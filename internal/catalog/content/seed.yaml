@@ -586,12 +586,14 @@ commands:
       Saves an exported body after editing the file with any tool. Keep the first stamp line: it names the body the edit started from. If the body changed since export, export again and reapply. Empty bodies are refused. Each edit saves a numbered version and a log entry; `note` adds what changed to that entry.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
-      - {name: body, type: markdown, required: true, cli: "-m", stdin: true, placeholder: "-", doc: "the edited file, with its stamp line; - reads stdin"}
-      - {name: base, type: text, required: true, cli: stamp}
+      - {name: body, type: markdown, required: true, cli: "-m", stdin: true, placeholder: "-", doc: "the exported text, edited, with its first stamp line; - reads stdin"}
       - {name: note, type: text, cli: "--note", placeholder: '"<what changed>"', doc: "what changed, saved on the edit entry"}
     result: SeedEditResult
     errors:
       - {code: not_exported, usage: true, fix: 'Export the seed, edit the file, and pass its whole text as {body}.'}
+      - {code: not_stamped, fix: 'Pass the exported text whole as {body}, its first stamp line included.'}
+      - {code: other_seed, fix: 'Export the seed you name in {seed}, reapply your change to that export, and pass it as {body}.'}
+      - {code: invalid_body, fix: 'Keep text below the stamp line, within the body size limit.'}
 
   - name: seed rollback
     summary: restore an earlier body

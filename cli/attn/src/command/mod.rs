@@ -12,7 +12,6 @@ pub enum Cli {
     Flag(&'static str),
     Choice(&'static [(&'static str, &'static str)]),
     SplitRest,
-    Stamp,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -60,7 +59,6 @@ pub trait Family {
     fn decode_file(&self, cmd: &Command, arg: &Arg, bytes: &[u8]) -> Result<Json, String>;
     fn read_stdin_error(&self, arg: &Arg) -> &'static str;
     fn choice_conflict(&self, cmd: &Command, arg: &Arg) -> String;
-    fn stamp(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), String>;
     fn before_send(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop>;
     fn present(
         &self,
@@ -266,16 +264,12 @@ fn parse(family: &dyn Family, cmd: &Command, argv: &[String]) -> Result<Parsed, 
     flag_values(family, cmd, &fs, &mut values)?;
     read_inputs(family, cmd, &mut values)?;
     split_text(cmd, &mut values);
-    let mut parsed = Parsed {
+    Ok(Parsed {
         args: values,
         json: cmd.result && fs.bool("json"),
         profile: fs.string("profile").trim().to_string(),
         session: fs.string("session").trim().to_string(),
-    };
-    if cmd.args.iter().any(|arg| matches!(arg.cli, Cli::Stamp)) {
-        family.stamp(cmd, &mut parsed).map_err(ParseStop::Fail)?;
-    }
-    Ok(parsed)
+    })
 }
 
 fn split_positionals(fs: &mut FlagSet<'_>, argv: &[String]) -> Result<Vec<String>, ParseStop> {

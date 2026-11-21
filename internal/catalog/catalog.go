@@ -328,7 +328,7 @@ func (c *Catalog) check() []string {
 				add("%s: type %q is not in %s", argWhere, a.Type, TypesFile)
 			}
 			if a.CLI == "" {
-				add("%s: cli is missing; name the mapping: pos, rest, a flag, --a|--b, -m+ or stamp", argWhere)
+				add("%s: cli is missing; name the mapping: pos, rest, a flag, --a|--b or -m+", argWhere)
 			}
 			if a.Unless != "" && !slices.ContainsFunc(cmd.Args, func(other Arg) bool { return other.Name == a.Unless && other.Type == "bool" }) {
 				add("%s: unless names %q, which is not a bool arg of this command", argWhere, a.Unless)

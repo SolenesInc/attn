@@ -146,8 +146,6 @@ func (g *generator) rustCLI(a catalog.Arg) string {
 		return "Cli::Rest"
 	case a.CLI == "-m+":
 		return "Cli::SplitRest"
-	case a.CLI == "stamp":
-		return "Cli::Stamp"
 	case strings.Contains(a.CLI, "|"):
 		var pairs []string
 		flags := strings.Split(a.CLI, "|")

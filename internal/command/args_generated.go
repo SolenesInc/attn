@@ -17,6 +17,7 @@ const (
 	CodeDetachNeedsTo            = "detach_needs_to"
 	CodeEmptyWords               = "empty_words"
 	CodeInAndAt                  = "in_and_at"
+	CodeInvalidBody              = "invalid_body"
 	CodeNeedsMessage             = "needs_message"
 	CodeNeedsNext                = "needs_next"
 	CodeNeedsStatement           = "needs_statement"
@@ -27,6 +28,8 @@ const (
 	CodeNotAPRURL                = "not_a_pr_url"
 	CodeNotExported              = "not_exported"
 	CodeNotInReview              = "not_in_review"
+	CodeNotStamped               = "not_stamped"
+	CodeOtherSeed                = "other_seed"
 	CodePlotAndStale             = "plot_and_stale"
 	CodePRWithoutWhenMerged      = "pr_without_when_merged"
 	CodeReferenceNeedsPath       = "reference_needs_path"
@@ -74,7 +77,7 @@ var specs = map[string]spec{
 	"seed remind":        {readOnly: false, fixes: map[string]string{"clear_with_reminder": "Pass {clear} alone.", "needs_time": "Pass one of {in} or {at}, or {clear}.", "needs_message": "Pass what the reminder says in {message}."}},
 	"seed standby":       {readOnly: false, fixes: map[string]string{"clear_with_standby": "Pass {clear} alone.", "in_and_at": "Pass {in} or {at}, not both.", "needs_next": "Pass what to do when mail resumes you in {next}."}},
 	"seed export":        {readOnly: true},
-	"seed edit":          {readOnly: false, fixes: map[string]string{"not_exported": "Export the seed, edit the file, and pass its whole text as {body}."}},
+	"seed edit":          {readOnly: false, fixes: map[string]string{"not_exported": "Export the seed, edit the file, and pass its whole text as {body}.", "not_stamped": "Pass the exported text whole as {body}, its first stamp line included.", "other_seed": "Export the seed you name in {seed}, reapply your change to that export, and pass it as {body}.", "invalid_body": "Keep text below the stamp line, within the body size limit."}},
 	"seed rollback":      {readOnly: false},
 	"seed authorization": {readOnly: false, fixes: map[string]string{"empty_words": "Pass the words, or {clear} to remove the authorization.", "words_and_clear": "Pass the words or {clear}, not both."}},
 	"seed attach":        {readOnly: false, fixes: map[string]string{"no_document": "Name one document with {path}, {notebook} or {url}.", "two_documents": "Name one document per call.", "transfer_with_note": "Leave out {note}; a managed transfer records its own receipt.", "transfer_needs_local_path": "Pass a local {path} without {repo}, or leave out {mode}.", "transfer_needs_mode": "Pass {mode}: move is recommended, copy keeps the source."}},
@@ -293,7 +296,6 @@ type SeedExportArgs struct {
 type SeedEditArgs struct {
 	Seed string `json:"seed,omitempty"`
 	Body string `json:"body,omitempty"`
-	Base string `json:"base,omitempty"`
 	Note string `json:"note,omitempty"`
 }
 

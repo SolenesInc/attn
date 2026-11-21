@@ -153,9 +153,7 @@ func TestEverySeedToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) 
 	if data, err := json.Marshal(call("seed_export", map[string]any{"seed": x}).StructuredContent); err == nil {
 		_ = json.Unmarshal(data, &exported)
 	}
-	stamp, body, _ := strings.Cut(exported.Text, "\n")
-	_, base, _ := strings.Cut(strings.TrimSuffix(stamp, " -->"), " body-sha256 ")
-	call("seed_edit", map[string]any{"seed": x, "body": body + "\nAlso retry refunds.\n", "base": base})
+	call("seed_edit", map[string]any{"seed": x, "body": exported.Text + "\nAlso retry refunds.\n"})
 	call("seed_rollback", map[string]any{"seed": x})
 
 	if err := os.WriteFile(filepath.Join(w.Path("shop"), "retry.log"), []byte("3 passes\n"), 0o644); err != nil {

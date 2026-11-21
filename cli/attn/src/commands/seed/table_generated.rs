@@ -345,7 +345,6 @@ pub const COMMANDS: &[Command] = &[
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "body", cli: Cli::Flag("m"), value: Value::Text, source: Source::Stdin, required: true, list: false },
-            Arg { name: "base", cli: Cli::Stamp, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "note", cli: Cli::Flag("note"), value: Value::Text, source: Source::Given, required: false, list: false },
         ],
     },

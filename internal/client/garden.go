@@ -365,7 +365,8 @@ func (c *Client) SeedShowSince(sessionID protocol.SessionID, seedID string, book
 }
 
 func (c *Client) SeedEdit(seedID, body, baseBodySHA256, note string) (*protocol.SeedEditResult, error) {
-	args := map[string]any{"seed": seedID, "body": body, "base": baseBodySHA256}
+	exported := fmt.Sprintf("<!-- attn-seed %s body-sha256 %s -->\n%s", seedID, baseBodySHA256, body)
+	args := map[string]any{"seed": seedID, "body": exported}
 	if note != "" {
 		args["note"] = note
 	}

@@ -4,8 +4,7 @@ use super::{Stop, fail, help_generated, usage_error};
 use crate::client::Reply;
 use crate::command::{self, Arg, Command, Family, Parsed};
 use crate::commands::{Run, absolute, print_json, print_stdout};
-use attn::garden::is_seed_id;
-use attn::garden::plot::{Check, parse_plot_spec, validate_body};
+use attn::garden::plot::{Check, parse_plot_spec};
 use attn::garden::section::section;
 use attn::go::quote::quote;
 use attn_protocol::go_values::NOTE_KIND_HANDOFF;
@@ -61,46 +60,6 @@ fn checks_json(checks: &[Check]) -> Json {
             })
             .collect::<Vec<_>>(),
     )
-}
-
-fn edit_recipe(id: &str) -> String {
-    format!(
-        "edit takes an exported file; run attn seed export {id}, edit it, then attn seed edit {id} -m - < {id}.md"
-    )
-}
-
-fn parse_stamped(id: &str, text: &str) -> Result<(String, String), String> {
-    let recipe = || edit_recipe(id);
-    let Some((line, body)) = text.split_once('\n') else {
-        return Err(recipe());
-    };
-    let line = line.strip_suffix('\r').unwrap_or(line);
-    let inner = line
-        .strip_prefix("<!-- attn-seed ")
-        .and_then(|rest| rest.strip_suffix(" -->"))
-        .ok_or_else(recipe)?;
-    let (stamped, hash) = inner.split_once(" body-sha256 ").ok_or_else(recipe)?;
-    let hash_is_hex = hash.len() == 64
-        && hash
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
-    if stamped.is_empty() || stamped.contains([' ', '\t']) || !hash_is_hex {
-        return Err(recipe());
-    }
-    if is_seed_id(id) && stamped != id {
-        return Err(format!(
-            "this export belongs to {stamped}, not {id}; {}",
-            recipe()
-        ));
-    }
-    if body.trim().is_empty() {
-        return Err(
-            "a body edit needs nonempty text; empty or whitespace-only bodies are refused"
-                .to_string(),
-        );
-    }
-    validate_body(body)?;
-    Ok((body.to_string(), hash.to_string()))
 }
 
 fn outlive_close_of_own_session() {
@@ -164,16 +123,6 @@ impl Family for Seed {
 
     fn choice_conflict(&self, _cmd: &Command, _arg: &Arg) -> String {
         "local attach requires exactly one of --move or --copy; --move is recommended".to_string()
-    }
-
-    fn stamp(&self, _cmd: &Command, parsed: &mut Parsed) -> Result<(), String> {
-        if !parsed.has("body") {
-            return Ok(());
-        }
-        let (body, base) = parse_stamped(parsed.text("seed"), parsed.text("body"))?;
-        parsed.args.insert("body".to_string(), Json::from(body));
-        parsed.args.insert("base".to_string(), Json::from(base));
-        Ok(())
     }
 
     fn before_send(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop> {

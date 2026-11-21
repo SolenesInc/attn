@@ -147,8 +147,6 @@ func (g *generator) argMention(cmd *catalog.Command, a catalog.Arg) string {
 	switch {
 	case a.CLI == "-m+":
 		return "the rest of `" + splitFlag(cmd) + "`"
-	case a.CLI == "stamp":
-		return "the stamp line"
 	case isSplitHead(cmd, a):
 		return "the first line of `" + a.CLI + "`"
 	case strings.Contains(a.CLI, "|"):
@@ -190,7 +188,7 @@ func (g *generator) placeholder(a catalog.Arg) string {
 
 func (g *generator) argUsage(a catalog.Arg) (string, bool) {
 	switch {
-	case a.CLI == "-m+" || a.CLI == "stamp":
+	case a.CLI == "-m+":
 		return "", false
 	case a.CLI == "pos" || a.CLI == "rest":
 		return g.placeholder(a), true
@@ -321,7 +319,7 @@ func (g *generator) example(cmd *catalog.Command, values map[string]any) string 
 			for _, item := range items {
 				words = append(words, a.CLI, shellWord(fmt.Sprint(item)))
 			}
-		case a.CLI == "-m+" || a.CLI == "stamp":
+		case a.CLI == "-m+":
 		default:
 			words = append(words, a.CLI, shellWord(fmt.Sprint(value)))
 		}

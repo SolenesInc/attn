@@ -600,15 +600,47 @@ func editRecipe(id string) string {
 	return fmt.Sprintf("edit takes an exported file; run attn seed export %s, edit it, then attn seed edit %s -m - < %s.md", id, id, id)
 }
 
+type stampedBody struct {
+	seedID     string
+	bodySHA256 string
+	body       string
+}
+
+func parseStampedBody(text string) (stampedBody, bool) {
+	line, body, found := strings.Cut(text, "\n")
+	inner, opened := strings.CutPrefix(strings.TrimSuffix(line, "\r"), "<!-- attn-seed ")
+	inner, closed := strings.CutSuffix(inner, " -->")
+	seedID, hash, named := strings.Cut(inner, " body-sha256 ")
+	if !found || !opened || !closed || !named || seedID == "" || strings.ContainsAny(seedID, " \t") || !isBodySHA256(hash) {
+		return stampedBody{}, false
+	}
+	return stampedBody{seedID: seedID, bodySHA256: hash, body: body}, true
+}
+
+func isBodySHA256(hash string) bool {
+	return len(hash) == sha256.Size*2 && strings.Trim(hash, "0123456789abcdef") == ""
+}
+
 func (d *Daemon) runSeedEdit(_ context.Context, c command.Caller, args command.SeedEditArgs) (any, error) {
-	if args.Body == "" && args.Base == "" {
+	if args.Body == "" {
 		return nil, command.Refuse(command.CodeNotExported, "%s", editRecipe(args.Seed))
 	}
-	msg := seedEditRequest{Cmd: cmdSeedEdit, SeedID: args.Seed, Body: args.Body, BaseBodySHA256: args.Base, Note: protocol.Ptr(args.Note)}
+	msg := seedEditRequest{Cmd: cmdSeedEdit, SeedID: args.Seed, Note: protocol.Ptr(args.Note)}
 	msg.SourceSessionID, msg.ProfileID = gardenScope(c)
 	if err := d.scoped(&msg, msg.Cmd); err != nil {
 		return nil, err
 	}
+	stamped, ok := parseStampedBody(args.Body)
+	if !ok {
+		return nil, command.Refuse(command.CodeNotStamped, "%s", editRecipe(msg.SeedID))
+	}
+	if stamped.seedID != msg.SeedID {
+		return nil, command.Refuse(command.CodeOtherSeed, "this export belongs to %s, not %s; %s", stamped.seedID, msg.SeedID, editRecipe(msg.SeedID))
+	}
+	if err := garden.ValidateBodyEdit(stamped.body); err != nil {
+		return nil, command.Refuse(command.CodeInvalidBody, "%v", err)
+	}
+	msg.Body, msg.BaseBodySHA256 = stamped.body, stamped.bodySHA256
 	result, err := d.applySeedBodyEdit(&msg, d.sessionOrOwner(c.Session))
 	if err != nil {
 		var conflict seedBodyConflictError

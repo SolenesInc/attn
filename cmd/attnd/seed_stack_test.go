@@ -232,6 +232,17 @@ p.write_bytes(p.read_bytes().replace(b"Change this", b"Changed this"))
 	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != "Edited by slug.\n" {
 		t.Fatalf("body edited by slug = %q", got)
 	}
+	refused(t, s.Run(testworld.Invocation{Args: []string{"seed", "edit", seed.ID, "-m", "-"}, Stdin: stamp + "\n \n"}), 1,
+		"seed edit: a body edit needs nonempty text; empty or whitespace-only bodies are refused")
+	twin := plant(t, s, "A twin with the same body", "-m", "Edited by slug.\n")
+	foreign := strings.Replace(seedAs(t, s, "", "export", seed.ID, "--out", "-"), "Edited by slug.", "Meant for the first seed.", 1)
+	refused(t, s.Run(testworld.Invocation{Args: []string{"seed", "edit", twin.StepSlug, "-m", "-"}, Stdin: foreign}), 1,
+		"seed edit: this export belongs to "+seed.ID+", not "+twin.ID+"; edit takes an exported file; run attn seed export "+twin.ID)
+	for _, id := range []string{seed.ID, twin.ID} {
+		if got := showSeed(t, s, "", id).Seed.Body; got != "Edited by slug.\n" {
+			t.Fatalf("a foreign export changed %s's body to %q", id, got)
+		}
+	}
 }
 
 func TestARollbackLosingARaceAsksToRetryTheRollback(t *testing.T) {

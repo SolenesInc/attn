@@ -112,9 +112,7 @@ func (g *generator) inputSchema(cmd *catalog.Command) map[string]any {
 		if a.List {
 			value = map[string]any{"type": "array", "items": value}
 		}
-		if a.CLI == "stamp" {
-			value["description"] = "The hash after body-sha256 in the stamp line that starts an export, <!-- attn-seed <id> body-sha256 <hash> -->. Pass the body without that line."
-		} else if doc := cmp.Or(a.Doc, t.Doc); doc != "" {
+		if doc := cmp.Or(a.Doc, t.Doc); doc != "" {
 			value["description"] = g.expand(where, doc)
 		}
 		properties[a.Name] = value
