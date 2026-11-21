@@ -32,6 +32,11 @@ pub fn pressed_layer(fill: Color, t: &Tokens) -> Color {
     ink.alpha(alpha)
 }
 
+/// Pressed alone, for a part of a row whose hover the row draws, over a surface of colour `fill`.
+pub(crate) fn pressed(e: El, fill: Color, t: &Tokens) -> El {
+    e.press(pressed_layer(fill, t))
+}
+
 /// Hover and pressed over a surface of colour `fill`.
 pub(crate) fn pressable(e: El, fill: Color, t: &Tokens) -> El {
     e.hover(hover_layer(fill, t)).press(pressed_layer(fill, t))

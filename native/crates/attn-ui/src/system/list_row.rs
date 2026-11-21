@@ -92,6 +92,7 @@ pub struct ListRow {
     tint: Option<Color>,
     help: Option<String>,
     asides_give_way: bool,
+    beside: bool,
 }
 
 /// How strongly a tinted row takes its tint, at rest and selected.
@@ -137,6 +138,7 @@ impl ListRow {
             tint: None,
             help: None,
             asides_give_way: false,
+            beside: false,
         }
     }
 
@@ -334,6 +336,16 @@ impl ListRow {
         self.hover
             .extend(controls.into_iter().map(|c| c.size(Size::Small)));
         self
+    }
+
+    /// [`Self::hover_controls`] in a room of their own at the row's end, kept at rest, where the
+    /// asides stand until the controls show: the words end before it, so a press where they
+    /// show never lands on a control, and a row with [`Self::select`] has its words' button
+    /// stop where the room starts. A row short of room narrows the room first, down to the
+    /// controls' least widths, and then its words.
+    pub fn hover_controls_beside(mut self, controls: impl IntoIterator<Item = IconButton>) -> Self {
+        self.beside = true;
+        self.hover_controls(controls)
     }
 
     /// Controls always at the row's end, after its asides, shown as `reveal` says.
@@ -537,7 +549,7 @@ impl ListRow {
         self.build_with(Some(under), t)
     }
 
-    fn build_with(self, holding: Option<El>, t: &Tokens) -> El {
+    fn build_with(mut self, holding: Option<El>, t: &Tokens) -> El {
         let size = Size::Compact;
         let two_lines = self.subtitle.is_some();
         let wraps = self.wrap;
@@ -618,6 +630,14 @@ impl ListRow {
         });
         let hovering = !self.hover.is_empty();
         let controls_width = self.hover.iter().map(IconButton::width).sum::<f32>();
+        let controls_least = self.hover.iter().map(IconButton::least_width).sum::<f32>();
+        let beside = self.beside && hovering && !wraps && self.inline.is_empty();
+        let words_button = if beside { self.select.take() } else { None };
+        let words_help = if words_button.is_some() {
+            self.help.take()
+        } else {
+            None
+        };
         let over_words = if self.inline.is_empty() {
             controls_width
         } else {
@@ -681,11 +701,15 @@ impl ListRow {
             } else {
                 marks.children(self.asides)
             };
-            gives_way(part(
-                at_least_band(marks).max_w_frac(0.5).shrink().min_w(0.0),
-                "asides",
-            ))
+            let marks = at_least_band(marks).shrink().min_w(0.0);
+            let marks = if beside { marks } else { marks.max_w_frac(0.5) };
+            gives_way(part(marks, "asides"))
         });
+        let (asides, asides_beside) = if beside {
+            (None, asides)
+        } else {
+            (asides, None)
+        };
         let badges = (!self.badges.is_empty()).then(|| {
             gives_way(part(
                 on_band(
@@ -722,18 +746,46 @@ impl ListRow {
             (title_line.grow(1.0).min_w(floor), under, subtitle)
         };
         let words = part(words, "words");
+        let words = if beside { door::clip(words) } else { words };
+        let words_least = if beside {
+            let lead = if has_lead { Self::lead_room() } else { 0.0 };
+            lead + if titled { TITLE_FLOOR } else { 0.0 }
+        } else {
+            0.0
+        };
         let fading = door::gap(row(), Space::S8)
             .grow(1.0)
-            .min_w(0.0)
+            .min_w(words_least)
             .items_start()
             .children(lead)
             .child(words)
             .children(asides)
             .children(badges);
         let fading = match (hovering, wraps) {
+            _ if beside => fading,
             (true, false) => door::fade_before_hover(fading, over_words),
             (true, true) => door::room_before_hover(fading, over_words),
             (false, _) => fading,
+        };
+        let words_are_a_button = words_button.is_some();
+        let fading = match words_button {
+            Some((key, label, attach)) => {
+                let button = door::corner(
+                    fading
+                        .key(key)
+                        .role(self.select_role)
+                        .label(label)
+                        .focusable(true),
+                    Radius::Control,
+                );
+                let button = attach(button);
+                let button = match words_help {
+                    Some(help) => button.help(help),
+                    None => button,
+                };
+                focus::ring_on_edge(layers::pressed(button, rest, t), t)
+            }
+            None => fading,
         };
         let controls_key = format!("{}.controls", self.key);
         let grows = self.grows;
@@ -790,6 +842,25 @@ impl ListRow {
                 .map(|kept| part(kept, "kept")),
                 None,
             ),
+            (None, over) if beside => (
+                None,
+                Some(part(
+                    row()
+                        .h(band)
+                        .w(controls_width)
+                        .shrink()
+                        .shrink_first()
+                        .min_w(controls_least)
+                        .items_center()
+                        .justify_end()
+                        .children(asides_beside)
+                        .children(over.map(|over| {
+                            over.pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                                .justify_end()
+                        })),
+                    "room",
+                )),
+            ),
             (None, over) => (
                 None,
                 over.map(|over| {
@@ -807,7 +878,11 @@ impl ListRow {
             .w_full()
             .min_w(0.0)
             .items_start()
-            .child(part(fading, "fading"))
+            .child(if words_are_a_button {
+                fading
+            } else {
+                part(fading, "fading")
+            })
             .children(anchor)
             .children(inline);
         let lower = (under.is_some() || subtitle.is_some()).then(|| {

@@ -337,13 +337,9 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
     };
     let title = Inline::joined()
         .w_full()
-        .children(yours.then(|| {
-            words(repo_name(&pr.repo).to_owned(), Type::Body, quiet)
-                .single_line()
-                .truncate()
-                .shrink()
-                .min_w(0.0)
-        }))
+        .children(
+            yours.then(|| words(repo_name(&pr.repo).to_owned(), Type::Body, quiet).single_line()),
+        )
         .child(words(format!("#{}", pr.number), Type::Body, quiet).single_line())
         .children(host.map(|host| {
             system::chip_edge(
@@ -356,15 +352,14 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
                 t,
             )
             .shrink()
-            .min_w(0.0)
+            .shrink_first()
         }))
         .child(
             words(pr.title.clone(), Type::Body, title_ink)
                 .key(format!("{key}.title"))
                 .single_line()
                 .truncate()
-                .shrink()
-                .shrink_first(),
+                .shrink(),
         );
     let phase = |act: Act| {
         state
@@ -443,7 +438,7 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
                 .label(role.said()),
         )
         .title_el(title)
-        .hover_controls(
+        .hover_controls_beside(
             [new_session, action(Act::Approve), action(Act::Merge), mute]
                 .into_iter()
                 .chain(mute_author),

@@ -8,6 +8,9 @@ use crate::{Glyph, Tokens};
 
 /// How much of the accent tints a counted button while what it opens is closed.
 const TINT: f32 = 0.22;
+/// The widest a button's words stand before they elide: "renovate-bot" and "dependabot[bot]"
+/// whole in `Small`, the longest of the logins that ask for reviews most.
+const SAID_WIDEST: f32 = 96.0;
 /// A dot's side, and the ring of the ground around it that keeps it apart from the icon.
 const DOT: f32 = super::DotSize::Small.side();
 const DOT_RING: f32 = super::dot::RING;
@@ -109,7 +112,8 @@ impl IconButton {
         self
     }
 
-    /// Words after the icon, such as whose the thing is: the button widens to hold them, and
+    /// Words after the icon, such as whose the thing is: the button widens to hold them, up to
+    /// a point, and narrows down to its icon when its row is short of room, its words eliding;
     /// its label still names what it does.
     pub fn said(mut self, said: impl Into<String>) -> Self {
         self.said = Some(said.into());
@@ -158,11 +162,27 @@ impl IconButton {
             .iter()
             .map(|count| (count, Type::Tag))
             .chain(self.keys.iter().map(|keys| (keys, Type::Mono)))
-            .chain(self.said.iter().map(|said| (said, Type::Small)))
             .map(|(said, kind)| Space::S4.pt() + door::width(said, kind))
-            .sum::<f32>();
+            .sum::<f32>()
+            + self
+                .said
+                .iter()
+                .map(|said| Space::S4.pt() + door::width(said, Type::Small).min(SAID_WIDEST))
+                .sum::<f32>();
+        self.around(mark + words)
+    }
+
+    /// How narrow the button goes: its words, if it has any of its own, elided away.
+    pub(crate) fn least_width(&self) -> f32 {
+        match &self.said {
+            Some(said) => self.width() - door::width(said, Type::Small).min(SAID_WIDEST),
+            None => self.width(),
+        }
+    }
+
+    fn around(&self, inside: f32) -> f32 {
         let (inset, _) = self.frame();
-        self.size.height().max(mark + words + 2.0 * inset.pt())
+        self.size.height().max(inside + 2.0 * inset.pt())
     }
 
     /// The room at the button's sides and its corner: a counted button is a pill, a button with
@@ -196,6 +216,8 @@ impl IconButton {
         };
         let ink = self.ink.unwrap_or(ink);
         let (inset, corner) = self.frame();
+        let eliding = self.said.is_some();
+        let least = self.least_width();
         let (glyph, icon, count, keys, said) =
             (self.glyph, self.icon, self.count, self.keys, self.said);
         let keys_ink = t.text_dimmed;
@@ -220,7 +242,21 @@ impl IconButton {
                 .child(mark)
                 .children(count.map(|count| words(count, Type::Tag, ink)))
                 .children(keys.map(|keys| words(keys, Type::Mono, keys_ink)))
-                .children(said.map(|said| words(said, Type::Small, ink).single_line()))
+                .children(said.map(|said| {
+                    words(said, Type::Small, ink)
+                        .single_line()
+                        .truncate()
+                        .shrink()
+                        .max_w(SAID_WIDEST)
+                }))
+        };
+        let label = move |a, b| {
+            let label = label(a, b);
+            if eliding {
+                label.shrink().min_w(0.0)
+            } else {
+                label
+            }
         };
         let side = self.size.height();
         let button = if self.disabled {
@@ -237,6 +273,11 @@ impl IconButton {
             .min_w(side)
             .justify_center()
             .fill(fill);
+        let button = if eliding {
+            button.shrink().min_w(least)
+        } else {
+            button
+        };
         let button = if self.edged {
             button.border(1.0, t.border)
         } else {

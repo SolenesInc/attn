@@ -1035,8 +1035,12 @@ fn tour_prs() -> Vec<PR> {
 /// Home with the tour's pull requests, at the default window and text size, or at the smallest
 /// window with the largest text.
 fn home_at(smallest: bool) -> World {
+    home_with(smallest, tour_prs())
+}
+
+fn home_with(smallest: bool, prs: Vec<PR>) -> World {
     let mut state = one_desktop(vec![]);
-    state.prs = Some(tour_prs());
+    state.prs = Some(prs);
     if smallest {
         state
             .settings
@@ -1044,6 +1048,16 @@ fn home_at(smallest: bool) -> World {
             .insert("uiScale".to_owned(), "1.5".to_owned());
     }
     let daemon = super::palette::daemon(state, vec![]);
+    for cmd in [
+        "pr_visited",
+        "approve_pr",
+        "merge_pr",
+        "mute_pr",
+        "mute_author",
+        "ensure_repo",
+    ] {
+        daemon.on(cmd, |_| ());
+    }
     let mut world = if smallest {
         World::start_sized(daemon, (800.0, 600.0))
     } else {
@@ -1273,4 +1287,108 @@ fn every_prs_action_keeps_its_key_name_and_tab_stop() {
             Some("home.pr.r2.open".to_owned()),
         ]
     );
+}
+
+const ACTION_COMMANDS: [&str; 5] = [
+    "approve_pr",
+    "merge_pr",
+    "mute_pr",
+    "mute_author",
+    "ensure_repo",
+];
+
+fn acted(world: &World) -> Vec<&'static str> {
+    let mut acted: Vec<&'static str> = ACTION_COMMANDS
+        .into_iter()
+        .filter(|cmd| !world.daemon.sent_of(cmd).is_empty())
+        .collect();
+    if has(world, MERGE) {
+        acted.push("merge dialog");
+    }
+    acted
+}
+
+#[test]
+fn a_press_where_a_prs_title_shows_or_on_its_open_key_opens_it_and_acts_on_nothing() {
+    let prs = tour_prs();
+    for smallest in [false, true] {
+        for pr in &prs[..3] {
+            for along in [0.5, 0.95] {
+                let mut world = home_at(smallest);
+                let case = format!("smallest {smallest}, {} at {along}", pr.id);
+                into_view(&mut world, &pr.id);
+                let (_, [x, y, w, h]) = drawn(&world, &format!("home.pr.{}.title", pr.id));
+                assert!(w > 0.5, "{case}: the title shows at rest");
+                let at = (x + w * along, y + h / 2.0);
+                world.gesture(|app| app.click_at(at));
+                assert_eq!(acted(&world), Vec::<&str>::new(), "{case}");
+                assert_eq!(
+                    world.opened_links(),
+                    std::slice::from_ref(&pr.url),
+                    "{case}"
+                );
+            }
+            let mut world = home_at(smallest);
+            into_view(&mut world, &pr.id);
+            let [x, y, w, h] = world.rect(&format!("home.pr.{}", pr.id));
+            world.gesture(|app| app.move_to(((x + w / 4.0) as f32, (y + h / 2.0) as f32)));
+            world.advance(Duration::from_secs(1));
+            let open = format!("home.pr.{}.open", pr.id);
+            world
+                .automate("press", serde_json::json!({"target": {"key": open}}))
+                .unwrap_or_else(|why| panic!("{why}"));
+            let case = format!("smallest {smallest}, {} by its open key", pr.id);
+            assert_eq!(acted(&world), Vec::<&str>::new(), "{case}");
+            assert_eq!(
+                world.opened_links(),
+                std::slice::from_ref(&pr.url),
+                "{case}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_long_author_keeps_every_action_whole_in_its_row_and_its_full_name() {
+    for author in [
+        "dependabot[bot]",
+        "chatgpt-codex-connector[bot]",
+        "microsoft-github-policy-service[bot]",
+    ] {
+        for smallest in [false, true] {
+            let mut prs = tour_prs();
+            prs[1].author = author.into();
+            let mut world = home_with(smallest, prs);
+            let case = format!("{author}, smallest {smallest}");
+            into_view(&mut world, "r1");
+            let [x, y, w, h] = world.rect("home.pr.r1");
+            world.gesture(|app| app.move_to(((x + w / 4.0) as f32, (y + h / 2.0) as f32)));
+            world.advance(Duration::from_secs(1));
+            let (_, row) = drawn(&world, "home.pr.r1");
+            for action in ROW_ACTIONS {
+                let key = format!("home.pr.r1.{action}");
+                let element = world
+                    .runtime()
+                    .elements()
+                    .into_iter()
+                    .find(|e| e.key.as_deref() == Some(key.as_str()))
+                    .unwrap_or_else(|| panic!("{case}: {key} is drawn"));
+                let [ex, _, ew, _] = element.rect;
+                assert!(
+                    element.opacity > 0.5
+                        && (element.visible[2] - ew).abs() < 0.5
+                        && ex >= row[0] - 0.5
+                        && ex + ew <= row[0] + row[2] + 0.5,
+                    "{case}: {action} at {:?}, visible {:?}, is not whole in its row {row:?}",
+                    element.rect,
+                    element.visible
+                );
+            }
+            assert_eq!(
+                name(&world, "home.pr.r1.mute-author"),
+                Some(format!("Mute all PRs by {author}")),
+                "{case}"
+            );
+        }
+    }
 }
