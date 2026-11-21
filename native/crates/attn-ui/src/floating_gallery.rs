@@ -6,7 +6,7 @@ use rune_kit::TextInput;
 
 use crate::Frame;
 use crate::Tokens;
-use crate::blocks::{Actions, Block, Columns, Dialog, Field, Menu, Notice, Popover, Prose, Stack};
+use crate::blocks::{Actions, Columns, Dialog, Field, List, Menu, Notice, Popover, Prose};
 use crate::colors::scheme_for;
 use crate::finder::{self, Hint};
 use crate::keycap::{self, Keys};
@@ -36,6 +36,8 @@ pub enum Case {
     Form,
     /// The field's value was refused.
     Failed,
+    /// What the question is about, as a card of things.
+    List,
     /// A sheet with no actions, closed by its ×, its body in columns.
     Sheet,
     /// A finder that lists nothing.
@@ -67,6 +69,7 @@ pub const FLOATING_SUBJECTS: &[FloatingSubject] = &[
             "Form",
             "Failed",
             "Failed focus",
+            "List",
             "Sheet",
             "Sheet smallest",
             "Long",
@@ -149,6 +152,9 @@ pub const FLOATING_SUBJECTS: &[FloatingSubject] = &[
     ),
 ];
 
+const LONG_ITEM: &str =
+    "pending_approval agent in worktree attn--ds-dialogs-palette-with-a-long-branch";
+
 const LONG_TITLE: &str =
     "Restart shared Codex on attn-linux-landing-runner-with-a-long-hostname now?";
 const LONG_LEAD: &str = "Every Codex tile in this profile goes offline until 0.142.0-alpha.7 is up, including the ones that run on a schedule and the ones another agent delegates to. What you typed stays.";
@@ -170,6 +176,7 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Focus", |_| {})
                 .variant("Form", |s| s.case = Case::Form)
                 .variant("Failed", |s| s.case = Case::Failed)
+                .variant("List", |s| s.case = Case::List)
                 .variant("Sheet", |s| s.case = Case::Sheet)
                 .variant("Sheet smallest", |s| {
                     s.case = Case::Sheet;
@@ -284,6 +291,26 @@ fn dialog(s: &Floating, cx: &mut Cx<Floating>) -> El {
                 }))
                 .build(&t),
         ),
+        Case::List => dialog.push(
+            List::new("story.list", "Affected tiles")
+                .card()
+                .row_with(
+                    ListRow::new("story.item.a", "working agent")
+                        .still()
+                        .title("working agent"),
+                    vec![
+                        Prose::lead("story.item.a.loses", "Its turn stops; what it typed stays.")
+                            .build(&t),
+                    ],
+                )
+                .row(
+                    ListRow::new("story.item.b", "idle agent")
+                        .still()
+                        .title(if s.long { LONG_ITEM } else { "idle agent" })
+                        .build(&t),
+                )
+                .build(&t),
+        ),
         Case::Sheet => dialog.size(crate::blocks::DialogSize::Sheet).push(
             Columns::new("story.columns")
                 .column(vec![sheet_items("Sessions", s, &t)])
@@ -322,39 +349,30 @@ fn dialog(s: &Floating, cx: &mut Cx<Floating>) -> El {
     window(s, &t, el(), layer)
 }
 
-fn sheet_items(title: &str, s: &Floating, t: &Tokens) -> crate::blocks::Block {
+fn sheet_items(title: &'static str, s: &Floating, t: &Tokens) -> crate::blocks::Block {
     let name = if s.long {
         "Open the new-session dialog on the desktop the pointer is over"
     } else {
         "New session"
     };
-    Block::custom(
-        format!("story.{title}.block"),
-        Stack::tight()
-            .key(format!("story.{title}"))
-            .w_full()
-            .child(
-                crate::system::GroupHead::new(format!("story.{title}.heading"), title.to_owned())
-                    .section(title.to_owned())
-                    .heading()
-                    .build(t),
-            )
-            .child(
-                ListRow::new(format!("story.{title}.a"), name)
-                    .still()
-                    .title(name)
-                    .aside(Keys::raised(&["⌘", "N"]).build(t))
-                    .build(t),
-            )
-            .child(
-                ListRow::new(format!("story.{title}.b"), "Close")
-                    .still()
-                    .title("Close")
-                    .subtitle("Asks first when the tile runs an agent.", t)
-                    .aside(Keys::raised(&["⌘", "W"]).build(t))
-                    .build(t),
-            ),
-    )
+    List::new(format!("story.{title}"), title)
+        .heading()
+        .row(
+            ListRow::new(format!("story.{title}.a"), name)
+                .still()
+                .title(name)
+                .aside(Keys::raised(&["⌘", "N"]).build(t))
+                .build(t),
+        )
+        .row(
+            ListRow::new(format!("story.{title}.b"), "Close")
+                .still()
+                .title("Close")
+                .subtitle("Asks first when the tile runs an agent.", t)
+                .aside(Keys::raised(&["⌘", "W"]).build(t))
+                .build(t),
+        )
+        .build(t)
 }
 
 fn checks(s: &Floating, cx: &mut Cx<Floating>) -> El {

@@ -967,6 +967,33 @@ fn long_blockers(count: usize) -> (World, Vec<String>, tempfile::TempDir) {
 }
 
 #[test]
+fn the_restart_confirm_shows_each_long_blocker_name_whole_so_alike_names_stay_apart() {
+    let (mut world, names, _dir) = long_blockers(8);
+    click_button(&mut world, "Restart now");
+    assert_eq!(dialog(&world).as_deref(), Some("Restart shared Codex now?"));
+    let titles: Vec<String> = world
+        .screen()
+        .descendants(Target::key(format!("{CONFIRM}.list")))
+        .into_iter()
+        .filter_map(|n| n.key)
+        .filter(|key| key.starts_with(&format!("{CONFIRM}.item.")) && key.ends_with(".title"))
+        .collect();
+    assert_eq!(
+        titles.len(),
+        names.len(),
+        "each blocker has its row: {titles:?}"
+    );
+    let one_line = world.rect(&format!("{CONFIRM}.cancel"))[3];
+    for title in titles {
+        let [_, _, _, h] = world.rect(&title);
+        assert!(
+            h > one_line,
+            "{title} is cut to one line, {h} tall, so the end that tells it apart is hidden"
+        );
+    }
+}
+
+#[test]
 fn twelve_long_blockers_keep_the_bar_to_its_lines_and_count_those_it_does_not_name() {
     let heights: Vec<f64> = [1, 12]
         .into_iter()
@@ -1023,13 +1050,7 @@ fn eight_long_blockers_leave_two_thirds_of_the_smallest_window_and_details_reach
         press(&mut world, Key::Tab);
     }
     press(&mut world, Key::Text(" ".into()));
-    let reached = tab_round_in_view(&mut world, |key| {
-        if key.contains(".blocker.") {
-            format!("{BAND}.whole.said")
-        } else {
-            format!("{BAND}.whole-dialog")
-        }
-    });
+    let reached = tab_round_in_view(&mut world, |_| format!("{BAND}.whole-dialog"));
     for name in &names {
         let go = format!("whole.{}", go(name));
         assert!(reached.contains(&go), "Tab never reached {go}: {reached:?}");

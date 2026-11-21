@@ -2298,6 +2298,110 @@ fn capture_focus(world: &World) -> Option<String> {
 }
 
 #[test]
+fn recent_is_a_region_of_the_panel_that_opens_at_the_newest_and_moves_by_arrows_not_tab() {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    for n in 1..=12 {
+        send(
+            &mut world,
+            &format!("message {n} with words enough to take a line of its own"),
+        );
+    }
+    open(&mut world);
+    press(&mut world, "shift+tab");
+    press(&mut world, "space");
+    let screen = world.capture_screen();
+    let root = screen.get(Target::key("capture"));
+    assert_eq!(
+        (root.role.as_str(), root.name.as_deref()),
+        ("dialog", Some("Quick Capture"))
+    );
+    let region = screen.get(Target::key("capture.history"));
+    assert_eq!(
+        (region.role.as_str(), region.name.as_deref()),
+        ("region", Some("Recent messages"))
+    );
+    assert!(
+        screen
+            .descendants(Target::key("capture"))
+            .iter()
+            .any(|n| n.key.as_deref() == Some("capture.history")),
+        "Recent sits inside the panel"
+    );
+    let items: Vec<_> = screen
+        .all(Target::role("list-item"))
+        .into_iter()
+        .filter(|n| {
+            n.key
+                .as_deref()
+                .is_some_and(|k| k.starts_with("capture.history.item."))
+        })
+        .collect();
+    let newest_key = items
+        .last()
+        .and_then(|n| n.key.clone())
+        .expect("a message shows");
+    assert!(
+        screen
+            .descendants(Target::key(newest_key.clone()))
+            .iter()
+            .chain(items.last())
+            .any(|n| {
+                n.name
+                    .as_deref()
+                    .is_some_and(|name| name.contains("message 12"))
+                    || n.value.as_deref().is_some_and(|v| v.contains("message 12"))
+            })
+            || shows(&world, "message 12 with"),
+        "the newest message is the last shown"
+    );
+    assert!(
+        items
+            .iter()
+            .all(|n| !n.is("expanded") && !n.is("collapsed")),
+        "a message opens nothing: {items:?}"
+    );
+    let list = screen.bounds(Target::key("capture.history.list")).unwrap();
+    let newest = screen.bounds(Target::key(newest_key.clone())).unwrap();
+    assert!(
+        newest[1] >= list[1] - 0.5 && newest[1] + newest[3] <= list[1] + list[3] + 0.5,
+        "Recent opens at the newest message: {newest:?} in {list:?}"
+    );
+
+    assert_eq!(
+        capture_focus(&world).as_deref(),
+        Some("capture.history.back")
+    );
+    let mut stops = Vec::new();
+    for _ in 0..3 {
+        press(&mut world, "tab");
+        stops.extend(capture_focus(&world));
+    }
+    assert!(
+        stops
+            .iter()
+            .all(|k| !k.starts_with("capture.history.item.")),
+        "the messages are no Tab stops: {stops:?}"
+    );
+    while capture_focus(&world).as_deref() != Some("capture.history.back") {
+        press(&mut world, "tab");
+    }
+    press(&mut world, "down");
+    let picked = world
+        .capture_screen()
+        .all(Target::role("list-item"))
+        .into_iter()
+        .filter(|n| n.is("selected"))
+        .filter_map(|n| n.key)
+        .collect::<Vec<_>>();
+    assert!(
+        picked.len() == 1 && picked[0].starts_with("capture.history.item."),
+        "an arrow picks one message, shown selected: {picked:?}"
+    );
+    rest(&mut world);
+}
+
+#[test]
 fn a_keyboard_alone_reaches_every_control_of_the_panel_and_typing_stays_with_the_message() {
     let (daemon, _) = home();
     let mut world = World::start(daemon);

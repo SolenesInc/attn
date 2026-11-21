@@ -9,12 +9,10 @@ use std::collections::BTreeMap;
 use attn_protocol::{
     InstallCodexUpdateMessage, RestartSharedCodexMessage, SharedCodexBlocker, SharedCodexState,
 };
-use attn_ui::blocks::{Banner, BannerTone};
-use attn_ui::dialog::Dialog;
-use attn_ui::system::Button;
-use attn_ui::type_;
-use attn_ui::{DialogFrame, Tokens};
-use rune::{Cx, El, TextStyle, Tx, col, text};
+use attn_ui::blocks::{Actions, Banner, BannerTone, Block, List};
+use attn_ui::system::{Button, ListRow, Look, Type, words};
+use attn_ui::{Dialog, Tokens};
+use rune::{Cx, El, Tx};
 use serde::{Deserialize, Serialize};
 
 use crate::State;
@@ -580,133 +578,124 @@ pub(crate) fn said(state: &State) -> Option<Banner> {
 }
 
 /// The confirm before restarting now or reloading the old tiles.
+/// A tile the confirmation takes offline: its name, and what it loses under it.
+fn affected(session: &str, name: String, loses: Option<&'static str>, t: &Tokens) -> Affected {
+    let key = format!("shared-codex-confirm.item.{session}");
+    let label = match loses {
+        Some(loses) => format!("{name} · {loses}"),
+        None => name.clone(),
+    };
+    let row = ListRow::new(key.clone(), label).still().wrap().title(name);
+    let under = loses
+        .map(|loses| {
+            Block::custom(
+                format!("{key}.loses.block"),
+                words(loses, Type::Small, t.text_tertiary)
+                    .key(format!("{key}.loses"))
+                    .wrap()
+                    .a11y_hidden(),
+            )
+        })
+        .into_iter()
+        .collect();
+    (row, under)
+}
+
+/// A tile the restart takes offline, and the notes under it.
+type Affected = (ListRow, Vec<Block>);
+
 pub(crate) fn confirm(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let (Some(confirm), Some(codex)) = (state.window.shared_codex.confirm, current(state)) else {
         return;
     };
-    let item = |key: String, name: String, detail: Option<&str>| {
-        col()
-            .key(key)
-            .role("listitem")
-            .label(match detail {
-                Some(detail) => format!("{name} · {detail}"),
-                None => name.clone(),
-            })
-            .w_full()
-            .gap(2.0)
-            .px(10.0)
-            .py(8.0)
-            .fill(t.bg_app)
-            .border(1.0, t.border)
-            .radius(6.0)
-            .child(text(name).font(type_::BODY).color(t.text_primary))
-            .children(detail.map(|d| {
-                text(d.to_owned())
-                    .font(type_::LABEL)
-                    .color(t.text_tertiary)
-                    .wrap()
-            }))
-    };
-    let (key, title, said, items, action): (_, String, String, Vec<El>, String) = match confirm {
-        Confirm::Restart => {
-            let installed = codex.installed_version.clone().unwrap_or_default();
-            let items = codex
-                .blockers
-                .iter()
-                .flatten()
-                .map(|b| {
-                    let (name, hidden) = name_of(state, &b.session_id);
-                    let name = if hidden {
-                        format!("{name} (hidden)")
-                    } else {
-                        name
-                    };
-                    item(
-                        format!("shared-codex-confirm.item.{}", b.session_id),
-                        name,
-                        Some(blocker_loss(b)),
-                    )
-                })
-                .collect();
-            (
-                "shared-codex-confirm",
-                "Restart shared Codex now?".to_owned(),
-                format!(
-                    "Every Codex tile in this profile goes offline until {installed} is up. What you typed stays."
-                ),
-                items,
-                "Restart now".to_owned(),
-            )
-        }
-        Confirm::Reload => {
-            let running = codex.running_version.clone().unwrap_or_default();
-            let sessions = stale(codex);
-            let one = sessions.len() == 1;
-            let items = sessions
-                .iter()
-                .map(|s| {
-                    item(
-                        format!("shared-codex-confirm.item.{s}"),
-                        name_of(state, s).0,
-                        None,
-                    )
-                })
-                .collect();
-            (
-                "shared-codex-confirm",
-                if one {
-                    "Reload 1 Codex tile?".to_owned()
-                } else {
-                    format!("Reload {} Codex tiles?", sessions.len())
-                },
-                format!(
-                    "{} its Codex on {running} and resumes its conversation. Text you typed and haven’t sent in {} is lost.",
+    let (key, title, said, items, action): (&str, String, String, Vec<Affected>, String) =
+        match confirm {
+            Confirm::Restart => {
+                let installed = codex.installed_version.clone().unwrap_or_default();
+                let items = codex
+                    .blockers
+                    .iter()
+                    .flatten()
+                    .map(|b| {
+                        let (name, hidden) = name_of(state, &b.session_id);
+                        let name = if hidden {
+                            format!("{name} (hidden)")
+                        } else {
+                            name
+                        };
+                        affected(&b.session_id, name, Some(blocker_loss(b)), t)
+                    })
+                    .collect();
+                (
+                    "shared-codex-confirm",
+                    "Restart shared Codex now?".to_owned(),
+                    format!(
+                        "Every Codex tile in this profile goes offline until {installed} is up. What you typed stays."
+                    ),
+                    items,
+                    "Restart now".to_owned(),
+                )
+            }
+            Confirm::Reload => {
+                let running = codex.running_version.clone().unwrap_or_default();
+                let sessions = stale(codex);
+                let one = sessions.len() == 1;
+                let items = sessions
+                    .iter()
+                    .map(|s| affected(s, name_of(state, s).0, None, t))
+                    .collect();
+                (
+                    "shared-codex-confirm",
                     if one {
-                        "The tile restarts"
+                        "Reload 1 Codex tile?".to_owned()
                     } else {
-                        "Each tile restarts"
+                        format!("Reload {} Codex tiles?", sessions.len())
                     },
-                    if one { "it" } else { "them" },
-                ),
-                items,
-                if one { "Reload tile" } else { "Reload tiles" }.to_owned(),
-            )
-        }
-    };
+                    format!(
+                        "{} its Codex on {running} and resumes its conversation. Text you typed and haven’t sent in {} is lost.",
+                        if one {
+                            "The tile restarts"
+                        } else {
+                            "Each tile restarts"
+                        },
+                        if one { "it" } else { "them" },
+                    ),
+                    items,
+                    if one { "Reload tile" } else { "Reload tiles" }.to_owned(),
+                )
+            }
+        };
     let close = |state: &mut State, _: &mut Tx| close_confirm(state);
+    let cancel = Button::new("Cancel")
+        .on_press_tx(close)
+        .build(t)
+        .key(format!("{key}.cancel"));
+    let confirm = Button::new(action)
+        .look(Look::Primary)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| match confirm {
+            Confirm::Restart => restart(state, true, tx),
+            Confirm::Reload => reload_old_tiles(state, tx),
+        })
+        .build(t)
+        .key(format!("{key}.confirm"));
     let listed = !items.is_empty();
-    let prompt = DialogFrame::prompt(t);
-    let frame = DialogFrame {
-        header: [22.0, 24.0, if listed { 12.0 } else { 24.0 }, 24.0],
-        subtitle: TextStyle::new(13.0, 400.0).lh(19.5),
-        subtitle_ink: t.text_secondary,
-        ..prompt
-    };
-    Dialog::new(key, title, frame)
-        .subtitle(said)
-        .width(480.0)
-        .on_close_tx(close)
-        .child(
-            col()
-                .key(format!("{key}.list"))
-                .role("list")
-                .w_full()
-                .gap(6.0)
-                .px(24.0)
-                .pb(if listed { 24.0 } else { 0.0 })
-                .children(items),
+    Dialog::new(key, title)
+        .lead(said)
+        .push_all(listed.then(|| {
+            items
+                .into_iter()
+                .fold(
+                    List::new("shared-codex-confirm.list", "Affected tiles").card(),
+                    |list, (row, under)| list.row_with(row, under),
+                )
+                .build(t)
+        }))
+        .actions(
+            Actions::new("shared-codex-confirm.actions")
+                .then_end()
+                .push(El::from(cancel).autofocus())
+                .push(confirm),
         )
-        .child(crate::prompt_dialog::actions(
-            crate::prompt_dialog::button("Cancel", false, format!("{key}.cancel"), t, |b| {
-                b.on_press_tx(close)
-            })
-            .autofocus(),
-            crate::prompt_dialog::button(action, true, format!("{key}.confirm"), t, |b| {
-                b.on_press_tx(move |state: &mut State, tx: &mut Tx| match confirm {
-                    Confirm::Restart => restart(state, true, tx),
-                    Confirm::Reload => reload_old_tiles(state, tx),
-                })
-            }),
-        ))
+        .on_close_tx(close)
         .build(t, layers);
 }

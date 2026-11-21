@@ -2,14 +2,13 @@ use std::any::Any;
 use std::rc::Rc;
 
 use rune::{Color, Cx, El, Tx, col, row};
-use rune_kit::ScrollBar;
 
-use crate::dialog::Dialog;
+use super::{Actions, Block, Dialog, DialogSize};
 use crate::system::{
-    Button, IconSize, Look, RING_REACH, Radius, Said, Size, Space, Type, door, focus, layers,
-    lines_at, width_of, words,
+    Button, IconSize, Look, Radius, Said, Size, Space, Type, door, focus, layers, lines_at,
+    width_of, words,
 };
-use crate::{DialogFrame, Tokens, colors, icon};
+use crate::{Tokens, colors, icon};
 
 /// What a banner is about, which decides its colour and its glyph.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -398,41 +397,32 @@ impl Banner {
             .children(notes)
         });
         let said = door::gap(col().w_full(), Space::S12)
+            .key(format!("{}.whole.said", self.key))
             .children(sentence)
             .children(notes);
-        let said = door::inset(said, Space::S24, Space::S4);
-        let said = col()
-            .key(format!("{}.whole.said", self.key))
-            .w_full()
-            .shrink()
-            .min_h(0.0)
-            .scroll(rune::ScrollSpec {
-                stick_bottom: false,
-            })
-            .scroll_margin(RING_REACH)
-            .child(said)
-            .scroll_bar_styled(crate::scroll_bar(t));
-        let actions =
-            door::gap(row().w_full().justify_end().flex_wrap(), Space::S8).children(actions(
-                self.tone,
-                self.actions
-                    .into_iter()
-                    .map(|(key, button, press)| (whole(&key), button, press))
-                    .collect(),
-                t,
-                Some(closing),
-            ));
-        let actions = door::inset(actions, Space::S24, Space::S16);
-        Dialog::new(
-            format!("{}.whole", self.key),
-            self.label,
-            DialogFrame::prompt(t),
+        let actions = actions(
+            self.tone,
+            self.actions
+                .into_iter()
+                .map(|(key, button, press)| (whole(&key), button, press))
+                .collect(),
+            t,
+            Some(closing),
         )
-        .width(560.0)
-        .on_close_tx(close)
-        .child(said)
-        .child(actions)
-        .build(t, layers);
+        .into_iter()
+        .fold(
+            Actions::new(format!("{}.whole.actions", self.key)).then_end(),
+            Actions::push,
+        );
+        Dialog::new(format!("{}.whole", self.key), self.label)
+            .size(DialogSize::Prompt)
+            .on_close_tx(close)
+            .push(Block::custom(
+                format!("{}.whole.said.block", self.key),
+                said,
+            ))
+            .actions(actions)
+            .build(t, layers);
     }
 }
 

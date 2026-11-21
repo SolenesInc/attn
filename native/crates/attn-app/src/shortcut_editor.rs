@@ -6,42 +6,25 @@
 use std::collections::BTreeMap;
 
 use attn_protocol::SetSettingMessage;
-use attn_ui::dialog::Dialog;
-use attn_ui::{DialogFrame, GlyphButton, Tokens, glyph, keycap, type_};
-use rune::tok::space;
-use rune::{
-    Chord, ChordKey, ChordMod, El, KeyPlatform, Shortcut, ShortcutError, TextEdit, TextStyle, Tx,
-    col, row, text,
+use attn_ui::blocks::DialogSize;
+use attn_ui::blocks::{Actions, Block, Inline, List, Notice, Prose, Section, Stack, Status};
+use attn_ui::system::{
+    Button, FieldState, IconSize, ListRow, Look, Reveal, Size, Tone, Type, chip_button,
+    icon_button, keycaps, line_box, tag, words,
 };
-use rune_kit::ScrollBar;
-use rune_kit::{
-    Badge, BadgeVariant, Button, ButtonVariant, Kit, ShortcutRecorder, ShortcutRecorderState,
-    TextInput, shortcut_error_message,
-};
+use attn_ui::{Dialog, Tokens, glyph, keycap};
+use rune::{Chord, ChordKey, ChordMod, El, KeyPlatform, Shortcut, ShortcutError, TextEdit, Tx};
+use rune_kit::{Kit, ShortcutRecorder, ShortcutRecorderState, TextInput, shortcut_error_message};
 use serde_json::{Map, Value, json};
 
 use crate::State;
 use crate::action::{Action, Category};
-use crate::cheat_sheet::category_title;
 use crate::keymap::{self, Binding, Keymap};
 use crate::shell::Layer;
 use crate::sidebar::dock;
 
 const THEN_RECORDER: &str = "shortcut-editor.then";
 const FILTER: &str = "shortcut-editor.filter";
-/// The kit dialog's own inset, which the editor's filter, list and footer line up with.
-/// `.shortcut-editor-modal`'s inset, which its header, filter, list and footer share.
-const INSET: f32 = 20.0;
-
-/// `.shortcut-editor-category { margin-top: 16px }`.
-const SECTION_GAP: f32 = 16.0;
-
-/// `.shortcut-editor-btn` and `.key-capture-button`: 12 point text between 6 points of padding
-/// inside a 1 point edge.
-const BUTTON_HEIGHT: f32 = 28.0;
-
-const ICON_GLYPH: TextStyle = TextStyle::new(13.0, 400.0).lh(13.0);
-
 /// The editor's recordings, its filter and a reassignment waiting for the user's answer. They
 /// start over each time the editor opens.
 #[derive(Default)]
@@ -577,7 +560,7 @@ pub(crate) fn view(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .binding(action)
                 .is_some_and(|b| keymap.label(b).to_lowercase().contains(&query))
     };
-    let sections: Vec<El> = CATEGORIES
+    let sections: Vec<Block> = CATEGORIES
         .into_iter()
         .filter_map(|category| {
             let rows: Vec<El> = Action::ALL
@@ -586,12 +569,10 @@ pub(crate) fn view(state: &State, t: &Tokens, layers: &mut Vec<El>) {
                 .map(|action| action_row(state, &keymap, action, t, k))
                 .collect();
             (!rows.is_empty()).then(|| {
-                section(
-                    format!("shortcut-editor.category.{category:?}"),
-                    category.label(),
-                    t,
-                )
-                .children(ruled(rows, t))
+                let key = format!("shortcut-editor.category.{category:?}");
+                Section::new(format!("{key}.section"), category.label())
+                    .push(List::new(key, category.label()).rows(rows).build(t))
+                    .build(t)
             })
         })
         .collect();
@@ -601,153 +582,72 @@ pub(crate) fn view(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let docked = query.is_empty().then(|| dock_section(state, &keymap, t));
     let empty = (sections.is_empty() && capture.is_none()).then(|| {
         let said = format!("No shortcuts match “{}”", editor.filter.text.trim());
-        text(said.clone())
-            .key("shortcut-editor.no-matches")
-            .role("status")
-            .label(said)
-            .font(type_::BODY)
-            .color(t.text_tertiary)
+        Status::new("shortcut-editor.no-matches", said, false).build(t)
     });
-    let body = col()
-        .key("shortcut-editor.body")
-        .w_full()
-        .grow(1.0)
-        .min_h(0.0)
-        .px(INSET)
-        .pt(8.0 + SECTION_GAP)
-        .pb(16.0)
-        .gap(SECTION_GAP)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .children(capture)
-        .children(docked)
-        .children(sections)
-        .children(empty)
-        .scroll_bar_styled(attn_ui::dialog_scroll_bar(t));
-    let footer = row()
-        .key("shortcut-editor.footer")
-        .w_full()
-        .px(INSET)
-        .py(12.0)
-        .items_center()
-        .justify_between()
-        .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
-        .border_layout()
-        .child(
-            text_button("Restore Defaults", false, t, |b| {
-                b.on_press_tx(restore_defaults)
-            })
-            .key("shortcut-editor.restore"),
+    let filter = line_box(
+        TextInput::new(&editor.filter)
+            .key(FILTER)
+            .placeholder("Filter shortcuts…")
+            .label("Filter shortcuts")
+            .on_edit(|state: &mut State| &mut state.window.shortcut_editor.filter)
+            .on_change(|state: &mut State, _: &mut Tx| {
+                let editor = &mut state.window.shortcut_editor;
+                editor.pending = None;
+                editor.recording = None;
+            }),
+        FieldState::Ready,
+        t,
+    );
+    Dialog::new("shortcut-editor", "Customize Shortcuts")
+        .close_button()
+        .lead("Click a shortcut to rebind it. Changes save automatically.")
+        .size(DialogSize::Sheet)
+        .on_close(close)
+        .top(
+            Stack::tight()
+                .key("shortcut-editor.search")
+                .w_full()
+                .child(filter.into()),
         )
-        .child(text_button("Done", true, t, |b| b.on_press(close)).key("shortcut-editor.done"));
-    Dialog::new(
-        "shortcut-editor",
-        "Customize Shortcuts",
-        DialogFrame::sheet(t),
-    )
-    .subtitle("Click a shortcut to rebind it. Changes save automatically.")
-    .width(720.0)
-    .window_height(0.84)
-    .on_close(close)
-    .child(
-        col()
-            .key("shortcut-editor.search")
-            .w_full()
-            .px(INSET)
-            .py(12.0)
-            .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-            .border_layout()
-            .child(filter_field(&editor.filter, t)),
-    )
-    .child(body)
-    .child(footer)
-    .build(t, layers);
+        .push_all(capture)
+        .push_all(docked)
+        .push_all(sections)
+        .push_all(empty)
+        .actions(
+            Actions::new("shortcut-editor.actions")
+                .push(
+                    Button::new("Restore Defaults")
+                        .on_press_tx(restore_defaults)
+                        .build(t)
+                        .key("shortcut-editor.restore"),
+                )
+                .then_end()
+                .push(
+                    Button::new("Done")
+                        .look(Look::Primary)
+                        .on_press(close)
+                        .build(t)
+                        .key("shortcut-editor.done"),
+                ),
+        )
+        .build(t, layers);
 }
 
-/// `.shortcut-editor-search-input`: the dialog's own fill inside its edge, with a dimmed
-/// placeholder.
-fn filter_field(filter: &TextEdit, t: &Tokens) -> El {
-    let mut k = attn_ui::kit(t).clone();
-    k.c.text_faint = t.text_dimmed;
-    TextInput::new(filter)
-        .key(FILTER)
-        .width(None)
-        .placeholder("Filter shortcuts…")
-        .label("Filter shortcuts")
-        .on_edit(|state: &mut State| &mut state.window.shortcut_editor.filter)
-        .on_change(|state: &mut State, _: &mut Tx| {
-            let editor = &mut state.window.shortcut_editor;
-            editor.pending = None;
-            editor.recording = None;
-        })
-        .build(&k)
-        .fill(t.bg_app)
-}
-
-/// `.shortcut-editor-category`: a heading over what follows it.
-fn section(key: impl Into<String>, title: &str, t: &Tokens) -> El {
-    col()
-        .key(key.into())
-        .role("group")
-        .label(title)
-        .w_full()
-        .child(category_title(title, t).mb(4.0))
-}
-
-/// `rows` with a rule under each but the last, as `.shortcut-editor-row` and
-/// `.shortcut-editor-dock-item` draw them.
-fn ruled(rows: Vec<El>, t: &Tokens) -> Vec<El> {
-    let last = rows.len().saturating_sub(1);
-    rows.into_iter()
-        .enumerate()
-        .map(|(i, row)| match i < last {
-            true => row
-                .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-                .border_layout(),
-            false => row,
-        })
-        .collect()
-}
-
-/// `.shortcut-editor-btn`, outlined, or `.shortcut-editor-btn--primary`, brand-tinted;
-/// `make` adds what it does.
-fn text_button(words: &str, primary: bool, t: &Tokens, make: impl FnOnce(Button) -> Button) -> El {
-    let ink = if primary { t.brand } else { t.text_primary };
-    let label = words.to_owned();
-    let button = make(
-        Button::new(words)
-            .variant(ButtonVariant::Ghost)
-            .label_with(move |_, _| text(label).font(type_::SMALL).color(ink)),
-    )
-    .build(attn_ui::kit(t))
-    .h(BUTTON_HEIGHT)
-    .px(14.0)
-    .radius(6.0);
-    match primary {
-        true => attn_ui::brand_tinted(button, t),
-        false => button.fill(t.highlight.alpha(0.03)).border(1.0, t.border),
-    }
-}
-
-/// `.shortcut-editor-icon-btn`: a 24 point square holding a dim glyph.
-fn icon_button(glyph: &str, said: impl Into<String>, t: &Tokens) -> GlyphButton {
-    GlyphButton::new(glyph, said)
-        .side(24.0)
-        .font(ICON_GLYPH)
-        .color(t.text_dimmed)
+/// A small button with words, for a row's or a section's controls.
+fn small(words: &'static str, look: Look, t: &Tokens) -> Button {
+    let _ = t;
+    Button::new(words).look(look).size(Size::Compact)
 }
 
 /// The Dock section: the dock's shortcuts in order, each moved up or down or taken out.
-fn dock_section(state: &State, keymap: &Keymap, t: &Tokens) -> El {
-    let k = attn_ui::kit(t);
+fn dock_section(state: &State, keymap: &Keymap, t: &Tokens) -> Block {
     let pinned = dock::pinned(state);
     let hint = format!(
         "Shortcuts shown in the sidebar dock, in order. Reorder or remove them here, or pin any shortcut with {} below.",
         glyph::STAR_OPEN
     );
     let last = pinned.len().saturating_sub(1);
-    let items: Vec<El> = pinned
+    let rows: Vec<El> = pinned
         .iter()
         .enumerate()
         .map(|(i, action)| {
@@ -755,141 +655,112 @@ fn dock_section(state: &State, keymap: &Keymap, t: &Tokens) -> El {
             let name = action.label();
             let keys = keymap
                 .binding(action)
-                .map(|b| keymap.label(b))
+                .map(|b| keymap.keycaps(b))
                 .unwrap_or_default();
-            let mover = |glyph: &str, said: String, later: bool, disabled: bool| {
-                let action = action.clone();
-                icon_button(glyph, said, t)
-                    .disabled(disabled)
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                        dock::shift(state, &action, later, tx)
-                    })
-                    .build(k)
-            };
-            row()
-                .key(format!("shortcut-editor.dock.{id}"))
-                .role("listitem")
-                .label(name)
-                .w_full()
-                .min_h(34.0)
-                .py(3.0)
-                .gap(6.0)
-                .items_center()
-                .child(
-                    text(name)
-                        .font(type_::BODY)
-                        .color(t.text_primary)
-                        .truncate()
-                        .grow(1.0)
-                        .min_w(0.0),
-                )
-                .child(text(keys).font(type_::SMALL).color(t.text_dimmed))
-                .child(
-                    mover(glyph::ARROW_UP, format!("Move {name} up"), false, i == 0)
-                        .key(format!("shortcut-editor.dock.up.{id}")),
-                )
-                .child(
-                    mover(
-                        glyph::ARROW_DOWN,
-                        format!("Move {name} down"),
-                        true,
-                        i == last,
-                    )
-                    .key(format!("shortcut-editor.dock.down.{id}")),
-                )
-                .child({
+            let mover =
+                |key: String, glyph: &'static str, said: String, later: bool, disabled: bool| {
                     let action = action.clone();
-                    icon_button(glyph::TIMES, format!("Remove {name} from dock"), t)
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            dock::pin(state, &action, false, tx)
-                        })
-                        .build(k)
-                        .key(format!("shortcut-editor.dock.remove.{id}"))
-                })
+                    El::from(
+                        icon_button(key, said, glyph, IconSize::Small)
+                            .disabled(disabled)
+                            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                                dock::shift(state, &action, later, tx)
+                            })
+                            .build(t),
+                    )
+                };
+            let remove = {
+                let action = action.clone();
+                El::from(
+                    icon_button(
+                        format!("shortcut-editor.dock.remove.{id}"),
+                        format!("Remove {name} from dock"),
+                        glyph::TIMES,
+                        IconSize::Small,
+                    )
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                        dock::pin(state, &action, false, tx)
+                    })
+                    .build(t),
+                )
+            };
+            ListRow::new(format!("shortcut-editor.dock.{id}"), name)
+                .still()
+                .title(name)
+                .aside(keycaps(keys, t))
+                .controls(
+                    [
+                        mover(
+                            format!("shortcut-editor.dock.up.{id}"),
+                            glyph::ARROW_UP,
+                            format!("Move {name} up"),
+                            false,
+                            i == 0,
+                        ),
+                        mover(
+                            format!("shortcut-editor.dock.down.{id}"),
+                            glyph::ARROW_DOWN,
+                            format!("Move {name} down"),
+                            true,
+                            i == last,
+                        ),
+                        remove,
+                    ],
+                    Reveal::Always,
+                )
+                .build(t)
         })
         .collect();
-    let list = match items.is_empty() {
-        true => text("No shortcuts pinned to the dock.")
-            .key("shortcut-editor.dock.empty")
-            .font(type_::SMALL.italic())
-            .color(t.text_dimmed),
-        false => col()
-            .key("shortcut-editor.dock.list")
-            .role("list")
-            .label("Dock")
-            .w_full()
-            .children(ruled(items, t)),
-    };
-    section("shortcut-editor.dock", "Dock", t)
-        .role("region")
-        .label("Dock")
-        .child(
-            text(hint)
-                .font(type_::SMALL)
-                .color(t.text_dimmed)
-                .wrap()
-                .mb(8.0),
+    let list = if rows.is_empty() {
+        Prose::lead(
+            "shortcut-editor.dock.empty",
+            "No shortcuts pinned to the dock.",
         )
-        .child(list)
+        .quiet(true)
+        .build(t)
+    } else {
+        List::new("shortcut-editor.dock.list", "Dock")
+            .rows(rows)
+            .build(t)
+    };
+    Section::new("shortcut-editor.dock", "Dock")
+        .region("Dock")
+        .description(hint)
+        .push(list)
+        .build(t)
 }
 
 fn action_row(state: &State, keymap: &Keymap, action: &Action, t: &Tokens, k: &Kit) -> El {
     let id = action.id();
-    let badge = |name: &str, variant: BadgeVariant| {
-        Badge::new(name)
-            .variant(variant)
-            .build(k)
-            .key(format!(
-                "shortcut-editor.badge.{id}.{}",
-                name.to_lowercase()
-            ))
-            .role("note")
-            .label(name)
+    let badge = |name: &'static str, tone: Tone| -> El {
+        El::from(tag(
+            format!("shortcut-editor.badge.{id}.{}", name.to_lowercase()),
+            name,
+            tone,
+            t,
+        ))
+        .role("note")
+        .label(name)
     };
-    let name = row()
-        .grow(1.0)
-        .min_w(0.0)
-        .gap(space::S2)
-        .items_center()
-        .child(
-            text(action.label())
-                .font(type_::BODY)
-                .color(t.text_primary)
-                .truncate()
-                .shrink()
-                .min_w(0.0),
-        )
-        .children(
-            keymap
-                .is_customized(action)
-                .then(|| badge("Customized", BadgeVariant::Accent)),
-        )
-        .children(
-            action
-                .is_protected()
-                .then(|| badge("Required", BadgeVariant::Neutral)),
-        )
-        .children(
-            action
-                .requires_terminal()
-                .then(|| badge("Needs terminal", BadgeVariant::Subtle)),
-        );
     let editor = &state.window.shortcut_editor;
     let controls = match &editor.pending {
-        Some(pending) if pending.action == *action => reassign_prompt(keymap, pending, t),
+        Some(pending) if pending.action == *action => vec![reassign_prompt(keymap, pending, t)],
         _ => controls(state, keymap, action, t, k),
     };
-    row()
-        .key(format!("shortcut-editor.row.{id}"))
+    let mut row = ListRow::new(format!("shortcut-editor.row.{id}"), action.label())
+        .still()
         .role("group")
-        .label(action.label())
-        .w_full()
-        .min_h(40.0)
-        .py(5.0)
-        .gap(16.0)
-        .items_center()
-        .child(name)
-        .child(controls)
+        .title(action.label());
+    if keymap.is_customized(action) {
+        row = row.tag(badge("Customized", Tone::Warn));
+    }
+    if action.is_protected() {
+        row = row.tag(badge("Required", Tone::Neutral));
+    }
+    if action.requires_terminal() {
+        row = row.tag(badge("Needs terminal", Tone::Neutral));
+    }
+    row.controls(controls, Reveal::Always).build(t)
 }
 
 fn reassign_prompt(keymap: &Keymap, pending: &Pending, t: &Tokens) -> El {
@@ -898,25 +769,27 @@ fn reassign_prompt(keymap: &Keymap, pending: &Pending, t: &Tokens) -> El {
         keymap.label(pending.binding),
         quoted_list(&pending.holders)
     );
-    row()
+    Inline::tight()
         .key("shortcut-editor.pending")
-        .gap(space::S2)
-        .items_center()
         .child(
-            text(said.clone())
+            words(said.clone(), Type::Small, t.text_secondary)
                 .key("shortcut-editor.pending.text")
                 .role("status")
-                .label(said)
-                .font(type_::SMALL)
-                .color(t.text_dimmed),
+                .label(said),
         )
         .child(
-            text_button("Reassign", true, t, |b| b.on_press_tx(reassign))
-                .key("shortcut-editor.reassign"),
+            small("Reassign", Look::Primary, t)
+                .on_press_tx(reassign)
+                .build(t)
+                .key("shortcut-editor.reassign")
+                .into(),
         )
         .child(
-            text_button("Cancel", false, t, |b| b.on_press(cancel_reassign))
-                .key("shortcut-editor.cancel"),
+            small("Cancel", Look::Plain, t)
+                .on_press(cancel_reassign)
+                .build(t)
+                .key("shortcut-editor.cancel")
+                .into(),
         )
 }
 
@@ -932,43 +805,22 @@ fn quoted_list(actions: &[Action]) -> String {
     }
 }
 
-/// `.key-capture-button`: the keys, sized to them, in a frame that starts recording when
-/// pressed. A binding without ⌘ or ⌥ has a warning edge.
-fn keys_button(keymap: &Keymap, action: &Action, risky: bool, t: &Tokens) -> El {
+/// The keys of a shortcut, as a button that starts recording when pressed.
+fn keys_button(keymap: &Keymap, action: &Action, t: &Tokens) -> El {
     let caps = shown_shortcut(keymap, action)
         .map(|shortcut| shortcut.keycaps())
         .unwrap_or_default();
     let (face, said) = match caps.is_empty() {
         true => (
-            text("Unassigned")
-                .font(type_::SMALL.italic())
-                .color(t.text_dimmed),
+            words("Unassigned", Type::Small, t.text_dimmed),
             "Unassigned".to_owned(),
         ),
         false => (keycap::Keys::raised(&caps).build(t), caps.join(" ")),
     };
-    let edge = match risky {
-        true => t.warning.alpha(0.5),
-        false => t.border,
-    };
     let key = keys_key(action);
     let action = action.clone();
-    let button = row()
-        .key(key.clone())
-        .role("button")
-        .label(action.label())
+    let button = chip_button(key.clone(), action.label(), face.a11y_hidden(), false, t)
         .a11y_value(said)
-        .focusable(true)
-        .focus_ring(2.0, 2.0, t.border_focus)
-        .min_h(BUTTON_HEIGHT)
-        .px(8.0)
-        .py(3.0)
-        .items_center()
-        .radius(6.0)
-        .fill(t.highlight.alpha(0.03))
-        .border(1.0, edge)
-        .hover(t.highlight.alpha(0.06))
-        .child(face.a11y_hidden())
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             state.window.shortcut_editor.pending = None;
             recorder_of(state, &action).begin();
@@ -980,10 +832,13 @@ fn keys_button(keymap: &Keymap, action: &Action, risky: bool, t: &Tokens) -> El 
 /// `face` where a `ShortcutRecorder` keyed `key` puts its control, so focus stays on the
 /// control as it turns from the recorder to `face` and back.
 fn recorder_place(key: String, face: El) -> El {
-    col().key(format!("{key}-field")).child(face)
+    Stack::tight().key(format!("{key}-field")).child(face)
 }
 
-fn controls(state: &State, keymap: &Keymap, action: &Action, t: &Tokens, k: &Kit) -> El {
+/// A recorder's width: the longest chord, "⌃⌥⇧⌘ PageDown", with its frame.
+const RECORDER_W: f32 = 160.0;
+
+fn controls(state: &State, keymap: &Keymap, action: &Action, t: &Tokens, k: &Kit) -> Vec<El> {
     let editor = &state.window.shortcut_editor;
     let id = action.id();
     let binding = keymap.binding(action);
@@ -997,26 +852,18 @@ fn controls(state: &State, keymap: &Keymap, action: &Action, t: &Tokens, k: &Kit
     };
     if let Some(leader) = then {
         let lead = format!("{} then…", leader.keycaps().join(""));
-        return row()
-            .gap(space::S2)
-            .items_center()
-            .child(
-                text(lead.clone())
-                    .key("shortcut-editor.then.lead")
-                    .font(type_::MONO_CAPTION)
-                    .color(t.text_secondary),
-            )
-            .child(
-                ShortcutRecorder::new(THEN_RECORDER, &editor.then, |state: &mut State| {
-                    &mut state.window.shortcut_editor.then
-                })
-                .label(format!("The key after {lead}"))
-                .allow_unmodified()
-                .width(160.0)
-                .on_change(recorded_then)
-                .error_message(message)
-                .build(k),
-            );
+        return vec![
+            words(lead.clone(), Type::Mono, t.text_secondary).key("shortcut-editor.then.lead"),
+            ShortcutRecorder::new(THEN_RECORDER, &editor.then, |state: &mut State| {
+                &mut state.window.shortcut_editor.then
+            })
+            .label(format!("The key after {lead}"))
+            .allow_unmodified()
+            .width(RECORDER_W)
+            .on_change(recorded_then)
+            .error_message(message)
+            .build(k),
+        ];
     }
     let risky = binding.is_some_and(|b| types_in_terminals(&b, keymap.platform()));
     let recording = editor.recorders.get(action).filter(|r| r.is_recording());
@@ -1028,7 +875,7 @@ fn controls(state: &State, keymap: &Keymap, action: &Action, t: &Tokens, k: &Kit
                 move |state: &mut State| recorder_of(state, &action)
             })
             .label(action.label())
-            .width(160.0)
+            .width(RECORDER_W)
             .on_change({
                 let action = action.clone();
                 move |state: &mut State, shortcut: Option<&Shortcut>, tx: &mut Tx| {
@@ -1052,7 +899,7 @@ fn controls(state: &State, keymap: &Keymap, action: &Action, t: &Tokens, k: &Kit
             }
             recorder.build(k)
         }
-        None => keys_button(keymap, action, risky, t),
+        None => keys_button(keymap, action, t),
     };
     let sequence_then = match binding {
         Some(Binding::Sequence { then, .. }) => Some(then.label_on(keymap.platform())),
@@ -1065,70 +912,86 @@ fn controls(state: &State, keymap: &Keymap, action: &Action, t: &Tokens, k: &Kit
     };
     let default = keymap.default_binding(action).map(|b| keymap.label(b));
     let pinned = dock::pinned(state).contains(action);
-    let (star, star_said, star_ink) = match pinned {
-        true => (glyph::STAR, "Remove from dock", t.brand),
-        false => (glyph::STAR_OPEN, "Add to dock", t.text_dimmed),
+    let (star, star_said) = match pinned {
+        true => (glyph::STAR, "Remove from dock"),
+        false => (glyph::STAR_OPEN, "Add to dock"),
     };
-    row()
-        .gap(6.0)
-        .items_center()
-        .children(risky.then(|| {
-            let said =
-                format!("No {accel}/{alt} modifier — this may collide with typing in the terminal");
-            text("⚠")
-                .key(format!("shortcut-editor.risky.{id}"))
-                .role("note")
-                .label(said)
-                .font(type_::BODY)
-                .color(t.text_secondary)
-        }))
-        .child(keys)
-        .children(sequence_then.map(|then| {
-            text(format!("then {then}"))
-                .key(format!("shortcut-editor.then-key.{id}"))
-                .font(type_::MONO_CAPTION)
-                .color(t.text_secondary)
-        }))
-        .child({
-            let action = action.clone();
-            let ink = t.text_dimmed;
-            Button::new("Record a chord")
-                .variant(ButtonVariant::Ghost)
-                .label_with(move |_, _| text("chord").font(type_::SMALL).color(ink))
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| record_chord(state, &action, tx))
-                .build(k)
-                .key(format!("shortcut-editor.chord.{id}"))
-                .h(BUTTON_HEIGHT)
-                .px(8.0)
-                .radius(6.0)
-                .border(1.0, t.border)
-        })
-        .child({
-            let action = action.clone();
-            icon_button(star, star_said, t)
-                .color(star_ink)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    dock::pin(state, &action, !pinned, tx)
-                })
-                .build(k)
-                .key(format!("shortcut-editor.dock-pin.{id}"))
-                .a11y_value(if pinned { "pinned" } else { "not pinned" })
-        })
-        .children(keymap.is_customized(action).then(|| {
-            let action = action.clone();
-            let said = format!("Reset to {}", default.clone().unwrap_or_default());
-            icon_button(glyph::UNDO, said, t)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| reset(state, &action, tx))
-                .build(k)
-                .key(format!("shortcut-editor.reset.{id}"))
-        }))
-        .children((!action.is_protected() && binding.is_some()).then(|| {
-            let action = action.clone();
-            icon_button(glyph::TIMES, "Unbind", t)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| unbind(state, &action, tx))
-                .build(k)
-                .key(format!("shortcut-editor.unbind.{id}"))
-        }))
+    let mut out = Vec::new();
+    if risky {
+        let said =
+            format!("No {accel}/{alt} modifier — this may collide with typing in the terminal");
+        out.push(
+            El::from(tag(
+                format!("shortcut-editor.risky.{id}"),
+                "⚠",
+                Tone::Warn,
+                t,
+            ))
+            .role("note")
+            .label(said),
+        );
+    }
+    out.push(keys);
+    if let Some(then) = sequence_then {
+        out.push(
+            words(format!("then {then}"), Type::Mono, t.text_secondary)
+                .key(format!("shortcut-editor.then-key.{id}")),
+        );
+    }
+    out.push({
+        let action = action.clone();
+        small("chord", Look::Plain, t)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| record_chord(state, &action, tx))
+            .build(t)
+            .key(format!("shortcut-editor.chord.{id}"))
+            .label("Record a chord")
+            .into()
+    });
+    out.push({
+        let action = action.clone();
+        El::from(
+            icon_button(
+                format!("shortcut-editor.dock-pin.{id}"),
+                star_said,
+                star,
+                IconSize::Small,
+            )
+            .selected(pinned)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                dock::pin(state, &action, !pinned, tx)
+            })
+            .build(t),
+        )
+        .a11y_value(if pinned { "pinned" } else { "not pinned" })
+    });
+    if keymap.is_customized(action) {
+        let action = action.clone();
+        let said = format!("Reset to {}", default.clone().unwrap_or_default());
+        out.push(El::from(
+            icon_button(
+                format!("shortcut-editor.reset.{id}"),
+                said,
+                glyph::UNDO,
+                IconSize::Small,
+            )
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| reset(state, &action, tx))
+            .build(t),
+        ));
+    }
+    if !action.is_protected() && binding.is_some() {
+        let action = action.clone();
+        out.push(El::from(
+            icon_button(
+                format!("shortcut-editor.unbind.{id}"),
+                "Unbind",
+                glyph::TIMES,
+                IconSize::Small,
+            )
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| unbind(state, &action, tx))
+            .build(t),
+        ));
+    }
+    out
 }
 
 fn message(error: &ShortcutError, shortcut: Option<&Shortcut>) -> String {
@@ -1142,7 +1005,7 @@ const CAPTURE_RECORDER: &str = "shortcut-editor.capture.keys";
 
 /// Quick Capture's system-wide shortcut: the one chosen, changed by recording, reset to the
 /// default or turned off, with what the system holds now.
-fn capture_section(state: &State, t: &Tokens, k: &Kit) -> El {
+fn capture_section(state: &State, t: &Tokens, k: &Kit) -> Block {
     let global = &state.capture_shortcut;
     let recorder = &state.window.shortcut_editor.capture;
     let chosen = match &global.named {
@@ -1152,7 +1015,7 @@ fn capture_section(state: &State, t: &Tokens, k: &Kit) -> El {
     let change = match recorder.is_recording() {
         true => ShortcutRecorder::new(CAPTURE_RECORDER, recorder, capture_recorder)
             .label("Quick Capture shortcut")
-            .width(200.0)
+            .width(CAPTURE_RECORDER_W)
             .on_change(
                 |state: &mut State, shortcut: Option<&Shortcut>, _: &mut Tx| {
                     let next = shortcut.map(crate::quick_capture::shortcut::stored);
@@ -1169,80 +1032,73 @@ fn capture_section(state: &State, t: &Tokens, k: &Kit) -> El {
             .build(k),
         false => recorder_place(
             CAPTURE_RECORDER.to_owned(),
-            text_button("Change", false, t, |b| {
-                b.on_press_tx(|state: &mut State, tx: &mut Tx| {
+            small("Change", Look::Plain, t)
+                .on_press_tx(|state: &mut State, tx: &mut Tx| {
                     capture_recorder(state).begin();
                     tx.focus(CAPTURE_RECORDER, false);
                 })
-            })
-            .key(CAPTURE_RECORDER)
-            .label("Quick Capture shortcut"),
+                .build(t)
+                .key(CAPTURE_RECORDER)
+                .label("Quick Capture shortcut")
+                .into(),
         ),
     };
-    let error = global.error.clone();
-    section("shortcut-editor.capture", "Quick Capture · system-wide", t)
-        .role("region")
-        .label("Global Quick Capture shortcut")
-        .gap(space::S1)
+    let line = Inline::loose()
         .child(
-            text("Open Quick Capture over the current app. Escape keeps your draft.")
-                .font(type_::BODY)
-                .color(t.text_secondary),
+            words(
+                chosen.unwrap_or_else(|| "Off".to_owned()),
+                Type::Body,
+                t.text_primary,
+            )
+            .key("shortcut-editor.capture.chosen"),
+        )
+        .child(change)
+        .child(
+            small("Reset", Look::Plain, t)
+                .on_press(|state: &mut State| {
+                    let _ = crate::quick_capture::shortcut::choose(
+                        state,
+                        Some(crate::quick_capture::shortcut::DEFAULT.to_owned()),
+                    );
+                })
+                .build(t)
+                .key("shortcut-editor.capture.reset")
+                .into(),
         )
         .child(
-            row()
-                .gap(space::S2)
-                .items_center()
-                .child(
-                    text(chosen.unwrap_or_else(|| "Off".to_owned()))
-                        .key("shortcut-editor.capture.chosen")
-                        .font(type_::BODY)
-                        .color(t.text_primary)
-                        .mr(space::S2),
-                )
-                .child(change)
-                .child(
-                    text_button("Reset", false, t, |b| {
-                        b.on_press(|state: &mut State| {
-                            let _ = crate::quick_capture::shortcut::choose(
-                                state,
-                                Some(crate::quick_capture::shortcut::DEFAULT.to_owned()),
-                            );
-                        })
-                    })
-                    .key("shortcut-editor.capture.reset"),
-                )
-                .child(
-                    text_button("Turn off", false, t, |b| {
-                        b.on_press(|state: &mut State| {
-                            let _ = crate::quick_capture::shortcut::choose(state, None);
-                        })
-                    })
-                    .key("shortcut-editor.capture.off"),
-                ),
+            small("Turn off", Look::Plain, t)
+                .on_press(|state: &mut State| {
+                    let _ = crate::quick_capture::shortcut::choose(state, None);
+                })
+                .build(t)
+                .key("shortcut-editor.capture.off")
+                .into(),
+        );
+    let active = format!("Active: {}", global.active.as_deref().unwrap_or("Off"));
+    Section::new("shortcut-editor.capture", "Quick Capture · system-wide")
+        .region("Global Quick Capture shortcut")
+        .description("Open Quick Capture over the current app. Escape keeps your draft.")
+        .push(Block::custom("shortcut-editor.capture.line.block", line))
+        .push_all(
+            global
+                .error
+                .clone()
+                .map(|said| Notice::error("shortcut-editor.capture.error", said).build(t)),
         )
-        .children(error.map(|said| {
-            text(said.clone())
-                .key("shortcut-editor.capture.error")
-                .role("alert")
-                .label(said)
-                .font(type_::LABEL)
-                .color(t.error)
-        }))
-        .child({
-            let active = format!("Active: {}", global.active.as_deref().unwrap_or("Off"));
-            text(active.clone())
-                .key("shortcut-editor.capture.active")
-                .label(active)
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-        })
-        .child(
-            text("macOS system and exclusive conflicts are reported. Shared shortcuts may not be detectable.")
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
+        .push(Prose::lead("shortcut-editor.capture.active", active).build(t))
+        .push(
+            Prose::lead(
+                "shortcut-editor.capture.note",
+                "macOS system and exclusive conflicts are reported. Shared shortcuts may not be detectable.",
+            )
+            .quiet(true)
+            .build(t),
         )
+        .build(t)
 }
+
+/// The Quick Capture recorder's width: a chord with three modifiers and its frame.
+const CAPTURE_RECORDER_W: f32 = 200.0;
 
 fn active_shortcut(state: &State) -> Option<Shortcut> {
     state

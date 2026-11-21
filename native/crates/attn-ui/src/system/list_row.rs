@@ -536,6 +536,7 @@ impl ListRow {
         let row_key = self.key.clone();
         let part = move |e: El, name: &str| e.key(format!("{row_key}.{name}")).role("none");
         let on_band = |e: El| row().h(band).items_center().child(e);
+        let at_least_band = |e: El| row().min_h(band).items_center().child(e);
         let cut_middle = self.cut_middle;
         let one_line = |e: El| {
             if wraps {
@@ -622,7 +623,7 @@ impl ListRow {
         };
         let asides = (!self.asides.is_empty()).then(|| {
             gives_way(part(
-                on_band(
+                at_least_band(
                     door::gap(row().items_center(), Space::S6)
                         .shrink()
                         .min_w(0.0)

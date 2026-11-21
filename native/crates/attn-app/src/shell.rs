@@ -1,11 +1,11 @@
 use attn_client::Desktop;
 use attn_client::{Connection, Facts, Refusal};
-use attn_ui::dialog::Dialog;
+use attn_ui::blocks::{Columns, DialogSize};
+use attn_ui::system::Size;
 use attn_ui::type_;
-use attn_ui::{DialogFrame, Tokens};
+use attn_ui::{Dialog, Tokens};
 use rune::tok::space;
 use rune::{Chord, Cx, El, Tx, col, el, row, text};
-use rune_kit::ScrollBar;
 use rune_kit::popover::raised;
 use rune_kit::{Button, ButtonVariant};
 
@@ -930,60 +930,24 @@ fn close_layer(state: &mut State, tx: &mut Tx) {
 
 fn shortcuts(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     let [left, right] = crate::cheat_sheet::columns(&state.keymap, t);
-    let column = |sections: Vec<El>| {
-        col()
-            .w(0.0)
-            .grow(1.0)
-            .min_w(0.0)
-            .gap(12.0)
-            .children(sections)
-    };
-    Dialog::new("shortcuts", "Keyboard Shortcuts", DialogFrame::sheet(t))
-        .width(760.0)
-        .window_height(0.8)
-        .header(edit_shortcuts(t))
+    Dialog::new("shortcuts", "Keyboard Shortcuts")
+        .size(DialogSize::Sheet)
+        .body_key("shortcuts.list")
+        .aside(
+            attn_ui::system::Button::new("Edit shortcuts")
+                .size(Size::Compact)
+                .on_press_tx(crate::shortcut_editor::open)
+                .build(t)
+                .key("shortcuts.edit"),
+        )
         .on_close_tx(close_layer)
-        .child(
-            col()
-                .key("shortcuts.list")
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .scroll(rune::ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(
-                    row()
-                        .w_full()
-                        .items_start()
-                        .gap(28.0)
-                        .px(20.0)
-                        .pt(24.0)
-                        .pb(20.0)
-                        .child(column(left))
-                        .child(column(right)),
-                )
-                .scroll_bar_styled(attn_ui::dialog_scroll_bar(t)),
+        .push(
+            Columns::new("shortcuts.columns")
+                .column(left)
+                .column(right)
+                .build(),
         )
         .build(t, layers);
-}
-
-/// `.shortcuts-edit`: a brand-tinted button beside the sheet's ×.
-fn edit_shortcuts(t: &Tokens) -> El {
-    const WORDS: &str = "Edit shortcuts";
-    let ink = t.brand;
-    attn_ui::brand_tinted(
-        rune_kit::Button::new(WORDS)
-            .variant(rune_kit::ButtonVariant::Ghost)
-            .label_with(move |_, _| text(WORDS).font(type_::SMALL).color(ink))
-            .on_press_tx(crate::shortcut_editor::open)
-            .build(attn_ui::kit(t))
-            .key("shortcuts.edit")
-            .h(27.0)
-            .px(12.0)
-            .radius(6.0),
-        t,
-    )
 }
 
 /// A notice that only tells: a card at the window's bottom right, as the Tauri app's toast.

@@ -138,19 +138,24 @@ pub(crate) fn kit_cap(k: &rune_kit::Kit, key: String) -> El {
 }
 
 /// Alternative shortcuts for one action, such as `⌘ ↑ / ⌘ ↓`: each a group of keycaps, a dim
-/// slash between them.
+/// slash before each one after the first. Where one line cannot hold them all, the groups wrap
+/// onto lines of their own, each group whole, flush to the end.
 pub fn alternatives(groups: Vec<Keys>, t: &Tokens) -> El {
     let label = groups.iter().map(Keys::said).collect::<Vec<_>>().join("/");
-    let mut children = Vec::new();
-    for (i, group) in groups.into_iter().enumerate() {
-        if i > 0 {
-            children.push(words("/", Type::Small, t.text_dimmed).a11y_hidden());
+    let children = groups.into_iter().enumerate().map(|(i, group)| {
+        let keys = group.build(t).a11y_hidden();
+        if i == 0 {
+            return keys;
         }
-        children.push(group.build(t).a11y_hidden());
-    }
-    door::gap(row(), Space::S6)
+        door::gap(row().items_center(), Space::S6)
+            .child(words("/", Type::Small, t.text_dimmed).a11y_hidden())
+            .child(keys)
+    });
+    door::gap(row().flex_wrap().justify_end(), Space::S6)
         .role("group")
         .label(label)
         .items_center()
+        .shrink()
+        .min_w(0.0)
         .children(children)
 }

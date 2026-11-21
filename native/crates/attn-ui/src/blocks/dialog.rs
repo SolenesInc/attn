@@ -1,8 +1,7 @@
 use rune::{El, Tx, col, row};
-use rune_kit::ScrollBar;
 
 use super::actions::Actions;
-use super::block::{Block, page_gap, spaced};
+use super::block::{Block, Opens, Room, bounded, page_gap, scrolling, spaced};
 use super::measure::{PROMPT, READING};
 use crate::system::{IconSize, icon_button};
 use crate::system::{Said, Size, Space, Type, door, words};
@@ -84,6 +83,7 @@ pub struct Dialog {
     lead: Option<Said>,
     aside: Vec<El>,
     body: Vec<Block>,
+    body_key: Option<String>,
     list: Option<El>,
     top: Option<El>,
     actions: Option<Actions>,
@@ -107,6 +107,7 @@ impl Dialog {
             lead: None,
             aside: Vec::new(),
             body: Vec::new(),
+            body_key: None,
             list: None,
             top: None,
             actions: None,
@@ -150,6 +151,13 @@ impl Dialog {
     /// lists.
     pub fn aside(mut self, control: impl Into<El>) -> Self {
         self.aside.push(control.into());
+        self
+    }
+
+    /// The body that scrolls is keyed `key` rather than `{key}.body`, as a feature whose key
+    /// names the part that scrolls.
+    pub fn body_key(mut self, key: impl Into<String>) -> Self {
+        self.body_key = Some(key.into());
         self
     }
 
@@ -278,21 +286,28 @@ impl Dialog {
         );
         let body = match self.list {
             Some(list) => Some(door::rule_above(
-                col().w_full().child(list.w_full().grow(1.0).min_h(0.0)),
+                col()
+                    .w_full()
+                    .min_h(0.0)
+                    .child(list.w_full().grow(1.0).min_h(0.0)),
                 t.border_subtle,
             )),
             None => bodied.then(|| {
-                door::frame(
-                    spaced(self.body, page_gap, Some(t.border_subtle)),
-                    Space::S16,
-                    Space::S24,
-                    if footed { Space::S0 } else { Space::S24 },
+                scrolling(
+                    door::frame(
+                        spaced(self.body, page_gap, Some(t.border_subtle)),
+                        Space::S16,
+                        Space::S24,
+                        if footed { Space::S0 } else { Space::S24 },
+                    )
+                    .key(
+                        self.body_key
+                            .clone()
+                            .unwrap_or_else(|| format!("{}.body", self.key)),
+                    ),
+                    Opens::AtStart,
+                    t,
                 )
-                .key(format!("{}.body", self.key))
-                .scroll(rune::ScrollSpec {
-                    stick_bottom: false,
-                })
-                .scroll_bar_styled(crate::scroll_bar(t))
             }),
         };
         let foot = self.actions.map(|actions| {
@@ -315,8 +330,8 @@ impl Dialog {
         let top = self
             .top
             .map(|top| door::frame(top, Space::S12, Space::S24, Space::S0));
-        let inside = col().w_full().child(head).children(top);
-        let (panel, inside, body, layer_box) = match self.size.height() {
+        let head = col().w_full().child(head).children(top);
+        let (panel, room, layer_box) = match self.size.height() {
             Height::Fit(cap) => (
                 match cap {
                     Some(points) => col().max_h(points),
@@ -324,20 +339,17 @@ impl Dialog {
                 }
                 .shrink()
                 .min_h(0.0),
-                inside.shrink().min_h(0.0),
-                body.map(|b| b.shrink().min_h(0.0)),
+                Room::Fit,
                 door::inset(col(), Space::S16, Space::S16),
             ),
             Height::Window(share) => (
                 col().h_frac(share),
-                inside.grow(1.0).min_h(0.0),
-                body.map(|b| b.grow(1.0).min_h(0.0)),
+                Room::Fill,
                 door::inset(col(), Space::S16, Space::S0),
             ),
             Height::Fill(tallest) => (
                 col().h_full().max_h(tallest),
-                inside.grow(1.0).min_h(0.0),
-                body.map(|b| b.grow(1.0).min_h(0.0)),
+                Room::Fill,
                 door::inset(col(), Space::S16, Space::S16),
             ),
         };
@@ -349,7 +361,7 @@ impl Dialog {
             .description(self.lead.map(|lead| lead.text()).unwrap_or_default())
             .w_full()
             .max_w(self.size.width())
-            .child(inside.children(body).children(foot))
+            .child(bounded(head, body, foot, room))
             .children(self.over)
             .token_motion(k.motion.overlay);
         let panel = if self.autofocus {

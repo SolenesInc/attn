@@ -1,10 +1,13 @@
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{ClipboardContent, Cx, El, SurfaceFit, Tx, col, el, row, text, text_input};
-use rune_kit::ScrollBar;
+use attn_ui::blocks::{Actions, Block, Inline, Menu, Notice, Prose, Sheet, Stack, Status};
+use attn_ui::system::{
+    Button, IconSize, ListRow, Look, Size, Trigger, TriggerLook, Type, composer, drop_overlay,
+    file_chip, icon_button, image_tile, keycaps, pick_area, words,
+};
+use rune::{ClipboardContent, Cx, El, SurfaceFit, Tx, col, el};
+use rune_kit::{Placement, popover};
 
-use super::attach::{self, Attachment, Source};
+use super::attach::{self, Source};
 use super::previews::{self, Picture, Sent};
 use super::{Busy, Face, Panel, history};
 
@@ -12,31 +15,24 @@ use super::{Busy, Face, Panel, history};
 pub(crate) const MESSAGE: &str = "capture.message";
 pub(crate) const BACK: &str = "capture.history.back";
 
-/// The message as the Tauri panel sets it, the panel's one big input.
-const MESSAGE_TYPE: rune::TextStyle = rune::TextStyle::new(20.0, 400.0).lh(30.0).tracking(-0.25);
-
 pub(super) fn view(panel: &Panel, cx: &mut Cx<Panel>) -> El {
     cx.controls_keep_focus();
     let t = crate::colors(&panel.facts.settings, cx.system_dark()).ui;
     cx.zoom(crate::settings::text_scale(&panel.facts.settings));
-    let body = match panel.face {
-        Face::Compose => compose(panel, &t),
-        Face::Recent => recent(panel, &t),
+    let panel_el = match panel.face {
+        Face::Compose => compose(panel, &t).framed().build(&t),
+        Face::Recent => col().key("capture").w_full().h_full().child(
+            recent(panel, &t)
+                .framed()
+                .build(&t)
+                .role("region")
+                .label("Recent messages"),
+        ),
     };
-    let frame = col()
-        .key("capture")
-        .role("dialog")
-        .label("Quick Capture")
+    el().key("capture.window")
         .w_full()
         .h_full()
-        .fill(t.bg_panel)
-        .radius(12.0)
-        .border(1.0, t.border);
-    let frame = match panel.face {
-        Face::Compose => frame.pt(18.0).px(22.0).pb(16.0),
-        Face::Recent => frame.padding(space::S3).gap(space::S2),
-    };
-    frame
+        .child(panel_el.role("dialog").label("Quick Capture"))
         .window_drag()
         .preserve_focus_on_press(panel.face == Face::Compose)
         .on_key(super::on_picker_key)
@@ -54,14 +50,12 @@ pub(super) fn view(panel: &Panel, cx: &mut Cx<Panel>) -> El {
         )
         .on_drop_hover(|panel: &mut Panel, over: bool, _: &mut Tx| panel.dropping = over)
         .on_window_focus(|panel: &mut Panel, focused: bool, _: &mut Tx| panel.key_window = focused)
-        .child(body)
-        .children(alert(panel, &t).map(|a| match panel.face {
-            Face::Compose => a.pt(5.0).pb(8.0),
-            Face::Recent => a,
-        }))
-        .children((panel.face == Face::Compose).then(|| footer(panel, &t)))
         .children(panel.picking.map(|at| picker(panel, at, &t)))
-        .children(panel.dropping.then(|| drop_zone(&t)))
+        .children(
+            panel
+                .dropping
+                .then(|| drop_overlay("capture.drop", "Drop to attach to this message", &t)),
+        )
 }
 
 fn file_name(path: &std::path::Path) -> String {
@@ -71,60 +65,34 @@ fn file_name(path: &std::path::Path) -> String {
     )
 }
 
-fn compose(panel: &Panel, t: &Tokens) -> El {
+fn compose(panel: &Panel, t: &Tokens) -> Sheet {
     let picking = panel.picking.is_some();
-    let to = row()
-        .key("capture.to")
-        .role("button")
-        .label("Send to")
-        .description("⌘K")
-        .expanded(picking)
-        .disabled(!panel.editable())
-        .items_center()
-        .gap(5.0)
-        .ml(-2.0)
-        .px(6.0)
-        .py(4.0)
-        .radius(6.0)
-        .fill(if picking {
-            t.bg_elevated
-        } else {
-            rune::Color::TRANSPARENT
-        })
-        .hover(t.bg_elevated)
-        .focus_ring(2.0, 1.0, t.accent)
-        .on_press_tx(super::toggle_picker)
-        .child(
-            text(format!("To: {}", panel.label(&panel.mailbox())))
-                .font(type_::TITLE)
-                .color(t.text_primary),
-        )
-        .child(rune::icon(&attn_ui::icon::CHEVRON_DOWN, 10.0).color(t.text_muted));
-    let recent = row()
-        .key("capture.recent")
-        .role("button")
-        .focusable(true)
-        .label("Recent messages")
-        .focus_ring(2.0, 1.0, t.accent)
+    let to = Trigger::new(
+        "capture.to",
+        "Send to",
+        words(
+            format!("To: {}", panel.label(&panel.mailbox())),
+            Type::Name,
+            t.text_primary,
+        ),
+    )
+    .look(TriggerLook::Quiet)
+    .open(picking)
+    .disabled(!panel.editable())
+    .build(t, super::toggle_picker);
+    let to = El::from(to).description("⌘K").focusable(false);
+    let recent = Button::new("Recent")
+        .look(Look::Quiet)
+        .size(Size::Compact)
         .on_press_tx(|panel: &mut Panel, tx: &mut Tx| history::open(panel, tx))
-        .child(text("Recent").font(type_::CAPTION).color(t.text_secondary));
-    let header = row()
-        .key("capture.top")
-        .h(28.0)
-        .items_center()
-        .gap(6.0)
-        .child(to)
-        .child(el().grow(1.0))
-        .child(recent);
+        .build(t)
+        .key("capture.recent")
+        .label("Recent messages");
     let placeholder = format!("Message {}", panel.label(&panel.mailbox()));
     let editable = panel.editable();
-    let field = text_input(&panel.draft.text, MESSAGE_TYPE)
+    let field = composer(&panel.draft.text, placeholder, t)
         .key(MESSAGE)
         .label("Message")
-        .w_full()
-        .color(t.text_primary)
-        .placeholder(placeholder, t.text_muted)
-        .caret(t.text_primary, attn_ui::kit(t).selection())
         .return_breaks_line()
         .disabled(!editable)
         .on_input_key(super::on_message_key)
@@ -143,23 +111,19 @@ fn compose(panel: &Panel, t: &Tokens) -> El {
         Some(key) => field.active_descendant(key),
         None => field,
     };
-    let message = col()
-        .key("capture.field")
-        .w_full()
-        .grow(1.0)
-        .pt(10.0)
-        .pb(6.0)
-        .scroll(rune::ScrollSpec {
-            stick_bottom: false,
-        })
-        .child(field)
-        .scroll_bar_styled(attn_ui::scroll_bar(t));
-    col()
-        .w_full()
-        .grow(1.0)
-        .child(header)
-        .child(message)
-        .children((!panel.draft.files.is_empty()).then(|| files(panel, t).pt(4.0).pb(12.0)))
+    let sheet = Sheet::new("capture", "Quick Capture")
+        .head(Inline::joined().child(to))
+        .aside(recent)
+        .push(Block::custom(
+            "capture.field.block",
+            Stack::tight().key("capture.field").w_full().child(field),
+        ))
+        .push_all(
+            (!panel.draft.files.is_empty())
+                .then(|| Block::custom("capture.files.block", files(panel, t))),
+        )
+        .footer(footer(panel, t));
+    with_alert(sheet, alert(panel, t))
 }
 
 /// Pasted files attach to the draft, and so does a pasted image, whether it came alone, as a
@@ -190,103 +154,82 @@ fn paste(panel: &mut Panel, content: &ClipboardContent, tx: &mut Tx) -> bool {
 }
 
 fn files(panel: &Panel, t: &Tokens) -> El {
-    row()
+    Inline::loose()
         .key("capture.files")
         .role("list")
         .label("Attached files")
         .w_full()
-        .gap(space::S2)
-        .wrap()
         .children(panel.draft.files.iter().map(|file| {
+            let id = file.id.clone();
+            let remove = remove_button(
+                &format!("capture.file.{}.remove", file.id),
+                &format!("Remove {}", file.name),
+                !panel.editable(),
+                t,
+                move |panel, tx| attach::remove(panel, &id, tx),
+            );
             let preview = file
                 .image()
                 .and_then(|path| panel.previews.drafted(path))
-                .and_then(|picture| self::picture(&file.name, picture, 84.0, 58.0, 7.0));
+                .and_then(|picture| self::picture(&file.name, picture, TILE));
             if let Some(picture) = preview {
-                return thumbnail(panel, file, picture, t);
+                return image_tile(
+                    format!("capture.file.{}", file.id),
+                    &file.name,
+                    Some(picture),
+                    TILE,
+                    Some(remove),
+                    t,
+                )
+                .a11y_value("ready");
             }
-            let id = file.id.clone();
             let ready = file.ready();
             let detail = if ready {
                 size(file.size())
             } else {
                 "Attaching…".to_owned()
             };
-            row()
-                .key(format!("capture.file.{}", file.id))
-                .role("listitem")
-                .label(file.name.clone())
-                .a11y_value(if ready { "ready" } else { "attaching" })
-                .items_center()
-                .gap(space::S1)
-                .px(space::S2)
-                .py(space::S1)
-                .radius(6.0)
-                .fill(t.bg_elevated)
-                .border(1.0, t.border)
-                .child(
-                    text(kind(&file.name, file.image().is_some()))
-                        .font(type_::MONO_CAPTION)
-                        .color(t.text_tertiary),
-                )
-                .child(
-                    text(file.name.clone())
-                        .font(type_::LABEL)
-                        .color(t.text_primary)
-                        .single_line()
-                        .truncate()
-                        .max_w(180.0),
-                )
-                .child(text(detail).font(type_::LABEL).color(t.text_tertiary))
-                .child(
-                    button(
-                        &format!("capture.file.{}.remove", file.id),
-                        &format!("Remove {}", file.name),
-                        "×",
-                        t,
-                        move |panel, tx| attach::remove(panel, &id, tx),
-                    )
-                    .disabled(!panel.editable()),
-                )
+            file_chip(
+                format!("capture.file.{}", file.id),
+                &file.name,
+                kind(&file.name, file.image().is_some()),
+                &detail,
+                Some(remove),
+                t,
+            )
+            .a11y_value(if ready { "ready" } else { "attaching" })
         }))
 }
 
-/// An image file of the draft as the picture it holds, which the Tauri panel draws 84 by 58
-/// points, cropped to fill.
-fn thumbnail(panel: &Panel, file: &Attachment, picture: El, t: &Tokens) -> El {
-    let id = file.id.clone();
-    el().key(format!("capture.file.{}", file.id))
-        .role("listitem")
-        .label(file.name.clone())
-        .a11y_value("ready")
-        .size(84.0, 58.0)
-        .radius(7.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .child(picture)
-        .child(
-            row()
-                .absolute(0.0, 0.0)
-                .w_full()
-                .justify_end()
-                .padding(4.0)
-                .child(
-                    button(
-                        &format!("capture.file.{}.remove", file.id),
-                        &format!("Remove {}", file.name),
-                        "×",
-                        t,
-                        move |panel, tx| attach::remove(panel, &id, tx),
-                    )
-                    .disabled(!panel.editable()),
-                ),
-        )
+/// A drafted image's picture: wide enough to tell screenshots apart, two rows of words high.
+const TILE: (f32, f32) = (84.0, 58.0);
+
+/// A sent image's picture.
+const SENT_TILE: (f32, f32) = (132.0, 84.0);
+
+fn remove_button(
+    key: &str,
+    label: &str,
+    disabled: bool,
+    t: &Tokens,
+    press: impl Fn(&mut Panel, &mut Tx) + 'static,
+) -> El {
+    icon_button(
+        key.to_owned(),
+        label.to_owned(),
+        attn_ui::glyph::TIMES,
+        IconSize::Small,
+    )
+    .disabled(disabled)
+    .on_press_tx(press)
+    .build(t)
+    .into()
 }
 
-/// `picture` cropped to fill `w` by `h` points, named `name` once it has decoded, and nothing
-/// when it could not decode.
-fn picture(name: &str, picture: &Picture, w: f32, h: f32, radius: f32) -> Option<El> {
-    let frame = el().role("image").size(w, h).radius(radius);
+/// `picture` cropped to fill `size`, named `name` once it has decoded, and nothing when it
+/// could not decode.
+fn picture(name: &str, picture: &Picture, (w, h): (f32, f32)) -> Option<El> {
+    let frame = el().role("image").size(w, h);
     match picture {
         Picture::Decoding(_) => Some(frame.label(format!("{name} (loading)"))),
         Picture::Ready(image) => Some(
@@ -298,23 +241,23 @@ fn picture(name: &str, picture: &Picture, w: f32, h: f32, radius: f32) -> Option
     }
 }
 
-fn alert(panel: &Panel, t: &Tokens) -> Option<El> {
+fn with_alert(sheet: Sheet, alert: Option<Block>) -> Sheet {
+    match alert {
+        Some(alert) => sheet.footer(alert),
+        None => sheet,
+    }
+}
+
+fn alert(panel: &Panel, t: &Tokens) -> Option<Block> {
     let error = panel.error.as_ref().or(panel
         .history
         .error
         .as_ref()
         .filter(|_| panel.face == Face::Recent))?;
-    Some(
-        text(error.clone())
-            .key("capture.error")
-            .role("alert")
-            .font(type_::LABEL)
-            .color(t.error)
-            .wrap(),
-    )
+    Some(Notice::error("capture.error", error.clone()).build(t))
 }
 
-fn footer(panel: &Panel, t: &Tokens) -> El {
+fn footer(panel: &Panel, t: &Tokens) -> Block {
     let receipt = match panel.busy {
         Busy::Saving => Some("Saving…".to_owned()),
         Busy::Checking => Some("Checking submission…".to_owned()),
@@ -330,227 +273,150 @@ fn footer(panel: &Panel, t: &Tokens) -> El {
     } else {
         "Send"
     };
-    row()
-        .key("capture.footer")
-        .items_center()
-        .gap(space::S2)
-        .children(receipt.map(|r| {
-            text(r)
+    let hint = Inline::tight()
+        .key("capture.hint")
+        .label("⇧↵ new line")
+        .child(keycaps(["⇧↵"], t).a11y_hidden())
+        .child(words("new line", Type::Small, t.text_muted).a11y_hidden());
+    let send = El::from(
+        Button::new(send)
+            .look(Look::Primary)
+            .disabled(!panel.can_send())
+            .trailing(keycaps(["↵"], t).a11y_hidden())
+            .on_press_tx(super::send)
+            .build(t)
+            .key("capture.send"),
+    )
+    .default_button();
+    let mut line = Actions::new("capture.actions");
+    if let Some(receipt) = receipt {
+        line = line.push(
+            words(receipt.clone(), Type::Small, t.text_secondary)
                 .key("capture.receipt")
                 .role("status")
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-        }))
-        .child(el().grow(1.0))
-        .child(
-            row()
-                .key("capture.hint")
-                .label("⇧↵ new line")
-                .items_center()
-                .gap(space::S1)
-                .mr(7.0)
-                .child(text("⇧↵").font(type_::MONO_CAPTION).color(t.text_muted))
-                .child(
-                    text("new line")
-                        .font(rune::TextStyle {
-                            weight: 400.0,
-                            ..type_::LABEL
-                        })
-                        .color(t.text_muted),
-                ),
-        )
-        .child(send_button(send, panel.can_send(), t))
-}
-
-/// The panel's primary action: filled `brand` while there is something to send, a quiet chip
-/// while there is not.
-fn send_button(face: &str, enabled: bool, t: &Tokens) -> El {
-    let (fill, ink) = if enabled {
-        (t.brand, t.on_brand)
-    } else {
-        (t.bg_elevated, t.text_muted)
-    };
-    row()
-        .key("capture.send")
-        .role("button")
-        .focusable(true)
-        .default_button()
-        .label(face.to_owned())
-        .disabled(!enabled)
-        .items_center()
-        .gap(10.0)
-        .py(7.0)
-        .pl(14.0)
-        .pr(12.0)
-        .radius(8.0)
-        .fill(fill)
-        .focus_ring(2.0, 1.0, t.accent)
-        .on_press_tx(super::send)
-        .child(text(face.to_owned()).font(type_::TITLE).color(ink))
-        .child(
-            text("↵")
-                .font(rune::TextStyle::new(12.0, 400.0).mono())
-                .color(ink)
-                .opacity(0.7)
-                .a11y_hidden(),
-        )
+                .label(receipt),
+        );
+    }
+    line.then_end().push(hint).push(send).build()
 }
 
 fn mailbox_key(id: &str) -> String {
     format!("capture.mailbox.{id}")
 }
 
+/// The list of mailboxes under the To control.
 fn picker(panel: &Panel, at: usize, t: &Tokens) -> El {
     let chosen = panel.mailbox();
-    let options = panel.roster().into_iter().enumerate().map(|(index, m)| {
+    let rows = panel.roster().into_iter().enumerate().map(|(index, m)| {
         let picked = m.id.clone();
         let detail = if m.in_session {
             "In session"
         } else {
             "Between sessions"
         };
-        row()
-            .key(mailbox_key(&m.id))
+        let mut row = ListRow::new(mailbox_key(&m.id), m.name.clone())
             .role("option")
-            .label(m.name.clone())
-            .focus_selected(index == at)
-            .w_full()
-            .items_center()
-            .gap(10.0)
-            .px(9.0)
-            .py(7.0)
-            .radius(6.0)
-            .fill(if index == at {
-                t.bg_elevated
-            } else {
-                rune::Color::TRANSPARENT
-            })
+            .unfocusable()
+            .cursor(index == at)
+            .selected(index == at)
+            .title(m.name.clone())
+            .tag(words(detail, Type::Small, t.text_muted));
+        if index < 4 {
+            row = row.aside(keycaps([format!("⌘{}", index + 1)], t));
+        }
+        if m.id == chosen {
+            row = row.aside(
+                words("✓", Type::Small, t.brand)
+                    .key(format!("capture.mailbox.{}.chosen", m.id))
+                    .a11y_hidden(),
+            );
+        }
+        row.build(t)
             .on_press_tx(move |panel: &mut Panel, tx: &mut Tx| {
                 super::pick(panel, picked.clone(), tx);
             })
-            .child(text(m.name.clone()).font(type_::BODY).color(t.text_primary))
-            .child(text(detail).font(type_::CAPTION).color(t.text_muted))
-            .child(el().grow(1.0))
-            .children((index < 4).then(|| {
-                text(format!("⌘{}", index + 1))
-                    .font(type_::MONO_CAPTION)
-                    .color(t.text_muted)
-            }))
-            .children((m.id == chosen).then(|| {
-                text("✓")
-                    .key(format!("capture.mailbox.{}.chosen", m.id))
-                    .font(type_::LABEL)
-                    .color(t.brand)
-                    .a11y_hidden()
-            }))
     });
-    let list = col()
-        .key("capture.mailboxes")
-        .role("listbox")
-        .label("Send to")
-        .w(236.0)
-        .padding(5.0)
-        .radius(10.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border)
-        .shadow(12.0, 32.0, t.shadow.alpha(0.4))
-        .outline(2.0, 1.0, t.accent)
-        .children(options);
+    let menu = Menu::new("capture.mailboxes", "Send to")
+        .listbox()
+        .rows(rows)
+        .build(t);
     el().absolute(0.0, 0.0)
         .w_full()
         .h_full()
         .on_background_press(|panel: &mut Panel| panel.picking = None)
-        .child(col().w_full().items_start().pt(48.0).pl(18.0).child(list))
+        .child(popover::anchored(
+            attn_ui::kit(t),
+            menu,
+            "capture.to",
+            Placement::BottomStart,
+            PICKER_DROP,
+        ))
 }
 
-fn drop_zone(t: &Tokens) -> El {
-    el().key("capture.drop")
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .radius(12.0)
-        .fill(t.bg_overlay)
-        .border(2.0, t.accent)
-        .items_center()
-        .justify_center()
-        .child(
-            text("Drop to attach to this message")
-                .font(type_::BODY)
-                .color(t.text_primary),
-        )
-}
+/// How far under the To control the list opens.
+const PICKER_DROP: f32 = 4.0;
 
-fn recent(panel: &Panel, t: &Tokens) -> El {
+fn recent(panel: &Panel, t: &Tokens) -> Sheet {
     let ordered = panel.history.ordered();
     let count = ordered.len();
-    let heading = row()
+    let back = Button::new("Back to draft")
+        .size(Size::Compact)
+        .trailing(keycaps(["esc"], t).a11y_hidden())
+        .on_press_tx(history::close)
+        .build(t)
+        .key(BACK)
+        .label("Back to draft");
+    let count_said = words(
+        format!(
+            "{count} {}",
+            if count == 1 { "message" } else { "messages" }
+        ),
+        Type::Small,
+        t.text_tertiary,
+    );
+    let heading = Inline::loose()
         .key("capture.history.heading")
-        .items_center()
-        .gap(space::S2)
-        .child(
-            text("Recent")
-                .role("heading")
-                .font(type_::TITLE)
-                .color(t.text_primary),
-        )
-        .child(
-            text(format!(
-                "{count} {}",
-                if count == 1 { "message" } else { "messages" }
-            ))
-            .font(type_::LABEL)
-            .color(t.text_tertiary),
-        )
-        .child(el().grow(1.0))
-        .child(button(
-            BACK,
-            "Back to draft",
-            "Back to draft  esc",
-            t,
-            history::close,
-        ));
+        .child(words("Recent", Type::Heading, t.text_primary).role("heading"))
+        .child(count_said);
     let has_draft = !panel.draft.text.text.is_empty() || !panel.draft.files.is_empty();
     let draft = has_draft.then(|| {
-        row()
-            .key("capture.history.draft")
-            .items_center()
-            .gap(space::S2)
-            .child(
-                text("Current draft")
-                    .font(type_::LABEL)
-                    .color(t.text_secondary),
+        Actions::new("capture.history.actions")
+            .push(
+                words("Current draft", Type::Small, t.text_secondary).key("capture.history.draft"),
             )
-            .child(el().grow(1.0))
-            .child(
-                button(
-                    "capture.history.discard",
-                    "Discard draft",
-                    "Discard draft",
-                    t,
-                    super::discard,
-                )
-                .disabled(panel.busy != Busy::Idle),
+            .then_end()
+            .push(
+                Button::new("Discard draft")
+                    .size(Size::Compact)
+                    .disabled(panel.busy != Busy::Idle)
+                    .on_press_tx(super::discard)
+                    .build(t)
+                    .key("capture.history.discard"),
             )
+            .build()
     });
     let empty = (count == 0).then(|| {
-        text(if panel.history.loading {
-            "Loading messages…"
-        } else {
-            "No saved messages yet."
-        })
-        .key("capture.history.empty")
-        .font(type_::BODY)
-        .color(t.text_tertiary)
+        Prose::lead(
+            "capture.history.empty",
+            if panel.history.loading {
+                "Loading messages…"
+            } else {
+                "No saved messages yet."
+            },
+        )
+        .quiet(true)
+        .build(t)
     });
     let older = panel.history.next_cursor.is_some().then(|| {
-        button(
-            "capture.history.older",
-            "Show older messages",
-            "Show older messages",
-            t,
-            history::older,
+        Block::control(
+            "capture.history.older.block",
+            Button::new("Show older messages")
+                .size(Size::Compact)
+                .disabled(panel.history.loading)
+                .on_press_tx(history::older)
+                .build(t)
+                .key("capture.history.older"),
         )
-        .disabled(panel.history.loading)
     });
     let mut shown_day = None;
     let mut rows = Vec::new();
@@ -559,54 +425,39 @@ fn recent(panel: &Panel, t: &Tokens) -> El {
         let day = ms.map(crate::calendar::local_day);
         if let Some(ms) = ms.filter(|_| day != shown_day) {
             rows.push(
-                row()
-                    .key(format!("capture.history.day.{}", record.id))
-                    .w_full()
-                    .justify_center()
-                    .child(
-                        text(day_label(ms, panel.today))
-                            .font(type_::LABEL)
-                            .color(t.text_tertiary),
-                    ),
+                words(day_label(ms, panel.today), Type::Label, t.text_tertiary)
+                    .key(format!("capture.history.day.{}", record.id)),
             );
         }
         shown_day = day;
         rows.push(item(panel, record, t));
     }
-    col()
-        .key("capture.history")
-        .role("region")
-        .label("Recent messages")
-        .w_full()
-        .grow(1.0)
-        .gap(space::S2)
-        .child(heading)
-        .children(draft)
-        .child(
-            col()
-                .key("capture.history.list")
+    let sheet = Sheet::new("capture.history", "Recent messages")
+        .body_key("capture.history.list")
+        .opens_at_end()
+        .head(heading)
+        .aside(back)
+        .push_all(draft)
+        .push_all(older)
+        .push_all(empty)
+        .push(Block::custom(
+            "capture.history.messages.block",
+            Stack::tight()
+                .key("capture.history.messages")
+                .role("list")
+                .label("Sent messages")
                 .w_full()
-                .grow(1.0)
-                .gap(space::S2)
-                .scroll(rune::ScrollSpec { stick_bottom: true })
-                .children(older)
-                .children(empty)
-                .child(
-                    col()
-                        .key("capture.history.messages")
-                        .role("list")
-                        .label("Sent messages")
-                        .w_full()
-                        .gap(space::S2)
-                        .children(rows),
-                )
-                .scroll_bar_styled(attn_ui::document_scroll_bar(t)),
-        )
-        .child(
-            text("↑↓ move    esc back to draft")
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
-        )
+                .children(rows),
+        ))
+        .footer(
+            Status::new(
+                "capture.history.keys",
+                "↑↓ move    esc back to draft",
+                false,
+            )
+            .build(t),
+        );
+    with_alert(sheet, alert(panel, t))
 }
 
 fn item(panel: &Panel, record: &attn_protocol::QuickCaptureRecord, t: &Tokens) -> El {
@@ -621,63 +472,53 @@ fn item(panel: &Panel, record: &attn_protocol::QuickCaptureRecord, t: &Tokens) -
         if file.media_type.starts_with("image/") {
             return sent_image(panel, record, file, t);
         }
-        text(format!(
-            "{} · {}",
-            file.name,
-            size(file.bytes.max(0) as u64)
-        ))
-        .font(type_::LABEL)
-        .color(t.text_secondary)
-    });
-    col()
-        .key(format!("capture.history.item.{}", record.id))
-        .role("listitem")
-        .label(format!("to {}", panel.label(&mailbox)))
-        .a11y_value(status.clone())
-        .focus_selected(selected)
-        .w_full()
-        .gap(space::S1)
-        .padding(space::S2)
-        .radius(8.0)
-        .fill(if selected {
-            t.bg_selected
-        } else {
-            t.bg_elevated
-        })
-        .on_press_tx(move |panel: &mut Panel, _: &mut Tx| {
-            panel.history.selected = Some(picked.clone());
-        })
-        .child(
-            text(format!("to {}", panel.label(&mailbox)))
-                .font(type_::LABEL)
-                .color(t.text_secondary),
+        words(
+            format!("{} · {}", file.name, size(file.bytes.max(0) as u64)),
+            Type::Small,
+            t.text_secondary,
         )
-        .children((!record.content.is_empty()).then(|| {
-            text(record.content.clone())
-                .font(type_::BODY)
-                .color(t.text_primary)
-                .wrap()
-        }))
+    });
+    let to = format!("to {}", panel.label(&mailbox));
+    let content = Stack::tight()
+        .w_full()
+        .child(words(to.clone(), Type::Small, t.text_secondary))
+        .children(
+            (!record.content.is_empty())
+                .then(|| words(record.content.clone(), Type::Body, t.text_primary).wrap()),
+        )
         .children(files)
         .child(
-            text(status)
-                .key(format!("capture.history.item.{}.status", record.id))
-                .description(if read.is_some() {
-                    "Retrieved from the inbox; not necessarily understood or acted upon."
-                } else {
-                    ""
-                })
-                .font(type_::LABEL)
-                .color(if read.is_some() {
+            words(
+                status.clone(),
+                Type::Small,
+                if read.is_some() {
                     t.success
                 } else {
                     t.text_tertiary
-                }),
-        )
+                },
+            )
+            .key(format!("capture.history.item.{}.status", record.id))
+            .description(if read.is_some() {
+                "Retrieved from the inbox; not necessarily understood or acted upon."
+            } else {
+                ""
+            }),
+        );
+    pick_area(
+        format!("capture.history.item.{}", record.id),
+        to,
+        status,
+        selected,
+        content,
+        t,
+        move |panel: &mut Panel, _: &mut Tx| {
+            panel.history.selected = Some(picked.clone());
+        },
+    )
 }
 
-/// An image a message sent, as the Tauri panel draws it: a 132 by 84 point picture cropped to
-/// fill, its name and size under it, and why it could not be read with a way to read it again.
+/// An image a message sent: its picture cropped to fill, its name and size under it, and why
+/// it could not be read with a way to read it again.
 fn sent_image(
     panel: &Panel,
     record: &attn_protocol::QuickCaptureRecord,
@@ -686,50 +527,46 @@ fn sent_image(
 ) -> El {
     let key = (record.id.clone(), file.id.clone());
     let sent = panel.history.images.get(&key);
-    let frame = el()
-        .size(132.0, 84.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .children(match sent {
-            Some(Sent::Downloaded(shown)) => picture(&file.name, shown, 132.0, 84.0, 8.0),
-            _ => None,
-        });
+    let shown = match sent {
+        Some(Sent::Downloaded(shown)) => picture(&file.name, shown, SENT_TILE),
+        _ => None,
+    };
     let failed = match sent {
         Some(Sent::Failed(why)) => Some(why.clone()),
         _ => None,
     };
-    col()
+    Stack::tight()
         .key(format!("capture.history.file.{}.{}", record.id, file.id))
-        .w(132.0)
-        .gap(space::S1)
-        .child(frame)
-        .child(
-            text(file.name.clone())
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-                .wrap(),
-        )
-        .child(
-            text(size(file.bytes.max(0) as u64))
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
-        )
-        .children(failed.map(|why| {
-            text(why)
-                .role("alert")
-                .font(type_::LABEL)
-                .color(t.error)
-                .wrap()
-        }))
+        .w(SENT_TILE.0)
+        .child(image_tile(
+            format!("capture.history.file.{}.{}.picture", record.id, file.id),
+            &file.name,
+            shown,
+            SENT_TILE,
+            None,
+            t,
+        ))
+        .child(words(file.name.clone(), Type::Small, t.text_tertiary).wrap())
+        .child(words(
+            size(file.bytes.max(0) as u64),
+            Type::Small,
+            t.text_tertiary,
+        ))
+        .children(failed.map(|why| words(why, Type::Small, t.error).role("alert").wrap()))
         .children(matches!(sent, Some(Sent::Failed(_))).then(|| {
             let media_type = file.media_type.clone();
-            button(
-                &format!("capture.history.file.{}.{}.retry", record.id, file.id),
-                &format!("Retry {}", file.name),
-                "Retry image",
-                t,
-                move |panel, tx| previews::retry(panel, key.clone(), media_type.clone(), tx),
+            El::from(
+                Button::new("Retry image")
+                    .size(Size::Compact)
+                    .on_press_tx(move |panel: &mut Panel, tx: &mut Tx| {
+                        previews::retry(panel, key.clone(), media_type.clone(), tx)
+                    })
+                    .build(t)
+                    .key(format!(
+                        "capture.history.file.{}.{}.retry",
+                        record.id, file.id
+                    ))
+                    .label(format!("Retry {}", file.name)),
             )
         }))
 }
@@ -756,33 +593,6 @@ fn day_label(ms: i64, today: i64) -> String {
     } else {
         format!("{month} {}, {}", local.day, local.year)
     }
-}
-
-fn button(
-    key: &str,
-    name: &str,
-    face: &str,
-    t: &Tokens,
-    press: impl Fn(&mut Panel, &mut Tx) + 'static,
-) -> El {
-    row()
-        .key(key.to_owned())
-        .role("button")
-        .focusable(true)
-        .label(name.to_owned())
-        .items_center()
-        .px(space::S2)
-        .py(space::S1)
-        .radius(6.0)
-        .fill(t.bg_button)
-        .border(1.0, t.border)
-        .focus_ring(2.0, 1.0, t.accent)
-        .on_press_tx(press)
-        .child(
-            text(face.to_owned())
-                .font(type_::LABEL)
-                .color(t.text_primary),
-        )
 }
 
 fn kind(name: &str, image: bool) -> String {

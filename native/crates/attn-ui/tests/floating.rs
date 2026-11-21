@@ -53,7 +53,7 @@ fn within(rt: &Runtime<()>, outer: &ElementInfo) -> Vec<ElementInfo> {
         .collect()
 }
 
-const ASKING: [&str; 5] = ["Prompt", "Form", "Failed", "Long", "Smallest long"];
+const ASKING: [&str; 6] = ["Prompt", "Form", "Failed", "List", "Long", "Smallest long"];
 
 #[test]
 fn a_dialogs_title_lead_body_and_actions_keep_its_inset() {
@@ -64,6 +64,7 @@ fn a_dialogs_title_lead_body_and_actions_keep_its_inset() {
         let mut lined = vec!["title", "lead"];
         match variant {
             "Form" | "Failed" => lined.push("story.name.field"),
+            "List" => lined.push("story.list"),
             "Long" | "Smallest long" => lined.push("story.error"),
             _ => {}
         }

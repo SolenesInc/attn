@@ -856,6 +856,39 @@ fn the_last_shortcut_scrolls_into_the_cheat_sheet_by_wheel_and_by_end() {
 }
 
 #[test]
+fn every_cheat_sheet_row_shows_all_its_keys_inside_the_row() {
+    let mut world = World::start(Daemon::scripted().state(state(vec![], &[])));
+    world.gesture(|app| app.key(chord(&Action::UiShowShortcuts)));
+    let screen = world.screen();
+    let one_line = screen
+        .bounds(Target::key("shortcut.session.new.title"))
+        .unwrap()[3];
+    for long in ["shortcut.session.prev", "shortcut.session.historyBack"] {
+        let [_, _, _, h] = screen.bounds(Target::key(format!("{long}.title"))).unwrap();
+        assert!(
+            h > one_line,
+            "{long}: its label is cut to one line, {h} tall, not wrapped whole"
+        );
+    }
+    let rows: Vec<String> = screen
+        .descendants(Target::key("shortcuts.list"))
+        .into_iter()
+        .filter_map(|n| n.key)
+        .filter_map(|key| key.strip_suffix(".keys").map(str::to_owned))
+        .collect();
+    assert!(rows.len() > 40, "the sheet lists its rows: {rows:?}");
+    for key in rows {
+        let row = screen.bounds(Target::key(key.clone())).unwrap();
+        let keys = screen.bounds(Target::key(format!("{key}.keys"))).unwrap();
+        assert!(
+            keys[0] >= row[0] - 0.5 && keys[0] + keys[2] <= row[0] + row[2] + 0.5,
+            "{key}: its keys at {keys:?} run past the row at {row:?}"
+        );
+    }
+    rest(&mut world);
+}
+
+#[test]
 fn the_cheat_sheet_lists_the_tauri_rows_with_paired_keys_and_notes() {
     let mut world = World::start(Daemon::scripted().state(state(vec![], &[])));
     world.gesture(|app| app.key(chord(&Action::UiShowShortcuts)));

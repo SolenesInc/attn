@@ -1,10 +1,9 @@
 use rune::{El, col, row};
-use rune_kit::ScrollBar;
 
 use super::actions::Actions;
-use super::block::{Block, Kind, spaced};
+use super::block::{Block, Kind, Opens, Room, bounded, scrolling, spaced};
 use super::measure::DOCUMENT;
-use crate::system::{RING_REACH, Said, Size, Space, Type, door, words};
+use crate::system::{Said, Size, Space, Type, door, words};
 use crate::{Frame, Tokens};
 
 /// A small form opened from a control and anchored beside it: its title, controls beside the
@@ -105,32 +104,21 @@ impl Popover {
         let body = (!self.body.is_empty()).then(|| {
             let content =
                 door::ring_ends(door::inset(spaced(self.body, gap, None), INSET, Space::S0));
-            door::over_ring_room(col())
-                .key(format!("{}.body", self.key))
-                .shrink()
-                .min_h(0.0)
-                .scroll(rune::ScrollSpec {
-                    stick_bottom: false,
-                })
-                .scroll_margin(RING_REACH)
-                .child(content)
-                .scroll_bar_styled(crate::scroll_bar(t))
+            scrolling(
+                door::over_ring_room(col())
+                    .key(format!("{}.body", self.key))
+                    .child(content),
+                Opens::AtStart,
+                t,
+            )
         });
-        let surface = door::gap(
-            col()
-                .key(self.key)
-                .role("dialog")
-                .label(self.title.text())
-                .focusable(self.focusable)
-                .tab_index(-1)
-                .no_focus_ring()
-                .shrink()
-                .min_h(0.0)
-                .child(head)
-                .children(body)
-                .children(actions),
-            Space::S12,
-        );
+        let surface = door::gap(bounded(head, body, actions, Room::Fit), Space::S12)
+            .key(self.key)
+            .role("dialog")
+            .label(self.title.text())
+            .focusable(self.focusable)
+            .tab_index(-1)
+            .no_focus_ring();
         let panel = Frame::panel(t).draw_clipped(door::inset(surface, Space::S0, INSET));
         let panel = if self.reading {
             panel.max_w(DOCUMENT)

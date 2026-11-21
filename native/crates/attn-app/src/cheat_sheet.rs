@@ -3,9 +3,10 @@
 //! carry a note. The keys come from the user's keymap.
 
 use attn_ui::Tokens;
+use attn_ui::blocks::{Block, List};
 use attn_ui::keycap;
-use attn_ui::type_;
-use rune::{El, KeyPlatform, TextStyle, col, el, row, text};
+use attn_ui::system::ListRow;
+use rune::{El, KeyPlatform};
 
 use crate::Action;
 use crate::keymap::{Binding, Keymap};
@@ -235,23 +236,9 @@ fn spoken(keymap: &Keymap, caps: &[String]) -> String {
     })
 }
 
-/// `.shortcuts-category-title` and `.shortcut-editor-category-title`: the heading of a
-/// group of shortcuts, uppercase in the brand color.
-pub(crate) fn category_title(title: &str, t: &Tokens) -> El {
-    type_::upper(title, CATEGORY_TITLE)
-        .role("heading")
-        .color(t.brand)
-}
-
-const CATEGORY_TITLE: TextStyle = TextStyle {
-    weight: 700.0,
-    tracking: 0.7,
-    ..type_::SECTION
-};
-
 /// The sheet's sections in two columns, as `.shortcuts-body { column-count: 2 }` balances
 /// them: the first column takes sections until it holds half the rows.
-pub(crate) fn columns(keymap: &Keymap, t: &Tokens) -> [Vec<El>; 2] {
+pub(crate) fn columns(keymap: &Keymap, t: &Tokens) -> [Vec<Block>; 2] {
     let rows: usize = SECTIONS.iter().map(|s| s.lines.len()).sum();
     let mut first = 0;
     let mut split = 0;
@@ -271,17 +258,11 @@ pub(crate) fn columns(keymap: &Keymap, t: &Tokens) -> [Vec<El>; 2] {
     })
 }
 
-fn section_of(keymap: &Keymap, section: &Section, t: &Tokens) -> El {
-    col()
-        .key(format!("shortcuts.{}", section.key))
-        .role("list")
-        .label(section.title)
-        .w_full()
-        .child(category_title(section.title, t).mb(6.0))
-        .children(section.lines.iter().enumerate().flat_map(|(i, line)| {
-            let rule = (i > 0).then(|| el().w_full().h(1.0).fill(t.border_subtle).a11y_hidden());
-            rule.into_iter().chain([row_of(keymap, line, t)])
-        }))
+fn section_of(keymap: &Keymap, section: &Section, t: &Tokens) -> Block {
+    List::new(format!("shortcuts.{}", section.key), section.title)
+        .heading()
+        .rows(section.lines.iter().map(|line| row_of(keymap, line, t)))
+        .build(t)
 }
 
 fn row_of(keymap: &Keymap, line: &Line, t: &Tokens) -> El {
@@ -299,38 +280,26 @@ fn row_of(keymap: &Keymap, line: &Line, t: &Tokens) -> El {
         .collect::<Vec<_>>()
         .join(" / ");
     let note = line.note.map(|note| note(keymap));
-    let mut label = col().grow(1.0).min_w(0.0).gap(2.0).child(
-        text(line.label)
-            .font(type_::BODY)
-            .color(t.text_primary)
-            .wrap(),
-    );
+    let key = format!("shortcut.{}", first.unwrap_or_default());
+    let keys = keycap::alternatives(
+        combos
+            .iter()
+            .map(|caps| keycap::Keys::raised(caps))
+            .collect(),
+        t,
+    )
+    .key(format!("{key}.keys"));
+    let mut row = ListRow::new(key, format!("{}, {said}", line.label))
+        .still()
+        .wrap()
+        .title(line.label)
+        .aside(keys);
     if let Some(note) = &note {
-        label = label.child(
-            text(note.clone())
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-                .wrap(),
-        );
+        row = row.subtitle(note.clone(), t);
     }
-    let item = row()
-        .key(format!("shortcut.{}", first.unwrap_or_default()))
-        .role("listitem")
-        .label(format!("{}, {said}", line.label))
-        .w_full()
-        .items_center()
-        .gap(16.0)
-        .py(7.0)
-        .child(label)
-        .child(keycap::alternatives(
-            combos
-                .iter()
-                .map(|caps| keycap::Keys::raised(caps))
-                .collect(),
-            t,
-        ));
+    let row = row.build(t);
     match note {
-        Some(note) => item.description(note),
-        None => item,
+        Some(note) => row.description(note),
+        None => row,
     }
 }

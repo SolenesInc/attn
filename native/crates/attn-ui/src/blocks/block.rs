@@ -1,6 +1,8 @@
 use rune::{Color, El, col};
+use rune_kit::ScrollBar;
 
-use crate::system::{Space, door};
+use crate::Tokens;
+use crate::system::{RING_REACH, Space, door};
 
 /// What a block is, which decides the space its parent leaves round it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -110,6 +112,60 @@ pub(crate) fn spaced(blocks: Vec<Block>, gap: fn(Kind, Kind) -> Space, rule: Opt
         });
     }
     out
+}
+
+/// Whether a bounded surface stands as tall as what it holds, up to its container, or fills
+/// its container.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum Room {
+    Fit,
+    Fill,
+}
+
+/// A surface bounded by its container, as a dialog, a popover or a sheet is: `head` and `foot`
+/// keep their size, and `body`, built with [`scrolling`], gives way to the room left between
+/// them, shrinking where the surface fits what it holds and growing where it fills.
+pub(crate) fn bounded(head: El, body: Option<El>, foot: Option<El>, room: Room) -> El {
+    let column = match room {
+        Room::Fit => col().shrink(),
+        Room::Fill => col().grow(1.0),
+    };
+    let body = body.map(|body| match room {
+        Room::Fit => body.shrink(),
+        Room::Fill => body.grow(1.0),
+    });
+    column
+        .w_full()
+        .min_h(0.0)
+        .child(head)
+        .children(body)
+        .children(foot)
+}
+
+/// How wide a scrolled body's edge fades while what it holds runs past that edge, and so how far
+/// from that edge a row brought into view stops: clear of the fade, and of its focus ring's reach.
+const EDGE_FADE: Space = Space::S16;
+
+/// Where a scrolled body opens: at its start, or at its end and staying there as more arrives,
+/// as messages whose newest is last.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum Opens {
+    AtStart,
+    AtEnd,
+}
+
+/// A bounded surface's body as it scrolls: an edge fades while rows run under it, so the body
+/// reads as passing under its head and foot; a row brought into view stops clear of that fade;
+/// and a focus ring at rest against the top or bottom edge draws whole past it.
+pub(crate) fn scrolling(body: El, opens: Opens, t: &Tokens) -> El {
+    body.scroll(rune::ScrollSpec {
+        stick_bottom: opens == Opens::AtEnd,
+    })
+    .scroll_margin(EDGE_FADE.pt())
+    .scroll_edge_fade(EDGE_FADE.pt())
+    .clip_outset(0.0, RING_REACH, 0.0, RING_REACH)
+    .scroll_bar_styled(crate::scroll_bar(t))
+    .min_h(0.0)
 }
 
 /// What a block runs when it is pressed.

@@ -42,7 +42,6 @@ mod palette;
 mod picker;
 mod presence;
 mod profile_switcher;
-mod prompt_dialog;
 pub mod prompts;
 pub mod quick_capture;
 mod requests;

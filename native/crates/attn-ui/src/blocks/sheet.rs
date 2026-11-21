@@ -1,7 +1,6 @@
 use rune::{El, col, row};
-use rune_kit::ScrollBar;
 
-use super::block::{Block, inner_gap, page_gap, spaced};
+use super::block::{Block, Opens, inner_gap, page_gap, scrolling, spaced};
 use super::notice::Notice;
 use crate::Tokens;
 use crate::system::{Radius, Said, Space, Type, door, words};
@@ -25,6 +24,7 @@ pub struct Sheet {
     framed: bool,
     fits: Option<f32>,
     room: f32,
+    opens: Opens,
     article: Option<(String, String)>,
     body_key: Option<String>,
     blocks: Vec<Block>,
@@ -48,6 +48,7 @@ impl Sheet {
             framed: false,
             fits: None,
             room: 0.0,
+            opens: Opens::AtStart,
             article: None,
             body_key: None,
             blocks: Vec::new(),
@@ -106,6 +107,13 @@ impl Sheet {
     /// names the part that scrolls.
     pub fn body_key(mut self, key: impl Into<String>) -> Self {
         self.body_key = Some(key.into());
+        self
+    }
+
+    /// The body opens at its end and stays there as more arrives, as messages whose newest is
+    /// last.
+    pub fn opens_at_end(mut self) -> Self {
+        self.opens = Opens::AtEnd;
         self
     }
 
@@ -216,17 +224,12 @@ impl Sheet {
                             .unwrap_or_else(|| format!("{key}.body")),
                     ),
                 };
-                let body = body.w_full();
-                let body = if self.fits.is_some() {
+                let body = scrolling(body.w_full().child(blocks), self.opens, t);
+                if self.fits.is_some() {
                     body.shrink().min_h(self.room)
                 } else {
                     body.grow_from(1.0, self.room).shrink().min_h(0.0)
-                };
-                body.scroll(rune::ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(blocks)
-                .scroll_bar_styled(crate::scroll_bar(t))
+                }
             }
         };
         let footer = (!self.footer.is_empty()).then(|| {
