@@ -426,7 +426,7 @@ func TestEachToolServerTeachesInTheTextItsHarnessShows(t *testing.T) {
 	}
 
 	intentMap := served[""].Instructions
-	for _, want := range []string{"| When you need to | Tools |", "| seed_ready, seed_show, seed_tend |", "A seed is one unit of work"} {
+	for _, want := range []string{"| When you need to | Tools |", "| seed_ready, seed_show, seed_tend |", "Tools take a seed's id or its slug"} {
 		if !strings.Contains(intentMap, want) {
 			t.Errorf("the server's instructions lack %q:\n%s", want, intentMap)
 		}
