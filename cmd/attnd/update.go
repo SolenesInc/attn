@@ -39,6 +39,7 @@ func runUpdate() {
 		fmt.Fprintln(os.Stderr, updateUsage)
 		os.Exit(2)
 	}
+	warnIfDaemonVersionMismatch()
 	status, err := client.New("").UpdateStatus()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "attn update status: %v\n", err)

@@ -74,10 +74,10 @@ func TestTheCLIWarnsWhenItsReleaseDiffersFromTheRunningDaemons(t *testing.T) {
 		{cli: "0.10.2", binary: testworld.AttnBinaryAt(t, "0.10.2")},
 		{cli: "dev", binary: testworld.AttnBinary(t)},
 	} {
-		got := s.Run(testworld.Invocation{Args: []string{"presence"}, Binary: tc.binary})
+		got := s.Run(testworld.Invocation{Args: []string{"update", "status"}, Binary: tc.binary})
 		warned := strings.Contains(got.Stderr, "this CLI is "+tc.cli+" but the running attn app is 0.10.2") && strings.Contains(got.Stderr, "`which -a attn`")
 		if warned != tc.warn || (!tc.warn && strings.Contains(got.Stderr, "warning")) {
-			t.Errorf("attn %s presence against a 0.10.2 daemon printed %q, want a warning: %t", tc.cli, got.Stderr, tc.warn)
+			t.Errorf("attn %s update status against a 0.10.2 daemon printed %q, want a warning: %t", tc.cli, got.Stderr, tc.warn)
 		}
 	}
 }
