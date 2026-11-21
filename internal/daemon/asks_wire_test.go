@@ -2,7 +2,9 @@ package daemon_test
 
 import (
 	"bytes"
+	"encoding/base64"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -894,6 +896,65 @@ func TestAnAgentAmendsItsOpenAskAndTheUserSeesTheUpdateUnderTheSameQuestions(t *
 	}
 	if _, err := cli.AskAmend(protocol.SessionID(asker), asked.ID, "Too late.", w.Path("shop")); err == nil {
 		t.Fatal("an amendment to an ask the user already answered was taken")
+	}
+}
+
+func TestAnAmendmentCannotReplaceAnImageTheAskAlreadyHolds(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(asker)
+	original, replacement := bytes.Repeat([]byte("old"), 100), bytes.Repeat([]byte("new"), 100)
+	for name, data := range map[string][]byte{"shot.png": original, "other.png": replacement} {
+		if err := os.WriteFile(w.Path("shop", name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	asked, err := cli.AskOpen(protocol.SessionID(asker), "", "The banner:\n\n![before](shot.png)"+askQuestion, "", w.Path("shop"),
+		protocol.AskImage{Path: w.Path("shop", "shot.png"), DataBase64: base64.StdEncoding.EncodeToString(original)})
+	if err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	savedImage := func(imagePath string) []byte {
+		t.Helper()
+		requestID := "image-" + filepath.Base(imagePath)
+		image := testworld.Request(app, protocol.AskImageMessage{Cmd: protocol.CmdAskImage, RequestID: requestID, AskID: asked.ID, Path: imagePath},
+			protocol.EventAskImageResult, func(r protocol.AskImageResultMessage) bool { return r.RequestID == requestID })
+		if !image.Success {
+			t.Fatalf("the home shows no image at %s: %s", imagePath, protocol.Deref(image.Error))
+		}
+		data, _ := base64.StdEncoding.DecodeString(protocol.Deref(image.DataBase64))
+		return data
+	}
+
+	if err := os.WriteFile(w.Path("shop", "shot.png"), replacement, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cli.AskAmend(protocol.SessionID(asker), asked.ID, "Moved it: ![after](shot.png)", w.Path("shop")); err == nil || !strings.Contains(err.Error(), w.Path("shop", "shot.png")) || !strings.Contains(err.Error(), "another name") {
+		t.Fatalf("an amendment naming a held image's path with new bytes answered %v, want a refusal that names the path and says to use another name", err)
+	}
+	if got := savedImage(w.Path("shop", "shot.png")); !bytes.Equal(got, original) {
+		t.Fatalf("after the refusal the ask's image holds %d bytes, want the original %d", len(got), len(original))
+	}
+	if listed, err := cli.AskShow(protocol.SessionID(asker), asked.ID); err != nil || len(listed.Ask.Parts) != 2 {
+		t.Fatalf("after the refusal the agent reads %+v (%v), want no amendment taken", listed, err)
+	}
+
+	if err := os.WriteFile(w.Path("shop", "shot.png"), original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cli.AskAmend(protocol.SessionID(asker), asked.ID, "Still the same: ![before](shot.png)", w.Path("shop")); err != nil {
+		t.Fatalf("an amendment naming a held image's path with the same bytes answered %v, want it taken", err)
+	}
+	if _, err := cli.AskAmend(protocol.SessionID(asker), asked.ID, "Moved it: ![after](other.png)", w.Path("shop")); err != nil {
+		t.Fatalf("an amendment with a new image path answered %v, want it taken", err)
+	}
+	if got := savedImage(w.Path("shop", "shot.png")); !bytes.Equal(got, original) {
+		t.Errorf("the first image holds %d bytes, want the original %d", len(got), len(original))
+	}
+	if got := savedImage(w.Path("shop", "other.png")); !bytes.Equal(got, replacement) {
+		t.Errorf("the new image holds %d bytes, want its %d", len(got), len(replacement))
 	}
 }
 

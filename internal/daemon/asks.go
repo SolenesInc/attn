@@ -173,6 +173,9 @@ func (d *Daemon) askAmend(msg *protocol.AskAmendMessage) (protocol.Ask, error) {
 	if err != nil {
 		return protocol.Ask{}, err
 	}
+	if err := refuseImagesThatReplaceSavedOnes(shown.stored.ID, images); err != nil {
+		return protocol.Ask{}, err
+	}
 	if err := refuseImagesPastTheAsksLimit(shown.stored.ID, images); err != nil {
 		return protocol.Ask{}, err
 	}

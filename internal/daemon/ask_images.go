@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -47,6 +48,20 @@ func askImagesDir(askID string) string {
 func askImageFile(askID, imagePath string) string {
 	sum := sha256.Sum256([]byte(imagePath))
 	return filepath.Join(askImagesDir(askID), hex.EncodeToString(sum[:])+strings.ToLower(path.Ext(imagePath)))
+}
+
+func refuseImagesThatReplaceSavedOnes(askID string, adding []askImage) error {
+	for _, image := range adding {
+		saved, err := os.ReadFile(askImageFile(askID, image.path))
+		if errors.Is(err, os.ErrNotExist) || (err == nil && bytes.Equal(saved, image.data)) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		return protocol.Refuse(protocol.RefusalInvalidInput, "%s already holds a different image at %s, and an ask's images never change once saved; save the new image under another name", askID, image.path)
+	}
+	return nil
 }
 
 func refuseImagesPastTheAsksLimit(askID string, adding []askImage) error {

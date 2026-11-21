@@ -71,7 +71,7 @@ commands:
     doc: |
       Adds markdown to the end of an open ask you hold or oversee, when something it says has changed. The user sees the addition as an update with its time, and keeps the ask's place in their queue and the answer they have started. Closing the ask and asking again would throw both away.
 
-      An amendment carries no question blocks, so the ask's questions stay as they are; to ask something new, open another ask. Images resolve as they do when you open an ask, against the folder the ask was opened from; from another folder, name each image by its absolute path. attn refuses an amendment to an ask the user already answered.
+      An amendment carries no question blocks, so the ask's questions stay as they are; to ask something new, open another ask. Images resolve as they do when you open an ask, against the folder the ask was opened from; from another folder, name each image by its absolute path. An ask's images never change once saved: save a new picture under a new name, because attn refuses an amendment that names a saved image's path with different bytes. attn refuses an amendment to an ask the user already answered.
     args:
       - {name: ask, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the ask's id"}
       - {name: markdown, type: markdown, required: true, piped: true, cli: "--file", placeholder: "<path>", doc: "the markdown to add, required; the CLI reads it from this file, or from stdin without one"}
