@@ -25,7 +25,7 @@ var claudeComposer = composer{prompt: "❯ ", footer: "  ? for shortcuts", lineF
 var claudeFlags = flagSpec{
 	values: map[string]bool{
 		"--session-id": true, "--settings": true, "--append-system-prompt": true,
-		"--model": true, "--effort": true, "--permission-mode": true, "--plugin-dir": true,
+		"--model": true, "--effort": true, "--permission-mode": true, "--plugin-dir": true, "--mcp-config": true,
 	},
 	variadic: map[string]bool{"--disallowed-tools": true, "--add-dir": true},
 	optional: map[string]bool{"-r": true, "--resume": true},

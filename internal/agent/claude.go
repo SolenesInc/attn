@@ -106,6 +106,9 @@ func (c *Claude) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	if opts.ClaudeMod.Dir != "" {
 		args = append(args, "--plugin-dir", opts.ClaudeMod.Dir)
 	}
+	if opts.AgentTools != nil {
+		args = append(args, "--mcp-config", claudeAgentToolsConfig(opts.AgentTools.URL))
+	}
 	if instructions := opts.launchGuidance(); instructions != "" {
 		args = append(args, "--append-system-prompt", instructions)
 	}
@@ -150,6 +153,9 @@ func (c *Claude) BuildEnv(opts SpawnOpts) []string {
 		env = append(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
 	}
 	env = append(env, "ATTN_AGENT_GUIDANCE=append_system_prompt")
+	if opts.AgentTools != nil {
+		env = append(env, AgentCredentialEnv+"="+opts.AgentTools.Credential)
+	}
 	if opts.AutoCompactWindow > 0 {
 		env = append(env, "CLAUDE_CODE_AUTO_COMPACT_WINDOW="+strconv.Itoa(opts.AutoCompactWindow))
 	}
@@ -401,7 +407,28 @@ func (c *Claude) PrepareLaunch(opts SpawnOpts) error {
 }
 
 func (c *Claude) GenerateHooksConfig(opts SpawnOpts) string {
-	return hooks.Generate(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, claudeSettingsEnv(opts))
+	var allow []string
+	if opts.AgentTools != nil {
+		allow = []string{"mcp__" + claudeAgentToolsServer + "__*"}
+	}
+	return hooks.Generate(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, claudeSettingsEnv(opts), allow)
+}
+
+const claudeAgentToolsServer = "attn"
+
+func claudeAgentToolsConfig(url string) string {
+	type server struct {
+		Type    string            `json:"type"`
+		URL     string            `json:"url"`
+		Headers map[string]string `json:"headers"`
+	}
+	config := map[string]map[string]server{"mcpServers": {claudeAgentToolsServer: {
+		Type:    "http",
+		URL:     url,
+		Headers: map[string]string{"Authorization": "Bearer ${" + AgentCredentialEnv + "}"},
+	}}}
+	data, _ := json.Marshal(config)
+	return string(data)
 }
 
 func claudeSettingsEnv(opts SpawnOpts) map[string]string {

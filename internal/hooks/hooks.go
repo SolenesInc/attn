@@ -19,15 +19,20 @@ type Hook struct {
 }
 
 type SettingsConfig struct {
-	Hooks map[string][]HookEntry `json:"hooks"`
-	Env   map[string]string      `json:"env,omitempty"`
+	Hooks       map[string][]HookEntry `json:"hooks"`
+	Env         map[string]string      `json:"env,omitempty"`
+	Permissions *Permissions           `json:"permissions,omitempty"`
+}
+
+type Permissions struct {
+	Allow []string `json:"allow"`
 }
 
 func GardenGuidance() string { return prompts.RenderText("session", "garden-guidance", nil) }
 
 type Launch = prompts.Launch
 
-func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) string {
+func Generate(sessionID, socketPath, wrapperPath string, env map[string]string, allow []string) string {
 	wrapper := strings.TrimSpace(wrapperPath)
 	if wrapper == "" {
 		wrapper = "attn"
@@ -138,6 +143,10 @@ func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) 
 				},
 			},
 		},
+	}
+
+	if len(allow) > 0 {
+		config.Permissions = &Permissions{Allow: allow}
 	}
 
 	data, _ := json.MarshalIndent(config, "", "  ")

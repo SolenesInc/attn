@@ -12,8 +12,8 @@ harness.
 ## Where each harness is described
 
 - [Claude Code](harnesses/claude.md): hooks, conversation ids, idle compaction,
-  composer suggestions, the agent view, auto memory, OSC 7501, mods and the
-  model call spare.
+  composer suggestions, the agent view, auto memory, OSC 7501, attn tools
+  over MCP, mods and the model call spare.
 - [Codex](harnesses/codex.md): plain Codex, local memories, updates and
   headless runs.
 - [Codex app-server and `--remote`](harnesses/codex-app-server.md): the shared

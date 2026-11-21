@@ -26,6 +26,7 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		if launch.Crew != "" {
 			opts.AgentEnv = append(opts.AgentEnv, "ATTN_CREW_MEMBER=1")
 		}
+		opts.AgentEnv = append(opts.AgentEnv, d.agentTools(terminal).LauncherEnv()...)
 		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_VENT_ENABLED=%t", launch.Vent), fmt.Sprintf("ATTN_TOOL_VENTS_ENABLED=%t", launch.ToolVents), fmt.Sprintf("ATTN_CODE_REVIEW_ENABLED=%t", launch.CodeReview))
 		return nil
 	}

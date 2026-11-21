@@ -223,6 +223,18 @@ type AgentTools struct {
 }
 
 const (
+	AgentToolsURLEnv   = "ATTN_AGENT_TOOLS_URL"
+	AgentCredentialEnv = "ATTN_AGENT_CREDENTIAL"
+)
+
+func (t *AgentTools) LauncherEnv() []string {
+	if t == nil {
+		return nil
+	}
+	return []string{AgentToolsURLEnv + "=" + t.URL, AgentCredentialEnv + "=" + t.Credential}
+}
+
+const (
 	ClaudeModDirEnv    = "ATTN_CLAUDE_MOD_DIR"
 	ClaudeModSocketEnv = "ATTN_CLAUDE_MOD_SOCKET"
 )

@@ -406,6 +406,45 @@ default permission mode:
 - With `/model`, `/resume`, `/config`, `/permissions` or the Esc-Esc rewind
   menu open, Claude sends no report and fires no hook.
 
+## attn tools over MCP
+
+Probed on 2.1.330 with a real account, on a non-production instance with
+`agent_tools_enabled` on, in auto mode, through both launch paths
+(`direct_agent_launch_enabled` on and off):
+
+- An inline `--mcp-config` HTTP server whose `Authorization` header is
+  `Bearer ${ATTN_AGENT_CREDENTIAL}` reaches `/mcp` with the credential from
+  the environment. `ps` shows only the literal `${ATTN_AGENT_CREDENTIAL}`.
+- `permissions.allow` with `mcp__attn__*` in `--settings` lets direct calls run
+  in auto mode without a question.
+- A background subagent started with the Agent tool calls with its parent's
+  credential, so its call acts as the parent's session.
+- After `/clear` the process keeps its server and credential, and the next
+  call acts as the session the terminal shows then.
+- After the daemon restarts, with the agent's process kept, the next call
+  succeeds with no reconnect step from the agent. A reload resumes with
+  `-r` and the same server.
+- `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1` asks for consent at the first launch.
+  In code mode the agent wrote one REPL script that found `seed_note` with
+  `searchTools`, read its schema with `describeTool`, and called
+  `tools["mcp__attn__seed_note"]` for three seeds in one `Promise.all`. The
+  consent text says auto mode's safety check reads each script once, before
+  it runs, and does not check the tool calls the script makes, so the
+  `mcp__attn__*` allow rule does not cover a script. That run passed the check.
+- Auto mode reads `autoMode.{allow, soft_deny, hard_deny, environment}` from
+  policy, flag (`--settings`) and user settings, not from project settings
+  (read in the bundle). `claude [--settings <json>] auto-mode config` prints
+  the result. Measured for `allow`: the list is the concatenation of the
+  sources, and a `"$defaults"` entry in any source puts the built-in entries
+  back:
+
+  | User settings `allow` | `--settings` `allow` | Result |
+  |---|---|---|
+  | none | `["$defaults", X]` | the 16 built-ins and X |
+  | none | `[X]` | X alone: the built-ins are dropped |
+  | `[U]` | `["$defaults", X]` | the built-ins, U and X: the built-ins U dropped return |
+  | `[U]` | `[X]` | U and X |
+
 ## Mods
 
 A mod is a plugin whose `hooks/hooks.json` names a TypeScript hooks module.

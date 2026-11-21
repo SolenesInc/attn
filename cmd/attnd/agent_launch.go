@@ -148,6 +148,7 @@ func runAgentDirectly(requestedAgent string) {
 		ToolVents:       consumeOneShotEnv("ATTN_TOOL_VENTS_ENABLED") == "true",
 		CodeReview:      consumeOneShotEnv("ATTN_CODE_REVIEW_ENABLED") == "true",
 		ClaudeMod:       agentdriver.ClaudeMod{Dir: consumeOneShotEnv(agentdriver.ClaudeModDirEnv), Socket: consumeOneShotEnv(agentdriver.ClaudeModSocketEnv)},
+		AgentTools:      consumeAgentTools(),
 	}
 
 	if preparer, ok := driver.(agentdriver.LaunchPreparer); ok {
@@ -229,6 +230,14 @@ func runAgentDirectly(requestedAgent string) {
 		}
 		exit(1)
 	}
+}
+
+func consumeAgentTools() *agentdriver.AgentTools {
+	url, credential := consumeOneShotEnv(agentdriver.AgentToolsURLEnv), consumeOneShotEnv(agentdriver.AgentCredentialEnv)
+	if url == "" || credential == "" {
+		return nil
+	}
+	return &agentdriver.AgentTools{URL: url, Credential: credential}
 }
 
 func consumeOneShotBoolEnv(key string) bool {

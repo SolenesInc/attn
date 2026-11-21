@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -21,9 +23,10 @@ import (
 )
 
 type agentToolsCaller struct {
-	w       *world
-	bearer  string
-	headers map[string]string
+	w        *world
+	bearer   string
+	headers  map[string]string
+	endpoint string
 }
 
 func terminalCredential(t *testing.T, w *world, terminal string) string {
@@ -61,6 +64,9 @@ func (c agentToolsCaller) connect(t *testing.T, query string) (*mcp.ClientSessio
 	t.Helper()
 	client := mcp.NewClient(&mcp.Implementation{Name: "wire-test", Version: "1"}, nil)
 	endpoint := "http://" + c.w.WSAddr + "/mcp" + query
+	if c.endpoint != "" {
+		endpoint = c.endpoint + query
+	}
 	session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: endpoint, HTTPClient: &http.Client{Transport: c}}, nil)
 	if err == nil {
 		t.Cleanup(func() { _ = session.Close() })
@@ -317,4 +323,78 @@ func TestAgentToolsAnswerEachPostAloneWithOneJSONBodyAndRefuseAStream(t *testing
 			t.Errorf("%s answered %d with Allow %q, want 405 and Allow POST", method, resp.StatusCode, resp.Header.Get("Allow"))
 		}
 	}
+}
+
+func TestALaunchedClaudeCallsTheToolsAsItsSessionWithACredentialOnlyItsEnvironmentHolds(t *testing.T) {
+	for _, direct := range []bool{false, true} {
+		t.Run("direct="+strconv.FormatBool(direct), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude)
+			app := w.App()
+			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
+			seed := plantForTools(t, w)
+
+			without := w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("off")))
+			if config, ok := flagValue(without.Argv, "--mcp-config"); ok {
+				t.Errorf("with agent_tools_enabled off claude launched with --mcp-config %s, want none", config)
+			}
+
+			setSetting(t, app, "agent_tools_enabled", "true")
+			session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+			claude := w.Launched(session)
+			agent := launchedToolsCaller(t, w, claude)
+			for _, arg := range claude.Argv {
+				if strings.Contains(arg, agent.bearer) {
+					t.Fatalf("claude's argv holds the credential in %q", arg)
+				}
+			}
+			settings, _ := flagValue(claude.Argv, "--settings")
+			var parsed struct {
+				Permissions struct{ Allow []string } `json:"permissions"`
+			}
+			if err := json.Unmarshal([]byte(settings), &parsed); err != nil || !slices.Contains(parsed.Permissions.Allow, "mcp__attn__*") {
+				t.Errorf("claude launched with --settings allowing %v (%v), want mcp__attn__*", parsed.Permissions.Allow, err)
+			}
+
+			agent.mustCall(t, "seed_note", map[string]any{"seed": seed, "text": "From the launched claude."})
+			if author, body := newestNoteAuthor(t, w, seed); author != session || body != "From the launched claude." {
+				t.Errorf("the seed's newest note is %q by %s, want it by %s", body, author, session)
+			}
+		})
+	}
+}
+
+func launchedToolsCaller(t *testing.T, w *world, claude *fakeagent.Run) agentToolsCaller {
+	t.Helper()
+	raw, ok := flagValue(claude.Argv, "--mcp-config")
+	if !ok {
+		t.Fatalf("claude launched as %q, want --mcp-config", claude.Argv)
+	}
+	var config struct {
+		MCPServers map[string]struct {
+			Type    string            `json:"type"`
+			URL     string            `json:"url"`
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal([]byte(raw), &config); err != nil {
+		t.Fatalf("--mcp-config %s: %v", raw, err)
+	}
+	server, ok := config.MCPServers["attn"]
+	if !ok || server.Type != "http" {
+		t.Fatalf("--mcp-config %s, want an http server named attn", raw)
+	}
+	authorization := os.Expand(server.Headers["Authorization"], func(name string) string {
+		for _, entry := range claude.Env {
+			if key, value, _ := strings.Cut(entry, "="); key == name {
+				return value
+			}
+		}
+		t.Fatalf("the Authorization header names $%s, which claude's environment lacks", name)
+		return ""
+	})
+	bearer, ok := strings.CutPrefix(authorization, "Bearer ")
+	if !ok || bearer == "" {
+		t.Fatalf("the Authorization header expands to %q, want a bearer credential", authorization)
+	}
+	return agentToolsCaller{w: w, bearer: bearer, endpoint: server.URL}
 }
