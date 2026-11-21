@@ -4124,7 +4124,7 @@ export interface Preferences {
     enabled:                boolean;
     fallback:               Fallback;
     revision:               number;
-    roles:                  RoleElement[];
+    roles:                  Role[];
     workflow_skill_enabled: boolean;
     [property: string]: any;
 }
@@ -4143,7 +4143,7 @@ export interface Selection {
     [property: string]: any;
 }
 
-export interface RoleElement {
+export interface Role {
     builtin?:          BuiltinDelegationRole;
     choices:           ChoiceObject[];
     default_choice_id: string;
@@ -4192,7 +4192,7 @@ export interface DelegateRolesResult {
     fallback?: Fallback;
     guidance:  string;
     revision:  number;
-    roles:     RoleElement[];
+    roles:     Role[];
     text?:     string;
     [property: string]: any;
 }
@@ -4201,7 +4201,8 @@ export interface DelegateRolesShowResult {
     enabled:                boolean;
     fallback:               Fallback;
     revision:               number;
-    roles:                  RoleElement[];
+    role?:                  Role;
+    roles:                  Role[];
     text?:                  string;
     workflow_skill_enabled: boolean;
     [property: string]: any;
@@ -4314,7 +4315,7 @@ export interface DelegationPreferences {
     enabled:                boolean;
     fallback:               Fallback;
     revision:               number;
-    roles:                  RoleElement[];
+    roles:                  Role[];
     workflow_skill_enabled: boolean;
     [property: string]: any;
 }
@@ -4347,12 +4348,12 @@ export interface DelegationPreferencesHistoryResult {
 export interface DelegationPreferencesResultMessage {
     error?:                string;
     event:                 DelegationPreferencesResultMessageEvent;
-    expanded_roles?:       RoleElement[];
+    expanded_roles?:       Role[];
     harnesses?:            HarnessElement[];
     preferences?:          Preferences;
     request_id:            string;
     success:               boolean;
-    templates?:            RoleElement[];
+    templates?:            Role[];
     workflow_skill_paths?: string[];
     [property: string]: any;
 }
@@ -4400,7 +4401,7 @@ export interface DelegationRolesResult {
     fallback?: Fallback;
     guidance:  string;
     revision:  number;
-    roles:     RoleElement[];
+    roles:     Role[];
     [property: string]: any;
 }
 
@@ -24342,7 +24343,7 @@ const typeMap: any = {
         { json: "enabled", js: "enabled", typ: true },
         { json: "fallback", js: "fallback", typ: r("Fallback") },
         { json: "revision", js: "revision", typ: 0 },
-        { json: "roles", js: "roles", typ: a(r("RoleElement")) },
+        { json: "roles", js: "roles", typ: a(r("Role")) },
         { json: "workflow_skill_enabled", js: "workflow_skill_enabled", typ: true },
     ], "any"),
     "Fallback": o([
@@ -24355,7 +24356,7 @@ const typeMap: any = {
         { json: "model", js: "model", typ: "" },
         { json: "provider", js: "provider", typ: "" },
     ], "any"),
-    "RoleElement": o([
+    "Role": o([
         { json: "builtin", js: "builtin", typ: u(undefined, r("BuiltinDelegationRole")) },
         { json: "choices", js: "choices", typ: a(r("ChoiceObject")) },
         { json: "default_choice_id", js: "default_choice_id", typ: "" },
@@ -24388,14 +24389,15 @@ const typeMap: any = {
         { json: "fallback", js: "fallback", typ: u(undefined, r("Fallback")) },
         { json: "guidance", js: "guidance", typ: "" },
         { json: "revision", js: "revision", typ: 0 },
-        { json: "roles", js: "roles", typ: a(r("RoleElement")) },
+        { json: "roles", js: "roles", typ: a(r("Role")) },
         { json: "text", js: "text", typ: u(undefined, "") },
     ], "any"),
     "DelegateRolesShowResult": o([
         { json: "enabled", js: "enabled", typ: true },
         { json: "fallback", js: "fallback", typ: r("Fallback") },
         { json: "revision", js: "revision", typ: 0 },
-        { json: "roles", js: "roles", typ: a(r("RoleElement")) },
+        { json: "role", js: "role", typ: u(undefined, r("Role")) },
+        { json: "roles", js: "roles", typ: a(r("Role")) },
         { json: "text", js: "text", typ: u(undefined, "") },
         { json: "workflow_skill_enabled", js: "workflow_skill_enabled", typ: true },
     ], "any"),
@@ -24473,7 +24475,7 @@ const typeMap: any = {
         { json: "enabled", js: "enabled", typ: true },
         { json: "fallback", js: "fallback", typ: r("Fallback") },
         { json: "revision", js: "revision", typ: 0 },
-        { json: "roles", js: "roles", typ: a(r("RoleElement")) },
+        { json: "roles", js: "roles", typ: a(r("Role")) },
         { json: "workflow_skill_enabled", js: "workflow_skill_enabled", typ: true },
     ], "any"),
     "DelegationPreferencesChangedMessage": o([
@@ -24490,12 +24492,12 @@ const typeMap: any = {
     "DelegationPreferencesResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("DelegationPreferencesResultMessageEvent") },
-        { json: "expanded_roles", js: "expanded_roles", typ: u(undefined, a(r("RoleElement"))) },
+        { json: "expanded_roles", js: "expanded_roles", typ: u(undefined, a(r("Role"))) },
         { json: "harnesses", js: "harnesses", typ: u(undefined, a(r("HarnessElement"))) },
         { json: "preferences", js: "preferences", typ: u(undefined, r("Preferences")) },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "success", js: "success", typ: true },
-        { json: "templates", js: "templates", typ: u(undefined, a(r("RoleElement"))) },
+        { json: "templates", js: "templates", typ: u(undefined, a(r("Role"))) },
         { json: "workflow_skill_paths", js: "workflow_skill_paths", typ: u(undefined, a("")) },
     ], "any"),
     "DelegationPreferencesRevision": o([
@@ -24527,7 +24529,7 @@ const typeMap: any = {
         { json: "fallback", js: "fallback", typ: u(undefined, r("Fallback")) },
         { json: "guidance", js: "guidance", typ: "" },
         { json: "revision", js: "revision", typ: 0 },
-        { json: "roles", js: "roles", typ: a(r("RoleElement")) },
+        { json: "roles", js: "roles", typ: a(r("Role")) },
     ], "any"),
     "DelegationSelection": o([
         { json: "effort", js: "effort", typ: "" },

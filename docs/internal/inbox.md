@@ -167,6 +167,9 @@ Notices are attn's own messages to an agent:
 - a reminder that came due on a seed (`attn seed remind`), addressed to the
   seed
 - crew close requests, from the user or when the user is away
+- a delegation that failed after attn accepted it, addressed to the session
+  that started it, so an agent whose `delegate` tool call returned at
+  acceptance learns of the failure
 
 ## Coalescing
 

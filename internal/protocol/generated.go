@@ -3817,6 +3817,9 @@ type DelegateRolesShowResult struct {
 	// Revision corresponds to the JSON schema field "revision".
 	Revision int `json:"revision"`
 
+	// Role corresponds to the JSON schema field "role".
+	Role *DelegationRole `json:"role,omitempty,omitzero"`
+
 	// Roles corresponds to the JSON schema field "roles".
 	Roles []DelegationRole `json:"roles"`
 

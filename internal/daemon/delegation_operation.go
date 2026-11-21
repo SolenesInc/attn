@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/delegationprefs"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/inbox"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
@@ -363,6 +365,28 @@ func (d *Daemon) finishDelegationFailure(id string, err error) {
 	}
 	d.persistDelegationTerminal(id, protocol.DelegationOperationStateFailed,
 		"delegation failed", "", "", nil, err)
+	d.noticeDelegationFailure(id, err)
+}
+
+func (d *Daemon) noticeDelegationFailure(id string, failure error) {
+	record, err := d.store.GetDelegationOperation(id)
+	if err != nil {
+		d.logf("delegate operation %s failed; its source session gets no notice: %v", id, err)
+		return
+	}
+	var request protocol.DelegateMessage
+	if err := json.Unmarshal([]byte(record.RequestJSON), &request); err != nil {
+		d.logf("delegate operation %s failed; its source session gets no notice: %v", id, err)
+		return
+	}
+	source := protocol.TrimID(protocol.Deref(request.SourceSessionID))
+	if source == "" {
+		return
+	}
+	text := prompts.RenderText("delegation", "failed", prompts.Values{"request_id": record.Operation.RequestID, "failure": failure.Error()})
+	if _, err := d.sendToInbox(inbox.Item{ID: "delegation-failed/" + record.Operation.OperationID, To: who.ToSession(source), Kind: inbox.Notice, Source: "delegation", Text: text}); err != nil {
+		d.logf("delegate operation %s failed; telling %s: %v", id, source, err)
+	}
 }
 
 func (d *Daemon) persistDelegationTerminal(id string, state protocol.DelegationOperationState, progress, profileID, worktreePath string, result *protocol.DelegateResult, operationErr error) {

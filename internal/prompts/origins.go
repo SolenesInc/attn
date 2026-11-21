@@ -8,6 +8,8 @@ var (
 	localReview  = FlagField("local_review", "The automation permits only a local review.")
 	hasTarget    = FlagField("has_target", "A local review has structured pull request identity.")
 	inputPath    = TextField("input_path", "Path to untrusted occurrence data.")
+	requestID    = TextField("request_id", "The failed delegation's request id.")
+	failure      = TextField("failure", "Why the delegation failed, as the operation records it.")
 	leafIdentity = Use("delegation.identity", "content/delegation/identity.md")
 	seedContract = Use("delegation.seed", "content/delegation/seed.md", Bind("seed_id", Input(seedID)), Bind("seed_title", Input(seedTitle)),
 		Bind("completion", Choose(Present(checkIDs),
@@ -62,6 +64,7 @@ func originRecipients() []Recipient {
 			On("opening", "opening_message", "Delegation identity and seed reference.", leafOpening(seedContract)),
 			On("brief", "message_fragment", "Seed reference for the delegated opening.", seedContract),
 			On("started", "cli_output", "attn delegate, after the agent started.", Use("delegation.started", "content/delegation/started.md")),
+			On("failed", "inbox_content", "A delegation the session started failed after attn accepted it; a notice to that session.", Use("delegation.failed", "content/delegation/failed.md", Bind("request_id", Input(requestID)), Bind("failure", Input(failure)))),
 			On("authorization", "message_fragment", "The seed's authorization, after the role block of a delegation or handover opening.", authorizationLine),
 			On("identity", "message_fragment", "Delegation identity shared by delegation and automation.", leafOpening(Input(brief))),
 			On("authorization-update", "inbox_content", "A change to a seed's authorization by someone other than its tender, typed into the tender's conversation as the user's message.", authorizationUpdate),

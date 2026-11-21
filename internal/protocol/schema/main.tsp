@@ -1395,10 +1395,12 @@ model DelegateRolesResult {
 }
 
 // DelegateRolesShowResult answers delegate roles show with the saved table,
-// which delegate roles apply takes. text is the table, or the one role asked
-// for, as the CLI prints it, present when the call asked to render.
+// which delegate roles apply takes. role is the one role asked for, with a
+// maintained role's guidance filled in. text is the table, or that role, as the
+// CLI prints it, present when the call asked to render.
 model DelegateRolesShowResult {
   ...DelegationPreferences;
+  role?: DelegationRole;
   text?: string;
 }
 

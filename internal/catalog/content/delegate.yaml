@@ -95,7 +95,7 @@ commands:
     grant: full
     read_only: true
     doc: |
-      Prints the whole saved table: roles turned off, roles that still need a model, alternatives and the fallback. With `role`, prints that role's full guidance and alternatives. The table in the result is what `delegate_roles_apply` takes.
+      Answers the whole saved table: roles turned off, roles that still need a model, alternatives and the fallback. With `role`, also answers that role with its full guidance and alternatives, a maintained role's included. The table in the result is what `delegate_roles_apply` takes.
     args:
       - {name: render, type: bool, cli: internal, doc: "answer the text the CLI prints too"}
       - {name: role, type: name, cli: pos, placeholder: "<role>", doc: "the role to read in full"}

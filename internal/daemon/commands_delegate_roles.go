@@ -117,21 +117,22 @@ func (d *Daemon) runDelegateRolesShow(ctx context.Context, c command.Caller, a c
 	if err != nil {
 		return nil, err
 	}
-	text := func() string { return delegationTableText(live.Config) }
-	if a.Role != "" {
-		role, err := findRole(&live.Config, a.Role)
-		if err != nil {
-			return nil, err
-		}
-		text = func() string {
-			return delegationRoleText(prompts.ExpandDelegationRoles([]protocol.DelegationRole{*role})[0])
-		}
-	}
 	cfg := live.Config
-	return protocol.DelegateRolesShowResult{
+	result := protocol.DelegateRolesShowResult{
 		Enabled: cfg.Enabled, Revision: cfg.Revision, WorkflowSkillEnabled: cfg.WorkflowSkillEnabled, Roles: cfg.Roles, Fallback: cfg.Fallback,
-		Text: rendered(a.Render, text),
-	}, nil
+	}
+	if a.Role == "" {
+		result.Text = rendered(a.Render, func() string { return delegationTableText(cfg) })
+		return result, nil
+	}
+	role, err := findRole(&cfg, a.Role)
+	if err != nil {
+		return nil, err
+	}
+	expanded := prompts.ExpandDelegationRoles([]protocol.DelegationRole{*role})[0]
+	result.Role = &expanded
+	result.Text = rendered(a.Render, func() string { return delegationRoleText(expanded) })
+	return result, nil
 }
 
 func (d *Daemon) runDelegateRolesHistory(ctx context.Context, c command.Caller, a command.DelegateRolesHistoryArgs) (any, error) {

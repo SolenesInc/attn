@@ -2265,6 +2265,40 @@
           }
         },
         {
+          "id": "failed",
+          "delivery": "inbox_content",
+          "description": "A delegation the session started failed after attn accepted it; a notice to that session.",
+          "body": {
+            "kind": "text",
+            "id": "delegation.failed",
+            "source": "content/delegation/failed.md",
+            "bindings": [
+              {
+                "name": "request_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "request_id",
+                    "kind": "text",
+                    "description": "The failed delegation's request id."
+                  }
+                }
+              },
+              {
+                "name": "failure",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "failure",
+                    "kind": "text",
+                    "description": "Why the delegation failed, as the operation records it."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
           "id": "authorization",
           "delivery": "message_fragment",
           "description": "The seed's authorization, after the role block of a delegation or handover opening.",
@@ -6824,5 +6858,5 @@
       ]
     }
   ],
-  "definitions_hash": "1eb227b9f5d22c69c6ebfe57be799f31e5b96e6da8f36a42678f23ce268e532e"
+  "definitions_hash": "00497a08c1a018560c32a68322db051ba99154d7a68b2ceca9bc25315579c248"
 }

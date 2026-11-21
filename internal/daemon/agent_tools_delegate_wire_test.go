@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -54,7 +55,9 @@ func TestEveryDelegateToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing
 	call("delegate_roles_rm", map[string]any{"target": "mine"})
 	call("delegate_roles_disable", map[string]any{"role": "custom"})
 	call("delegate_roles_enable", map[string]any{"role": "custom"})
-	call("delegate_roles_show", map[string]any{"role": "builder"})
+	if shown := call("delegate_roles_show", map[string]any{"role": "builder"}); !strings.Contains(fmt.Sprint(shown["role"]), "attn-workflow") {
+		t.Errorf("delegate_roles_show for the maintained builder answered role %v, want its instructions filled in", shown["role"])
+	}
 	shown := call("delegate_roles_show", map[string]any{})
 	call("delegate_roles_apply", map[string]any{"table": shown, "message": "round trip"})
 	call("delegate_roles_history", map[string]any{"limit": 3})
@@ -121,5 +124,37 @@ func TestADelegateCallerReadsAndDelegatesNothingOfAnotherProfile(t *testing.T) {
 		if err := w.Client().RunCommand(tc.command, protocol.SessionID(side), tc.args, &answer); err == nil || !strings.Contains(err.Error(), `belongs to profile "Default"`) {
 			t.Errorf("run_command %s %v as the Side profile's session answered %v, %v, want a refusal naming the Default profile", tc.command, tc.args, answer, err)
 		}
+	}
+}
+
+func TestADelegationThatFailsAfterItsToolCallReturnedReachesTheCallersInbox(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
+	repo := w.Path("repo")
+	gitRepo(t, repo)
+
+	accepted := agent.mustCall(t, "delegate", map[string]any{"brief": "Work in a repository without a checkout", "cwd": repo, "model": "default", "request_id": "fails-after-acceptance"})
+	if accepted.IsError {
+		t.Fatalf("delegate refused before acceptance: %s", resultText(accepted))
+	}
+	var operation protocol.DelegationOperation
+	data, _ := json.Marshal(accepted.StructuredContent)
+	if err := json.Unmarshal(data, &operation); err != nil {
+		t.Fatal(err)
+	}
+	for operation.State == protocol.DelegationOperationStateAccepted || operation.State == protocol.DelegationOperationStatePreparing {
+		if err := w.Client().RunCommand("delegate status", protocol.SessionID(session), map[string]any{"id": operation.OperationID, "wait_past": operation.UpdatedAt}, &operation); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if operation.State != protocol.DelegationOperationStateFailed {
+		t.Fatalf("the delegation settled %s, want failed: it needs a checkout in a repository", operation.State)
+	}
+	items := readInbox(t, w.Client(), session, 10).Items
+	if len(items) != 1 || items[0].Kind != "maintenance_prompt" || !strings.Contains(items[0].Content, "fails-after-acceptance") || !strings.Contains(items[0].Content, "git checkout requires") {
+		t.Fatalf("the caller's inbox holds %+v, want one notice naming the request and why it failed", items)
 	}
 }
