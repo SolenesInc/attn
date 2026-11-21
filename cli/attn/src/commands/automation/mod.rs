@@ -64,19 +64,29 @@ impl Family for Automation {
         parsed: &Parsed,
         reply: &Reply,
     ) -> Result<(), Stop> {
+        if cmd.name != "show" {
+            return self.present_json(run, cmd, parsed, reply);
+        }
+        let shown: AutomationShowResult = command::result(reply)
+            .whole()
+            .map_err(|error| run.fail_send("automation show", &error))?;
+        print_stdout(&format!(
+            "{}{}",
+            show_header(&shown.definition),
+            shown.spec_yaml
+        ));
+        Ok(())
+    }
+
+    fn present_json(
+        &self,
+        run: &mut Run<'_>,
+        cmd: &Command,
+        _parsed: &Parsed,
+        reply: &Reply,
+    ) -> Result<(), Stop> {
         let result = command::result(reply);
         let label = format!("automation {}", cmd.name);
-        if cmd.name == "show" && !parsed.json {
-            let shown: AutomationShowResult = result
-                .whole()
-                .map_err(|error| run.fail_send(&label, &error))?;
-            print_stdout(&format!(
-                "{}{}",
-                show_header(&shown.definition),
-                shown.spec_yaml
-            ));
-            return Ok(());
-        }
         let path: &[&str] = match cmd.name {
             "list" => &["definitions"],
             "runs" => &["runs"],

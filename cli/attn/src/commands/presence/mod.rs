@@ -1,7 +1,7 @@
 mod help_generated;
 mod table_generated;
 
-use super::{Run, Stop, print_stdout};
+use super::{Run, Stop, print_json, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
 use attn_protocol::PresenceResult;
@@ -12,6 +12,8 @@ struct Presence;
 pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     command::run_group(run, &Presence, args)
 }
+
+const NOT_IN_A_SESSION: &[u8] = br#"{"session_id":"","seed_ids":[]}"#;
 
 fn env(name: &str) -> String {
     std::env::var(name).unwrap_or_default()
@@ -71,12 +73,18 @@ impl Family for Presence {
             return Err(Stop(1));
         }
         if env("ATTN_INSIDE_APP") != "1" && !terminal.starts_with("server-env:") {
-            if !session_id && !seed_ids {
+            if parsed.json {
+                print_json(NOT_IN_A_SESSION);
+            } else if !session_id && !seed_ids {
                 print_stdout("not running inside attn\n");
             }
             return Err(Stop(1));
         }
         if terminal.is_empty() {
+            if parsed.json {
+                print_json(NOT_IN_A_SESSION);
+                return Err(Stop(0));
+            }
             if session_id || seed_ids {
                 return Err(Stop(1));
             }
@@ -103,9 +111,6 @@ impl Family for Presence {
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
-        if parsed.json {
-            return command::print_result(run, self, cmd, &result);
-        }
         let presence: PresenceResult = command::decode(run, self, cmd, &result)?;
         if parsed.on("session_id") {
             return lines_or_exit(&[presence.session_id]);

@@ -1,7 +1,7 @@
 mod help_generated;
 mod table_generated;
 
-use super::{Run, Stop, print_json, print_stdout};
+use super::{Run, Stop, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
 use crate::paths::os_error_text;
@@ -72,18 +72,11 @@ impl Family for Journal {
         &self,
         run: &mut Run<'_>,
         cmd: &Command,
-        parsed: &Parsed,
+        _parsed: &Parsed,
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
         let label = format!("journal {}", cmd.name);
-        if parsed.json {
-            let raw = result
-                .raw_field(&[])
-                .map_err(|error| run.fail_send(&label, &error))?;
-            print_json(raw.as_bytes());
-            return Ok(());
-        }
         let appended: JournalAppendResult = result
             .whole()
             .map_err(|error| run.fail_send(&label, &error))?;

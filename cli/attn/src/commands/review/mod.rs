@@ -114,6 +114,24 @@ impl Family for Review {
         Ok(())
     }
 
+    fn present_json(
+        &self,
+        run: &mut Run<'_>,
+        cmd: &Command,
+        _parsed: &Parsed,
+        reply: &Reply,
+    ) -> Result<(), Stop> {
+        let result = command::result(reply);
+        command::print_result(run, self, cmd, &result)?;
+        if cmd.name == "check" {
+            let checked: ReviewCheckResult = command::decode(run, self, cmd, &result)?;
+            if !checked.problems.is_empty() {
+                return Err(Stop(1));
+            }
+        }
+        Ok(())
+    }
+
     fn present(
         &self,
         run: &mut Run<'_>,
@@ -122,16 +140,6 @@ impl Family for Review {
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
-        if parsed.json {
-            command::print_result(run, self, cmd, &result)?;
-            if cmd.name == "check" {
-                let checked: ReviewCheckResult = command::decode(run, self, cmd, &result)?;
-                if !checked.problems.is_empty() {
-                    return Err(Stop(1));
-                }
-            }
-            return Ok(());
-        }
         match cmd.name {
             "start" => print_stdout(&started(&command::decode(run, self, cmd, &result)?)),
             "check" => {

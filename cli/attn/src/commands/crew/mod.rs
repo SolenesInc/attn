@@ -84,27 +84,35 @@ impl Family for Crew {
         Ok(())
     }
 
+    fn present_json(
+        &self,
+        run: &mut Run<'_>,
+        cmd: &Command,
+        _parsed: &Parsed,
+        reply: &Reply,
+    ) -> Result<(), Stop> {
+        let result = command::result(reply);
+        let path: &[&str] = if cmd.name == "list" {
+            &["members"]
+        } else {
+            &[]
+        };
+        let raw = result
+            .raw_field(path)
+            .map_err(|error| run.fail_send(&format!("crew {}", cmd.name), &error))?;
+        print_json(raw.as_bytes());
+        Ok(())
+    }
+
     fn present(
         &self,
         run: &mut Run<'_>,
         cmd: &Command,
-        parsed: &Parsed,
+        _parsed: &Parsed,
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
         let label = format!("crew {}", cmd.name);
-        if parsed.json {
-            let path: &[&str] = if cmd.name == "list" {
-                &["members"]
-            } else {
-                &[]
-            };
-            let raw = result
-                .raw_field(path)
-                .map_err(|error| run.fail_send(&label, &error))?;
-            print_json(raw.as_bytes());
-            return Ok(());
-        }
         let out = match cmd.name {
             "list" => roster(&decode::<CrewListResult>(run, &label, &result)?.members),
             "create" => created(&decode(run, &label, &result)?),

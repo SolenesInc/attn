@@ -1,7 +1,7 @@
 mod help_generated;
 mod table_generated;
 
-use super::{Run, Stop, print_json, print_stdout};
+use super::{Run, Stop, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
 use attn::go::tabwriter;
@@ -59,13 +59,6 @@ impl Family for Settings {
     ) -> Result<(), Stop> {
         let result = command::result(reply);
         let label = format!("settings {}", cmd.name);
-        if parsed.json {
-            let raw = result
-                .raw_field(&[])
-                .map_err(|error| run.fail_send(&label, &error))?;
-            print_json(raw.as_bytes());
-            return Ok(());
-        }
         if cmd.name != "list" {
             let entry: SettingEntry = result
                 .whole()

@@ -175,9 +175,6 @@ impl Family for Nav {
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
-        if parsed.json {
-            return command::print_result(run, self, cmd, &result);
-        }
         let out = match cmd.name {
             "status" => status(&command::decode(run, self, cmd, &result)?),
             "check" => checked(&command::decode(run, self, cmd, &result)?),

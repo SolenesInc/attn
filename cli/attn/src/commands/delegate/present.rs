@@ -78,6 +78,20 @@ impl Family for Delegate {
         Ok(())
     }
 
+    fn present_json(
+        &self,
+        run: &mut Run<'_>,
+        cmd: &Command,
+        parsed: &Parsed,
+        reply: &Reply,
+    ) -> Result<(), Stop> {
+        let result = command::result(reply);
+        if cmd.name.is_empty() {
+            return await_delegation(run, parsed, &result);
+        }
+        command::print_result(run, self, cmd, &result)
+    }
+
     fn present(
         &self,
         run: &mut Run<'_>,
@@ -90,12 +104,8 @@ impl Family for Delegate {
         if cmd.name.is_empty() {
             return await_delegation(run, parsed, &result);
         }
-        if parsed.json || cmd.name == "status" {
-            let raw = result
-                .raw_field(&[])
-                .map_err(|error| run.fail_send(&label, &error))?;
-            print_json(raw.as_bytes());
-            return Ok(());
+        if cmd.name == "status" {
+            return command::print_result(run, self, cmd, &result);
         }
         let text: String = result
             .value("text")

@@ -44,13 +44,10 @@ impl Family for State {
         &self,
         run: &mut Run<'_>,
         cmd: &Command,
-        parsed: &Parsed,
+        _parsed: &Parsed,
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
-        if parsed.json {
-            return command::print_result(run, self, cmd, &result);
-        }
         print_stdout(&explain(&command::decode(run, self, cmd, &result)?));
         Ok(())
     }

@@ -61,24 +61,32 @@ impl Family for Pr {
         Stop(EXIT_ERROR)
     }
 
+    fn present_json(
+        &self,
+        run: &mut Run<'_>,
+        cmd: &Command,
+        _parsed: &Parsed,
+        reply: &Reply,
+    ) -> Result<(), Stop> {
+        let result = command::result(reply);
+        if !matches!(cmd.name, "ls" | "status") {
+            return command::print_result(run, self, cmd, &result);
+        }
+        let raw = result
+            .raw_field(&["pull_requests"])
+            .map_err(|error| command::send_failed(run, self, cmd, &error))?;
+        print_json(raw.as_bytes());
+        Ok(())
+    }
+
     fn present(
         &self,
         run: &mut Run<'_>,
         cmd: &Command,
-        parsed: &Parsed,
+        _parsed: &Parsed,
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
-        if parsed.json && matches!(cmd.name, "ls" | "status") {
-            let raw = result
-                .raw_field(&["pull_requests"])
-                .map_err(|error| command::send_failed(run, self, cmd, &error))?;
-            print_json(raw.as_bytes());
-            return Ok(());
-        }
-        if parsed.json {
-            return command::print_result(run, self, cmd, &result);
-        }
         let out = match cmd.name {
             "watch" => watched(&command::decode(run, self, cmd, &result)?),
             "ls" | "status" => list(cmd.name, &command::decode(run, self, cmd, &result)?),

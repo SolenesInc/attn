@@ -43,7 +43,7 @@ impl Family for Activity {
         &self,
         run: &mut Run<'_>,
         cmd: &Command,
-        parsed: &Parsed,
+        _parsed: &Parsed,
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
@@ -51,9 +51,6 @@ impl Family for Activity {
             let cleared: String = command::decode(run, self, cmd, &result)?;
             print_stdout(&format!("{cleared}\n"));
             return Ok(());
-        }
-        if parsed.json {
-            return command::print_result(run, self, cmd, &result);
         }
         print_stdout(&status(&command::decode(run, self, cmd, &result)?));
         Ok(())

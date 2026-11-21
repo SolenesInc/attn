@@ -63,13 +63,10 @@ impl Family for Open {
         &self,
         run: &mut Run<'_>,
         cmd: &Command,
-        parsed: &Parsed,
+        _parsed: &Parsed,
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
-        if parsed.json {
-            return command::print_result(run, self, cmd, &result);
-        }
         let opened: OpenResult = command::decode(run, self, cmd, &result)?;
         print_stdout(&format!("opened {}\n", opened.opened));
         let problems = opened.problems.unwrap_or_default();

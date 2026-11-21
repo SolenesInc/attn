@@ -133,6 +133,19 @@ impl Family for Seed {
         }
     }
 
+    fn present_json(
+        &self,
+        run: &mut Run<'_>,
+        cmd: &Command,
+        parsed: &Parsed,
+        reply: &Reply,
+    ) -> Result<(), Stop> {
+        match cmd.name {
+            "standby" | "export" => self.present(run, cmd, parsed, reply),
+            _ => command::print_result(run, self, cmd, &command::result(reply)),
+        }
+    }
+
     fn present(
         &self,
         run: &mut Run<'_>,
@@ -147,7 +160,6 @@ impl Family for Seed {
             "prime" => render::prime(&command::decode::<SeedReadyResult>(
                 run, &Seed, cmd, &result,
             )?),
-            _ if parsed.json => return command::print_result(run, &Seed, cmd, &result),
             "search" => render::search(
                 parsed.text("words"),
                 &command::decode::<SeedSearchResult>(run, &Seed, cmd, &result)?,

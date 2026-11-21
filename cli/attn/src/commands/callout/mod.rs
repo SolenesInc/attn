@@ -47,6 +47,14 @@ impl Callout {
         print_compact_line(raw);
         Ok(())
     }
+
+    fn require_app(&self, cmd: &Command, listed: &CalloutAnchorsResult) -> Result<(), Stop> {
+        if listed.app_showing_profile {
+            Ok(())
+        } else {
+            Err(self.fail(cmd.name, "the attn app is not showing your profile"))
+        }
+    }
 }
 
 impl Family for Callout {
@@ -84,30 +92,35 @@ impl Family for Callout {
         Stop(1)
     }
 
+    fn present_json(
+        &self,
+        run: &mut Run<'_>,
+        cmd: &Command,
+        _parsed: &Parsed,
+        reply: &Reply,
+    ) -> Result<(), Stop> {
+        let result = command::result(reply);
+        self.print_raw(run, cmd, &result)?;
+        if cmd.name == "anchors" {
+            self.require_app(cmd, &command::decode(run, self, cmd, &result)?)?;
+        }
+        Ok(())
+    }
+
     fn present(
         &self,
         run: &mut Run<'_>,
         cmd: &Command,
-        parsed: &Parsed,
+        _parsed: &Parsed,
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
         if cmd.name == "show" {
-            if parsed.json {
-                return self.print_raw(run, cmd, &result);
-            }
             print_stdout(&shown(&command::decode(run, self, cmd, &result)?));
             return Ok(());
         }
         let listed: CalloutAnchorsResult = command::decode(run, self, cmd, &result)?;
-        if parsed.json {
-            self.print_raw(run, cmd, &result)?;
-        } else {
-            print_stdout(&anchors(&listed));
-        }
-        if !listed.app_showing_profile {
-            return Err(self.fail(cmd.name, "the attn app is not showing your profile"));
-        }
-        Ok(())
+        print_stdout(&anchors(&listed));
+        self.require_app(cmd, &listed)
     }
 }

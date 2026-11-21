@@ -70,13 +70,10 @@ impl Family for Turn {
         &self,
         run: &mut Run<'_>,
         cmd: &Command,
-        parsed: &Parsed,
+        _parsed: &Parsed,
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
-        if parsed.json {
-            return command::print_result(run, self, cmd, &result);
-        }
         let turn: AgentTurnResult = command::decode(run, self, cmd, &result)?;
         print_stdout(outcome_text(&turn.outcome));
         print_stdout("\n");

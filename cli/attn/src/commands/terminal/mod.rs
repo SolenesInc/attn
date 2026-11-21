@@ -160,42 +160,66 @@ impl Family for Terminal {
         Some(Instant::now() + Duration::try_from_secs_f64(seconds).ok()?)
     }
 
+    fn present_json(
+        &self,
+        run: &mut Run<'_>,
+        cmd: &Command,
+        _parsed: &Parsed,
+        reply: &Reply,
+    ) -> Result<(), Stop> {
+        let result = command::result(reply);
+        let path: &[&str] = if cmd.name == "ls" {
+            &["terminals"]
+        } else {
+            &[]
+        };
+        self.print_raw(run, cmd, &result, path)?;
+        match cmd.name {
+            "run" => {
+                let ran: TerminalRunResult = command::decode(run, self, cmd, &result)?;
+                self.finish(cmd, ran.block.as_ref(), ran.exited, ran.exit_code, false)
+            }
+            "wait" => {
+                let waited: TerminalWaitResult = command::decode(run, self, cmd, &result)?;
+                self.finish(
+                    cmd,
+                    waited.block.as_ref(),
+                    waited.exited,
+                    waited.exit_code,
+                    false,
+                )
+            }
+            _ => Ok(()),
+        }
+    }
+
     fn present(
         &self,
         run: &mut Run<'_>,
         cmd: &Command,
-        parsed: &Parsed,
+        _parsed: &Parsed,
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
-        let plain = !parsed.json;
-        if parsed.json {
-            let path: &[&str] = if cmd.name == "ls" {
-                &["terminals"]
-            } else {
-                &[]
-            };
-            self.print_raw(run, cmd, &result, path)?;
-        }
         match cmd.name {
-            "ls" if plain => {
+            "ls" => {
                 let listed: TerminalListResult = command::decode(run, self, cmd, &result)?;
                 print_stdout(&table(&listed.terminals));
             }
-            "open" if plain => {
+            "open" => {
                 let opened: TerminalOpenResult = command::decode(run, self, cmd, &result)?;
                 print_stdout(&format!("{}\n", opened.terminal_id));
             }
-            "move" if plain => {
+            "move" => {
                 print_stdout(&moved(&command::decode(run, self, cmd, &result)?));
             }
-            "read" if plain => {
+            "read" => {
                 let read: TerminalReadResult = command::decode(run, self, cmd, &result)?;
                 print_stdout(&format!("{}\n", read.text));
             }
             "run" => {
                 let ran: TerminalRunResult = command::decode(run, self, cmd, &result)?;
-                return self.finish(cmd, ran.block.as_ref(), ran.exited, ran.exit_code, plain);
+                return self.finish(cmd, ran.block.as_ref(), ran.exited, ran.exit_code, true);
             }
             "wait" => {
                 let waited: TerminalWaitResult = command::decode(run, self, cmd, &result)?;
@@ -204,7 +228,7 @@ impl Family for Terminal {
                     waited.block.as_ref(),
                     waited.exited,
                     waited.exit_code,
-                    plain,
+                    true,
                 );
             }
             _ => {}

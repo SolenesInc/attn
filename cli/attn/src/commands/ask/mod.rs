@@ -240,21 +240,29 @@ impl Family for Ask {
         command::unresolved_session(message)
     }
 
+    fn present_json(
+        &self,
+        run: &mut Run<'_>,
+        cmd: &Command,
+        _parsed: &Parsed,
+        reply: &Reply,
+    ) -> Result<(), Stop> {
+        let result = command::result(reply);
+        let raw = result
+            .raw_field(&[])
+            .map_err(|error| run.fail_send(&self.label(cmd.name), &error))?;
+        print_compact_line(raw);
+        Ok(())
+    }
+
     fn present(
         &self,
         run: &mut Run<'_>,
         cmd: &Command,
-        parsed: &Parsed,
+        _parsed: &Parsed,
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
-        if parsed.json {
-            let raw = result
-                .raw_field(&[])
-                .map_err(|error| run.fail_send(&self.label(cmd.name), &error))?;
-            print_compact_line(raw);
-            return Ok(());
-        }
         let text = match cmd.name {
             "list" => listed(&command::decode(run, self, cmd, &result)?),
             "show" => shown(&command::decode(run, self, cmd, &result)?),

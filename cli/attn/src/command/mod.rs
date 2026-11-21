@@ -137,6 +137,15 @@ pub trait Family {
         parsed: &Parsed,
         reply: &Reply,
     ) -> Result<(), Stop>;
+    fn present_json(
+        &self,
+        run: &mut Run<'_>,
+        cmd: &Command,
+        _parsed: &Parsed,
+        reply: &Reply,
+    ) -> Result<(), Stop> {
+        print_result(run, self, cmd, &result(reply))
+    }
 }
 
 pub fn run_group(run: &mut Run<'_>, family: &dyn Family, args: &[String]) -> Result<(), Stop> {
@@ -752,7 +761,11 @@ pub fn run_command(
         return done;
     }
     let reply = call(run, family, cmd, &parsed)?;
-    family.present(run, cmd, &parsed, &reply)
+    if parsed.json {
+        family.present_json(run, cmd, &parsed, &reply)
+    } else {
+        family.present(run, cmd, &parsed, &reply)
+    }
 }
 
 pub enum Answer {
@@ -856,9 +869,9 @@ fn refuse(
     family.fail(cmd.name, &message)
 }
 
-pub fn send_failed(
+pub fn send_failed<F: Family + ?Sized>(
     run: &mut Run<'_>,
-    family: &dyn Family,
+    family: &F,
     cmd: &Command,
     error: &SendError,
 ) -> Stop {
@@ -885,9 +898,9 @@ pub fn decode<T: serde::de::DeserializeOwned>(
         .map_err(|error| send_failed(run, family, cmd, &error))
 }
 
-pub fn print_result(
+pub fn print_result<F: Family + ?Sized>(
     run: &mut Run<'_>,
-    family: &dyn Family,
+    family: &F,
     cmd: &Command,
     result: &Reply,
 ) -> Result<(), Stop> {

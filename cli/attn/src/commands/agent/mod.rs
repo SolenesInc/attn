@@ -65,70 +65,56 @@ impl Family for Agent {
         Ok(())
     }
 
-    fn present(
+    fn present_json(
         &self,
         run: &mut Run<'_>,
         cmd: &Command,
-        parsed: &Parsed,
+        _parsed: &Parsed,
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
         match cmd.name {
-            "list" if parsed.json => print_field(run, cmd, &result, "agents"),
-            "list" => {
-                print_stdout(&list(&command::decode::<AgentListResult>(
-                    run, self, cmd, &result,
-                )?));
-                Ok(())
-            }
-            "inbox" if parsed.json => {
+            "list" => print_field(run, cmd, &result, "agents")?,
+            "inbox" => {
                 let inbox: AgentInboxBatchResult = command::decode(run, self, cmd, &result)?;
                 match (&inbox.item, &inbox.message) {
-                    (Some(_), _) => print_field(run, cmd, &result, "item"),
-                    (_, Some(_)) => print_field(run, cmd, &result, "message"),
-                    _ => command::print_result(run, self, cmd, &result),
+                    (Some(_), _) => print_field(run, cmd, &result, "item")?,
+                    (_, Some(_)) => print_field(run, cmd, &result, "message")?,
+                    _ => command::print_result(run, self, cmd, &result)?,
                 }
             }
+            _ => command::print_result(run, self, cmd, &result)?,
+        }
+        self.settle(run, cmd, &result)
+    }
+
+    fn present(
+        &self,
+        run: &mut Run<'_>,
+        cmd: &Command,
+        _parsed: &Parsed,
+        reply: &Reply,
+    ) -> Result<(), Stop> {
+        let result = command::result(reply);
+        match cmd.name {
+            "list" => print_stdout(&list(&command::decode::<AgentListResult>(
+                run, self, cmd, &result,
+            )?)),
             "inbox" => {
                 let inbox: AgentInboxBatchResult = command::decode(run, self, cmd, &result)?;
                 print_stdout(&format!("{}\n", inbox.text.unwrap_or_default()));
-                Ok(())
             }
             "msg" => {
                 let sent: AgentMsgResult = command::decode(run, self, cmd, &result)?;
-                if parsed.json {
-                    command::print_result(run, self, cmd, &result)?;
-                } else {
-                    print_stdout(&format!("{}\n", msg_line(&sent)));
-                }
-                if sent.status == "refused" {
-                    Err(Stop(1))
-                } else {
-                    Ok(())
-                }
+                print_stdout(&format!("{}\n", msg_line(&sent)));
             }
             "close" => {
                 let closed: AgentCloseResult = command::decode(run, self, cmd, &result)?;
-                if closed.rule == "self" && closed.pending_compact != Some(true) {
-                    run.closed_session = Some(closed.target_session_id.clone());
-                }
-                if parsed.json {
-                    return command::print_result(run, self, cmd, &result);
-                }
                 print_stdout(&close(&closed));
-                Ok(())
             }
             "reload" => {
                 let reloaded: AgentReloadResult = command::decode(run, self, cmd, &result)?;
-                if parsed.json {
-                    command::print_result(run, self, cmd, &result)?;
-                }
-                let mut failed = false;
                 for outcome in &reloaded.outcomes {
-                    failed |= !outcome.success;
-                    if parsed.json {
-                        continue;
-                    }
                     if outcome.success {
                         print_stdout(&format!("reloaded session {}\n", outcome.target));
                     } else {
@@ -139,18 +125,12 @@ impl Family for Agent {
                         );
                     }
                 }
-                if failed { Err(Stop(1)) } else { Ok(()) }
             }
             "attachment" => {
                 let saved: String = command::decode(run, self, cmd, &result)?;
                 print_stdout(&format!("{saved}\n"));
-                Ok(())
             }
-            _ if parsed.json => command::print_result(run, self, cmd, &result),
-            "peek" => {
-                print_stdout(&peek(&command::decode(run, self, cmd, &result)?));
-                Ok(())
-            }
+            "peek" => print_stdout(&peek(&command::decode(run, self, cmd, &result)?)),
             _ => {
                 let message: AgentPeerMessage = command::decode(run, self, cmd, &result)?;
                 print_stdout(&format!(
@@ -159,9 +139,36 @@ impl Family for Agent {
                     message.message_id,
                     short(&message.target_session_id)
                 ));
-                Ok(())
             }
         }
+        self.settle(run, cmd, &result)
+    }
+}
+
+impl Agent {
+    fn settle(&self, run: &mut Run<'_>, cmd: &Command, result: &Reply) -> Result<(), Stop> {
+        match cmd.name {
+            "msg" => {
+                let sent: AgentMsgResult = command::decode(run, self, cmd, result)?;
+                if sent.status == "refused" {
+                    return Err(Stop(1));
+                }
+            }
+            "close" => {
+                let closed: AgentCloseResult = command::decode(run, self, cmd, result)?;
+                if closed.rule == "self" && closed.pending_compact != Some(true) {
+                    run.closed_session = Some(closed.target_session_id.clone());
+                }
+            }
+            "reload" => {
+                let reloaded: AgentReloadResult = command::decode(run, self, cmd, result)?;
+                if reloaded.outcomes.iter().any(|outcome| !outcome.success) {
+                    return Err(Stop(1));
+                }
+            }
+            _ => {}
+        }
+        Ok(())
     }
 }
 

@@ -68,9 +68,6 @@ impl Family for Handoff {
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
-        if parsed.json {
-            return command::print_result(run, self, cmd, &result);
-        }
         let handed: CrewHandoffResult = command::decode(run, self, cmd, &result)?;
         let name = &handed.name;
         if parsed.on("retry") {

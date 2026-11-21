@@ -62,6 +62,28 @@ impl Family for Session {
         }
     }
 
+    fn present_json(
+        &self,
+        run: &mut Run<'_>,
+        cmd: &Command,
+        _parsed: &Parsed,
+        reply: &Reply,
+    ) -> Result<(), Stop> {
+        let result = command::result(reply);
+        command::print_result(run, self, cmd, &result)?;
+        if matches!(cmd.name, "snooze" | "unsnooze") {
+            let outcomes: SessionSnoozeResult = command::decode(run, self, cmd, &result)?;
+            if outcomes
+                .outcomes
+                .iter()
+                .any(|outcome| outcome.error.is_some())
+            {
+                return Err(Stop(1));
+            }
+        }
+        Ok(())
+    }
+
     fn present(
         &self,
         run: &mut Run<'_>,
@@ -70,20 +92,6 @@ impl Family for Session {
         reply: &Reply,
     ) -> Result<(), Stop> {
         let result = command::result(reply);
-        if parsed.json {
-            command::print_result(run, self, cmd, &result)?;
-            if matches!(cmd.name, "snooze" | "unsnooze") {
-                let outcomes: SessionSnoozeResult = command::decode(run, self, cmd, &result)?;
-                if outcomes
-                    .outcomes
-                    .iter()
-                    .any(|outcome| outcome.error.is_some())
-                {
-                    return Err(Stop(1));
-                }
-            }
-            return Ok(());
-        }
         let out = match cmd.name {
             "list" => list(parsed, &command::decode(run, self, cmd, &result)?),
             "show" => show(&command::decode(run, self, cmd, &result)?),
