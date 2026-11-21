@@ -820,6 +820,12 @@ func TestSharedHost_TerminalQueriesUseTheHostModel(t *testing.T) {
 			os.Exit(2)
 		}
 		_, _ = fmt.Fprintf(os.Stdout, "__QUERY_REPLY_%x__", reply)
+		_, _ = os.Stdout.Write([]byte("\x1b[5;2H\x1b[>c\x1b[?6n"))
+		more := make([]byte, len("\x1b[>1;0;0c\x1b[?5;2;1R"))
+		if _, err := io.ReadFull(os.Stdin, more); err != nil {
+			os.Exit(3)
+		}
+		_, _ = fmt.Fprintf(os.Stdout, "__MORE_REPLY_%x__", more)
 		os.Exit(0)
 	}
 	binary := os.Getenv("ATTN_TEST_PTY_HOST")
@@ -863,7 +869,7 @@ func TestSharedHost_TerminalQueriesUseTheHostModel(t *testing.T) {
 	if err := backend.Input(context.Background(), "shared-query", []byte("\n")); err != nil {
 		t.Fatal(err)
 	}
-	want := "__QUERY_REPLY_1b5b333b37521b5b3f313b3263__"
+	want := "__QUERY_REPLY_1b5b333b37521b5b3f313b3263__\x1b[5;2H\x1b[>c\x1b[?6n__MORE_REPLY_1b5b3e313b303b30631b5b3f353b323b3152__"
 	waitForStreamText(t, stream, want)
 }
 
