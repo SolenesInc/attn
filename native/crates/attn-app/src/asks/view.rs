@@ -57,6 +57,10 @@ pub(super) fn condition_key(question: &str) -> String {
     format!("asks.q.{question}.condition.field")
 }
 
+pub(super) fn suggestion_key(question: &str) -> String {
+    format!("asks.q.{question}.suggestion")
+}
+
 pub(super) fn text_key(question: &str) -> String {
     format!("asks.q.{question}.text.field")
 }
@@ -830,7 +834,7 @@ fn written(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) ->
                                 answer.text = super::rewritten(&answer.text, r.clone());
                             })
                             .build(t)
-                            .key(format!("asks.q.{key}.suggestion")),
+                            .key(suggestion_key(&key)),
                     )
                     .self_start()
                 });

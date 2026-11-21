@@ -153,6 +153,16 @@ You can select any text of an ask, such as its subject, a paragraph, a question
 or a choice, and copy it with Cmd+C (Ctrl+C on Linux). `c` copies the whole ask
 as the markdown the agent wrote, with its id and the agent that asked.
 
+One question of an ask is active, marked by a bar beside it, and only its
+choices show their numbers. The keys 1–9 pick the choice with that number, and
+the number after the last choice puts the cursor in **Other**. When you pick
+the answer of a one-choice question, the next question with no pick becomes
+active. Tab and Shift+Tab move the active question through the questions and
+your note, from inside an answer field too; past the note, Tab goes on through
+the sheet's buttons. A click in a question makes it active. To quote part of an
+ask in your note, select the text and press `q`, or click **Quote** above the
+selection. The note gets the passage as `> ` lines.
+
 ## Roles
 
 When making a delegation, the agent picks:

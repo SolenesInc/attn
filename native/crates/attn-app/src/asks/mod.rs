@@ -107,6 +107,7 @@ fn stop_of(ask: &Ask, focused: &str) -> Option<Stop> {
     questions(ask)
         .find(|q| {
             focused == view::text_key(&q.key)
+                || focused == view::suggestion_key(&q.key)
                 || focused == view::other_key(&q.key)
                 || (0..q.choices.len()).any(|i| focused == view::choice_key(&q.key, i))
         })
@@ -143,11 +144,40 @@ fn input_of(state: &State, ask: &Ask, stop: &Stop) -> String {
     }
 }
 
+/// The controls ⇥ visits in a stop, in order: its input, then a written question's Use the
+/// suggestion while its field is empty.
+fn controls(state: &State, ask: &Ask, stop: &Stop) -> Vec<String> {
+    let mut controls = vec![input_of(state, ask, stop)];
+    let Stop::Question(key) = stop else {
+        return controls;
+    };
+    let suggested = questions(ask).any(|q| {
+        &q.key == key
+            && Kind::of(q) == Kind::Text
+            && q.recommended.as_ref().is_some_and(|r| !r.is_empty())
+    });
+    let written = state
+        .window
+        .asks
+        .drafts
+        .get(&ask.id)
+        .and_then(|d| d.answers.get(key))
+        .is_some_and(|a| !a.text.text.trim().is_empty());
+    if suggested && !written {
+        controls.push(view::suggestion_key(key));
+    }
+    controls
+}
+
 /// Makes `stop` of the ask shown active and puts the keyboard in its control.
 fn enter(state: &mut State, ask: &Ask, stop: Stop, tx: &mut Tx) {
     let input = input_of(state, ask, &stop);
+    focus_in(state, ask, stop, input, tx);
+}
+
+fn focus_in(state: &mut State, ask: &Ask, stop: Stop, control: String, tx: &mut Tx) {
     activate(state, &ask.id, stop);
-    tx.focus(input, tx.by_keys() || tx.focus_visible());
+    tx.focus(control, tx.by_keys() || tx.focus_visible());
 }
 
 /// Makes `stop` of `ask` active, as a click inside it does.
@@ -170,24 +200,46 @@ pub(crate) fn tab(state: &mut State, by: isize, tx: &mut Tx) -> bool {
     let Some(ask) = shown_open(state) else {
         return false;
     };
-    let here = match tx.focused() {
-        Some(focused) if focused != SHEET => match stop_of(&ask, focused) {
+    let focused = tx.focused().filter(|f| *f != SHEET).map(str::to_owned);
+    let here = match &focused {
+        Some(focused) => match stop_of(&ask, focused) {
             Some(stop) => stop,
             None => return false,
         },
-        _ => active(state, &ask),
+        None => active(state, &ask),
     };
+    let inside = controls(state, &ask, &here);
+    let within = focused
+        .and_then(|f| inside.iter().position(|c| *c == f))
+        .and_then(|at| step_in(&inside, at, by));
+    if let Some(control) = within {
+        focus_in(state, &ask, here, control, tx);
+        return true;
+    }
     let stops = stops(&ask);
-    let at = stops.iter().position(|s| *s == here).unwrap_or(0) as isize + by;
-    let Some(next) = usize::try_from(at)
-        .ok()
-        .and_then(|at| stops.get(at))
-        .cloned()
-    else {
+    let at = stops.iter().position(|s| *s == here).unwrap_or(0) as isize;
+    let Some(next) = step_in(&stops, at as usize, by) else {
         return false;
     };
-    enter(state, &ask, next, tx);
+    let mut entered = controls(state, &ask, &next);
+    let control = if by > 0 {
+        entered.swap_remove(0)
+    } else {
+        entered
+            .pop()
+            .unwrap_or_else(|| input_of(state, &ask, &next))
+    };
+    focus_in(state, &ask, next, control, tx);
     true
+}
+
+/// The item `by` one from `at` in `items`, if there is one.
+fn step_in<T: Clone>(items: &[T], at: usize, by: isize) -> Option<T> {
+    let to = at as isize + by;
+    usize::try_from(to)
+        .ok()
+        .and_then(|to| items.get(to))
+        .cloned()
 }
 
 /// A number key `n`: picks choice `n` of the active question; the number after its last choice

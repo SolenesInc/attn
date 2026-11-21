@@ -2116,7 +2116,7 @@ fn a_click_on_a_link_in_an_asks_words_still_opens_it() {
 }
 
 /// Three questions, one of each kind the number keys and ⇥ treat differently: one choice, any
-/// choices and a written answer.
+/// choices and a written answer with a suggestion.
 fn release_plan() -> Ask {
     ask(
         "a-plan",
@@ -2127,7 +2127,7 @@ fn release_plan() -> Ask {
             prose("The load test found a regression in the cache warmup."),
             question("q1", "one", "Which region first?", &["eu", "us"]),
             question("q2", "any", "Which checks?", &["smoke", "load", "soak"]),
-            question("q3", "text", "Which date?", &[]),
+            recommending(question("q3", "text", "Which date?", &[]), "Monday"),
         ],
     )
 }
@@ -2173,6 +2173,7 @@ fn number_keys_pick_in_the_active_question_and_tab_moves_it_to_the_written_field
         .collect();
     assert_eq!(rows_before, rows_after, "the keycaps keep their room");
 
+    rest_but_for_ages(&mut world);
     letter(&mut world, "2");
     letter(&mut world, "3");
     assert!(checked(&world, "asks.q.q2.choice.1"), "2 toggles load");
@@ -2218,7 +2219,7 @@ fn tab_walks_the_questions_and_the_note_then_the_sheets_controls_and_never_the_l
     open_sheet(&mut world);
     click(&mut world, "asks.row.a-plan");
     let mut walk = vec![focused(&world).unwrap_or_default()];
-    for _ in 0..6 {
+    for _ in 0..7 {
         plain(&mut world, Key::Tab);
         walk.push(focused(&world).unwrap_or_default());
     }
@@ -2228,6 +2229,7 @@ fn tab_walks_the_questions_and_the_note_then_the_sheets_controls_and_never_the_l
             "asks.q.q1.choice.0",
             "asks.q.q2.choice.0",
             "asks.q.q3.text.field",
+            "asks.q.q3.suggestion",
             "asks.note.field",
             "asks.replied",
             "asks.close",
@@ -2235,7 +2237,7 @@ fn tab_walks_the_questions_and_the_note_then_the_sheets_controls_and_never_the_l
         ]
     );
     let mut back = Vec::new();
-    for _ in 0..6 {
+    for _ in 0..9 {
         world.gesture(|d| d.press("shift+tab"));
         back.push(focused(&world).unwrap_or_default());
     }
@@ -2245,9 +2247,12 @@ fn tab_walks_the_questions_and_the_note_then_the_sheets_controls_and_never_the_l
             "asks.close",
             "asks.replied",
             "asks.note.field",
+            "asks.q.q3.suggestion",
             "asks.q.q3.text.field",
             "asks.q.q2.choice.0",
             "asks.q.q1.choice.0",
+            "asks.snooze",
+            "asks.open-agent",
         ]
     );
 }
@@ -2255,9 +2260,14 @@ fn tab_walks_the_questions_and_the_note_then_the_sheets_controls_and_never_the_l
 #[test]
 fn a_click_in_a_question_makes_it_the_one_the_number_keys_pick_in() {
     let mut world = start(vec![release_plan()], vec![api_working()]);
+    world.resize((1000.0, 1000.0));
     open_sheet(&mut world);
-    click(&mut world, "asks.q.q2.prompt");
-    assert_eq!(active(&world), ["q2"]);
+    click(&mut world, "asks.q.q3.prompt");
+    assert_eq!(active(&world), ["q3"]);
+
+    click(&mut world, "asks.q.q1.choice.1");
+    assert!(checked(&world, "asks.q.q1.choice.1"));
+    assert_eq!(active(&world), ["q2"], "a clicked one-choice pick moves on");
 
     letter(&mut world, "1");
     assert!(checked(&world, "asks.q.q2.choice.0"), "1 picks smoke");
@@ -2302,6 +2312,7 @@ fn the_quote_button_floats_over_a_selection_and_quotes_it() {
     assert!(!has(&world, "asks.quote"));
     drag_across(&mut world, "asks.subject");
     assert!(has(&world, "asks.quote"), "a selection brings the button");
+    rest_but_for_ages(&mut world);
     let [_, by, _, bh] = world.rect("asks.quote");
     let [_, sy, _, _] = world.rect("asks.subject");
     assert!(by + bh <= sy, "the button floats above the selection");
