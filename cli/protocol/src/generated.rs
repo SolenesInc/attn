@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "1c5f42527241";
+pub const PROTOCOL_VERSION: &str = "5f972dd5e7e1";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -496,6 +496,42 @@ pub struct AskCloseResult {
 pub struct AskDefault {
     pub choice: String,
     pub due_at: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AskFollowUpMessage {
+    pub ask_id: String,
+    pub cmd: String,
+    pub request_id: String,
+    pub text: String,
+}
+
+impl AskFollowUpMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "ask_follow_up".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AskFollowUpResultMessage {
+    pub ask_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    pub request_id: String,
+    pub success: bool,
+}
+
+impl AskFollowUpResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "ask_follow_up_result".to_string(),
+            ..Self::default()
+        }
+    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AskImage {

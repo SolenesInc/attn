@@ -5674,6 +5674,51 @@
           }
         },
         {
+          "id": "follow-up",
+          "delivery": "inbox_content",
+          "description": "The user's follow-up on an ask they already answered, typed into the conversation of whoever holds the ask now, as the answer was. A seed also keeps it as a note.",
+          "body": {
+            "kind": "text",
+            "id": "ask.follow-up",
+            "source": "content/ask/follow-up.md",
+            "bindings": [
+              {
+                "name": "subject",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "subject",
+                    "kind": "text",
+                    "description": "Quoted ask subject."
+                  }
+                }
+              },
+              {
+                "name": "ask_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "ask_id",
+                    "kind": "text",
+                    "description": "Ask ID."
+                  }
+                }
+              },
+              {
+                "name": "text",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "text",
+                    "kind": "text",
+                    "description": "The user's follow-up, quoted by the adapter."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
           "id": "entry",
           "delivery": "message_fragment",
           "description": "One question and the user's answer to it.",
@@ -7833,5 +7878,5 @@
       ]
     }
   ],
-  "definitions_hash": "6dba469a84beee0bab72d898b221ca1f025da1b616f087fe52cbc0b1719d776e"
+  "definitions_hash": "87f396c72af7018c7f645c01ac9739822839eeabc93357f61336c1b13141f8f2"
 }

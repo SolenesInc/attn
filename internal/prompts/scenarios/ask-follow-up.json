@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "id": "ask-follow-up",
+  "description": "The user follows up on an ask they already answered.",
+  "recipient": "ask",
+  "event": "follow-up",
+  "values": {
+    "subject": "\"Scrollback cap\"",
+    "ask_id": "a-7k3f9m",
+    "text": "> On second thought, cap it at 100,000 lines: the logs I tail run longer."
+  }
+}

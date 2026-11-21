@@ -1181,6 +1181,15 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 			}
 		}
 		d.handleAskAnswer(client, answer)
+	case protocol.CmdAskFollowUp:
+		followUp := msg.(*protocol.AskFollowUpMessage)
+		if stored, err := d.store.GetAsk(strings.TrimSpace(followUp.AskID)); err == nil {
+			if holder := d.inboxHolder(stored.To); holder != nil {
+				d.inSessionOrder(client, holder.ID, func() { d.handleAskFollowUp(client, followUp) })
+				return
+			}
+		}
+		d.handleAskFollowUp(client, followUp)
 	case protocol.CmdSetVentDismissed:
 		d.handleSetVentDismissed(client, msg.(*protocol.SetVentDismissedMessage))
 	case protocol.CmdPlantVentSeed:

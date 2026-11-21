@@ -291,6 +291,16 @@ func (s *Store) PutInbox(item inbox.Item, at time.Time) (string, error) {
 	}
 	return item.ID, tx.Commit()
 }
+func (s *Store) PutInboxWithNote(item inbox.Item, note DocumentWrite, fact BusEvent, events []BusEvent, now time.Time) (DocumentWriteResult, []int64, error) {
+	results, eventSeqs, err := s.commitDocumentWrites([]DocumentCommit{{Write: note, Fact: fact}}, events, now, true, func(tx *sql.Tx) (bool, error) {
+		return true, putInbox(tx, item, now)
+	})
+	if err != nil {
+		return DocumentWriteResult{}, nil, err
+	}
+	return results[0], eventSeqs, nil
+}
+
 func putInbox(tx *sql.Tx, item inbox.Item, at time.Time) error {
 	if _, err := who.ParseAddress(item.To.String()); err != nil {
 		return err

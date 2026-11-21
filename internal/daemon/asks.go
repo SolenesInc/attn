@@ -508,6 +508,62 @@ func (d *Daemon) noteAnswer(profileID, askID, seedID string, reply protocol.AskR
 	return err
 }
 
+func (d *Daemon) handleAskFollowUp(client *wsClient, msg *protocol.AskFollowUpMessage) {
+	result := protocol.AskFollowUpResultMessage{Event: protocol.EventAskFollowUpResult, RequestID: msg.RequestID, AskID: msg.AskID}
+	if err := d.followUpAsk(msg, client.selectedProfile()); err != nil {
+		result.Error = protocol.Ptr(err.Error())
+	} else {
+		result.Success = true
+	}
+	d.sendToClient(client, result)
+}
+
+var (
+	errAskForgotten = errors.New("attn no longer keeps this ask, so it takes no follow-up")
+	errAskStillOpen = errors.New("this ask is still open; answer it instead")
+)
+
+func (d *Daemon) followUpAsk(msg *protocol.AskFollowUpMessage, profileID string) error {
+	stored, err := d.store.GetAsk(strings.TrimSpace(msg.AskID))
+	if errors.Is(err, store.ErrAskGone) {
+		return errAskForgotten
+	}
+	if err != nil {
+		return err
+	}
+	if stored.Reply == nil {
+		return errAskStillOpen
+	}
+	shown, err := d.readAsk(stored)
+	if err != nil {
+		return err
+	}
+	if !askShownIn(profileID, shown.profileID) {
+		return errAskForgotten
+	}
+	text, err := ask.FollowUp(shown.wire, msg.Text)
+	if err != nil {
+		return err
+	}
+	followUp := inbox.Item{ID: uuid.NewString(), To: stored.To, Kind: inbox.AskAnswer, Source: stored.ID, Text: text}
+	if seedID, seed := stored.To.TenderOf(); seed {
+		note := garden.Note{Seed: seedID, Kind: garden.NoteKindAnswer, Body: text}
+		_, _, err = d.mintAndWriteNote(note, false, "", func(write store.DocumentWrite, fact store.BusEvent, events []store.BusEvent, now time.Time) (store.DocumentWriteResult, []int64, error) {
+			return d.store.PutInboxWithNote(followUp, write, fact, events, now)
+		})
+	} else {
+		_, err = d.store.PutInbox(followUp, time.Now())
+	}
+	if err != nil {
+		return fmt.Errorf("save the follow-up: %w", err)
+	}
+	d.kickInboxAfterCommit(stored.To)
+	if holder := d.inboxHolder(stored.To); holder != nil && holder.State != protocol.SessionStatePendingApproval {
+		d.handBackTurn(holder.ID)
+	}
+	return nil
+}
+
 func (d *Daemon) askRepliesForgetHandler(_ context.Context, _ *jobs.Job) (any, error) {
 	ids, err := d.store.ForgetRepliesBefore(time.Now().Add(-askReplyShownFor))
 	if err != nil {

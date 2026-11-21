@@ -4462,6 +4462,25 @@ model AskAnswerResultMessage {
   error?: string;
 }
 
+// The user's follow-up on an ask they already answered, typed into the
+// conversation of whoever holds the ask now, as the answer was. A seed also
+// keeps it as a note. An open ask takes an answer instead, and a forgotten
+// one takes nothing.
+model AskFollowUpMessage {
+  cmd: "ask_follow_up";
+  request_id: string;
+  ask_id: string;
+  text: string;
+}
+
+model AskFollowUpResultMessage {
+  event: "ask_follow_up_result";
+  request_id: string;
+  ask_id: string;
+  success: boolean;
+  error?: string;
+}
+
 // The profile's open asks, oldest first, then the asks the user answered in the
 // last day, which carry their reply. A replied ask leaves sooner when its
 // session or seed closes.
@@ -8906,6 +8925,7 @@ alias DaemonEvent =
   | BrowserControlRequestMessage
   | CommandErrorMessage
   | AskAnswerResultMessage
+  | AskFollowUpResultMessage
   | AskImageResultMessage
   | AskSeedMentionsResultMessage
   | AsksUpdatedMessage

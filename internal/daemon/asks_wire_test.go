@@ -1061,3 +1061,74 @@ func TestAFollowUpAskKeepsTheQuestionAndAnswerItFollowsAfterTheEarlierAskIsForgo
 		}
 	})
 }
+
+func TestAFollowUpOnARepliedSeedAskIsTypedToTheSeedsTenderNowAndNotedOnTheSeed(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	cwd := registerDelegationCaller(t, w, cli, "caller")
+	seed := plantDelegationSeed(t, cli, "caller", "Migrate the store")
+	first, err := cli.Delegate(delegateAtSeed("caller", cwd, seed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	delegate := w.Launched(string(first.SessionID))
+	asked, err := cli.AskOpen(first.SessionID, "", cacheAsk, "", cwd)
+	if err != nil {
+		t.Fatalf("the delegate asks: %v", err)
+	}
+	followUp := func(requestID, askID, text string) protocol.AskFollowUpResultMessage {
+		return testworld.Request(app, protocol.AskFollowUpMessage{
+			Cmd: protocol.CmdAskFollowUp, RequestID: requestID, AskID: askID, Text: text,
+		}, protocol.EventAskFollowUpResult, func(r protocol.AskFollowUpResultMessage) bool { return r.RequestID == requestID })
+	}
+	if early := followUp("early", asked.ID, "Redis after all"); early.Success || !strings.Contains(protocol.Deref(early.Error), "answer it instead") {
+		t.Fatalf("a follow-up on the open ask got %+v, want it refused in favour of an answer", early)
+	}
+
+	delegate.Prompted()
+	delegate.Reply("Asked about the store. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, string(first.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	answerCacheAsk(t, app, asked.ID)
+	if got := delegate.DeliveredPrompt(); !strings.Contains(got, "Answer: Postgres") {
+		t.Fatalf("the first tender was typed %q, want the answer", got)
+	}
+
+	handover := delegateAtSeed("caller", cwd, seed)
+	handover.Assignment.Handover = &protocol.DelegateHandover{}
+	second, err := cli.Delegate(handover)
+	if err != nil {
+		t.Fatal(err)
+	}
+	successor := w.Launched(string(second.SessionID))
+	if closed := closeFromApp(app, string(first.SessionID)); !closed.Accepted {
+		t.Fatalf("close %s: %+v", first.SessionID, closed)
+	}
+	successor.Prompted()
+	successor.Reply("Picked up the migration. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, string(second.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+
+	if sent := followUp("later", asked.ID, "Redis after all: the cache is hot."); !sent.Success {
+		t.Fatalf("the follow-up failed: %s", protocol.Deref(sent.Error))
+	}
+	typed := successor.DeliveredPrompt()
+	for _, want := range []string{asked.ID, "followed up", "> Redis after all: the cache is hot."} {
+		if !strings.Contains(typed, want) {
+			t.Errorf("the seed's tender now was typed %q, missing %q", typed, want)
+		}
+	}
+	notes, err := cli.SeedNotes("", seed, client.SeedNotesQuery{Limit: 1})
+	if err != nil || len(notes.Notes) != 1 || !strings.Contains(notes.Notes[0].Body, "> Redis after all: the cache is hot.") {
+		t.Fatalf("the seed's newest note is %+v (%v), want the follow-up", notes, err)
+	}
+	if authorSessionOf(notes.Notes[0]) != "" || authorMemberOf(notes.Notes[0]) != "" {
+		t.Errorf("the follow-up is noted by %q/%q, want the user", authorSessionOf(notes.Notes[0]), authorMemberOf(notes.Notes[0]))
+	}
+
+	if _, err := cli.SeedTransition(second.SessionID, seed, "wither", "superseded", false, client.SeedTransitionOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if forgotten := followUp("forgotten", asked.ID, "one more thing"); forgotten.Success || !strings.Contains(protocol.Deref(forgotten.Error), "no longer keeps") {
+		t.Fatalf("a follow-up on a forgotten ask got %+v, want it refused", forgotten)
+	}
+}

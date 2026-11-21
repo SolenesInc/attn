@@ -66,6 +66,22 @@ func Answered(ask protocol.Ask) (string, error) {
 	return strings.Join(sections, "\n\n"), nil
 }
 
+func FollowUp(ask protocol.Ask, text string) (string, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", fmt.Errorf("write the follow-up")
+	}
+	followUp := prompts.RenderText("ask", "follow-up", prompts.Values{
+		"subject": strconv.Quote(ask.Subject),
+		"ask_id":  ask.ID,
+		"text":    blockquote(text),
+	})
+	if len(followUp) > MaxAnswerBytes {
+		return "", fmt.Errorf("a follow-up holds at most %d KiB", MaxAnswerBytes>>10)
+	}
+	return followUp, nil
+}
+
 func answersByKey(questions []protocol.AskQuestion, answers []protocol.AskAnswer) (map[string]protocol.AskAnswer, error) {
 	byKey := make(map[string]protocol.AskAnswer, len(answers))
 	for _, answer := range answers {
