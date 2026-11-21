@@ -36,6 +36,9 @@ enum Mark {
     Selected,
     /// The selected surface and the brand bar at its start: the row on screen.
     InView,
+    /// The chosen colour, whatever surface the row lies on, and the brand bar at its start: the
+    /// value a picker's list holds.
+    Chosen,
 }
 
 type Press = Box<dyn FnOnce(El) -> El>;
@@ -345,12 +348,20 @@ impl ListRow {
         self
     }
 
-    /// The row is the one on screen, or the value its list holds, such as a picker's current
-    /// choice: the selected surface and the brand bar at its start, which neither hover nor the
-    /// keyboard's ring draws.
+    /// The row is the one on screen: the selected surface and the brand bar at its start.
     pub fn in_view(mut self, in_view: bool) -> Self {
         if in_view {
             self.mark = Mark::InView;
+        }
+        self
+    }
+
+    /// The row is the value its list holds, such as a picker's current model: the chosen colour
+    /// and the brand bar at its start, which stand above the pointer's layer and apart from the
+    /// keyboard's ring.
+    pub fn chosen(mut self, chosen: bool) -> Self {
+        if chosen {
+            self.mark = Mark::Chosen;
         }
         self
     }
@@ -553,6 +564,7 @@ impl ListRow {
                 let fill = tint.alpha(if lit { TINT.1 } else { TINT.0 });
                 (crate::colors::mix_srgb(below, tint, fill.a), fill)
             }
+            (None, true) if self.mark == Mark::Chosen => (t.bg_selected, t.bg_selected),
             (None, true) => {
                 let lit = if below == t.bg_elevated {
                     t.bg_selected
@@ -827,7 +839,7 @@ impl ListRow {
         .child(part(band_line, "band"))
         .children(lower);
         let keyboards = self.cursor && self.mark == Mark::Selected;
-        let bar = (self.mark == Mark::InView || keyboards).then(|| {
+        let bar = (matches!(self.mark, Mark::InView | Mark::Chosen) || keyboards).then(|| {
             let top = (height - BAR.1) / 2.0;
             door::corner(
                 el().key(format!("{}.in-view", self.key))

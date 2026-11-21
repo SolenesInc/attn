@@ -244,8 +244,9 @@ choices once for the whole app:
   one line of a list (32 high) or two (title in `Name` over a line in
   `Small`), its lead in a 16-point column, its controls shown always, faint
   until it is selected, or on hover at its end on its own ground with its
-  words fading out before them, and the row on screen marked by the brand bar
-  at its start; `GroupHead`, a list group's heading; `dot`, a state's mark,
+  words fading out before them, the row on screen marked by the brand bar
+  at its start, and a picker's current value by the bar on the chosen colour,
+  which stands further from its ground than hover; `GroupHead`, a list group's heading; `dot`, a state's mark,
   filled, hollow or square at 6 or 8; `keycaps` and `keys_hint`, keys drawn as
   keys; `search_field`; and `number_chip` and `count_badge`. Each wraps rune-kit's control
   where one exists, and a view never writes a field of rune-kit's `Kit`:

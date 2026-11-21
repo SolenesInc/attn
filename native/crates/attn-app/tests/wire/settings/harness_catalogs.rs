@@ -264,7 +264,7 @@ pub(crate) fn pick_effort(world: &mut World, name: &str) {
         .screen()
         .descendants(Target::key("settings.route-picker.effort"))
         .into_iter()
-        .find(|n| n.role == "button" && n.name.as_deref() == Some(name))
+        .find(|n| n.role == "radio-button" && n.name.as_deref() == Some(name))
         .and_then(|n| n.key)
         .unwrap_or_else(|| panic!("no effort {name}"));
     click(world, &key);

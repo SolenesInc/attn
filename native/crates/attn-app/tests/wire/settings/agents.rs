@@ -1546,7 +1546,7 @@ fn effort_key(world: &World, name: &str) -> String {
         .screen()
         .descendants(Target::key("settings.route-picker.effort"))
         .into_iter()
-        .find(|n| n.role == "button" && n.name.as_deref() == Some(name))
+        .find(|n| n.role == "radio-button" && n.name.as_deref() == Some(name))
         .and_then(|n| n.key)
         .unwrap_or_else(|| panic!("no effort {name}"))
 }
@@ -1564,17 +1564,29 @@ fn model_key(world: &World, name: &str) -> String {
 }
 
 #[test]
-fn the_open_picker_fills_the_current_effort_as_chosen() {
+fn the_open_picker_offers_the_effort_as_one_choice_with_the_current_one_chosen() {
     let mut world = on_agents(&both(&[
         ("default_model_claude", "opus"),
         ("default_effort_claude", "high"),
     ]));
     open_route(&mut world, "Claude default model");
+    let group = world
+        .screen()
+        .get(Target::key("settings.route-picker.effort"));
+    assert_eq!(group.role, "radio-group", "the efforts are one choice");
+    let chosen: Vec<String> = world
+        .screen()
+        .descendants(Target::key("settings.route-picker.effort"))
+        .into_iter()
+        .filter(|n| n.role == "radio-button" && n.is("checked"))
+        .filter_map(|n| n.name)
+        .collect();
+    assert_eq!(chosen, ["high"]);
     let high = fills_under(&world, &effort_key(&world, "high"));
     let low = fills_under(&world, &effort_key(&world, "low"));
     assert_ne!(
         high, low,
-        "the stored effort high is drawn like the effort low beside it"
+        "the stored effort high is drawn like the effort low"
     );
     rest(&mut world);
 }
@@ -1756,6 +1768,48 @@ fn down_from_the_filter_the_picker_opens_in_moves_into_the_models() {
     assert_eq!(
         focused, "settings.route-picker.model.0",
         "Down from the filter"
+    );
+    rest(&mut world);
+}
+
+fn channel(hex: &str, at: usize) -> f64 {
+    f64::from(u8::from_str_radix(&hex[at..at + 2], 16).unwrap_or(0)) / 255.0
+}
+
+fn rgb(hex: &str) -> [f64; 3] {
+    [0, 1, 2].map(|i| channel(hex, 1 + 2 * i))
+}
+
+fn luminance([r, g, b]: [f64; 3]) -> f64 {
+    let linear = |v: f64| {
+        if v <= 0.04045 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+}
+
+fn contrast(a: [f64; 3], b: [f64; 3]) -> f64 {
+    let (x, y) = (luminance(a), luminance(b));
+    (x.max(y) + 0.05) / (x.min(y) + 0.05)
+}
+
+/// How far the pointer's layer takes a row from its ground, as the design rules set it.
+const HOVER_STEP: f64 = 1.20;
+
+#[test]
+fn the_current_model_stands_out_from_its_ground_more_than_hover_does() {
+    let mut world = on_agents(&both(&[("default_model_claude", "opus")]));
+    open_route(&mut world, "Claude default model");
+    let chosen = model_key(&world, "Opus 5.5");
+    let ground = rgb(&fills_under(&world, "settings.route-picker")[0]);
+    let row = rgb(&fills_under(&world, &chosen)[0]);
+    let current = contrast(row, ground);
+    assert!(
+        current > HOVER_STEP + 0.1,
+        "the current model stands {current:.2}:1 from its ground, no further than hover's {HOVER_STEP}:1"
     );
     rest(&mut world);
 }

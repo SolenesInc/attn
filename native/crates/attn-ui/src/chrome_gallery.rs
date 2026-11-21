@@ -16,6 +16,7 @@ use crate::system::{
 pub struct Chrome {
     pub rings: bool,
     pub lit: bool,
+    pub chosen: bool,
     pub open: bool,
     pub long: bool,
     pub narrow: bool,
@@ -55,6 +56,9 @@ const PRESSABLE: &[(&str, &str, &str, &str)] = &[
     ("In view", "In view", "", ""),
     ("In view, hover", "In view", "hover", ""),
     ("In view, focus", "In view", "tab", ""),
+    ("Chosen", "Chosen", "", ""),
+    ("Chosen, hover", "Chosen", "hover", ""),
+    ("Chosen, focus", "Chosen", "tab", ""),
     ("Long", "Long", "", ""),
     ("Long, hover", "Long", "hover", ""),
     ("Narrow long", "Narrow long", "", ""),
@@ -163,6 +167,7 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 .variant("Rest", |_| {})
                 .variant("Disabled", |s| s.disabled = true)
                 .variant("In view", |s| s.lit = true)
+                .variant("Chosen", |s| s.chosen = true)
                 .variant("Long", |s| s.long = true)
                 .variant("Narrow long", |s| {
                     s.narrow = true;
@@ -301,6 +306,7 @@ fn list_rows(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
             .badge(tag("row.agent.tag", "Builder", Tone::Neutral, &t))
             .hover_controls(row_controls("row.agent"))
             .in_view(s.lit)
+            .chosen(s.chosen)
             .disabled(s.disabled)
             .build(&t)
             .on_press_tx(press)

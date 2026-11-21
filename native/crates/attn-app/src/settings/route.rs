@@ -1118,7 +1118,7 @@ fn option(key: String, name: String, selected: bool, disabled: bool) -> ListRow 
         .role("option")
         .wrap()
         .title(name)
-        .in_view(selected)
+        .chosen(selected)
         .disabled(disabled)
 }
 
@@ -1490,35 +1490,31 @@ fn effort_control(p: &Picker, view: &View, t: &Tokens) -> Option<El> {
         if view.effort_missing {
             levels.push(value.effort.clone());
         }
-        let group = Inline::tight()
-            .key(EFFORT)
-            .role("group")
-            .label("Effort")
-            .children(levels.into_iter().enumerate().map(|(i, level)| {
-                let shown = if !level.is_empty() {
-                    level.clone()
-                } else if !view.default_effort.is_empty() {
-                    format!("default ({})", view.default_effort)
-                } else {
-                    "default".into()
-                };
-                let next = Route {
-                    effort: level.clone(),
-                    ..value.clone()
-                };
-                El::from(
-                    system::Button::new(shown)
-                        .size(Size::Compact)
-                        .chosen(value.effort == level)
-                        .disabled(view.pins_unavailable)
-                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                            change(state, next.clone(), tx);
-                            finish(state, tx);
-                        })
-                        .build(t)
-                        .key(format!("{EFFORT}.{i}")),
-                )
-            }));
+        let segments = levels.into_iter().enumerate().map(|(i, level)| {
+            let shown = if !level.is_empty() {
+                level.clone()
+            } else if !view.default_effort.is_empty() {
+                format!("default ({})", view.default_effort)
+            } else {
+                "default".into()
+            };
+            let next = Route {
+                effort: level.clone(),
+                ..value.clone()
+            };
+            system::Segment::new(format!("{EFFORT}.{i}"), shown)
+                .chosen(value.effort == level)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    change(state, next.clone(), tx);
+                    finish(state, tx);
+                })
+        });
+        let group = El::from(
+            system::Segmented::new(EFFORT, "Effort")
+                .disabled(view.pins_unavailable)
+                .options(segments)
+                .build(t),
+        );
         return Some(head(group));
     }
     let empty = TextEdit::new(value.effort.clone());
