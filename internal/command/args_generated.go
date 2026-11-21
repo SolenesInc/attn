@@ -21,6 +21,7 @@ const (
 	CodeFallbackWithTarget       = "fallback_with_target"
 	CodeInAndAt                  = "in_and_at"
 	CodeInvalidBody              = "invalid_body"
+	CodeNavOff                   = "nav_off"
 	CodeNeedsMessage             = "needs_message"
 	CodeNeedsNext                = "needs_next"
 	CodeNeedsStatement           = "needs_statement"
@@ -81,6 +82,12 @@ var specs = map[string]spec{
 	"delegate roles apply":    {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"not_a_table": "Pass the table delegate_roles_show returns, with only its fields.", "conflict": "Export the table again with delegate_roles_show, change it, and apply that."}},
 	"delegate roles rollback": {readOnly: false, anyone: true, sessionFlag: true},
 	"list":                    {readOnly: true, anyone: true, sessionFlag: false},
+	"nav status":              {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"nav check":               {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"nav link":                {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"nav unlink":              {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"nav set":                 {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"nav rm":                  {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
 	"open":                    {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"no_target": "Pass {path} or {seed}."}},
 	"review start":            {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
 	"review check":            {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
@@ -272,6 +279,36 @@ type DelegateRolesRollbackArgs struct {
 }
 
 type ListArgs struct {
+}
+
+type NavStatusArgs struct {
+	Repository string `json:"repository,omitempty"`
+}
+
+type NavCheckArgs struct {
+	At         string `json:"at,omitempty"`
+	Wait       bool   `json:"wait,omitempty"`
+	Repository string `json:"repository,omitempty"`
+}
+
+type NavLinkArgs struct {
+	Program string `json:"program,omitempty"`
+	As      string `json:"as,omitempty"`
+}
+
+type NavUnlinkArgs struct {
+	Name string `json:"name,omitempty"`
+}
+
+type NavSetArgs struct {
+	Language   string `json:"language,omitempty"`
+	Definition string `json:"definition,omitempty"`
+	Repository string `json:"repository,omitempty"`
+}
+
+type NavRmArgs struct {
+	Language   string `json:"language,omitempty"`
+	Repository string `json:"repository,omitempty"`
 }
 
 type OpenArgs struct {

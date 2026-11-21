@@ -3218,16 +3218,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleInjectTestSession(conn, msg.(*protocol.InjectTestSessionMessage))
 	case protocol.CmdOpenMarkdown:
 		d.handleOpenMarkdown(ctx, conn, msg.(*protocol.OpenMarkdownMessage))
-	case protocol.CmdCodeNavCheck:
-		d.handleCodeNavCheck(ctx, conn, msg.(*protocol.CodeNavCheckMessage))
-	case protocol.CmdCodeNavStatus:
-		d.handleCodeNavStatus(ctx, conn, msg.(*protocol.CodeNavStatusMessage))
-	case protocol.CmdCodeNavLink:
-		d.handleCodeNavLink(conn, msg.(*protocol.CodeNavLinkMessage))
-	case protocol.CmdCodeNavUnlink:
-		d.handleCodeNavUnlink(conn, msg.(*protocol.CodeNavUnlinkMessage))
-	case protocol.CmdCodeNavDefine:
-		d.handleCodeNavDefine(ctx, conn, msg.(*protocol.CodeNavDefineMessage))
 	case protocol.CmdOpenSeed:
 		d.handleOpenSeed(conn, msg.(*protocol.OpenSeedMessage))
 	case protocol.CmdOpenSentFiles:

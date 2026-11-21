@@ -2174,20 +2174,6 @@ type ClientHelloMessage struct {
 	Version string `json:"version"`
 }
 
-type CodeNavCheckMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Line corresponds to the JSON schema field "line".
-	Line int `json:"line"`
-
-	// Path corresponds to the JSON schema field "path".
-	Path string `json:"path"`
-
-	// Repository corresponds to the JSON schema field "repository".
-	Repository string `json:"repository"`
-}
-
 type CodeNavCheckResult struct {
 	// ElapsedMs corresponds to the JSON schema field "elapsed_ms".
 	ElapsedMs int `json:"elapsed_ms"`
@@ -2204,22 +2190,11 @@ type CodeNavCheckResult struct {
 	// Program corresponds to the JSON schema field "program".
 	Program string `json:"program"`
 
+	// Starting corresponds to the JSON schema field "starting".
+	Starting *bool `json:"starting,omitempty,omitzero"`
+
 	// Tried corresponds to the JSON schema field "tried".
 	Tried []string `json:"tried"`
-}
-
-type CodeNavDefineMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Definition corresponds to the JSON schema field "definition".
-	Definition *string `json:"definition,omitempty,omitzero"`
-
-	// Language corresponds to the JSON schema field "language".
-	Language string `json:"language"`
-
-	// Repository corresponds to the JSON schema field "repository".
-	Repository string `json:"repository"`
 }
 
 type CodeNavDefineResult struct {
@@ -2251,17 +2226,6 @@ type CodeNavLanguage struct {
 
 	// Source corresponds to the JSON schema field "source".
 	Source string `json:"source"`
-}
-
-type CodeNavLinkMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Name corresponds to the JSON schema field "name".
-	Name *string `json:"name,omitempty,omitzero"`
-
-	// Target corresponds to the JSON schema field "target".
-	Target string `json:"target"`
 }
 
 type CodeNavLinkResult struct {
@@ -2425,14 +2389,6 @@ type CodeNavSetupResultMessage struct {
 	Success bool `json:"success"`
 }
 
-type CodeNavStatusMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Repository corresponds to the JSON schema field "repository".
-	Repository *string `json:"repository,omitempty,omitzero"`
-}
-
 type CodeNavStatusResult struct {
 	// BinDir corresponds to the JSON schema field "bin_dir".
 	BinDir string `json:"bin_dir"`
@@ -2445,14 +2401,6 @@ type CodeNavStatusResult struct {
 
 	// Servers corresponds to the JSON schema field "servers".
 	Servers []CodeNavServer `json:"servers"`
-}
-
-type CodeNavUnlinkMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Name corresponds to the JSON schema field "name".
-	Name string `json:"name"`
 }
 
 type CodexStatusMessage struct {
@@ -9714,21 +9662,6 @@ type Response struct {
 
 	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
 	CallerSessionID *SessionID `json:"caller_session_id,omitempty,omitzero"`
-
-	// CodeNavCheckResult corresponds to the JSON schema field
-	// "code_nav_check_result".
-	CodeNavCheckResult *CodeNavCheckResult `json:"code_nav_check_result,omitempty,omitzero"`
-
-	// CodeNavDefineResult corresponds to the JSON schema field
-	// "code_nav_define_result".
-	CodeNavDefineResult *CodeNavDefineResult `json:"code_nav_define_result,omitempty,omitzero"`
-
-	// CodeNavLinkResult corresponds to the JSON schema field "code_nav_link_result".
-	CodeNavLinkResult *CodeNavLinkResult `json:"code_nav_link_result,omitempty,omitzero"`
-
-	// CodeNavStatusResult corresponds to the JSON schema field
-	// "code_nav_status_result".
-	CodeNavStatusResult *CodeNavStatusResult `json:"code_nav_status_result,omitempty,omitzero"`
 
 	// CodexStatusResult corresponds to the JSON schema field "codex_status_result".
 	CodexStatusResult *CodexStatusResult `json:"codex_status_result,omitempty,omitzero"`

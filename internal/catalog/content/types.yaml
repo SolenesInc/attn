@@ -150,3 +150,7 @@ types:
     json: {type: string, pattern: "^s-"}
     doc: "A seed's id, such as s-7k3f9m."
     placeholder: "<seed-id>"
+  file_line:
+    json: {type: string, pattern: "^.+:[0-9]+$"}
+    doc: "A file and a line in it, as path:line."
+    placeholder: "<path>:<line>"

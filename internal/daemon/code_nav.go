@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +16,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/victorarias/attn/internal/codenav"
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/diag"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
@@ -40,6 +41,15 @@ const codeNavIdleStopMaxSeconds = 86400
 // answers measured: gopls on attn with a cold cache in 36 s (ai-sandbox) and
 // once 40.9 s on a loaded Mac (F8).
 const codeNavRequestTripwire = 2 * time.Minute
+
+// codeNavToolBound is how long a nav check that does not wait holds the call
+// before it answers that the server is starting. It sits under the shortest
+// tool-call limit of the harnesses that call attn's tools: pi-mcp 1.3.0's
+// 30 s request default (DEFAULT_REQUEST_TIMEOUT_MS), below Claude Code's 60 s
+// and Codex's 300 s (DEFAULT_TOOL_TIMEOUT), with 10 s left for the call's own
+// round trip. A cold gopls on attn takes 36 to 41 s (F8), past every bound a
+// call may hold.
+const codeNavToolBound = 20 * time.Second
 
 func (d *Daemon) codeNavDir(elem ...string) string {
 	return filepath.Join(append([]string{filepath.Dir(d.socketPath), "code-navigation"}, elem...)...)
@@ -414,42 +424,90 @@ func identifiers(line string) []struct {
 	return found
 }
 
-func (d *Daemon) handleCodeNavCheck(ctx context.Context, conn net.Conn, msg *protocol.CodeNavCheckMessage) {
-	result, err := d.checkCodeNav(ctx, msg)
-	if err != nil {
-		d.sendError(conn, fmt.Sprintf("nav check: %v", err))
-		return
+func (d *Daemon) navCommands() map[string]command.Handler {
+	return map[string]command.Handler{
+		"nav status": command.Typed(d.runNavStatus),
+		"nav check":  command.Typed(d.runNavCheck),
+		"nav link":   command.Typed(d.runNavLink),
+		"nav unlink": command.Typed(d.runNavUnlink),
+		"nav set": command.Typed(func(ctx context.Context, c command.Caller, a command.NavSetArgs) (any, error) {
+			return d.runNavDefine(ctx, c, a.Repository, a.Language, a.Definition)
+		}),
+		"nav rm": command.Typed(func(ctx context.Context, c command.Caller, a command.NavRmArgs) (any, error) {
+			return d.runNavDefine(ctx, c, a.Repository, a.Language, "")
+		}),
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, CodeNavCheckResult: &result})
 }
 
-// checkCodeNav asks for the definition of each name on the line in turn and
-// answers with the first that resolves.
-func (d *Daemon) checkCodeNav(ctx context.Context, msg *protocol.CodeNavCheckMessage) (protocol.CodeNavCheckResult, error) {
-	if !d.on(setting.CodeReviewEnabled) {
-		return protocol.CodeNavCheckResult{}, errors.New(codeNavOff())
+func codeNavOffRefusal() error {
+	return command.Refuse(command.CodeNavOff, "%s", codeNavOff())
+}
+
+func (d *Daemon) callerRepository(c command.Caller, given string) string {
+	if given != "" {
+		return given
 	}
-	repository, err := d.repositoryRoot(ctx, msg.Repository)
+	if row := d.store.Get(c.Session); row != nil {
+		return row.Directory
+	}
+	return ""
+}
+
+func (d *Daemon) runNavCheck(ctx context.Context, c command.Caller, a command.NavCheckArgs) (any, error) {
+	if !d.on(setting.CodeReviewEnabled) {
+		return nil, codeNavOffRefusal()
+	}
+	cut := strings.LastIndex(a.At, ":")
+	if cut < 0 {
+		return nil, command.Usage("expected <path>:<line>")
+	}
+	line, err := strconv.Atoi(a.At[cut+1:])
+	if err != nil {
+		return nil, command.Usage("%s is not a line number", a.At[cut+1:])
+	}
+	bound := codeNavRequestTripwire
+	if !a.Wait {
+		bound = codeNavToolBound
+	}
+	result, err := d.checkCodeNav(ctx, d.callerRepository(c, a.Repository), a.At[:cut], line, bound)
+	if errors.Is(err, errCodeNavStillStarting) {
+		return result, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("nav check: %w", err)
+	}
+	return result, nil
+}
+
+var errCodeNavStillStarting = errors.New("the server is still starting")
+
+func (d *Daemon) checkCodeNav(ctx context.Context, repositoryDir, file string, line int, bound time.Duration) (protocol.CodeNavCheckResult, error) {
+	repository, err := d.repositoryRoot(ctx, repositoryDir)
 	if err != nil {
 		return protocol.CodeNavCheckResult{}, err
 	}
-	path := filepath.Join(repository, filepath.FromSlash(msg.Path))
+	path := filepath.Join(repository, filepath.FromSlash(file))
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return protocol.CodeNavCheckResult{}, err
 	}
 	lines := strings.Split(string(content), "\n")
-	if msg.Line < 1 || int(msg.Line) > len(lines) {
-		return protocol.CodeNavCheckResult{}, fmt.Errorf("%s has %d lines; ask about a line from 1 to %d", msg.Path, len(lines), len(lines))
+	if line < 1 || line > len(lines) {
+		return protocol.CodeNavCheckResult{}, fmt.Errorf("%s has %d lines; ask about a line from 1 to %d", file, len(lines), len(lines))
 	}
 	result := protocol.CodeNavCheckResult{Tried: []string{}}
-	ctx, cancel := context.WithTimeout(ctx, codeNavRequestTripwire)
+	ctx, cancel := context.WithTimeout(ctx, bound)
 	defer cancel()
 	started := time.Now()
-	for _, name := range identifiers(lines[msg.Line-1]) {
+	for _, name := range identifiers(lines[line-1]) {
 		result.Tried = append(result.Tried, name.name)
-		answer, err := d.codeNav.Ask(ctx, "", repository, path, int(msg.Line), name.character, codenav.KindDefinition)
+		answer, err := d.codeNav.Ask(ctx, "", repository, path, line, name.character, codenav.KindDefinition)
 		result.Language, result.Program = answer.Language, answer.Program
+		if errors.Is(err, context.DeadlineExceeded) && bound < codeNavRequestTripwire {
+			result.Starting = protocol.Ptr(true)
+			result.ElapsedMs = int(time.Since(started).Milliseconds())
+			return result, errCodeNavStillStarting
+		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			return result, fmt.Errorf("%s did not answer within %s (codeNavRequestTripwire)", answer.Program, codeNavRequestTripwire)
 		}
@@ -461,14 +519,14 @@ func (d *Daemon) checkCodeNav(ctx context.Context, msg *protocol.CodeNavCheckMes
 		if err != nil {
 			return result, fmt.Errorf("%s: %w", answer.Program, err)
 		}
-		if location, ok := definitionElsewhere(codeNavLocations(repository, answer.Locations), msg.Path, int(msg.Line), name.character); ok {
+		if location, ok := definitionElsewhere(codeNavLocations(repository, answer.Locations), file, line, name.character); ok {
 			result.Name, result.Location = protocol.Ptr(name.name), &location
 			break
 		}
 	}
 	result.ElapsedMs = int(time.Since(started).Milliseconds())
 	if result.Location == nil {
-		return result, fmt.Errorf("no name on %s:%d has a definition the server could find (asked about %s)", msg.Path, msg.Line, strings.Join(result.Tried, ", "))
+		return result, fmt.Errorf("no name on %s:%d has a definition the server could find (asked about %s)", file, line, strings.Join(result.Tried, ", "))
 	}
 	return result, nil
 }
@@ -486,13 +544,13 @@ func definitionElsewhere(locations []protocol.CodeNavLocation, path string, line
 	return protocol.CodeNavLocation{}, false
 }
 
-func (d *Daemon) handleCodeNavStatus(ctx context.Context, conn net.Conn, msg *protocol.CodeNavStatusMessage) {
+func (d *Daemon) runNavStatus(ctx context.Context, c command.Caller, a command.NavStatusArgs) (any, error) {
 	if !d.on(setting.CodeReviewEnabled) {
-		d.sendError(conn, codeNavOff())
-		return
+		return nil, codeNavOffRefusal()
 	}
+	given := d.callerRepository(c, a.Repository)
 	result := protocol.CodeNavStatusResult{BinDir: d.codeNavDir("bin"), Languages: []protocol.CodeNavLanguage{}, Servers: []protocol.CodeNavServer{}}
-	if repository, err := d.repositoryRoot(ctx, protocol.Deref(msg.Repository)); msg.Repository != nil && err == nil {
+	if repository, err := d.repositoryRoot(ctx, given); given != "" && err == nil {
 		origin := d.repositoryOrigin(reviewTask, repository)
 		result.Origin = optional(origin)
 		set := d.codeNavSetDefinitions(origin)
@@ -522,33 +580,30 @@ func (d *Daemon) handleCodeNavStatus(ctx context.Context, conn net.Conn, msg *pr
 		}
 		result.Servers = append(result.Servers, server)
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, CodeNavStatusResult: &result})
+	return result, nil
 }
 
-func (d *Daemon) handleCodeNavLink(conn net.Conn, msg *protocol.CodeNavLinkMessage) {
+func (d *Daemon) runNavLink(ctx context.Context, c command.Caller, a command.NavLinkArgs) (any, error) {
 	if !d.on(setting.CodeReviewEnabled) {
-		d.sendError(conn, codeNavOff())
-		return
+		return nil, codeNavOffRefusal()
 	}
-	target := filepath.Clean(msg.Target)
+	target := filepath.Clean(a.Program)
 	info, err := os.Stat(target)
 	switch {
 	case !filepath.IsAbs(target):
-		err = fmt.Errorf("%s is not an absolute path", msg.Target)
+		err = fmt.Errorf("%s is not an absolute path", a.Program)
 	case err == nil && (info.IsDir() || info.Mode().Perm()&0o111 == 0):
 		err = fmt.Errorf("%s is not an executable file", target)
 	}
 	if err != nil {
-		d.sendError(conn, fmt.Sprintf("nav link: %v", err))
-		return
+		return nil, fmt.Errorf("nav link: %w", err)
 	}
-	name := protocol.Deref(msg.Name)
+	name := a.As
 	if name == "" {
 		name = filepath.Base(target)
 	}
 	if !filepath.IsLocal(name) || strings.ContainsRune(name, filepath.Separator) {
-		d.sendError(conn, fmt.Sprintf("nav link: %q is not a program name", name))
-		return
+		return nil, fmt.Errorf("nav link: %q is not a program name", name)
 	}
 	link := d.codeNavDir("bin", name)
 	err = os.MkdirAll(filepath.Dir(link), 0o755)
@@ -557,50 +612,45 @@ func (d *Daemon) handleCodeNavLink(conn net.Conn, msg *protocol.CodeNavLinkMessa
 		err = os.Symlink(target, link)
 	}
 	if err != nil {
-		d.sendError(conn, fmt.Sprintf("nav link: %v", err))
-		return
+		return nil, fmt.Errorf("nav link: %w", err)
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, CodeNavLinkResult: &protocol.CodeNavLinkResult{Name: name, Path: link, Target: protocol.Ptr(target)}})
+	return protocol.CodeNavLinkResult{Name: name, Path: link, Target: protocol.Ptr(target)}, nil
 }
 
-func (d *Daemon) handleCodeNavUnlink(conn net.Conn, msg *protocol.CodeNavUnlinkMessage) {
+func (d *Daemon) runNavUnlink(ctx context.Context, c command.Caller, a command.NavUnlinkArgs) (any, error) {
 	if !d.on(setting.CodeReviewEnabled) {
-		d.sendError(conn, codeNavOff())
-		return
+		return nil, codeNavOffRefusal()
 	}
-	if !filepath.IsLocal(msg.Name) || strings.ContainsRune(msg.Name, filepath.Separator) {
-		d.sendError(conn, fmt.Sprintf("nav unlink: %q is not a program name", msg.Name))
-		return
+	if !filepath.IsLocal(a.Name) || strings.ContainsRune(a.Name, filepath.Separator) {
+		return nil, fmt.Errorf("nav unlink: %q is not a program name", a.Name)
 	}
-	link := d.codeNavDir("bin", msg.Name)
+	link := d.codeNavDir("bin", a.Name)
 	if err := os.Remove(link); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			err = fmt.Errorf("nothing is linked as %s in %s; `attn nav status` lists what is", msg.Name, d.codeNavDir("bin"))
+			err = fmt.Errorf("nothing is linked as %s in %s; `attn nav status` lists what is", a.Name, d.codeNavDir("bin"))
 		}
-		d.sendError(conn, fmt.Sprintf("nav unlink: %v", err))
-		return
+		return nil, fmt.Errorf("nav unlink: %w", err)
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, CodeNavLinkResult: &protocol.CodeNavLinkResult{Name: msg.Name, Path: link}})
+	return protocol.CodeNavLinkResult{Name: a.Name, Path: link}, nil
 }
 
-func (d *Daemon) handleCodeNavDefine(ctx context.Context, conn net.Conn, msg *protocol.CodeNavDefineMessage) {
-	result, err := d.defineCodeNav(ctx, msg)
-	if err != nil {
-		d.sendError(conn, fmt.Sprintf("nav set: %v", err))
-		return
-	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, CodeNavDefineResult: &result})
-}
-
-func (d *Daemon) defineCodeNav(ctx context.Context, msg *protocol.CodeNavDefineMessage) (protocol.CodeNavDefineResult, error) {
+func (d *Daemon) runNavDefine(ctx context.Context, c command.Caller, repositoryDir, language, definition string) (any, error) {
 	if !d.on(setting.CodeReviewEnabled) {
-		return protocol.CodeNavDefineResult{}, errors.New(codeNavOff())
+		return nil, codeNavOffRefusal()
 	}
-	language := strings.TrimSpace(msg.Language)
+	result, err := d.defineCodeNav(ctx, d.callerRepository(c, repositoryDir), language, definition)
+	if err != nil {
+		return nil, fmt.Errorf("nav set: %w", err)
+	}
+	return result, nil
+}
+
+func (d *Daemon) defineCodeNav(ctx context.Context, repositoryDir, given, definition string) (protocol.CodeNavDefineResult, error) {
+	language := strings.TrimSpace(given)
 	if language == "" || strings.ContainsFunc(language, func(r rune) bool { return !unicode.IsLower(r) && !unicode.IsDigit(r) && r != '-' }) {
-		return protocol.CodeNavDefineResult{}, fmt.Errorf("language %q must be lowercase letters, digits and dashes, such as java", msg.Language)
+		return protocol.CodeNavDefineResult{}, fmt.Errorf("language %q must be lowercase letters, digits and dashes, such as java", given)
 	}
-	repository, err := d.repositoryRoot(ctx, msg.Repository)
+	repository, err := d.repositoryRoot(ctx, repositoryDir)
 	if err != nil {
 		return protocol.CodeNavDefineResult{}, err
 	}
@@ -609,7 +659,7 @@ func (d *Daemon) defineCodeNav(ctx context.Context, msg *protocol.CodeNavDefineM
 		return protocol.CodeNavDefineResult{}, fmt.Errorf("%s has no origin remote; a server definition is keyed by the origin, so outposts with a clone find it", repository)
 	}
 	key := codeNavSettingKey(origin, language)
-	value := strings.TrimSpace(protocol.Deref(msg.Definition))
+	value := strings.TrimSpace(definition)
 	if value != "" {
 		def, err := codenav.ParseDefinition(value)
 		if err != nil {

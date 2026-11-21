@@ -59,12 +59,7 @@ var Placements = map[string][]Placement{
 	"claude_mod_reach":                 {Placement{LocatorSession, "session_id"}},
 	"claude_mod_reach_report":          {Placement{LocatorHome, ""}},
 	"code_nav":                         {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"code_nav_check":                   {Placement{LocatorHere, ""}},
-	"code_nav_define":                  {Placement{LocatorHere, ""}},
-	"code_nav_link":                    {Placement{LocatorHere, ""}},
 	"code_nav_setup":                   {Placement{LocatorHome, ""}},
-	"code_nav_status":                  {Placement{LocatorHere, ""}},
-	"code_nav_unlink":                  {Placement{LocatorHere, ""}},
 	"codex_status":                     {Placement{LocatorHere, ""}},
 	"collapse_repo":                    {Placement{LocatorHome, ""}},
 	"compacting_close_begin":           {Placement{LocatorSession, "session_id"}},
@@ -654,42 +649,6 @@ func (m CodeNavMessage) Locate() string {
 	return ""
 }
 
-func (CodeNavCheckMessage) CommandName() string {
-	return "code_nav_check"
-}
-
-func (m CodeNavCheckMessage) Placement() Placement {
-	return Placement{LocatorHere, ""}
-}
-
-func (m CodeNavCheckMessage) Locate() string {
-	return ""
-}
-
-func (CodeNavDefineMessage) CommandName() string {
-	return "code_nav_define"
-}
-
-func (m CodeNavDefineMessage) Placement() Placement {
-	return Placement{LocatorHere, ""}
-}
-
-func (m CodeNavDefineMessage) Locate() string {
-	return ""
-}
-
-func (CodeNavLinkMessage) CommandName() string {
-	return "code_nav_link"
-}
-
-func (m CodeNavLinkMessage) Placement() Placement {
-	return Placement{LocatorHere, ""}
-}
-
-func (m CodeNavLinkMessage) Locate() string {
-	return ""
-}
-
 func (CodeNavSetupMessage) CommandName() string {
 	return "code_nav_setup"
 }
@@ -699,30 +658,6 @@ func (m CodeNavSetupMessage) Placement() Placement {
 }
 
 func (m CodeNavSetupMessage) Locate() string {
-	return ""
-}
-
-func (CodeNavStatusMessage) CommandName() string {
-	return "code_nav_status"
-}
-
-func (m CodeNavStatusMessage) Placement() Placement {
-	return Placement{LocatorHere, ""}
-}
-
-func (m CodeNavStatusMessage) Locate() string {
-	return ""
-}
-
-func (CodeNavUnlinkMessage) CommandName() string {
-	return "code_nav_unlink"
-}
-
-func (m CodeNavUnlinkMessage) Placement() Placement {
-	return Placement{LocatorHere, ""}
-}
-
-func (m CodeNavUnlinkMessage) Locate() string {
 	return ""
 }
 

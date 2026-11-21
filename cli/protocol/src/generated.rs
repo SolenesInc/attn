@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "0b9d003f6c12";
+pub const PROTOCOL_VERSION: &str = "e2160fbbc3c0";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -1983,23 +1983,6 @@ impl ClientHelloMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CodeNavCheckMessage {
-    pub cmd: String,
-    pub line: i64,
-    pub path: String,
-    pub repository: String,
-}
-
-impl CodeNavCheckMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "code_nav_check".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CodeNavCheckResult {
     pub elapsed_ms: i64,
     pub language: String,
@@ -2008,26 +1991,10 @@ pub struct CodeNavCheckResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub program: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub starting: Option<bool>,
     #[serde(deserialize_with = "null_as_default")]
     pub tried: Vec<String>,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CodeNavDefineMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub definition: Option<String>,
-    pub language: String,
-    pub repository: String,
-}
-
-impl CodeNavDefineMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "code_nav_define".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CodeNavDefineResult {
@@ -2047,23 +2014,6 @@ pub struct CodeNavLanguage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub setting_key: Option<String>,
     pub source: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CodeNavLinkMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    pub target: String,
-}
-
-impl CodeNavLinkMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "code_nav_link".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CodeNavLinkResult {
@@ -2194,22 +2144,6 @@ impl CodeNavSetupResultMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CodeNavStatusMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub repository: Option<String>,
-}
-
-impl CodeNavStatusMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "code_nav_status".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CodeNavStatusResult {
     pub bin_dir: String,
     #[serde(deserialize_with = "null_as_default")]
@@ -2218,21 +2152,6 @@ pub struct CodeNavStatusResult {
     pub origin: Option<String>,
     #[serde(deserialize_with = "null_as_default")]
     pub servers: Vec<CodeNavServer>,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CodeNavUnlinkMessage {
-    pub cmd: String,
-    pub name: String,
-}
-
-impl CodeNavUnlinkMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "code_nav_unlink".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CodexStatusMessage {
@@ -9150,14 +9069,6 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub caller_session_id: Option<SessionID>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub code_nav_check_result: Option<CodeNavCheckResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub code_nav_define_result: Option<CodeNavDefineResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub code_nav_link_result: Option<CodeNavLinkResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub code_nav_status_result: Option<CodeNavStatusResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub codex_status_result: Option<CodexStatusResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command_refusal: Option<CommandRefusal>,
@@ -14489,18 +14400,6 @@ impl ResponseField for Ask {
 }
 impl ResponseField for AskShowResult {
     const FIELD: &'static str = "ask_show_result";
-}
-impl ResponseField for CodeNavCheckResult {
-    const FIELD: &'static str = "code_nav_check_result";
-}
-impl ResponseField for CodeNavDefineResult {
-    const FIELD: &'static str = "code_nav_define_result";
-}
-impl ResponseField for CodeNavLinkResult {
-    const FIELD: &'static str = "code_nav_link_result";
-}
-impl ResponseField for CodeNavStatusResult {
-    const FIELD: &'static str = "code_nav_status_result";
 }
 impl ResponseField for CodexStatusResult {
     const FIELD: &'static str = "codex_status_result";

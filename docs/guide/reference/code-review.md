@@ -176,7 +176,7 @@ To set one up yourself, run these from the repository:
 - `attn nav link <program>` links a program into attn's code navigation
   folder, such as a server your editor installed outside `PATH`.
 - `attn nav set <language> <definition>` sets how to start a server for this
-  repository. `attn nav --help` describes the definition.
+  repository. `attn nav set --help` describes the definition.
 - `attn nav check <path>:<line>` asks for a definition on that line. Setup is
   done when it answers.
 

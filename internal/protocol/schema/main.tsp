@@ -4130,15 +4130,6 @@ model CodeNavResultMessage {
   text?: string;                 // hover: the type, as the server words it
 }
 
-// Resolves the first name on a line that has a definition, to prove a server
-// works: `attn nav check path:line`.
-@extension("x-on", #{ here: true })
-model CodeNavCheckMessage {
-  cmd: "code_nav_check";
-  repository: string;            // a directory inside the repository
-  path: string;                  // relative to the repository
-  line: int32;
-}
 
 model CodeNavCheckResult {
   language: string;
@@ -4147,13 +4138,9 @@ model CodeNavCheckResult {
   location?: CodeNavLocation;
   elapsed_ms: safeint;           // from the question to the answer, including a start
   tried: string[];               // the names asked about, in order
+  starting?: boolean;            // the server was still starting when the call's bound ran out
 }
 
-@extension("x-on", #{ here: true })
-model CodeNavStatusMessage {
-  cmd: "code_nav_status";
-  repository?: string;           // a directory inside a repository, for its definitions
-}
 
 model CodeNavStatusResult {
   bin_dir: string;
@@ -4183,20 +4170,7 @@ model CodeNavServer {
   rss_bytes?: safeint;
 }
 
-// Links a language server's program into this machine's code navigation
-// folder, which is searched before PATH.
-@extension("x-on", #{ here: true })
-model CodeNavLinkMessage {
-  cmd: "code_nav_link";
-  target: string;                // absolute path of the program
-  name?: string;                 // the name to link it as; the target's file name when absent
-}
 
-@extension("x-on", #{ here: true })
-model CodeNavUnlinkMessage {
-  cmd: "code_nav_unlink";
-  name: string;
-}
 
 model CodeNavLinkResult {
   name: string;
@@ -4204,15 +4178,6 @@ model CodeNavLinkResult {
   target?: string;               // absent after an unlink
 }
 
-// Sets or removes the server definition of a language for the repository's
-// origin, a home setting that outposts copy.
-@extension("x-on", #{ here: true })
-model CodeNavDefineMessage {
-  cmd: "code_nav_define";
-  repository: string;            // a directory inside the repository
-  language: string;
-  definition?: string;           // JSON; absent removes it
-}
 
 model CodeNavDefineResult {
   key: string;
@@ -7457,10 +7422,6 @@ model Response {
   repos?: RepoState[];
   authors?: AuthorState[];
   journal_append_result?: JournalAppendResult;
-  code_nav_check_result?: CodeNavCheckResult;
-  code_nav_status_result?: CodeNavStatusResult;
-  code_nav_link_result?: CodeNavLinkResult;
-  code_nav_define_result?: CodeNavDefineResult;
   // open_markdown on a review document: the problems `attn review check` reports.
   review_problems?: ReviewProblem[];
   kept_conversation_list_result?: KeptConversationListResult;

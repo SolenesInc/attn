@@ -1084,48 +1084,27 @@ func (c *Client) ReviewAnswer(document, annotationID, text string) error {
 }
 
 func (c *Client) CodeNavCheck(repository, path string, line int) (*protocol.CodeNavCheckResult, error) {
-	resp, err := c.send(protocol.CodeNavCheckMessage{Cmd: protocol.CmdCodeNavCheck, Repository: repository, Path: path, Line: line})
-	if err != nil {
-		return nil, err
-	}
-	return resp.CodeNavCheckResult, nil
+	return commandResult[protocol.CodeNavCheckResult](c, "nav check", "", map[string]any{"repository": repository, "at": fmt.Sprintf("%s:%d", path, line), "wait": true})
 }
 
 func (c *Client) CodeNavStatus(repository string) (*protocol.CodeNavStatusResult, error) {
-	msg := protocol.CodeNavStatusMessage{Cmd: protocol.CmdCodeNavStatus}
-	if repository != "" {
-		msg.Repository = protocol.Ptr(repository)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	return resp.CodeNavStatusResult, nil
+	return commandResult[protocol.CodeNavStatusResult](c, "nav status", "", map[string]any{"repository": repository})
 }
 
 func (c *Client) CodeNavLink(target string) (*protocol.CodeNavLinkResult, error) {
-	resp, err := c.send(protocol.CodeNavLinkMessage{Cmd: protocol.CmdCodeNavLink, Target: target})
-	if err != nil {
-		return nil, err
-	}
-	return resp.CodeNavLinkResult, nil
+	return commandResult[protocol.CodeNavLinkResult](c, "nav link", "", map[string]any{"program": target})
 }
 
 func (c *Client) CodeNavUnlink(name string) error {
-	_, err := c.send(protocol.CodeNavUnlinkMessage{Cmd: protocol.CmdCodeNavUnlink, Name: name})
+	_, err := commandResult[protocol.CodeNavLinkResult](c, "nav unlink", "", map[string]any{"name": name})
 	return err
 }
 
 func (c *Client) CodeNavDefine(repository, language, definition string) (*protocol.CodeNavDefineResult, error) {
-	msg := protocol.CodeNavDefineMessage{Cmd: protocol.CmdCodeNavDefine, Repository: repository, Language: language}
-	if definition != "" {
-		msg.Definition = protocol.Ptr(definition)
+	if definition == "" {
+		return commandResult[protocol.CodeNavDefineResult](c, "nav rm", "", map[string]any{"repository": repository, "language": language})
 	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	return resp.CodeNavDefineResult, nil
+	return commandResult[protocol.CodeNavDefineResult](c, "nav set", "", map[string]any{"repository": repository, "language": language, "definition": definition})
 }
 
 func (c *Client) OpenSeed(seedID string, sessionID protocol.SessionID) error {
