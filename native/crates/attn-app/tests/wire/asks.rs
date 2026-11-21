@@ -3084,6 +3084,7 @@ fn a_replied_ask_takes_a_follow_up_sent_with_the_send_chord_and_says_who_it_went
             request_id: r["request_id"].as_str().unwrap().into(),
             ask_id: r["ask_id"].as_str().unwrap().into(),
             success: true,
+            holder: Some("api".into()),
             ..AskFollowUpResultMessage::new()
         })
     });
@@ -3114,4 +3115,74 @@ fn a_replied_ask_takes_a_follow_up_sent_with_the_send_chord_and_says_who_it_went
     assert!(!has(&world, "asks.follow-up.field"));
     assert!(has(&world, "asks.follow-up"));
     assert_eq!(name(&world, "notice.text"), "Follow-up sent to api");
+}
+
+#[test]
+fn text_typed_while_a_follow_up_sends_stays_in_the_field_after_the_daemon_takes_it() {
+    let answered = replied(cache_store(), vec![picked("q1", &["Postgres"])], None);
+    let mut world = start(vec![answered], vec![api_working()]);
+    world.daemon.on("ask_follow_up", |_| ());
+    open_sheet(&mut world);
+    letter(&mut world, "r");
+    letter(&mut world, "f");
+    world.gesture(|app| app.type_text("Use Redis."));
+    send_key(&mut world);
+    let sent = world.daemon.sent_of("ask_follow_up");
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0]["text"], "Use Redis.");
+
+    world.gesture(|app| app.type_text(" After the backup finishes."));
+    world.daemon.reply_to(
+        &sent[0],
+        message(AskFollowUpResultMessage {
+            ask_id: "a-cache1".into(),
+            success: true,
+            holder: Some("api".into()),
+            ..AskFollowUpResultMessage::new()
+        }),
+    );
+    world.settle();
+
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("asks.follow-up.field"))
+            .and_then(|n| n.value)
+            .as_deref(),
+        Some("Use Redis. After the backup finishes.")
+    );
+    assert_eq!(focused(&world).as_deref(), Some("asks.follow-up.field"));
+    assert_eq!(name(&world, "notice.text"), "Follow-up sent to api");
+    assert_eq!(world.daemon.sent_of("ask_follow_up").len(), 1);
+}
+
+#[test]
+fn a_follow_up_no_session_holds_says_it_waits_for_the_seeds_next_tender() {
+    let seed_ask = Ask {
+        seed_id: Some("s-cache".into()),
+        seed_title: Some("Cache migration".into()),
+        ..cache_store()
+    };
+    let answered = replied(seed_ask, vec![picked("q1", &["Postgres"])], None);
+    let mut world = start(vec![answered], vec![]);
+    world.daemon.on("ask_follow_up", |r| {
+        message(AskFollowUpResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            ask_id: r["ask_id"].as_str().unwrap().into(),
+            success: true,
+            ..AskFollowUpResultMessage::new()
+        })
+    });
+    open_sheet(&mut world);
+    letter(&mut world, "r");
+    letter(&mut world, "f");
+    world.gesture(|app| app.type_text("Use Redis."));
+    send_key(&mut world);
+
+    assert_eq!(world.daemon.sent_of("ask_follow_up").len(), 1);
+    assert!(!has(&world, "asks.follow-up.field"));
+    assert_eq!(
+        name(&world, "notice.text"),
+        "Follow-up waits for the next tender of Cache migration"
+    );
 }

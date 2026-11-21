@@ -526,6 +526,12 @@ func TestAsksBelongToTheAskingSessionsProfile(t *testing.T) {
 	if crossed.Success {
 		t.Fatal("an app on another profile answered the ask")
 	}
+	crossedFollowUp := testworld.Request(sideApp, protocol.AskFollowUpMessage{
+		Cmd: protocol.CmdAskFollowUp, RequestID: "across-follow-up", AskID: homeAsk.ID, Text: "from the side",
+	}, protocol.EventAskFollowUpResult, func(r protocol.AskFollowUpResultMessage) bool { return r.RequestID == "across-follow-up" })
+	if crossedFollowUp.Success || !strings.Contains(protocol.Deref(crossedFollowUp.Error), "no longer keeps") {
+		t.Fatalf("an app on another profile following up the open ask got %+v, want it refused as forgotten", crossedFollowUp)
+	}
 
 	selectProfile(app, side.ID)
 	testworld.Await(app, protocol.EventAsksUpdated, only(side.ID, sideAsk.ID))
@@ -1062,7 +1068,7 @@ func TestAFollowUpAskKeepsTheQuestionAndAnswerItFollowsAfterTheEarlierAskIsForgo
 	})
 }
 
-func TestAFollowUpOnARepliedSeedAskIsTypedToTheSeedsTenderNowAndNotedOnTheSeed(t *testing.T) {
+func TestAFollowUpOnARepliedSeedAskIsTypedToTheSeedsTenderNowOrWaitsForItsNextTender(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "asks_enabled", "true")
@@ -1108,8 +1114,8 @@ func TestAFollowUpOnARepliedSeedAskIsTypedToTheSeedsTenderNowAndNotedOnTheSeed(t
 	successor.Reply("Picked up the migration. <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, string(second.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 
-	if sent := followUp("later", asked.ID, "Redis after all: the cache is hot."); !sent.Success {
-		t.Fatalf("the follow-up failed: %s", protocol.Deref(sent.Error))
+	if sent := followUp("later", asked.ID, "Redis after all: the cache is hot."); !sent.Success || protocol.Deref(sent.Holder) != second.SessionID {
+		t.Fatalf("the follow-up got %+v, want it taken and sent to the seed's tender now, %s", sent, second.SessionID)
 	}
 	typed := successor.DeliveredPrompt()
 	for _, want := range []string{asked.ID, "followed up", "> Redis after all: the cache is hot."} {
@@ -1125,6 +1131,12 @@ func TestAFollowUpOnARepliedSeedAskIsTypedToTheSeedsTenderNowAndNotedOnTheSeed(t
 		t.Errorf("the follow-up is noted by %q/%q, want the user", authorSessionOf(notes.Notes[0]), authorMemberOf(notes.Notes[0]))
 	}
 
+	if _, err := cli.SeedTransition(second.SessionID, seed, "park", "waiting on review", false, client.SeedTransitionOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if parked := followUp("parked", asked.ID, "And keep the old keys."); !parked.Success || parked.Holder != nil {
+		t.Fatalf("a follow-up while no one tends the seed got %+v, want it taken with no holder, waiting for the next tender", parked)
+	}
 	if _, err := cli.SeedTransition(second.SessionID, seed, "wither", "superseded", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatal(err)
 	}

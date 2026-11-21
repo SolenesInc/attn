@@ -572,10 +572,13 @@ func (d *Daemon) noteAnswer(profileID, askID, seedID string, reply protocol.AskR
 
 func (d *Daemon) handleAskFollowUp(client *wsClient, msg *protocol.AskFollowUpMessage) {
 	result := protocol.AskFollowUpResultMessage{Event: protocol.EventAskFollowUpResult, RequestID: msg.RequestID, AskID: msg.AskID}
-	if err := d.followUpAsk(msg, client.selectedProfile()); err != nil {
+	if holder, err := d.followUpAsk(msg, client.selectedProfile()); err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	} else {
 		result.Success = true
+		if holder != nil {
+			result.Holder = protocol.Ptr(holder.ID)
+		}
 	}
 	d.sendToClient(client, result)
 }
@@ -585,27 +588,27 @@ var (
 	errAskStillOpen = errors.New("this ask is still open; answer it instead")
 )
 
-func (d *Daemon) followUpAsk(msg *protocol.AskFollowUpMessage, profileID string) error {
+func (d *Daemon) followUpAsk(msg *protocol.AskFollowUpMessage, profileID string) (*protocol.Session, error) {
 	stored, err := d.store.GetAsk(strings.TrimSpace(msg.AskID))
 	if errors.Is(err, store.ErrAskGone) {
-		return errAskForgotten
+		return nil, errAskForgotten
 	}
 	if err != nil {
-		return err
-	}
-	if stored.Reply == nil {
-		return errAskStillOpen
+		return nil, err
 	}
 	shown, err := d.readAsk(stored)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !askShownIn(profileID, shown.profileID) {
-		return errAskForgotten
+		return nil, errAskForgotten
+	}
+	if stored.Reply == nil {
+		return nil, errAskStillOpen
 	}
 	text, err := ask.FollowUp(shown.wire, msg.Text)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	followUp := inbox.Item{ID: uuid.NewString(), To: stored.To, Kind: inbox.AskAnswer, Source: stored.ID, Text: text}
 	if seedID, seed := stored.To.TenderOf(); seed {
@@ -617,13 +620,14 @@ func (d *Daemon) followUpAsk(msg *protocol.AskFollowUpMessage, profileID string)
 		_, err = d.store.PutInbox(followUp, time.Now())
 	}
 	if err != nil {
-		return fmt.Errorf("save the follow-up: %w", err)
+		return nil, fmt.Errorf("save the follow-up: %w", err)
 	}
 	d.kickInboxAfterCommit(stored.To)
-	if holder := d.inboxHolder(stored.To); holder != nil && holder.State != protocol.SessionStatePendingApproval {
+	holder := d.inboxHolder(stored.To)
+	if holder != nil && holder.State != protocol.SessionStatePendingApproval {
 		d.handBackTurn(holder.ID)
 	}
-	return nil
+	return holder, nil
 }
 
 func (d *Daemon) askRepliesForgetHandler(_ context.Context, _ *jobs.Job) (any, error) {

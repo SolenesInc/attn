@@ -4504,6 +4504,10 @@ model AskFollowUpResultMessage {
   ask_id: string;
   success: boolean;
   error?: string;
+  // The session the follow-up went to, the one holding the ask when it was
+  // sent. Absent when no session holds it: the follow-up then waits for the
+  // ask's next holder, such as the seed's next tender.
+  holder?: SessionID;
 }
 
 model AskDraftSaveMessage {

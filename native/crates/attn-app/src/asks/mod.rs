@@ -689,15 +689,35 @@ fn from(ask: &Ask, holder: Option<&Session>, standby: Option<&StandbyTender>) ->
     }
     match (holder, &ask.seed_id) {
         (Some(session), _) => crate::sidebar::display_name(session),
-        (None, Some(seed)) => format!(
-            "waiting for the next tender of {}",
-            ask.seed_title
-                .as_deref()
-                .filter(|t| !t.is_empty())
-                .unwrap_or(seed)
-        ),
+        (None, Some(seed)) => format!("waiting for {}", next_tender_of(seed, ask)),
         (None, None) => "Closed agent".into(),
     }
+}
+
+fn next_tender_of(seed: &str, ask: &Ask) -> String {
+    let title = ask.seed_title.as_deref().filter(|t| !t.is_empty());
+    format!("the next tender of {}", title.unwrap_or(seed))
+}
+
+/// Says where a follow-up the daemon took went: to the session holding the ask, or, with none
+/// holding it, who it waits for.
+fn follow_up_notice(ask: &Ask, holder: Option<&str>, facts: &Facts) -> String {
+    if let Some(id) = holder {
+        return match facts.sessions.iter().find(|s| s.id == id) {
+            Some(session) => format!("Follow-up sent to {}", from(ask, Some(session), None)),
+            None => "Follow-up sent".into(),
+        };
+    }
+    let waits_for = match (standby_tender(ask, facts), &ask.crew_member, &ask.seed_id) {
+        (Some(standby), _, _) => format!(
+            "{} · on standby",
+            crate::desktop::chain::dormant_name(standby.tender)
+        ),
+        (None, Some(member), _) => format!("{}'s next session", crew_display_name(member)),
+        (None, None, Some(seed)) => next_tender_of(seed, ask),
+        (None, None, None) => "its agent".into(),
+    };
+    format!("Follow-up waits for {waits_for}")
 }
 
 pub(crate) fn crew_display_name(id: &str) -> String {
@@ -1173,8 +1193,8 @@ pub(crate) fn follow_up_edit<'a>(state: &'a mut State, ask: &str) -> &'a mut Tex
 }
 
 /// Sends what was written to follow up on a replied ask to whoever holds it now. Once the
-/// daemon takes it the field closes and a notice says who it went to; a refusal keeps it and
-/// says why.
+/// daemon takes it a notice says who it went to, and the field closes unless the person wrote
+/// more in it meanwhile; a refusal keeps it and says why.
 fn send_follow_up(state: &mut State, id: String, tx: &mut Tx) {
     if state.window.asks.sending.is_some() {
         return;
@@ -1189,12 +1209,10 @@ fn send_follow_up(state: &mut State, id: String, tx: &mut Tx) {
     else {
         return;
     };
-    let to = state
-        .asks_items()
-        .iter()
-        .find(|i| i.ask.id == id)
-        .map(|i| i.from.clone())
-        .unwrap_or_default();
+    let Some(ask) = state.facts.asks.iter().find(|a| a.id == id).cloned() else {
+        return;
+    };
+    let sent = text.clone();
     state.window.asks.sending = Some(id.clone());
     state.window.asks.error = None;
     state.ask(
@@ -1210,12 +1228,20 @@ fn send_follow_up(state: &mut State, id: String, tx: &mut Tx) {
         move |state, answer, tx| {
             state.window.asks.sending = None;
             match answer.outcome() {
-                Ok(_) => {
-                    state.window.asks.follow_ups.remove(&id);
-                    state.window.notify(format!("Follow-up sent to {to}"), tx);
-                    if is_open(state) {
-                        tx.focus(SHEET, tx.by_keys() || tx.focus_visible());
+                Ok(reply) => {
+                    let holder = reply.body["holder"].as_str();
+                    let notice = follow_up_notice(&ask, holder, &state.facts);
+                    let follow_ups = &mut state.window.asks.follow_ups;
+                    if follow_ups
+                        .get(&id)
+                        .is_some_and(|edit| edit.text.trim() == sent)
+                    {
+                        follow_ups.remove(&id);
+                        if is_open(state) {
+                            tx.focus(SHEET, tx.by_keys() || tx.focus_visible());
+                        }
                     }
+                    state.window.notify(notice, tx);
                 }
                 Err(why) => state.window.asks.error = Some((id, why)),
             }

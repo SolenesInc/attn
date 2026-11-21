@@ -757,6 +757,9 @@ type AskFollowUpResultMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
+	// Holder corresponds to the JSON schema field "holder".
+	Holder *SessionID `json:"holder,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 
