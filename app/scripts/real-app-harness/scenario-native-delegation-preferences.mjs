@@ -141,7 +141,7 @@ try {
     runner.assert((await preferences()).roles.find((r) => r.id === builder.id).choices[0].selection.harness === '', 'browsing a harness saves nothing');
     await pressIn('models', 'list-box-option', 'Mock agent 1');
     await saved((p) => p.roles.find((r) => r.id === builder.id && r.choices[0].selection.model === MOCK_AGENT_MODEL), 'Builder model');
-    await pressIn('effort', 'button', 'medium');
+    await pressIn('effort', 'radio-button', 'medium');
     await saved((p) => p.roles.find((r) => r.id === builder.id && r.choices[0].selection.effort === 'medium'), 'Builder effort');
     await closePicker();
     runner.assert(roles().roles.some((r) => r.id === builder.id), 'a role with a harness and model is offered to agents');
@@ -169,7 +169,7 @@ try {
     await write(`settings.delegation.field.when.${builder.id}/${alt}`, 'Verification is difficult or the requirements are ambiguous.');
     await saved((p) => p.roles.find((r) => r.id === builder.id && r.choices[1].when.includes('ambiguous')), 'the condition');
     await openModel('Difficult verification');
-    await pressIn('effort', 'button', 'high');
+    await pressIn('effort', 'radio-button', 'high');
     const role = await saved((p) => p.roles.find((r) => r.id === builder.id && r.choices[1].selection.effort === 'high'), 'the alternative effort');
     runner.assert(role.choices[1].name === 'Difficult verification' && role.choices[1].selection.model === MOCK_AGENT_MODEL, 'the alternative starts from the default model', role);
     runner.assert(role.choices[0].selection.effort === 'medium', 'the default choice keeps its effort', role);
