@@ -69,7 +69,7 @@ Preconditions:
 - **Durability across restarts**: an instance's sessions, garden and settings live in its data folder and survive restarts of its daemon, app and machine. `clean` removes them. The notebook folder, `~/attn-notebook-<name>`, survives `clean`, and a later instance with the same name starts with it.
 - **Linux**: the app is a directory tree instead of a macOS bundle. `attn instance register-scheme` claims the deep-link scheme in the desktop database, and `make run` starts the app in the background, logging to `<data-dir>/app.log`.
 - **Profiles**: profiles live inside an instance. A new instance starts with its own profiles and sees none of production's.
-- **Compatibility across versions**: `attn profile` and `attn profile-env` were renamed to `attn instance` and `attn instance-env`, and exit 2 naming the new command. `attn daemon ensure` restarts a daemon that does not match the binary, and the CLI warns when its release differs from the running daemon's.
+- **Compatibility across versions**: `attn profile` and `attn profile-env` were renamed to `attn instance` and `attn instance-env`, and exit 2 naming the new command. `attn daemon ensure` restarts a daemon that does not match the binary, and the CLI warns when its protocol differs from the running daemon's.
 - **Flow**: the marker sits in the title bar in either flow.
 
 ## Tests
