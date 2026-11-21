@@ -22,6 +22,8 @@ attn seed note <seed-id> -m "The parser change passes focused checks. Integratio
 
 Add `--ring` only when the delegator needs to respond now. A note does not stop or transfer the session.
 
+Do not end your turn while a background shell is still running: the terminal looks idle to the user, and attn holds messages to you until the shell exits. Run local builds and tests synchronously, reusing warm build caches, and use `attn pr watch` or `attn seed standby` for waits on CI, pull requests, or other agents.
+
 ## Report each check as you prove it
 
 `attn seed show <seed-id>` lists your seed's checks, including the shared checks of the plot. Report each check in one call when you prove it, and report every check before you harvest. When the check ran against a Git revision, add the commit it ran on.

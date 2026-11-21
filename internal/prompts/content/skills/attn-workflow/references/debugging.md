@@ -44,8 +44,9 @@ the surface where the failure was reported. It must pass. A unit test
 alone shows branch behavior, not that the bug is gone. When the reproduction is
 a committed test, commit the test before the fix. Run the test without the fix and watch it fail. Then run it with the fix and watch it pass.
 When the cause is a mistake that has happened before, fix the class too: follow
-[Correction](correction.md), or plant a seed for the class when the work falls
-outside the task.
+[Correction](correction.md). If that fix is large and falls outside the task,
+report it to your coordinator, or plant a seed for the class when you have no
+coordinator.
 
 If two fixes that share an assumption have failed the same check, [Attack the
 premise](../principles/attack-the-premise.md) before the next fix. If your

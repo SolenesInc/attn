@@ -13,8 +13,8 @@ const seedCLITeaching = "`attn seed standby`"
 var gardenRulesNoToolTeaches = []string{
 	"Never make the user decode an id.",
 	"When the user uses one of those Jira words",
-	"Do not use markdown TODO lists or your harness's todo tool",
-	"Before your turn ends, plant the work that is still undone.",
+	"not in markdown TODO lists or your harness's todo tool",
+	"Never plant an unverified suspicion:",
 	"`--discovered-from <seed>`",
 }
 

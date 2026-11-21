@@ -33,8 +33,9 @@ Put these in one `attn ask`, and do not close while it is unanswered:
 - decisions agreed but not yet acted on or dispatched
 - work for another agent, including a review or merge a delegate waits on
   you for
-- follow-ups you found. Raise them instead of planting them, so the user
-  sees them.
+- verified, high-impact follow-ups you found that you could not finish here.
+  Raise them instead of planting them, so the user sees them. Drop P2 polish,
+  unverified suspicions, and anything on the fence.
 
 When the answer arrives, act on it, then close.
 

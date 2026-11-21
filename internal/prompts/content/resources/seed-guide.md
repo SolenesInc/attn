@@ -117,8 +117,9 @@ off. A part you cannot fill means the work is not scoped yet. Read referenced
 seed bodies with `attn seed show <id>`.
 
 When an agreed decision changes, rewrite every part of the shared plan that
-depends on that decision, and note why. Plant deferred work under the plot or
-beside it so the work stays tracked.
+depends on that decision, and note why. Plant deferred work only when it is
+verified, high-impact, and genuinely needs its own effort. Drop low-value ideas
+and unverified suspicions.
 
 CHECKS
 

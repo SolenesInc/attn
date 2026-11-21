@@ -52,13 +52,13 @@ Do not edit the plan or its children. The plan's author rewrites the plan with t
 
 ## Return findings
 
-Prioritize actionable findings by severity. For each finding, explain the affected behavior, the conditions that expose the defect, and the consequence. Include a file location or reproducible steps and supporting evidence. Label each finding measured, inferred, or guessed, as [Prove it works](../principles/prove-it-works.md) defines the labels. When you weigh another reviewer's findings, give the reason for each dismissed finding in one line. A finding that two independent reviews raise is strong evidence. If a finding repeats an earlier one, it is a class: say so, and recommend fixing it with [Correction](correction.md).
+Prioritize actionable findings by severity. Verify each finding against the code or a run before you report it. Drop claims you cannot substantiate, and leave out P2 polish unless the task asks for it. For each finding, explain the affected behavior, the conditions that expose the defect, and the consequence. Include a file location or reproducible steps and supporting evidence. Label each finding measured, inferred, or guessed, as [Prove it works](../principles/prove-it-works.md) defines the labels. When you weigh another reviewer's findings, give the reason for each dismissed finding in one line. A finding that two independent reviews raise is strong evidence. If a finding repeats an earlier one, it is a class: say so, and recommend fixing it with [Correction](correction.md).
 
 Sort the findings into three groups, and name the group of each finding:
 
 - Blocking: a defect in behavior that you can show at the reviewed revision, with a run that fails or a line of documentation that the change made wrong. A defect that the base already has blocks only when the change copies it or newly reaches it. Record any other defect of the base in one line. In a plan, a blocking finding is one that the author must correct before dispatch: a claim that the code or a spike's evidence contradicts, passages that disagree, a requested outcome that the plan does not deliver, or a check that a broken result would pass.
 - Scope question: a finding about the design, as Inspect and exercise the change describes. A scope question needs no run. In a plan, a scope question is a decision with a better alternative, or a doubt that needs a spike. The user decides both.
-- Follow-up: every other finding, including an optional improvement and a defect that you could not reproduce, which keeps its label.
+- Follow-up: a verified, high-impact defect outside the reviewed change's scope or reach, such as a pre-existing P0 or P1 in untouched code or work requiring another machine. Leave out unconfirmed suspicions, P2 nitpicks, and optional polish.
 
 List the questions about intent that you asked under Establish the review context apart from the findings.
 
@@ -66,6 +66,6 @@ When you review a change and the reviewed seed carries checks, record a verdict 
 
 Summarize what you checked, the reviewed revision, coverage gaps, and your recommendation. For a plan, the reviewed revision is the bookmark that `attn seed show` printed for the plan seed, and the recommendation is one of three: dispatch as written, dispatch after the named changes, or rework the named parts first. If no actionable findings remain, say so and state any material limits on the review.
 
-Return the blocking findings to the Builder, or to the plan's author, with enough context to address them. In a follow-up review, check the correction and the affected behavior, and reuse prior evidence where it remains valid. When two corrections that share an assumption have failed the same check, [Attack the premise](../principles/attack-the-premise.md) and report the assumption as the finding. Publish comments or other external responses only when the user or the assigned task authorizes it.
+Return the blocking findings to the Builder, or to the plan's author, with enough context to address them. In a follow-up review, check only the correction and the affected behavior, and reuse prior evidence where it remains valid. Do not start a fresh hunt for P2 polish: only verified P0 or P1 defects block. When two corrections that share an assumption have failed the same check, [Attack the premise](../principles/attack-the-premise.md) and report the assumption as the finding. Publish comments or other external responses only when the user or the assigned task authorizes it.
 
 Report the review in the conversation, and record it in the assigned seed with links to the supporting artifacts.
