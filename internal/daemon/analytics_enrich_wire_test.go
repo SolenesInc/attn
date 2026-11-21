@@ -108,6 +108,52 @@ func TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText(t *test
 	})
 }
 
+func TestAnEmptyGitDirectoryDoesNotMakeASessionsFolderARepository(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		shop := w.Path("shop")
+		gitRepo(t, shop)
+		if err := os.WriteFile(filepath.Join(shop, "AGENTS.md"), []byte("be kind\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		for _, dir := range []string{w.Path("notes", ".git"), w.Path("notes", "today"), filepath.Join(shop, "web", ".git")} {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		setAnalyticsEnabled(app, "true")
+
+		plain := w.bubbleClaude(t, app, "notes/today")
+		nested := w.bubbleClaude(t, app, "shop/web")
+		secret, err := hex.DecodeString(strings.TrimSpace(readSecret(t, filepath.Join(w.Dir, "analytics-secret"))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		records := mirroredRecords(t, app, "session.state.changed")
+		for _, tc := range []struct {
+			name, session string
+			repo          *analytics.RepoTraits
+		}{
+			{"session under an empty .git", plain.id, nil},
+			{"session under an empty .git inside a repository", nested.id, &analytics.RepoTraits{AgentsMD: true}},
+		} {
+			subject := analytics.HashSubject(secret, tc.session)
+			latest := slices.IndexFunc(records, func(r analytics.Record) bool { return r.Subject == subject })
+			if latest < 0 {
+				t.Errorf("no session.state.changed record for the %s", tc.name)
+				continue
+			}
+			var got analytics.Derived
+			if err := json.Unmarshal(records[latest].Props, &got); err != nil {
+				t.Fatalf("%s props %s: %v", tc.name, records[latest].Props, err)
+			}
+			if (got.Repo == nil) != (tc.repo == nil) || (got.Repo != nil && *got.Repo != *tc.repo) {
+				t.Errorf("the %s carries %s, want repo traits %+v", tc.name, records[latest].Props, tc.repo)
+			}
+		}
+	})
+}
+
 func assertDerivedTraitsAreClosed(t *testing.T, record analytics.Record) {
 	t.Helper()
 	if len(record.Props) == 0 {

@@ -111,7 +111,8 @@ func locateGitDir(ctx context.Context, dir string) (root, gitDir string, ok bool
 		}
 		gitPath := filepath.Join(root, ".git")
 		entry, err := os.Lstat(gitPath)
-		if err == nil {
+		headlessGitDir := err == nil && entry.IsDir() && !fileExists(filepath.Join(gitPath, "HEAD"))
+		if err == nil && !headlessGitDir {
 			if !gitPathOwnedByCurrentUser(entry) || (!entry.IsDir() && !entry.Mode().IsRegular()) {
 				return "", "", false
 			}
@@ -131,7 +132,7 @@ func locateGitDir(ctx context.Context, dir string) (root, gitDir string, ok bool
 			}
 			return root, filepath.Clean(gitDir), true
 		}
-		if !os.IsNotExist(err) {
+		if err != nil && !os.IsNotExist(err) {
 			return "", "", false
 		}
 		parent := filepath.Dir(root)
