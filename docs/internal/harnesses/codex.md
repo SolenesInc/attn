@@ -195,8 +195,7 @@ signed-in `CODEX_HOME` passed as `model_catalog_json`, 2026-11-20 (seed
   file, so they stay out of `ps` and past Linux's 128 KiB limit on one
   argument. attn uses it. On 0.171.0 the two forms sent the same request,
   with attn's arguments and alone, and 1,048,576-byte instructions arrived
-  whole (seed `s-d7drbj`). With attn's tool-free arguments, 0.171.0 sends the
-  instructions twice, as two identical developer messages, under either form.
+  whole (seed `s-d7drbj`).
 - Tools travel in an `additional_tools` input item, not the top-level `tools`
   array, which stays empty. Without the settings that follow, a tool-free run on
   gpt-5.6-terra declared `exec`, `wait`, `request_user_input` and six
@@ -223,3 +222,9 @@ signed-in `CODEX_HOME` passed as `model_catalog_json`, 2026-11-20 (seed
 - A catalog entry with `tool_mode: direct`, no `experimental_supported_tools`
   and no `apply_patch_tool_type` declares no tools. Codex reads the catalog
   from its private model cache.
+- A request that declares no tools at all carries the instructions twice on
+  0.171.0, under either form: once as a developer message in the place of the
+  `additional_tools` item, and once in the turn. Both are tagged
+  `model.base_instructions`. Only such a catalog entry produces that request.
+  With attn's tool-free arguments, every model in a signed-in catalog declared
+  tools and got the instructions once (seed `s-fhpsxz`).
