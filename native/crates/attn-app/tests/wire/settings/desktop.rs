@@ -372,22 +372,28 @@ fn a_notebook_folder_with_a_backtick_in_its_name_reads_whole() {
     rest(&mut world);
 }
 
-/// Where the page and the newly focused control stand after the person types into the
-/// Notebook folder field at the smallest window with the largest text and leaves it by
-/// `leave`, when the daemon `refuses` the folder or saves it.
-fn left_notebook_folder(
-    refuses: bool,
-    leave: fn(&mut World),
-) -> (String, [f32; 2], [f32; 4], [f32; 4]) {
-    let (daemon, _) = super::keeping(&[("uiScale", "1.5")], move |key, _| {
+/// The newly focused control, and where it shows and how much of it, after the person types
+/// into the Notebook folder field at the smallest window with the largest text and leaves it
+/// by `leave`, when the daemon `refuses` the folder or saves it. The daemon answers once
+/// leaving has settled.
+fn left_notebook_folder(refuses: bool, leave: fn(&mut World)) -> (String, [f32; 4], [f32; 4]) {
+    let refuse = move |key: &str, _: &str| {
         (refuses && key == "notebook.root")
             .then(|| "cannot create directory: permission denied".to_owned())
-    });
+    };
+    let (daemon, stored) = super::keeping(&[("uiScale", "1.5")], refuse);
+    daemon.on("set_setting", |_| ());
     let mut world = World::start(daemon);
     world.resize((800.0, 600.0));
     on_desktop(&mut world);
     retype(&mut world, &field("notebook.root"), "~/elsewhere");
     leave(&mut world);
+    world.settle();
+    let sent = world.daemon.sent_of("set_setting");
+    let save = sent.last().expect("leaving the field saves it");
+    for answer in super::write(&stored, &refuse, save) {
+        world.daemon.emit(answer);
+    }
     world.settle();
     assert_eq!(
         named(&world, "settings.refusal.notebook.root").is_some(),
@@ -406,7 +412,7 @@ fn left_notebook_folder(
         .find(|e| e.key.as_deref() == Some(focused.as_str()))
         .expect("the destination is drawn");
     rest(&mut world);
-    (focused, e.scrolled, e.rect, e.visible)
+    (focused, e.rect, e.visible)
 }
 
 #[test]
@@ -434,12 +440,12 @@ fn leaving_a_refused_field_by_tab_or_click_keeps_the_page_where_the_person_went(
         world.gesture(|app| app.click_at((x + w / 2.0, y + h / 2.0)));
     }
     for (how, leave) in [("Tab", by_tab as fn(&mut World)), ("a click", by_click)] {
-        let (saved_on, saved_offset, _, _) = left_notebook_folder(false, leave);
-        let (on, offset, rect, visible) = left_notebook_folder(true, leave);
+        let (saved_on, saved_rect, _) = left_notebook_folder(false, leave);
+        let (on, rect, visible) = left_notebook_folder(true, leave);
         assert_eq!(on, saved_on, "{how}: the focus went where it would have");
         assert_eq!(
-            offset, saved_offset,
-            "{how}: the page stands where the save would have left it"
+            rect, saved_rect,
+            "{how}: {on} shows where the save would have left it"
         );
         assert!(
             (visible[3] - rect[3]).abs() < 0.5,
