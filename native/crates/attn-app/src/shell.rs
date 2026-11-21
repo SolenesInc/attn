@@ -85,6 +85,7 @@ pub struct Window {
     pub(crate) session_menu: Option<crate::sidebar::session_menu::Menu>,
     pub(crate) rename: Option<crate::sidebar::rename::Rename>,
     pub(crate) context_cap: Option<crate::context_cap::ContextCap>,
+    pub(crate) sender_pairing: crate::sender_pairing::SenderPairing,
     /// The popped-out leaf this window shows, when it is a tile window.
     pub(crate) tile: Option<crate::desktop::TileWindow>,
     pub(crate) garden: crate::garden::Garden,
@@ -917,6 +918,7 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
     layers.extend(crate::desktop::width_label(state, t));
     layers.extend(crate::desktop::drag_overlay(state, t));
     layers.extend(crate::picker::worktree_setup(state, t));
+    crate::sender_pairing::view(state, t, &mut layers);
     layers
 }
 

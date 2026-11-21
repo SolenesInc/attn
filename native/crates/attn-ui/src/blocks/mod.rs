@@ -26,6 +26,7 @@ pub mod inspector;
 mod key_line;
 mod lane;
 mod list;
+mod match_code;
 mod measure;
 mod menu;
 mod miniature;
@@ -85,6 +86,7 @@ pub use key_line::{
 };
 pub use lane::{Lane, board, lanes};
 pub use list::List;
+pub use match_code::MatchCode;
 pub use menu::Menu;
 pub use miniature::Miniature;
 pub use notice::{Notice, Refusal, Status, saved, show_refusal};

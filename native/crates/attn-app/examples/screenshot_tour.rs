@@ -1859,6 +1859,52 @@ fn context_cap(dark: bool) {
     snap(&mut world, "context-cap", dark);
 }
 
+/// A program asking to pair, with the longest real sender name, over the agent on screen; then
+/// with Allow refused, in the smallest window at the largest text.
+fn sender_pairing(dark: bool) {
+    let refuse = |daemon: &Daemon| {
+        daemon.on("sender_pair_decide", |_: &Request| {
+            message(attn_protocol::SenderPairDecideResultMessage {
+                success: false,
+                error: Some(
+                    "profile \"Work\" already has a sender named \"engineering-observability-staging-deploy-bot\"; remove it from Paired senders, then allow again"
+                        .into(),
+                ),
+                ..attn_protocol::SenderPairDecideResultMessage::new()
+            })
+        });
+    };
+    let ask = |world: &mut World| {
+        world.daemon.emit(attn_protocol::SendersUpdatedMessage {
+            request: Some(attn_protocol::SenderPairingRequest {
+                id: "pair-1".into(),
+                name: "engineering-observability-staging-deploy-bot".into(),
+                code: "4821".into(),
+                requested_at: "2026-11-12T09:00:00Z".into(),
+            }),
+            ..attn_protocol::SendersUpdatedMessage::new()
+        });
+        world.settle();
+    };
+    let mut world = popover_world(dark, |_| {}, refuse);
+    ask(&mut world);
+    snap(&mut world, "sender-pairing", dark);
+
+    let mut world = popover_world(
+        dark,
+        |state| {
+            if let Some(settings) = state.settings.as_mut() {
+                settings.insert("uiScale".into(), SMALLEST_TEXT.into());
+            }
+        },
+        refuse,
+    );
+    world.resize((800.0, 600.0));
+    ask(&mut world);
+    click(&mut world, Target::key("sender-pairing.allow"));
+    snap(&mut world, "sender-pairing-smallest-refused", dark);
+}
+
 const MESSAGE: &str = "The cache keeps every row it reads until the window closes.";
 const KNOWN_SEED: &str = "s-7k3f9m";
 
@@ -7824,6 +7870,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("palette_no_match", || palette_no_match(dark));
         scene("opener", || opener(dark));
         scene("context_cap", || context_cap(dark));
+        scene("sender_pairing", || sender_pairing(dark));
         scene("terminal_overlays", || terminal_overlays(dark));
         scene("terminal_filter", || terminal_filter(dark));
         scene("tile_notices", || tile_notices(dark));

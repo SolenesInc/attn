@@ -47,6 +47,7 @@ pub mod quick_capture;
 mod requests;
 mod review;
 pub mod screen;
+mod sender_pairing;
 mod settings;
 mod shared_codex;
 mod shell;
@@ -258,6 +259,7 @@ pub fn bind(
             }
             if !was && is {
                 warnings::connected(state);
+                sender_pairing::connected(state);
                 picker::reconnected(state, tx);
                 crew::reconnected(state, tx);
             }
@@ -284,6 +286,7 @@ pub fn bind(
             sidebar::session_menu::follow(state);
             sidebar::rename::follow(state);
             context_cap::follow(state);
+            sender_pairing::follow(state, tx);
             sidebar::width::follow(state);
             palette::follow(state);
             asks::follow(state, tx);

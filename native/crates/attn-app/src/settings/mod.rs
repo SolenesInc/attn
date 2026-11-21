@@ -384,7 +384,6 @@ pub(crate) fn follow(state: &mut State, changed: Slices, tx: &mut Tx) {
     tasks::follow(state, tx);
     outposts::follow(state, changed);
     phones::follow(state, changed);
-    senders::follow(state, changed);
 }
 
 /// Before each frame: reads the event bus when its refresh is due, forgets unmutes the daemon

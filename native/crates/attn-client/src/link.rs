@@ -13,11 +13,10 @@ use attn_protocol::{
     PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage, ProfileArrangementChangedMessage,
     ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage, QuickCaptureReadMessage,
     QuickCaptureUnreadMessage, RateLimitedMessage, ReposUpdatedMessage, RuntimeRespawnedMessage,
-    SendersUpdatedMessage, SessionClosedMessage, SessionExitedMessage,
-    SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
-    SessionsUpdatedMessage, SettingsUpdatedMessage, SharedCodexChangedMessage,
-    UpdateChangedMessage, VentsUpdatedMessage, WorktreeStateChangedEvent, WorktreeSweptEvent,
-    go_values,
+    SessionClosedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
+    SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
+    SettingsUpdatedMessage, SharedCodexChangedMessage, UpdateChangedMessage, VentsUpdatedMessage,
+    WorktreeStateChangedEvent, WorktreeSweptEvent, go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -759,8 +758,7 @@ impl Task {
                 None
             }
             "senders_updated" => {
-                let message: SendersUpdatedMessage = parse(&header.event, text)?;
-                self.store.set_senders(message.senders);
+                self.store.set_senders(parse(&header.event, text)?);
                 None
             }
             "asks_updated" => {

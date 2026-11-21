@@ -1081,6 +1081,8 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::prose::Prose::lead(said)", true),
     ("blocks::prose::Prose::empty(said)", true),
     ("blocks::prose::Prose::hint(said)", true),
+    ("blocks::match_code::MatchCode::new(code)", false),
+    ("blocks::match_code::MatchCode::new(hint)", true),
     ("blocks::prose::Prose::code(value)", false),
     ("blocks::section::Section::new(title)", true),
     ("blocks::section::Section::description(said)", true),

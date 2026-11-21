@@ -232,6 +232,10 @@ pub(crate) const WORDMARK: TextStyle = TextStyle::new(24.0, 700.0).mono();
 /// What the brand is, under its wordmark: widely spaced capitals in the interface face.
 pub(crate) const TAGLINE: TextStyle = TextStyle::new(12.0, 400.0).tracking(0.9);
 
+/// A code the person matches by eye, as the Tauri app's `.sender-pairing-code`: 40/600
+/// monospace, spaced 0.3em.
+pub(crate) const MATCH_CODE: TextStyle = TextStyle::new(40.0, 600.0).mono().tracking(12.0);
+
 /// `e` in `style`, for the text a caller outside the type roles still hands in, such as a
 /// glyph button's mark.
 pub(crate) fn styled(e: El, style: TextStyle) -> El {

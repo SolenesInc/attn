@@ -21,7 +21,7 @@ only for the model. Attn Lens refines dictation this way.
 
 ### People
 
-- A program the user paired with `attn send pair` (Attn Lens, a script). Pairing needs the Tauri app's approval dialog, as [Quick capture](quick-capture.md) describes.
+- A program the user paired with `attn send pair` (Attn Lens, a script), allowed in the app's approval dialog, as [Quick capture](quick-capture.md) describes.
 - Settings: `model_calls.agent` and `model_calls.model`, through `attn settings set` or the settings dialog.
 
 ### Agents
@@ -32,9 +32,9 @@ only for the model. Attn Lens refines dictation this way.
 
 Preconditions:
 
-- A Tauri instance (`APP=tauri make install INSTANCE=<name>`), launched with `bridge --launch --wait-ready ping`. The native app has no pairing dialog.
+- A native instance (`make install INSTANCE=<name> APP=native`), launched with `bridge --launch ping`.
 - The real harnesses and headless tasks on, appended to the env file before the launch, so the daemon starts with them: `echo "export ATTN_HEADLESS_TASKS=on ATTN_CLAUDE_EXECUTABLE=$(which claude) ATTN_CODEX_EXECUTABLE=$(which codex) CODEX_HOME=$HOME/.codex" >> $DRIVE_ENV`. Each call spends real tokens; keep the text synthetic.
-- Pair: `./attn send pair --name Probe --json > $P/pair.out &`, then `bridge dom_wait '{"selector":".sender-pairing-title","timeoutMs":15000}'`, `bridge dom_native_point '{"selector":"button.allow"}'` and `bridge native_mouse '{"action":"click","x":<x>,"y":<y>}'`. The token is `token` on the second line of `$P/pair.out`.
+- Pair: `./attn send pair --name Probe --json > $P/pair.out &`, then `bridge wait '{"target":{"key":"sender-pairing-dialog"}}'` and `bridge press '{"target":{"key":"sender-pairing.allow"}}'`. The token is `token` on the second line of `$P/pair.out`.
 - The daemon's pid is in `~/.attn-<name>/attn.pid`. The spare is its child whose command has `--input-format stream-json`.
 
 Recipes:
@@ -52,7 +52,7 @@ Recipes:
 
 ## Contexts
 
-- **Linux**: the daemon and CLI run there the same way; pairing still needs the Tauri app.
+- **Linux**: the daemon and CLI run there the same way; pairing needs the app, which runs on macOS. `TestTheNativeAppAllowsAndDeniesAProgramThatAsksToPair` answers a pairing in the headless native app on Linux.
 - **Outposts**: model calls run on the home, where the sender is paired; an outpost's harnesses do not answer them.
 - **Performance and idle cost**: the spare holds about 200 to 300 MB and uses no CPU while it waits: once Claude answers attn's `mcp_status` request, attn stops the spare with SIGSTOP until a call takes it. That holds under `--bare`, which Claude runs with when the environment has an API key or a cloud provider. The spare ends 4 hours after the last presence report or call, when the last sender is unpaired, when headless tasks go off, or when the default harness cannot start ahead.
 - **Harnesses**: Claude answers from the spare; Codex answers cold through `codex exec`, which still declares `exec` and `wait`, a V8 isolate with no file system or network, and on gpt-6.2 models also `send_message_to_user_async`, whose message stays in the call's output (`docs/internal/harnesses/codex.md`, Headless runs). Plugin harnesses do not answer model calls yet.

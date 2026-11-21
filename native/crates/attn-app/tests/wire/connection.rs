@@ -31,11 +31,12 @@ fn the_app_says_hello_with_its_token_and_shows_the_daemon_state() {
         sent,
         [
             "client_hello",
+            "senders_get",
             "notification_list",
             "set_terminal_theme",
             "set_client_presence"
         ],
-        "the app says hello, then counts its notifications, gives the daemon its terminal colors and says the user is at Home once the handshake completes"
+        "the app says hello, then asks which program waits to pair, counts its notifications, gives the daemon its terminal colors and says the user is at Home once the handshake completes"
     );
     let hello = &hello[0];
     assert_eq!(hello["client_kind"], "native-app");

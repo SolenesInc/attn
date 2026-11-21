@@ -192,6 +192,7 @@ mod wire {
     mod remote_agents;
     mod remote_shell;
     mod review;
+    mod sender_pairing;
     mod settings;
     mod shared_codex;
     mod shelf_drags;

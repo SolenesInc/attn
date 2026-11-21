@@ -5,8 +5,8 @@ use crate::layout::{Leaf, Node};
 use attn_protocol::{
     Ask, AuthorState, CrewMember, DaemonWarning, DesktopTileContentMessage, GardenReview,
     GitOperation, InitialStateMessage, OutpostInfo, PR, PairedSender, PhonesUpdatedMessage,
-    PluginInfo, PluginIssue, Profile, RepoState, Seed, Session, SessionLedgerEntry,
-    SharedCodexState, UpdateRun, Vent, Worktree, WorktreeSweepEntry,
+    PluginInfo, PluginIssue, Profile, RepoState, Seed, SenderPairingRequest, SendersUpdatedMessage,
+    Session, SessionLedgerEntry, SharedCodexState, UpdateRun, Vent, Worktree, WorktreeSweepEntry,
 };
 
 /// A desktop as the daemon sent it, with its layout tree read once on arrival.
@@ -85,6 +85,9 @@ pub struct Facts {
     /// The programs paired to send as the selected profile; `None` until the daemon first
     /// lists them.
     pub senders: Arc<Option<Vec<PairedSender>>>,
+    /// The program waiting for the user to allow or deny it as a sender; the daemon asks about
+    /// one at a time.
+    pub sender_pairing: Arc<Option<SenderPairingRequest>>,
     /// Every crew member of every profile, in session or not.
     pub crew: Arc<Vec<CrewMember>>,
     /// When the daemon last said an agent retrieved a quick capture from its inbox, by capture
@@ -742,9 +745,10 @@ impl Store {
         });
     }
 
-    pub(crate) fn set_senders(&self, senders: Vec<PairedSender>) {
+    pub(crate) fn set_senders(&self, message: SendersUpdatedMessage) {
         self.change(|facts| {
-            facts.senders = Arc::new(Some(senders));
+            facts.senders = Arc::new(Some(message.senders));
+            facts.sender_pairing = Arc::new(message.request);
             Slices::SENDERS
         });
     }

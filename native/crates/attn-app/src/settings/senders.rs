@@ -1,7 +1,6 @@
 //! Settings → Paired senders: the programs paired to send as this profile, each with when it
 //! paired and last sent, and Remove.
 
-use attn_client::{Connection, Slices};
 use attn_protocol::{PairedSender, SenderUnpairMessage, SendersGetMessage};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Block, List, Notice, Prose, Section, Status};
@@ -31,16 +30,6 @@ fn read(state: &mut State) {
 pub(super) fn arrive(state: &mut State) {
     if shown(state) {
         state.window.settings.senders.error = None;
-        read(state);
-    }
-}
-
-/// Reads the senders again when the connection comes back under the page.
-pub(super) fn follow(state: &mut State, changed: Slices) {
-    if changed.intersects(Slices::CONNECTION)
-        && state.facts.connection == Connection::Connected
-        && shown(state)
-    {
         read(state);
     }
 }
