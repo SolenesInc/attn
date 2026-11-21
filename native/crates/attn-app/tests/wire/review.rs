@@ -5354,11 +5354,11 @@ fn keeps_the_picked_place_in_view_as_the_keys_move_it_down_a_long_list_of_uses()
     assert!(!shows_inside(&world, list, "review.nav.place.59"));
 
     for (key, picked) in [
-        (Key::PageDown, 20),
-        (Key::PageDown, 40),
-        (Key::Down, 41),
-        (Key::PageDown, 59),
-        (Key::PageUp, 39),
+        (Key::PageDown, 18),
+        (Key::PageDown, 36),
+        (Key::Down, 37),
+        (Key::PageDown, 55),
+        (Key::PageUp, 37),
         (Key::PageUp, 19),
         (Key::Up, 18),
     ] {
@@ -5374,6 +5374,40 @@ fn keeps_the_picked_place_in_view_as_the_keys_move_it_down_a_long_list_of_uses()
         file_reads(&world).last().map(String::as_str),
         Some("pkg18.go")
     );
+}
+
+#[test]
+fn the_page_keys_move_through_a_long_list_of_uses_without_skipping_a_place() {
+    let (mut world, _) = open_served(DOCUMENT, bundle());
+    world.daemon.on("code_nav", |r| {
+        if r["kind"] == "definition" {
+            nav_answer(vec![place("calc.go", 3, 5, "func Add(a, b int) int {")])
+        } else {
+            nav_answer(
+                (0..60)
+                    .map(|i| place(&format!("pkg{i}.go"), i + 1, 2, "\tAdd(1, 2)"))
+                    .collect(),
+            )
+        }
+    });
+    press(&mut world, Key::Right);
+    type_key(&mut world, "f");
+    type_key(&mut world, "s");
+    let list = "tile.m.review.nav.list";
+    let shown = |world: &World| -> Vec<usize> {
+        (0..60)
+            .filter(|i| shows_inside(world, list, &format!("review.nav.place.{i}")))
+            .collect()
+    };
+    let mut seen = shown(&world);
+    for _ in 0..10 {
+        press(&mut world, Key::PageDown);
+        world.settle();
+        seen.extend(shown(&world));
+    }
+    seen.sort_unstable();
+    seen.dedup();
+    assert_eq!(seen, (0..60).collect::<Vec<_>>());
 }
 
 #[test]

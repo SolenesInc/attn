@@ -15,8 +15,6 @@ use crate::State;
 pub(crate) const LATE_ANSWER: f64 = 1.5;
 /// How long an offered answer stays in the note line once it shows.
 pub(crate) const OFFER: f64 = 20.0;
-/// Rows a page key moves in a list of places.
-const PAGE: usize = 20;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Kind {
@@ -395,8 +393,8 @@ pub(crate) fn panel_key(tile: &str, panel: &mut Answer, ev: &KeyEvent, tx: &mut 
     panel.cursor = match ev.key {
         Key::Down => (panel.cursor + 1).min(last),
         Key::Up => panel.cursor.saturating_sub(1),
-        Key::PageDown => (panel.cursor + PAGE).min(last),
-        Key::PageUp => panel.cursor.saturating_sub(PAGE),
+        Key::PageDown => (panel.cursor + page(tile)).min(last),
+        Key::PageUp => panel.cursor.saturating_sub(page(tile)),
         Key::Enter => return true,
         _ => return false,
     };
@@ -457,8 +455,10 @@ pub(crate) fn note_line(tile: &str, nav: &Nav, t: &Tokens) -> Option<El> {
     )
 }
 
-/// As tall as a list of places gets before it scrolls: 18 places.
-const LIST_HEIGHT: f32 = 360.0;
+/// How many places a list shows before it scrolls.
+const PLACES_SHOWN: usize = 18;
+/// As tall as a list of places gets before it scrolls.
+const LIST_HEIGHT: f32 = PLACES_SHOWN as f32 * PLACE_HEIGHT;
 /// A place's height: a line of `Mono`, 15, in a place's insets of 2, rounded up.
 const PLACE_HEIGHT: f32 = 20.0;
 
@@ -591,6 +591,11 @@ const PANEL: &str = "review.nav.panel";
 /// As tall as the list of places in tile `tile` may stand: [`LIST_HEIGHT`], or less where the
 /// panel, bounded above the key line, leaves less room under the list's top and over the room
 /// the panel keeps under its body.
+/// How many places a page key moves: as many as the list shows whole.
+fn page(tile: &str) -> usize {
+    ((list_height(tile) / PLACE_HEIGHT) as usize).max(1)
+}
+
 fn list_height(tile: &str) -> f32 {
     let bottom = |key: &str| rune::memo::layout_with(key, |[_, y, _, h]| y + h);
     let foot = bottom(PANEL)
