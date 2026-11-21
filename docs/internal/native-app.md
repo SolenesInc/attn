@@ -352,12 +352,15 @@ choices once for the whole app:
 - **The door.** `attn_ui::system::door` is the one module that calls Rune's raw
   spacing, font, corner and icon methods (`gap`, `padding`, `px`…, `radius`,
   `font`, `TextStyle::new`, `rune::icon` and the rest), the rune-kit setters
-  that take a spacing, a font or a corner (`TextInput::text_style`,
+  that take a spacing, a font, a corner or an icon size (`TextInput::text_style`,
   `MarkdownStyle::body_font`, `Menu::gutter`, …) and rune-kit's `Kit`
   constructors. `native/clippy.toml` rejects them everywhere else in the
   workspace, as it does Rune's colour constructors, so a view gets its kit from
-  `attn_ui::kit` and draws through `attn_ui`. Clippy cannot see a clone of that
-  kit with a field changed, so review catches that. Only the files
+  `attn_ui::kit` and draws through `attn_ui`. The guard stops raw calls and
+  making a kit, not a view that clones that kit and writes one of its public
+  fields: a derived `Clone` resolves to `Clone::clone`, which clippy can only
+  ban for every type, so review catches it until rune-kit's `Kit` keeps its
+  fields private. Only the files
   `native/clippy-allows.tsv` names, each with its reason, may carry
   `allow(clippy::disallowed_methods)`: the door, the colours, the terminal's
   cell font, What's New's illustrations and the tests that state a type role

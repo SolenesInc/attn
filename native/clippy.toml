@@ -47,6 +47,8 @@ disallowed-methods = [
   { path = "rune::el::El::set_font", reason = "set text with attn_ui::system::words" },
   { path = "rune::el::text_input", reason = "set text with attn_ui::system::words" },
   { path = "rune::el::icon", reason = "take icon sizes from attn_ui::system::IconSize" },
+  { path = "rune::el::InlineIcon::size", reason = "take icon sizes from attn_ui::system::IconSize" },
+  { path = "rune_kit::TextInput::leading_icon_size", reason = "take icon sizes from attn_ui::system::IconSize" },
   { path = "rune_kit::Kit::neutral", reason = "views take the kit attn_ui::kit builds" },
   { path = "rune_kit::Kit::from_palette", reason = "views take the kit attn_ui::kit builds" },
   { path = "rune_kit::Kit::from_palette_focus", reason = "views take the kit attn_ui::kit builds" },
@@ -75,6 +77,7 @@ disallowed-methods = [
   { path = "rune::HelpLook::radius", reason = "spacing, type and corners of kit controls come from attn_ui::system" },
   { path = "rune::HelpLook::font", reason = "spacing, type and corners of kit controls come from attn_ui::system" },
   { path = "rune::HelpLook::keycaps", reason = "spacing, type and corners of kit controls come from attn_ui::system" },
+  { path = "rune::HelpLook::keycap_shape", reason = "spacing, type and corners of kit controls come from attn_ui::system" },
   { path = "rune_kit::popover::raised", reason = "take corners from attn_ui::system::Radius" },
   { path = "rune_kit::syntax::SyntaxTheme::with_weight", reason = "take type roles from attn_ui::system::Type" },
   { path = "rune_kit::TextInput::text_style", reason = "spacing, type and corners of kit controls come from attn_ui::system" },
@@ -84,6 +87,7 @@ disallowed-methods = [
   { path = "rune_kit::PopupList::padding", reason = "spacing, type and corners of kit controls come from attn_ui::system" },
   { path = "rune_kit::PopupList::gutter", reason = "spacing, type and corners of kit controls come from attn_ui::system" },
   { path = "rune_kit::PopupList::row_radius", reason = "spacing, type and corners of kit controls come from attn_ui::system" },
+  { path = "rune_kit::PopupList::offset", reason = "spacing, type and corners of kit controls come from attn_ui::system" },
   { path = "rune_kit::Popover::padding", reason = "spacing, type and corners of kit controls come from attn_ui::system" },
   { path = "rune_kit::Popover::gutter", reason = "spacing, type and corners of kit controls come from attn_ui::system" },
   { path = "rune_kit::TooltipStyle::padding", reason = "spacing, type and corners of kit controls come from attn_ui::system" },
@@ -147,6 +151,7 @@ disallowed-methods = [
   { path = "rune_kit::MarkdownStyle::link_icons", reason = "spacing, type and corners of kit controls come from attn_ui::system", allow-invalid = true },
   { path = "rune_kit::MarkdownStyle::table_body", reason = "spacing, type and corners of kit controls come from attn_ui::system", allow-invalid = true },
   { path = "rune_kit::MarkdownStyle::task_checkbox", reason = "spacing, type and corners of kit controls come from attn_ui::system", allow-invalid = true },
+  { path = "rune_kit::MarkdownStyle::task_ring", reason = "spacing, type and corners of kit controls come from attn_ui::system", allow-invalid = true },
   { path = "rune_kit::MarkdownStyle::table_like", reason = "spacing, type and corners of kit controls come from attn_ui::system", allow-invalid = true },
 ]
 allow-unwrap-in-tests = true
