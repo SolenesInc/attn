@@ -104,6 +104,8 @@ extern "C" fn interrupted(_: libc::c_int) {
     INTERRUPTED.store(true, Ordering::SeqCst);
 }
 
+const FOLLOW_WAITS_ON: [&str; 3] = ["transcript_unavailable", "home_unreachable", "home_lost"];
+
 fn wait_for_poll() -> bool {
     for _ in 0..10 {
         if INTERRUPTED.load(Ordering::SeqCst) {
@@ -164,7 +166,9 @@ fn transcript(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed) -> Result<(), S
             }
         };
         match answer {
-            Answer::Refused(_, refusal) if follow && refusal.code == "transcript_unavailable" => {
+            Answer::Refused(_, refusal)
+                if follow && FOLLOW_WAITS_ON.contains(&refusal.code.as_str()) =>
+            {
                 if !wait_for_poll() {
                     return done(&cursor);
                 }

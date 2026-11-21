@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -187,6 +188,48 @@ func TestSessionTranscriptFollowKeepsReadingAcrossADaemonRestart(t *testing.T) {
 	_, cursor := readTranscript(t, s, id)
 	if stopped := follow.Interrupt(); stopped.Code != 0 || !strings.Contains(stopped.Stderr, "cursor: "+cursor) {
 		t.Errorf("--follow interrupted after a restart exited %d with stderr %q, want the cursor %s of the last page it printed", stopped.Code, stopped.Stderr, cursor)
+	}
+}
+
+func TestSessionTranscriptFollowOnAnOutpostKeepsReadingAcrossAHomeRestart(t *testing.T) {
+	home, outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude)), testworld.NewStack(t)
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	homeAway := outpost.PauseAt(pausepoint.HomeForwardFailed)
+	pair.Start()
+	app := pair.App
+	id := home.Spawn(app, fakeagent.Claude, home.Path("shop"))
+	claude := home.Launched(id)
+	converse(app, claude, id, "add a discount field", "Added the field.")
+
+	follow := outpost.Launch(testworld.Invocation{Args: []string{"session", "transcript", id, "--follow"}})
+	follow.AwaitStdout("Added the field.")
+	home.Stop()
+	homeAway.Await()
+	homeAway.Release()
+	name, err := os.Hostname()
+	if err != nil {
+		t.Fatal(err)
+	}
+	once := outpost.Attn("session", "transcript", id)
+	if refused := strings.TrimSpace(once.Stderr); once.Code != 1 || (refused != name+" is unreachable; this needs it now" && refused != "lost "+name+" during this call; it may have run") {
+		t.Errorf("session transcript without --follow on the outpost with the home away exited %d with stderr %q, want the refusal naming %s", once.Code, once.Stderr, name)
+	}
+	t.Logf("without --follow, the home away: %q", once.Stderr)
+
+	home.Start()
+	app = home.App()
+	outpostStateOnConnect(app, "outpost", protocol.OutpostStateConnected)
+	converse(app, claude, id, "and apply it after tax", "Applied after tax.")
+	follow.AwaitStdout("Applied after tax.")
+	_, cursor := readTranscript(t, home, id)
+	stopped := follow.Interrupt()
+	if stopped.Code != 0 || !strings.Contains(stopped.Stderr, "cursor: "+cursor) {
+		t.Errorf("--follow on the outpost interrupted after the home restarted exited %d with stderr %q, want the cursor %s of the last page it printed", stopped.Code, stopped.Stderr, cursor)
+	}
+	for _, reply := range []string{"Added the field.", "Applied after tax."} {
+		if printed := strings.Count(stopped.Stdout, reply); printed != 1 {
+			t.Errorf("--follow on the outpost printed %q %d times across the home's restart, want once: %q", reply, printed, stopped.Stdout)
+		}
 	}
 }
 

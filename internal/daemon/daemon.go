@@ -2940,7 +2940,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 					return
 				}
 				if err := d.router().Forward(data, caller, bufferedSocket{Conn: conn, reader: reader}, conn); err != nil {
-					d.sendError(conn, err.Error())
+					pausepoint.At(pausepoint.HomeForwardFailed)
+					d.sendForwardFailure(conn, cmd, err)
 				}
 				return
 			}
@@ -3702,6 +3703,14 @@ func (d *Daemon) sendOK(conn net.Conn) {
 func (d *Daemon) sendError(conn net.Conn, errMsg string) {
 	resp := protocol.Response{Ok: false, Error: protocol.Ptr(errMsg)}
 	json.NewEncoder(conn).Encode(resp)
+}
+
+func (d *Daemon) sendForwardFailure(conn net.Conn, cmd string, err error) {
+	if cmd == protocol.CmdRunCommand {
+		json.NewEncoder(conn).Encode(command.Response(nil, homeForwardRefusal(err)))
+		return
+	}
+	d.sendError(conn, err.Error())
 }
 
 func (d *Daemon) sendRefusal(conn net.Conn, message string, err error) {

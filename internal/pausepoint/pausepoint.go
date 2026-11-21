@@ -115,6 +115,7 @@ const (
 	BridgeChannelOpening           = "bridge-channel-opening"
 	RemoteInputAnswered            = "remote-input-answered"
 	BridgeSendQueued               = "bridge-send-queued"
+	HomeForwardFailed              = "home-forward-failed"
 	OutpostMachineRead             = "outpost-machine-read"
 	ClassifierVerdictReached       = "classifier-verdict-reached"
 	ClassifierVerdictApplied       = "classifier-verdict-applied"

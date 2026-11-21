@@ -332,11 +332,7 @@ func (d *Daemon) forwardAgentCommand(c command.Caller, name string, args map[str
 	}
 	var out bytes.Buffer
 	if err := d.router().Forward(append(frame, '\n'), c.Session, nil, &out); err != nil {
-		var unreachable *homeUnreachableError
-		if errors.As(err, &unreachable) {
-			return nil, &command.Refusal{Code: "home_unreachable", Message: err.Error(), Fix: "Nothing ran. Make the same call again once " + unreachable.home + " is reachable."}
-		}
-		return nil, command.AsRefusal(err)
+		return nil, homeForwardRefusal(err)
 	}
 	var reply protocol.Response
 	scanner := bufio.NewScanner(&out)

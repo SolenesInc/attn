@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pausepoint"
@@ -156,6 +157,22 @@ func (d *Daemon) homeConn(status enrollment.Status) (*bridge.Conn, string, error
 type homeUnreachableError struct{ home, message string }
 
 func (e *homeUnreachableError) Error() string { return e.message }
+
+type homeLostError struct{ home, message string }
+
+func (e *homeLostError) Error() string { return e.message }
+
+func homeForwardRefusal(err error) *command.Refusal {
+	var unreachable *homeUnreachableError
+	if errors.As(err, &unreachable) {
+		return &command.Refusal{Code: "home_unreachable", Message: err.Error(), Fix: "Nothing ran. Make the same call again once " + unreachable.home + " is reachable."}
+	}
+	var lost *homeLostError
+	if errors.As(err, &lost) {
+		return &command.Refusal{Code: "home_lost", Message: err.Error(), Fix: "It may have run. Check its effect at " + lost.home + " before making the call again."}
+	}
+	return command.AsRefusal(err)
+}
 
 func (d *Daemon) sessionKnownHere(id protocol.SessionID) bool {
 	_, copied := d.store.SessionHost(id)

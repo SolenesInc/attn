@@ -50,9 +50,9 @@ func (r *Router) Forward(frame []byte, caller protocol.SessionID, input forwardI
 	lost := fmt.Sprintf("lost %s during this call; it may have run", name)
 	lostError := func() error {
 		if notice := d.homeUpdateNoticeText(name); notice != "" {
-			return errors.New(lost + "; " + notice)
+			return &homeLostError{home: name, message: lost + "; " + notice}
 		}
-		return errors.New(lost)
+		return &homeLostError{home: name, message: lost}
 	}
 	header, err := json.Marshal(forwardRequest{Caller: caller})
 	if err != nil {
