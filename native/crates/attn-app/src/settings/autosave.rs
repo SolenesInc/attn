@@ -286,8 +286,15 @@ fn landed(state: &mut State, key: &str, draft: String, outcome: Result<(), Strin
 /// Lands `key`'s refusal on its frame, then shows it as far as the control that holds the
 /// keyboard stays in view: each by the least movement, the focused control last.
 fn show_refusal(key: &str, tx: &mut Tx) {
+    show_reply(format!("settings.refusal.{key}"), tx);
+}
+
+/// Lands a reply keyed `reply`, such as the reason a removal was refused, on its frame, then
+/// shows it as far as the control that holds the keyboard stays in view: each by the least
+/// movement, the focused control last.
+pub(super) fn show_reply(reply: String, tx: &mut Tx) {
     tx.instant();
-    tx.scroll_into_view_in(super::BODY, format!("settings.refusal.{key}"));
+    tx.scroll_into_view_in(super::BODY, reply);
     if let Some(focused) = tx.focused().map(str::to_owned) {
         tx.scroll_into_view_in(super::BODY, focused);
     }

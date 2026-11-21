@@ -191,3 +191,43 @@ fn shows_a_senders_latest_use_when_settings_reopens() {
     press_action(&mut world, Action::UiOpenSettings);
     assert!(copy(&world).contains("Last used "));
 }
+
+#[test]
+fn a_refused_removal_in_the_smallest_window_shows_its_whole_reason_and_keeps_the_keyboard() {
+    let ci = PairedSender {
+        id: "sender-2".into(),
+        name: "ci".into(),
+        ..deploy_bot(None)
+    };
+    let (daemon, _) = accepting(&[("uiScale", "1.5")]);
+    let listed = vec![deploy_bot(None), ci];
+    daemon.on("senders_get", move |_| listing(listed.clone()));
+    daemon.on("sender_unpair", |_| {
+        message(SenderUnpairResultMessage {
+            success: false,
+            error: Some(
+                r#"profile "Work" has no paired sender named or with id "sender-1"; attn send senders lists them"#
+                    .into(),
+            ),
+            ..SenderUnpairResultMessage::new()
+        })
+    });
+    let mut world = World::start(daemon);
+    world.resize((800.0, 600.0));
+    on_senders(&mut world);
+    let remove = format!("{ROW}.remove");
+    tab_to(&mut world, &remove);
+    press(&mut world, Key::Text(" ".into()));
+    let body = world.rect("settings.body");
+    let reason = world.rect("settings.senders.error");
+    assert!(
+        reason[1] >= body[1] && reason[1] + reason[3] <= body[1] + body[3],
+        "the refusal at {reason:?} lies whole inside the page's view {body:?}"
+    );
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some(remove.as_str()),
+        "Remove keeps the keyboard through the refusal"
+    );
+    rest(&mut world);
+}

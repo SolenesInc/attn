@@ -170,13 +170,13 @@ pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {
 }
 
 fn failed(state: &mut State, profile_id: &str, why: String, tx: &mut Tx) {
-    tx.instant();
     state
         .window
         .settings
         .phones
         .errors
         .insert(profile_id.to_owned(), why);
+    super::autosave::show_reply(format!("settings.phones.{profile_id}.error"), tx);
 }
 
 fn pair(state: &mut State, profile_id: &str, tx: &mut Tx) {

@@ -428,3 +428,57 @@ fn the_pair_button_keeps_the_keyboard_when_the_code_arrives() {
     press(&mut world, Key::Text(" ".into()));
     assert_eq!(world.daemon.sent_of("phone_pair_begin").len(), 2);
 }
+
+#[test]
+fn a_refused_revoke_in_the_smallest_window_shows_its_whole_reason_and_keeps_the_keyboard() {
+    let ipad = PhonePairing {
+        device_id: "device-2".into(),
+        name: "iPad".into(),
+        ..phone(false)
+    };
+    let daemon = Daemon::scripted().state(InitialStateMessage {
+        selected_profile_id: Some("work".into()),
+        profiles: Some(vec![Profile {
+            id: "work".into(),
+            name: "Work".into(),
+            ..Profile::default()
+        }]),
+        settings: Some(
+            [
+                ("phone_access_enabled".into(), "true".into()),
+                ("uiScale".into(), "1.5".into()),
+            ]
+            .into(),
+        ),
+        ..InitialStateMessage::new()
+    });
+    let listed = phones(vec![], vec![phone(true), ipad]);
+    daemon.on("phones_get", move |_| message(listed.clone()));
+    daemon.on("phone_pairing_revoke", |_| {
+        message(PhonePairingRevokeResultMessage {
+            success: false,
+            error: Some(
+                r#"phone device-1 has no pairing with profile "work" on this home; it was revoked or never paired"#
+                    .into(),
+            ),
+            ..PhonePairingRevokeResultMessage::new()
+        })
+    });
+    let mut world = World::start(daemon);
+    world.resize((800.0, 600.0));
+    on_phones(&mut world);
+    let revoke = "settings.phone.work.device-1.revoke";
+    tab_to(&mut world, revoke);
+    press(&mut world, Key::Text(" ".into()));
+    let body = world.rect("settings.body");
+    let reason = world.rect("settings.phones.work.error");
+    assert!(
+        reason[1] >= body[1] && reason[1] + reason[3] <= body[1] + body[3],
+        "the refusal at {reason:?} lies whole inside the page's view {body:?}"
+    );
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some(revoke),
+        "Revoke keeps the keyboard through the refusal"
+    );
+}

@@ -61,8 +61,12 @@ fn remove(state: &mut State, id: &str, tx: &mut Tx) {
             ..SenderUnpairMessage::new()
         },
         |state, answer, tx| {
-            tx.instant();
             state.window.settings.senders.error = answer.outcome().err();
+            if state.window.settings.senders.error.is_some() {
+                super::autosave::show_reply("settings.senders.error".into(), tx);
+            } else {
+                tx.instant();
+            }
         },
         tx,
     );
