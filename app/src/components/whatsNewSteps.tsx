@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { shortcutTokens } from '../shortcuts/formatShortcut';
 import type { Binding, ShortcutId } from '../shortcuts/registry';
-import { NewLookScene, NightScene } from './WhatsNewScenes';
+import { NewLookScene, MoreColorsScene } from './WhatsNewScenes';
 
 export interface WhatsNewKey {
   label: string;
@@ -31,18 +31,18 @@ export function whatsNewSteps(resolve: (id: ShortcutId) => Binding | null): What
     {
       id: 'new-look',
       title: 'A new look',
-      body: 'attn has a new logo, a black cat watching over your agents, and new colors to go with it. Magenta marks an agent waiting for you, cyan an agent at work, and violet the main buttons. If you prefer the colors you had, switch back here, or any time in Settings → Appearance → Theme, where they are called Classic.',
+      body: 'attn has a new logo, a black cat watching over your agents, and new colors to go with it: plain neutral surfaces, with magenta for an agent waiting for you and cyan for an agent at work. If you prefer the colors you had, switch back here, or any time in Settings → Appearance → Theme, where they are called Classic.',
       keys,
       scene: <NewLookScene />,
       scheme: { id: 'classic', offer: 'Switch back to Classic', back: 'Use the new colors' },
     },
     {
-      id: 'night',
-      title: 'Night, for the full colors',
-      body: 'The new colors are kept quiet so they stay out of your way. Night shows them at full strength on indigo surfaces, the way the logo does. Try it here, or pick it later under Settings → Appearance → Theme.',
+      id: 'catppuccin',
+      title: 'More colors',
+      body: 'Settings → Appearance → Theme has more color schemes, and each one colors your terminals too. Try Catppuccin here, or pick one later.',
       keys,
-      scene: <NightScene />,
-      scheme: { id: 'night', offer: 'Try Night', back: 'Use the default colors' },
+      scene: <MoreColorsScene />,
+      scheme: { id: 'catppuccin', offer: 'Try Catppuccin', back: 'Use the default colors' },
     },
   ];
 }

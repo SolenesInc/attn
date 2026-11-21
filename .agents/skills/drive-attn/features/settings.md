@@ -115,10 +115,10 @@ Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) s
 
 ## Tests
 
-- Wire: `internal/daemon/settings_ack_wire_test.go`, `internal/daemon/settings_validation_wire_test.go`, `native/crates/attn-app/tests/wire/settings.rs` and `native/crates/attn-app/tests/wire/settings/*.rs` (the dialog and each section, including the scheme list and Reset), `native/crates/attn-app/tests/wire/colors.rs` (the window and terminals repaint on a scheme or override), `native/crates/attn-app/tests/wire/update_run.rs` (the update band and Update attn).
+- Wire: `internal/daemon/settings_ack_wire_test.go`, `internal/daemon/settings_validation_wire_test.go`, `native/crates/attn-app/tests/wire/settings.rs` and `native/crates/attn-app/tests/wire/settings/*.rs` (the dialog and each section, including the scheme list and Reset), `native/crates/attn-app/tests/wire/colors.rs` (the window and terminals repaint on a scheme or override, and a saved scheme attn no longer has draws attn), `native/crates/attn-app/tests/wire/update_run.rs` (the update band and Update attn).
 - Stack: `cmd/attnd/update_run_stack_test.go`, `cmd/attnd/update_release_stack_test.go`, `cmd/attnd/settings_stack_test.go`, `cmd/attnd/settings_outpost_stack_test.go`, and the Tauri app's (the rollback) `app/e2e/settings.spec.ts`, `app/e2e/settings-visual.spec.ts`.
 - Scenario: `native-settings`, `native-agent-settings`, `native-self-update`, and in the Tauri app (the rollback) `focusless-native` (parked macOS native input), `agent-settings`, `self-update`.
-- App: the Tauri app's (the rollback) `app/src/App.settingsAutosave.test.tsx`, `app/src/components/SettingsModal*.test.tsx`, `app/src/App.colorScheme.test.tsx` (scheme, overrides and theme from the daemon, the scheme list and Reset).
+- App: the Tauri app's (the rollback) `app/src/App.settingsAutosave.test.tsx`, `app/src/components/SettingsModal*.test.tsx`, `app/src/App.colorScheme.test.tsx` (scheme, overrides and theme from the daemon, a saved scheme attn no longer has, the scheme list and Reset).
 
 ## Gotchas
 

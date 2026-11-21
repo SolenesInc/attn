@@ -153,6 +153,11 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.bg_icon_button_contrast = t.brand;
     p.submit_fg = brand_ink(t);
     p.submit_icon = brand_ink(t);
+    if brand_ink(t).luminance() > t.brand.luminance() {
+        p.submit_hover = t.shadow.alpha(SUBMIT_HOVER);
+        p.submit_highlight = t.shadow.alpha(SUBMIT_PRESSED);
+        p.contrast_pressed = t.shadow.alpha(SUBMIT_PRESSED);
+    }
     p.text_base = t.text_primary;
     p.text_muted = t.text_secondary;
     p.text_faint = t.text_tertiary;
@@ -212,12 +217,22 @@ pub fn brand_edge(t: &Tokens) -> Color {
     t.brand.alpha(BRAND_EDGE)
 }
 
+/// rune-kit's own steps over a submit fill, taken toward black under light ink so the ink keeps
+/// reading on it.
+const SUBMIT_HOVER: f32 = 0.12;
+const SUBMIT_PRESSED: f32 = 0.20;
+
 const BRAND_FILL: f32 = 0.12;
 const BRAND_EDGE: f32 = 0.5;
 
-/// The Tauri app's ink on a brand fill, `color-mix(in srgb, var(--color-brand) 12%, black)`.
+/// The ink on a brand fill: the scheme's `on_brand` where it reads there, else the Tauri app's
+/// `color-mix(in srgb, var(--color-brand) 12%, black)`.
 pub fn brand_ink(t: &Tokens) -> Color {
-    colors::mix_srgb(t.brand, t.shadow, 0.88)
+    if colors::reads_on(t.on_brand, t.brand) {
+        t.on_brand
+    } else {
+        colors::mix_srgb(t.brand, t.shadow, 0.88)
+    }
 }
 
 /// The Tauri app's ink on a warning fill, `color-mix(in srgb, var(--color-warning) 10%, black)`.

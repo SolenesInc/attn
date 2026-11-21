@@ -8295,7 +8295,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("agent_palette", || agent_palette(dark));
         scene("profile_switcher", || profile_switcher(dark));
         scene("whats_new", || whats_new(dark, 0, "whats-new"));
-        scene("whats_new", || whats_new(dark, 1, "whats-new-night"));
+        scene("whats_new", || whats_new(dark, 1, "whats-new-more-colors"));
         scene("settings_analytics", || settings_analytics(dark));
         scene("settings_analytics_populated", || {
             settings_analytics_populated(dark, false)

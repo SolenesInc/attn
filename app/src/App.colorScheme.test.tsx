@@ -48,6 +48,19 @@ describe('App color scheme', () => {
     ]);
   });
 
+  it('draws attn for a saved scheme attn no longer has, and keeps the other settings', async () => {
+    const { daemon } = await renderApp({ initialState: { settings: { color_scheme: 'night', theme: 'light' } } });
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    expect(rootColor('bg-app')).toBe(attn.light.ui.bg_app);
+    expect(daemon.sentOf('set_terminal_theme')).toEqual([terminalTheme(attn.light.terminal)]);
+  });
+
+  it('marks attn chosen in Settings for a saved scheme attn no longer has', async () => {
+    await openSection('general', { settings: { color_scheme: 'night' } });
+    expect(screen.getByRole('button', { name: 'attn' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('follows a theme change from the daemon without a reload', async () => {
     const { daemon } = await renderApp({ initialState: { settings: { color_scheme: 'catppuccin-frappe' } } });
     expect(rootColor('bg-app')).toBe(frappe.dark.ui.bg_app);

@@ -8,7 +8,8 @@ const SWATCHES = ['bg_app', 'bg_panel', 'text_primary', 'accent', 'brand', 'stat
 export function ColorSchemeSettings() {
   const { settings, setSetting } = useSettings();
   const { appearance } = useAppearance(settings);
-  const selected = settings[COLOR_SCHEME_SETTING] || DEFAULT_SCHEME_ID;
+  const saved = settings[COLOR_SCHEME_SETTING];
+  const selected = SCHEMES.some(({ id }) => id === saved) ? saved : DEFAULT_SCHEME_ID;
 
   return (
     <div className="settings-color-schemes">

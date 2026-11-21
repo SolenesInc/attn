@@ -60,15 +60,15 @@ export function NewLookScene() {
   );
 }
 
-export function NightScene() {
+export function MoreColorsScene() {
   const scene = useRef<HTMLDivElement>(null);
   const { settings } = useSettings();
   const { appearance } = useAppearance(settings);
   useLayoutEffect(() => {
-    if (scene.current) applyColors(resolveColors('night', undefined, appearance), scene.current);
+    if (scene.current) applyColors(resolveColors('catppuccin', undefined, appearance), scene.current);
   }, [appearance]);
   return (
-    <div ref={scene} className="wn-scene" role="img" aria-label="The same window in Night's colors, on indigo surfaces">
+    <div ref={scene} className="wn-scene" role="img" aria-label="The same window in Catppuccin's colors">
       <Window />
     </div>
   );

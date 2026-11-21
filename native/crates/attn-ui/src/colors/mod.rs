@@ -80,10 +80,6 @@ const SCHEME_FILES: &[(&str, &str)] = &[
         include_str!("../../../../../internal/colors/schemes/classic.json"),
     ),
     (
-        "night",
-        include_str!("../../../../../internal/colors/schemes/night.json"),
-    ),
-    (
         "tokyo-night",
         include_str!("../../../../../internal/colors/schemes/tokyo-night.json"),
     ),
@@ -283,6 +279,11 @@ pub fn moved_until_it_reads(moving: Color, toward: Color, against: Color) -> Col
 pub fn contrast(a: Color, b: Color) -> f32 {
     let (a, b) = (a.luminance(), b.luminance());
     (a.max(b) + 0.05) / (a.min(b) + 0.05)
+}
+
+/// Whether `ink` reads on `ground` at the 4.5:1 body text needs.
+pub fn reads_on(ink: Color, ground: Color) -> bool {
+    contrast(ink, ground) >= READS
 }
 
 const READS: f32 = 4.5;

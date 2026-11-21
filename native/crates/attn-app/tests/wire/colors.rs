@@ -76,6 +76,19 @@ fn a_scheme_and_an_override_recolor_the_window_and_its_terminals_as_they_arrive(
     assert_eq!(terminal_background(&world), attn("terminal", "bg"));
 }
 
+#[test]
+fn a_saved_scheme_attn_no_longer_has_draws_attn_and_the_other_settings_still_apply() {
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
+    update(&mut world, &[("color_scheme", "night"), ("theme", "light")]);
+    let light = |group: &str, name: &str| {
+        let file: Value = serde_json::from_str(ATTN).unwrap();
+        file["light"][group][name].as_str().unwrap().to_owned()
+    };
+    assert_eq!(window_background(&world), light("ui", "bg_app"));
+    assert_eq!(terminal_background(&world), light("terminal", "bg"));
+}
+
 fn menu_fill(world: &World, key: &str) -> String {
     let menu = world
         .runtime()

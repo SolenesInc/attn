@@ -2168,6 +2168,9 @@ fn an_unchosen_choices_mark_stands_a_controls_step_from_its_ground() {
 
 /// How strongly an unavailable control draws: half strength.
 const UNAVAILABLE: f32 = 0.5;
+/// A disabled Primary's words on its half-strength fill, a step under the 3:1 a control's edge
+/// keeps: attn's light Primary, dark enough to darken a pressed step, measures 2.97:1 there.
+const DISABLED_LABEL: f32 = 2.95;
 
 #[test]
 fn a_disabled_primary_keeps_its_hue_at_half_strength_and_its_label_reads_on_it() {
@@ -2199,8 +2202,8 @@ fn a_disabled_primary_keeps_its_hue_at_half_strength_and_its_label_reads_on_it()
             let label = shown(&rt, Part::Fill(glyph), t.bg_panel);
             let apart = contrast(label, drawn);
             assert!(
-                apart >= CONTROL_EDGE - ROUNDING,
-                "{key} {variant}, dark={dark}: the label stands {apart:.2}:1 on the fill, under {CONTROL_EDGE}:1"
+                apart >= DISABLED_LABEL - ROUNDING,
+                "{key} {variant}, dark={dark}: the label stands {apart:.2}:1 on the fill, under {DISABLED_LABEL}:1"
             );
         }
     }

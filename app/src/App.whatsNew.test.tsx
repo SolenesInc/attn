@@ -10,7 +10,7 @@ import { savedSettings, serveSettings } from './test/settings';
 import classic from '../../internal/colors/schemes/classic.json';
 
 const FIRST = 'A new look';
-const LAST = 'Night, for the full colors';
+const LAST = 'More colors';
 const rootColor = (name: string) => document.documentElement.style.getPropertyValue(`--color-${name}`);
 
 const whatsNew = () => screen.queryByRole('dialog', { name: "What's new" });
@@ -140,8 +140,8 @@ describe('App what’s new', () => {
     expect(savedSettings(daemon)).toEqual([['color_scheme', 'classic'], ['color_scheme', '']]);
 
     await press(daemon, 'ArrowRight');
-    await gesture(daemon, () => fireEvent.click(button('Try Night')));
-    expect(savedSettings(daemon)).toEqual([['color_scheme', 'classic'], ['color_scheme', ''], ['color_scheme', 'night']]);
+    await gesture(daemon, () => fireEvent.click(button('Try Catppuccin')));
+    expect(savedSettings(daemon)).toEqual([['color_scheme', 'classic'], ['color_scheme', ''], ['color_scheme', 'catppuccin']]);
     expect(button('Use the default colors')).toBeInTheDocument();
   });
 

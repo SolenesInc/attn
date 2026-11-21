@@ -81,7 +81,7 @@ fn steps(keymap: &Keymap) -> Vec<Step> {
     vec![
         Step {
             title: "A new look",
-            body: "attn has a new logo, a black cat watching over your agents, and new colors to go with it. Magenta marks an agent waiting for you, cyan an agent at work, and violet the main buttons. If you prefer the colors you had, switch back here, or any time in Settings → Appearance → Theme, where they are called Classic.",
+            body: "attn has a new logo, a black cat watching over your agents, and new colors to go with it: plain neutral surfaces, with magenta for an agent waiting for you and cyan for an agent at work. If you prefer the colors you had, switch back here, or any time in Settings → Appearance → Theme, where they are called Classic.",
             keys: keys.clone(),
             scene: Scene::NewLook,
             scheme: Scheme {
@@ -91,13 +91,13 @@ fn steps(keymap: &Keymap) -> Vec<Step> {
             },
         },
         Step {
-            title: "Night, for the full colors",
-            body: "The new colors are kept quiet so they stay out of your way. Night shows them at full strength on indigo surfaces, the way the logo does. Try it here, or pick it later under Settings → Appearance → Theme.",
+            title: "More colors",
+            body: "Settings → Appearance → Theme has more color schemes, and each one colors your terminals too. Try Catppuccin here, or pick one later.",
             keys,
-            scene: Scene::Night,
+            scene: Scene::MoreColors,
             scheme: Scheme {
-                id: "night",
-                offer: "Try Night",
+                id: "catppuccin",
+                offer: "Try Catppuccin",
                 back: "Use the default colors",
             },
         },

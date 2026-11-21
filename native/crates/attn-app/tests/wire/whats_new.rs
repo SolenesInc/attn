@@ -13,7 +13,7 @@ use super::keys::{chord, state, two_terminals};
 
 const STEPS: usize = 2;
 const FIRST: &str = "A new look";
-const LAST: &str = "Night, for the full colors";
+const LAST: &str = "More colors";
 
 fn daemon(settings: &[(&str, &str)]) -> Daemon {
     super::palette::daemon(state(two_terminals(), settings), vec![])
@@ -350,10 +350,10 @@ fn each_step_puts_its_scheme_on_and_then_offers_the_default_back() {
     scheme_is(&mut world, "");
 
     press(&mut world, Key::Right);
-    assert_eq!(scheme_button(&world), "Try Night");
+    assert_eq!(scheme_button(&world), "Try Catppuccin");
     world.gesture(|app| app.click(Target::key("whats-new.scheme")));
-    assert_eq!(scheme_writes(&world), ["classic", "", "night"]);
-    scheme_is(&mut world, "night");
+    assert_eq!(scheme_writes(&world), ["classic", "", "catppuccin"]);
+    scheme_is(&mut world, "catppuccin");
     assert_eq!(scheme_button(&world), "Use the default colors");
 }
 

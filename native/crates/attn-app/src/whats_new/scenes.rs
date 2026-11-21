@@ -29,7 +29,7 @@ enum Ink {
 #[derive(Clone, Copy)]
 pub(super) enum Scene {
     NewLook,
-    Night,
+    MoreColors,
 }
 
 impl Scene {
@@ -38,15 +38,19 @@ impl Scene {
             Scene::NewLook => {
                 "attn's window in the colors in effect: api waits for you while web and docs work"
             }
-            Scene::Night => "The same window in Night's colors, on indigo surfaces",
+            Scene::MoreColors => "The same window in Catppuccin's colors",
         }
     }
 
-    /// The colors the scene is painted in: Night's own for Night, the window's for the rest.
+    /// The colors the scene is painted in: Catppuccin's for More colors, the window's for the rest.
     fn tokens(self, t: &Tokens) -> Tokens {
         match self {
             Scene::NewLook => *t,
-            Scene::Night => attn_ui::colors::scheme_for(Some("night")).colors(t.dark).ui,
+            Scene::MoreColors => {
+                attn_ui::colors::scheme_for(Some("catppuccin"))
+                    .colors(t.dark)
+                    .ui
+            }
         }
     }
 }

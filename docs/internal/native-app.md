@@ -119,7 +119,7 @@ Settings on Appearance, Agents, its end and a missing agent's tooltip, Analytics
 Experimental and its end, Phones, Plugins, Updates, Event bus, Files and locations, Attention
 queue, Background agents, Task runner, GitHub hosts and Models, Quick Capture with a
 message typed and with its mailbox list open, the shortcut editor
-and the shortcuts sheet, What's New on its first and its Night step, the
+and the shortcuts sheet, What's New on its first step and its More colors step, the
 close-desktop dialog, the diagnostic report, the command and agent palettes, the command palette matching nothing, the markdown opener, the context window cap prompt, a program asking to pair and its refused Allow in the smallest window, the profile switcher, the
 ledger empty and with a live agent selected, the asks drawer, the fullscreen
 notebook empty, with a folder opened in its tree, with a note open, with its
@@ -394,7 +394,7 @@ choices once for the whole app:
   where every other control's is, a focus ring never cut or dimmed, hover and
   pressed at their measured contrast, every part of a disabled control at
   half strength, one in `primary` neutral but a disabled Primary in its own hue with
-  its words at 3:1 or more, and a banner's first action 8 after its
+  its words at 2.95:1 or more, and a banner's first action 8 after its
   sentence, its glyph and dismiss on its first line, its actions beside its
   sentence or under it, its sentence readable at the smallest window with
   the largest text, a long link elided inside the bar with its ring whole,

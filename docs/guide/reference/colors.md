@@ -10,12 +10,11 @@ both settings.
 
 ## Pick a scheme
 
-Attn comes with seven schemes:
+Attn comes with six schemes:
 
-- `attn`, the default. Calm, near-neutral grays with the colors of attn's cat
-  logo kept quiet: magenta marks the agents waiting for you, cyan the agents at
-  work, and violet the main buttons and selections.
-- `night`, the same colors at full strength on indigo surfaces.
+- `attn`, the default. Neutral surfaces, near-black in dark and near-white in
+  light, with the colors of attn's cat logo: magenta marks the agents waiting
+  for you, cyan the agents at work, and violet the keyboard's focus ring.
 - `classic`, attn's colors before the cat logo: neutral grays with an orange
   brand color.
 - `catppuccin`, Catppuccin Mocha in dark and Latte in light.
@@ -38,7 +37,8 @@ From a terminal, set `color_scheme` to a scheme's id:
 attn settings set color_scheme catppuccin
 ```
 
-Attn refuses an id it doesn't know, and the error lists the schemes it has. To
+Attn refuses an id it doesn't know, and the error lists the schemes it has. A
+scheme saved before Attn removed it, such as `night`, draws in `attn`'s colors. To
 go back to Attn's colors, clear the setting:
 
 ```sh
