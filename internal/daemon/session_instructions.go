@@ -23,7 +23,7 @@ func (d *Daemon) runSessionInstructions(ctx context.Context, c command.Caller, a
 		return nil, command.Usage("{question} is required")
 	}
 	if entry := d.store.SessionLedgerEntry(protocol.SessionID(strings.TrimSpace(a.ID))); entry != nil {
-		if scope := d.callerScope(c); scope != "" && entry.ProfileID != scope {
+		if !c.Sees(entry.ProfileID) {
 			return nil, command.Refuse("session_not_found", "%s", SessionInstructionsErrorMessage("session_not_found"))
 		}
 	}

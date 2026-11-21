@@ -29,25 +29,13 @@ func (d *Daemon) sessionCommands() map[string]command.Handler {
 	}
 }
 
-func (d *Daemon) callerScope(c command.Caller) string {
-	if c.Session != "" {
-		if session := d.store.Get(c.Session); session != nil {
-			return session.ProfileID
-		}
-		if entry := d.store.SessionLedgerEntry(c.Session); entry != nil {
-			return entry.ProfileID
-		}
-	}
-	return c.Profile
-}
-
 func (d *Daemon) ledgerEntryInScope(c command.Caller, id string) (*protocol.SessionLedgerEntry, error) {
 	id = strings.TrimSpace(id)
 	entry := d.store.SessionLedgerEntry(protocol.SessionID(id))
 	if entry == nil {
 		return nil, command.Refuse(command.CodeSessionNotFound, "no session %q in the ledger", id)
 	}
-	if scope := d.callerScope(c); scope != "" && entry.ProfileID != scope {
+	if !c.Sees(entry.ProfileID) {
 		return nil, command.Refuse(command.CodeSessionNotFound, "no session %q in the ledger", id)
 	}
 	return entry, nil
@@ -58,7 +46,7 @@ func (d *Daemon) liveSessionInScope(c command.Caller, id protocol.SessionID) err
 	if session == nil {
 		return fmt.Errorf("unknown live session %s", id)
 	}
-	if scope := d.callerScope(c); scope != "" && session.ProfileID != scope {
+	if !c.Sees(session.ProfileID) {
 		return fmt.Errorf("unknown live session %s", id)
 	}
 	return nil
@@ -98,7 +86,7 @@ func (d *Daemon) runSessionList(ctx context.Context, c command.Caller, a command
 		}
 	}
 	profile := strings.TrimSpace(a.Profile)
-	if scope := d.callerScope(c); scope != "" {
+	if scope := c.Profile; scope != "" {
 		if profile != "" && profile != scope {
 			return &protocol.SessionListResult{Entries: []protocol.SessionLedgerEntry{}}, nil
 		}

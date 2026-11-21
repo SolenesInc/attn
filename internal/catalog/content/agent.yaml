@@ -64,7 +64,7 @@ commands:
 
       `compact` goes only with `self`: attn waits for your turn to end, compacts your conversation through the harness, then closes the session. End your turn right after: you get no turn after the compact. When the compact fails, the session still closes, and the reason says the compact did not run. Only a Claude session with the Claude mod and a Codex session on the shared Codex app server compact, on the home machine or an outpost, and a Sigma session on the home machine; attn refuses any other session and says why. Compact only a session that will resume as itself, as a seed's tender does when its standby resumes it. A crew member's next session starts fresh.
     args:
-      - {name: target, type: text, cli: pos, placeholder: "<session-or-seed>", unless: self, doc: "the session id or unique prefix, or the seed whose tender to close"}
+      - {name: target, type: text, cli: pos, placeholder: "<session-or-seed>", doc: "the session id or unique prefix, or the seed whose tender to close"}
       - {name: reason, type: text, required: true, cli: "-m", placeholder: '"<reason>"', doc: "why this session is done"}
       - {name: self, type: bool, cli: "--self", doc: "close the calling session"}
       - {name: compact, type: bool, cli: "--compact", doc: "compact the conversation after this turn, then close (with self)"}

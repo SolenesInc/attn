@@ -27,7 +27,7 @@ var claudeSuggestionCells = sync.OnceValue(func() *regexp.Regexp {
 func (d *Daemon) runAgentPeek(ctx context.Context, c command.Caller, a command.AgentPeekArgs) (any, error) {
 	session, errCode := d.resolveAgentPeekTarget(crewAsker{session: c.Session, profileID: c.Profile}, a.Target)
 	if session != nil {
-		if scope := d.callerScope(c); scope != "" && session.ProfileID != scope {
+		if !c.Sees(session.ProfileID) {
 			session, errCode = nil, "session_not_found"
 		}
 	}

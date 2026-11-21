@@ -20,7 +20,7 @@ type sessionTreeNode struct {
 }
 
 func (d *Daemon) sessionTree(ctx context.Context, c command.Caller, profileID string) (*protocol.SessionListResult, error) {
-	callerProfileID := d.callerScope(c)
+	callerProfileID := c.Profile
 	inView := func(profile string) bool {
 		return (callerProfileID == "" || profile == callerProfileID) && (profileID == "" || profile == profileID)
 	}

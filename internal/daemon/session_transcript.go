@@ -17,7 +17,7 @@ const sessionTranscriptPageSize = 200
 
 func (d *Daemon) runSessionTranscript(ctx context.Context, c command.Caller, a command.SessionTranscriptArgs) (any, error) {
 	session := d.store.SessionLedgerEntry(protocol.SessionID(strings.TrimSpace(a.ID)))
-	if scope := d.callerScope(c); session == nil || scope != "" && session.ProfileID != scope {
+	if session == nil || !c.Sees(session.ProfileID) {
 		return nil, sessionTranscriptRefusal("session_not_found")
 	}
 

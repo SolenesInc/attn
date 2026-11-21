@@ -29,10 +29,9 @@ func (d *Daemon) runAgentList(ctx context.Context, c command.Caller, a command.A
 	for _, profile := range profiles {
 		names[profile.ID] = profile.Name
 	}
-	scope := d.callerScope(c)
 	rows := []protocol.AgentListRow{}
 	for _, session := range d.sessionsForBroadcast(d.store.List("")) {
-		if scope != "" && session.ProfileID != scope {
+		if !c.Sees(session.ProfileID) {
 			continue
 		}
 		row := protocol.AgentListRow{

@@ -126,3 +126,70 @@ func TestAnotherProfilesSessionDoesNotExistForTheSessionCommands(t *testing.T) {
 		t.Errorf("session_list over /mcp = %v, want no session of another profile", listed.StructuredContent)
 	}
 }
+
+func TestEveryAgentToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	mine := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(mine)
+	other := w.Spawn(app, fakeagent.Claude, w.Path("blog"))
+	w.Launched(other)
+	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(mine))}
+	shapes := newToolShapes(t, agent, listOfferedTools(t, agent))
+
+	shapes.call("agent_list", map[string]any{})
+	shapes.call("agent_peek", map[string]any{"target": other})
+	sent := shapes.call("agent_msg", map[string]any{"target": other, "text": "the build is green"})
+	messageID := fmt.Sprint(sent.StructuredContent.(map[string]any)["message_id"])
+	shapes.call("agent_msg_status", map[string]any{"message": messageID})
+	shapes.call("agent_inbox", map[string]any{})
+	shapes.call("agent_reload", map[string]any{"targets": []string{mine}})
+	shapes.call("agent_close", map[string]any{"self": true, "reason": "Done with the shop"})
+	shapes.finish("agent_")
+}
+
+func TestAnotherProfilesSessionDoesNotExistForTheAgentCommands(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	registerSessions(t, w, cli, "planter", "neighbour")
+	side := createProfile(app, "Side")
+	if err := w.InjectSession("stranger", "stranger", w.Path("stranger"), protocol.SessionAgentClaude, side.ID); err != nil {
+		t.Fatalf("register stranger: %v", err)
+	}
+	planter := cli.WithCaller(protocol.TerminalID(w.Terminal("planter")))
+	run := func(name string, args map[string]any) (any, error) {
+		var result any
+		err := planter.RunCommand(name, "", args, &result)
+		return result, err
+	}
+	if _, err := run("agent peek", map[string]any{"target": "stranger"}); client.ErrorCode(err) != "session_not_found" {
+		t.Errorf("peek of another profile's session = %v, want session_not_found", err)
+	}
+	if _, err := run("agent msg", map[string]any{"target": "stranger", "text": "hello"}); client.ErrorCode(err) != "session_or_crew_member_not_found" {
+		t.Errorf("msg to another profile's session = %v, want session_or_crew_member_not_found", err)
+	}
+	if _, err := run("agent close", map[string]any{"target": "stranger", "reason": "not mine"}); err == nil {
+		t.Errorf("close of another profile's session succeeded")
+	}
+	if reloaded, err := run("agent reload", map[string]any{"targets": []string{"stranger"}}); err != nil || strings.Contains(fmt.Sprint(reloaded), "success:true") {
+		t.Errorf("reload of another profile's session = %v, %v, want a failed outcome", reloaded, err)
+	}
+	if listed, err := run("agent list", map[string]any{}); err != nil || strings.Contains(fmt.Sprint(listed), "stranger") || !strings.Contains(fmt.Sprint(listed), "neighbour") {
+		t.Errorf("agent list from planter = %v, %v, want neighbour and not stranger", listed, err)
+	}
+	var everyone any
+	if err := cli.RunCommand("agent list", "", map[string]any{}, &everyone); err != nil || !strings.Contains(fmt.Sprint(everyone), "stranger") {
+		t.Errorf("agent list from outside attn = %v, %v, want every profile", everyone, err)
+	}
+
+	mine := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(mine))}
+	if peek := agent.mustCall(t, "agent_peek", map[string]any{"target": "stranger"}); !peek.IsError || !strings.HasPrefix(resultText(peek), "session_not_found: ") {
+		t.Errorf("agent_peek of another profile's session over /mcp = %q, want session_not_found", resultText(peek))
+	}
+	if listed := agent.mustCall(t, "agent_list", map[string]any{}); listed.IsError || strings.Contains(fmt.Sprint(listed.StructuredContent), "stranger") {
+		t.Errorf("agent_list over /mcp = %v, want no session of another profile", listed.StructuredContent)
+	}
+}
