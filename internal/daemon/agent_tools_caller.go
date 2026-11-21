@@ -19,17 +19,18 @@ type agentToolLocal struct {
 }
 
 type callerSide struct {
-	d        *Daemon
-	ctx      context.Context
-	dir      string
-	problems []string
+	d           *Daemon
+	ctx         context.Context
+	dir         string
+	problems    []string
+	absentPaths []string
 }
 
-func (d *Daemon) doCallerSideWork(ctx context.Context, def agentToolDefinition, args map[string]any, c command.Caller) *command.Refusal {
-	if len(def.Local) == 0 {
-		return nil
-	}
+func (d *Daemon) doCallerSideWork(ctx context.Context, def agentToolDefinition, args map[string]any, c command.Caller) (*callerSide, *command.Refusal) {
 	w := &callerSide{d: d, ctx: ctx}
+	if len(def.Local) == 0 {
+		return w, nil
+	}
 	if row := d.store.Get(c.Session); row != nil {
 		w.dir = row.Directory
 	}
@@ -51,17 +52,30 @@ func (d *Daemon) doCallerSideWork(ctx context.Context, def agentToolDefinition, 
 			}
 		}
 	}
-	switch len(w.problems) {
+	return w, w.refuseProblems(w.problems)
+}
+
+func (w *callerSide) explainRefusal(refusal *command.Refusal) *command.Refusal {
+	if refusal == nil || len(w.absentPaths) == 0 {
+		return refusal
+	}
+	explained := *refusal
+	explained.Message = strings.Join(append([]string{refusal.Message}, w.absentPaths...), "\n")
+	return &explained
+}
+
+func (w *callerSide) refuseProblems(problems []string) *command.Refusal {
+	switch len(problems) {
 	case 0:
 		return nil
 	case 1:
-		return w.refusal(w.problems[0])
+		return w.refusal(problems[0])
 	default:
-		lines := make([]string, len(w.problems))
-		for i, problem := range w.problems {
+		lines := make([]string, len(problems))
+		for i, problem := range problems {
 			lines[i] = "  - " + problem
 		}
-		return w.refusal(fmt.Sprintf("%d problems; fix each and call again:\n%s", len(w.problems), strings.Join(lines, "\n")))
+		return w.refusal(fmt.Sprintf("%d problems; fix each and call again:\n%s", len(problems), strings.Join(lines, "\n")))
 	}
 }
 
@@ -82,13 +96,17 @@ func (w *callerSide) path(name, value string, kind catalog.Local) (string, bool)
 		return "", false
 	}
 	resolved := filepath.Join(w.dir, value)
-	probe := resolved
-	if kind == catalog.LocalDestination {
-		probe = filepath.Dir(resolved)
-	}
-	if _, err := os.Stat(probe); err != nil {
-		w.problem("{%s} %q is not found in %s, the folder the session started in; pass an absolute path", name, value, w.dir)
-		return "", false
+	notFound := fmt.Sprintf("{%s} %q is not found in %s, the folder the session started in; pass an absolute path", name, value, w.dir)
+	switch kind {
+	case catalog.LocalDestination:
+		if _, err := os.Stat(filepath.Dir(resolved)); err != nil {
+			w.problems = append(w.problems, notFound)
+			return "", false
+		}
+	default:
+		if _, err := os.Stat(resolved); err != nil {
+			w.absentPaths = append(w.absentPaths, notFound)
+		}
 	}
 	return resolved, true
 }

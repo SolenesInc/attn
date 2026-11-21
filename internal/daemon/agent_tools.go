@@ -208,12 +208,14 @@ func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, tool agentT
 	if refusal == nil {
 		args, refusal = def.arguments(arguments, tool.input)
 	}
+	var caller *callerSide
 	if refusal == nil {
-		refusal = d.doCallerSideWork(ctx, def, args, call.caller)
+		caller, refusal = d.doCallerSideWork(ctx, def, args, call.caller)
 	}
 	var result any
 	if refusal == nil {
 		result, refusal = d.runAgentCommand(ctx, call, def.Command, args)
+		refusal = caller.explainRefusal(refusal)
 	}
 	if refusal != nil {
 		d.logf("agent tools: %s by %s (session %s): refused %s: %s", def.Name, call.who, call.caller.Session, refusal.Code, refusal.Message)

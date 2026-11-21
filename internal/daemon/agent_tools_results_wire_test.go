@@ -283,6 +283,11 @@ func TestAToolCallDoesTheCallersWorkInTheFolderTheSessionStartedIn(t *testing.T)
 	if _, err := os.Stat(filepath.Join(shop, "plan.md")); !os.IsNotExist(err) {
 		t.Errorf("plan.md is still in the session's folder after a move: %v", err)
 	}
+	var retried protocol.SeedArtifactResult
+	structured("seed_attach", map[string]any{"seed": seed, "path": "plan.md", "mode": "move"}, &retried)
+	if protocol.Deref(retried.OperationID) != protocol.Deref(attached.OperationID) || !protocol.Deref(retried.Recovered) {
+		t.Errorf("seed_attach of plan.md again after the move answered operation %q recovered %v, want the first call's operation %q recovered", protocol.Deref(retried.OperationID), protocol.Deref(retried.Recovered), protocol.Deref(attached.OperationID))
+	}
 
 	var detached protocol.SeedArtifactResult
 	structured("seed_detach", map[string]any{"seed": seed, "path": "plan.md", "to": "plan-back.md"}, &detached)
