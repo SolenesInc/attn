@@ -429,6 +429,11 @@ func (c *Catalog) check() []string {
 			if items, _ := c.Types[a.Type].Schema["items"].(map[string]any); a.CLI == "words" && (c.Types[a.Type].Schema["type"] != "array" || items["required"] == nil) {
 				add("%s: cli words takes an array of objects whose required fields are the words of each item", argWhere)
 			}
+			if a.CLI == "pos" && a.OneOf != "" {
+				if problem := c.sharedPositionalProblem(cmd, a); problem != "" {
+					add("%s: %s", argWhere, problem)
+				}
+			}
 			if a.Unless != "" && !slices.ContainsFunc(cmd.Args, func(other Arg) bool { return other.Name == a.Unless && other.Type == "bool" }) {
 				add("%s: unless names %q, which is not a bool arg of this command", argWhere, a.Unless)
 			}
@@ -534,4 +539,58 @@ func schemaProblems(schema map[string]any, at string) []string {
 		}
 	}
 	return problems
+}
+
+// SharedPositional reports, for a positional arg that shares its one_of with
+// another positional, the partner it takes the word from and the literal
+// prefix of its type's pattern that a word must start with to be its.
+func (c *Catalog) SharedPositional(cmd *Command, a Arg) (partner, prefix string, ok bool) {
+	if a.CLI != "pos" || a.OneOf == "" {
+		return "", "", false
+	}
+	prefix, ok = literalPrefix(c.Types[a.Type].Schema)
+	if !ok {
+		return "", "", false
+	}
+	for _, other := range cmd.Args {
+		if other.Name != a.Name && other.OneOf == a.OneOf && other.CLI == "pos" {
+			return other.Name, prefix, true
+		}
+	}
+	return "", "", false
+}
+
+func literalPrefix(schema map[string]any) (string, bool) {
+	pattern, _ := schema["pattern"].(string)
+	literal, anchored := strings.CutPrefix(pattern, "^")
+	if !anchored || literal == "" || strings.ContainsAny(literal, `\.+*?()[]{}|$^`) {
+		return "", false
+	}
+	return literal, true
+}
+
+func (c *Catalog) sharedPositionalProblem(cmd *Command, a Arg) string {
+	var members []Arg
+	positionals := 0
+	for _, other := range cmd.Args {
+		if other.OneOf == a.OneOf {
+			members = append(members, other)
+			if other.CLI == "pos" {
+				positionals++
+			}
+		}
+	}
+	if positionals < 2 {
+		return ""
+	}
+	shared := 0
+	for _, member := range members {
+		if _, _, ok := c.SharedPositional(cmd, member); ok {
+			shared++
+		}
+	}
+	if len(members) != 2 || members[0].CLI != "pos" || members[1].CLI != "pos" || shared != 1 || a.Required {
+		return "a positional in a one_of shares the word with one other positional: two optional pos args, and exactly one has a type whose pattern is a literal prefix such as ^s-, which decides whose the word is"
+	}
+	return ""
 }

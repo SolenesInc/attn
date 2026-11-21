@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "dde5e691922c";
+pub const PROTOCOL_VERSION: &str = "e2fd142fdec2";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -7524,6 +7524,12 @@ impl OpenMarkdownResultMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct OpenResult {
+    pub opened: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub problems: Option<Vec<ReviewProblem>>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OpenSeedMessage {

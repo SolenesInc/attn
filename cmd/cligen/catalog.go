@@ -266,6 +266,16 @@ func (g *generator) usageForm(verb string, args []catalog.Arg) string {
 				continue
 			}
 			done[a.OneOf] = true
+			var words []string
+			for _, member := range args {
+				if member.OneOf == a.OneOf && member.CLI == "pos" {
+					words = append(words, strings.Trim(g.placeholder(member), "<>"))
+				}
+			}
+			if len(words) > 1 {
+				parts = append(parts, "<"+strings.Join(words, "|")+">")
+				continue
+			}
 			var alternatives []string
 			required := false
 			for _, member := range args {
@@ -555,7 +565,11 @@ func (g *generator) reference(group *catalog.Group) (string, error) {
 		}
 		for _, name := range section.Commands {
 			cmd, _ := g.c.Command(name)
-			fmt.Fprintf(&out, "\n    attn %s %s\n\n", group.Name, g.usage(group.Name, cmd))
+			command := group.Name + " " + g.usage(group.Name, cmd)
+			if cmd.Name == group.Name {
+				command = g.usage(group.Name, cmd)
+			}
+			fmt.Fprintf(&out, "\n    attn %s\n\n", command)
 			out.WriteString(strings.TrimSpace(g.cliText(cmd, cmd.File+": "+cmd.Name, cmd.Doc)) + "\n")
 			if len(cmd.Examples) > 0 {
 				out.WriteString("\n")

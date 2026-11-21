@@ -154,7 +154,7 @@ func TestTheCommandsAnAgentRunsFromItsSessionActOnThatSession(t *testing.T) {
 		refused(t, inSession("open", "s-not-valid"), 1, `"s-not-valid" is not a seed id`)
 		refused(t, inSession("open", "--session", session), 1, "usage: attn open")
 		refused(t, inSession("open"), 1, "usage: attn open")
-		refused(t, inSession("open", "a.md", "b.md"), 1, "unexpected extra arguments")
+		refused(t, inSession("open", "a.md", "b.md"), 1, "takes at most 1 argument")
 		refused(t, inSession("open", readme, "--nope"), 1, "usage: attn open")
 	})
 

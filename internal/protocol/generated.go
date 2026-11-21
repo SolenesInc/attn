@@ -8019,6 +8019,14 @@ type OpenMarkdownResultMessage struct {
 	TileID *string `json:"tile_id,omitempty,omitzero"`
 }
 
+type OpenResult struct {
+	// Opened corresponds to the JSON schema field "opened".
+	Opened string `json:"opened"`
+
+	// Problems corresponds to the JSON schema field "problems".
+	Problems []ReviewProblem `json:"problems,omitempty,omitzero"`
+}
+
 type OpenSeedMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`

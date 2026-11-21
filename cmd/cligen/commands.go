@@ -199,7 +199,10 @@ func writeGo(path, source string) error {
 	return os.WriteFile(path, formatted, 0o644)
 }
 
-func (g *generator) rustCLI(a catalog.Arg) string {
+func (g *generator) rustCLI(cmd *catalog.Command, a catalog.Arg) string {
+	if partner, prefix, ok := g.c.SharedPositional(cmd, a); ok {
+		return fmt.Sprintf("Cli::Shares(%s, %s)", rustString(partner), rustString(prefix))
+	}
 	switch {
 	case a.CLI == "pos":
 		return "Cli::Pos"
@@ -259,7 +262,7 @@ func (g *generator) rustTable(group string) (string, error) {
 				source = "Source::Stdin"
 			}
 			fmt.Fprintf(&out, "            Arg { name: %s, cli: %s, value: %s, source: %s, required: %v, list: %v },\n",
-				rustString(a.Name), g.rustCLI(a), kinds[g.valueKind(a)], source, a.Required && a.Unless == "", a.List)
+				rustString(a.Name), g.rustCLI(cmd, a), kinds[g.valueKind(a)], source, a.Required && a.Unless == "", a.List)
 		}
 		out.WriteString("        ],\n    },\n")
 	}

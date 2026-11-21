@@ -42,7 +42,7 @@ pub const TOP_LEVEL: &[TopLevel] = &[
     TopLevel { name: "model", usage: "model <command>", summary: "call a model through attn as a paired sender; log", hidden: false },
     TopLevel { name: "nav", usage: "nav <command>", summary: "code navigation for a review", hidden: false },
     TopLevel { name: "onboarding", usage: "onboarding [done|again]", summary: "show, finish or restart the Chief's onboarding", hidden: false },
-    TopLevel { name: "open", usage: "open <file.md|seed-id>", summary: "show the user a markdown document", hidden: false },
+    TopLevel { name: "open", usage: "open", summary: "show the user a markdown document", hidden: false },
     TopLevel { name: "plugin", usage: "plugin <command>", summary: "install, link, list or remove plugins", hidden: false },
     TopLevel { name: "pr", usage: "pr <command>", summary: "deliver through the repository's pull requests or trunk", hidden: false },
     TopLevel { name: "preflight", usage: "preflight", summary: "diagnose tools, paths, routing, and launch settings", hidden: false },

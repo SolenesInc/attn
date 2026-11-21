@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
@@ -253,6 +254,31 @@ func markdownOpenHost(ctx context.Context, msg *protocol.OpenMarkdownMessage) st
 		return origin.Host
 	}
 	return protocol.Deref(msg.Host)
+}
+
+func (d *Daemon) openCommands() map[string]command.Handler {
+	return map[string]command.Handler{"open": command.Typed(d.runOpen)}
+}
+
+func (d *Daemon) runOpen(ctx context.Context, c command.Caller, a command.OpenArgs) (any, error) {
+	if seed := strings.TrimSpace(a.Seed); seed != "" {
+		if _, _, err := d.openSeedTile(seed, c.Session, false, false, c.Profile); err != nil {
+			return nil, fmt.Errorf("open_seed: %w", err)
+		}
+		return protocol.OpenResult{Opened: seed}, nil
+	}
+	if a.Path == "" {
+		return nil, command.Refuse(command.CodeNoTarget, "missing <file.md|seed-id> argument")
+	}
+	host := ""
+	if origin, remote := OriginOf(ctx); remote {
+		host = origin.Host
+	}
+	_, _, problems, err := d.openMarkdownTile(host, a.Path, c.Session, false)
+	if err != nil {
+		return nil, fmt.Errorf("open_markdown: %w", err)
+	}
+	return protocol.OpenResult{Opened: filepath.Clean(a.Path), Problems: problems}, nil
 }
 
 func (d *Daemon) handleOpenMarkdown(ctx context.Context, conn net.Conn, msg *protocol.OpenMarkdownMessage) {

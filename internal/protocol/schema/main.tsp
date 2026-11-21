@@ -3974,6 +3974,12 @@ model ReviewNavigation {
   setup_session_id?: SessionID;  // the session setting up a server for the language, set by the home
 }
 
+// What open showed: the path or seed id, and a review document's problems.
+model OpenResult {
+  opened: string;
+  problems?: ReviewProblem[];
+}
+
 model ReviewProblem {
   line: int32;                   // the document line; 0 for the document as a whole
   message: string;               // what is wrong and the fix

@@ -23,6 +23,7 @@ var CommandRuns = map[string]Locator{
 	"delegate roles apply":    LocatorHome,
 	"delegate roles rollback": LocatorHome,
 	"list":                    LocatorHome,
+	"open":                    LocatorHome,
 	"review start":            LocatorHere,
 	"review check":            LocatorHere,
 	"review answer":           LocatorHome,

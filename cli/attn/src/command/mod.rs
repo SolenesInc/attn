@@ -14,6 +14,7 @@ pub enum Cli {
     SplitRest,
     Words(&'static [&'static str]),
     Internal,
+    Shares(&'static str, &'static str),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -405,6 +406,17 @@ fn positional_values(
             Json::from(raw.clone())
         };
         values.insert(arg.name.to_string(), value);
+    }
+    for arg in cmd.args {
+        if let Cli::Shares(partner, prefix) = arg.cli
+            && values
+                .get(partner)
+                .and_then(Json::as_str)
+                .is_some_and(|word| word.trim().starts_with(prefix))
+        {
+            let word = values.remove(partner).expect("checked above");
+            values.insert(arg.name.to_string(), word);
+        }
     }
     Ok(values)
 }

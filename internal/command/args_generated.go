@@ -30,6 +30,7 @@ const (
 	CodeNoQuestion               = "no_question"
 	CodeNoRole                   = "no_role"
 	CodeNoSession                = "no_session"
+	CodeNoTarget                 = "no_target"
 	CodeNotACheckID              = "not_a_check_id"
 	CodeNotAPlot                 = "not_a_plot"
 	CodeNotAPRURL                = "not_a_pr_url"
@@ -80,6 +81,7 @@ var specs = map[string]spec{
 	"delegate roles apply":    {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"not_a_table": "Pass the table delegate_roles_show returns, with only its fields.", "conflict": "Export the table again with delegate_roles_show, change it, and apply that."}},
 	"delegate roles rollback": {readOnly: false, anyone: true, sessionFlag: true},
 	"list":                    {readOnly: true, anyone: true, sessionFlag: false},
+	"open":                    {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"no_target": "Pass {path} or {seed}."}},
 	"review start":            {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
 	"review check":            {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
 	"review answer":           {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled.", "no_question": "Answer a question that is still open on the document."}},
@@ -270,6 +272,11 @@ type DelegateRolesRollbackArgs struct {
 }
 
 type ListArgs struct {
+}
+
+type OpenArgs struct {
+	Path string `json:"path,omitempty"`
+	Seed string `json:"seed,omitempty"`
 }
 
 type ReviewStartArgs struct {

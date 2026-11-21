@@ -105,10 +105,7 @@ fn native_command(name: &str, verb: Option<&str>, argv: &[OsString]) -> Option<N
             help: Some(nav::HELP),
             ..native(nav::run, true)
         },
-        ("open", _) => Native {
-            help: Some(open::USAGE),
-            ..native(open::run, true)
-        },
+        ("open", _) => native(open::run, true),
         ("browser", _) => Native {
             help: Some(browser::USAGE),
             ..native(browser::run, true)

@@ -146,3 +146,7 @@ types:
       required: [revision, roles, fallback]
     doc: "The delegation table, as delegate_roles_show returns it in preferences."
     placeholder: "<file|->"
+  seed_id:
+    json: {type: string, pattern: "^s-"}
+    doc: "A seed's id, such as s-7k3f9m."
+    placeholder: "<seed-id>"
