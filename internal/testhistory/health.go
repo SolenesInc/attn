@@ -146,6 +146,9 @@ type Standing struct {
 func (h Health) Standing(unit string) (Standing, bool) {
 	var lanes []LaneStanding
 	for lane, revisions := range h.units[unit] {
+		if !landingsRunItIn(unit, lane) {
+			continue
+		}
 		if standing, ok := h.laneStanding(lane, revisions); ok {
 			lanes = append(lanes, standing)
 		}

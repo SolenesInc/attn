@@ -157,7 +157,9 @@ func TestSelectChoosesTheCheckoutsTestsFromItsHistory(t *testing.T) {
 	firstMain := repo.commit("the baseline", start)
 	repo.runTests("./p", "./q")
 	repo.receive(otherLaneFailure("ci-c-fails", firstMain, "go ./q TestC", start.Add(time.Minute)))
-	repo.receive(otherLaneFailure("ci-native-fails", firstMain, "native agent-reload", start.Add(time.Minute)))
+	nativeFails := otherLaneFailure("ci-native-fails", firstMain, "native agent-reload", start.Add(time.Minute))
+	nativeFails.Lane = testhistory.Lane{OS: "linux", Arch: "amd64"}
+	repo.receive(nativeFails)
 
 	repo.git("checkout", "-q", "-b", "side")
 	repo.write("side/side.go", "package side\n")

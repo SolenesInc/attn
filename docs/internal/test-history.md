@@ -208,7 +208,7 @@ runs:
 - every test that failed on `main` and has since passed there, on at least one
   and fewer than 30 later main revisions in the lane where it failed, whatever
   its runner, except the Tauri app's Vitest and Playwright files, which `main`
-  no longer runs. A test still red on `main`, with no pass since its last failure,
+  no longer runs, and the native scenarios that failed only on macOS. A test still red on `main`, with no pass since its last failure,
   is listed as `RED` and not run. The sheriff owns it. A red test blocks no
   landing, unless the test is in the baseline or the landing changes the test.
   `land` writes a red Vitest file as `red vitest <file>`, and `landing-tests.sh`
@@ -306,7 +306,8 @@ run of the whole unit that no longer reports the case, as after a renamed
 subtest. A run filtered to other cases (Go `-run` with a subtest or `-skip`,
 Vitest `-t`, Playwright `--grep`) does not clear the failure, and neither does
 a skip of the case. A failure in one lane makes the unit a candidate wherever
-the unit can run, and only passes in the failing lane clear it. The unit counts
+the unit can run, and only passes in the failing lane clear it. A native
+scenario is the exception: only its Linux lanes count, as below. The unit counts
 in its least cleared lane: fewest passes, then the newest anchor. With no pass
 since, the unit is red. The unit has cleared once that lane has 30 passes
 since. A failure on a later revision starts the count again.
@@ -326,9 +327,17 @@ whose file does not build on this platform, such as a `_linux_test.go` test on
 a Mac, is `UNAVAILABLE`, with the reason.
 
 A native scenario is chosen like any other test, though no group lists one and
-the checkout's inventory does not hold them. `land` writes it as
-`native <scenario>`, and `land.sh` hands it to `scripts/land-linux.sh`,
-which runs it with the scenarios the landing selects for other reasons, as
+the checkout's inventory does not hold them, with one difference: selection
+counts only its failures and passes in Linux lanes, because the landing's
+scenario step runs it on Linux, and its passes there never clear a failure on
+macOS. A scenario whose failures are all on macOS is no candidate; `land`
+neither runs nor lists it. The macOS scenario lane runs only when someone
+dispatches it: on 19 November 2026 one dispatch at e967baa4c failed 30
+scenarios, the lane had 3 passes in 524 main commits, and with macOS failures
+counted, the scenarios landings added cost each landing 461 s at the median and cleared none. `land`
+writes a chosen scenario as `native <scenario>`, and `land.sh` hands it to
+`scripts/land-linux.sh`, which runs it with the scenarios the landing selects
+for other reasons, as
 [Trunk-based development](trunk-based-development.md#what-landsh-does) says.
 The scenario step, not this selection, says when one does not run on Linux or
 is gone from the scenario catalog.

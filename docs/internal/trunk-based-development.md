@@ -42,10 +42,11 @@ the Tauri app's:
   feature file it changes in `.agents/skills/drive-attn/features/`, because a
   landing that changes a feature's behavior can leave that feature's scenarios
   expecting the old behavior
-- each scenario that failed on `main` and has since passed there, until it
-  clears, when the landing runs landing tests (below): the landing tests choose
-  it as they choose any test with that history, and `land.sh` hands it to the
-  scenario step. A landing prints each scenario of this kind that does not run
+- each scenario that failed on `main` on Linux and has since passed there,
+  until it clears, when the landing runs landing tests (below): the landing
+  tests choose it as they choose any test with that history, and `land.sh`
+  hands it to the scenario step. A scenario that failed only on macOS is not
+  chosen, because its Linux runs here never clear that failure. A landing prints each scenario of this kind that does not run
   on Linux or is gone from the scenario catalog.
 
 `land.sh` starts the Acceptance soak workflow for them on a temporary

@@ -237,6 +237,7 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 		changed   = "vitest src/changed.test.tsx"
 		gone      = "vitest src/gone.test.tsx"
 		scenario  = "native agent-reload"
+		macOnly   = "native mac-only"
 		elsewhere = "go ./p TestElsewhere"
 		playwrite = "playwright e2e/x.spec.ts"
 	)
@@ -249,6 +250,9 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 		receipt(on(at(2), linux), result(recent, th.Fail)),
 		receipt(on(at(2), linux), result(red, th.Pass)),
 		receipt(on(at(2), linux), result(scenario, th.Pass)),
+		receipt(on(at(1), mac), result(macOnly, th.Fail)),
+		receipt(on(at(2), mac), result(macOnly, th.Pass)),
+		receipt(on(at(3), mac), result(scenario, th.Fail)),
 		receipt(on(at(3), linux), result(red, th.Fail)),
 	}
 	for i := 2; i < n+2; i++ {
@@ -267,7 +271,7 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 		cleared: th.Cleared, gone: th.Missing, scenario: th.Selected,
 	}
 	if got := statuses(selection); !reflect.DeepEqual(got, want) {
-		t.Fatalf("statuses = %v, want %v: the matched group's baseline, the changed test and a failure with %d of %d passes run; one still red since its last failure is listed, not run; one with %d passes has cleared; a native scenario that has passed since runs too, though no inventory lists it; a test gone from the checkout is missing; a Go failure that has passed since joins an app-only landing", got, want, n-1, n, n)
+		t.Fatalf("statuses = %v, want %v: the matched group's baseline, the changed test and a failure with %d of %d passes run; one still red since its last failure is listed, not run; one with %d passes has cleared; a native scenario that has passed on Linux since runs too, though no inventory lists it, and counts only its Linux failures, the lane the scenario step runs; one that failed only on macOS is no candidate; a test gone from the checkout is missing; a Go failure that has passed since joins an app-only landing", got, want, n-1, n, n)
 	}
 	for _, choice := range selection.Choices {
 		if choice.Unit == recent && choice.PassesLeft() != 1 {

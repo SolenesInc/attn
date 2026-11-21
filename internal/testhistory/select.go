@@ -73,6 +73,12 @@ func runsInTheScenarioStep(unit string) bool {
 	return UnitRunner(unit) == RunnerNative
 }
 
+const scenarioStepOS = "linux"
+
+func landingsRunItIn(unit, lane string) bool {
+	return !runsInTheScenarioStep(unit) || strings.HasPrefix(lane, scenarioStepOS+"/")
+}
+
 func (inventory Inventory) Has(unit string) bool {
 	_, present := inventory[unit]
 	return present
@@ -171,7 +177,9 @@ func Select(request SelectRequest) Selection {
 		choose(unit).Changed = true
 	}
 	for _, unit := range request.Health.FailureUnits() {
-		choose(unit)
+		if _, ok := request.Health.Standing(unit); ok {
+			choose(unit)
+		}
 	}
 	for _, unit := range order {
 		choice := choices[unit]
