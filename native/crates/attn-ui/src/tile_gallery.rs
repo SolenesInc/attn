@@ -419,8 +419,7 @@ fn drag_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
     terminal(s, &t, vec![target, ghost])
 }
 
-const LONG_AGENT: &str =
-    "attn--ds-page-blocks-delegation-appearance-landing-two · 本番の権限を移行する作業ツリー";
+const LONG_AGENT: &str = "attn--ds-page-blocks-delegation-appearance-landing-two · migrate-production-permissions-worktree";
 
 fn header_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
     let t = tokens(cx);
@@ -534,14 +533,14 @@ fn header_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
 fn annotations_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
     let t = tokens(cx);
     let quote = if s.long {
-        "error[E0308]: mismatched types in attn--ds-chrome-tiles/native/crates/attn-app/src/desktop/view.rs:1325 expected `El`, found `Control` — 本番の権限を移行する作業ツリー"
+        "error[E0308]: mismatched types in attn--ds-chrome-tiles/native/crates/attn-app/src/desktop/view.rs:1325 expected `El`, found `Control` — migrate the production permissions worktree"
     } else {
         "error: could not compile `attn-app`"
     };
     let card = |i: usize, comment: &str| {
         let face = Inline::top()
             .child(crate::system::glyph(
-                "🐛",
+                "❌",
                 IconSize::Small,
                 t.text_secondary,
             ))
