@@ -3,8 +3,9 @@ use std::time::Duration;
 
 use attn_app::Action;
 use attn_protocol::{
-    Ask, AskAnswer, AskAnswerResultMessage, AskChoice, AskDefault, AskPart, AskQuestion, AskReply,
-    AskThread, AsksUpdatedMessage, InitialStateMessage, Session, SessionStateChangedMessage,
+    Ask, AskAnswer, AskAnswerResultMessage, AskChoice, AskDefault, AskFollowUpResultMessage,
+    AskPart, AskQuestion, AskReply, AskThread, AsksUpdatedMessage, InitialStateMessage, Session,
+    SessionStateChangedMessage,
 };
 use attn_protocol::{
     GardenSeedsUpdatedMessage, PartyView, Seed, SeedDocument, SeedDocumentGetResultMessage,
@@ -2906,4 +2907,45 @@ fn tab_reaches_a_picks_condition_inside_its_question() {
     assert_eq!(active(&world), ["q1"]);
     world.gesture(|d| d.press("shift+tab"));
     assert_eq!(focused(&world).as_deref(), Some("asks.q.q1.choice.0"));
+}
+
+#[test]
+fn a_replied_ask_takes_a_follow_up_sent_with_the_send_chord_and_says_who_it_went_to() {
+    let answered = replied(cache_store(), vec![picked("q1", &["Postgres"])], None);
+    let mut world = start(vec![answered], vec![api_working()]);
+    world.daemon.on("ask_follow_up", |r| {
+        message(AskFollowUpResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            ask_id: r["ask_id"].as_str().unwrap().into(),
+            success: true,
+            ..AskFollowUpResultMessage::new()
+        })
+    });
+    open_sheet(&mut world);
+    letter(&mut world, "r");
+    assert!(!has(&world, "asks.follow-up.field"));
+
+    letter(&mut world, "f");
+    assert_eq!(focused(&world).as_deref(), Some("asks.follow-up.field"));
+    assert!(disabled(&world, "asks.follow-up.send"));
+    world.gesture(|app| app.type_text("Redis after all: the cache is hot."));
+    send_key(&mut world);
+
+    let sent: Vec<_> = world
+        .daemon
+        .sent_of("ask_follow_up")
+        .into_iter()
+        .map(|r| (r["ask_id"].clone(), r["text"].clone()))
+        .collect();
+    assert_eq!(
+        sent,
+        [(
+            serde_json::json!("a-cache1"),
+            serde_json::json!("Redis after all: the cache is hot.")
+        )]
+    );
+    assert!(world.daemon.sent_of("ask_answer").is_empty());
+    assert!(!has(&world, "asks.follow-up.field"));
+    assert!(has(&world, "asks.follow-up"));
+    assert_eq!(name(&world, "notice.text"), "Follow-up sent to api");
 }

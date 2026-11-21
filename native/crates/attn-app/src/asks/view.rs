@@ -76,6 +76,7 @@ pub(super) fn remove_file_key(file: &str) -> String {
     format!("asks.file.{file}.remove")
 }
 const QUOTE: &str = "asks.quote";
+pub(super) const FOLLOW_UP: &str = "asks.follow-up.field";
 
 fn send_chord() -> &'static str {
     if rune::Platform::current() == rune::Platform::Mac {
@@ -604,6 +605,21 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
                     .filter(|files| !files.is_empty())
                     .map(|files| Block::custom("asks.files.block", sent_files(files, t))),
             );
+            if let Some(edit) = state.window.asks.follow_ups.get(&ask.id) {
+                let id = ask.id.clone();
+                blocks.push(Block::custom(
+                    "asks.follow-up.block",
+                    written_field(
+                        Some(edit),
+                        FOLLOW_UP,
+                        "Follow up",
+                        &format!("What else should {} know?", item.from),
+                        move |state: &mut State| super::follow_up_edit(state, &id),
+                        None,
+                        t,
+                    ),
+                ));
+            }
         }
         None => {
             let (id, pressed) = (ask.id.clone(), ask.id.clone());
@@ -1236,9 +1252,13 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
             } else {
                 format!("Replied {age} ago")
             };
-            words(said.clone(), Type::Small, t.text_tertiary)
+            let when = words(said.clone(), Type::Small, t.text_tertiary)
                 .key("asks.replied-when")
-                .label(said)
+                .label(said);
+            Inline::loose()
+                .key("asks.replied-actions")
+                .child(when)
+                .child(follow_up_button(state, ask, t))
         }
         None => {
             let sendable = !sending
@@ -1346,6 +1366,38 @@ fn quote_button(text: &str, t: &Tokens) -> Option<El> {
     )
 }
 
+/// A replied ask's Follow up, which opens its field, then sends what the field holds.
+fn follow_up_button(state: &State, ask: &Ask, t: &Tokens) -> El {
+    let Some(edit) = state.window.asks.follow_ups.get(&ask.id) else {
+        return El::from(
+            Button::new("Follow up")
+                .size(Size::Compact)
+                .look(Look::Plain)
+                .trailing(keycaps(["f"], t))
+                .on_press_tx(super::follow_up)
+                .build(t)
+                .key("asks.follow-up"),
+        )
+        .label("Follow up f");
+    };
+    let sending = state.window.asks.sending.is_some();
+    let said = if sending {
+        "Sending…"
+    } else {
+        "Send follow-up"
+    };
+    El::from(
+        Button::new(said)
+            .look(Look::Primary)
+            .disabled(sending || edit.text.trim().is_empty())
+            .trailing(keycaps([send_chord()], t))
+            .on_press_tx(super::send)
+            .build(t)
+            .key("asks.follow-up.send"),
+    )
+    .label(format!("{said} {}", send_chord()))
+}
+
 fn toggle_replied(state: &mut State, tx: &mut Tx) {
     state.window.asks.show_replied = !state.window.asks.show_replied;
     state.tick(tx);
@@ -1391,6 +1443,7 @@ fn sheet_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         "r" => toggle_replied(state, tx),
         "c" if ask.is_some() => super::copy(state, tx),
         "q" => return super::quote(state, tx),
+        "f" if ask.as_ref().is_some_and(|a| a.reply.is_some()) => super::follow_up(state, tx),
         "a" => match &ask {
             Some(ask) if ask.reply.is_none() && super::recommended(ask).len() > 1 => {
                 super::accept_recommended(state, &ask.id)

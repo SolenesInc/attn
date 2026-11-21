@@ -6,7 +6,8 @@ use std::collections::{BTreeMap, HashMap};
 
 use attn_client::Facts;
 use attn_protocol::{
-    Ask, AskAnswer, AskAnswerMessage, AskDefault, AskQuestion, Session, StandbyTender,
+    Ask, AskAnswer, AskAnswerMessage, AskDefault, AskFollowUpMessage, AskQuestion, Session,
+    StandbyTender,
 };
 use rune::{TextEdit, Tx};
 
@@ -38,6 +39,8 @@ pub struct Asks {
     /// The ask whose "Follows …" line is unfolded to show the earlier answer.
     pub(crate) follows_open: Option<String>,
     pub(crate) drafts: HashMap<String, Draft>,
+    /// The follow-ups being written to replied asks, each kept while its ask stays listed.
+    pub(crate) follow_ups: HashMap<String, TextEdit>,
     pub(crate) sending: Option<String>,
     /// Files are dragged over the sheet.
     pub(crate) dropping: bool,
@@ -824,6 +827,12 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
         .map(|a| a.id.clone())
         .collect();
     state.window.asks.drafts.retain(|id, _| open.contains(id));
+    let listed: Vec<String> = state.facts.asks.iter().map(|a| a.id.clone()).collect();
+    state
+        .window
+        .asks
+        .follow_ups
+        .retain(|id, _| listed.contains(id));
     if !is_open(state) {
         return;
     }
@@ -934,12 +943,14 @@ pub(crate) fn accept_recommended(state: &mut State, ask: &str) {
     }
 }
 
-/// Sends the answers and note written for the ask shown. Once the daemon takes them the sheet
-/// moves to the ask after it in its section, or before it, or stays to show the reply; a
-/// refusal keeps what was written and says why.
+/// Sends the answers and note written for the ask shown, or the follow-up written to it once
+/// replied. Once the daemon takes an answer the sheet moves to the ask after it in its section,
+/// or before it, or stays to show the reply; a refusal keeps what was written and says why.
 pub(crate) fn send(state: &mut State, tx: &mut Tx) {
-    if let Some((id, false)) = state.shown_ask() {
-        send_ask(state, id, tx);
+    match state.shown_ask() {
+        Some((id, false)) => send_ask(state, id, tx),
+        Some((id, true)) => send_follow_up(state, id, tx),
+        None => {}
     }
 }
 
@@ -1014,6 +1025,77 @@ fn uploaded(state: &mut State, ask: &str, tx: &mut Tx) {
     if draft.files.iter().all(|f| f.failed().is_none()) {
         send_ask(state, ask.to_owned(), tx);
     }
+}
+
+/// Opens the follow-up field of the replied ask shown and takes the keyboard into it.
+pub(crate) fn follow_up(state: &mut State, tx: &mut Tx) {
+    let Some((id, true)) = state.shown_ask() else {
+        return;
+    };
+    state.window.asks.follow_ups.entry(id).or_default();
+    let ring = tx.by_keys() || tx.focus_visible();
+    tx.focus(view::FOLLOW_UP, ring);
+}
+
+pub(crate) fn follow_up_edit<'a>(state: &'a mut State, ask: &str) -> &'a mut TextEdit {
+    state
+        .window
+        .asks
+        .follow_ups
+        .entry(ask.to_owned())
+        .or_default()
+}
+
+/// Sends what was written to follow up on a replied ask to whoever holds it now. Once the
+/// daemon takes it the field closes and a notice says who it went to; a refusal keeps it and
+/// says why.
+fn send_follow_up(state: &mut State, id: String, tx: &mut Tx) {
+    if state.window.asks.sending.is_some() {
+        return;
+    }
+    let Some(text) = state
+        .window
+        .asks
+        .follow_ups
+        .get(&id)
+        .map(|edit| edit.text.trim().to_owned())
+        .filter(|text| !text.is_empty())
+    else {
+        return;
+    };
+    let to = state
+        .asks_items()
+        .iter()
+        .find(|i| i.ask.id == id)
+        .map(|i| i.from.clone())
+        .unwrap_or_default();
+    state.window.asks.sending = Some(id.clone());
+    state.window.asks.error = None;
+    state.ask(
+        {
+            let id = id.clone();
+            |request_id| AskFollowUpMessage {
+                request_id,
+                ask_id: id,
+                text,
+                ..AskFollowUpMessage::new()
+            }
+        },
+        move |state, answer, tx| {
+            state.window.asks.sending = None;
+            match answer.outcome() {
+                Ok(_) => {
+                    state.window.asks.follow_ups.remove(&id);
+                    state.window.notify(format!("Follow-up sent to {to}"), tx);
+                    if is_open(state) {
+                        tx.focus(SHEET, tx.by_keys() || tx.focus_visible());
+                    }
+                }
+                Err(why) => state.window.asks.error = Some((id, why)),
+            }
+        },
+        tx,
+    );
 }
 
 /// Closes the sheet and opens the agent that holds the ask shown.
