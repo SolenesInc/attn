@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -42,16 +41,16 @@ func TestTerminalCommandsAddressEachTileOfASharedConversation(t *testing.T) {
 		t.Fatalf("listed terminals: %+v", entries)
 	}
 	for _, ref := range []string{caller, caller[:8]} {
-		_, err := client.TerminalCommand[protocol.TerminalReadResult](context.Background(), cli, "terminal read", me, map[string]any{"terminal": ref})
+		err := cli.RunCommand("terminal read", me, map[string]any{"terminal": ref}, new(protocol.TerminalReadResult))
 		if err == nil || !strings.Contains(err.Error(), firstTerminal) || !strings.Contains(err.Error(), secondTerminal) {
 			t.Fatalf("ambiguous session %s: %v", ref, err)
 		}
 	}
-	_, err := client.TerminalCommand[protocol.TerminalListResult](context.Background(), cli, "terminal ls", me, map[string]any{})
+	err := cli.RunCommand("terminal ls", me, map[string]any{}, new(protocol.TerminalListResult))
 	if err == nil || !strings.Contains(err.Error(), "pass --desktop") {
 		t.Fatalf("ambiguous caller desktop: %v", err)
 	}
-	_, err = client.TerminalCommand[protocol.TerminalInputResult](context.Background(), cli, "terminal send", me, map[string]any{"terminal": firstTerminal, "desktop": elsewhere.ID, "text": "wrong desktop"})
+	err = cli.RunCommand("terminal send", me, map[string]any{"terminal": firstTerminal, "desktop": elsewhere.ID, "text": "wrong desktop"}, new(protocol.TerminalInputResult))
 	if err == nil || !strings.Contains(err.Error(), "--desktop "+home) {
 		t.Fatalf("selected terminal desktop: %v", err)
 	}
@@ -72,7 +71,7 @@ func TestTerminalCommandsAddressEachTileOfASharedConversation(t *testing.T) {
 	if strings.Contains(firstRead.Text, "second independent draft") || strings.Contains(secondRead.Text, "first independent draft") {
 		t.Fatalf("drafts crossed terminals: first=%q second=%q", firstRead.Text, secondRead.Text)
 	}
-	_, err = client.TerminalCommand[protocol.TerminalMoveResult](context.Background(), cli, "terminal move", me, map[string]any{"terminal": caller, "desktop": home})
+	err = cli.RunCommand("terminal move", me, map[string]any{"terminal": caller, "desktop": home}, new(protocol.TerminalMoveResult))
 	if err == nil || !strings.Contains(err.Error(), firstTerminal) || !strings.Contains(err.Error(), secondTerminal) {
 		t.Fatalf("ambiguous move must name both terminals: %v", err)
 	}
@@ -89,7 +88,8 @@ func TestTerminalCommandsAddressEachTileOfASharedConversation(t *testing.T) {
 
 func terminalDo[R any](t *testing.T, cli *client.Client, name string, caller protocol.SessionID, args map[string]any) *R {
 	t.Helper()
-	result, err := client.TerminalCommand[R](context.Background(), cli, name, caller, args)
+	result := new(R)
+	err := cli.RunCommand(name, caller, args, result)
 	if err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}

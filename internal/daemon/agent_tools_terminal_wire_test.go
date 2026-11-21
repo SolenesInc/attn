@@ -1,11 +1,9 @@
 package daemon_test
 
 import (
-	"context"
 	"strings"
 	"testing"
 
-	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -91,7 +89,7 @@ func TestTerminalCommandsReachNothingInAnotherProfile(t *testing.T) {
 		if text := resultText(result); !result.IsError || !strings.Contains(text, "not found in the caller's profile") {
 			t.Errorf("/mcp %s on another profile's terminal = %q, want it not found", tc.tool, text)
 		}
-		_, err := client.TerminalCommand[map[string]any](context.Background(), w.Client(), tc.command, protocol.SessionID(home), tc.args)
+		err := w.Client().RunCommand(tc.command, protocol.SessionID(home), tc.args, new(map[string]any))
 		if err == nil || !strings.Contains(err.Error(), "not found in the caller's profile") {
 			t.Errorf("run_command %s on another profile's terminal = %v, want it not found", tc.command, err)
 		}
