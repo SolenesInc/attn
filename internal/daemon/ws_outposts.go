@@ -20,7 +20,7 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 	r.actions.Lock()
 	defer r.actions.Unlock()
 	if !d.outpostsEnabled() {
-		return fmt.Errorf("outposts_enabled is off; run attn settings set outposts_enabled true before you %s an outpost", action)
+		return protocol.Refuse(protocol.RefusalWrongState, "outposts_enabled is off; run {attn settings set outposts_enabled true} before you %s an outpost", action)
 	}
 	if action == "add" {
 		name = strings.TrimSpace(name)

@@ -48,7 +48,7 @@ var catalogFamilies = map[string]bool{
 	"seed":             true,
 	"send":             false,
 	"session":          true,
-	"settings":         false,
+	"settings":         true,
 	"skill":            true,
 	"state":            true,
 	"terminal":         true,

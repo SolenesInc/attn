@@ -1,2 +1,56 @@
+# The settings family. `anyone` lets a shell that shows no session read and
+# change settings, as it always could.
 groups:
-  - {name: settings, usage: "<command>", summary: "read or change settings"}
+  - name: settings
+    usage: "<command>"
+    summary: "read or change settings"
+    map:
+      rows:
+        - {need: "Read or change attn's settings", tools: [settings_list, settings_get, settings_set]}
+    doc: |
+      Read and change settings. Most apply to all profiles; a few apply to one profile, and list shows which. Inside an attn session, profile settings belong to the session's profile; outside, --profile chooses one when several exist.
+    flags:
+      - {name: profile, placeholder: "<name|id>", doc: "the profile whose profile settings these are; required outside attn when several profiles exist"}
+    sections:
+      - title: Commands
+        commands: [settings list, settings get, settings set]
+
+commands:
+  - name: settings list
+    summary: show every setting's key, scope, value and description
+    runs: here
+    grant: full
+    read_only: true
+    anyone: true
+    doc: |
+      Shows each setting's key, scope, value and description. `all` adds the read-only values attn computes. `features` shows each experimental feature instead, whether it is on, and when a change applies.
+    args:
+      - {name: all, type: bool, cli: "--all", doc: "include the read-only values attn computes"}
+      - {name: features, type: bool, cli: "--features", cli_only: true, doc: "show the experimental features instead; takes no other flag"}
+    result: SettingsListResult
+
+  - name: settings get
+    summary: show the value of one setting
+    runs: here
+    grant: full
+    read_only: true
+    anyone: true
+    doc: |
+      Shows the value in effect. It is empty when the setting is unset, unless the setting is on by default.
+    args:
+      - {name: key, type: setting_key, required: true, cli: pos}
+    result: SettingEntry
+
+  - name: settings set
+    summary: change a setting
+    runs: here
+    grant: full
+    anyone: true
+    doc: |
+      Changes a setting. An empty `value` restores the default of a setting that has one, or clears it where its description allows. On an outpost, a home setting is saved at the home.
+    args:
+      - {name: key, type: setting_key, required: true, cli: pos}
+      - {name: value, type: clearable, required: true, cli: pos, placeholder: "<value>", doc: "the new value; empty restores the default"}
+    result: SettingEntry
+    examples:
+      - {key: agent_tools_enabled, value: "true"}

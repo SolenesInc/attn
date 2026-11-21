@@ -353,10 +353,10 @@ func (d *Daemon) crewMembersWithHomes(profileID string) (int, error) {
 
 func (d *Daemon) placeChiefNotebook(member crew.Member, revision int64, root string) (crew.Member, int64, error) {
 	if !member.Chief {
-		return member, revision, fmt.Errorf("only the Chief's setup picks a Notebook folder; set this profile's folder with attn settings set %s <folder>", setting.NotebookRoot)
+		return member, revision, protocol.Refuse(protocol.RefusalWrongState, "only the Chief's setup picks a Notebook folder; set this profile's folder with {attn settings set %s <folder>}", setting.NotebookRoot)
 	}
 	if member.Agent != "" {
-		return member, revision, fmt.Errorf("%s's Notebook folder is picked once, at setup; change the profile's folder with attn settings set %s <folder>", member.Name, setting.NotebookRoot)
+		return member, revision, protocol.Refuse(protocol.RefusalWrongState, "%s's Notebook folder is picked once, at setup; change the profile's folder with {attn settings set %s <folder>}", member.Name, setting.NotebookRoot)
 	}
 	previous, changed, err := d.pointProfileNotebook(member.ProfileID, root)
 	if err != nil {

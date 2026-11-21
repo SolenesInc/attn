@@ -324,3 +324,28 @@ func TestThePresenceToolOnAnOutpostNamesTheHomesSeedsAndRefusesWhileTheHomeIsDow
 		t.Errorf("presence on the outpost while the home is down answered %+v, want a refusal naming the unreachable home", answer)
 	}
 }
+
+func TestTheSettingsToolOnAnOutpostSavesAHomeSettingAtTheHomeAndAMachineSettingHere(t *testing.T) {
+	o := newOutpostTools(t, fakeagent.Claude)
+	shop := o.outpost.Path("shop")
+	if err := os.MkdirAll(shop, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, claude := o.spawn(fakeagent.Claude, shop)
+	tools := claudeToolEndpoint(t, claude)
+
+	var entry protocol.SettingEntry
+	tools.structured(t, "settings_set", map[string]any{"key": "theme", "value": "dark"}, &entry)
+	if protocol.Deref(entry.Value) != "dark" {
+		t.Errorf("settings_set theme on the outpost answered %+v, want dark", entry)
+	}
+	requireStdout(t, o.home.Attn("settings", "get", "theme"), "dark")
+	tools.structured(t, "settings_set", map[string]any{"key": "worktree_sweep_enabled", "value": "false"}, &entry)
+	if protocol.Deref(entry.Value) != "false" {
+		t.Errorf("settings_set worktree_sweep_enabled on the outpost answered %+v, want false", entry)
+	}
+	requireStdout(t, o.outpost.Attn("settings", "get", "worktree_sweep_enabled"), "false")
+	if got := o.home.Attn("settings", "get", "worktree_sweep_enabled"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "true" {
+		t.Errorf("the outpost's machine setting reached the home: %+v", got)
+	}
+}

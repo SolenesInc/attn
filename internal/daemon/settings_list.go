@@ -1,9 +1,7 @@
 package daemon
 
 import (
-	"encoding/json"
 	"fmt"
-	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -81,7 +79,7 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 		return spec.Scope == setting.PerProfile && !spec.ReadOnly() && d.enrollmentStatus().IsOutpost()
 	}
 	if key != "" && savedAtHome(spec) {
-		return nil, nil, fmt.Errorf("%s is saved at the home for each profile; read it there with attn settings get %s, or read %s for this machine's copy", key, key, setting.NotebookRootEffective)
+		return nil, nil, protocol.Refuse(protocol.RefusalWrongState, "%s is saved at the home for each profile; read it there with {attn settings get %s}, or read %s for this machine's copy", key, key, setting.NotebookRootEffective)
 	}
 	notebookProfile := profile.ID
 	if d.enrollmentStatus().IsOutpost() && msg.SourceSessionID != nil {
@@ -117,22 +115,4 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 	}
 	sort.Slice(result.Entries, func(i, j int) bool { return result.Entries[i].Key < result.Entries[j].Key })
 	return result, nil, nil
-}
-
-func (d *Daemon) handleGetSettings(conn net.Conn, msg *protocol.GetSettingsMessage) {
-	list, entry, err := d.settingsList(msg)
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SettingsList: list, Setting: entry})
-}
-
-func (d *Daemon) handleSetSetting(conn net.Conn, msg *protocol.SetSettingMessage) {
-	entry, err := d.setSetting(msg)
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, Setting: entry})
 }

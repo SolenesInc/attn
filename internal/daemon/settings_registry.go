@@ -10,6 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/colors"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/modeltiers"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/prreadiness"
 	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/setting"
@@ -203,7 +204,7 @@ func (d *Daemon) writableSettingHere(key string) (*setting.Setting, error) {
 		return nil, err
 	}
 	if spec == setting.OutpostsEnabled && !d.enrollmentStatus().IsHome() {
-		return nil, fmt.Errorf("%s can only change at the home, because turning it off from here would cut this outpost's own connection to the home: run attn settings set %s there", key, key)
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s can only change at the home, because turning it off from here would cut this outpost's own connection to the home: run {attn settings set %s <value>} there", key, key)
 	}
 	return spec, nil
 }

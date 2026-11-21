@@ -243,6 +243,9 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"session unsnooze":        {readOnly: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false},
 		"session rename":          {readOnly: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Pass {target}, or run it inside an attn session."}},
 		"session reopen":          {readOnly: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"unknown_action": "Pass one of the actions session_show lists for the session."}},
+		"settings list":           {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false},
+		"settings get":            {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false},
+		"settings set":            {readOnly: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false},
 		"skill":                   {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: true, fixes: map[string]string{"no_such_reference": "Use one of the names `skill` with `list` prints.", "list_and_reference": "Pass {reference} or {list}, not both."}},
 		"state explain":           {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
 		"terminal ls":             {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
@@ -1067,6 +1070,20 @@ type SessionRenameArgs struct {
 type SessionReopenArgs struct {
 	ID     string `json:"id,omitempty"`
 	Action string `json:"action,omitempty"`
+}
+
+type SettingsListArgs struct {
+	All      bool `json:"all,omitempty"`
+	Features bool `json:"features,omitempty"`
+}
+
+type SettingsGetArgs struct {
+	Key string `json:"key,omitempty"`
+}
+
+type SettingsSetArgs struct {
+	Key   string  `json:"key,omitempty"`
+	Value *string `json:"value,omitempty"`
 }
 
 type SkillArgs struct {
