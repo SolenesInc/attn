@@ -131,8 +131,8 @@ impl Button {
         self
     }
 
-    /// The words are never cut: what follows them gives way first, such as a count before the
-    /// crumbs that may shrink to nothing.
+    /// The words are never cut, and the button never stands narrower than them and its marks:
+    /// what follows them gives way first, such as a count's crumbs that may shrink to nothing.
     pub fn whole(mut self) -> Self {
         self.whole = true;
         self
@@ -241,9 +241,7 @@ impl Button {
                 .child(most(words(said, role, t.text_secondary).truncate()))
         });
         let label = move |_, _| match shown {
-            Shown::Words(shown) => door::gap(row().items_center(), Space::S4)
-                .shrink()
-                .min_w(0.0)
+            Shown::Words(shown) => giving_way(door::gap(row().items_center(), Space::S4), whole)
                 .children(leading)
                 .child(match quiet {
                     Some(quiet) => {
@@ -268,9 +266,8 @@ impl Button {
             .variant(ButtonVariant::Ghost)
             .label_with(label)
             .build(kit(t))
-            .h(self.size.height())
-            .shrink()
-            .min_w(0.0)
+            .h(self.size.height());
+        let button = giving_way(button, whole)
             .justify_center()
             .fill(fill)
             .border(1.0, edge);
@@ -303,5 +300,15 @@ impl Button {
             None => button,
         };
         Control::new(button, self.size)
+    }
+}
+
+/// `el` shrinking when its row runs out of room: down to nothing, or for a button whose words
+/// are whole, down to what it holds at its narrowest, its words whole beside its marks.
+fn giving_way(el: El, whole: bool) -> El {
+    if whole {
+        el.shrink_first()
+    } else {
+        el.shrink().min_w(0.0)
     }
 }

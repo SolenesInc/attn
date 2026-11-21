@@ -73,6 +73,7 @@ pub(crate) fn title_middle(state: &State, shelf: El, t: &Tokens) -> El {
     } else {
         let shown = crowding::given_up(state) < crowding::GivenUp::Shelf;
         crowding::filled(
+            state,
             rune::row()
                 .items_center()
                 .h_full()

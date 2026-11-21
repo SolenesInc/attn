@@ -2359,14 +2359,13 @@ fn arranged_on(world: &mut World, message: &InitialStateMessage, current: &str, 
 const MACOS_WINDOW_CONTROLS: f32 = 69.0;
 /// Wide enough for every chip of eight desktops, the runs chip and the waiting pill.
 const ROOMY: (f32, f32) = (1400.0, 900.0);
-/// At Home, too narrow for the chips of eight desktops beside the waiting pill without its crumbs
-/// and the runs chip (they need a window 779 wide), with room for the crowded bar (it keeps off
-/// the toolbar down to 594).
-const CROWDED_AT_HOME: (f32, f32) = (700.0, 900.0);
-/// On desktop 1, too narrow for the chips of eight desktops beside the waiting pill without its
-/// crumbs, the runs chip and its two tiles' shelf (they need a window 923 wide), and wide enough
-/// for them beside desktop 3's single tile (779).
-const CROWDED_BESIDE_SHELF: (f32, f32) = (850.0, 900.0);
+/// At Home, too narrow for the chips of eight desktops beside the waiting pill and the runs chip
+/// (they need a window 880 wide), and wide enough for the chips of three (730).
+const CROWDED_AT_HOME: (f32, f32) = (800.0, 900.0);
+/// On desktop 1, too narrow for the chips of eight desktops beside the waiting pill, the runs
+/// chip and its two tiles' shelf (they need a window 1020 wide), and wide enough for them beside
+/// desktop 3's single tile (880).
+const CROWDED_BESIDE_SHELF: (f32, f32) = (920.0, 900.0);
 
 /// The queue bar crowded by eight desktops, on desktop 1 where its tiles leave the shelf
 /// beside the chips, or at Home.
@@ -2380,6 +2379,10 @@ fn crowded_bar(on_desktop: bool) -> (World, InitialStateMessage) {
     world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
     world.resize(ROOMY);
     assert_eq!(bar_chips(&world), every_bar_chip(8));
+    assert!(
+        pill_shows_crumbs(&world),
+        "a roomy bar shows the pill's crumbs"
+    );
     world.resize(if on_desktop {
         CROWDED_BESIDE_SHELF
     } else {
@@ -2481,15 +2484,6 @@ fn no_part_of_the_title_bar_covers_another_in_the_smallest_window_at_every_text_
                 );
             }
         }
-        if collapsed && scale == "1" {
-            let screen = world.screen();
-            for key in ["queue-bar.desktop.1", "queue-bar.desktop-extras"] {
-                assert!(
-                    screen.find(Target::key(key)).is_some(),
-                    "the bar gives up the pill's crumbs before the window's chip and the extras: {key}"
-                );
-            }
-        }
         if collapsed {
             world.resize((2400.0, 900.0));
             let screen = world.screen();
@@ -2516,6 +2510,10 @@ fn a_crowded_queue_bar_keeps_the_window_s_desktop_and_gathers_the_rest_into_the_
     assert_eq!(
         bar_chips(&world),
         ["queue-bar.desktop.1", "queue-bar.desktop-extras"]
+    );
+    assert!(
+        !pill_shows_crumbs(&world),
+        "the bar gives up the pill's crumbs before it gathers the desktops"
     );
     assert_eq!(
         name(&world, "queue-bar.desktop-extras"),
@@ -2606,6 +2604,14 @@ fn a_crowded_queue_bar_shows_every_chip_again_when_its_desktops_change_and_fit_a
 
     arranged_on(&mut world, &message, "d1", 3);
     assert_eq!(bar_chips(&world), every_bar_chip(3));
+}
+
+/// Whether the waiting pill draws the agents whose turns wait after its count.
+fn pill_shows_crumbs(world: &World) -> bool {
+    world.runtime().elements().into_iter().any(|e| {
+        e.path.contains("/queue-bar.pill/")
+            && e.text.as_deref().is_some_and(|said| said.starts_with("· "))
+    })
 }
 
 /// How many desktop chips the queue bar draws on each frame `recording` sampled.
@@ -2738,4 +2744,174 @@ fn a_delegated_turn_keeps_its_chain_chip_and_its_name_floor_beside_three_hover_c
         .bounds(Target::role("label").name("Rework the ledger's sweep across every profile"))
         .expect("the name");
     assert!(name_w >= 46.0, "the name keeps {name_w} of its 46 floor");
+}
+
+/// The queue bar collapsed beside macOS's traffic lights on desktop 1 of `message`, with an
+/// unread critical notification, in a window `size`.
+fn crowded_with_a_critical_notification(message: InitialStateMessage, size: (f32, f32)) -> World {
+    let daemon = Daemon::scripted().state(message);
+    daemon.on("notification_list", |r| {
+        attn_testkit::message(attn_protocol::NotificationListResultMessage {
+            request_id: r["request_id"].as_str().unwrap_or_default().into(),
+            success: true,
+            unread_count: 1,
+            unread_critical_count: 1,
+            critical_title: Some("The nightly review automation failed".into()),
+            ..attn_protocol::NotificationListResultMessage::new()
+        })
+    });
+    let mut world = World::start_sized(daemon, (2400.0, 900.0));
+    world.window_controls_take(MACOS_WINDOW_CONTROLS);
+    world.gesture(|app| app.click(Target::key("queue.desktop.1")));
+    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.critical"))
+            .is_some()
+    );
+    world.resize(size);
+    world
+}
+
+#[test]
+fn closing_the_columns_that_crowded_out_the_critical_notification_brings_it_back_at_the_same_width()
+{
+    let mut six_columns = crowding_desktops(8);
+    six_columns.profiles.as_mut().unwrap()[0].name = "Work-build-and-release-platform".into();
+    six_columns.sessions.as_mut().unwrap()[1].automation = None;
+    let mut panes = six_columns.desktops.as_ref().unwrap()[0].panes.clone();
+    for n in 2..6 {
+        let id = format!("extra{n}");
+        six_columns
+            .sessions
+            .as_mut()
+            .unwrap()
+            .push(session(&id, "working"));
+        panes.push(pane("d1", &format!("p{n}"), &id));
+    }
+    let mut one_column = six_columns.clone();
+    one_column.desktops.as_mut().unwrap()[0] =
+        slotted(desktop("d1", "a", "", vec![panes[0].clone()]), 1);
+    six_columns.desktops.as_mut().unwrap()[0] = slotted(desktop("d1", "a", "", panes), 1);
+    let has = |world: &World, key: &str| world.screen().find(Target::key(key)).is_some();
+    let mut crowded_out = 0;
+    for width in (900..=1300).step_by(20) {
+        let size = (width as f32, 900.0);
+        if !has(
+            &crowded_with_a_critical_notification(one_column.clone(), size),
+            "sidebar.critical",
+        ) {
+            continue;
+        }
+        let mut world = crowded_with_a_critical_notification(six_columns.clone(), size);
+        if has(&world, "sidebar.critical") || !has(&world, "shelf") {
+            continue;
+        }
+        crowded_out += 1;
+        arranged_on(&mut world, &one_column, "d1", 8);
+        assert!(!has(&world, "shelf"));
+        assert!(
+            has(&world, "sidebar.critical"),
+            "at {width}, with the columns closed the critical notification shows again, as in a window opened so"
+        );
+    }
+    assert_ne!(
+        crowded_out, 0,
+        "some width lets six columns' shelf crowd out the critical notification that one column leaves room for"
+    );
+}
+
+#[test]
+fn narrowing_the_queue_bar_keeps_the_waiting_pill_whole_and_pressable() {
+    let mut message = queue(one_desktop(vec![
+        turn("t1", 5),
+        session("t2", "working"),
+        session("t3", "working"),
+        session("t4", "working"),
+    ]));
+    message.desktops.as_mut().unwrap().extend(
+        (2..=8).map(|n| slotted(desktop(&format!("d{n}"), &format!("{n:02}"), "", vec![]), n)),
+    );
+    let settings = message.settings.get_or_insert_default();
+    settings.insert("uiScale".into(), "1.25".into());
+    settings.insert("narrowest_tile_cols".into(), "100".into());
+    message.profiles.as_mut().unwrap()[0].name = "Work-build-and-release-platform".into();
+    let mut world = crowded_with_a_critical_notification(message, (1600.0, 900.0));
+
+    world.resize((800.0, 900.0));
+    let count = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| {
+            e.path.contains("/queue-bar.pill/")
+                && e.text
+                    .as_deref()
+                    .is_some_and(|said| said.ends_with(" waiting"))
+        })
+        .expect("the pill says how many wait");
+    let said = count.text.clone().unwrap();
+    let [x, _, w, _] = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("queue-bar.pill"))
+        .expect("the pill is drawn")
+        .visible;
+    let [cx, _, cw, _] = count.rect;
+    assert!(
+        cw > 0.0 && x <= cx + 0.5 && cx + cw <= x + w + 0.5,
+        "the narrowed pill, {x}..{} drawn, holds its count {said:?} at {cx}..{}",
+        x + w,
+        cx + cw
+    );
+    world.gesture(|app| app.click(Target::key("queue-bar.pill")));
+    assert!(
+        world.screen().find(Target::key("palette.dialog")).is_some(),
+        "the narrowed pill still opens the waiting agents"
+    );
+}
+
+#[test]
+fn a_queue_bar_narrowed_to_the_smallest_window_keeps_off_the_toolbar_from_its_first_frame() {
+    for scale in ["1", "1.25", "1.5"] {
+        let mut message = crowding_desktops(8);
+        message
+            .settings
+            .get_or_insert_default()
+            .insert("uiScale".into(), scale.into());
+        message.profiles.as_mut().unwrap()[0].name = "Work-build-and-release-platform".into();
+        for desktop in message.desktops.as_mut().unwrap() {
+            desktop.name = format!("{}-build-and-release-platform-migration", desktop.name);
+        }
+        let mut world = crowded_with_a_critical_notification(message, (2400.0, 900.0));
+        let recording = world.record(60.0, 0.25, |_, app| {
+            let scale = app.runtime.env.scale;
+            app.runtime.set_viewport((800.0, 600.0), scale);
+        });
+        let frames = |key: &str| {
+            recording
+                .tracks
+                .iter()
+                .find(|t| t.path.rsplit('/').next() == Some(key))
+                .unwrap_or_else(|| panic!("no {key}"))
+                .frames
+                .clone()
+        };
+        let middle = frames("titlebar.middle");
+        let end = frames("titlebar.middle.end");
+        let past: Vec<_> = middle
+            .iter()
+            .zip(&end)
+            .filter_map(|((n, m), (_, e))| {
+                let over = e.rect[0] - (m.rect[0] + m.rect[2]);
+                (over > 0.5).then_some((*n, over))
+            })
+            .collect();
+        assert!(
+            past.is_empty(),
+            "{scale}: the middle's content runs past it toward the toolbar on frames {past:?}"
+        );
+    }
 }

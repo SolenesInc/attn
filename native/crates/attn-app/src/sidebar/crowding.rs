@@ -26,7 +26,7 @@ pub(crate) enum GivenUp {
     /// The shelf leaves; moving focus left and right still walks to the columns it held, and the
     /// palette still runs its tile commands.
     Shelf,
-    /// The waiting pill says only its number.
+    /// The waiting pill says only its number, beside its dot.
     PillWord,
 }
 
@@ -48,6 +48,7 @@ struct Contents {
     desktops: usize,
     runs: bool,
     critical: bool,
+    shelf: Option<[usize; 3]>,
     profile: String,
     scale: u32,
     sidebar: u32,
@@ -64,6 +65,7 @@ fn contents(state: &State) -> Contents {
         desktops: facts.desktops.len(),
         runs,
         critical: facts.notifications.unread_critical > 0,
+        shelf: crate::desktop::shelf_columns(state),
         profile: facts.profiles.selected.clone(),
         scale: (crate::settings::text_scale(&facts.settings) * 100.0).round() as u32,
         sidebar: super::width::of(state).round() as u32,
@@ -132,35 +134,28 @@ pub(crate) fn middle_laid_out(state: &mut State, rect: [f32; 4]) {
     }
 }
 
-/// Where the middle's content ends.
-fn end_laid_out(state: &mut State, [x, ..]: [f32; 4]) {
-    let contents = contents(state);
-    state.window.queue_bar_room.content_right = Some((x, contents));
-    measure(state);
-}
-
-/// The middle's `content` across the whole middle, its parts in a row whose end is measured.
-pub(crate) fn filled(content: rune::El) -> rune::El {
-    content.grow(1.0).shrink().child(
-        rune::el()
-            .key("titlebar.middle.end")
-            .w(0.0)
-            .on_measure(end_laid_out),
-    )
+/// The middle's `content` across the whole middle, its parts in a row whose end is measured
+/// with what the bar held as `state`'s view built it.
+pub(crate) fn filled(state: &State, content: rune::El) -> rune::El {
+    let held = contents(state);
+    content
+        .grow(1.0)
+        .shrink()
+        .child(rune::el().key("titlebar.middle.end").w(0.0).on_measure(
+            move |state: &mut State, [x, ..]: [f32; 4]| {
+                state.window.queue_bar_room.content_right = Some((x, held.clone()));
+                measure(state);
+            },
+        ))
 }
 
 fn measure(state: &mut State) {
-    let contents = contents(state);
     let room = &mut state.window.queue_bar_room;
-    let (Some(bar_w), Some([x, _, w, _]), Some((content_right, measured))) =
-        (room.bar_w, room.middle, &room.content_right)
+    let (Some(bar_w), Some([x, _, w, _]), Some((content_right, contents))) =
+        (room.bar_w, room.middle, room.content_right.clone())
     else {
         return;
     };
-    if *measured != contents {
-        return;
-    }
-    let content_right = *content_right;
     let crowding = room.crowding.get_or_insert_with(|| Crowding {
         taken: Vec::new(),
         contents: contents.clone(),
@@ -203,6 +198,8 @@ fn measure(state: &mut State) {
 /// The title bar's parts that a step gives up, as wide as they were last laid out.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct Widths {
+    trail: f32,
+    caret: f32,
     strip: f32,
     profile: f32,
     chips: f32,
@@ -212,6 +209,9 @@ pub(crate) struct Widths {
 /// A part of the title bar whose width a step frees.
 #[derive(Clone, Copy)]
 pub(crate) enum Part {
+    /// What follows the waiting pill's count: its crumbs, if any, and its caret.
+    Trail,
+    Caret,
     Strip,
     Profile,
     Chips,
@@ -220,16 +220,18 @@ pub(crate) enum Part {
 
 impl Widths {
     /// The room `step` frees, when it is known before the step is taken: the part it removes
-    /// and the gap before it. Dropping the crumbs, gathering the desktops and saying only the
-    /// waiting number leave something in the part's place, so what they free is measured after.
+    /// and the gap before it, or for the crumbs all of the pill's trail but its caret.
+    /// Gathering the desktops and saying only the waiting number leave something in the part's
+    /// place, so what they free is measured after.
     fn freed_by(&self, step: GivenUp) -> Option<f32> {
         let gap = attn_ui::blocks::Inline::joined_gap();
         match step {
+            GivenUp::Crumbs => Some((self.trail - self.caret).max(0.0)),
             GivenUp::Strip => Some(self.strip + gap),
             GivenUp::ProfileName => Some((self.profile - PROFILE_SHORT_W).max(0.0)),
             GivenUp::Chips => Some(self.chips + gap),
             GivenUp::Shelf => Some(self.shelf + gap),
-            GivenUp::Nothing | GivenUp::Crumbs | GivenUp::Desktops | GivenUp::PillWord => None,
+            GivenUp::Nothing | GivenUp::Desktops | GivenUp::PillWord => None,
         }
     }
 }
@@ -240,6 +242,8 @@ pub(crate) fn part(content: rune::El, part: Part) -> rune::El {
     content.on_measure(move |state: &mut State, [_, _, w, _]: [f32; 4]| {
         let widths = &mut state.window.queue_bar_room.widths;
         match part {
+            Part::Trail => widths.trail = w,
+            Part::Caret => widths.caret = w,
             Part::Strip => widths.strip = w,
             Part::Profile => widths.profile = w,
             Part::Chips => widths.chips = w,

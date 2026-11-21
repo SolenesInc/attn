@@ -213,24 +213,35 @@ pub(crate) struct Anchor {
     pub edge: Option<Edge>,
 }
 
+/// The current desktop with its row's plan, when the shelf shows: some column is off screen,
+/// the window shows the desktop, and the active tile is not in focus mode.
+fn shelved(state: &State) -> Option<(&Desktop, Node, layout::RowPlan)> {
+    if state.window.view != crate::shell::View::Desktop {
+        return None;
+    }
+    let desk = &state.window.desk;
+    let desktop = state.facts.current_desktop()?;
+    if matches!(desk.row(&desktop.id).view, View::Focused(_)) {
+        return None;
+    }
+    let (tree, plan) = desk.plan(&state.facts, desktop)?;
+    (!plan.before.is_empty() || !plan.after.is_empty()).then_some((desktop, tree, plan))
+}
+
+/// How many columns stand before the screen, on it and after it while the shelf shows: what
+/// changes the room the shelf takes in the title bar.
+pub(crate) fn columns(state: &State) -> Option<[usize; 3]> {
+    shelved(state).map(|(_, _, p)| [p.before.len(), p.screen.len(), p.after.len()])
+}
+
 impl Shelf {
     /// The shelf of the current desktop, or None when nothing is off screen, the window shows
     /// Home, or the active tile is in focus mode.
     pub(crate) fn of(state: &State) -> Option<Shelf> {
-        if state.window.view != crate::shell::View::Desktop {
-            return None;
-        }
+        let (desktop, tree, plan) = shelved(state)?;
         let facts = &state.facts;
         let desk = &state.window.desk;
-        let desktop = facts.current_desktop()?;
         let row_state = desk.row(&desktop.id);
-        if matches!(row_state.view, View::Focused(_)) {
-            return None;
-        }
-        let (tree, plan) = desk.plan(facts, desktop)?;
-        if plan.before.is_empty() && plan.after.is_empty() {
-            return None;
-        }
         let flashing: Vec<(&str, u64)> = desk
             .flashes
             .iter()

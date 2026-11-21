@@ -478,6 +478,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
     if given_up >= GivenUp::Crumbs {
         trail.clear();
     }
+    let crumbs_shown = !trail.is_empty();
     let waiting = system::dot(
         if owed.0 > 0 { t.warning } else { t.text_dimmed },
         system::DotShape::Filled,
@@ -485,17 +486,19 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
     );
     let after = Inline::joined()
         .shrink()
-        .children((!trail.is_empty()).then(|| {
+        .children(crumbs_shown.then(|| {
             words(trail, Type::Small, t.text_secondary)
                 .single_line()
                 .truncate()
                 .shrink()
         }))
-        .child(system::glyph(
-            attn_ui::glyph::CARET_DOWN,
-            IconSize::Small,
-            t.text_dimmed,
-        ));
+        .children((given_up < GivenUp::PillWord).then(|| {
+            super::crowding::part(
+                system::glyph(attn_ui::glyph::CARET_DOWN, IconSize::Small, t.text_dimmed),
+                Part::Caret,
+            )
+        }));
+    let after = super::crowding::part(after, Part::Trail);
     let shown = if given_up < GivenUp::PillWord {
         count
     } else {
@@ -519,13 +522,12 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
     .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
         super::bar_peek::anchor_hovered(state, super::bar_peek::Anchor::Waiting, inside)
     })
-    .shrink()
-    .min_w(if given_up < GivenUp::Crumbs {
-        PILL_MIN_W
-    } else {
-        0.0
-    })
     .max_w(PILL_MAX_W);
+    let pill = if crumbs_shown {
+        pill.shrink().min_w(PILL_MIN_W)
+    } else {
+        pill.shrink_first()
+    };
     let crowded = given_up >= GivenUp::Desktops;
     let bar = Inline::joined()
         .key("queue-bar")
@@ -553,7 +555,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
             (given_up < GivenUp::Chips)
                 .then(|| super::crowding::part(desktops(state, bands, crowded, t), Part::Chips)),
         );
-    super::crowding::filled(bar)
+    super::crowding::filled(state, bar)
 }
 
 /// The queue bar's desktop chips, as the Tauri app's `.queue-bar-desktops`.
@@ -622,8 +624,9 @@ fn runs_chip(state: &State, t: &Tokens) -> Option<El> {
     )
 }
 
-/// The queue bar pill's narrowest and widest, as the Tauri app's `.queue-bar-pill`: the count
-/// whole, and the crumbs cut before the pill crowds the desktops.
+/// The queue bar pill's narrowest while it shows crumbs, and its widest, as the Tauri app's
+/// `.queue-bar-pill`: the crumbs cut before the pill crowds the desktops. Without crumbs it holds
+/// its dot, its count whole and its caret.
 const PILL_MIN_W: f32 = 124.0;
 const PILL_MAX_W: f32 = 640.0;
 

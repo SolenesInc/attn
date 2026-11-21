@@ -49,7 +49,10 @@ pub(crate) use fit::Widths;
 pub(crate) use host::outpost_name;
 pub(crate) use overview::{create as create_desktop, view as overview};
 pub(crate) use peek::view as peek;
-pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_control_layer, width_label};
+pub(crate) use shelf::{
+    cap_menu, columns as shelf_columns, settle, slot as shelf_slot, width_control_layer,
+    width_label,
+};
 pub use tile_look::FocusStyle;
 pub(crate) use view::{Room, area, session_of_leaf};
 pub use windows::{
