@@ -2859,6 +2859,7 @@ fn accept_all_recommended_keeps_a_multi_choice_condition_and_drops_a_one_choice_
     type_into(&mut world, "asks.q.q1.condition.field", "only in the day");
     click(&mut world, "asks.q.q2.choice.0");
     click(&mut world, "asks.q.q2.choice.1");
+    scroll_to(&mut world, "asks.q.q2.condition");
     click(&mut world, "asks.q.q2.condition");
     type_into(&mut world, "asks.q.q2.condition.field", "after the freeze");
     click(&mut world, "asks.accept");
