@@ -15,7 +15,7 @@
 #                              [--dormant-after N] [--cache DIR]
 #
 # Formats:
-#   table     ranked flakes, dormant flakes and unresolved failures (default)
+#   table     ranked flakes, dormant flakes, unresolved failures and fixed waits (default)
 #   markdown  tracking-issue body, consumed by the flake-ledger workflow
 #   json      the report's records
 

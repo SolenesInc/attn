@@ -406,6 +406,16 @@ in one lane:
   threshold only sorts the report. The 30 passes that clear a landing test are
   separate.
 
+The report also lists **fixed waits**: Go tests that sit out the same time on
+every CI pass. Only complete CI runs of clean `main` commits count. A test is
+listed in a lane when, of its latest 20 fresh passes there, at least 5 ran, the
+fastest took 15 s or more, and the median is within 5% of the fastest. Real work
+varies from run to run, even on CI's runners, so a time that does not vary is
+most likely a timer, usually one a fake never ends by sending what the daemon
+waits for. A test is listed only if it passed in the latest run of its CI job
+and shard, so a moved or deleted test drops out. One fast pass drops a fixed
+test at once, because its fastest pass then falls far below its median.
+
 `report` reads the spool, so after `sync` the report covers every machine and
 CI, or every receipt under `--receipts`. `scripts/ci-flake-report.sh` reports
 CI alone. The script downloads the receipt artifacts of recent `ci.yml` and

@@ -20,6 +20,7 @@ type failureReport struct {
 	MainRef      string                      `json:"main_ref"`
 	DormantAfter int                         `json:"dormant_after"`
 	Failures     []testhistory.FailureRecord `json:"failures"`
+	FixedWaits   []testhistory.FixedWait     `json:"fixed_waits"`
 }
 
 func reportCommand(args []string) int {
@@ -60,7 +61,7 @@ func reportCommand(args []string) int {
 		return fail(err)
 	}
 	report := failureReport{Source: *source, Receipts: len(loaded.receipts), Skipped: loaded.skipped, MainRef: *mainRef, DormantAfter: *dormantAfter,
-		Failures: testhistory.BuildHealth(loaded.receipts, main).FailureRecords()}
+		Failures: testhistory.BuildHealth(loaded.receipts, main).FailureRecords(), FixedWaits: testhistory.FixedWaits(loaded.receipts, main)}
 	runs, commits := map[string]bool{}, map[int]bool{}
 	first, last := -1, -1
 	for _, receipt := range loaded.receipts {
@@ -135,7 +136,19 @@ func printFailureTable(out io.Writer, r failureReport) {
 	if len(unresolved) > 0 {
 		table("UNRESOLVED: its last failure never passed on that commit: a break, or a flake nobody ran again", unresolved)
 	}
+	fmt.Fprintf(out, "\nFIXED WAITS: listed when, %s\n", fixedWaitRule)
+	if len(r.FixedWaits) == 0 {
+		fmt.Fprintln(out, "  (none)")
+		return
+	}
+	fmt.Fprintf(out, "%-8s %-15s %-6s %-16s %s\n", "MEDIAN", "RANGE", "PASSES", "LANE", "TEST")
+	for _, w := range r.FixedWaits {
+		fmt.Fprintf(out, "%-8s %-15s %-6d %-16s %s\n", seconds(w.MedianMS), seconds(w.FastestMS)+" to "+seconds(w.SlowestMS), w.Passes, w.Lane, w.Unit)
+	}
 }
+
+var fixedWaitRule = fmt.Sprintf("of its latest %d fresh passes in a lane in complete CI runs of main, at least %d ran, the fastest took %s or more, and the median is within %d%% of the fastest: the time is a wait, not work",
+	testhistory.FixedWaitLatestPasses, testhistory.FixedWaitMinPasses, seconds(testhistory.FixedWaitFloorMS), testhistory.FixedWaitSpreadPct)
 
 func printFailureMarkdown(out io.Writer, r failureReport) {
 	fmt.Fprintln(out, "<!-- ci-flake-ledger -->")
@@ -174,5 +187,14 @@ func printFailureMarkdown(out io.Writer, r failureReport) {
 			fmt.Fprintf(out, "| %d | %d | %d | %s | %s | %s |\n", f.FlakyCommits, f.FailedCommits, f.PassesSince, short(f.LastFailure), f.Lane, f.Unit)
 		}
 		fmt.Fprintln(out)
+	}
+	fmt.Fprintf(out, "## Fixed waits\n\nA test is listed when, %s. A fake that never sends the signal the daemon waits for usually leaves it sitting out a production timer.\n\n", fixedWaitRule)
+	if len(r.FixedWaits) == 0 {
+		fmt.Fprint(out, "None.\n")
+		return
+	}
+	fmt.Fprint(out, "| Median | Range | Passes | Lane | Test |\n| ---: | --- | ---: | --- | --- |\n")
+	for _, w := range r.FixedWaits {
+		fmt.Fprintf(out, "| %s | %s to %s | %d | %s | %s |\n", seconds(w.MedianMS), seconds(w.FastestMS), seconds(w.SlowestMS), w.Passes, w.Lane, w.Unit)
 	}
 }

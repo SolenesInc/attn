@@ -117,6 +117,9 @@ gathered through fast reads without reproducing bugs or burning context.
 - Check `CI flake ledger` (or run `go tool test-history sync` and
   `go tool test-history explain --test '<unit>'`). Repeating flakes still need
   a root-cause fix.
+- The ledger's `Fixed waits` section lists tests that pass but sit out the same
+  timer on every CI run; they are slow, not red, so plant a seed for a new
+  entry instead of a repair.
 - Find candidates in `git log <green-sha>..<red-sha>` (for a full run, look
   back to the last green run from
   `gh run list --workflow <workflow> --branch main --event schedule`).
