@@ -104,7 +104,7 @@ func TestAgentCloseRefusalsCloseNothing(t *testing.T) {
 		{name: "a reason past the limit", target: worker, source: worker, reason: strings.Repeat("x", 401), code: "close_reason_required", wants: []string{"401", "400"}},
 		{name: "a reason past the limit in characters", target: other, source: other, reason: seedling + "🌱", code: "close_reason_required", wants: []string{"401", "400"}},
 		{name: "an ambiguous prefix", target: "dupe", source: chief, reason: "tidying up", code: "ambiguous_session", wants: []string{"more than one session"}},
-		{name: "a caller that is not a session", target: worker, source: "ghost", reason: "cleaning up", code: "session_not_found", wants: []string{"unknown session ghost"}},
+		{name: "a caller that is not a session", target: worker, source: "ghost", reason: "cleaning up", code: "session_not_found", wants: []string{`the caller "ghost" is not a session`}},
 	} {
 		_, err := cli.AgentClose(row.target, protocol.SessionID(row.source), row.reason)
 		if code := client.ErrorCode(err); code != row.code {

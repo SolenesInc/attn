@@ -76,18 +76,19 @@ func (d *Daemon) serveRunCommand(ctx context.Context, conn net.Conn, msg *protoc
 func (d *Daemon) callerFromFrame(ctx context.Context, msg *protocol.RunCommandMessage) (command.Caller, error) {
 	requested := strings.TrimSpace(protocol.Deref(msg.ProfileID))
 	terminal := protocol.TerminalID(strings.TrimSpace(string(protocol.Deref(msg.CallerID))))
+	role := command.CallerRole(msg.Command)
 	var asking command.Caller
 	if terminal != "" {
 		if session := d.callerSession(ctx, terminal); session != "" {
 			profile, known := d.knownSessionProfile(session)
 			if !known {
-				return command.Caller{}, unknownFramedSession(session)
+				return command.Caller{}, unknownFramedSession(role, session)
 			}
 			asking = command.Caller{Session: session, Profile: profile}
 		}
 	}
 	if named := protocol.TrimID(protocol.Deref(msg.SessionID)); named != "" {
-		session, profile, err := d.resolveFramedSession(named, asking.Profile)
+		session, profile, err := d.resolveFramedSession(role, named, asking.Profile)
 		if err != nil {
 			return command.Caller{}, err
 		}
@@ -115,7 +116,7 @@ func (d *Daemon) sessionCallerFor(session protocol.SessionID, profile, requested
 	return command.Caller{Session: session, Profile: profile}, nil
 }
 
-func (d *Daemon) resolveFramedSession(named protocol.SessionID, scope string) (protocol.SessionID, string, error) {
+func (d *Daemon) resolveFramedSession(role string, named protocol.SessionID, scope string) (protocol.SessionID, string, error) {
 	if profile, known := d.knownSessionProfile(named); known && (scope == "" || profile == scope) {
 		return named, profile, nil
 	}
@@ -124,9 +125,9 @@ func (d *Daemon) resolveFramedSession(named protocol.SessionID, scope string) (p
 	case session != nil:
 		return session.ID, session.ProfileID, nil
 	case code == "ambiguous_session":
-		return "", "", command.Refuse("ambiguous_session", "session %s matches more than one session; give more of the id", named)
+		return "", "", command.Refuse("ambiguous_session", "the %s %q matches more than one session; give more of the id", role, named)
 	default:
-		return "", "", unknownFramedSession(named)
+		return "", "", unknownFramedSession(role, named)
 	}
 }
 
@@ -140,8 +141,8 @@ func (d *Daemon) knownSessionProfile(id protocol.SessionID) (string, bool) {
 	return "", false
 }
 
-func unknownFramedSession(id protocol.SessionID) error {
-	return command.Refuse(command.CodeSessionNotFound, "unknown session %s", id)
+func unknownFramedSession(role string, id protocol.SessionID) error {
+	return command.Refuse(command.CodeSessionNotFound, "the %s %q is not a session on this daemon", role, id)
 }
 
 func (d *Daemon) requestedProfileID(requested string) (string, error) {

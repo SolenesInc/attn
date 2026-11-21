@@ -213,7 +213,7 @@ func TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict(t *testing.T) {
 	requireFailure(t, s.Run(testworld.Invocation{Args: []string{"agent", "msg", "nobody", "hi"}, Session: reviewer}),
 		"agent msg: ", `"nobody"`, "attn agent list", "attn crew list")
 	requireFailure(t, s.Run(testworld.Invocation{Args: []string{"agent", "msg", desk, "hi", "--source-session", "ghost"}, Session: reviewer}),
-		"agent msg: ", "unknown session ghost")
+		"agent msg: ", `the sender "ghost"`)
 
 	var seed protocol.Seed
 	s.Run(testworld.Invocation{Args: []string{"seed", "plant", "sweep the stale branches", "--json"}, Session: desk}).JSON(t, &seed)

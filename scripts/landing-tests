@@ -119,6 +119,7 @@ go ./internal/daemon TestACodexInstalledWhileARestartPreparesGetsARestartOfItsOw
 go ./internal/daemon TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText
 go ./internal/daemon TestAnEmptyGitDirectoryDoesNotMakeASessionsFolderARepository
 go ./internal/daemon TestSeedMailResumesACrewMemberTenderOnStandbyWithItsNote
+go ./cmd/attnd TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict
 
 group pty-host ^pty-host/|^internal/ptyhost/
 go ./internal/ptybackend TestSharedHost_ReapingAHostDuringASpawnStopsTheHostAndItsTerminal

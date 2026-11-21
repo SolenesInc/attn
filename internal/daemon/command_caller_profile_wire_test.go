@@ -27,8 +27,8 @@ func TestAnotherProfilesSessionDoesNotExistForACommandsCaller(t *testing.T) {
 		}
 
 		stranger := cli.WithCaller(protocol.TerminalID(w.Terminal("stranger")))
-		if err := note(stranger, "from another profile"); err == nil || !strings.Contains(err.Error(), "unknown session planter") {
-			t.Errorf("an agent in another profile notes as planter = %v, want unknown session planter", err)
+		if err := note(stranger, "from another profile"); err == nil || !strings.Contains(err.Error(), `the caller "planter" is not a session`) {
+			t.Errorf("an agent in another profile notes as planter = %v, want the caller planter refused as no session", err)
 		}
 		neighbour := cli.WithCaller(protocol.TerminalID(w.Terminal("neighbour")))
 		if err := note(neighbour, "from the same profile"); err != nil {
@@ -81,24 +81,26 @@ func TestAFramedSessionIsAKnownSessionOfTheAskingProfile(t *testing.T) {
 			t.Errorf("peek of another profile's session as a closed session of the profile = %v, want session_not_found", err)
 		}
 
-		if _, err := run("no-such-session", "agent list", map[string]any{}); err == nil || !strings.Contains(err.Error(), "unknown session no-such-session") {
-			t.Errorf("agent list as a session attn does not know = %v, want unknown session", err)
+		if _, err := run("no-such-session", "agent list", map[string]any{}); err == nil || !strings.Contains(err.Error(), `the caller "no-such-session" is not a session`) {
+			t.Errorf("agent list as a session attn does not know = %v, want the caller refused as no session", err)
 		}
 
 		calls := []struct {
 			name string
 			args map[string]any
+			role string
 		}{
-			{"agent list", map[string]any{}},
-			{"agent peek", map[string]any{"target": "neighbour"}},
-			{"agent inbox", map[string]any{}},
-			{"agent msg", map[string]any{"target": "neighbour", "text": "as a stranger"}},
-			{"agent close", map[string]any{"target": "neighbour", "reason": "as a stranger"}},
-			{"session list", map[string]any{"all": true}},
+			{"agent list", map[string]any{}, "caller"},
+			{"agent peek", map[string]any{"target": "neighbour"}, "caller"},
+			{"agent inbox", map[string]any{}, "caller"},
+			{"agent msg", map[string]any{"target": "neighbour", "text": "as a stranger"}, "sender"},
+			{"agent close", map[string]any{"target": "neighbour", "reason": "as a stranger"}, "caller"},
+			{"session list", map[string]any{"all": true}, "caller"},
 		}
 		for _, call := range calls {
-			if got, err := run("str", call.name, call.args); err == nil || !strings.Contains(err.Error(), "unknown session str") {
-				t.Errorf("%s as a prefix of another profile's session = %v, %v, want unknown session", call.name, got, err)
+			want := fmt.Sprintf(`the %s "str" is not a session`, call.role)
+			if got, err := run("str", call.name, call.args); err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("%s as a prefix of another profile's session = %v, %v, want %s", call.name, got, err, want)
 			}
 		}
 

@@ -111,6 +111,7 @@ type Command struct {
 	Args              []Arg            `yaml:"args"`
 	ReadOnly          bool             `yaml:"read_only"`
 	Anyone            bool             `yaml:"anyone"`
+	Caller            string           `yaml:"caller"`
 	RunsWithoutDaemon bool             `yaml:"runs_without_daemon"`
 	Result            string           `yaml:"result"`
 	Errors            []Error          `yaml:"errors"`

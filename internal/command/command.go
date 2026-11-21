@@ -62,7 +62,15 @@ type spec struct {
 	anyone            bool
 	sessionFlag       bool
 	runsWithoutDaemon bool
+	caller            string
 	fixes             map[string]string
+}
+
+func CallerRole(name string) string {
+	if role := specs()[name].caller; role != "" {
+		return role
+	}
+	return "caller"
 }
 
 type Layer struct {

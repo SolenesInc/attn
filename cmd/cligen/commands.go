@@ -114,7 +114,11 @@ func writeCommandTables(c *catalog.Catalog, cliRoot, goRoot string) error {
 			}
 			fixes = fmt.Sprintf(", fixes: map[string]string{%s}", strings.Join(pairs, ", "))
 		}
-		fmt.Fprintf(&args, "\t\t%q: {readOnly: %v, anyone: %v, sessionFlag: %v, runsWithoutDaemon: %v%s},\n", cmd.Name, cmd.ReadOnly, cmd.Anyone, g.takesSessionFlag(cmd), cmd.RunsWithoutDaemon, fixes)
+		caller := ""
+		if cmd.Caller != "" {
+			caller = fmt.Sprintf(", caller: %q", cmd.Caller)
+		}
+		fmt.Fprintf(&args, "\t\t%q: {readOnly: %v, anyone: %v, sessionFlag: %v, runsWithoutDaemon: %v%s%s},\n", cmd.Name, cmd.ReadOnly, cmd.Anyone, g.takesSessionFlag(cmd), cmd.RunsWithoutDaemon, caller, fixes)
 	}
 	args.WriteString("\t}\n})\n")
 	for _, cmd := range c.Commands {
