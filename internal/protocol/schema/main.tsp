@@ -7423,47 +7423,6 @@ model GardenReviewUpdatedMessage {
 }
 
 // ============================================================================
-// Dictation refinement
-// ============================================================================
-
-// Where the refined text will be inserted: plain fields and terminals take
-// plain text; Markdown editors also accept paragraphs and lists.
-enum DictationTextFormat {
-  plain,
-  markdown,
-}
-
-// Asks the daemon to clean up one dictated transcript with the dictation
-// refinement harness, tool-free. The request is answered once, unless it is
-// cancelled or its connection closes first. The caller keeps the original.
-model DictationRefineMessage {
-  "cmd": "dictation_refine";
-  "request_id": string;
-  "profile_id": string;
-  "raw_text": string;
-  "recording_duration_ms": safeint;
-  "format": DictationTextFormat;
-}
-
-// Stops a pending refinement. No result follows.
-model DictationRefineCancelMessage {
-  "cmd": "dictation_refine_cancel";
-  "request_id": string;
-}
-
-// limit_ms is set when the refinement did not answer within its limit:
-// 15 s plus a quarter of the recording duration.
-model DictationRefineResultMessage {
-  "event": "dictation_refine_result";
-  "request_id": string;
-  "profile_id": string;
-  "success": boolean;
-  "refined_text"?: string;
-  "error"?: string;
-  "limit_ms"?: safeint;
-}
-
-// ============================================================================
 // Response Types
 // ============================================================================
 
@@ -7537,7 +7496,6 @@ model Response {
   paired_sender_token?: PairedSenderToken;
   paired_senders?: PairedSender[];
   sender_sessions?: SenderSession[];
-  sender_refine_result?: SenderRefineResult;
   sender_model_call_result?: SenderModelCallResult;
   model_calls?: ModelCall[];
   agent_inbox_result?: AgentPeerMessage;
@@ -9171,29 +9129,6 @@ model SenderSessionsMessage {
   sender_token: string;
 }
 
-// Refines one dictated transcript for a paired sender the way
-// dictation_refine does. The daemon answers once; closing the connection
-// first cancels the refinement.
-@extension("x-on", #{ home: true })
-model SenderRefineMessage {
-  cmd: "sender_refine";
-  sender_token: string;
-  raw_text: string;
-  recording_duration_ms: safeint;
-  format: DictationTextFormat;
-}
-
-// The fields of dictation_refine_result for a sender_refine: profile_id is the
-// sender's profile, and limit_ms is set when the refinement did not answer
-// within its limit.
-model SenderRefineResult {
-  profile_id: string;
-  success: boolean;
-  refined_text?: string;
-  error?: string;
-  limit_ms?: safeint;
-}
-
 // One tool-free model call from a paired sender: the caller's instructions
 // and input, answered by a harness's model. What the call leaves out comes
 // from model_calls.agent and model_calls.model. The daemon answers when the
@@ -9330,7 +9265,6 @@ alias DaemonEvent =
   | GardenReviewUpdatedMessage
   | SeedReviewResultMessage
   | SeedReviewDraftResultMessage
-  | DictationRefineResultMessage
   | SeedResumeResultMessage
   | SeedSendToChiefResultMessage
   | SeedDocumentGetResultMessage

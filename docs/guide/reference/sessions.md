@@ -152,26 +152,6 @@ Settings or run `attn send senders`. To stop a program sending, click
 **Remove** there or run `attn send unpair <name>`. Run `attn send --help` for
 the details.
 
-## Refine dictated text from outside Attn
-
-A program you paired, as in [Send files to an agent from outside
-Attn](#send-files-to-an-agent-from-outside-attn), can clean up dictated text
-with the refinement Attn's own dictation uses. Give the token on the first
-line of stdin and the raw transcript after it:
-
-```sh
-printf '%s\n%s' "$TOKEN" "$TRANSCRIPT" | attn refine --token-stdin --duration-ms 7616 --json
-```
-
-The command prints the refined text and exits 0. If the refinement fails or
-takes longer than 15 seconds plus a quarter of the recording, the command
-prints the error and exits 1, and your program keeps its raw text. With
-`--json`, the error for a refinement that ran past that limit also has
-`limit_ms`. Add `--format markdown` to get paragraphs and lists for an editor
-that takes Markdown. Stopping the command cancels the refinement. The
-`dictation.refinement_agent` setting chooses the harness, and headless tasks
-must be on. Run `attn refine --help` for the details.
-
 ## Call a model from outside Attn
 
 A program you paired, as in [Send files to an agent from outside

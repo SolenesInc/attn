@@ -16,7 +16,6 @@ commands:
 
   - {name: send, usage: "<command>", summary: "send files and a message to a session as the user; pair, senders, unpair", offered: false, reason: &paired "Acts as the user from a paired device."}
   - {name: model, usage: "<command>", summary: "call a model through attn as a paired sender; log", offered: false, reason: *paired}
-  - {name: refine, usage: "--token-stdin", summary: "clean up dictated text as a paired sender", offered: false, reason: *paired}
 
   - {name: debug, usage: "<command>", summary: "probe debug artifacts (incidents, logs)", offered: false, reason: &diagnostics "A maintainer's diagnostic."}
   - {name: bus, usage: "<command>", summary: "event bus: consumer cursors, lag, kill switch", offered: false, reason: *diagnostics}

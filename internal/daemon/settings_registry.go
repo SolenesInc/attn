@@ -88,10 +88,6 @@ var settingValidators = map[*setting.Setting]func(*Daemon, string, string) error
 		return validateModelCallsAgent(value)
 	},
 	setting.ModelCallsModel: func(d *Daemon, key, value string) error { return nil },
-	setting.DictationRefinementAgent: func(d *Daemon, key, value string) error {
-		_, err := parseDictationRefinementAgent(value)
-		return err
-	},
 	setting.ActivityIntervals: func(d *Daemon, key, value string) error {
 		_, err := parseActivityIntervals(value)
 		return err

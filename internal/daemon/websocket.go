@@ -768,7 +768,6 @@ func (d *Daemon) wsReadPump(client *wsClient) {
 		d.dropFsWatchClient(client)
 		d.dropDocSubscriptions(client)
 		d.detachAllSessions(client)
-		d.dictationRefinements.dropClient(client)
 		close(client.recv)
 		d.wsHub.remove(client)
 		d.nudgeDesktopTileContent()
@@ -992,10 +991,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("handleSeedReviewKeepWS", func() { d.handleSeedReviewKeepWS(client, msg.(*protocol.SeedReviewKeepMessage)) })
 	case protocol.CmdSeedReviewDraft:
 		d.life.Go("handleSeedReviewDraftWS", func() { d.handleSeedReviewDraftWS(client, msg.(*protocol.SeedReviewDraftMessage)) })
-	case protocol.CmdDictationRefine:
-		d.handleDictationRefine(client, msg.(*protocol.DictationRefineMessage))
-	case protocol.CmdDictationRefineCancel:
-		d.handleDictationRefineCancel(client, msg.(*protocol.DictationRefineCancelMessage))
 	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList, protocol.CmdQuickCaptureAttachmentPut, protocol.CmdQuickCaptureAttachmentGet, protocol.CmdQuickCaptureAttachmentDiscard:
 		selected := client.selectedProfile()
 		d.life.Go("handleQuickCaptureWS", func() { d.handleQuickCaptureWS(client, selected, msg) })

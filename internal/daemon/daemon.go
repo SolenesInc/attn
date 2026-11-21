@@ -236,9 +236,8 @@ type Daemon struct {
 
 	emptyDesktops emptyDesktopRemoval
 
-	dictationRefinements dictationRefinements
-	modelCallsRunning    modelCallsRunning
-	modelCallSpare       modelCallSpare
+	modelCallsRunning modelCallsRunning
+	modelCallSpare    modelCallSpare
 
 	recoveryMu          sync.RWMutex
 	recovering          bool
@@ -3106,8 +3105,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleSenderUnpair(conn, msg.(*protocol.SenderUnpairMessage), caller)
 	case protocol.CmdSenderSessions:
 		d.handleSenderSessions(conn, msg.(*protocol.SenderSessionsMessage))
-	case protocol.CmdSenderRefine:
-		d.handleSenderRefine(conn, msg.(*protocol.SenderRefineMessage))
 	case protocol.CmdModelCallLog:
 		d.handleModelCallLog(conn, msg.(*protocol.ModelCallLogMessage), caller)
 	case protocol.CmdSenderModelCall:

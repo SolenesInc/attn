@@ -16,7 +16,6 @@ pub mod model;
 pub mod nav;
 pub mod open;
 pub mod pr;
-pub mod refine;
 pub mod review;
 pub mod seed;
 pub mod send;

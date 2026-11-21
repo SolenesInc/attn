@@ -344,3 +344,8 @@ func containsRun(args []string, run ...string) bool {
 	}
 	return false
 }
+
+func lastLine(text string) string {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	return lines[len(lines)-1]
+}

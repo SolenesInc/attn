@@ -51,7 +51,6 @@ pub const TOP_LEVEL: &[TopLevel] = &[
     TopLevel { name: "profile-env", usage: "profile-env", summary: "the retired name of instance-env; says the new command", hidden: true },
     TopLevel { name: "prompts", usage: "prompts <command>", summary: "inspect prompt sources and scenario composition", hidden: false },
     TopLevel { name: "pty-worker", usage: "pty-worker", summary: "run one terminal's PTY worker", hidden: true },
-    TopLevel { name: "refine", usage: "refine --token-stdin", summary: "clean up dictated text as a paired sender", hidden: false },
     TopLevel { name: "review", usage: "review <command>", summary: "present a change for the user to review", hidden: false },
     TopLevel { name: "seed", usage: "seed <command>", summary: "track work in the garden; plant, tend, note and harvest seeds", hidden: false },
     TopLevel { name: "send", usage: "send <command>", summary: "send files and a message to a session as the user; pair, senders, unpair", hidden: false },

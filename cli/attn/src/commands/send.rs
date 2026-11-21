@@ -76,9 +76,8 @@ unpair <name|id>
   --profile <name|id> chooses the profile for senders and unpair. It defaults
   to the calling session's profile inside attn, or the only profile.
 
-A paired sender can also call a model with attn model call, and clean up
-dictated text with attn refine; see attn model call --help and attn refine
---help.
+A paired sender can also call a model with attn model call; see attn model
+call --help.
 ";
 
 pub(super) fn usage(line: &str) -> Stop {

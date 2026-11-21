@@ -4055,52 +4055,6 @@
       ]
     },
     {
-      "id": "dictation-refiner",
-      "description": "Tool-free model cleaning up a dictated transcript before it replaces the original.",
-      "events": [
-        {
-          "id": "plain",
-          "delivery": "system_prompt",
-          "description": "Cleanup rules for text bound for a plain field or a terminal.",
-          "body": {
-            "kind": "compose",
-            "children": [
-              {
-                "kind": "text",
-                "id": "dictation-refiner.instructions",
-                "source": "content/dictation-refiner/instructions.md"
-              },
-              {
-                "kind": "text",
-                "id": "dictation-refiner.plain",
-                "source": "content/dictation-refiner/plain.md"
-              }
-            ]
-          }
-        },
-        {
-          "id": "markdown",
-          "delivery": "system_prompt",
-          "description": "Cleanup rules for text bound for a Markdown editor.",
-          "body": {
-            "kind": "compose",
-            "children": [
-              {
-                "kind": "text",
-                "id": "dictation-refiner.instructions",
-                "source": "content/dictation-refiner/instructions.md"
-              },
-              {
-                "kind": "text",
-                "id": "dictation-refiner.markdown",
-                "source": "content/dictation-refiner/markdown.md"
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
       "id": "attn-workflow-skill",
       "description": "Installed workflow skill and process references. Availability does not establish that the harness loaded them.",
       "events": [
@@ -6858,5 +6812,5 @@
       ]
     }
   ],
-  "definitions_hash": "00497a08c1a018560c32a68322db051ba99154d7a68b2ceca9bc25315579c248"
+  "definitions_hash": "eb525b4e8f79a42e2dfd0f604e780a1e606c8cf791fcd84ffafc5792fbfabd97"
 }

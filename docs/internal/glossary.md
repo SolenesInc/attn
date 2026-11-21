@@ -134,9 +134,8 @@ quick capture           a quick message (with optional attachments) the user
                         like macOS Quick Note
 paired sender           a program the user allowed in the app to send quick
                         captures as them with attn send, to the sessions of
-                        the profile it was allowed in, to refine dictated
-                        text with attn refine, and to make model calls; like
-                        an OAuth client
+                        the profile it was allowed in, and to make model
+                        calls; like an OAuth client
 model call              one request from a paired sender to a model, with its
                         own instructions and input, a text answer and no tool
                         that reaches outside the call; like an API request
