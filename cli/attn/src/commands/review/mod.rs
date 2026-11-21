@@ -1,12 +1,10 @@
 mod help_generated;
 mod table_generated;
 
-use super::{Run, Stop, absolute, print_stdout};
+use super::{Run, Stop, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
-use crate::paths::os_error_text;
 use attn_protocol::{ReviewAnswerResult, ReviewCheckResult, ReviewProblem, ReviewStartResult};
-use serde_json::Value as Json;
 use std::fmt::Write as _;
 
 struct Review;
@@ -66,21 +64,6 @@ fn started(result: &ReviewStartResult) -> String {
     out
 }
 
-fn resolve(parsed: &mut Parsed, verb: &str, name: &str, default: Option<&str>) -> Result<(), Stop> {
-    let given = parsed.text(name).trim().to_string();
-    let path = match (given.is_empty(), default) {
-        (true, Some(default)) => default.to_string(),
-        (true, None) => return Ok(()),
-        (false, _) => given,
-    };
-    let resolved = absolute(&path).map_err(|error| {
-        eprintln!("review {verb}: resolve path: {}", os_error_text(&error));
-        Stop(1)
-    })?;
-    parsed.args.insert(name.to_string(), Json::from(resolved));
-    Ok(())
-}
-
 impl Family for Review {
     fn group(&self) -> &'static str {
         "review"
@@ -104,14 +87,6 @@ impl Family for Review {
 
     fn usage(&self, verb: &str) -> &'static str {
         help_generated::usage(verb)
-    }
-
-    fn before_send(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop> {
-        resolve(parsed, cmd.name, "document", None)?;
-        if cmd.name == "start" {
-            resolve(parsed, cmd.name, "repository", Some("."))?;
-        }
-        Ok(())
     }
 
     fn present_json(

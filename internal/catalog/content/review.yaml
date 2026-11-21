@@ -180,9 +180,9 @@ commands:
     doc: |
       Snapshots the working tree of `repository` as head, and writes frame (brief unless the document already picks one), repository, base and head into the frontmatter of `document`. Creates the document when it is missing, and leaves the text below the frontmatter as written. Run it again before presenting a revision: it takes a fresh head and keeps the base. `base` defaults to the head of the last review the user sent on this document, else the document's base; without one the review is a tour of unchanged code.
     args:
-      - {name: document, type: path, required: true, cli: pos, local: destination, placeholder: "<document>", doc: "the review document"}
+      - {name: document, type: path, required: true, cli: pos, placeholder: "<document>", doc: "the review document"}
       - {name: base, type: revision, cli: "--base", placeholder: "<commit>", doc: "the commit the change is drawn against"}
-      - {name: repository, type: path, cli: "--repository", local: path, placeholder: "<dir>", doc: "a directory inside the repository under review; defaults to the current directory, or for a tool the folder the session started in"}
+      - {name: repository, type: path, cli: "--repository", placeholder: "<dir>", doc: "a directory inside the repository under review; defaults to the current directory, or for a tool the folder the session started in"}
     result: ReviewStartResult
     errors:
       - {code: review_off, fix: "Ask the user to turn on the experimental setting code_review_enabled."}
@@ -196,7 +196,7 @@ commands:
     doc: |
       Lists the problems of `document`, each with its line and the fix. An empty list means the document is ready to open. On the CLI it exits 1 when there are problems, and `attn open` prints the same problems as warnings.
     args:
-      - {name: document, type: path, required: true, cli: pos, local: path, placeholder: "<document>", doc: "the review document"}
+      - {name: document, type: path, required: true, cli: pos, placeholder: "<document>", doc: "the review document"}
     result: ReviewCheckResult
     errors:
       - {code: review_off, fix: "Ask the user to turn on the experimental setting code_review_enabled."}
@@ -209,7 +209,7 @@ commands:
       Answers a question the user asked on the review. The question arrives as the user's message with this command and the question's id; the answer shows under the line in the user's review.
     args:
       - {name: question, type: text, required: true, cli: pos, placeholder: "<question-id>", doc: "the question's id, as the user's message gives it"}
-      - {name: document, type: path, required: true, cli: "--doc", local: path, placeholder: "<document>", doc: "the review document the question is on"}
+      - {name: document, type: path, required: true, cli: "--doc", placeholder: "<document>", doc: "the review document the question is on"}
       - {name: text, type: text, required: true, cli: "-m", placeholder: "<answer>", doc: "the answer, a sentence or two that stands under the line"}
     result: ReviewAnswerResult
     errors:

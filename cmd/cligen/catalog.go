@@ -205,11 +205,9 @@ func (g *generator) argDoc(a catalog.Arg, on surface) string {
 	switch {
 	case on == cliSurface && a.Stdin && !a.File:
 		return doc + "; - reads stdin"
-	case on == cliSurface && a.Local == catalog.LocalCommit:
-		return doc + " in the current directory"
-	case on == toolSurface && a.Local == catalog.LocalCommit:
-		return doc + " in the folder the session started in"
-	case on == toolSurface && a.Local != "":
+	case on == cliSurface && a.Type == "path":
+		return doc + "; a relative path resolves against the current directory"
+	case on == toolSurface && a.Type == "path":
 		return doc + "; a relative path resolves against the folder the session started in"
 	}
 	return doc

@@ -2,12 +2,10 @@ mod help_generated;
 mod table_generated;
 
 use super::review::problem_lines;
-use super::{Run, Stop, absolute, print_stdout};
+use super::{Run, Stop, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
-use crate::paths::os_error_text;
 use attn_protocol::OpenResult;
-use serde_json::Value as Json;
 
 struct Open;
 
@@ -44,19 +42,6 @@ impl Family for Open {
         eprintln!("{}: {message}", self.label(verb));
         eprintln!("usage: attn open {} (attn open --help)", self.usage(verb));
         Stop(1)
-    }
-
-    fn before_send(&self, _cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop> {
-        let path = parsed.text("path").trim().to_string();
-        if path.is_empty() {
-            return Ok(());
-        }
-        let resolved = absolute(&path).map_err(|error| {
-            eprintln!("open: resolve path: {}", os_error_text(&error));
-            Stop(1)
-        })?;
-        parsed.args.insert("path".to_string(), Json::from(resolved));
-        Ok(())
     }
 
     fn present(

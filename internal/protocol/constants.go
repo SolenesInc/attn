@@ -207,6 +207,7 @@ const (
 	CmdRecentFiles                = "recent_files"
 	CmdBrowseDirectory            = "browse_directory"
 	CmdInspectPath                = "inspect_path"
+	CmdInspectCallerPaths         = "inspect_caller_paths"
 	CmdCreateWorktreeFromBranch   = "create_worktree_from_branch"
 	CmdEnsureRepo                 = "ensure_repo"
 	CmdGetRepoInfo                = "get_repo_info"

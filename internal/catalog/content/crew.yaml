@@ -100,7 +100,7 @@ commands:
       - {name: launch_desktop, type: desktop, cli: "--launch-desktop"}
       - {name: desktop_name, type: name, cli: "--desktop-name", doc: "the name of the new desktop of own or an empty slot"}
       - {name: awareness_dirs, type: clearable, list: true, cli: "--awareness-dir", placeholder: "<dir>", doc: "a context folder; repeat to replace the saved list, and pass one empty value to clear it"}
-      - {name: home, type: path, cli: "--home", local: path, placeholder: "<dir>", doc: "the folder that now holds the member's CHARTER.md"}
+      - {name: home, type: path, cli: "--home", placeholder: "<dir>", doc: "the folder that now holds the member's CHARTER.md"}
     errors:
       - {code: nothing_to_set, usage: true, fix: "Pass at least one setting."}
       - {code: desktop_name_needs_desktop, usage: true, fix: "Pass {launch_desktop} own or an empty slot with {desktop_name}."}

@@ -44,13 +44,15 @@ func (d *Daemon) runReviewStart(ctx context.Context, c command.Caller, a command
 	if !d.on(setting.CodeReviewEnabled) {
 		return nil, reviewOffRefusal()
 	}
-	repository := a.Repository
-	if repository == "" {
-		if row := d.store.Get(c.Session); row != nil {
-			repository = row.Directory
-		}
+	repository, err := d.callerRepository(ctx, c, a.Repository)
+	if err != nil {
+		return nil, err
 	}
-	document := filepath.Clean(a.Document)
+	document, _, err := d.callerPath(ctx, c, callerDestination("document", a.Document))
+	if err != nil {
+		return nil, err
+	}
+	document = filepath.Clean(document)
 	result, err := gitValue(ctx, d.gitExecution(), reviewTask, func(ctx context.Context, client *attngit.Client) (protocol.ReviewStartResult, error) {
 		return review.Start(ctx, client, document, repository, a.Base)
 	})
@@ -64,10 +66,14 @@ func (d *Daemon) runReviewCheck(ctx context.Context, c command.Caller, a command
 	if !d.on(setting.CodeReviewEnabled) {
 		return nil, reviewOffRefusal()
 	}
-	document := filepath.Clean(a.Document)
+	document, found, err := d.callerPath(ctx, c, callerFile("document", a.Document))
+	if err != nil {
+		return nil, err
+	}
+	document = filepath.Clean(document)
 	content, err := readMarkdownFile(document)
 	if err != nil {
-		return nil, fmt.Errorf("review check: %w", err)
+		return found.explain(nil, fmt.Errorf("review check: %w", err))
 	}
 	bundle, err := d.resolveReview(ctx, document, content)
 	if err != nil {
@@ -157,16 +163,17 @@ func (d *Daemon) runReviewAnswer(ctx context.Context, c command.Caller, a comman
 	if text == "" {
 		return nil, command.Usage("the answer is empty. Pass it with {text} \"<answer>\"")
 	}
-	if !filepath.IsAbs(a.Document) {
-		return nil, command.Usage("the document path must be absolute: %s", a.Document)
+	document, found, err := d.callerPath(ctx, c, callerFile("document", a.Document))
+	if err != nil {
+		return nil, err
 	}
-	key := store.HostPath{Path: filepath.Clean(a.Document)}
+	key := store.HostPath{Path: filepath.Clean(document)}
 	if origin, remote := OriginOf(ctx); remote {
 		key.Host = origin.Host
 	}
 	generation, err := d.store.AnswerMarkdownQuestion(key, a.Question, text, time.Now())
 	if errors.Is(err, store.ErrNoQuestion) {
-		return nil, command.Refuse(command.CodeNoQuestion, "%s has no open question %s. The user may have removed it or sent the review", key.Path, a.Question)
+		return found.explain(nil, command.Refuse(command.CodeNoQuestion, "%s has no open question %s. The user may have removed it or sent the review", key.Path, a.Question))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("review answer: %w", err)

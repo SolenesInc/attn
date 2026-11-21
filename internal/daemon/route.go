@@ -187,6 +187,9 @@ func (d *Daemon) forwardCommand(c command.Caller, name string, args json.RawMess
 	if c.Terminal != "" {
 		msg.CallerID = protocol.Ptr(c.Terminal)
 	}
+	if c.Directory != "" {
+		msg.Directory = protocol.Ptr(c.Directory)
+	}
 	frame, err := json.Marshal(msg)
 	if err != nil {
 		return nil, command.AsRefusal(err)

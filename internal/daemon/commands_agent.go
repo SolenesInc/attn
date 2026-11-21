@@ -60,9 +60,9 @@ func (d *Daemon) runAgentList(ctx context.Context, c command.Caller, a command.A
 }
 
 func (d *Daemon) runAgentAttachment(ctx context.Context, c command.Caller, a command.AgentAttachmentArgs) (any, error) {
-	path := a.Out
-	if !filepath.IsAbs(path) {
-		return nil, command.Usage("{out} must be an absolute path, not %q", path)
+	path, _, err := d.callerPath(ctx, c, callerDestination("out", a.Out))
+	if err != nil {
+		return nil, err
 	}
 	temp, err := os.CreateTemp(filepath.Dir(path), ".attn-attachment-*")
 	if err != nil {

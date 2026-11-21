@@ -2113,6 +2113,34 @@ type BusStatusResultMessage struct {
 	SurgeRatePerHour float64 `json:"surge_rate_per_hour"`
 }
 
+type CallerPath struct {
+	// Arg corresponds to the JSON schema field "arg".
+	Arg string `json:"arg"`
+
+	// Destination corresponds to the JSON schema field "destination".
+	Destination *bool `json:"destination,omitempty,omitzero"`
+
+	// Value corresponds to the JSON schema field "value".
+	Value string `json:"value"`
+}
+
+type CallerPaths struct {
+	// Absent corresponds to the JSON schema field "absent".
+	Absent []string `json:"absent"`
+
+	// Commit corresponds to the JSON schema field "commit".
+	Commit *string `json:"commit,omitempty,omitzero"`
+
+	// Evidence corresponds to the JSON schema field "evidence".
+	Evidence []string `json:"evidence"`
+
+	// Paths corresponds to the JSON schema field "paths".
+	Paths []string `json:"paths"`
+
+	// Problems corresponds to the JSON schema field "problems".
+	Problems []string `json:"problems"`
+}
+
 type CallerSessionMessage struct {
 	// CallerID corresponds to the JSON schema field "caller_id".
 	CallerID *TerminalID `json:"caller_id,omitempty,omitzero"`
@@ -6259,6 +6287,29 @@ type InjectTestSessionMessage struct {
 	Unplaced *bool `json:"unplaced,omitempty,omitzero"`
 }
 
+type InspectCallerPathsMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Commit corresponds to the JSON schema field "commit".
+	Commit *string `json:"commit,omitempty,omitzero"`
+
+	// Evidence corresponds to the JSON schema field "evidence".
+	Evidence []string `json:"evidence,omitempty,omitzero"`
+
+	// Folder corresponds to the JSON schema field "folder".
+	Folder string `json:"folder"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
+	// Paths corresponds to the JSON schema field "paths".
+	Paths []CallerPath `json:"paths,omitempty,omitzero"`
+
+	// SessionFolder corresponds to the JSON schema field "session_folder".
+	SessionFolder *bool `json:"session_folder,omitempty,omitzero"`
+}
+
 type InspectPathMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -9897,6 +9948,9 @@ type RunCommandMessage struct {
 
 	// Command corresponds to the JSON schema field "command".
 	Command string `json:"command"`
+
+	// Directory corresponds to the JSON schema field "directory".
+	Directory *string `json:"directory,omitempty,omitzero"`
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`

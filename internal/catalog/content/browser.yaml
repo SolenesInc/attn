@@ -194,7 +194,7 @@ commands:
     doc: |
       Saves a PNG of the page at `path`, attn-browser.png by default, readable only by you, and returns the absolute path.
     args:
-      - {name: path, type: path, cli: pos, local: destination, placeholder: "<path>", doc: "where to save the PNG"}
+      - {name: path, type: path, cli: pos, placeholder: "<path>", doc: "where to save the PNG"}
     result: BrowserFileResult
     errors:
       - {code: bad_capture, fix: "Take the capture again; the host answered with data that is not base64."}
@@ -207,7 +207,7 @@ commands:
     doc: |
       Saves a PDF of the page at `path`, attn-browser.pdf by default, readable only by you, and returns the absolute path. `params` takes the print options as a JSON object; called as a tool, its `timeout` is at most 15000 ms.
     args:
-      - {name: path, type: path, cli: pos, local: destination, placeholder: "<path>", doc: "where to save the PDF"}
+      - {name: path, type: path, cli: pos, placeholder: "<path>", doc: "where to save the PDF"}
       - {name: params, type: text, cli: "--params", placeholder: "<json>", doc: "the print options, as a JSON object; {} by default"}
       - {name: wait, type: bool, cli: internal, doc: "allow a params timeout up to 120000 ms; the CLI always sets it"}
     result: BrowserFileResult

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -189,9 +190,16 @@ func (e toolEndpoint) structured(t *testing.T, tool string, args map[string]any,
 func TestAClaudeOnAnOutpostRunsHomeToolsAtTheHomeAsItsSessionAndHereToolsWithoutTheBridge(t *testing.T) {
 	o := newOutpostTools(t, fakeagent.Claude)
 	shop := o.outpost.Path("shop")
-	if err := os.MkdirAll(shop, 0o755); err != nil {
+	gitRepo(t, shop)
+	sub := filepath.Join(shop, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	head, err := exec.Command("git", "-C", shop, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	full := strings.TrimSpace(string(head))
 	session, claude := o.spawn(fakeagent.Claude, shop)
 	tools := claudeToolEndpoint(t, claude)
 	if want := "http://" + o.outpost.WSAddr + "/mcp"; tools.url != want {
@@ -222,12 +230,54 @@ func TestAClaudeOnAnOutpostRunsHomeToolsAtTheHomeAsItsSessionAndHereToolsWithout
 	tools.structured(t, "seed_check_add", map[string]any{"seed": o.seed, "statement": "C1=Retries pass"}, &struct{}{})
 	write("retry.log", "3 passes\n")
 	var reported protocol.SeedCheckResult
-	tools.structured(t, "seed_check_report", map[string]any{"seed": o.seed, "id": "C1", "summary": "Passed", "evidence": []any{"retry.log"}}, &reported)
+	tools.structured(t, "seed_check_report", map[string]any{"seed": o.seed, "id": "C1", "summary": "Passed", "evidence": []any{"retry.log"}, "commit": full[:7]}, &reported)
 	if len(reported.Attached) != 1 || reported.Attached[0].Filename != "retry.log" {
 		t.Errorf("seed_check_report attached %+v, want retry.log copied from the outpost session's folder", reported.Attached)
 	}
+	reportedCommit := func() string {
+		t.Helper()
+		for _, check := range showSeed(t, o.home, "", o.seed).Seed.Checks {
+			if check.ID == "C1" && check.Report != nil {
+				return protocol.Deref(check.Report.Commit)
+			}
+		}
+		return ""
+	}
+	if got := reportedCommit(); got != full {
+		t.Errorf("C1's report names commit %q after the tool named %s, want %s from the outpost's repository", got, full[:7], full)
+	}
+	write("tool-copy.md", "copied by the tool\n")
+	var copied protocol.SeedArtifactResult
+	tools.structured(t, "seed_attach", map[string]any{"seed": o.seed, "path": "tool-copy.md", "mode": "copy"}, &copied)
+	if protocol.Deref(copied.SourcePath) != filepath.Join(shop, "tool-copy.md") {
+		t.Errorf("seed_attach copied %q, want %s from the outpost session's folder", protocol.Deref(copied.SourcePath), filepath.Join(shop, "tool-copy.md"))
+	}
+	if gone := tools.call(t, "seed_attach", map[string]any{"seed": o.seed, "path": "gone.md", "mode": "copy"}); !gone.IsError || !strings.Contains(gone.Text, `"gone.md" is not found in `+shop+", the folder the session started in; pass an absolute path") {
+		t.Errorf("seed_attach of a missing relative file answered error=%v %q, want the hint naming %s", gone.IsError, gone.Text, shop)
+	}
+
+	write("cli-move.md", "moved by the CLI\n")
+	write("cli-copy.md", "copied by the CLI\n")
+	write("cli.log", "4 passes\n")
+	for _, args := range [][]string{
+		{"seed", "attach", o.seed, "--path", "../cli-move.md", "--move"},
+		{"seed", "attach", o.seed, "--path", "../cli-copy.md", "--copy"},
+		{"seed", "check", "report", o.seed, "C1", "-m", "Passed again", "--evidence", "../cli.log", "--commit", full[:9]},
+	} {
+		if ran := o.outpost.Run(testworld.Invocation{Args: args, Terminal: o.pair.App.Terminal(session), Dir: sub}); ran.Code != 0 {
+			t.Fatalf("attn %q in %s exited %d: %s", args, sub, ran.Code, ran.Stderr)
+		}
+	}
+	if got := reportedCommit(); got != full {
+		t.Errorf("C1's report names commit %q after the CLI named %s in %s, want %s", got, full[:9], sub, full)
+	}
+	for name, kept := range map[string]bool{"tool-copy.md": true, "cli-move.md": false, "cli-copy.md": true} {
+		if _, err := os.Stat(filepath.Join(shop, name)); (err == nil) != kept {
+			t.Errorf("%s on the outpost after its attach: %v, want it kept %v", name, err, kept)
+		}
+	}
 	shown := showSeed(t, o.home, "", o.seed)
-	for _, name := range []string{"plan.md", "retry.log"} {
+	for _, name := range []string{"plan.md", "retry.log", "tool-copy.md", "cli-move.md", "cli-copy.md", "cli.log"} {
 		if !slices.ContainsFunc(shown.Artifacts, func(a protocol.SeedArtifact) bool { return a.Filename == name }) {
 			t.Errorf("the home's seed has artifacts %+v, want %s from the outpost", shown.Artifacts, name)
 		}

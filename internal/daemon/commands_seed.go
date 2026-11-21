@@ -64,10 +64,21 @@ func (d *Daemon) seedCommands() map[string]command.Handler {
 		"seed rollback":      command.Typed(d.runSeedRollback),
 		"seed authorization": command.Typed(d.runSeedAuthorization),
 		"seed attach": command.Typed(func(ctx context.Context, c command.Caller, a command.SeedAttachArgs) (any, error) {
-			return d.runSeedArtifact(ctx, c, "attach", artifactArgs{a.Seed, a.Path, a.Repo, a.Notebook, a.URL, a.Mode, "", false, a.Note})
+			var found callerFound
+			if a.Mode != "" && a.Repo == "" && a.Notebook == "" && a.URL == "" {
+				var err error
+				if a.Path, found, err = d.callerPath(ctx, c, callerFile("path", a.Path)); err != nil {
+					return nil, err
+				}
+			}
+			return found.explain(d.runSeedArtifact(ctx, c, "attach", artifactArgs{a.Seed, a.Path, a.Repo, a.Notebook, a.URL, a.Mode, "", false, a.Note}))
 		}),
 		"seed detach": command.Typed(func(ctx context.Context, c command.Caller, a command.SeedDetachArgs) (any, error) {
-			return d.runSeedArtifact(ctx, c, "detach", artifactArgs{a.Seed, a.Path, a.Repo, a.Notebook, a.URL, "", a.To, a.Reference, a.Note})
+			to, _, err := d.callerPath(ctx, c, callerDestination("to", a.To))
+			if err != nil {
+				return nil, err
+			}
+			return d.runSeedArtifact(ctx, c, "detach", artifactArgs{a.Seed, a.Path, a.Repo, a.Notebook, a.URL, "", to, a.Reference, a.Note})
 		}),
 		"seed review start":  command.Typed(d.runSeedReviewStart),
 		"seed review show":   command.Typed(d.runSeedReviewShow),
@@ -456,7 +467,18 @@ func (d *Daemon) checkCommand(verb string) command.Handler {
 		})
 	case "report":
 		return command.Typed(func(ctx context.Context, c command.Caller, a command.SeedCheckReportArgs) (any, error) {
-			return run(ctx, c, checkArgs{Seed: a.Seed, ID: a.ID, Summary: a.Summary, Detail: a.Detail, Evidence: a.Evidence, Commit: a.Commit, Ring: a.Ring})
+			var problems []string
+			if _, err := garden.ParseReportText(strings.TrimSpace(a.Summary + "\n" + a.Detail)); err != nil {
+				problems = append(problems, protocol.MentionedText(err))
+			}
+			found, err := d.askCallersMachine(ctx, c, callerAsk{evidence: a.Evidence, commit: strings.TrimSpace(a.Commit)})
+			if err == nil {
+				err = refuseCallerProblems(append(problems, found.Problems...))
+			}
+			if err != nil {
+				return nil, err
+			}
+			return run(ctx, c, checkArgs{Seed: a.Seed, ID: a.ID, Summary: a.Summary, Detail: a.Detail, Evidence: found.Evidence, Commit: protocol.Deref(found.Commit), Ring: a.Ring})
 		})
 	case "confirm":
 		return command.Typed(func(ctx context.Context, c command.Caller, a command.SeedCheckConfirmArgs) (any, error) {

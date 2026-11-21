@@ -443,14 +443,13 @@ func codeNavOffRefusal() error {
 	return command.Refuse(command.CodeNavOff, "%s", codeNavOff())
 }
 
-func (d *Daemon) callerRepository(c command.Caller, given string) string {
-	if given != "" {
-		return given
+func (d *Daemon) callerRepository(ctx context.Context, c command.Caller, given string) (string, error) {
+	if given == "" {
+		folder, _ := d.callerFolder(c)
+		return folder, nil
 	}
-	if row := d.store.Get(c.Session); row != nil {
-		return row.Directory
-	}
-	return ""
+	repository, _, err := d.callerPath(ctx, c, callerFile("repository", given))
+	return repository, err
 }
 
 func (d *Daemon) runNavCheck(ctx context.Context, c command.Caller, a command.NavCheckArgs) (any, error) {
@@ -469,7 +468,11 @@ func (d *Daemon) runNavCheck(ctx context.Context, c command.Caller, a command.Na
 	if !a.Wait {
 		bound = codeNavToolBound
 	}
-	result, err := d.checkCodeNav(ctx, d.callerRepository(c, a.Repository), a.At[:cut], line, bound)
+	repository, err := d.callerRepository(ctx, c, a.Repository)
+	if err != nil {
+		return nil, err
+	}
+	result, err := d.checkCodeNav(ctx, repository, a.At[:cut], line, bound)
 	if errors.Is(err, errCodeNavStillStarting) {
 		return result, nil
 	}
@@ -548,7 +551,10 @@ func (d *Daemon) runNavStatus(ctx context.Context, c command.Caller, a command.N
 	if !d.on(setting.CodeReviewEnabled) {
 		return nil, codeNavOffRefusal()
 	}
-	given := d.callerRepository(c, a.Repository)
+	given, err := d.callerRepository(ctx, c, a.Repository)
+	if err != nil {
+		return nil, err
+	}
 	result := protocol.CodeNavStatusResult{BinDir: d.codeNavDir("bin"), Languages: []protocol.CodeNavLanguage{}, Servers: []protocol.CodeNavServer{}}
 	if repository, err := d.repositoryRoot(ctx, given); given != "" && err == nil {
 		origin := d.repositoryOrigin(reviewTask, repository)
@@ -587,7 +593,11 @@ func (d *Daemon) runNavLink(ctx context.Context, c command.Caller, a command.Nav
 	if !d.on(setting.CodeReviewEnabled) {
 		return nil, codeNavOffRefusal()
 	}
-	target := filepath.Clean(a.Program)
+	program, _, err := d.callerPath(ctx, c, callerFile("program", a.Program))
+	if err != nil {
+		return nil, err
+	}
+	target := filepath.Clean(program)
 	info, err := os.Stat(target)
 	switch {
 	case !filepath.IsAbs(target):
@@ -638,7 +648,11 @@ func (d *Daemon) runNavDefine(ctx context.Context, c command.Caller, repositoryD
 	if !d.on(setting.CodeReviewEnabled) {
 		return nil, codeNavOffRefusal()
 	}
-	result, err := d.defineCodeNav(ctx, d.callerRepository(c, repositoryDir), language, definition)
+	repository, err := d.callerRepository(ctx, c, repositoryDir)
+	if err != nil {
+		return nil, err
+	}
+	result, err := d.defineCodeNav(ctx, repository, language, definition)
 	if err != nil {
 		return nil, fmt.Errorf("nav set: %w", err)
 	}

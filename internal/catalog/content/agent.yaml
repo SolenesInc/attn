@@ -130,4 +130,4 @@ commands:
     args:
       - {name: attachment, type: text, required: true, cli: pos, placeholder: "<attachment-id>", doc: "the attachment to download"}
       - {name: quoted_attachment, type: text, cli: pos, cli_only: true, placeholder: "<attachment-id>", doc: "the attachment, when a quick capture id comes first"}
-      - {name: out, type: path, required: true, cli: "--out", local: destination, placeholder: "<path>", doc: "where to write the file; it must not exist yet"}
+      - {name: out, type: path, required: true, cli: "--out", placeholder: "<path>", doc: "where to write the file; it must not exist yet"}

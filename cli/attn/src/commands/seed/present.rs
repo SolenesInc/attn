@@ -1,6 +1,6 @@
-use super::checks::{render_move, report_evidence};
+use super::checks::render_move;
 use super::render::{self, ListView, seed_line};
-use super::{Stop, fail, help_generated, usage_error};
+use super::{Stop, fail, help_generated};
 use crate::client::Reply;
 use crate::command::{self, Arg, Command, Family, Parsed};
 use crate::commands::{Run, absolute, print_json, print_stdout};
@@ -36,14 +36,6 @@ fn checks_json(checks: &[Check]) -> Json {
             })
             .collect::<Vec<_>>(),
     )
-}
-
-fn resolve(parsed: &mut Parsed, name: &str, label: &str) -> Result<(), String> {
-    let value = parsed.text(name).to_string();
-    let resolved = absolute(&value)
-        .map_err(|error| format!("{label}: {}", crate::paths::os_error_text(&error)))?;
-    parsed.args.insert(name.to_string(), Json::from(resolved));
-    Ok(())
 }
 
 impl Family for Seed {
@@ -104,30 +96,11 @@ impl Family for Seed {
 
     fn before_send(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop> {
         match cmd.name {
-            "check report" => {
-                report_evidence(parsed).map_err(|message| usage_error(cmd.name, &message))
-            }
             "standby" => {
                 if !parsed.on("clear") && !parsed.on("stay") {
                     command::outlive_close_of_own_session();
                 }
                 Ok(())
-            }
-            "attach" => {
-                let managed = parsed.has("mode")
-                    && !parsed.text("path").is_empty()
-                    && parsed.text("repo").trim().is_empty()
-                    && parsed.text("notebook").trim().is_empty()
-                    && parsed.text("url").trim().is_empty();
-                if managed {
-                    resolve(parsed, "path", "resolve source path")
-                        .map_err(|message| fail(cmd.name, &message))?;
-                }
-                Ok(())
-            }
-            "detach" if !parsed.text("to").is_empty() => {
-                resolve(parsed, "to", "resolve detach destination")
-                    .map_err(|message| fail(cmd.name, &message))
             }
             _ => Ok(()),
         }

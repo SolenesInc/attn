@@ -270,15 +270,23 @@ func (d *Daemon) runOpen(ctx context.Context, c command.Caller, a command.OpenAr
 	if a.Path == "" {
 		return nil, command.Refuse(command.CodeNoTarget, "missing <file.md|seed-id> argument")
 	}
+	path, found, err := d.callerPath(ctx, c, callerFile("path", a.Path))
+	if err != nil {
+		return nil, err
+	}
+	return found.explain(d.openMarkdownFor(ctx, c, path))
+}
+
+func (d *Daemon) openMarkdownFor(ctx context.Context, c command.Caller, path string) (any, error) {
 	host := ""
 	if origin, remote := OriginOf(ctx); remote {
 		host = origin.Host
 	}
-	_, _, problems, err := d.openMarkdownTile(host, a.Path, c.Session, false)
+	_, _, problems, err := d.openMarkdownTile(host, path, c.Session, false)
 	if err != nil {
 		return nil, fmt.Errorf("open_markdown: %w", err)
 	}
-	return protocol.OpenResult{Opened: filepath.Clean(a.Path), Problems: problems}, nil
+	return protocol.OpenResult{Opened: filepath.Clean(path), Problems: problems}, nil
 }
 
 func (d *Daemon) handleOpenMarkdown(ctx context.Context, conn net.Conn, msg *protocol.OpenMarkdownMessage) {

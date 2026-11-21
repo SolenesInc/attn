@@ -784,6 +784,7 @@ pub fn send(
     message.args = Some(parsed.args.clone().into_iter().collect());
     message.session_id = (!parsed.session.is_empty()).then(|| parsed.session.clone());
     message.profile_id = (!parsed.profile.is_empty()).then(|| parsed.profile.clone());
+    message.directory = crate::commands::working_directory().ok();
     let deadline = family.deadline(cmd, parsed);
     match Client::new(run.paths, "", &run.terminal).call_command(&message, deadline) {
         Err(error) if error.unconnected && cmd.runs_without_daemon => {

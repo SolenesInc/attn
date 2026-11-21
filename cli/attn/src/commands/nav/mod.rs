@@ -1,10 +1,9 @@
 mod help_generated;
 mod table_generated;
 
-use super::{Run, Stop, absolute, print_stdout};
+use super::{Run, Stop, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
-use crate::paths::os_error_text;
 use attn::go::time::Time;
 use attn_protocol::{
     CodeNavCheckResult, CodeNavDefineResult, CodeNavLinkResult, CodeNavStatusResult,
@@ -115,21 +114,6 @@ fn defined(result: &CodeNavDefineResult, language: &str) -> String {
     }
 }
 
-fn resolve(parsed: &mut Parsed, verb: &str, name: &str, default: Option<&str>) -> Result<(), Stop> {
-    let given = parsed.text(name).trim().to_string();
-    let path = match (given.is_empty(), default) {
-        (true, Some(default)) => default.to_string(),
-        (true, None) => return Ok(()),
-        (false, _) => given,
-    };
-    let resolved = absolute(&path).map_err(|error| {
-        eprintln!("nav {verb}: resolve path: {}", os_error_text(&error));
-        Stop(1)
-    })?;
-    parsed.args.insert(name.to_string(), Json::from(resolved));
-    Ok(())
-}
-
 impl Family for Nav {
     fn group(&self) -> &'static str {
         "nav"
@@ -156,15 +140,10 @@ impl Family for Nav {
     }
 
     fn before_send(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop> {
-        match cmd.name {
-            "link" => resolve(parsed, cmd.name, "program", None),
-            "unlink" => Ok(()),
-            "check" => {
-                parsed.args.insert("wait".to_string(), Json::from(true));
-                resolve(parsed, cmd.name, "repository", Some("."))
-            }
-            _ => resolve(parsed, cmd.name, "repository", Some(".")),
+        if cmd.name == "check" {
+            parsed.args.insert("wait".to_string(), Json::from(true));
         }
+        Ok(())
     }
 
     fn present(

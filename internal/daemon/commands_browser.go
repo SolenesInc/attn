@@ -216,13 +216,9 @@ func (d *Daemon) runBrowserPDF(ctx context.Context, c command.Caller, a command.
 }
 
 func (d *Daemon) capture(ctx context.Context, c command.Caller, ctl browserControl, kind, path, fallback string) (any, error) {
-	if path == "" {
-		if row := d.store.Get(c.Session); row != nil {
-			path = filepath.Join(row.Directory, fallback)
-		}
-	}
-	if !filepath.IsAbs(path) {
-		return nil, command.Usage("the capture's path must be absolute: %q", path)
+	path, _, err := d.callerPath(ctx, c, callerDestination("path", cmp.Or(path, fallback)))
+	if err != nil {
+		return nil, err
 	}
 	data, err := d.control(ctx, c, ctl)
 	if err != nil {

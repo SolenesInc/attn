@@ -24,15 +24,14 @@ import (
 var agentToolDefinitions []byte
 
 type agentToolDefinition struct {
-	Command      string           `json:"command"`
-	Name         string           `json:"name"`
-	Title        string           `json:"title"`
-	Description  string           `json:"description"`
-	Core         bool             `json:"core"`
-	ReadOnly     bool             `json:"read_only"`
-	Local        []agentToolLocal `json:"local"`
-	InputSchema  json.RawMessage  `json:"inputSchema"`
-	OutputSchema json.RawMessage  `json:"outputSchema"`
+	Command      string          `json:"command"`
+	Name         string          `json:"name"`
+	Title        string          `json:"title"`
+	Description  string          `json:"description"`
+	Core         bool            `json:"core"`
+	ReadOnly     bool            `json:"read_only"`
+	InputSchema  json.RawMessage `json:"inputSchema"`
+	OutputSchema json.RawMessage `json:"outputSchema"`
 }
 
 const (
@@ -234,7 +233,6 @@ func (def agentToolDefinition) offered() mcpserver.Tool {
 
 func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, tool agentTool, arguments, meta json.RawMessage) mcpserver.Result {
 	def := tool.def
-	var args map[string]any
 	var refusal *command.Refusal
 	if call.named != nil {
 		call.caller, call.who, refusal = call.named(meta)
@@ -243,17 +241,12 @@ func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, tool agentT
 		refusal = &command.Refusal{Code: "setting_off", Message: setting.AgentToolsEnabled.Refusal().Error(), Fix: "Use the attn CLI until the setting is on."}
 	}
 	if refusal == nil {
-		args, refusal = def.arguments(arguments, tool.input)
+		refusal = def.checkArguments(arguments, tool.input)
 		arguments = tool.input.IntegerLiterals(arguments)
-	}
-	var caller *callerSide
-	if refusal == nil {
-		caller, refusal = d.doCallerSideWork(ctx, def, args, call.caller)
 	}
 	var result any
 	if refusal == nil {
-		result, refusal = d.runAgentCommand(ctx, call, def.Command, arguments, caller)
-		refusal = caller.explainRefusal(refusal)
+		result, refusal = d.runAgentCommand(ctx, call, def.Command, arguments)
 	}
 	if refusal != nil {
 		d.logf("agent tools: %s by %s (session %s): refused %s: %s", def.Name, call.who, call.caller.Session, refusal.Code, refusal.Message)
@@ -266,17 +259,17 @@ func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, tool agentT
 	return mcpserver.Result{Content: []mcpserver.Content{}, StructuredContent: result}
 }
 
-func (def agentToolDefinition) arguments(raw json.RawMessage, schema *mcpserver.Schema) (map[string]any, *command.Refusal) {
+func (def agentToolDefinition) checkArguments(raw json.RawMessage, schema *mcpserver.Schema) *command.Refusal {
 	args := map[string]any{}
 	if len(bytes.TrimSpace(raw)) > 0 && string(raw) != "null" {
 		if err := json.Unmarshal(raw, &args); err != nil {
-			return nil, def.usage(fmt.Sprintf("arguments must be a JSON object: %v", err))
+			return def.usage(fmt.Sprintf("arguments must be a JSON object: %v", err))
 		}
 	}
 	if err := schema.Validate(args); err != nil {
-		return nil, def.usage(err.Error())
+		return def.usage(err.Error())
 	}
-	return args, nil
+	return nil
 }
 
 func (def agentToolDefinition) usage(message string) *command.Refusal {
@@ -299,11 +292,7 @@ func (def agentToolDefinition) refusalText(r *command.Refusal) string {
 	return text
 }
 
-func (d *Daemon) runAgentCommand(ctx context.Context, call *agentCall, name string, sent json.RawMessage, caller *callerSide) (any, *command.Refusal) {
-	args, err := caller.commandArguments(sent)
-	if err != nil {
-		return nil, command.AsRefusal(err)
-	}
+func (d *Daemon) runAgentCommand(ctx context.Context, call *agentCall, name string, args json.RawMessage) (any, *command.Refusal) {
 	if protocol.CommandRuns[name] == protocol.LocatorHome && !d.enrollmentStatus().IsHome() {
 		return d.forwardCommand(call.caller, name, args)
 	}

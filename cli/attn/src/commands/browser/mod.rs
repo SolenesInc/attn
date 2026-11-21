@@ -1,10 +1,9 @@
 mod help_generated;
 mod table_generated;
 
-use super::{Run, Stop, absolute, print_stdout};
+use super::{Run, Stop, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
-use crate::paths::os_error_text;
 use attn_protocol::{BrowserFileResult, BrowserOpenResult, BrowserResult};
 use serde_json::Value as Json;
 
@@ -12,14 +11,6 @@ struct Browser;
 
 pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     command::run_group(run, &Browser, args)
-}
-
-fn default_capture(verb: &str) -> Option<&'static str> {
-    match verb {
-        "screenshot" => Some("attn-browser.png"),
-        "pdf" => Some("attn-browser.pdf"),
-        _ => None,
-    }
 }
 
 impl Family for Browser {
@@ -61,18 +52,6 @@ impl Family for Browser {
         if cmd.name == "command" || cmd.name == "pdf" {
             parsed.args.insert("wait".to_string(), Json::from(true));
         }
-        let Some(fallback) = default_capture(cmd.name) else {
-            return Ok(());
-        };
-        let given = parsed.text("path").to_string();
-        let path = if given.is_empty() { fallback } else { &given };
-        let resolved = absolute(path).map_err(|error| {
-            self.fail(
-                cmd.name,
-                &format!("resolve path: {}", os_error_text(&error)),
-            )
-        })?;
-        parsed.args.insert("path".to_string(), Json::from(resolved));
         Ok(())
     }
 

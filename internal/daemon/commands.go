@@ -74,6 +74,12 @@ func (d *Daemon) serveRunCommand(ctx context.Context, conn net.Conn, msg *protoc
 }
 
 func (d *Daemon) callerFromFrame(ctx context.Context, msg *protocol.RunCommandMessage) (command.Caller, error) {
+	c, err := d.framedCaller(ctx, msg)
+	c.Directory = strings.TrimSpace(protocol.Deref(msg.Directory))
+	return c, err
+}
+
+func (d *Daemon) framedCaller(ctx context.Context, msg *protocol.RunCommandMessage) (command.Caller, error) {
 	requested := strings.TrimSpace(protocol.Deref(msg.ProfileID))
 	terminal := protocol.TerminalID(strings.TrimSpace(string(protocol.Deref(msg.CallerID))))
 	role := command.CallerRole(msg.Command)

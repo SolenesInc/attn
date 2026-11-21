@@ -140,8 +140,6 @@ type Arg struct {
 	Stdin       bool     `yaml:"stdin"`
 	File        bool     `yaml:"file"`
 	Piped       bool     `yaml:"piped"`
-	Local       Local    `yaml:"local"`
-	LocalWhen   string   `yaml:"local_when"`
 	CLIOnly     bool     `yaml:"cli_only"`
 	Values      []string `yaml:"values"`
 	OneOf       string   `yaml:"one_of"`
@@ -163,17 +161,6 @@ func (a Arg) FlagWords() string {
 	}
 	return ""
 }
-
-type Local string
-
-const (
-	LocalPath        Local = "path"
-	LocalDestination Local = "destination"
-	LocalEvidence    Local = "evidence"
-	LocalCommit      Local = "commit"
-)
-
-var locals = []Local{LocalPath, LocalDestination, LocalEvidence, LocalCommit}
 
 type familyFile struct {
 	Groups   []Group   `yaml:"groups"`
@@ -478,17 +465,11 @@ func (c *Catalog) check() []string {
 			if strings.Contains(a.CLI, "|") && len(a.Values) == 0 {
 				add("%s: cli %q maps values to flags, but the arg has no values", argWhere, a.CLI)
 			}
-			if a.Local != "" && !slices.Contains(locals, a.Local) {
-				add("%s: local is %q; accepted values are path, destination, evidence and commit", argWhere, a.Local)
+			if a.Internal() && (a.Required || a.CLIOnly) {
+				add("%s: cli internal on an arg that is required or cli_only; the CLI fills it alone, and a tool call leaves it out", argWhere)
 			}
-			if a.LocalWhen != "" && (a.Local == "" || !slices.ContainsFunc(cmd.Args, func(other Arg) bool { return other.Name == a.LocalWhen })) {
-				add("%s: local_when names %q; it needs local and another arg of this command", argWhere, a.LocalWhen)
-			}
-			if a.Internal() && (a.Required || a.Local != "" || a.CLIOnly) {
-				add("%s: cli internal on an arg that is required, local or cli_only; the CLI fills it alone, and a tool call leaves it out", argWhere)
-			}
-			if a.CLIOnly && (a.Required || a.Local != "") {
-				add("%s: cli_only on an arg that is required or local; a tool must be able to make the call without it", argWhere)
+			if a.CLIOnly && a.Required {
+				add("%s: cli_only on an arg that is required; a tool must be able to make the call without it", argWhere)
 			}
 		}
 		for _, example := range cmd.Examples {

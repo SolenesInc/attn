@@ -1,7 +1,7 @@
 mod help_generated;
 mod table_generated;
 
-use super::{Run, Stop, absolute, print_json, print_stdout};
+use super::{Run, Stop, print_json, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
 use attn_protocol::go_values::{AGENT_MSG_STATUS_QUEUED, CREW_KEY_REF_PREFIX};
@@ -11,7 +11,6 @@ use attn_protocol::{
     LaunchDesktopSetting,
 };
 use serde::de::DeserializeOwned;
-use serde_json::Value as Json;
 use std::fmt::Write as _;
 
 const SHORT_ID_LENGTH: usize = 8;
@@ -71,17 +70,6 @@ impl Family for Crew {
 
     fn usage(&self, verb: &str) -> &'static str {
         help_generated::usage(verb)
-    }
-
-    fn before_send(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop> {
-        let home = parsed.text("home").to_string();
-        if cmd.name != "set" || home.trim().is_empty() || home.starts_with('~') {
-            return Ok(());
-        }
-        let resolved = absolute(&home)
-            .map_err(|error| self.usage_error(cmd.name, &format!("--home {home}: {error}")))?;
-        parsed.args.insert("home".to_string(), Json::from(resolved));
-        Ok(())
     }
 
     fn present_json(

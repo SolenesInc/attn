@@ -13,9 +13,10 @@ import (
 )
 
 type Caller struct {
-	Session  protocol.SessionID
-	Profile  string
-	Terminal protocol.TerminalID
+	Session   protocol.SessionID
+	Profile   string
+	Terminal  protocol.TerminalID
+	Directory string
 }
 
 func (c Caller) Sees(profile string) bool {

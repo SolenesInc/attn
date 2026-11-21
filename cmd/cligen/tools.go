@@ -13,12 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/catalog"
 )
 
-type toolLocal struct {
-	Arg  string        `json:"arg"`
-	Kind catalog.Local `json:"kind"`
-	When string        `json:"when,omitempty"`
-}
-
 type toolDefinition struct {
 	Command      string         `json:"command"`
 	Name         string         `json:"name"`
@@ -26,7 +20,6 @@ type toolDefinition struct {
 	Description  string         `json:"description"`
 	Core         bool           `json:"core,omitempty"`
 	ReadOnly     bool           `json:"read_only,omitempty"`
-	Local        []toolLocal    `json:"local,omitempty"`
 	InputSchema  map[string]any `json:"inputSchema"`
 	OutputSchema map[string]any `json:"outputSchema,omitempty"`
 }
@@ -48,11 +41,6 @@ func writeTools(c *catalog.Catalog, goRoot string) error {
 			Core:        cmd.Core,
 			ReadOnly:    cmd.ReadOnly,
 			InputSchema: g.inputSchema(cmd),
-		}
-		for _, a := range cmd.Args {
-			if a.Local != "" {
-				tool.Local = append(tool.Local, toolLocal{Arg: a.Name, Kind: a.Local, When: a.LocalWhen})
-			}
 		}
 		if cmd.Result != "" {
 			schema, err := bundledSchema(cmd.Result)

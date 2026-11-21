@@ -2083,6 +2083,42 @@ model BrowseDirectoryMessage {
   request_id?: string;
 }
 
+// A command asks the machine its caller runs on to resolve the paths, the
+// evidence and the commit the caller named, against the caller's folder.
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
+model InspectCallerPathsMessage {
+  cmd: "inspect_caller_paths";
+  host?: string;
+  folder: string;
+  // The folder is the one the caller's session started in, not a working
+  // directory the caller named.
+  session_folder?: boolean;
+  paths?: CallerPath[];
+  evidence?: string[];
+  commit?: string;
+}
+
+// A path a command argument names. When the caller's session folder resolves
+// it, a destination need not exist but the folder that receives it must.
+model CallerPath {
+  arg: string;
+  value: string;
+  destination?: boolean;
+}
+
+// What the caller's machine found, in the order asked. paths holds each path
+// resolved against the caller's folder; one that is absolute or starts with ~
+// comes back as given. evidence holds the resolved path of each local file and
+// every other value as given. problems refuse the call. absent lists the
+// relative paths that do not exist, which a later refusal adds to its message.
+model CallerPaths {
+  paths: string[];
+  evidence: string[];
+  commit?: string;
+  problems: string[];
+  absent: string[];
+}
+
 @extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model InspectPathMessage {
   cmd: "inspect_path";
@@ -6812,6 +6848,10 @@ model RunCommandMessage {
   args?: { ...Record<unknown> };
   session_id?: SessionID;
   profile_id?: string;
+  // The CLI's working directory, where the command's relative paths resolve.
+  // Without it they resolve against the folder the caller's session started
+  // in.
+  directory?: string;
 }
 
 // CommandRefusal is why a command did not run. code is a refusal class

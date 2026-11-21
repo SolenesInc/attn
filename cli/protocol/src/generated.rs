@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "70c0ec79c8b2";
+pub const PROTOCOL_VERSION: &str = "61a8bc3dfe8b";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -1806,6 +1806,26 @@ impl BusStatusResultMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CallerPath {
+    pub arg: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub destination: Option<bool>,
+    pub value: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CallerPaths {
+    #[serde(deserialize_with = "null_as_default")]
+    pub absent: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub evidence: Vec<String>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub paths: Vec<String>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub problems: Vec<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CallerSessionMessage {
@@ -5648,6 +5668,31 @@ impl InjectTestSessionMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct InspectCallerPathsMessage {
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<Vec<String>>,
+    pub folder: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paths: Option<Vec<CallerPath>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_folder: Option<bool>,
+}
+
+impl InspectCallerPathsMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "inspect_caller_paths".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct InspectPathMessage {
     pub cmd: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -8905,6 +8950,8 @@ pub struct RunCommandMessage {
     pub caller_id: Option<TerminalID>,
     pub cmd: String,
     pub command: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub directory: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

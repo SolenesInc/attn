@@ -127,7 +127,11 @@ func (d *Daemon) runCrewApply(_ context.Context, c command.Caller, a command.Cre
 	return result, nil
 }
 
-func (d *Daemon) runCrewSet(_ context.Context, c command.Caller, a command.CrewSetArgs) (any, error) {
+func (d *Daemon) runCrewSet(ctx context.Context, c command.Caller, a command.CrewSetArgs) (any, error) {
+	home, _, err := d.callerPath(ctx, c, callerFile("home", a.Home))
+	if err != nil {
+		return nil, err
+	}
 	msg := &protocol.CrewSetMessage{
 		Member:            a.Member,
 		Cwd:               a.Cwd,
@@ -136,7 +140,7 @@ func (d *Daemon) runCrewSet(_ context.Context, c command.Caller, a command.CrewS
 		Effort:            a.Effort,
 		LaunchDesktop:     optionalText(a.LaunchDesktop),
 		LaunchDesktopName: optionalText(a.DesktopName),
-		Home:              optionalText(a.Home),
+		Home:              optionalText(home),
 	}
 	msg.SourceSessionID, msg.ProfileID = crewAskerOf(c).source()
 	if msg.LaunchDesktopName != nil && msg.LaunchDesktop == nil {

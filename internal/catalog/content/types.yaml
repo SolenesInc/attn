@@ -65,7 +65,7 @@ types:
     placeholder: "<name>"
   path:
     json: {type: string, minLength: 1}
-    doc: "A path on this machine. A relative path resolves against the working directory."
+    doc: "A path on the caller's machine."
     placeholder: "<path>"
   url:
     json: {type: string, format: uri}

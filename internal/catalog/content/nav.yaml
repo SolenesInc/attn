@@ -47,7 +47,7 @@ commands:
     doc: |
       The server definitions for the repository in `repository`, where each program was found or why it was not, and the language servers running on this machine with their memory and, for one still starting, when its start began.
     args:
-      - {name: repository, type: path, cli: "--repository", local: path, placeholder: "<dir>", doc: "a directory inside the repository; defaults to the current directory, or for a tool the folder the session started in"}
+      - {name: repository, type: path, cli: "--repository", placeholder: "<dir>", doc: "a directory inside the repository; defaults to the current directory, or for a tool the folder the session started in"}
     result: CodeNavStatusResult
     errors:
       - {code: nav_off, fix: "Ask the user to turn on the experimental setting code_review_enabled."}
@@ -61,7 +61,7 @@ commands:
     args:
       - {name: at, type: file_line, required: true, cli: pos, doc: "a file relative to the repository and a line in it, such as internal/daemon/review.go:42"}
       - {name: wait, type: bool, cli: internal, doc: "wait for a starting server to answer; the CLI always waits"}
-      - {name: repository, type: path, cli: "--repository", local: path, placeholder: "<dir>", doc: "a directory inside the repository; defaults to the current directory, or for a tool the folder the session started in"}
+      - {name: repository, type: path, cli: "--repository", placeholder: "<dir>", doc: "a directory inside the repository; defaults to the current directory, or for a tool the folder the session started in"}
     result: CodeNavCheckResult
     errors:
       - {code: nav_off, fix: "Ask the user to turn on the experimental setting code_review_enabled."}
@@ -75,7 +75,7 @@ commands:
     doc: |
       Links the server's program at `program` into this machine's code navigation folder, which attn searches before PATH. Use it for a server your editor installed outside PATH, such as Neovim's mason folder. `as` links it under the name the definition's command uses.
     args:
-      - {name: program, type: path, required: true, cli: pos, local: path, placeholder: "<program>", doc: "the server's program"}
+      - {name: program, type: path, required: true, cli: pos, placeholder: "<program>", doc: "the server's program"}
       - {name: as, type: name, cli: "--as", doc: "the name to link it as; the program's file name by default"}
     result: CodeNavLinkResult
     errors:
@@ -102,7 +102,7 @@ commands:
     args:
       - {name: language, type: name, required: true, cli: pos, placeholder: "<language>", doc: "lowercase letters, digits and dashes, such as java"}
       - {name: definition, type: text, required: true, cli: pos, placeholder: "<definition>", doc: "the definition, as JSON"}
-      - {name: repository, type: path, cli: "--repository", local: path, placeholder: "<dir>", doc: "a directory inside the repository; defaults to the current directory, or for a tool the folder the session started in"}
+      - {name: repository, type: path, cli: "--repository", placeholder: "<dir>", doc: "a directory inside the repository; defaults to the current directory, or for a tool the folder the session started in"}
     result: CodeNavDefineResult
     errors:
       - {code: nav_off, fix: "Ask the user to turn on the experimental setting code_review_enabled."}
@@ -115,7 +115,7 @@ commands:
       Removes the definition set for `language`, so the built-in one applies again.
     args:
       - {name: language, type: name, required: true, cli: pos, placeholder: "<language>", doc: "the language whose set definition goes"}
-      - {name: repository, type: path, cli: "--repository", local: path, placeholder: "<dir>", doc: "a directory inside the repository; defaults to the current directory, or for a tool the folder the session started in"}
+      - {name: repository, type: path, cli: "--repository", placeholder: "<dir>", doc: "a directory inside the repository; defaults to the current directory, or for a tool the folder the session started in"}
     result: CodeNavDefineResult
     errors:
       - {code: nav_off, fix: "Ask the user to turn on the experimental setting code_review_enabled."}

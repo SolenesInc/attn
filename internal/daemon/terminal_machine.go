@@ -55,6 +55,7 @@ func (d *Daemon) machineParts() map[string]machinePart {
 	runs(parts, true, d.worktreeSeedOwnersHere)
 	runs(parts, true, d.browseDirectoryHere)
 	runs(parts, true, d.inspectPathHere)
+	runs(parts, true, d.inspectCallerPaths)
 	runs(parts, true, d.readRepoInfoHere)
 	runs(parts, false, d.closeAgentMachine)
 	runs(parts, true, d.readTerminalLaunch)
