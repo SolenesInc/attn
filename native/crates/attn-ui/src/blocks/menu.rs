@@ -21,6 +21,7 @@ pub struct Menu {
     form: Vec<Block>,
     footer: Option<Actions>,
     active: Option<String>,
+    focusable: bool,
 }
 
 impl Menu {
@@ -34,12 +35,20 @@ impl Menu {
             form: Vec::new(),
             footer: None,
             active: None,
+            focusable: true,
         }
     }
 
     /// Its rows are the values of a list box rather than the commands of a menu.
     pub fn listbox(mut self) -> Self {
         self.role = "listbox";
+        self
+    }
+
+    /// The keyboard stays in the field that opened it, which names the row it is on, so the
+    /// menu takes no focus of its own, even when an assistive client asks it to.
+    pub fn driven_by_field(mut self) -> Self {
+        self.focusable = false;
         self
     }
 
@@ -97,7 +106,7 @@ impl Menu {
                 .role(self.role)
                 .label(self.label)
                 .w(WIDTH)
-                .focusable(true)
+                .focusable(self.focusable)
                 .no_focus_ring(),
             Space::S2,
         )

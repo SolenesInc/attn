@@ -2547,6 +2547,27 @@ fn return_in_the_mailbox_list_picks_a_mailbox_even_when_a_button_had_the_keyboar
 }
 
 #[test]
+fn the_draft_keeps_the_keyboard_when_an_assistive_client_focuses_the_send_to_list() {
+    let (daemon, _) = home();
+    let mut world = World::start(daemon);
+    open(&mut world);
+    type_text(&mut world, "draft");
+    press(&mut world, "mod+k");
+    world.capture_gesture(|d| {
+        d.runtime
+            .accessibility_action("capture.mailboxes", rune::accesskit::Action::Focus, None);
+    });
+    assert_eq!(capture_focus(&world).as_deref(), Some("capture.message"));
+
+    press(&mut world, "escape");
+    type_text(&mut world, " more");
+
+    assert!(world.capture_shown());
+    assert_eq!(message_text(&world), "draft more");
+    rest(&mut world);
+}
+
+#[test]
 fn return_picks_the_highlighted_mailbox_when_an_assistive_client_focuses_recent_under_the_open_list()
  {
     let (daemon, _) = home();

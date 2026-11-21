@@ -339,6 +339,7 @@ fn picker(panel: &Panel, at: usize, t: &Tokens) -> El {
     });
     let menu = Menu::new("capture.mailboxes", "Send to")
         .listbox()
+        .driven_by_field()
         .rows(rows)
         .build(t);
     el().absolute(0.0, 0.0)
