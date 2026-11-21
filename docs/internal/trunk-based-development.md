@@ -255,10 +255,13 @@ every macOS job, on `main`'s head. A red CI full run opens
 closes each. The sheriff automation watches both
 workflows on `main` and counts a run as red when any job in it failed, even when the run itself
 concluded `cancelled`. The sheriff never re-runs CI. As soon as a job fails, the
-sheriff reads it, finds the commit that broke it, and delegates an agent
-to fix forward when the fix is small and clear, or to revert the commit when the
-revert is clean. The fix lands like any other, and the next push run on
-`main` shows whether the fix worked. The issue records each failure once, with
+sheriff reads the job's log, finds the commit that broke `main`, and picks a
+path. For a small, clear fix forward, the sheriff messages the culprit's live
+session first, or delegates a Builder if that session is gone or stalled. For a
+larger break with a clean revert, the sheriff delegates a Builder to revert. The fix lands like any other, and the next push run on
+`main` shows whether the fix worked. Fast landings are intentional: occasional
+breaks on `main` are why the sheriff exists, so repairs keep `land.sh` fast
+instead of gating landings on slow suites. The issue records each failure once, with
 the failure's owner and the repair that landed, so the sheriff does not fix a
 failure that already has an owner or a repair. Every revert gets an owner who
 will land the change again: the commit's live session, or a seed that the chief

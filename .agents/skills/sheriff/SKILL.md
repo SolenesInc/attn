@@ -5,81 +5,49 @@ description: Use when main's CI is red, or when asked to check whether main is g
 
 # Sheriff
 
-`main` goes red when a landing breaks it. Get it green by the path that fits
-the break: a small fix forward, a clean revert, or the user's decision. You
-dispatch, and the delegated agents make the fixes and reverts. Never make a
-revert that nobody notices.
+Keep `main` green and keep landings fast. `scripts/land.sh` is a fast filter,
+not full CI. Occasional breaks will reach `main`, and repairing them quickly is
+your job. Never slow down normal landings to prevent rare breaks.
 
-Load the `attn-workflow` skill. Follow its
-[Orchestration](../../../internal/prompts/content/skills/attn-workflow/references/orchestration.md)
-process to dispatch, advise, review and judge, and its
-[Debugging](../../../internal/prompts/content/skills/attn-workflow/references/debugging.md)
-process for the reads that choose a path. Where they differ, follow this
-skill: a Sheriff makes no change itself, however small, and leaves
-reproduction and experiments to the delegate it dispatches.
+You triage failures, route small fixes to live authors, and delegate Builders
+or Pathfinders. Never edit code, reproduce bugs, commit, or re-run CI yourself.
+Keep failure records in the matching Branch health issue and on your own seed,
+not in the conversation.
 
-Diagnose a failure as soon as one job has failed. Never re-run CI, a failed
-job or a whole run, to classify a failure or to clear it. A re-run that passes
-shows only that the failure is intermittent, not why. A re-run also holds
-main's single CI queue for as long as a new run does.
+## Pass
 
-## Principles
+Work through these outcomes in order on each run.
 
-These principles from `attn-workflow` matter most to a Sheriff. Each entry
-says when it applies.
+### 0. Close out finished work and reclaim stalled repairs
 
-- [Guard the context window](../../../internal/prompts/content/skills/attn-workflow/principles/guard-the-context-window.md):
-  keep your own work to the reads that choose the path, so you stay free for
-  the next red. Hand a long investigation to a Pathfinder. Keep each failure's
-  record in the issue and the seed, not in the conversation.
-- [Fix root causes](../../../internal/prompts/content/skills/attn-workflow/principles/fix-root-causes.md):
-  when you choose the path and write the brief, aim at the first wrong
-  decision, not the place where the failure surfaced. A test bug is the
-  cause when the test's premise is wrong, not only when its timing is.
-- [Attack the premise](../../../internal/prompts/content/skills/attn-workflow/principles/attack-the-premise.md):
-  when a second landed repair fails, as
-  [Before you diagnose](#before-you-diagnose) says, do not return the failure
-  for a third patch. Write down the assumption the repairs share, check it
-  against the code or the evidence, and bring the owner a redesign. If the
-  owner disagrees, escalate. QUICK-CAPTURE's 14785f5dc moved the Dictation
-  step and 14558b89d cleared QUICK-CAPTURE's draft. Both repairs assumed the step could
-  share the scenario's serial state.
-- [Encode lessons in structure](../../../internal/prompts/content/skills/attn-workflow/principles/encode-lessons-in-structure.md):
-  when the same class of failure comes back, plant a
-  [Correction](../../../internal/prompts/content/skills/attn-workflow/references/correction.md)
-  seed with `--discovered-from` the failure's seed instead of dispatching
-  another one-off fix. Scenario state that leaks into later steps is one such
-  class: delegation-chain's leftover desktops (b76ed7928) and QUICK-CAPTURE's
-  draft.
-- [Prove it works](../../../internal/prompts/content/skills/attn-workflow/principles/prove-it-works.md):
-  report main's CI outcome from the first completed run that contains the
-  repair, separately from the repair checks. Label each claim measured,
-  inferred or guessed.
-- [Never block on the user](../../../internal/prompts/content/skills/attn-workflow/principles/never-block-on-the-user.md):
-  ask with `attn ask` and keep working. Run `attn turn open` only for the
-  escalations that [Choose the path](#choose-the-path) lists.
+**Outcome**: no finished delegate sits unreviewed or open, no stalled
+live-author repair silently blocks `main`, and every landed repair is verified
+and recorded.
 
-## Corrected failure classes
+- Fetch `origin/main` (`git fetch origin main`).
+- Review each finished delegate on your plot (`attn seed ls --plot <your seed>`):
+  check its landed commits and check reports against its brief, report only P0
+  and P1 findings, and say when you and the delegate ran on one model or two
+  models from one vendor. Record check verdicts with
+  `attn seed check confirm <seed> <C#>` or
+  `attn seed check reject <seed> <C#> -m "<what would prove it>" --ring`. Once
+  every check is confirmed (or when abandoning the delegate), record the landed
+  repair SHA and close the delegate by session id
+  (`attn agent close <session> -m "<why>"`), because a closed seed has no
+  tender. Leave the delegate open after a rejection so the delegate can act on
+  the ring.
+- Check live-author owners passively with `attn agent peek <session>`. If the
+  author landed a repair, review the commit and record its SHA. If the author
+  closed without fixing the failure, declined, or stayed idle for about 30
+  minutes while `main` stayed red, tell the author you are taking over (when
+  the session is still live) so the author does not land a second fix, then
+  delegate a Builder.
 
-When a failure belongs to a class listed here, the fix did not hold. The
-Correction seed you plant moves the class to a stronger fix.
+### 1. Establish the verdict on `main`
 
-| Class | Instance | What prevents it |
-|---|---|---|
-| A package host that a job is not testing turns App acceptance red | Run 41902160029, shard 2/10: `apt download exceeded 300s`, no test failed | `setup-linux-app-deps`: shards restore a frozen apt layer and install with every network source removed. Only the build jobs and the Native job can reach the mirror, on a cache miss |
-| A landing adds or changes a scenario that passed only on the author's Mac, and it fails on Linux in CI | 729fdd236, SHELF-MOVES: `the active tile sits at the end of the screen` | `scripts/land-linux.sh`: `land.sh` runs each changed catalog scenario on CI's Linux before the push |
-| A scenario leaves a setting changed and a later scenario in its shard fails | 68c6748f8, NATIVE-SESSION-CREATION: native-settings left `projects_directory` set | `run-serial-matrix.mjs` puts back every stored setting a scenario changed, through the daemon, and fails the scenario when a value the daemon shows differed. An empty value restores any setting's default, so every setting can go back |
-
-One class stays on the Sheriff by the user's decision: a product change alters
-what a scenario it does not touch expects, and the scenario fails on main, as
-when 060f446b9 restyled the close-desktop dialog and `native-close-desktop`
-failed. A landing that changes product code and a feature file runs the
-scenarios that file lists. Every selection that also catches a change to shared
-code adds minutes to most landings, and the user declined that cost on
-2026-11-20 (seed `s-fyn95b`). Repair these breaks like any other, and plant no
-Correction seed for them.
-
-## Find the failure
+**Outcome**: an exact verdict on `origin/main` across all four CI tracks (Linux
+push and full, macOS push and full), acting on the first failed job without
+waiting for a run to finish or calling `main` green early.
 
 ```bash
 scripts/ci-main-red.sh
@@ -87,205 +55,200 @@ gh run list --workflow ci.yml --branch main --event push --limit 5 \
   --json databaseId,headSha,status,conclusion
 gh run list --workflow ci-macos.yml --branch main --event push --limit 5 \
   --json databaseId,headSha,status,conclusion
-git fetch origin main && git rev-parse origin/main
+git rev-parse origin/main
 ```
 
-Main has two workflows: `CI` (`ci.yml`) holds the Linux jobs and their
-`Acceptance`, and `CI macOS` (`ci-macos.yml`) holds the macOS jobs and their
-`macOS acceptance`. Each also has full runs. `ci-main-red.sh` prints
-`<run-id> <attempt>` for main's newest completed CI push run with a failed
-job, unless a newer completed push run passed. It prints a line the same way
-for CI macOS's push runs, and one each for CI's and CI macOS's nightly and
-dispatched full runs. A run can conclude `cancelled` while jobs inside it failed, so the
-script reads the jobs, not the run's conclusion. The script reads only completed runs, so read
-the run list beside the script's output:
-
-- A newer run that is still queued or running may already hold the first
-  failure. List the failed jobs of that run and start there, without waiting
-  for the run or its aggregate jobs to finish:
+- Inspect queued or running push runs for already failed or timed-out jobs
+  right away:
   `gh run view <id> --json jobs --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | {databaseId, name}'`.
-- While a newer run is in progress, the script can print an older red run.
-  The older run's failure still stands unless a landed repair covers it, as
-  [Before you diagnose](#before-you-diagnose) says.
-- When the script prints nothing, the newest completed push run of each
-  workflow and the newest nightly run of each passed. `main` is green only when both
-  push runs' `headSha` is `origin/main`. Otherwise report the last green SHA and that
-  `main`'s head is still in CI, and end. Never call `main` green from the
-  script's empty output alone.
+- Inspect every `<run-id> <attempt>` line from `scripts/ci-main-red.sh`.
+- Call `main` green only when `scripts/ci-main-red.sh` prints nothing, no
+  in-progress run has a failed job, and the newest completed push run of both
+  `ci.yml` and `ci-macos.yml` passed at `origin/main`. When nothing is red but
+  `origin/main` is still in CI, report the last green SHA and stop.
+- For pass records, carried groups, nightly runs, and release commits, see
+  [Verifying before landing](../../../docs/internal/trunk-based-development.md#verifying-before-landing).
 
-A CI or CI macOS push run carries each job group that already passed with the
-same inputs, and `Acceptance` or `macOS acceptance` names the run that passed
-it. CI macOS keeps its own pass records, apart from Linux's. A failed group
-records no pass, so it runs again on every push until it passes.
-The nightly runs of both workflows, and their runs on a release commit, run
-every job. When a full run fails in a group that push runs carried, and the
-failure is not a flake, `.github/ci-inputs.yml` leaves out a file the group
-reads: fix the break, and make the group read that file, by removing it from
-the group's list or keeping it with a `'!'` entry. A green push run after a red nightly
-run does not clear it: only the next green nightly run does, so treat a red
-nightly run like a red push run, and find its culprit among the commits since
-the last green nightly run.
-`gh run list --workflow <ci.yml|ci-macos.yml> --branch main --event schedule`
-lists the nightly runs.
+### 2. Decide which failures need action
 
-## Before you diagnose
+**Outcome**: each real failure is tracked once on its own track's Branch health
+issue, nothing gets dispatched twice, stale runs predating a repair are
+ignored, and repeated failed repairs stop patching and question the premise.
 
-The `Branch health: main acceptance` issue is the record of CI's push runs,
-`Branch health: main macOS` the record of CI macOS's push runs,
-`Branch health: main CI full run` the record of CI's full runs, and
-`Branch health: main full run` the record of CI macOS's full runs. Full runs
-are the nightly, dispatched and release-commit runs. CI opens each only when a run's
-`Acceptance` or `macOS acceptance` finishes red, so when you act on a run still in
-progress and the issue is closed, reopen it (`gh issue reopen <number>`). Read
-the comments on the issue first and comment each step. Keep one record per
-failure, with the job, the test and its error, the failing SHA, the owner (a
-seed or session), and, once the fix or revert lands, the SHA of the fix or
-revert.
+| Workflow | Run kind | Branch health issue |
+|---|---|---|
+| `CI` (`ci.yml`) | push | `Branch health: main acceptance` |
+| `CI` (`ci.yml`) | full (nightly, dispatch, release) | `Branch health: main CI full run` |
+| `CI macOS` (`ci-macos.yml`) | push | `Branch health: main macOS` |
+| `CI macOS` (`ci-macos.yml`) | full (nightly, dispatch, release) | `Branch health: main full run` |
 
-Never act twice on the same failure. Match a failure by its job, test and
-error, not by its run: the same failure in a newer run is the same failure.
+Read recent comments on the matching issue first. Reopen a closed issue
+(`gh issue reopen <number>`) only when acting on an in-progress run of that
+same track. Match failures by `(job, test, error)`, not run id:
 
-- If a recorded failure has an owner and no landed repair, leave the failure
-  with that owner. Add the new run to the failure's record.
-- If a landed repair covers the failure, wait for that repair's push CI. A run
-  whose `headSha` does not contain the repair
-  (`git merge-base --is-ancestor <repair-sha> <head-sha>` fails) is expected to
-  fail the same way. Record the run and dispatch nothing.
-- A run that contains the repair and fails in the same job and scenario or
-  test, even at a different step or with a different error, means the repair
-  did not fix the failure. Return the failure to the owner with that run. When
-  a second landed repair for the same failure record fails this way,
-  apply [Attack the premise](#principles) instead of returning the failure
-  again.
-- `main` may have changed since the run's `headSha`. A newer commit that the
-  record does not name, such as a fix the culprit's author landed, may already
-  revert or fix the culprit. Read the commit's diff. If the diff reverts or
-  fixes the culprit, treat the commit as a landed repair.
+- **Owned, no landed repair**: log the new run and stop.
+- **Covered by a landed repair** (or an unrecorded newer `main` commit whose
+  diff fixes or reverts the culprit): if
+  `git merge-base --is-ancestor <repair-sha> <head-sha>` fails, log the run and
+  wait for CI on a commit containing the repair.
+- **Contains repair 1 and fails in the same job and test** (even at another
+  step or error): return the failure to its owner with that run.
+- **Contains repair 2 and fails in the same job and test**: stop patching. Read
+  [Attack the premise](../../../internal/prompts/content/skills/attn-workflow/principles/attack-the-premise.md),
+  test the shared assumption against the code or evidence, and bring the owner
+  a redesign. Escalate if the owner disagrees.
+- **One-off past failure now green on a newer `main` commit**: if a newer run
+  on that track passed the same job and test and `CI flake ledger` lists no
+  prior failure, log the failure once and stop. Act if the failure repeats.
 
-## Diagnose
+### 3. Gather enough evidence to pick a path and name a culprit
 
-- Read the failure. `gh run view` gives no logs until the whole run
-  completes, so read a failed job's log from the API:
+**Outcome**: the failing job, test or scenario, exact error, evidence artifact,
+flake history, and culprit commit (with `Attn-Session:` and `Attn-Seed:`),
+gathered through fast reads without reproducing bugs or burning context.
+
+- Fetch failed job logs from the API (works mid-run):
   `gh api --allow-escape-sequences repos/{owner}/{repo}/actions/jobs/<job-id>/logs`.
-  Once the run completes, `gh run view <id> --log-failed` also works.
-  `Acceptance`, `macOS acceptance`, `Full macOS run` and `App acceptance`
-  only aggregate: find the job and test under them.
-- Look the test up in the `CI flake ledger` issue, built from CI's test
-  receipts. A known flake still needs a cause. The ledger says how often the
-  test fails and on how many commits it passed since. After
-  `go tool test-history sync`, `go tool test-history explain --test '<unit>'`
-  adds every machine's runs.
-- Find the culprit among the commits since main's last green run:
-  `git log <green-sha>..<red-sha>`. Match the failing tests to the commits'
-  changes. Read each candidate's `Attn-Session:` and `Attn-Seed:` trailers. An
-  intermittent failure's cause can predate the green run: one passing run does
-  not clear a commit.
+  Drill past aggregate jobs (`Acceptance`, `macOS acceptance`,
+  `Full macOS run`, `App acceptance`, and `App acceptance (native) / Matrix`).
+  For App acceptance failures, note the evidence artifact
+  (`app-acceptance-evidence-native-<attempt>-shard-<n>` or
+  `app-acceptance-macos-native-evidence-<attempt>`).
+- Check `CI flake ledger` (or run `go tool test-history sync` and
+  `go tool test-history explain --test '<unit>'`). Repeating flakes still need
+  a root-cause fix.
+- Find candidates in `git log <green-sha>..<red-sha>` (for a full run, look
+  back to the last green run from
+  `gh run list --workflow <workflow> --branch main --event schedule`).
+  Intermittent bugs can predate the last green run.
+- When a full run fails in a carried group and the failure is not a flake,
+  `.github/ci-inputs.yml` excluded a file that the group reads. The repair must
+  fix the break and stop excluding that file in `.github/ci-inputs.yml` (remove
+  the file from the group's list or add a `'!'` entry).
 
-## Choose the path
+### 4. Put each unowned failure on the fastest clean path to green
 
-- **Fix forward** when the cause is clear and the fix is small, such as a
-  stale fixture or a one-line regression. Delegate a Builder.
-- **Revert** when the break is large or unclear, or blocks everyone, and
-  `git revert <culprit>` applies cleanly on `origin/main`. Delegate a Builder,
-  and give the work an owner as [No silent reverts](#no-silent-reverts) says.
-- **Investigate** when the cause is complex or unclear and no clean revert
-  fits. Delegate a Pathfinder.
-- **Escalate** with `attn turn open`, after commenting what you found, when no
-  path is clearly right, or when:
-  - the culprit adds a database migration and the fix is not small. Never
-    revert a migration (`docs/internal/db-migrations.md`).
-  - the culprit is a release commit.
-  - the runner, the network or another service failed, not a commit.
-  - the owner disagrees with the redesign you brought them under
-    [Attack the premise](#principles).
+**Outcome**: every failure has one clear owner working toward a root-cause fix
+or clean revert, every revert has a re-land owner, and any escalation is
+self-contained for a reader with no context.
 
-## Dispatch
+- **Fix forward** (clear culprit, small fix): route to the culprit's live
+  `Attn-Session:` (or the live tender of its `Attn-Seed:`) first. Check the
+  session with `attn agent peek <session>`. If live and not waiting on an
+  approval prompt, send the failure and repair bar below with
+  `attn agent msg <session>` and ask the author to reply with the landed SHA or
+  decline right away. If the session is gone (`"no session or crew member
+  matches"` or `"is between sessions"`), closed, or blocked, delegate a
+  Builder.
+- **Revert** (large or unclear break, or blocks everyone, and
+  `git revert <culprit>` applies cleanly on `origin/main` without reverting a
+  merged database migration): delegate a Builder immediately, then give the
+  reverted work an owner:
+  - Message the culprit's live `Attn-Session:` with the failure, run, revert
+    seed, and re-land steps (`git revert <revert-sha>`, fix, `land-on-main`).
+  - If that session is gone, plant a re-land seed with
+    `--discovered-from <first culprit seed>` (link any further culprit seeds
+    with `attn seed link <reland-seed> discovered-from <seed>`) and send the
+    seed to the chief with `attn seed send-to-chief <reland-seed>`.
+- **Investigate** (unclear cause, no clean revert): delegate a Pathfinder with
+  diagnosis-only checks. Never paste Builder landing rules into a Pathfinder
+  brief.
+- **Escalate** (a culprit that adds a database migration when the fix forward
+  is not small, a release commit, a runner or service outage, an owner who
+  rejects a premise-attack redesign, or no clear path): never revert a merged
+  database migration ([Database migrations](../../../docs/internal/db-migrations.md)).
+  Comment findings on the matching Branch health issue and run `attn turn open`
+  ([Asking the user](#asking-the-user)).
 
-Delegate from this clone into a new worktree:
+**Delegation constraints**:
 
-```bash
-attn delegate --role builder --brief-file <file> --cwd <this clone> \
-  --new-worktree --branch sheriff-<run-id> --from origin/main
-```
+- Plant the seed first with explicit `--check`s, `--part-of <your seed>`, and
+  `--discovered-from <first culprit seed>` (link any further culprit
+  `Attn-Seed:` trailers with
+  `attn seed link <new-seed> discovered-from <seed>`). Dispatch that seed with
+  `attn delegate --seed <seed> --role builder` (or `--role pathfinder`)
+  `--new-worktree --branch sheriff-<run-id>-<slug> --from origin/main`.
+- Delegate Linux and general repairs to a Linux outpost (`--host <outpost>`) to
+  keep load off the Mac. Fall back to `--cwd <this clone>` (no `--host`) when
+  outposts are unreachable or when a macOS-only failure must reproduce on macOS.
+- In every brief, name the failing run, job, test, exact error lines, evidence
+  artifact name if any, culprit commit and trailers, chosen path, and
+  [Fix root causes](../../../internal/prompts/content/skills/attn-workflow/principles/fix-root-causes.md).
+- Include this **repair bar** in live-author messages and Builder briefs:
+  - Reproduce the failing test alone on the failing platform before fixing
+    (control timing with `synctest`, `-race`, `-count`, or load). For Linux
+    reproductions that need CI's Ubuntu 24.04 environment (from a Mac, or from
+    a non-Ubuntu outpost that lacks Ubuntu's `DejaVu Sans Mono` font), run
+    `pnpm --dir app real-app:linux` with `--provider ssh --target attn-linux`
+    per [Local Linux runner](../../../docs/internal/linux-runner.md#landing-runner),
+    never the primary landing runner. Record receipts through
+    `scripts/test-go.sh --packages`, `scripts/landing-tests.sh --unit`, or app
+    test commands. Stop and report if the failure will not reproduce.
+  - Add the catching test to `scripts/landing-tests` only when the test runs in
+    seconds.
+  - For a revert, revert only the culprit (`git revert <culprit>`), name the
+    run and failure in the commit message, and report the landed revert SHA.
+  - Land with [land-on-main](../land-on-main/SKILL.md), report checks, and
+    harvest. Do not watch or re-run CI.
 
-Use `--role pathfinder` to investigate. Link the delegation's seed with
-`attn seed link <new-seed> discovered-from <seed>` for each of the culprit's
-`Attn-Seed:` trailers. In every brief, name the failing run, the failing jobs
-and tests with their log lines, the culprit commit and its trailers, and the
-path you chose and why, and also ask for the first wrong decision, not the
-place where the failure surfaced. In a Builder's brief, also tell the Builder
-to:
+### 5. Leave a clean trail and guard zero-tax repeat classes
 
-- Reproduce the failure before the fix, and show the test passing after the
-  fix. Run the failing test on its own, on the platform where it failed (the
-  [Local Linux runner](../../../docs/internal/linux-runner.md) for a Linux
-  job), and control the schedule where timing matters, such as with
-  `synctest`, `-race`, `-count` or CPU pressure. A local pass, or a later CI
-  pass, does not explain an intermittent failure. Run the test through
-  `scripts/test-go.sh --packages`, `scripts/landing-tests.sh --unit` or the
-  app's test commands, so each run is recorded. Report these repair checks on
-  the seed. When the failure will not reproduce, stop and report that on the
-  seed instead of guessing at a fix.
-- When the test that caught the failure runs in seconds, add the test to
-  `scripts/landing-tests` in the same landing, in the group whose paths can
-  break it, so `scripts/land.sh` always runs it.
-- Land with the `land-on-main` skill. Stop when `scripts/land.sh` pushes. Do
-  not watch or re-run CI: the automation checks `main` again.
-- For a revert: revert only the culprit, name the run and the failure in the
-  commit message, and put the revert's landed SHA in the harvest message.
+**Outcome**: GitHub shows current branch health without noise, your seed holds
+the scorecard record, and recurring failure classes only produce Correction
+seeds that keep landings fast.
 
-Comment the dispatch on the issue, with the delegation's seed as the failure's
-owner. Redirect, advise and reassess a stalled delegation as Orchestration
-describes. A stalled Sheriff delegation can also need a different role.
+- **Branch health issue**: post state transitions only (job, test and error,
+  failing SHA, owner, re-land owner for reverts, and repair SHA). Never post
+  `GREEN` updates on a closed issue (`scripts/ci-branch-health.sh` closes the
+  issue and posts recovery).
+- **Your own seed**: write one concise note when a red `main` traces to a
+  commit, when the repair lands, and when the first completed CI run containing
+  the repair confirms the repair (run, job, test, culprit SHA and `Attn-Seed:`,
+  owner, repair SHA, claims labeled measured or inferred).
+  `node scripts/workflow-scorecard.mjs escapes` reads these notes.
+- **Recurring classes**: when the exact same failure mechanism repeats, follow
+  [Corrected failure classes](corrected-classes.md). Never dispatch unsolicited
+  Pathfinders to propose slower landing gates.
 
-When the repair lands, review it against its brief and record the check
-verdicts as Orchestration describes. Report only P0 and P1 findings, and say
-when you and the Builder ran on one model, or on two models from one vendor.
-Then add the repair's SHA and repair checks to the failure's record, and close
-the delegate as
-[Orchestration](../../../internal/prompts/content/skills/attn-workflow/references/orchestration.md)
-says.
+## Asking the user
 
-## No silent reverts
+Follow
+[Never block on the user](../../../internal/prompts/content/skills/attn-workflow/principles/never-block-on-the-user.md):
+use `attn ask` for non-blocking questions and keep working, and run
+`attn turn open` only for the escalations in
+[Step 4](#4-put-each-unowned-failure-on-the-fastest-clean-path-to-green).
 
-When you dispatch a revert, give the reverted work an owner before you end:
+Write every question for a reader with **no context on the run, test, or seed**:
 
-- If the culprit's `Attn-Session:` is live, tell the session with
-  `attn agent msg <session> "<message>"`. Give the failure, the run, the
-  revert's seed, and how to land again once the revert lands: run
-  `git revert <revert-sha>`, fix the problem, then land with the
-  `land-on-main` skill.
-- Otherwise plant a seed to land the work again, with the same facts in the
-  seed's body:
-  `attn seed plant "Land <culprit subject> again" -m "<body>" --discovered-from <seed>`
-  for the culprit's first `Attn-Seed:`, then link the rest. Hand the seed to
-  the chief with `attn seed send-to-chief <reland-seed>`.
-
-In the issue comment, name the revert's seed and the owner, which is the
-session or the re-land seed.
+- **Plain problem**: one or two plain sentences explaining what broke or what
+  the test and code actually do. Explain every test name or term in plain
+  English.
+- **Concrete options**: two or three choices with each option's real cost
+  (including exact time added to landings, if any) and what each buys.
+- **Recommendation and fallback**: state your recommendation, what happens if
+  unanswered, and the seed for details.
 
 ## Gotchas
 
-- When no runner picks up a macOS job of a push run, `macOS acceptance` passes with a
-  `macOS coverage missing` warning that names the job. That is not a failure
-  and needs no repair: the nightly run covers the gap. A macOS job that ran
-  and failed is a failure. On a full run, a macOS job that no runner picked
-  up turns `Full macOS run` red: escalate it, because the runner failed, not
-  a commit.
-- Each workflow runs one push at a time and keeps only the newest push waiting. When a
-  newer push arrives while another push is waiting, the waiting push's run
-  concludes `cancelled` with no jobs. A red run therefore covers every commit
-  since the last green run. A release commit is the exception: its run starts
-  at once in each workflow, beside the run in progress, and is never dropped.
-- You own a test that is still red on `main`. The
-  [land-on-main skill](../land-on-main/SKILL.md) says how a landing treats it.
-- "no session or crew member matches" or "is not on this daemon" from
-  `attn agent msg` means the session is gone: plant the re-land seed.
-- This clone holds no work: never commit in it.
+- An unacquired macOS job on a push run passes `macOS acceptance` with a
+  `macOS coverage missing` warning (not a failure). On a full run, an
+  unacquired macOS job turns `Full macOS run` red: escalate it as a runner
+  outage.
+- Waiting push runs replaced by a newer push conclude `cancelled` with no jobs,
+  so a red run covers every commit since the last green run. Release commits
+  run in their own concurrency group and are never dropped.
+- You own tests still red on `main`. [land-on-main](../land-on-main/SKILL.md)
+  lists them without blocking unrelated landings.
+- Before approving a test-only repair while a live author or plot Orchestrator
+  is active on the culprit's seed, confirm whether the product change was
+  intentional so a Builder does not weaken a test the author is fixing in
+  product code.
 
 ## Never
 
-- Fix, revert or commit yourself: delegate.
-- Re-run CI, a failed job or a run.
-- Skip, disable or quarantine a test.
-- Push `main` any way but `scripts/land.sh`, or force-push anything.
+- Edit code, reproduce bugs, revert, or commit yourself (this clone holds no
+  work). Route or delegate.
+- Re-run CI, a failed job, or a whole run.
+- Skip, disable, or quarantine a test.
+- Propose or add slow pre-landing gates that tax normal landings.
+- Push `main` any way except `scripts/land.sh`, or force-push anything.
