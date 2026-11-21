@@ -712,7 +712,7 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
             Button::new(primary.clone())
                 .size(Size::Compact)
                 .look(if can_save { Look::Primary } else { Look::Plain })
-                .trailing(words("⏎", Type::Control, attn_ui::warning_ink(t)).a11y_hidden())
+                .trailing(words("⏎", Type::Control, t.on_primary).a11y_hidden())
                 .on_press_tx(submit)
                 .build(t)
                 .key(PRIMARY)

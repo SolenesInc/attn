@@ -43,19 +43,33 @@ pub(crate) fn pressable(e: El, fill: Color, t: &Tokens) -> El {
 }
 
 fn steps(t: &Tokens) -> (f32, f32) {
-    if t.bg_app.luminance() < t.text_primary.luminance() {
-        STEPS.dark
-    } else {
-        STEPS.light
-    }
+    if dark(t) { STEPS.dark } else { STEPS.light }
+}
+
+fn dark(t: &Tokens) -> bool {
+    t.bg_app.luminance() < t.text_primary.luminance()
 }
 
 fn away_from(fill: Color, t: &Tokens) -> Color {
+    if !dark(t) {
+        return darker_from(fill, t);
+    }
     let distance = |ink: Color| (ink.luminance() - fill.luminance()).abs();
     if distance(t.text_primary) >= distance(t.bg_app) {
         t.text_primary
     } else {
         t.bg_app
+    }
+}
+
+fn darker_from(fill: Color, t: &Tokens) -> Color {
+    let reaches = |ink: Color| {
+        ink.luminance() < fill.luminance() && contrast(srgb(ink), srgb(fill)) >= STEPS.light.1
+    };
+    if reaches(t.text_primary) {
+        t.text_primary
+    } else {
+        t.shadow
     }
 }
 

@@ -48,7 +48,7 @@ impl Check {
     ) -> Control {
         let size = Size::Compact;
         let (fill, edge, ink) = match (self.checked, self.disabled) {
-            (true, false) => (t.warning, t.warning, crate::warning_ink(t)),
+            (true, false) => (t.primary, t.primary, t.on_primary),
             (true, true) => (t.text_tertiary, t.text_tertiary, t.bg_panel),
             (false, _) => (t.bg_input, t.border_hover, t.bg_input),
         };

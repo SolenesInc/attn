@@ -148,7 +148,7 @@ fn a_steppers_value_keeps_one_width_so_steppers_line_up() {
 
 /// The warm ring drawn round `e`: outside its edge, or over it for a control in a tight list.
 fn ring_of<'a>(rt: &'a Runtime<()>, e: &ElementInfo, t: &Tokens) -> Option<&'a Instance> {
-    let warm = [t.warning.r, t.warning.g, t.warning.b].map(rune::theme::srgb_encode);
+    let warm = [t.focus.r, t.focus.g, t.focus.b].map(rune::theme::srgb_encode);
     let [x, y, w, h] = device(e.rect);
     let reach = RING_REACH * SCALE;
     rt.instances.iter().find(|i| {
@@ -339,6 +339,39 @@ fn hover_and_pressed_show_on_every_control_in_dark_and_light() {
     println!("{}", measured.join("\n"));
 }
 
+#[test]
+fn in_light_hover_and_pressed_darken_every_control() {
+    let t = tokens(false);
+    let mut lightened = Vec::new();
+    for &(name, subject) in PRESSABLE {
+        let mut rt = story_at(false, name, None);
+        let find = |rt: &Runtime<()>| match subject.split_once('/') {
+            Some((within, key)) => inside(rt, within, key),
+            None => element(rt, subject),
+        };
+        let e = find(&rt);
+        let rest = luminance(surface(&rt, &e, t.bg_panel));
+        let (x, y) = (e.rect[0] + e.rect[2] / 2.0, e.rect[1] + e.rect[3] / 2.0);
+        rt.pointer_move(x, y);
+        rt.frame(1.0);
+        rt.frame(1.0);
+        let hover = luminance(surface(&rt, &find(&rt), t.bg_panel));
+        rt.pointer_down(x, y);
+        rt.frame(1.0);
+        rt.frame(1.0);
+        let pressed = luminance(surface(&rt, &find(&rt), t.bg_panel));
+        if !(hover < rest && pressed < hover) {
+            lightened.push(format!(
+                "{subject}: rest {rest:.3}, hover {hover:.3}, pressed {pressed:.3}"
+            ));
+        }
+    }
+    assert!(
+        lightened.is_empty(),
+        "in light, these do not darken from rest to hover to pressed: {lightened:#?}"
+    );
+}
+
 fn click(rt: &mut Runtime<()>, e: &ElementInfo) {
     let (x, y) = (e.rect[0] + e.rect[2] / 2.0, e.rect[1] + e.rect[3] / 2.0);
     rt.pointer_move(x, y);
@@ -497,7 +530,7 @@ fn a_failed_field_keeps_its_red_edge_inside_the_ring_while_focused() {
     let mut lost = Vec::new();
     for dark in [true, false] {
         let t = tokens(dark);
-        let red = attn_ui::kit(&t).c.danger.fg;
+        let red = t.error;
         for key in FIELD_BOXES {
             let mut rt = story(dark, "Library/Field box", "Failed");
             tab_into(&mut rt, key);
@@ -2145,7 +2178,7 @@ fn a_disabled_primary_keeps_its_hue_at_half_strength_and_its_label_reads_on_it()
         let t = tokens(dark);
         let rt = story(dark, "Library/Button", variant);
         let ground = [t.bg_panel.r, t.bg_panel.g, t.bg_panel.b].map(rune::theme::srgb_encode);
-        let primary = [t.warning.r, t.warning.g, t.warning.b].map(rune::theme::srgb_encode);
+        let primary = [t.primary.r, t.primary.g, t.primary.b].map(rune::theme::srgb_encode);
         let half = [0, 1, 2].map(|c| primary[c] * UNAVAILABLE + ground[c] * (1.0 - UNAVAILABLE));
         for size in ["regular", "compact"] {
             let key = format!("button.primary.{size}");

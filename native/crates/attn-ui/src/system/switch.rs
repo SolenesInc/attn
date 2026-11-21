@@ -26,7 +26,7 @@ pub fn switch<S: 'static>(
 ) -> Control {
     let (track_fill, edge, knob_ink) = match (disabled, on) {
         (true, true) => (t.text_tertiary, t.text_tertiary, t.bg_panel),
-        (false, true) => (t.warning, t.warning, crate::warning_ink(t)),
+        (false, true) => (t.primary, t.primary, t.on_primary),
         (_, false) => (t.bg_button, t.border_hover, t.text_tertiary),
     };
     let knob = door::corner(el().key("thumb").size(KNOB, KNOB), Radius::Round)

@@ -741,7 +741,7 @@ fn refused_edge_and_ring(world: &World, input: &str) -> (bool, bool) {
         .colors(rt.env.system_dark)
         .ui;
     let encode = |c: rune::Color| [c.r, c.g, c.b].map(rune::theme::srgb_encode);
-    let (red, warm) = (encode(attn_ui::kit(&t).c.danger.fg), encode(t.warning));
+    let (red, warm) = (encode(t.error), encode(t.focus));
     let inked = |i: &&rune::render::Instance, ink: [f32; 3]| {
         i.params[0] > 0.0
             && i.border[3] > 0.99

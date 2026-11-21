@@ -87,7 +87,9 @@ dark and once for light. The schemes are the files in `internal/colors/schemes`,
 which the daemon checks settings against and the Tauri app reads too; the native
 app includes them when it builds, and a scheme missing a color fails to load.
 Tokens are named by what they mean, such as `state_waiting` or `find`, never by
-the view that uses them. Clippy rejects Rune's color constructors, such as
+the view that uses them. `primary` fills the one main action and marks what is
+chosen in a switch, a check or a choice, `on_primary` is the words and marks on
+it, and `focus` is the keyboard's ring. Clippy rejects Rune's color constructors, such as
 `rune::color::hex`, everywhere else (`native/clippy.toml`). It cannot see
 `Color::BLACK` and `Color::WHITE`, so review catches those.
 
@@ -250,17 +252,20 @@ choices once for the whole app:
   filled, hollow or square at 6 or 8; `keycaps` and `keys_hint`, keys drawn as
   keys; `search_field`; and `number_chip` and `count_badge`. Each wraps rune-kit's control
   where one exists, and a view never writes a field of rune-kit's `Kit`:
-  `attn-ui` sets them once. Hover and pressed lighten a dark surface and
-  darken a light one, each by the step a list row takes (1.20:1 and 1.66:1
-  from rest in dark, 1.17:1 and 1.50:1 in light). Focus draws a 2-point warm
-  ring outside the edge, on a field as on a button, and no state moves a
-  control's edge. Open fills a control with the selected surface. A control
+  `attn-ui` sets them once. Hover and pressed step a surface by the step a
+  list row takes (1.20:1 and 1.66:1 from rest in dark, 1.17:1 and 1.50:1 in
+  light). In dark they move it away from the nearer of the text and background
+  colours; in light they always darken it, toward the text colour or, where
+  that is too close to reach the pressed step, black, so a dark Primary never
+  pales. Focus draws a 2-point ring in `focus` outside the edge, on a field as
+  on a button, and no state moves a control's edge. A failed field's edge is
+  the scheme's `error`. Open fills a control with the selected surface. A control
   that opens what it holds below itself, `expander`, `disclosure` and the head
   of an agent group in Settings, carries `opens_in_place`: a chevron that
   points right while closed and down while open. Disabled draws a control's
   rest look at half strength, every part alike, the strength rune-kit draws a
-  disabled field at. A warm part first turns neutral, so no disabled control
-  reads as the page's one warm action, except the Primary action itself: it
+  disabled field at. A part in `primary` first turns neutral, so no disabled control
+  reads as the page's one main action, except the Primary action itself: it
   keeps its hue with its fill at half strength and its words whole on it, so a
   person sees where the action will be before it is available. A disabled
   control draws no layer and no ring and takes no press, focus or Tab stop,
@@ -385,7 +390,7 @@ choices once for the whole app:
   keeping to its own width beside words and inside its column, a field's edge
   where every other control's is, a focus ring never cut or dimmed, hover and
   pressed at their measured contrast, every part of a disabled control at
-  half strength, a warm one neutral but a disabled Primary in its own hue with
+  half strength, one in `primary` neutral but a disabled Primary in its own hue with
   its words at 3:1 or more, and a banner's first action 8 after its
   sentence, its glyph and dismiss on its first line, its actions beside its
   sentence or under it, its sentence readable at the smallest window with

@@ -106,7 +106,7 @@ fn pressable(rt: &Runtime<()>, key: &str) -> bool {
 }
 
 fn ring_of<'a>(rt: &'a Runtime<()>, e: &ElementInfo, t: &Tokens) -> Option<&'a Instance> {
-    let warm = [t.warning.r, t.warning.g, t.warning.b].map(rune::theme::srgb_encode);
+    let warm = [t.focus.r, t.focus.g, t.focus.b].map(rune::theme::srgb_encode);
     let [x, y, w, h] = device(e.rect);
     let reach = RING_REACH * SCALE;
     rt.instances.iter().find(|i| {

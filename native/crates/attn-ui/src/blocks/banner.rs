@@ -657,6 +657,9 @@ impl Paint {
                 link: ink,
                 controls: Tokens {
                     warning: ink,
+                    primary: ink,
+                    on_primary: colors::mix_srgb(ink, t.shadow, 0.9),
+                    focus: ink,
                     text_secondary: ink,
                     text_tertiary: ink,
                     ..*t

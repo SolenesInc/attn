@@ -10,7 +10,7 @@ use crate::Tokens;
 /// How a button reads.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Look {
-    /// The one main action of a surface, filled in the warm accent.
+    /// The one main action of a surface, filled in `primary`.
     Primary,
     #[default]
     Plain,
@@ -214,10 +214,10 @@ impl Button {
                 (t.bg_selected, Color::TRANSPARENT, t.text_primary)
             }
             Look::Primary if self.disabled => {
-                let fill = t.warning.alpha(disabled::STRENGTH);
-                (fill, fill, crate::warning_ink(t))
+                let fill = t.primary.alpha(disabled::STRENGTH);
+                (fill, fill, t.on_primary)
             }
-            Look::Primary => (t.warning, t.warning, crate::warning_ink(t)),
+            Look::Primary => (t.primary, t.primary, t.on_primary),
             Look::Plain => (t.bg_button, t.border_hover, t.text_primary),
             Look::Quiet => (Color::TRANSPARENT, Color::TRANSPARENT, t.text_secondary),
             Look::Danger => (t.bg_button, t.error.alpha(0.45), t.error),

@@ -62,7 +62,7 @@ pub(super) fn focus_shows_whole(world: &World, viewport: &str, ring: Ring) -> Re
         return Ok(());
     };
     let t = attn_ui::colors::scheme_for(None).colors(dark).ui;
-    let warm = [t.warning.r, t.warning.g, t.warning.b].map(rune::theme::srgb_encode);
+    let warm = [t.focus.r, t.focus.g, t.focus.b].map(rune::theme::srgb_encode);
     let to_pixels = runtime.zoom() * runtime.window_scale();
     let [x, y, w, h] = line.map(|v| v * to_pixels);
     let ring = runtime
@@ -201,7 +201,7 @@ fn focused_whole(world: &World) -> Result<String, String> {
         ));
     }
     let t = attn_ui::colors::scheme_for(None).colors(true).ui;
-    let warm = [t.warning.r, t.warning.g, t.warning.b].map(rune::theme::srgb_encode);
+    let warm = [t.focus.r, t.focus.g, t.focus.b].map(rune::theme::srgb_encode);
     let to_pixels = runtime.zoom() * runtime.window_scale();
     let [x, y, w, h] = focused.rect.map(|v| v * to_pixels);
     let ring = runtime.instances.iter().find(|i| {

@@ -86,9 +86,9 @@ impl Choice {
         t: &Tokens,
         press: impl Fn(&mut S, &mut Tx) + 'static,
     ) -> Control {
-        let warm = self.chosen && !self.disabled;
-        let (edge, ink) = match (warm, self.chosen) {
-            (true, _) => (t.warning, t.text_primary),
+        let marked = self.chosen && !self.disabled;
+        let (edge, ink) = match (marked, self.chosen) {
+            (true, _) => (t.primary, t.text_primary),
             (false, true) => (t.border_hover, t.text_primary),
             (false, false) => (t.border, t.text_secondary),
         };
@@ -97,8 +97,8 @@ impl Choice {
         } else {
             t.bg_panel
         };
-        let mark_ink = match (warm, self.chosen) {
-            (true, _) => t.warning,
+        let mark_ink = match (marked, self.chosen) {
+            (true, _) => t.primary,
             (false, _) => t.text_tertiary,
         };
         let dot = if self.many {

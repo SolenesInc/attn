@@ -49,6 +49,12 @@ pub struct Tokens {
     pub brand: Color,
     pub error: Color,
     pub warning: Color,
+    /// The one main action's fill, and what is chosen in a switch, a check or a choice.
+    pub primary: Color,
+    /// Words and marks on a `primary` fill.
+    pub on_primary: Color,
+    /// The ring a control draws while the keyboard is on it.
+    pub focus: Color,
     pub success: Color,
     pub merged: Color,
     /// Text and icons on an `accent` fill.
@@ -163,6 +169,7 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.border_focus = t.border_focus;
     p.hover = t.bg_elevated;
     p.pressed = t.bg_selected;
+    p.danger.fg = t.error;
     p.scrim = t.bg_overlay;
     kit.keycap = Some(keycap::kit_cap);
     kit.glyph.select = Some(&rune_kit::glyphs::CHEVRON_UP_DOWN);

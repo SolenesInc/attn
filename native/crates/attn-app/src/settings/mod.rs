@@ -440,11 +440,11 @@ pub(crate) fn automation_state(state: &State) -> serde_json::Value {
     })
 }
 
-/// The kit the settings pages build their rune-kit controls with: the Tauri app's settings
-/// paint primary actions in `warning`, where the rest of the app paints them in `brand`.
+/// The kit the settings pages build their rune-kit controls with: primary actions in `primary`,
+/// where the rest of the app paints them in `brand`.
 pub(in crate::settings) fn kit(t: &attn_ui::Tokens) -> &'static rune_kit::Kit {
     attn_ui::kit(&attn_ui::Tokens {
-        brand: t.warning,
+        brand: t.primary,
         ..*t
     })
 }

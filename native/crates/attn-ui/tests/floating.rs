@@ -493,7 +493,7 @@ fn fielded(state: &Fielded, _: &mut Cx<Fielded>) -> El {
 fn a_focused_field_at_either_end_of_a_dialogs_body_has_its_whole_ring() {
     use attn_ui::blocks::DialogSize;
     let t = attn_ui::colors::scheme_for(None).colors(true).ui;
-    let warm = [t.warning.r, t.warning.g, t.warning.b].map(rune::theme::srgb_encode);
+    let warm = [t.focus.r, t.focus.g, t.focus.b].map(rune::theme::srgb_encode);
     for size in [
         DialogSize::Prompt,
         DialogSize::Form,

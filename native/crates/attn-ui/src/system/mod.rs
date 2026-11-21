@@ -88,12 +88,12 @@ pub use type_role::{Type, width_of, words};
 
 use crate::Tokens;
 
-/// The kit attn's controls build on: the warm accent as its brand and its focus, placeholders
+/// The kit attn's controls build on: `primary` as its brand and `focus` as its focus, placeholders
 /// dimmed.
 pub(crate) fn kit(t: &Tokens) -> &'static rune_kit::Kit {
     crate::kit(&Tokens {
-        brand: t.warning,
-        border_focus: t.warning,
+        brand: t.primary,
+        border_focus: t.focus,
         text_tertiary: t.text_dimmed,
         ..*t
     })

@@ -23,20 +23,20 @@ pub fn ring_scroll_beside_bar(e: El) -> El {
 
 /// The ring a focusable control draws while the keyboard is on it, outside its edge.
 pub(crate) fn ring(e: El, t: &Tokens) -> El {
-    e.focus_ring(WIDTH, OFFSET, t.warning)
+    e.focus_ring(WIDTH, OFFSET, t.focus)
 }
 
 /// The ring a field draws while focus is anywhere inside it, from the pointer or the keyboard:
 /// the same drawing as [`ring`], since the field's own editor is what takes focus.
 pub(crate) fn ring_within(e: El, t: &Tokens) -> El {
-    e.focus_within_ring(WIDTH, OFFSET, t.warning)
+    e.focus_within_ring(WIDTH, OFFSET, t.focus)
         .focus_within_flat()
 }
 
 /// The ring of a bordered control in a tight list, drawn over its own edge, so it never
 /// reaches a neighbour.
 pub(crate) fn ring_on_edge(e: El, t: &Tokens) -> El {
-    e.focus_ring(WIDTH, -1.0, t.warning)
+    e.focus_ring(WIDTH, -1.0, t.focus)
 }
 
 /// The ring of a control joined to a neighbour that shares its edge, drawn just inside its own
@@ -44,7 +44,7 @@ pub(crate) fn ring_on_edge(e: El, t: &Tokens) -> El {
 /// control as every other control's does, until a focused half can paint above its neighbour
 /// (seed s-d03z9v).
 pub(crate) fn ring_inside(e: El, t: &Tokens) -> El {
-    e.focus_ring(WIDTH, -(WIDTH + EDGE), t.warning)
+    e.focus_ring(WIDTH, -(WIDTH + EDGE), t.focus)
 }
 
 /// A control's edge, which a joined neighbour draws over.
