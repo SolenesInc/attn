@@ -282,20 +282,26 @@ fn expand_burst(state: &mut State, key: String, first: i64, tx: &mut Tx) {
     reveal(state, tx);
 }
 
-/// Picks a row: a second pick of the selected burst opens it.
+/// Picks a row. A key that reaches a row only chooses it: the list's selection follows its
+/// focus, so the arrows, Home, End and the page keys press the row they reach. A click on the
+/// chosen burst opens it, as Return does.
 fn pick(state: &mut State, key: String, tx: &mut Tx) {
-    let burst = {
-        let items = listed(state);
-        let index = current(&items, state.window.settings.analytics.selected.as_deref());
-        match items.get(index) {
-            Some(Item::Burst(records)) if items[index].key() == key => Some(records[0].id),
-            _ => None,
-        }
-    };
+    let burst = (!tx.by_keys())
+        .then(|| {
+            let items = listed(state);
+            let index = current(&items, state.window.settings.analytics.selected.as_deref());
+            match items.get(index) {
+                Some(Item::Burst(records)) if items[index].key() == key => Some(records[0].id),
+                _ => None,
+            }
+        })
+        .flatten();
     match burst {
         Some(first) => {
             expand_burst(state, key, first, tx);
-            tx.focus(view::PAGE, false);
+            let items = listed(state);
+            let index = current(&items, state.window.settings.analytics.selected.as_deref());
+            tx.focus(format!("item{index}"), false);
         }
         None => select(state, key, tx),
     }
@@ -620,14 +626,11 @@ fn enter(state: &mut State, tx: &mut Tx) -> bool {
 }
 
 /// The page's keys, while the focus is on the page or a control in it.
-fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx, page_rows: usize) -> bool {
+fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
         return false;
     }
-    let on_option = tx.focused().is_some_and(|key| key.starts_with("item"));
     match &ev.key {
-        Key::PageDown if on_option => step(state, page_rows as isize, tx),
-        Key::PageUp if on_option => step(state, -(page_rows as isize), tx),
         Key::Down => step(state, 1, tx),
         Key::Up => step(state, -1, tx),
         Key::Enter => return enter(state, tx),

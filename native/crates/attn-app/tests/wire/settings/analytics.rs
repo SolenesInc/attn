@@ -1552,3 +1552,77 @@ fn m_and_the_view_keys_keep_the_keyboard_on_the_page() {
     tab_once(&mut world);
     assert_eq!(focused(&world).as_deref(), Some("item0"));
 }
+
+/// The bus record list, its burst the last option, with the keyboard on its first option.
+fn on_bus_records() -> World {
+    let mut world = on_records();
+    press(&mut world, "]");
+    press(&mut world, "]");
+    super::tab_to(&mut world, "settings.analytics.views.bus");
+    tab_once(&mut world);
+    assert_eq!(focused(&world).as_deref(), Some("item0"));
+    assert!(
+        rows(&world)[1].contains("pr.updated ×3"),
+        "{:?}",
+        rows(&world)
+    );
+    world
+}
+
+/// The keys move the choice and only move it: the burst stays folded, the keyboard stays on
+/// the option, and the daemon is asked nothing.
+fn moves_without_opening(world: &mut World, keys: &[Key]) {
+    let asked = world.daemon.sent_of("list_analytics_records").len();
+    for key in keys {
+        key_press(world, key.clone());
+    }
+    assert_eq!(
+        rows(world).len(),
+        2,
+        "the burst stays folded: {:?}",
+        rows(world)
+    );
+    assert_eq!(
+        named(world, "settings.analytics.record.heading"),
+        "3 records in the same second"
+    );
+    assert_eq!(
+        focused(world).as_deref(),
+        Some("item1"),
+        "the keyboard stays on the option"
+    );
+    assert_eq!(world.daemon.sent_of("list_analytics_records").len(), asked);
+}
+
+#[test]
+fn end_on_the_chosen_last_burst_moves_nothing_and_opens_nothing() {
+    let mut world = on_bus_records();
+    moves_without_opening(&mut world, &[Key::End, Key::End]);
+    key_press(&mut world, Key::Home);
+    key_press(&mut world, Key::End);
+    assert_eq!(rows(&world).len(), 2, "Home then End opens nothing");
+    press(&mut world, "Enter");
+    assert_eq!(rows(&world).len(), 4, "Return still opens the burst");
+}
+
+#[test]
+fn page_down_and_up_choose_by_the_list_and_never_open_a_burst() {
+    let mut world = on_bus_records();
+    moves_without_opening(&mut world, &[Key::PageDown, Key::PageDown]);
+    key_press(&mut world, Key::PageUp);
+    assert_eq!(focused(&world).as_deref(), Some("item0"));
+    assert_eq!(rows(&world).len(), 2);
+}
+
+#[test]
+fn a_click_on_the_chosen_burst_opens_it_and_the_keyboard_stays_on_the_list() {
+    let mut world = on_bus_records();
+    key_press(&mut world, Key::End);
+    click(&mut world, "item1");
+    assert_eq!(rows(&world).len(), 4, "the click opens the chosen burst");
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("item1"),
+        "the keyboard stays on the opened burst's first record"
+    );
+}

@@ -11,7 +11,7 @@ use attn_ui::system::{
     self, DotShape, DotSize, ListRow, Look, Tone, Type, chip_button, count_badge, dot, keys_hint,
     tag, words,
 };
-use rune::{El, KeyEvent, Tx, el};
+use rune::{El, Tx, el};
 use rune_kit::{Toast, ToastRegion};
 
 use super::items::{self, Item, SEND_SENT, VENT_TOOLS, VENTS, VIEWS};
@@ -56,11 +56,8 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<Block> {
         )
         .build(t)
     });
-    let page_rows = options_in_view(index);
     let group = Group::new(PAGE, "Analytics records and vents")
-        .keys(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-            super::key(state, ev, tx, page_rows)
-        })
+        .keys(super::key)
         .push(stats(
             state,
             page,
@@ -84,17 +81,6 @@ pub(in crate::settings) fn page(state: &State, t: &Tokens) -> Vec<Block> {
         ))
         .push(hints(page.view, sharing, t));
     vec![group.build(t)]
-}
-
-/// How many options of the list stand in the page's view, by the last frame's layout: the
-/// page Page Up and Page Down move the choice by. One until the list has been laid out.
-fn options_in_view(index: usize) -> usize {
-    let view = rune::memo::layout_size(crate::settings::BODY).map(|[_, h]| h);
-    let option = rune::memo::layout_size(&format!("item{index}")).map(|[_, h]| h);
-    match (view, option) {
-        (Some(view), Some(option)) if option > 0.0 => ((view / option).floor() as usize).max(1),
-        _ => 1,
-    }
 }
 
 /// The last action's outcome over the dialog, with Undo when it can be taken back.
