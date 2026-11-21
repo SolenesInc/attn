@@ -321,23 +321,18 @@ func TestRemoteOutputResumesAfterAWorkerUpgradeWithoutDroppingTheBridge(t *testi
 	stopRetries := home.FireTimers(bridge.RetryTimer)
 	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
 	stopRetries()
-	attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
-	if !attached.Success {
-		t.Fatalf("attach before worker handoff: %s", protocol.Deref(attached.Error))
-	}
 	mark = len(app.Log())
+	app.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal})
 	upgrade.Release()
-	t.Log("worker handoff released with the remote stream attached and bridge connected")
-	desync := testworld.Await(app, protocol.EventPtyDesync, func(r protocol.WebSocketEvent) bool { return protocol.Deref(r.ID) == string(terminal) })
-	if protocol.Deref(desync.Reason) != "runtime_stream_ended" {
-		t.Fatalf("worker handoff desync: %s", protocol.Deref(desync.Reason))
-	}
-	attached = testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
+	attached := testworld.AwaitSince(app, mark, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
 	if !attached.Success {
-		t.Fatalf("attach after worker handoff: %s", protocol.Deref(attached.Error))
+		t.Fatalf("attach sent during the worker handoff: %s", protocol.Deref(attached.Error))
 	}
 	app.TypeLine(id, "echo after-upgrade-$((2+2))")
 	app.AwaitScreen(id, "after-upgrade-4")
+	if swapped := initialSession(t, remote.App(), id); swapped.TerminalBuildStale != nil {
+		t.Fatalf("after the handoff the outpost reports the terminal on a stale build: %+v", swapped)
+	}
 	for _, frame := range app.Log()[mark:] {
 		var update protocol.OutpostsUpdatedMessage
 		if json.Unmarshal(frame, &update) == nil && update.Event == protocol.EventOutpostsUpdated {
