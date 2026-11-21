@@ -15,7 +15,7 @@ const goodTypes = `types:
 const goodServer = `server:
   name: attn
   description: attn's tools.
-  instructions: Reach for attn to track work.
+  intro: Reach for attn to track work.
 `
 
 const goodNotOffered = `commands:
@@ -23,7 +23,12 @@ const goodNotOffered = `commands:
 `
 
 const goodFamily = `groups:
-  - {name: seed, usage: "<command>", summary: track work}
+  - name: seed
+    usage: "<command>"
+    summary: track work
+    map:
+      rows:
+        - {need: Read a seed, tools: [seed_show]}
 commands:
   - name: seed show
     summary: one seed
@@ -60,6 +65,16 @@ func TestLoadAcceptsAFamilyAndACommandNotOffered(t *testing.T) {
 	}
 }
 
+func TestABareCommandCarriesItsFamilysMap(t *testing.T) {
+	c, err := Load(catalogFS(map[string]string{"list.yaml": "commands:\n  - {name: list, summary: list sessions, runs: home, grant: full, doc: Lists sessions., map: {rows: [{need: See every session, tools: [list]}]}}\n"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Instructions(); !strings.Contains(got, "| See every session | list |\n| Read a seed | seed_show |") {
+		t.Fatalf("instructions do not hold both families' rows in name order:\n%s", got)
+	}
+}
+
 func TestLoadRefusesWhatWouldBreakAHarnessOrAnUnmarkedCommand(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -85,8 +100,33 @@ func TestLoadRefusesWhatWouldBreakAHarnessOrAnUnmarkedCommand(t *testing.T) {
 		},
 		{
 			name:  "an intent map over Claude Code's cut",
-			files: map[string]string{ServerFile: "server:\n  name: attn\n  description: attn's tools.\n  instructions: " + strings.Repeat("x", 4097) + "\n"},
-			want:  []string{"server.yaml", "4097 characters", "limit of 4096"},
+			files: map[string]string{ServerFile: "server:\n  name: attn\n  description: attn's tools.\n  intro: " + strings.Repeat("x", 4097) + "\n"},
+			want:  []string{"server.yaml", "characters, over the limit of 4096", "server.yaml 4097, seed.yaml 20"},
+		},
+		{
+			name:  "a family that offers tools without a map",
+			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "    map:\n      rows:\n        - {need: Read a seed, tools: [seed_show]}\n", "", 1)},
+			want:  []string{"seed.yaml: family \"seed\"", "offers tools but has no map"},
+		},
+		{
+			name:  "a map row that names a tool the family does not offer",
+			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "tools: [seed_show]", "tools: [seed_show, ask]", 1)},
+			want:  []string{"seed.yaml: family \"seed\"", `names "ask", which is not a tool of this family`},
+		},
+		{
+			name:  "a map on a command that is not its whole family",
+			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "    doc: Reads one seed.\n", "    doc: Reads one seed.\n    map: {rows: [{need: Read a seed, tools: [seed_show]}]}\n", 1)},
+			want:  []string{"seed.yaml: seed show", "map belongs to the family"},
+		},
+		{
+			name:  "a bare command that offers a tool without a map",
+			files: map[string]string{"list.yaml": "commands:\n  - {name: list, summary: list sessions, runs: home, grant: full, doc: Lists sessions.}\n"},
+			want:  []string{"list.yaml: family \"list\"", "offers tools but has no map"},
+		},
+		{
+			name:  "a core tool the map does not name",
+			files: map[string]string{"seed.yaml": goodFamily + "  - {name: seed notes, summary: the log, core: true, runs: home, grant: own, doc: Reads the log.}\n"},
+			want:  []string{"seed.yaml: family \"seed\"", `core tool "seed_notes" is in no map row`},
 		},
 		{
 			name:  "a command without runs",
@@ -125,12 +165,12 @@ func TestLoadRefusesWhatWouldBreakAHarnessOrAnUnmarkedCommand(t *testing.T) {
 		},
 		{
 			name:  "a command whose family has no group",
-			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "  - {name: seed, usage: \"<command>\", summary: track work}\n", "", 1)},
+			files: map[string]string{"seed.yaml": "commands:" + strings.SplitN(goodFamily, "commands:", 2)[1]},
 			want:  []string{"seed.yaml: seed show", `no group is named "seed"`},
 		},
 		{
 			name:  "a group summary of more than one line",
-			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "summary: track work}", "summary: \"track\\nwork\"}", 1)},
+			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "summary: track work\n", "summary: \"track\\nwork\"\n", 1)},
 			want:  []string{"seed.yaml", `group "seed": summary is more than one line`},
 		},
 		{

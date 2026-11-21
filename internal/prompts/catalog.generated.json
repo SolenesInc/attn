@@ -57,12 +57,174 @@
                 "children": [
                   {
                     "kind": "join",
-                    "separator": "\n",
                     "children": [
                       {
                         "kind": "text",
                         "id": "session.attn-map",
-                        "source": "content/session/attn-map.md"
+                        "source": "content/session/attn-map.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.skill",
+                        "source": "content/session/attn-map/skill.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.guide",
+                        "source": "content/session/attn-map/guide.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.table",
+                        "source": "content/session/attn-map/table.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.seed-track",
+                            "source": "content/session/attn-map/seed-track.md",
+                            "keep_final_newline": true
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.delegate",
+                        "source": "content/session/attn-map/delegate.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.seed-report",
+                            "source": "content/session/attn-map/seed-report.md",
+                            "keep_final_newline": true
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.pr",
+                        "source": "content/session/attn-map/pr.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.agent",
+                        "source": "content/session/attn-map/agent.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.session",
+                        "source": "content/session/attn-map/session.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.seed-standby",
+                            "source": "content/session/attn-map/seed-standby.md",
+                            "keep_final_newline": true
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.terminal",
+                        "source": "content/session/attn-map/terminal.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.open",
+                        "source": "content/session/attn-map/open.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.showing",
+                        "source": "content/session/attn-map/showing.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.browser",
+                        "source": "content/session/attn-map/browser.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.callout",
+                        "source": "content/session/attn-map/callout.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.journal",
+                        "source": "content/session/attn-map/journal.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.crew",
+                        "source": "content/session/attn-map/crew.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.automation",
+                        "source": "content/session/attn-map/automation.md",
+                        "keep_final_newline": true
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map.settings",
+                        "source": "content/session/attn-map/settings.md",
+                        "keep_final_newline": true
                       },
                       {
                         "kind": "when",
@@ -76,9 +238,21 @@
                         },
                         "children": [
                           {
-                            "kind": "text",
-                            "id": "session.attn-map-review",
-                            "source": "content/session/attn-map-review.md"
+                            "kind": "join",
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "session.attn-map.review",
+                                "source": "content/session/attn-map/review.md",
+                                "keep_final_newline": true
+                              },
+                              {
+                                "kind": "text",
+                                "id": "session.attn-map.nav",
+                                "source": "content/session/attn-map/nav.md",
+                                "keep_final_newline": true
+                              }
+                            ]
                           }
                         ]
                       }
@@ -87,17 +261,27 @@
                 ]
               },
               {
-                "kind": "text",
-                "id": "session.agent",
-                "source": "content/agent.md",
-                "bindings": [
+                "kind": "compose",
+                "children": [
                   {
-                    "name": "delegation_boundary",
-                    "node": {
-                      "kind": "text",
-                      "id": "delegation.boundary",
-                      "source": "content/delegation-boundary.md"
-                    }
+                    "kind": "text",
+                    "id": "session.agent",
+                    "source": "content/agent.md"
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.agent-reach",
+                    "source": "content/agent-reach.md"
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.agent-trust",
+                    "source": "content/agent-trust.md"
+                  },
+                  {
+                    "kind": "text",
+                    "id": "delegation.boundary",
+                    "source": "content/delegation-boundary.md"
                   }
                 ]
               },
@@ -113,9 +297,25 @@
                 },
                 "children": [
                   {
-                    "kind": "text",
-                    "id": "session.garden",
-                    "source": "content/garden.md"
+                    "kind": "choose",
+                    "condition": {
+                      "field": {
+                        "name": "agent_tools",
+                        "kind": "flag",
+                        "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                      },
+                      "test": "enabled"
+                    },
+                    "children": [
+                      {
+                        "kind": "compose"
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.garden",
+                        "source": "content/garden.md"
+                      }
+                    ]
                   }
                 ]
               },
@@ -219,9 +419,134 @@
           "delivery": "cli_output",
           "description": "attn skill and attn --help: what attn offers and where to learn more.",
           "body": {
-            "kind": "text",
-            "id": "session.attn-map",
-            "source": "content/session/attn-map.md"
+            "kind": "trim",
+            "children": [
+              {
+                "kind": "join",
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map",
+                    "source": "content/session/attn-map.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.skill",
+                    "source": "content/session/attn-map/skill.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.guide",
+                    "source": "content/session/attn-map/guide.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.table",
+                    "source": "content/session/attn-map/table.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.seed-track",
+                    "source": "content/session/attn-map/seed-track.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.delegate",
+                    "source": "content/session/attn-map/delegate.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.seed-report",
+                    "source": "content/session/attn-map/seed-report.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.pr",
+                    "source": "content/session/attn-map/pr.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.agent",
+                    "source": "content/session/attn-map/agent.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.session",
+                    "source": "content/session/attn-map/session.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.seed-standby",
+                    "source": "content/session/attn-map/seed-standby.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.terminal",
+                    "source": "content/session/attn-map/terminal.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.open",
+                    "source": "content/session/attn-map/open.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.showing",
+                    "source": "content/session/attn-map/showing.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.browser",
+                    "source": "content/session/attn-map/browser.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.callout",
+                    "source": "content/session/attn-map/callout.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.journal",
+                    "source": "content/session/attn-map/journal.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.crew",
+                    "source": "content/session/attn-map/crew.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.automation",
+                    "source": "content/session/attn-map/automation.md",
+                    "keep_final_newline": true
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.attn-map.settings",
+                    "source": "content/session/attn-map/settings.md",
+                    "keep_final_newline": true
+                  }
+                ]
+              }
+            ]
           }
         },
         {
@@ -6812,5 +7137,5 @@
       ]
     }
   ],
-  "definitions_hash": "eb525b4e8f79a42e2dfd0f604e780a1e606c8cf791fcd84ffafc5792fbfabd97"
+  "definitions_hash": "e8d48d7a2ed137ea3d64880fdc4e87c529a219d65b7af00b37a97c6793231aeb"
 }

@@ -283,6 +283,7 @@ func (o SpawnOpts) launchSpec() hooks.Launch {
 		CodeReview:             o.CodeReview,
 		Crew:                   o.CrewPriming,
 		SelfReportPullRequests: o.SelfReportPullRequests,
+		AgentTools:             o.AgentTools != nil,
 	}
 }
 

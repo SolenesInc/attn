@@ -20,19 +20,91 @@ var (
 	crewPriming            = ProducedBy(Trimmed(TextField("crew_priming", "Rendered crew identity and predecessor letter, supplied by internal/crew.")), "crew/priming")
 )
 
+var agentToolsCarried = FlagField("agent_tools", "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer.")
+
+func cliTeaching(node Node, families ...string) Node {
+	for _, family := range families {
+		offered, known := catalogFamilies[family]
+		if !known {
+			panic("prompts: the catalog has no family " + strconv.Quote(family))
+		}
+		if !offered {
+			return node
+		}
+	}
+	return Choose(Enabled(agentToolsCarried), Compose(), node)
+}
+
+func attnMapPart(name string) Node {
+	return Exact(Use("session.attn-map."+name, "content/session/attn-map/"+name+".md"))
+}
+
+type attnMapRow struct {
+	name     string
+	families []string
+}
+
+var attnMapRows = []attnMapRow{
+	{"seed-track", []string{"seed"}},
+	{"delegate", []string{"delegate"}},
+	{"seed-report", []string{"seed"}},
+	{"pr", []string{"pr"}},
+	{"agent", []string{"agent"}},
+	{"session", []string{"session"}},
+	{"seed-standby", []string{"seed"}},
+	{"terminal", []string{"terminal"}},
+	{"open", []string{"open"}},
+	{"showing", []string{"skill"}},
+	{"browser", []string{"browser"}},
+	{"callout", []string{"callout"}},
+	{"journal", []string{"journal"}},
+	{"crew", []string{"crew"}},
+	{"automation", []string{"automation"}},
+	{"settings", []string{"settings"}},
+}
+
+func attnMapTable(rows []attnMapRow, launch bool) []Node {
+	nodes := make([]Node, 0, len(rows))
+	for _, row := range rows {
+		if launch {
+			nodes = append(nodes, cliTeaching(attnMapPart(row.name), row.families...))
+		} else {
+			nodes = append(nodes, attnMapPart(row.name))
+		}
+	}
+	return nodes
+}
+
+func attnMapNode(launch bool) Node {
+	head := Exact(Use("session.attn-map", "content/session/attn-map.md"))
+	bullets := []Node{attnMapPart("skill"), attnMapPart("guide")}
+	if launch {
+		bullets = []Node{cliTeaching(bullets[0], "skill"), cliTeaching(bullets[1], "guide")}
+	}
+	parts := append([]Node{head}, bullets...)
+	parts = append(parts, attnMapPart("table"))
+	parts = append(parts, attnMapTable(attnMapRows, launch)...)
+	if launch {
+		parts = append(parts, When(Enabled(codeReviewEnabled), Join("", attnMapTable([]attnMapRow{{"review", []string{"review"}}, {"nav", []string{"nav"}}}, true)...)))
+	}
+	return Trim(Join("", parts...))
+}
+
 var (
 	delegationBoundary = Use("delegation.boundary", "content/delegation-boundary.md")
-	agentGuidance      = Use("session.agent", "content/agent.md",
-		Bind("delegation_boundary", delegationBoundary))
+	agentGuidance      = Compose(
+		Use("session.agent", "content/agent.md"),
+		cliTeaching(Use("session.agent-reach", "content/agent-reach.md"), "agent", "session"),
+		Use("session.agent-trust", "content/agent-trust.md"),
+		delegationBoundary)
 	quickCaptureGuidance = Use("session.quick-capture-guidance", "content/session/quick-capture.md")
 	crewCleared          = Use("crew.cleared", "content/crew/cleared.md")
 	gardenGuidance       = Use("session.garden", "content/garden.md")
 	queueGuidance        = Use("session.queue", "content/session/queue.md")
-	attnMap              = Use("session.attn-map", "content/session/attn-map.md")
-	launchAttnMap        = Trim(Join("\n", attnMap,
-		When(Enabled(codeReviewEnabled), Use("session.attn-map-review", "content/session/attn-map-review.md"))))
-	pullRequestGuidance = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
-	ventGuidance        = Compose(
+	attnMap              = attnMapNode(false)
+	launchAttnMap        = attnMapNode(true)
+	pullRequestGuidance  = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
+	ventGuidance         = Compose(
 		Use("session.vent-guidance", "content/session/vent-guidance.md"),
 		Choose(Enabled(toolVentsEnabled),
 			Use("session.vent-tools", "content/session/vent-tools.md"),
@@ -50,11 +122,11 @@ var session = Recipient{
 				When(Present(crewPriming), Compose(crewCleared, Input(crewPriming), quickCaptureGuidance)),
 				launchAttnMap,
 				agentGuidance,
-				When(Enabled(gardenAvailable), gardenGuidance),
-				queueGuidance,
-				When(Enabled(asksEnabled), askGuidance),
-				When(Enabled(ventEnabled), ventGuidance),
-				When(Enabled(selfReportPullRequests), pullRequestGuidance),
+				When(Enabled(gardenAvailable), cliTeaching(gardenGuidance, "seed")),
+				cliTeaching(queueGuidance, "turn", "agent"),
+				When(Enabled(asksEnabled), cliTeaching(askGuidance, "ask")),
+				When(Enabled(ventEnabled), cliTeaching(ventGuidance, "vent")),
+				When(Enabled(selfReportPullRequests), cliTeaching(pullRequestGuidance, "pr")),
 			)),
 		On("attn-map", "cli_output", "attn skill and attn --help: what attn offers and where to learn more.", attnMap),
 		On("seed-artifacts", "cli_output", "attn seed show, under a seed's artifacts.", Use("session.seed-artifacts", "content/session/seed-artifacts.md")),
@@ -88,6 +160,7 @@ type Launch struct {
 	ToolVents              bool
 	CodeReview             bool
 	Crew                   string
+	AgentTools             bool
 }
 
 func (l Launch) Values() Values {
@@ -99,6 +172,7 @@ func (l Launch) Values() Values {
 		toolVentsEnabled.Name:       strconv.FormatBool(l.ToolVents),
 		codeReviewEnabled.Name:      strconv.FormatBool(l.CodeReview),
 		crewPriming.Name:            l.Crew,
+		agentToolsCarried.Name:      strconv.FormatBool(l.AgentTools),
 	}
 }
 

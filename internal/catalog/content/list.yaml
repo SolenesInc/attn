@@ -7,4 +7,7 @@ commands:
     anyone: true
     doc: |
       Lists every session on this daemon and every profile, as JSON.
+    map:
+      rows:
+        - {need: "List every session and profile", tools: [list]}
     result: ListResult

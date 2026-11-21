@@ -50,6 +50,9 @@ func writeCatalog(cliRoot, referencesDir, goRoot string) error {
 	if err := writeTools(c, goRoot); err != nil {
 		return err
 	}
+	if err := writeToolFamilies(c, goRoot); err != nil {
+		return err
+	}
 	for _, name := range c.LayerFamilies() {
 		group := g.family(name)
 		rust, err := g.rustHelp(group)

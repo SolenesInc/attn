@@ -47,9 +47,9 @@ type Catalog struct {
 }
 
 type Server struct {
-	Name         string `yaml:"name"`
-	Description  string `yaml:"description"`
-	Instructions string `yaml:"instructions"`
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
+	Intro       string `yaml:"intro"`
 }
 
 type Type struct {
@@ -67,7 +67,18 @@ type Group struct {
 	Flags     []Flag     `yaml:"flags"`
 	Sections  []Section  `yaml:"sections"`
 	Reference *Reference `yaml:"reference"`
+	Map       *FamilyMap `yaml:"map"`
 	File      string     `yaml:"-"`
+}
+
+type FamilyMap struct {
+	Rows  []MapRow `yaml:"rows"`
+	Notes string   `yaml:"notes"`
+}
+
+type MapRow struct {
+	Need  string   `yaml:"need"`
+	Tools []string `yaml:"tools"`
 }
 
 type Flag struct {
@@ -107,6 +118,7 @@ type Command struct {
 	Reason            string           `yaml:"reason"`
 	Usage             string           `yaml:"usage"`
 	Hidden            bool             `yaml:"hidden"`
+	Map               *FamilyMap       `yaml:"map"`
 	File              string           `yaml:"-"`
 }
 
@@ -314,11 +326,11 @@ func (c *Catalog) check() []string {
 	var problems []string
 	add := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
 
-	if n := utf8.RuneCountInString(c.Server.Instructions); n > MaxInstructionsChars {
-		add("%s: server instructions are %d characters, over the limit of %d that Claude Code keeps; cut the intent map", ServerFile, n, MaxInstructionsChars)
+	if n := utf8.RuneCountInString(c.Instructions()); n > MaxInstructionsChars {
+		add("%s: server instructions are %d characters, over the limit of %d that Claude Code keeps; cut the intent map (%s)", ServerFile, n, MaxInstructionsChars, c.mapShares())
 	}
-	if strings.TrimSpace(c.Server.Instructions) == "" {
-		add("%s: server instructions are empty", ServerFile)
+	if strings.TrimSpace(c.Server.Intro) == "" {
+		add("%s: server intro is empty", ServerFile)
 	}
 	if strings.TrimSpace(c.Server.Description) == "" || strings.Contains(strings.TrimSpace(c.Server.Description), "\n") {
 		add("%s: server description must be one line", ServerFile)
@@ -372,6 +384,9 @@ func (c *Catalog) check() []string {
 		}
 		if cmd.Usage != "" && cmd.ThroughLayer() {
 			add("%s: usage is generated from the args of a command the command layer runs; remove it", where)
+		}
+		if _, grouped := c.Group(cmd.Name); cmd.Map != nil && (!top || grouped) {
+			add("%s: map belongs to the family: put it on the group, or on the command only when the command is the whole family", where)
 		}
 		if cmd.Hidden && cmd.IsOffered() {
 			add("%s: hidden is for a command that is not offered", where)
@@ -495,6 +510,113 @@ func (c *Catalog) check() []string {
 		for _, cmd := range c.GroupCommands(g.Name) {
 			if !listed[cmd.Name] {
 				add("%s: group %q: %q is in no section", g.File, g.Name, cmd.Name)
+			}
+		}
+	}
+	return append(problems, c.mapProblems()...)
+}
+
+func (c *Catalog) Tools(family string) []*Command {
+	var tools []*Command
+	for _, cmd := range c.FamilyCommands(family) {
+		if cmd.IsTool() {
+			tools = append(tools, cmd)
+		}
+	}
+	return tools
+}
+
+func (c *Catalog) Offers(family string) bool { return len(c.Tools(family)) > 0 }
+
+func (t TopLevel) Map() *FamilyMap {
+	if t.Group != nil {
+		return t.Group.Map
+	}
+	return t.Command.Map
+}
+
+func (t TopLevel) File() string {
+	if t.Group != nil {
+		return t.Group.File
+	}
+	return t.Command.File
+}
+
+func (c *Catalog) Instructions() string {
+	var rows, notes []string
+	for _, top := range c.TopLevel() {
+		m := top.Map()
+		if m == nil {
+			continue
+		}
+		for _, row := range m.Rows {
+			rows = append(rows, fmt.Sprintf("| %s | %s |", strings.TrimSpace(row.Need), strings.Join(row.Tools, ", ")))
+		}
+		if text := strings.TrimSpace(m.Notes); text != "" {
+			notes = append(notes, text)
+		}
+	}
+	parts := []string{strings.TrimSpace(c.Server.Intro)}
+	if len(rows) > 0 {
+		parts = append(parts, "| When you need to | Tools |\n|---|---|\n"+strings.Join(rows, "\n"))
+	}
+	return strings.Join(append(parts, notes...), "\n\n")
+}
+
+func (c *Catalog) mapShares() string {
+	shares := []string{fmt.Sprintf("%s %d", ServerFile, utf8.RuneCountInString(c.Server.Intro))}
+	for _, top := range c.TopLevel() {
+		m := top.Map()
+		if m == nil {
+			continue
+		}
+		n := utf8.RuneCountInString(m.Notes)
+		for _, row := range m.Rows {
+			n += utf8.RuneCountInString(row.Need + strings.Join(row.Tools, ", "))
+		}
+		shares = append(shares, fmt.Sprintf("%s %d", top.File(), n))
+	}
+	return strings.Join(shares, ", ")
+}
+
+func (c *Catalog) mapProblems() []string {
+	var problems []string
+	for _, top := range c.TopLevel() {
+		add := func(format string, args ...any) {
+			problems = append(problems, fmt.Sprintf("%s: family %q: ", top.File(), top.Name)+fmt.Sprintf(format, args...))
+		}
+		tools := map[string]bool{}
+		for _, cmd := range c.Tools(top.Name) {
+			tools[cmd.ToolName()] = true
+		}
+		m := top.Map()
+		if m == nil {
+			if len(tools) > 0 {
+				add("it offers tools but has no map; add map rows that say when to reach for them, because the intent map is how an agent finds a tool")
+			}
+			continue
+		}
+		if len(m.Rows) == 0 {
+			add("map has no rows")
+		}
+		mapped := map[string]bool{}
+		for _, row := range m.Rows {
+			if strings.TrimSpace(row.Need) == "" || strings.Contains(row.Need, "|") || strings.Contains(strings.TrimSpace(row.Need), "\n") {
+				add("a map row's need must be one line without |")
+			}
+			if len(row.Tools) == 0 {
+				add("map row %q names no tool", row.Need)
+			}
+			for _, name := range row.Tools {
+				if !tools[name] {
+					add("map row %q names %q, which is not a tool of this family", row.Need, name)
+				}
+				mapped[name] = true
+			}
+		}
+		for _, cmd := range c.Tools(top.Name) {
+			if cmd.Core && !mapped[cmd.ToolName()] {
+				add("core tool %q is in no map row; a core tool is always loaded, so the map must say when to call it", cmd.ToolName())
 			}
 		}
 	}

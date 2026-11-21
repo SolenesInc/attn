@@ -743,7 +743,7 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 		}
 		if req.pluginDriver.Capabilities["launch_instructions"] {
 			instructions, err := d.preparePluginLaunchInstructions(msg.ID, req.profile.ID,
-				!req.pluginDriver.Capabilities["pull_request_reporting"])
+				!req.pluginDriver.Capabilities["pull_request_reporting"], d.pluginReceivesAgentTools(req.pluginDriver))
 			if err != nil {
 				return nil, err
 			}

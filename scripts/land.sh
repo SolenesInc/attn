@@ -34,6 +34,7 @@ protocol_outputs=(
   cli/protocol/src/go_values.rs
   cli/attn/src/commands/seed/help_generated.rs
   internal/prompts/content/skills/attn/references/garden.md
+  internal/prompts/tool_families_generated.go
   cli/testdata/duration_string.jsonl
   cli/testdata/flag.jsonl
   cli/testdata/flag_spec.json

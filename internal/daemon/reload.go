@@ -615,7 +615,7 @@ func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptyback
 	}
 	if reg.Capabilities["launch_instructions"] {
 		instructions, err := d.preparePluginLaunchInstructions(session.ID, session.ProfileID,
-			!reg.Capabilities["pull_request_reporting"])
+			!reg.Capabilities["pull_request_reporting"], d.pluginReceivesAgentTools(reg))
 		if err != nil {
 			return nil, err
 		}

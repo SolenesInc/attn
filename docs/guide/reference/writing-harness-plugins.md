@@ -143,6 +143,12 @@ user's own. `examples/plugins/sample-harness` passes the endpoint to its
 harness in the environment, and the harness's `/tool <name> <json>` line calls
 a tool.
 
+When your driver also declares `launchInstructions`, a launch that carries
+`agent_tools` gets launch `instructions` without the CLI teaching of the
+command families the tools offer, because the intent map teaches them. Show
+your agent the server's `instructions`, or it learns those families from
+neither.
+
 A shared server gets the endpoint from attn itself; see
 [Shared servers and attn's tools](#shared-servers-and-attns-tools).
 

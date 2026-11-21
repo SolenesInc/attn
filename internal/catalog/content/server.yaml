@@ -1,23 +1,13 @@
-# The MCP server's `description`: one line a harness shows before it reads the
-# server's `instructions`. The `instructions`: the intent map that says when to
-# reach for attn. Claude Code keeps the first 4,096 characters, so the generator
-# refuses a longer map.
+# The MCP server attn serves at /mcp. `description` is the one line a harness
+# shows before it reads the server's instructions, and the instructions of the
+# deferred server Codex lists (Codex shows a deferred server's first line, cut
+# at 250 characters). The instructions are the intent map: `intro`, then a
+# table of every group's `map.rows`, then each group's `map.notes`. A group that
+# offers tools needs a map, and each core tool needs a row. Claude Code keeps
+# the first 4,096 characters, so the generator refuses a longer map and names
+# each file's share.
 server:
   name: attn
-  description: attn's tools for the work you share with the user and their other agents, starting with seeds in the garden.
-  instructions: |
+  description: attn's tools for the work you share with the user and the agents beside you. Reach for them to track, report or hand off work, and before you tell the user attn can't do something.
+  intro: |
     attn runs you beside the user's other agents. These tools are attn's. Each tool's description holds its rules: read it before the first call. Find a tool by the words in this map.
-
-    | When you need to | Tools |
-    |---|---|
-    | Find work you can pick up, read a seed or plan, claim it | seed_ready, seed_show, seed_tend |
-    | Record progress or prove a check on a seed you tend | seed_note, seed_check_report |
-    | Finish, pause, abandon or give back a seed | seed_harvest, seed_park, seed_wither, seed_replant |
-    | Track new work, find existing work, split a plan | seed_search, seed_plant, seed_plot, seed_link |
-    | Change a seed's body, checks, files or reminders | seed_edit, seed_check_add, seed_attach, seed_remind |
-    | Wait for a time, a pull request or another seed, with your session closed | seed_standby |
-    | Read the rules for an attn capability, or the user guide to answer the user's questions about attn | skill, guide |
-
-    A seed is one unit of work in the garden, with an id like s-7k3f9m, a slug made of its title's words, a markdown body, checks (C1, C2) and a log. A plot is a seed with children. Tools take the id or the slug. Give other agents the id, because a slug two seeds share is refused. To the user, say the slug.
-
-    Track work that outlives this turn in seeds, not in TODO lists: they end with the session. Search before you plant, and plant before you start. Write every body as a work prompt for an agent who has not seen this conversation.

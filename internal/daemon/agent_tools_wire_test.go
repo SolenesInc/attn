@@ -398,3 +398,45 @@ func launchedToolsCaller(t *testing.T, w *world, claude *fakeagent.Run) agentToo
 	}
 	return agentToolsCaller{w: w, bearer: bearer, endpoint: server.URL}
 }
+
+var coreTools = []string{"seed_show", "seed_note", "seed_check_report", "ask", "agent_msg", "delegate"}
+
+func TestEachToolServerTeachesInTheTextItsHarnessShows(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(w.Spawn(app, fakeagent.Claude, w.Path("shop"))))}
+	served := map[string]*mcp.InitializeResult{}
+	for _, query := range []string{"", "?tools=core", "?tools=rest"} {
+		session, err := agent.connect(t, query)
+		if err != nil {
+			t.Fatalf("%q: %v", query, err)
+		}
+		served[query] = session.InitializeResult()
+		listed, err := session.ListTools(context.Background(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, tool := range listed.Tools {
+			if loaded := tool.Meta["anthropic/alwaysLoad"] == true; loaded != slices.Contains(coreTools, tool.Name) {
+				t.Errorf("%q lists %s with alwaysLoad %t; exactly the core tools %v are always loaded", query, tool.Name, loaded, coreTools)
+			}
+		}
+	}
+
+	intentMap := served[""].Instructions
+	for _, want := range []string{"| When you need to | Tools |", "| seed_ready, seed_show, seed_tend |", "A seed is one unit of work"} {
+		if !strings.Contains(intentMap, want) {
+			t.Errorf("the server's instructions lack %q:\n%s", want, intentMap)
+		}
+	}
+	if len([]rune(intentMap)) > 4096 {
+		t.Errorf("the intent map is %d characters; Claude Code keeps 4,096", len([]rune(intentMap)))
+	}
+	if served["?tools=core"].Instructions != intentMap {
+		t.Errorf("Codex's always-loaded attn-core server teaches %q, want the whole intent map", served["?tools=core"].Instructions)
+	}
+	if rest := served["?tools=rest"].Instructions; rest == "" || strings.Contains(rest, "\n") || len([]rune(rest)) > 250 {
+		t.Errorf("Codex's deferred attn server teaches %q; Codex shows a deferred server's first line cut at 250 characters, so it must be the one-line description", rest)
+	}
+}

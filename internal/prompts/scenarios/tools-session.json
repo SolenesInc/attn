@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "tools-session",
+  "description": "Ordinary session whose harness received attn's tools, so the tools' families are taught by the server's intent map.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "garden_available": "true",
+    "asks_enabled": "true",
+    "vent_enabled": "true",
+    "crew_priming": "",
+    "self_report_pull_requests": "false",
+    "tool_vents_enabled": "false",
+    "agent_tools": "true"
+  }
+}

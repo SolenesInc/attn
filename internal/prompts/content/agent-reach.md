@@ -1,0 +1,1 @@
+Use `attn agent msg` to reach sessions attn runs. Native subagents your harness spawned are the only exception. Run `attn session rename "<a few words>"` when your session's main work no longer matches its name.

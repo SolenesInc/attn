@@ -1,0 +1,1 @@
+- `attn skill --reference <name>` prints the rules for a capability. Read it before you first use that capability.

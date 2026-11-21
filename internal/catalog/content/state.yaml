@@ -6,6 +6,9 @@ groups:
     summary: "replay why a session's state is what it is"
     doc: |
       Replay why a session's state is what it is.
+    map:
+      rows:
+        - {need: "Find out why a session shows the state it does", tools: [state_explain]}
 
 commands:
   - name: state explain

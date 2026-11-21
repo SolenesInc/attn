@@ -1,0 +1,1 @@
+- `attn guide [<topic>]` is the user guide. Use it to answer the user's questions about attn.

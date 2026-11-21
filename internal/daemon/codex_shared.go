@@ -994,7 +994,7 @@ func (r *codexShared) grantApprovals(params map[string]any, sessionID protocol.S
 }
 
 func (r *codexShared) instructions(sessionID protocol.SessionID, profile string) string {
-	launch, err := r.d.preparePluginLaunchInstructions(sessionID, profile, false)
+	launch, err := r.d.preparePluginLaunchInstructions(sessionID, profile, false, r.d.sharedCodexAgentTools(profile) != nil)
 	if err != nil {
 		r.d.logf("shared Codex: no attn instructions for session %s: %v", sessionID, err)
 		return ""

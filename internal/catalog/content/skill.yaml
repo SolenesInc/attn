@@ -3,6 +3,9 @@
 commands:
   - name: skill
     summary: print the map of what attn can do, or a capability's rules
+    map:
+      rows:
+        - {need: "Read the rules for an attn capability before you first use it", tools: [skill]}
     runs: here
     grant: any
     read_only: true

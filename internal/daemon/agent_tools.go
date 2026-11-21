@@ -200,8 +200,8 @@ func (d *Daemon) agentToolServers() map[string]*mcpserver.Server {
 			}
 		}
 		d.agentToolSet.servers = map[string]*mcpserver.Server{}
-		for _, set := range []string{agentToolsAll, agentToolsCore, agentToolsRest} {
-			d.agentToolSet.servers[set] = mcpserver.New(catalog.Name, buildinfo.Version, catalog.Instructions, sets[set])
+		for set, instructions := range map[string]string{agentToolsAll: catalog.Instructions, agentToolsCore: catalog.Instructions, agentToolsRest: catalog.Description} {
+			d.agentToolSet.servers[set] = mcpserver.New(catalog.Name, buildinfo.Version, instructions, sets[set])
 		}
 	})
 	return d.agentToolSet.servers

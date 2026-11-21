@@ -14,11 +14,12 @@ type pluginLaunchInstructions struct {
 	ProfileID string `json:"profile_id,omitempty"`
 }
 
-func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, profileID string, selfReportPullRequests bool) (*pluginLaunchInstructions, error) {
+func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, profileID string, selfReportPullRequests, agentTools bool) (*pluginLaunchInstructions, error) {
 	launch, _, err := d.prepareLaunchContext(sessionID, selfReportPullRequests)
 	if err != nil {
 		return nil, err
 	}
+	launch.AgentTools = agentTools
 	return &pluginLaunchInstructions{
 		Kind: pluginInstructionKindAgent, Content: launch.Instructions(), ProfileID: profileID,
 	}, nil

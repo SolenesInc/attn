@@ -5,6 +5,9 @@ groups:
   - name: session
     usage: "<command>"
     summary: "read past sessions, rename or snooze a session"
+    map:
+      rows:
+        - {need: "Read past sessions, or rename or snooze a session", tools: [session_list, session_transcript, session_rename, session_snooze, session_unsnooze]}
     doc: |
       Read the session ledger, a session's transcript or what it was told; rename, mark, snooze or reopen a session.
 
