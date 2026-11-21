@@ -10017,9 +10017,6 @@ type Response struct {
 	// SettingsList corresponds to the JSON schema field "settings_list".
 	SettingsList *SettingsListResult `json:"settings_list,omitempty,omitzero"`
 
-	// StateExplainResult corresponds to the JSON schema field "state_explain_result".
-	StateExplainResult *StateExplainResult `json:"state_explain_result,omitempty,omitzero"`
-
 	// TerminalEntries corresponds to the JSON schema field "terminal_entries".
 	TerminalEntries []TerminalEntry `json:"terminal_entries,omitempty,omitzero"`
 
@@ -14267,14 +14264,6 @@ type StateExplainEntry struct {
 
 	// Source corresponds to the JSON schema field "source".
 	Source string `json:"source"`
-}
-
-type StateExplainMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// TargetSessionID corresponds to the JSON schema field "target_session_id".
-	TargetSessionID string `json:"target_session_id"`
 }
 
 type StateExplainResult struct {

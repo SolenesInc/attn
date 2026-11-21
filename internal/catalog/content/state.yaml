@@ -1,2 +1,25 @@
+# The state family. `anyone` lets a terminal that shows no session, such as a
+# shell in attn, run the command: it reads daemon state and acts as nobody.
 groups:
-  - {name: state, usage: "explain <id>", summary: "replay why a session's state is what it is"}
+  - name: state
+    usage: "explain <id>"
+    summary: "replay why a session's state is what it is"
+    doc: |
+      Replay why a session's state is what it is.
+
+commands:
+  - name: state explain
+    summary: replay the recorded state observations of one session
+    runs: home
+    grant: full
+    read_only: true
+    anyone: true
+    doc: |
+      Replays the daemon's recorded state observations for one session: which source claimed what, and whether the claim was applied, vetoed before the store, discarded by it, or skipped by its own source. Identical observations in a row fold into one with a count. Reading it changes nothing.
+    args:
+      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the full id of the session to explain"}
+    result: StateExplainResult
+    errors:
+      - {code: session_not_found, fix: "Pass the full id of a session this daemon holds."}
+    examples:
+      - {id: 3f9a2c4e-8b1d-4c6e-9a7f-2d5e8c1b4a6f}

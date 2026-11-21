@@ -46,4 +46,5 @@ var CommandRuns = map[string]Locator{
 	"seed review cancel": LocatorHome,
 	"seed review retry":  LocatorHome,
 	"seed review keep":   LocatorHome,
+	"state explain":      LocatorHome,
 }

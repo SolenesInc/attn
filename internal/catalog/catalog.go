@@ -97,6 +97,7 @@ type Command struct {
 	Doc      string           `yaml:"doc"`
 	Args     []Arg            `yaml:"args"`
 	ReadOnly bool             `yaml:"read_only"`
+	Anyone   bool             `yaml:"anyone"`
 	Result   string           `yaml:"result"`
 	Errors   []Error          `yaml:"errors"`
 	Examples []map[string]any `yaml:"examples"`
@@ -232,6 +233,20 @@ func (c *Catalog) Group(name string) (*Group, bool) {
 		}
 	}
 	return nil, false
+}
+
+func (c *Catalog) LayerFamilies() []string {
+	var out []string
+	for i := range c.Groups {
+		name := c.Groups[i].Name
+		if strings.Contains(name, " ") {
+			continue
+		}
+		if slices.ContainsFunc(c.GroupCommands(name), (*Command).ThroughLayer) {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 func (c *Catalog) GroupCommands(group string) []*Command {

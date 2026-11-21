@@ -156,7 +156,6 @@ const (
 	CmdDeclineUpdate                 = "decline_update"
 	CmdSessionShow                   = "session_show"
 	CmdSessionReopen                 = "session_reopen"
-	CmdStateExplain                  = "state_explain"
 	CmdAgentPeek                     = "agent_peek"
 	CmdAgentMsg                      = "agent_msg"
 	CmdAgentClose                    = "agent_close"

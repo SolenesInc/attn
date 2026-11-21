@@ -59,7 +59,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdStartUpdate:                   commandMetadata(false, true),
 	protocol.CmdDeclineUpdate:                 commandMetadata(false, true),
 	protocol.CmdSessionReopen:                 commandMetadata(false, true),
-	protocol.CmdStateExplain:                  commandMetadata(false, true),
 	protocol.CmdAgentPeek:                     commandMetadata(false, true),
 	protocol.CmdAgentMsg:                      commandMetadata(false, true),
 	protocol.CmdAgentClose:                    commandMetadata(false, true),

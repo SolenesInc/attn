@@ -18,6 +18,7 @@ pub mod review;
 pub mod seed;
 pub mod send;
 pub mod settings;
+pub mod state;
 pub mod support;
 pub mod terminal;
 pub mod ticket;

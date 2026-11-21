@@ -894,15 +894,6 @@ model SessionReopenMessage {
 
 }
 
-// Replays the daemon's per-session ring of state observations so a wrong color
-// can be explained: which sources spoke, what each claimed, and what happened to
-// each claim. Diagnostic only — reading it changes nothing.
-@extension("x-on", #{ home: true })
-model StateExplainMessage {
-  cmd: "state_explain";
-  target_session_id: string;
-}
-
 // One agent observes another without interrupting it: state, the last
 // assistant message, and the rendered screen, all served from what the daemon
 // already holds. Passive by construction — nothing here touches the target's
@@ -7580,7 +7571,6 @@ model Response {
   terminal_read_result?: TerminalReadResult;
   terminal_wait_result?: TerminalWaitResult;
   terminal_move_result?: TerminalMoveResult;
-  state_explain_result?: StateExplainResult;
   agent_peek_result?: AgentPeekResult;
   agent_msg_result?: AgentMsgResult;
   agent_close_result?: AgentCloseResult;

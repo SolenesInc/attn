@@ -52,7 +52,7 @@ pub fn help(verb: &str) -> &'static str {
         "review keep" => "review keep <review-id> <seed-id> [--json]\n      Keeps a seed growing and reviews it again after seven quiet days.\n\nflags:\n  --json                         print the result as JSON\n  --profile <name|id>            the garden of this profile; required outside attn when several profiles exist\n  --session <id>                 the session asking (defaults to the current session)\n",
         "check" => "check <add|edit|remove|restore|report|confirm|reject|uncheck|reopen>\n      Define, report, or judge what a seed must prove. Each move has its own\n      --help. Checks never block a move. harvest lists the checks still open or\n      rejected.\n\nflags:\n  --profile <name|id>            the garden of this profile; required outside attn when several profiles exist\n  --session <id>                 the session asking (defaults to the current session)\n",
         "review" => "review <start|show|cancel|retry|keep>\n      Start an advisory Garden review, inspect its progressive results, cancel\n      unfinished classification, retry one failed or changed item, or keep one\n      seed growing and review it again after seven quiet days. The review never\n      changes a seed's state.\n\nflags:\n  --profile <name|id>            the garden of this profile; required outside attn when several profiles exist\n  --session <id>                 the session asking (defaults to the current session)\n",
-        _ => panic!("unknown seed verb: {verb}"),
+        _ => panic!("unknown verb: {verb}"),
     }
 }
 
@@ -103,6 +103,6 @@ pub fn usage(verb: &str) -> &'static str {
         "review keep" => "review keep <review-id> <seed-id> [--json]",
         "check" => "check <add|edit|remove|restore|report|confirm|reject|uncheck|reopen>",
         "review" => "review <start|show|cancel|retry|keep>",
-        _ => panic!("unknown seed verb: {verb}"),
+        _ => panic!("unknown verb: {verb}"),
     }
 }

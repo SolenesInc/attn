@@ -601,17 +601,11 @@ func (c *Client) SessionTranscript(targetSessionID string, afterCursor string) (
 }
 
 func (c *Client) StateExplain(targetSessionID string) (*protocol.StateExplainResult, error) {
-	resp, err := c.send(protocol.StateExplainMessage{
-		Cmd:             protocol.CmdStateExplain,
-		TargetSessionID: targetSessionID,
-	})
-	if err != nil {
+	var result protocol.StateExplainResult
+	if err := c.RunCommand("state explain", "", map[string]string{"id": targetSessionID}, &result); err != nil {
 		return nil, err
 	}
-	if resp.StateExplainResult == nil {
-		return nil, errors.New("daemon returned no state explain result")
-	}
-	return resp.StateExplainResult, nil
+	return &result, nil
 }
 
 func (c *Client) AgentPeek(targetSessionID string) (*protocol.AgentPeekResult, error) {

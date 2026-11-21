@@ -216,7 +216,6 @@ var Placements = map[string][]Placement{
 	"snooze_turn":                      {Placement{LocatorHome, ""}},
 	"start_update":                     {Placement{LocatorHere, ""}},
 	"state":                            {Placement{LocatorHere, ""}},
-	"state_explain":                    {Placement{LocatorHome, ""}},
 	"stop":                             {Placement{LocatorHere, ""}},
 	"terminal_close":                   {Placement{LocatorHome, ""}},
 	"terminal_exited":                  {Placement{LocatorHome, ""}},
@@ -2615,18 +2614,6 @@ func (m StateMessage) Placement() Placement {
 }
 
 func (m StateMessage) Locate() string {
-	return ""
-}
-
-func (StateExplainMessage) CommandName() string {
-	return "state_explain"
-}
-
-func (m StateExplainMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m StateExplainMessage) Locate() string {
 	return ""
 }
 

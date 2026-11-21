@@ -13,7 +13,7 @@ while IFS= read -r -d '' file; do
     *.go) go_files+=("$file") ;;
     app/src-tauri/*.rs) tauri_rust_files+=("$file") ;;
     pty-host/*.rs) pty_host_rust_files+=("$file") ;;
-    cli/protocol/src/generated.rs | cli/protocol/src/go_values.rs | cli/attn/src/commands/seed/help_generated.rs) continue ;;
+    cli/protocol/src/generated.rs | cli/protocol/src/go_values.rs | cli/attn/src/commands/*/help_generated.rs) continue ;;
     cli/*.rs) cli_rust_files+=("$file") ;;
     native/*.rs) native_rust_files+=("$file") ;;
     *) continue ;;

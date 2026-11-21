@@ -32,7 +32,7 @@ Agents read the state of every session with `attn agent list` and
 ### Agents
 
 - `attn agent list [--json]` and `attn agent peek <session-or-member> [--json]` (`cmd/attnd/agent.go`).
-- `attn state explain <session> [--json]` (`cmd/attnd/state_explain.go`).
+- `attn state explain <session> [--json]` (`cli/attn/src/commands/state/`, `internal/catalog/content/state.yaml`), and the tool `state_explain` when `agent_tools_enabled` is on.
 - `attn activity [--json]` and `attn activity clear <session>` (`cmd/attnd/activity.go`).
 - Prompts: `attn skill --reference converse-and-observe`, which names `agent list` and `agent peek` (`internal/prompts/content/skills/attn/references/converse-and-observe.md`). The classifier and activity prompts go to background models, under Triggers.
 

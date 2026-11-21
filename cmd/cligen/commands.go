@@ -110,7 +110,7 @@ func writeCommandTables(c *catalog.Catalog, cliRoot, goRoot string) error {
 			}
 			fixes = fmt.Sprintf(", fixes: map[string]string{%s}", strings.Join(pairs, ", "))
 		}
-		fmt.Fprintf(&args, "\t%q: {readOnly: %v%s},\n", cmd.Name, cmd.ReadOnly, fixes)
+		fmt.Fprintf(&args, "\t%q: {readOnly: %v, anyone: %v%s},\n", cmd.Name, cmd.ReadOnly, cmd.Anyone, fixes)
 	}
 	args.WriteString("}\n")
 	for _, cmd := range c.Commands {
@@ -127,12 +127,12 @@ func writeCommandTables(c *catalog.Catalog, cliRoot, goRoot string) error {
 		return err
 	}
 
-	for _, out := range []struct{ group, file string }{{"seed", "commands/seed/table_generated.rs"}} {
-		rust, err := g.rustTable(out.group)
+	for _, group := range c.LayerFamilies() {
+		rust, err := g.rustTable(group)
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(cliRoot, out.file), []byte(rust), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(cliRoot, "commands", rustModule(group), "table_generated.rs"), []byte(rust), 0o644); err != nil {
 			return err
 		}
 	}

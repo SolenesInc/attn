@@ -50,7 +50,6 @@ func topLevelCommands() []topLevelCommand {
 			help: func(w io.Writer) { fmt.Fprintln(w, "usage: attn list\n\nPrint sessions and profiles as JSON.") }},
 		{names: []string{"activity"}, run: runActivity, banner: true,
 			help: func(w io.Writer) { fmt.Fprint(w, activityUsage) }},
-		{names: []string{"state"}, run: runState, banner: true},
 		{names: []string{"preflight"}, run: runPreflight, banner: true},
 		{names: []string{"update"}, run: runUpdate, banner: true,
 			help: func(w io.Writer) { fmt.Fprintln(w, updateUsage) }},

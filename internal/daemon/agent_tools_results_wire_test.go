@@ -54,6 +54,64 @@ func listOfferedTools(t *testing.T, agent agentToolsCaller) offeredTools {
 	return tools
 }
 
+type toolShapes struct {
+	t          *testing.T
+	agent      agentToolsCaller
+	tools      offeredTools
+	called     map[string]bool
+	mismatches []string
+}
+
+func newToolShapes(t *testing.T, agent agentToolsCaller, tools offeredTools) *toolShapes {
+	return &toolShapes{t: t, agent: agent, tools: tools, called: map[string]bool{}}
+}
+
+func (s *toolShapes) call(tool string, args map[string]any) *mcp.CallToolResult {
+	s.t.Helper()
+	s.called[tool] = true
+	result := s.agent.mustCall(s.t, tool, args)
+	if result.IsError {
+		s.mismatches = append(s.mismatches, tool+": refused: "+resultText(result))
+		return result
+	}
+	schema, ok := s.tools[tool]
+	if !ok {
+		s.t.Fatalf("%s is not offered", tool)
+	}
+	if schema == nil {
+		return result
+	}
+	data, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	var instance any
+	if err := json.Unmarshal(data, &instance); err != nil {
+		s.t.Fatal(err)
+	}
+	if err := schema.Validate(instance); err != nil {
+		s.mismatches = append(s.mismatches, tool+": "+err.Error())
+	}
+	return result
+}
+
+func (s *toolShapes) finish(prefixes ...string) {
+	s.t.Helper()
+	var uncalled []string
+	for tool := range s.tools {
+		if slices.ContainsFunc(prefixes, func(prefix string) bool { return strings.HasPrefix(tool, prefix) }) && !s.called[tool] {
+			uncalled = append(uncalled, tool)
+		}
+	}
+	sort.Strings(uncalled)
+	if len(uncalled) > 0 {
+		s.t.Errorf("offered tools this test never called: %v", uncalled)
+	}
+	for _, mismatch := range s.mismatches {
+		s.t.Error(mismatch)
+	}
+}
+
 func TestEverySeedToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
@@ -62,36 +120,8 @@ func TestEverySeedToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) 
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
 	tools := listOfferedTools(t, agent)
 
-	called := map[string]bool{}
-	var mismatches []string
-	call := func(tool string, args map[string]any) *mcp.CallToolResult {
-		t.Helper()
-		called[tool] = true
-		result := agent.mustCall(t, tool, args)
-		if result.IsError {
-			mismatches = append(mismatches, tool+": refused: "+resultText(result))
-			return result
-		}
-		schema, ok := tools[tool]
-		if !ok {
-			t.Fatalf("%s is not offered", tool)
-		}
-		if schema == nil {
-			return result
-		}
-		data, err := json.Marshal(result.StructuredContent)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var instance any
-		if err := json.Unmarshal(data, &instance); err != nil {
-			t.Fatal(err)
-		}
-		if err := schema.Validate(instance); err != nil {
-			mismatches = append(mismatches, tool+": "+err.Error())
-		}
-		return result
-	}
+	shapes := newToolShapes(t, agent, tools)
+	call := shapes.call
 	seedOf := func(r *mcp.CallToolResult) string {
 		t.Helper()
 		var shape struct {
@@ -112,7 +142,7 @@ func TestEverySeedToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) 
 	y := seedOf(call("seed_plant", map[string]any{"title": "Ship the retry", "body": "After the fix."}))
 	z := seedOf(call("seed_plant", map[string]any{"title": "Document the retry", "body": "Say why."}))
 	if x == "" || y == "" || z == "" {
-		t.Fatalf("seed_plant answered no seed ids: %q %q %q; %v", x, y, z, mismatches)
+		t.Fatalf("seed_plant answered no seed ids: %q %q %q; %v", x, y, z, shapes.mismatches)
 	}
 	call("seed_plot", map[string]any{"plot": map[string]any{"title": "Checkout plot", "children": []any{map[string]any{"title": "Step one"}}}})
 	call("seed_search", map[string]any{"words": "flaky checkout"})
@@ -198,19 +228,7 @@ func TestEverySeedToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) 
 	call("seed_review_keep", map[string]any{"review": started.Review.Run.ID, "seed": abandoned})
 	call("seed_review_cancel", map[string]any{"review": started.Review.Run.ID})
 
-	var uncalled []string
-	for tool := range tools {
-		if strings.HasPrefix(tool, "seed_") && !called[tool] {
-			uncalled = append(uncalled, tool)
-		}
-	}
-	sort.Strings(uncalled)
-	if len(uncalled) > 0 {
-		t.Errorf("offered seed tools this test never called: %v", uncalled)
-	}
-	for _, mismatch := range mismatches {
-		t.Error(mismatch)
-	}
+	shapes.finish("seed_")
 }
 
 func TestEverySeedToolRefusesWithACodeAndAFix(t *testing.T) {

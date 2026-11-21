@@ -17,7 +17,6 @@ func TestStateExplainReplaysEachClaimAndWhatBecameOfIt(t *testing.T) {
 
 	for _, args := range [][]string{
 		{},
-		{"--json", "abc"},
 		{"abc", "def"},
 		{"abc", "--nope"},
 	} {

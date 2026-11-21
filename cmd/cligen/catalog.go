@@ -35,11 +35,6 @@ var (
 	backtickedPattern   = regexp.MustCompile("`([^`\n]+)`")
 )
 
-type familyOutput struct {
-	group    string
-	rustHelp string
-}
-
 func writeCatalog(cliRoot, referencesDir, goRoot string) error {
 	c, err := catalog.Builtin()
 	if err != nil {
@@ -55,16 +50,13 @@ func writeCatalog(cliRoot, referencesDir, goRoot string) error {
 	if err := writeTools(c, goRoot); err != nil {
 		return err
 	}
-	for _, out := range []familyOutput{{group: "seed", rustHelp: "commands/seed/help_generated.rs"}} {
-		group, ok := c.Group(out.group)
-		if !ok {
-			return fmt.Errorf("catalog: no group %q", out.group)
-		}
+	for _, name := range c.LayerFamilies() {
+		group, _ := c.Group(name)
 		rust, err := g.rustHelp(group)
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(cliRoot, out.rustHelp), []byte(rust), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(cliRoot, "commands", rustModule(name), "help_generated.rs"), []byte(rust), 0o644); err != nil {
 			return err
 		}
 		if group.Reference == nil {
@@ -419,7 +411,14 @@ func (g *generator) groupHelp(group *catalog.Group) string {
 	fmt.Fprintf(&out, "usage: attn %s <command>\n\n", group.Name)
 	writeWrapped(&out, g.cliText(nil, group.File+": "+group.Name, group.Doc), "")
 	fmt.Fprintf(&out, "Use attn %s <command> --help for one command's syntax and flags.\n", group.Name)
-	for _, section := range group.Sections {
+	sections := group.Sections
+	if len(sections) == 0 {
+		sections = []catalog.Section{{Title: "Commands"}}
+		for _, cmd := range g.c.GroupCommands(group.Name) {
+			sections[0].Commands = append(sections[0].Commands, cmd.Name)
+		}
+	}
+	for _, section := range sections {
 		if len(section.Commands) == 0 {
 			continue
 		}
@@ -472,12 +471,16 @@ func (g *generator) rustHelp(group *catalog.Group) (string, error) {
 	return out.String(), nil
 }
 
+func rustModule(group string) string {
+	return strings.ReplaceAll(group, "-", "_")
+}
+
 func writeRustMatch[T any](out *strings.Builder, name string, entries []T, verb, field func(T) string) {
 	fmt.Fprintf(out, "#[rustfmt::skip]\npub fn %s(verb: &str) -> &'static str {\n    match verb {\n", name)
 	for _, e := range entries {
 		fmt.Fprintf(out, "        %s => %s,\n", rustString(verb(e)), rustString(field(e)))
 	}
-	out.WriteString("        _ => panic!(\"unknown seed verb: {verb}\"),\n    }\n}\n")
+	out.WriteString("        _ => panic!(\"unknown verb: {verb}\"),\n    }\n}\n")
 }
 
 func (g *generator) reference(group *catalog.Group) (string, error) {

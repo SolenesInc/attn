@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "d07ecc82e63c";
+pub const PROTOCOL_VERSION: &str = "23ca9eff8f79";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -9443,8 +9443,6 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settings_list: Option<SettingsListResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub state_explain_result: Option<StateExplainResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terminal_entries: Option<Vec<TerminalEntry>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terminal_input_result: Option<TerminalInputResult>,
@@ -12946,21 +12944,6 @@ pub struct StateExplainEntry {
     pub source: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct StateExplainMessage {
-    pub cmd: String,
-    pub target_session_id: String,
-}
-
-impl StateExplainMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "state_explain".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StateExplainResult {
     pub agent: String,
     pub capacity: i64,
@@ -14897,9 +14880,6 @@ impl ResponseField for SessionShowResult {
 }
 impl ResponseField for SessionTranscriptResult {
     const FIELD: &'static str = "session_transcript_result";
-}
-impl ResponseField for StateExplainResult {
-    const FIELD: &'static str = "state_explain_result";
 }
 impl ResponseField for TerminalInputResult {
     const FIELD: &'static str = "terminal_input_result";

@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net"
 	"strings"
 
@@ -13,7 +14,13 @@ import (
 
 func (d *Daemon) commandLayer() *command.Layer {
 	d.commandsOnce.Do(func() {
-		layer, err := command.New(d.seedCommands())
+		handlers := d.seedCommands()
+		for _, family := range []map[string]command.Handler{
+			{"state explain": command.Typed(d.runStateExplain)},
+		} {
+			maps.Copy(handlers, family)
+		}
+		layer, err := command.New(handlers)
 		if err != nil {
 			panic(err)
 		}

@@ -5,7 +5,7 @@ mod render;
 mod table_generated;
 
 use super::{Run, Stop, print_stdout};
-use crate::command::{Command, flags_of};
+use crate::command::{Command, Family, flags_of};
 use attn::go::flag::{FlagError, FlagSet};
 use attn::go::quote::quote;
 use attn_protocol::go_values::CHECK_VERBS;
@@ -52,7 +52,7 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
         run.path = format!("seed {name}");
     }
     let words = if name.contains(' ') { &rest[1..] } else { rest };
-    crate::command::run(run, &present::Seed, cmd, words)
+    crate::command::run_command(run, &present::Seed, cmd, words)
 }
 
 fn group_flags(run: &mut Run<'_>, group: &str, args: &[String]) -> Result<(), Stop> {
@@ -113,15 +113,9 @@ fn review_move(run: &mut Run<'_>, args: &[String]) -> Result<String, Stop> {
 }
 
 fn usage_error(name: &str, message: &str) -> Stop {
-    eprintln!("seed {name}: {message}");
-    eprintln!(
-        "usage: attn seed {} (attn seed {name} --help)",
-        help_generated::usage(name)
-    );
-    Stop(2)
+    Family::usage_error(&present::Seed, name, message)
 }
 
 fn fail(name: &str, message: &str) -> Stop {
-    eprintln!("seed {name}: {message}");
-    Stop(1)
+    Family::fail(&present::Seed, name, message)
 }

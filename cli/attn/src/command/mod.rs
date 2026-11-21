@@ -49,17 +49,39 @@ pub const CODE_USAGE: &str = "usage";
 
 pub trait Family {
     fn group(&self) -> &'static str;
+    fn commands(&self) -> &'static [Command];
+    fn group_help(&self) -> &'static str;
     fn help(&self, verb: &str) -> &'static str;
-    fn usage_error(&self, verb: &str, message: &str) -> Stop;
+    fn usage(&self, verb: &str) -> &'static str;
+    fn usage_error(&self, verb: &str, message: &str) -> Stop {
+        eprintln!("{} {verb}: {message}", self.group());
+        eprintln!(
+            "usage: attn {} {} (attn {} {verb} --help)",
+            self.group(),
+            self.usage(verb),
+            self.group()
+        );
+        Stop(2)
+    }
     fn fail(&self, verb: &str, message: &str) -> Stop {
         eprintln!("{} {verb}: {message}", self.group());
         Stop(1)
     }
-    fn answered_here(&self, cmd: &Command) -> Option<&'static str>;
-    fn decode_file(&self, cmd: &Command, arg: &Arg, bytes: &[u8]) -> Result<Json, String>;
-    fn read_stdin_error(&self, arg: &Arg) -> &'static str;
-    fn choice_conflict(&self, cmd: &Command, arg: &Arg) -> String;
-    fn before_send(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop>;
+    fn answered_here(&self, _cmd: &Command) -> Option<&'static str> {
+        None
+    }
+    fn decode_file(&self, _cmd: &Command, _arg: &Arg, bytes: &[u8]) -> Result<Json, String> {
+        serde_json::from_slice(bytes).map_err(|error| error.to_string())
+    }
+    fn read_stdin_error(&self, _arg: &Arg) -> &'static str {
+        "reading stdin"
+    }
+    fn choice_conflict(&self, _cmd: &Command, arg: &Arg) -> String {
+        format!("{} takes one flag", arg.name)
+    }
+    fn before_send(&self, _cmd: &Command, _parsed: &mut Parsed) -> Result<(), Stop> {
+        Ok(())
+    }
     fn present(
         &self,
         run: &mut Run<'_>,
@@ -67,6 +89,26 @@ pub trait Family {
         parsed: &Parsed,
         reply: &Reply,
     ) -> Result<(), Stop>;
+}
+
+pub fn run_group(run: &mut Run<'_>, family: &dyn Family, args: &[String]) -> Result<(), Stop> {
+    let group = family.group();
+    let Some(verb) = args
+        .first()
+        .filter(|verb| !["-h", "--help"].contains(&verb.as_str()))
+    else {
+        crate::commands::print_stdout(family.group_help());
+        return Ok(());
+    };
+    let Some(cmd) = family.commands().iter().find(|cmd| cmd.name == verb) else {
+        run.path = group.to_string();
+        run.usage_error = Some(crate::commands::USAGE_UNKNOWN_COMMAND);
+        eprintln!("{group}: unknown command {}", quote(verb.as_bytes()));
+        eprintln!("usage: attn {group} <command> (attn {group} --help)");
+        return Err(Stop(2));
+    };
+    run.path = format!("{group} {verb}");
+    run_command(run, family, cmd, &args[1..])
 }
 
 pub struct Parsed {
@@ -447,7 +489,7 @@ fn read_file(path: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-pub fn run(
+pub fn run_command(
     run: &mut Run<'_>,
     family: &dyn Family,
     cmd: &Command,
@@ -527,4 +569,28 @@ fn refuse(
 
 pub fn result(reply: &Reply) -> Reply {
     reply.field("command_result")
+}
+
+pub fn decode<T: serde::de::DeserializeOwned>(
+    run: &mut Run<'_>,
+    family: &dyn Family,
+    cmd: &Command,
+    result: &Reply,
+) -> Result<T, Stop> {
+    result
+        .whole()
+        .map_err(|error| run.fail_send(&format!("{} {}", family.group(), cmd.name), &error))
+}
+
+pub fn print_result(
+    run: &mut Run<'_>,
+    family: &dyn Family,
+    cmd: &Command,
+    result: &Reply,
+) -> Result<(), Stop> {
+    let raw = result
+        .raw_field(&[])
+        .map_err(|error| run.fail_send(&format!("{} {}", family.group(), cmd.name), &error))?;
+    crate::commands::print_json(raw.as_bytes());
+    Ok(())
 }

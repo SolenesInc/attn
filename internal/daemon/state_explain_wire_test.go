@@ -113,7 +113,7 @@ func TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose(t *testing
 		t.Fatalf("close the session: %s", protocol.Deref(closed.Error))
 	}
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool { return e.Session != nil && e.Session.ID == session })
-	if _, err := cli.StateExplain(string(session)); err == nil || !strings.Contains(err.Error(), "session_not_found") {
+	if _, err := cli.StateExplain(string(session)); client.ErrorCode(err) != "session_not_found" {
 		t.Fatalf("explain of a closed session answered %v, want session_not_found", err)
 	}
 }

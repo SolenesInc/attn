@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/statetrace"
@@ -48,25 +49,16 @@ func (d *Daemon) traceStateEvidence(sessionID protocol.SessionID, origin session
 	})
 }
 
-func (d *Daemon) handleStateExplain(conn net.Conn, msg *protocol.StateExplainMessage) {
-	session := d.store.Get(protocol.SessionID(strings.TrimSpace(msg.TargetSessionID)))
+func (d *Daemon) runStateExplain(ctx context.Context, c command.Caller, a command.StateExplainArgs) (any, error) {
+	session := d.store.Get(protocol.SessionID(strings.TrimSpace(a.ID)))
 	if session == nil {
-		d.sendError(conn, "session_not_found")
-		return
+		return nil, command.Refuse(command.CodeSessionNotFound, "no session %q; pass a full session id", a.ID)
 	}
-	result, err := d.stateExplainResult(session)
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{
-		Ok:                 true,
-		StateExplainResult: result,
-	})
+	return d.stateExplainResult(ctx, session)
 }
 
-func (d *Daemon) stateExplainResult(session *protocol.Session) (*protocol.StateExplainResult, error) {
-	answer, err := Call[protocol.MonitorStateTraceResult](context.Background(), d.router(), protocol.MonitorStateTraceMessage{Cmd: protocol.CmdMonitorStateTrace, SessionID: session.ID})
+func (d *Daemon) stateExplainResult(ctx context.Context, session *protocol.Session) (*protocol.StateExplainResult, error) {
+	answer, err := Call[protocol.MonitorStateTraceResult](ctx, d.router(), protocol.MonitorStateTraceMessage{Cmd: protocol.CmdMonitorStateTrace, SessionID: session.ID})
 	var recorded []statetrace.Observation
 	if err == nil {
 		err = json.Unmarshal([]byte(answer.Observations), &recorded)

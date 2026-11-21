@@ -141,7 +141,6 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdSessionShow:                   decodeInto[SessionShowMessage],
 	CmdTerminalReadText:              decodeInto[TerminalReadTextMessage],
 	CmdSessionReopen:                 decodeInto[SessionReopenMessage],
-	CmdStateExplain:                  decodeInto[StateExplainMessage],
 	CmdAgentPeek:                     decodeInto[AgentPeekMessage],
 	CmdAgentMsg:                      decodeInto[AgentMsgMessage],
 	CmdAgentClose:                    decodeInto[AgentCloseMessage],

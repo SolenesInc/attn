@@ -17,35 +17,11 @@ use attn_protocol::{
     SeedTransitionResult, SeedWatchResult,
 };
 use serde::Serialize;
-use serde::de::DeserializeOwned;
 use serde_json::{Value as Json, json};
 use std::fmt::Write as _;
 use std::path::Path;
 
 pub struct Seed;
-
-fn decode<T: DeserializeOwned>(
-    run: &mut Run<'_>,
-    cmd: &Command,
-    result: &Reply,
-) -> Result<T, Stop> {
-    result
-        .whole()
-        .map_err(|error| run.fail_send(&format!("seed {}", cmd.name), &error))
-}
-
-fn print_field(
-    run: &mut Run<'_>,
-    cmd: &Command,
-    result: &Reply,
-    path: &[&str],
-) -> Result<(), Stop> {
-    let raw = result
-        .raw_field(path)
-        .map_err(|error| run.fail_send(&format!("seed {}", cmd.name), &error))?;
-    print_json(raw.as_bytes());
-    Ok(())
-}
 
 fn checks_json(checks: &[Check]) -> Json {
     Json::from(
@@ -82,16 +58,20 @@ impl Family for Seed {
         "seed"
     }
 
+    fn commands(&self) -> &'static [Command] {
+        super::table_generated::COMMANDS
+    }
+
+    fn group_help(&self) -> &'static str {
+        help_generated::GROUP_HELP
+    }
+
     fn help(&self, verb: &str) -> &'static str {
         help_generated::help(verb)
     }
 
-    fn usage_error(&self, verb: &str, message: &str) -> Stop {
-        usage_error(verb, message)
-    }
-
-    fn fail(&self, verb: &str, message: &str) -> Stop {
-        fail(verb, message)
+    fn usage(&self, verb: &str) -> &'static str {
+        help_generated::usage(verb)
     }
 
     fn answered_here(&self, cmd: &Command) -> Option<&'static str> {
@@ -167,18 +147,20 @@ impl Family for Seed {
         let out = match cmd.name {
             "standby" => return standby(run, cmd, parsed, &result),
             "export" => return export(run, cmd, parsed, &result),
-            "prime" => render::prime(&decode::<SeedReadyResult>(run, cmd, &result)?),
-            _ if parsed.json => return print_field(run, cmd, &result, &[]),
+            "prime" => render::prime(&command::decode::<SeedReadyResult>(
+                run, &Seed, cmd, &result,
+            )?),
+            _ if parsed.json => return command::print_result(run, &Seed, cmd, &result),
             "search" => render::search(
                 parsed.text("words"),
-                &decode::<SeedSearchResult>(run, cmd, &result)?,
+                &command::decode::<SeedSearchResult>(run, &Seed, cmd, &result)?,
             ),
-            "plant" => plant(&decode(run, cmd, &result)?),
-            "plot" => plot(&decode(run, cmd, &result)?),
-            "link" | "unlink" => link(cmd, parsed, &decode(run, cmd, &result)?),
-            "ready" => render::ready(&decode(run, cmd, &result)?),
+            "plant" => plant(&command::decode(run, &Seed, cmd, &result)?),
+            "plot" => plot(&command::decode(run, &Seed, cmd, &result)?),
+            "link" | "unlink" => link(cmd, parsed, &command::decode(run, &Seed, cmd, &result)?),
+            "ready" => render::ready(&command::decode(run, &Seed, cmd, &result)?),
             "ls" => render::list(
-                &decode::<SeedListResult>(run, cmd, &result)?,
+                &command::decode::<SeedListResult>(run, &Seed, cmd, &result)?,
                 &ListView {
                     plot_id: parsed.text("plot").trim().to_string(),
                     flat: parsed.on("flat"),
@@ -186,32 +168,32 @@ impl Family for Seed {
                     standby: parsed.on("standby"),
                 },
             ),
-            "show" => show(parsed, &decode(run, cmd, &result)?)?,
-            "notes" => notes(parsed, &decode(run, cmd, &result)?),
-            "note" => note(parsed, &decode(run, cmd, &result)?),
+            "show" => show(parsed, &command::decode(run, &Seed, cmd, &result)?)?,
+            "notes" => notes(parsed, &command::decode(run, &Seed, cmd, &result)?),
+            "note" => note(parsed, &command::decode(run, &Seed, cmd, &result)?),
             "tend" | "park" | "replant" | "wither" | "harvest" => render::transition(
-                &decode::<SeedTransitionResult>(run, cmd, &result)?,
+                &command::decode::<SeedTransitionResult>(run, &Seed, cmd, &result)?,
                 parsed.on("when_merged") && parsed.on("clear"),
             ),
             "send-to-chief" => format!(
                 "{} sent to Chief ({})\n",
                 parsed.text("seed").trim(),
-                decode::<SeedSendToChiefResult>(run, cmd, &result)?.detail
+                command::decode::<SeedSendToChiefResult>(run, &Seed, cmd, &result)?.detail
             ),
             "watch" | "unwatch" => render::watch_result(
-                &decode::<SeedWatchResult>(run, cmd, &result)?,
+                &command::decode::<SeedWatchResult>(run, &Seed, cmd, &result)?,
                 cmd.name == "unwatch",
             ),
-            "remind" => remind(&decode(run, cmd, &result)?),
+            "remind" => remind(&command::decode(run, &Seed, cmd, &result)?),
             "edit" => {
-                let result: SeedEditResult = decode(run, cmd, &result)?;
+                let result: SeedEditResult = command::decode(run, &Seed, cmd, &result)?;
                 format!(
                     "updated {}: body v{}, {} → {} bytes\n",
                     result.seed.id, result.body_version, result.previous_bytes, result.new_bytes
                 )
             }
             "rollback" => {
-                let result: SeedRollbackResult = decode(run, cmd, &result)?;
+                let result: SeedRollbackResult = command::decode(run, &Seed, cmd, &result)?;
                 format!(
                     "rolled {} back to v{} as v{}: {} → {} bytes\n",
                     result.seed.id,
@@ -222,7 +204,7 @@ impl Family for Seed {
                 )
             }
             "authorization" => {
-                let result: SeedAuthorizationResult = decode(run, cmd, &result)?;
+                let result: SeedAuthorizationResult = command::decode(run, &Seed, cmd, &result)?;
                 let clear = parsed.on("clear");
                 let changing = !parsed.text("words").trim().is_empty() || clear;
                 format!(
@@ -231,15 +213,17 @@ impl Family for Seed {
                 )
             }
             "attach" | "detach" if !result.present("operation") => {
-                association(cmd, parsed, &decode(run, cmd, &result)?)
+                association(cmd, parsed, &command::decode(run, &Seed, cmd, &result)?)
             }
-            "attach" | "detach" => transfer(cmd, parsed, &decode(run, cmd, &result)?),
+            "attach" | "detach" => {
+                transfer(cmd, parsed, &command::decode(run, &Seed, cmd, &result)?)
+            }
             name if name.starts_with("check ") => render_move(
-                &decode::<SeedCheckResult>(run, cmd, &result)?,
+                &command::decode::<SeedCheckResult>(run, &Seed, cmd, &result)?,
                 parsed.on("ring"),
             ),
             name if name.starts_with("review ") => {
-                let result: SeedReviewResult = decode(run, cmd, &result)?;
+                let result: SeedReviewResult = command::decode(run, &Seed, cmd, &result)?;
                 match &result.review {
                     None => format!("{} seeds need review\n", result.candidate_count),
                     Some(review) => render::review(review, name == "review show"),
@@ -381,7 +365,7 @@ fn remind(result: &SeedReminderResult) -> String {
 }
 
 fn standby(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed, result: &Reply) -> Result<(), Stop> {
-    let raw: SeedStandbyResult = decode(run, cmd, result)?;
+    let raw: SeedStandbyResult = command::decode(run, &Seed, cmd, result)?;
     if let Some(close) = raw
         .close
         .as_ref()
@@ -390,7 +374,7 @@ fn standby(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed, result: &Reply) ->
         run.closed_session = Some(close.target_session_id.clone());
     }
     if parsed.json {
-        return print_field(run, cmd, result, &[]);
+        return command::print_result(run, &Seed, cmd, result);
     }
     let mut out = String::new();
     if let Some(standby) = &raw.seed.standby {
@@ -441,7 +425,7 @@ fn write_file(path: &str, contents: &[u8]) -> std::io::Result<()> {
 }
 
 fn export(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed, result: &Reply) -> Result<(), Stop> {
-    let exported: SeedExportResult = decode(run, cmd, result)?;
+    let exported: SeedExportResult = command::decode(run, &Seed, cmd, result)?;
     let text = exported.text.unwrap_or_default();
     let out = parsed.text("out").trim().to_string();
     if out == "-" {

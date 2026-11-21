@@ -3102,8 +3102,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleWakeTurnConn(conn, msg.(*protocol.WakeTurnMessage))
 	case protocol.CmdRenameSession:
 		d.handleRenameSessionConn(conn, msg.(*protocol.RenameSessionMessage))
-	case protocol.CmdStateExplain:
-		d.handleStateExplain(conn, msg.(*protocol.StateExplainMessage))
 	case protocol.CmdAgentPeek:
 		d.handleAgentPeek(conn, msg.(*protocol.AgentPeekMessage))
 
