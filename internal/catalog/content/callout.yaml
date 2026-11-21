@@ -1,0 +1,2 @@
+groups:
+  - {name: callout, usage: "<command>", summary: "point at something in the app"}

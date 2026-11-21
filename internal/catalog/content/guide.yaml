@@ -1,0 +1,2 @@
+groups:
+  - {name: guide, usage: "[<topic>]", summary: "read the user guide"}

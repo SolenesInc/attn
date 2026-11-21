@@ -1,0 +1,2 @@
+groups:
+  - {name: turn, usage: "open|settle", summary: "put yourself in the user's queue, or take yourself out"}

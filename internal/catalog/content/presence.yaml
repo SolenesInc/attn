@@ -1,0 +1,2 @@
+groups:
+  - {name: presence, usage: "[--session-id|--seed-ids]", summary: "check whether the shell runs inside attn, or print only its session or seeds"}

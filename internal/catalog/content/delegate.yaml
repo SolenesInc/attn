@@ -1,0 +1,2 @@
+groups:
+  - {name: delegate, usage: "<command>", summary: "start another agent on work you may hand off; roles picks its models"}

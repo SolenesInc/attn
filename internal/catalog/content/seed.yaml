@@ -8,7 +8,9 @@
 # in. `cli_only` keeps an arg out of the tool.
 groups:
   - name: seed
-    summary: |
+    summary: track work in the garden; plant, tend, note and harvest seeds
+    usage: "<command>"
+    doc: |
       A seed is the unit of work: one document, one short id, one slug made of the title's key words, planted in the garden. Commands take the id or the slug; a slug two seeds share is refused, listing each match. Anything worth handing off, parking, or attributing is a seed.
     flags:
       - {name: profile, placeholder: "<name|id>", doc: "the garden of this profile; required outside attn when several profiles exist"}

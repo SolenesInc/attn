@@ -1,0 +1,2 @@
+groups:
+  - {name: crew, usage: "<command>", summary: "work with permanent agents that keep a charter and letters"}

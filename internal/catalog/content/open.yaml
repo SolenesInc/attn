@@ -1,0 +1,2 @@
+groups:
+  - {name: open, usage: "<file.md|seed-id>", summary: "show the user a markdown document"}

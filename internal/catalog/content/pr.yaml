@@ -1,0 +1,2 @@
+groups:
+  - {name: pr, usage: "<command>", summary: "deliver through the repository's pull requests or trunk"}

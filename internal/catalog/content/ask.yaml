@@ -1,0 +1,2 @@
+groups:
+  - {name: ask, usage: "[list|show|close]", summary: "ask the user something they answer from attn"}

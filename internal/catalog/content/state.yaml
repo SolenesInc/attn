@@ -1,0 +1,2 @@
+groups:
+  - {name: state, usage: "explain <id>", summary: "replay why a session's state is what it is"}

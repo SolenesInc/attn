@@ -130,8 +130,11 @@ fn route_command(argv: Vec<OsString>) -> ExitCode {
         return hand_off_to_attnd(argv);
     };
     let verb = argv.get(2).map(|verb| verb.to_string_lossy().into_owned());
-    let command = native_command(&name, verb.as_deref(), &argv);
-    if command.is_none() && top_level::attnd_owns(&name) {
+    let known = name.starts_with('-') || top_level::is_command(&name);
+    let command = known
+        .then(|| native_command(&name, verb.as_deref(), &argv))
+        .flatten();
+    if known && command.is_none() {
         return hand_off_to_attnd(argv);
     }
     let from = command.map_or(2, |command| command.arguments_from);

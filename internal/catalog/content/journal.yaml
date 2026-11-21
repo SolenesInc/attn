@@ -1,0 +1,2 @@
+groups:
+  - {name: journal, usage: "<command>", summary: "read or add to the Notebook"}

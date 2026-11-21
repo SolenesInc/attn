@@ -1,0 +1,2 @@
+groups:
+  - {name: browser, usage: "<command>", summary: "use the in-app browser"}

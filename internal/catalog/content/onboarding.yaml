@@ -1,0 +1,2 @@
+groups:
+  - {name: onboarding, usage: "[done|again]", summary: "show, finish or restart the Chief's onboarding"}

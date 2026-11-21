@@ -1,0 +1,2 @@
+groups:
+  - {name: handoff, usage: "-m \"<letter>\"", summary: "file this crew member's letter; its session ends"}

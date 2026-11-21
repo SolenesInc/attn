@@ -1,0 +1,2 @@
+groups:
+  - {name: agent, usage: "<command>", summary: "see what other agents are doing, message one, close or reload one"}

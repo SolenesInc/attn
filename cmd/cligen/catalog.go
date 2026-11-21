@@ -133,7 +133,7 @@ func (g *generator) cliText(cmd *catalog.Command, where, text string) string {
 			}
 		}
 		for i := range g.c.Commands {
-			if g.c.Commands[i].ToolName() == word {
+			if g.c.Commands[i].IsTool() && g.c.Commands[i].ToolName() == word {
 				return "`attn " + g.c.Commands[i].Name + "`"
 			}
 		}
@@ -417,7 +417,7 @@ func (g *generator) subgroupHelp(group, sub *catalog.Group) string {
 func (g *generator) groupHelp(group *catalog.Group) string {
 	var out strings.Builder
 	fmt.Fprintf(&out, "usage: attn %s <command>\n\n", group.Name)
-	writeWrapped(&out, g.cliText(nil, group.File+": "+group.Name, group.Summary), "")
+	writeWrapped(&out, g.cliText(nil, group.File+": "+group.Name, group.Doc), "")
 	fmt.Fprintf(&out, "Use attn %s <command> --help for one command's syntax and flags.\n", group.Name)
 	for _, section := range group.Sections {
 		if len(section.Commands) == 0 {

@@ -1,0 +1,39 @@
+# The CLI commands that are not offered as tools. Each runs outside the command
+# layer, so it names no runs, grant or args; its usage and summary are its line
+# in `attn --help`. A hidden command is one attn runs itself, left out of that
+# list. A reason is written once and named by its anchor after.
+commands:
+  - {name: daemon, usage: "[ensure|stop]", summary: "run the daemon, ensure it is running, or stop it", offered: false, reason: &installation "Operates the installation, and several of its commands stop or replace the process that would serve the call."}
+  - {name: instance, usage: "<status|resolve|list>", summary: "show / resolve the active instance's resources", offered: false, reason: *installation}
+  - {name: instance-env, usage: "<instance|--unset>", summary: "print shell commands for selecting an instance", offered: false, reason: *installation}
+  - {name: db, usage: "<command>", summary: "database maintenance (restore from backup)", offered: false, reason: *installation}
+  - {name: update, usage: "status [--json]", summary: "how attn was installed and whether an update is available", offered: false, reason: *installation}
+  - {name: enrollment, usage: "<command>", summary: "this data folder's enrollment: status, leave", offered: false, reason: *installation}
+  - {name: plugin, usage: "<command>", summary: "install, link, list or remove plugins", offered: false, reason: *installation}
+  - {name: preflight, summary: "diagnose tools, paths, routing, and launch settings", offered: false, reason: *installation}
+  - {name: version, usage: "[--json]", summary: "print version, channel and commit", offered: false, reason: *installation}
+  - {name: codex, usage: "status|update|restart", summary: "shared Codex versions, its update and restart", offered: false, reason: *installation}
+
+  - {name: send, usage: "<command>", summary: "send files and a message to a session as the user; pair, senders, unpair", offered: false, reason: &paired "Acts as the user from a paired device."}
+  - {name: model, usage: "<command>", summary: "call a model through attn as a paired sender; log", offered: false, reason: *paired}
+  - {name: refine, usage: "--token-stdin", summary: "clean up dictated text as a paired sender", offered: false, reason: *paired}
+
+  - {name: debug, usage: "<command>", summary: "probe debug artifacts (incidents, logs)", offered: false, reason: &diagnostics "A maintainer's diagnostic."}
+  - {name: bus, usage: "<command>", summary: "event bus: consumer cursors, lag, kill switch", offered: false, reason: *diagnostics}
+  - {name: doc, usage: "<command>", summary: "document store: collections, documents, live queries", offered: false, reason: *diagnostics}
+  - {name: prompts, usage: "<command>", summary: "inspect prompt sources and scenario composition", offered: false, reason: *diagnostics}
+  - {name: vision-check, usage: "<image> <question>", summary: "answer a question about an image (single LLM call)", offered: false, reason: *diagnostics}
+
+  - {name: conversation, usage: "<command>", summary: "list, keep forever or forget attn's conversation copies", offered: false, reason: &records "Housekeeping over the user's records. No agent has shown a need, and it still works from the CLI."}
+  - {name: worktree, usage: "<command>", summary: "every tracked worktree, the sweep and the keep pin", offered: false, reason: *records}
+
+  - {name: help, summary: "print this list", hidden: true, offered: false, reason: "Prints the CLI's command list; a tool's own description says what it does."}
+  - {name: ticket, summary: "the retired name of seed; points at the seed command", hidden: true, offered: false, reason: "The retired name of seed. It only prints the seed command to run."}
+  - {name: profile, summary: "the retired name of instance; says the new command", hidden: true, offered: false, reason: "The retired name of instance. It only prints the new command to run."}
+  - {name: profile-env, summary: "the retired name of instance-env; says the new command", hidden: true, offered: false, reason: "The retired name of instance-env. It only prints the new command to run."}
+  - {name: pty-worker, summary: "run one terminal's PTY worker", hidden: true, offered: false, reason: &plumbing "attn runs it itself, to start or move its own processes."}
+  - {name: _bridge, summary: "carry the bridge to an outpost", hidden: true, offered: false, reason: *plumbing}
+  - {name: _outpost-install, summary: "install attn on an outpost", hidden: true, offered: false, reason: *plumbing}
+  - {name: _outpost-switch, summary: "switch an outpost to its installed build", hidden: true, offered: false, reason: *plumbing}
+  - {name: _update-apply, summary: "apply a staged update", hidden: true, offered: false, reason: *plumbing}
+  - {name: _probe-tui, summary: "draw a fake agent screen for terminal probes", hidden: true, offered: false, reason: *plumbing}

@@ -1,0 +1,2 @@
+groups:
+  - {name: terminal, usage: "<command>", summary: "open a shell, read a terminal, move between desktops"}

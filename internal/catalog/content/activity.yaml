@@ -1,0 +1,2 @@
+groups:
+  - {name: activity, usage: "[clear <id>]", summary: "what each agent is doing right now"}

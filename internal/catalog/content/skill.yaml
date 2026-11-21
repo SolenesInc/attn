@@ -1,0 +1,2 @@
+groups:
+  - {name: skill, usage: "[--reference <name>|--list]", summary: "print the map above, or a capability's rules"}

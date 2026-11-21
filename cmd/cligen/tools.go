@@ -36,7 +36,7 @@ func writeTools(c *catalog.Catalog, goRoot string) error {
 	var tools []toolDefinition
 	for i := range c.Commands {
 		cmd := &c.Commands[i]
-		if !cmd.IsOffered() {
+		if !cmd.IsTool() {
 			continue
 		}
 		where := fmt.Sprintf("%s: %s", cmd.File, cmd.Name)

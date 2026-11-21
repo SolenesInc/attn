@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -9,6 +8,7 @@ import (
 
 	attn "github.com/victorarias/attn/cmd/attnd"
 	"github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/catalog"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -49,26 +49,36 @@ func TestHelpListsEveryCommandAndReferenceAndEachCommandExplainsItself(t *testin
 	s := testworld.NewStack(t)
 	help := s.Attn("--help").Stdout
 
-	named := map[string]bool{}
-	for _, match := range regexp.MustCompile("`attn ([a-z][a-z-]*)").FindAllStringSubmatch(help, -1) {
-		named[match[1]] = true
+	c, err := catalog.Builtin()
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, match := range regexp.MustCompile(`(?m)^  ([a-z][a-z-]*)`).FindAllStringSubmatch(help[strings.Index(help, "Other commands:"):], -1) {
-		named[match[1]] = true
+	var listed, inCatalog []string
+	for _, top := range c.TopLevel() {
+		inCatalog = append(inCatalog, top.Name)
+		if !top.Hidden {
+			listed = append(listed, top.Name)
+		}
+	}
+	commandList := help[strings.Index(help, "\nCommands:\n"):]
+	var helped []string
+	for _, match := range regexp.MustCompile(`(?m)^  ([a-z][a-z-]*)`).FindAllStringSubmatch(commandList, -1) {
+		helped = append(helped, match[1])
+	}
+	if !slices.Equal(slices.Sorted(slices.Values(helped)), listed) {
+		t.Errorf("attn --help lists %v, the catalog lists %v", helped, listed)
 	}
 	for _, command := range attn.TopLevelCommandNames() {
-		if strings.HasPrefix(command, "-") || strings.HasPrefix(command, "_") || command == "pty-worker" || command == "instance" {
-			continue
-		}
-		if out := s.Attn(command, "--help"); strings.Contains(out.Stderr, "unknown command") {
-			t.Errorf("attnd dispatches %q, but attn refuses it as unknown:\n%s", command, out.Stderr)
+		if !strings.HasPrefix(command, "-") && !slices.Contains(inCatalog, command) {
+			t.Errorf("attnd dispatches %q, which the catalog does not hold, so attn refuses it", command)
 		}
 	}
-	commands := slices.Sorted(maps.Keys(named))
-	if len(commands) < 30 {
-		t.Fatalf("attn --help names only %d commands: %v", len(commands), commands)
+	unknown := s.Attn("not-a-command")
+	if unknown.Code != 1 || !strings.Contains(unknown.Stderr, `unknown command "not-a-command"`) {
+		t.Errorf("a name the catalog does not hold: %+v", unknown)
 	}
-	for _, command := range commands {
+
+	for _, command := range listed {
 		if command == "instance" || command == "version" {
 			continue
 		}

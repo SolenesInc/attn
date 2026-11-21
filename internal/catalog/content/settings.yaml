@@ -1,0 +1,2 @@
+groups:
+  - {name: settings, usage: "<command>", summary: "read or change settings"}

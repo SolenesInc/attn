@@ -60,6 +60,7 @@ type Type struct {
 type Group struct {
 	Name      string     `yaml:"name"`
 	Summary   string     `yaml:"summary"`
+	Usage     string     `yaml:"usage"`
 	Doc       string     `yaml:"doc"`
 	Flags     []Flag     `yaml:"flags"`
 	Sections  []Section  `yaml:"sections"`
@@ -100,6 +101,8 @@ type Command struct {
 	Examples []map[string]any `yaml:"examples"`
 	Offered  *bool            `yaml:"offered"`
 	Reason   string           `yaml:"reason"`
+	Usage    string           `yaml:"usage"`
+	Hidden   bool             `yaml:"hidden"`
 	File     string           `yaml:"-"`
 }
 
@@ -246,6 +249,39 @@ func (c *Command) ToolName() string {
 
 func (c *Command) IsOffered() bool { return c.Offered == nil || *c.Offered }
 
+func (c *Command) ThroughLayer() bool { return c.Runs != "" }
+
+func (c *Command) IsTool() bool { return c.ThroughLayer() && c.IsOffered() }
+
+type TopLevel struct {
+	Name    string
+	Summary string
+	Hidden  bool
+	Group   *Group
+	Command *Command
+}
+
+func (c *Catalog) TopLevel() []TopLevel {
+	var out []TopLevel
+	for i := range c.Groups {
+		if g := &c.Groups[i]; !strings.Contains(g.Name, " ") {
+			out = append(out, TopLevel{Name: g.Name, Summary: g.Summary, Group: g})
+		}
+	}
+	for i := range c.Commands {
+		cmd := &c.Commands[i]
+		if strings.Contains(cmd.Name, " ") {
+			continue
+		}
+		if _, grouped := c.Group(cmd.Name); grouped {
+			continue
+		}
+		out = append(out, TopLevel{Name: cmd.Name, Summary: cmd.Summary, Hidden: cmd.Hidden, Command: cmd})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
 func (c *Catalog) ArgType(a Arg) Type { return c.Types[a.Type] }
 
 func (c *Catalog) check() []string {
@@ -287,14 +323,32 @@ func (c *Catalog) check() []string {
 			add("%s: defined twice", where)
 		}
 		seen[cmd.Name] = true
+		top := !strings.Contains(cmd.Name, " ")
+		if family, _, multiword := strings.Cut(cmd.Name, " "); multiword {
+			if _, ok := c.Group(family); !ok {
+				add("%s: no group is named %q; add the group for the family", where, family)
+			}
+		}
 		switch cmd.Runs {
 		case RunsHome, RunsHere:
 		case "":
-			add("%s: runs is missing; name where the command runs: home or here", where)
+			if cmd.IsOffered() || !top {
+				add("%s: runs is missing; name where the command runs: home or here", where)
+			}
+			if len(cmd.Args) > 0 || cmd.Result != "" || len(cmd.Errors) > 0 || cmd.Grant != "" {
+				add("%s: args, result, errors and grant belong to a command the command layer runs; name where it runs", where)
+			}
 		default:
 			add("%s: runs is %q; accepted values are home and here", where, cmd.Runs)
 		}
+		if cmd.Usage != "" && cmd.ThroughLayer() {
+			add("%s: usage is generated from the args of a command the command layer runs; remove it", where)
+		}
+		if cmd.Hidden && cmd.IsOffered() {
+			add("%s: hidden is for a command that is not offered", where)
+		}
 		switch {
+		case !cmd.ThroughLayer():
 		case cmd.Grant == "":
 			add("%s: grant is missing; name the grant the command needs: %s", where, strings.Join(slices.Concat(gates, grantNames), ", "))
 		case !slices.Contains(gates, cmd.Grant) && !slices.Contains(grantNames, cmd.Grant):
@@ -316,7 +370,7 @@ func (c *Catalog) check() []string {
 		if strings.Contains(strings.TrimSpace(cmd.Summary), "\n") {
 			add("%s: summary is more than one line", where)
 		}
-		if strings.TrimSpace(cmd.Doc) == "" {
+		if strings.TrimSpace(cmd.Doc) == "" && cmd.ThroughLayer() {
 			add("%s: doc is missing", where)
 		}
 		codes := map[string]bool{}
@@ -371,6 +425,15 @@ func (c *Catalog) check() []string {
 
 	for gi := range c.Groups {
 		g := &c.Groups[gi]
+		switch summary := strings.TrimSpace(g.Summary); {
+		case summary == "":
+			add("%s: group %q: summary is missing", g.File, g.Name)
+		case strings.Contains(summary, "\n"):
+			add("%s: group %q: summary is more than one line; put the paragraph in doc", g.File, g.Name)
+		}
+		if g.Usage != "" && strings.Contains(g.Name, " ") {
+			add("%s: group %q: usage is for a top-level group", g.File, g.Name)
+		}
 		listed := map[string]bool{}
 		for _, section := range g.Sections {
 			for _, name := range section.Commands {

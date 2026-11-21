@@ -1,0 +1,2 @@
+groups:
+  - {name: review, usage: "<command>", summary: "present a change for the user to review"}

@@ -1,0 +1,2 @@
+groups:
+  - {name: nav, usage: "<command>", summary: "code navigation for a review"}

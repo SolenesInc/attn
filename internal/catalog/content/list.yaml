@@ -1,0 +1,2 @@
+groups:
+  - {name: list, usage: "", summary: "list sessions and profiles"}

@@ -1,0 +1,2 @@
+groups:
+  - {name: session, usage: "<command>", summary: "read past sessions, rename or snooze a session"}

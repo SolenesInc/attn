@@ -1,0 +1,2 @@
+groups:
+  - {name: automation, usage: "<command>", summary: "run an agent on a schedule or an event"}
