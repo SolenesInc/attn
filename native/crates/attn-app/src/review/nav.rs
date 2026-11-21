@@ -159,6 +159,8 @@ pub(crate) struct Answer {
     pub(crate) locations: Vec<CodeNavLocation>,
     pub(crate) text: Option<String>,
     pub(crate) cursor: usize,
+    /// How many places a page key moves: as many as the list last showed whole.
+    pub(crate) page: usize,
 }
 
 impl Answer {
@@ -363,6 +365,7 @@ fn answered(
         locations,
         text,
         cursor: 0,
+        page: PLACES_SHOWN,
     };
     if kind == Kind::Definition && shown.locations.len() == 1 && !late {
         let location = shown.locations[0].clone();
@@ -393,8 +396,8 @@ pub(crate) fn panel_key(tile: &str, panel: &mut Answer, ev: &KeyEvent, tx: &mut 
     panel.cursor = match ev.key {
         Key::Down => (panel.cursor + 1).min(last),
         Key::Up => panel.cursor.saturating_sub(1),
-        Key::PageDown => (panel.cursor + page(tile)).min(last),
-        Key::PageUp => panel.cursor.saturating_sub(page(tile)),
+        Key::PageDown => (panel.cursor + panel.page).min(last),
+        Key::PageUp => panel.cursor.saturating_sub(panel.page),
         Key::Enter => return true,
         _ => return false,
     };
@@ -577,7 +580,23 @@ pub(crate) fn panel_view(tile: &str, answer: &Answer, t: &Tokens) -> El {
                 .role("listbox")
                 .label(title.clone())
                 .w_full()
-                .max_h(shown_height(tile))
+                .max_h(list_height(tile))
+                .on_layout_tx({
+                    let tile = tile.to_owned();
+                    move |state: &mut State, [_, _, _, h], tx: &mut Tx| {
+                        let whole = ((h / PLACE_HEIGHT) as usize).max(1);
+                        match state
+                            .readings
+                            .reviews
+                            .tiles
+                            .get_mut(&tile)
+                            .and_then(|r| r.nav.panel.as_mut())
+                        {
+                            Some(answer) if answer.page != whole => answer.page = whole,
+                            _ => tx.live_only(),
+                        }
+                    }
+                })
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
@@ -597,28 +616,6 @@ pub(crate) fn panel_view(tile: &str, answer: &Answer, t: &Tokens) -> El {
 }
 
 const PANEL: &str = "review.nav.panel";
-
-thread_local! {
-    static PAGES: std::cell::RefCell<std::collections::HashMap<String, usize>> =
-        std::cell::RefCell::default();
-}
-
-/// How many places a page key moves in tile `tile`: as many as its list last showed whole.
-/// Keys arrive outside a view build, where no layout can be read, so the view that draws the
-/// list keeps the count.
-fn page(tile: &str) -> usize {
-    PAGES
-        .with(|pages| pages.borrow().get(tile).copied())
-        .unwrap_or(PLACES_SHOWN)
-}
-
-/// The height the list of places in tile `tile` stands at, kept as its page.
-fn shown_height(tile: &str) -> f32 {
-    let height = list_height(tile);
-    let whole = ((height / PLACE_HEIGHT) as usize).max(1);
-    PAGES.with(|pages| pages.borrow_mut().insert(tile.to_owned(), whole));
-    height
-}
 
 /// As tall as the list of places in tile `tile` may stand: [`LIST_HEIGHT`], or less where the
 /// panel, bounded above the key line, leaves less room under the list's top and over the room

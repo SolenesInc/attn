@@ -5397,6 +5397,67 @@ fn the_page_keys_see_every_use_in_the_smallest_window_at_large_text() {
     pages_through_every_use(world);
 }
 
+#[test]
+fn a_list_opened_after_another_closed_pages_by_the_rows_it_shows() {
+    let mut world = review_in(
+        row(vec![document_tile("m", DOC, None)]),
+        (800.0, 600.0),
+        Some("1.5"),
+    );
+    let [x, y, w, _] = world
+        .screen()
+        .bounds(Target::key("tile.m.review.keys"))
+        .unwrap();
+    world.gesture(|app| app.click_at((x + w - 12.0, y + 12.0)));
+    world.daemon.on("code_nav", |r| {
+        if r["kind"] == "definition" {
+            nav_answer(vec![place("calc.go", 3, 5, "func Add(a, b int) int {")])
+        } else {
+            nav_answer(
+                (0..60)
+                    .map(|i| place(&format!("pkg{i}.go"), i + 1, 2, "\tAdd(1, 2)"))
+                    .collect(),
+            )
+        }
+    });
+    let list = "tile.m.review.nav.list";
+    let shown = |world: &World| {
+        (0..60)
+            .filter(|i| shows_inside(world, list, &format!("review.nav.place.{i}")))
+            .count()
+    };
+    press(&mut world, Key::Right);
+    type_key(&mut world, "f");
+    type_key(&mut world, "s");
+    let small = shown(&world);
+    press(&mut world, Key::PageDown);
+    press(&mut world, Key::Escape);
+    world.resize((1600.0, 900.0));
+    world.settle();
+
+    type_key(&mut world, "f");
+    type_key(&mut world, "s");
+    let rows = shown(&world);
+    assert!(
+        rows > small,
+        "the wider window shows {rows} rows, the small one {small}"
+    );
+    world.advance(std::time::Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+    press(&mut world, Key::PageDown);
+    press(&mut world, Key::Enter);
+    let read = file_reads(&world).last().cloned().unwrap_or_default();
+    let picked: usize = read
+        .trim_start_matches("pkg")
+        .trim_end_matches(".go")
+        .parse()
+        .unwrap_or_else(|_| panic!("opened {read:?}"));
+    assert!(
+        picked > small && picked <= rows + 1,
+        "a page moved to place {picked}; the small list showed {small}, this one {rows}"
+    );
+}
+
 /// Asks for 60 uses, then pages down to the last and back up to the first: each way, every
 /// use shows whole at some step.
 fn pages_through_every_use(mut world: World) {
