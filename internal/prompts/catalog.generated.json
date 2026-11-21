@@ -187,10 +187,26 @@
                         "keep_final_newline": true
                       },
                       {
-                        "kind": "text",
-                        "id": "session.attn-map.agent",
-                        "source": "content/session/attn-map/agent.md",
-                        "keep_final_newline": true
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.agent",
+                            "source": "content/session/attn-map/agent.md",
+                            "keep_final_newline": true
+                          }
+                        ]
                       },
                       {
                         "kind": "choose",
@@ -413,9 +429,25 @@
                     "source": "content/agent.md"
                   },
                   {
-                    "kind": "text",
-                    "id": "session.agent-reach",
-                    "source": "content/agent-reach.md"
+                    "kind": "choose",
+                    "condition": {
+                      "field": {
+                        "name": "agent_tools",
+                        "kind": "flag",
+                        "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                      },
+                      "test": "enabled"
+                    },
+                    "children": [
+                      {
+                        "kind": "compose"
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.agent-reach",
+                        "source": "content/agent-reach.md"
+                      }
+                    ]
                   },
                   {
                     "kind": "text",
@@ -7281,5 +7313,5 @@
       ]
     }
   ],
-  "definitions_hash": "444f3b5eeee7c916732ede80a568eff1d12e3f141c2c23d8380c45608db5c5e0"
+  "definitions_hash": "5f12f5320e0798dc7541c27d474f3bdae99a905de6173583935ea635505a38db"
 }
