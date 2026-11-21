@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Fails when a file of native/crates asks the build's OS (cfg!(target_os ...), #[cfg(... target_os
+# ...)], target_vendor) and is not one of the files that talk to the real OS: the '!' entries of
+# native_macos in .github/ci-inputs.yml, which also decide when CI macOS runs. A native test acts
+# as a Mac on every host, so platform behavior behind a host read passes on Linux and breaks on
+# macOS. Lint attributes (cfg_attr(..., allow(...))) don't count.
+set -euo pipefail
+
+root="${NATIVE_HOST_READS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+inputs="$root/.github/ci-inputs.yml"
+
+os_files="$(awk '
+  /^[a-z_]+:/ { group = $1; next }
+  group == "native_macos:" && /^  - '\''!native\/crates\// { sub(/^  - '\''!/, ""); sub(/'\''$/, ""); print }
+' "$inputs")"
+
+talks_to_the_os() {
+  local file="$1" entry
+  while IFS= read -r entry; do
+    case "$entry" in
+      */\*\*) [[ "$file" == "${entry%\*\*}"* ]] && return 0 ;;
+      *) [ "$file" = "$entry" ] && return 0 ;;
+    esac
+  done <<<"$os_files"
+  return 1
+}
+
+problems=()
+while IFS=: read -r file line _; do
+  [ -n "$file" ] || continue
+  talks_to_the_os "$file" ||
+    problems+=("$file:$line asks the build's OS: ask rune::Platform::current() for platform behavior (attn_testkit::platform() in a test), and add the file to native_macos in .github/ci-inputs.yml only when it talks to the real operating system")
+done < <(cd "$root" && grep -rnE --include='*.rs' '(cfg!\(|#!?\[cfg\().*target_(os|vendor)' native/crates 2>/dev/null | sort || true)
+
+if [ "${#problems[@]}" -gt 0 ]; then
+  printf 'native-host-reads: %s\n' "${problems[@]}" >&2
+  exit 1
+fi

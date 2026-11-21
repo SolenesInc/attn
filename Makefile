@@ -260,6 +260,7 @@ NATIVE_CLIPPY ?= --workspace
 check-native: $(NATIVE_VT_DEP)
 	scripts/native-parity
 	scripts/native-clippy-allows
+	scripts/native-host-reads
 	@labels=$$(git grep -nE '(Ctrl|Alt|Shift|Super|Cmd)\+|⌘|⇧|⌥|⌃' -- 'native/crates/*/tests/*' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//'); \
 	if [ -n "$$labels" ]; then \
 		printf '%s\n' "$$labels" >&2; \

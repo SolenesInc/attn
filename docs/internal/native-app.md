@@ -87,8 +87,9 @@ system, such as windows, the browser's WebKit view and Quick Capture, keeps its
 CI macOS's `Native / macos-15` runs the checks nightly, on a release commit, and
 when a file its `native_macos` group in `.github/ci-inputs.yml` keeps changes.
 Those files cover the code that has such a `cfg`, the Rune pin and the VT
-library. Keep a file there with a `'!'` entry when it gains a
-`cfg(target_os = "macos")`.
+library. `scripts/native-host-reads`, in `make check-native`, fails on a file
+of `native/crates` that holds a `cfg(target_os = ...)` and is not a `'!'` entry
+there. Add a file only when it talks to the real operating system.
 
 ## Colors
 

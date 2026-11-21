@@ -6,8 +6,9 @@
 # CI macOS keeps its own pass records, because a Linux pass does not prove
 # macOS. native_macos and pty_upgrade_macos also leave out paths their jobs read
 # but that behave the same on Linux, where CI proves them: native_macos keeps
-# only the code that compiles or behaves differently on macOS, and
-# pty_upgrade_macos only the PTY paths. The nightly run covers the rest.
+# only the code that compiles or behaves differently on macOS, which
+# scripts/native-host-reads holds native code to, and pty_upgrade_macos only
+# the PTY paths. The nightly run covers the rest.
 every_group:
   - 'website/**'
   - 'docs/internal/**'
