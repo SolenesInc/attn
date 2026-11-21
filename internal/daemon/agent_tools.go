@@ -6,17 +6,16 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
 	"sync"
 
-	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/modelcontextprotocol/go-sdk/auth"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/command"
+	"github.com/victorarias/attn/internal/mcpserver"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
 )
@@ -50,34 +49,49 @@ type agentCall struct {
 
 type agentToolServers struct {
 	once    sync.Once
-	servers map[string]*mcp.Server
+	servers map[string]*mcpserver.Server
+	tools   map[string]agentTool
+}
+
+type agentTool struct {
+	def   agentToolDefinition
+	input *mcpserver.Schema
 }
 
 func (d *Daemon) agentToolsHandler() http.Handler {
-	sdk := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
-		return d.agentToolServers()[r.URL.Query().Get("tools")]
-	}, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := d.agentToolServers()[r.URL.Query().Get("tools")]; !ok {
-			http.Error(w, fmt.Sprintf("tools=%s names no tool set; use tools=core, tools=rest, or leave it out for every tool", r.URL.Query().Get("tools")), http.StatusBadRequest)
+		set := r.URL.Query().Get("tools")
+		server, ok := d.agentToolServers()[set]
+		if !ok {
+			http.Error(w, fmt.Sprintf("tools=%s names no tool set; use tools=core, tools=rest, or leave it out for every tool", set), http.StatusBadRequest)
 			return
 		}
-		call := &agentCall{}
-		verify := func(_ context.Context, token string, r *http.Request) (*auth.TokenInfo, error) {
-			caller, who, err := d.agentCaller(token, r.Header)
-			if err != nil {
-				d.logf("agent tools: %s %s refused: %v", r.Method, r.URL.Path, err)
-				return nil, fmt.Errorf("%w: %v", auth.ErrInvalidToken, err)
-			}
-			call.caller, call.who = caller, who
-			return &auth.TokenInfo{Extra: map[string]any{"call": call}}, nil
+		call, err := d.agentCallFor(r)
+		if err != nil {
+			d.logf("agent tools: %s %s refused: %v", r.Method, r.URL.Path, err)
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
 		}
-		auth.RequireBearerToken(verify, &auth.RequireBearerTokenOptions{AllowMissingExpiration: true})(sdk).ServeHTTP(w, r)
+		server.Serve(w, r, func(ctx context.Context, tool string, arguments json.RawMessage) mcpserver.Result {
+			return d.callAgentTool(ctx, call, d.agentToolSet.tools[tool], arguments)
+		})
 		if call.after != nil {
 			_ = http.NewResponseController(w).Flush()
 			call.after()
 		}
 	})
+}
+
+func (d *Daemon) agentCallFor(r *http.Request) (*agentCall, error) {
+	scheme, token, _ := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " ")
+	if !strings.EqualFold(scheme, "Bearer") || strings.TrimSpace(token) == "" {
+		return nil, errors.New("no bearer token")
+	}
+	caller, who, err := d.agentCaller(strings.TrimSpace(token), r.Header)
+	if err != nil {
+		return nil, fmt.Errorf("invalid token: %w", err)
+	}
+	return &agentCall{caller: caller, who: who}, nil
 }
 
 func (d *Daemon) agentCaller(token string, header http.Header) (command.Caller, string, error) {
@@ -124,7 +138,7 @@ func (d *Daemon) sessionCaller(session protocol.SessionID) command.Caller {
 	return c
 }
 
-func (d *Daemon) agentToolServers() map[string]*mcp.Server {
+func (d *Daemon) agentToolServers() map[string]*mcpserver.Server {
 	d.agentToolSet.once.Do(func() {
 		var catalog struct {
 			Name         string                `json:"name"`
@@ -134,77 +148,77 @@ func (d *Daemon) agentToolServers() map[string]*mcp.Server {
 		if err := json.Unmarshal(agentToolDefinitions, &catalog); err != nil {
 			panic(err)
 		}
-		servers := map[string]*mcp.Server{}
-		for _, set := range []string{agentToolsAll, agentToolsCore, agentToolsRest} {
-			servers[set] = mcp.NewServer(&mcp.Implementation{Name: catalog.Name, Version: buildinfo.Version}, &mcp.ServerOptions{Instructions: catalog.Instructions})
-		}
-		for _, tool := range catalog.Tools {
-			add := d.agentTool(tool)
-			add(servers[agentToolsAll])
-			if tool.Core {
-				add(servers[agentToolsCore])
+		sets := map[string][]mcpserver.Tool{}
+		d.agentToolSet.tools = map[string]agentTool{}
+		for _, def := range catalog.Tools {
+			d.agentToolSet.tools[def.Name] = agentTool{def: def, input: def.parsedInput()}
+			sets[agentToolsAll] = append(sets[agentToolsAll], def.offered())
+			if def.Core {
+				sets[agentToolsCore] = append(sets[agentToolsCore], def.offered())
 			} else {
-				add(servers[agentToolsRest])
+				sets[agentToolsRest] = append(sets[agentToolsRest], def.offered())
 			}
 		}
-		d.agentToolSet.servers = servers
+		d.agentToolSet.servers = map[string]*mcpserver.Server{}
+		for _, set := range []string{agentToolsAll, agentToolsCore, agentToolsRest} {
+			d.agentToolSet.servers[set] = mcpserver.New(catalog.Name, buildinfo.Version, catalog.Instructions, sets[set])
+		}
 	})
 	return d.agentToolSet.servers
 }
 
-func (d *Daemon) agentTool(def agentToolDefinition) func(*mcp.Server) {
-	var input jsonschema.Schema
-	if err := json.Unmarshal(def.InputSchema, &input); err != nil {
-		panic(fmt.Sprintf("%s: input schema: %v", def.Name, err))
-	}
-	resolved, err := input.Resolve(nil)
+func (def agentToolDefinition) parsedInput() *mcpserver.Schema {
+	input, err := mcpserver.ParseSchema(def.InputSchema)
 	if err != nil {
 		panic(fmt.Sprintf("%s: input schema: %v", def.Name, err))
 	}
-	tool := &mcp.Tool{
-		Name:        def.Name,
-		Title:       def.Title,
-		Description: def.Description,
-		InputSchema: def.InputSchema,
-		Annotations: &mcp.ToolAnnotations{Title: def.Title, ReadOnlyHint: def.ReadOnly},
-	}
-	if len(def.OutputSchema) > 0 {
-		tool.OutputSchema = def.OutputSchema
-	}
-	if def.Core {
-		tool.Meta = mcp.Meta{"anthropic/alwaysLoad": true}
-	}
-	handler := func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		call := req.Extra.TokenInfo.Extra["call"].(*agentCall)
-		var args map[string]any
-		var refusal *command.Refusal
-		if !d.on(setting.AgentToolsEnabled) {
-			refusal = &command.Refusal{Code: "setting_off", Message: setting.AgentToolsEnabled.Refusal().Error(), Fix: "Use the attn CLI until the setting is on."}
-		}
-		if refusal == nil {
-			args, refusal = def.arguments(req.Params.Arguments, resolved)
-		}
-		if refusal == nil {
-			refusal = d.localWork(def, args, call.caller)
-		}
-		var result any
-		if refusal == nil {
-			result, refusal = d.runAgentCommand(ctx, call, def.Command, args)
-		}
-		if refusal != nil {
-			d.logf("agent tools: %s by %s (session %s): refused %s: %s", def.Name, call.who, call.caller.Session, refusal.Code, refusal.Message)
-			return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: def.refusalText(refusal)}}}, nil
-		}
-		d.logf("agent tools: %s by %s (session %s): ok", def.Name, call.who, call.caller.Session)
-		if text, ok := result.(string); ok {
-			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil
-		}
-		return &mcp.CallToolResult{Content: []mcp.Content{}, StructuredContent: result}, nil
-	}
-	return func(s *mcp.Server) { s.AddTool(tool, handler) }
+	return input
 }
 
-func (def agentToolDefinition) arguments(raw json.RawMessage, schema *jsonschema.Resolved) (map[string]any, *command.Refusal) {
+func (def agentToolDefinition) offered() mcpserver.Tool {
+	tool := mcpserver.Tool{
+		Name:         def.Name,
+		Title:        def.Title,
+		Description:  def.Description,
+		InputSchema:  def.InputSchema,
+		OutputSchema: def.OutputSchema,
+		Annotations:  &mcpserver.Annotations{Title: def.Title, ReadOnlyHint: def.ReadOnly},
+	}
+	if def.Core {
+		tool.Meta = map[string]any{"anthropic/alwaysLoad": true}
+	}
+	return tool
+}
+
+func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, tool agentTool, arguments json.RawMessage) mcpserver.Result {
+	def := tool.def
+	var args map[string]any
+	var refusal *command.Refusal
+	if !d.on(setting.AgentToolsEnabled) {
+		refusal = &command.Refusal{Code: "setting_off", Message: setting.AgentToolsEnabled.Refusal().Error(), Fix: "Use the attn CLI until the setting is on."}
+	}
+	if refusal == nil {
+		args, refusal = def.arguments(arguments, tool.input)
+	}
+	if refusal == nil {
+		refusal = d.localWork(def, args, call.caller)
+	}
+	var result any
+	if refusal == nil {
+		result, refusal = d.runAgentCommand(ctx, call, def.Command, args)
+	}
+	if refusal != nil {
+		d.logf("agent tools: %s by %s (session %s): refused %s: %s", def.Name, call.who, call.caller.Session, refusal.Code, refusal.Message)
+		return mcpserver.Result{IsError: true, Content: []mcpserver.Content{mcpserver.Text(def.refusalText(refusal))}}
+	}
+	d.logf("agent tools: %s by %s (session %s): ok", def.Name, call.who, call.caller.Session)
+	if text, ok := result.(string); ok {
+		return mcpserver.Result{Content: []mcpserver.Content{mcpserver.Text(text)}}
+	}
+	return mcpserver.Result{Content: []mcpserver.Content{}, StructuredContent: result}
+}
+
+func (def agentToolDefinition) arguments(raw json.RawMessage, schema *mcpserver.Schema) (map[string]any, *command.Refusal) {
 	args := map[string]any{}
 	if len(bytes.TrimSpace(raw)) > 0 && string(raw) != "null" {
 		if err := json.Unmarshal(raw, &args); err != nil {

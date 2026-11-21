@@ -138,6 +138,12 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
   `--mcp-config`. Otherwise `--mcp-config` consumes the subcommand's words.
   `--mcp-config <json> --setting-sources '' auth status` preserves the
   subcommand.
+- An HTTP MCP server's first request is `server/discover` at protocol
+  2026-07-28. When the server advertises `tools.listChanged`, Claude then holds
+  a `subscriptions/listen` stream open. When `server/discover` gets -32601,
+  Claude sends `initialize` at 2025-11-25 and `notifications/initialized`,
+  takes a 405 on GET, and lists and calls tools (probed on 2.1.330 with
+  `claude -p`; captures on `s-vadq83`).
 - `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false` disables composer suggestions
   without replacing inline hook settings. `promptSuggestionEnabled: false`
   is also a supported setting. Both switches were read in 2.1.310's source.

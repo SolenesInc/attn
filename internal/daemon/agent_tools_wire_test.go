@@ -5,6 +5,8 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -255,6 +257,64 @@ func TestASharedServersCredentialActsAsTheSessionHoldingTheConversationItsHeader
 		_, err := agentToolsCaller{w: w, bearer: credential, headers: headers}.connect(t, "")
 		if err == nil || !strings.Contains(err.Error(), "Unauthorized") {
 			t.Errorf("%s: connecting gave %v, want 401 Unauthorized", name, err)
+		}
+	}
+}
+
+func TestAgentToolsAnswerEachPostAloneWithOneJSONBodyAndRefuseAStream(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	seed := plantForTools(t, w)
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	bearer := terminalCredential(t, w, app.Terminal(session))
+	send := func(method, body string) (*http.Response, string) {
+		t.Helper()
+		req, err := http.NewRequest(method, "http://"+w.WSAddr+"/mcp", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp, string(data)
+	}
+
+	resp, body := send(http.MethodPost, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"seed_note","arguments":{"seed":"`+seed+`","text":"Without a handshake."}}}`)
+	var reply struct {
+		ID     int `json:"id"`
+		Result struct {
+			IsError bool `json:"isError"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(body), &reply); err != nil || resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "application/json" || reply.ID != 1 || reply.Result.IsError {
+		t.Fatalf("a tools/call with no initialize before it answered %d %q with %q (%v), want one JSON reply to id 1", resp.StatusCode, resp.Header.Get("Content-Type"), body, err)
+	}
+	if id := resp.Header.Get("Mcp-Session-Id"); id != "" {
+		t.Errorf("the server named session %q, want no session", id)
+	}
+	if author, text := newestNoteAuthor(t, w, seed); author != session || text != "Without a handshake." {
+		t.Errorf("the seed's newest note is %q by %s, want the call's note by %s", text, author, session)
+	}
+
+	if resp, _ := send(http.MethodPost, `{"jsonrpc":"2.0","method":"notifications/initialized"}`); resp.StatusCode != http.StatusAccepted {
+		t.Errorf("a notification answered %d, want 202 Accepted", resp.StatusCode)
+	}
+	if resp, body := send(http.MethodPost, `{"jsonrpc":"2.0","id":"probe","method":"server/discover","params":{}}`); resp.StatusCode != http.StatusOK || !strings.Contains(body, `"code":-32601`) {
+		t.Errorf("server/discover answered %d %q, want -32601, which makes Claude Code fall back to initialize", resp.StatusCode, body)
+	}
+	for _, method := range []string{http.MethodGet, http.MethodDelete} {
+		if resp, _ := send(method, ""); resp.StatusCode != http.StatusMethodNotAllowed || resp.Header.Get("Allow") != http.MethodPost {
+			t.Errorf("%s answered %d with Allow %q, want 405 and Allow POST", method, resp.StatusCode, resp.Header.Get("Allow"))
 		}
 	}
 }

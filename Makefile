@@ -238,7 +238,7 @@ lint-go: $(NATIVE_VT_DEP)
 		echo "the shipped binaries must not import the test worlds listed above" >&2; exit 1; \
 	fi
 	@deps=$$(go list -deps ./cmd/attnd) || exit 1; \
-	if printf '%s\n' "$$deps" | grep -E '^github.com/(santhosh-tekuri/jsonschema|prometheus)/'; then \
+	if printf '%s\n' "$$deps" | grep -E '^github.com/(santhosh-tekuri/jsonschema|prometheus|modelcontextprotocol/go-sdk|google/jsonschema-go)/'; then \
 		echo "attn must not link the packages listed above: every CLI command and agent hook pays for their init on every start" >&2; exit 1; \
 	fi
 	@deps=$$(go list -deps ./internal/sessionmonitor) || exit 1; \

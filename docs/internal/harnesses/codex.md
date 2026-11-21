@@ -24,6 +24,12 @@ Read in the source at openai/codex 60947e2341.
   SubagentStart (`core/src/hook_runtime.rs`).
 - Codex supports only `command` and `mcp_tool` hooks; `prompt` and `agent`
   parse but are skipped (0.164, `codex-rs/config/src/hook_config.rs`).
+- An HTTP MCP server gets `initialize` at protocol 2025-06-18, then
+  `notifications/initialized` and `tools/list`, and no GET (probed on 0.171.0
+  with `codex exec`; captures on `s-vadq83`). `bearer_token_env_var` names the
+  environment variable that holds the bearer token, and
+  `default_tools_approval_mode = "approve"` runs the server's tools without
+  asking.
 - Hooks run in the process that runs the turn. For a PTY launch, that process
   is the terminal's own Codex process, so `ATTN_TERMINAL_ID` names the terminal
   (older launches use `ATTN_SESSION_ID` with the same meaning). For a
