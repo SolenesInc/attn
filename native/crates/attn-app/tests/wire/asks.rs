@@ -1031,6 +1031,51 @@ fn an_ask_whose_tender_is_on_standby_names_it_and_says_whether_an_answer_resumes
 }
 
 #[test]
+fn a_follow_up_to_a_tender_on_standby_says_whether_it_resumes_it() {
+    for (resume, says) in [
+        (None, "Follow-up resumes Migrate the cache"),
+        (
+            Some("off"),
+            "Follow-up waits for Migrate the cache · on standby",
+        ),
+    ] {
+        let mut seed = migration(Some("delegate"));
+        seed.standby = Some(SeedStandbyView {
+            tender: Some(StandbyTender {
+                session_id: "delegate".into(),
+                label: "Migrate the cache".into(),
+                agent: "claude".into(),
+                ..StandbyTender::default()
+            }),
+            ..SeedStandbyView::default()
+        });
+        let mut state = one_desktop(vec![api_working()]);
+        state.seeds = Some(vec![seed]);
+        let settings: Vec<(&str, &str)> = resume
+            .map(|value| ("garden.tender_resume", value))
+            .into_iter()
+            .collect();
+        let answered = replied(landing(), vec![picked("q1", &["Postgres"])], None);
+        let mut world = start_on(state, vec![answered], &settings);
+        world.daemon.on("ask_follow_up", |r| {
+            message(AskFollowUpResultMessage {
+                request_id: r["request_id"].as_str().unwrap().into(),
+                ask_id: r["ask_id"].as_str().unwrap().into(),
+                success: true,
+                ..AskFollowUpResultMessage::new()
+            })
+        });
+        open_sheet(&mut world);
+        letter(&mut world, "r");
+        letter(&mut world, "f");
+        world.gesture(|app| app.type_text("Keep the old keys."));
+        send_key(&mut world);
+
+        assert_eq!(name(&world, "notice.text"), says, "{resume:?}");
+    }
+}
+
+#[test]
 fn open_in_garden_closes_the_sheet_for_the_seed_and_the_sheet_reopens_on_the_ask() {
     let mut world = start_with_seeds(
         vec![landing()],
@@ -3157,32 +3202,41 @@ fn text_typed_while_a_follow_up_sends_stays_in_the_field_after_the_daemon_takes_
 }
 
 #[test]
-fn a_follow_up_no_session_holds_says_it_waits_for_the_seeds_next_tender() {
-    let seed_ask = Ask {
+fn a_follow_up_no_session_holds_says_who_it_waits_for() {
+    let about_seed = Ask {
         seed_id: Some("s-cache".into()),
         seed_title: Some("Cache migration".into()),
         ..cache_store()
     };
-    let answered = replied(seed_ask, vec![picked("q1", &["Postgres"])], None);
-    let mut world = start(vec![answered], vec![]);
-    world.daemon.on("ask_follow_up", |r| {
-        message(AskFollowUpResultMessage {
-            request_id: r["request_id"].as_str().unwrap().into(),
-            ask_id: r["ask_id"].as_str().unwrap().into(),
-            success: true,
-            ..AskFollowUpResultMessage::new()
-        })
-    });
-    open_sheet(&mut world);
-    letter(&mut world, "r");
-    letter(&mut world, "f");
-    world.gesture(|app| app.type_text("Use Redis."));
-    send_key(&mut world);
+    let from_member = Ask {
+        crew_member: Some("ólafur".into()),
+        ..cache_store()
+    };
+    for (ask, says) in [
+        (
+            about_seed,
+            "Follow-up waits for the next tender of Cache migration",
+        ),
+        (from_member, "Follow-up waits for Ólafur's next session"),
+    ] {
+        let answered = replied(ask, vec![picked("q1", &["Postgres"])], None);
+        let mut world = start(vec![answered], vec![]);
+        world.daemon.on("ask_follow_up", |r| {
+            message(AskFollowUpResultMessage {
+                request_id: r["request_id"].as_str().unwrap().into(),
+                ask_id: r["ask_id"].as_str().unwrap().into(),
+                success: true,
+                ..AskFollowUpResultMessage::new()
+            })
+        });
+        open_sheet(&mut world);
+        letter(&mut world, "r");
+        letter(&mut world, "f");
+        world.gesture(|app| app.type_text("Use Redis."));
+        send_key(&mut world);
 
-    assert_eq!(world.daemon.sent_of("ask_follow_up").len(), 1);
-    assert!(!has(&world, "asks.follow-up.field"));
-    assert_eq!(
-        name(&world, "notice.text"),
-        "Follow-up waits for the next tender of Cache migration"
-    );
+        assert_eq!(world.daemon.sent_of("ask_follow_up").len(), 1);
+        assert!(!has(&world, "asks.follow-up.field"));
+        assert_eq!(name(&world, "notice.text"), says);
+    }
 }

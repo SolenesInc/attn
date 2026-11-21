@@ -28,6 +28,7 @@ const TENDER_RESUME: &str = "garden.tender_resume";
 pub(crate) struct Standby<'a> {
     pub tender: &'a StandbyTender,
     pub answer: String,
+    pub resumes: bool,
 }
 
 /// The sheet's own state: which ask it shows, what the person has written in each, and the
@@ -656,18 +657,29 @@ fn standby_tender<'a>(ask: &Ask, facts: &'a Facts) -> Option<Standby<'a>> {
         .as_ref()?;
     let tender = standby.tender.as_ref()?;
     let blocked = standby.resume_blocked.as_deref().unwrap_or_default();
-    let answer = if !blocked.is_empty() {
-        format!("Resume blocked: {blocked}. Your answer waits for it.")
+    let (answer, resumes) = if !blocked.is_empty() {
+        (
+            format!("Resume blocked: {blocked}. Your answer waits for it."),
+            false,
+        )
     } else {
         match facts.settings.get(TENDER_RESUME).map(String::as_str) {
-            Some("off") => "Seed mail does not resume it, so your answer waits for it.".into(),
-            Some("watches") => {
-                "Your answer waits until a reminder or pull request update resumes it.".into()
-            }
-            _ => "Your answer resumes it.".into(),
+            Some("off") => (
+                "Seed mail does not resume it, so your answer waits for it.".into(),
+                false,
+            ),
+            Some("watches") => (
+                "Your answer waits until a reminder or pull request update resumes it.".into(),
+                false,
+            ),
+            _ => ("Your answer resumes it.".into(), true),
         }
     };
-    Some(Standby { tender, answer })
+    Some(Standby {
+        tender,
+        answer,
+        resumes,
+    })
 }
 
 fn from(ask: &Ask, holder: Option<&Session>, standby: Option<&StandbyTender>) -> String {
@@ -699,8 +711,8 @@ fn next_tender_of(seed: &str, ask: &Ask) -> String {
     format!("the next tender of {}", title.unwrap_or(seed))
 }
 
-/// Says where a follow-up the daemon took went: to the session holding the ask, or, with none
-/// holding it, who it waits for.
+/// Says where a follow-up the daemon took went: to the session holding the ask, to the tender
+/// on standby it resumes, or, with neither, who it waits for.
 fn follow_up_notice(ask: &Ask, holder: Option<&str>, facts: &Facts) -> String {
     if let Some(id) = holder {
         return match facts.sessions.iter().find(|s| s.id == id) {
@@ -709,6 +721,10 @@ fn follow_up_notice(ask: &Ask, holder: Option<&str>, facts: &Facts) -> String {
         };
     }
     let waits_for = match (standby_tender(ask, facts), &ask.crew_member, &ask.seed_id) {
+        (Some(standby), _, _) if standby.resumes => {
+            let name = crate::desktop::chain::dormant_name(standby.tender);
+            return format!("Follow-up resumes {name}");
+        }
         (Some(standby), _, _) => format!(
             "{} · on standby",
             crate::desktop::chain::dormant_name(standby.tender)
@@ -1193,8 +1209,9 @@ pub(crate) fn follow_up_edit<'a>(state: &'a mut State, ask: &str) -> &'a mut Tex
 }
 
 /// Sends what was written to follow up on a replied ask to whoever holds it now. Once the
-/// daemon takes it a notice says who it went to, and the field closes unless the person wrote
-/// more in it meanwhile; a refusal keeps it and says why.
+/// daemon takes it a notice says who it went to, or who it waits for when no session holds the
+/// ask, and the field closes unless the person wrote more in it meanwhile; a refusal keeps it
+/// and says why.
 fn send_follow_up(state: &mut State, id: String, tx: &mut Tx) {
     if state.window.asks.sending.is_some() {
         return;
