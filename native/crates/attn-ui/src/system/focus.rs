@@ -14,6 +14,13 @@ pub fn ring_scroll(e: El) -> El {
     super::door::ring_room_around(e)
 }
 
+/// A scrolling column whose bar is drawn over its end, such as a popover's: [`ring_scroll`]'s
+/// room, and the bar's width at its end, so the bar covers no control and no ring. Scroll it
+/// with [`crate::page_scroll_bar`].
+pub fn ring_scroll_beside_bar(e: El) -> El {
+    super::door::ring_room_beside_bar(e)
+}
+
 /// The ring a focusable control draws while the keyboard is on it, outside its edge.
 pub(crate) fn ring(e: El, t: &Tokens) -> El {
     e.focus_ring(WIDTH, OFFSET, t.warning)

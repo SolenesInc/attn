@@ -1519,3 +1519,188 @@ fn a_route_picker_shows_at_least_one_whole_model_in_the_smallest_window() {
     );
     rest(&mut world);
 }
+
+/// The fills drawn by the element keyed `key` and everything inside it.
+fn fills_under(world: &World, key: &str) -> Vec<String> {
+    let elements = world.runtime().elements();
+    let Some(root) = elements.iter().position(|e| e.key.as_deref() == Some(key)) else {
+        panic!("no {key} on screen");
+    };
+    let under = |mut at: usize| loop {
+        if at == root {
+            return true;
+        }
+        match elements[at].parent {
+            Some(parent) => at = parent,
+            None => return false,
+        }
+    };
+    (0..elements.len())
+        .filter(|&i| under(i) && elements[i].fill.a > 0.0)
+        .map(|i| elements[i].fill.hex())
+        .collect()
+}
+
+fn effort_key(world: &World, name: &str) -> String {
+    world
+        .screen()
+        .descendants(Target::key("settings.route-picker.effort"))
+        .into_iter()
+        .find(|n| n.role == "button" && n.name.as_deref() == Some(name))
+        .and_then(|n| n.key)
+        .unwrap_or_else(|| panic!("no effort {name}"))
+}
+
+fn model_key(world: &World, name: &str) -> String {
+    world
+        .screen()
+        .descendants(Target::key("settings.route-picker.models"))
+        .into_iter()
+        .find(|n| {
+            n.role == "list-box-option" && n.name.as_deref().is_some_and(|s| s.starts_with(name))
+        })
+        .and_then(|n| n.key)
+        .unwrap_or_else(|| panic!("no model {name}"))
+}
+
+#[test]
+fn the_open_picker_fills_the_current_effort_as_chosen() {
+    let mut world = on_agents(&both(&[
+        ("default_model_claude", "opus"),
+        ("default_effort_claude", "high"),
+    ]));
+    open_route(&mut world, "Claude default model");
+    let high = fills_under(&world, &effort_key(&world, "high"));
+    let low = fills_under(&world, &effort_key(&world, "low"));
+    assert_ne!(
+        high, low,
+        "the stored effort high is drawn like the effort low beside it"
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn the_current_model_reads_as_chosen_apart_from_hover_and_the_keyboard() {
+    let mut world = on_agents(&both(&[("default_model_claude", "opus")]));
+    open_route(&mut world, "Claude default model");
+    let chosen = model_key(&world, "Opus 5.5");
+    let other = model_key(&world, "Sonnet 5.5");
+    let [x, y, w, h] = world.rect(&other);
+    world.gesture(|app| app.move_to(((x + w / 2.0) as f32, (y + h / 2.0) as f32)));
+    world.settle();
+    let marked = |world: &World, key: &str| {
+        world
+            .runtime()
+            .elements()
+            .iter()
+            .any(|e| e.key.as_deref() == Some(&format!("{key}.in-view")))
+    };
+    assert!(
+        marked(&world, &chosen),
+        "the current model carries no chosen mark"
+    );
+    assert!(
+        !marked(&world, &other),
+        "the hovered model carries the chosen mark"
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn opening_the_picker_puts_the_keyboard_in_its_filter() {
+    let mut world = on_agents(BOTH);
+    open_route(&mut world, "Claude default model");
+    world.settle();
+    let focused = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.focused)
+        .and_then(|e| e.key);
+    assert_eq!(focused.as_deref(), Some("settings.route-picker.filter"));
+    world.gesture(|app| app.type_text("son"));
+    world.settle();
+    let names: Vec<String> = options(&world, "models").into_iter().map(|o| o.0).collect();
+    assert!(
+        names.iter().all(|n| n.starts_with("Sonnet")) && !names.is_empty(),
+        "typing on open filters the models: {names:?}"
+    );
+    rest(&mut world);
+}
+
+fn option_keys(world: &World) -> Vec<String> {
+    world
+        .screen()
+        .descendants(Target::key("settings.route-picker.models"))
+        .into_iter()
+        .filter(|n| n.role == "list-box-option")
+        .filter_map(|n| n.key)
+        .collect()
+}
+
+#[test]
+fn in_the_smallest_window_the_picker_stays_inside_it_and_its_list_holds_three_whole_models() {
+    let mut world = smallest_picker();
+    let window = world.rect("window");
+    let picker = world.rect("settings.route-picker");
+    assert!(
+        inside(picker, window),
+        "the picker at {picker:?} runs out of the window {window:?}"
+    );
+    let list = world.rect("settings.route-picker.models");
+    let whole = option_keys(&world)
+        .iter()
+        .filter(|key| inside(world.rect(key), list))
+        .count();
+    assert!(
+        whole >= 3,
+        "the model list at {list:?} holds only {whole} whole models"
+    );
+    rest(&mut world);
+}
+
+/// The picker's scroll bar, stated apart from the library: 8 points wide.
+const BAR_WIDTH: f64 = 8.0;
+
+#[test]
+fn in_the_smallest_window_the_picker_s_scroll_bar_covers_no_control_or_ring() {
+    let mut world = smallest_picker();
+    let main = world.rect("settings.route-picker.main");
+    let bar_starts = main[0] + main[2] - BAR_WIDTH;
+    let reach = f64::from(attn_ui::system::RING_REACH);
+    let mut keys = option_keys(&world);
+    keys.push("settings.route-picker.refresh".into());
+    for key in keys {
+        let at = world.rect(&key);
+        assert!(
+            at[0] + at[2] + reach <= bar_starts + 0.5,
+            "{key}'s ring ends at {} under the bar from {bar_starts}",
+            at[0] + at[2] + reach
+        );
+    }
+    rest(&mut world);
+}
+
+#[test]
+fn in_the_smallest_window_the_effort_field_shows_its_placeholder_whole() {
+    let mut world = smallest_picker();
+    let effort = "settings.route-picker.effort-control";
+    world.gesture(|app| app.update(|_, tx| tx.scroll_into_view(effort)));
+    world.settle();
+    let text = world.rect("settings.route-picker.effort");
+    let needs = f64::from(attn_ui::system::width_of(
+        "As the harness names it",
+        attn_ui::system::Type::Body,
+    ));
+    assert!(
+        text[2] + 0.5 >= needs,
+        "the effort field gives its text {} of the {needs} its placeholder needs",
+        text[2]
+    );
+    let (at, picker) = (world.rect(effort), world.rect("settings.route-picker"));
+    assert!(
+        inside(at, picker),
+        "the effort control at {at:?} is cut by the picker at {picker:?}"
+    );
+    rest(&mut world);
+}

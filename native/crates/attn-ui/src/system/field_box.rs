@@ -49,6 +49,11 @@ pub fn code_box(input: TextInput, state: FieldState, t: &Tokens) -> Control {
     single_line(input.width(None), Type::Mono, state, t)
 }
 
+/// How wide a [`line_box`] is that shows `words` whole, as its value or its placeholder.
+pub fn line_box_width(words: &'static str) -> f32 {
+    super::width_of(words, Type::Body) + 2.0 * Size::Regular.inset().pt()
+}
+
 /// A field that holds a number, at the one width every number field takes.
 pub fn number_box(input: TextInput, state: FieldState, t: &Tokens) -> Control {
     single_line(input.width(Some(NUMBER_WIDTH)), Type::Body, state, t)

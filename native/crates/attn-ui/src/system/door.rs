@@ -122,6 +122,15 @@ pub(crate) fn ring_room_around(e: El) -> El {
     e.mx(-reach).my(-reach).padding(reach).scroll_margin(reach)
 }
 
+pub(crate) fn ring_room_beside_bar(e: El) -> El {
+    let reach = super::focus::RING_REACH;
+    e.mx(-reach)
+        .my(-reach)
+        .padding(reach)
+        .pr(reach + crate::scroll_bar::BAR)
+        .scroll_margin(reach)
+}
+
 /// Content of a scrolling box with the focus ring's reach as room at its top and its end, so a
 /// control's ring stays whole when the box scrolls to either end.
 pub(crate) fn ring_ends(e: El) -> El {

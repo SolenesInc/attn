@@ -6375,7 +6375,7 @@ fn crew_page_with(dark: bool, smallest: bool) -> World {
                             available: true,
                             model_pin: true,
                             effort_pin: true,
-                            ..Harness::default()
+                            discovery: true,
                         })
                         .collect(),
                 ),
@@ -6415,6 +6415,7 @@ fn crew_page_with(dark: bool, smallest: bool) -> World {
                 ..LaunchDesktopResultMessage::new()
             })
         });
+    picker_models(&daemon);
     let mut world = start(daemon);
     if smallest {
         world.resize((800.0, 600.0));

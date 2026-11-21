@@ -333,7 +333,9 @@ impl ListRow {
         self
     }
 
-    /// The row is the one on screen: the selected surface and the brand bar at its start.
+    /// The row is the one on screen, or the value its list holds, such as a picker's current
+    /// choice: the selected surface and the brand bar at its start, which neither hover nor the
+    /// keyboard's ring draws.
     pub fn in_view(mut self, in_view: bool) -> Self {
         if in_view {
             self.mark = Mark::InView;

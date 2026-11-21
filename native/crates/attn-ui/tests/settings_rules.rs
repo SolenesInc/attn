@@ -1149,6 +1149,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("system::disclosure::disclosure(chips)", true),
     ("system::drop_zone::drop_zone(said)", true),
     ("system::expander::expander(said)", true),
+    ("system::field_box::line_box_width(words)", true),
     ("system::group_head::GroupHead::new(label)", false),
     ("system::group_head::GroupHead::name(name)", true),
     ("system::group_head::GroupHead::section(name)", true),

@@ -831,6 +831,7 @@ fn toggle(state: &mut State, target: Target, tx: &mut Tx) {
         provider: TextEdit::default(),
         effort: None,
     });
+    tx.focus(FILTER.to_owned(), true);
     super::invalidate(state);
 }
 
@@ -1039,11 +1040,11 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         body = body.child(harness_list(&shown, &rules, t));
     }
     body = body.child(
-        system::ring_scroll(main(state, p, &view, t).key("settings.route-picker.main"))
+        system::ring_scroll_beside_bar(main(state, p, &view, t).key("settings.route-picker.main"))
             .scroll(rune::ScrollSpec {
                 stick_bottom: false,
             })
-            .scroll_bar_styled(attn_ui::scroll_bar(t)),
+            .scroll_bar_styled(attn_ui::page_scroll_bar(t)),
     );
     let surface = Frame::menu(t).draw_holding(
         col()
@@ -1083,7 +1084,7 @@ fn option(key: String, name: String, selected: bool, disabled: bool) -> ListRow 
         .role("option")
         .wrap()
         .title(name)
-        .selected(selected)
+        .in_view(selected)
         .disabled(disabled)
 }
 
@@ -1265,14 +1266,16 @@ fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
 
 /// The provider field's width, as main draws it: "openrouter" with the field's insets.
 const PROVIDER_WIDTH: f32 = 120.0;
-/// The effort field's width, as main draws it: "As the harness names it" with the insets.
-const EFFORT_WIDTH: f32 = 160.0;
+const EFFORT_PLACEHOLDER: &str = "As the harness names it";
+/// How many models the list shows before it scrolls, however little room the window leaves.
+const ROWS_AT_LEAST: usize = 3;
 
 fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
     let query = p.query.text.clone();
     let mut rows = Vec::new();
     let mut index = 0;
     let mut floor = 0.0;
+    let mut floored = 0;
     if query.is_empty() || !view.can_pin_model {
         let next = view.with_model(None);
         let selected = view.value.model.is_empty();
@@ -1289,6 +1292,7 @@ fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
         }
         rows.push(item.build(t).focus_selected(selected));
         floor = ListRow::height();
+        floored = 1;
         index += 1;
     }
     let mut previous = String::new();
@@ -1301,7 +1305,7 @@ fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
             } else {
                 tier_label(&option_row.group)
             };
-            if index == 0 {
+            if floored < ROWS_AT_LEAST {
                 floor += ListRow::note_height(Type::Label);
             }
             rows.push(ListRow::note(
@@ -1380,12 +1384,13 @@ fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
             selected,
             disabled,
         );
-        if index == 0 {
+        if floored < ROWS_AT_LEAST {
             floor += if detail.is_empty() {
                 ListRow::height()
             } else {
                 ListRow::two_line_height()
             };
+            floored += 1;
         }
         if !detail.is_empty() {
             item = item.subtitle(detail.clone(), t).description(detail);
@@ -1469,6 +1474,7 @@ fn effort_control(p: &Picker, view: &View, t: &Tokens) -> Option<El> {
                 El::from(
                     system::Button::new(shown)
                         .size(Size::Compact)
+                        .chosen(value.effort == level)
                         .disabled(view.pins_unavailable)
                         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                             change(state, next.clone(), tx);
@@ -1477,7 +1483,6 @@ fn effort_control(p: &Picker, view: &View, t: &Tokens) -> Option<El> {
                         .build(t)
                         .key(format!("{EFFORT}.{i}")),
                 )
-                .checked(value.effort == level)
             }));
         return Some(head(group));
     }
@@ -1486,7 +1491,7 @@ fn effort_control(p: &Picker, view: &View, t: &Tokens) -> Option<El> {
     let input = TextInput::new(draft)
         .key(EFFORT)
         .label("Effort")
-        .placeholder("As the harness names it")
+        .placeholder(EFFORT_PLACEHOLDER)
         .disabled(view.pins_unavailable)
         .on_edit(|state: &mut State| {
             let shown = current(state).map(|(_, r, _)| r.effort).unwrap_or_default();
@@ -1506,7 +1511,7 @@ fn effort_control(p: &Picker, view: &View, t: &Tokens) -> Option<El> {
             FieldState::disabled_if(view.pins_unavailable),
             t,
         ))
-        .w(EFFORT_WIDTH),
+        .w(system::line_box_width(EFFORT_PLACEHOLDER)),
     ))
 }
 
