@@ -1,7 +1,7 @@
-use rune::{El, row};
+use rune::{Color, El, row};
 
 use crate::Tokens;
-use crate::system::{DotSize, Radius, Space, chip_button, door};
+use crate::system::{DotSize, Radius, Size, Space, Type, chip_button, door, words};
 
 /// The title bar's shelf of tiles off screen: chips in a row, each a column's tiles as their
 /// marks with its name, either side of a chip per column on screen. The shelf fits as many
@@ -48,6 +48,24 @@ impl Shelf {
         t: &Tokens,
     ) -> El {
         chip_button(key, label, face, current, crate::system::Size::Small, t).focusable(false)
+    }
+
+    /// A cap of the shelf, keyed `key` and read as `label`, saying in `ink` how many columns
+    /// it holds: `caption`.
+    pub fn cap(
+        key: impl Into<String>,
+        label: impl Into<String>,
+        caption: impl Into<String>,
+        ink: Color,
+        open: bool,
+        t: &Tokens,
+    ) -> El {
+        Self::chip(key, label, words(caption.into(), Type::Label, ink), open, t)
+    }
+
+    /// How wide [`Shelf::cap`] stands saying `caption`.
+    pub fn cap_width(caption: &str) -> f32 {
+        (door::width(caption, Type::Label) + 2.0 * CHIP_INSET.pt()).max(Size::Small.height())
     }
 
     /// The accent ring over a chip while what it brings arrives, keyed `key`, its corners

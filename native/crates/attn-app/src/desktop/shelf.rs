@@ -23,7 +23,6 @@ use crate::sidebar::AgentState;
 const CHIP_PX: f32 = 112.0;
 const LIVE_DOT_PX: f32 = 28.0;
 const MARK: DotSize = DotSize::Small;
-const CAP_PX: f32 = 52.0;
 /// How long the width label shows after fewer or more tiles.
 const WIDTH_LABEL_SECONDS: f64 = 1.5;
 /// How long a chip flashes when its tile arrives on the shelf.
@@ -170,9 +169,22 @@ fn chip(
     }
 }
 
-/// The room the caps take: one cap on each side that has columns off screen.
+/// The room the caps take, each with its gap: one cap on each side that has columns off
+/// screen, saying at most every column on that side.
 fn caps_px(before: usize, after: usize) -> f32 {
-    [before, after].iter().filter(|&&n| n > 0).count() as f32 * CAP_PX
+    [(Edge::Left, before), (Edge::Right, after)]
+        .into_iter()
+        .filter(|&(_, n)| n > 0)
+        .map(|(side, n)| blocks::Shelf::gap() + blocks::Shelf::cap_width(&caption(side, n)))
+        .sum()
+}
+
+/// What the cap on `side` says when it holds `n` columns.
+fn caption(side: Edge, n: usize) -> String {
+    match side {
+        Edge::Left => format!("‹ {n}"),
+        Edge::Right => format!("{n} ›"),
+    }
 }
 
 /// How many chips show either side when the shelf is `available` points wide; the rest go
@@ -264,7 +276,7 @@ impl Shelf {
         let (before, screen, after) =
             (chips(&plan.before), chips(&plan.screen), chips(&plan.after));
         let available = desk.shelf_px.unwrap_or(f32::INFINITY);
-        let live = screen.iter().map(dot_px).sum::<f32>() + blocks::Shelf::gap();
+        let live = screen.iter().map(dot_px).sum::<f32>();
         let (left, right) = allot(available, before.len(), after.len(), live);
         Some(Shelf {
             desktop: desktop.id.clone(),
@@ -607,9 +619,9 @@ fn cap(side: Edge, chips: &[Chip], open: bool, drop: bool, t: &Tokens) -> Option
         return None;
     }
     let n = chips.len();
-    let (name, caption) = match side {
-        Edge::Left => ("before", format!("‹ {n}")),
-        Edge::Right => ("after", format!("{n} ›")),
+    let name = match side {
+        Edge::Left => "before",
+        Edge::Right => "after",
     };
     let key = format!("shelf.cap.{name}");
     let recorded = key.clone();
@@ -618,10 +630,11 @@ fn cap(side: Edge, chips: &[Chip], open: bool, drop: bool, t: &Tokens) -> Option
     } else {
         t.text_secondary
     };
-    let cap = blocks::Shelf::chip(
+    let cap = blocks::Shelf::cap(
         key,
         format!("{n} more this way"),
-        words(caption, Type::Label, ink),
+        caption(side, n),
+        ink,
         open,
         t,
     )
