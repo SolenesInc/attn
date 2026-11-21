@@ -78,17 +78,29 @@ impl File {
 
 /// A paste at a stop: copied files attach, else an image, as a screenshot pastes; plain text is
 /// left to the field it was pasted in.
+/// Where a paste lands: a field, which types the clipboard's text before an image beside it,
+/// or the sheet, where nothing types.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Into {
+    Field,
+    Sheet,
+}
+
 pub(crate) fn paste(
     state: &mut State,
     ask: &str,
     to: &Stop,
     content: &ClipboardContent,
+    into: Into,
     tx: &mut Tx,
 ) -> bool {
     if !content.files().is_empty() {
         let files = content.files().iter().map(|p| on_disk(p)).collect();
         add(state, ask, to, files, tx);
         return true;
+    }
+    if into == Into::Field && !content.text().is_empty() {
+        return false;
     }
     if let Some(image) = content.image() {
         let png: Arc<[u8]> = image.png().into();

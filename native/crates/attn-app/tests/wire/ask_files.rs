@@ -393,3 +393,175 @@ fn a_question_of_a_kind_the_app_does_not_know_is_not_shown_as_a_choice_question(
     world.gesture(|app| app.press("1"));
     assert!(answers(&world).is_empty());
 }
+
+fn three_kinds() -> attn_protocol::Ask {
+    ask(
+        "a-three",
+        "web",
+        "Banner",
+        10,
+        vec![
+            question("q1", "one", "Ship the banner?", &["Yes", "No"]),
+            question("q2", "file", "If it looks wrong, attach a screenshot", &[]),
+            question("q3", "text", "What did you see?", &[]),
+        ],
+    )
+}
+
+/// ⌘V on macOS, Ctrl+V on Linux, as a window reports it: by its code, with the key it types.
+fn press_paste(world: &mut World, content: ClipboardContent) {
+    world.clipboard.set_content(content);
+    let typed = attn_testkit::key_event(&rune::Chord::parse("mod+v").unwrap());
+    world.gesture(|app| {
+        for pressed in [true, false] {
+            app.runtime.physical_key_input(
+                rune::PhysicalInput::Key {
+                    key: rune::PhysicalKeyCode::KeyV,
+                    mods: typed.mods,
+                    pressed,
+                    repeat: false,
+                },
+                typed.clone(),
+                Some('v'),
+            );
+        }
+    });
+    world.settle();
+}
+
+fn focused_key(world: &World) -> Option<String> {
+    world.screen().focused().and_then(|n| n.key)
+}
+
+fn field_text(world: &World, key: &str) -> String {
+    world
+        .screen()
+        .find(Target::key(key))
+        .and_then(|n| n.value)
+        .unwrap_or_default()
+}
+
+#[test]
+fn mod_v_attaches_a_pasted_image_or_file_wherever_the_keyboard_is_in_the_sheet() {
+    let screenshot =
+        || ClipboardContent::new("").with_image(ClipboardImage::from_png(png()).unwrap());
+    let landing: [(&str, &[&str], &str); 8] = [
+        (
+            "the sheet, after a press on the file question's text",
+            &["asks.q.q2.prompt"],
+            "asks.q.q2.files",
+        ),
+        (
+            "the sheet, after a press on another question's text",
+            &["asks.q.q1.prompt"],
+            "asks.files",
+        ),
+        ("a choice", &["asks.q.q1.choice.0"], "asks.files"),
+        ("a button", &["asks.copy"], "asks.files"),
+        (
+            "the file question's Attach file button",
+            &["asks.q.q2.drop"],
+            "asks.q.q2.files",
+        ),
+        ("the Other field", &["asks.q.q1.other.field"], "asks.files"),
+        (
+            "the written answer",
+            &["asks.q.q3.text.field"],
+            "asks.files",
+        ),
+        (
+            "the condition field",
+            &["asks.q.q1.choice.0", "asks.q.q1.condition"],
+            "asks.files",
+        ),
+    ];
+    for (place, presses, tray) in landing {
+        let mut world = start(vec![three_kinds()], vec![api_working(), web_waiting()]);
+        let held = Held::default();
+        let h = held.clone();
+        world.daemon.on("attachment_put", move |r| hold(&h, r));
+        open_sheet(&mut world);
+        for &key in presses.iter() {
+            world.gesture(|app| app.click(Target::key(key)));
+        }
+        if place == "the condition field" {
+            world.gesture(|app| app.click(Target::key("asks.q.q1.condition.field")));
+        }
+        let focused = world.screen().focused().and_then(|n| n.key);
+        press_paste(&mut world, screenshot());
+        let names: Vec<String> = tray_in(&world, tray)
+            .into_iter()
+            .map(|(_, n, _)| n)
+            .collect();
+        assert_eq!(
+            names,
+            ["Pasted screenshot.png"],
+            "a screenshot pasted with focus on {place} ({focused:?}) went elsewhere"
+        );
+        let file = world.data_dir().with_file_name("console.txt");
+        std::fs::write(&file, b"TypeError\n").unwrap();
+        press_paste(&mut world, ClipboardContent::new("").with_files([file]));
+        let names: Vec<String> = tray_in(&world, tray)
+            .into_iter()
+            .map(|(_, n, _)| n)
+            .collect();
+        assert_eq!(
+            names,
+            ["Pasted screenshot.png", "console.txt"],
+            "a file copied with focus on {place} went elsewhere"
+        );
+    }
+}
+
+#[test]
+fn mod_v_of_text_and_an_image_into_a_field_of_the_sheet_types_the_text() {
+    for (field, presses) in [
+        ("asks.q.q1.other.field", &["asks.q.q1.other.field"][..]),
+        ("asks.q.q3.text.field", &["asks.q.q3.text.field"][..]),
+        (
+            "asks.q.q1.condition.field",
+            &[
+                "asks.q.q1.choice.0",
+                "asks.q.q1.condition",
+                "asks.q.q1.condition.field",
+            ][..],
+        ),
+        (NOTE, &["asks.q.q3.text.field"][..]),
+    ] {
+        let mut world = start(vec![three_kinds()], vec![api_working(), web_waiting()]);
+        open_sheet(&mut world);
+        for &key in presses.iter() {
+            world.gesture(|app| app.click(Target::key(key)));
+        }
+        while field == NOTE && focused_key(&world).as_deref() != Some(NOTE) {
+            world.gesture(|app| app.press("tab"));
+        }
+        assert_eq!(focused_key(&world).as_deref(), Some(field));
+        press_paste(&mut world, ClipboardContent::new("only on Safari"));
+        assert_eq!(
+            field_text(&world, field),
+            "only on Safari",
+            "{field} did not take the text"
+        );
+        assert!(tray_in(&world, "asks.files").is_empty());
+        assert!(tray_in(&world, "asks.q.q2.files").is_empty());
+    }
+}
+
+#[test]
+fn mod_v_of_text_and_an_image_with_no_field_focused_attaches_the_image() {
+    let mut world = start(vec![three_kinds()], vec![api_working(), web_waiting()]);
+    let held = Held::default();
+    let h = held.clone();
+    world.daemon.on("attachment_put", move |r| hold(&h, r));
+    open_sheet(&mut world);
+    world.gesture(|app| app.click(Target::key("asks.q.q1.choice.0")));
+    let cell = ClipboardContent::new("only on Safari")
+        .with_image(ClipboardImage::from_png(png()).unwrap());
+    press_paste(&mut world, cell);
+    let names: Vec<String> = tray_in(&world, "asks.files")
+        .into_iter()
+        .map(|(_, n, _)| n)
+        .collect();
+    assert_eq!(names, ["Pasted screenshot.png"]);
+}

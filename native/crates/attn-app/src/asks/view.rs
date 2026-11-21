@@ -625,7 +625,6 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
                         "Follow up",
                         &format!("What else should {} know?", item.from),
                         move |state: &mut State| super::follow_up_edit(state, &id),
-                        None,
                         t,
                     ),
                 ));
@@ -641,7 +640,6 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
                     "Note",
                     &note_placeholder,
                     move |state: &mut State| state.note(&id),
-                    Some(ask.id.clone()),
                     t,
                 )
                 .on_press_within(move |state: &mut State, _: &mut Tx| {
@@ -905,7 +903,6 @@ fn written(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) ->
                 &question.prompt,
                 &placeholder,
                 move |state: &mut State| &mut state.answer(&ask_id, &q).text,
-                None,
                 t,
             );
             let suggestion = question
@@ -1001,7 +998,8 @@ fn choice_list(
                 .on_change(move |state: &mut State, _: &mut Tx| {
                     super::other_edited(state, &ask_id, &q, kind)
                 })
-                .on_key(field_key);
+                .on_key(field_key)
+                .on_paste(super::paste_into_field);
             let field = El::from(line_box(input, FieldState::Ready, t))
                 .grow(1.0)
                 .min_w(0.0);
@@ -1057,7 +1055,8 @@ fn condition(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) 
                                 .condition
                                 .get_or_insert_with(rune::TextEdit::default)
                         })
-                        .on_key(field_key);
+                        .on_key(field_key)
+                        .on_paste(super::paste_into_field);
                     line_box(input, FieldState::Ready, t).into()
                 }
             })
@@ -1092,32 +1091,25 @@ fn replied_text(key: String, label: &str, value: &str, t: &Tokens) -> El {
         )
 }
 
-/// A field of several lines that starts three lines high and that its grip drags taller. With
-/// `attaching_to`, a pasted file or image attaches to that ask's answer.
+/// A field of several lines that starts three lines high and that its grip drags taller. A
+/// file or image pasted into it attaches to the open ask.
 fn written_field(
     edit: Option<&rune::TextEdit>,
     key: &str,
     label: &str,
     placeholder: &str,
     lens: impl for<'a> Fn(&'a mut State) -> &'a mut rune::TextEdit + 'static,
-    attaching_to: Option<String>,
     t: &Tokens,
 ) -> El {
     let empty = rune::TextEdit::default();
-    let mut area = TextArea::new(edit.unwrap_or(&empty))
+    let area = TextArea::new(edit.unwrap_or(&empty))
         .key(key.to_owned())
         .label(label.to_owned())
         .placeholder(placeholder.to_owned())
         .resizable()
         .on_edit(lens)
-        .on_key(field_key);
-    if let Some(ask) = attaching_to {
-        area = area.on_paste(
-            move |state: &mut State, content: &rune::ClipboardContent, tx| {
-                attach::paste(state, &ask, &Stop::Note, content, tx)
-            },
-        );
-    }
+        .on_key(field_key)
+        .on_paste(super::paste_into_field);
     area_box(area, FieldState::Ready, t).into()
 }
 

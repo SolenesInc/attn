@@ -119,12 +119,32 @@ pub(crate) fn drop_on_sheet(state: &mut State, paths: &[std::path::PathBuf], tx:
     }
 }
 
-/// A paste while no field holds the keyboard attaches where attach_target says.
+/// A file pasted into a field of an open ask attaches where attach_target says, and so does an
+/// image unless the clipboard also holds text, which the field types.
+pub(crate) fn paste_into_field(
+    state: &mut State,
+    content: &rune::ClipboardContent,
+    tx: &mut Tx,
+) -> bool {
+    paste(state, content, attach::Into::Field, tx)
+}
+
+/// A file or image pasted while no field holds the keyboard attaches where attach_target says.
 pub(crate) fn paste_on_sheet(state: &mut State, content: &rune::ClipboardContent, tx: &mut Tx) {
-    if let Some(ask) = shown_open(state) {
-        let to = attach_target(state, &ask);
-        attach::paste(state, &ask.id, &to, content, tx);
-    }
+    paste(state, content, attach::Into::Sheet, tx);
+}
+
+fn paste(
+    state: &mut State,
+    content: &rune::ClipboardContent,
+    into: attach::Into,
+    tx: &mut Tx,
+) -> bool {
+    let Some(ask) = shown_open(state) else {
+        return false;
+    };
+    let to = attach_target(state, &ask);
+    attach::paste(state, &ask.id, &to, content, into, tx)
 }
 
 /// Where a paste outside a field or a drop on the sheet attaches in the ask: the active stop
