@@ -5,6 +5,9 @@ use attn::go::quote::quote;
 use attn_protocol::{CommandRefusal, RunCommandMessage};
 use serde_json::{Map, Value as Json};
 use std::io::Read;
+use std::sync::Once;
+
+static STALE_PROTOCOL_PROBE: Once = Once::new();
 
 pub enum Cli {
     Pos,
@@ -641,7 +644,10 @@ pub fn ask(
     }
     .map_err(|error| run.fail_send(&family.label(cmd.name), &error))?;
     Ok(match refusal_of(&reply) {
-        Some(refusal) => Answer::Refused(reply, refusal),
+        Some(refusal) => {
+            STALE_PROTOCOL_PROBE.call_once(|| crate::commands::warn_if_stale(run.paths));
+            Answer::Refused(reply, refusal)
+        }
         None => Answer::Result(reply),
     })
 }

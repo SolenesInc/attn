@@ -1,7 +1,10 @@
 package main_test
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -104,4 +107,71 @@ func TestTheCLIWarnsWhenItsProtocolDiffersFromTheRunningDaemons(t *testing.T) {
 			t.Errorf("attn conversation list against protocol %s printed %q, want a warning: %t", tc.daemon, got.Stderr, tc.warn)
 		}
 	}
+}
+
+func TestACatalogCommandRefusedByADaemonOnAnotherProtocolNamesTheStaleProtocol(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	var probes atomic.Int32
+	s.ServeWS(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		probes.Add(1)
+		_, _ = fmt.Fprint(w, `{"protocol":"an-older-protocol"}`)
+	}))
+	olderDaemon := serveOlderDaemon(t, s.Socket)
+
+	for _, args := range [][]string{
+		{"review", "check", "review.md"},
+		{"open", "s-7k3f9m"},
+		{"nav", "status"},
+		{"seed", "show", "s-7k3f9m"},
+		{"session", "transcript", "a-session"},
+		{"session", "instructions", "a-session", "--question", "what changed?"},
+	} {
+		olderDaemon.Store(`{"ok":false,"command_refusal":{"code":"usage","message":"\"` + args[0] + `\" is not a command"}}`)
+		got := s.Run(testworld.Invocation{Args: args})
+		warning := strings.Index(got.Stderr, "the running attn app speaks an-older-protocol")
+		refusal := strings.Index(got.Stderr, "is not a command")
+		if got.Code == 0 || warning < 0 || !strings.Contains(got.Stderr, "`which -a attn`") || refusal < warning {
+			t.Errorf("attn %s refused by a daemon on another protocol exited %d printing %q, want the stale-protocol warning and its hint, then the refusal", strings.Join(args, " "), got.Code, got.Stderr)
+		}
+	}
+
+	before := probes.Load()
+	olderDaemon.Store(`{"ok":true,"command_result":{"opened":"s-7k3f9m"}}`)
+	if got := s.Attn("open", "s-7k3f9m"); got.Code != 0 || strings.Contains(got.Stderr, "warning") {
+		t.Errorf("attn open answered by the daemon exited %d printing %q, want it to succeed without a warning", got.Code, got.Stderr)
+	}
+	if after := probes.Load(); after != before {
+		t.Errorf("a successful attn open probed the daemon's health %d times, want none", after-before)
+	}
+}
+
+func serveOlderDaemon(t *testing.T, socket string) *atomic.Value {
+	t.Helper()
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	var reply atomic.Value
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			var request struct {
+				Cmd string `json:"cmd"`
+			}
+			if json.NewDecoder(bufio.NewReader(conn)).Decode(&request) == nil {
+				if request.Cmd == "run_command" {
+					_, _ = fmt.Fprintln(conn, reply.Load())
+				} else {
+					_, _ = fmt.Fprintf(conn, `{"ok":false,"error":"the older daemon was asked %s"}`+"\n", request.Cmd)
+				}
+			}
+			_ = conn.Close()
+		}
+	}()
+	return &reply
 }
