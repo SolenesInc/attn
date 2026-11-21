@@ -335,6 +335,12 @@
         },
         "type": "array"
       },
+      "attachment_names": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "note": {
         "type": "string"
       }

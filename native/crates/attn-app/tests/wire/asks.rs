@@ -122,6 +122,7 @@ fn replied(mut ask: Ask, answers: Vec<AskAnswer>, note: Option<&str>) -> Ask {
     ask.reply = Some(AskReply {
         answers,
         note: note.map(str::to_owned),
+        attachments: None,
         answered_at: ago(1),
     });
     ask

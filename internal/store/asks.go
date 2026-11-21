@@ -195,7 +195,7 @@ func (s *Store) CloseAsk(id string) error {
 	return expectOpenAsk(s.db.Exec("DELETE FROM asks WHERE id = ? AND "+openAsk, id))
 }
 
-func (s *Store) AnswerAsk(id string, reply protocol.AskReply, answer inbox.Item, at time.Time) error {
+func (s *Store) AnswerAsk(profileID, id string, reply protocol.AskReply, answer inbox.Item, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -206,7 +206,7 @@ func (s *Store) AnswerAsk(id string, reply protocol.AskReply, answer inbox.Item,
 		return err
 	}
 	defer tx.Rollback()
-	if err := replyToAsk(tx, id, reply, at); err != nil {
+	if err := replyToAsk(tx, profileID, id, reply, at); err != nil {
 		return err
 	}
 	if err := putInbox(tx, answer, at); err != nil {
@@ -215,9 +215,9 @@ func (s *Store) AnswerAsk(id string, reply protocol.AskReply, answer inbox.Item,
 	return tx.Commit()
 }
 
-func (s *Store) AnswerAskWithNote(id string, reply protocol.AskReply, answer inbox.Item, note DocumentWrite, fact BusEvent, events []BusEvent, now time.Time) (DocumentWriteResult, []int64, error) {
+func (s *Store) AnswerAskWithNote(profileID, id string, reply protocol.AskReply, answer inbox.Item, note DocumentWrite, fact BusEvent, events []BusEvent, now time.Time) (DocumentWriteResult, []int64, error) {
 	results, eventSeqs, err := s.commitDocumentWrites([]DocumentCommit{{Write: note, Fact: fact}}, events, now, true, func(tx *sql.Tx) (bool, error) {
-		if err := replyToAsk(tx, id, reply, now); err != nil {
+		if err := replyToAsk(tx, profileID, id, reply, now); err != nil {
 			return true, err
 		}
 		return true, putInbox(tx, answer, now)
@@ -228,13 +228,20 @@ func (s *Store) AnswerAskWithNote(id string, reply protocol.AskReply, answer inb
 	return results[0], eventSeqs, nil
 }
 
-func replyToAsk(db execer, id string, reply protocol.AskReply, at time.Time) error {
+func replyToAsk(tx *sql.Tx, profileID, id string, reply protocol.AskReply, at time.Time) error {
 	answers, err := json.Marshal(reply.Answers)
 	if err != nil {
 		return err
 	}
-	return expectOpenAsk(db.Exec("UPDATE asks SET answered_at = ?, answers = ?, note = ? WHERE id = ? AND "+openAsk,
-		at.UTC().Format(sortableTimeFormat), string(answers), protocol.Deref(reply.Note), id))
+	if err := expectOpenAsk(tx.Exec("UPDATE asks SET answered_at = ?, answers = ?, note = ? WHERE id = ? AND "+openAsk,
+		at.UTC().Format(sortableTimeFormat), string(answers), protocol.Deref(reply.Note), id)); err != nil {
+		return err
+	}
+	ids := make([]string, len(reply.Attachments))
+	for i, a := range reply.Attachments {
+		ids[i] = a.ID
+	}
+	return commitAttachments(tx, profileID, protocol.AttachmentOwner{Kind: protocol.AttachmentOwnerKindAsk, ID: id}, ids)
 }
 
 func expectOpenAsk(result sql.Result, err error) error {

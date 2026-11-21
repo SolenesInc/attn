@@ -1228,7 +1228,7 @@
         {
           "id": "quick-capture-file",
           "delivery": "cli_output",
-          "description": "Retrieve one Quick Capture attachment.",
+          "description": "Retrieve one attachment: a file sent with a Quick Capture or an ask's answer.",
           "body": {
             "kind": "text",
             "id": "session.quick-capture-file",
@@ -1284,7 +1284,7 @@
         {
           "id": "quick-capture-file-saved",
           "delivery": "cli_output",
-          "description": "Inspect a downloaded Quick Capture attachment.",
+          "description": "Inspect a downloaded attachment.",
           "body": {
             "kind": "text",
             "id": "session.quick-capture-file-saved",
@@ -5599,6 +5599,41 @@
                           ]
                         }
                       ]
+                    },
+                    {
+                      "kind": "when",
+                      "condition": {
+                        "field": {
+                          "name": "files",
+                          "kind": "text",
+                          "description": "The files the answer carried, one retrieval line each, rendered by the adapter.",
+                          "trim_space": true,
+                          "from": "session/quick-capture-file"
+                        },
+                        "test": "present"
+                      },
+                      "children": [
+                        {
+                          "kind": "text",
+                          "id": "ask.files",
+                          "source": "content/ask/files.md",
+                          "bindings": [
+                            {
+                              "name": "files",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "files",
+                                  "kind": "text",
+                                  "description": "The files the answer carried, one retrieval line each, rendered by the adapter.",
+                                  "trim_space": true,
+                                  "from": "session/quick-capture-file"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
                     }
                   ]
                 }
@@ -7562,5 +7597,5 @@
       ]
     }
   ],
-  "definitions_hash": "811f8ea72429e20a17706f10910b4bb33fa96cff063ab10a1cc2ca76d3c54ffb"
+  "definitions_hash": "c1f4ce1c4ec18af635881d29da83b2e763fd841b81d8dcdb3f50d30e8a579975"
 }

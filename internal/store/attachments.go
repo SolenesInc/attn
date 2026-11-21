@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -74,4 +75,48 @@ func (s *Store) AttachmentsIn(states ...AttachmentState) ([]StoredAttachment, er
 		}
 	}
 	return result, nil
+}
+
+func commitAttachments(tx *sql.Tx, profileID string, owner protocol.AttachmentOwner, ids []string) error {
+	for position, id := range ids {
+		var name string
+		var state AttachmentState
+		err := tx.QueryRow(`SELECT name,state FROM attachments WHERE attachment_id=? AND profile_id=? AND owner_kind=? AND owner_id=?`, id, profileID, owner.Kind, owner.ID).Scan(&name, &state)
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("attachment %s does not belong to %s %s", id, owner.Kind, owner.ID)
+		}
+		if err != nil {
+			return err
+		}
+		if state != AttachmentReady {
+			return fmt.Errorf("attachment %s (%q) is %s, expected ready", id, name, state)
+		}
+		if _, err := tx.Exec(`UPDATE attachments SET state='committed',position=? WHERE attachment_id=?`, position, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) OwnedAttachments(profileID string, owner protocol.AttachmentOwner) ([]protocol.Attachment, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return committedAttachments(s.db, profileID, owner)
+}
+
+func committedAttachments(q quickCaptureQuery, profileID string, owner protocol.AttachmentOwner) ([]protocol.Attachment, error) {
+	rows, err := q.Query(`SELECT attachment_id,name,media_type,byte_count FROM attachments WHERE profile_id=? AND owner_kind=? AND owner_id=? AND state='committed' ORDER BY position,attachment_id`, profileID, owner.Kind, owner.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	attachments := []protocol.Attachment{}
+	for rows.Next() {
+		var a protocol.Attachment
+		if err := rows.Scan(&a.ID, &a.Name, &a.MediaType, &a.Bytes); err != nil {
+			return nil, err
+		}
+		attachments = append(attachments, a)
+	}
+	return attachments, rows.Err()
 }

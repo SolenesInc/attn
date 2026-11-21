@@ -58,17 +58,8 @@ func (s *Store) SaveQuickCapture(profileID string, msg protocol.QuickCaptureSend
 	if err != sql.ErrNoRows {
 		return err
 	}
-	for position, id := range msg.AttachmentIds {
-		var state string
-		if err := tx.QueryRow(`SELECT state FROM attachments WHERE attachment_id=? AND profile_id=? AND owner_kind='quick_capture' AND owner_id=?`, id, profileID, msg.CaptureID).Scan(&state); err != nil {
-			return fmt.Errorf("attachment %s is not ready: %w", id, err)
-		}
-		if state != "ready" {
-			return fmt.Errorf("attachment %s is %s, expected ready", id, state)
-		}
-		if _, err := tx.Exec(`UPDATE attachments SET state='committed',position=? WHERE attachment_id=?`, position, id); err != nil {
-			return err
-		}
+	if err := commitAttachments(tx, profileID, protocol.AttachmentOwner{Kind: protocol.AttachmentOwnerKindQuickCapture, ID: msg.CaptureID}, msg.AttachmentIds); err != nil {
+		return err
 	}
 	inboxID := QuickCaptureInboxID(profileID, msg.CaptureID)
 	_, err = tx.Exec(`INSERT INTO quick_captures(profile_id,id,inbox_item_id,submission,mailbox_kind,mailbox_member_id,mailbox_session_id,body,created_at) VALUES(?,?,?,?,?,?,?,?,?)`, profileID, msg.CaptureID, inboxID, quickCaptureSubmission(msg), msg.Mailbox.Kind, protocol.Deref(msg.Mailbox.MemberID), protocol.Deref(msg.Mailbox.SessionID), msg.Content, at.UTC().Format(sortableTimeFormat))
@@ -124,20 +115,8 @@ func quickCaptureRecord(q quickCaptureQuery, profileID, id string) (*protocol.Qu
 	if err != nil {
 		return nil, err
 	}
-	r.Attachments = []protocol.Attachment{}
-	rows, err := q.Query(`SELECT attachment_id,name,media_type,byte_count FROM attachments WHERE profile_id=? AND owner_kind='quick_capture' AND owner_id=? AND state='committed' ORDER BY position,attachment_id`, profileID, id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var a protocol.Attachment
-		if err := rows.Scan(&a.ID, &a.Name, &a.MediaType, &a.Bytes); err != nil {
-			return nil, err
-		}
-		r.Attachments = append(r.Attachments, a)
-	}
-	return r, rows.Err()
+	r.Attachments, err = committedAttachments(q, profileID, protocol.AttachmentOwner{Kind: protocol.AttachmentOwnerKindQuickCapture, ID: id})
+	return r, err
 }
 
 func (s *Store) QuickCaptures(profileID string, limit int, cursor string) ([]protocol.QuickCaptureRecord, *string, error) {

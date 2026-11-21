@@ -607,6 +607,9 @@ type AskAnswerMessage struct {
 	// AskID corresponds to the JSON schema field "ask_id".
 	AskID string `json:"ask_id"`
 
+	// Attachments corresponds to the JSON schema field "attachments".
+	Attachments []string `json:"attachments,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
@@ -777,6 +780,9 @@ type AskReply struct {
 
 	// Answers corresponds to the JSON schema field "answers".
 	Answers []AskAnswer `json:"answers"`
+
+	// Attachments corresponds to the JSON schema field "attachments".
+	Attachments []Attachment `json:"attachments,omitempty,omitzero"`
 
 	// Note corresponds to the JSON schema field "note".
 	Note *string `json:"note,omitempty,omitzero"`

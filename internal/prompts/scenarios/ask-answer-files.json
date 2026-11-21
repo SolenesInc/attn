@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "ask-answer-files",
+  "description": "The user's answer to a one-question ask, with a note and a pasted screenshot.",
+  "recipient": "ask",
+  "event": "answer",
+  "values": {
+    "subject": "\"Grant card header\"",
+    "ask_id": "a-p3d8w1",
+    "entries": "## 1. Does the header look right?\n\nAnswer: No",
+    "note": "> The title wraps on narrow windows.",
+    "files": "File \"Pasted screenshot.png\" (image/png, 48211 bytes). To save the file, run:\n  attn agent attachment 7f0c2b1e-4d1a-4c3e-9b8f-2a6d5e1c0f93 --out <path>\nInspect the saved file with your tools.\n"
+  }
+}

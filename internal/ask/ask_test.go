@@ -160,7 +160,7 @@ func TestReplyRendersEachAnswerForTheAgent(t *testing.T) {
 		"an unanswered question":   {protocol.AskAnswer{Key: "q1", Picked: []string{"Redis"}}, 3, "3. Banner text?\n\nUnanswered."},
 	} {
 		t.Run(name, func(t *testing.T) {
-			text, err := ask.Reply(a, []protocol.AskAnswer{tc.answer}, "")
+			text, err := ask.Reply(a, []protocol.AskAnswer{tc.answer}, "", nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -199,7 +199,7 @@ func TestReplyOpensWithTheAskAndEndsWithTheReminder(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			text, err := ask.Reply(protocol.Ask{ID: "a-2", Subject: "Heads up", Parts: tc.parts}, tc.answers, tc.note)
+			text, err := ask.Reply(protocol.Ask{ID: "a-2", Subject: "Heads up", Parts: tc.parts}, tc.answers, tc.note, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -221,7 +221,7 @@ func TestReplyRefusesAnswersTheAskCannotHold(t *testing.T) {
 		note    string
 		want    string
 	}{
-		"nothing":        {nil, " ", "answer at least one question or write a note"},
+		"nothing":        {nil, " ", "answer at least one question, write a note or attach a file"},
 		"unknown key":    {[]protocol.AskAnswer{{Key: "q9", Picked: []string{}}}, "", `the ask has no question "q9"`},
 		"unknown choice": {[]protocol.AskAnswer{{Key: "q1", Picked: []string{"C"}}}, "", `question q1 has no choice "C"`},
 		"two for one":    {[]protocol.AskAnswer{{Key: "q1", Picked: []string{"A"}, Other: protocol.Ptr("C")}}, "", "question q1 takes one choice"},
@@ -229,7 +229,7 @@ func TestReplyRefusesAnswersTheAskCannotHold(t *testing.T) {
 		"text for one":   {[]protocol.AskAnswer{{Key: "q1", Picked: []string{}, Text: protocol.Ptr("x")}}, "", "question q1 takes a choice"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := ask.Reply(a, tc.answers, tc.note)
+			_, err := ask.Reply(a, tc.answers, tc.note, nil)
 			if err == nil || err.Error() != tc.want {
 				t.Fatalf("err = %v, want %q", err, tc.want)
 			}

@@ -297,6 +297,7 @@ export const askScreen = <Message>(
             [h.Class('answered')],
             [
               ask.reply.note ? h.p([h.Class('replied')], [ask.reply.note]) : h.empty,
+              ...ask.reply.files.map((file) => h.p([h.Class('replied-file')], [file])),
               h.p([h.Class('muted')], [`Answered ${age(ask.reply.answeredAt, now)} ago`]),
             ],
           )

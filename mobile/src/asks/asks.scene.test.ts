@@ -179,7 +179,7 @@ describe('asks on the phone', () => {
       arrive(linux, [ask('a-new', 1, [{ markdown: null, question: choiceQuestion }], 'Ship it?')]),
       arrive(personal, [
         storeAsk,
-        { ...ask('a-done', 30, []), reply: { answers: [], note: 'done', answeredAt: now } },
+        { ...ask('a-done', 30, []), reply: { answers: [], note: 'done', files: [], answeredAt: now } },
       ]),
       Scene.Command.resolveAll(
         [
@@ -231,7 +231,7 @@ describe('asks on the phone', () => {
       ),
       Scene.expect(Scene.text('Queue')).toExist(),
       Scene.expectAll(Scene.all.testId('ask-entry')).toHaveCount(1),
-      arrive(personal, [{ ...storeAsk, reply: { answers: [], note: '', answeredAt: now } }]),
+      arrive(personal, [{ ...storeAsk, reply: { answers: [], note: '', files: [], answeredAt: now } }]),
       Scene.expectAll(Scene.all.testId('ask-entry')).toHaveCount(0),
     )
   })
@@ -494,6 +494,30 @@ describe('asks on the phone', () => {
       Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
       arrive(personal, []),
       Scene.expect(Scene.text('This ask was withdrawn or closed.')).toExist(),
+    )
+  })
+
+  it('names the files of an answer sent from the desktop', () => {
+    const plain = ask('a-plain', 1, [{ markdown: null, question: choiceQuestion }])
+    Scene.scene(
+      { update, view },
+      Scene.given(online(personal)),
+      arrive(personal, [plain]),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      arrive(personal, [
+        {
+          ...plain,
+          reply: {
+            answers: [],
+            note: 'See the shot.',
+            files: ['Pasted screenshot.png', 'hit-rate.txt'],
+            answeredAt: now,
+          },
+        },
+      ]),
+      Scene.expect(Scene.text('See the shot.')).toExist(),
+      Scene.expect(Scene.text('Pasted screenshot.png')).toExist(),
+      Scene.expect(Scene.text('hit-rate.txt')).toExist(),
     )
   })
 })

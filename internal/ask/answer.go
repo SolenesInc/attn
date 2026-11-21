@@ -5,21 +5,22 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 const MaxAnswerBytes = 16 << 10
 
-func Reply(ask protocol.Ask, answers []protocol.AskAnswer, note string) (string, error) {
+func Reply(ask protocol.Ask, answers []protocol.AskAnswer, note string, files []protocol.Attachment) (string, error) {
 	questions := Questions(ask.Parts)
 	byKey, err := answersByKey(questions, answers)
 	if err != nil {
 		return "", err
 	}
 	note = strings.TrimSpace(note)
-	if len(byKey) == 0 && note == "" {
-		return "", fmt.Errorf("answer at least one question or write a note")
+	if len(byKey) == 0 && note == "" && len(files) == 0 {
+		return "", fmt.Errorf("answer at least one question, write a note or attach a file")
 	}
 	entries := make([]string, 0, len(questions))
 	for i, question := range questions {
@@ -30,6 +31,7 @@ func Reply(ask protocol.Ask, answers []protocol.AskAnswer, note string) (string,
 		"ask_id":  ask.ID,
 		"entries": strings.Join(entries, "\n\n"),
 		"note":    blockquote(note),
+		"files":   inbox.FileLines(files),
 	})
 	if len(text) > MaxAnswerBytes {
 		return "", fmt.Errorf("an answer holds at most %d KiB", MaxAnswerBytes>>10)

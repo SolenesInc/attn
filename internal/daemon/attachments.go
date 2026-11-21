@@ -3,6 +3,7 @@ package daemon
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -86,7 +87,21 @@ func (d *Daemon) checkAttachmentOwner(profileID string, owner protocol.Attachmen
 		}
 		return nil
 	case protocol.AttachmentOwnerKindAsk:
-		return fmt.Errorf("asks do not take files yet")
+		stored, err := d.store.GetOpenAsk(owner.ID)
+		if errors.Is(err, store.ErrAskNotOpen) {
+			return errAskGone
+		}
+		if err != nil {
+			return err
+		}
+		shown, err := d.readAsk(stored)
+		if err != nil {
+			return err
+		}
+		if !askShownIn(profileID, shown.profileID) {
+			return errAskGone
+		}
+		return nil
 	}
 	return fmt.Errorf("unknown attachment owner kind %q", owner.Kind)
 }
@@ -280,7 +295,7 @@ func (d *Daemon) attachmentDiscard(profileID string, msg *protocol.AttachmentDis
 		return nil
 	}
 	if a.State == store.AttachmentCommitted {
-		return fmt.Errorf("attachment %s belongs to a saved quick capture", msg.AttachmentID)
+		return fmt.Errorf("attachment %s was already sent and cannot be removed", msg.AttachmentID)
 	}
 	a.State = store.AttachmentDiscarded
 	if err := d.store.SaveAttachment(*a); err != nil {

@@ -22,12 +22,14 @@ func askRecipient() Recipient {
 		Bind("answer", answer))
 	entries := ProducedBy(text("entries", "Each question's entry in order, joined by the adapter."), "ask/entry")
 	note := text("note", "The user's note, quoted by the adapter.")
+	files := Trimmed(ProducedBy(text("files", "The files the answer carried, one retrieval line each, rendered by the adapter."), "session/quick-capture-file"))
 	reply := Use("ask.answer", "content/ask/answer.md",
 		Bind("subject", Input(text("subject", "Quoted ask subject."))),
 		Bind("ask_id", Input(text("ask_id", "Ask ID."))),
 		Bind("body", Compose(
 			When(Present(entries), Input(entries)),
-			When(Present(note), fragment("note", note)))))
+			When(Present(note), fragment("note", note)),
+			When(Present(files), Use("ask.files", "content/ask/files.md", Bind("files", Input(files)))))))
 	defaultDue := Use("ask.default-due", "content/ask/default-due.md",
 		Bind("subject", Input(text("subject", "Quoted ask subject."))),
 		Bind("ask_id", Input(text("ask_id", "Ask ID."))),

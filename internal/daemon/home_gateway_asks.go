@@ -107,6 +107,9 @@ func homeGatewayAsk(wire protocol.Ask) homegateway.HomeGatewayAsk {
 			Note:       wire.Reply.Note,
 			AnsweredAt: parseAskTime(wire.Reply.AnsweredAt),
 		}
+		for _, file := range wire.Reply.Attachments {
+			out.Reply.AttachmentNames = append(out.Reply.AttachmentNames, file.Name)
+		}
 	}
 	return out
 }

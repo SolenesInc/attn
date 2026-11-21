@@ -40,7 +40,12 @@ export const PhoneAsk = Schema.Struct({
   crewMember: Schema.NullOr(Schema.String),
   chief: Schema.Boolean,
   reply: Schema.NullOr(
-    Schema.Struct({ answers: Schema.Array(Answer), note: Schema.String, answeredAt: Schema.Finite }),
+    Schema.Struct({
+      answers: Schema.Array(Answer),
+      note: Schema.String,
+      files: Schema.Array(Schema.String),
+      answeredAt: Schema.Finite,
+    }),
   ),
   tooLarge: Schema.NullOr(Schema.Struct({ bytes: Schema.Finite, limit: Schema.Finite })),
 })
@@ -86,6 +91,7 @@ export const fromHomeGatewayAsk = (ask: HomeGatewayAsk): PhoneAsk => ({
     ? {
         answers: ask.reply.answers.map(fromHomeGatewayAnswer),
         note: ask.reply.note ?? '',
+        files: ask.reply.attachment_names ?? [],
         answeredAt: ask.reply.answered_at.getTime(),
       }
     : null,

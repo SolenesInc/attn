@@ -653,6 +653,12 @@ textarea.note:focus {
   color: var(--muted);
 }
 
+.replied-file {
+  margin: 8px 0 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 .answer-bar {
   margin-top: 12px;
 }

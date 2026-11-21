@@ -4305,9 +4305,11 @@ model Ask {
 }
 
 // What the user sent when they answered an ask; answered_at is an ISO timestamp.
+// attachments are the files the answer carried, in the order sent.
 model AskReply {
   answers: AskAnswer[];
   note?: string;
+  attachments?: Attachment[];
   answered_at: string;
 }
 
@@ -4425,12 +4427,14 @@ model AskAnswer {
   text?: string;
 }
 
+// attachments name ready files uploaded with attachment_put, owned by this ask.
 model AskAnswerMessage {
   cmd: "ask_answer";
   request_id: string;
   ask_id: string;
   answers: AskAnswer[];
   note?: string;
+  attachments?: string[];
 }
 
 model AskAnswerResultMessage {

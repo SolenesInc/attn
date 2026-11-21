@@ -406,22 +406,8 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 	if !askShownIn(profileID, shown.profileID) {
 		return errAskGone
 	}
-	text, err := ask.Reply(shown.wire, msg.Answers, protocol.Deref(msg.Note))
-	if err != nil {
+	if err := d.commitAnswer(profileID, stored, shown.wire, msg); err != nil {
 		return err
-	}
-	reply := protocol.AskReply{Answers: msg.Answers, Note: msg.Note}
-	answer := inbox.Item{ID: uuid.NewString(), To: stored.To, Kind: inbox.AskAnswer, Source: stored.ID, Text: text}
-	if seedID, seed := stored.To.TenderOf(); seed {
-		err = d.noteAnswer(stored.ID, seedID, reply, answer)
-	} else {
-		err = d.store.AnswerAsk(stored.ID, reply, answer, time.Now())
-	}
-	if errors.Is(err, store.ErrAskNotOpen) {
-		return errAskGone
-	}
-	if err != nil {
-		return fmt.Errorf("save the answer: %w", err)
 	}
 	d.kickInboxAfterCommit(stored.To)
 	d.publishFact(FactAskClosed, stored.ID, nil)
@@ -431,10 +417,56 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 	return nil
 }
 
-func (d *Daemon) noteAnswer(askID, seedID string, reply protocol.AskReply, answer inbox.Item) error {
+func (d *Daemon) commitAnswer(profileID string, stored store.Ask, wire protocol.Ask, msg *protocol.AskAnswerMessage) error {
+	d.attachmentMu.Lock()
+	defer d.attachmentMu.Unlock()
+	files, err := d.answerFiles(profileID, stored.ID, msg.Attachments)
+	if err != nil {
+		return err
+	}
+	text, err := ask.Reply(wire, msg.Answers, protocol.Deref(msg.Note), files)
+	if err != nil {
+		return err
+	}
+	reply := protocol.AskReply{Answers: msg.Answers, Note: msg.Note, Attachments: files}
+	answer := inbox.Item{ID: uuid.NewString(), To: stored.To, Kind: inbox.AskAnswer, Source: stored.ID, Text: text}
+	if seedID, seed := stored.To.TenderOf(); seed {
+		err = d.noteAnswer(profileID, stored.ID, seedID, reply, answer)
+	} else {
+		err = d.store.AnswerAsk(profileID, stored.ID, reply, answer, time.Now())
+	}
+	if errors.Is(err, store.ErrAskNotOpen) {
+		return errAskGone
+	}
+	if err != nil {
+		return fmt.Errorf("save the answer: %w", err)
+	}
+	return nil
+}
+
+func (d *Daemon) answerFiles(profileID, askID string, ids []string) ([]protocol.Attachment, error) {
+	owner := protocol.AttachmentOwner{Kind: protocol.AttachmentOwnerKindAsk, ID: askID}
+	files := make([]protocol.Attachment, 0, len(ids))
+	for _, id := range ids {
+		a, err := d.store.Attachment(id)
+		if err != nil {
+			return nil, err
+		}
+		if a == nil || a.ProfileID != profileID || a.Owner != owner {
+			return nil, fmt.Errorf("attachment %s was not uploaded for this ask", id)
+		}
+		if a.State != store.AttachmentReady {
+			return nil, fmt.Errorf("attachment %s (%q) is %s, expected ready", id, a.Attachment.Name, a.State)
+		}
+		files = append(files, a.Attachment)
+	}
+	return files, nil
+}
+
+func (d *Daemon) noteAnswer(profileID, askID, seedID string, reply protocol.AskReply, answer inbox.Item) error {
 	note := garden.Note{Seed: seedID, Kind: garden.NoteKindAnswer, Body: answer.Text}
 	_, _, err := d.mintAndWriteNote(note, false, "", func(write store.DocumentWrite, fact store.BusEvent, events []store.BusEvent, now time.Time) (store.DocumentWriteResult, []int64, error) {
-		return d.store.AnswerAskWithNote(askID, reply, answer, write, fact, events, now)
+		return d.store.AnswerAskWithNote(profileID, askID, reply, answer, write, fact, events, now)
 	})
 	return err
 }
@@ -623,6 +655,17 @@ func (d *Daemon) describeAsk(a store.Ask, parts []protocol.AskPart) (shownAsk, e
 	default:
 		if session := d.store.Get(a.SessionID); session != nil {
 			shown.profileID = session.ProfileID
+		}
+	}
+	if a.Reply != nil {
+		files, err := d.store.OwnedAttachments(shown.profileID, protocol.AttachmentOwner{Kind: protocol.AttachmentOwnerKindAsk, ID: a.ID})
+		if err != nil {
+			return shownAsk{}, err
+		}
+		if len(files) > 0 {
+			reply := *a.Reply
+			reply.Attachments = files
+			shown.wire.Reply = &reply
 		}
 	}
 	return shown, nil

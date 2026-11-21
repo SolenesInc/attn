@@ -62,7 +62,7 @@ func upgradedWithChiefAsk(t *testing.T, answeredBeforeUpgrade bool) (*testworld.
 	}
 	if answeredBeforeUpgrade {
 		answer := inbox.Item{ID: uuid.NewString(), To: legacy, Kind: inbox.AskAnswer, Source: askID, Text: startedAnswer}
-		if err := before.AnswerAsk(askID, protocol.AskReply{Answers: []protocol.AskAnswer{{Key: "q1", Picked: []string{"Postgres"}}}}, answer, time.Now()); err != nil {
+		if err := before.AnswerAsk("", askID, protocol.AskReply{Answers: []protocol.AskAnswer{{Key: "q1", Picked: []string{"Postgres"}}}}, answer, time.Now()); err != nil {
 			t.Fatal(err)
 		}
 	}

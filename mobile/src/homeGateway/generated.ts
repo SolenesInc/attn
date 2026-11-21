@@ -119,9 +119,10 @@ export enum HomeGatewayAskQuestionKind {
 }
 
 export interface Reply {
-    answered_at: Date;
-    answers:     AnswerElement[];
-    note?:       string;
+    answered_at:       Date;
+    answers:           AnswerElement[];
+    attachment_names?: string[];
+    note?:             string;
     [property: string]: any;
 }
 
@@ -261,9 +262,10 @@ export interface HomeGatewayAskQuestion {
 }
 
 export interface HomeGatewayAskReply {
-    answered_at: Date;
-    answers:     AnswerElement[];
-    note?:       string;
+    answered_at:       Date;
+    answers:           AnswerElement[];
+    attachment_names?: string[];
+    note?:             string;
     [property: string]: any;
 }
 
@@ -1500,6 +1502,7 @@ const typeMap: any = {
     "Reply": o([
         { json: "answered_at", js: "answered_at", typ: Date },
         { json: "answers", js: "answers", typ: a(r("AnswerElement")) },
+        { json: "attachment_names", js: "attachment_names", typ: u(undefined, a("")) },
         { json: "note", js: "note", typ: u(undefined, "") },
     ], "any"),
     "AnswerElement": o([
@@ -1590,6 +1593,7 @@ const typeMap: any = {
     "HomeGatewayAskReply": o([
         { json: "answered_at", js: "answered_at", typ: Date },
         { json: "answers", js: "answers", typ: a(r("AnswerElement")) },
+        { json: "attachment_names", js: "attachment_names", typ: u(undefined, a("")) },
         { json: "note", js: "note", typ: u(undefined, "") },
     ], "any"),
     "HomeGatewayAskSeedMentions": o([

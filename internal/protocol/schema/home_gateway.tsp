@@ -197,9 +197,11 @@ model HomeGatewayAskAnswer {
   text?: string;
 }
 
+// attachment_names are the names of the files the answer carried.
 model HomeGatewayAskReply {
   answers: HomeGatewayAskAnswer[];
   note?: string;
+  attachment_names?: string[];
   answered_at: utcDateTime;
 }
 

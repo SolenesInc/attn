@@ -207,6 +207,9 @@ type HomeGatewayAskReply struct {
 	// Answers corresponds to the JSON schema field "answers".
 	Answers []HomeGatewayAskAnswer `json:"answers"`
 
+	// AttachmentNames corresponds to the JSON schema field "attachment_names".
+	AttachmentNames []string `json:"attachment_names,omitempty,omitzero"`
+
 	// Note corresponds to the JSON schema field "note".
 	Note *string `json:"note,omitempty,omitzero"`
 }
