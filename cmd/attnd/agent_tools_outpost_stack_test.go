@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -68,16 +69,19 @@ func TestAnOutpostSessionsToolCallRunsOnTheHomeAsThatSession(t *testing.T) {
 		t.Fatalf("the home's newest note is not the outpost session's: %+v", shown.Notes)
 	}
 
-	local := outpost.Path("retry.log")
-	if err := os.WriteFile(local, []byte("3 passes\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(outpost.Path("shell"), "retry.log"), []byte("3 passes\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	attached, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "seed_attach", Arguments: map[string]any{"seed": seed.ID, "path": local, "mode": "copy"}})
+	attached, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "seed_attach", Arguments: map[string]any{"seed": seed.ID, "path": "retry.log", "mode": "copy"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if text := toolText(attached); !attached.IsError || !strings.HasPrefix(text, "needs_the_cli: ") {
-		t.Errorf("seed_attach of a file on the outpost answered %q, want needs_the_cli, since the home cannot read the outpost's file", text)
+	if attached.IsError {
+		t.Fatalf("seed_attach of retry.log, a file in the outpost session's folder, refused: %s", toolText(attached))
+	}
+	shown = showSeed(t, home, "", seed.ID)
+	if !slices.ContainsFunc(shown.Artifacts, func(a protocol.SeedArtifact) bool { return a.Filename == "retry.log" }) {
+		t.Errorf("the home's seed has artifacts %+v, want retry.log copied from the outpost", shown.Artifacts)
 	}
 
 	home.Stop()

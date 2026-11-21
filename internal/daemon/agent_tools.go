@@ -24,15 +24,15 @@ import (
 var agentToolDefinitions []byte
 
 type agentToolDefinition struct {
-	Command      string          `json:"command"`
-	Name         string          `json:"name"`
-	Title        string          `json:"title"`
-	Description  string          `json:"description"`
-	Core         bool            `json:"core"`
-	ReadOnly     bool            `json:"read_only"`
-	Stdin        []string        `json:"stdin"`
-	InputSchema  json.RawMessage `json:"inputSchema"`
-	OutputSchema json.RawMessage `json:"outputSchema"`
+	Command      string           `json:"command"`
+	Name         string           `json:"name"`
+	Title        string           `json:"title"`
+	Description  string           `json:"description"`
+	Core         bool             `json:"core"`
+	ReadOnly     bool             `json:"read_only"`
+	Local        []agentToolLocal `json:"local"`
+	InputSchema  json.RawMessage  `json:"inputSchema"`
+	OutputSchema json.RawMessage  `json:"outputSchema"`
 }
 
 const (
@@ -201,7 +201,7 @@ func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, tool agentT
 		args, refusal = def.arguments(arguments, tool.input)
 	}
 	if refusal == nil {
-		refusal = d.localWork(def, args, call.caller)
+		refusal = d.doCallerSideWork(ctx, def, args, call.caller)
 	}
 	var result any
 	if refusal == nil {

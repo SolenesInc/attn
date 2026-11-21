@@ -83,9 +83,10 @@ func (r *Router) Forward(frame []byte, caller protocol.SessionID, input forwardI
 	inputEnded := make(chan struct{})
 	goTransport(func() {
 		defer close(inputEnded)
-		if _, err := channel.Write(frame); err == nil && input != nil {
-			_, _ = io.Copy(channel, input)
+		if _, err := channel.Write(frame); err != nil || input == nil {
+			return
 		}
+		_, _ = io.Copy(channel, input)
 		_ = channel.CloseWrite()
 	})
 	defer func() {

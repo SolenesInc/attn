@@ -1,7 +1,11 @@
 # The seed family. Write each doc for both surfaces: name an arg by its tool
 # name in backticks (`summary`) and another command by its tool name in
 # backticks (`seed_show`). The CLI's help and the garden reference print them as
-# the flag (`-m`) and the command (`attn seed show`).
+# the flag (`-m`) and the command (`attn seed show`). `local` marks an arg that
+# names something on the caller's machine (path, destination, evidence or
+# commit): the CLI resolves it in its working directory, and the daemon that
+# launched the agent resolves a tool call's in the folder the session started
+# in. `cli_only` keeps an arg out of the tool.
 groups:
   - name: seed
     summary: |
@@ -130,7 +134,7 @@ commands:
       Plants a seed and prints its id, slug and title. `body` takes markdown; if the seed gains children, that body is the plot's plan. `part_of` plants it under a plot. `checks` defines what the seed must prove; attn numbers each check unless C#= names the id, and prints each id. Lists up to 3 similar open seeds in your profile, leaving out that plot. Planting always proceeds. If one is the same work, wither the new seed.
     args:
       - {name: title, type: text, required: true, cli: pos, placeholder: '"<title>"', doc: "the seed's title"}
-      - {name: body, type: markdown, cli: "-m", stdin: true, doc: "markdown, or - to read stdin; empty stdin is refused"}
+      - {name: body, type: markdown, cli: "-m", stdin: true, doc: "markdown; empty text is refused"}
       - {name: part_of, type: seed, cli: "--part-of", placeholder: "<plot>", doc: "plant under a plot"}
       - {name: discovered_from, type: seed, cli: "--discovered-from", placeholder: "<seed>", doc: "record the seed this work came from"}
       - {name: checks, type: check_definition, list: true, cli: "--check", doc: "a check the seed must prove; attn picks the id unless C#= names it; repeats"}
@@ -286,7 +290,7 @@ commands:
       Appends to the seed's log: what happened and what you learned, for whoever tends it next. `handoff` addresses it to your successor on this seed: `seed_tend` prints the freshest one on the claim, so it is read before any work, and `seed_show` points at it once newer entries bury it. `ring` tells current and covering plot tenders and watchers to look; ordinary notes stay quiet.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
-      - {name: text, type: markdown, required: true, cli: "-m", stdin: true, placeholder: '"<what happened>"', doc: "markdown, or - to read stdin; empty stdin is refused"}
+      - {name: text, type: markdown, required: true, cli: "-m", stdin: true, placeholder: '"<what happened>"', doc: "markdown; empty text is refused"}
       - {name: handoff, type: bool, cli: "--handoff", doc: "write a note to whoever tends the seed next"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this note lands, and print who gets it"}
     result: SeedNoteResult
@@ -435,10 +439,10 @@ commands:
     args:
       - {name: seed, type: seed, required: true, cli: pos}
       - {name: id, type: check_id, required: true, cli: pos}
-      - {name: summary, type: text, required: true, cli: "-m", stdin: true, maxLength: 400, placeholder: '"<summary line>[\n\n<detail>]"', doc: "the summary line, then the detail after a blank line; - reads stdin"}
+      - {name: summary, type: text, required: true, cli: "-m", stdin: true, maxLength: 400, placeholder: '"<summary line>[\n\n<detail>]"', doc: "the summary line, then the detail after a blank line"}
       - {name: detail, type: markdown, cli: "-m+"}
-      - {name: evidence, type: text, list: true, cli: "--evidence", placeholder: "<file|artifact|url>", doc: "a local file to copy onto the seed, an artifact on the seed, or an http(s) URL; repeats"}
-      - {name: commit, type: revision, cli: "--commit", doc: "the commit the evidence came from, resolved with git rev-parse in the current directory"}
+      - {name: evidence, type: text, list: true, cli: "--evidence", local: evidence, placeholder: "<file|artifact|url>", doc: "a local file to copy onto the seed, an artifact on the seed, or an http(s) URL; repeats"}
+      - {name: commit, type: revision, cli: "--commit", local: commit, doc: "the commit the evidence came from, resolved with git rev-parse"}
       - {name: ring, type: bool, cli: "--ring", doc: "give the current tender and watchers a seed update after this check move lands, and print who gets it"}
     result: SeedCheckResult
     examples:
@@ -572,10 +576,10 @@ commands:
     grant: full
     read_only: true
     doc: |
-      Writes the raw body with a first-line stamp naming this seed and its body hash. Edit the file with any tool, keep its first line, then submit it with `attn seed edit <id> -m - < <id>.md`. `out` - writes to stdout; the default is <id>.md in the current directory.
+      Exports the raw body with a first-line stamp naming this seed and its body hash. Edit it with any tool, keep its first line, then pass the whole text to `seed_edit`.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
-      - {name: out, type: path, cli: "--out", doc: "file to write; - writes to stdout"}
+      - {name: out, type: path, cli: "--out", cli_only: true, doc: "file to write, <id>.md in the current directory by default; - writes to stdout"}
     result: SeedExportResult
 
   - name: seed edit
@@ -586,7 +590,7 @@ commands:
       Saves an exported body after editing the file with any tool. Keep the first stamp line: it names the body the edit started from. If the body changed since export, export again and reapply. Empty bodies are refused. Each edit saves a numbered version and a log entry; `note` adds what changed to that entry.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
-      - {name: body, type: markdown, required: true, cli: "-m", stdin: true, placeholder: "-", doc: "the exported text, edited, with its first stamp line; - reads stdin"}
+      - {name: body, type: markdown, required: true, cli: "-m", stdin: true, placeholder: "-", doc: "the exported text, edited, with its first stamp line"}
       - {name: note, type: text, cli: "--note", placeholder: '"<what changed>"', doc: "what changed, saved on the edit entry"}
     result: SeedEditResult
     errors:
@@ -629,7 +633,7 @@ commands:
       Puts a local regular file in durable seed-owned storage, or records a document that stays where it lives. For a local file, `mode` is required: move transfers the file and leaves one editable canonical file, which is the recommended choice; copy keeps an independent source snapshot. Git-tracked files must use copy. A file the seed already has by that name is replaced, and `seed_show` marks check evidence replaced after its report; re-attaching an unchanged file changes nothing. A `path` in a `repo`, a `notebook` document and a `url` remain associations, and `note` goes on the log with them.
     args:
       - {name: seed, type: seed, required: true, cli: pos}
-      - {name: path, type: path, cli: "--path", one_of: document, placeholder: "<file>", doc: "the local file, or a file in --repo"}
+      - {name: path, type: path, cli: "--path", one_of: document, local: path, local_when: mode, placeholder: "<file>", doc: "the local file, or a file in --repo"}
       - {name: notebook, type: text, cli: "--notebook", one_of: document, placeholder: "<id>", doc: "a Notebook document"}
       - {name: url, type: url, cli: "--url", one_of: document, doc: "anything reachable by URL"}
       - {name: mode, type: text, cli: "--move|--copy", values: [move, copy], doc: "move transfers a local file into seed ownership; copy snapshots it"}
@@ -659,7 +663,7 @@ commands:
       - {name: path, type: path, cli: "--path", one_of: document, placeholder: "<filename>", doc: "the managed filename, or the linked path"}
       - {name: notebook, type: text, cli: "--notebook", one_of: document, placeholder: "<id>", doc: "a Notebook document"}
       - {name: url, type: url, cli: "--url", one_of: document, doc: "anything reachable by URL"}
-      - {name: to, type: path, cli: "--to", placeholder: "<destination>", doc: "the destination that receives a managed artifact"}
+      - {name: to, type: path, cli: "--to", local: destination, placeholder: "<destination>", doc: "the destination that receives a managed artifact"}
       - {name: reference, type: bool, cli: "--reference", doc: "remove an old linked path association"}
       - {name: repo, type: name, cli: "--repo", placeholder: "<repository>", doc: "the repository that path lives in"}
       - {name: note, type: text, cli: "-m", stdin: true, placeholder: '"<note>"', doc: "a note on the log for an association"}

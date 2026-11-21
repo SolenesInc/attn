@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"cmp"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -14,6 +13,12 @@ import (
 	"github.com/victorarias/attn/internal/catalog"
 )
 
+type toolLocal struct {
+	Arg  string        `json:"arg"`
+	Kind catalog.Local `json:"kind"`
+	When string        `json:"when,omitempty"`
+}
+
 type toolDefinition struct {
 	Command      string         `json:"command"`
 	Name         string         `json:"name"`
@@ -21,7 +26,7 @@ type toolDefinition struct {
 	Description  string         `json:"description"`
 	Core         bool           `json:"core,omitempty"`
 	ReadOnly     bool           `json:"read_only,omitempty"`
-	Stdin        []string       `json:"stdin,omitempty"`
+	Local        []toolLocal    `json:"local,omitempty"`
 	InputSchema  map[string]any `json:"inputSchema"`
 	OutputSchema map[string]any `json:"outputSchema,omitempty"`
 }
@@ -45,8 +50,8 @@ func writeTools(c *catalog.Catalog, goRoot string) error {
 			InputSchema: g.inputSchema(cmd),
 		}
 		for _, a := range cmd.Args {
-			if a.Stdin {
-				tool.Stdin = append(tool.Stdin, a.Name)
+			if a.Local != "" {
+				tool.Local = append(tool.Local, toolLocal{Arg: a.Name, Kind: a.Local, When: a.LocalWhen})
 			}
 		}
 		if cmd.Result != "" {
@@ -92,6 +97,9 @@ func (g *generator) inputSchema(cmd *catalog.Command) map[string]any {
 	defs := map[string]any{}
 	required := []string{}
 	for _, a := range cmd.Args {
+		if a.CLIOnly {
+			continue
+		}
 		t := g.c.ArgType(a)
 		value := maps.Clone(t.Schema)
 		if nested, ok := value["$defs"].(map[string]any); ok {
@@ -112,7 +120,7 @@ func (g *generator) inputSchema(cmd *catalog.Command) map[string]any {
 		if a.List {
 			value = map[string]any{"type": "array", "items": value}
 		}
-		if doc := cmp.Or(a.Doc, t.Doc); doc != "" {
+		if doc := g.argDoc(a, toolSurface); doc != "" {
 			value["description"] = g.expand(where, doc)
 		}
 		properties[a.Name] = value

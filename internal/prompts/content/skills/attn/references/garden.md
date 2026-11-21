@@ -234,7 +234,7 @@ To change a body, export it, edit the file, and submit it with `attn seed edit`.
 
     attn seed export <id> [--out <path>] [--json]
 
-Writes the raw body with a first-line stamp naming this seed and its body hash. Edit the file with any tool, keep its first line, then submit it with `attn seed edit <id> -m - < <id>.md`. `--out` - writes to stdout; the default is <id>.md in the current directory.
+Exports the raw body with a first-line stamp naming this seed and its body hash. Edit it with any tool, keep its first line, then pass the whole text to `attn seed edit`.
 
     attn seed edit <id> -m - [--note "<what changed>"] [--json]
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -186,6 +187,31 @@ func (g *generator) placeholder(a catalog.Arg) string {
 	return "<" + a.Name + ">"
 }
 
+type surface int
+
+const (
+	cliSurface surface = iota
+	toolSurface
+)
+
+func (g *generator) argDoc(a catalog.Arg, on surface) string {
+	doc := cmp.Or(a.Doc, g.c.ArgType(a).Doc)
+	if doc == "" {
+		return ""
+	}
+	switch {
+	case on == cliSurface && a.Stdin:
+		return doc + "; - reads stdin"
+	case on == cliSurface && a.Local == catalog.LocalCommit:
+		return doc + " in the current directory"
+	case on == toolSurface && a.Local == catalog.LocalCommit:
+		return doc + " in the folder the session started in"
+	case on == toolSurface && a.Local != "":
+		return doc + "; a relative path resolves against the folder the session started in"
+	}
+	return doc
+}
+
 func (g *generator) argUsage(a catalog.Arg) (string, bool) {
 	switch {
 	case a.CLI == "-m+":
@@ -346,11 +372,7 @@ func (g *generator) flagLines(cmd *catalog.Command, group *catalog.Group) []stri
 			continue
 		}
 		label, _ := g.argUsage(a)
-		doc := a.Doc
-		if doc == "" {
-			doc = g.c.ArgType(a).Doc
-		}
-		add(label, g.cliText(cmd, cmd.Name+": arg "+a.Name, doc))
+		add(label, g.cliText(cmd, cmd.Name+": arg "+a.Name, g.argDoc(a, cliSurface)))
 	}
 	if cmd.Result != "" {
 		add("--json", "print the result as JSON")

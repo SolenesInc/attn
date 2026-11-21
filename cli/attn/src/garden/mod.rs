@@ -2,20 +2,12 @@ pub mod json;
 pub mod plot;
 pub mod section;
 
-use attn_protocol::go_values::{ID_ALPHABET, ID_BODY_LEN, MAX_SLUG_CHARS, MAX_SLUG_WORDS};
+use attn_protocol::go_values::{MAX_SLUG_CHARS, MAX_SLUG_WORDS};
 
-const ID_PREFIX: &str = "s-";
 const STOP_WORDS: &[&str] = &[
     "a", "an", "the", "of", "in", "on", "at", "to", "for", "with", "by", "from", "and", "or", "as",
     "is", "into", "its", "it",
 ];
-
-pub fn is_seed_id(id: &str) -> bool {
-    id.strip_prefix(ID_PREFIX).is_some_and(|body| {
-        i64::try_from(body.len()) == Ok(ID_BODY_LEN)
-            && body.chars().all(|letter| ID_ALPHABET.contains(letter))
-    })
-}
 
 pub fn step_slug(title: &str) -> String {
     let lowered = title.trim().to_lowercase();
