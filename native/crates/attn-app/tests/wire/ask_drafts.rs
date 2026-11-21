@@ -262,3 +262,29 @@ fn an_answered_or_closed_ask_saves_no_draft() {
             .collect::<Vec<Value>>()
     );
 }
+
+#[test]
+fn a_save_the_daemon_never_answered_is_sent_again_once_it_is_back() {
+    let mut world = launched(vec![launch()]);
+    world.daemon.on("ask_draft_save", |_| Vec::<Value>::new());
+    open_sheet(&mut world);
+    type_into(&mut world, NOTE, "Ask me before Friday");
+    world.advance(Duration::from_millis(400));
+    assert_eq!(saves(&world).len(), 1);
+
+    let kept = Kept::default();
+    keeping(&world, &kept);
+    world.reconnect();
+    world.advance(Duration::from_millis(400));
+    let draft = kept
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("the draft was saved again");
+    assert_eq!(draft.note.as_deref(), Some("Ask me before Friday"));
+    assert_eq!(
+        saves(&world).len(),
+        2,
+        "the unanswered save went again once, and only once"
+    );
+}

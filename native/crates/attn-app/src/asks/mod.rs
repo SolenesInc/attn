@@ -71,8 +71,7 @@ pub(crate) struct Draft {
     /// Send was pressed while a file still uploaded: the answer goes once every file is up.
     pub sends_after_upload: bool,
     generation: i64,
-    /// What the daemon holds of this draft, as `saving` compares it.
-    saved: serde_json::Value,
+    saved: saving::Held,
     /// What was written, and when it is saved unless it changes before then.
     pending: Option<(serde_json::Value, f64)>,
 }

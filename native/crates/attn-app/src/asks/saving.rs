@@ -4,6 +4,7 @@
 
 use std::collections::BTreeMap;
 
+use attn_client::Connection;
 use attn_protocol::{AskAnswer, AskDraft, AskDraftSaveMessage, AskDraftSaveResultMessage};
 use rune::{TextEdit, Tx};
 use serde_json::Value;
@@ -14,6 +15,20 @@ use crate::State;
 /// How long editing pauses before the draft is saved: an annotation note's pause, measured to
 /// clear an ordinary gap between keystrokes, 100 to 250 ms.
 const PAUSE: f64 = 0.4;
+
+/// What the daemon holds of a draft as far as this window knows: what it was last sent, or
+/// nothing known once a save never reached it, which the next poll saves again.
+#[derive(Debug, PartialEq)]
+pub(super) enum Held {
+    Sent(Value),
+    Unknown,
+}
+
+impl Default for Held {
+    fn default() -> Self {
+        Held::Sent(Value::Null)
+    }
+}
 
 /// Seeds a draft from each open ask the daemon holds one for and this window does not.
 pub(super) fn restore(state: &mut State) {
@@ -39,7 +54,7 @@ pub(super) fn restore(state: &mut State) {
             generation: stored.generation,
             ..Draft::default()
         };
-        draft.saved = draft.form();
+        draft.saved = Held::Sent(draft.form());
         state.window.asks.drafts.insert(ask.id.clone(), draft);
     }
 }
@@ -60,13 +75,17 @@ fn restored_answers(answers: &[AskAnswer]) -> BTreeMap<String, Answer> {
 }
 
 /// Saves each draft whose writing has paused for `PAUSE` since it last changed, and wakes the
-/// window when the next one is due.
+/// window when the next one is due. While the daemon is away nothing is due: the connection
+/// coming back runs the poll again.
 pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) {
+    if state.facts.connection != Connection::Connected {
+        return;
+    }
     let mut due = Vec::new();
     let mut wake = f64::INFINITY;
     for (id, draft) in &mut state.window.asks.drafts {
         let form = draft.form();
-        if form == draft.saved {
+        if matches!(&draft.saved, Held::Sent(sent) if *sent == form) {
             draft.pending = None;
             continue;
         }
@@ -94,13 +113,13 @@ pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) {
 
 /// Saves the draft for ask `id` at the next generation. A daemon that took a later generation
 /// from elsewhere refuses it; this window's draft is the one being written, so it saves again past
-/// that generation.
+/// that generation. A save the daemon never answered leaves what it holds unknown.
 fn save(state: &mut State, id: &str, tx: &mut Tx) {
     let Some(draft) = state.window.asks.drafts.get_mut(id) else {
         return;
     };
     draft.generation += 1;
-    draft.saved = draft.form();
+    draft.saved = Held::Sent(draft.form());
     draft.pending = None;
     let message = AskDraftSaveMessage {
         ask_id: id.to_owned(),
@@ -114,19 +133,17 @@ fn save(state: &mut State, id: &str, tx: &mut Tx) {
             ..message
         },
         move |state, answer, tx| {
-            let Some(stored) = answer
-                .parse::<AskDraftSaveResultMessage>()
-                .filter(|r| r.stale == Some(true))
-                .map(|r| r.generation)
-            else {
-                return;
-            };
+            let result = answer.parse::<AskDraftSaveResultMessage>();
             let Some(draft) = state.window.asks.drafts.get_mut(&id) else {
                 return;
             };
-            if stored >= draft.generation {
-                draft.generation = stored;
-                save(state, &id, tx);
+            match result {
+                None => draft.saved = Held::Unknown,
+                Some(r) if r.stale == Some(true) && r.generation >= draft.generation => {
+                    draft.generation = r.generation;
+                    save(state, &id, tx);
+                }
+                Some(_) => {}
             }
         },
         tx,
