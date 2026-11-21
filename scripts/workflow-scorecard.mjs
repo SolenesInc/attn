@@ -109,9 +109,13 @@ async function ledger() {
 }
 
 async function thisHost(rows) {
-  const [{ stdout: self }, status] = await Promise.all([run('attn', ['presence', '--session-id']), attnJSON('update', 'status')]);
-  const row = rows.find((r) => r.id === self.trim());
-  return row?.host && status.kind === 'outpost' ? { id: row.host, name: status.outpost } : null;
+  try {
+    const [{ stdout: self }, status] = await Promise.all([run('attn', ['presence', '--session-id']), attnJSON('update', 'status')]);
+    const row = rows.find((r) => r.id === self.trim());
+    return row?.host && status.kind === 'outpost' ? { id: row.host, name: status.outpost } : null;
+  } catch {
+    return null;
+  }
 }
 
 const shellTools = new Set(['Bash', 'exec', 'exec_command', 'shell', 'shell_command', 'local_shell']);
@@ -169,6 +173,9 @@ function sessionLine(row, hostNames) {
     references: [],
     principles: [],
     verdicts: [],
+    seed_plants: 0,
+    discovered_plants: 0,
+    seed_withers: 0,
   };
   const references = new Set();
   const principles = new Set();
@@ -202,6 +209,14 @@ function sessionLine(row, hostNames) {
     for (const [, kind, file] of reads ? text.matchAll(skillFile) : []) {
       if (!skillFiles[kind].has(file)) continue;
       (kind === 'references' ? references : principles).add(file);
+    }
+    const plants = /(?:^|__)seed_plant$/.test(name) || (shellTools.has(name) && /\battn\s+seed\s+plant\b/.test(text) && !/\battn\s+seed\s+plant\b[^\n;|&]*--help/.test(text));
+    if (plants) {
+      line.seed_plants += 1;
+      if (/--discovered-from\b|"discovered_from"\s*:/.test(text)) line.discovered_plants += 1;
+    }
+    if (/(?:^|__)seed_wither$/.test(name) || (shellTools.has(name) && /\battn\s+seed\s+wither\b/.test(text) && !/\battn\s+seed\s+wither\b[^\n;|&]*--help/.test(text))) {
+      line.seed_withers += 1;
     }
     const verdicts = shellTools.has(name) ? [...text.matchAll(/attn seed check (confirm|reject) (s-[a-z0-9]{6})(?: (C\d+))?/g)] : [];
     if (verdicts.length) {
@@ -400,6 +415,17 @@ async function scorecard(inPeriod, title, since, until, names) {
     return [...tally].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(' · ') || '-';
   };
   const cost = (set) => `$${Math.round(set.reduce((sum, l) => sum + l.cost_usd, 0))}`;
+  const seedMoves = (set) => {
+    const tracked = set.filter((l) => typeof l.seed_plants === 'number');
+    if (!tracked.length) return '-';
+    const planted = tracked.reduce((sum, l) => sum + l.seed_plants, 0);
+    const withered = tracked.reduce((sum, l) => sum + (l.seed_withers ?? 0), 0);
+    return `${planted} / ${withered}`;
+  };
+  const discoveredPlants = (set) => {
+    const tracked = set.filter((l) => typeof l.discovered_plants === 'number');
+    return tracked.length ? tracked.reduce((sum, l) => sum + l.discovered_plants, 0) : '-';
+  };
 
   const rows = [
     [title, 'Builders', 'Orchestrators'],
@@ -410,6 +436,8 @@ async function scorecard(inPeriod, title, since, until, names) {
     ['confirmations after a look', '', `${percent(afterLook, confirmations.size)} of ${confirmations.size}`],
     ['checks rejected', '', garden.rejected],
     ['seeds with a check reported twice', garden.rereported, ''],
+    ['seeds planted / withered', seedMoves(builders), seedMoves(orchestrators)],
+    ['  discovered-from planted', discoveredPlants(builders), discoveredPlants(orchestrators)],
     ['findings from review on main', `${garden.findingSeeds} seeds`, ''],
     ['median tool calls per session', median(builders.map((l) => l.tool_calls)), median(orchestrators.map((l) => l.tool_calls))],
     ['cost', cost(builders), cost(orchestrators)],

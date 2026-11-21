@@ -8,4 +8,4 @@
      {"kind": "test", "run": "python3 readme_example.py"}]},
    {"kind": "check", "seed": "child", "check": "C1", "state": "rejected", "absent": true},
    {"kind": "ask", "state": "any"},
-   {"kind": "planted", "title": "tokeni|share|count_words and top_words"}]}
+   {"kind": "planted", "title": "tokeni|share|count_words and top_words", "absent": true}]}
