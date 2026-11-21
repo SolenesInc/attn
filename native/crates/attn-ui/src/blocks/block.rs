@@ -67,6 +67,15 @@ impl Block {
         }
     }
 
+    /// The block with its element changed by `f`, such as a handler or a mark added to a
+    /// section.
+    pub fn map(self, f: impl FnOnce(El) -> El) -> Block {
+        Block {
+            el: f(self.el),
+            ..self
+        }
+    }
+
     /// A part of the page with no heading of its own, such as a seed's plan: spaced and ruled
     /// from the sections around it as a section is.
     pub fn part(el: El) -> Block {

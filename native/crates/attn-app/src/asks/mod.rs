@@ -45,12 +45,240 @@ pub struct Asks {
     /// The keyboard moves into the sheet at the next follow, whatever it shows.
     take_keyboard: bool,
     mentions: Option<mentions::Mentions>,
+    /// The first text of the selection in the ask, by its key path, once no press is still making
+    /// the selection: the Quote button floats over it.
+    pub(crate) quotable: Option<String>,
 }
 
 #[derive(Default)]
 pub(crate) struct Draft {
     pub answers: BTreeMap<String, Answer>,
     pub note: TextEdit,
+    /// The stop ⇥, the number keys and clicks last made active; the ask's first unanswered
+    /// choice question until then.
+    pub active: Option<Stop>,
+}
+
+/// Where ⇥ stops in an open ask, in order: each question, then the note.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Stop {
+    Question(String),
+    Note,
+}
+
+pub(crate) fn stops(ask: &Ask) -> Vec<Stop> {
+    questions(ask)
+        .map(|q| Stop::Question(q.key.clone()))
+        .chain([Stop::Note])
+        .collect()
+}
+
+/// The stop the number keys act on in `ask`: the one last made active, else its first choice
+/// question with no pick, else its first choice question, else its first stop.
+pub(crate) fn active(state: &State, ask: &Ask) -> Stop {
+    let draft = state.window.asks.drafts.get(&ask.id);
+    if let Some(stop) = draft.and_then(|d| d.active.clone()) {
+        return stop;
+    }
+    let choosing: Vec<&AskQuestion> = questions(ask)
+        .filter(|q| Kind::of(q) != Kind::Text)
+        .collect();
+    choosing
+        .iter()
+        .find(|q| !chosen(draft, q))
+        .or(choosing.first())
+        .copied()
+        .or(questions(ask).next())
+        .map_or(Stop::Note, |q| Stop::Question(q.key.clone()))
+}
+
+/// A choice question has a pick, or another answer written in its Other field.
+fn chosen(draft: Option<&Draft>, question: &AskQuestion) -> bool {
+    draft
+        .and_then(|d| d.answers.get(&question.key))
+        .is_some_and(|a| !a.picked.is_empty() || !a.other.text.trim().is_empty())
+}
+
+/// The stop whose control is keyed `focused`.
+fn stop_of(ask: &Ask, focused: &str) -> Option<Stop> {
+    if focused == view::NOTE {
+        return Some(Stop::Note);
+    }
+    questions(ask)
+        .find(|q| {
+            focused == view::text_key(&q.key)
+                || focused == view::other_key(&q.key)
+                || (0..q.choices.len()).any(|i| focused == view::choice_key(&q.key, i))
+        })
+        .map(|q| Stop::Question(q.key.clone()))
+}
+
+/// The control a stop puts the keyboard in: a written question's field, a choice question's
+/// chosen or first choice, the note.
+fn input_of(state: &State, ask: &Ask, stop: &Stop) -> String {
+    let Stop::Question(key) = stop else {
+        return view::NOTE.to_owned();
+    };
+    let Some(question) = questions(ask).find(|q| &q.key == key) else {
+        return view::NOTE.to_owned();
+    };
+    if Kind::of(question) == Kind::Text {
+        return view::text_key(key);
+    }
+    let picked = state
+        .window
+        .asks
+        .drafts
+        .get(&ask.id)
+        .and_then(|d| d.answers.get(key))
+        .and_then(|a| a.picked.first());
+    match question
+        .choices
+        .iter()
+        .position(|c| Some(&c.label) == picked)
+        .or((!question.choices.is_empty()).then_some(0))
+    {
+        Some(i) => view::choice_key(key, i),
+        None => view::other_key(key),
+    }
+}
+
+/// Makes `stop` of the ask shown active and puts the keyboard in its control.
+fn enter(state: &mut State, ask: &Ask, stop: Stop, tx: &mut Tx) {
+    let input = input_of(state, ask, &stop);
+    activate(state, &ask.id, stop);
+    tx.focus(input, tx.by_keys() || tx.focus_visible());
+}
+
+/// Makes `stop` of `ask` active, as a click inside it does.
+pub(crate) fn activate(state: &mut State, ask: &str, stop: Stop) {
+    state.draft(ask).active = Some(stop);
+}
+
+fn shown_open(state: &State) -> Option<Ask> {
+    let (id, replied) = state.shown_ask()?;
+    if replied {
+        return None;
+    }
+    state.facts.asks.iter().find(|a| a.id == id).cloned()
+}
+
+/// ⇥ and ⇧⇥: moves the active stop of the ask shown `by` one, from the stop the keyboard is in.
+/// Past the first or last stop, and from any other control of the sheet, the key goes on to
+/// move focus through the sheet's controls as Tab does.
+pub(crate) fn tab(state: &mut State, by: isize, tx: &mut Tx) -> bool {
+    let Some(ask) = shown_open(state) else {
+        return false;
+    };
+    let here = match tx.focused() {
+        Some(focused) if focused != SHEET => match stop_of(&ask, focused) {
+            Some(stop) => stop,
+            None => return false,
+        },
+        _ => active(state, &ask),
+    };
+    let stops = stops(&ask);
+    let at = stops.iter().position(|s| *s == here).unwrap_or(0) as isize + by;
+    let Some(next) = usize::try_from(at)
+        .ok()
+        .and_then(|at| stops.get(at))
+        .cloned()
+    else {
+        return false;
+    };
+    enter(state, &ask, next, tx);
+    true
+}
+
+/// A number key `n`: picks choice `n` of the active question; the number after its last choice
+/// puts the keyboard in its Other field.
+pub(crate) fn number(state: &mut State, n: usize, tx: &mut Tx) -> bool {
+    let Some(ask) = shown_open(state) else {
+        return false;
+    };
+    let Stop::Question(key) = active(state, &ask) else {
+        return false;
+    };
+    let Some(question) = questions(&ask).find(|q| q.key == key).cloned() else {
+        return false;
+    };
+    let kind = Kind::of(&question);
+    if kind == Kind::Text || n == 0 {
+        return false;
+    }
+    if n == question.choices.len() + 1 {
+        activate(state, &ask.id, Stop::Question(key.clone()));
+        tx.focus(view::other_key(&key), tx.by_keys() || tx.focus_visible());
+        return true;
+    }
+    let Some(choice) = question.choices.get(n - 1) else {
+        return false;
+    };
+    activate(state, &ask.id, Stop::Question(key.clone()));
+    pick(state, &ask.id, &key, kind, &choice.label, tx);
+    true
+}
+
+/// Picks `label` in a question of `ask`. A pick in a one-choice question moves the active
+/// question, and the keyboard, on to the next choice question with no pick.
+pub(crate) fn pick(
+    state: &mut State,
+    ask: &str,
+    question: &str,
+    kind: Kind,
+    label: &str,
+    tx: &mut Tx,
+) {
+    choose(state, ask, question, kind, label);
+    if kind != Kind::One {
+        return;
+    }
+    let Some(found) = state.facts.asks.iter().find(|a| a.id == ask).cloned() else {
+        return;
+    };
+    let draft = state.window.asks.drafts.get(ask);
+    let unpicked = |q: &&&AskQuestion| Kind::of(q) != Kind::Text && !chosen(draft, q);
+    let all: Vec<&AskQuestion> = questions(&found).collect();
+    let at = all.iter().position(|q| q.key == question).unwrap_or(0);
+    let next = all[at + 1..]
+        .iter()
+        .chain(&all[..at])
+        .find(unpicked)
+        .map(|q| Stop::Question(q.key.clone()));
+    if let Some(next) = next {
+        enter(state, &found, next, tx);
+    }
+}
+
+/// Appends the text selected in the ask shown to its note as `> ` lines, and puts the
+/// keyboard at the note's end.
+pub(crate) fn quote(state: &mut State, tx: &mut Tx) -> bool {
+    let Some(ask) = shown_open(state) else {
+        return false;
+    };
+    let Some(passage) = tx
+        .text_selection()
+        .map(|s| s.text().trim().to_owned())
+        .filter(|s| !s.is_empty())
+    else {
+        return false;
+    };
+    let quoted: Vec<String> = passage
+        .lines()
+        .map(|line| format!("> {}", line.trim()).trim_end().to_owned())
+        .collect();
+    let note = state.note(&ask.id);
+    let written = note.text.trim_end();
+    let text = if written.is_empty() {
+        format!("{}\n", quoted.join("\n"))
+    } else {
+        format!("{written}\n\n{}\n", quoted.join("\n"))
+    };
+    *note = rewritten(note, text);
+    state.window.asks.quotable = None;
+    tx.clear_text_selection();
+    enter(state, &ask, Stop::Note, tx);
+    true
 }
 
 /// `edit` holding `text` instead, at the height its grip was dragged to.
@@ -519,25 +747,15 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
         state.window.asks.error = None;
     }
     state.window.asks.focused_on = shown.clone();
+    state.window.asks.quotable = None;
     let ring = tx.by_keys() || tx.focus_visible();
-    match shown.and_then(|(id, _)| first_input(state, &id)) {
-        Some(input) => tx.focus(input, ring),
+    match shown_open(state) {
+        Some(ask) => {
+            let input = input_of(state, &ask, &active(state, &ask));
+            tx.focus(input, ring)
+        }
         None => tx.focus(SHEET, ring),
     }
-}
-
-/// The first control an open ask takes the keyboard in: its first choice or written answer.
-fn first_input(state: &State, ask: &str) -> Option<String> {
-    let ask = state.facts.asks.iter().find(|a| a.id == ask)?;
-    if ask.reply.is_some() {
-        return None;
-    }
-    let question = questions(ask).next()?;
-    Some(match Kind::of(question) {
-        Kind::Text => view::text_key(&question.key),
-        Kind::One | Kind::Any if question.choices.is_empty() => view::other_key(&question.key),
-        Kind::One | Kind::Any => view::choice_key(&question.key, 0),
-    })
 }
 
 /// Moves to the next or previous ask the sheet lists.
@@ -558,7 +776,7 @@ pub(crate) fn step(state: &mut State, by: isize, tx: &mut Tx) {
     follow(state, tx);
 }
 
-pub(crate) fn pick(state: &mut State, ask: &str, question: &str, kind: Kind, label: &str) {
+fn choose(state: &mut State, ask: &str, question: &str, kind: Kind, label: &str) {
     let answer = state.answer(ask, question);
     match kind {
         Kind::One => {

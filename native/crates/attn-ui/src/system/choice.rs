@@ -18,6 +18,7 @@ pub struct Choice {
     note: Option<Said>,
     leading: Option<El>,
     tag: Option<El>,
+    trailing: Option<El>,
     many: bool,
     chosen: bool,
     disabled: bool,
@@ -33,6 +34,7 @@ impl Choice {
             note: None,
             leading: None,
             tag: None,
+            trailing: None,
             many: false,
             chosen: false,
             disabled: false,
@@ -55,6 +57,12 @@ impl Choice {
     /// A tag after its name, such as the one it is recommended to choose.
     pub fn tag(mut self, tag: impl Into<El>) -> Self {
         self.tag = Some(tag.into());
+        self
+    }
+
+    /// What ends its row, such as the key that picks it.
+    pub fn trailing(mut self, end: El) -> Self {
+        self.trailing = Some(end);
         self
     }
 
@@ -170,7 +178,8 @@ impl Choice {
             })
             .border(1.0, edge)
             .child(dot)
-            .child(said);
+            .child(said)
+            .children(self.trailing);
         let row = match described {
             Some(note) => row.description(note.text()),
             None => row,

@@ -19,6 +19,8 @@ Every agent's asks reach one sheet in the middle of the window, so you answer th
 
 Cmd+Shift+R (Ctrl+Alt+R on Linux) opens Asks. An ask can offer one choice, any number of choices, or a space for a written answer, and the agent can mark the choice it recommends. You can always answer in your own words instead.
 
+The number keys pick a choice of the active question, the one with the bar beside it, and Tab moves on to the next question and to your note. Select a passage of the ask and press Q to quote it in your note.
+
 Attn types your answer into the agent's conversation as your message. When the ask is about a seed, the answer goes to whoever tends that seed when you answer, and Attn adds the answer to the seed as a note.
 
 An agent writes an ask as Markdown:

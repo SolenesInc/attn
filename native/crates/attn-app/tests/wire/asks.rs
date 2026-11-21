@@ -2115,15 +2115,110 @@ fn a_click_on_a_link_in_an_asks_words_still_opens_it() {
     );
 }
 
+/// Three questions, one of each kind the number keys and ⇥ treat differently: one choice, any
+/// choices and a written answer.
+fn release_plan() -> Ask {
+    ask(
+        "a-plan",
+        "api",
+        "Release plan",
+        28,
+        vec![
+            prose("The load test found a regression in the cache warmup."),
+            question("q1", "one", "Which region first?", &["eu", "us"]),
+            question("q2", "any", "Which checks?", &["smoke", "load", "soak"]),
+            question("q3", "text", "Which date?", &[]),
+        ],
+    )
+}
+
+fn active(world: &World) -> Vec<String> {
+    ["q1", "q2", "q3"]
+        .into_iter()
+        .filter(|q| {
+            world
+                .screen()
+                .get(Target::key(format!("asks.q.{q}")))
+                .value
+                .as_deref()
+                == Some("active")
+        })
+        .map(str::to_owned)
+        .collect()
+}
+
+fn field_text(world: &World, key: &str) -> String {
+    world
+        .screen()
+        .get(Target::key(key))
+        .value
+        .unwrap_or_default()
+}
+
 #[test]
-fn tab_walks_the_sheet_and_stays_in_it_and_never_stops_on_the_list_of_asks() {
+fn number_keys_pick_in_the_active_question_and_tab_moves_it_to_the_written_field() {
+    let mut world = start(vec![release_plan()], vec![api_working()]);
+    open_sheet(&mut world);
+    assert_eq!(active(&world), ["q1"]);
+    let rows_before: Vec<_> = (0..3)
+        .map(|i| world.rect(&format!("asks.q.q2.choice.{i}")))
+        .collect();
+
+    letter(&mut world, "1");
+    assert!(checked(&world, "asks.q.q1.choice.0"), "1 picks eu");
+    assert_eq!(active(&world), ["q2"], "a one-choice pick moves on");
+    assert_eq!(focused(&world).as_deref(), Some("asks.q.q2.choice.0"));
+    let rows_after: Vec<_> = (0..3)
+        .map(|i| world.rect(&format!("asks.q.q2.choice.{i}")))
+        .collect();
+    assert_eq!(rows_before, rows_after, "the keycaps keep their room");
+
+    letter(&mut world, "2");
+    letter(&mut world, "3");
+    assert!(checked(&world, "asks.q.q2.choice.1"), "2 toggles load");
+    assert!(checked(&world, "asks.q.q2.choice.2"), "3 toggles soak");
+    assert!(!checked(&world, "asks.q.q2.choice.0"));
+    assert_eq!(active(&world), ["q2"], "a pick of any keeps the question");
+
+    letter(&mut world, "4");
+    assert_eq!(focused(&world).as_deref(), Some("asks.q.q2.other.field"));
+    world.gesture(|app| app.type_text("4 nodes"));
+    assert_eq!(field_text(&world, "asks.q.q2.other.field"), "4 nodes");
+
+    plain(&mut world, Key::Tab);
+    assert_eq!(focused(&world).as_deref(), Some("asks.q.q3.text.field"));
+    assert_eq!(active(&world), ["q3"]);
+    world.gesture(|app| app.type_text("12 May"));
+    assert_eq!(field_text(&world, "asks.q.q3.text.field"), "12 May");
+
+    world.gesture(|app| app.press("shift+tab"));
+    assert_eq!(active(&world), ["q2"]);
+    assert_eq!(focused(&world).as_deref(), Some("asks.q.q2.choice.1"));
+
+    send_key(&mut world);
+    assert_eq!(
+        sent_answers(&world),
+        [serde_json::json!({
+            "ask_id": "a-plan",
+            "answers": [
+                {"key": "q1", "picked": ["eu"]},
+                {"key": "q2", "picked": ["load", "soak"], "other": "4 nodes"},
+                {"key": "q3", "picked": [], "text": "12 May"},
+            ],
+        })]
+    );
+}
+
+#[test]
+fn tab_walks_the_questions_and_the_note_then_the_sheets_controls_and_never_the_list_of_asks() {
     let mut world = start(
-        vec![cache_store(), release_day()],
+        vec![release_plan(), release_day()],
         vec![api_working(), web_waiting()],
     );
     open_sheet(&mut world);
+    click(&mut world, "asks.row.a-plan");
     let mut walk = vec![focused(&world).unwrap_or_default()];
-    for _ in 0..7 {
+    for _ in 0..6 {
         plain(&mut world, Key::Tab);
         walk.push(focused(&world).unwrap_or_default());
     }
@@ -2131,18 +2226,16 @@ fn tab_walks_the_sheet_and_stays_in_it_and_never_stops_on_the_list_of_asks() {
         walk,
         [
             "asks.q.q1.choice.0",
-            "asks.q.q1.choice.1",
-            "asks.q.q1.other.field",
+            "asks.q.q2.choice.0",
+            "asks.q.q3.text.field",
             "asks.note.field",
-            "asks.sheet",
             "asks.replied",
             "asks.close",
             "asks.copy",
         ]
     );
-
     let mut back = Vec::new();
-    for _ in 0..10 {
+    for _ in 0..6 {
         world.gesture(|d| d.press("shift+tab"));
         back.push(focused(&world).unwrap_or_default());
     }
@@ -2151,16 +2244,85 @@ fn tab_walks_the_sheet_and_stays_in_it_and_never_stops_on_the_list_of_asks() {
         [
             "asks.close",
             "asks.replied",
-            "asks.sheet",
             "asks.note.field",
-            "asks.q.q1.other.field",
-            "asks.q.q1.choice.1",
+            "asks.q.q3.text.field",
+            "asks.q.q2.choice.0",
             "asks.q.q1.choice.0",
-            "asks.snooze",
-            "asks.open-agent",
-            "asks.copy",
         ]
     );
+}
+
+#[test]
+fn a_click_in_a_question_makes_it_the_one_the_number_keys_pick_in() {
+    let mut world = start(vec![release_plan()], vec![api_working()]);
+    open_sheet(&mut world);
+    click(&mut world, "asks.q.q2.prompt");
+    assert_eq!(active(&world), ["q2"]);
+
+    letter(&mut world, "1");
+    assert!(checked(&world, "asks.q.q2.choice.0"), "1 picks smoke");
+    assert!(!checked(&world, "asks.q.q1.choice.0"));
+}
+
+#[test]
+fn the_footer_names_the_number_keys_tab_and_quote() {
+    let mut world = start(vec![release_plan()], vec![api_working()]);
+    open_sheet(&mut world);
+    let hints = name(&world, "asks.hints");
+    assert!(hints.contains("1–2 pick"), "{hints}");
+    assert!(hints.contains("⇥ next question"), "{hints}");
+    assert!(hints.contains("q quote"), "{hints}");
+    letter(&mut world, "1");
+    assert!(name(&world, "asks.hints").contains("1–3 pick"));
+}
+
+#[test]
+fn q_quotes_the_selected_passage_into_the_note_and_puts_the_keyboard_there() {
+    let mut world = start(vec![release_plan()], vec![api_working()]);
+    world.resize((1000.0, 1000.0));
+    open_sheet(&mut world);
+    type_into(&mut world, NOTE, "Looks fine.");
+    drag_across(&mut world, "asks.part.0");
+
+    letter(&mut world, "q");
+
+    assert_eq!(
+        field_text(&world, NOTE),
+        "Looks fine.\n\n> The load test found a regression in the cache warmup.\n"
+    );
+    assert_eq!(focused(&world).as_deref(), Some(NOTE));
+    world.gesture(|app| app.type_text("Which one?"));
+    assert!(field_text(&world, NOTE).ends_with("warmup.\nWhich one?"));
+}
+
+#[test]
+fn the_quote_button_floats_over_a_selection_and_quotes_it() {
+    let mut world = start(vec![release_plan()], vec![api_working()]);
+    open_sheet(&mut world);
+    assert!(!has(&world, "asks.quote"));
+    drag_across(&mut world, "asks.subject");
+    assert!(has(&world, "asks.quote"), "a selection brings the button");
+    let [_, by, _, bh] = world.rect("asks.quote");
+    let [_, sy, _, _] = world.rect("asks.subject");
+    assert!(by + bh <= sy, "the button floats above the selection");
+
+    click(&mut world, "asks.quote");
+
+    assert_eq!(field_text(&world, NOTE), "> Release plan\n");
+    assert_eq!(focused(&world).as_deref(), Some(NOTE));
+    assert!(!has(&world, "asks.quote"), "quoting lets the selection go");
+}
+
+#[test]
+fn a_replied_ask_shows_no_quote_button_and_q_does_nothing() {
+    let answered = replied(release_plan(), vec![picked("q1", &["eu"])], None);
+    let mut world = start(vec![answered], vec![api_working()]);
+    open_sheet(&mut world);
+    letter(&mut world, "r");
+    drag_across(&mut world, "asks.subject");
+    assert!(!has(&world, "asks.quote"));
+    letter(&mut world, "q");
+    assert!(!has(&world, NOTE));
 }
 
 #[test]
@@ -2237,23 +2399,6 @@ fn a_click_on_the_title_bar_s_asks_button_closes_the_open_sheet_as_a_click_outsi
 
     world.gesture(|app| app.click_at(button));
     assert!(!has(&world, "asks.sheet"));
-}
-
-#[test]
-fn tab_reaches_every_answer_of_a_question_as_on_main_even_after_one_is_chosen() {
-    let mut world = start(vec![rollout()], vec![api_working()]);
-    open_sheet(&mut world);
-    assert_eq!(focused(&world).as_deref(), Some("asks.q.q1.choice.0"));
-    world.gesture(|d| d.press("a"));
-    assert!(
-        world
-            .screen()
-            .get(Target::key("asks.q.q1.choice.0"))
-            .is("checked"),
-        "accepting the recommendations chooses eu"
-    );
-    plain(&mut world, Key::Tab);
-    assert_eq!(focused(&world).as_deref(), Some("asks.q.q1.choice.1"));
 }
 
 #[test]

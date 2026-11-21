@@ -12,7 +12,7 @@ use attn_ui::{Backdrop, Frame, Tokens, glyph};
 use rune::{El, Image, Key, KeyEvent, Side, Tx, col, row};
 use rune_kit::{ImageFrame, Markdown, TextArea, TextInput};
 
-use super::{Chip, Item, Kind, Lists, mentions, questions};
+use super::{Chip, Item, Kind, Lists, Stop, mentions, questions};
 use crate::State;
 use crate::desktop::header_pop::{self, Pop, What};
 use crate::markdown::{images, links};
@@ -61,7 +61,8 @@ pub(super) fn text_key(question: &str) -> String {
     format!("asks.q.{question}.text.field")
 }
 
-const NOTE: &str = "asks.note.field";
+pub(super) const NOTE: &str = "asks.note.field";
+const QUOTE: &str = "asks.quote";
 
 fn send_chord() -> &'static str {
     if rune::Platform::current() == rune::Platform::Mac {
@@ -80,6 +81,11 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
     let asks = &state.window.asks;
     let items = lists.shown(asks.show_replied);
     let shown = state.shown_ask().map(|(id, _)| id);
+    let quoting = shown.as_ref().is_some_and(|id| {
+        items
+            .iter()
+            .any(|i| &i.ask.id == id && i.ask.reply.is_none())
+    });
     let close = icon_button("asks.close", "Close asks", glyph::TIMES, IconSize::Large)
         .on_press_tx(super::close)
         .build(t);
@@ -105,8 +111,16 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
         .role("dialog")
         .label("Asks")
         .focusable(true)
+        .tab_index(-1)
         .no_focus_ring()
         .on_key(sheet_key)
+        .on_selection_change(|state: &mut State, change, _: &mut Tx| {
+            state.window.asks.quotable = change
+                .selection()
+                .filter(|_| !change.dragging())
+                .and_then(|s| s.texts().iter().find(|t| t.is_selected()))
+                .map(|t| keyed_path(t.path()));
+        })
         .modal_tx(true, super::close)
         .w_full()
         .max_w(SHEET_W);
@@ -152,6 +166,10 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
                 .build(t);
             panel.h_full().max_h(SHEET_H).child(stacked)
         }
+    };
+    let panel = match asks.quotable.as_deref().filter(|_| quoting) {
+        Some(text) => panel.children(quote_button(text, t)),
+        None => panel,
     };
     let placed = col()
         .pin(
@@ -508,7 +526,9 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
                     Some(answers) => Shown::Replied(answers.iter().find(|a| a.key == question.key)),
                     None => Shown::Draft(draft.and_then(|d| d.answers.get(&question.key))),
                 };
-                question_section(&ask.id, index, question, answer, &prose, t)
+                let active = ask.reply.is_none()
+                    && super::active(state, ask) == Stop::Question(question.key.clone());
+                question_section(&ask.id, index, question, answer, active, &prose, t)
             }
             None => Block::custom(
                 format!("asks.part.{at}.block"),
@@ -546,7 +566,7 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
             )
         })),
         None => {
-            let id = ask.id.clone();
+            let (id, pressed) = (ask.id.clone(), ask.id.clone());
             blocks.push(Block::custom(
                 "asks.note.block",
                 written_field(
@@ -556,7 +576,10 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
                     &note_placeholder,
                     move |state: &mut State| state.note(&id),
                     t,
-                ),
+                )
+                .on_press_within(move |state: &mut State, _: &mut Tx| {
+                    super::activate(state, &pressed, Stop::Note)
+                }),
             ));
         }
     }
@@ -690,14 +713,16 @@ fn question_section(
     index: usize,
     question: &AskQuestion,
     answer: Shown<'_>,
+    active: bool,
     prose: &Prose<'_>,
     t: &Tokens,
 ) -> Block {
     let kind = Kind::of(question);
+    let number_ink = if active { t.accent } else { t.text_tertiary };
     let heading = Inline::joined()
         .key(format!("asks.q.{}.prompt", question.key))
         .items_start()
-        .child(words(index.to_string(), Type::Mono, t.text_tertiary))
+        .child(words(index.to_string(), Type::Mono, number_ink))
         .child(
             prose.text(
                 words(question.prompt.clone(), Type::Name, t.text_primary)
@@ -720,8 +745,9 @@ fn question_section(
         });
     let body = match kind {
         Kind::Text => written(ask, question, &answer, t),
-        Kind::One | Kind::Any => choice_list(ask, question, kind, &answer, t),
+        Kind::One | Kind::Any => choice_list(ask, question, kind, &answer, active, t),
     };
+    let (ask_id, key) = (ask.to_owned(), question.key.clone());
     Section::new(format!("asks.q.{}", question.key), question.prompt.clone())
         .heading(heading)
         .push_all(context)
@@ -730,6 +756,38 @@ fn question_section(
             body,
         ))
         .build(t)
+        .map(|section| {
+            let section = section
+                .a11y_value(if active { "active" } else { "" })
+                .on_press_within(move |state: &mut State, _: &mut Tx| {
+                    super::activate(state, &ask_id, Stop::Question(key.clone()))
+                });
+            match active {
+                true => section.child(active_bar(t)),
+                false => section,
+            }
+        })
+}
+
+/// How far left of its question the active question's bar stands, and how wide it is.
+const BAR_LEFT: f32 = 14.0;
+const BAR_W: f32 = 2.0;
+
+fn active_bar(t: &Tokens) -> El {
+    rune::el()
+        .key("asks.active-bar")
+        .pin(Some(-BAR_LEFT), Some(0.0), None, Some(0.0))
+        .w(BAR_W)
+        .fill(t.accent)
+}
+
+/// The key that picks choice `n` of a question, drawn in the active question alone; the
+/// others keep its room so nothing moves as the active question changes.
+fn number_cap(n: usize, active: bool, t: &Tokens) -> Option<El> {
+    (n <= 9).then(|| {
+        let cap = keycaps([n.to_string()], t).a11y_hidden();
+        if active { cap } else { cap.opacity(0.0) }
+    })
 }
 
 fn written(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) -> El {
@@ -786,6 +844,7 @@ fn choice_list(
     question: &AskQuestion,
     kind: Kind,
     answer: &Shown<'_>,
+    active: bool,
     t: &Tokens,
 ) -> El {
     let replied = matches!(answer, Shown::Replied(_));
@@ -802,6 +861,9 @@ fn choice_list(
         if let Some(note) = choice.description.clone().filter(|d| !d.is_empty()) {
             shown = shown.note(note);
         }
+        if let Some(cap) = number_cap(i + 1, active, t).filter(|_| !replied) {
+            shown = shown.trailing(cap);
+        }
         if recommended {
             shown = shown.tag(tag(
                 format!("{}.recommended", choice_key(&question.key, i)),
@@ -811,8 +873,8 @@ fn choice_list(
             ));
         }
         El::from(
-            shown.build((i, n), t, move |state: &mut State, _: &mut Tx| {
-                super::pick(state, &ask_id, &q, kind, &label)
+            shown.build((i, n), t, move |state: &mut State, tx: &mut Tx| {
+                super::pick(state, &ask_id, &q, kind, &label, tx)
             }),
         )
     });
@@ -847,7 +909,15 @@ fn choice_list(
                     super::other_edited(state, &ask_id, &q, kind)
                 })
                 .on_key(field_key);
-            Some(El::from(line_box(input, FieldState::Ready, t)))
+            let field = El::from(line_box(input, FieldState::Ready, t))
+                .grow(1.0)
+                .min_w(0.0);
+            Some(
+                Inline::loose()
+                    .w_full()
+                    .child(field)
+                    .children(number_cap(n + 1, active, t)),
+            )
         }
     };
     group.children(options).children(condition).children(other)
@@ -949,11 +1019,16 @@ fn written_field(
     area_box(area, FieldState::Ready, t).into()
 }
 
-/// A field's keys it does not take as text: ⌘↩ sends and Escape closes the sheet.
+/// A field's keys it does not take as text: ⌘↩ sends, Escape closes the sheet and ⇥ moves the
+/// active stop.
 fn field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    let m = ev.mods;
     match ev.key {
-        Key::Enter if ev.mods.cmd || ev.mods.ctrl => super::send(state, tx),
+        Key::Enter if m.cmd || m.ctrl => super::send(state, tx),
         Key::Escape => super::close(state, tx),
+        Key::Tab if !(m.cmd || m.ctrl || m.alt) => {
+            return super::tab(state, if m.shift { -1 } else { 1 }, tx);
+        }
         _ => return false,
     }
     true
@@ -972,6 +1047,22 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
     }
     if item.holder.is_some() {
         hints.push((&["o"], "open agent"));
+    }
+    let picks: Option<[String; 1]> = match (ask.reply.is_none(), super::active(state, ask)) {
+        (true, Stop::Question(key)) => questions(ask)
+            .find(|q| q.key == key && Kind::of(q) != Kind::Text && !q.choices.is_empty())
+            .map(|q| [format!("1–{}", q.choices.len().min(9))]),
+        _ => None,
+    };
+    let picks_said: Vec<&str> = picks.iter().flatten().map(String::as_str).collect();
+    if !picks_said.is_empty() {
+        hints.push((&picks_said, "pick"));
+    }
+    if ask.reply.is_none() && super::questions(ask).count() > 1 {
+        hints.push((&["⇥"], "next question"));
+    }
+    if ask.reply.is_none() {
+        hints.push((&["q"], "quote"));
     }
     if snoozable.is_some() {
         hints.push((&["s"], if snoozed { "wake" } else { "snooze" }));
@@ -1052,6 +1143,55 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
     )
 }
 
+/// The key path of the element at `path`: its keyed ancestors and itself, joined as layout reads
+/// name an element, which leaves out the unkeyed ones a path counts as `#n`.
+fn keyed_path(path: &str) -> String {
+    path.split('/')
+        .filter(|part| !part.starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// How far above the selection's first line the Quote button floats, and the least room it
+/// keeps from the sheet's edges.
+const QUOTE_ABOVE: f32 = 6.0;
+const QUOTE_EDGE: f32 = 8.0;
+
+/// The Quote button over the text the selection starts in, inside the sheet so the sheet's modal
+/// lets it take the press; a press on it leaves the selection for it to read.
+fn quote_button(text: &str, t: &Tokens) -> Option<El> {
+    let first = rune::memo::window_layout(text)?;
+    let sheet = rune::memo::window_layout(super::SHEET)?;
+    let [w, h] = rune::memo::layout_size(QUOTE).unwrap_or([96.0, 28.0]);
+    let left = (first[0] - sheet[0]).clamp(QUOTE_EDGE, (sheet[2] - w - QUOTE_EDGE).max(QUOTE_EDGE));
+    let above = first[1] - sheet[1] - h - QUOTE_ABOVE;
+    let top = if above >= QUOTE_EDGE {
+        above
+    } else {
+        first[1] - sheet[1] + first[3] + QUOTE_ABOVE
+    };
+    if top + h > sheet[3] - QUOTE_EDGE {
+        return None;
+    }
+    Some(
+        El::from(
+            Button::new("Quote")
+                .size(Size::Compact)
+                .look(Look::Primary)
+                .trailing(keycaps(["q"], t))
+                .help("Quote the selection in your note (q)")
+                .on_press_tx(|state: &mut State, tx: &mut Tx| {
+                    super::quote(state, tx);
+                })
+                .build(t)
+                .key(QUOTE),
+        )
+        .label("Quote q")
+        .keeps_text_selection()
+        .absolute(left, top),
+    )
+}
+
 fn toggle_replied(state: &mut State, tx: &mut Tx) {
     state.window.asks.show_replied = !state.window.asks.show_replied;
     state.tick(tx);
@@ -1070,12 +1210,18 @@ fn sheet_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         super::close(state, tx);
         return true;
     }
+    if ev.key == Key::Tab && !(m.cmd || m.ctrl || m.alt) {
+        return super::tab(state, if m.shift { -1 } else { 1 }, tx);
+    }
     if tx.in_text_field() || m.cmd || m.ctrl || m.alt {
         return false;
     }
     let Key::Text(typed) = &ev.key else {
         return false;
     };
+    if let Ok(n) = typed.parse::<usize>() {
+        return super::number(state, n, tx);
+    }
     let shown = state.shown_ask();
     let ask = shown
         .as_ref()
@@ -1090,6 +1236,7 @@ fn sheet_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         "k" if ask.is_some() => super::step(state, -1, tx),
         "r" => toggle_replied(state, tx),
         "c" if ask.is_some() => super::copy(state, tx),
+        "q" => return super::quote(state, tx),
         "a" => match &ask {
             Some(ask) if ask.reply.is_none() && super::recommended(ask).len() > 1 => {
                 super::accept_recommended(state, &ask.id)
