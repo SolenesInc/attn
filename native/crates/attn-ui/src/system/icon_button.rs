@@ -24,6 +24,7 @@ pub struct IconButton {
     ink: Option<Color>,
     count: Option<String>,
     keys: Option<String>,
+    said: Option<String>,
     dot: Option<Color>,
     busy: bool,
     edged: bool,
@@ -47,6 +48,7 @@ pub fn icon_button(
         ink: None,
         count: None,
         keys: None,
+        said: None,
         dot: None,
         busy: false,
         edged: false,
@@ -107,6 +109,13 @@ impl IconButton {
         self
     }
 
+    /// Words after the icon, such as whose the thing is: the button widens to hold them, and
+    /// its label still names what it does.
+    pub fn said(mut self, said: impl Into<String>) -> Self {
+        self.said = Some(said.into());
+        self
+    }
+
     /// A dot of `ink` on the icon's top end, saying something waits there, such as unread
     /// notifications.
     pub fn dot(mut self, dot: Option<Color>) -> Self {
@@ -149,6 +158,7 @@ impl IconButton {
             .iter()
             .map(|count| (count, Type::Tag))
             .chain(self.keys.iter().map(|keys| (keys, Type::Mono)))
+            .chain(self.said.iter().map(|said| (said, Type::Small)))
             .map(|(said, kind)| Space::S4.pt() + door::width(said, kind))
             .sum::<f32>();
         let (inset, _) = self.frame();
@@ -158,7 +168,10 @@ impl IconButton {
     /// The room at the button's sides and its corner: a counted button is a pill, a button with
     /// keys a wider control, a bare icon a square.
     fn frame(&self) -> (Space, Radius) {
-        match (self.count.is_some(), self.keys.is_some()) {
+        match (
+            self.count.is_some(),
+            self.keys.is_some() || self.said.is_some(),
+        ) {
             (true, _) => (Space::S8, Radius::Round),
             (false, true) => (Space::S6, Radius::Control),
             (false, false) if self.size == Size::Small => (Space::S0, Radius::Control),
@@ -183,7 +196,8 @@ impl IconButton {
         };
         let ink = self.ink.unwrap_or(ink);
         let (inset, corner) = self.frame();
-        let (glyph, icon, count, keys) = (self.glyph, self.icon, self.count, self.keys);
+        let (glyph, icon, count, keys, said) =
+            (self.glyph, self.icon, self.count, self.keys, self.said);
         let keys_ink = t.text_dimmed;
         let ground = if fill.a > 0.0 { fill } else { t.bg_panel };
         let dot = self.dot;
@@ -206,6 +220,7 @@ impl IconButton {
                 .child(mark)
                 .children(count.map(|count| words(count, Type::Tag, ink)))
                 .children(keys.map(|keys| words(keys, Type::Mono, keys_ink)))
+                .children(said.map(|said| words(said, Type::Small, ink).single_line()))
         };
         let side = self.size.height();
         let button = if self.disabled {

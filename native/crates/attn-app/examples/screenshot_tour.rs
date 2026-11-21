@@ -7452,6 +7452,8 @@ fn home_pull_requests(dark: bool) {
         ..RateLimitedMessage::new()
     });
     click(&mut world, Target::key("home.prs.refresh"));
+    world.gesture(|app| app.move_to((1.0, 1.0)));
+    world.advance(std::time::Duration::from_secs(2));
     snap(&mut world, "home-pull-requests", dark);
     let [x, y, w, h] = world.rect("home.pr.r1");
     world.gesture(|app| app.move_to(((x + w / 2.0) as f32, (y + h / 2.0) as f32)));

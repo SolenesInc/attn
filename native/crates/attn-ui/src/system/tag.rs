@@ -46,7 +46,7 @@ pub fn mark_chip(mark: impl Into<crate::Glyph>, ink: Color, t: &Tokens) -> El {
     door::corner(door::inset(chip, Space::S4, Space::S2), Radius::Round)
 }
 
-const PILL_WASH: f32 = 0.14;
+pub(crate) const PILL_WASH: f32 = 0.14;
 
 /// How wide [`tag`] draws `said`: its capitals, its inset on each side and its edge.
 pub fn tag_width(said: &'static str) -> f32 {

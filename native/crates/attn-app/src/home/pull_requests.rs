@@ -8,9 +8,9 @@ use attn_protocol::{
     ApprovePRMessage, MergePRMessage, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, PR,
     PRVisitedMessage, RefreshPRsMessage,
 };
-use attn_ui::blocks::{Actions, Block, BoardCard, Card, Inline, Notice, Prose, Stack};
+use attn_ui::blocks::{Actions, Block, BoardCard, Inline, Notice, Prose, Stack};
 use attn_ui::system::{
-    self, Button, DotShape, DotSize, GroupHead, IconSize, Look, Size, Tone, Type, count_badge,
+    self, DotShape, DotSize, GroupHead, IconSize, ListRow, Look, Size, Tone, Type, count_chip,
     icon_button, tag, words,
 };
 use attn_ui::{Dialog, Tokens, glyph, icon};
@@ -328,44 +328,44 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
         Some(host) => format!("{heading} on {host}"),
         None => heading.clone(),
     };
-    let mut open = Button::new(heading.clone())
-        .look(Look::Quiet)
-        .size(Size::Compact)
-        .help(format!("Open {heading} on GitHub"));
-    if let Some(host) = host {
-        open = open.trailing(
-            words(host.to_lowercase(), Type::Mono, t.text_tertiary)
-                .key(format!("{key}.host"))
+    let settled = pr.approved_by_me && !pr.has_new_changes;
+    let quiet = t.text_tertiary;
+    let title_ink = if settled {
+        t.text_secondary
+    } else {
+        t.text_primary
+    };
+    let title = Inline::joined()
+        .w_full()
+        .children(yours.then(|| {
+            words(repo_name(&pr.repo).to_owned(), Type::Body, quiet)
                 .single_line()
                 .truncate()
                 .shrink()
-                .a11y_hidden(),
-        );
-    }
-    let open = El::from(
-        open.on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            visit(state, &visited);
-            open_url(state, &url, tx)
-        })
-        .build(t),
-    )
-    .key(format!("{key}.open"))
-    .label(format!("{named}: {}", pr.title));
-    let top = Inline::joined()
-        .w_full()
+                .min_w(0.0)
+        }))
+        .child(words(format!("#{}", pr.number), Type::Body, quiet).single_line())
+        .children(host.map(|host| {
+            system::chip_edge(
+                words(host.to_lowercase(), Type::Mono, quiet)
+                    .key(format!("{key}.host"))
+                    .single_line()
+                    .truncate()
+                    .shrink()
+                    .min_w(0.0),
+                t,
+            )
+            .shrink()
+            .min_w(0.0)
+        }))
         .child(
-            words(role.emoji(), Type::Small, t.text_primary)
-                .key(format!("{key}.role"))
-                .role("img")
-                .label(role.said()),
-        )
-        .child(open)
-        .child(rune::el().grow(1.0))
-        .children(marks(pr, &key, t));
-    let title = words(pr.title.clone(), Type::Body, t.text_primary)
-        .wrap()
-        .w_full()
-        .a11y_hidden();
+            words(pr.title.clone(), Type::Body, title_ink)
+                .key(format!("{key}.title"))
+                .single_line()
+                .truncate()
+                .shrink()
+                .shrink_first(),
+        );
     let phase = |act: Act| {
         state
             .window
@@ -380,18 +380,15 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
         let id = pr.id.clone();
         let button = format!("{key}.{}", chosen.wire());
         let asking = button.clone();
-        El::from(
-            icon_button(button, label, glyph, IconSize::Regular)
-                .help(label)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| match chosen {
-                    Act::Approve => act(state, Act::Approve, &id, tx),
-                    Act::Merge => ask_merge(state, &id, number, asking.clone()),
-                })
-                .build(t),
-        )
+        icon_button(button, label, glyph, IconSize::Regular)
+            .help(label)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| match chosen {
+                Act::Approve => act(state, Act::Approve, &id, tx),
+                Act::Merge => ask_merge(state, &id, number, asking.clone()),
+            })
     };
     let mute_id = pr.id.clone();
-    let new_session: El = {
+    let new_session = {
         let pr = pr.clone();
         icon_button(
             format!("{key}.new"),
@@ -403,70 +400,65 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             crate::picker::pull_request::open_in_worktree(state, &pr, tx)
         })
-        .build(t)
-        .into()
     };
+    let mute = icon_button(
+        format!("{key}.mute"),
+        "Mute this PR",
+        glyph::BELL_SLASH,
+        IconSize::Regular,
+    )
+    .help("Mute this PR")
+    .on_press(move |state: &mut State| self::mute(state, &mute_id));
     let mute_author = (!pr.author.is_empty()).then(|| {
         let author = pr.author.clone();
-        El::from(
-            Button::new(author.clone())
-                .look(Look::Quiet)
-                .size(Size::Compact)
-                .help(format!("Mute all PRs by {author}"))
-                .on_press(move |state: &mut State| mute_author(state, &author))
-                .build(t),
+        let said = format!("Mute all PRs by {author}");
+        icon_button(
+            format!("{key}.mute-author"),
+            said.clone(),
+            glyph::PERSON,
+            IconSize::Small,
         )
-        .key(format!("{key}.mute-author"))
-        .label(format!("Mute all PRs by {}", pr.author))
+        .said(author.clone())
+        .help(said)
+        .on_press(move |state: &mut State| self::mute_author(state, &author))
     });
-    let footer = Inline::joined()
-        .w_full()
-        .child(
-            words(
-                if yours {
-                    pr.reason.replace('_', " ")
-                } else {
-                    String::new()
-                },
-                Type::Small,
-                t.text_tertiary,
-            )
-            .key(format!("{key}.reason"))
-            .single_line()
-            .truncate()
-            .shrink()
-            .grow(1.0),
+    let status = (yours && !pr.reason.is_empty()).then(|| {
+        El::from(tag(
+            format!("{key}.reason"),
+            pr.reason.replace('_', " "),
+            Tone::Neutral,
+            t,
+        ))
+    });
+    let row = marks(pr, &key, t)
+        .into_iter()
+        .chain(status)
+        .fold(ListRow::new(key.clone(), heading.clone()), ListRow::aside)
+        .asides_give_way();
+    row.depth(u8::from(!yours))
+        .lead(
+            words(role.emoji(), Type::Small, t.text_primary)
+                .key(format!("{key}.role"))
+                .role("img")
+                .label(role.said()),
         )
-        .child(new_session)
-        .child(action(Act::Approve))
-        .child(action(Act::Merge))
-        .child(
-            icon_button(
-                format!("{key}.mute"),
-                "Mute this PR",
-                glyph::BELL_SLASH,
-                IconSize::Regular,
-            )
-            .help("Mute this PR")
-            .on_press(move |state: &mut State| mute(state, &mute_id))
-            .build(t)
-            .into(),
+        .title_el(title)
+        .hover_controls(
+            [new_session, action(Act::Approve), action(Act::Merge), mute]
+                .into_iter()
+                .chain(mute_author),
         )
-        .children(mute_author);
-    let settled = pr.approved_by_me && !pr.has_new_changes;
-    Card::new(key)
-        .push(top)
-        .push(title)
-        .push(footer)
+        .select(
+            format!("{key}.open"),
+            format!("{named}: {}", pr.title),
+            move |state: &mut State, tx: &mut Tx| {
+                visit(state, &visited);
+                open_url(state, &url, tx)
+            },
+        )
+        .help(format!("Open {heading} on GitHub"))
         .build(t)
-        .role("group")
-        .label(heading)
-        .opacity(if settled { SETTLED } else { 1.0 })
 }
-
-/// How strongly a pull request the user approved, with nothing new since, draws: it needs
-/// nothing more of them.
-const SETTLED: f32 = 0.5;
 
 /// What changed on a pull request at a glance: new commits or comments since the user's last
 /// visit, the user's approval, and how its CI went.
@@ -653,7 +645,7 @@ fn pr_card(state: &State, t: &Tokens) -> El {
     card = card.action(refresh_button(&tracked.refresh, refresh_help, t));
     if facts.github.polling_off_reason.is_none() {
         card = card.action(
-            count_badge(needing, t.brand, t.on_brand)
+            count_chip(needing.to_string(), t)
                 .key("home.prs.count")
                 .role("status")
                 .label(format!("{needing} need attention")),
@@ -695,10 +687,11 @@ pub(crate) fn rate_limit_notice(state: &State, t: &Tokens) -> Option<Block> {
     let left_ms = rate_limit_left_ms(&state.facts, state.window.now_ms)?;
     let (minutes, seconds) = (left_ms / 60_000, left_ms % 60_000 / 1000);
     Some(
-        Notice::info(
+        Notice::accent(
             "home.rate-limit",
             format!("GitHub rate limited. Resuming in {minutes}m {seconds}s"),
         )
+        .mark(glyph::CLOCK)
         .build(t),
     )
 }
@@ -730,12 +723,8 @@ fn repo_group(
         format!("{key}.fold"),
         format!("{name}, {} review", prs.len()),
     )
-    .name(name.to_owned())
-    .aside(words(
-        format!("{} review", prs.len()),
-        Type::Mono,
-        t.text_tertiary,
-    ))
+    .name_el(words(name.to_owned(), Type::Name, t.text_primary))
+    .aside(count_chip(format!("{} review", prs.len()), t))
     .open(!folded)
     .build(t)
     .a11y_value(if folded { "collapsed" } else { "expanded" })
@@ -749,9 +738,10 @@ fn repo_group(
                 format!("{key}.mute"),
                 "Mute all PRs from this repo",
                 glyph::BAN,
-                IconSize::Regular,
+                IconSize::Small,
             )
             .size(Size::Small)
+            .edged()
             .help("Mute all PRs from this repo")
             .on_press(move |state: &mut State| mute_repo(state, &mute_repo_id))
             .build(t)

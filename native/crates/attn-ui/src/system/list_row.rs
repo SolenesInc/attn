@@ -87,6 +87,8 @@ pub struct ListRow {
     select_role: &'static str,
     surface: Option<Color>,
     tint: Option<Color>,
+    help: Option<String>,
+    asides_give_way: bool,
 }
 
 /// How strongly a tinted row takes its tint, at rest and selected.
@@ -130,6 +132,8 @@ impl ListRow {
             select_role: "button",
             surface: None,
             tint: None,
+            help: None,
+            asides_give_way: false,
         }
     }
 
@@ -289,6 +293,14 @@ impl ListRow {
     /// Something the row says about itself at its end: a count, a mark, a time.
     pub fn aside(mut self, aside: impl Into<El>) -> Self {
         self.asides.push(aside.into());
+        self
+    }
+
+    /// Asides that do not all fit leave whole, the last first, rather than squeezing, so a
+    /// narrow row ends on the marks that fit: for asides that are marks and tags, not words
+    /// that cut short.
+    pub fn asides_give_way(mut self) -> Self {
+        self.asides_give_way = true;
         self
     }
 
@@ -491,6 +503,13 @@ impl ListRow {
         self
     }
 
+    /// What the row's press does, said in a tooltip over the row, or over its words' button
+    /// when it has [`Self::select`].
+    pub fn help(mut self, help: impl Into<String>) -> Self {
+        self.help = Some(help.into());
+        self
+    }
+
     /// The surface the row lies on, when it is not the panel.
     pub fn on(mut self, surface: Color) -> Self {
         self.surface = Some(surface);
@@ -634,16 +653,24 @@ impl ListRow {
             }
         };
         let asides = (!self.asides.is_empty()).then(|| {
-            gives_way(part(
-                at_least_band(
-                    door::gap(row().items_center(), Space::S6)
-                        .shrink()
-                        .min_w(0.0)
+            let marks = door::gap(row().items_center(), Space::S6)
+                .shrink()
+                .min_w(0.0);
+            let marks = if self.asides_give_way {
+                let line_start = door::behind_start(el().w(0.0).h(band), Space::S6.pt());
+                door::clip(
+                    marks
+                        .flex_wrap()
+                        .justify_end()
+                        .h(band)
+                        .child(line_start)
                         .children(self.asides),
                 )
-                .max_w_frac(0.5)
-                .shrink()
-                .min_w(0.0),
+            } else {
+                marks.children(self.asides)
+            };
+            gives_way(part(
+                at_least_band(marks).max_w_frac(0.5).shrink().min_w(0.0),
                 "asides",
             ))
         });
@@ -876,6 +903,10 @@ impl ListRow {
         let line = door::corner(door::gap(line, Space::S8), Radius::Control);
         let line = match attach {
             Some(attach) => attach(line),
+            None => line,
+        };
+        let line = match self.help {
+            Some(help) => line.help(help),
             None => line,
         };
         let line = match (self.disabled, self.still, focusable, self.cursor) {

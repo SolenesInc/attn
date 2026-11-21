@@ -59,6 +59,20 @@ pub fn count_badge(count: usize, fill: Color, ink: Color) -> El {
     door::corner(door::inset(badge, Space::S4, Space::S0), Radius::Round)
 }
 
+/// How many things a card or a group holds, said as `said`: words in the brand on the brand
+/// mixed into the panel, round, as the count beside a card's title or a repository's name.
+pub fn count_chip(said: impl Into<Said>, t: &Tokens) -> El {
+    let ground = crate::colors::mix_srgb(t.bg_panel, t.brand, super::tag::PILL_WASH);
+    let ink = crate::colors::moved_until_it_reads(t.brand, t.text_primary, ground);
+    let chip = row()
+        .min_w(door::line_height(Type::Small))
+        .justify_center()
+        .items_center()
+        .fill(ground)
+        .child(words(said, Type::Small, ink).single_line());
+    door::corner(door::inset(chip, Space::S6, Space::S0), Radius::Round)
+}
+
 /// Keys drawn as keys: an outlined cap for each, in the order they are pressed together.
 pub fn keycaps(keys: impl IntoIterator<Item = impl Into<String>>, t: &Tokens) -> El {
     door::gap(row().items_center(), Space::S2).children(keys.into_iter().map(|key| {

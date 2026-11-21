@@ -4,7 +4,7 @@ use rune_kit::ScrollBar;
 use super::block::{Block, Kind};
 use super::measure::COPY_FLOOR;
 use crate::Tokens;
-use crate::system::{Radius, Said, Size, Space, Tone, Type, door, focus, words};
+use crate::system::{IconSize, Radius, Said, Size, Space, Tone, Type, door, focus, words};
 
 const DOT: f32 = 6.0;
 const EDGE: f32 = 0.45;
@@ -23,6 +23,7 @@ pub struct Notice {
     action: Option<El>,
     bare: bool,
     action_height: Option<f32>,
+    mark: Option<crate::Glyph>,
 }
 
 impl Notice {
@@ -52,7 +53,15 @@ impl Notice {
             action: None,
             bare: false,
             action_height: None,
+            mark: None,
         }
+    }
+
+    /// The notice leads with `mark` in its tone's ink rather than a dot, such as a clock on a
+    /// notice about waiting.
+    pub fn mark(mut self, mark: impl Into<crate::Glyph>) -> Self {
+        self.mark = Some(mark.into());
+        self
     }
 
     /// The button that deals with it, such as Retry, at the line's end.
@@ -114,10 +123,12 @@ impl Notice {
         } else {
             Size::Regular.height()
         };
-        let mark = row()
-            .h(band)
-            .items_center()
-            .child(dot(tone_ink(self.tone, t)));
+        let mark = row().h(band).items_center().child(match self.mark {
+            Some(mark) => {
+                crate::system::glyph(mark, IconSize::Small, tone_ink(self.tone, t)).a11y_hidden()
+            }
+            None => dot(tone_ink(self.tone, t)),
+        });
         let said = words(self.said.clone(), Type::Small, ink)
             .wrap_anywhere()
             .a11y_hidden();

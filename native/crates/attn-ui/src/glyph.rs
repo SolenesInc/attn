@@ -48,3 +48,4 @@ pub const BAN: &str = "\u{f05e}";
 pub const STAR_OPEN: &str = "\u{f006}";
 pub const STAR: &str = "\u{f005}";
 pub const UNDO: &str = "\u{f0e2}";
+pub const PERSON: &str = "\u{f007}";

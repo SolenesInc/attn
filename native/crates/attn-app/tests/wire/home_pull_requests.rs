@@ -612,7 +612,7 @@ fn opening_a_pr_from_home_marks_it_visited_so_the_daemon_clears_its_new_changes(
         Some("1 need attention")
     );
 
-    click(&mut world, "home.pr.p1.open");
+    click(&mut world, "home.pr.p1.role");
     let visited = world.daemon.sent_of("pr_visited");
     assert_eq!(visited.len(), 1);
     assert_eq!(visited[0]["id"], "p1");
@@ -959,5 +959,318 @@ fn the_hostname_beside_a_pr_number_opens_the_pr_and_says_so_on_hover() {
     assert_eq!(
         world.opened_links(),
         ["https://ghe.corp.example/victorarias/attn/pull/4"]
+    );
+}
+
+const ROW_ACTIONS: [&str; 5] = ["new", "approve", "merge", "mute", "mute-author"];
+
+fn tour_prs() -> Vec<PR> {
+    let at = |id: &str, number, role, author: &str, repo: &str, host: &str, title: &str| PR {
+        author: author.into(),
+        host: host.into(),
+        url: format!("https://{host}/{repo}/pull/{number}"),
+        ..home_pr(id, number, role, repo, title)
+    };
+    let marked = |pr: PR, updated: bool, approved: bool, ci: &str| PR {
+        has_new_changes: updated,
+        approved_by_me: approved,
+        ci_status: Some(ci.into()),
+        ..pr
+    };
+    vec![
+        marked(
+            at(
+                "a1",
+                7,
+                "author",
+                "me",
+                "victorarias/attn",
+                "github.com",
+                "Route every key through the keymap",
+            ),
+            true,
+            false,
+            "failure",
+        ),
+        marked(
+            at(
+                "r1",
+                12,
+                "reviewer",
+                "someone",
+                "org/shop",
+                "github.com",
+                "Cache the catalog so the storefront answers before the warehouse wakes up",
+            ),
+            false,
+            true,
+            "success",
+        ),
+        marked(
+            at(
+                "r2",
+                31,
+                "reviewer",
+                "renovate-bot",
+                "org/shop",
+                "ghe.corp.example",
+                "Bump serde",
+            ),
+            true,
+            true,
+            "pending",
+        ),
+        at(
+            "r3",
+            4,
+            "reviewer",
+            "someone",
+            "org/api",
+            "github.com",
+            "Add the orders endpoint",
+        ),
+    ]
+}
+
+/// Home with the tour's pull requests, at the default window and text size, or at the smallest
+/// window with the largest text.
+fn home_at(smallest: bool) -> World {
+    let mut state = one_desktop(vec![]);
+    state.prs = Some(tour_prs());
+    if smallest {
+        state
+            .settings
+            .get_or_insert_default()
+            .insert("uiScale".to_owned(), "1.5".to_owned());
+    }
+    let daemon = super::palette::daemon(state, vec![]);
+    let mut world = if smallest {
+        World::start_sized(daemon, (800.0, 600.0))
+    } else {
+        World::start(daemon)
+    };
+    press(&mut world, Action::SessionGoToDashboard);
+    world.gesture(|app| app.move_to((1.0, 1.0)));
+    world.settle();
+    world
+}
+
+/// Scrolls Home's cards until the pull request `id`'s row is whole in view.
+fn into_view(world: &mut World, id: &str) {
+    let row = format!("home.pr.{id}");
+    for _ in 0..40 {
+        let screen = world.screen();
+        let [cx, cy, cw, ch] = screen
+            .bounds(Target::key("home.cards.scroll"))
+            .expect("home's cards are on screen");
+        let [_, y, _, h] = screen
+            .bounds(Target::key(row.as_str()))
+            .unwrap_or_else(|| panic!("{row} is listed:\n{screen}"));
+        if y >= cy && y + h <= cy + ch {
+            return;
+        }
+        let toward = if y < cy { 60.0 } else { -60.0 };
+        world.gesture(|app| app.runtime.wheel(cx + cw / 2.0, cy + ch / 2.0, toward));
+        world.settle();
+    }
+    panic!("{row} never scrolls into view");
+}
+
+/// What the window draws of the element keyed `key`: how strongly, and the part of it its
+/// clips leave visible.
+fn drawn(world: &World, key: &str) -> (f32, [f32; 4]) {
+    let element = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some(key))
+        .unwrap_or_else(|| panic!("{key} is drawn"));
+    (element.opacity, element.visible)
+}
+
+/// Whether the control keyed `key` shows: drawn whole in strength, some of it in view.
+fn shows(world: &World, key: &str) -> bool {
+    let (opacity, [_, _, w, h]) = drawn(world, key);
+    opacity > 0.5 && w > 0.5 && h > 0.5
+}
+
+struct RowLook {
+    height: f32,
+    title_start: f32,
+}
+
+fn row_look(world: &World, id: &str) -> RowLook {
+    let screen = world.screen();
+    let row = screen
+        .bounds(Target::key(format!("home.pr.{id}")))
+        .unwrap_or_else(|| panic!("home.pr.{id} is listed"));
+    let title = screen
+        .bounds(Target::key(format!("home.pr.{id}.title")))
+        .unwrap_or_else(|| panic!("home.pr.{id} has its title:\n{screen}"));
+    RowLook {
+        height: row[3],
+        title_start: title[0],
+    }
+}
+
+#[test]
+fn each_pr_rests_as_one_line_with_its_actions_and_author_out_of_sight() {
+    for smallest in [false, true] {
+        let mut world = home_at(smallest);
+        for id in ["a1", "r1", "r2", "r3"] {
+            into_view(&mut world, id);
+            let height = world
+                .screen()
+                .bounds(Target::key(format!("home.pr.{id}")))
+                .unwrap_or_else(|| panic!("home.pr.{id} is listed"))[3];
+            assert!(
+                (height - attn_ui::system::ListRow::height()).abs() < 0.5,
+                "smallest {smallest}: {id} stands {} tall, not one row's {}",
+                height,
+                attn_ui::system::ListRow::height()
+            );
+            let (_, row) = drawn(&world, &format!("home.pr.{id}"));
+            let parts: Vec<(&str, [f32; 4])> = [
+                "role", "host", "title", "updated", "approved", "ci", "reason",
+            ]
+            .into_iter()
+            .filter_map(|part| {
+                let key = format!("home.pr.{id}.{part}");
+                let element = world
+                    .runtime()
+                    .elements()
+                    .into_iter()
+                    .find(|e| e.key.as_deref() == Some(key.as_str()))?;
+                (element.opacity > 0.01 && element.visible[2] > 0.5 && element.visible[3] > 0.5)
+                    .then_some((part, element.visible))
+            })
+            .collect();
+            for (part, [x, y, w, h]) in &parts {
+                assert!(
+                    *x >= row[0] - 0.5
+                        && x + w <= row[0] + row[2] + 0.5
+                        && *y >= row[1] - 0.5
+                        && y + h <= row[1] + row[3] + 0.5,
+                    "smallest {smallest}: {id}'s {part} at {:?} runs out of its row {row:?}",
+                    [x, y, w, h]
+                );
+            }
+            for (i, (a, ra)) in parts.iter().enumerate() {
+                for (b, rb) in &parts[i + 1..] {
+                    let apart = ra[0] + ra[2] <= rb[0] + 0.5
+                        || rb[0] + rb[2] <= ra[0] + 0.5
+                        || ra[1] + ra[3] <= rb[1] + 0.5
+                        || rb[1] + rb[3] <= ra[1] + 0.5;
+                    assert!(
+                        apart,
+                        "smallest {smallest}: {id}'s {a} {ra:?} overlaps its {b} {rb:?}"
+                    );
+                }
+            }
+            for action in ROW_ACTIONS {
+                assert!(
+                    !shows(&world, &format!("home.pr.{id}.{action}")),
+                    "smallest {smallest}: {id}'s {action} shows on a row at rest"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn hovering_or_focusing_a_pr_shows_its_actions_and_author_beside_its_title_never_over_it() {
+    for smallest in [false, true] {
+        for by_keyboard in [false, true] {
+            let mut world = home_at(smallest);
+            let case = format!("smallest {smallest}, keyboard {by_keyboard}");
+            for id in ["a1", "r1", "r2"] {
+                into_view(&mut world, id);
+                let rest = row_look(&world, id);
+                if by_keyboard {
+                    let open = format!("home.pr.{id}.open");
+                    world.gesture(|app| app.update(|_, tx| tx.focus(open, true)));
+                } else {
+                    let [x, y, w, h] = world.rect(&format!("home.pr.{id}"));
+                    world.gesture(|app| app.move_to(((x + w / 4.0) as f32, (y + h / 2.0) as f32)));
+                }
+                world.advance(Duration::from_secs(1));
+                let shown = row_look(&world, id);
+                assert!(
+                    (shown.height - rest.height).abs() < 0.5,
+                    "{case}: {id} grows from {} to {} as its actions show",
+                    rest.height,
+                    shown.height
+                );
+                assert!(
+                    (shown.title_start - rest.title_start).abs() < 0.5,
+                    "{case}: {id}'s title moves from {} to {}",
+                    rest.title_start,
+                    shown.title_start
+                );
+                let mut first_action = f32::INFINITY;
+                for action in ROW_ACTIONS {
+                    let key = format!("home.pr.{id}.{action}");
+                    assert!(shows(&world, &key), "{case}: {id}'s {action} does not show");
+                    first_action = first_action.min(drawn(&world, &key).1[0]);
+                }
+                let (_, [x, _, w, _]) = drawn(&world, &format!("home.pr.{id}.title"));
+                assert!(
+                    w <= 0.0 || x + w <= first_action + 0.5,
+                    "{case}: {id}'s title shows to {} under its first action at {first_action}",
+                    x + w
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn every_prs_action_keeps_its_key_name_and_tab_stop() {
+    let mut world = home_at(false);
+    let names = [
+        (
+            "open",
+            "#12 on github.com: Cache the catalog so the storefront answers before the warehouse wakes up",
+        ),
+        ("new", "New worktree session"),
+        ("approve", "Approve"),
+        ("merge", "Merge"),
+        ("mute", "Mute this PR"),
+        ("mute-author", "Mute all PRs by someone"),
+    ];
+    for (action, said) in names {
+        assert_eq!(
+            name(&world, &format!("home.pr.r1.{action}")).as_deref(),
+            Some(said),
+            "{action}"
+        );
+    }
+    assert_eq!(
+        name(&world, "home.prs.repo.org/shop.mute").as_deref(),
+        Some("Mute all PRs from this repo")
+    );
+    world.gesture(|app| app.update(|_, tx| tx.focus("home.pr.r1.open".to_owned(), true)));
+    let mut stops = vec![focused(&world)];
+    for _ in 0..6 {
+        world.gesture(|app| {
+            app.key(KeyEvent {
+                key: Key::Tab,
+                mods: Mods::default(),
+            })
+        });
+        stops.push(focused(&world));
+    }
+    let r1 = |part: &str| Some(format!("home.pr.r1.{part}"));
+    assert_eq!(
+        stops,
+        [
+            r1("open"),
+            r1("new"),
+            r1("approve"),
+            r1("merge"),
+            r1("mute"),
+            r1("mute-author"),
+            Some("home.pr.r2.open".to_owned()),
+        ]
     );
 }
