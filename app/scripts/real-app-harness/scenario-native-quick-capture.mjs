@@ -35,9 +35,7 @@ const runner = createScenarioRunner(options, {
     launch: 'The app launches without MAC_APP_QUIET: a quiet launch refuses activation for its first seconds, and this scenario activates attn and the fixtures itself, so it runs only on a display it owns',
   },
 });
-const launchApp = appPlatform.launchApp.bind(appPlatform);
 appPlatform.launchApp = async args => {
-  if (args.appPath !== options.appPath) return launchApp(args);
   const fd = fs.openSync(args.logPath, 'w');
   try {
     const child = spawn(appPlatform.appExecutableInTree(args.appPath), [], {
@@ -226,6 +224,18 @@ const sha256 = file => crypto.createHash('sha256').update(fs.readFileSync(file))
 runner.writeJson('retained-file-workload.json', { name: path.basename(pdfPath), pages: 20, bytes: fs.statSync(pdfPath).size, sha256: sha256(pdfPath), source: 'docs/banner.png' });
 
 let normalFixtureWindow;
+const FIXTURE_EXECUTABLE = 'app';
+async function launchFixture(appPath, logName, env) {
+  const fd = fs.openSync(path.join(runner.runDir, logName), 'w');
+  try {
+    const child = spawn(path.join(appPath, 'Contents', 'MacOS', FIXTURE_EXECUTABLE), [], {
+      detached: true, stdio: ['ignore', fd, fd], env: instanceCliEnv(instance, { CAPTURE_FIXTURE_DIR: runner.runDir, ...env }),
+    });
+    await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
+    child.unref();
+    return { pid: child.pid };
+  } finally { fs.closeSync(fd); }
+}
 let fixtureLaunch;
 let otherFixtureLaunch;
 runner.registerCleanup('fixture', async () => { if (fixtureLaunch?.pid) await appPlatform.requestQuit({ bundleId: fixtureId }); });
@@ -275,14 +285,14 @@ try {
   await runner.step('build_synthetic_foreground_app', async () => {
     const app = path.join(runner.runDir, 'CaptureFixture.app');
     fs.mkdirSync(path.join(app, 'Contents', 'MacOS'), { recursive: true });
-    fs.writeFileSync(path.join(app, 'Contents', 'Info.plist'), `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>${fixtureId}</string><key>CFBundleExecutable</key><string>app</string><key>CFBundleName</key><string>Capture Fixture</string><key>NSHighResolutionCapable</key><true/></dict></plist>`);
-    execFileSync('swiftc', [fileURLToPath(new URL('./CaptureFixture.swift', import.meta.url)), '-o', path.join(app, 'Contents', 'MacOS', 'app')]);
-    await fixtureSignal('fixture-ready', async () => { fixtureLaunch = await appPlatform.launchApp({ appPath: app, logPath: path.join(runner.runDir, 'fixture.log'), env: { CAPTURE_FIXTURE_DIR: runner.runDir } }); });
+    fs.writeFileSync(path.join(app, 'Contents', 'Info.plist'), `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>${fixtureId}</string><key>CFBundleExecutable</key><string>${FIXTURE_EXECUTABLE}</string><key>CFBundleName</key><string>Capture Fixture</string><key>NSHighResolutionCapable</key><true/></dict></plist>`);
+    execFileSync('swiftc', [fileURLToPath(new URL('./CaptureFixture.swift', import.meta.url)), '-o', path.join(app, 'Contents', 'MacOS', FIXTURE_EXECUTABLE)]);
+    await fixtureSignal('fixture-ready', async () => { fixtureLaunch = await launchFixture(app, 'fixture.log', {}); });
     const otherApp = path.join(runner.runDir, 'OtherCaptureFixture.app');
     fs.cpSync(app, otherApp, { recursive: true });
     const otherPlist = path.join(otherApp, 'Contents', 'Info.plist');
     fs.writeFileSync(otherPlist, fs.readFileSync(otherPlist, 'utf8').replace(fixtureId, otherFixtureId));
-    await fixtureSignal('other-ready', async () => { otherFixtureLaunch = await appPlatform.launchApp({ appPath: otherApp, logPath: path.join(runner.runDir, 'other-fixture.log'), env: { CAPTURE_FIXTURE_DIR: runner.runDir, CAPTURE_FIXTURE_NO_HOTKEY: '1', CAPTURE_FIXTURE_READY_FILE: 'other-ready' } }); });
+    await fixtureSignal('other-ready', async () => { otherFixtureLaunch = await launchFixture(otherApp, 'other-fixture.log', { CAPTURE_FIXTURE_NO_HOTKEY: '1', CAPTURE_FIXTURE_READY_FILE: 'other-ready' }); });
     await fixture.activateApp();
     await fixture.runInputDriver(['wait_frontmost']);
     assert.equal(await fixture.frontmostBundleId(), fixtureId);
