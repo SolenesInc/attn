@@ -153,7 +153,8 @@ fn nudge_popup(state: &mut State, id: &str, ev: &KeyEvent) -> bool {
 }
 
 /// Where over a terminal a popup may open: anywhere, or below the find or filter bar standing
-/// over the terminal's top, which reaches this far down.
+/// over the terminal's top, which reaches this far down. A filter's results under its bar give
+/// way to the popup, so a popup keeps room for its labels.
 #[derive(Clone, Copy, PartialEq)]
 pub(super) enum Room {
     Anywhere,

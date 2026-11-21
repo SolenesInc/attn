@@ -1465,7 +1465,7 @@ fn the_label_list_stays_inside_a_short_terminal() {
 }
 
 #[test]
-fn under_an_open_find_or_filter_bar_the_last_label_stays_inside_the_terminal_and_takes_a_click() {
+fn under_an_open_find_or_filter_bar_the_label_list_shows_three_labels_and_its_last_takes_a_click() {
     for bar in ["find", "filter"] {
         let mut state = showing(vec![agent_pane()], "daemon-1");
         state.settings = Some(std::collections::BTreeMap::from([(
@@ -1509,6 +1509,18 @@ fn under_an_open_find_or_filter_bar_the_last_label_stays_inside_the_terminal_and
             popup[1],
             popup[1] + popup[3],
             top + height
+        );
+        let whole = attn_app::annotations::picker_groups()
+            .into_iter()
+            .flatten()
+            .filter(|label| {
+                let row = world.rect(&format!("terminal.r1.annotation.pick.{}", label.id));
+                row[1] >= popup[1] && row[1] + row[3] <= popup[1] + popup[3]
+            })
+            .count();
+        assert!(
+            whole >= 3,
+            "{bar}: {whole} labels show whole before a scroll"
         );
         let over = (
             (popup[0] + popup[2] / 2.0) as f32,

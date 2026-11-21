@@ -14,7 +14,7 @@ pub(crate) struct Filtering {
     pub(crate) case: bool,
     block: u64,
     lines: Vec<Filtered>,
-    /// How tall the bar and its results stood when last laid out.
+    /// How tall the bar stood when last laid out.
     pub(crate) height: Option<f32>,
 }
 

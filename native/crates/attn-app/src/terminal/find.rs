@@ -76,7 +76,8 @@ impl Terminals {
         self.finds.get(id).filter(|f| f.open)
     }
 
-    /// How tall terminal `id`'s open find or filter bar stood when last laid out.
+    /// How tall terminal `id`'s open find or filter bar stood when last laid out, without the
+    /// filter's results under it.
     pub(crate) fn bars_height(&self, id: &str) -> Option<f32> {
         self.finding(id)
             .and_then(|f| f.height)

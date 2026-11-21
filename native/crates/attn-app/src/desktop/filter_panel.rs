@@ -52,13 +52,12 @@ pub(super) fn panel(id: &str, filtering: &Filtering, results_height: f32, t: &To
         .lines()
         .map(|lines| results(id, lines, results_height, t));
     let laid = id.to_owned();
-    TerminalBar::corner([bar].into_iter().chain(results).collect()).on_layout_tx(
-        move |state: &mut State, [_, _, _, height], tx: &mut Tx| {
-            if !state.terminals.bars_laid_out(&laid, height) {
-                tx.live_only();
-            }
-        },
-    )
+    let bar = bar.on_layout_tx(move |state: &mut State, [_, _, _, height], tx: &mut Tx| {
+        if !state.terminals.bars_laid_out(&laid, height) {
+            tx.live_only();
+        }
+    });
+    TerminalBar::corner([bar].into_iter().chain(results).collect())
 }
 
 fn results(id: &str, lines: &[Filtered], max_height: f32, t: &Tokens) -> El {

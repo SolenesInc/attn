@@ -1786,7 +1786,7 @@ fn tab_from_the_notes_close_reaches_overall_note_and_clear_all_before_forty_card
 }
 
 #[test]
-fn the_quick_label_list_stays_inside_the_document_and_its_last_label_takes_a_click() {
+fn the_quick_label_list_stays_inside_the_document_shows_three_labels_and_its_last_takes_a_click() {
     for seed in [None, Some(None)] {
         let (mut world, kept) = start_with(
             DOC,
@@ -1814,6 +1814,18 @@ fn the_quick_label_list_stays_inside_the_document_and_its_last_label_takes_a_cli
             toolbar[1],
             toolbar[1] + toolbar[3],
             top + height
+        );
+        let whole = attn_app::annotations::picker_groups()
+            .into_iter()
+            .flatten()
+            .filter(|label| {
+                let row = world.rect(&format!("tile.m.document.toolbar.pick.{}", label.id));
+                row[1] >= toolbar[1] && row[1] + row[3] <= toolbar[1] + toolbar[3]
+            })
+            .count();
+        assert!(
+            whole >= 3,
+            "{tile}: {whole} labels show whole before a scroll"
         );
         let over = (
             (toolbar[0] + toolbar[2] / 2.0) as f32,
