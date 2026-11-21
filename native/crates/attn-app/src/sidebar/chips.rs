@@ -483,7 +483,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
         system::DotShape::Filled,
         system::DotSize::Regular,
     );
-    let after = Inline::line()
+    let after = Inline::joined()
         .shrink()
         .children((!trail.is_empty()).then(|| {
             words(trail, Type::Small, t.text_secondary)
