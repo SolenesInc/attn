@@ -342,11 +342,7 @@ func (d *Daemon) runSeedGuide(context.Context, command.Caller, command.SeedGuide
 func (d *Daemon) runSeedMove(c command.Caller, verb, seed, reason, assignee string, force bool) (any, error) {
 	msg := protocol.SeedTransitionMessage{Cmd: protocol.CmdSeedTransition, SeedID: seed, Verb: verb, Assignee: optionalText(strings.TrimSpace(assignee)), Force: optionalTrue(force)}
 	if reason != "" {
-		if verb == string(garden.VerbPark) {
-			msg.Comment = protocol.Ptr(reason)
-		} else {
-			msg.Reason = protocol.Ptr(reason)
-		}
+		msg.Reason = protocol.Ptr(reason)
 	}
 	return d.moveFor(c, &msg)
 }

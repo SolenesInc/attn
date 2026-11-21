@@ -181,11 +181,7 @@ func (c *Client) SeedTransition(sessionID protocol.SessionID, seedID string, ver
 		msg.SourceSessionID = protocol.Ptr(sessionID)
 	}
 	if reason != "" {
-		if verb == "park" {
-			msg.Comment = protocol.Ptr(reason)
-		} else {
-			msg.Reason = protocol.Ptr(reason)
-		}
+		msg.Reason = protocol.Ptr(reason)
 	}
 	if opts.Assignee != "" {
 		msg.Assignee = protocol.Ptr(opts.Assignee)

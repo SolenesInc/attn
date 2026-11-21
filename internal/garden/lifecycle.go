@@ -139,7 +139,7 @@ func Transition(seed Seed, verb Verb, ask Ask, standing Standing, openChildren [
 		displaced = &held
 	}
 
-	if err := ValidateReason(reason, seed.ID); err != nil {
+	if err := validateMoveReason(rule, reason, seed.ID); err != nil {
 		return Outcome{}, err
 	}
 
@@ -148,9 +148,6 @@ func Transition(seed Seed, verb Verb, ask Ask, standing Standing, openChildren [
 	}
 	if rule.needsReason && reason == "" {
 		return Outcome{}, protocol.Refuse(protocol.RefusalInvalidInput, "harvesting %s records what got done: {attn seed harvest %s -m \"what got done\"}", seed.ID, seed.ID)
-	}
-	if reason != "" && !rule.keepsReason {
-		return Outcome{}, protocol.Refuse(protocol.RefusalInvalidInput, "%s records no reason; put it on the log instead: {attn seed note %s -m \"…\"}", verb, seed.ID)
 	}
 
 	next := seed
@@ -171,6 +168,17 @@ func Transition(seed Seed, verb Verb, ask Ask, standing Standing, openChildren [
 		next.HarvestWhen = nil
 	}
 	return Outcome{Seed: next, Moved: true, Displaced: displaced, By: by}, nil
+}
+
+func validateMoveReason(rule move, reason, seedID string) error {
+	switch {
+	case rule.keepsReason:
+		return ValidateReason(reason, seedID)
+	case reason != "":
+		return ValidateNote(reason)
+	default:
+		return nil
+	}
 }
 
 func refuseTakeover(seed Seed, tender string) error {
