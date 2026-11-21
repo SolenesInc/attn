@@ -506,6 +506,19 @@ fn a_color_scheme_click_saves_it_and_the_list_marks_it_chosen() {
     rest(&mut world);
 }
 
+#[test]
+fn a_saved_catppuccin_choice_reads_as_mocha_beside_the_other_flavours_and_tokyo_night() {
+    let (daemon, _) = accepting(&[("color_scheme", "catppuccin")]);
+    let mut world = World::start(daemon);
+    open(&mut world);
+    click(&mut world, "settings.nav.general");
+    assert!(scheme(&world, "Catppuccin Mocha").is("checked"));
+    for other in ["Catppuccin Frappé", "Catppuccin Macchiato", "Tokyo Night"] {
+        assert!(!scheme(&world, other).is("checked"));
+    }
+    rest(&mut world);
+}
+
 fn scheme(world: &World, name: &str) -> Node {
     world
         .screen()

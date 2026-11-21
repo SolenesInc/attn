@@ -10,7 +10,7 @@ both settings.
 
 ## Pick a scheme
 
-Attn comes with five schemes:
+Attn comes with seven schemes:
 
 - `attn`, the default. Calm, near-neutral grays with the colors of attn's cat
   logo kept quiet: magenta marks the agents waiting for you, cyan the agents at
@@ -18,8 +18,16 @@ Attn comes with five schemes:
 - `night`, the same colors at full strength on indigo surfaces.
 - `classic`, attn's colors before the cat logo: neutral grays with an orange
   brand color.
-- `catppuccin`, Mocha in dark and Latte in light.
+- `catppuccin`, Catppuccin Mocha in dark and Latte in light.
 - `catppuccin-frappe`, Frappé in dark and Latte in light.
+- `catppuccin-macchiato`, Macchiato in dark and Latte in light.
+- `tokyo-night`, Tokyo Night in dark and Tokyo Night Light in light.
+
+Latte, Catppuccin's light flavor, is the light side of all three Catppuccin
+schemes: pick any of them and set the theme to light. The Catppuccin and Tokyo
+Night schemes keep their palettes' colors, a little lighter or darker where
+needed so text stays readable on its background and each session state keeps a
+color of its own.
 
 In the app, open Settings → Appearance and pick one under Theme. Each scheme
 shows a few of its colors for the appearance in effect.

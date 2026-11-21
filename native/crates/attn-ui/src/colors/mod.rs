@@ -72,12 +72,20 @@ const SCHEME_FILES: &[(&str, &str)] = &[
         include_str!("../../../../../internal/colors/schemes/catppuccin-frappe.json"),
     ),
     (
+        "catppuccin-macchiato",
+        include_str!("../../../../../internal/colors/schemes/catppuccin-macchiato.json"),
+    ),
+    (
         "classic",
         include_str!("../../../../../internal/colors/schemes/classic.json"),
     ),
     (
         "night",
         include_str!("../../../../../internal/colors/schemes/night.json"),
+    ),
+    (
+        "tokyo-night",
+        include_str!("../../../../../internal/colors/schemes/tokyo-night.json"),
     ),
 ];
 
