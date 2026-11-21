@@ -2492,7 +2492,7 @@ fn each_line_of_a_note_stands_as_tall_as_the_line_of_the_reading_role_it_is_writ
 }
 
 #[test]
-fn a_note_s_line_ends_where_the_role_it_is_written_in_measures_it() {
+fn a_note_is_written_in_its_own_family_apart_from_the_one_a_document_is_read_in() {
     use attn_ui::system::Reading;
     let said = "Written by hand";
     let disk = Disk::with(&[("knowledge/index.md", &format!("{said}\n"))]);
@@ -2509,6 +2509,11 @@ fn a_note_s_line_ends_where_the_role_it_is_written_in_measures_it() {
         ((caret[0] - line[0]) as f32 - written).abs() < 0.5,
         "the caret ends the line at {}, the note's measure is {written}",
         caret[0] - line[0]
+    );
+    assert_ne!(
+        Reading::Text.written().family,
+        Reading::Text.style().family,
+        "the note asks for the family a document is read in"
     );
 }
 
