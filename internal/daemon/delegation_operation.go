@@ -363,9 +363,9 @@ func (d *Daemon) finishDelegationFailure(id string, err error) {
 		d.logf("delegate operation %s stays pending across daemon stop: %v", id, err)
 		return
 	}
+	d.noticeDelegationFailure(id, err)
 	d.persistDelegationTerminal(id, protocol.DelegationOperationStateFailed,
 		"delegation failed", "", "", nil, err)
-	d.noticeDelegationFailure(id, err)
 }
 
 func (d *Daemon) noticeDelegationFailure(id string, failure error) {
