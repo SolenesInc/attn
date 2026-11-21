@@ -131,11 +131,14 @@ func refusalLiterals(t *testing.T, root string) []refusalLiteral {
 		ast.Inspect(file, func(n ast.Node) bool {
 			switch node := n.(type) {
 			case *ast.FuncDecl:
-				if node.Recv != nil && (node.Name.Name == "Error" || node.Name.Name == "Mentioned") && refusalTypes[receiverType(node)] {
+				if node.Recv == nil || node.Name.Name != "Error" && node.Name.Name != "Mentioned" {
+					return true
+				}
+				if refusal := refusalTypes[receiverType(node)]; refusal || plainScope {
 					ast.Inspect(node.Body, func(m ast.Node) bool {
 						if call, ok := m.(*ast.CallExpr); ok && calleeName(call.Fun) == "fmt.Sprintf" {
 							for _, arg := range call.Args {
-								collect(arg, true)
+								collect(arg, refusal)
 							}
 						}
 						return true

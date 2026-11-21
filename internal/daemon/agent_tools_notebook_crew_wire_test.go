@@ -122,6 +122,10 @@ func TestEveryCrewToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) 
 	tools.call("crew_close", map[string]any{"member": "ranger"})
 	tools.call("crew_prime", map[string]any{})
 	tools.call("crew_retire", map[string]any{"member": "alder"})
+	retired := agent.mustCall(t, "crew_start", map[string]any{"member": "alder"})
+	if text := resultText(retired); !retired.IsError || !strings.Contains(text, "`crew_restore`") || strings.Contains(text, "attn crew") {
+		t.Errorf("crew_start of a retired member answered %q, want a refusal that names the crew_restore tool", text)
+	}
 	tools.call("crew_restore", map[string]any{"member": "alder"})
 	tools.report("crew")
 }

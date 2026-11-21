@@ -12,9 +12,13 @@ import (
 
 type errRetiredMember struct{ name string }
 
-func (e errRetiredMember) Error() string {
-	return fmt.Sprintf("%s is retired; `attn crew restore %s` brings them back", e.name, e.name)
+func (e errRetiredMember) Error() string { return protocol.CLIText(e.Mentioned()) }
+
+func (e errRetiredMember) Mentioned() string {
+	return fmt.Sprintf("%s is retired; {attn crew restore %s} brings them back", e.name, e.name)
 }
+
+func (e errRetiredMember) Refusal() protocol.Refusal { return protocol.RefusalConflict }
 
 func retiredMemberError(member crew.Member) error { return errRetiredMember{name: member.Name} }
 
