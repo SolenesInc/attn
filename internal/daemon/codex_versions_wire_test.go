@@ -105,11 +105,12 @@ func TestATerminalStillOnAnOlderCodexThanItsAppServerIsReported(t *testing.T) {
 }
 
 func TestSharedCodexRunsTheConfiguredCodexForItsAppServerAndItsTerminals(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
+	w := &world{World: prepareWorld(t, fakeagent.Codex)}
 	w.SetCodexVersion("0.162.1")
+	w.start()
 	app := w.App()
 	configured := w.InstallCodexAt("configured-codex", "0.170.0")
-	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+	awaitSharedCodexFromConnect(app, func(s *protocol.SharedCodexState) bool {
 		return s != nil && protocol.Deref(s.InstalledVersion) == "0.162.1"
 	})
 	setSetting(t, app, "codex_executable", configured)

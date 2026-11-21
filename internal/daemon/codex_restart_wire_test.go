@@ -27,8 +27,9 @@ func restartState(s *protocol.SharedCodexState, running, installed string, resta
 
 func sharedCodexOn(t *testing.T, version string) (w *world, app *testworld.Peer, session string, codex *fakeagent.Run) {
 	t.Helper()
-	w = newWorld(t, fakeagent.Codex)
+	w = &world{World: prepareWorld(t, fakeagent.Codex)}
 	w.SetCodexVersion(version)
+	w.start()
 	app = w.App()
 	session = w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	return w, app, session, w.Launched(session)

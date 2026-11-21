@@ -8,9 +8,10 @@ import (
 )
 
 func TestASharedCodexTerminalOpensPastCodexsOwnUpdatePromptWhenANewerCodexIsOut(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
+	w := &world{World: prepareWorld(t, fakeagent.Codex)}
 	w.SetCodexVersion("0.162.1")
 	w.SetCodexLatest("0.163.0")
+	w.start()
 	app := w.App()
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	codex := w.Launched(session)
