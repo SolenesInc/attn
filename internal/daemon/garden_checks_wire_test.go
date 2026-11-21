@@ -167,7 +167,8 @@ func TestWitheredChildrenLeavePlotCheckRollupsAndTalliesClean(t *testing.T) {
 func TestConfirmingLastCheckOrClosingReportsLiveDelegateToOtherSessions(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
-	orchestrator := spawnPanes(w, app, w.Path("orchestrator"))[0].session
+	panes := spawnPanes(w, app, w.Path("orchestrator"), w.Path("outsider"))
+	orchestrator, outsider := panes[0].session, panes[1].session
 	cwd := w.Path("orchestrator", "work")
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
@@ -196,6 +197,17 @@ func TestConfirmingLastCheckOrClosingReportsLiveDelegateToOtherSessions(t *testi
 		t.Errorf("confirming C1 with C2 still open reported live_delegate %q, want nil", *got)
 	}
 
+	byOutsider := checkMove(planted.ID, "C2", "confirm", "checked")
+	byOutsider.SourceSessionID = protocol.Ptr(protocol.SessionID(outsider))
+	if got := checkMoveOK(t, cli, byOutsider).LiveDelegate; got != nil {
+		t.Errorf("outsider confirming last check reported live_delegate %q, want nil", *got)
+	}
+
+	withoutSession := checkMove(planted.ID, "C2", "confirm", "checked")
+	if got := checkMoveOK(t, cli, withoutSession).LiveDelegate; got != nil {
+		t.Errorf("sessionless caller confirming last check reported live_delegate %q, want nil", *got)
+	}
+
 	second := checkMove(planted.ID, "C2", "confirm", "checked")
 	second.SourceSessionID = protocol.Ptr(protocol.SessionID(orchestrator))
 	if got := protocol.Deref(checkMoveOK(t, cli, second).LiveDelegate); got != delegated.SessionID {
@@ -205,6 +217,32 @@ func TestConfirmingLastCheckOrClosingReportsLiveDelegateToOtherSessions(t *testi
 	harvested := gardenNudgeMove(t, cli, orchestrator, planted.ID, "harvest")
 	if got := protocol.Deref(harvested.LiveDelegate); got != delegated.SessionID {
 		t.Errorf("orchestrator harvest reported live_delegate %q, want %q", got, delegated.SessionID)
+	}
+
+	plotCrown, err := cli.SeedPlantWith(protocol.SessionID(orchestrator), client.Plant{
+		Title:  "delegated plot",
+		Body:   protocol.Ptr("Orchestrate the plot."),
+		Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C1"), Text: "Plot check."}},
+	})
+	if err != nil {
+		t.Fatalf("plant plot: %v", err)
+	}
+	if _, err := cli.SeedPlantWith(protocol.SessionID(orchestrator), client.Plant{
+		Title:  "open plot child",
+		PartOf: protocol.Ptr(plotCrown.ID),
+		Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C2"), Text: "Child check."}},
+	}); err != nil {
+		t.Fatalf("plant plot child: %v", err)
+	}
+	plotDelegate, err := cli.Delegate(delegateAtSeed(orchestrator, cwd, plotCrown.ID))
+	if err != nil {
+		t.Fatalf("delegate plot: %v", err)
+	}
+	w.Launched(string(plotDelegate.SessionID))
+	confirmPlot := checkMove(plotCrown.ID, "C1", "confirm", "checked")
+	confirmPlot.SourceSessionID = protocol.Ptr(protocol.SessionID(orchestrator))
+	if got := checkMoveOK(t, cli, confirmPlot).LiveDelegate; got != nil {
+		t.Errorf("confirming plot own check with open child check reported live_delegate %q, want nil", *got)
 	}
 
 	planted2, err := cli.SeedPlantWith(protocol.SessionID(orchestrator), client.Plant{

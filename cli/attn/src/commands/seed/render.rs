@@ -1480,22 +1480,3 @@ pub fn agent_close(out: &mut String, result: &AgentCloseResult) {
         "the session is kept: `attn session show {id}` reads it back"
     );
 }
-
-#[cfg(test)]
-mod tests {
-    use super::live_delegate_nudge;
-
-    #[test]
-    fn live_delegate_nudge_formats_short_id_and_skips_absent() {
-        let mut out = String::new();
-        live_delegate_nudge(&mut out, None);
-        live_delegate_nudge(&mut out, Some("   "));
-        assert_eq!(out, "");
-
-        live_delegate_nudge(&mut out, Some("019d8f44-6f91-7a10-a001-000000000001"));
-        assert_eq!(
-            out,
-            "delegate 019d8f44 is still live — close it with `attn agent close 019d8f44 -m \"<why>\"` if done\n"
-        );
-    }
-}

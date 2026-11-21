@@ -52,7 +52,7 @@ Do not edit the plan or its children. The plan's author rewrites the plan with t
 
 ## Return findings
 
-Prioritize actionable findings by severity. Verify each finding against the code or a run before you report it. Drop claims you cannot substantiate, and leave out P2 polish unless the task asks for it. For each finding, explain the affected behavior, the conditions that expose the defect, and the consequence. Include a file location or reproducible steps and supporting evidence. Label each finding measured, inferred, or guessed, as [Prove it works](../principles/prove-it-works.md) defines the labels. When you weigh another reviewer's findings, give the reason for each dismissed finding in one line. A finding that two independent reviews raise is strong evidence. If a finding repeats an earlier one, it is a class: say so, and recommend fixing it with [Correction](correction.md).
+Prioritize actionable findings by severity. Verify each finding against the code or a run before you report it, and leave out P2 polish unless the task asks for it. Drop guesses you have not verified against the code. For each finding, explain the affected behavior, the conditions that expose the defect, and the consequence. Include a file location or reproducible steps and supporting evidence. Label each finding measured, inferred, or guessed, as [Prove it works](../principles/prove-it-works.md) defines the labels. When you weigh another reviewer's findings, give the reason for each dismissed finding in one line. A finding that two independent reviews raise is strong evidence. If a finding repeats an earlier one, it is a class: say so, and recommend fixing it with [Correction](correction.md).
 
 Sort the findings into three groups, and name the group of each finding:
 

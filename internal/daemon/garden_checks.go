@@ -110,7 +110,7 @@ func (d *Daemon) applySeedCheck(ctx context.Context, msg *protocol.SeedCheckMess
 			outcome.ringRecipients = recipients
 		}
 		if verb == garden.CheckVerbConfirm {
-			tally := updated.plots.EffectiveCheckTally(next.ID)
+			tally := updated.plots.CheckTally(next.ID)
 			if tally.Total > 0 && tally.Confirmed == tally.Total {
 				outcome.liveDelegate = d.liveDelegateToClose(next, sessionID)
 			}
