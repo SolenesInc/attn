@@ -131,20 +131,34 @@ func (l *serverLink) newestEntry(ctx context.Context, conversation string) (tran
 	return newest, found, err
 }
 
+func (l *serverLink) lastWritten(ctx context.Context, conversation string) (time.Time, bool, error) {
+	var written time.Time
+	found := false
+	err := l.entriesFrom(ctx, false, map[string]any{"conversation": conversation, "order": "descending", "limit": serverEntriesPerCall}, func(entry transcript.ServerEntry) bool {
+		found = true
+		at, dated := entry.Written()
+		written = at
+		return !dated
+	})
+	return written, found, err
+}
+
 func (l *serverLink) activity(ctx context.Context, conversation string, msg protocol.TranscriptActivityMessage) (protocol.TranscriptActivityResult, error) {
 	var result protocol.TranscriptActivityResult
 	switch msg.Kind {
-	case "modified", "head":
+	case "head":
 		newest, found, err := l.newestEntry(ctx, conversation)
 		if err != nil || !found {
 			return result, nil
 		}
 		result.Available = true
-		if msg.Kind == "head" {
-			result.Head = protocol.Ptr(transcript.ServerCursor(newest.ID, len(transcript.ServerEntryEvents(newest))))
+		result.Head = protocol.Ptr(transcript.ServerCursor(newest.ID, len(transcript.ServerEntryEvents(newest))))
+	case "modified":
+		written, found, err := l.lastWritten(ctx, conversation)
+		if err != nil || !found {
 			return result, nil
 		}
-		written, _ := newest.Written()
+		result.Available = true
 		result.ModifiedAt = protocol.Ptr(written.Format(time.RFC3339Nano))
 	case "events":
 		result.Available = true

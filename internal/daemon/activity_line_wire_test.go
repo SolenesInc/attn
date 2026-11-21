@@ -111,6 +111,40 @@ func TestAnAppServerSessionsActivityLineSaysWhatItDidSinceTheLastLine(t *testing
 	})
 }
 
+func TestAnAppServerSessionsActivityLineCatchesUpWithARunThatEndedWhileTheUserWasAway(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newTitlingWorld(t, h, fakeagent.Claude)
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "activity.enabled", "true")
+		setSetting(t, app, "activity.config", `{"agent":"claude"}`)
+		present := func(visible bool) {
+			app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: visible, DashboardVisible: visible})
+			listTasks(app)
+		}
+		session, view, server := appServerSession(t, w, app, h, func(m *protocol.SpawnSessionMessage) {
+			m.Label = protocol.Ptr("checkout")
+		})
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		present(true)
+		serverActivityTurn(t, w, app, view, server, session, "read the plan", "I read the plan.")
+		awaitActivityTask(app, session, func(task protocol.Task) bool { return task.State == "done" })
+		w.awaitJobsSettled()
+
+		present(false)
+		presenceTierIs(t, cli, "while the run ends", "away")
+		serverActivityTurn(t, w, app, view, server, session, "fix the cart test", "The cart test is fixed.")
+
+		present(true)
+		w.advance(time.Minute)
+		task := w.HeadlessTask()
+		if !strings.Contains(task.Prompt, "The cart test is fixed.") {
+			t.Errorf("the activity prompt %q, want the run that ended while the user was away", task.Prompt)
+		}
+		task.Answer("Fixed the cart test")
+		awaitActivity(app, session, "Fixed the cart test")
+	})
+}
+
 func serverActivityTurn(t *testing.T, w *world, app *testworld.Peer, view *fakeagent.Run, server *fakeagent.AppServer, session, prompt, reply string) {
 	t.Helper()
 	mark := len(app.Log())
