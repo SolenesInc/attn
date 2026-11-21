@@ -313,7 +313,11 @@ fn session_defaults(state: &State, t: &Tokens) -> Block {
             SettingRow::new(
                 "settings.row.auto-approve",
                 "Auto-approve",
-                "Let Claude and Codex review approval requests automatically. On by default for new sessions; YOLO sessions already bypass approval.",
+                if harnesses::builtin(settings, "sigma") {
+                    "Let Claude and Codex review approval requests automatically. Sigma has no reviewer, so with this on a new Sigma conversation starts with every tool call approved without review. On by default for new sessions; YOLO sessions already bypass approval."
+                } else {
+                    "Let Claude and Codex review approval requests automatically. On by default for new sessions; YOLO sessions already bypass approval."
+                },
                 setting_toggle(AUTO_APPROVE, "Auto-approve", false, t, state),
             )
             .build(t),

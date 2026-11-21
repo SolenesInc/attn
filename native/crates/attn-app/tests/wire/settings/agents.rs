@@ -454,6 +454,27 @@ fn sigma_shows_its_executable_and_default_route_and_no_context_cap_it_cannot_app
 }
 
 #[test]
+fn auto_approve_says_sigma_approves_every_call_without_review_only_while_sigma_is_offered() {
+    let says_unreviewed = |world: &World| {
+        world
+            .screen()
+            .descendants(Target::key("settings.row.auto-approve"))
+            .iter()
+            .filter_map(|node| node.name.as_deref())
+            .any(|text| text.contains("approved without review"))
+    };
+    let world = on_agents(BOTH);
+    assert!(!says_unreviewed(&world));
+    rest(&mut { world });
+    let world = on_agents(&both(&[
+        ("sigma_available", "true"),
+        ("sigma_cap_executable_setting", "true"),
+    ]));
+    assert!(says_unreviewed(&world));
+    rest(&mut { world });
+}
+
+#[test]
 fn a_plugin_agent_lists_its_capabilities_without_an_executable_field() {
     let mut world = on_agents(&[("snipe_available", "true"), ("snipe_cap_resume", "true")]);
     assert!(groups(&world).contains(&"Snipe".to_owned()));
