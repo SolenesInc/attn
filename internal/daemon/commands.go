@@ -22,6 +22,7 @@ func (d *Daemon) commandLayer() *command.Layer {
 			d.calloutCommands(),
 			d.delegateCommands(),
 			d.delegateRolesCommands(),
+			d.reviewCommands(),
 		} {
 			maps.Copy(handlers, family)
 		}

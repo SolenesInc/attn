@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "09c9b68d4009";
+pub const PROTOCOL_VERSION: &str = "dde5e691922c";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -9305,11 +9305,7 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repos: Option<Vec<RepoState>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub review_check_result: Option<ReviewCheckResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review_problems: Option<Vec<ReviewProblem>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub review_start_result: Option<ReviewStartResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_artifact_transfer_result: Option<SeedArtifactTransferResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -9412,21 +9408,9 @@ impl RestartSharedCodexResultMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ReviewAnswerMessage {
-    pub annotation_id: String,
-    pub cmd: String,
+pub struct ReviewAnswerResult {
     pub document: String,
-    pub text: String,
-}
-
-impl ReviewAnswerMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "review_answer".to_string(),
-            ..Self::default()
-        }
-    }
+    pub question: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ReviewBundle {
@@ -9447,21 +9431,6 @@ pub struct ReviewBundle {
     pub repository: String,
     #[serde(deserialize_with = "null_as_default")]
     pub stops: Vec<ReviewStop>,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ReviewCheckMessage {
-    pub cmd: String,
-    pub document: String,
-}
-
-impl ReviewCheckMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "review_check".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ReviewCheckResult {
@@ -9729,24 +9698,6 @@ impl ReviewSentMessage {
     pub fn new() -> Self {
         Self {
             cmd: "review_sent".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ReviewStartMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub base: Option<String>,
-    pub cmd: String,
-    pub document: String,
-    pub repository: String,
-}
-
-impl ReviewStartMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "review_start".to_string(),
             ..Self::default()
         }
     }
@@ -14730,12 +14681,6 @@ impl ResponseField for QuickCaptureResult {
 }
 impl ResponseField for Vent {
     const FIELD: &'static str = "record_vent_result";
-}
-impl ResponseField for ReviewCheckResult {
-    const FIELD: &'static str = "review_check_result";
-}
-impl ResponseField for ReviewStartResult {
-    const FIELD: &'static str = "review_start_result";
 }
 impl ResponseField for SeedArtifactTransferResult {
     const FIELD: &'static str = "seed_artifact_transfer_result";

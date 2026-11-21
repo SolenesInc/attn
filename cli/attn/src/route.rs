@@ -100,10 +100,7 @@ fn native_command(name: &str, verb: Option<&str>, argv: &[OsString]) -> Option<N
         },
         ("terminal", _) => native(terminal::run, true),
         ("journal", _) => native(journal::run, true),
-        ("review", _) => Native {
-            help: Some(review::HELP),
-            ..native(review::run, true)
-        },
+        ("review", _) => native(review::run, true),
         ("nav", _) => Native {
             help: Some(nav::HELP),
             ..native(nav::run, true)

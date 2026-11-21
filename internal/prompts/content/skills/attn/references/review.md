@@ -29,6 +29,16 @@ Keep the frontmatter that `attn review start` wrote. If you write the whole file
 
 To present the same document again after you change the code, revise the review, then run `attn review start <document>` with no `--base`, check it and open it. The base stays where it was, or moves to what the user last reviewed, so the user sees only what changed since their notes. An open tile reloads by itself.
 
+    attn review start <document> [--base <commit>] [--repository <dir>] [--json]
+
+Snapshots the working tree of `--repository` as head, and writes frame (brief unless the document already picks one), repository, base and head into the frontmatter of `<document>`. Creates the document when it is missing, and leaves the text below the frontmatter as written. Run it again before presenting a revision: it takes a fresh head and keeps the base. `--base` defaults to the head of the last review the user sent on this document, else the document's base; without one the review is a tour of unchanged code.
+
+    attn review start review.md --base HEAD
+
+    attn review check <document> [--json]
+
+Lists the problems of `<document>`, each with its line and the fix. An empty list means the document is ready to open. On the CLI it exits 1 when there are problems, and `attn open` prints the same problems as warnings.
+
 ## Write the review
 
 Write for a reader who has not seen the conversation. Put in:
@@ -79,7 +89,38 @@ Use the forms in `attn skill --reference showing` for the prose. Every changed f
 
 A stop on a markdown file renders as a document, block by block, with the changed words marked. Use it for a change to docs or prompts.
 
-`attn review --help` has the full grammar.
+The grammar below is the whole of it.
+
+## The grammar
+
+Below the frontmatter:
+
+```text
+# Title, then a summary
+## A step              prose that explains one part of the change
+### path:from-to       a stop: those lines of the file, at head
+- L12: note           an agent note on line 12 (L12-14 for a range)
+- L12!: note          the place to look
+## Not shown          `- path: why it is left out`, for each changed file
+                      no stop shows
+```
+
+Every changed file needs a stop or a Not shown entry.
+
+`frame:` in the frontmatter picks the frame the review opens in, and the user switches with 1, 2 and 3: `brief` shows the document top to bottom, `walkthrough` the stops one at a time with your prose beside the file, and `map` a sequence diagram's messages, each beside the `##` step that holds its stop. A pick the document cannot fill opens in brief, and `attn review check` says what is missing: walkthrough needs a stop, map a drawn diagram with a message tied to a stop.
+
+A mermaid `sequenceDiagram` ties a message to a stop with `%% stop: path:from-to` on the line after it. attn draws:
+
+```text
+participant a as A<br/>a.go   a participant or actor; <br/> starts a second line
+a->>b: text                  a message
+Note over a,b: text          after a message, its caption; before the first
+                             message, the diagram's caption
+loop label ... end           a box around the messages inside: rect, opt,
+                             loop, alt/else, critical/option, par/and, break
+```
+
+A diagram with any other line (activate, autonumber, box) shows as a mermaid figure and is not mapped, and `attn review check` names the line. A fence with no side, before or after, shows with both.
 
 ## Pick the frame
 
@@ -120,6 +161,12 @@ The reader draws participants, actors, messages, notes and these blocks, in the 
 A question from the user arrives as their message, with the lines it is about and an `attn review answer` command. Answer with that command. The answer shows under the line in the user's review, so write it to stand there: a sentence or two that answers the question, with a file and line when that helps.
 
 The user is still reading, so leave the files alone. When the question shows that something needs to change, say so in the answer and make the change after the user sends the review.
+
+    attn review answer <question-id> --doc <document> -m <answer> [--json]
+
+Answers a question the user asked on the review. The question arrives as the user's message with this command and the question's id; the answer shows under the line in the user's review.
+
+    attn review answer q1 --doc review.md -m "It retries once, at review.go:42."
 
 ## Act on the verdict
 

@@ -166,13 +166,10 @@ var Placements = map[string][]Placement{
 	"reopen_inspect":                   {Placement{LocatorMachine, "host"}},
 	"reopen_worktree":                  {Placement{LocatorMachine, "host"}},
 	"restart_shared_codex":             {Placement{LocatorHere, ""}},
-	"review_answer":                    {Placement{LocatorHome, ""}},
-	"review_check":                     {Placement{LocatorHere, ""}},
 	"review_edit":                      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"review_file":                      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"review_search":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"review_sent":                      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"review_start":                     {Placement{LocatorHere, ""}},
 	"run_command":                      {Placement{LocatorCommand, "command"}},
 	"seed_artifact_transfer":           {Placement{LocatorHome, ""}},
 	"seed_artifact_transfer_here":      {Placement{LocatorMachine, "host"}},
@@ -1984,30 +1981,6 @@ func (m RestartSharedCodexMessage) Locate() string {
 	return ""
 }
 
-func (ReviewAnswerMessage) CommandName() string {
-	return "review_answer"
-}
-
-func (m ReviewAnswerMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m ReviewAnswerMessage) Locate() string {
-	return ""
-}
-
-func (ReviewCheckMessage) CommandName() string {
-	return "review_check"
-}
-
-func (m ReviewCheckMessage) Placement() Placement {
-	return Placement{LocatorHere, ""}
-}
-
-func (m ReviewCheckMessage) Locate() string {
-	return ""
-}
-
 func (ReviewEditMessage) CommandName() string {
 	return "review_edit"
 }
@@ -2077,18 +2050,6 @@ func (m ReviewSentMessage) Locate() string {
 	if m.Host != nil {
 		return string(*m.Host)
 	}
-	return ""
-}
-
-func (ReviewStartMessage) CommandName() string {
-	return "review_start"
-}
-
-func (m ReviewStartMessage) Placement() Placement {
-	return Placement{LocatorHere, ""}
-}
-
-func (m ReviewStartMessage) Locate() string {
 	return ""
 }
 

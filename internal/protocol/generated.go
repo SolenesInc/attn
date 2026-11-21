@@ -9933,14 +9933,8 @@ type Response struct {
 	// Repos corresponds to the JSON schema field "repos".
 	Repos []RepoState `json:"repos,omitempty,omitzero"`
 
-	// ReviewCheckResult corresponds to the JSON schema field "review_check_result".
-	ReviewCheckResult *ReviewCheckResult `json:"review_check_result,omitempty,omitzero"`
-
 	// ReviewProblems corresponds to the JSON schema field "review_problems".
 	ReviewProblems []ReviewProblem `json:"review_problems,omitempty,omitzero"`
-
-	// ReviewStartResult corresponds to the JSON schema field "review_start_result".
-	ReviewStartResult *ReviewStartResult `json:"review_start_result,omitempty,omitzero"`
 
 	// SeedArtifactTransferResult corresponds to the JSON schema field
 	// "seed_artifact_transfer_result".
@@ -10079,18 +10073,12 @@ type RestartSharedCodexResultMessage struct {
 	Success bool `json:"success"`
 }
 
-type ReviewAnswerMessage struct {
-	// AnnotationID corresponds to the JSON schema field "annotation_id".
-	AnnotationID string `json:"annotation_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
+type ReviewAnswerResult struct {
 	// Document corresponds to the JSON schema field "document".
 	Document string `json:"document"`
 
-	// Text corresponds to the JSON schema field "text".
-	Text string `json:"text"`
+	// Question corresponds to the JSON schema field "question".
+	Question string `json:"question"`
 }
 
 type ReviewBundle struct {
@@ -10123,14 +10111,6 @@ type ReviewBundle struct {
 
 	// Stops corresponds to the JSON schema field "stops".
 	Stops []ReviewStop `json:"stops"`
-}
-
-type ReviewCheckMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Document corresponds to the JSON schema field "document".
-	Document string `json:"document"`
 }
 
 type ReviewCheckResult struct {
@@ -10477,20 +10457,6 @@ type ReviewSentMessage struct {
 
 	// Host corresponds to the JSON schema field "host".
 	Host *string `json:"host,omitempty,omitzero"`
-}
-
-type ReviewStartMessage struct {
-	// Base corresponds to the JSON schema field "base".
-	Base *string `json:"base,omitempty,omitzero"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Document corresponds to the JSON schema field "document".
-	Document string `json:"document"`
-
-	// Repository corresponds to the JSON schema field "repository".
-	Repository string `json:"repository"`
 }
 
 type ReviewStartResult struct {

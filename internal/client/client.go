@@ -1067,27 +1067,19 @@ func (c *Client) OpenMarkdown(path string, sessionID protocol.SessionID) ([]prot
 }
 
 func (c *Client) ReviewStart(document, repository, base string) (*protocol.ReviewStartResult, error) {
-	msg := protocol.ReviewStartMessage{Cmd: protocol.CmdReviewStart, Document: document, Repository: repository}
-	if base != "" {
-		msg.Base = protocol.Ptr(base)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	return resp.ReviewStartResult, nil
+	return commandResult[protocol.ReviewStartResult](c, "review start", "", map[string]any{"document": document, "repository": repository, "base": base})
 }
 
 func (c *Client) ReviewCheck(document string) ([]protocol.ReviewProblem, error) {
-	resp, err := c.send(protocol.ReviewCheckMessage{Cmd: protocol.CmdReviewCheck, Document: document})
+	result, err := commandResult[protocol.ReviewCheckResult](c, "review check", "", map[string]any{"document": document})
 	if err != nil {
 		return nil, err
 	}
-	return resp.ReviewCheckResult.Problems, nil
+	return result.Problems, nil
 }
 
 func (c *Client) ReviewAnswer(document, annotationID, text string) error {
-	_, err := c.send(protocol.ReviewAnswerMessage{Cmd: protocol.CmdReviewAnswer, Document: document, AnnotationID: annotationID, Text: text})
+	_, err := commandResult[protocol.ReviewAnswerResult](c, "review answer", "", map[string]any{"document": document, "question": annotationID, "text": text})
 	return err
 }
 

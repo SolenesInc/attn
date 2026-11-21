@@ -27,6 +27,7 @@ const (
 	CodeNeedsTime                = "needs_time"
 	CodeNoAlternative            = "no_alternative"
 	CodeNoDocument               = "no_document"
+	CodeNoQuestion               = "no_question"
 	CodeNoRole                   = "no_role"
 	CodeNoSession                = "no_session"
 	CodeNotACheckID              = "not_a_check_id"
@@ -41,6 +42,7 @@ const (
 	CodePlotAndStale             = "plot_and_stale"
 	CodePRWithoutWhenMerged      = "pr_without_when_merged"
 	CodeReferenceNeedsPath       = "reference_needs_path"
+	CodeReviewOff                = "review_off"
 	CodeSessionNotFound          = "session_not_found"
 	CodeSinceAndSection          = "since_and_section"
 	CodeStandbyWithScope         = "standby_with_scope"
@@ -78,6 +80,9 @@ var specs = map[string]spec{
 	"delegate roles apply":    {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"not_a_table": "Pass the table delegate_roles_show returns, with only its fields.", "conflict": "Export the table again with delegate_roles_show, change it, and apply that."}},
 	"delegate roles rollback": {readOnly: false, anyone: true, sessionFlag: true},
 	"list":                    {readOnly: true, anyone: true, sessionFlag: false},
+	"review start":            {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"review check":            {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"review answer":           {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled.", "no_question": "Answer a question that is still open on the document."}},
 	"seed search":             {readOnly: true, anyone: false, sessionFlag: true},
 	"seed plant":              {readOnly: false, anyone: false, sessionFlag: true},
 	"seed plot":               {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_a_plot": "Pass a plot payload: a JSON object with title, body, checks and children, as attn seed guide describes."}},
@@ -265,6 +270,22 @@ type DelegateRolesRollbackArgs struct {
 }
 
 type ListArgs struct {
+}
+
+type ReviewStartArgs struct {
+	Document   string `json:"document,omitempty"`
+	Base       string `json:"base,omitempty"`
+	Repository string `json:"repository,omitempty"`
+}
+
+type ReviewCheckArgs struct {
+	Document string `json:"document,omitempty"`
+}
+
+type ReviewAnswerArgs struct {
+	Question string `json:"question,omitempty"`
+	Document string `json:"document,omitempty"`
+	Text     string `json:"text,omitempty"`
 }
 
 type SeedSearchArgs struct {

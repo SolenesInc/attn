@@ -3979,15 +3979,6 @@ model ReviewProblem {
   message: string;               // what is wrong and the fix
 }
 
-// Takes a fresh head for a review document and writes frame, repository,
-// base and head into its frontmatter, creating the document when it is missing.
-@extension("x-on", #{ here: true })
-model ReviewStartMessage {
-  cmd: "review_start";
-  document: string;
-  repository: string;            // a directory inside the repository under review
-  base?: string;
-}
 
 model ReviewStartResult {
   document: string;
@@ -4003,9 +3994,9 @@ model ReviewLeftOut {
   reason: string;
 }
 
-@extension("x-on", #{ here: true })
-model ReviewCheckMessage {
-  cmd: "review_check";
+
+model ReviewAnswerResult {
+  question: string;
   document: string;
 }
 
@@ -4096,15 +4087,6 @@ model ReviewSentMessage {
   document: string;
 }
 
-// An agent's answer to the user's question on a review, stored on the
-// question in the document's draft. Sent by `attn review answer`.
-@extension("x-on", #{ home: true })
-model ReviewAnswerMessage {
-  cmd: "review_answer";
-  document: string;
-  annotation_id: string;
-  text: string;
-}
 
 // Definition, uses or type of the name at a position in a review's file,
 // answered by a language server on the machine that holds it.
@@ -7508,8 +7490,6 @@ model Response {
   repos?: RepoState[];
   authors?: AuthorState[];
   journal_append_result?: JournalAppendResult;
-  review_start_result?: ReviewStartResult;
-  review_check_result?: ReviewCheckResult;
   code_nav_check_result?: CodeNavCheckResult;
   code_nav_status_result?: CodeNavStatusResult;
   code_nav_link_result?: CodeNavLinkResult;

@@ -2,14 +2,13 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/command"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/review"
@@ -29,40 +28,52 @@ func (d *Daemon) resolveReview(ctx context.Context, document, content string) (p
 	})
 }
 
-func (d *Daemon) handleReviewStart(ctx context.Context, conn net.Conn, msg *protocol.ReviewStartMessage) {
-	if !d.on(setting.CodeReviewEnabled) {
-		d.sendError(conn, reviewOff())
-		return
+func (d *Daemon) reviewCommands() map[string]command.Handler {
+	return map[string]command.Handler{
+		"review start":  command.Typed(d.runReviewStart),
+		"review check":  command.Typed(d.runReviewCheck),
+		"review answer": command.Typed(d.runReviewAnswer),
 	}
-	document := filepath.Clean(msg.Document)
-	result, err := gitValue(ctx, d.gitExecution(), reviewTask, func(ctx context.Context, client *attngit.Client) (protocol.ReviewStartResult, error) {
-		return review.Start(ctx, client, document, msg.Repository, protocol.Deref(msg.Base))
-	})
-	if err != nil {
-		d.sendError(conn, fmt.Sprintf("review start: %v", err))
-		return
-	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, ReviewStartResult: &result})
-	d.warmCodeNavigation(document)
 }
 
-func (d *Daemon) handleReviewCheck(ctx context.Context, conn net.Conn, msg *protocol.ReviewCheckMessage) {
+func reviewOffRefusal() error {
+	return command.Refuse(command.CodeReviewOff, "%s", reviewOff())
+}
+
+func (d *Daemon) runReviewStart(ctx context.Context, c command.Caller, a command.ReviewStartArgs) (any, error) {
 	if !d.on(setting.CodeReviewEnabled) {
-		d.sendError(conn, reviewOff())
-		return
+		return nil, reviewOffRefusal()
 	}
-	document := filepath.Clean(msg.Document)
+	repository := a.Repository
+	if repository == "" {
+		if row := d.store.Get(c.Session); row != nil {
+			repository = row.Directory
+		}
+	}
+	document := filepath.Clean(a.Document)
+	result, err := gitValue(ctx, d.gitExecution(), reviewTask, func(ctx context.Context, client *attngit.Client) (protocol.ReviewStartResult, error) {
+		return review.Start(ctx, client, document, repository, a.Base)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("review start: %w", err)
+	}
+	return command.Then{Result: result, After: func() { d.warmCodeNavigation(document) }}, nil
+}
+
+func (d *Daemon) runReviewCheck(ctx context.Context, c command.Caller, a command.ReviewCheckArgs) (any, error) {
+	if !d.on(setting.CodeReviewEnabled) {
+		return nil, reviewOffRefusal()
+	}
+	document := filepath.Clean(a.Document)
 	content, err := readMarkdownFile(document)
 	if err != nil {
-		d.sendError(conn, fmt.Sprintf("review check: %v", err))
-		return
+		return nil, fmt.Errorf("review check: %w", err)
 	}
 	bundle, err := d.resolveReview(ctx, document, content)
 	if err != nil {
-		d.sendError(conn, fmt.Sprintf("review check: %v", err))
-		return
+		return nil, fmt.Errorf("review check: %w", err)
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, ReviewCheckResult: &protocol.ReviewCheckResult{Problems: bundle.Problems}})
+	return protocol.ReviewCheckResult{Problems: bundle.Problems}, nil
 }
 
 func (d *Daemon) reviewDocumentHere(document string) (string, error) {
@@ -135,35 +146,33 @@ func (d *Daemon) markReviewSent(ctx context.Context, msg protocol.ReviewSentMess
 	})
 }
 
-func (d *Daemon) handleReviewAnswer(ctx context.Context, conn net.Conn, msg *protocol.ReviewAnswerMessage) {
+func (d *Daemon) runReviewAnswer(ctx context.Context, c command.Caller, a command.ReviewAnswerArgs) (any, error) {
 	if !d.on(setting.CodeReviewEnabled) {
-		d.sendError(conn, reviewOff())
-		return
+		return nil, reviewOffRefusal()
 	}
-	text := strings.TrimSpace(msg.Text)
+	if a.Document == "" {
+		return nil, command.Usage("{document} <document> is required")
+	}
+	text := strings.TrimSpace(a.Text)
 	if text == "" {
-		d.sendError(conn, "review answer: the answer is empty. Pass it with -m \"<answer>\"")
-		return
+		return nil, command.Usage("the answer is empty. Pass it with {text} \"<answer>\"")
 	}
-	if !filepath.IsAbs(msg.Document) {
-		d.sendError(conn, fmt.Sprintf("review answer: the document path must be absolute: %s", msg.Document))
-		return
+	if !filepath.IsAbs(a.Document) {
+		return nil, command.Usage("the document path must be absolute: %s", a.Document)
 	}
-	key := store.HostPath{Path: filepath.Clean(msg.Document)}
+	key := store.HostPath{Path: filepath.Clean(a.Document)}
 	if origin, remote := OriginOf(ctx); remote {
 		key.Host = origin.Host
 	}
-	generation, err := d.store.AnswerMarkdownQuestion(key, msg.AnnotationID, text, time.Now())
+	generation, err := d.store.AnswerMarkdownQuestion(key, a.Question, text, time.Now())
 	if errors.Is(err, store.ErrNoQuestion) {
-		d.sendError(conn, fmt.Sprintf("review answer: %s has no open question %s. The user may have removed it or sent the review", key.Path, msg.AnnotationID))
-		return
+		return nil, command.Refuse(command.CodeNoQuestion, "%s has no open question %s. The user may have removed it or sent the review", key.Path, a.Question)
 	}
 	if err != nil {
-		d.sendError(conn, fmt.Sprintf("review answer: %v", err))
-		return
+		return nil, fmt.Errorf("review answer: %w", err)
 	}
 	d.annotationsChanged(key, generation)
-	d.sendOK(conn)
+	return protocol.ReviewAnswerResult{Question: a.Question, Document: key.Path}, nil
 }
 
 func (d *Daemon) editReviewFile(_ context.Context, msg protocol.ReviewEditMessage) (protocol.ReviewEditResultMessage, error) {
