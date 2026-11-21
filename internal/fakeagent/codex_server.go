@@ -1310,7 +1310,10 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		}
 		started := time.Now().UTC()
 		t := s.newThread(id.String(), parent.c.cwd, parent.c.model, codexRolloutPath(filepath.Join(s.cfg.CodexHome, "sessions"), id.String(), started), "subagent", started, nil)
-		t.parent, t.subscribers, t.config = p.ThreadID, map[*codexServerConn]bool{}, parent.config
+		s.mu.Lock()
+		inherited := parent.config
+		s.mu.Unlock()
+		t.parent, t.subscribers, t.config = p.ThreadID, map[*codexServerConn]bool{}, inherited
 		if err := s.write(t); err != nil {
 			return nil, err
 		}

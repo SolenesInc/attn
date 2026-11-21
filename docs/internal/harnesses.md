@@ -34,10 +34,9 @@ conversation instead: a hook by the `session_id` on its stdin, a command by
 `/side` conversation has no session of its own: attn sets `ATTN_TERMINAL_ID` on
 its shell tools and gives it its terminal's credential for the tools, so its
 commands and tool calls act as the session of the terminal that shows it, and
-its hooks resolve to no session. Sigma runs
-commands in its server, and names the conversation people started by
-`SIGMA_ROOT_CONVERSATION`. Native harness conversation ids remain separate text
-values.
+its hooks resolve to no session. Sigma runs commands in its server, and names
+the conversation people started by `SIGMA_ROOT_CONVERSATION`. Native harness
+conversation ids remain separate text values.
 
 A session is attn's record of one conversation in one profile. A terminal
 shows one session at a time, and a session can show in any number of

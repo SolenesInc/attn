@@ -796,8 +796,7 @@ func (r *codexShared) prepare(connection context.Context, v *codexView, m *codex
 	if config == nil {
 		config = make(map[string]any)
 	}
-	r.capContext(config, sessionID)
-	offerAgentTools(config, r.d.sharedCodexAgentTools(v.profile))
+	r.loadConfig(config, sessionID, v.profile)
 	if _, bound := r.d.crewMemberForSession(sessionID); bound {
 		config["features.memories"] = false
 		config["memories.generate_memories"] = false
@@ -971,10 +970,9 @@ func (r *codexShared) capContext(config map[string]any, sessionID protocol.Sessi
 	}
 }
 
-func (r *codexShared) serves(profile string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.servers[profile] != nil
+func (r *codexShared) loadConfig(config map[string]any, sessionID protocol.SessionID, profile string) {
+	r.capContext(config, sessionID)
+	offerAgentTools(config, r.d.sharedCodexAgentTools(profile))
 }
 
 func offerAgentTools(config map[string]any, tools *agentdriver.AgentTools) {

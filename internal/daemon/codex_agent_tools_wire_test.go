@@ -8,6 +8,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestSharedCodexConversationsCallAttnToolsAsTheSessionThatShowsThem(t *testing.T) {
@@ -132,5 +134,30 @@ func TestASharedCodexCallThatNamesNoConversationOfItsProfileIsRefusedNamingIt(t 
 	}
 	if len(notes.Notes) != 0 {
 		t.Errorf("a refused call wrote a note: %+v", notes.Notes[0])
+	}
+}
+
+func TestAHiddenSharedCodexConversationThatAttnWakesKeepsItsAttnTools(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	seed := plantForTools(t, w)
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	conversation := codex.ConversationID
+	moveOn(t, app, codex, terminal, "/new", "add a discount field")
+	codex.Reply("Added. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+
+	if got := submitSessionAnnotationFeedback(app, checkout, sessionAnnotationFeedback); !got.success {
+		t.Fatalf("feedback to the hidden session = %+v", got)
+	}
+	server := w.CodexServer()
+	server.Prompted(conversation)
+	result := server.CallTool(conversation, "attn-core", "seed_note", map[string]any{"seed": seed, "text": "Woken by feedback."})
+	if result.IsError {
+		t.Fatalf("seed_note from the woken conversation %s was refused: %s", conversation, result.Text)
+	}
+	if author, _ := newestNoteAuthor(t, w, seed); author != checkout {
+		t.Errorf("seed_note from the woken conversation of %s is by %s", checkout, author)
 	}
 }

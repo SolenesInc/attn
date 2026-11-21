@@ -28,13 +28,11 @@ Read in the source at openai/codex 60947e2341.
   `notifications/initialized` and `tools/list`, and no GET (probed on 0.171.0
   with `codex exec`; captures on `s-vadq83`). `bearer_token_env_var` names the
   environment variable that holds the bearer token, and
-  `default_tools_approval_mode = "approve"` runs the server's tools without
-  asking.
-- `-c mcp_servers.<name>.http_headers.Authorization="Bearer ..."` sends that
-  header on every request, and with `default_tools_approval_mode = "approve"`
-  a direct call runs under `approval: never`. A subagent spawned with the
-  multi-agent tools calls with the same header (probed on 0.171.0 with
-  `codex exec` and a real model; seed `s-z7cfmc`).
+  `http_headers.Authorization="Bearer ..."` sends that header on every request.
+  With `default_tools_approval_mode = "approve"` the server's tools run without
+  asking, for a direct call and for a subagent spawned with the multi-agent
+  tools, which calls with the same header (probed on 0.171.0 with `codex exec`
+  and a real model; seed `s-z7cfmc`).
 - Hooks run in the process that runs the turn. For a PTY launch, that process
   is the terminal's own Codex process, so `ATTN_TERMINAL_ID` names the terminal
   (older launches use `ATTN_SESSION_ID` with the same meaning). For a

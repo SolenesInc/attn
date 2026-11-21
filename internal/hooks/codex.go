@@ -35,10 +35,7 @@ type CodexSetting struct {
 }
 
 func (s CodexSetting) Override() string {
-	value, err := json.Marshal(s.Value)
-	if err != nil {
-		panic(fmt.Sprintf("codex setting %s: %v", s.Key, err))
-	}
+	value, _ := json.Marshal(s.Value)
 	return s.Key + "=" + string(value)
 }
 

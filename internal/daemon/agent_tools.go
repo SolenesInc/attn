@@ -102,9 +102,6 @@ func (d *Daemon) agentCaller(token string, header http.Header) (*agentCall, erro
 		return nil, err
 	}
 	if profile, ok := strings.CutPrefix(credential.name, sharedCodexServerPrefix); ok && credential.kind == credentialServer {
-		if !d.codexShared().serves(profile) {
-			return nil, fmt.Errorf("profile %s runs no shared Codex", profile)
-		}
 		return &agentCall{who: "shared Codex of profile " + profile, named: func(meta json.RawMessage) (command.Caller, string, *command.Refusal) {
 			return d.sharedCodexCaller(profile, meta)
 		}}, nil
