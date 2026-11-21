@@ -2,7 +2,7 @@
 
 The garden is where work lives, inside your session's profile. Seeds belong to their planting profile for life. Lists, relationships, claims and delegations stay in that profile. Outside attn, seed commands require `--profile <name|id>` when several profiles exist.
 
-The garden section of your launch prompt, which `attn seed prime` prints again, teaches ids and slugs, the user's words for garden things, when to plant and the loop. This reference holds the rules that span commands. Each section lists its commands; `attn seed <command> --help` gives a command's flags, its full behavior and examples. Before you write a plot, read `attn seed guide` for body authoring, a complete plot example and completion checks.
+Every command prints a seed as `id  slug  title`. The garden section of your launch prompt teaches ids and slugs, the user's words for garden things and when to plant. `attn seed prime` prints it again with the loop of commands. This reference holds the rules that span commands. Each section lists its commands; `attn seed <command> --help` gives a command's flags, its full behavior and examples. Before you write a plot, read `attn seed guide` for body authoring, a complete plot example and completion checks.
 
 ## Planting work
 

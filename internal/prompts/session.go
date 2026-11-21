@@ -99,7 +99,9 @@ var (
 		delegationBoundary)
 	quickCaptureGuidance = Use("session.quick-capture-guidance", "content/session/quick-capture.md")
 	crewCleared          = Use("crew.cleared", "content/crew/cleared.md")
-	gardenGuidance       = Use("session.garden", "content/garden.md")
+	gardenRules          = Use("session.garden", "content/garden.md")
+	gardenCLI            = Use("session.garden-cli", "content/garden-cli.md")
+	gardenGuidance       = Compose(gardenRules, gardenCLI)
 	queueGuidance        = Use("session.queue", "content/session/queue.md")
 	attnMap              = attnMapNode(false)
 	launchAttnMap        = attnMapNode(true)
@@ -122,7 +124,7 @@ var session = Recipient{
 				When(Present(crewPriming), Compose(crewCleared, Input(crewPriming), quickCaptureGuidance)),
 				launchAttnMap,
 				agentGuidance,
-				When(Enabled(gardenAvailable), cliTeaching(gardenGuidance, "seed")),
+				When(Enabled(gardenAvailable), Compose(gardenRules, cliTeaching(gardenCLI, "seed"))),
 				cliTeaching(queueGuidance, "turn", "agent"),
 				When(Enabled(asksEnabled), cliTeaching(askGuidance, "ask")),
 				When(Enabled(ventEnabled), cliTeaching(ventGuidance, "vent")),

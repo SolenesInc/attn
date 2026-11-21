@@ -30,9 +30,7 @@ groups:
         - {need: "Change a seed's body, checks, files or reminders", tools: [seed_edit, seed_check_add, seed_attach, seed_remind]}
         - {need: "Wait for a time, a pull request or another seed, with your session closed", tools: [seed_standby]}
       notes: |
-        A seed is one unit of work in the garden, with an id like s-7k3f9m, a slug made of its title's words, a markdown body, checks (C1, C2) and a log. A plot is a seed with children. Tools take the id or the slug. Give other agents the id, because a slug two seeds share is refused. To the user, say the slug.
-
-        Track work that outlives this turn in seeds, not in TODO lists: they end with the session. Search before you plant, and plant before you start. Write every body as a work prompt for an agent who has not seen this conversation. Harvest a seed when the outcome and the verification its body asks for are complete.
+        Tools take a seed's id or its slug. Besides its body, a seed has checks (C1, C2) and a log.
 
         An update about a seed asks you to read what changed, not to act. Act only when the update needs you or the user.
     reference:
@@ -41,7 +39,7 @@ groups:
       intro: |
         The garden is where work lives, inside your session's profile. Seeds belong to their planting profile for life. Lists, relationships, claims and delegations stay in that profile. Outside attn, seed commands require `--profile <name|id>` when several profiles exist.
 
-        The garden section of your launch prompt, which `attn seed prime` prints again, teaches ids and slugs, the user's words for garden things, when to plant and the loop. This reference holds the rules that span commands. Each section lists its commands; `attn seed <command> --help` gives a command's flags, its full behavior and examples. Before you write a plot, read `attn seed guide` for body authoring, a complete plot example and completion checks.
+        Every command prints a seed as `id  slug  title`. The garden section of your launch prompt teaches ids and slugs, the user's words for garden things and when to plant. `attn seed prime` prints it again with the loop of commands. This reference holds the rules that span commands. Each section lists its commands; `attn seed <command> --help` gives a command's flags, its full behavior and examples. Before you write a plot, read `attn seed guide` for body authoring, a complete plot example and completion checks.
     sections:
       - title: Planting work
         commands: [seed search, seed plant]

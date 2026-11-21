@@ -537,23 +537,33 @@
                 },
                 "children": [
                   {
-                    "kind": "choose",
-                    "condition": {
-                      "field": {
-                        "name": "agent_tools",
-                        "kind": "flag",
-                        "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
-                      },
-                      "test": "enabled"
-                    },
+                    "kind": "compose",
                     "children": [
-                      {
-                        "kind": "compose"
-                      },
                       {
                         "kind": "text",
                         "id": "session.garden",
                         "source": "content/garden.md"
+                      },
+                      {
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.garden-cli",
+                            "source": "content/garden-cli.md"
+                          }
+                        ]
                       }
                     ]
                   }
@@ -852,9 +862,19 @@
           "delivery": "message_fragment",
           "description": "Garden instructions.",
           "body": {
-            "kind": "text",
-            "id": "session.garden",
-            "source": "content/garden.md"
+            "kind": "compose",
+            "children": [
+              {
+                "kind": "text",
+                "id": "session.garden",
+                "source": "content/garden.md"
+              },
+              {
+                "kind": "text",
+                "id": "session.garden-cli",
+                "source": "content/garden-cli.md"
+              }
+            ]
           }
         },
         {
@@ -7414,5 +7434,5 @@
       ]
     }
   ],
-  "definitions_hash": "885d4cdfab5322f500d3b72573c2f79ed1bc3c5d27a989337aa861072e4bd4eb"
+  "definitions_hash": "86b8bc5093f9286deb26519cb55a74969ca99830deb8eff5b6dfc821c63568fb"
 }

@@ -10,6 +10,14 @@ import (
 
 const seedCLITeaching = "`attn seed standby`"
 
+var gardenRulesNoToolTeaches = []string{
+	"Never make the user decode an id.",
+	"When the user uses one of those Jira words",
+	"Do not use markdown TODO lists or your harness's todo tool",
+	"Before your turn ends, plant the work that is still undone.",
+	"`--discovered-from <seed>`",
+}
+
 func TestALaunchThatCarriesTheToolsLeavesTheirFamiliesCLITeachingToTheServer(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app := w.App()
@@ -42,12 +50,12 @@ func TestALaunchThatCarriesTheToolsLeavesTheirFamiliesCLITeachingToTheServer(t *
 		if dropped := !strings.Contains(text, hooks.GardenGuidance()) && !strings.Contains(text, seedCLITeaching); dropped != taught {
 			t.Errorf("%s left out the seed family's CLI teaching: %t, want %t, because its launch carries the tools: %t:\n%s", launch, dropped, taught, taught, text)
 		}
-		for _, kept := range []string{agentGuidanceLead, "## What attn can do"} {
+		for _, kept := range append([]string{agentGuidanceLead, "## What attn can do"}, gardenRulesNoToolTeaches...) {
 			if !strings.Contains(text, kept) {
 				t.Errorf("%s launched without %q, which no tool teaches yet", launch, kept)
 			}
 		}
-		if dropped := !strings.Contains(text, "`attn agent msg`"); dropped != taught {
+		if dropped := !strings.Contains(text, "Use `attn agent msg` to reach sessions attn runs."); dropped != taught {
 			t.Errorf("%s left out the agent and session families' CLI teaching: %t, want %t:\n%s", launch, dropped, taught, text)
 		}
 	}
