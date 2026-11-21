@@ -44,6 +44,23 @@ func TestTheAskToolsOpenListShowAndCloseAnAskWithItsImages(t *testing.T) {
 	}
 	s.shapes.call("ask_close", map[string]any{"ask": askWith(map[string]any{"markdown": "Absolute: ![before](" + shotPath + ")" + askQuestion}).ID})
 
+	after := bytes.Repeat([]byte("new"), 300)
+	afterPath := filepath.Join(s.w.Path("shop"), "shots", "after.png")
+	if err := os.WriteFile(afterPath, after, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var amended protocol.Ask
+	structuredAs(t, s.shapes.call("ask_amend", map[string]any{"ask": asked.ID, "markdown": "Moved the tabs down:\n\n![after](shots/after.png)"}), &amended)
+	if last := amended.Parts[len(amended.Parts)-1]; last.AmendedAt == nil || !strings.Contains(protocol.Deref(last.Markdown), "Moved the tabs down") {
+		t.Errorf("ask_amend answered the parts %+v, want the amendment last with its time", amended.Parts)
+	}
+	requestID := "ask-image-amended"
+	image := testworld.Request(s.app, protocol.AskImageMessage{Cmd: protocol.CmdAskImage, RequestID: requestID, AskID: asked.ID, Path: afterPath},
+		protocol.EventAskImageResult, func(r protocol.AskImageResultMessage) bool { return r.RequestID == requestID })
+	if got, _ := base64.StdEncoding.DecodeString(protocol.Deref(image.DataBase64)); !image.Success || !bytes.Equal(got, after) {
+		t.Errorf("the home shows %d bytes for the amendment's image (%v), want its %d", len(got), protocol.Deref(image.Error), len(after))
+	}
+
 	var listed protocol.AskListResult
 	structuredAs(t, s.shapes.call("ask_list", map[string]any{}), &listed)
 	if len(listed.Asks) != 1 || listed.Asks[0].ID != asked.ID {

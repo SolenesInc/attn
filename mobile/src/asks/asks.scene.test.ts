@@ -13,7 +13,7 @@ import {
   type Model,
 } from '../main'
 import type { Pairing } from '../pairing'
-import type { PhoneAsk, Question } from './ask'
+import type { Part, PhoneAsk, Question } from './ask'
 
 const personal: Pairing = {
   id: 'mac/p-personal',
@@ -92,13 +92,13 @@ const choiceQuestion: Question = {
 const ask = (
   id: string,
   minutesAgo: number,
-  parts: PhoneAsk['parts'],
+  parts: ReadonlyArray<Omit<Part, 'amendedAt'> & { readonly amendedAt?: number }>,
   subject = 'Which store?',
 ): PhoneAsk => ({
   id,
   sessionId: 's1',
   subject,
-  parts,
+  parts: parts.map((part) => ({ amendedAt: null, ...part })),
   createdAt: now - minutesAgo * 60_000,
   seedSlug: 'cache-store',
   seedTitle: 'Cache store',
@@ -459,6 +459,30 @@ describe('asks on the phone', () => {
       { update, view },
       Scene.given(opened(model)),
       Scene.expect(Scene.text('Not sent: Mac went offline')).toExist(),
+    )
+  })
+
+  it('shows what the agent added to an open ask as an update after its questions', () => {
+    const asked = ask('a-amended', 30, [
+      { markdown: 'Deploys empty the cache.', question: null },
+      { markdown: null, question: choiceQuestion },
+    ])
+    const amended = {
+      ...asked,
+      parts: [
+        ...asked.parts,
+        { markdown: 'Redis is already running in staging.', question: null, amendedAt: now - 2 * 60_000 },
+      ],
+    }
+    Scene.scene(
+      { update, view },
+      Scene.given(online(personal)),
+      arrive(personal, [asked]),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      Scene.expect(Scene.testId('ask-amendment')).not.toExist(),
+      arrive(personal, [amended]),
+      Scene.expect(Scene.testId('ask-amendment')).toContainText('Updated 2m ago'),
+      Scene.expect(Scene.testId('ask-amendment')).toContainText('Redis is already running in staging.'),
     )
   })
 

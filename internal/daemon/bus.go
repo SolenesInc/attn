@@ -87,8 +87,9 @@ const (
 	FactAutomationChanged = "automation.changed"
 	FactTaskChanged       = "task.changed"
 
-	FactAskOpened = "ask.opened"
-	FactAskClosed = "ask.closed"
+	FactAskOpened  = "ask.opened"
+	FactAskClosed  = "ask.closed"
+	FactAskAmended = "ask.amended"
 
 	FactVentChanged = "vent.changed"
 
@@ -400,7 +401,7 @@ func buildWireProjections() []projection {
 			},
 		},
 		{
-			filter: bus.Filter{FactAskOpened, FactAskClosed},
+			filter: bus.Filter{FactAskOpened, FactAskAmended, FactAskClosed},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectAsks() },
 		},
 		{

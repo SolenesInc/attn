@@ -128,6 +128,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdCodeNav:                    commandMetadata(false, false),
 	protocol.CmdCodeNavSetup:               commandMetadata(false, true),
 	protocol.CmdAskOpen:                    commandMetadata(false, true),
+	protocol.CmdAskAmend:                   commandMetadata(false, true),
 	protocol.CmdAskAnswer:                  commandMetadata(false, true),
 	protocol.CmdAskImage:                   commandMetadata(false, false),
 	protocol.CmdAskSeedMentions:            commandMetadata(false, false),

@@ -25,6 +25,7 @@ func (d *Daemon) askCommands() map[string]command.Handler {
 		"ask show": command.Typed(func(_ context.Context, c command.Caller, a command.AskShowArgs) (any, error) {
 			return d.askShow(c.Session, a.Ask)
 		}),
+		"ask amend": command.Typed(d.runAskAmend),
 		"ask close": command.Typed(func(_ context.Context, c command.Caller, a command.AskCloseArgs) (any, error) {
 			return d.askClose(c.Session, a.Ask, a.Reason)
 		}),
@@ -57,7 +58,30 @@ func (d *Daemon) runAsk(_ context.Context, c command.Caller, a command.AskArgs) 
 	if d.enrollmentStatus().IsHome() {
 		return d.askOpen(&msg)
 	}
-	return d.askOpenOnHome(msg)
+	return d.askOnHome(msg, msg.SessionID, func(reply protocol.Response) *protocol.Ask { return reply.AskOpenResult })
+}
+
+func (d *Daemon) runAskAmend(_ context.Context, c command.Caller, a command.AskAmendArgs) (any, error) {
+	if strings.TrimSpace(a.Markdown) == "" {
+		return nil, command.Usage("the amendment has no markdown; write it in {markdown}")
+	}
+	baseDir, err := d.askBaseDir(c, a.BaseDir)
+	if err != nil {
+		return nil, err
+	}
+	parts, err := ask.Parse(a.Markdown, d.clock.Now())
+	if err != nil {
+		return nil, err
+	}
+	images, err := readAskImages(ask.ImagePaths(parts, baseDir))
+	if err != nil {
+		return nil, err
+	}
+	msg := protocol.AskAmendMessage{Cmd: protocol.CmdAskAmend, SessionID: c.Session, AskID: strings.TrimSpace(a.Ask), Markdown: a.Markdown, BaseDir: baseDir, Images: images}
+	if d.enrollmentStatus().IsHome() {
+		return d.askAmend(&msg)
+	}
+	return d.askOnHome(msg, msg.SessionID, func(reply protocol.Response) *protocol.Ask { return reply.AskAmendResult })
 }
 
 func (d *Daemon) askBaseDir(c command.Caller, given string) (string, error) {
@@ -97,13 +121,13 @@ func readAskImages(paths []string) ([]protocol.AskImage, error) {
 	return images, nil
 }
 
-func (d *Daemon) askOpenOnHome(msg protocol.AskOpenMessage) (protocol.Ask, error) {
+func (d *Daemon) askOnHome(msg any, sessionID protocol.SessionID, result func(protocol.Response) *protocol.Ask) (protocol.Ask, error) {
 	frame, err := json.Marshal(msg)
 	if err != nil {
 		return protocol.Ask{}, err
 	}
 	var out bytes.Buffer
-	if err := d.router().Forward(append(frame, '\n'), msg.SessionID, nil, &out); err != nil {
+	if err := d.router().Forward(append(frame, '\n'), sessionID, nil, &out); err != nil {
 		return protocol.Ask{}, err
 	}
 	var reply protocol.Response
@@ -118,8 +142,8 @@ func (d *Daemon) askOpenOnHome(msg protocol.AskOpenMessage) (protocol.Ask, error
 	if refusal := reply.CommandRefusal; refusal != nil && !reply.Ok {
 		return protocol.Ask{}, &command.Refusal{Code: refusal.Code, Message: refusal.Message, Fix: protocol.Deref(refusal.Fix)}
 	}
-	if !reply.Ok || reply.AskOpenResult == nil {
+	if !reply.Ok || result(reply) == nil {
 		return protocol.Ask{}, errors.New(protocol.Deref(reply.Error))
 	}
-	return *reply.AskOpenResult, nil
+	return *result(reply), nil
 }

@@ -275,7 +275,15 @@ export const askScreen = <Message>(
     : ask.parts.map((part) =>
         part.question
           ? questionCard(ask, row.from, part.question, ++index, open, now, mentionActions, h)
-          : renderMarkdown(part.markdown ?? '', mentionActions, h),
+          : part.amendedAt === null
+            ? renderMarkdown(part.markdown ?? '', mentionActions, h)
+            : h.section(
+                [h.Class('amendment'), h.DataAttribute('testid', 'ask-amendment')],
+                [
+                  h.p([h.Class('muted')], [`Updated ${age(part.amendedAt, now)} ago`]),
+                  renderMarkdown(part.markdown ?? '', mentionActions, h),
+                ],
+              ),
       )
   const sendable = !ask.reply && !ask.tooLarge && draftSendable(ask, open.draft) && !open.sending && row.live
   return h.article(

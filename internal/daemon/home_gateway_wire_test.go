@@ -661,3 +661,29 @@ func TestHomeGatewayReadsTheHTMLImageAPhoneNames(t *testing.T) {
 		})
 	})
 }
+
+func TestHomeGatewayShowsAnAmendmentAsAPartWithItsTime(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "phone_access_enabled", "true")
+	setSetting(t, app, "asks_enabled", "true")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(asker)
+	phone := connectPhone(t, w, "phone", app.SelectedProfile())
+	phone.welcomed()
+	asked, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "", w.Path("shop"))
+	if err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	phone.showsAsks(func(asks []homegateway.HomeGatewayAsk) bool { return len(asks) == 1 })
+	if _, err := cli.AskAmend(protocol.SessionID(asker), asked.ID, "Redis already runs in staging.", w.Path("shop")); err != nil {
+		t.Fatalf("amend: %v", err)
+	}
+	asks := phone.showsAsks(func(asks []homegateway.HomeGatewayAsk) bool { return len(asks) == 1 && len(asks[0].Parts) == 3 })
+	if part := asks[0].Parts[2]; protocol.Deref(part.Markdown) != "Redis already runs in staging." || part.AmendedAt == nil || part.Question != nil {
+		t.Fatalf("the phone shows the last part %+v, want the amendment with its time", part)
+	}
+	if asks[0].Parts[1].Question == nil || asks[0].Parts[1].Question.Key != "q1" {
+		t.Fatalf("the phone shows the question %+v, want it still q1", asks[0].Parts[1].Question)
+	}
+}

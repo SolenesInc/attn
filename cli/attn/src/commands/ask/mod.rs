@@ -39,7 +39,7 @@ fn read_ask(parsed: &Parsed) -> Result<(String, String), String> {
         .map_err(|error| crate::paths::os_error_text(&error))?;
     let markdown = String::from_utf8_lossy(&raw).into_owned();
     if markdown.trim().is_empty() {
-        return Err("pipe the ask's markdown on stdin, or pass --file".to_string());
+        return Err("pipe the markdown on stdin, or pass --file".to_string());
     }
     let folder = super::absolute(".").map_err(|error| crate::paths::os_error_text(&error))?;
     Ok((markdown, folder))
@@ -155,7 +155,25 @@ fn shown(result: &AskShowResult) -> String {
         );
     }
     let _ = writeln!(out, "\n{}", result.markdown.trim_end_matches('\n'));
+    for part in &ask.parts {
+        if let (Some(at), Some(markdown)) = (&part.amended_at, &part.markdown) {
+            let _ = writeln!(
+                out,
+                "\nUpdated {}:\n{}",
+                at,
+                markdown.trim_end_matches('\n')
+            );
+        }
+    }
     out
+}
+
+fn amended(ask: &OpenAsk) -> String {
+    format!(
+        "Amended {}: {}. The user sees the update in the ask, and keeps its place and their answer so far.\n",
+        ask.id,
+        quote(ask.subject.as_bytes())
+    )
 }
 
 impl Family for Ask {
@@ -206,7 +224,7 @@ impl Family for Ask {
                 "no session — pass --session <id>, or run inside an attn session",
             ));
         }
-        if cmd.name.is_empty() {
+        if cmd.name.is_empty() || cmd.name == "amend" {
             let (markdown, folder) = read_ask(parsed).map_err(|message| self.fail("", &message))?;
             parsed
                 .args
@@ -240,6 +258,7 @@ impl Family for Ask {
         let text = match cmd.name {
             "list" => listed(&command::decode(run, self, cmd, &result)?),
             "show" => shown(&command::decode(run, self, cmd, &result)?),
+            "amend" => amended(&command::decode(run, self, cmd, &result)?),
             "close" => {
                 let closed: AskCloseResult = command::decode(run, self, cmd, &result)?;
                 format!("Withdrew {}.\n", closed.id)

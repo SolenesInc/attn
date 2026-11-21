@@ -109,6 +109,73 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AskOpenResult: &opened})
 }
 
+func (d *Daemon) askAmend(msg *protocol.AskAmendMessage) (protocol.Ask, error) {
+	shown, _, err := d.reachableOpenAsk(protocol.TrimID(msg.SessionID), msg.AskID)
+	if err != nil {
+		return protocol.Ask{}, err
+	}
+	if strings.TrimSpace(msg.Markdown) == "" {
+		return protocol.Ask{}, protocol.Refuse(protocol.RefusalInvalidInput, "the amendment has no markdown; write what changed")
+	}
+	parts, err := ask.Parse(msg.Markdown, d.clock.Now())
+	if err != nil {
+		return protocol.Ask{}, err
+	}
+	if len(ask.Questions(parts)) > 0 {
+		return protocol.Ask{}, protocol.Refuse(protocol.RefusalInvalidInput, "an amendment adds markdown and cannot hold a question block, so %s keeps the questions the user is answering; to ask something new, open another ask with `{attn ask}`", shown.stored.ID)
+	}
+	if !slices.Equal(ask.ImagePaths(parts, msg.BaseDir), ask.ImagePaths(parts, shown.stored.BaseDir)) {
+		return protocol.Ask{}, protocol.Refuse(protocol.RefusalInvalidInput, "the user's view resolves the ask's images against %s, where %s was opened; name each image of the amendment by its absolute path", shown.stored.BaseDir, shown.stored.ID)
+	}
+	held := len(shown.stored.Markdown)
+	for _, amendment := range shown.stored.Amendments {
+		held += len(amendment.Markdown)
+	}
+	if held+len(msg.Markdown) > ask.MaxMarkdownBytes {
+		return protocol.Ask{}, protocol.Refuse(protocol.RefusalInvalidInput, "an ask holds at most %d KiB of markdown, its amendments included; %s holds %d bytes, and this amendment adds %d. Close it and open another ask",
+			ask.MaxMarkdownBytes>>10, shown.stored.ID, held, len(msg.Markdown))
+	}
+	images, err := parseAskImages(msg.Images)
+	if err != nil {
+		return protocol.Ask{}, err
+	}
+	if err := refuseImagesPastTheAsksLimit(shown.stored.ID, images); err != nil {
+		return protocol.Ask{}, err
+	}
+	for _, image := range images {
+		if err := writeAskImage(shown.stored.ID, image); err != nil {
+			return protocol.Ask{}, fmt.Errorf("keep the amendment's images: %v", err)
+		}
+	}
+	err = d.store.AmendAsk(shown.stored.ID, msg.Markdown, d.clock.Now())
+	if errors.Is(err, store.ErrAskNotOpen) {
+		d.forgetAskImages([]string{shown.stored.ID})
+		return protocol.Ask{}, errAskGone
+	}
+	if err != nil {
+		return protocol.Ask{}, err
+	}
+	d.publishFact(FactAskAmended, shown.stored.ID, nil)
+	stored, err := d.store.GetAsk(shown.stored.ID)
+	if err != nil {
+		return protocol.Ask{}, err
+	}
+	amended, err := d.readAsk(stored)
+	if err != nil {
+		return protocol.Ask{}, err
+	}
+	return amended.wire, nil
+}
+
+func (d *Daemon) handleAskAmend(conn net.Conn, msg *protocol.AskAmendMessage) {
+	amended, err := d.askAmend(msg)
+	if err != nil {
+		_ = json.NewEncoder(conn).Encode(command.Response(nil, command.AsRefusal(err)))
+		return
+	}
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AskAmendResult: &amended})
+}
+
 func (d *Daemon) askAddressOf(session *protocol.Session, ref string) (who.Address, error) {
 	seedID := ref
 	if ref != "" {
@@ -534,6 +601,9 @@ func (d *Daemon) describeAsk(a store.Ask, parts []protocol.AskPart) (shownAsk, e
 		CreatedAt: a.CreatedAt,
 		Reply:     a.Reply,
 	}}
+	for _, amendment := range a.Amendments {
+		shown.wire.Parts = append(shown.wire.Parts, protocol.AskPart{Markdown: protocol.Ptr(amendment.Markdown), AmendedAt: protocol.Ptr(amendment.AmendedAt)})
+	}
 	seedID, toSeed := a.To.TenderOf()
 	memberKey, toMember := a.To.Member()
 	switch {

@@ -47,6 +47,7 @@ var homeGatewayFacts = bus.Filter{
 	FactProfileRenamed,
 	FactSettingChanged,
 	FactAskOpened,
+	FactAskAmended,
 	FactAskClosed,
 	FactCrewRegistered,
 	FactCrewBound,

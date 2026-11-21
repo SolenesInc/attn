@@ -3,11 +3,11 @@
 # shows there; the home keeps the asks.
 groups:
   - name: ask
-    usage: "[list|show|close]"
+    usage: "[list|show|amend|close]"
     summary: "ask the user something they answer from attn"
     map:
       rows:
-        - {need: "Ask the user a decision only they can make", tools: [ask, ask_list, ask_close]}
+        - {need: "Ask the user a decision only they can make", tools: [ask, ask_list, ask_amend, ask_close]}
     flags:
       - {name: session, placeholder: "<id>", doc: "session id (defaults to the current session)"}
     doc: |
@@ -18,7 +18,7 @@ groups:
       You can also read and withdraw the asks of the agents you oversee: the agents below you in your delegation chain, or every agent in your profile when you are the Chief. They are not your asks, and only the user answers them.
     sections:
       - title: Asking
-        commands: [ask, ask list, ask show, ask close]
+        commands: [ask, ask list, ask show, ask amend, ask close]
 
 commands:
   - name: ask
@@ -62,6 +62,20 @@ commands:
     args:
       - {name: ask, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the ask's id"}
     result: AskShowResult
+
+  - name: ask amend
+    summary: add to an open ask when the facts change; the user keeps its place and their answer so far
+    runs: here
+    grant: own
+    doc: |
+      Adds markdown to the end of an open ask you hold or oversee, when something it says has changed. The user sees the addition as an update with its time, and keeps the ask's place in their queue and the answer they have started. Closing the ask and asking again would throw both away.
+
+      An amendment carries no question blocks, so the ask's questions stay as they are; to ask something new, open another ask. Images resolve as they do when you open an ask, against the folder the ask was opened from; from another folder, name each image by its absolute path. attn refuses an amendment to an ask the user already answered.
+    args:
+      - {name: ask, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the ask's id"}
+      - {name: markdown, type: markdown, required: true, piped: true, cli: "--file", placeholder: "<path>", doc: "the markdown to add, required; the CLI reads it from this file, or from stdin without one"}
+      - {name: base_dir, type: path, cli: internal, doc: "the folder the markdown's image paths resolve against: the working directory, or beside the file"}
+    result: Ask
 
   - name: ask close
     summary: withdraw an ask you no longer need answered

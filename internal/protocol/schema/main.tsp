@@ -4274,10 +4274,13 @@ model AskDefault {
   due_at: string;
 }
 
-// An ask reads as its parts in order: markdown, or one question.
+// An ask reads as its parts in order: markdown, or one question. An
+// amendment (`attn ask amend`) is a markdown part after them, with the time it
+// was added.
 model AskPart {
   markdown?: string;
   question?: AskQuestion;
+  amended_at?: utcDateTime;
 }
 
 // An ask is about a seed its agent tends: the agent's stake, or the seed it
@@ -4319,6 +4322,20 @@ model AskOpenMessage {
   seed_id?: string;
   markdown: string;
   subject?: string;
+  base_dir: string;
+  images?: AskImage[];
+}
+
+// The home's half of `attn ask amend`: markdown appended to an open ask,
+// with the images it shows, read on the amending session's machine as for
+// ask_open. It carries no question blocks, so the ask's question keys never
+// change. Whoever may close the ask may amend it.
+@extension("x-on", #{ home: true })
+model AskAmendMessage {
+  cmd: "ask_amend";
+  session_id: SessionID;
+  ask_id: string;
+  markdown: string;
   base_dir: string;
   images?: AskImage[];
 }
@@ -7030,6 +7047,7 @@ model Response {
   worktree_sweep_log_result?: WorktreeSweepLogResult;
   worktree_refresh_result?: WorktreeRefreshResult;
   ask_open_result?: Ask;
+  ask_amend_result?: Ask;
   session_list_result?: SessionListResult;
   session_show_result?: SessionShowResult;
   update_status?: UpdateStatus;

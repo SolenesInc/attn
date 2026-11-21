@@ -3004,6 +3004,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 
 	case protocol.CmdAskOpen:
 		d.handleAskOpen(conn, msg.(*protocol.AskOpenMessage))
+	case protocol.CmdAskAmend:
+		d.handleAskAmend(conn, msg.(*protocol.AskAmendMessage))
 
 	case protocol.CmdUnregister:
 		d.handleUnregister(conn, msg.(*protocol.UnregisterMessage), by.Actor())

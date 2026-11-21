@@ -17,6 +17,7 @@ export type Question = typeof Question.Type
 export const Part = Schema.Struct({
   markdown: Schema.NullOr(Schema.String),
   question: Schema.NullOr(Question),
+  amendedAt: Schema.NullOr(Schema.Finite),
 })
 export type Part = typeof Part.Type
 
@@ -74,6 +75,7 @@ export const fromHomeGatewayAsk = (ask: HomeGatewayAsk): PhoneAsk => ({
             : null,
         }
       : null,
+    amendedAt: part.amended_at?.getTime() ?? null,
   })),
   createdAt: ask.created_at.getTime(),
   seedSlug: ask.seed_slug ?? null,

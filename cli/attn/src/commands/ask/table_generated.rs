@@ -38,6 +38,17 @@ pub const COMMANDS: &[Command] = &[
         ],
     },
     Command {
+        name: "amend",
+        result: true,
+        runs_without_daemon: false,
+        usage: &[],
+        args: &[
+            Arg { name: "ask", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
+            Arg { name: "markdown", cli: Cli::Flag("file"), value: Value::Text, source: Source::Given, required: false, list: false },
+            Arg { name: "base_dir", cli: Cli::Internal, value: Value::Text, source: Source::Given, required: false, list: false },
+        ],
+    },
+    Command {
         name: "close",
         result: true,
         runs_without_daemon: false,

@@ -49,6 +49,31 @@ func askImageFile(askID, imagePath string) string {
 	return filepath.Join(askImagesDir(askID), hex.EncodeToString(sum[:])+strings.ToLower(path.Ext(imagePath)))
 }
 
+func refuseImagesPastTheAsksLimit(askID string, adding []askImage) error {
+	replaced := map[string]bool{}
+	total := 0
+	for _, image := range adding {
+		replaced[filepath.Base(askImageFile(askID, image.path))] = true
+		total += len(image.data)
+	}
+	kept, err := os.ReadDir(askImagesDir(askID))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	for _, entry := range kept {
+		info, err := entry.Info()
+		if err != nil || replaced[entry.Name()] || !info.Mode().IsRegular() {
+			continue
+		}
+		total += int(info.Size())
+	}
+	if total > ask.MaxImageBytes {
+		return protocol.Refuse(protocol.RefusalInvalidInput, "an ask's images hold at most max_ask_image_bytes=%d (%d MiB) together, its amendments' included; with these %d images %s would hold %d bytes. Show fewer or smaller images",
+			ask.MaxImageBytes, ask.MaxImageBytes>>20, len(adding), askID, total)
+	}
+	return nil
+}
+
 func writeAskImages(askID string, images []askImage) error {
 	for _, image := range images {
 		if err := writeAskImage(askID, image); err != nil {

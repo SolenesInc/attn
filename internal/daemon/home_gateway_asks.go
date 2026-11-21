@@ -99,7 +99,7 @@ func homeGatewayAsk(wire protocol.Ask) homegateway.HomeGatewayAsk {
 		CrewMember: wire.CrewMember,
 	}
 	for _, part := range wire.Parts {
-		out.Parts = append(out.Parts, homegateway.HomeGatewayAskPart{Markdown: part.Markdown, Question: homeGatewayAskQuestion(part.Question)})
+		out.Parts = append(out.Parts, homegateway.HomeGatewayAskPart{Markdown: part.Markdown, Question: homeGatewayAskQuestion(part.Question), AmendedAt: part.AmendedAt})
 	}
 	if wire.Reply != nil {
 		out.Reply = &homegateway.HomeGatewayAskReply{

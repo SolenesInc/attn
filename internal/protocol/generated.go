@@ -566,6 +566,26 @@ type Ask struct {
 	Subject string `json:"subject"`
 }
 
+type AskAmendMessage struct {
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// BaseDir corresponds to the JSON schema field "base_dir".
+	BaseDir string `json:"base_dir"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Images corresponds to the JSON schema field "images".
+	Images []AskImage `json:"images,omitempty,omitzero"`
+
+	// Markdown corresponds to the JSON schema field "markdown".
+	Markdown string `json:"markdown"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
 type AskAnswer struct {
 	// Key corresponds to the JSON schema field "key".
 	Key string `json:"key"`
@@ -712,6 +732,9 @@ type AskOpenMessage struct {
 }
 
 type AskPart struct {
+	// AmendedAt corresponds to the JSON schema field "amended_at".
+	AmendedAt *time.Time `json:"amended_at,omitempty,omitzero"`
+
 	// Markdown corresponds to the JSON schema field "markdown".
 	Markdown *string `json:"markdown,omitempty,omitzero"`
 
@@ -9004,6 +9027,9 @@ type ReposUpdatedMessage struct {
 }
 
 type Response struct {
+	// AskAmendResult corresponds to the JSON schema field "ask_amend_result".
+	AskAmendResult *Ask `json:"ask_amend_result,omitempty,omitzero"`
+
 	// AskOpenResult corresponds to the JSON schema field "ask_open_result".
 	AskOpenResult *Ask `json:"ask_open_result,omitempty,omitzero"`
 

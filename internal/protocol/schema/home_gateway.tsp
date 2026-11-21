@@ -180,10 +180,12 @@ model HomeGatewayAskDefault {
 }
 
 // An ask reads as its parts in order: markdown, or one question. Images in the
-// markdown load through ask_image with their src as written.
+// markdown load through ask_image with their src as written. An amendment the
+// agent added later is a markdown part with the time it was added.
 model HomeGatewayAskPart {
   markdown?: string;
   question?: HomeGatewayAskQuestion;
+  amended_at?: utcDateTime;
 }
 
 // picked holds choice labels; other is your own choice on a one or any

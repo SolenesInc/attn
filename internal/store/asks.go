@@ -21,14 +21,20 @@ var (
 )
 
 type Ask struct {
-	ID        string
-	SessionID protocol.SessionID
-	To        who.Address
-	Subject   string
+	ID         string
+	SessionID  protocol.SessionID
+	To         who.Address
+	Subject    string
+	Markdown   string
+	BaseDir    string
+	CreatedAt  string
+	Amendments []AskAmendment
+	Reply      *protocol.AskReply
+}
+
+type AskAmendment struct {
 	Markdown  string
-	BaseDir   string
-	CreatedAt string
-	Reply     *protocol.AskReply
+	AmendedAt time.Time
 }
 
 const (
@@ -109,7 +115,46 @@ func (s *Store) queryAsks(query string, args ...any) ([]Ask, error) {
 		}
 		asks = append(asks, a)
 	}
-	return asks, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range asks {
+		if asks[i].Amendments, err = amendmentsOf(s.db, asks[i].ID); err != nil {
+			return nil, err
+		}
+	}
+	return asks, nil
+}
+
+func amendmentsOf(db rowsQuerier, askID string) ([]AskAmendment, error) {
+	rows, err := db.Query("SELECT markdown, amended_at FROM ask_amendments WHERE ask_id = ? ORDER BY seq", askID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var amendments []AskAmendment
+	for rows.Next() {
+		var amendment AskAmendment
+		var at string
+		if err := rows.Scan(&amendment.Markdown, &at); err != nil {
+			return nil, err
+		}
+		if amendment.AmendedAt, err = time.Parse(sortableTimeFormat, at); err != nil {
+			return nil, fmt.Errorf("ask %s amendment time: %w", askID, err)
+		}
+		amendments = append(amendments, amendment)
+	}
+	return amendments, rows.Err()
+}
+
+func (s *Store) AmendAsk(id, markdown string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return ErrAskNotOpen
+	}
+	return expectOpenAsk(s.db.Exec("INSERT INTO ask_amendments (ask_id, seq, markdown, amended_at) SELECT id, (SELECT count(*) FROM ask_amendments WHERE ask_id = asks.id) + 1, ?, ? FROM asks WHERE id = ? AND "+openAsk,
+		markdown, at.UTC().Format(sortableTimeFormat), id))
 }
 
 func (s *Store) GetOpenAsk(id string) (Ask, error) {
@@ -134,6 +179,10 @@ func (s *Store) getAsk(id, condition string) (Ask, error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return Ask{}, ErrAskGone
 	}
+	if err != nil {
+		return Ask{}, err
+	}
+	a.Amendments, err = amendmentsOf(s.db, a.ID)
 	return a, err
 }
 

@@ -17,6 +17,7 @@ var CommandRuns = map[string]Locator{
 	"ask":                     LocatorHere,
 	"ask list":                LocatorHome,
 	"ask show":                LocatorHome,
+	"ask amend":               LocatorHere,
 	"ask close":               LocatorHome,
 	"browser open":            LocatorHome,
 	"browser snapshot":        LocatorHome,

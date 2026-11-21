@@ -19,7 +19,7 @@ pub const TOP_LEVEL: &[TopLevel] = &[
     TopLevel { name: "_update-apply", usage: "_update-apply", summary: "apply a staged update", hidden: true },
     TopLevel { name: "activity", usage: "activity [--json] | clear <id>", summary: "what each agent is doing right now", hidden: false },
     TopLevel { name: "agent", usage: "agent <command>", summary: "see what other agents are doing, message one, close or reload one", hidden: false },
-    TopLevel { name: "ask", usage: "ask [list|show|close]", summary: "ask the user something they answer from attn", hidden: false },
+    TopLevel { name: "ask", usage: "ask [list|show|amend|close]", summary: "ask the user something they answer from attn", hidden: false },
     TopLevel { name: "automation", usage: "automation <command>", summary: "run an agent on a schedule or an event", hidden: false },
     TopLevel { name: "browser", usage: "browser <command>", summary: "use the in-app browser", hidden: false },
     TopLevel { name: "bus", usage: "bus <command>", summary: "event bus: consumer cursors, lag, kill switch", hidden: false },

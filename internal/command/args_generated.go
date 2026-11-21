@@ -109,6 +109,7 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"ask":                     {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"ask list":                {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"ask show":                {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+		"ask amend":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"ask close":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"browser open":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"browser snapshot":        {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
@@ -303,6 +304,12 @@ type AskListArgs struct {
 
 type AskShowArgs struct {
 	Ask string `json:"ask,omitempty"`
+}
+
+type AskAmendArgs struct {
+	Ask      string `json:"ask,omitempty"`
+	Markdown string `json:"markdown,omitempty"`
+	BaseDir  string `json:"base_dir,omitempty"`
 }
 
 type AskCloseArgs struct {

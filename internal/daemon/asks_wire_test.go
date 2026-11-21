@@ -1,6 +1,8 @@
 package daemon_test
 
 import (
+	"bytes"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/ask"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -808,5 +811,87 @@ func TestAnAgentReadsAndWithdrawsTheAsksOfTheAgentsItOversees(t *testing.T) {
 	}
 	if closed, err := cli.SeedShow("caller", seed); err != nil || len(closed.OpenAsks) != 0 {
 		t.Fatalf("after the withdrawal seed show lists %+v (%v), want no open asks", closed.OpenAsks, err)
+	}
+}
+
+func TestAnAgentAmendsItsOpenAskAndTheUserSeesTheUpdateUnderTheSameQuestions(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(asker)
+	other := w.Spawn(app, fakeagent.Claude, w.Path("other"))
+	w.Launched(other)
+	asked, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "", w.Path("shop"))
+	if err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 })
+
+	const changed = "Redis already runs in staging, so it adds no service there."
+	amended, err := cli.AskAmend(protocol.SessionID(asker), asked.ID, changed, w.Path("shop"))
+	if err != nil {
+		t.Fatalf("amend: %v", err)
+	}
+	if len(amended.Parts) != 3 || protocol.Deref(amended.Parts[2].Markdown) != changed || amended.Parts[2].AmendedAt == nil {
+		t.Fatalf("amend answered the parts %+v, want the ask's two then the amendment with its time", amended.Parts)
+	}
+	shown := testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool {
+		return len(m.Asks) == 1 && len(m.Asks[0].Parts) == 3
+	})
+	parts := shown.Asks[0].Parts
+	if shown.Asks[0].ID != asked.ID || parts[1].Question == nil || parts[1].Question.Key != "q1" || parts[2].Question != nil {
+		t.Fatalf("the app shows %+v, want %s with its question still q1 and the amendment after it", shown.Asks[0], asked.ID)
+	}
+	if at := parts[2].AmendedAt; at == nil || at.Before(time.Now().Add(-time.Minute)) {
+		t.Fatalf("the amendment shows the time %v, want when it was added", at)
+	}
+	if shown.Asks[0].CreatedAt != asked.CreatedAt || shown.Asks[0].Subject != asked.Subject {
+		t.Fatalf("the amended ask reads %+v, want its place and subject kept from %+v", shown.Asks[0], asked)
+	}
+
+	if _, err := cli.AskAmend(protocol.SessionID(asker), asked.ID, ":::question\nAnd the queue?\n- [ ] Kafka\n- [ ] SQS\n:::\n", w.Path("shop")); err == nil || !strings.Contains(err.Error(), "another ask") {
+		t.Fatalf("an amendment with a question block answered %v, want a refusal that says to open another ask", err)
+	}
+	if _, err := cli.AskAmend(protocol.SessionID(other), asked.ID, "Not mine to change.", w.Path("other")); err == nil {
+		t.Fatal("a session that may not close the ask amended it")
+	}
+	if err := os.MkdirAll(w.Path("elsewhere"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(w.Path("elsewhere", "board.png"), []byte("png"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cli.AskAmend(protocol.SessionID(asker), asked.ID, "See ![the board](board.png)", w.Path("elsewhere")); err == nil || !strings.Contains(err.Error(), "absolute path") {
+		t.Fatalf("an amendment from another folder showing a relative image answered %v, want a refusal that asks for an absolute path", err)
+	}
+	filling := strings.Repeat("x", ask.MaxMarkdownBytes-len(cacheAsk)-len(changed)+1)
+	if _, err := cli.AskAmend(protocol.SessionID(asker), asked.ID, filling, w.Path("shop")); err == nil || !strings.Contains(err.Error(), "amendments included") {
+		t.Fatalf("an amendment past the ask's markdown limit answered %v, want a refusal that counts the amendments", err)
+	}
+	shot := bytes.Repeat([]byte("p"), ask.MaxImageBytes/2+1)
+	for _, name := range []string{"first.png", "second.png"} {
+		if err := os.WriteFile(w.Path("shop", name), shot, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := cli.AskAmend(protocol.SessionID(asker), asked.ID, "![first](first.png)", w.Path("shop")); err != nil {
+		t.Fatalf("amend with an image: %v", err)
+	}
+	if _, err := cli.AskAmend(protocol.SessionID(asker), asked.ID, "![second](second.png)", w.Path("shop")); err == nil || !strings.Contains(err.Error(), "max_ask_image_bytes") {
+		t.Fatalf("an amendment past the ask's image limit answered %v, want a refusal that counts the images it holds", err)
+	}
+	if listed, err := cli.AskShow(protocol.SessionID(asker), asked.ID); err != nil || len(listed.Ask.Parts) != 4 {
+		t.Fatalf("after the refusals the agent reads %+v (%v), want the two amendments taken", listed, err)
+	}
+
+	answered := testworld.Request(app, protocol.AskAnswerMessage{
+		Cmd: protocol.CmdAskAnswer, RequestID: "answer", AskID: asked.ID, Answers: []protocol.AskAnswer{{Key: "q1", Picked: []string{"Redis"}}},
+	}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == "answer" })
+	if !answered.Success {
+		t.Fatalf("answering the amended ask failed: %s", protocol.Deref(answered.Error))
+	}
+	if _, err := cli.AskAmend(protocol.SessionID(asker), asked.ID, "Too late.", w.Path("shop")); err == nil {
+		t.Fatal("an amendment to an ask the user already answered was taken")
 	}
 }

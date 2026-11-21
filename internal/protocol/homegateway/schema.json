@@ -266,6 +266,10 @@
   },
   "HomeGatewayAskPart": {
     "properties": {
+      "amended_at": {
+        "format": "date-time",
+        "type": "string"
+      },
       "markdown": {
         "type": "string"
       },

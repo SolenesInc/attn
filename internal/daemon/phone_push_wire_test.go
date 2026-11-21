@@ -361,3 +361,21 @@ func TestASnoozedAgentStillWaitingPushesAgainWhenItWakes(t *testing.T) {
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.TurnSnoozedUntil == nil && protocol.Deref(s.TurnOwed) })
 	phone.expect("waiting", "Should I land this?")
 }
+
+func TestAnAmendedAskSendsThePhoneNoSecondPush(t *testing.T) {
+	w, app, cli, phone := phonePushWorld(t, true, true)
+	setSetting(t, app, "asks_enabled", "true")
+	registerSessions(t, w, cli, "asker")
+	asked, err := cli.AskOpen("asker", "", ":::question\nShip the cache?\n- [ ] Yes\n- [ ] No\n:::\n", "", w.Path("asker"))
+	if err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	phone.expect("ask", "Ship the cache?")
+	if _, err := cli.AskAmend("asker", asked.ID, "The cache now holds sessions too.", w.Path("asker")); err != nil {
+		t.Fatalf("amend: %v", err)
+	}
+	if _, err := cli.AskOpen("reviewer", "", ":::question\nShip the review?\n- [ ] Yes\n- [ ] No\n:::\n", "", w.Path("reviewer")); err != nil {
+		t.Fatalf("second ask: %v", err)
+	}
+	phone.expect("ask", "Ship the review?")
+}

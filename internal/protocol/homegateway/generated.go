@@ -160,6 +160,9 @@ type HomeGatewayAskImageError struct {
 }
 
 type HomeGatewayAskPart struct {
+	// AmendedAt corresponds to the JSON schema field "amended_at".
+	AmendedAt *time.Time `json:"amended_at,omitempty,omitzero"`
+
 	// Markdown corresponds to the JSON schema field "markdown".
 	Markdown *string `json:"markdown,omitempty,omitzero"`
 

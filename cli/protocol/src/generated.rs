@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "94aa154ec346";
+pub const PROTOCOL_VERSION: &str = "a67f8e417ff2";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -408,6 +408,26 @@ pub struct Ask {
     pub subject: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AskAmendMessage {
+    pub ask_id: String,
+    pub base_dir: String,
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub images: Option<Vec<AskImage>>,
+    pub markdown: String,
+    pub session_id: SessionID,
+}
+
+impl AskAmendMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "ask_amend".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AskAnswer {
     pub key: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -548,6 +568,8 @@ impl AskOpenMessage {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AskPart {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub amended_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub markdown: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -8236,6 +8258,8 @@ impl ReposUpdatedMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ask_amend_result: Option<Ask>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ask_open_result: Option<Ask>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attachment_result: Option<AttachmentResult>,
@@ -13321,9 +13345,6 @@ impl WorktreeSweptEvent {
             ..Self::default()
         }
     }
-}
-impl ResponseField for Ask {
-    const FIELD: &'static str = "ask_open_result";
 }
 impl ResponseField for AttachmentResult {
     const FIELD: &'static str = "attachment_result";

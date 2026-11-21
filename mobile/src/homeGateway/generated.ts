@@ -82,8 +82,9 @@ export interface HomeGatewayAsk {
 }
 
 export interface PartElement {
-    markdown?: string;
-    question?: Question;
+    amended_at?: Date;
+    markdown?:   string;
+    question?:   Question;
     [property: string]: any;
 }
 
@@ -242,8 +243,9 @@ export enum HomeGatewayAskImageErrorEvent {
 }
 
 export interface HomeGatewayAskPart {
-    markdown?: string;
-    question?: Question;
+    amended_at?: Date;
+    markdown?:   string;
+    question?:   Question;
     [property: string]: any;
 }
 
@@ -1474,6 +1476,7 @@ const typeMap: any = {
         { json: "too_large_bytes", js: "too_large_bytes", typ: u(undefined, 0) },
     ], "any"),
     "PartElement": o([
+        { json: "amended_at", js: "amended_at", typ: u(undefined, Date) },
         { json: "markdown", js: "markdown", typ: u(undefined, "") },
         { json: "question", js: "question", typ: u(undefined, r("Question")) },
     ], "any"),
@@ -1571,6 +1574,7 @@ const typeMap: any = {
         { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
     "HomeGatewayAskPart": o([
+        { json: "amended_at", js: "amended_at", typ: u(undefined, Date) },
         { json: "markdown", js: "markdown", typ: u(undefined, "") },
         { json: "question", js: "question", typ: u(undefined, r("Question")) },
     ], "any"),

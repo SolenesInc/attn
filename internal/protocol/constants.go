@@ -58,6 +58,7 @@ const (
 	CmdDocCount                   = "doc_count"
 	CmdDocSubscribe               = "doc_subscribe"
 	CmdAskOpen                    = "ask_open"
+	CmdAskAmend                   = "ask_amend"
 	CmdAskAnswer                  = "ask_answer"
 	CmdAskImage                   = "ask_image"
 	CmdAskSeedMentions            = "ask_seed_mentions"

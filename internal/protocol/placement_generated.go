@@ -31,6 +31,7 @@ var Placements = map[string][]Placement{
 	"agent_catalog":                  {Placement{LocatorMachine, "host"}},
 	"agent_launch_close":             {Placement{LocatorSession, "session_id"}},
 	"apply_monitor_view":             {Placement{LocatorHome, ""}},
+	"ask_amend":                      {Placement{LocatorHome, ""}},
 	"ask_open":                       {Placement{LocatorHome, ""}},
 	"attachment_discard":             {Placement{LocatorHome, ""}},
 	"attachment_get":                 {Placement{LocatorHome, ""}},
@@ -261,6 +262,18 @@ func (m ApplyMonitorViewMessage) Placement() Placement {
 }
 
 func (m ApplyMonitorViewMessage) Locate() string {
+	return ""
+}
+
+func (AskAmendMessage) CommandName() string {
+	return "ask_amend"
+}
+
+func (m AskAmendMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AskAmendMessage) Locate() string {
 	return ""
 }
 

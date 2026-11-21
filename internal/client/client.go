@@ -869,6 +869,14 @@ func (c *Client) AskShow(sessionID protocol.SessionID, askID string) (*protocol.
 	return &result, nil
 }
 
+func (c *Client) AskAmend(sessionID protocol.SessionID, askID, markdown, baseDir string) (*protocol.Ask, error) {
+	var amended protocol.Ask
+	if err := c.RunCommand("ask amend", sessionID, command.AskAmendArgs{Ask: askID, Markdown: markdown, BaseDir: baseDir}, &amended); err != nil {
+		return nil, err
+	}
+	return &amended, nil
+}
+
 func (c *Client) AskClose(sessionID protocol.SessionID, askID, reason string) error {
 	args := map[string]string{"ask": askID}
 	if reason = strings.TrimSpace(reason); reason != "" {
