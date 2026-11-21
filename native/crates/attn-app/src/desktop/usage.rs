@@ -1,6 +1,6 @@
 use attn_protocol::{Session, SessionUsage, SessionUsageModel};
 use attn_ui::Tokens;
-use attn_ui::blocks::{Actions, Block, Card, Facts, HeaderPiece, Inline, Popover};
+use attn_ui::blocks::{Actions, Block, Card, HeaderPiece, Inline, Popover, Stack};
 use attn_ui::system::{Type, keys_hint, words};
 use rune::{El, Tx};
 use rune_kit::Placement;
@@ -224,40 +224,35 @@ fn model(key: &str, model: &SessionUsageModel, t: &Tokens) -> Block {
             Type::Small,
             t.text_tertiary,
         ));
-    let counts = |name: &str, rows: [(&str, i64); 3]| {
-        let facts = rows.into_iter().fold(
-            Facts::new(format!("{key}.{name}")),
-            |facts, (label, value)| {
-                facts.fact(
-                    format!("{key}.{}", label.to_lowercase().replace([',', ' '], "-")),
-                    label.to_owned(),
-                    grouped(value),
-                )
-            },
-        );
-        facts.el(t).grow(1.0).min_w(0.0)
+    let count = |label: &str, value: i64| {
+        Inline::loose()
+            .w_frac(0.5)
+            .shrink()
+            .min_w(0.0)
+            .child(
+                words(label.to_owned(), Type::Small, t.text_tertiary)
+                    .single_line()
+                    .grow(1.0),
+            )
+            .child(words(grouped(value), Type::Small, t.text_secondary))
     };
-    let columns = Inline::loose()
-        .key(format!("{key}.counts"))
+    let pair = |left: El, right: El| Inline::loose().w_full().child(left).child(right);
+    let counts = Stack::tight()
         .w_full()
-        .child(counts(
-            "left",
-            [
-                ("Input", model.input_tokens),
-                ("Cache read", model.cache_read_tokens),
-                ("Cache write, 1h", model.cache_write_1h_tokens),
-            ],
+        .child(pair(
+            count("Input", model.input_tokens),
+            count("Output", model.output_tokens),
         ))
-        .child(counts(
-            "right",
-            [
-                ("Output", model.output_tokens),
-                ("Cache write, 5m", model.cache_write_5m_tokens),
-                (
-                    "Cache write, unknown",
-                    model.cache_write_unclassified_tokens,
-                ),
-            ],
+        .child(pair(
+            count("Cache read", model.cache_read_tokens),
+            count("Cache write, 5m", model.cache_write_5m_tokens),
+        ))
+        .child(pair(
+            count("Cache write, 1h", model.cache_write_1h_tokens),
+            count(
+                "Cache write, unknown",
+                model.cache_write_unclassified_tokens,
+            ),
         ));
     let unpriced = model.has_unpriced_usage.then(|| {
         let reason = model
@@ -269,7 +264,7 @@ fn model(key: &str, model: &SessionUsageModel, t: &Tokens) -> Block {
     });
     let card = Card::new(key)
         .push(head)
-        .push(columns)
+        .push(counts)
         .push_all(unpriced)
         .build(t);
     Block::custom(format!("{key}.card"), card)

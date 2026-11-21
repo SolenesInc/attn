@@ -312,13 +312,13 @@ fn the_usage_breakdown_counts_each_model_exactly_with_the_guardian_beside_the_ag
         "$1.23*",
         "claude-opus-5",
         "184,321 tokens · $1.23*",
-        "Input 12,345",
-        "Output 6,789",
-        "Cache read 150,000",
-        "Cache write, unknown 187",
+        "12,345",
+        "6,789",
+        "150,000",
+        "187",
         "Guardian · claude-opus-5",
         "1,876 tokens · <$0.01",
-        "Input 1,746",
+        "1,746",
         "* Cache write duration is unavailable.",
     ] {
         assert!(shown.lines().any(|l| l == line), "{line:?} in {shown}");

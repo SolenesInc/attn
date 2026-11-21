@@ -150,6 +150,12 @@ impl TerminalBar {
         )
     }
 
+    /// How far down its terminal a corner of bars `height` tall reaches, measured from the
+    /// terminal's top.
+    pub fn reach(height: f32) -> f32 {
+        FROM_TOP.pt() + height
+    }
+
     /// `bars` one under another over a terminal's top right corner, each as wide as it needs up
     /// to a reading line, so a short list leaves the terminal's output beside it visible. A bar
     /// narrower than its smallest overflows past the terminal's left edge, never its right,

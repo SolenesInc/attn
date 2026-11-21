@@ -10,10 +10,12 @@ use super::blocks::Part;
 #[derive(Default)]
 pub(crate) struct Filtering {
     pub(crate) query: TextEdit,
-    open: bool,
+    pub(super) open: bool,
     pub(crate) case: bool,
     block: u64,
     lines: Vec<Filtered>,
+    /// How tall the bar and its results stood when last laid out.
+    pub(crate) height: Option<f32>,
 }
 
 /// An output line that holds the query: its place in the block's output, its text, and the
@@ -75,6 +77,7 @@ impl Terminals {
                 case: false,
                 block,
                 lines: Vec::new(),
+                height: None,
             },
         );
         tx.focus(filter_field_key(id), false);

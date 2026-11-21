@@ -60,7 +60,14 @@ pub(super) fn bar(id: &str, finding: &Finding, t: &Tokens) -> El {
             |state, id, tx| state.terminals.close_find(id, tx),
         ))
         .build(t);
-    TerminalBar::corner(vec![bar])
+    let laid = id.to_owned();
+    TerminalBar::corner(vec![bar]).on_layout_tx(
+        move |state: &mut State, [_, _, _, height], tx: &mut Tx| {
+            if !state.terminals.bars_laid_out(&laid, height) {
+                tx.live_only();
+            }
+        },
+    )
 }
 
 /// Escape closes the bar; Enter steps to the older match and Shift+Enter to the newer, as in

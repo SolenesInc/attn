@@ -1878,6 +1878,11 @@ fn terminal_overlays(dark: bool) {
         assert!(shown, "terminal a shows no {color} overlay: {overlays}");
     }
     snap(&mut world, "terminal-overlays", dark);
+    world.gesture(|app| app.click(Target::key("terminal.r-a.annotation.more")));
+    snap(&mut world, "terminal-annotation-labels", dark);
+    world.gesture(|app| app.click(Target::key("terminal.r-a.annotation.more")));
+    world.gesture(|app| app.click(Target::key("terminal.r-a.annotation.write")));
+    snap(&mut world, "terminal-annotation-comment", dark);
 }
 
 /// Terminal `a` whose conversation another terminal has open, running an older build than the

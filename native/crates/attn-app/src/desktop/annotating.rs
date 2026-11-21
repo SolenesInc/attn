@@ -152,20 +152,26 @@ fn nudge_popup(state: &mut State, id: &str, ev: &KeyEvent) -> bool {
     true
 }
 
-/// Where over a terminal a popup may open: anywhere, or only below its point while a find or
-/// filter bar stands over the terminal's top.
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// Where over a terminal a popup may open: anywhere, or below the find or filter bar standing
+/// over the terminal's top, which reaches this far down.
+#[derive(Clone, Copy, PartialEq)]
 pub(super) enum Room {
     Anywhere,
-    UnderBars,
+    Under(f32),
 }
 
 impl Room {
     pub(super) fn of(terminals: &crate::terminal::Terminals, id: &str) -> Room {
-        if terminals.finding(id).is_some() || terminals.filtering(id).is_some() {
-            Room::UnderBars
-        } else {
-            Room::Anywhere
+        match terminals.bars_height(id) {
+            Some(height) => Room::Under(attn_ui::blocks::TerminalBar::reach(height)),
+            None => Room::Anywhere,
+        }
+    }
+
+    fn top(self) -> f32 {
+        match self {
+            Room::Anywhere => MARGIN,
+            Room::Under(reach) => reach + MARGIN,
         }
     }
 }
@@ -186,17 +192,18 @@ pub(crate) fn place(at: (f32, f32), size: (f32, f32), slot: (f32, f32)) -> (f32,
 fn place_in(at: (f32, f32), size: (f32, f32), slot: (f32, f32), room: Room) -> (f32, f32) {
     let clamp = |v: f32, low: f32, high: f32| v.min(high.max(low)).max(low);
     let left = clamp(at.0 - size.0 / 2.0, MARGIN, slot.0 - size.0 - MARGIN);
+    let top = room.top();
     let above = at.1 - size.1 - GAP;
-    if room == Room::Anywhere && above >= MARGIN {
+    if above >= top {
         return (left, above);
     }
-    let below = at.1 + GAP;
+    let below = (at.1 + GAP).max(top);
     if below + size.1 + MARGIN <= slot.1 {
         return (left, below);
     }
     (
         left,
-        clamp(at.1 - size.1 / 2.0, MARGIN, slot.1 - size.1 - MARGIN),
+        clamp(at.1 - size.1 / 2.0, top, slot.1 - size.1 - MARGIN),
     )
 }
 
@@ -331,6 +338,7 @@ fn popup(
     .group(labels)
     .group([write, remove])
     .under(Some(under))
+    .max_height(slot.1 - 2.0 * MARGIN)
     .build(t);
     let (left, top) = match popup.size {
         Some(size) => popup_at(popup, size, slot, room),

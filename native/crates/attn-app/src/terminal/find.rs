@@ -20,6 +20,8 @@ pub(crate) struct Finding {
     focused: Option<usize>,
     /// The focused match's first cell, which keeps it as the history drops its oldest rows.
     focused_at: Option<Mark>,
+    /// How tall the bar stood when last laid out.
+    pub(crate) height: Option<f32>,
 }
 
 impl Finding {
@@ -72,6 +74,26 @@ impl Terminals {
     /// The find bar of terminal `id` while it is open.
     pub(crate) fn finding(&self, id: &str) -> Option<&Finding> {
         self.finds.get(id).filter(|f| f.open)
+    }
+
+    /// How tall terminal `id`'s open find or filter bar stood when last laid out.
+    pub(crate) fn bars_height(&self, id: &str) -> Option<f32> {
+        self.finding(id)
+            .and_then(|f| f.height)
+            .or_else(|| self.filtering(id).and_then(|f| f.height))
+    }
+
+    /// Terminal `id`'s open find or filter bar was laid out `height` tall: true when that
+    /// changed it.
+    pub(crate) fn bars_laid_out(&mut self, id: &str, height: f32) -> bool {
+        let stood = if let Some(finding) = self.finds.get_mut(id).filter(|f| f.open) {
+            &mut finding.height
+        } else if let Some(filtering) = self.filters.get_mut(id).filter(|f| f.open) {
+            &mut filtering.height
+        } else {
+            return false;
+        };
+        stood.replace(height) != Some(height)
     }
 
     /// What the open find bars show, for the view to tell when one changed.
