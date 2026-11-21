@@ -82,7 +82,7 @@ func TestEachAttnCommandWritesOneCLIRecordNamedByItsPath(t *testing.T) {
 		`seed show {"caller":"agent","error_kind":"refused","exit_code":1,"harness":"claude","ok":false,"refusal":"not_found"}`,
 		`seed check report {"caller":"agent","error_kind":"refused","exit_code":1,"harness":"claude","ok":false,"refusal":"not_found"}`,
 		`seed ls {"caller":"agent","error_kind":"unknown_flag","exit_code":2,"harness":"claude","ok":false}`,
-		`terminal read {"caller":"agent","error_kind":"refused","exit_code":1,"harness":"claude","ok":false,"refusal":"unclassified"}`,
+		`terminal read {"caller":"agent","error_kind":"refused","exit_code":1,"harness":"claude","ok":false,"refusal":"not_found"}`,
 		`attn {"caller":"human","error_kind":"unknown_command","exit_code":1,"ok":false}`,
 		`codex {"caller":"human","error_kind":"usage","exit_code":2,"ok":false}`,
 		`delegate roles {"caller":"human","exit_code":0,"ok":true}`,

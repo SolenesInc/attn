@@ -80,7 +80,7 @@ func (d *Daemon) terminalTarget(caller *protocol.Session, ref string) (*selected
 		}
 		if ref != "" && strings.HasPrefix(string(session.ID), ref) {
 			if match != nil {
-				return nil, command.Refuse("target_ambiguous", "target rule: %q matches multiple sessions; use a terminal id from `{attn terminal ls --all}`", ref)
+				return nil, protocol.Refuse(protocol.RefusalInvalidInput, "target rule: %q matches multiple sessions; use a terminal id from `{attn terminal ls --all}`", ref)
 			}
 			match = session
 		}
@@ -97,7 +97,7 @@ func (d *Daemon) terminalTarget(caller *protocol.Session, ref string) (*selected
 		}
 	}
 	if match == nil {
-		return nil, command.Refuse("target_not_found", "target rule: terminal %q not found in the caller's profile; `{attn terminal ls --all}` lists its terminals", ref)
+		return nil, protocol.Refuse(protocol.RefusalNotFound, "target rule: terminal %q not found in the caller's profile; `{attn terminal ls --all}` lists its terminals", ref)
 	}
 	ids := d.terminalsOf(match.ID)
 	if len(ids) != 1 {
@@ -105,7 +105,7 @@ func (d *Daemon) terminalTarget(caller *protocol.Session, ref string) (*selected
 		for i, id := range ids {
 			terminals[i] = string(id)
 		}
-		return nil, command.Refuse("target_ambiguous", "target rule: session %s shows in %d terminals (%s); pass one terminal id from `{attn terminal ls --all}`", match.ID, len(ids), strings.Join(terminals, ", "))
+		return nil, protocol.Refuse(protocol.RefusalInvalidInput, "target rule: session %s shows in %d terminals (%s); pass one terminal id from `{attn terminal ls --all}`", match.ID, len(ids), strings.Join(terminals, ", "))
 	}
 	return &selectedTerminal{Session: match, terminal: ids[0]}, nil
 }
@@ -333,7 +333,7 @@ func (d *Daemon) runTerminalOpen(ctx context.Context, c command.Caller, a comman
 			}
 		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return nil, command.Refuse("first_prompt_timeout", "first prompt wait exceeded limit=%s; %s. Terminal %s stays open; nothing was typed. Use `{attn terminal send %s}` to continue", terminalFirstPromptTripwire, terminalFirstPromptReceipt, id, id)
+			return nil, protocol.Refuse(protocol.RefusalLimit, "first prompt wait exceeded limit=%s; %s. Terminal %s stays open; nothing was typed. Use `{attn terminal send %s}` to continue", terminalFirstPromptTripwire, terminalFirstPromptReceipt, id, id)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("opened terminal %s, but command was not typed: %v", id, err)
@@ -506,7 +506,7 @@ func (d *Daemon) runTerminalClose(_ context.Context, c command.Caller, a command
 		return nil, err
 	}
 	if target.Agent != protocol.AgentShellValue {
-		return nil, command.Refuse("close_rule", "close rule: terminal close only closes shells; use `{attn agent close}` for an agent")
+		return nil, protocol.Refuse(protocol.RefusalInvalidInput, "close rule: terminal close only closes shells; use `{attn agent close}` for an agent")
 	}
 	if err := d.terminalAct(caller, target, a.Desktop, "close"); err != nil {
 		return nil, err
