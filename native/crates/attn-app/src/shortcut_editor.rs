@@ -821,13 +821,20 @@ fn keys_button(keymap: &Keymap, action: &Action, t: &Tokens) -> El {
     };
     let key = keys_key(action);
     let action = action.clone();
-    let button = chip_button(key.clone(), action.label(), face.a11y_hidden(), false, t)
-        .a11y_value(said)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            state.window.shortcut_editor.pending = None;
-            recorder_of(state, &action).begin();
-            tx.focus(keys_key(&action), false);
-        });
+    let button = chip_button(
+        key.clone(),
+        action.label(),
+        face.a11y_hidden(),
+        false,
+        attn_ui::system::Size::Small,
+        t,
+    )
+    .a11y_value(said)
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+        state.window.shortcut_editor.pending = None;
+        recorder_of(state, &action).begin();
+        tx.focus(keys_key(&action), false);
+    });
     recorder_place(key, button)
 }
 
