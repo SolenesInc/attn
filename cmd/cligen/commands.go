@@ -208,6 +208,10 @@ func (g *generator) rustCLI(cmd *catalog.Command, a catalog.Arg) string {
 		return "Cli::Pos"
 	case a.CLI == "rest":
 		return "Cli::Rest"
+	case a.AfterDashes():
+		return "Cli::AfterDashes"
+	case a.FlagWords() != "":
+		return fmt.Sprintf("Cli::FlagWords(%s)", rustString(a.FlagWords()))
 	case a.CLI == "words":
 		var fields []string
 		for _, field := range g.wordFields(a) {

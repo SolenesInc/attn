@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
@@ -19,11 +18,8 @@ func TestAShellPublishesItsTitleAndKeepsDeliveringOutput(t *testing.T) {
 	shell := w.Spawn(app, shellHarness, w.Path("shop"))
 	listedName := func(want string) {
 		t.Helper()
-		r, err := cli.TerminalCommand(context.Background(), protocol.TerminalListMessage{Cmd: protocol.CmdTerminalList, CallerSessionID: protocol.SessionID(caller), All: protocol.Ptr(true)})
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, entry := range r.TerminalEntries {
+		r := terminalDo[protocol.TerminalListResult](t, cli, "terminal ls", protocol.SessionID(caller), map[string]any{"all": true})
+		for _, entry := range r.Terminals {
 			if string(entry.SessionID) == shell {
 				if entry.Name != want {
 					t.Fatalf("listed shell name=%q, want %q", entry.Name, want)
@@ -31,7 +27,7 @@ func TestAShellPublishesItsTitleAndKeepsDeliveringOutput(t *testing.T) {
 				return
 			}
 		}
-		t.Fatalf("shell missing from terminal list: %+v", r.TerminalEntries)
+		t.Fatalf("shell missing from terminal list: %+v", r.Terminals)
 	}
 	testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return protocol.Deref(s.Title) == "shop" })
 	listedName("shop")

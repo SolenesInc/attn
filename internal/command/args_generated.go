@@ -69,6 +69,7 @@ const (
 	CodeStandbyWithScope            = "standby_with_scope"
 	CodeStepNeedsText               = "step_needs_text"
 	CodeStepTooLong                 = "step_too_long"
+	CodeTimeout                     = "timeout"
 	CodeTooManySteps                = "too_many_steps"
 	CodeTranscriptUnavailable       = "transcript_unavailable"
 	CodeTransferNeedsLocalPath      = "transfer_needs_local_path"
@@ -78,6 +79,7 @@ const (
 	CodeTwoDocuments                = "two_documents"
 	CodeUnknownAction               = "unknown_action"
 	CodeUnknownAnchor               = "unknown_anchor"
+	CodeUnknownKey                  = "unknown_key"
 	CodeUnknownSession              = "unknown_session"
 	CodeWindowWithoutStale          = "window_without_stale"
 	CodeWordsAndClear               = "words_and_clear"
@@ -191,6 +193,14 @@ var specs = map[string]spec{
 	"session reopen":          {readOnly: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"unknown_action": "Pass one of the actions session_show lists for the session."}},
 	"skill":                   {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: true, fixes: map[string]string{"no_such_reference": "Use one of the names `skill` with `list` prints.", "list_and_reference": "Pass {reference} or {list}, not both."}},
 	"state explain":           {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
+	"terminal ls":             {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"terminal open":           {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"terminal run":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"terminal send":           {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"unknown_key": "Use a key name the message lists."}},
+	"terminal read":           {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"terminal wait":           {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"timeout": "Wait longer with a larger {timeout}, or read the terminal later."}},
+	"terminal move":           {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"terminal close":          {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 }
 
 type ActivityArgs struct {
@@ -823,4 +833,54 @@ type SkillArgs struct {
 
 type StateExplainArgs struct {
 	ID string `json:"id,omitempty"`
+}
+
+type TerminalLsArgs struct {
+	Desktop string `json:"desktop,omitempty"`
+	All     bool   `json:"all,omitempty"`
+}
+
+type TerminalOpenArgs struct {
+	Host    string   `json:"host,omitempty"`
+	Down    bool     `json:"down,omitempty"`
+	Desktop string   `json:"desktop,omitempty"`
+	Cwd     string   `json:"cwd,omitempty"`
+	Command []string `json:"command,omitempty"`
+}
+
+type TerminalRunArgs struct {
+	Terminal string `json:"terminal,omitempty"`
+	Command  string `json:"command,omitempty"`
+	Wait     bool   `json:"wait,omitempty"`
+	Timeout  string `json:"timeout,omitempty"`
+	Desktop  string `json:"desktop,omitempty"`
+}
+
+type TerminalSendArgs struct {
+	Terminal string   `json:"terminal,omitempty"`
+	Text     *string  `json:"text,omitempty"`
+	Keys     []string `json:"keys,omitempty"`
+	Desktop  string   `json:"desktop,omitempty"`
+}
+
+type TerminalReadArgs struct {
+	Terminal string `json:"terminal,omitempty"`
+	Mode     string `json:"mode,omitempty"`
+	Lines    *int64 `json:"lines,omitempty"`
+}
+
+type TerminalWaitArgs struct {
+	Terminal string `json:"terminal,omitempty"`
+	Until    string `json:"until,omitempty"`
+	Timeout  string `json:"timeout,omitempty"`
+}
+
+type TerminalMoveArgs struct {
+	Terminal string `json:"terminal,omitempty"`
+	Desktop  string `json:"desktop,omitempty"`
+}
+
+type TerminalCloseArgs struct {
+	Terminal string `json:"terminal,omitempty"`
+	Desktop  string `json:"desktop,omitempty"`
 }

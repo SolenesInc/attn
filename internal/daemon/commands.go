@@ -30,6 +30,7 @@ func (d *Daemon) commandLayer() *command.Layer {
 			reading.Handlers(),
 			d.agentCommands(),
 			d.browserCommands(),
+			d.terminalCommands(),
 		} {
 			maps.Copy(handlers, family)
 		}

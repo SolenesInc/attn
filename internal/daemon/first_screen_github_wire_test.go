@@ -169,12 +169,12 @@ func TestAPendingRunThatNeedsGitHubHoldsRecoveryUntilDiscoveryAndIsDelivered(t *
 	discovery.Await()
 	waiting.Await()
 	app := r.w.ConnectApp()
-	app.Send(protocol.TerminalCloseMessage{Cmd: protocol.CmdTerminalClose, CallerSessionID: "nobody", Target: "nothing"})
+	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: "nothing"})
 	refused := testworld.Await(app, protocol.EventCommandError, func(e protocol.CommandErrorMessage) bool {
-		return protocol.Deref(e.Cmd) == protocol.CmdTerminalClose
+		return protocol.Deref(e.Cmd) == protocol.CmdKillSession
 	})
 	if refused.Error != "daemon_recovering" {
-		t.Fatalf("with discovery held a terminal command answers %q, want daemon_recovering", refused.Error)
+		t.Fatalf("with discovery held a kill answers %q, want daemon_recovering", refused.Error)
 	}
 	if slices.ContainsFunc(app.Received(), func(e protocol.WebSocketEvent) bool { return e.Event == protocol.EventInitialState }) {
 		t.Fatal("the first screen arrived before the run that needs GitHub was recovered")

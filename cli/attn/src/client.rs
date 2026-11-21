@@ -11,9 +11,8 @@ use std::fmt;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-const DEADLINE_EXCEEDED: &str = "context deadline exceeded";
 const RECORD_ANALYTICS_DEADLINE: Duration = Duration::from_secs(2);
 
 #[derive(Debug)]
@@ -42,10 +41,6 @@ impl SendError {
             }),
             unconnected: false,
         }
-    }
-
-    pub fn deadline_exceeded(&self) -> bool {
-        self.message == DEADLINE_EXCEEDED
     }
 }
 
@@ -258,27 +253,19 @@ impl<'a> Client<'a> {
     }
 
     pub fn call<M: Serialize>(&self, message: &M) -> Result<Reply, SendError> {
-        self.call_until(message, None)
-    }
-
-    pub fn call_until<M: Serialize>(
-        &self,
-        message: &M,
-        deadline: Option<Instant>,
-    ) -> Result<Reply, SendError> {
         let frame = self.scoped_frame(message, garden_command)?;
-        self.exchange(&frame, deadline).map(|raw| Reply { raw })
+        self.exchange(&frame).map(|raw| Reply { raw })
     }
 
     /// Sends a frame and returns the reply as it came, refusal or not.
     pub fn call_command<M: Serialize>(&self, message: &M) -> Result<Reply, SendError> {
         let frame = self.frame(message)?;
-        self.round_trip(&frame, None).map(|raw| Reply { raw })
+        self.round_trip(&frame).map(|raw| Reply { raw })
     }
 
     pub fn call_automation<M: Serialize>(&self, message: &M) -> Result<Reply, SendError> {
         let frame = self.scoped_frame(message, |_| true)?;
-        let raw = self.round_trip(&frame, None)?;
+        let raw = self.round_trip(&frame)?;
         let head: AutomationReplyHead = serde_json::from_slice(&raw)
             .map_err(|error| SendError::plain(format!("receive response: {error}")))?;
         if head.success {
@@ -392,25 +379,10 @@ impl<'a> Client<'a> {
         })
     }
 
-    fn round_trip(&self, frame: &[u8], deadline: Option<Instant>) -> Result<Vec<u8>, SendError> {
+    fn round_trip(&self, frame: &[u8]) -> Result<Vec<u8>, SendError> {
         let mut connection = self.connect()?;
-        if let Some(deadline) = deadline {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                return Err(SendError::plain(DEADLINE_EXCEEDED.to_string()));
-            }
-            connection
-                .set_read_timeout(Some(remaining))
-                .map_err(|error| SendError::plain(os_error_text(&error)))?;
-        }
         let write_result = connection.write_all(frame);
         read_reply(&mut connection).map_err(|error| {
-            if matches!(
-                error.kind(),
-                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
-            ) {
-                return SendError::plain(DEADLINE_EXCEEDED.to_string());
-            }
             SendError::plain(match write_result {
                 Err(ref write_error) => format!("send message: {}", os_error_text(write_error)),
                 Ok(()) => format!("receive response: {}", reply_read_text(&error)),
@@ -418,8 +390,8 @@ impl<'a> Client<'a> {
         })
     }
 
-    fn exchange(&self, frame: &[u8], deadline: Option<Instant>) -> Result<Vec<u8>, SendError> {
-        let reply = self.round_trip(frame, deadline)?;
+    fn exchange(&self, frame: &[u8]) -> Result<Vec<u8>, SendError> {
+        let reply = self.round_trip(frame)?;
         check_reply(reply)
     }
 
@@ -441,7 +413,7 @@ impl<'a> Client<'a> {
 
     pub fn send<M: Serialize>(&self, message: &M) -> Result<(), SendError> {
         let frame = self.frame(message)?;
-        self.exchange(&frame, None).map(|_| ())
+        self.exchange(&frame).map(|_| ())
     }
 
     pub fn record_analytics(

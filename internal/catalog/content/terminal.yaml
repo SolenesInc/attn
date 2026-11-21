@@ -1,2 +1,180 @@
+# The terminal family. Write each doc for both surfaces, as seed.yaml says.
 groups:
-  - {name: terminal, usage: "<command>", summary: "open a shell, read a terminal, move between desktops"}
+  - name: terminal
+    usage: "<command>"
+    summary: "open a shell, read a terminal, move between desktops"
+    map:
+      rows:
+        - {need: "Open a shell, run in it, read a terminal", tools: [terminal_open, terminal_run, terminal_read]}
+    doc: |
+      Run inside an attn agent. A target is a terminal id or unique terminal-id prefix printed by ls. A session id or prefix, or the name of a crew member in session, also works when that session shows in exactly one terminal; otherwise choose a terminal id. All targets belong to the caller's profile. `attn skill --reference terminal` has placement, reach, moving, reading and waiting, and the key names.
+    flags:
+      - {name: session, placeholder: "<id>", doc: "act as this session (defaults to the current session)"}
+    reference:
+      name: terminal
+      title: "Terminals"
+      intro: |
+        Use `attn terminal` inside an attn agent to open terminals, inspect them, type into them, wait for a command or terminal to finish, move terminals between desktops, and close shells.
+    sections:
+      - title: Placement and lifetime
+        text: |
+          `terminal_open` keeps the user's focus where it was. A terminal goes to the end of the desktop's row. `--down` stacks it below you, or below the terminal you most recently opened in your column. `--desktop <ref>` opens it on that desktop, and with `--down` it stacks below that desktop's active tile. attn creates a missing numbered `--desktop`. `--cwd <dir>` selects the directory on the target machine.
+
+          `terminal_open` defaults to your session's machine and directory. `--host <name|id>` selects an outpost, and `--host home` selects the home. If you change the machine and omit `--cwd`, the shell starts in that machine's home directory. Claude, Codex and shells run on outposts. An agent's attn commands reach the home. Spawning chief, crew and plugin agents on outposts is unavailable.
+
+          `terminal_open` with a command waits for the shell's first OSC 133 prompt, then types the command. Before it opens a terminal, `terminal_open` refuses known unsupported shells. If the first prompt takes more than 30 seconds, `terminal_open` fails and reports the terminal's id. It leaves the terminal open and types nothing. A healthy start takes far less: first prompts took between 9 and 176 ms across fish, zsh and bash. The 30-second limit catches a broken startup, or startup files that turned the shell integration off. To continue in that terminal after a failure, use `send`. For a shell without command marks, open without a command.
+
+          An opened terminal is an ordinary interactive shell. The command enters the shell's history, so the user can recall it with ↑. The terminal records you as its parent and keeps running after your session closes. Close the terminal when its work is done.
+        commands: [terminal open, terminal close]
+      - title: Reach
+        text: |
+          A target is a terminal id, or a unique prefix of one, as printed by `ls`. `terminal_open` prints the new terminal id. A session id or prefix, or the name of a crew member in session, also works when that session shows in exactly one terminal. Shared Codex can show one session in several tiles. When it does, choose a terminal id. Every target belongs to your profile. A crew name follows the member's current session and never starts a session for a member between sessions.
+
+          If your session has tiles on several desktops, pass `--desktop` when you list, type, or close. If your session has several tiles on one desktop, `terminal_open` also needs `--desktop` to select that desktop's active tile as the anchor.
+
+          - `ls` shows your desktop. `--all` shows all desktops in your profile.
+          - `read` and `wait` can inspect any terminal in your profile. `move` also reaches every desktop without `--desktop`.
+          - `terminal_open`, `run`, `send` and `close` on another desktop require an explicit `--desktop <ref>`. A refusal prints the value to pass.
+          - Any agent can type into or move a shell. You can type into or move an agent only when the agent is you or below you in your delegation chain, including delegates' delegates. Your profile's chief can type into or move any agent in the profile.
+          - `close` closes shells. Use `attn agent close` to close an agent.
+
+          Typing goes straight to the terminal, as keyboard input does. `send --text` writes literal bytes and does not press Enter for you. To submit text, use `send --keys Enter`. To run a shell command, use `run`. `send --keys C-c` interrupts the foreground program.
+
+          Keys: C-a through C-z, C-\, C-], C-^, C-_, Escape, Enter, Tab, Backspace, Space, Up, Down, Left, Right, Home, End, Delete, Insert, PageUp, PageDown, F1 through F12. send writes bytes directly, as a keyboard does.
+        commands: [terminal ls, terminal send]
+      - title: Move
+        text: |
+          `move` moves one terminal and keeps the terminal's process running. Without a target, the command moves your session's terminal. A session shown in several terminals needs an explicit terminal id.
+
+          A `<desktop>` is the desktop's shortcut digit, its name as shown (case-insensitive), or its id. attn creates a missing numbered desktop on its shortcut slot. Listing, typing, and closing with `--desktop` require an existing desktop.
+
+          The terminal goes beside the destination's active tile. Your profile's current desktop never changes. The moved tile becomes active at the destination only when it was active at the source and the destination is not current. Moving an agent whose tile was removed gives the agent's existing terminal a tile at the destination. Move yourself and a shell with two calls:
+
+              attn terminal move 8
+              attn terminal move <shell-id> 8
+        commands: [terminal move]
+      - title: Reading and waiting
+        text: |
+          `read` returns the rendered screen. `read --scrollback` includes retained history, and `--lines <n>` selects the last n lines of that history. `read --last` returns the last completed command's output. When output has been discarded from scrollback, `read` fails with an explicit error.
+
+          `run` requires a shell at its prompt. If a program is running, use `send` to talk to the program. `run --wait` reads the next completed command block and exits with the block's exit code. To attribute a block to a command, avoid concurrent writers to that shell. Shells without OSC 133 command marks do not support `run --wait`, `read --last`, or `wait --until prompt`. In those shells, use plain `run` and screen reads.
+
+          `wait --until prompt` waits for the shell prompt. `wait --until exit` waits for the terminal process to exit. `--timeout <seconds>` bounds either wait and `run --wait`. When the timeout expires, the command exits 124. Without `--timeout`, waiting continues until the condition is met or your CLI connection closes. If the worker restarts or disconnects, the call fails visibly. It never leaves a command queued for later.
+        commands: [terminal read, terminal run, terminal wait]
+
+commands:
+  - name: terminal ls
+    summary: list the terminals on your desktop, or on every desktop
+    runs: home
+    grant: full
+    read_only: true
+    doc: |
+      Lists the terminals of your desktop, or of the desktop `desktop` names, or with `all` of every desktop in your profile: each one's id, name, agent, state, desktop, position and the session that opened it.
+    args:
+      - {name: desktop, type: text, cli: "--desktop", placeholder: "<ref>", doc: "list this desktop: its shortcut digit, its name or its id"}
+      - {name: all, type: bool, cli: "--all", doc: "list every desktop in your profile"}
+    result: TerminalListResult
+
+  - name: terminal open
+    summary: open a shell beside you, or on a desktop or outpost
+    runs: home
+    grant: full
+    doc: |
+      Opens a shell at the end of your desktop's row, keeping the user's focus where it was, and returns its terminal id. `down` stacks it below you, or below the terminal you most recently opened in your column. `desktop` opens it on that desktop, creating a missing numbered one. `host` selects an outpost by name or id, or home; `cwd` names a directory on that machine, and without it a shell on another machine starts in its home directory. With `command`, open waits up to 30 s for the shell's first OSC 133 prompt, then types the command.
+    args:
+      - {name: host, type: text, cli: "--host", placeholder: "<outpost|home>", doc: "the machine to open it on"}
+      - {name: down, type: bool, cli: "--down", doc: "stack it below you"}
+      - {name: desktop, type: text, cli: "--desktop", placeholder: "<ref>", doc: "the desktop to open it on"}
+      - {name: cwd, type: text, cli: "--cwd", placeholder: "<dir>", doc: "the directory on the target machine"}
+      - {name: command, type: text, list: true, cli: "--", placeholder: "<command>", doc: "the command to type once the shell shows its first prompt; one word is typed as written, several are each quoted"}
+    result: TerminalOpenResult
+    examples:
+      - {command: [pnpm, dev]}
+
+  - name: terminal run
+    summary: type a command into a shell at its prompt
+    runs: home
+    grant: full
+    doc: |
+      Types `command` into the shell `terminal` at its prompt, through the shell, preserving history, and returns the id of the last completed block without waiting for the command. The shell needs OSC 133 shell integration. Read the command's output with `terminal_read` and its `last` mode once it is done. Anyone may run a command in a shell.
+    args:
+      - {name: terminal, type: terminal_ref, required: true, cli: pos, placeholder: "<terminal>"}
+      - {name: command, type: text, required: true, cli: pos, placeholder: '"<command>"', doc: "the command line"}
+      - {name: wait, type: bool, cli: "--wait", cli_only: true, doc: "wait for the command's block and exit with its exit code"}
+      - {name: timeout, type: seconds, cli: "--timeout", cli_only: true, doc: "give up waiting after this many seconds and exit 124"}
+      - {name: desktop, type: text, cli: "--desktop", placeholder: "<ref>", doc: "the terminal's desktop, when it is not yours"}
+    result: TerminalRunResult
+    errors:
+    examples:
+      - {terminal: 4f2a, command: make test}
+
+  - name: terminal send
+    summary: type text or keys into a terminal
+    runs: home
+    grant: full
+    doc: |
+      Types into `terminal` as a keyboard does: `text` as literal bytes, without Enter, or `keys` by name: C-a through C-z, C-\\, C-], C-^, C-_, Escape, Enter, Tab, Backspace, Space, Up, Down, Left, Right, Home, End, Delete, Insert, PageUp, PageDown, F1 through F12. Anyone may type into a shell; into an agent only when it is you or below you in your delegation chain, or you are the profile's chief.
+    args:
+      - {name: terminal, type: terminal_ref, required: true, cli: pos, placeholder: "<terminal>"}
+      - {name: text, type: typed_text, cli: "--text", one_of: input, placeholder: '"<text>"', doc: "the bytes to type"}
+      - {name: keys, type: text, list: true, cli: "--keys...", one_of: input, placeholder: "<key>", doc: "the keys to press, in order"}
+      - {name: desktop, type: text, cli: "--desktop", placeholder: "<ref>", doc: "the terminal's desktop, when it is not yours"}
+    result: TerminalInputResult
+    errors:
+      - {code: unknown_key, fix: "Use a key name the message lists."}
+    examples:
+      - {terminal: 4f2a, keys: [C-c]}
+
+  - name: terminal read
+    summary: read a terminal's screen, scrollback or last command
+    runs: home
+    grant: full
+    read_only: true
+    doc: |
+      Returns the rendered screen of `terminal`; with `mode`, the retained scrollback, of which `lines` selects the last n lines, or the last completed command's block, which needs OSC 133 shell integration.
+    args:
+      - {name: terminal, type: terminal_ref, required: true, cli: pos, placeholder: "<terminal>"}
+      - {name: mode, type: text, cli: "--last|--scrollback", values: [last, scrollback], doc: "read the last completed command's block, or the scrollback, instead of the screen"}
+      - {name: lines, type: count, cli: "--lines", doc: "the last lines of the scrollback"}
+    result: TerminalReadResult
+
+  - name: terminal wait
+    summary: wait for a shell's prompt or a terminal's exit
+    runs: home
+    grant: full
+    read_only: true
+    offered: false
+    reason: "It holds the call until the prompt or the exit, with no limit of its own, past a harness's tool limit (D9). A tool caller looks with terminal_read; attn terminal wait stays on the CLI."
+    doc: |
+      Waits until `terminal` shows its shell prompt, or until its process exits, and exits with the exit code. `timeout` gives up after that many seconds and exits 124.
+    args:
+      - {name: terminal, type: terminal_ref, required: true, cli: pos, placeholder: "<terminal>"}
+      - {name: until, type: wait_until, required: true, cli: "--until", doc: "what to wait for"}
+      - {name: timeout, type: seconds, cli: "--timeout", doc: "give up waiting after this many seconds"}
+    result: TerminalWaitResult
+    errors:
+      - {code: timeout, fix: "Wait longer with a larger {timeout}, or read the terminal later."}
+
+  - name: terminal move
+    summary: move a terminal to another desktop
+    runs: home
+    grant: full
+    doc: |
+      Moves `terminal`, or your own session's terminal, to `desktop`: its shortcut digit, its name as shown or its id. A missing numbered desktop is created. The terminal keeps running beside the destination's active tile. Anyone may move a shell; an agent only when it is you or below you in your delegation chain, or you are the profile's chief.
+    args:
+      - {name: terminal, type: terminal_ref, cli: pos, placeholder: "<terminal>", doc: "the terminal to move; yours by default"}
+      - {name: desktop, type: text, required: true, cli: pos, placeholder: "<desktop>", doc: "where it goes"}
+    result: TerminalMoveResult
+    examples:
+      - {desktop: "8"}
+
+  - name: terminal close
+    summary: close a shell
+    runs: home
+    grant: full
+    doc: |
+      Closes the shell `terminal`. It closes shells only; close an agent with `agent_close`.
+    args:
+      - {name: terminal, type: terminal_ref, required: true, cli: pos, placeholder: "<terminal>"}
+      - {name: desktop, type: text, cli: "--desktop", placeholder: "<ref>", doc: "the shell's desktop, when it is not yours; the refusal names the value to pass"}
+    result: TerminalCloseResult

@@ -1,38 +1,31 @@
 package daemon
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"net"
+
+	"github.com/victorarias/attn/internal/command"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) handleTerminalMove(conn net.Conn, msg *protocol.TerminalMoveMessage) {
-	caller, err := d.terminalCaller(msg.CallerSessionID)
+func (d *Daemon) runTerminalMove(_ context.Context, c command.Caller, a command.TerminalMoveArgs) (any, error) {
+	caller, err := d.terminalCaller(c.Session)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
-	ref := msg.Target
+	ref := a.Terminal
 	if ref == "" {
 		ref = string(caller.ID)
 	}
 	target, err := d.terminalTarget(caller, ref)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
 	if err := d.mayActOnTerminal(caller, target, "move"); err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
-	result, err := d.moveTerminalToDesktop(target, msg.Desktop)
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TerminalMoveResult: result})
+	return d.moveTerminalToDesktop(target, a.Desktop)
 }
 
 func (d *Daemon) moveTerminalToDesktop(target *selectedTerminal, ref string) (*protocol.TerminalMoveResult, error) {

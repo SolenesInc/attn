@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "aae4669eb52c";
+pub const PROTOCOL_VERSION: &str = "33790e3822ae";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -9068,18 +9068,6 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settings_list: Option<SettingsListResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub terminal_entries: Option<Vec<TerminalEntry>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub terminal_input_result: Option<TerminalInputResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub terminal_move_result: Option<TerminalMoveResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub terminal_open_result: Option<TerminalOpenResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub terminal_read_result: Option<TerminalReadResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub terminal_wait_result: Option<TerminalWaitResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub update_request_result: Option<UpdateRequestResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub update_status: Option<UpdateStatus>,
@@ -12776,22 +12764,8 @@ pub struct TerminalBlock {
     pub output: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct TerminalCloseMessage {
-    pub caller_session_id: SessionID,
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub desktop: Option<String>,
-    pub target: String,
-}
-
-impl TerminalCloseMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "terminal_close".to_string(),
-            ..Self::default()
-        }
-    }
+pub struct TerminalCloseResult {
+    pub terminal_id: TerminalID,
 }
 pub type TerminalDirection = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -12849,29 +12823,6 @@ impl TerminalFocusMessage {
     }
 }
 pub type TerminalID = String;
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct TerminalInputMessage {
-    pub caller_session_id: SessionID,
-    pub cmd: String,
-    pub data: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub desktop: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub run: Option<bool>,
-    pub target: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub wait: Option<bool>,
-}
-
-impl TerminalInputMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "terminal_input".to_string(),
-            ..Self::default()
-        }
-    }
-}
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TerminalInputResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12931,40 +12882,9 @@ pub struct TerminalLaunchResult {
     pub unrecorded: Option<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct TerminalListMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub all: Option<bool>,
-    pub caller_session_id: SessionID,
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub desktop: Option<String>,
-}
-
-impl TerminalListMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "terminal_list".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct TerminalMoveMessage {
-    pub caller_session_id: SessionID,
-    pub cmd: String,
-    pub desktop: String,
-    pub target: String,
-}
-
-impl TerminalMoveMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "terminal_move".to_string(),
-            ..Self::default()
-        }
-    }
+pub struct TerminalListResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub terminals: Vec<TerminalEntry>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TerminalMoveResult {
@@ -12978,31 +12898,6 @@ pub struct TerminalMoveResult {
     pub terminal_id: TerminalID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unchanged: Option<bool>,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct TerminalOpenMessage {
-    pub caller_session_id: SessionID,
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub command: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cwd: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub desktop: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub direction: Option<TerminalDirection>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub host: Option<String>,
-}
-
-impl TerminalOpenMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "terminal_open".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TerminalOpenResult {
@@ -13022,25 +12917,6 @@ impl TerminalPointerActivityMessage {
     pub fn new() -> Self {
         Self {
             cmd: "terminal_pointer_activity".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct TerminalReadMessage {
-    pub caller_session_id: SessionID,
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub lines: Option<i64>,
-    pub mode: TerminalReadMode,
-    pub target: String,
-}
-
-impl TerminalReadMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "terminal_read".to_string(),
             ..Self::default()
         }
     }
@@ -13126,6 +13002,19 @@ impl TerminalRestartMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TerminalRunResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub block: Option<TerminalBlock>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exited: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_block_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_id: Option<TerminalID>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TerminalShellMessage {
@@ -13217,25 +13106,6 @@ impl TerminalWaitBlockMessage {
     pub fn new() -> Self {
         Self {
             cmd: "terminal_wait_block".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct TerminalWaitMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub after_block_id: Option<String>,
-    pub caller_session_id: SessionID,
-    pub cmd: String,
-    pub target: String,
-    pub until: TerminalWaitUntil,
-}
-
-impl TerminalWaitMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "terminal_wait".to_string(),
             ..Self::default()
         }
     }
@@ -14378,21 +14248,6 @@ impl ResponseField for SessionReopenResult {
 }
 impl ResponseField for SessionShowResult {
     const FIELD: &'static str = "session_show_result";
-}
-impl ResponseField for TerminalInputResult {
-    const FIELD: &'static str = "terminal_input_result";
-}
-impl ResponseField for TerminalMoveResult {
-    const FIELD: &'static str = "terminal_move_result";
-}
-impl ResponseField for TerminalOpenResult {
-    const FIELD: &'static str = "terminal_open_result";
-}
-impl ResponseField for TerminalReadResult {
-    const FIELD: &'static str = "terminal_read_result";
-}
-impl ResponseField for TerminalWaitResult {
-    const FIELD: &'static str = "terminal_wait_result";
 }
 impl ResponseField for UpdateRequestResult {
     const FIELD: &'static str = "update_request_result";

@@ -110,4 +110,12 @@ var CommandRuns = map[string]Locator{
 	"session reopen":          LocatorHome,
 	"skill":                   LocatorHere,
 	"state explain":           LocatorHome,
+	"terminal ls":             LocatorHome,
+	"terminal open":           LocatorHome,
+	"terminal run":            LocatorHome,
+	"terminal send":           LocatorHome,
+	"terminal read":           LocatorHome,
+	"terminal wait":           LocatorHome,
+	"terminal move":           LocatorHome,
+	"terminal close":          LocatorHome,
 }

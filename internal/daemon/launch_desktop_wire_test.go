@@ -220,7 +220,7 @@ func TestReopenReturnsToItsNumberedDesktopEvenAfterItWasRemoved(t *testing.T) {
 	targetAnchor := w.Spawn(app, fakeagent.Codex, w.Path("target-anchor"))
 	w.Launched(targetAnchor)
 	switchDesktop(app, profile, current.ID)
-	if _, err := cli.TerminalCommand(context.Background(), protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: protocol.SessionID(session), Target: session, Desktop: target.ID}); err != nil {
+	if _, err := client.TerminalCommand[protocol.TerminalMoveResult](context.Background(), cli, "terminal move", protocol.SessionID(session), map[string]any{"terminal": session, "desktop": target.ID}); err != nil {
 		t.Fatal(err)
 	}
 	closeSession(t, cli, session, "done")

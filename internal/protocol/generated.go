@@ -9787,25 +9787,6 @@ type Response struct {
 	// SettingsList corresponds to the JSON schema field "settings_list".
 	SettingsList *SettingsListResult `json:"settings_list,omitempty,omitzero"`
 
-	// TerminalEntries corresponds to the JSON schema field "terminal_entries".
-	TerminalEntries []TerminalEntry `json:"terminal_entries,omitempty,omitzero"`
-
-	// TerminalInputResult corresponds to the JSON schema field
-	// "terminal_input_result".
-	TerminalInputResult *TerminalInputResult `json:"terminal_input_result,omitempty,omitzero"`
-
-	// TerminalMoveResult corresponds to the JSON schema field "terminal_move_result".
-	TerminalMoveResult *TerminalMoveResult `json:"terminal_move_result,omitempty,omitzero"`
-
-	// TerminalOpenResult corresponds to the JSON schema field "terminal_open_result".
-	TerminalOpenResult *TerminalOpenResult `json:"terminal_open_result,omitempty,omitzero"`
-
-	// TerminalReadResult corresponds to the JSON schema field "terminal_read_result".
-	TerminalReadResult *TerminalReadResult `json:"terminal_read_result,omitempty,omitzero"`
-
-	// TerminalWaitResult corresponds to the JSON schema field "terminal_wait_result".
-	TerminalWaitResult *TerminalWaitResult `json:"terminal_wait_result,omitempty,omitzero"`
-
 	// UpdateRequestResult corresponds to the JSON schema field
 	// "update_request_result".
 	UpdateRequestResult *UpdateRequestResult `json:"update_request_result,omitempty,omitzero"`
@@ -14328,18 +14309,9 @@ type TerminalBlock struct {
 	Output string `json:"output"`
 }
 
-type TerminalCloseMessage struct {
-	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
-	CallerSessionID SessionID `json:"caller_session_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Desktop corresponds to the JSON schema field "desktop".
-	Desktop *string `json:"desktop,omitempty,omitzero"`
-
-	// Target corresponds to the JSON schema field "target".
-	Target string `json:"target"`
+type TerminalCloseResult struct {
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID TerminalID `json:"terminal_id"`
 }
 
 type TerminalDirection string
@@ -14411,29 +14383,6 @@ type TerminalFocusMessage struct {
 
 type TerminalID string
 
-type TerminalInputMessage struct {
-	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
-	CallerSessionID SessionID `json:"caller_session_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Data corresponds to the JSON schema field "data".
-	Data string `json:"data"`
-
-	// Desktop corresponds to the JSON schema field "desktop".
-	Desktop *string `json:"desktop,omitempty,omitzero"`
-
-	// Run corresponds to the JSON schema field "run".
-	Run *bool `json:"run,omitempty,omitzero"`
-
-	// Target corresponds to the JSON schema field "target".
-	Target string `json:"target"`
-
-	// Wait corresponds to the JSON schema field "wait".
-	Wait *bool `json:"wait,omitempty,omitzero"`
-}
-
 type TerminalInputResult struct {
 	// LastBlockID corresponds to the JSON schema field "last_block_id".
 	LastBlockID *string `json:"last_block_id,omitempty,omitzero"`
@@ -14490,32 +14439,9 @@ type TerminalLaunchResult struct {
 	Unrecorded *string `json:"unrecorded,omitempty,omitzero"`
 }
 
-type TerminalListMessage struct {
-	// All corresponds to the JSON schema field "all".
-	All *bool `json:"all,omitempty,omitzero"`
-
-	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
-	CallerSessionID SessionID `json:"caller_session_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Desktop corresponds to the JSON schema field "desktop".
-	Desktop *string `json:"desktop,omitempty,omitzero"`
-}
-
-type TerminalMoveMessage struct {
-	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
-	CallerSessionID SessionID `json:"caller_session_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Desktop corresponds to the JSON schema field "desktop".
-	Desktop string `json:"desktop"`
-
-	// Target corresponds to the JSON schema field "target".
-	Target string `json:"target"`
+type TerminalListResult struct {
+	// Terminals corresponds to the JSON schema field "terminals".
+	Terminals []TerminalEntry `json:"terminals"`
 }
 
 type TerminalMoveResult struct {
@@ -14541,29 +14467,6 @@ type TerminalMoveResult struct {
 	Unchanged *bool `json:"unchanged,omitempty,omitzero"`
 }
 
-type TerminalOpenMessage struct {
-	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
-	CallerSessionID SessionID `json:"caller_session_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Command corresponds to the JSON schema field "command".
-	Command *string `json:"command,omitempty,omitzero"`
-
-	// Cwd corresponds to the JSON schema field "cwd".
-	Cwd *string `json:"cwd,omitempty,omitzero"`
-
-	// Desktop corresponds to the JSON schema field "desktop".
-	Desktop *string `json:"desktop,omitempty,omitzero"`
-
-	// Direction corresponds to the JSON schema field "direction".
-	Direction *TerminalDirection `json:"direction,omitempty,omitzero"`
-
-	// Host corresponds to the JSON schema field "host".
-	Host *string `json:"host,omitempty,omitzero"`
-}
-
 type TerminalOpenResult struct {
 	// DesktopID corresponds to the JSON schema field "desktop_id".
 	DesktopID string `json:"desktop_id"`
@@ -14584,23 +14487,6 @@ type TerminalPointerActivityMessage struct {
 
 	// ID corresponds to the JSON schema field "id".
 	ID TerminalID `json:"id"`
-}
-
-type TerminalReadMessage struct {
-	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
-	CallerSessionID SessionID `json:"caller_session_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Lines corresponds to the JSON schema field "lines".
-	Lines *int `json:"lines,omitempty,omitzero"`
-
-	// Mode corresponds to the JSON schema field "mode".
-	Mode TerminalReadMode `json:"mode"`
-
-	// Target corresponds to the JSON schema field "target".
-	Target string `json:"target"`
 }
 
 type TerminalReadMode string
@@ -14677,6 +14563,23 @@ type TerminalRestartMessage struct {
 
 	// TerminalID corresponds to the JSON schema field "terminal_id".
 	TerminalID TerminalID `json:"terminal_id"`
+}
+
+type TerminalRunResult struct {
+	// Block corresponds to the JSON schema field "block".
+	Block *TerminalBlock `json:"block,omitempty,omitzero"`
+
+	// ExitCode corresponds to the JSON schema field "exit_code".
+	ExitCode *int `json:"exit_code,omitempty,omitzero"`
+
+	// Exited corresponds to the JSON schema field "exited".
+	Exited *bool `json:"exited,omitempty,omitzero"`
+
+	// LastBlockID corresponds to the JSON schema field "last_block_id".
+	LastBlockID *string `json:"last_block_id,omitempty,omitzero"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID *TerminalID `json:"terminal_id,omitempty,omitzero"`
 }
 
 type TerminalShellMessage struct {
@@ -14774,23 +14677,6 @@ type TerminalWaitBlockMessage struct {
 
 	// TerminalID corresponds to the JSON schema field "terminal_id".
 	TerminalID TerminalID `json:"terminal_id"`
-
-	// Until corresponds to the JSON schema field "until".
-	Until TerminalWaitUntil `json:"until"`
-}
-
-type TerminalWaitMessage struct {
-	// AfterBlockID corresponds to the JSON schema field "after_block_id".
-	AfterBlockID *string `json:"after_block_id,omitempty,omitzero"`
-
-	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
-	CallerSessionID SessionID `json:"caller_session_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Target corresponds to the JSON schema field "target".
-	Target string `json:"target"`
 
 	// Until corresponds to the JSON schema field "until".
 	Until TerminalWaitUntil `json:"until"`
