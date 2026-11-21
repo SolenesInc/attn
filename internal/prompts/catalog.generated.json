@@ -4330,6 +4330,40 @@
               }
             ]
           }
+        },
+        {
+          "id": "command-may-have-run",
+          "delivery": "inbox_content",
+          "description": "terminal_open called as a tool answered before its command was typed, and the daemon restarted after it began typing the command; a notice to the session that opened the terminal.",
+          "body": {
+            "kind": "text",
+            "id": "terminal.command-may-have-run",
+            "source": "content/terminal/command-may-have-run.md",
+            "bindings": [
+              {
+                "name": "terminal",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "terminal",
+                    "kind": "text",
+                    "description": "The opened terminal's id."
+                  }
+                }
+              },
+              {
+                "name": "command",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "command",
+                    "kind": "text",
+                    "description": "The command attn was typing."
+                  }
+                }
+              }
+            ]
+          }
         }
       ]
     },
@@ -7924,5 +7958,5 @@
       ]
     }
   ],
-  "definitions_hash": "eb607750ef1933a49baed51ec46d6b3a9cf87b48a79fb61e9c023aa7711ba6d9"
+  "definitions_hash": "bbdb6b9cc1f73464168cfeb041913bc8ea60e32c61fcf366e618e14d26760df1"
 }

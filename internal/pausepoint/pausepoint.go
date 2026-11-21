@@ -75,6 +75,7 @@ const (
 	AgentTerminalStarted           = "agent-terminal-started"
 	ServerFeedBaselined            = "server-feed-baselined"
 	TerminalStarting               = "terminal-starting"
+	TerminalOpenCommandTyped       = "terminal-open-command-typed"
 	TerminalRuntimeEnding          = "terminal-runtime-ending"
 	AgentLaunchCommitReporting     = "agent-launch-commit-reporting"
 	CodexViewReleaseChecked        = "codex-view-release-checked"

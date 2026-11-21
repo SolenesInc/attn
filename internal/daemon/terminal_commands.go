@@ -17,6 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -329,9 +330,11 @@ func (d *Daemon) runTerminalOpen(ctx context.Context, c command.Caller, a comman
 		}
 		opener := caller.ID
 		d.life.Go("type the command of an opened terminal", func() {
-			err := d.typeFirstCommand(d.life.Context(), terminal, id, line)
+			markSubmitting := func() error { return d.store.MarkTerminalOpenCommandSubmitting(terminal, time.Now()) }
+			err := d.typeFirstCommand(d.life.Context(), terminal, id, line, markSubmitting)
 			switch {
 			case err == nil:
+				pausepoint.At(pausepoint.TerminalOpenCommandTyped)
 				if err := d.store.ForgetTerminalOpenCommand(terminal); err != nil {
 					d.logf("terminal open: command for %s typed; forgetting it: %v", terminal, err)
 				}
@@ -343,7 +346,7 @@ func (d *Daemon) runTerminalOpen(ctx context.Context, c command.Caller, a comman
 		})
 	}
 	if line != "" && a.WaitForShell {
-		if err := d.typeFirstCommand(ctx, terminal, id, line); err != nil {
+		if err := d.typeFirstCommand(ctx, terminal, id, line, nil); err != nil {
 			return nil, err
 		}
 	}
@@ -366,25 +369,39 @@ func (d *Daemon) noticeCommandsCutByRestart() {
 		return
 	}
 	for _, command := range pending {
-		failure := fmt.Errorf("the daemon restarted before attn typed %s", command.Command)
-		if err := d.store.NoticeTerminalOpenCommandNotTyped(command.Terminal, commandNotTypedNotice(command.Opener, command.Terminal, failure), time.Now()); err != nil {
+		if err := d.store.NoticeTerminalOpenCommandNotTyped(command.Terminal, commandCutByRestartNotice(command), time.Now()); err != nil {
 			d.logf("terminal open: command for %s cut by a restart; telling %s: %v", command.Terminal, command.Opener, err)
 		}
 	}
 }
 
+func commandCutByRestartNotice(command store.TerminalOpenCommand) inbox.Item {
+	if !command.Submitting {
+		return commandNotTypedNotice(command.Opener, command.Terminal, fmt.Errorf("the daemon restarted before attn typed %s", command.Command))
+	}
+	text := prompts.RenderText("terminal", "command-may-have-run", prompts.Values{"terminal": string(command.Terminal), "command": command.Command})
+	return terminalCommandNotice(command.Opener, command.Terminal, text)
+}
+
 func commandNotTypedNotice(opener protocol.SessionID, terminal protocol.TerminalID, failure error) inbox.Item {
 	text := prompts.RenderText("terminal", "command-not-typed", prompts.Values{"terminal": string(terminal), "failure": failure.Error()})
+	return terminalCommandNotice(opener, terminal, text)
+}
+
+func terminalCommandNotice(opener protocol.SessionID, terminal protocol.TerminalID, text string) inbox.Item {
 	return inbox.Item{ID: "terminal-command-not-typed/" + string(terminal), To: who.ToSession(opener), Kind: inbox.Notice, Source: "terminal", Text: text}
 }
 
-func (d *Daemon) typeFirstCommand(ctx context.Context, terminal protocol.TerminalID, id protocol.SessionID, line string) error {
+func (d *Daemon) typeFirstCommand(ctx context.Context, terminal protocol.TerminalID, id protocol.SessionID, line string, beforeWrite func() error) error {
 	ctx, cancel := context.WithTimeout(ctx, terminalFirstPromptTripwire)
 	defer cancel()
 	err := d.waitForTerminalFirstPrompt(ctx, terminal)
 	if err == nil && ctx.Err() == nil {
 		var state protocol.TerminalText
 		state, err = Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: terminal, Mode: protocol.TerminalReadModeScreen})
+		if err == nil && beforeWrite != nil {
+			err = beforeWrite()
+		}
 		if err == nil {
 			err = d.typeInput(ctx, terminal, state, line+"\r")
 		}

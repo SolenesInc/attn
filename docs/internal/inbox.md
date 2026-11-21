@@ -174,7 +174,10 @@ Notices are attn's own messages to an agent:
   shell showed no first prompt in time, or the terminal ended or the daemon
   restarted first, addressed to the session that opened the terminal. The
   daemon records the command before the tool answers, so a restart before
-  the first prompt sends the notice when the daemon starts again
+  the first prompt sends the notice when the daemon starts again. The daemon
+  marks the command just before it types it, so a restart after that mark
+  sends a notice that the command may have run, and to read the terminal
+  before running it again
 
 ## Coalescing
 

@@ -23,7 +23,11 @@ func lifecycleRecipients() []Recipient {
 			Events: []Event{On("command-not-typed", "inbox_content", "terminal_open called as a tool answered before its command was typed, and typing it failed; a notice to the session that opened the terminal.",
 				template("terminal.command-not-typed", "content/terminal/command-not-typed.md",
 					TextField("terminal", "The opened terminal's id."),
-					TextField("failure", "Why the command was not typed.")))}},
+					TextField("failure", "Why the command was not typed."))),
+				On("command-may-have-run", "inbox_content", "terminal_open called as a tool answered before its command was typed, and the daemon restarted after it began typing the command; a notice to the session that opened the terminal.",
+					template("terminal.command-may-have-run", "content/terminal/command-may-have-run.md",
+						TextField("terminal", "The opened terminal's id."),
+						TextField("command", "The command attn was typing.")))}},
 
 		{ID: "session-title",
 			Description: "Session title",

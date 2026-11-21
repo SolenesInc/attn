@@ -212,3 +212,46 @@ exec /bin/bash "$@"
 		})
 	}
 }
+
+func TestACommandTerminalOpenWasTypingWhenTheDaemonRestartedIsNoticedAsMayHaveRun(t *testing.T) {
+	for _, backend := range testworld.WorkerAndSharedHost {
+		t.Run(string(backend), func(t *testing.T) {
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(backend))
+			s.Vars = append(s.Vars, "SHELL=/bin/bash")
+			typed := s.PauseAt(pausepoint.TerminalOpenCommandTyped)
+			s.Start()
+			app := s.App()
+			mark := app.EventCount()
+			requireStdout(t, s.Attn("settings", "set", "agent_tools_enabled", "true"), "true")
+			testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+				return m.Settings["agent_tools_enabled"] == "true"
+			})
+			session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+			tools := claudeToolEndpoint(t, s.LaunchedCarrying(app.Terminal(session)))
+			appended := filepath.Join(s.Dir, "appended")
+			accepted := "printf 'appended\\n' >> " + appended
+			var opened protocol.TerminalOpenResult
+			tools.structured(t, "terminal_open", map[string]any{"command": []string{accepted}}, &opened)
+			typed.Await()
+
+			s.Signal(syscall.SIGTERM)
+			s.AwaitStopped()
+			s.Start()
+			run := func(args ...string) testworld.Result {
+				return s.Run(testworld.Invocation{Session: session, Args: args})
+			}
+			terminal := string(opened.TerminalID)
+			inbox := run("agent", "inbox")
+			want := "The daemon restarted while attn was typing the command you opened terminal " + terminal + " with, so the command may have run: " + accepted + "."
+			if inbox.Code != 0 || !strings.Contains(inbox.Stdout, want) || strings.Contains(inbox.Stdout, "was not typed") {
+				t.Fatalf("the opener's inbox after a restart while attn typed the command = %+v, want the notice that it may have run", inbox)
+			}
+			if got := run("terminal", "wait", terminal, "--until", "prompt"); got.Code != 0 {
+				t.Fatalf("waiting for the recovered shell's prompt: %+v", got)
+			}
+			if got, err := os.ReadFile(appended); err != nil || string(got) != "appended\n" {
+				t.Fatalf("the file the command appends to = %q (%v), want one line: the command ran once and was not replayed", got, err)
+			}
+		})
+	}
+}

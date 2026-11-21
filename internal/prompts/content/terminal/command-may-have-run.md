@@ -1,0 +1,1 @@
+The daemon restarted while attn was typing the command you opened terminal {{terminal}} with, so the command may have run: {{command}}. The terminal stays open. Read it with `terminal_read` and check for the command's effects before you run it again with `terminal_run`, or close the terminal with `terminal_close`.

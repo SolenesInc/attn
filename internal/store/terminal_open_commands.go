@@ -8,9 +8,10 @@ import (
 )
 
 type TerminalOpenCommand struct {
-	Terminal protocol.TerminalID
-	Opener   protocol.SessionID
-	Command  string
+	Terminal   protocol.TerminalID
+	Opener     protocol.SessionID
+	Command    string
+	Submitting bool
 }
 
 func (s *Store) RecordTerminalOpenCommand(command TerminalOpenCommand, at time.Time) error {
@@ -24,7 +25,7 @@ func (s *Store) RecordTerminalOpenCommand(command TerminalOpenCommand, at time.T
 func (s *Store) TerminalOpenCommands() ([]TerminalOpenCommand, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	rows, err := s.db.Query(`SELECT terminal_id, opener_session_id, command FROM terminal_open_commands ORDER BY created_at, terminal_id`)
+	rows, err := s.db.Query(`SELECT terminal_id, opener_session_id, command, submitting_at IS NOT NULL FROM terminal_open_commands ORDER BY created_at, terminal_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -32,12 +33,19 @@ func (s *Store) TerminalOpenCommands() ([]TerminalOpenCommand, error) {
 	var commands []TerminalOpenCommand
 	for rows.Next() {
 		var command TerminalOpenCommand
-		if err := rows.Scan(&command.Terminal, &command.Opener, &command.Command); err != nil {
+		if err := rows.Scan(&command.Terminal, &command.Opener, &command.Command, &command.Submitting); err != nil {
 			return nil, err
 		}
 		commands = append(commands, command)
 	}
 	return commands, rows.Err()
+}
+
+func (s *Store) MarkTerminalOpenCommandSubmitting(terminal protocol.TerminalID, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`UPDATE terminal_open_commands SET submitting_at = ? WHERE terminal_id = ?`, at.UTC().Format(sortableTimeFormat), terminal)
+	return err
 }
 
 func (s *Store) ForgetTerminalOpenCommand(terminal protocol.TerminalID) error {
