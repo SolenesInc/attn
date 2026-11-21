@@ -57,7 +57,9 @@ analytics uploads go nowhere. With the exports in the file, the daemon
 launches the mock agent for `claude` and `codex`, refuses headless model
 tasks, and talks to the mock GitHub. `ATTN_TOOL_HOME` gives the instance a
 scratch harness home, so a mock conversation that a fixture makes resumable
-lands there and not in your `~/.claude` or `~/.codex`. The file also defines
+lands there and not in your `~/.claude` or `~/.codex`. `SIGMA_HOME` puts
+Sigma's home under it too, so a Sigma session's server keeps its
+conversations there and not in your `~/.sigma`. The file also defines
 `wsctl`, `bridge` and `DRIVE_ENV`. `DRIVE_ENV` holds the path of the file
 itself, which recipes append their variables to
 ([features/README.md](features/README.md)). Running `write-env.sh` again
