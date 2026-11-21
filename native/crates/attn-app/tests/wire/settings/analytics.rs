@@ -309,7 +309,7 @@ fn sharing(
 }
 
 /// Analytics as the vent tests open it: a new vent and a withdrawn one, with the stake seed.
-fn triage() -> World {
+pub(in super::super) fn triage() -> World {
     triage_of(vec![vent("v-new"), withdrawn()])
 }
 

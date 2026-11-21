@@ -10,7 +10,7 @@ pub fn ask_mark(count: usize, t: &Tokens) -> El {
         .justify_center()
         .items_center()
         .fill(t.accent)
-        .child(words(said(count), Type::Tag, t.bg_app));
+        .child(words(said(count), Type::Tag, crate::ink_on(t.accent, t)));
     door::corner(door::inset(mark, Space::S4, Space::S0), Radius::Round)
 }
 

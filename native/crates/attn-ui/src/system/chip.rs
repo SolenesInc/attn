@@ -7,7 +7,7 @@ use crate::Tokens;
 /// dashed while it holds nothing.
 pub fn number_chip(number: i64, current: bool, empty: bool, t: &Tokens) -> El {
     let ink = if current {
-        crate::brand_ink(t)
+        crate::ink_on(t.brand, t)
     } else {
         t.text_tertiary
     };

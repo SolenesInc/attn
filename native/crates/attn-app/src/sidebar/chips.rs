@@ -190,7 +190,7 @@ fn waiting_words(waiting: usize, look: Look) -> String {
 fn waiting_mark(chip: &str, waiting: usize, look: Look, t: &Tokens) -> Option<El> {
     (waiting > 0).then(|| match look {
         Look::Strip => waiting_dot(t),
-        Look::Bar => system::count_badge(waiting, t.warning, attn_ui::warning_ink(t))
+        Look::Bar => system::count_badge(waiting, t.warning, attn_ui::ink_on(t.warning, t))
             .key(format!("{chip}.waiting"))
             .role("none")
             .pin(None, Some(-BADGE_RISE), Some(-BADGE_OVERHANG), None)

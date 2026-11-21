@@ -281,6 +281,27 @@ pub fn contrast(a: Color, b: Color) -> f32 {
     (a.max(b) + 0.05) / (a.min(b) + 0.05)
 }
 
+/// Whichever of `inks` reads furthest on `ground`, the first of them on a tie.
+pub fn reads_furthest(ground: Color, inks: impl IntoIterator<Item = Color>) -> Color {
+    inks.into_iter()
+        .reduce(|best, ink| {
+            if contrast(ink, ground) > contrast(best, ground) {
+                ink
+            } else {
+                best
+            }
+        })
+        .expect("an ink")
+}
+
+/// The first of `inks` that reads on `ground` at 4.5:1, else whichever reads furthest.
+pub fn first_that_reads(ground: Color, inks: impl IntoIterator<Item = Color> + Clone) -> Color {
+    inks.clone()
+        .into_iter()
+        .find(|&ink| reads_on(ink, ground))
+        .unwrap_or_else(|| reads_furthest(ground, inks))
+}
+
 /// Whether `ink` reads on `ground` at the 4.5:1 body text needs.
 pub fn reads_on(ink: Color, ground: Color) -> bool {
     contrast(ink, ground) >= READS

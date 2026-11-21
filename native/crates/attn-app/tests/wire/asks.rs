@@ -60,7 +60,7 @@ fn ask(id: &str, session: &str, subject: &str, minutes_ago: i64, parts: Vec<AskP
     }
 }
 
-fn cache_store() -> Ask {
+pub(super) fn cache_store() -> Ask {
     let mut store = question("q1", "one", "Which store should keep the cache?", &[]);
     store.question.as_mut().unwrap().choices = vec![
         AskChoice {
@@ -82,7 +82,7 @@ fn cache_store() -> Ask {
     )
 }
 
-fn release_day() -> Ask {
+pub(super) fn release_day() -> Ask {
     ask(
         "a-release",
         "web",
@@ -143,11 +143,11 @@ fn written(key: &str, text: &str) -> AskAnswer {
     }
 }
 
-fn api_working() -> Session {
+pub(super) fn api_working() -> Session {
     session("api", "working")
 }
 
-fn web_waiting() -> Session {
+pub(super) fn web_waiting() -> Session {
     Session {
         turn_owed: Some(true),
         turn_opened_at: Some(ago(20)),
@@ -155,7 +155,7 @@ fn web_waiting() -> Session {
     }
 }
 
-fn start(asks: Vec<Ask>, sessions: Vec<Session>) -> World {
+pub(super) fn start(asks: Vec<Ask>, sessions: Vec<Session>) -> World {
     start_with(asks, sessions, &[])
 }
 
@@ -183,7 +183,7 @@ fn start_on(mut state: InitialStateMessage, asks: Vec<Ask>, settings: &[(&str, &
     World::start(daemon)
 }
 
-fn open_drawer(world: &mut World) {
+pub(super) fn open_drawer(world: &mut World) {
     world.gesture(|app| app.key(chord(Action::DockAsks)));
 }
 

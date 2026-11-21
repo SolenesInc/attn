@@ -62,7 +62,7 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
     let mut sheet = Sheet::new("asks.sheet", "Asks");
     if live > 0 {
         sheet = sheet.badge(
-            count_badge(live, t.accent, t.bg_app)
+            count_badge(live, t.accent, attn_ui::ink_on(t.accent, t))
                 .key("asks.count")
                 .role("status")
                 .label(format!("{live} open")),

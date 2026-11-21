@@ -154,7 +154,7 @@ impl Paint<'_> {
                 .child(
                     text(label)
                         .font(TextStyle::new(9.5, 600.0))
-                        .color(attn_ui::brand_ink(self.t)),
+                        .color(attn_ui::ink_on(self.t.brand, self.t)),
                 ),
         );
     }

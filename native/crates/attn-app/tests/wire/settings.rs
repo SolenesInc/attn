@@ -12,7 +12,7 @@ use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 
 mod agents;
-mod analytics;
+pub(super) mod analytics;
 mod background;
 mod bus;
 mod delegation;

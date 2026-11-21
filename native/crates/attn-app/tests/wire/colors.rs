@@ -148,3 +148,103 @@ fn a_standard_menu_draws_the_row_the_keys_reach_in_primary_ink_and_the_rest_in_s
     assert_eq!(label_ink(&world, "For 30 minutes"), secondary);
     assert_eq!(label_ink(&world, "For an hour"), primary);
 }
+
+/// The contrast of every word drawn in a `fill` inside the element keyed `within`, the element
+/// itself included.
+fn words_on(world: &World, within: &str, fill: rune::Color) -> Vec<f32> {
+    let all = world.runtime().elements();
+    let inside = |e: &rune::ElementInfo, outer: usize| {
+        std::iter::successors(Some(e), |e| e.parent.map(|p| &all[p]))
+            .any(|a| a.path == all[outer].path)
+    };
+    let root = all
+        .iter()
+        .position(|e| e.key.as_deref() == Some(within))
+        .unwrap_or_else(|| panic!("no {within} on screen"));
+    all.iter()
+        .enumerate()
+        .filter(|(_, e)| e.fill == fill && inside(e, root))
+        .flat_map(|(i, _)| {
+            all.iter()
+                .filter(move |w| w.text_color.is_some() && inside(w, i))
+                .map(move |w| attn_ui::colors::contrast(w.text_color.unwrap(), fill))
+        })
+        .collect()
+}
+
+type Status = fn(&attn_ui::Tokens) -> rune::Color;
+
+/// Each place in `world` that draws words on a status fill, as what it is, the element it lies
+/// in and the fill, measured in every scheme on both sides with `settings` kept.
+fn unread_in_every_scheme(
+    world: &mut World,
+    settings: &[(&str, &str)],
+    places: &[(&str, &str, Status)],
+) -> Vec<String> {
+    let mut unread = Vec::new();
+    for scheme in attn_ui::colors::SCHEMES.iter() {
+        for (side, dark) in [("dark", true), ("light", false)] {
+            let mut all = vec![("color_scheme", scheme.id), ("theme", side)];
+            all.extend_from_slice(settings);
+            update(world, &all);
+            let t = scheme.colors(dark).ui;
+            for &(place, within, fill) in places {
+                let reads = words_on(world, within, fill(&t));
+                assert!(!reads.is_empty(), "{place} draws no words on its fill");
+                for read in reads.into_iter().filter(|&r| r < 4.5) {
+                    unread.push(format!("{}, {side}: {place} reads {read:.2}:1", scheme.id));
+                }
+            }
+        }
+    }
+    unread
+}
+
+#[test]
+fn a_count_or_mark_on_a_status_fill_reads_at_4_5_to_1_in_every_scheme_dark_and_light() {
+    let mut bar = World::start(Daemon::scripted().state(queue(super::queue::crowding_desktops(3))));
+    bar.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+    bar.resize((1400.0, 900.0));
+    let mut unread = unread_in_every_scheme(
+        &mut bar,
+        &[("queue_mode_enabled", "true")],
+        &[
+            ("the queue bar's desktop count", "queue-bar.desktops", |t| {
+                t.warning
+            }),
+        ],
+    );
+
+    let mut asks = super::asks::start(
+        vec![super::asks::cache_store(), super::asks::release_day()],
+        vec![super::asks::api_working(), super::asks::web_waiting()],
+    );
+    asks.open_desktop();
+    super::asks::open_drawer(&mut asks);
+    unread.extend(unread_in_every_scheme(
+        &mut asks,
+        &[],
+        &[
+            ("the asks drawer's count", "asks.count", |t| t.accent),
+            ("an asking agent's mark", "sidebar.session.web.ask", |t| {
+                t.accent
+            }),
+        ],
+    ));
+
+    let mut vents = super::settings::analytics::triage();
+    unread.extend(unread_in_every_scheme(
+        &mut vents,
+        &[("analytics.enabled", "true")],
+        &[(
+            "the vents tab's count",
+            "settings.analytics.views.vents",
+            |t| t.brand,
+        )],
+    ));
+
+    assert!(
+        unread.is_empty(),
+        "words under 4.5:1 on a status fill: {unread:#?}"
+    );
+}

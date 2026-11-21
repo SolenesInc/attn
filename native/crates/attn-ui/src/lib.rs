@@ -151,9 +151,9 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.layer_04 = t.border_hover;
     p.bg_accent = t.accent;
     p.bg_icon_button_contrast = t.brand;
-    p.submit_fg = brand_ink(t);
-    p.submit_icon = brand_ink(t);
-    if brand_ink(t).luminance() > t.brand.luminance() {
+    p.submit_fg = ink_on(t.brand, t);
+    p.submit_icon = ink_on(t.brand, t);
+    if ink_on(t.brand, t).luminance() > t.brand.luminance() {
         p.submit_hover = t.shadow.alpha(SUBMIT_HOVER);
         p.submit_highlight = t.shadow.alpha(SUBMIT_PRESSED);
         p.contrast_pressed = t.shadow.alpha(SUBMIT_PRESSED);
@@ -225,19 +225,18 @@ const SUBMIT_PRESSED: f32 = 0.20;
 const BRAND_FILL: f32 = 0.12;
 const BRAND_EDGE: f32 = 0.5;
 
-/// The ink on a brand fill: the scheme's `on_brand` where it reads there, else the Tauri app's
+/// The words on a solid status or brand `fill`: the first that reads there of the scheme's inks
+/// for a coloured fill and the fill's own shade 12% from black, as the Tauri app's
 /// `color-mix(in srgb, var(--color-brand) 12%, black)`.
-pub fn brand_ink(t: &Tokens) -> Color {
-    if colors::reads_on(t.on_brand, t.brand) {
-        t.on_brand
-    } else {
-        colors::mix_srgb(t.brand, t.shadow, 0.88)
-    }
-}
-
-/// The Tauri app's ink on a warning fill, `color-mix(in srgb, var(--color-warning) 10%, black)`.
-pub fn warning_ink(t: &Tokens) -> Color {
-    colors::mix_srgb(t.warning, t.shadow, 0.9)
+pub fn ink_on(fill: Color, t: &Tokens) -> Color {
+    colors::first_that_reads(
+        fill,
+        [
+            t.on_brand,
+            t.on_accent,
+            colors::mix_srgb(fill, t.shadow, 0.88),
+        ],
+    )
 }
 
 /// Every menu: a menu's surface, its rows a compact control high with their words at a compact

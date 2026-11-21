@@ -251,13 +251,7 @@ fn views(state: &State, view: usize, t: &Tokens) -> Block {
                 Type::Small,
                 if on { t.text_primary } else { t.text_secondary },
             ))
-            .children(count.map(|count| {
-                count_badge(
-                    count,
-                    t.brand,
-                    attn_ui::colors::mix_srgb(rune::Color::BLACK, t.brand, 0.11),
-                )
-            }));
+            .children(count.map(|count| count_badge(count, t.brand, attn_ui::ink_on(t.brand, t))));
         let label = match count {
             Some(count) => format!("{name} {count}"),
             None => (*name).to_owned(),

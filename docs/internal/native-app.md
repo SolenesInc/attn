@@ -101,7 +101,10 @@ builds, and a scheme missing a color fails to load.
 Tokens are named by what they mean, such as `state_waiting` or `find`, never by
 the view that uses them. `primary` fills the one main action and marks what is
 chosen in a switch, a check or a choice, `on_primary` is the words and marks on
-it, and `focus` is the keyboard's ring. Clippy rejects Rune's color constructors, such as
+it, and `focus` is the keyboard's ring. Words on any other solid status or brand
+fill, such as a count on `warning`, take `attn_ui::ink_on`: the first of the
+scheme's inks for a coloured fill and the fill's own shade near black that reads
+at 4.5:1 there, which holds in every scheme, dark and light. Clippy rejects Rune's color constructors, such as
 `rune::color::hex`, everywhere else (`native/clippy.toml`). It cannot see
 `Color::BLACK` and `Color::WHITE`, so review catches those.
 

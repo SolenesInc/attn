@@ -382,10 +382,5 @@ impl Face {
 /// half-strength fill, so `on_primary` answers only to the full-strength one.
 fn ink_on_disabled_primary(t: &Tokens) -> Color {
     let fill = crate::colors::mix_srgb(t.bg_panel, t.primary, disabled::STRENGTH);
-    let reads = |ink: Color| crate::colors::contrast(ink, fill);
-    if reads(t.on_primary) >= reads(t.text_primary) {
-        t.on_primary
-    } else {
-        t.text_primary
-    }
+    crate::colors::reads_furthest(fill, [t.on_primary, t.text_primary])
 }

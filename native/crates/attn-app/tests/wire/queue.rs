@@ -2293,7 +2293,7 @@ fn hidden_agents_stay_out_of_the_queue_with_the_setting_off() {
     assert!(world.screen().find(Target::key("queue-turn.h1")).is_none());
 }
 
-fn crowding_desktops(count: usize) -> InitialStateMessage {
+pub(super) fn crowding_desktops(count: usize) -> InitialStateMessage {
     let run = Session {
         automation: Some(AutomationProvenance {
             definition_id: 1,
