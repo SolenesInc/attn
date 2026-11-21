@@ -20,7 +20,7 @@ func (d *Daemon) runPresence(_ context.Context, c command.Caller, a command.Pres
 		return protocol.PresenceResult{SessionID: c.Session, SeedIds: []string{}}, nil
 	}
 	if !d.enrollmentStatus().IsHome() {
-		result, refusal := d.forwardCommand(c, "presence", map[string]any{})
+		result, refusal := d.forwardCommand(c, "presence", nil)
 		if refusal != nil {
 			return nil, refusal
 		}

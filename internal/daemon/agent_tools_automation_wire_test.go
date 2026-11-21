@@ -1,9 +1,12 @@
 package daemon_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -66,6 +69,48 @@ func TestEveryAutomationToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testi
 		t.Errorf("automation_apply with enabled in the spec answered %q, want a refusal that names the automation_enable tool", text)
 	}
 	tools.report("automation")
+}
+
+func TestAnAutomationRunToolGivesTheAgentItsInputsIntegersExactly(t *testing.T) {
+	const input = `{"record":{"id":9007199254740993,"parent":{"id":-9007199254740993}}}`
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
+	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	app := w.App()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	session := w.Spawn(app, fakeagent.Claude, w.Path("check"))
+	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
+	var applied protocol.AutomationDefinitionSummary
+	structuredAs(t, agent.mustCall(t, "automation_apply", map[string]any{"definition": manualAutomation(w, "Check the record.")}), &applied)
+	ran := agent.mustCall(t, "automation_run", map[string]any{"id": applied.ID, "input": json.RawMessage(input)})
+	if ran.IsError {
+		t.Fatalf("automation_run refused: %s", resultText(ran))
+	}
+	var run protocol.AutomationRunSummary
+	structuredAs(t, ran, &run)
+	occurrence := filepath.Join(w.Dir, "automation", "occurrences", run.ID+".json")
+	if prompt := w.Launched(string(protocol.Deref(run.SessionID))).Prompted(); !strings.Contains(prompt, occurrence) {
+		t.Fatalf("the agent was prompted with %q, want it pointed at %s", prompt, occurrence)
+	}
+	stored, err := os.ReadFile(occurrence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(jsonKeepingNumbers(t, stored), jsonKeepingNumbers(t, []byte(input))) {
+		t.Errorf("the agent's occurrence file holds %s, want %s", stored, input)
+	}
+}
+
+func jsonKeepingNumbers(t *testing.T, raw []byte) any {
+	t.Helper()
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		t.Fatalf("decode %s: %v", raw, err)
+	}
+	return value
 }
 
 func TestAnAutomationCallerReadsAndChangesNothingOfAnotherProfile(t *testing.T) {

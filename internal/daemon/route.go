@@ -176,8 +176,8 @@ func homeForwardRefusal(err error) *command.Refusal {
 	return command.AsRefusal(err)
 }
 
-func (d *Daemon) forwardCommand(c command.Caller, name string, args map[string]any) (any, *command.Refusal) {
-	msg := protocol.RunCommandMessage{Cmd: protocol.CmdRunCommand, Command: name, Args: protocol.RecordUnknown(args)}
+func (d *Daemon) forwardCommand(c command.Caller, name string, args json.RawMessage) (any, *command.Refusal) {
+	msg := protocol.RunCommandMessage{Cmd: protocol.CmdRunCommand, Command: name, Args: args}
 	if c.Session != "" {
 		msg.SessionID = protocol.Ptr(c.Session)
 	}

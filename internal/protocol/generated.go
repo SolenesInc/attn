@@ -2,6 +2,7 @@
 
 package protocol
 
+import "encoding/json"
 import "time"
 
 type ActivityStatusResult struct {
@@ -9811,7 +9812,7 @@ type ReviewStop struct {
 
 type RunCommandMessage struct {
 	// Args corresponds to the JSON schema field "args".
-	Args RecordUnknown `json:"args,omitempty,omitzero"`
+	Args json.RawMessage `json:"args,omitempty,omitzero"`
 
 	// CallerID corresponds to the JSON schema field "caller_id".
 	CallerID *TerminalID `json:"caller_id,omitempty,omitzero"`

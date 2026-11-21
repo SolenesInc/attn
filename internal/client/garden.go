@@ -243,10 +243,7 @@ func (c *Client) RunCommand(name string, session protocol.SessionID, args any, o
 	if err != nil {
 		return err
 	}
-	msg := protocol.RunCommandMessage{Cmd: protocol.CmdRunCommand, Command: name}
-	if err := json.Unmarshal(raw, &msg.Args); err != nil {
-		return err
-	}
+	msg := protocol.RunCommandMessage{Cmd: protocol.CmdRunCommand, Command: name, Args: raw}
 	if session == "" {
 		session = c.gardenSession
 	}

@@ -22,12 +22,7 @@ func runWithoutDaemon() {
 		fmt.Fprintln(os.Stderr, "_run-command: read the run_command frame from stdin:", err)
 		exit(2)
 	}
-	args, err := json.Marshal(msg.Args)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "_run-command:", err)
-		exit(2)
-	}
-	result, refusal := layer.Run(context.Background(), command.Caller{}, msg.Command, args)
+	result, refusal := layer.Run(context.Background(), command.Caller{}, msg.Command, msg.Args)
 	if err := json.NewEncoder(os.Stdout).Encode(command.Response(result, refusal)); err != nil {
 		fmt.Fprintln(os.Stderr, "_run-command: write the reply:", err)
 		exit(1)

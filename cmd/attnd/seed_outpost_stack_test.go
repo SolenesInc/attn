@@ -38,7 +38,7 @@ func TestAnOutpostSessionsSeedCommandsRunOnTheHomeAsThatSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run, err := json.Marshal(protocol.RunCommandMessage{Cmd: protocol.CmdRunCommand, Command: "seed show", Args: protocol.RecordUnknown{"seed": seed.ID}})
+	run, err := json.Marshal(protocol.RunCommandMessage{Cmd: protocol.CmdRunCommand, Command: "seed show", Args: json.RawMessage(`{"seed":"` + seed.ID + `"}`)})
 	if err != nil {
 		t.Fatal(err)
 	}

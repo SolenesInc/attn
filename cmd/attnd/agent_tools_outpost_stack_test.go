@@ -3,6 +3,7 @@ package main_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -251,6 +252,29 @@ func TestAClaudeOnAnOutpostRunsHomeToolsAtTheHomeAsItsSessionAndHereToolsWithout
 	}
 	t.Logf("seed_note with the bridge down: %s", refused.Text)
 	o.requireNoteBy(session, "After the outpost restarted")
+}
+
+func TestAnAutomationRunToolOnAnOutpostGivesTheHomesAgentItsInputsIntegersExactly(t *testing.T) {
+	home, outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude)), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	home.Start()
+	outpost.Start()
+	o := &outpostTools{t: t, home: home, outpost: outpost, pair: pair, remote: outpost.App()}
+	pair.Connect()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	o.setTools("true")
+	shop := outpost.Path("shop")
+	if err := os.MkdirAll(shop, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, claude := o.spawn(fakeagent.Claude, shop)
+	tools := claudeToolEndpoint(t, claude)
+	spec := fmt.Sprintf("api_version: attn.dev/automations/v1alpha1\nname: Check\ntrigger: {type: manual}\nprompt: Check the record.\nlaunch: {driver: claude}\nlocation: {type: directory, path: %q}\n", home.Dir)
+	var applied protocol.AutomationDefinitionSummary
+	tools.structured(t, "automation_apply", map[string]any{"definition": spec}, &applied)
+	var run protocol.AutomationRunSummary
+	tools.structured(t, "automation_run", map[string]any{"id": applied.ID, "input": json.RawMessage(integersPastFloatPrecision)}, &run)
+	requireSameJSONNumbers(t, home.Launched(string(protocol.Deref(run.SessionID))), filepath.Join(home.Dir, "automation", "occurrences", run.ID+".json"), integersPastFloatPrecision)
 }
 
 func TestAnOutpostAgentsCredentialIsRefusedByTheHomeAndByAnotherOutpost(t *testing.T) {

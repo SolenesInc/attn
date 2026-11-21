@@ -6760,7 +6760,8 @@ model RunCommandMessage {
   cmd: "run_command";
   ...SocketCaller;
   command: string;
-  args?: Record<unknown>;
+  @extension("goJSONSchema", #{ type: "json.RawMessage", imports: #["encoding/json"], nillable: true })
+  args?: { ...Record<unknown> };
   session_id?: SessionID;
   profile_id?: string;
 }

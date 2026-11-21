@@ -138,7 +138,7 @@ func TestOutpostForwardCallerHangupCancelsTerminalWaitAtHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	if err := json.NewEncoder(conn).Encode(protocol.RunCommandMessage{Cmd: protocol.CmdRunCommand, Command: "terminal wait", SessionID: protocol.Ptr(protocol.SessionID(id)), Args: map[string]any{"terminal": pair.App.Terminal(id), "until": "prompt"}}); err != nil {
+	if err := json.NewEncoder(conn).Encode(protocol.RunCommandMessage{Cmd: protocol.CmdRunCommand, Command: "terminal wait", SessionID: protocol.Ptr(protocol.SessionID(id)), Args: json.RawMessage(`{"terminal":"` + pair.App.Terminal(id) + `","until":"prompt"}`)}); err != nil {
 		t.Fatal(err)
 	}
 	waiting.Await()

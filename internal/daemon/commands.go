@@ -55,11 +55,6 @@ func (d *Daemon) commandLayer() *command.Layer {
 }
 
 func (d *Daemon) serveRunCommand(ctx context.Context, conn net.Conn, msg *protocol.RunCommandMessage) {
-	args, err := json.Marshal(msg.Args)
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
 	ctx, cancel := d.connectionContext(ctx, conn)
 	defer cancel()
 	caller, err := d.callerFromFrame(ctx, msg)
@@ -69,7 +64,7 @@ func (d *Daemon) serveRunCommand(ctx context.Context, conn net.Conn, msg *protoc
 		}
 		return
 	}
-	reply, after := d.runCommand(ctx, caller, msg.Command, args)
+	reply, after := d.runCommand(ctx, caller, msg.Command, msg.Args)
 	if err := json.NewEncoder(conn).Encode(reply); err != nil {
 		d.logf("run_command %s: writing response: %v", msg.Command, err)
 	}
