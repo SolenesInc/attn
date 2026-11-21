@@ -9,6 +9,7 @@ var _ json.RawMessage
 const (
 	CodeAppNotShowingProfile     = "app_not_showing_profile"
 	CodeBadBookmark              = "bad_bookmark"
+	CodeBadUntil                 = "bad_until"
 	CodeBadWindow                = "bad_window"
 	CodeClearWithPR              = "clear_with_pr"
 	CodeClearWithReason          = "clear_with_reason"
@@ -16,11 +17,18 @@ const (
 	CodeClearWithStandby         = "clear_with_standby"
 	CodeClearWithoutWhenMerged   = "clear_without_when_merged"
 	CodeConflict                 = "conflict"
+	CodeConversationTooLarge     = "conversation_too_large"
+	CodeCursorMismatch           = "cursor_mismatch"
+	CodeCursorPastEnd            = "cursor_past_end"
 	CodeDetachNeedsTo            = "detach_needs_to"
 	CodeEmptyWords               = "empty_words"
 	CodeFallbackWithTarget       = "fallback_with_target"
 	CodeInAndAt                  = "in_and_at"
 	CodeInvalidBody              = "invalid_body"
+	CodeInvalidCursor            = "invalid_cursor"
+	CodeInvalidEvidence          = "invalid_evidence"
+	CodeInvalidResponse          = "invalid_response"
+	CodeModelUnavailable         = "model_unavailable"
 	CodeNavOff                   = "nav_off"
 	CodeNeedsMessage             = "needs_message"
 	CodeNeedsNext                = "needs_next"
@@ -51,11 +59,13 @@ const (
 	CodeStepNeedsText            = "step_needs_text"
 	CodeStepTooLong              = "step_too_long"
 	CodeTooManySteps             = "too_many_steps"
+	CodeTranscriptUnavailable    = "transcript_unavailable"
 	CodeTransferNeedsLocalPath   = "transfer_needs_local_path"
 	CodeTransferNeedsManagedPath = "transfer_needs_managed_path"
 	CodeTransferNeedsMode        = "transfer_needs_mode"
 	CodeTransferWithNote         = "transfer_with_note"
 	CodeTwoDocuments             = "two_documents"
+	CodeUnknownAction            = "unknown_action"
 	CodeUnknownAnchor            = "unknown_anchor"
 	CodeUnknownSession           = "unknown_session"
 	CodeWindowWithoutStale       = "window_without_stale"
@@ -134,6 +144,15 @@ var specs = map[string]spec{
 	"seed review cancel":      {readOnly: false, anyone: false, sessionFlag: true},
 	"seed review retry":       {readOnly: false, anyone: false, sessionFlag: true},
 	"seed review keep":        {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_in_review": "Pass a seed the review lists; seed review show lists them."}},
+	"session instructions":    {readOnly: true, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the id of a session in the ledger.", "transcript_unavailable": "Ask again once the session has written its conversation.", "conversation_too_large": "Read the conversation with session_transcript instead.", "model_unavailable": "Choose a model for session instructions in Settings, or read the conversation with session_transcript.", "invalid_response": "Ask again, or read the conversation with session_transcript.", "invalid_evidence": "Ask again, or read the conversation with session_transcript."}},
+	"session transcript":      {readOnly: true, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the id of a session in the ledger.", "transcript_unavailable": "Read again once the session has written its conversation.", "invalid_cursor": "Pass a cursor an earlier read ended on, or leave out {after}.", "cursor_mismatch": "Pass a cursor from a read of this session, or leave out {after}.", "cursor_past_end": "Pass the cursor the last read ended on."}},
+	"session list":            {readOnly: true, anyone: true, sessionFlag: false, fixes: map[string]string{"unknown_session": "Pass to {before} the id a previous page's notice named."}},
+	"session show":            {readOnly: true, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the id of a session in the ledger."}},
+	"session priority":        {readOnly: false, anyone: true, sessionFlag: false, fixes: map[string]string{"no_session": "Pass {target}, or run it inside an attn session."}},
+	"session snooze":          {readOnly: false, anyone: true, sessionFlag: false, fixes: map[string]string{"bad_until": "Pass {until} as an RFC3339 instant, a positive duration like 1h, or tomorrow, saturday or monday, optionally with HH:MM."}},
+	"session unsnooze":        {readOnly: false, anyone: true, sessionFlag: false},
+	"session rename":          {readOnly: false, anyone: true, sessionFlag: false, fixes: map[string]string{"no_session": "Pass {target}, or run it inside an attn session."}},
+	"session reopen":          {readOnly: false, anyone: true, sessionFlag: false, fixes: map[string]string{"unknown_action": "Pass one of the actions session_show lists for the session."}},
 	"state explain":           {readOnly: true, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
 }
 
@@ -593,6 +612,59 @@ type SeedReviewRetryArgs struct {
 type SeedReviewKeepArgs struct {
 	Review string `json:"review,omitempty"`
 	Seed   string `json:"seed,omitempty"`
+}
+
+type SessionInstructionsArgs struct {
+	ID       string `json:"id,omitempty"`
+	Question string `json:"question,omitempty"`
+}
+
+type SessionTranscriptArgs struct {
+	ID     string `json:"id,omitempty"`
+	After  string `json:"after,omitempty"`
+	Follow bool   `json:"follow,omitempty"`
+}
+
+type SessionListArgs struct {
+	Closed     bool   `json:"closed,omitempty"`
+	All        bool   `json:"all,omitempty"`
+	Limit      *int64 `json:"limit,omitempty"`
+	Before     string `json:"before,omitempty"`
+	Repository string `json:"repository,omitempty"`
+	Last       string `json:"last,omitempty"`
+	Since      string `json:"since,omitempty"`
+	Until      string `json:"until,omitempty"`
+	Profile    string `json:"profile,omitempty"`
+	Reopen     bool   `json:"reopen,omitempty"`
+	Tree       bool   `json:"tree,omitempty"`
+}
+
+type SessionShowArgs struct {
+	ID string `json:"id,omitempty"`
+}
+
+type SessionPriorityArgs struct {
+	Priority string `json:"priority,omitempty"`
+	Target   string `json:"target,omitempty"`
+}
+
+type SessionSnoozeArgs struct {
+	Ids   []string `json:"ids,omitempty"`
+	Until string   `json:"until,omitempty"`
+}
+
+type SessionUnsnoozeArgs struct {
+	Ids []string `json:"ids,omitempty"`
+}
+
+type SessionRenameArgs struct {
+	Name   string `json:"name,omitempty"`
+	Target string `json:"target,omitempty"`
+}
+
+type SessionReopenArgs struct {
+	ID     string `json:"id,omitempty"`
+	Action string `json:"action,omitempty"`
 }
 
 type StateExplainArgs struct {

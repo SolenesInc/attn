@@ -25,6 +25,7 @@ func (d *Daemon) commandLayer() *command.Layer {
 			d.reviewCommands(),
 			d.openCommands(),
 			d.navCommands(),
+			d.sessionCommands(),
 		} {
 			maps.Copy(handlers, family)
 		}

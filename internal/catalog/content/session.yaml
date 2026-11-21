@@ -1,2 +1,155 @@
+# The session family. `anyone` lets a terminal that shows no session, such as a
+# shell in attn, run the command: a read acts as nobody, and a change names its
+# target, or acts as the person at that shell.
 groups:
-  - {name: session, usage: "<command>", summary: "read past sessions, rename or snooze a session"}
+  - name: session
+    usage: "<command>"
+    summary: "read past sessions, rename or snooze a session"
+    doc: |
+      Read the session ledger, a session's transcript or what it was told; rename, mark, snooze or reopen a session.
+
+commands:
+  - name: session instructions
+    summary: answer a question from a Codex session's conversation, with exact excerpts
+    runs: home
+    grant: full
+    read_only: true
+    anyone: true
+    doc: |
+      Answers a free-form question from the target session's bounded Codex conversation, returning validated exact excerpts. Unclear is a successful answer.
+    args:
+      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the session whose conversation to read"}
+      - {name: question, type: text, required: true, cli: "--question", doc: "the question to answer from that conversation"}
+    result: SessionInstructionsResult
+    errors:
+      - {code: session_not_found, fix: "Pass the id of a session in the ledger."}
+      - {code: transcript_unavailable, fix: "Ask again once the session has written its conversation."}
+      - {code: conversation_too_large, fix: "Read the conversation with session_transcript instead."}
+      - {code: model_unavailable, fix: "Choose a model for session instructions in Settings, or read the conversation with session_transcript."}
+      - {code: invalid_response, fix: "Ask again, or read the conversation with session_transcript."}
+      - {code: invalid_evidence, fix: "Ask again, or read the conversation with session_transcript."}
+
+  - name: session transcript
+    summary: read a session's conversation and tool events
+    runs: home
+    grant: full
+    read_only: true
+    anyone: true
+    doc: |
+      Reads provider-neutral, timestamped, redacted conversation and tool events of one session. `after` resumes strictly after the cursor an earlier read ended on. `follow` keeps reading until interrupted; `--json` prints one event per line.
+    args:
+      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the session to read"}
+      - {name: after, type: text, cli: "--after", placeholder: "<cursor>", doc: "resume strictly after this cursor"}
+      - {name: follow, type: bool, cli: "--follow", cli_only: true, doc: "keep reading new events until interrupted"}
+    result: SessionTranscriptResult
+    errors:
+      - {code: session_not_found, fix: "Pass the id of a session in the ledger."}
+      - {code: transcript_unavailable, fix: "Read again once the session has written its conversation."}
+      - {code: invalid_cursor, fix: "Pass a cursor an earlier read ended on, or leave out {after}."}
+      - {code: cursor_mismatch, fix: "Pass a cursor from a read of this session, or leave out {after}."}
+      - {code: cursor_past_end, fix: "Pass the cursor the last read ended on."}
+
+  - name: session list
+    summary: the session ledger, newest first, or every live session as a tree
+    runs: home
+    grant: full
+    read_only: true
+    anyone: true
+    doc: |
+      Reads the session ledger, newest first: live sessions by default, `closed` for the ones that ended, `all` for both. When rows are omitted the notice names the id to pass to `before` for the next page. Filters combine and are applied before paging. `last` takes today, yesterday, 7d or 30d; `since` and `until` take a date or an RFC3339 instant and are half-open, so `until` excludes its own instant. `reopen` adds what would bring each closed row back, judging the whole page in one call; session_show explains any one of those verdicts.
+
+      `tree` shows every live session, and each closed agent on standby, nested under the session that dispatched it, sorted by label within each profile and branch. Rows carry short ids, agent, state, owed or snoozed turns and seed slugs. A delegate whose dispatcher is closed or absent becomes a root. A closed agent whose seed is on standby stays under its dispatcher with the state standby, and its seed column adds what it waits for. Shell split provenance is labeled separately. Inside attn the tree is limited to your session's profile; `profile` narrows it. Only `profile` goes with `tree`.
+    args:
+      - {name: closed, type: bool, cli: "--closed", doc: "the sessions that ended"}
+      - {name: all, type: bool, cli: "--all", doc: "live and closed sessions together"}
+      - {name: limit, type: count, cli: "--limit", doc: "rows in one page (default 20)"}
+      - {name: before, type: text, cli: "--before", placeholder: "<id>", doc: "start after this session id, from a previous page's notice"}
+      - {name: repository, type: text, cli: "--repository", placeholder: "<path>", doc: "only sessions that ran in this repository path"}
+      - {name: last, type: text, cli: "--last", placeholder: "<preset>", doc: "a date preset: 30d, 7d, today, yesterday"}
+      - {name: since, type: text, cli: "--since", placeholder: "<when>", doc: "only sessions from this date or RFC3339 instant onwards"}
+      - {name: until, type: text, cli: "--until", placeholder: "<when>", doc: "only sessions before this date or RFC3339 instant"}
+      - {name: profile, type: text, cli: "--profile", placeholder: "<id>", doc: "only sessions of this profile id, deleted profiles included"}
+      - {name: reopen, type: bool, cli: "--reopen", doc: "judge every closed row and add what would bring it back"}
+      - {name: tree, type: bool, cli: "--tree", doc: "every live session, and each closed agent on standby, nested under its dispatcher"}
+    result: SessionListResult
+    errors:
+      - {code: unknown_session, fix: "Pass to {before} the id a previous page's notice named."}
+
+  - name: session show
+    summary: one ledger row, live or closed, with who closed it and why
+    runs: home
+    grant: full
+    read_only: true
+    anyone: true
+    doc: |
+      Reads one ledger row, live or closed, including who closed it and why. A closed row also carries the reopen verdict: whether it comes back, why not when it does not, and the actions offered instead.
+    args:
+      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the session to read"}
+    result: SessionShowResult
+    errors:
+      - {code: session_not_found, fix: "Pass the id of a session in the ledger."}
+
+  - name: session priority
+    summary: mark a session so its owed turns go first, or clear the mark
+    runs: home
+    grant: full
+    anyone: true
+    doc: |
+      Marks a session so its owed turns go first, or clears that mark. `target` defaults to the session running this command. Any agent may mark any session.
+    args:
+      - {name: priority, type: text, required: true, cli: pos, placeholder: "on|off", doc: "on marks the session, off clears the mark"}
+      - {name: target, type: text, cli: "--session", placeholder: "<id>", doc: "the session to mark (defaults to the current session)"}
+    errors:
+      - {code: no_session, usage: true, fix: "Pass {target}, or run it inside an attn session."}
+
+  - name: session snooze
+    summary: defer sessions' owed turns until a time
+    runs: home
+    grant: full
+    anyone: true
+    doc: |
+      Defers sessions until an RFC3339 instant, a positive duration (30m, 1h, 2h, 4h, 8h), or tomorrow, saturday or monday. Day choices use local 09:00; quote a custom time, e.g. "tomorrow 09:00". A session may snooze itself and agents below it in its delegation chain, including delegates of delegates; the chief any session of its profile. Each id reports success or why it failed. session_unsnooze ends a snooze early.
+    args:
+      - {name: ids, type: text, list: true, required: true, cli: rest, placeholder: "<id>", doc: "the sessions to snooze"}
+      - {name: until, type: text, required: true, cli: "--until", placeholder: "<when>", doc: "when the snooze ends"}
+    result: SessionSnoozeResult
+    errors:
+      - {code: bad_until, usage: true, fix: "Pass {until} as an RFC3339 instant, a positive duration like 1h, or tomorrow, saturday or monday, optionally with HH:MM."}
+
+  - name: session unsnooze
+    summary: end sessions' snoozes early
+    runs: home
+    grant: full
+    anyone: true
+    doc: |
+      Ends snoozes early, with the same permissions as session_snooze. Already unsnoozed is a successful no-op. session_list and session_show include the snoozed-until instant.
+    args:
+      - {name: ids, type: text, list: true, required: true, cli: rest, placeholder: "<id>", doc: "the sessions to unsnooze"}
+    result: SessionSnoozeResult
+
+  - name: session rename
+    summary: give a session the name a person reads in the sidebar
+    runs: home
+    grant: own
+    anyone: true
+    doc: |
+      Gives a session the name a person reads in the sidebar and the ledger: a few plain words about the work, up to 48 characters. `target` defaults to the session running this command. Rename when the main work drifts from the name it started with.
+    args:
+      - {name: name, type: text, required: true, cli: pos, placeholder: "<name>", doc: "the new name; quote it when it has spaces"}
+      - {name: target, type: text, cli: "--session", placeholder: "<id>", doc: "the session to rename (defaults to the current session)"}
+    errors:
+      - {code: no_session, usage: true, fix: "Pass {target}, or run it inside an attn session."}
+
+  - name: session reopen
+    summary: bring a closed or stopped session back under its own id
+    runs: home
+    grant: full
+    anyone: true
+    doc: |
+      Brings a closed or stopped session back under its own id, on its last or current desktop in its profile. Without `action` it performs the plain reopen and refuses, naming what is offered, when the verdict does not allow one. Actions that recreate a worktree or fetch a branch write to the repository and only ever run when named here. Sessions whose profile was deleted cannot reopen. To close a session, use agent_close.
+    args:
+      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the session to reopen"}
+      - {name: action, type: text, cli: "--action", placeholder: "<name>", doc: "reopen, recreate_worktree_and_reopen or fetch_recreate_and_reopen; session_show lists the ones offered"}
+    result: SessionReopenResult
+    errors:
+      - {code: unknown_action, usage: true, fix: "Pass one of the actions session_show lists for the session."}

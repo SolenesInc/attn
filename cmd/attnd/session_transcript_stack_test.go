@@ -64,8 +64,6 @@ func TestSessionTranscriptAndInstructionsReadTheTargetConversation(t *testing.T)
 		{"transcript", "target", "extra"},
 		{"instructions"},
 		{"instructions", "--question", "was it authorized?"},
-		{"instructions", "target"},
-		{"instructions", "target", "--question", " "},
 		{"instructions", "target", "extra", "--question", "was it authorized?"},
 	} {
 		refused := s.Attn(append([]string{"session"}, args...)...)
@@ -73,11 +71,17 @@ func TestSessionTranscriptAndInstructionsReadTheTargetConversation(t *testing.T)
 			t.Errorf("attn session %q exited %d with stderr %q, want a usage refusal", args, refused.Code, refused.Stderr)
 		}
 	}
-	if absent := s.Attn("session", "transcript", "target"); absent.Code != 1 || !strings.Contains(absent.Stderr, "The target transcript is unavailable") {
+	if absent := s.Attn("session", "transcript", "target"); absent.Code != 1 || !strings.Contains(absent.Stderr, "connect to daemon") {
 		t.Errorf("transcript with no daemon exited %d: %q", absent.Code, absent.Stderr)
 	}
 
 	s.Start()
+	for _, args := range [][]string{{"instructions", "target"}, {"instructions", "target", "--question", " "}} {
+		refused := s.Attn(append([]string{"session"}, args...)...)
+		if refused.Code != 2 || !strings.Contains(refused.Stderr, "--question is required") {
+			t.Errorf("attn session %q exited %d with stderr %q, want a usage refusal", args, refused.Code, refused.Stderr)
+		}
+	}
 	app := s.App()
 	claudeID := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
 	claude := s.Launched(claudeID)

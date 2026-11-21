@@ -3031,10 +3031,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleHookCompaction(conn, msg.(*protocol.HookCompactionMessage))
 	case protocol.CmdSetSessionResumeID:
 		d.handleObserveAgentConversation(ctx, conn, msg.(*protocol.SetSessionResumeIDMessage))
-	case protocol.CmdSessionInstructions:
-		d.handleSessionInstructions(conn, msg.(*protocol.SessionInstructionsMessage))
-	case protocol.CmdSessionTranscript:
-		d.handleSessionTranscript(conn, msg.(*protocol.SessionTranscriptMessage))
 	case protocol.CmdSessionList:
 		d.handleSessionList(conn, msg.(*protocol.SessionListMessage))
 	case protocol.CmdSessionShow:

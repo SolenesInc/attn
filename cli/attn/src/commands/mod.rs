@@ -19,6 +19,7 @@ pub mod pr;
 pub mod review;
 pub mod seed;
 pub mod send;
+pub mod session;
 pub mod settings;
 pub mod state;
 pub mod support;

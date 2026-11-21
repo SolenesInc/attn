@@ -132,8 +132,6 @@ const (
 	CmdHookStopFailure               = "hook_stop_failure"
 	CmdHookCompaction                = "hook_compaction"
 	CmdSetSessionResumeID            = "set_session_resume_id"
-	CmdSessionInstructions           = "session_instructions"
-	CmdSessionTranscript             = "session_transcript"
 	CmdSessionList                   = "session_list"
 	CmdUpdateStatus                  = "update_status"
 	CmdHomeUpdateNotice              = "home_update_notice"

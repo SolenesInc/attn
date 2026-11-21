@@ -3,11 +3,11 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"net"
 	"os"
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/transcript"
@@ -15,26 +15,22 @@ import (
 
 const sessionTranscriptPageSize = 200
 
-func (d *Daemon) handleSessionTranscript(conn net.Conn, msg *protocol.SessionTranscriptMessage) {
-	session := d.store.SessionLedgerEntry(protocol.SessionID(strings.TrimSpace(msg.TargetSessionID)))
+func (d *Daemon) runSessionTranscript(ctx context.Context, c command.Caller, a command.SessionTranscriptArgs) (any, error) {
+	session := d.store.SessionLedgerEntry(protocol.SessionID(strings.TrimSpace(a.ID)))
 	if session == nil {
-		d.sendError(conn, "session_not_found")
-		return
+		return nil, sessionTranscriptRefusal("session_not_found")
 	}
 
-	answer, err := Call[protocol.MonitorTranscriptPageResult](context.Background(), d.router(), protocol.MonitorTranscriptPageMessage{Cmd: protocol.CmdMonitorTranscriptPage, SessionID: session.ID, Cursor: protocol.Ptr(strings.TrimSpace(protocol.Deref(msg.AfterCursor)))})
+	answer, err := Call[protocol.MonitorTranscriptPageResult](ctx, d.router(), protocol.MonitorTranscriptPageMessage{Cmd: protocol.CmdMonitorTranscriptPage, SessionID: session.ID, Cursor: protocol.Ptr(strings.TrimSpace(a.After))})
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
 	if answer.ErrorKind != nil {
-		d.sendError(conn, string(*answer.ErrorKind))
-		return
+		return nil, sessionTranscriptRefusal(string(*answer.ErrorKind))
 	}
 	var page transcript.EventPage
 	if err := json.Unmarshal([]byte(protocol.Deref(answer.Page)), &page); err != nil {
-		d.sendError(conn, "transcript_unavailable")
-		return
+		return nil, sessionTranscriptRefusal("transcript_unavailable")
 	}
 
 	events := make([]protocol.SessionTranscriptEvent, 0, len(page.Events))
@@ -64,15 +60,16 @@ func (d *Daemon) handleSessionTranscript(conn net.Conn, msg *protocol.SessionTra
 		events = append(events, item)
 	}
 
-	_ = json.NewEncoder(conn).Encode(protocol.Response{
-		Ok: true,
-		SessionTranscriptResult: &protocol.SessionTranscriptResult{
-			SessionID:  session.ID,
-			Events:     events,
-			NextCursor: page.NextCursor,
-			AtEnd:      page.AtEnd,
-		},
-	})
+	return protocol.SessionTranscriptResult{
+		SessionID:  session.ID,
+		Events:     events,
+		NextCursor: page.NextCursor,
+		AtEnd:      page.AtEnd,
+	}, nil
+}
+
+func sessionTranscriptRefusal(code string) *command.Refusal {
+	return command.Refuse(code, "%s", SessionTranscriptErrorMessage(code))
 }
 
 func (d *Daemon) inspectableTranscriptPath(sessionID protocol.SessionID, agent string) string {

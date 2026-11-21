@@ -116,8 +116,6 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdHookStopFailure:               decodeInto[HookStopFailureMessage],
 	CmdHookCompaction:                decodeInto[HookCompactionMessage],
 	CmdSetSessionResumeID:            decodeInto[SetSessionResumeIDMessage],
-	CmdSessionInstructions:           decodeInto[SessionInstructionsMessage],
-	CmdSessionTranscript:             decodeInto[SessionTranscriptMessage],
 	CmdSessionList:                   decodeInto[SessionListMessage],
 	CmdUpdateStatus:                  decodeInto[UpdateStatusMessage],
 	CmdHomeUpdateNotice:              decodeInto[HomeUpdateNoticeMessage],

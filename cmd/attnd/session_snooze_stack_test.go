@@ -86,7 +86,7 @@ func TestSessionSnoozeCLIShowsBatchDeadlinesAndUnsnoozes(t *testing.T) {
 	}{
 		{[]string{"session", "snooze", first}, "--until is required"},
 		{[]string{"session", "snooze", first, "--until", "2020-01-01T00:00:00Z"}, "in the past"},
-		{[]string{"session", "snooze", "--until", "1h"}, "at least one session id"},
+		{[]string{"session", "snooze", "--until", "1h"}, "needs ids"},
 	} {
 		got := s.Attn(tc.args...)
 		if got.Code != 2 || !strings.Contains(got.Stderr, tc.want) {

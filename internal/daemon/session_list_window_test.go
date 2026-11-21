@@ -1,9 +1,10 @@
-package main
+package daemon
 
 import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/command"
 	"pgregory.net/rapid"
 )
 
@@ -24,7 +25,7 @@ func TestSessionListPresetsStartOnLocalCalendarDays(t *testing.T) {
 		now := transition.Add(time.Duration(rapid.Int64Range(0, 8*24*3600).Draw(t, "after transition")) * time.Second).In(loc)
 		preset := rapid.SampledFrom(presets).Draw(t, "preset")
 
-		since, until, err := sessionListPresetWindow(preset, now)
+		since, until, err := sessionListWindow(command.SessionListArgs{Last: preset}, now)
 		if err != nil {
 			t.Fatalf("%s: %v", preset, err)
 		}

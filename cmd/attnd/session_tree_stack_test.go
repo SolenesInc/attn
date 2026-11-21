@@ -111,7 +111,7 @@ func TestSessionTreeShowsDelegationChainsAndKeepsChildrenOfClosedDispatchers(t *
 	if got := tree("--profile", "other-profile"); !strings.Contains(got, "no sessions match those filters") {
 		t.Errorf("other profile tree printed %q", got)
 	}
-	for _, args := range [][]string{{"--closed"}, {"--all"}, {"--limit", "1"}, {"--before", source}, {"--repository", cwd}, {"--last", "today"}, {"--since", "2026-01-01"}, {"--until", "2026-12-31"}, {"--reopen"}, {"--json"}} {
+	for _, args := range [][]string{{"--closed"}, {"--all"}, {"--limit", "1"}, {"--before", source}, {"--repository", cwd}, {"--last", "today"}, {"--since", "2026-01-01"}, {"--until", "2026-12-31"}, {"--reopen"}} {
 		refused := s.Attn(append([]string{"session", "list", "--tree"}, args...)...)
 		if refused.Code != 2 || refused.Stdout != "" || !strings.Contains(refused.Stderr, "--tree supports only --profile") {
 			t.Errorf("tree with %q exited %d: %s%s", args, refused.Code, refused.Stdout, refused.Stderr)

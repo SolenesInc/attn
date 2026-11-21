@@ -3,11 +3,9 @@ package daemon_test
 import (
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
-
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -75,7 +73,7 @@ func TestAMissingBoundTranscriptNeverUsesANeighborsReply(t *testing.T) {
 	if err := os.Remove(oldPath); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SessionTranscript(older, ""); err == nil || !strings.Contains(err.Error(), "transcript_unavailable") {
+	if _, err := cli.SessionTranscript(older, ""); client.ErrorCode(err) != "transcript_unavailable" {
 		t.Fatalf("missing own transcript resolved to a neighbor: %v", err)
 	}
 	if err := cli.SendStop(protocol.TerminalID(w.Terminal(older)), neighborPath, client.StopFacts{}); err != nil {

@@ -81,7 +81,7 @@ func TestTheCommandsAnAgentRunsFromItsSessionActOnThatSession(t *testing.T) {
 		}
 		testworld.AwaitSession(app, other, func(x protocol.Session) bool { return x.Label == "checkout" })
 
-		refused(t, inSession("session", "rename", "plugin", "resume"), 2, "exactly one name is required")
+		refused(t, inSession("session", "rename", "plugin", "resume"), 2, "takes 1 argument (name), got 2")
 		refused(t, inSession("session", "rename", "   "), 1, "name cannot be empty for an agent")
 		refused(t, s.Attn("session", "rename", "orphan"), 2, "--session")
 	})

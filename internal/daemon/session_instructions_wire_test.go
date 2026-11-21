@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -117,7 +118,7 @@ func TestSessionInstructionsAnswerOnlyFromQuotesTheTranscriptHolds(t *testing.T)
 			}
 			got := <-done
 			if tc.refusal != "" {
-				if got.err == nil || !strings.Contains(got.err.Error(), tc.refusal) {
+				if client.ErrorCode(got.err) != tc.refusal {
 					t.Fatalf("asking %q = %+v, %v; want %s", tc.question, got.result, got.err, tc.refusal)
 				}
 				return
@@ -140,7 +141,7 @@ func TestSessionInstructionsAnswerOnlyFromQuotesTheTranscriptHolds(t *testing.T)
 	}
 
 	converse("paste the whole build log", strings.Repeat("build output line\n", 7000))
-	if _, err := cli.SessionInstructions(session, "Was merging PR #571 authorized?"); err == nil || !strings.Contains(err.Error(), "conversation_too_large") {
+	if _, err := cli.SessionInstructions(session, "Was merging PR #571 authorized?"); client.ErrorCode(err) != "conversation_too_large" {
 		t.Errorf("asking about a conversation too large to inspect = %v, want conversation_too_large", err)
 	}
 }

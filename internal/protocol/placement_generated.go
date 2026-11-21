@@ -184,13 +184,11 @@ var Placements = map[string][]Placement{
 	"sender_sessions":                  {Placement{LocatorHome, ""}},
 	"sender_unpair":                    {Placement{LocatorHome, ""}},
 	"session_input_reopened":           {Placement{LocatorHome, ""}},
-	"session_instructions":             {Placement{LocatorHome, ""}},
 	"session_list":                     {Placement{LocatorHome, ""}},
 	"session_place":                    {Placement{LocatorSession, "session_id"}},
 	"session_pull_request_save":        {Placement{LocatorHome, ""}},
 	"session_reopen":                   {Placement{LocatorHome, ""}},
 	"session_show":                     {Placement{LocatorHome, ""}},
-	"session_transcript":               {Placement{LocatorHome, ""}},
 	"set_session_context_window_cap":   {Placement{LocatorHome, ""}},
 	"set_session_priority":             {Placement{LocatorHome, ""}},
 	"set_session_resume_id":            {Placement{LocatorHere, ""}},
@@ -2215,18 +2213,6 @@ func (m SessionInputReopenedMessage) Locate() string {
 	return ""
 }
 
-func (SessionInstructionsMessage) CommandName() string {
-	return "session_instructions"
-}
-
-func (m SessionInstructionsMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SessionInstructionsMessage) Locate() string {
-	return ""
-}
-
 func (SessionListMessage) CommandName() string {
 	return "session_list"
 }
@@ -2284,18 +2270,6 @@ func (m SessionShowMessage) Placement() Placement {
 }
 
 func (m SessionShowMessage) Locate() string {
-	return ""
-}
-
-func (SessionTranscriptMessage) CommandName() string {
-	return "session_transcript"
-}
-
-func (m SessionTranscriptMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m SessionTranscriptMessage) Locate() string {
 	return ""
 }
 

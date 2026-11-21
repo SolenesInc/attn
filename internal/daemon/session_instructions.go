@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"strings"
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioninstructions"
@@ -18,25 +18,27 @@ import (
 
 const sessionInstructionsTimeout = 45 * time.Second
 
-func (d *Daemon) handleSessionInstructions(conn net.Conn, msg *protocol.SessionInstructionsMessage) {
+func (d *Daemon) runSessionInstructions(ctx context.Context, c command.Caller, a command.SessionInstructionsArgs) (any, error) {
+	if strings.TrimSpace(a.Question) == "" {
+		return nil, command.Usage("{question} is required")
+	}
 	service := sessioninstructions.Service{
 		Store:  d.store,
 		Finder: agentdriver.Get("codex").(agentdriver.TranscriptFinder),
 		Model:  daemonSessionInstructionsModel{daemon: d},
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), sessionInstructionsTimeout)
+	ctx, cancel := context.WithTimeout(ctx, sessionInstructionsTimeout)
 	defer cancel()
-	result, err := service.Ask(ctx, sessioninstructions.Request{TargetSessionID: protocol.SessionID(msg.TargetSessionID), Question: msg.Question})
+	result, err := service.Ask(ctx, sessioninstructions.Request{TargetSessionID: protocol.SessionID(strings.TrimSpace(a.ID)), Question: strings.TrimSpace(a.Question)})
 	if err != nil {
+		code := "model_unavailable"
 		var sessionErr *sessioninstructions.Error
 		if errors.As(err, &sessionErr) {
-			d.sendError(conn, sessionErr.Code)
-			return
+			code = sessionErr.Code
 		}
-		d.sendError(conn, "model_unavailable")
-		return
+		return nil, command.Refuse(code, "%s", SessionInstructionsErrorMessage(code))
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SessionInstructionsResult: result})
+	return result, nil
 }
 
 type daemonSessionInstructionsModel struct{ daemon *Daemon }

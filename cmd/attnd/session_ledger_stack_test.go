@@ -52,20 +52,21 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Vars = append(s.Vars, "TZ="+zone)
 
+	s.Start()
 	for _, tc := range []struct {
 		args []string
 		want []string
 	}{
 		{args: []string{"list", "--closed", "--all"}, want: []string{"--closed and --all ask for different lists"}},
 		{args: []string{"list", "--limit", "-1"}, want: []string{"--limit -1 is not a number of rows"}},
-		{args: []string{"list", "stray"}, want: []string{"takes no positional arguments"}},
+		{args: []string{"list", "stray"}, want: []string{"takes no arguments"}},
 		{args: []string{"list", "--last", "fortnight"}, want: []string{"today", "yesterday", "7d", "30d"}},
 		{args: []string{"list", "--last", "7d", "--since", "2026-09-01T00:00:00Z"}, want: []string{"--last already names a window"}},
 		{args: []string{"list", "--last", "7d", "--until", "2026-09-01T00:00:00Z"}, want: []string{"--last already names a window"}},
 		{args: []string{"list", "--since", "yesterday"}, want: []string{"neither a date like 2026-09-05 nor an RFC3339 instant"}},
-		{args: []string{"reopen"}, want: []string{"exactly one session id is required"}},
-		{args: []string{"reopen", "--action", "reopen"}, want: []string{"exactly one session id is required"}},
-		{args: []string{"reopen", "sess-1", "sess-2"}, want: []string{"exactly one session id is required"}},
+		{args: []string{"reopen"}, want: []string{"takes 1 argument (id), got none"}},
+		{args: []string{"reopen", "--action", "reopen"}, want: []string{"takes 1 argument (id), got none"}},
+		{args: []string{"reopen", "sess-1", "sess-2"}, want: []string{"takes 1 argument (id), got 2"}},
 		{args: []string{"reopen", "sess-1", "--action", "recreate_worktree"}, want: []string{
 			string(protocol.SessionReopenActionReopen), string(protocol.SessionReopenActionRecreateWorktreeAndReopen),
 			string(protocol.SessionReopenActionFetchRecreateAndReopen),
@@ -80,7 +81,6 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 		requireLines(t, "session "+strings.Join(tc.args, " "), refused.Stderr, tc.want...)
 	}
 
-	s.Start()
 	for _, tc := range []struct {
 		args []string
 		want string

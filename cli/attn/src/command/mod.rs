@@ -93,6 +93,14 @@ pub trait Family {
     fn before_send(&self, _cmd: &Command, _parsed: &mut Parsed) -> Result<(), Stop> {
         Ok(())
     }
+    fn exchange(
+        &self,
+        _run: &mut Run<'_>,
+        _cmd: &Command,
+        _parsed: &Parsed,
+    ) -> Option<Result<(), Stop>> {
+        None
+    }
     fn present(
         &self,
         run: &mut Run<'_>,
@@ -293,7 +301,7 @@ fn mention(cmd: &Command, name: &str) -> Option<String> {
     }
 }
 
-fn render_mentions(cmd: &Command, text: &str) -> String {
+pub fn render_mentions(cmd: &Command, text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
     while let Some(open) = rest.find('{') {
@@ -376,6 +384,13 @@ fn positional_values(
         return Ok(values);
     }
     if let Some(arg) = cmd.args.iter().find(|arg| matches!(arg.cli, Cli::Rest)) {
+        if arg.list {
+            if arg.required && positionals.is_empty() {
+                return Err(ParseStop::Usage(wrong_args(cmd, positionals)));
+            }
+            values.insert(arg.name.to_string(), Json::from(positionals.to_vec()));
+            return Ok(values);
+        }
         let words = positionals.join(" ");
         if arg.required && words.trim().is_empty() {
             return Err(ParseStop::Usage(wrong_args(cmd, positionals)));
@@ -594,19 +609,55 @@ pub fn run_command(
             .map_err(|message| family.fail(cmd.name, &message))?;
     }
     family.before_send(cmd, &mut parsed)?;
+    if let Some(done) = family.exchange(run, cmd, &parsed) {
+        return done;
+    }
+    let reply = call(run, family, cmd, &parsed)?;
+    family.present(run, cmd, &parsed, &reply)
+}
+
+pub enum Answer {
+    Result(Reply),
+    Refused(Reply, CommandRefusal),
+}
+
+pub fn ask(
+    run: &mut Run<'_>,
+    family: &dyn Family,
+    cmd: &Command,
+    parsed: &Parsed,
+) -> Result<Answer, Stop> {
     let mut message = RunCommandMessage::new();
     message.command = family.label(cmd.name);
     message.args = Some(parsed.args.clone().into_iter().collect());
     message.session_id = (!parsed.session.is_empty()).then(|| parsed.session.clone());
     message.profile_id = (!parsed.profile.is_empty()).then(|| parsed.profile.clone());
-    let label = family.label(cmd.name);
     let reply = Client::new(run.paths, "", &run.terminal)
         .call_command(&message)
-        .map_err(|error| run.fail_send(&label, &error))?;
-    if let Some(refusal) = refusal_of(&reply) {
-        return Err(refuse(run, family, cmd, &label, &reply, &refusal));
+        .map_err(|error| run.fail_send(&family.label(cmd.name), &error))?;
+    Ok(match refusal_of(&reply) {
+        Some(refusal) => Answer::Refused(reply, refusal),
+        None => Answer::Result(reply),
+    })
+}
+
+pub fn call(
+    run: &mut Run<'_>,
+    family: &dyn Family,
+    cmd: &Command,
+    parsed: &Parsed,
+) -> Result<Reply, Stop> {
+    match ask(run, family, cmd, parsed)? {
+        Answer::Result(reply) => Ok(reply),
+        Answer::Refused(reply, refusal) => Err(refuse(
+            run,
+            family,
+            cmd,
+            &family.label(cmd.name),
+            &reply,
+            &refusal,
+        )),
     }
-    family.present(run, cmd, &parsed, &reply)
 }
 
 fn refusal_of(reply: &Reply) -> Option<CommandRefusal> {

@@ -703,22 +703,6 @@ model SetSessionResumeIDMessage {
   lifecycle_id?: string; // The run whose hook reports this, from ATTN_RUNTIME_LIFECYCLE
 }
 
-@extension("x-on", #{ home: true })
-model SessionInstructionsMessage {
-  cmd: "session_instructions";
-  target_session_id: string;
-  question: string;
-}
-
-// Reads provider-neutral, redacted transcript events strictly after the opaque
-// cursor. The daemon owns native transcript discovery and cursor validation.
-@extension("x-on", #{ home: true })
-model SessionTranscriptMessage {
-  cmd: "session_transcript";
-  target_session_id: string;
-  after_cursor?: string;
-}
-
 // Reads the session ledger: the durable record of every session that ran.
 // Live sessions by default, `closed` for the closed ones alone, `all` for both.
 // Newest first, where newest means the close for a closed session and the last
@@ -7434,8 +7418,6 @@ model Response {
   ask_list_result?: AskListResult;
   ask_show_result?: AskShowResult;
   record_vent_result?: Vent;
-  session_instructions_result?: SessionInstructionsResult;
-  session_transcript_result?: SessionTranscriptResult;
   session_list_result?: SessionListResult;
   session_show_result?: SessionShowResult;
   update_status?: UpdateStatus;
@@ -8328,6 +8310,38 @@ model SessionListResult {
   // Present when the request asked for it. Closed rows only; a live row is
   // never reopenable and the surface renders it without a verdict.
   reopen?: SessionReopenEntry[];
+  // session list --tree: every live session, and each closed agent on standby,
+  // nested under its dispatcher, one group per profile. Entries is empty then.
+  tree?: SessionTreeProfile[];
+}
+
+model SessionTreeProfile {
+  profile_id: string;
+  profile_name: string;
+  rows: SessionTreeRow[];
+}
+
+// One row of the tree, in the order it prints. prefix draws the branches above
+// the row; label carries why a row is a root or a shell split.
+model SessionTreeRow {
+  prefix: string;
+  session_id: SessionID;
+  label: string;
+  agent: string;
+  state: string;
+  turn: string;
+  seed?: string;
+}
+
+// One outcome per session session snooze or unsnooze named, in order.
+model SessionSnoozeResult {
+  outcomes: SessionSnoozeOutcome[];
+}
+
+model SessionSnoozeOutcome {
+  session_id: SessionID;
+  until?: string;
+  error?: string;
 }
 
 model SessionReopenEntry {

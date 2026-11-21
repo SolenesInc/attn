@@ -439,18 +439,11 @@ func (c *Client) ObserveAgentConversation(id protocol.TerminalID, nativeID strin
 }
 
 func (c *Client) SessionInstructions(targetSessionID string, question string) (*protocol.SessionInstructionsResult, error) {
-	resp, err := c.send(protocol.SessionInstructionsMessage{
-		Cmd:             protocol.CmdSessionInstructions,
-		TargetSessionID: targetSessionID,
-		Question:        question,
-	})
-	if err != nil {
+	var result protocol.SessionInstructionsResult
+	if err := c.RunCommand("session instructions", "", map[string]string{"id": targetSessionID, "question": question}, &result); err != nil {
 		return nil, err
 	}
-	if resp.SessionInstructionsResult == nil {
-		return nil, errors.New("daemon returned no session instructions result")
-	}
-	return resp.SessionInstructionsResult, nil
+	return &result, nil
 }
 
 type SessionListOptions struct {
@@ -583,21 +576,15 @@ func (c *Client) SessionReopen(opts SessionReopenOptions) (*protocol.SessionReop
 }
 
 func (c *Client) SessionTranscript(targetSessionID string, afterCursor string) (*protocol.SessionTranscriptResult, error) {
-	msg := protocol.SessionTranscriptMessage{
-		Cmd:             protocol.CmdSessionTranscript,
-		TargetSessionID: targetSessionID,
+	args := map[string]string{"id": targetSessionID}
+	if after := strings.TrimSpace(afterCursor); after != "" {
+		args["after"] = after
 	}
-	if strings.TrimSpace(afterCursor) != "" {
-		msg.AfterCursor = protocol.Ptr(strings.TrimSpace(afterCursor))
-	}
-	resp, err := c.send(msg)
-	if err != nil {
+	var result protocol.SessionTranscriptResult
+	if err := c.RunCommand("session transcript", "", args, &result); err != nil {
 		return nil, err
 	}
-	if resp.SessionTranscriptResult == nil {
-		return nil, errors.New("daemon returned no session transcript result")
-	}
-	return resp.SessionTranscriptResult, nil
+	return &result, nil
 }
 
 func (c *Client) StateExplain(targetSessionID string) (*protocol.StateExplainResult, error) {

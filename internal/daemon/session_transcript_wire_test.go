@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -45,7 +46,7 @@ func TestASessionsTranscriptIsReadableWithSecretsRedacted(t *testing.T) {
 		t.Errorf("reading from the end cursor returned %+v, want nothing new", resumed)
 	}
 
-	if _, err := cli.SessionTranscript("no-such-session", ""); err == nil || !strings.Contains(err.Error(), "session_not_found") {
+	if _, err := cli.SessionTranscript("no-such-session", ""); client.ErrorCode(err) != "session_not_found" {
 		t.Errorf("an unknown session's transcript answered %v, want session_not_found", err)
 	}
 }

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "e2160fbbc3c0";
+pub const PROTOCOL_VERSION: &str = "cbc25c94e4f4";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -9188,15 +9188,11 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sender_sessions: Option<Vec<SenderSession>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_instructions_result: Option<SessionInstructionsResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_list_result: Option<SessionListResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_reopen_result: Option<SessionReopenResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_show_result: Option<SessionShowResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_transcript_result: Option<SessionTranscriptResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sessions: Option<Vec<Session>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -11526,22 +11522,6 @@ impl SessionInputReopenedMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SessionInstructionsMessage {
-    pub cmd: String,
-    pub question: String,
-    pub target_session_id: String,
-}
-
-impl SessionInstructionsMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "session_instructions".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SessionInstructionsResult {
     pub answer: String,
     #[serde(deserialize_with = "null_as_default")]
@@ -11660,6 +11640,8 @@ pub struct SessionListResult {
     pub omitted: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reopen: Option<Vec<SessionReopenEntry>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tree: Option<Vec<SessionTreeProfile>>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SessionListResultMessage {
@@ -11993,6 +11975,19 @@ impl SessionShowResultMessage {
         }
     }
 }
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SessionSnoozeOutcome {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub session_id: SessionID,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SessionSnoozeResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub outcomes: Vec<SessionSnoozeOutcome>,
+}
 pub type SessionState = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SessionStateChangedMessage {
@@ -12027,29 +12022,30 @@ pub struct SessionTranscriptEvent {
     pub tool_name: Option<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SessionTranscriptMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub after_cursor: Option<String>,
-    pub cmd: String,
-    pub target_session_id: String,
-}
-
-impl SessionTranscriptMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "session_transcript".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SessionTranscriptResult {
     pub at_end: bool,
     #[serde(deserialize_with = "null_as_default")]
     pub events: Vec<SessionTranscriptEvent>,
     pub next_cursor: String,
     pub session_id: SessionID,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SessionTreeProfile {
+    pub profile_id: String,
+    pub profile_name: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub rows: Vec<SessionTreeRow>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SessionTreeRow {
+    pub agent: String,
+    pub label: String,
+    pub prefix: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<String>,
+    pub session_id: SessionID,
+    pub state: String,
+    pub turn: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SessionUnregisteredMessage {
@@ -14524,9 +14520,6 @@ impl ResponseField for SeedTransitionResult {
 impl ResponseField for SenderModelCallResult {
     const FIELD: &'static str = "sender_model_call_result";
 }
-impl ResponseField for SessionInstructionsResult {
-    const FIELD: &'static str = "session_instructions_result";
-}
 impl ResponseField for SessionListResult {
     const FIELD: &'static str = "session_list_result";
 }
@@ -14535,9 +14528,6 @@ impl ResponseField for SessionReopenResult {
 }
 impl ResponseField for SessionShowResult {
     const FIELD: &'static str = "session_show_result";
-}
-impl ResponseField for SessionTranscriptResult {
-    const FIELD: &'static str = "session_transcript_result";
 }
 impl ResponseField for TerminalInputResult {
     const FIELD: &'static str = "terminal_input_result";

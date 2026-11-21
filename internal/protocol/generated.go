@@ -9858,10 +9858,6 @@ type Response struct {
 	// SenderSessions corresponds to the JSON schema field "sender_sessions".
 	SenderSessions []SenderSession `json:"sender_sessions,omitempty,omitzero"`
 
-	// SessionInstructionsResult corresponds to the JSON schema field
-	// "session_instructions_result".
-	SessionInstructionsResult *SessionInstructionsResult `json:"session_instructions_result,omitempty,omitzero"`
-
 	// SessionListResult corresponds to the JSON schema field "session_list_result".
 	SessionListResult *SessionListResult `json:"session_list_result,omitempty,omitzero"`
 
@@ -9871,10 +9867,6 @@ type Response struct {
 
 	// SessionShowResult corresponds to the JSON schema field "session_show_result".
 	SessionShowResult *SessionShowResult `json:"session_show_result,omitempty,omitzero"`
-
-	// SessionTranscriptResult corresponds to the JSON schema field
-	// "session_transcript_result".
-	SessionTranscriptResult *SessionTranscriptResult `json:"session_transcript_result,omitempty,omitzero"`
 
 	// Sessions corresponds to the JSON schema field "sessions".
 	Sessions []Session `json:"sessions,omitempty,omitzero"`
@@ -12812,17 +12804,6 @@ type SessionInputReopenedMessage struct {
 	SessionID SessionID `json:"session_id"`
 }
 
-type SessionInstructionsMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Question corresponds to the JSON schema field "question".
-	Question string `json:"question"`
-
-	// TargetSessionID corresponds to the JSON schema field "target_session_id".
-	TargetSessionID string `json:"target_session_id"`
-}
-
 type SessionInstructionsResult struct {
 	// Answer corresponds to the JSON schema field "answer".
 	Answer string `json:"answer"`
@@ -13002,6 +12983,9 @@ type SessionListResult struct {
 
 	// Reopen corresponds to the JSON schema field "reopen".
 	Reopen []SessionReopenEntry `json:"reopen,omitempty,omitzero"`
+
+	// Tree corresponds to the JSON schema field "tree".
+	Tree []SessionTreeProfile `json:"tree,omitempty,omitzero"`
 }
 
 type SessionListResultMessage struct {
@@ -13407,6 +13391,22 @@ type SessionShowResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type SessionSnoozeOutcome struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// Until corresponds to the JSON schema field "until".
+	Until *string `json:"until,omitempty,omitzero"`
+}
+
+type SessionSnoozeResult struct {
+	// Outcomes corresponds to the JSON schema field "outcomes".
+	Outcomes []SessionSnoozeOutcome `json:"outcomes"`
+}
+
 type SessionState string
 
 type SessionStateChangedMessage struct {
@@ -13452,17 +13452,6 @@ type SessionTranscriptEvent struct {
 	ToolName *string `json:"tool_name,omitempty,omitzero"`
 }
 
-type SessionTranscriptMessage struct {
-	// AfterCursor corresponds to the JSON schema field "after_cursor".
-	AfterCursor *string `json:"after_cursor,omitempty,omitzero"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// TargetSessionID corresponds to the JSON schema field "target_session_id".
-	TargetSessionID string `json:"target_session_id"`
-}
-
 type SessionTranscriptResult struct {
 	// AtEnd corresponds to the JSON schema field "at_end".
 	AtEnd bool `json:"at_end"`
@@ -13475,6 +13464,40 @@ type SessionTranscriptResult struct {
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
+}
+
+type SessionTreeProfile struct {
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// ProfileName corresponds to the JSON schema field "profile_name".
+	ProfileName string `json:"profile_name"`
+
+	// Rows corresponds to the JSON schema field "rows".
+	Rows []SessionTreeRow `json:"rows"`
+}
+
+type SessionTreeRow struct {
+	// Agent corresponds to the JSON schema field "agent".
+	Agent string `json:"agent"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
+
+	// Prefix corresponds to the JSON schema field "prefix".
+	Prefix string `json:"prefix"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed *string `json:"seed,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// State corresponds to the JSON schema field "state".
+	State string `json:"state"`
+
+	// Turn corresponds to the JSON schema field "turn".
+	Turn string `json:"turn"`
 }
 
 type SessionUnregisteredMessage struct {

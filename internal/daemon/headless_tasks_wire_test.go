@@ -1,9 +1,9 @@
 package daemon_test
 
 import (
-	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -35,13 +35,13 @@ func TestWithHeadlessTasksOffNoModelRunsAndSessionsStillSettle(t *testing.T) {
 		}()
 		return asked
 	}
-	if err := <-askWhatItRan(); err == nil || !strings.Contains(err.Error(), "model_unavailable") {
+	if err := <-askWhatItRan(); client.ErrorCode(err) != "model_unavailable" {
 		t.Errorf("with headless tasks off, session instructions = %v, want model_unavailable", err)
 	}
 	t.Setenv("ATTN_HEADLESS_TASKS", "on")
 	asked := askWhatItRan()
 	w.HeadlessTask().Fail("the model is overloaded")
-	if err := <-asked; err == nil || !strings.Contains(err.Error(), "model_unavailable") {
+	if err := <-asked; client.ErrorCode(err) != "model_unavailable" {
 		t.Errorf("with a failing model, session instructions = %v, want model_unavailable", err)
 	}
 	t.Setenv("ATTN_HEADLESS_TASKS", "off")
