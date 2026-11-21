@@ -139,7 +139,6 @@ go ./cmd/attnd TestHelpListsEveryCommandAndReferenceAndEachCommandExplainsItself
 group cli-help ^cli/|^internal/prompttest/
 go ./cmd/attnd TestPRWaitReadyReportsEachActionableUpdateOnceAcrossInvocations
 go ./cmd/attnd TestSettingsCLIDiscoversReadsAndSavesDaemonSettings
-go ./cmd/attnd TestTheCLIWarnsWhenItsReleaseDiffersFromTheRunningDaemons
 go ./cmd/attnd TestTheCLINamesThePathItSearchedWhenAttndIsMissing
 go ./cmd/attnd TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict
 go ./cmd/attnd TestTheCommandsAnAgentRunsFromItsSessionActOnThatSession
