@@ -187,6 +187,10 @@ func (d *Daemon) handleSenderModelCall(conn net.Conn, msg *protocol.SenderModelC
 		d.sendError(conn, fmt.Sprintf("limit_ms must be a positive number of milliseconds, not %d", msg.LimitMs))
 		return
 	}
+	if strings.TrimSpace(msg.Input) == "" {
+		d.sendError(conn, "input must not be empty; send the text the model answers")
+		return
+	}
 	if !d.modelCallsRunning.admit() {
 		d.sendError(conn, fmt.Sprintf("%d model calls are already running, attn's limit; retry when one answers", modelCallsRunningTripwire))
 		return

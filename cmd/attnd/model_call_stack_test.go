@@ -151,6 +151,8 @@ func TestAModelCallIsRefusedOrEndsAsItsCallerSays(t *testing.T) {
 	}{
 		{map[string]any{"tier": "light", "model": "claude-opus-fake"}, "model call: name a tier or a model, not both"},
 		{map[string]any{"tier": "huge"}, `model call: tier must be light, standard or deep, not "huge"`},
+		{map[string]any{"input": ""}, "model call: input must not be empty; send the text the model answers"},
+		{map[string]any{"input": " \n", "harness": "codex"}, "model call: input must not be empty; send the text the model answers"},
 		{map[string]any{"harness": "gemini"}, `model call: no harness named "gemini" is installed; installed: claude, codex`},
 	} {
 		result := s.Run(testworld.Invocation{Args: []string{"model", "call", "--token-stdin"}, Stdin: modelCallStdin(token, refused.request)})

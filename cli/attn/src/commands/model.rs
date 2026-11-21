@@ -33,8 +33,8 @@ The request:
 
   purpose   a short label for the call, shown in attn's log
   system    the instructions: the model's system prompt
-  input     the text the model answers. Codex takes at most 1,048,576
-            characters
+  input     the text the model answers. Required, not empty. Codex takes at
+            most 1,048,576 characters
   limit_ms  how long to wait for the answer, in milliseconds. Required
   harness   optional: claude or codex. Default: the model_calls.agent setting,
             or the harness for new sessions when that is empty
