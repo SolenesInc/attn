@@ -141,6 +141,10 @@ recommended** (or `a`) selects every one of them in the draft, so you can review
 and change them before you send. Questions with no recommendation stay
 unanswered. The phone app has the same button.
 
+Once you pick a choice, **Add a condition** under the choices lets you qualify
+it, such as "yes, but skip the Windows VM step". The agent reads the condition
+right after your pick. The phone shows a condition you sent but cannot add one.
+
 **Snooze** (or `s`) in Asks snoozes the agent that holds the ask, with the
 queue's snooze choices, and **Wake** (or `s`) on a snoozed agent's ask wakes it.
 [The queue page](queue.md) says what a snooze does to the agent's asks.
