@@ -760,7 +760,9 @@ fn action_row(state: &State, keymap: &Keymap, action: &Action, t: &Tokens, k: &K
     if action.requires_terminal() {
         row = row.tag(badge("Needs terminal", Tone::Neutral));
     }
-    row.controls(controls, Reveal::Always).build(t)
+    row.controls(controls, Reveal::Always)
+        .controls_grow()
+        .build(t)
 }
 
 fn reassign_prompt(keymap: &Keymap, pending: &Pending, t: &Tokens) -> El {

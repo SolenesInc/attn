@@ -783,6 +783,49 @@ fn a_chord_leader_without_a_modifier_is_refused_and_the_binding_stays() {
 }
 
 #[test]
+fn a_refused_chord_s_reason_ends_above_the_next_row() {
+    let mut world = start(None);
+    open_editor(&mut world);
+    let zoom = format!("shortcut-editor.row.{}", Action::TerminalToggleZoom.id());
+
+    click(
+        &mut world,
+        &format!("shortcut-editor.chord.{}", Action::TerminalToggleZoom.id()),
+    );
+    physical(&mut world, "y");
+
+    let screen = world.screen();
+    let refusal = screen
+        .all(Target::role("alert"))
+        .into_iter()
+        .find(|n| n.name.as_deref().is_some_and(|n| !n.is_empty()))
+        .expect("the chord is refused");
+    let [_, ay, _, ah] = screen
+        .bounds(Target::key(
+            refusal.key.clone().expect("the refusal is keyed"),
+        ))
+        .expect("the refusal is laid out");
+    let rows: Vec<String> = screen
+        .all(Target::role("group"))
+        .into_iter()
+        .filter_map(|n| n.key)
+        .filter(|k| k.starts_with("shortcut-editor.row.") && !k.ends_with(".controls"))
+        .collect();
+    let next = rows
+        .iter()
+        .skip_while(|k| **k != zoom)
+        .nth(1)
+        .expect("a row follows Zoom active pane");
+    let [_, ny, ..] = screen.bounds(Target::key(next.clone())).expect("next row");
+    assert!(
+        ay + ah <= ny + 0.5,
+        "the refusal ends at {} under the next row's top at {ny}",
+        ay + ah
+    );
+    escape(&mut world);
+}
+
+#[test]
 fn a_recorded_chord_runs_its_action_once_the_daemon_has_it() {
     let mut world = start(None);
     open_editor(&mut world);

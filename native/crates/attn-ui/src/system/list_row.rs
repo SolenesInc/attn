@@ -67,6 +67,7 @@ pub struct ListRow {
     hover: Vec<IconButton>,
     inline: Vec<El>,
     quiet: bool,
+    grows: bool,
     mark: Mark,
     current: bool,
     dimmed: bool,
@@ -118,6 +119,7 @@ impl ListRow {
             role: "button",
             focusable: true,
             still: false,
+            grows: false,
             wrap: false,
             expanded: None,
             checked: None,
@@ -381,6 +383,13 @@ impl ListRow {
     /// How deep in a tree the row is: each level moves its lead one step in.
     pub fn depth(mut self, depth: u8) -> Self {
         self.depth = depth;
+        self
+    }
+
+    /// Controls that can grow under the title's line, such as a recorder that says under it why
+    /// it refused a chord: they start on the title's line, and the row grows to hold them.
+    pub fn controls_grow(mut self) -> Self {
+        self.grows = true;
         self
     }
 
@@ -680,13 +689,18 @@ impl ListRow {
             (false, _) => fading,
         };
         let controls_key = format!("{}.controls", self.key);
+        let grows = self.grows;
         let inline = (!self.inline.is_empty()).then(|| {
-            let controls = on_band(
-                door::gap(row(), Space::S4)
-                    .key(controls_key.clone())
-                    .items_center()
-                    .children(self.inline),
-            );
+            let controls = door::gap(row(), Space::S4).key(controls_key.clone());
+            let controls = if grows {
+                row().min_h(band).items_start().child(
+                    controls
+                        .items_start()
+                        .children(self.inline.into_iter().map(at_least_band)),
+                )
+            } else {
+                on_band(controls.items_center().children(self.inline))
+            };
             let controls = if self.quiet && !lit {
                 controls.group_opacity(QUIET, 1.0)
             } else {
@@ -710,19 +724,21 @@ impl ListRow {
         let (inline, anchor) = match (inline, over) {
             (Some(inline), over) => (
                 Some(
-                    row()
-                        .h(band)
-                        .items_center()
-                        .children(over.map(|over| {
-                            part(
-                                row()
-                                    .pin(Some(0.0), Some(0.0), None, Some(0.0))
-                                    .w(0.0)
-                                    .child(over),
-                                "hover-pin",
-                            )
-                        }))
-                        .child(inline),
+                    if grows {
+                        row().min_h(band).items_start()
+                    } else {
+                        row().h(band).items_center()
+                    }
+                    .children(over.map(|over| {
+                        part(
+                            row()
+                                .pin(Some(0.0), Some(0.0), None, Some(0.0))
+                                .w(0.0)
+                                .child(over),
+                            "hover-pin",
+                        )
+                    }))
+                    .child(inline),
                 )
                 .map(|kept| part(kept, "kept")),
                 None,
