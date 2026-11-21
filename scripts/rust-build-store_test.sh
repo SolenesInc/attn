@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-work="$(mktemp -d "${TMPDIR:-/tmp}/attn-rust-build-store-test.XXXXXX")"
+work="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/attn-rust-build-store-test.XXXXXX")" && pwd -P)"
 trap 'rm -rf "$work"' EXIT
 export XDG_CACHE_HOME="$work/cache with spaces"
 store="$XDG_CACHE_HOME/attn/rust-builds"

@@ -173,14 +173,16 @@ within() {
 }
 
 check_inputs() {
-  local messages="$1" built_dir="$2" deps_dir path root allowed outside=() name undeclared=() declared_names=" " line
-  deps_dir="$(grep -o '"filenames":\[[^]]*\]' "$messages" | grep -o '"[^"]*/deps/[^"]*"' | head -n1 | tr -d '"')" || true
+  local messages="$1" built_dir="$2" deps_dir path paths root allowed outside=() name undeclared=() declared_names=" " line
+  deps_dir="$(grep -o '"filenames":\[[^]]*\]' "$messages" | grep -o "\"[^\"]*/${built_dir##*"$target_dir"/}/deps/[^\"]*\"" | head -n1 | tr -d '"')" || true
   [[ -n "$deps_dir" ]] || die "cargo reported no artifact under a deps directory, so $recipe's rustc dep-info cannot be read"
   deps_dir="$(dirname "$deps_dir")"
   [[ -f "$built_dir/$binary.d" ]] || die "cargo wrote no dep-info at $built_dir/$binary.d, so $recipe's inputs cannot be checked"
   local repo_real build_outputs
   repo_real="$(cd "$repo" && pwd -P)"
   build_outputs="$(dirname "$deps_dir" | normalize_paths)"
+  paths="$(dep_info_paths "$built_dir/$binary.d" | normalize_paths | LC_ALL=C sort -u)"
+  [[ -n "$paths" ]] || die "no inputs read from $built_dir/$binary.d, so $recipe's inputs cannot be checked"
   while IFS= read -r path; do
     allowed=""
     if within "$path" "$build_outputs" || within "$path" "$(printf '%s\n' "$target_dir" | normalize_paths)"; then
@@ -194,7 +196,7 @@ check_inputs() {
       done
     fi
     [[ -n "$allowed" ]] || outside+=("$path")
-  done < <(dep_info_paths "$built_dir/$binary.d" | normalize_paths | LC_ALL=C sort -u)
+  done <<< "$paths"
   if [[ ${#outside[@]} -gt 0 ]]; then
     {
       echo "error: $recipe read files outside its input roots, so the store refuses to keep this build:"
@@ -246,7 +248,7 @@ evict_idle_entries() {
 }
 
 provide() {
-  local key entry messages built_dir
+  local key entry built_dir
   key="$(recipe_key)"
   entry="$(entry_for "$key")"
   if [[ -f "$entry/$binary" ]]; then
@@ -256,10 +258,10 @@ provide() {
   fi
   mkdir -p "$store"
   messages="$(mktemp "$store/.cargo-messages.XXXXXX")"
-  cargo_build "$messages" || { rm -f "$messages"; exit 1; }
+  trap 'rm -f "$messages"' EXIT
+  cargo_build "$messages"
   built_dir="$(output_dir)"
-  (check_inputs "$messages" "$built_dir") || { rm -f "$messages"; exit 1; }
-  rm -f "$messages"
+  check_inputs "$messages" "$built_dir"
   if [[ "$(recipe_key)" != "$key" ]]; then
     echo "warning: $recipe's inputs changed during the build, so this binary is not stored" >&2
     printf '%s\n' "$built_dir/$binary"
@@ -274,7 +276,7 @@ provide_variants() {
   local list="$1" name format fault extra built keys="" set_dir pending
   local names=() binaries=()
   [[ -f "$list" ]] || die "no variant list at $list"
-  while read -r name format fault extra || [[ -n "$name" ]]; do
+  while read -r name format fault extra <&3 || [[ -n "$name" ]]; do
     [[ -n "$name" && "$name" != \#* ]] || continue
     [[ -n "$format" && -z "$extra" && ( -z "$fault" || "$fault" == adopt-fault ) ]] ||
       die "$list: '$name $format $fault $extra' is not '<name> <snapshot format> [adopt-fault]'"
@@ -285,7 +287,7 @@ provide_variants() {
     names+=("$name")
     binaries+=("$built")
     keys+="$name $(basename "$(dirname "$built")")"$'\n'
-  done < "$list"
+  done 3< "$list"
   [[ ${#names[@]} -gt 0 ]] || die "$list lists no variants"
   set_dir="$store/variant-sets/$(printf '%s' "$keys" | shasum -a 256 | cut -d' ' -f1)"
   local i
