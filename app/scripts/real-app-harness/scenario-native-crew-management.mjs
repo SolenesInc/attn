@@ -346,7 +346,7 @@ try {
     const crewClaude = options.find((n) => (n.name ?? '').startsWith('Crew Claude'));
     runner.assert(Boolean(crewClaude), 'the harness offers the discovered model', options.map((n) => n.name));
     await driver.click({ key: crewClaude.key });
-    await driver.click({ role: 'button', name: 'high' });
+    await driver.click({ role: 'radio-button', name: 'high' });
     await full;
     if (await driver.find({ key: 'settings.route-picker' })) await driver.pressKey('Escape');
     await named('crew.launch.status', 'Saved');
@@ -360,7 +360,7 @@ try {
       runner.assert(Number.isInteger(down.pid), 'the scenario stopped its own daemon');
       await gone;
       await driver.click({ key: `settings.route.crew.${inSession}` });
-      await driver.click({ role: 'button', name: 'low' });
+      await driver.click({ role: 'radio-button', name: 'low' });
       if (await driver.find({ key: 'settings.route-picker' })) await driver.pressKey('Escape');
       await named('crew.launch.status', 'Not saved');
       await shot('08-not-saved.png');
