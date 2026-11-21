@@ -42,7 +42,7 @@ macOS only. A paired program sends with `attn send` without the panel.
 
 ### Agents
 
-- `attn agent attachment <capture-id> <attachment-id> --out <path>` saves a file the user attached (`cmd/attnd/agent_attachment.go`). Agents never send a quick capture. They receive one.
+- `attn agent attachment <capture-id> <attachment-id> --out <path>` saves a file the user attached (`internal/daemon/commands_agent.go`; it runs on the machine the session runs on and reads the file from the home in chunks, and is the tool `agent_attachment` when `agent_tools_enabled` is on). Agents never send a quick capture. They receive one.
 - Prompts: the quick capture guidance in the session instructions of the chief and crew members, and of no other agent (`internal/prompts/content/session/quick-capture.md`). The typed message and its file lines are in `session/quick-capture-item.md`, `quick-capture-file.md`, and `quick-capture-file-saved.md`.
 
 ### Triggers

@@ -68,7 +68,7 @@ fn native_command(name: &str, verb: Option<&str>, argv: &[OsString]) -> Option<N
         ("state", _) => native(state::run, true),
         ("list", _) => native(list::run, true),
         ("activity", _) => native(activity::run, true),
-        ("agent", Some("attachment")) | ("doc", Some("watch")) => return None,
+        ("doc", Some("watch")) => return None,
         ("agent", _) => native(agent::run, true),
         ("session", _) => native(session::run, true),
         ("skill", _) => native(skill::run, false),

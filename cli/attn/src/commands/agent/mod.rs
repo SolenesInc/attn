@@ -48,6 +48,15 @@ impl Family for Agent {
     fn before_send(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop> {
         match cmd.name {
             "close" => command::outlive_close_of_own_session(),
+            "attachment" => {
+                let out = crate::commands::absolute(parsed.text("out")).map_err(|error| {
+                    self.fail(
+                        cmd.name,
+                        &format!("resolve --out: {}", crate::paths::os_error_text(&error)),
+                    )
+                })?;
+                parsed.args.insert("out".to_string(), Json::from(out));
+            }
             "inbox" if !parsed.json => {
                 parsed.args.insert("render".to_string(), Json::from(true));
             }
@@ -131,6 +140,11 @@ impl Family for Agent {
                     }
                 }
                 if failed { Err(Stop(1)) } else { Ok(()) }
+            }
+            "attachment" => {
+                let saved: String = command::decode(run, self, cmd, &result)?;
+                print_stdout(&format!("{saved}\n"));
+                Ok(())
             }
             _ if parsed.json => command::print_result(run, self, cmd, &result),
             "peek" => {

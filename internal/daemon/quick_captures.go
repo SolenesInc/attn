@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -181,6 +182,18 @@ func (d *Daemon) handleQuickCapture(conn net.Conn, msg any) {
 	}
 	_ = json.NewEncoder(conn).Encode(response)
 }
+func (d *Daemon) readQuickCaptureAttachment(_ context.Context, msg protocol.QuickCaptureAttachmentGetMessage) (protocol.QuickCaptureResult, error) {
+	profileID, err := d.quickCaptureProfile(&msg, "")
+	if err != nil {
+		return protocol.QuickCaptureResult{}, err
+	}
+	result, err := d.quickCaptureRequest(profileID, &msg, quickCaptureSocketDownloadBytes)
+	if err != nil {
+		return protocol.QuickCaptureResult{}, err
+	}
+	return *result, nil
+}
+
 func (d *Daemon) handleQuickCaptureWS(client *wsClient, selected string, msg any) {
 	if _, download := msg.(*protocol.QuickCaptureAttachmentGetMessage); !download && !client.isTrustedAppClient() {
 		d.sendToClient(client, protocol.QuickCaptureResultMessage{ProfileID: selected, Event: protocol.EventQuickCaptureResult, RequestID: quickCaptureRequestScope(msg).requestID, Success: false, Error: protocol.Ptr("quick capture authoring and history require the authenticated attn app"), ErrorCode: protocol.Ptr(protocol.ErrorCodeUnauthorizedClient)})

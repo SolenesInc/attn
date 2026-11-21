@@ -1,10 +1,14 @@
 package daemon_test
 
 import (
+	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -144,6 +148,17 @@ func TestEveryAgentToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T)
 	messageID := fmt.Sprint(sent.StructuredContent.(map[string]any)["message_id"])
 	shapes.call("agent_msg_status", map[string]any{"message": messageID})
 	shapes.call("agent_inbox", map[string]any{})
+	capture, attachment := uuid.NewString(), uuid.NewString()
+	trusted := w.TrustedApp()
+	uploadQuickCapture(t, trusted, capture, attachment, quickCapturePNG(t), true)
+	if _, err := trusted.QuickCapture(protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: capture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID(mine))}, Content: "see the screenshot", AttachmentIds: []string{attachment}}); err != nil {
+		t.Fatal(err)
+	}
+	saved := filepath.Join(w.Path("shop"), "screenshot.png")
+	shapes.call("agent_attachment", map[string]any{"capture": capture, "attachment": attachment, "out": saved})
+	if data, err := os.ReadFile(saved); err != nil || !bytes.Equal(data, quickCapturePNG(t)) {
+		t.Errorf("agent_attachment wrote %d bytes, %v; want the uploaded screenshot", len(data), err)
+	}
 	shapes.call("agent_reload", map[string]any{"targets": []string{mine}})
 	shapes.call("agent_close", map[string]any{"self": true, "reason": "Done with the shop"})
 	shapes.finish("agent_")

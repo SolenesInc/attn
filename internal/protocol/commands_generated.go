@@ -13,6 +13,7 @@ var CommandRuns = map[string]Locator{
 	"agent reload":            LocatorHome,
 	"agent inbox":             LocatorHome,
 	"agent msg-status":        LocatorHome,
+	"agent attachment":        LocatorHere,
 	"callout anchors":         LocatorHome,
 	"callout show":            LocatorHome,
 	"delegate":                LocatorHome,

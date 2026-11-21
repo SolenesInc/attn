@@ -117,3 +117,14 @@ commands:
     errors:
       - {code: no_session, usage: true, fix: "Pass {session}, or run it inside an attn session."}
       - {code: message_not_found, fix: "Pass the id agent_msg answered for a message you sent."}
+
+  - name: agent attachment
+    summary: download a file the user attached to a message
+    runs: here
+    grant: own
+    doc: |
+      Downloads a saved user file from this session's profile to `out`, then you can inspect it. Outside a session, choose the profile when more than one profile exists.
+    args:
+      - {name: capture, type: text, required: true, cli: pos, placeholder: "<capture-id>", doc: "the quick capture the file came with"}
+      - {name: attachment, type: text, required: true, cli: pos, placeholder: "<attachment-id>", doc: "the attachment to download"}
+      - {name: out, type: path, required: true, cli: "--out", local: destination, placeholder: "<path>", doc: "where to write the file; it must not exist yet"}
