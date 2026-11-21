@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"strings"
 	"time"
@@ -61,11 +60,10 @@ func (d *Daemon) experimentalSettingsOn() []string {
 	return on
 }
 
-func (d *Daemon) handleRecordVent(conn net.Conn, msg *protocol.RecordVentMessage) {
-	vent, err := d.recordVent(msg)
+func (d *Daemon) vent(sessionID protocol.SessionID, kind protocol.VentKind, text string) (protocol.Vent, error) {
+	vent, err := d.recordVent(sessionID, kind, text)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return protocol.Vent{}, err
 	}
 	if vent.Kind == protocol.VentKindAttn && d.analyticsSharing() && d.on(setting.AnalyticsShareVents) {
 		if err := d.queueVentRecord(vent); err != nil {
@@ -74,9 +72,8 @@ func (d *Daemon) handleRecordVent(conn net.Conn, msg *protocol.RecordVentMessage
 			vent.Queued = true
 		}
 	}
-	wire := vent.wire()
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, RecordVentResult: &wire})
 	d.publishFact(FactVentChanged, vent.ID, nil)
+	return vent.wire(), nil
 }
 
 func (d *Daemon) queueVentRecord(vent storedVent) error {
@@ -184,8 +181,7 @@ func (d *Daemon) announceVentSends(vents []store.Vent) {
 	})
 }
 
-func (d *Daemon) recordVent(msg *protocol.RecordVentMessage) (storedVent, error) {
-	sessionID := protocol.TrimID(msg.SessionID)
+func (d *Daemon) recordVent(sessionID protocol.SessionID, kind protocol.VentKind, text string) (storedVent, error) {
 	session := d.store.Get(sessionID)
 	if sessionID == "" || session == nil {
 		return storedVent{}, errSessionNotLive(sessionID)
@@ -197,16 +193,16 @@ func (d *Daemon) recordVent(msg *protocol.RecordVentMessage) (storedVent, error)
 	if !launch.Vent {
 		return storedVent{}, errors.New("this session launched while usage analytics was off, so it cannot vent. Keep working")
 	}
-	switch msg.Kind {
+	switch kind {
 	case protocol.VentKindAttn:
 	case protocol.VentKindTools:
 		if !d.toolVentsEnabled() || !launch.ToolVents {
 			return storedVent{}, fmt.Errorf("tool vents are off for this session (%s), so it vents only about attn itself. Keep working", setting.AnalyticsToolVents)
 		}
 	default:
-		return storedVent{}, fmt.Errorf("%q is not a vent kind: a vent is about attn or about your other tools", msg.Kind)
+		return storedVent{}, fmt.Errorf("%q is not a vent kind: a vent is about attn or about your other tools", kind)
 	}
-	text := strings.TrimSpace(msg.Text)
+	text = strings.TrimSpace(text)
 	if text == "" {
 		return storedVent{}, errors.New("the vent is empty: say what happened, what you expected and what you did instead")
 	}
@@ -218,7 +214,7 @@ func (d *Daemon) recordVent(msg *protocol.RecordVentMessage) (storedVent, error)
 		return storedVent{}, err
 	}
 	vent := storedVent{store.Vent{
-		ID: id, ProfileID: session.ProfileID, SessionID: sessionID, Kind: msg.Kind, Text: text,
+		ID: id, ProfileID: session.ProfileID, SessionID: sessionID, Kind: kind, Text: text,
 		Turn:      fmt.Sprintf("%d:%d", d.startedAt.UnixNano(), d.monitorRun(sessionID)),
 		Context:   d.ventContext(session),
 		CreatedAt: time.Now(),
@@ -281,21 +277,19 @@ func (d *Daemon) sessionModels(session *protocol.Session, intent store.LaunchInt
 	return sessionModels{reported: reported, requested: intent.Model}
 }
 
-func (d *Daemon) handleWithdrawVent(conn net.Conn, msg *protocol.WithdrawVentMessage) {
-	sessionID, id := protocol.TrimID(msg.SessionID), strings.TrimSpace(msg.VentID)
+func (d *Daemon) withdrawVent(sessionID protocol.SessionID, id string) (protocol.VentWithdrawResult, error) {
+	id = strings.TrimSpace(id)
 	d.analyticsUpload.run.Lock()
 	withdrawn, err := d.store.WithdrawVent(sessionID, id, time.Now())
 	d.analyticsUpload.run.Unlock()
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return protocol.VentWithdrawResult{}, err
 	}
 	if !withdrawn {
-		d.sendError(conn, fmt.Sprintf("%s is not a vent this session can withdraw", id))
-		return
+		return protocol.VentWithdrawResult{}, fmt.Errorf("%s is not a vent this session can withdraw", id)
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true})
 	d.publishFact(FactVentChanged, id, nil)
+	return protocol.VentWithdrawResult{ID: id}, nil
 }
 
 func (d *Daemon) handleSetVentDismissed(client *wsClient, msg *protocol.SetVentDismissedMessage) {

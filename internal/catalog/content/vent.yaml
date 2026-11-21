@@ -1,2 +1,49 @@
+# The vent family: an agent reporting what got in its way. Both commands act on
+# the calling session.
 groups:
-  - {name: vent, usage: "[withdraw]", summary: "report what got in your way"}
+  - name: vent
+    usage: "[withdraw]"
+    summary: "report what got in your way"
+    map:
+      rows:
+        - {need: "Report what got in your way", tools: [vent]}
+    flags:
+      - {name: session, placeholder: "<id>", doc: "session id (defaults to the current session)"}
+    doc: |
+      Report problems with attn's usability with --about attn. For example: an attn command that failed or behaved differently from its help or docs, attn's instructions contradicting each other or attn's behavior, an attn capability you needed and had to work around, or attn not working inside your harness. A human reviews vents later, and they may help improve attn.
+
+      When the user turned on tool vents (analytics.tool_vents) before the session launched, you can also vent about problems with your local environment's tooling with --about tools. Your tools are things besides attn: for example, a skill, another CLI or MCP server, or your harness's permissions. The task and the repository you work on are not tools.
+
+      Pass the vent as arguments, with --file, or on stdin. Nobody replies, so keep working.
+
+      attn records with each vent what it already knows: the session, its harness and model, your stake (the seed a delegation assigned you), attn's build, the experimental settings on when the session launched, and where your transcript stood.
+
+      Limits: one vent per turn, and {vent_text_limit} bytes of text. To add to a vent, withdraw it and send one that covers both. Vents need usage analytics on (analytics.enabled) when the session launched.
+    sections:
+      - title: Venting
+        commands: [vent, vent withdraw]
+
+commands:
+  - name: vent
+    summary: record what got in your way; nobody replies
+    runs: home
+    grant: any
+    doc: |
+      Records a vent about attn's usability: an attn command that failed or behaved differently from its help or docs, attn instructions that contradict each other or attn's behavior, an attn capability you needed and had to work around, or attn not working inside your harness. With `about` tools, when the user turned tool vents on, it is about your other tooling instead: a skill, another CLI or MCP server, or your harness's permissions; the task and the repository are never tools. Don't vent because the work was hard, to report progress, or to ask for help. Say what happened, what you expected and what you did instead, in a paragraph at most. Nobody replies, so keep working. One vent per turn: to add to one, withdraw it with `vent_withdraw` and send one that covers both; withdraw a wrong vent instead of sending a correction.
+    args:
+      - {name: about, type: vent_kind, required: true, cli: "--about"}
+      - {name: text, type: text, cli: rest, placeholder: '"<what happened, what you expected, what you did instead>"', doc: "the vent, required; at most {vent_text_limit} bytes"}
+      - {name: file, type: path, cli: "--file", cli_only: true, doc: "read the vent from a file instead of the arguments or stdin"}
+    result: Vent
+    examples:
+      - {about: attn, text: "attn seed show printed no bookmark, though its help says it does; I read the whole log instead."}
+
+  - name: vent withdraw
+    summary: take back a vent you sent
+    runs: home
+    grant: any
+    doc: |
+      Takes back a vent this session sent.
+    args:
+      - {name: vent, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the vent's id, as recording it printed"}
+    result: VentWithdrawResult

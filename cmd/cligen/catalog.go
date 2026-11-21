@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/catalog"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
@@ -30,6 +31,7 @@ var catalogValues = map[string]string{
 	"max_check_summary_chars": fmt.Sprint(garden.MaxCheckSummaryChars),
 	"max_note_kib":            fmt.Sprint(garden.MaxNoteBytes >> 10),
 	"max_inbox":               fmt.Sprint(inbox.MaxInboxLimit),
+	"vent_text_limit":         fmt.Sprint(analytics.VentTextLimit),
 }
 
 var (

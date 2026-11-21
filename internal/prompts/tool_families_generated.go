@@ -55,7 +55,7 @@ var catalogFamilies = map[string]bool{
 	"ticket":           false,
 	"turn":             true,
 	"update":           false,
-	"vent":             false,
+	"vent":             true,
 	"version":          false,
 	"vision-check":     false,
 	"worktree":         false,

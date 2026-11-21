@@ -546,40 +546,56 @@
                 },
                 "children": [
                   {
-                    "kind": "compose",
+                    "kind": "choose",
+                    "condition": {
+                      "field": {
+                        "name": "agent_tools",
+                        "kind": "flag",
+                        "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                      },
+                      "test": "enabled"
+                    },
                     "children": [
                       {
-                        "kind": "text",
-                        "id": "session.vent-guidance",
-                        "source": "content/session/vent-guidance.md"
+                        "kind": "compose"
                       },
                       {
-                        "kind": "choose",
-                        "condition": {
-                          "field": {
-                            "name": "tool_vents_enabled",
-                            "kind": "flag",
-                            "description": "Offer tool vents when the session launched with analytics.tool_vents on."
-                          },
-                          "test": "enabled"
-                        },
+                        "kind": "compose",
                         "children": [
                           {
                             "kind": "text",
-                            "id": "session.vent-tools",
-                            "source": "content/session/vent-tools.md"
+                            "id": "session.vent-guidance",
+                            "source": "content/session/vent-guidance.md"
+                          },
+                          {
+                            "kind": "choose",
+                            "condition": {
+                              "field": {
+                                "name": "tool_vents_enabled",
+                                "kind": "flag",
+                                "description": "Offer tool vents when the session launched with analytics.tool_vents on."
+                              },
+                              "test": "enabled"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "session.vent-tools",
+                                "source": "content/session/vent-tools.md"
+                              },
+                              {
+                                "kind": "text",
+                                "id": "session.vent-attn-only",
+                                "source": "content/session/vent-attn-only.md"
+                              }
+                            ]
                           },
                           {
                             "kind": "text",
-                            "id": "session.vent-attn-only",
-                            "source": "content/session/vent-attn-only.md"
+                            "id": "session.vent-rules",
+                            "source": "content/session/vent-rules.md"
                           }
                         ]
-                      },
-                      {
-                        "kind": "text",
-                        "id": "session.vent-rules",
-                        "source": "content/session/vent-rules.md"
                       }
                     ]
                   }
@@ -7329,5 +7345,5 @@
       ]
     }
   ],
-  "definitions_hash": "5ee8d4ffb53874e62acaa87f1301002bb5450289160c0bac42c0ec27c5e29b4b"
+  "definitions_hash": "7b153466bea3fe0d2a6589a802506948d43756a24ef2054e1e3357c44e18d0da"
 }

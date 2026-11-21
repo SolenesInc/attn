@@ -4722,19 +4722,9 @@ model Vent {
   send?: VentSend;
 }
 
-@extension("x-on", #{ home: true })
-model RecordVentMessage {
-  cmd: "record_vent";
-  session_id: SessionID;
-  kind: VentKind;
-  text: string;
-}
-
-@extension("x-on", #{ home: true })
-model WithdrawVentMessage {
-  cmd: "withdraw_vent";
-  session_id: SessionID;
-  vent_id: string;
+// The vent an agent took back (`attn vent withdraw`).
+model VentWithdrawResult {
+  id: string;
 }
 
 // Plant a seed in the garden from a vent and link it to the vent, in one step.
@@ -7341,7 +7331,6 @@ model Response {
   ask_open_result?: Ask;
   ask_list_result?: AskListResult;
   ask_show_result?: AskShowResult;
-  record_vent_result?: Vent;
   session_list_result?: SessionListResult;
   session_show_result?: SessionShowResult;
   update_status?: UpdateStatus;

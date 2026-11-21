@@ -3012,10 +3012,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleAskShow(conn, msg.(*protocol.AskShowMessage))
 	case protocol.CmdAskClose:
 		d.handleAskClose(conn, msg.(*protocol.AskCloseMessage))
-	case protocol.CmdRecordVent:
-		d.handleRecordVent(conn, msg.(*protocol.RecordVentMessage))
-	case protocol.CmdWithdrawVent:
-		d.handleWithdrawVent(conn, msg.(*protocol.WithdrawVentMessage))
 
 	case protocol.CmdJournalAppend:
 		d.handleJournalAppend(conn, msg.(*protocol.JournalAppendMessage))

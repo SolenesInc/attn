@@ -154,3 +154,7 @@ types:
     json: {type: string, pattern: "^.+:[0-9]+$"}
     doc: "A file and a line in it, as path:line."
     placeholder: "<path>:<line>"
+  vent_kind:
+    json: {type: string, enum: [attn, tools]}
+    doc: "What the vent is about: attn for attn itself, including attn blocked inside your harness, or tools for your other tooling (skills, other CLIs or MCP servers, harness permissions)."
+    placeholder: "attn|tools"

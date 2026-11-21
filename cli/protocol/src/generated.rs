@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "622a608c4e0e";
+pub const PROTOCOL_VERSION: &str = "201e30d551bd";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -8678,23 +8678,6 @@ impl RecordCommandUsageResultMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct RecordVentMessage {
-    pub cmd: String,
-    pub kind: VentKind,
-    pub session_id: SessionID,
-    pub text: String,
-}
-
-impl RecordVentMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "record_vent".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RefreshPRsMessage {
     pub cmd: String,
 }
@@ -9037,8 +9020,6 @@ pub struct Response {
     pub pull_requests: Option<Vec<SessionPullRequest>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quick_capture_result: Option<QuickCaptureResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub record_vent_result: Option<Vent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refusal: Option<Refusal>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -13667,6 +13648,10 @@ pub struct VentTranscript {
     pub path: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct VentWithdrawResult {
+    pub id: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct VentsUpdatedMessage {
     pub event: String,
     pub profile_id: String,
@@ -13841,22 +13826,6 @@ pub struct WebSocketEvent {
     pub xpixel: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ypixel: Option<i64>,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct WithdrawVentMessage {
-    pub cmd: String,
-    pub session_id: SessionID,
-    pub vent_id: String,
-}
-
-impl WithdrawVentMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "withdraw_vent".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Worktree {
@@ -14349,9 +14318,6 @@ impl ResponseField for OnboardingResult {
 }
 impl ResponseField for QuickCaptureResult {
     const FIELD: &'static str = "quick_capture_result";
-}
-impl ResponseField for Vent {
-    const FIELD: &'static str = "record_vent_result";
 }
 impl ResponseField for SeedArtifactTransferResult {
     const FIELD: &'static str = "seed_artifact_transfer_result";

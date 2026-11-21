@@ -71,8 +71,6 @@ const (
 	CmdAskAnswer                     = "ask_answer"
 	CmdAskImage                      = "ask_image"
 	CmdAskSeedMentions               = "ask_seed_mentions"
-	CmdRecordVent                    = "record_vent"
-	CmdWithdrawVent                  = "withdraw_vent"
 	CmdSetVentDismissed              = "set_vent_dismissed"
 	CmdSetVentSend                   = "set_vent_send"
 	CmdSetVentKind                   = "set_vent_kind"

@@ -874,19 +874,15 @@ func (c *Client) AgentTurn(sessionID protocol.SessionID, action protocol.AgentTu
 }
 
 func (c *Client) RecordVent(sessionID protocol.SessionID, kind protocol.VentKind, text string) (*protocol.Vent, error) {
-	resp, err := c.send(protocol.RecordVentMessage{Cmd: protocol.CmdRecordVent, SessionID: sessionID, Kind: kind, Text: text})
-	if err != nil {
+	var vent protocol.Vent
+	if err := c.RunCommand("vent", sessionID, map[string]string{"about": string(kind), "text": text}, &vent); err != nil {
 		return nil, err
 	}
-	if resp.RecordVentResult == nil {
-		return nil, errors.New("daemon returned no vent")
-	}
-	return resp.RecordVentResult, nil
+	return &vent, nil
 }
 
 func (c *Client) WithdrawVent(sessionID protocol.SessionID, ventID string) error {
-	_, err := c.send(protocol.WithdrawVentMessage{Cmd: protocol.CmdWithdrawVent, SessionID: sessionID, VentID: strings.TrimSpace(ventID)})
-	return err
+	return c.RunCommand("vent withdraw", sessionID, map[string]string{"vent": ventID}, &protocol.VentWithdrawResult{})
 }
 
 func (c *Client) AskShow(sessionID protocol.SessionID, askID string) (*protocol.AskShowResult, error) {

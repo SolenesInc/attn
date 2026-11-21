@@ -149,7 +149,6 @@ var Placements = map[string][]Placement{
 	"quick_capture_list":               {Placement{LocatorHome, ""}},
 	"quick_capture_send":               {Placement{LocatorHome, ""}},
 	"record_analytics":                 {Placement{LocatorHere, ""}},
-	"record_vent":                      {Placement{LocatorHome, ""}},
 	"rename_session":                   {Placement{LocatorHome, ""}},
 	"reopen_inspect":                   {Placement{LocatorMachine, "host"}},
 	"reopen_worktree":                  {Placement{LocatorMachine, "host"}},
@@ -219,7 +218,6 @@ var Placements = map[string][]Placement{
 	"update_request":                   {Placement{LocatorHome, ""}},
 	"update_status":                    {Placement{LocatorHome, ""}},
 	"wake_turn":                        {Placement{LocatorHome, ""}},
-	"withdraw_vent":                    {Placement{LocatorHome, ""}},
 	"worktree_keep":                    {Placement{LocatorHere, ""}},
 	"worktree_list":                    {Placement{LocatorHere, ""}},
 	"worktree_refresh":                 {Placement{LocatorHere, ""}},
@@ -1762,18 +1760,6 @@ func (m RecordAnalyticsMessage) Locate() string {
 	return ""
 }
 
-func (RecordVentMessage) CommandName() string {
-	return "record_vent"
-}
-
-func (m RecordVentMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m RecordVentMessage) Locate() string {
-	return ""
-}
-
 func (RenameSessionMessage) CommandName() string {
 	return "rename_session"
 }
@@ -2641,18 +2627,6 @@ func (m WakeTurnMessage) Placement() Placement {
 }
 
 func (m WakeTurnMessage) Locate() string {
-	return ""
-}
-
-func (WithdrawVentMessage) CommandName() string {
-	return "withdraw_vent"
-}
-
-func (m WithdrawVentMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m WithdrawVentMessage) Locate() string {
 	return ""
 }
 

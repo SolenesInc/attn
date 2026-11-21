@@ -176,6 +176,8 @@ var specs = map[string]spec{
 	"state explain":           {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
 	"turn open":               {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
 	"turn settle":             {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+	"vent":                    {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"vent withdraw":           {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 }
 
 type ActivityArgs struct {
@@ -746,4 +748,14 @@ type TurnOpenArgs struct {
 }
 
 type TurnSettleArgs struct {
+}
+
+type VentArgs struct {
+	About string `json:"about,omitempty"`
+	Text  string `json:"text,omitempty"`
+	File  string `json:"file,omitempty"`
+}
+
+type VentWithdrawArgs struct {
+	Vent string `json:"vent,omitempty"`
 }

@@ -9312,20 +9312,6 @@ type RecordString map[string]interface{}
 
 type RecordUnknown map[string]interface{}
 
-type RecordVentMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Kind corresponds to the JSON schema field "kind".
-	Kind VentKind `json:"kind"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
-
-	// Text corresponds to the JSON schema field "text".
-	Text string `json:"text"`
-}
-
 type RefreshPRsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -9722,9 +9708,6 @@ type Response struct {
 
 	// QuickCaptureResult corresponds to the JSON schema field "quick_capture_result".
 	QuickCaptureResult *QuickCaptureResult `json:"quick_capture_result,omitempty,omitzero"`
-
-	// RecordVentResult corresponds to the JSON schema field "record_vent_result".
-	RecordVentResult *Vent `json:"record_vent_result,omitempty,omitzero"`
 
 	// Refusal corresponds to the JSON schema field "refusal".
 	Refusal *Refusal `json:"refusal,omitempty,omitzero"`
@@ -15259,6 +15242,11 @@ type VentTranscript struct {
 	Path string `json:"path"`
 }
 
+type VentWithdrawResult struct {
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+}
+
 type VentsUpdatedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
@@ -15495,17 +15483,6 @@ type WebSocketEvent struct {
 
 	// Ypixel corresponds to the JSON schema field "ypixel".
 	Ypixel *int `json:"ypixel,omitempty,omitzero"`
-}
-
-type WithdrawVentMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
-
-	// VentID corresponds to the JSON schema field "vent_id".
-	VentID string `json:"vent_id"`
 }
 
 type Worktree struct {

@@ -30,7 +30,7 @@ plant a seed from it. The user can also send attn vents to attn's maintainers.
 
 ### Agents
 
-- `attn vent --about attn|tools "<text>"`, or the text from `--file <path>` or stdin, and `attn vent withdraw <id>` (`cmd/attnd/vent.go`). `--session <id>` acts as another session.
+- `attn vent --about attn|tools "<text>"`, or the text from `--file <path>` or stdin, and `attn vent withdraw <id>`, and the tools `vent` and `vent_withdraw` over `/mcp` (`internal/catalog/content/vent.yaml`, `internal/daemon/commands_vent.go`, `cli/attn/src/commands/vent`). `--session <id>` acts as another session.
 - Prompts: the vent guidance in the launch instructions, only when usage analytics was on at launch: `internal/prompts/content/session/vent-guidance.md`, then `vent-tools.md` when tool vents were on or `vent-attn-only.md`, then `vent-rules.md`. How launch instructions reach each harness is in [agent-guidance.md](agent-guidance.md).
 
 ### Triggers

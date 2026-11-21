@@ -97,4 +97,6 @@ var CommandRuns = map[string]Locator{
 	"state explain":           LocatorHome,
 	"turn open":               LocatorHome,
 	"turn settle":             LocatorHome,
+	"vent":                    LocatorHome,
+	"vent withdraw":           LocatorHome,
 }
