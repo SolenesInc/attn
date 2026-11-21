@@ -148,13 +148,19 @@ fn transcript(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed) -> Result<(), S
             ask.args
                 .insert("after".to_string(), Json::from(cursor.clone()));
         }
-        let answer = match command::ask(run, &Session, cmd, &ask) {
-            Ok(answer) => answer,
-            Err(stop) => {
+        let answer = match command::send(run, &Session, cmd, &ask) {
+            Ok(reply) => command::answer(run, reply),
+            Err(_) if follow => {
+                if !wait_for_poll() {
+                    return done(&cursor);
+                }
+                continue;
+            }
+            Err(error) => {
                 if !cursor.is_empty() {
                     eprintln!("cursor: {cursor}");
                 }
-                return Err(stop);
+                return Err(run.fail_send(&Session.label(cmd.name), &error));
             }
         };
         match answer {
@@ -195,10 +201,10 @@ fn transcript(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed) -> Result<(), S
                     .lock()
                     .write_all(out.as_bytes())
                     .and_then(|()| std::io::stdout().lock().flush());
-                cursor = page.next_cursor;
                 if written.is_err() {
                     return done(&cursor);
                 }
+                cursor = page.next_cursor;
                 if !page.at_end {
                     continue;
                 }

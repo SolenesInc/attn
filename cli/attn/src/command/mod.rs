@@ -647,31 +647,44 @@ pub enum Answer {
     Refused(Reply, CommandRefusal),
 }
 
+pub fn send(
+    run: &Run<'_>,
+    family: &dyn Family,
+    cmd: &Command,
+    parsed: &Parsed,
+) -> Result<Reply, SendError> {
+    let mut message = RunCommandMessage::new();
+    message.command = family.label(cmd.name);
+    message.args = Some(parsed.args.clone().into_iter().collect());
+    message.session_id = (!parsed.session.is_empty()).then(|| parsed.session.clone());
+    message.profile_id = (!parsed.profile.is_empty()).then(|| parsed.profile.clone());
+    match Client::new(run.paths, "", &run.terminal).call_command(&message) {
+        Err(error) if error.unconnected && cmd.runs_without_daemon => {
+            crate::client::run_in_attnd(&message)
+        }
+        sent => sent,
+    }
+}
+
+pub fn answer(run: &Run<'_>, reply: Reply) -> Answer {
+    match refusal_of(&reply) {
+        Some(refusal) => {
+            STALE_PROTOCOL_PROBE.call_once(|| crate::commands::warn_if_stale(run.paths));
+            Answer::Refused(reply, refusal)
+        }
+        None => Answer::Result(reply),
+    }
+}
+
 pub fn ask(
     run: &mut Run<'_>,
     family: &dyn Family,
     cmd: &Command,
     parsed: &Parsed,
 ) -> Result<Answer, Stop> {
-    let mut message = RunCommandMessage::new();
-    message.command = family.label(cmd.name);
-    message.args = Some(parsed.args.clone().into_iter().collect());
-    message.session_id = (!parsed.session.is_empty()).then(|| parsed.session.clone());
-    message.profile_id = (!parsed.profile.is_empty()).then(|| parsed.profile.clone());
-    let reply = match Client::new(run.paths, "", &run.terminal).call_command(&message) {
-        Err(error) if error.unconnected && cmd.runs_without_daemon => {
-            crate::client::run_in_attnd(&message)
-        }
-        sent => sent,
-    }
-    .map_err(|error| run.fail_send(&family.label(cmd.name), &error))?;
-    Ok(match refusal_of(&reply) {
-        Some(refusal) => {
-            STALE_PROTOCOL_PROBE.call_once(|| crate::commands::warn_if_stale(run.paths));
-            Answer::Refused(reply, refusal)
-        }
-        None => Answer::Result(reply),
-    })
+    let reply = send(run, family, cmd, parsed)
+        .map_err(|error| run.fail_send(&family.label(cmd.name), &error))?;
+    Ok(answer(run, reply))
 }
 
 pub fn call(

@@ -254,6 +254,12 @@ func (r *Running) Kill() {
 	<-r.done
 }
 
+func (r *Running) Interrupt() Result {
+	r.t.Helper()
+	r.interrupt()
+	return r.Wait()
+}
+
 func (r *Running) interrupt() {
 	r.t.Helper()
 	_ = r.process.Signal(syscall.SIGINT)

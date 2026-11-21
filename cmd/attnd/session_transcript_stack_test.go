@@ -2,6 +2,9 @@ package main_test
 
 import (
 	"encoding/json"
+	"errors"
+	"net"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -150,4 +153,57 @@ func TestSessionInstructionsPrintsTheAnswerWithItsExcerptsAndTranscript(t *testi
 
 	asked := s.Attn("session", "instructions", id, "--question", question)
 	requireStdout(t, asked, "No.\n\nuser — ", "\n  \"who approved the refund?\"\n\nTranscript: /")
+}
+
+func TestSessionTranscriptFollowKeepsReadingAcrossADaemonRestart(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	app := s.App()
+	id := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+	claude := s.Launched(id)
+	converse(app, claude, id, "add a discount field", "Added the field.")
+
+	follow := s.Launch(testworld.Invocation{Args: []string{"session", "transcript", id, "--follow"}})
+	follow.AwaitStdout("Added the field.")
+	s.Stop()
+	if err := os.Remove(s.Socket); err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	lost, err := net.Listen("unix", s.Socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropped, err := lost.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropped.Close()
+	lost.Close()
+	s.Start()
+	app = s.App()
+	converse(app, claude, id, "and apply it after tax", "Applied after tax.")
+	follow.AwaitStdout("Applied after tax.")
+	_, cursor := readTranscript(t, s, id)
+	if stopped := follow.Interrupt(); stopped.Code != 0 || !strings.Contains(stopped.Stderr, "cursor: "+cursor) {
+		t.Errorf("--follow interrupted after a restart exited %d with stderr %q, want the cursor %s of the last page it printed", stopped.Code, stopped.Stderr, cursor)
+	}
+}
+
+func TestSessionTranscriptFollowStopsWhenItsReaderGoesAwayAndNamesTheLastPageItDelivered(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	app := s.App()
+	id := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+	claude := s.Launched(id)
+	converse(app, claude, id, "add a discount field", "Added the field.")
+	_, delivered := readTranscript(t, s, id)
+
+	follow := s.Launch(testworld.Invocation{Binary: "/bin/sh", Args: []string{"-c", `"$0" session transcript "$1" --follow | head -c 1 >/dev/null`, testworld.AttnBinary(t), id}})
+	converse(app, claude, id, "and apply it after tax", "Applied after tax.")
+	stopped := follow.Wait()
+	if stopped.Code != 0 || !strings.Contains(stopped.Stderr, "cursor: "+delivered) {
+		t.Errorf("--follow into a closed pipe exited %d with stderr %q, want it to stop and name the cursor %s of the page it delivered", stopped.Code, stopped.Stderr, delivered)
+	}
 }
