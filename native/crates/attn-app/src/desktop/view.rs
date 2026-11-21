@@ -425,7 +425,11 @@ fn short_id(session: &str) -> String {
 }
 
 fn id_face(short: String, ink: rune::Color) -> HeaderPiece {
-    HeaderPiece::new().words(short, ink)
+    let width = attn_ui::system::width_of(short.clone(), attn_ui::system::Type::Mono);
+    HeaderPiece::new().drawn(
+        attn_ui::system::words(short, attn_ui::system::Type::Mono, ink).single_line(),
+        width,
+    )
 }
 
 fn id_width(session: &str) -> Widths {

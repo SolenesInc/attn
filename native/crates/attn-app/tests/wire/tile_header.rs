@@ -2075,3 +2075,26 @@ fn escape_closes_a_shown_chain_at_once_while_a_control_holds_the_keyboard() {
     );
     rest(&mut world);
 }
+
+#[test]
+fn session_ids_of_the_same_length_stand_equally_wide_in_their_headers() {
+    let ids = ["iiiiiiii", "wwwwwwww"];
+    let mut on = desktop("a");
+    for (pane, id) in on.panes.iter_mut().zip(ids) {
+        pane.session_id = id.into();
+    }
+    let mut world = start_on(
+        ids.iter()
+            .map(|id| session(id, "ledger sweep", None))
+            .collect(),
+        vec![on],
+    );
+    let [_, _, narrow, _] = world.rect("tile.a.id");
+    let [_, _, wide, _] = world.rect("tile.b.id");
+    assert!(
+        (narrow - wide).abs() < 0.5,
+        "{} stands {narrow} wide and {} {wide}",
+        ids[0],
+        ids[1]
+    );
+}
