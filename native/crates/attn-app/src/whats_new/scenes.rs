@@ -1,4 +1,5 @@
 //! The tour's illustrations: each idea drawn as the window looks once it has happened.
+#![allow(clippy::disallowed_methods)]
 
 use attn_ui::Tokens;
 use rune::tok::TextStyle;

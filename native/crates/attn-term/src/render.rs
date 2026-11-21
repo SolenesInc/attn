@@ -165,6 +165,7 @@ impl Raster {
 
     /// `text` shaped in device pixels through Rune's text system, which loads the system font
     /// that has a character the terminal's families lack, as Core Text gives WebKit one.
+    #[allow(clippy::disallowed_methods)]
     fn layout(&self, text: &str, style: u8) -> Rc<parley::Layout<Ink>> {
         let family = if needs_emoji(text) {
             EMOJI_FAMILY

@@ -9,8 +9,8 @@ use attn_ui::blocks::{
     Actions, Block, Column, Empty, Field, Inline, Notice, Prose, Section, SettingRow, Status,
     SubRow, Table, TableColumns, TableRow,
 };
-use attn_ui::system::{self, Control, Look, Size, Tone, Type};
-use rune::{El, Icon, TextEdit, Tx, icon};
+use attn_ui::system::{self, Control, IconSize, Look, Size, Tone, Type};
+use rune::{El, Icon, TextEdit, Tx};
 use rune_kit::{Button, ButtonVariant, ControlSize, Select, TextArea, TextInput};
 
 use super::table::{self, NEW, Slot};
@@ -123,7 +123,7 @@ const ICONS: [(&str, &Icon); 9] = [
 
 fn role_glyph(name: &str, which: &str, t: &Tokens) -> El {
     match ICONS.iter().find(|(id, _)| *id == which) {
-        Some((_, glyph)) => icon(glyph, 16.0).color(t.text_secondary).a11y_hidden(),
+        Some((_, glyph)) => system::icon(glyph, IconSize::Regular, t.text_secondary).a11y_hidden(),
         None => {
             let initial = name
                 .trim()

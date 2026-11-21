@@ -50,7 +50,7 @@ pub use chip::{
     keys_hint_width, number_chip, slot_badge,
 };
 pub use choice::{Choice, answers, checks, choices};
-pub use composer::composer;
+pub use composer::{composer, text_input};
 pub use control::Control;
 pub use disclosure::disclosure;
 pub use dot::{DotShape, DotSize, RINGED_DOT, dot, ringed_dot, struck_dot};
@@ -65,7 +65,7 @@ pub use icon_size::{IconSize, glyph, icon};
 pub use layers::{hover_layer, pressed_layer};
 pub use link::Link;
 pub use list_row::{ListRow, Reveal};
-pub use mark::{dot_on_line, marked, meter, with_command};
+pub use mark::{code_span, dot_on_line, grounded, marked, meter, with_command};
 pub use pager::pager;
 pub use press_area::{pick_area, press_area};
 pub use radius::Radius;
@@ -97,4 +97,15 @@ pub(crate) fn kit(t: &Tokens) -> &'static rune_kit::Kit {
         text_tertiary: t.text_dimmed,
         ..*t
     })
+}
+
+/// The menu a row's own button opens, such as a sidebar row's actions: the standard menu, near
+/// its row, its separators across its whole width.
+pub fn row_menu(key: impl Into<String>) -> rune_kit::Menu {
+    door::row_menu(key.into())
+}
+
+/// `e` lifted over what is under it, on the raised surface with `radius` corners and a shadow.
+pub fn raised(e: rune::El, radius: Radius, t: &Tokens) -> rune::El {
+    door::raised(e, radius, t)
 }

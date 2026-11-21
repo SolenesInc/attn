@@ -355,11 +355,7 @@ fn labelled(
         shown.push_str(&l.label);
         shown.push('\u{2009}');
         inserted.push((l.byte, shown.len() - at));
-        chips.push(
-            Span::new(at, at + l.label.len())
-                .color(t.accent)
-                .weight(700.0),
-        );
+        chips.push(Span::new(at, at + l.label.len()).color(t.accent).bold());
         from = l.byte;
     }
     shown.push_str(&text_[from..]);

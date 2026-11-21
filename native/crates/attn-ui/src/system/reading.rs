@@ -1,8 +1,7 @@
 use rune::{Color, TextStyle};
 use rune_kit::MarkdownStyle;
-use rune_kit::syntax::Syntax;
 
-use super::{Space, Type, door};
+use super::{Space, door};
 use crate::Tokens;
 use crate::blocks::DOCUMENT;
 
@@ -34,7 +33,7 @@ impl Reading {
         self.metrics().0
     }
 
-    const fn metrics(self) -> (f32, f32, f32) {
+    pub(crate) const fn metrics(self) -> (f32, f32, f32) {
         match self {
             Reading::Text => (15.0, 400.0, 24.0),
             Reading::Title => (20.0, 700.0, 26.0),
@@ -49,23 +48,13 @@ impl Reading {
 
     /// The role as a text style, to measure text set in it.
     pub const fn style(self) -> TextStyle {
-        let (size, weight, line) = self.metrics();
-        let face = door::reading_face(size, weight, line);
-        match self {
-            Reading::Code | Reading::InlineCode => face.mono(),
-            Reading::Title => face.tracking(-0.5),
-            _ => face,
-        }
+        door::document::style(self)
     }
 
     /// The role as a person writes their own notes in it: in a serif, code in mono, each
     /// character drawn as typed, `-->` as its three characters rather than an arrow.
     pub const fn written(self) -> TextStyle {
-        let typed = self.style().features("'liga' 0, 'calt' 0");
-        match self {
-            Reading::Code | Reading::InlineCode => typed,
-            _ => door::serif(typed),
-        }
+        door::document::written(self)
     }
 }
 
@@ -117,111 +106,15 @@ pub fn written_cell(e: rune::El, head: bool) -> rune::El {
 /// across the text with hairline rules. Paragraphs, lists, quotes and headings stop at the
 /// document measure.
 pub fn document_style(t: &Tokens) -> MarkdownStyle {
-    family(t).prose_measure(DOCUMENT)
-}
-
-fn family(t: &Tokens) -> MarkdownStyle {
-    let kit = crate::kit(t);
-    let text = t.text_primary.alpha(0.9);
-    let code = crate::colors::syntax(t.dark);
-    let pt = |s: Space| s.pt();
-    MarkdownStyle::from_kit(kit)
-        .text(text)
-        .body_font(Reading::Text.style())
-        .heading_font(1, Reading::Title.style())
-        .heading_font(2, Reading::Heading.style())
-        .heading_font(3, Reading::Subheading.style())
-        .heading_font(4, Reading::Subheading.style())
-        .heading_text(1, t.text_primary)
-        .heading_text(2, text)
-        .heading_text(3, t.text_primary.alpha(0.8))
-        .deep_heading(t.text_primary)
-        .paragraph_margin(pt(Space::S16))
-        .heading_margin(1, pt(Space::S24), pt(Space::S16))
-        .heading_margin(2, pt(Space::S32), pt(Space::S12))
-        .heading_margin(3, pt(Space::S24), pt(Space::S8))
-        .heading_margin(4, pt(Space::S16), pt(Space::S8))
-        .heading_margins_collapse(true)
-        .list_font(Reading::Item.style())
-        .list_marker(t.accent.alpha(0.6))
-        .list(pt(Space::S24), pt(Space::S6))
-        .list_margin(pt(Space::S6), pt(Space::S6))
-        .list_markers_outside(true)
-        .list_marker_gap(pt(Space::S8))
-        .list_tabular_figures(true)
-        .link_underline(Color::TRANSPARENT)
-        .inline_code_size(Reading::InlineCode.style().size)
-        .inline_code_font(1.0, 400.0)
-        .inline_code_pad(pt(Space::S6))
-        .inline_code_pad_y(pt(Space::S2))
-        .inline_code_bg(t.bg_elevated)
-        .code_block_font(Reading::Code.style())
-        .code_block(t.bg_elevated.alpha(0.5), t.border.alpha(0.3))
-        .code_block_padding(pt(Space::S16), pt(Space::S12))
-        .code_margin(pt(Space::S16), pt(Space::S16))
-        .code_block_text(code.color(Syntax::Variable))
-        .syntax_theme(code)
-        .quote(t.accent.alpha(0.5), RAIL, pt(Space::S16), t.text_secondary)
-        .quote_italic(true)
-        .quote_margin(pt(Space::S16), pt(Space::S16))
-        .rule(t.border.alpha(0.3))
-        .rule_margin(pt(Space::S32), pt(Space::S32))
-        .lines(1.0)
-        .table_font(Reading::Item.style())
-        .table_outline(None)
-        .table_header_rule(t.border)
-        .table_rules(t.border.alpha(0.5))
-        .table_header_fill(t.bg_elevated.alpha(0.3))
-        .table_header_text(text)
-        .table_text(t.text_primary.alpha(0.8))
-        .table_header_weight(HEAD_WEIGHT)
-        .table_cell_padding(pt(Space::S12), pt(Space::S8))
-        .table_margin(pt(Space::S16), pt(Space::S16))
-        .table_full_width(true)
-        .table_scroll_bar(t.border, t.text_tertiary)
-        .code_scroll_bar(crate::code_scroll_bar(t))
-        .diagram_font(Reading::Diagram.style())
-        .task_checkbox(
-            CHECKBOX,
-            pt(Space::S8),
-            pt(Space::S8),
-            None,
-            Color::TRANSPARENT,
-            t.success,
-            Color::TRANSPARENT,
-            t.text_secondary.alpha(0.5),
-        )
-        .task_checked(Color::TRANSPARENT, t.success, t.success)
-        .task_ring(RAIL, CHECK_RING)
-        .task_done(t.text_secondary)
+    door::document::family(t).prose_measure(DOCUMENT)
 }
 
 /// A seed's body or a log entry's words in `ink`: a document at the interface's `Body` size,
 /// since it is read beside the interface rather than on its own, across the column it is given
 /// and with its lists drawn closer.
 pub fn note_style(ink: Color, t: &Tokens) -> MarkdownStyle {
-    let body = TextStyle {
-        line_height: NOTE_LINE,
-        ..door::style(Type::Body)
-    };
-    let body = TextStyle {
-        family: crate::kit(t).ty.body.family,
-        ..body
-    };
-    family(t)
-        .body_font(body)
-        .list_font(body)
-        .list(Space::S24.pt(), Space::S4.pt())
-        .text(ink)
-        .deep_heading(ink)
+    door::document::note(ink, t)
 }
 
 /// A table head's words.
-const HEAD_WEIGHT: f32 = 600.0;
-/// A quote's rail and a checkbox's ring.
-const RAIL: f32 = 2.0;
-/// A task's checkbox, as tall as a line of list text is high less its leading.
-const CHECKBOX: f32 = 16.0;
-const CHECK_RING: f32 = 11.0;
-/// `Body` read as a document: 13 on a 20 line.
-const NOTE_LINE: f32 = 20.0;
+pub(crate) const HEAD_WEIGHT: f32 = 600.0;

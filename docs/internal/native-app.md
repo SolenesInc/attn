@@ -351,15 +351,20 @@ choices once for the whole app:
   colour.
 - **The door.** `attn_ui::system::door` is the one module that calls Rune's raw
   spacing, font, corner and icon methods (`gap`, `padding`, `px`…, `radius`,
-  `font`, `TextStyle::new`, `rune::icon` and the rest). While views move onto the system,
-  `scripts/native-ui-budget` in `make check-native` holds each directory of
-  `attn-app/src`, and `attn-ui/src`, to its line in `native/ui-budget.tsv`:
-  a count above its line fails, and a count below it fails until the line is
-  lowered, so the count only goes down. The files its `allow` rows name, such as
-  the door, count for nothing. It also fails when a file of `native/crates`
-  outside the file's `allow` rows carries `allow(clippy::disallowed_methods)`.
-  Once every line is 0, `native/clippy.toml` rejects the raw methods for the
-  whole workspace, as it does Rune's colour constructors.
+  `font`, `TextStyle::new`, `rune::icon` and the rest), the rune-kit setters
+  that take a spacing, a font or a corner (`TextInput::text_style`,
+  `MarkdownStyle::body_font`, `Menu::gutter`, …) and rune-kit's `Kit`
+  constructors. `native/clippy.toml` rejects them everywhere else in the
+  workspace, as it does Rune's colour constructors, so a view gets its kit from
+  `attn_ui::kit` and draws through `attn_ui`. Clippy cannot see a clone of that
+  kit with a field changed, so review catches that. Only the files
+  `native/clippy-allows.tsv` names, each with its reason, may carry
+  `allow(clippy::disallowed_methods)`: the door, the colours, the terminal's
+  cell font, What's New's illustrations and the tests that state a type role
+  apart from the library. `scripts/native-clippy-allows` in
+  `make check-native` fails when any other file carries it. Code outside
+  `attn-ui` never names a step of `rune::tok::space`, `type_` or `radius`; an
+  overlay's offset is a named constant in its feature.
 - **The gallery.** `attn_ui::gallery` has a playground story for every
   control and block, with a variant for each state it can be in. `cargo run -p
   attn-ui --example state_sheets -- OUT` draws each state sheet, with no window

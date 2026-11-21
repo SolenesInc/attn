@@ -1,0 +1,10 @@
+# The files that may carry allow(clippy::disallowed_methods), lifting native/clippy.toml's bans,
+# each with its reason. scripts/native-clippy-allows checks it in make check-native.
+native/crates/attn-ui/src/system/door.rs	the one door to Rune's raw spacing, font and corner methods
+native/crates/attn-ui/src/colors/mod.rs	the one door to Rune's colour constructors
+native/crates/attn-app/src/terminal/input_trace.rs	a key's hops are timed on the platform's monotonic clock, which no test clock stands in for
+native/crates/attn-app/src/whats_new/scenes.rs	an illustration painted in its own viewBox, not a layout
+native/crates/attn-term/src/font.rs	the terminal's cell font, which the design system does not set
+native/crates/attn-term/src/render.rs	the terminal's cell font, which the design system does not set
+native/crates/attn-ui/tests/rules.rs	the tests state the type roles apart from the library
+native/crates/attn-app/tests/wire/update_run.rs	the test states the bar's type role apart from the library

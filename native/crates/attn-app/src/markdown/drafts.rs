@@ -299,7 +299,7 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
                 Rc::new(Passages::read(
                     text,
                     &super::read_as(text),
-                    &rune_kit::Kit::neutral(true),
+                    attn_ui::unpainted_kit(),
                 )),
             ));
             draft.unplaced = true;

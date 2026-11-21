@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Fails when a file of native/crates carries allow(clippy::disallowed_methods) and
+# native/clippy-allows.tsv does not name it, since an agent that meets a ban tends to silence it.
+set -euo pipefail
+
+root="${NATIVE_CLIPPY_ALLOWS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+list="$root/native/clippy-allows.tsv"
+
+allowed="$(awk -F'\t' '$1 !~ /^#/ && NF { print $1 }' "$list")"
+problems=()
+while read -r file; do
+  [ -n "$file" ] || continue
+  printf '%s\n' "$allowed" | grep -qxF "$file" ||
+    problems+=("$file carries allow(clippy::disallowed_methods): only the files native/clippy-allows.tsv names may lift native/clippy.toml's bans; build with attn_ui's tokens and controls")
+done < <(cd "$root" && grep -rlE --include='*.rs' 'allow\(clippy::disallowed_methods\)' native/crates 2>/dev/null | sort || true)
+
+if [ "${#problems[@]}" -gt 0 ]; then
+  printf 'native-clippy-allows: %s\n' "${problems[@]}" >&2
+  exit 1
+fi

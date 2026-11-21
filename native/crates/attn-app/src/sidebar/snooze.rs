@@ -196,11 +196,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
         format!("Snooze {}", menu.name)
     };
     let mode = if menu.standby { "standby" } else { "snooze" };
-    let mut kit_menu = rune_kit::Menu::new(format!("{MENU}.{mode}"))
-        .standard()
-        .gutter(4.0)
+    let mut kit_menu = attn_ui::system::row_menu(format!("{MENU}.{mode}"))
         .min_width(216.0)
-        .separator_inset(0.0)
         .label(title.clone())
         .open(true)
         .on_close(|state: &mut State| state.window.snooze = None)

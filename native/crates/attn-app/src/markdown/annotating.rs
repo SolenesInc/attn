@@ -6,12 +6,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::ops::Range;
 
 use attn_protocol::MarkdownAnnotationAnchor;
+use attn_ui::Tokens;
 use attn_ui::blocks::{Actions, Block, Popover, Toolbar};
 use attn_ui::system::{
     Button as UiButton, IconSize, Look, Size, Type, icon_button, passage_mark, words,
 };
-use attn_ui::{Tokens, type_};
-use rune::{Chord, Cx, El, Key, KeyEvent, KeyPlatform, SelectionChange, TextEdit, Tx, text_input};
+use rune::{Chord, Cx, El, Key, KeyEvent, KeyPlatform, SelectionChange, TextEdit, Tx};
 use rune_kit::Highlight;
 
 use super::anchoring::Resolved;
@@ -695,7 +695,7 @@ fn composer_box(
     let save_key = Chord::parse("mod+enter")
         .expect("the save chord parses")
         .label_on(KeyPlatform::current());
-    let field = text_input(&composer.text, type_::BODY)
+    let field = attn_ui::system::text_input(&composer.text, Type::Body)
         .key(key(tile, "composer.field"))
         .return_breaks_line()
         .label(if overall { "Overall note" } else { "Comment" })

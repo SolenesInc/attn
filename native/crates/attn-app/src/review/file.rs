@@ -8,12 +8,14 @@ use attn_protocol::{ReviewFileMessage, ReviewFileResultMessage, ReviewNote, Revi
 use attn_ui::Tokens;
 use attn_ui::blocks::{Bar, Hints, Inline, Pane, Tray, key_hint};
 use attn_ui::system::{Type, words};
-use rune::tok::space;
 use rune::{El, GrowthSpec, Live, ScrollPos, ScrollSpec, Tx, col};
 use rune_kit::ScrollBar;
 
 use super::stop::{Colors, code_row};
 use crate::State;
+
+/// How far a note in a file's strip is set in from the strip's edge.
+const NOTE_INDENT: f32 = 8.0;
 
 /// Rows a page key moves.
 pub(super) const PAGE_ROWS: usize = 20;
@@ -335,7 +337,7 @@ pub(super) fn view(
     let strip: Vec<El> = notes
         .iter()
         .filter(|n| line.is_some_and(|l| n.now_from > 0 && l >= n.now_from && l <= n.now_to))
-        .map(|n| super::stop::note(n, space::S2, t))
+        .map(|n| super::stop::note(n, NOTE_INDENT, t))
         .chain(marks)
         .collect();
     let strip = (!strip.is_empty()).then(|| {

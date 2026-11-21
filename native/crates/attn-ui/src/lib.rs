@@ -15,7 +15,6 @@ mod scroll_bar;
 pub mod settings_gallery;
 pub mod system;
 pub mod tile_gallery;
-pub mod type_;
 
 pub use scroll_bar::{
     asks_scroll_bar, code_scroll_bar, dialog_scroll_bar, document_scroll_bar, page_scroll_bar,
@@ -126,8 +125,14 @@ pub fn kit(t: &Tokens) -> &'static rune_kit::Kit {
     kit
 }
 
+/// The kit with no theme painted on it, for reading what a document draws without drawing it.
+pub fn unpainted_kit() -> &'static rune_kit::Kit {
+    static KIT: std::sync::OnceLock<rune_kit::Kit> = std::sync::OnceLock::new();
+    KIT.get_or_init(|| system::door::neutral_kit(true))
+}
+
 fn painted(t: &Tokens) -> rune_kit::Kit {
-    let mut kit = rune_kit::Kit::neutral(t.dark);
+    let mut kit = system::door::neutral_kit(t.dark);
     let p = &mut kit.c;
     p.page = t.bg_app;
     p.bg_base = t.bg_panel;

@@ -26,13 +26,16 @@ use attn_protocol::{ReviewBundle, ReviewFlow, ReviewRow};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Bar, Inline, Pane, Stack, Surface, Tray};
 use attn_ui::system::{Type, words};
-use rune::tok::space;
 use rune::{El, Key, KeyEvent, ScrollSpec, Tx, col, memo, row};
 use rune_kit::ScrollBar;
 
 use crate::State;
 use document::Part;
 use frames::{Frame, MapPlace, Side};
+
+/// How far the review's floating panels, the finding's panel, the editor and the composer, sit in
+/// from the review's edges.
+const PANEL_INSET: f32 = 24.0;
 
 /// The review's card, as the Tauri review reader widens the markdown reader's.
 pub(crate) const CARD_MAX_WIDTH: f32 = 1180.0;
@@ -948,11 +951,9 @@ pub(crate) fn body(
                 .push(n)
                 .build(t)
         }))
-        .children(
-            review.nav.panel.as_ref().map(|p| {
-                nav::panel_view(tile, p, t).pin(Some(0.0), Some(space::S6), Some(0.0), None)
-            }),
-        )
+        .children(review.nav.panel.as_ref().map(|p| {
+            nav::panel_view(tile, p, t).pin(Some(0.0), Some(PANEL_INSET), Some(0.0), None)
+        }))
         .child(keys::key_line(
             tile,
             (reading.frame, &offered),
@@ -980,7 +981,7 @@ pub(crate) fn body(
                 .map(|e| {
                     edits::view(e, &reviews.edit_text, t).pin(
                         Some(0.0),
-                        Some(space::S6),
+                        Some(PANEL_INSET),
                         Some(0.0),
                         None,
                     )
@@ -993,7 +994,12 @@ pub(crate) fn body(
                 .filter(|c| c.tile == tile)
                 .map(|c| {
                     col()
-                        .pin(Some(space::S6), Some(space::S6), Some(space::S6), None)
+                        .pin(
+                            Some(PANEL_INSET),
+                            Some(PANEL_INSET),
+                            Some(PANEL_INSET),
+                            None,
+                        )
                         .child(marks::composer_view(c, &reviews.composer_text, t))
                 }),
         )

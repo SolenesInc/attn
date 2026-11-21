@@ -184,13 +184,10 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
         .as_ref()
         .map(|c| c.key.clone())
         .or_else(|| member_of(state, &menu.session));
-    let mut kit_menu = rune_kit::Menu::new(MENU)
-        .standard()
+    let mut kit_menu = attn_ui::system::row_menu(MENU)
         .anchor(menu.under.clone())
         .placement(Placement::BottomEnd)
-        .gutter(4.0)
         .min_width(190.0)
-        .separator_inset(3.0)
         .label(format!("Actions for {}", menu.name))
         .open(true)
         .on_close(|state: &mut State| state.window.session_menu = None);

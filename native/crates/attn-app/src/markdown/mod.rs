@@ -21,7 +21,6 @@ use attn_ui::system::{
     words as attn_words,
 };
 use attn_ui::{GlyphButton, Tokens, glyph};
-use rune::tok::space;
 use rune::{Color, El, Image, LinkPaint, ScrollSpec, Span, Tx, col, memo, text};
 use rune_kit::ScrollBar;
 use rune_kit::{CodeFrame, ImageFrame, Markdown, MarkdownStyle, MissingImage};
@@ -33,6 +32,9 @@ pub use drafts::Drafts;
 pub use images::Pictures;
 pub(crate) use images::{follow as follow_images, over as with_image_preview};
 pub(crate) use links::Document;
+
+/// How far a code block's Copy button sits in from the block's top right corner.
+const COPY_INSET: f32 = 8.0;
 
 /// The widest paragraphs, lists, quotes and headings run; tables, code, diagrams and front
 /// matter take the card.
@@ -486,7 +488,7 @@ fn with_copy(card: El, frame: &CodeFrame<'_>, view: &str, copied: Option<usize>,
         })
         .build(attn_ui::kit(t))
         .key("copy")
-        .pin(None, Some(space::S2), Some(space::S2), None);
+        .pin(None, Some(COPY_INSET), Some(COPY_INSET), None);
     let button = if done {
         button.color(t.success)
     } else {

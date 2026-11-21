@@ -35,11 +35,7 @@ pub fn meter(parts: impl IntoIterator<Item = (f32, Color)>) -> El {
 pub fn marked(said: &str, marks: &[(usize, usize)], kind: Type, ink: Color, mark: Color) -> El {
     let spans = marks
         .iter()
-        .map(|&(from, to)| {
-            Span::new(from, to)
-                .color(mark)
-                .weight(door::style(Type::Name).weight)
-        })
+        .map(|&(from, to)| Span::new(from, to).color(mark).bold())
         .collect();
     door::font(rich(said.to_owned(), spans).label(said.to_owned()), kind).color(ink)
 }
@@ -54,8 +50,23 @@ pub fn with_command(
     ground: Color,
 ) -> El {
     let spans = command
-        .map(|(from, to)| door::mono_span(Span::new(from, to)).bg(ground, Space::S2.pt()))
+        .map(|(from, to)| grounded(door::mono_span(Span::new(from, to)), ground))
         .into_iter()
         .collect();
     door::font(rich(said.to_owned(), spans).label(said.to_owned()), kind).color(ink)
+}
+
+/// `span` on a quiet `ground` that reaches a little past its letters, as a command or a changed
+/// word is set apart from the words around it.
+pub fn grounded(span: Span, ground: Color) -> Span {
+    door::grounded(span, ground)
+}
+
+/// `span` as code inside a sentence, in `InlineCode`, on `ground` when there is one.
+pub fn code_span(span: Span, ground: Option<Color>) -> Span {
+    let code = door::inline_code(span);
+    match ground {
+        Some(ground) => grounded(code, ground),
+        None => code,
+    }
 }

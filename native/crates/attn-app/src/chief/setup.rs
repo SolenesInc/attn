@@ -759,6 +759,6 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
 const BESIDE_SIDEBAR: f32 = 10.0;
 const ABOVE_ROW: f32 = 10.0;
 /// How far the row ends inside the sidebar: the sidebar's padding.
-const SIDEBAR_INSET: f32 = rune::tok::space::S2;
+const SIDEBAR_INSET: f32 = 8.0;
 /// The square turned into the notch that points at the row: `.chief-pop-notch`.
 const NOTCH: f32 = 10.0;

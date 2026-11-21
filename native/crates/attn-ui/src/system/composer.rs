@@ -12,3 +12,8 @@ pub fn composer(edit: &TextEdit, placeholder: impl Into<String>, t: &Tokens) -> 
         .placeholder(placeholder.into(), t.text_muted)
         .caret(t.text_primary, crate::kit(t).selection())
 }
+
+/// A free text input, its words set as `kind`, for a field no field box frames.
+pub fn text_input(edit: &TextEdit, kind: Type) -> El {
+    door::text_input(edit, kind)
+}

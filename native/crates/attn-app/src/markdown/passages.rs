@@ -144,7 +144,10 @@ impl Passages {
                 .blocks()
                 .iter()
                 .position(|b| b.contains(&start))?;
-            Some((first, super::read_as(source).drawn(&Kit::neutral(true))))
+            Some((
+                first,
+                super::read_as(source).drawn(attn_ui::unpainted_kit()),
+            ))
         });
         let text_at = |within: &str| match part {
             None => self.drawn.at(within),
@@ -343,11 +346,10 @@ mod tests {
     const DOC: &str = "---\ntitle: x\n---\n# Plan\n\nCache the `tile` layout.\n\n- first\n- second\n  - deep one\n\n> quoted\n";
 
     fn read(source: &str) -> Passages {
-        let kit = Kit::neutral(true);
         Passages::read(
             source,
             &Markdown::new(source.to_owned()).smart_punctuation(true),
-            &kit,
+            attn_ui::unpainted_kit(),
         )
     }
 

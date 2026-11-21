@@ -705,8 +705,7 @@ fn a_number_field_shows_a_seven_digit_value_whole() {
     for dark in [true, false] {
         let mut rt = story(dark, "Library/Stepper", "Wide value");
         let room = element(&rt, "stepper.number.input").rect[2];
-        let body = rune::TextStyle::new(13.0, 400.0);
-        let (needed, _) = rt.text.measure("1000000", body, SCALE);
+        let (needed, _) = rt.text.measure("1000000", roles::BODY, SCALE);
         assert!(
             needed <= room,
             "dark={dark}: 1000000 needs {needed}, the field leaves {room} beside its arrows"
@@ -731,14 +730,11 @@ fn segments(rt: &Runtime<()>, track: &str) -> Vec<(ElementInfo, ElementInfo)> {
         .collect()
 }
 
-/// How a segment sets its words: `Type::Control`, 12/600.
-const CONTROL: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
-
 /// Whether text `e`, as wide as its box, shows its whole first word, or all of it when short.
 fn reads_its_first_word(rt: &mut Runtime<()>, e: &ElementInfo) -> bool {
     let all = e.text.clone().unwrap_or_default();
     let first = all.split_whitespace().next().unwrap_or_default();
-    let shown = |rt: &mut Runtime<()>, words: &str| rt.text.measure(words, CONTROL, SCALE).0;
+    let shown = |rt: &mut Runtime<()>, words: &str| rt.text.measure(words, roles::CONTROL, SCALE).0;
     let room = e.rect[2] + 0.25;
     shown(rt, &all) <= room || shown(rt, &format!("{first}…")) <= room
 }
@@ -1342,9 +1338,6 @@ fn tab_to(rt: &mut Runtime<()>, key: &str) -> ElementInfo {
     panic!("Tab never reaches {key}")
 }
 
-/// How the library sets a link in a note: `Type::Name`, 13/600.
-const NAME: rune::TextStyle = rune::TextStyle::new(13.0, 600.0);
-
 #[test]
 fn a_long_link_elides_inside_its_bar_with_its_ring_whole_and_its_name_whole() {
     for dark in [true, false] {
@@ -1412,7 +1405,7 @@ fn a_long_link_elides_inside_its_bar_with_its_ring_whole_and_its_name_whole() {
                     name.starts_with("Go to ") && shown.chars().count() >= 40,
                     "dark={dark}: {key} is announced as {name:?}, not by its whole name"
                 );
-                let (whole, _) = rune::text::measure(shown, &[], NAME, None);
+                let (whole, _) = rune::text::measure(shown, &[], roles::NAME, None);
                 assert!(
                     focused.rect[2] + 0.5 < whole,
                     "dark={dark}: {key} at {} wide draws its name whole at {whole}, which the \
@@ -1474,7 +1467,7 @@ fn a_sentence_longer_than_its_lines_ends_in_an_ellipsis_and_offers_details() {
         let mut rt = story(true, "Library/Banner", MANY_FAILURES);
         let (_, sentence) = banner_parts(&rt, tone);
         let said = sentence.label.clone().unwrap_or_default();
-        let (_, whole) = rune::text::measure(&said, &[], NAME, Some(sentence.rect[2]));
+        let (_, whole) = rune::text::measure(&said, &[], roles::NAME, Some(sentence.rect[2]));
         assert!(
             (sentence.rect[3] - SENTENCE_LINES * SENTENCE_LINE).abs() < 1.0
                 && whole > sentence.rect[3],
@@ -1503,9 +1496,6 @@ fn a_sentence_longer_than_its_lines_ends_in_an_ellipsis_and_offers_details() {
     }
 }
 
-/// How the library sets a note: `Type::Body`, 13/400.
-const NOTE: rune::TextStyle = rune::TextStyle::new(13.0, 400.0);
-
 #[test]
 fn a_banners_note_ends_in_an_ellipsis_only_when_its_line_is_too_short_for_it() {
     for variant in BANNER_VARIANTS {
@@ -1522,7 +1512,7 @@ fn a_banners_note_ends_in_an_ellipsis_only_when_its_line_is_too_short_for_it() {
             });
             for note in words {
                 let said = note.text.as_deref().unwrap_or_default();
-                let (whole, _) = rune::text::measure(said, &[], NOTE, None);
+                let (whole, _) = rune::text::measure(said, &[], roles::BODY, None);
                 let shortened = note.rect[2] + 0.5 < whole;
                 let alone = note.rect[2] + 0.5 >= notes.rect[2];
                 assert!(
@@ -2779,8 +2769,6 @@ fn a_notices_actions_share_a_line_wherever_its_line_holds_them_at_every_text_siz
 }
 
 const FACTS: &[&str] = &["facts.session.state.changed", "facts.pr.updated"];
-const MONO: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
-
 #[test]
 fn an_end_columns_numbers_and_title_share_its_right_edge() {
     for variant in ["Rest", "Focus"] {
@@ -2802,7 +2790,7 @@ fn an_end_columns_numbers_and_title_share_its_right_edge() {
 
 #[test]
 fn an_identifier_wraps_only_after_its_dots() {
-    let line = MONO.line_px();
+    let line = roles::MONO.line_px();
     for variant in ["Long", "Narrow long", "Smallest long"] {
         let rt = block_story(true, "Blocks/Diagnostics table", variant);
         let row = "facts.workspace.terminal.layout.snapshot.persisted.across.every.profile";
@@ -2829,7 +2817,7 @@ fn an_identifier_wraps_only_after_its_dots() {
 
 #[test]
 fn a_compact_tables_one_line_row_is_as_tall_as_its_text() {
-    let line = MONO.line_px();
+    let line = roles::MONO.line_px();
     for variant in ["Rest", "Focus"] {
         let rt = block_story(true, "Blocks/Diagnostics table", variant);
         let row = element(&rt, "facts.pr.updated");
@@ -2865,4 +2853,18 @@ fn a_tables_column_title_shows_wherever_its_values_show() {
             }
         }
     }
+}
+
+/// The type roles as these tests state them, apart from the library, so a test fails when the
+/// library sets a role differently.
+#[allow(clippy::disallowed_methods)]
+mod roles {
+    /// `Type::Body`, 13/400, as the library sets a note.
+    pub const BODY: rune::TextStyle = rune::TextStyle::new(13.0, 400.0);
+    /// How a segment sets its words: `Type::Control`, 12/600.
+    pub const CONTROL: rune::TextStyle = rune::TextStyle::new(12.0, 600.0);
+    /// How the library sets a link in a note: `Type::Name`, 13/600.
+    pub const NAME: rune::TextStyle = rune::TextStyle::new(13.0, 600.0);
+    /// `Type::Mono`'s size and weight, 12/400.
+    pub const MONO: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
 }

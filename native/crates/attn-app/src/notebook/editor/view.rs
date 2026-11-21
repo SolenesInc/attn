@@ -8,12 +8,14 @@ use attn_ui::Tokens;
 use attn_ui::blocks::{Card, Surface};
 use attn_ui::system::{Reading, Tone, Type, read_aside, tag, words, written_as, written_cell};
 use rune::text::{Span, TextHighlight};
-use rune::tok::space;
 use rune::{Color, El, GrowthSpec, Phase, Tx, col, el, rich, row, text};
 
 use super::markdown::{LineKind, Shown, Style};
 use super::{Editor, Pos};
 use crate::State;
+
+/// How far left of a quoted line's text its rail is drawn.
+const QUOTE_RAIL_OFFSET: f32 = 8.0;
 
 /// Rows not built yet are this tall until they are: one line of the note's text.
 fn estimated_row() -> f32 {
@@ -189,7 +191,7 @@ fn line_row(
                 ""
             })
             .children(shown.quote.then(|| {
-                el().absolute(-space::S2, 0.0)
+                el().absolute(-QUOTE_RAIL_OFFSET, 0.0)
                     .w(2.0)
                     .h(estimated_row())
                     .fill(t.border)
@@ -206,13 +208,7 @@ pub(crate) fn spans(shown: &Shown, t: Option<&Tokens>) -> Vec<Span> {
         let span = match style {
             Style::Strong => span.bold(),
             Style::Emphasis => span.italic(),
-            Style::Code => match t {
-                Some(t) => span
-                    .mono()
-                    .size(Reading::InlineCode.style().size)
-                    .bg(t.bg_elevated, 2.0),
-                None => span.mono().size(Reading::InlineCode.style().size),
-            },
+            Style::Code => attn_ui::system::code_span(span, t.map(|t| t.bg_elevated)),
             Style::Strike => span,
             Style::Link => match t {
                 Some(t) => span.color(t.accent).underline(t.accent),

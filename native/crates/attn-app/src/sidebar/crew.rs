@@ -388,11 +388,9 @@ pub(crate) fn menu_view(state: &State, t: &Tokens) -> Vec<El> {
     let desktop = member.and_then(|m| m.launch_desktop.as_ref()?.label.clone());
     let chief = crate::chief::view(state).filter(|c| c.key == menu.member);
     let id = menu.member.clone();
-    let mut kit_menu = rune_kit::Menu::new(MENU)
-        .standard()
+    let mut kit_menu = attn_ui::system::row_menu(MENU)
         .anchor(menu.under.clone())
         .placement(Placement::BottomEnd)
-        .gutter(4.0)
         .min_width(200.0)
         .label(format!("Actions for {name}"))
         .open(true)

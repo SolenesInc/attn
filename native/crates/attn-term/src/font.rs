@@ -14,6 +14,7 @@ pub struct Metrics {
 }
 
 impl Metrics {
+    #[allow(clippy::disallowed_methods)]
     pub fn of(font_size: f32) -> Metrics {
         let m = rune::text::advance(
             "M",

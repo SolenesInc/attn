@@ -205,6 +205,8 @@ pub(crate) fn step_by_key(state: &mut crate::State, wider: bool, tx: &mut rune::
 /// rows' end and half over the content; the Tauri app's `.sidebar-resize-handle` is 9 and
 /// starts at the edge.
 const GRIP: f32 = 6.0;
+/// How far the width label sits in from the content's top left corner while the edge moves.
+const LABEL_OFFSET: f32 = 8.0;
 
 /// The edge the sidebar is dragged wider or narrower by: the width follows the pointer
 /// within the limits, Escape puts it back, the release sends it, and a double-click goes back
@@ -259,7 +261,7 @@ pub(crate) fn label_view(state: &crate::State, t: &attn_ui::Tokens) -> Option<ru
             attn_ui::system::Tone::Neutral,
             t,
         ))
-        .absolute(rune::tok::space::S2, rune::tok::space::S2);
-        rune_kit::popover::raised(attn_ui::kit(t), label, 4.0)
+        .absolute(LABEL_OFFSET, LABEL_OFFSET);
+        attn_ui::system::raised(label, attn_ui::system::Radius::Tag, t)
     })
 }

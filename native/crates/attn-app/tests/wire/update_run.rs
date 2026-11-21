@@ -424,6 +424,9 @@ fn could_not_stage(hosts: &[&str]) -> UpdateRun {
 /// points it lays out in: 600 / 1.5 - 32.
 const SMALLEST: (f32, f32) = (800.0, 600.0);
 const SENTENCE_LINE: f64 = 16.25;
+/// How the bar sets its sentence, `Type::Name`, 13/600, stated apart from the library.
+#[allow(clippy::disallowed_methods)]
+const NAME: rune::TextStyle = rune::TextStyle::new(13.0, 600.0);
 const SMALLEST_WORK_AREA: f64 = 368.0;
 
 fn inside(rect: [f64; 4], of: [f64; 4]) -> bool {
@@ -630,8 +633,7 @@ fn at_every_width_a_failure_cut_short_offers_details() {
         );
         let [_, _, w, h] = world.rect("update-run.text");
         let shows = (h / SENTENCE_LINE).round();
-        let style = rune::TextStyle::new(13.0, 600.0);
-        let needs = (f64::from(rune::text::measure(&whole, &[], style, Some(w as f32)).1)
+        let needs = (f64::from(rune::text::measure(&whole, &[], NAME, Some(w as f32)).1)
             / SENTENCE_LINE)
             .round();
         assert_eq!(

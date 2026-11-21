@@ -1,7 +1,7 @@
 use rune::{Color, El, Icon, TextStyle, Tx, row, text};
 use rune_kit::{Button, ButtonVariant, Kit};
 
-use crate::system::{Space, door};
+use crate::system::{IconSize, Space, door};
 
 /// What a [`GlyphButton`] draws: an icon of [`crate::icon`], or text such as a mark of
 /// [`crate::glyph`] or `Aa`.
@@ -11,10 +11,9 @@ pub enum Glyph {
 }
 
 impl Glyph {
-    /// An icon `icon_size` points square, or text in `font`, in `ink`.
-    pub fn draw(self, icon_size: f32, font: TextStyle, ink: Color) -> El {
+    fn draw(self, font: TextStyle, ink: Color) -> El {
         match self {
-            Glyph::Icon(icon) => rune::icon(icon, icon_size).color(ink),
+            Glyph::Icon(icon) => door::icon(icon, IconSize::Small).color(ink),
             Glyph::Text(glyph) => door::styled(text(glyph), font).color(ink),
         }
     }
@@ -38,15 +37,15 @@ impl From<String> for Glyph {
     }
 }
 
+/// A glyph button's height and least width.
+const SIDE: f32 = 22.0;
+
 /// A button that draws a [`Glyph`] in place of its label, which names it. rune-kit's
 /// `IconButton` sizes its icon to the kit's controls; attn's buttons size each icon as the
 /// Tauri app's CSS does, so this is a `rune_kit::Button` that draws the glyph instead.
 pub struct GlyphButton {
     glyph: Glyph,
     button: Button,
-    side: f32,
-    font: Option<TextStyle>,
-    icon_size: f32,
     color: Option<Color>,
     trailing: Option<El>,
 }
@@ -56,30 +55,9 @@ impl GlyphButton {
         GlyphButton {
             glyph: glyph.into(),
             button: Button::new(label).variant(ButtonVariant::GhostMuted),
-            side: 22.0,
-            font: None,
-            icon_size: 14.0,
             color: None,
             trailing: None,
         }
-    }
-
-    /// An icon's width and height; 14 points unless set.
-    pub fn icon_size(mut self, size: f32) -> Self {
-        self.icon_size = size;
-        self
-    }
-
-    /// The button's height and least width; 22 points unless set.
-    pub fn side(mut self, side: f32) -> Self {
-        self.side = side;
-        self
-    }
-
-    /// The glyph's type; the button's own unless set.
-    pub fn font(mut self, font: TextStyle) -> Self {
-        self.font = Some(font);
-        self
     }
 
     /// The glyph's color; the variant's ink unless set.
@@ -123,9 +101,6 @@ impl GlyphButton {
         let GlyphButton {
             glyph,
             button,
-            side,
-            font,
-            icon_size,
             color,
             trailing,
         } = self;
@@ -136,7 +111,7 @@ impl GlyphButton {
         };
         let button = button
             .label_with(move |style, ink| {
-                let glyph = glyph.draw(icon_size, font.unwrap_or(style), color.unwrap_or(ink));
+                let glyph = glyph.draw(style, color.unwrap_or(ink));
                 match trailing {
                     Some(trailing) => door::gap(row(), Space::S4)
                         .items_center()
@@ -146,8 +121,8 @@ impl GlyphButton {
                 }
             })
             .build(k)
-            .h(side)
-            .min_w(side);
+            .h(SIDE)
+            .min_w(SIDE);
         door::inset(button, padding, Space::S0)
     }
 }

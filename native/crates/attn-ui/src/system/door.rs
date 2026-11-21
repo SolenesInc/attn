@@ -6,6 +6,8 @@ use rune::{El, Icon, Span, TextStyle};
 
 use super::{IconSize, Radius, Space, Type};
 
+pub(crate) mod document;
+
 pub(crate) const fn style(kind: Type) -> TextStyle {
     match kind {
         Type::PageTitle => TextStyle::new(18.0, 700.0),
@@ -19,11 +21,6 @@ pub(crate) const fn style(kind: Type) -> TextStyle {
         Type::Control => TextStyle::new(12.0, 600.0),
         Type::Compose => TextStyle::new(18.0, 400.0).lh(27.0),
     }
-}
-
-/// Text `size` high in `weight` on a `line` points tall, the face a document is read in.
-pub(crate) const fn reading_face(size: f32, weight: f32, line: f32) -> TextStyle {
-    TextStyle::new(size, weight).lh(line)
 }
 
 /// `style` in the serif a person's own notes are set in: the Tauri editor's `ui-serif, Georgia,
@@ -53,6 +50,29 @@ pub(crate) fn control_mark(mark: &'static str, size: IconSize) -> El {
 
 pub(crate) fn font(e: El, kind: Type) -> El {
     e.font(style(kind))
+}
+
+pub(crate) fn grounded(span: Span, ground: rune::Color) -> Span {
+    span.bg(ground, Space::S2.pt())
+}
+
+pub(crate) fn inline_code(span: Span) -> Span {
+    span.mono().size(super::Reading::InlineCode.style().size)
+}
+
+pub(crate) fn row_menu(key: String) -> rune_kit::Menu {
+    rune_kit::Menu::new(key)
+        .standard()
+        .gutter(Space::S4.pt())
+        .separator_inset(Space::S0.pt())
+}
+
+pub(crate) fn raised(e: El, radius: Radius, t: &crate::Tokens) -> El {
+    rune_kit::popover::raised(crate::kit(t), e, radius.pt())
+}
+
+pub(crate) fn neutral_kit(dark: bool) -> rune_kit::Kit {
+    rune_kit::Kit::neutral(dark)
 }
 
 pub(crate) fn mono_span(span: Span) -> Span {
@@ -308,12 +328,6 @@ const HOVER_FADE_ROOM: Space = Space::S2;
 
 pub(crate) fn rows(e: El, top: Space, bottom: Space) -> El {
     e.pt(top.pt()).pb(bottom.pt())
-}
-
-/// A style of [`crate::type_`], the styles views used before the type roles, which go once the
-/// last view takes its roles.
-pub(crate) const fn legacy(size: f32, weight: f32) -> TextStyle {
-    TextStyle::new(size, weight)
 }
 
 /// A free text input whose words are set as `kind`.

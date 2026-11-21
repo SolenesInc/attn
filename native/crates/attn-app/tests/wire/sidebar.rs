@@ -797,6 +797,7 @@ fn a_desktop_heading_shows_its_keys_and_its_pencil_renames_it_showing_a_refusal_
             "desktop work changed since revision 1 while another window arranged it, so this name was not saved"
         )
     );
+    const TWELVE_POINT_LINE: f32 = 15.0;
     let inside = |outer: [f32; 4], inner: [f32; 4]| {
         inner[0] >= outer[0] && inner[0] + inner[2] <= outer[0] + outer[2] + 0.5
     };
@@ -809,7 +810,7 @@ fn a_desktop_heading_shows_its_keys_and_its_pencil_renames_it_showing_a_refusal_
         .bounds(Target::key("desktop.rename.refused"))
         .unwrap();
     assert!(
-        inside(popover, refused) && refused[3] > 1.5 * attn_ui::type_::LABEL.line_px(),
+        inside(popover, refused) && refused[3] > 1.5 * TWELVE_POINT_LINE,
         "the refusal wraps onto more lines inside the popover: {refused:?} in {popover:?}"
     );
 

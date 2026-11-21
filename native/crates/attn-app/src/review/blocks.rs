@@ -7,7 +7,7 @@ use std::rc::Rc;
 use attn_protocol::{MarkdownAnnotation, ReviewRow, ReviewStop};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Stack, edged};
-use attn_ui::system::{Reading, read_as};
+use attn_ui::system::{Reading, grounded, read_as};
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd, TextMergeStream};
 use rune::{El, Image, Link, Span, col, text};
 use rune_kit::markdown::Markdown;
@@ -431,7 +431,7 @@ fn worded(ops: &[(Op, Word)], key: String, document: &Document, t: &Tokens) -> E
         }
         match op {
             Op::Added => {
-                span = span.color(t.success).bg(t.success.alpha(0.15), 1.0);
+                span = grounded(span.color(t.success), t.success.alpha(0.15));
                 added.push(word.text.as_str());
             }
             Op::Removed => {
@@ -462,7 +462,6 @@ fn worded(ops: &[(Op, Word)], key: String, document: &Document, t: &Tokens) -> E
         .color(t.text_primary)
         .spans(spans)
         .strikes(strikes)
-        .span_radius(3.0)
         .wrap();
     read_as(worded, Reading::Text)
 }
