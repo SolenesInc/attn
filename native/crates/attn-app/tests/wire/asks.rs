@@ -2722,6 +2722,86 @@ fn a_condition_added_under_a_pick_is_sent_with_it_and_shown_once_replied() {
 }
 
 #[test]
+fn a_new_pick_in_a_one_choice_question_drops_the_condition_written_for_the_old_one() {
+    let mut world = start(vec![cache_store()], vec![api_working()]);
+    open_sheet(&mut world);
+
+    click(&mut world, "asks.q.q1.choice.0");
+    click(&mut world, "asks.q.q1.condition");
+    type_into(&mut world, "asks.q.q1.condition.field", "only after VACUUM");
+    click(&mut world, "asks.q.q1.choice.1");
+
+    assert!(!has(&world, "asks.q.q1.condition.field"));
+    assert!(has(&world, "asks.q.q1.condition"));
+    click(&mut world, "asks.send");
+    assert_eq!(
+        sent_answers(&world)[0]["answers"],
+        serde_json::json!([{"key": "q1", "picked": ["Redis"]}])
+    );
+}
+
+#[test]
+fn a_number_key_pick_and_a_typed_answer_each_drop_the_condition() {
+    let mut world = start(vec![cache_store()], vec![api_working()]);
+    open_sheet(&mut world);
+
+    letter(&mut world, "1");
+    click(&mut world, "asks.q.q1.condition");
+    type_into(&mut world, "asks.q.q1.condition.field", "only after VACUUM");
+    click(&mut world, "asks.q.q1.choice.0");
+    assert!(
+        has(&world, "asks.q.q1.condition.field"),
+        "the same pick keeps it"
+    );
+    letter(&mut world, "2");
+    assert!(checked(&world, "asks.q.q1.choice.1"), "2 picks Redis");
+    assert!(!has(&world, "asks.q.q1.condition.field"));
+    assert!(has(&world, "asks.q.q1.condition"));
+
+    click(&mut world, "asks.q.q1.condition");
+    type_into(&mut world, "asks.q.q1.condition.field", "only today");
+    type_into(&mut world, "asks.q.q1.other.field", "SQLite");
+    click(&mut world, "asks.q.q1.choice.0");
+    assert!(!has(&world, "asks.q.q1.condition.field"));
+    click(&mut world, "asks.send");
+    assert_eq!(
+        sent_answers(&world)[0]["answers"],
+        serde_json::json!([{"key": "q1", "picked": ["Postgres"]}])
+    );
+}
+
+#[test]
+fn a_multi_choice_condition_stays_while_any_pick_remains_and_goes_with_the_last() {
+    let mut world = start(vec![release_day()], vec![api_working()]);
+    open_sheet(&mut world);
+
+    click(&mut world, "asks.q.q1.choice.0");
+    click(&mut world, "asks.q.q1.choice.1");
+    click(&mut world, "asks.q.q1.condition");
+    assert_eq!(
+        name(&world, "asks.q.q1.condition.field"),
+        "Condition on macOS, Linux"
+    );
+    type_into(&mut world, "asks.q.q1.condition.field", "after the freeze");
+
+    click(&mut world, "asks.q.q1.choice.1");
+    assert_eq!(
+        name(&world, "asks.q.q1.condition.field"),
+        "Condition on macOS"
+    );
+    click(&mut world, "asks.q.q1.choice.0");
+    assert!(!has(&world, "asks.q.q1.condition.field"));
+
+    click(&mut world, "asks.q.q1.choice.1");
+    assert!(!has(&world, "asks.q.q1.condition.field"));
+    click(&mut world, "asks.send");
+    assert_eq!(
+        sent_answers(&world)[0]["answers"],
+        serde_json::json!([{"key": "q1", "picked": ["Linux"]}])
+    );
+}
+
+#[test]
 fn typing_another_answer_drops_the_pick_and_its_condition() {
     let mut world = start(vec![cache_store()], vec![api_working()]);
     open_sheet(&mut world);

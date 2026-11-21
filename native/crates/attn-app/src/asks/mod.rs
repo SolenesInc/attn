@@ -377,6 +377,16 @@ pub(crate) struct Answer {
     pub condition: Option<TextEdit>,
 }
 
+impl Answer {
+    /// Replaces the picks. The condition qualified the picks it was written for, so it goes.
+    fn replace_picks(&mut self, picked: Vec<String>) {
+        if self.picked != picked {
+            self.condition = None;
+        }
+        self.picked = picked;
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Kind {
     One,
@@ -863,7 +873,7 @@ fn choose(state: &mut State, ask: &str, question: &str, kind: Kind, label: &str)
     let answer = state.answer(ask, question);
     match kind {
         Kind::One => {
-            answer.picked = vec![label.to_owned()];
+            answer.replace_picks(vec![label.to_owned()]);
             answer.other = TextEdit::default();
         }
         Kind::Any => {
@@ -871,6 +881,9 @@ fn choose(state: &mut State, ask: &str, question: &str, kind: Kind, label: &str)
                 answer.picked.remove(at);
             } else {
                 answer.picked.push(label.to_owned());
+            }
+            if answer.picked.is_empty() {
+                answer.condition = None;
             }
         }
         Kind::Text => {}
@@ -880,7 +893,7 @@ fn choose(state: &mut State, ask: &str, question: &str, kind: Kind, label: &str)
 /// A one-choice question's written answer replaces its pick.
 pub(crate) fn other_edited(state: &mut State, ask: &str, question: &str, kind: Kind) {
     if kind == Kind::One {
-        state.answer(ask, question).picked.clear();
+        state.answer(ask, question).replace_picks(Vec::new());
     }
 }
 
@@ -909,11 +922,11 @@ pub(crate) fn accept_recommended(state: &mut State, ask: &str) {
         match kind {
             Kind::Text => {
                 answer.text = rewritten(&answer.text, value);
-                answer.picked.clear();
+                answer.replace_picks(Vec::new());
                 answer.other = TextEdit::default();
             }
             Kind::One | Kind::Any => {
-                answer.picked = vec![value];
+                answer.replace_picks(vec![value]);
                 answer.other = TextEdit::default();
                 answer.text = TextEdit::default();
             }
