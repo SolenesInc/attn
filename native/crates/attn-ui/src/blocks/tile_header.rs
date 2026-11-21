@@ -123,7 +123,7 @@ impl TileHeader {
         let size = Size::Compact;
         let field = door::line(input.plain(), Type::Mono)
             .width(None)
-            .height(door::line_height(Type::Mono))
+            .height(size.height())
             .build(crate::system::kit(t))
             .grow(1.0);
         let frame = row()

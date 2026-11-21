@@ -1382,3 +1382,26 @@ fn a_press_on_a_control_in_another_tile_takes_the_keys_off_the_address_field() {
     );
     rest(&mut world);
 }
+
+#[test]
+fn a_click_anywhere_in_the_address_fields_box_edits_the_address() {
+    let reach = attn_ui::system::Size::Compact.height() / 2.0 - 2.0;
+    for dy in [-reach, reach] {
+        let (mut world, engine) = start(START);
+        engine.take();
+        let [x, y, w, h] = world
+            .screen()
+            .bounds(Target::key(format!("tile.{TILE}.address")))
+            .expect("the address field is drawn");
+        world.gesture(|app| app.click_at((x + w / 2.0, y + h / 2.0 + dy)));
+        world.gesture(|app| app.press("mod+a"));
+        world.gesture(|app| app.type_text("example.com/edge"));
+        key(&mut world, Key::Enter, Mods::default());
+        assert!(
+            engine
+                .take()
+                .contains(&Asked::Navigate("https://example.com/edge".into())),
+            "a click {dy} points from the field's middle edits the address"
+        );
+    }
+}
