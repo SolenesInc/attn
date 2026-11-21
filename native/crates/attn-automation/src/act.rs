@@ -67,6 +67,25 @@ struct Scroll {
     dy: f32,
 }
 
+/// What the system clipboard holds when the person pastes: text, a PNG read from a file,
+/// copied files, or several of them.
+#[derive(Deserialize)]
+struct Clipboard {
+    #[serde(default)]
+    text: String,
+    image: Option<std::path::PathBuf>,
+    #[serde(default)]
+    files: Vec<std::path::PathBuf>,
+}
+
+/// Files a file manager drops on `target`.
+#[derive(Deserialize)]
+struct Dropped {
+    #[serde(flatten)]
+    aimed: Aimed,
+    files: Vec<std::path::PathBuf>,
+}
+
 #[derive(Deserialize)]
 struct Chorded {
     chord: String,
@@ -222,6 +241,28 @@ pub fn act<S: 'static>(
                 }
                 Err(why) => Attempt::Fail(format!("key: {chord:?}: {why}")),
             }
+        }
+        "paste" => {
+            let Clipboard { text, image, files } = args!(action, payload);
+            let mut content = rune::ClipboardContent::new(text).with_files(files);
+            if let Some(path) = image {
+                let image = std::fs::read(&path)
+                    .ok()
+                    .and_then(rune::ClipboardImage::from_png);
+                let Some(image) = image else {
+                    return Attempt::Fail(format!(
+                        "paste: {} is not a readable PNG",
+                        path.display()
+                    ));
+                };
+                content = content.with_image(image);
+            }
+            rt.paste_content(content);
+            Attempt::Done(json!({"pasted": true}))
+        }
+        "drop" => {
+            let Dropped { aimed, files } = args!(action, payload);
+            pointer(rt, &aimed, |rt, point| rt.drop_files(files, Some(point)))
         }
         "hold" => {
             let Held { mods } = args!(action, payload);

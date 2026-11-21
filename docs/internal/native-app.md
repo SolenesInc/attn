@@ -475,6 +475,8 @@ are on their way to the daemon.
 | `drag` | `target`, `at`, then `to` (a target) or `by` (points) | press, move, release |
 | `scroll` | `target`, `dy` | turns the wheel over the element by `dy` points, as a mouse wheel does; positive `dy` turns it down, as a DOM wheel's `deltaY` does. The element's own wheel handler hears it before a scroll view does |
 | `key` | `chord`, such as `mod+shift+k` | the key the keyboard sends for it on this platform |
+| `paste` | `text`, `image` (a PNG file's path), `files` (paths), each optional | pastes what the system clipboard would hold into the focused field, or the root's paste handler, as Cmd+V does; the bridge's `key` sends Cmd+V as a key without reading any clipboard |
+| `drop` | `target`, `at`, `files` (paths) | drops the files at `at` in the target, as a file manager's drag does |
 | `hold` | `mods`, such as `mod` or `mod+shift`, or empty | holds those modifiers down, as a keyboard does, until the next `hold`; empty lets them all go |
 | `type` | `text`, `target` | focuses the target first, then types |
 | `run` | `name`, an action id such as `session.toggleSidebar`, or `capture.shortcut=<binding>` | dispatches the action. `capture.shortcut=Control+Alt+KeyB` binds Quick Capture's system-wide shortcut as the shortcut editor does, and fails with the editor's reason when the system or the binding refuses it; nothing after `=` turns it off |
