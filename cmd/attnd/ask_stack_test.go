@@ -38,7 +38,7 @@ func TestAnAgentAsksAndTheAskSurvivesADaemonRestartUntilWithdrawn(t *testing.T) 
 		t.Errorf("after a daemon restart, attn ask list exited %d and printed %q, stderr %q", listed.Code, listed.Stdout, listed.Stderr)
 	}
 	refused(t, inSession(":::question\nWhich?\n", "ask"), 1, "ask: line 1: question block has no closing :::")
-	refused(t, inSession("", "ask"), 1, "ask: pipe the ask's markdown on stdin, or pass --file")
+	refused(t, inSession("", "ask"), 1, "ask: pipe the markdown on stdin, or pass --file")
 
 	if withdrawn := inSession("", "ask", "close", id, "--session", session); withdrawn.Code != 0 || withdrawn.Stdout != "Withdrew "+id+".\n" {
 		t.Errorf("attn ask close exited %d and printed %q, stderr %q", withdrawn.Code, withdrawn.Stdout, withdrawn.Stderr)
