@@ -49,6 +49,11 @@ func TestEveryAutomationToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testi
 	if first["id"] == nil || retried["id"] != first["id"] {
 		t.Errorf("a retried automation_run answered run %v, want the first call's run %v", retried["id"], first["id"])
 	}
+	delivered, err := w.Client().AutomationRun(int(id), "tool-run", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(string(protocol.Deref(delivered.SessionID)))
 	if runs := tools.call("automation_runs", map[string]any{"id": id}); len(runs["runs"].([]any)) != 1 {
 		t.Errorf("automation_runs answered %v, want the one run", runs)
 	}
