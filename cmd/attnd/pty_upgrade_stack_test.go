@@ -399,7 +399,7 @@ func TestAnUpdateFromTheReleaseKeepsWorkerAndHostTerminalsAndReloadsThemOntoTheH
 		u.turn(app, agent, "before-update")
 	}
 
-	u.InstallBuild(testworld.AttnBinaryWithSnapshotFormat(t, upgradeMovedSnapshotFormat), ptyhosttest.BuildWithSnapshotFormat(t, upgradeMovedSnapshotFormat))
+	u.InstallBuild(testworld.AttnBinaryWithSnapshotFormat(t, upgradeMovedSnapshotFormat), ptyhosttest.Variant(t, upgradeMovedSnapshotFormat))
 	app = u.ensureCurrent()
 	format := attachedFormatAfterMove(app, hostTerminal, formatBefore)
 	if format == formatBefore || format == "" {
@@ -846,7 +846,7 @@ func TestAPhoneReattachesToAHostTerminalAndDrawsAfterAnUpdate(t *testing.T) {
 	cloud := testworld.StartCloud(t)
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Vars = append(s.Vars, "ATTN_CLOUD_URL="+cloud.HomeURL, "ATTN_PTY_BACKEND=migrating")
-	s.StartBinary(testworld.AttnBinaryWithSnapshotFormat(t, "phone-current"), "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "phone-current"))
+	s.StartBinary(testworld.AttnBinaryWithSnapshotFormat(t, "current"), "ATTN_PTY_HOST_BINARY="+ptyhosttest.Variant(t, "current"))
 	u := &releaseUpdate{Stack: s, t: t}
 	app := s.App()
 	setPhoneAccess(t, app, true)
@@ -866,7 +866,7 @@ func TestAPhoneReattachesToAHostTerminalAndDrawsAfterAnUpdate(t *testing.T) {
 
 	s.Stop()
 	socket.AwaitPresence(false)
-	s.StartBinary(testworld.AttnBinaryWithSnapshotFormat(t, "phone-next"), "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "phone-next"))
+	s.StartBinary(testworld.AttnBinaryWithSnapshotFormat(t, "next"), "ATTN_PTY_HOST_BINARY="+ptyhosttest.Variant(t, "next"))
 	socket.AwaitPresence(true)
 	if err := socket.Resume(qr); err != nil {
 		t.Fatal(err)
@@ -903,11 +903,11 @@ func TestKillingTheDaemonDuringAHostMoveLeavesTerminalsAliveAndTheNextStartRecov
 		t.Run(point, func(t *testing.T) {
 			t.Parallel()
 			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-			current := testworld.AttnBinaryWithSnapshotFormat(t, "move-current")
-			next := testworld.AttnBinaryWithSnapshotFormat(t, "move-next")
-			nextHost := "ATTN_PTY_HOST_BINARY=" + ptyhosttest.BuildWithSnapshotFormat(t, "move-next")
+			current := testworld.AttnBinaryWithSnapshotFormat(t, "current")
+			next := testworld.AttnBinaryWithSnapshotFormat(t, "next")
+			nextHost := "ATTN_PTY_HOST_BINARY=" + ptyhosttest.Variant(t, "next")
 			s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating")
-			s.StartBinary(current, "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "move-current"))
+			s.StartBinary(current, "ATTN_PTY_HOST_BINARY="+ptyhosttest.Variant(t, "current"))
 			u := &releaseUpdate{Stack: s, t: t}
 			app := s.App()
 			agent := u.spawnAgent(app, fakeagent.Claude)
@@ -931,12 +931,12 @@ func TestKillingTheDaemonDuringAHostMoveLeavesTerminalsAliveAndTheNextStartRecov
 				return testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)},
 					protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
 			}
-			if attached := attach(); attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "move-next" {
+			if attached := attach(); attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "next" {
 				testworld.AwaitEvent(app, "the attached stream of "+terminal+" to end when its host hands over", func(e protocol.WebSocketEvent) bool {
 					return e.Event == protocol.EventPtyDesync && protocol.Deref(e.ID) == terminal
 				})
-				if attached := attach(); attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "move-next" {
-					t.Fatalf("after the recovery the terminal attached with snapshot %+v, want its host on move-next", attached.Snapshot)
+				if attached := attach(); attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "next" {
+					t.Fatalf("after the recovery the terminal attached with snapshot %+v, want its host on next", attached.Snapshot)
 				}
 			}
 			if host := sharedHostOf(t, s.Dir, terminal); host != hostBefore {
@@ -1324,7 +1324,7 @@ const (
 	upgradeSharedHostEnabled   = "pty_shared_host_enabled"
 	upgradeSharedHostActive    = "pty_shared_host_active"
 	upgradeDirectLaunchEnabled = "direct_agent_launch_enabled"
-	upgradeMovedSnapshotFormat = "update-moves-the-format"
+	upgradeMovedSnapshotFormat = "next"
 )
 
 type upgradeDaemon struct {

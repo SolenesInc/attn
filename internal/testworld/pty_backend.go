@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptyhost/ptyhosttest"
 )
 
 type PTYBackend string
@@ -26,10 +25,11 @@ func OnPTYBackend(backend PTYBackend) StackOption {
 
 func SharedHostBinary(t testing.TB) string {
 	t.Helper()
-	if host := os.Getenv("ATTN_TEST_PTY_HOST"); host != "" {
-		return host
+	host := os.Getenv("ATTN_TEST_PTY_HOST")
+	if host == "" {
+		t.Fatal("ATTN_TEST_PTY_HOST is unset: run this test through scripts/test-go.sh, which provides the PTY host")
 	}
-	return ptyhosttest.BuildWithSnapshotFormat(t, ptyhosttest.DefaultSnapshotFormat)
+	return host
 }
 
 func (s *Stack) UseSharedHostBinary(host string) {

@@ -64,7 +64,7 @@ load_recipe() {
       workspace=pty-host binary=attn-pty-host profile=debug toolchain=rust-toolchain.toml
       cargo_args=()
       [[ -z "$variant_fault" ]] || cargo_args=(--features adopt-fault)
-      target_dir="$repo/pty-host/target/test-formats"
+      target_dir="$repo/pty-host/target/test-variants/$variant_name"
       roots=(pty-host ghostty-vt.pin "$vt/lib" "$vt/include")
       declared=("ATTN_PTY_HOST_SNAPSHOT_FORMAT=$variant_format")
       ;;
@@ -294,7 +294,7 @@ provide_variants() {
     [[ -n "$name" && "$name" != \#* ]] || continue
     [[ -n "$format" && -z "$extra" && ( -z "$fault" || "$fault" == adopt-fault ) ]] ||
       die "$list: '$name $format $fault $extra' is not '<name> <snapshot format> [adopt-fault]'"
-    variant_format="$format" variant_fault="$fault"
+    variant_name="$name" variant_format="$format" variant_fault="$fault"
     load_recipe attn-pty-host-variant
     provide
     [[ -n "$provided_stored" ]] || die "pty-host changed while variant $name was building; run again"

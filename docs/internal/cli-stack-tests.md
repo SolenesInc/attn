@@ -20,8 +20,15 @@ returns `testworld.Main(m)`.
   `testworld.WorkerPTY` when a test needs a worker on purpose, such as for a
   stepped kill timer, and `testworld.SharedHostOnlyPTY` to run the host without
   the workers. `ATTN_TEST_PTY_HOST` names the host build. `scripts/test-go.sh`
-  sets it, and a bare `go test` builds one with cargo.
-- A test that needs another host build passes it to `s.UseSharedHostBinary`.
+  sets it, and a test run without it fails and names the script.
+- A test that needs another host build, such as one with a different snapshot
+  format for an upgrade, takes it from `ptyhosttest.Variant(t, name)` and
+  passes it to `s.UseSharedHostBinary` or `ATTN_PTY_HOST_BINARY`. The variants
+  are listed in `pty-host/test-variants`: `current` and `next` serve terminal
+  formats of those names, and `next-adopt-fault` is `next` built to fail at
+  adoption. Each is its own file, because the daemon names a host build by its
+  hash. Pair a variant with `testworld.AttnBinaryWithSnapshotFormat` of the
+  same format. Add a line to the list only for a role no variant covers.
 - The historical PTY upgrade test uses port `0`. Older binaries cannot inherit
   that listener. After the daemon logs that it is bound, the test runs `lsof` on the captured
   PID to read the assigned port. The test does not release a reservation or

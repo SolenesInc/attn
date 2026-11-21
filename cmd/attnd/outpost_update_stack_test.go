@@ -175,11 +175,11 @@ func sha256OfFile(t *testing.T, path string) [32]byte {
 }
 
 func TestAnUpdateCarriesTheHostToAnOutpostAndATerminalInTheHostSurvivesIt(t *testing.T) {
-	const beforeFormat, afterFormat = "outpost-before", "outpost-after"
+	const beforeFormat, afterFormat = "current", "next"
 	before := testworld.AttnUpdateBinaryWithSnapshotFormat(t, "before-update", beforeFormat)
 	after := testworld.AttnUpdateBinaryWithSnapshotFormat(t, "after-update", afterFormat)
-	hostBefore := ptyhosttest.BuildWithSnapshotFormat(t, beforeFormat)
-	hostAfter := ptyhosttest.BuildWithSnapshotFormat(t, afterFormat)
+	hostBefore := ptyhosttest.Variant(t, beforeFormat)
+	hostAfter := ptyhosttest.Variant(t, afterFormat)
 
 	ssh := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t), testworld.NewStack(t)
@@ -261,14 +261,14 @@ func TestAnUpdateCarriesTheHostToAnOutpostAndATerminalInTheHostSurvivesIt(t *tes
 
 func outpostWithMatchingBuild(t *testing.T) (*testworld.SSH, *testworld.Stack, *testworld.Stack) {
 	t.Helper()
-	const format = "outpost-matching"
+	const format = "current"
 	build := testworld.AttnUpdateBinaryWithSnapshotFormat(t, "matching", format)
 	ssh := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t), testworld.NewStack(t)
 	remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_HOST_BINARY=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
 	remote.RunFrom(build)
 	home.RunFrom(build)
-	home.InstallsOnOutposts(build, ptyhosttest.BuildWithSnapshotFormat(t, format))
+	home.InstallsOnOutposts(build, ptyhosttest.Variant(t, format))
 	ssh.Use(home.World)
 	ssh.Route("matching-outpost", remote)
 	remote.RunFrom(ssh.InstallPath(remote))

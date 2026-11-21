@@ -316,15 +316,15 @@ func TestTerminalTextSurvivesAnUpgrade(t *testing.T) {
 			t.Parallel()
 			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(backend))
 			s.Vars = append(s.Vars, "SHELL=/bin/bash")
-			current := testworld.AttnBinaryWithSnapshotFormat(t, "terminal-text-current")
-			next := testworld.AttnBinaryWithSnapshotFormat(t, "terminal-text-next")
+			current := testworld.AttnBinaryWithSnapshotFormat(t, "current")
+			next := testworld.AttnBinaryWithSnapshotFormat(t, "next")
 			hostBuild := func(format string) []string {
 				if backend != testworld.SharedHostPTY {
 					return nil
 				}
-				return []string{"ATTN_PTY_HOST_BINARY=" + ptyhosttest.BuildWithSnapshotFormat(t, format)}
+				return []string{"ATTN_PTY_HOST_BINARY=" + ptyhosttest.Variant(t, format)}
 			}
-			s.StartBinary(current, hostBuild("terminal-text-current")...)
+			s.StartBinary(current, hostBuild("current")...)
 			app := s.App()
 			caller := s.Spawn(app, fakeagent.Claude, s.Path("upgrade"))
 			s.Launched(caller)
@@ -347,7 +347,7 @@ func TestTerminalTextSurvivesAnUpgrade(t *testing.T) {
 				t.Fatalf("before upgrade: %+v", got)
 			}
 			s.Stop()
-			s.StartBinary(next, hostBuild("terminal-text-next")...)
+			s.StartBinary(next, hostBuild("next")...)
 			app = s.App()
 			terminal := app.Terminal(string(opened.SessionID))
 			for _, session := range app.Initial.Sessions {
@@ -356,18 +356,18 @@ func TestTerminalTextSurvivesAnUpgrade(t *testing.T) {
 				}
 			}
 			attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
-			if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "terminal-text-next" {
+			if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "next" {
 				testworld.AwaitEvent(app, "the old terminal stream to end at handover", func(e protocol.WebSocketEvent) bool {
 					return e.Event == protocol.EventPtyDesync && protocol.Deref(e.ID) == terminal
 				})
 				attached = testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
 			}
-			if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "terminal-text-next" {
+			if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "next" {
 				format := "none"
 				if attached.Snapshot != nil {
 					format = protocol.Deref(attached.Snapshot.Format)
 				}
-				t.Fatalf("worker snapshot format = %s, want terminal-text-next", format)
+				t.Fatalf("worker snapshot format = %s, want next", format)
 			}
 			payload, err := base64.StdEncoding.DecodeString(attached.Snapshot.SnapshotB64)
 			if err != nil {

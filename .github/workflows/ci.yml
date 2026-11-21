@@ -323,7 +323,7 @@ jobs:
       - name: Cache pty-host test builds
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: pty-host -> target/test-formats
+          workspaces: pty-host -> target
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Ensure ghostty-vt artifacts

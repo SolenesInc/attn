@@ -23,7 +23,7 @@ func TestSharedHost_HandoverMovesEveryTerminalToTheNewBuildInPlace(t *testing.T)
 		t.Skip("set ATTN_TEST_PTY_HOST to run the shared PTY host integration tests")
 	}
 	world := newHandoverWorld(t)
-	oldBackend := world.backend(t, "handover-old", ptyhosttest.BuildWithSnapshotFormat(t, "handover-old"))
+	oldBackend := world.backend(t, "current", ptyhosttest.Variant(t, "current"))
 	for _, id := range []string{"numbers", "neighbour"} {
 		if err := oldBackend.Spawn(context.Background(), SpawnOptions{ID: harness.TerminalID(id), CWD: t.TempDir(), Agent: "shell", Cols: 80, Rows: 24}); err != nil {
 			t.Fatal(err)
@@ -36,7 +36,7 @@ func TestSharedHost_HandoverMovesEveryTerminalToTheNewBuildInPlace(t *testing.T)
 	})
 	numbers := fillTerminal(t, oldBackend, "numbers")
 
-	newBackend := world.backend(t, "handover-new", ptyhosttest.BuildWithSnapshotFormat(t, "handover-new"))
+	newBackend := world.backend(t, "next", ptyhosttest.Variant(t, "next"))
 	if _, err := newBackend.Recover(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -44,14 +44,14 @@ func TestSharedHost_HandoverMovesEveryTerminalToTheNewBuildInPlace(t *testing.T)
 		if err := newBackend.UpgradeWorker(context.Background(), id); err != nil {
 			t.Fatalf("UpgradeWorker(%s): %v", id, err)
 		}
-		if format, known := newBackend.SessionTerminalBuild(id); !known || format != "handover-new" {
-			t.Fatalf("%s reports terminal format %q (known=%t) after the handover, want handover-new", id, format, known)
+		if format, known := newBackend.SessionTerminalBuild(id); !known || format != "next" {
+			t.Fatalf("%s reports terminal format %q (known=%t) after the handover, want next", id, format, known)
 		}
 	}
 	if pids := newBackend.WorkerPIDs(context.Background()); pids["numbers"] != hostPID || pids["neighbour"] != hostPID {
 		t.Fatalf("host pids after the handover = %v, want both terminals still in pid %d", pids, hostPID)
 	}
-	numbers.requireCarriedBy(t, newBackend, "handover-new")
+	numbers.requireCarriedBy(t, newBackend, "next")
 }
 
 func TestSharedHost_ABuildThatCannotAdoptNeverTouchesTheLiveHost(t *testing.T) {
@@ -59,7 +59,7 @@ func TestSharedHost_ABuildThatCannotAdoptNeverTouchesTheLiveHost(t *testing.T) {
 		t.Skip("set ATTN_TEST_PTY_HOST to run the shared PTY host integration tests")
 	}
 	world := newHandoverWorld(t)
-	oldBackend := world.backend(t, "rehearsal-old", ptyhosttest.BuildWithSnapshotFormat(t, "rehearsal-old"))
+	oldBackend := world.backend(t, "current", ptyhosttest.Variant(t, "current"))
 	if err := oldBackend.Spawn(context.Background(), SpawnOptions{ID: "kept", CWD: t.TempDir(), Agent: "shell", Cols: 80, Rows: 24}); err != nil {
 		t.Fatal(err)
 	}
@@ -69,13 +69,13 @@ func TestSharedHost_ABuildThatCannotAdoptNeverTouchesTheLiveHost(t *testing.T) {
 		_ = waitForPIDsGone(3*time.Second, hostPID)
 	})
 
-	newBuild := ptyhosttest.BuildWithSnapshotFormat(t, "rehearsal-new")
+	newBuild := ptyhosttest.Variant(t, "next")
 	refusesToAdopt := filepath.Join(t.TempDir(), "attn-pty-host")
 	script := "#!/bin/sh\nif [ \"$1\" = --adopt-handoff ]; then echo 'this build cannot adopt' >&2; exit 1; fi\nexec " + newBuild + " \"$@\"\n"
 	if err := os.WriteFile(refusesToAdopt, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	newBackend := world.backend(t, "rehearsal-new", refusesToAdopt)
+	newBackend := world.backend(t, "next", refusesToAdopt)
 	if _, err := newBackend.Recover(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -86,8 +86,8 @@ func TestSharedHost_ABuildThatCannotAdoptNeverTouchesTheLiveHost(t *testing.T) {
 	if pids := newBackend.WorkerPIDs(context.Background()); pids["kept"] != hostPID {
 		t.Fatalf("host pid after the refused handover = %d, want the untouched %d", pids["kept"], hostPID)
 	}
-	if format, _ := newBackend.SessionTerminalBuild("kept"); format != "rehearsal-old" {
-		t.Fatalf("terminal format after the refused handover = %q, want rehearsal-old", format)
+	if format, _ := newBackend.SessionTerminalBuild("kept"); format != "current" {
+		t.Fatalf("terminal format after the refused handover = %q, want current", format)
 	}
 	_, stream, err := newBackend.Attach(context.Background(), "kept", "still-here", AttachOptions{OmitReplay: true})
 	if err != nil {
@@ -108,7 +108,7 @@ func TestSharedHost_ABuildThatFailsToAdoptHandsEveryTerminalBack(t *testing.T) {
 		t.Run(fault, func(t *testing.T) {
 			world := newHandoverWorld(t)
 			t.Setenv("ATTN_PTY_HOST_ADOPT_FAULT", fault)
-			oldBackend := world.backend(t, "fallback-old", ptyhosttest.BuildWithSnapshotFormat(t, "fallback-old"))
+			oldBackend := world.backend(t, "current", ptyhosttest.Variant(t, "current"))
 			for _, id := range []harness.TerminalID{"kept", "neighbour"} {
 				if err := oldBackend.Spawn(context.Background(), SpawnOptions{ID: id, CWD: t.TempDir(), Agent: "shell", Cols: 80, Rows: 24}); err != nil {
 					t.Fatal(err)
@@ -125,7 +125,7 @@ func TestSharedHost_ABuildThatFailsToAdoptHandsEveryTerminalBack(t *testing.T) {
 			terminals := []filledTerminal{fillTerminal(t, oldBackend, "kept"), fillTerminal(t, oldBackend, "neighbour")}
 			registryBefore := world.hostRegistry(t, hostPID)
 
-			newBackend := world.backend(t, "fallback-new", ptyhosttest.BuildWithAdoptFault(t, "fallback-new"))
+			newBackend := world.backend(t, "next", ptyhosttest.Variant(t, "next-adopt-fault"))
 			if _, err := newBackend.Recover(context.Background()); err != nil {
 				t.Fatal(err)
 			}
@@ -143,10 +143,10 @@ func TestSharedHost_ABuildThatFailsToAdoptHandsEveryTerminalBack(t *testing.T) {
 					registryBefore.ArtifactID, registryBefore.Executable, registryBefore.SnapshotFormat)
 			}
 			for _, terminal := range terminals {
-				if format, _ := newBackend.SessionTerminalBuild(terminal.id); format != "fallback-old" {
-					t.Fatalf("terminal format of %s after the hand-back = %q, want fallback-old", terminal.id, format)
+				if format, _ := newBackend.SessionTerminalBuild(terminal.id); format != "current" {
+					t.Fatalf("terminal format of %s after the hand-back = %q, want current", terminal.id, format)
 				}
-				terminal.requireCarriedBy(t, newBackend, "fallback-old")
+				terminal.requireCarriedBy(t, newBackend, "current")
 			}
 		})
 	}
@@ -272,7 +272,7 @@ func TestSharedHost_HandoverKeepsInputAProgramHasNotReadYet(t *testing.T) {
 	}
 	ctx := context.Background()
 	world := newHandoverWorld(t)
-	oldBackend := world.backend(t, "handover-old", ptyhosttest.BuildWithSnapshotFormat(t, "handover-old"))
+	oldBackend := world.backend(t, "current", ptyhosttest.Variant(t, "current"))
 	gate := filepath.Join(world.root, "gate")
 	if err := syscall.Mkfifo(gate, 0o600); err != nil {
 		t.Fatal(err)
@@ -296,7 +296,7 @@ func TestSharedHost_HandoverKeepsInputAProgramHasNotReadYet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	newBackend := world.backend(t, "handover-new", ptyhosttest.BuildWithSnapshotFormat(t, "handover-new"))
+	newBackend := world.backend(t, "next", ptyhosttest.Variant(t, "next"))
 	if _, err := newBackend.Recover(ctx); err != nil {
 		t.Fatal(err)
 	}

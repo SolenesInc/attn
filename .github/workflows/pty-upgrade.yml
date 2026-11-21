@@ -50,6 +50,8 @@ jobs:
 
       - name: Build host and native terminal library
         run: make build-pty-host
+      - name: Provide the PTY host test variants
+        run: echo "ATTN_TEST_PTY_HOST_VARIANTS=$(bash scripts/lib/rust-build-store.sh provide-variants pty-host/test-variants)" >> "$GITHUB_ENV"
       - name: PTY host fmt, clippy, and test
         run: |
           cargo fmt --manifest-path pty-host/Cargo.toml -- --check

@@ -101,7 +101,8 @@ happened. No test sleeps or polls.
 A stepped timer the test never advances fails at the hang guard instead of
 passing slowly. `make lint-go` rejects these in Go test code outside a `synctest.Test` body:
 `time.Sleep`, `time.Tick`, `time.NewTicker`, a bare `<-time.After`, and a
-`time.After` deadline other than `fakeagent.HangGuard`. `scripts/testtimelint`
+`time.After` deadline other than `fakeagent.HangGuard`. It also rejects running
+`cargo` from test files and test harness packages. `scripts/testlint`
 lists the few allowed exceptions with their reasons. Clippy rejects
 `std::thread::sleep`, `Instant::now` and `SystemTime::now` anywhere in
 `native/` (`native/clippy.toml`). In plugin and SDK tests, and in the Tauri
@@ -232,11 +233,16 @@ The runner and Makefile also share the pinned native VT artifact between
 worktrees. Before using Go commands directly, run
 `./scripts/build-libghostty-vt.sh` to prepare it for this checkout.
 
-The Rust CLI comes from the machine-wide build store,
-`scripts/lib/rust-build-store.sh`, kept in `~/.cache/attn/rust-builds`
-(`~/Library/Caches/attn/rust-builds` on macOS), so a worktree whose CLI sources match one
-already built reuses that build. The store keys each recipe on the contents of
-its input roots and refuses to keep a build that read a file outside them or an
+The runner builds the Rust binaries tests run before `go test` starts, and
+tests read their paths from the environment. The CLI, the
+PTY host (`ATTN_TEST_PTY_HOST`) and, when the run includes `./cmd/attnd` or
+`./internal/ptybackend`, the PTY host variants listed in
+`pty-host/test-variants` (`ATTN_TEST_PTY_HOST_VARIANTS`) come from the
+machine-wide build store, `scripts/lib/rust-build-store.sh`, kept in
+`~/.cache/attn/rust-builds` (`~/Library/Caches/attn/rust-builds` on macOS), so a
+worktree whose sources match a build already made reuses that build. A test that
+needs a binary the runner did not provide fails and names `scripts/test-go.sh`.
+The store keys each recipe on the contents of its input roots and refuses to keep a build that read a file outside them or an
 environment variable the recipe does not declare. The error names the file or
 variable to add to the recipe. An entry no run has used for 7 days is removed,
 and deleting the directory is always safe. A run that selects a native app test

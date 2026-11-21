@@ -17,8 +17,12 @@ test_root="$(mktemp -d "${TMPDIR:-/tmp}/attn-pty-upgrade.XXXXXX")"
 trap 'rm -rf "$test_root"' EXIT
 
 if [ -z "${ATTN_TEST_PTY_HOST:-}" ]; then
-  make build-pty-host
-  export ATTN_TEST_PTY_HOST="$root/pty-host/target/release/attn-pty-host"
+  ATTN_TEST_PTY_HOST="$(bash scripts/lib/rust-build-store.sh provide attn-pty-host)"
+  export ATTN_TEST_PTY_HOST
+fi
+if [ -z "${ATTN_TEST_PTY_HOST_VARIANTS:-}" ]; then
+  ATTN_TEST_PTY_HOST_VARIANTS="$(bash scripts/lib/rust-build-store.sh provide-variants pty-host/test-variants)"
+  export ATTN_TEST_PTY_HOST_VARIANTS
 fi
 if [ -z "${ATTN_UPGRADE_OLD_BIN:-}" ]; then
   mkdir -p "$test_root/legacy"

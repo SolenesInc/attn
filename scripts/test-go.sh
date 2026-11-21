@@ -6,6 +6,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$root/scripts/lib/test-git.sh"
 daemon_package="github.com/victorarias/attn/internal/daemon"
 cli_package="github.com/victorarias/attn/cmd/attnd"
+ptybackend_package="github.com/victorarias/attn/internal/ptybackend"
 shard_count="${ATTN_GO_TEST_SHARDS:-4}"
 cli_shard_count=6
 package_parallelism="${ATTN_GO_TEST_PACKAGE_PARALLELISM:-4}"
@@ -57,6 +58,7 @@ test_cache_root="${TMPDIR:-/tmp}/attn-go-test-cache/$cache_namespace"
 # 3x the 1200s test timeout, so no healthy run loses its own.
 e2e_store="$(dirname "$("$go_bin" env GOCACHE)")/attn/go-test-e2e"
 e2e_binary_idle_minutes=60
+pty_host_variants_wanted=""
 mkdir -p "$test_cache_root/data"
 export ATTN_DATA_DIR="$test_cache_root/data"
 # ATTN_INSTANCE goes too: an explicit data dir with an instance name that resolves
@@ -132,9 +134,29 @@ start_pty_host_build() {
     fi
     return 0
   fi
-  make -C "$root" --no-print-directory build-pty-host >"$test_root/pty-host-build.log" 2>&1 &
+  bash "$root/scripts/lib/rust-build-store.sh" provide attn-pty-host >"$test_root/pty-host-path" 2>"$test_root/pty-host-build.log" &
   test_binary_builds+=("$!")
-  ATTN_TEST_PTY_HOST="$root/pty-host/target/release/attn-pty-host"
+}
+
+start_pty_host_variants_build() {
+  if [ -n "${ATTN_TEST_PTY_HOST_VARIANTS:-}" ]; then
+    if [ ! -d "$ATTN_TEST_PTY_HOST_VARIANTS" ]; then
+      echo "ATTN_TEST_PTY_HOST_VARIANTS is not a directory: $ATTN_TEST_PTY_HOST_VARIANTS" >&2
+      exit 2
+    fi
+    return 0
+  fi
+  bash "$root/scripts/lib/rust-build-store.sh" provide-variants "$root/pty-host/test-variants" >"$test_root/pty-host-variants-path" 2>"$test_root/pty-host-variants-build.log" &
+  test_binary_builds+=("$!")
+}
+
+selects_pty_host_variant_packages() {
+  local arg patterns=()
+  for arg in "$@"; do
+    case "$arg" in . | ./* | github.com/victorarias/attn | github.com/victorarias/attn/*) patterns+=("$arg") ;; esac
+  done
+  [ "${#patterns[@]}" -gt 0 ] || return 1
+  "$go_bin" list -e "${patterns[@]}" 2>/dev/null | grep -qxF -e "$cli_package" -e "$ptybackend_package"
 }
 
 place_in_store() {
@@ -198,7 +220,7 @@ start_native_app_provide() {
 }
 
 provide_test_binaries() {
-  local arg build_pid compile_ahead=() test_binary_builds=()
+  local arg build_pid compile_ahead=() test_binary_builds=() build_log
   while [ "$1" != -- ]; do
     compile_ahead+=("$1")
     shift
@@ -212,16 +234,24 @@ provide_test_binaries() {
   start_attn_binaries_build
   start_test_binary_build ATTN_FAKEAGENT_BIN fakeagent ./scripts/fakeagent
   start_pty_host_build
+  [ -z "$pty_host_variants_wanted" ] || start_pty_host_variants_build
   if [ "${#test_binary_builds[@]}" -gt 0 ] && [ "${#compile_ahead[@]}" -gt 0 ]; then
     "$go_bin" list -test -deps -export "${compile_ahead[@]}" >/dev/null 2>&1 || true
   fi
   start_native_app_provide "$@"
   for build_pid in ${test_binary_builds[@]+"${test_binary_builds[@]}"}; do
     wait "$build_pid" || {
-      [ ! -f "$test_root/pty-host-build.log" ] || cat "$test_root/pty-host-build.log" >&2
+      for build_log in "$test_root/pty-host-build.log" "$test_root/pty-host-variants-build.log"; do
+        [ ! -f "$build_log" ] || cat "$build_log" >&2
+      done
       exit 1
     }
   done
+  [ ! -f "$test_root/pty-host-path" ] || ATTN_TEST_PTY_HOST="$(cat "$test_root/pty-host-path")"
+  if [ -f "$test_root/pty-host-variants-path" ]; then
+    ATTN_TEST_PTY_HOST_VARIANTS="$(cat "$test_root/pty-host-variants-path")"
+    export ATTN_TEST_PTY_HOST_VARIANTS
+  fi
   store_test_binary ATTN_E2E_BIN attn
   store_test_binary ATTN_FAKEAGENT_BIN fakeagent
   store_test_binary ATTN_TEST_PTY_HOST attn-pty-host
@@ -236,8 +266,9 @@ if [ "${1:-}" = "--provide-test-binaries" ]; then
   test_binaries_out="$2"
   shift 2
   unset GOMAXPROCS
+  ! selects_pty_host_variant_packages "$@" || pty_host_variants_wanted=1
   provide_test_binaries "$@"
-  printf '%s\n%s\n%s\n%s\n' "$ATTN_E2E_BIN" "$ATTN_FAKEAGENT_BIN" "$ATTN_TEST_PTY_HOST" "${ATTN_NATIVE_APP_BIN:-}" >"$test_binaries_out"
+  printf '%s\n%s\n%s\n%s\n%s\n' "$ATTN_E2E_BIN" "$ATTN_FAKEAGENT_BIN" "$ATTN_TEST_PTY_HOST" "${ATTN_NATIVE_APP_BIN:-}" "${ATTN_TEST_PTY_HOST_VARIANTS:-}" >"$test_binaries_out"
   exit 0
 fi
 
@@ -255,6 +286,7 @@ if [ "${1:-}" = "--packages" ]; then
       unit_packages+=("$package")
     fi
   done
+  ! selects_pty_host_variant_packages ${unit_packages[@]+"${unit_packages[@]}"} "$@" || pty_host_variants_wanted=1
   provide_test_binaries ${unit_packages[@]+"${unit_packages[@]}"} -- "$@"
   status=0
   "$go_bin" tool test-history capture go ${capture_options[@]+"${capture_options[@]}"} -- -timeout "$test_timeout" "$@" || status=$?
@@ -298,6 +330,7 @@ any_job_selected() {
   return 1
 }
 
+! job_selected packages && ! any_job_selected attn "$cli_shard_count" || pty_host_variants_wanted=1
 provide_test_binaries -- "$@" ./...
 
 list_tests() {

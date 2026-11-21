@@ -170,9 +170,9 @@ func TestAnAgentWhoseTerminalEndedWhileTheDaemonWasDownShowsNoReloadNotice(t *te
 func TestASharedHostTerminalMovesToTheNewBuildAcrossAnUpdate(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.OnPTYBackend(testworld.SharedHostPTY))
-	current := testworld.AttnBinaryWithSnapshotFormat(t, "shared-current")
-	next := testworld.AttnBinaryWithSnapshotFormat(t, "shared-next")
-	s.StartBinary(current, "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "shared-current"))
+	current := testworld.AttnBinaryWithSnapshotFormat(t, "current")
+	next := testworld.AttnBinaryWithSnapshotFormat(t, "next")
+	s.StartBinary(current, "ATTN_PTY_HOST_BINARY="+ptyhosttest.Variant(t, "current"))
 	app := s.App()
 	if active := s.App().Initial.Settings["pty_shared_host_active"]; active != "true" {
 		t.Fatalf("after enabling it the shared PTY host reads active=%q, want true", active)
@@ -188,7 +188,7 @@ func TestASharedHostTerminalMovesToTheNewBuildAcrossAnUpdate(t *testing.T) {
 	hostBefore := sharedHostOf(t, s.Dir, app.Terminal(shell))
 	s.Stop()
 
-	s.StartBinary(next, "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "shared-next"))
+	s.StartBinary(next, "ATTN_PTY_HOST_BINARY="+ptyhosttest.Variant(t, "next"))
 	app = s.App()
 	terminal := app.Terminal(shell)
 	attach := func() protocol.AttachResultMessage {
@@ -196,14 +196,14 @@ func TestASharedHostTerminalMovesToTheNewBuildAcrossAnUpdate(t *testing.T) {
 			protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
 	}
 	attached := attach()
-	if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "shared-next" {
+	if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "next" {
 		testworld.AwaitEvent(app, "the attached stream of "+terminal+" to end when its host hands over", func(e protocol.WebSocketEvent) bool {
 			return e.Event == protocol.EventPtyDesync && protocol.Deref(e.ID) == terminal
 		})
 		attached = attach()
 	}
-	if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "shared-next" {
-		t.Fatalf("after the update the terminal attached with snapshot %+v, want its host handed over to shared-next", attached.Snapshot)
+	if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "next" {
+		t.Fatalf("after the update the terminal attached with snapshot %+v, want its host handed over to next", attached.Snapshot)
 	}
 	if host := sharedHostOf(t, s.Dir, terminal); host != hostBefore {
 		t.Fatalf("the terminal moved from host pid %d to %d, want the same process carrying it", hostBefore, host)

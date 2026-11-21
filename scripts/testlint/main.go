@@ -12,10 +12,31 @@ import (
 	"strings"
 )
 
-var harnessDirs = []string{"internal/testworld", "internal/fakeagent", "internal/fakessh"}
+var harnessDirs = []string{"internal/testworld", "internal/fakeagent", "internal/fakessh", "internal/ptyhost/ptyhosttest"}
 
-// Each allowance names a function by file and receiver and says why it may wait real time.
-var allowed = map[string]string{
+type rule struct {
+	problem string
+	find    func(fset *token.FileSet, body ast.Node, name string) []string
+	allowed map[string]string
+}
+
+var rules = []rule{
+	{
+		problem: "tests waiting for real time; step a clock or wait on a signal (docs/internal/testing.md)",
+		find:    waitsIn,
+		allowed: allowedWaits,
+	},
+	{
+		problem: "test code running cargo; read the binary's path from the environment scripts/test-go.sh sets (docs/internal/testing.md)",
+		find:    cargoRunsIn,
+		allowed: allowedCargo,
+	},
+}
+
+// Each allowance names a function by file and receiver and says why it may break the rule.
+var allowedCargo = map[string]string{}
+
+var allowedWaits = map[string]string{
 	"internal/daemon/world_test.go (*world).elapse":                                                                  "moves the synctest clock of a world inBubble; refuses outside a bubble",
 	"internal/daemon/desktop_tiles_protocol_test.go (*desktopTilesWorld).deliver":                                    "runs in tileContentWorld's synctest bubble, so the sleep moves its clock past the tile watcher's tick",
 	"internal/daemon/exit_screen_wire_test.go TestAnExitReleasesItsRuntimeAtOnceAndReportsTheExitOnceStorageReturns": "runs inBubbleWithAgents, so the sleep moves the synctest clock",
@@ -31,18 +52,22 @@ var allowed = map[string]string{
 }
 
 func main() {
-	violations, err := realTimeWaits()
+	broken, err := brokenRules()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if len(violations) > 0 {
-		fmt.Fprintf(os.Stderr, "tests waiting for real time; step a clock or wait on a signal (docs/internal/testing.md):\n%s\n", strings.Join(violations, "\n"))
+	for _, r := range rules {
+		if violations := broken[r.problem]; len(violations) > 0 {
+			fmt.Fprintf(os.Stderr, "%s:\n%s\n", r.problem, strings.Join(violations, "\n"))
+		}
+	}
+	if len(broken) > 0 {
 		os.Exit(1)
 	}
 }
 
-func realTimeWaits() ([]string, error) {
+func brokenRules() (map[string][]string, error) {
 	paths, err := testFiles()
 	if err != nil {
 		return nil, err
@@ -51,34 +76,93 @@ func realTimeWaits() ([]string, error) {
 		return nil, fmt.Errorf("no Go test files found; run from the repository root")
 	}
 	fset := token.NewFileSet()
-	var violations []string
+	broken := make(map[string][]string)
 	used := make(map[string]bool)
 	for _, path := range paths {
 		file, err := parser.ParseFile(fset, path, nil, 0)
 		if err != nil {
 			return nil, fmt.Errorf("parse %s: %w", path, err)
 		}
-		for _, decl := range file.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Body == nil {
-				continue
+		for _, d := range declarations(file) {
+			key := filepath.ToSlash(path) + " " + d.name
+			for _, r := range rules {
+				found := r.find(fset, d.body, d.name)
+				if r.allowed[key] != "" && len(found) > 0 {
+					used[r.problem+key] = true
+					continue
+				}
+				broken[r.problem] = append(broken[r.problem], found...)
 			}
-			name := funcDeclName(fn)
-			waits := waitsIn(fset, fn.Body, name)
-			if key := filepath.ToSlash(path) + " " + name; allowed[key] != "" && len(waits) > 0 {
-				used[key] = true
-				continue
-			}
-			violations = append(violations, waits...)
 		}
 	}
-	for key := range allowed {
-		if !used[key] {
-			violations = append(violations, key+": allowance names no function that waits real time; remove it")
+	for _, r := range rules {
+		for key := range r.allowed {
+			if !used[r.problem+key] {
+				broken[r.problem] = append(broken[r.problem], key+": allowance names no function that breaks this rule; remove it")
+			}
+		}
+		if len(broken[r.problem]) == 0 {
+			delete(broken, r.problem)
+		}
+		sort.Strings(broken[r.problem])
+	}
+	return broken, nil
+}
+
+type declaration struct {
+	name string
+	body ast.Node
+}
+
+func declarations(file *ast.File) []declaration {
+	var found []declaration
+	for _, decl := range file.Decls {
+		switch decl := decl.(type) {
+		case *ast.FuncDecl:
+			if decl.Body != nil {
+				found = append(found, declaration{funcDeclName(decl), decl.Body})
+			}
+		case *ast.GenDecl:
+			for _, spec := range decl.Specs {
+				value, ok := spec.(*ast.ValueSpec)
+				if !ok {
+					continue
+				}
+				for i, v := range value.Values {
+					name := "_"
+					if i < len(value.Names) {
+						name = value.Names[i].Name
+					}
+					found = append(found, declaration{name, v})
+				}
+			}
 		}
 	}
-	sort.Strings(violations)
-	return violations, nil
+	return found
+}
+
+func cargoRunsIn(fset *token.FileSet, body ast.Node, name string) []string {
+	var violations []string
+	ast.Inspect(body, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		program := -1
+		switch {
+		case isCall(call, "exec", "Command"):
+			program = 0
+		case isCall(call, "exec", "CommandContext"):
+			program = 1
+		}
+		if program >= 0 && len(call.Args) > program {
+			if literal, ok := call.Args[program].(*ast.BasicLit); ok && literal.Kind == token.STRING && literal.Value == `"cargo"` {
+				violations = append(violations, fmt.Sprintf("%s in %s: runs cargo", fset.Position(call.Pos()), name))
+			}
+		}
+		return true
+	})
+	return violations
 }
 
 func testFiles() ([]string, error) {
