@@ -507,6 +507,17 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
                 col()
                     .key(format!("asks.part.{at}"))
                     .w_full()
+                    .children(part.amended_at.as_deref().map(|amended| {
+                        let age = queue::turn_age(Some(amended), state.window.now_ms);
+                        let said = if age == "now" {
+                            "Updated just now".to_owned()
+                        } else {
+                            format!("Updated {age} ago")
+                        };
+                        words(said.clone(), Type::Small, t.text_tertiary)
+                            .key(format!("asks.part.{at}.amended"))
+                            .label(said)
+                    }))
                     .child(prose.markdown(part.markdown.as_deref().unwrap_or_default())),
             ),
         });

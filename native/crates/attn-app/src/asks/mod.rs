@@ -378,12 +378,17 @@ pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {
         lists
             .shown(state.window.asks.show_replied)
             .iter()
-            .filter_map(|item| queue::next_age_change(Some(age_from(item.ask)), now_ms))
+            .flat_map(|item| std::iter::once(age_from(item.ask)).chain(amended_ats(item.ask)))
+            .filter_map(|at| queue::next_age_change(Some(at), now_ms))
             .collect()
     } else {
         Vec::new()
     };
     wakes.into_iter().chain(ages).min()
+}
+
+fn amended_ats(ask: &Ask) -> impl Iterator<Item = &str> {
+    ask.parts.iter().filter_map(|p| p.amended_at.as_deref())
 }
 
 /// When an ask's age counts from: its answer once replied, else its opening.
@@ -696,7 +701,10 @@ fn markdown(ask: &Ask, from: &str) -> String {
     for part in &ask.parts {
         match (&part.question, &part.markdown) {
             (Some(question), _) => blocks.push(question_block(question, &ask.created_at)),
-            (None, Some(prose)) => blocks.push(prose.clone()),
+            (None, Some(prose)) => blocks.push(match &part.amended_at {
+                Some(at) => format!("Updated {at}:\n\n{}", prose.trim_end()),
+                None => prose.clone(),
+            }),
             (None, None) => {}
         }
     }

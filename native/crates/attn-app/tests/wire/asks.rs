@@ -563,6 +563,62 @@ fn c_copies_the_ask_as_the_markdown_the_agent_wrote_with_its_id_and_asker() {
     );
 }
 
+fn amended(mut ask: Ask, markdown: &str, minutes_ago: i64) -> Ask {
+    ask.parts.push(AskPart {
+        markdown: Some(markdown.into()),
+        amended_at: Some(ago(minutes_ago)),
+        ..AskPart::default()
+    });
+    ask
+}
+
+#[test]
+fn an_amendment_shows_as_an_update_after_the_questions_and_keeps_the_answer_started() {
+    let mut world = start(vec![cache_store()], vec![api_working()]);
+    open_sheet(&mut world);
+    click(&mut world, "asks.q.q1.choice.1");
+    type_into(&mut world, "asks.q.q2.text.field", "Welcome back");
+
+    update_asks(
+        &mut world,
+        vec![amended(
+            cache_store(),
+            "Redis already runs in staging.\n",
+            2,
+        )],
+    );
+
+    assert_eq!(name(&world, "asks.part.3.amended"), "Updated 2m ago");
+    assert!(has(&world, "asks.part.3"));
+    assert!(!has(&world, "asks.part.0.amended"));
+    assert!(checked(&world, "asks.q.q1.choice.1"));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("asks.q.q2.text.field"))
+            .value
+            .as_deref(),
+        Some("Welcome back")
+    );
+    rest_but_for_ages(&mut world);
+
+    click(&mut world, "asks.subject");
+    world.clipboard.set_text("");
+    letter(&mut world, "c");
+    let copied = world
+        .clipboard
+        .text()
+        .map(|t| t.to_string())
+        .unwrap_or_default();
+    assert!(
+        copied.ends_with(&format!(
+            ":::\n\nUpdated {}:\n\nRedis already runs in staging.\n\nAsk a-cache1 from api\n",
+            ago(2)
+        )),
+        "{copied}"
+    );
+}
+
 /// At rest but for the next minute an age in the open sheet reads differently.
 fn rest_but_for_ages(world: &mut World) {
     world.advance(Duration::from_secs(1));
