@@ -70,11 +70,11 @@ jobs:
       - name: Cargo test
         run: go tool test-history capture cargo -- --locked --no-fail-fast --workspace
 
-      - name: Wire suite with the macOS keymap
+      - name: Wire suite acting as Linux
         if: runner.os == 'Linux'
         env:
-          RUNE_KEY_PLATFORM: mac
-        run: go tool test-history capture cargo --shard macos-keymap -- --locked --no-fail-fast -p attn-app --test wire
+          RUNE_PLATFORM: linux
+        run: go tool test-history capture cargo --shard linux-platform -- --locked --no-fail-fast -p attn-app --test wire
 
       - name: Ensure ghostty-vt artifacts
         if: runner.os == 'Linux'

@@ -4,7 +4,7 @@ use attn_ui::system::{
     DotShape, DotSize, GroupHead, IconSize, ListRow, Part, Said, Tone, Type, dot, icon, tag, words,
 };
 use attn_ui::{Tokens, icon};
-use rune::{El, KeyPlatform, Span, Tx, col, row};
+use rune::{El, Platform, Span, Tx, col, row};
 use rune_kit::ScrollBar;
 use rune_kit::TextInput;
 
@@ -20,12 +20,12 @@ use crate::picker::{
 fn keycaps(spec: &str) -> Vec<String> {
     rune::Chord::parse(spec)
         .expect("a launcher chord parses")
-        .keycaps_on(KeyPlatform::current())
+        .keycaps_on(Platform::current())
 }
 
 /// `spec` as this platform writes the chord: `⌥Q` on a Mac, `Alt+Q` elsewhere.
 fn combo(spec: &str) -> String {
-    let joint = if KeyPlatform::current() == KeyPlatform::Mac {
+    let joint = if Platform::current() == Platform::Mac {
         ""
     } else {
         "+"
@@ -622,7 +622,7 @@ fn where_row(
 
 fn hints(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> El {
     let accel = |key: &str| {
-        let modifier = if KeyPlatform::current() == KeyPlatform::Mac {
+        let modifier = if Platform::current() == Platform::Mac {
             "⌘"
         } else {
             "Ctrl+"

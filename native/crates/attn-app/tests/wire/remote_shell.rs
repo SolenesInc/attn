@@ -6,7 +6,6 @@ use attn_protocol::{
     ProfileArrangementChangedMessage, Session,
 };
 use attn_testkit::{Daemon, Target, World, key_event, message, tree};
-use rune::KeyPlatform;
 use serde_json::json;
 
 use super::terminal_view::wheel;
@@ -167,7 +166,7 @@ fn go_to(world: &mut World, slot: u8) {
 }
 
 fn press(world: &mut World, action: &Action) {
-    let ev = match Keymap::from_setting(None, KeyPlatform::current()).binding(action) {
+    let ev = match Keymap::from_setting(None, attn_testkit::platform()).binding(action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
     };

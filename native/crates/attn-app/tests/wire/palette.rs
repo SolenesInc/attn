@@ -10,7 +10,7 @@ use attn_protocol::{
     SessionUnregisteredMessage,
 };
 use attn_testkit::{Daemon, Request, Target, World, key_event, message};
-use rune::{Key, KeyEvent, KeyPlatform, Mods};
+use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 
 use super::queue::ago;
@@ -125,7 +125,7 @@ fn hold(world: &World, cmd: &str) -> Arc<Mutex<Vec<Request>>> {
 }
 
 fn chord(action: Action) -> KeyEvent {
-    match Keymap::from_setting(None, KeyPlatform::current()).binding(&action) {
+    match Keymap::from_setting(None, attn_testkit::platform()).binding(&action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
     }
@@ -462,7 +462,7 @@ fn a_desktop_command_shows_the_keys_of_its_slot() {
     press_action(&mut world, Action::UiCommandPalette);
     world.gesture(|app| app.type_text("go to"));
 
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
     for (desktop, select) in [
         ("d1", Action::DesktopSelect1),
         ("d2", Action::DesktopSelect2),
@@ -995,7 +995,7 @@ fn the_agents_face_lists_the_crew_then_turns_agents_runs_snoozed_agents_and_tile
     assert_eq!(text_of(&world, "palette.count").as_deref(), Some("8 of 8"));
     assert_eq!(highlighted(&world).as_deref(), Some("chief-1"));
 
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
     let label = |action: Action| keymap.binding(&action).map(|b| keymap.label(b));
     assert_eq!(
         row_text(&world, "agent:older-turn", "tag"),

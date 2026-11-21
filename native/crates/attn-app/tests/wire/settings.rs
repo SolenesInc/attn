@@ -8,7 +8,7 @@ use attn_protocol::{
     GitHubHostsUpdatedMessage, InitialStateMessage, Profile, SettingsUpdatedMessage,
 };
 use attn_testkit::{Daemon, Node, Request, Target, World, key_event, message};
-use rune::{Key, KeyEvent, KeyPlatform, Mods};
+use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 
 mod agents;
@@ -105,7 +105,7 @@ fn accepting(settings: &[(&str, &str)]) -> (Daemon, Settings) {
 }
 
 fn chord(action: Action) -> KeyEvent {
-    match Keymap::from_setting(None, KeyPlatform::current()).binding(&action) {
+    match Keymap::from_setting(None, attn_testkit::platform()).binding(&action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
     }

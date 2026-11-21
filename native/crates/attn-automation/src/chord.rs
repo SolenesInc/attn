@@ -1,9 +1,9 @@
-use rune::{Chord, ChordKey, ChordMod, Key, KeyEvent, KeyPlatform, Mods};
+use rune::{Chord, ChordKey, ChordMod, Key, KeyEvent, Mods, Platform};
 
 /// The key event the keyboard sends for `chord` on this platform: "mod+shift+k" is ⇧⌘K on
 /// macOS and Ctrl+Shift+K on Linux.
 pub fn key_event(chord: &Chord) -> Result<KeyEvent, String> {
-    let mods = mods_of(chord.mods_on(KeyPlatform::current()));
+    let mods = mods_of(chord.mods_on(Platform::current()));
     let key = match chord.key() {
         ChordKey::Char(c) if mods.cmd || mods.ctrl => Key::Command(c),
         ChordKey::Char(c) if mods.shift => Key::Text(shifted(c).to_string()),
@@ -48,13 +48,13 @@ pub fn held_mods(held: &str) -> Result<Mods, String> {
 }
 
 fn mods_of(named: Vec<ChordMod>) -> Mods {
-    let platform = KeyPlatform::current();
+    let platform = Platform::current();
     let mut mods = Mods::default();
     for m in named {
         match m {
             ChordMod::Primary => {
                 mods.cmd = true;
-                if platform == KeyPlatform::Mac {
+                if platform == Platform::Mac {
                     mods.logo = true;
                 } else {
                     mods.ctrl = true;

@@ -1,4 +1,4 @@
-use rune::{Color, El, KeyPlatform, Shadow, row, text};
+use rune::{Color, El, Platform, Shadow, row, text};
 
 use crate::Tokens;
 use crate::system::{Radius, Space, Type, door, words};
@@ -57,12 +57,11 @@ impl Keys {
     }
 
     fn said(&self) -> String {
-        self.caps
-            .join(if KeyPlatform::current() == KeyPlatform::Mac {
-                ""
-            } else {
-                "+"
-            })
+        self.caps.join(if Platform::current() == Platform::Mac {
+            ""
+        } else {
+            "+"
+        })
     }
 
     pub fn build(self, t: &Tokens) -> El {

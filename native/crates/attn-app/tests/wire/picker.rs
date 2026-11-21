@@ -12,7 +12,7 @@ use attn_protocol::{
     SpawnResultMessage, Worktree,
 };
 use attn_testkit::{Daemon, Node, Request, Target, World, key_event, message};
-use rune::{Key, KeyEvent, KeyPlatform, Mods};
+use rune::{Key, KeyEvent, Mods};
 use serde_json::Value;
 
 const HOME: &str = "/home/me";
@@ -277,7 +277,7 @@ fn open_dialog(world: &mut World) {
 }
 
 fn press_action(world: &mut World, action: &Action) {
-    let ev = match Keymap::from_setting(None, KeyPlatform::current()).binding(action) {
+    let ev = match Keymap::from_setting(None, attn_testkit::platform()).binding(action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
     };
@@ -768,7 +768,7 @@ fn each_harness_and_yolo_shows_its_keys_as_keycaps() {
     let spoken = |spec: &str| {
         rune::Chord::parse(spec)
             .unwrap()
-            .label_on(KeyPlatform::current())
+            .label_on(attn_testkit::platform())
     };
     for (key, spec) in [
         ("new-session.agent.shell.keys", "alt+t"),
@@ -2705,7 +2705,7 @@ fn chooser_with_long_branches(worktrees: usize, window: (f32, f32)) -> World {
     let mut world = World::start_sized(daemon, window);
     world.open_desktop();
     let Some(Binding::Chord(chord)) =
-        Keymap::from_setting(None, KeyPlatform::current()).binding(&Action::SessionNew)
+        Keymap::from_setting(None, attn_testkit::platform()).binding(&Action::SessionNew)
     else {
         panic!("New session has no chord")
     };

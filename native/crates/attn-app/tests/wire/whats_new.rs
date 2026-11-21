@@ -4,7 +4,6 @@ use std::time::Duration;
 use attn_app::whats_new::{BANNER_PREF, RELEASE, SEEN_PREF};
 use attn_app::{Action, Keymap};
 use attn_testkit::{Daemon, Target, World};
-use rune::KeyPlatform;
 use rune::motion_gate;
 use rune::prefs::Prefs;
 use rune::{Key, KeyEvent, Mods};
@@ -290,7 +289,7 @@ fn the_command_palette_replays_the_tour_from_the_first_step() {
 }
 
 fn key_label(keybindings: Option<&str>, action: Action) -> String {
-    let keymap = Keymap::from_setting(keybindings, KeyPlatform::current());
+    let keymap = Keymap::from_setting(keybindings, attn_testkit::platform());
     keymap.label(keymap.binding(&action).expect("the action has a key"))
 }
 

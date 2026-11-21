@@ -9,7 +9,6 @@ use attn_protocol::{
 };
 use attn_testkit::tree::{below, pane, row};
 use attn_testkit::{Answer, Daemon, Request, Target, World, key_event, message};
-use rune::KeyPlatform;
 use serde_json::Value;
 
 /// The sidebar beside the tile area, in points: a 1600-point window has 1360
@@ -181,7 +180,7 @@ fn becomes(world: &mut World, desktop: Desktop) {
 }
 
 fn press(world: &mut World, action: Action) {
-    let ev = match Keymap::from_setting(None, KeyPlatform::current()).binding(&action) {
+    let ev = match Keymap::from_setting(None, attn_testkit::platform()).binding(&action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
     };

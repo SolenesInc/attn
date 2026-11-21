@@ -48,8 +48,7 @@ app-observable change on a non-production instance. When no scenario covers
 the change, add one or tell the user. `scripts/land.sh` runs on Linux each
 scenario you add or change and, when you change product code, each scenario
 listed by a feature file you change, so a scenario you ran on a Mac still gets
-its Linux run before the push. A native change you land from a Mac also runs
-the native wire suite on the landing runner before the push.
+its Linux run before the push.
 
 Before you land, clean every instance the check started, as the drive-attn
 skill's Cleanup says.

@@ -134,6 +134,7 @@ impl Daemon {
     /// A daemon that answers the handshake and attaches every terminal with an empty screen at
     /// the size the app last asked for, until a test scripts `attach_session` itself.
     pub fn scripted() -> Daemon {
+        crate::machine::settle();
         let shared = Arc::new(Shared {
             script: Mutex::new(Script {
                 initial_state: InitialStateMessage::new(),

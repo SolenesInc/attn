@@ -1,5 +1,5 @@
 use attn_app::{Action, Binding, Keymap, PageKey, Zoom, page_key};
-use rune::KeyPlatform;
+use rune::Platform;
 
 /// Who takes a key while a web page in a browser tile holds the keyboard.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -106,7 +106,7 @@ fn splits_like_a_browser(keymap: &Keymap) {
 
 #[test]
 fn each_default_key_goes_to_attn_or_the_focused_page_as_a_browser_splits_them() {
-    for platform in [KeyPlatform::Mac, KeyPlatform::Linux] {
+    for platform in [Platform::Mac, Platform::Linux] {
         splits_like_a_browser(&Keymap::from_setting(None, platform));
     }
 }
@@ -118,13 +118,13 @@ fn a_rebound_key_follows_its_action_between_attn_and_the_page() {
         "session.refreshPRs":{"key":"l","meta":true,"alt":true},
         "session.jumpToWaiting":{"key":"y","meta":true}
     }}"#;
-    let keymap = Keymap::from_setting(Some(setting), KeyPlatform::Mac);
+    let keymap = Keymap::from_setting(Some(setting), Platform::Mac);
     splits_like_a_browser(&keymap);
     let claims = |spec: &str| {
         let chord = rune::Chord::parse(spec).unwrap();
         keymap
             .claimed_from_pages()
-            .any(|c| c.same_keys(&chord, KeyPlatform::Mac))
+            .any(|c| c.same_keys(&chord, Platform::Mac))
     };
     assert!(!claims("mod+e"), "the page keeps find's new key");
     assert!(
@@ -141,7 +141,7 @@ fn a_leader_sequence_goes_to_attn_whatever_its_action() {
         "ui.actionMenu":{"leader":{"key":"y","meta":true,"shift":true},"then":{"key":"j"}},
         "terminal.find":{"key":"e","meta":true}
     }}"#;
-    let keymap = Keymap::from_setting(Some(setting), KeyPlatform::Mac);
+    let keymap = Keymap::from_setting(Some(setting), Platform::Mac);
     assert!(matches!(
         keymap.binding(&Action::UiActionMenu),
         Some(Binding::Sequence { .. })

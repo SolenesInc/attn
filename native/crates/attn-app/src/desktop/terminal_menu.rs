@@ -1,4 +1,4 @@
-use rune::{KeyPlatform, PopupItem, PopupMenu, Shortcut, Tx};
+use rune::{Platform, PopupItem, PopupMenu, Shortcut, Tx};
 
 use crate::State;
 use crate::terminal::Part;
@@ -10,9 +10,9 @@ pub(super) fn open(state: &mut State, id: &str, at: (f32, f32), window: [f32; 2]
     let Some(menu) = state.terminals.menu_at(id, at) else {
         return;
     };
-    let mac = KeyPlatform::current() == KeyPlatform::Mac;
+    let mac = Platform::current() == Platform::Mac;
     let hint = |mac_chord: &str, chord: &str| {
-        Shortcut::parse_on(if mac { mac_chord } else { chord }, KeyPlatform::current()).ok()
+        Shortcut::parse_on(if mac { mac_chord } else { chord }, Platform::current()).ok()
     };
     let item = |id: &str, title: &str, enabled: bool, shortcut: Option<Shortcut>| {
         let item = PopupItem::new(id, title).enabled(enabled);

@@ -41,7 +41,7 @@ pub(super) fn text_key(question: &str) -> String {
 const NOTE: &str = "asks.note.field";
 
 fn send_chord() -> &'static str {
-    if rune::KeyPlatform::current() == rune::KeyPlatform::Mac {
+    if rune::Platform::current() == rune::Platform::Mac {
         "⌘↩"
     } else {
         "Ctrl+↩"

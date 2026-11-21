@@ -43,7 +43,7 @@ use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Request, Target, World, key_event, message};
 use rune::render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer, write_png};
 use rune::text::pixel_compare::Image;
-use rune::{Compositor, Frame, KeyPlatform, Runtime};
+use rune::{Compositor, Frame, Runtime};
 use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 
@@ -469,7 +469,7 @@ fn select(world: &mut World) {
 }
 
 fn press(world: &mut World, action: Action) {
-    let chord = match Keymap::from_setting(None, KeyPlatform::current()).binding(&action) {
+    let chord = match Keymap::from_setting(None, attn_testkit::platform()).binding(&action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
     };
@@ -1964,7 +1964,7 @@ fn terminal_overlays(dark: bool) {
     drag(&mut world, None, (5, 4), (5, 4));
     drag(&mut world, Some(alt()), (4, 0), (20, 0));
     world.gesture(|app| {
-        app.press(if cfg!(target_os = "macos") {
+        app.press(if attn_testkit::mac() {
             "mod+f"
         } else {
             "mod+shift+f"
@@ -2107,7 +2107,7 @@ fn notice_failed(dark: bool) {
 
 /// The first key of a sequence pressed: the keys it waits for at the window's foot.
 fn leader(dark: bool) {
-    let palette = match Keymap::from_setting(None, KeyPlatform::current())
+    let palette = match Keymap::from_setting(None, attn_testkit::platform())
         .binding(&Action::UiCommandPalette)
     {
         Some(Binding::Chord(chord)) => key_event(&chord),

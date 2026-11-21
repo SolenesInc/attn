@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use attn_app::{Action, Binding, Keymap};
-use rune::{Chord, ChordKey, ChordMod, KeyPlatform};
+use rune::{Chord, ChordKey, ChordMod, Platform};
 
 const REGISTRY: &str = include_str!("../../../../app/src/shortcuts/registry.ts");
 
@@ -35,7 +35,7 @@ fn tauri_table(name: &str) -> BTreeMap<String, String> {
         .collect()
 }
 
-fn same_as_tauri(name: &str, platform: KeyPlatform) {
+fn same_as_tauri(name: &str, platform: Platform) {
     let table = tauri_table(name);
     let ids: Vec<&str> = Action::ALL.iter().map(|a| a.id()).collect();
     let tauri_ids: Vec<&str> = table.keys().map(String::as_str).collect();
@@ -83,12 +83,12 @@ fn same_as_tauri(name: &str, platform: KeyPlatform) {
 
 #[test]
 fn the_mac_defaults_are_the_tauri_apps() {
-    same_as_tauri("MAC_SHORTCUTS", KeyPlatform::Mac);
+    same_as_tauri("MAC_SHORTCUTS", Platform::Mac);
 }
 
 #[test]
 fn the_linux_defaults_are_the_tauri_apps() {
-    same_as_tauri("LINUX_SHORTCUTS", KeyPlatform::Linux);
+    same_as_tauri("LINUX_SHORTCUTS", Platform::Linux);
 }
 
 fn chord(keymap: &Keymap, action: &Action) -> Chord {
@@ -107,9 +107,9 @@ fn letter(chord: &Chord) -> Option<char> {
 
 #[test]
 fn every_linux_default_leaves_plain_ctrl_and_a_letter_to_the_shell() {
-    let linux = Keymap::from_setting(None, KeyPlatform::Linux);
+    let linux = Keymap::from_setting(None, Platform::Linux);
     for action in Action::ALL {
-        let mods = chord(&linux, action).mods_on(KeyPlatform::Linux);
+        let mods = chord(&linux, action).mods_on(Platform::Linux);
         assert!(
             mods.contains(&ChordMod::Primary),
             "{} needs Ctrl",
@@ -125,7 +125,7 @@ fn every_linux_default_leaves_plain_ctrl_and_a_letter_to_the_shell() {
 
 #[test]
 fn no_linux_default_takes_a_ctrl_alt_chord_the_ubuntu_desktop_reserves() {
-    let linux = Keymap::from_setting(None, KeyPlatform::Linux);
+    let linux = Keymap::from_setting(None, Platform::Linux);
     for action in Action::ALL {
         let chord = chord(&linux, action);
         if !chord.has(ChordMod::Alt) || chord.has(ChordMod::Shift) {
@@ -148,8 +148,8 @@ fn no_linux_default_takes_a_ctrl_alt_chord_the_ubuntu_desktop_reserves() {
 
 #[test]
 fn a_mac_cmd_and_letter_action_keeps_its_letter_on_linux_behind_shift_or_alt() {
-    let mac = Keymap::from_setting(None, KeyPlatform::Mac);
-    let linux = Keymap::from_setting(None, KeyPlatform::Linux);
+    let mac = Keymap::from_setting(None, Platform::Mac);
+    let linux = Keymap::from_setting(None, Platform::Linux);
     for action in Action::ALL {
         let on_mac = chord(&mac, action);
         let Some(key) = letter(&on_mac) else { continue };
@@ -168,7 +168,7 @@ fn a_mac_cmd_and_letter_action_keeps_its_letter_on_linux_behind_shift_or_alt() {
 
 #[test]
 fn the_former_cmd_shift_letter_actions_sit_on_ctrl_alt_on_linux() {
-    let linux = Keymap::from_setting(None, KeyPlatform::Linux);
+    let linux = Keymap::from_setting(None, Platform::Linux);
     for action in [
         Action::TerminalSplitHorizontal,
         Action::TerminalToggleZoom,
@@ -179,7 +179,7 @@ fn the_former_cmd_shift_letter_actions_sit_on_ctrl_alt_on_linux() {
         Action::SessionToggleSidebar,
         Action::BoardOpen,
     ] {
-        let mods = chord(&linux, &action).mods_on(KeyPlatform::Linux);
+        let mods = chord(&linux, &action).mods_on(Platform::Linux);
         assert_eq!(mods, [ChordMod::Primary, ChordMod::Alt], "{}", action.id());
     }
 }

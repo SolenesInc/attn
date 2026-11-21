@@ -13,7 +13,7 @@ use attn_protocol::{
     RecentLocationsResultMessage, SessionPlacement, SetSettingMessage, SpawnResultMessage,
     SpawnSessionMessage,
 };
-use rune::{Chord, Key, KeyEvent, KeyPlatform, LiveRegion, TextEdit, Tx};
+use rune::{Chord, Key, KeyEvent, LiveRegion, Platform, TextEdit, Tx};
 
 use crate::State;
 pub(crate) use agents::{Agents, TERMINAL};
@@ -876,7 +876,7 @@ pub(crate) fn agent_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut
     if !ev.mods.alt || ev.mods.cmd || ev.mods.ctrl {
         return false;
     }
-    let platform = KeyPlatform::current();
+    let platform = Platform::current();
     let pressed = |spec: &str| {
         Chord::parse(spec)
             .expect("a picker chord parses")

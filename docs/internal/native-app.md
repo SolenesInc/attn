@@ -67,14 +67,22 @@ runs `make check-native` and every test of the workspace, as
 CI's `Native / ubuntu-24.04` job runs the same checks when those paths change,
 and on every push to `main`.
 
-That job also runs the `attn-app` wire suite a second time with
-`RUNE_KEY_PLATFORM=mac`, which gives Rune macOS's keymap: its chords, labels
-and text-editing keys. This second run catches macOS key mistakes on Linux.
-Code and tests that depend on which keys a platform uses ask
-`KeyPlatform::current()`, and wire tests ask `wire::mac()`, because
-`cfg!(target_os = "macos")` cannot change in the second run. Code that compiles
-or behaves differently on macOS for any other reason, such as windows, the
-browser's WebKit view and Quick Capture, keeps its `cfg(target_os = "macos")`.
+A wire test gives the same result on every machine. It acts as a Mac, the
+platform the app ships on, unless `RUNE_PLATFORM=linux` asks for Linux: its
+keymap, title bar, field menu and window close follow
+`rune::Platform::current()`, which attn-testkit sets before the first world
+starts. Text measures with the repository's fonts only, Inter and Symbols Nerd
+Font Mono from `attn-ui` and IBM Plex Mono in `attn-testkit/fonts` as the
+system's monospace; no installed font loads. So a plain `cargo test` acts as a
+Mac on Linux and on macOS alike, and how text looks on a real Mac is left to
+CI macOS and the macOS scenarios. CI's Linux job runs the `attn-app` wire suite
+a second time with `RUNE_PLATFORM=linux`.
+
+Code that behaves differently on a platform asks `rune::Platform::current()`,
+and wire tests ask `wire::mac()`, because `cfg!(target_os = "macos")` cannot
+change between the two runs. Only code that talks to the real operating
+system, such as windows, the browser's WebKit view and Quick Capture, keeps its
+`cfg(target_os = "macos")`.
 
 CI macOS's `Native / macos-15` runs the checks nightly, on a release commit, and
 when a file its `native_macos` group in `.github/ci-inputs.yml` keeps changes.

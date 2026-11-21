@@ -9,7 +9,6 @@ use attn_protocol::{
 };
 use attn_testkit::tree::{below, pane, row, tile};
 use attn_testkit::{Daemon, Request, Target, World, key_event};
-use rune::KeyPlatform;
 use rune::prefs::Prefs;
 use serde_json::Value;
 
@@ -117,7 +116,7 @@ fn arrange(world: &mut World, current: &str, desktops: Vec<Desktop>) {
 }
 
 fn press(world: &mut World, action: Action) {
-    let ev = match Keymap::from_setting(None, KeyPlatform::current()).binding(&action) {
+    let ev = match Keymap::from_setting(None, attn_testkit::platform()).binding(&action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
     };
@@ -1125,7 +1124,7 @@ fn a_tile_goes_by_its_sessions_name_as_renamed_and_a_document_by_its_file() {
 }
 
 fn key_label(action: Action) -> String {
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
     keymap.label(keymap.binding(&action).expect("the action has a key"))
 }
 
@@ -3504,7 +3503,7 @@ fn a_reused_window_shows_the_tile_it_was_given() {
 fn the_pop_out_key_and_close_pressed_in_a_tile_window_bring_its_tile_back() {
     let mut world = start(vec![with_document(Some(OUT))]);
     let key = only_window(&world).key;
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
     let chord = |action: &Action| match keymap.binding(action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
@@ -3527,7 +3526,7 @@ fn closing_a_tile_window_brings_its_tile_back_and_the_next_pop_out_shows_it_agai
     let mut world = start(vec![with_document(Some(OUT))]);
     let key = only_window(&world).key;
     assert_eq!(world.keyboard_window(), Some(key.as_str()));
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
     let Some(Binding::Chord(pop_out)) = keymap.binding(&Action::TilePopOut) else {
         panic!("{} has no single chord", Action::TilePopOut.id());
     };
@@ -3621,7 +3620,7 @@ fn row_shortcuts_in_a_tile_window_leave_the_desktop_and_a_split_opens_beside_its
     ]);
     press(&mut world, Action::DesktopSelect2);
     let key = only_window(&world).key;
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
     let chord = |action: &Action| match keymap.binding(action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
@@ -3803,7 +3802,8 @@ fn an_agent_pops_out_into_a_window_with_its_live_terminal_and_comes_back_attache
 
     world.tile_gesture(&key, |w| {
         w.key(
-            match Keymap::from_setting(None, KeyPlatform::current()).binding(&Action::TilePopOut) {
+            match Keymap::from_setting(None, attn_testkit::platform()).binding(&Action::TilePopOut)
+            {
                 Some(Binding::Chord(chord)) => key_event(&chord),
                 other => panic!("no single chord: {other:?}"),
             },
@@ -3871,7 +3871,7 @@ fn two_agents_out_each_draw_and_split_in_their_own_window_while_main_shows_anoth
         "the main window shows the other desktop"
     );
 
-    let split = match Keymap::from_setting(None, KeyPlatform::current())
+    let split = match Keymap::from_setting(None, attn_testkit::platform())
         .binding(&Action::TerminalSplitVertical)
     {
         Some(Binding::Chord(chord)) => key_event(&chord),
@@ -4035,7 +4035,7 @@ fn a_desktop_holding_only_a_document_shows_the_document_and_not_the_launcher() {
 fn a_key_pressed_in_a_tile_window_whose_action_does_not_run_says_nothing_in_the_main_window() {
     let mut world = start(vec![with_document(Some(OUT))]);
     let key = only_window(&world).key;
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
 
     for action in Action::ALL {
         let Some(Binding::Chord(chord)) = keymap.binding(action) else {

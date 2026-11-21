@@ -9,7 +9,6 @@ use attn_protocol::{
 };
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Answer, Daemon, Request, Target, World, key_event, message};
-use rune::KeyPlatform;
 use serde_json::{Value, json};
 
 const DESKTOP: &str = "work/desktop_1";
@@ -203,7 +202,7 @@ fn start(setup: Setup) -> World {
 
 /// Presses the opener's shortcut, ⌘P on macOS.
 fn open_opener(world: &mut World) {
-    let ev = match Keymap::from_setting(None, KeyPlatform::current()).binding(&Action::FileOpen) {
+    let ev = match Keymap::from_setting(None, attn_testkit::platform()).binding(&Action::FileOpen) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("the opener has no single chord: {other:?}"),
     };

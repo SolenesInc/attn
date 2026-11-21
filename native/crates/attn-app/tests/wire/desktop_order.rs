@@ -3,7 +3,7 @@ use std::time::Duration;
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{Desktop, InitialStateMessage, Profile, ProfileArrangementChangedMessage};
 use attn_testkit::{Node, Request, Target, World, key_event, message};
-use rune::{Key, KeyEvent, KeyPlatform, Mods};
+use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 
 use super::queue::{changes, one_desktop, queue, sent_ids, turn};
@@ -77,7 +77,7 @@ fn start(queue: bool, refusal: Option<&'static str>) -> World {
 }
 
 fn sort(world: &mut World) {
-    let ev = match Keymap::from_setting(None, KeyPlatform::current())
+    let ev = match Keymap::from_setting(None, attn_testkit::platform())
         .binding(&Action::UiCommandPalette)
     {
         Some(Binding::Chord(chord)) => key_event(&chord),

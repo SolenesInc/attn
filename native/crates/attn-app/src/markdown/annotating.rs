@@ -11,7 +11,7 @@ use attn_ui::blocks::{Actions, Block, Popover, Toolbar};
 use attn_ui::system::{
     Button as UiButton, IconSize, Look, Size, Type, icon_button, passage_mark, words,
 };
-use rune::{Chord, Cx, El, Key, KeyEvent, KeyPlatform, SelectionChange, TextEdit, Tx};
+use rune::{Chord, Cx, El, Key, KeyEvent, Platform, SelectionChange, TextEdit, Tx};
 use rune_kit::Highlight;
 
 use super::anchoring::Resolved;
@@ -444,7 +444,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let digit = if ev.mods.cmd || ev.mods.ctrl || ev.mods.logo {
         None
     } else if ev.mods.alt {
-        let platform = KeyPlatform::current();
+        let platform = Platform::current();
         (1..=9).find(|n| {
             Chord::parse(&format!("alt+{n}"))
                 .expect("an alt digit chord parses")
@@ -694,7 +694,7 @@ fn composer_box(
     );
     let save_key = Chord::parse("mod+enter")
         .expect("the save chord parses")
-        .label_on(KeyPlatform::current());
+        .label_on(Platform::current());
     let field = attn_ui::system::text_input(&composer.text, Type::Body)
         .key(key(tile, "composer.field"))
         .return_breaks_line()

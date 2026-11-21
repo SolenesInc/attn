@@ -69,7 +69,7 @@ use attn_client::{
     Commands, Facts, Link, LinkConfig, Pulse, ReplySink, Slices, Store, Subscription, TerminalSink,
     setting,
 };
-use rune::{AppSpec, KeyPlatform, MenuItem, Shortcut, Titlebar, Tx};
+use rune::{AppSpec, MenuItem, Platform, Shortcut, Titlebar, Tx};
 
 pub use action::{Action, Category};
 pub use calendar::{HourCycle, use_hour_cycle};
@@ -242,7 +242,7 @@ pub fn bind(
         let facts = facts.clone();
         let keymap = changed.intersects(Slices::SETTINGS).then(|| {
             let setting = facts.settings.get(keymap::SETTING).map(String::as_str);
-            Arc::new(Keymap::from_setting(setting, KeyPlatform::current()))
+            Arc::new(Keymap::from_setting(setting, Platform::current()))
         });
         deliver(Box::new(move |state, tx| {
             let connected = |facts: &Facts| facts.connection == attn_client::Connection::Connected;
@@ -500,7 +500,7 @@ fn quit(state: &mut State, tx: &mut Tx) {
 /// back when the app is reopened or the last tile window goes; otherwise the app quits.
 fn main_closed(state: &mut State, tx: &mut Tx) {
     let windows = &mut state.window.desk.windows;
-    if cfg!(target_os = "macos") && windows.shows_a_window() {
+    if rune::Platform::current() == rune::Platform::Mac && windows.shows_a_window() {
         windows.main_hidden = true;
     } else {
         tx.quit();
@@ -542,9 +542,7 @@ pub fn menu_items(keymap: &Keymap) -> Vec<MenuItem<State>> {
     .menu("File")
     .keys_first();
     let stop_keys = match keymap.binding(&Action::SessionCancelCountdown) {
-        Some(Binding::Chord(chord)) => {
-            Shortcut::parse_on(&chord.to_string(), KeyPlatform::Mac).ok()
-        }
+        Some(Binding::Chord(chord)) => Shortcut::parse_on(&chord.to_string(), Platform::Mac).ok(),
         _ => None,
     };
     vec![

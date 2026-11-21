@@ -9,9 +9,9 @@ use attn_protocol::{
     SessionUnregisteredMessage,
 };
 use attn_testkit::{Daemon, Target, WALL_START_MS, World};
-use rune::KeyPlatform;
 
 use super::MACOS_WINDOW_CONTROLS;
+
 use super::sidebar::{chord, desktop, pane, session, state};
 
 /// An RFC 3339 instant `minutes` before every world starts.
@@ -108,7 +108,7 @@ fn lines(world: &World) -> Vec<String> {
 }
 
 fn keys_of(action: Action) -> String {
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
     keymap.label(keymap.binding(&action).unwrap())
 }
 
@@ -157,7 +157,7 @@ fn the_queue_sidebar_anchors_the_chief_above_the_owed_turns_oldest_first_and_kee
 #[test]
 fn the_waiting_head_and_the_agent_list_toggle_say_what_they_do_and_their_keys() {
     let world = World::start(Daemon::scripted().state(the_queue()));
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
     let keys =
         |action: &Action| keymap.label(keymap.binding(action).expect("the action has a key"));
     let screen = world.screen();
@@ -2360,17 +2360,24 @@ const ROOMY: (f32, f32) = (1400.0, 900.0);
 /// At Home, too narrow for the chips of eight desktops beside the waiting pill and the runs chip
 /// (they need a window 880 wide), and wide enough for the chips of three (730).
 const CROWDED_AT_HOME: (f32, f32) = (800.0, 900.0);
-/// On desktop 1, too narrow for the chips of eight desktops beside the waiting pill, the runs
-/// chip and its two tiles' shelf (they need a window 1020 wide), and wide enough for them beside
-/// desktop 3's single tile (880).
+/// On desktop 1 of a Mac, too narrow for the chips of eight desktops beside the waiting pill, the
+/// runs chip and its two tiles' shelf (they need a window 1020 wide), and wide enough for them
+/// beside desktop 3's single tile (880).
 const CROWDED_BESIDE_SHELF: (f32, f32) = (920.0, 900.0);
+
+/// [`CROWDED_BESIDE_SHELF`], less the room macOS's traffic lights take that this platform's title
+/// bar does not, so the queue bar has a Mac's room on either platform.
+fn crowded_beside_shelf(world: &World) -> (f32, f32) {
+    let (width, height) = CROWDED_BESIDE_SHELF;
+    let lights = world.runtime().chrome_insets().leading;
+    (width - (MACOS_WINDOW_CONTROLS - lights), height)
+}
 
 /// The queue bar crowded by eight desktops, on desktop 1 where its tiles leave the shelf
 /// beside the chips, or at Home.
 fn crowded_bar(on_desktop: bool) -> (World, InitialStateMessage) {
     let message = crowding_desktops(8);
     let mut world = World::start(Daemon::scripted().state(message.clone()));
-    world.window_controls_take(MACOS_WINDOW_CONTROLS);
     if on_desktop {
         world.gesture(|app| app.click(Target::key("queue.desktop.1")));
     }
@@ -2382,7 +2389,7 @@ fn crowded_bar(on_desktop: bool) -> (World, InitialStateMessage) {
         "a roomy bar shows the pill's crumbs"
     );
     world.resize(if on_desktop {
-        CROWDED_BESIDE_SHELF
+        crowded_beside_shelf(&world)
     } else {
         CROWDED_AT_HOME
     });
@@ -2426,7 +2433,6 @@ fn no_part_of_the_title_bar_covers_another_in_the_smallest_window_at_every_text_
             })
         });
         let mut world = World::start_sized(daemon, (800.0, 600.0));
-        world.window_controls_take(MACOS_WINDOW_CONTROLS);
         world.gesture(|app| app.click(Target::key("queue.desktop.1")));
         if collapsed {
             world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
@@ -2633,10 +2639,11 @@ fn bar_chips_drawn(recording: &rune::motion_gate::Recording) -> Vec<usize> {
 fn a_queue_bar_crowds_or_shows_every_chip_from_the_first_frame_of_a_resize_or_desktop_switch() {
     let (mut world, message) = crowded_bar(true);
     world.resize(ROOMY);
+    let crowded = crowded_beside_shelf(&world);
 
     let narrowed = world.record(60.0, 0.25, |_, app| {
         let scale = app.runtime.env.scale;
-        app.runtime.set_viewport(CROWDED_BESIDE_SHELF, scale);
+        app.runtime.set_viewport(crowded, scale);
     });
     let drawn = bar_chips_drawn(&narrowed);
     assert_eq!(drawn[0], 8, "the roomy bar showed every chip: {drawn:?}");
@@ -2759,7 +2766,6 @@ fn crowded_with_a_critical_notification(message: InitialStateMessage, size: (f32
         })
     });
     let mut world = World::start_sized(daemon, (2400.0, 900.0));
-    world.window_controls_take(MACOS_WINDOW_CONTROLS);
     world.gesture(|app| app.click(Target::key("queue.desktop.1")));
     world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
     assert!(

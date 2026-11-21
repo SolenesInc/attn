@@ -10,7 +10,6 @@ use attn_protocol::{
 };
 use attn_testkit::tree::{below, pane, row};
 use attn_testkit::{Answer, Daemon, Target, World, key_event};
-use rune::KeyPlatform;
 use serde_json::{Value, json};
 
 mod saves;
@@ -2892,7 +2891,8 @@ fn the_finder_finds_in_a_popped_out_editor_tile_from_its_own_window() {
     arrange(&mut world, row(vec![pane("a"), popped_out(tile())]), 2);
     let window = world.tile_windows()[0].key.clone();
 
-    let open = match Keymap::from_setting(None, KeyPlatform::current()).binding(&Action::FileOpen) {
+    let open = match Keymap::from_setting(None, attn_testkit::platform()).binding(&Action::FileOpen)
+    {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("file.open has no single chord: {other:?}"),
     };

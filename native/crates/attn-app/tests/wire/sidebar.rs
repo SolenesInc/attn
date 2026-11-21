@@ -6,10 +6,10 @@ use attn_protocol::{
     SessionStateChangedMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
 };
 use attn_testkit::{Daemon, Target, World, key_event};
-use rune::{KeyEvent, KeyPlatform};
+use rune::KeyEvent;
 
 pub(super) fn chord(action: Action) -> KeyEvent {
-    match Keymap::from_setting(None, KeyPlatform::current()).binding(&action) {
+    match Keymap::from_setting(None, attn_testkit::platform()).binding(&action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
     }
@@ -575,7 +575,7 @@ fn a_desktop_dragged_after_the_rows_above_it_changed_lands_where_the_pointer_sho
 }
 
 fn keys_of(action: Action) -> String {
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
     keymap.label(keymap.binding(&action).unwrap())
 }
 
@@ -667,7 +667,7 @@ fn home_hints_the_keys_the_user_bound_it_to() {
     });
     world.settle();
 
-    let keymap = Keymap::from_setting(Some(rebound), KeyPlatform::current());
+    let keymap = Keymap::from_setting(Some(rebound), attn_testkit::platform());
     let bound = keymap.label(keymap.binding(&Action::SessionGoToDashboard).unwrap());
     assert_ne!(bound, keys_of(Action::SessionGoToDashboard));
     assert_eq!(
@@ -726,7 +726,7 @@ fn a_desktop_heading_shows_its_keys_and_its_pencil_renames_it_showing_a_refusal_
         vec![session("agent", "claude")],
         desktop("work", 1, "Work", None, &["agent"]),
     );
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
     let select = |action| keymap.label(keymap.binding(&action).unwrap());
     let heading = |world: &World, id: &str| {
         world

@@ -802,7 +802,7 @@ fn text_size(panel: &mut Panel, ev: &KeyEvent, tx: &mut Tx) -> bool {
         .settings
         .get(keymap::SETTING)
         .map(String::as_str);
-    let keymap = Keymap::from_setting(setting, rune::KeyPlatform::current());
+    let keymap = Keymap::from_setting(setting, rune::Platform::current());
     if let Some(second) = follow_leader(&mut panel.leader, &keymap, ev, tx) {
         if let Some(action) = second {
             size_text(panel, &action);

@@ -803,7 +803,6 @@ fn the_smallest_window_at_large_text_keeps_the_cap_that_reaches_the_columns_off_
                 }
             });
         let mut world = World::start_as_instance(daemon, "default");
-        world.window_controls_take(super::MACOS_WINDOW_CONTROLS);
         world.resize(size);
         world.open_desktop();
         assert!(

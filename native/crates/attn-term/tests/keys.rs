@@ -1,11 +1,11 @@
 use attn_term::Vt;
 use attn_term::keys::{Press, press};
-use rune::{Key, KeyEvent, KeyPlatform, Mods, PhysicalKeyCode as Code};
+use rune::{Key, KeyEvent, Mods, PhysicalKeyCode as Code, Platform};
 
-const MAC: KeyPlatform = KeyPlatform::Mac;
-const LINUX: KeyPlatform = KeyPlatform::Linux;
+const MAC: Platform = Platform::Mac;
+const LINUX: Platform = Platform::Linux;
 
-fn mods(spec: &str, platform: KeyPlatform) -> Mods {
+fn mods(spec: &str, platform: Platform) -> Mods {
     let mut m = Mods::default();
     for part in spec.split('+').filter(|p| !p.is_empty()) {
         match part {
@@ -35,11 +35,11 @@ type Case = (
     Key,
     &'static str,
     Option<Code>,
-    KeyPlatform,
+    Platform,
     Option<&'static [u8]>,
 );
 
-fn sent(key: Key, held: &str, physical: Option<Code>, platform: KeyPlatform) -> Option<Vec<u8>> {
+fn sent(key: Key, held: &str, physical: Option<Code>, platform: Platform) -> Option<Vec<u8>> {
     let ev = KeyEvent {
         key,
         mods: mods(held, platform),

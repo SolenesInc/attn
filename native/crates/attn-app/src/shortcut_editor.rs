@@ -13,7 +13,7 @@ use attn_ui::system::{
     icon_button, keycaps, line_box, tag, words,
 };
 use attn_ui::{Dialog, Tokens, glyph, keycap};
-use rune::{Chord, ChordKey, ChordMod, El, KeyPlatform, Shortcut, ShortcutError, TextEdit, Tx};
+use rune::{Chord, ChordKey, ChordMod, El, Platform, Shortcut, ShortcutError, TextEdit, Tx};
 use rune_kit::{Kit, ShortcutRecorder, ShortcutRecorderState, TextInput, shortcut_error_message};
 use serde_json::{Map, Value, json};
 
@@ -95,7 +95,7 @@ pub(crate) fn setting(state: &State) -> Option<&str> {
 }
 
 fn keymap(state: &State) -> Keymap {
-    Keymap::from_setting(setting(state), KeyPlatform::current())
+    Keymap::from_setting(setting(state), Platform::current())
 }
 
 /// Lets the daemon's value take over once it moved, and forgets recorders showing keys that
@@ -228,7 +228,7 @@ fn recorded_then(
 /// with other modifiers than the ones pressed: Control on macOS and Super elsewhere are not
 /// shortcut modifiers there.
 fn storable(shortcut: &Shortcut) -> Result<Value, ShortcutError> {
-    let platform = KeyPlatform::current();
+    let platform = Platform::current();
     let stored = stored_combo(shortcut);
     let kept = match keymap::parse_binding(&stored, platform) {
         Some(Binding::Chord(chord)) => chord.mods_on(platform),
@@ -237,7 +237,7 @@ fn storable(shortcut: &Shortcut) -> Result<Value, ShortcutError> {
     if kept == pressed_modifiers(shortcut).mods_on(platform) {
         return Ok(stored);
     }
-    let said = if platform == KeyPlatform::Mac {
+    let said = if platform == Platform::Mac {
         "Control isn’t available as a shortcut modifier on macOS. Use ⌘, ⌥, or ⇧."
     } else {
         "Super isn’t available as a shortcut modifier. Use Ctrl, Alt, or Shift."
@@ -431,7 +431,7 @@ fn write(state: &mut State, value: String, tx: &mut Tx) {
 /// A recorded combination as the Tauri app stores it: the key it types under the accelerator,
 /// with its physical key as `code` where the typed key depends on the layout.
 fn stored_combo(shortcut: &Shortcut) -> Value {
-    let mac = KeyPlatform::current() == KeyPlatform::Mac;
+    let mac = Platform::current() == Platform::Mac;
     let mods = shortcut.modifiers();
     let display = shortcut.to_string();
     let name = display.rsplit('+').next().unwrap_or_default();
@@ -523,7 +523,7 @@ fn keys_key(action: &Action) -> String {
 }
 
 /// A combination without ⌘ or ⌥ (Ctrl or Alt elsewhere) types in a terminal.
-fn types_in_terminals(binding: &Binding, platform: KeyPlatform) -> bool {
+fn types_in_terminals(binding: &Binding, platform: Platform) -> bool {
     let first = match binding {
         Binding::Chord(chord) => chord,
         Binding::Sequence { leader, .. } => leader,
@@ -894,7 +894,7 @@ fn controls(state: &State, keymap: &Keymap, action: &Action, t: &Tokens, k: &Kit
             .error_message(move |error, shortcut| {
                 let bare = shortcut.is_some_and(|s| s.require_modifier().is_err());
                 if leader_mode && bare && matches!(error, ShortcutError::InvalidAccelerator(_)) {
-                    let (accel, alt) = if KeyPlatform::current() == KeyPlatform::Mac {
+                    let (accel, alt) = if Platform::current() == Platform::Mac {
                         ("⌘", "⌥")
                     } else {
                         ("Ctrl", "Alt")
@@ -914,7 +914,7 @@ fn controls(state: &State, keymap: &Keymap, action: &Action, t: &Tokens, k: &Kit
         Some(Binding::Sequence { then, .. }) => Some(then.label_on(keymap.platform())),
         _ => None,
     };
-    let (accel, alt) = if keymap.platform() == KeyPlatform::Mac {
+    let (accel, alt) = if keymap.platform() == Platform::Mac {
         ("⌘", "⌥")
     } else {
         ("Ctrl", "Alt")

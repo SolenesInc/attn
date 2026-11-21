@@ -7,7 +7,7 @@ use attn_protocol::{
     RefreshPRsResultMessage,
 };
 use attn_testkit::{Daemon, Target, World, key_event, message, tree};
-use rune::{Key, KeyEvent, KeyPlatform, Mods};
+use rune::{Key, KeyEvent, Mods};
 
 fn pane(id: &str, runtime: &str) -> DesktopPane {
     DesktopPane {
@@ -71,7 +71,7 @@ pub(super) fn two_terminals() -> Vec<Desktop> {
 
 /// The keys `action` has by default on this platform.
 pub(super) fn chord(action: &Action) -> KeyEvent {
-    match Keymap::from_setting(None, KeyPlatform::current()).binding(action) {
+    match Keymap::from_setting(None, attn_testkit::platform()).binding(action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
     }
@@ -892,7 +892,7 @@ fn every_cheat_sheet_row_shows_all_its_keys_inside_the_row() {
 fn the_cheat_sheet_lists_the_tauri_rows_with_paired_keys_and_notes() {
     let mut world = World::start(Daemon::scripted().state(state(vec![], &[])));
     world.gesture(|app| app.key(chord(&Action::UiShowShortcuts)));
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
     let keys = |action: Action| keymap.label(keymap.binding(&action).expect("bound"));
     let item = |world: &World, key: &str| world.screen().get(Target::key(key));
 
@@ -969,7 +969,7 @@ fn open_layer(world: &mut World, open: &Action) {
 /// closed, nothing reached the daemon or a terminal, and the menu bar never heard them unless
 /// a focused field keeps them.
 fn held(world: &mut World, layer: &Action, action: &Action) {
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
     let front = fronts(world);
     let records = shortcut_records(world).len();
     let sent = world.daemon.sent().len();
@@ -1050,7 +1050,7 @@ fn the_palette_holds_every_app_shortcut_tauri_turns_off_under_it() {
         Action::SessionPriority,
         Action::SessionSnooze,
     ];
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
     let layer = Action::UiCommandPalette;
     let mut world = counting();
     open_layer(&mut world, &layer);

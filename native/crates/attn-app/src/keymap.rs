@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use rune::{Chord, KeyEvent, KeyPlatform, Tx};
+use rune::{Chord, KeyEvent, Platform, Tx};
 use serde_json::Value;
 
 use crate::action::Action;
@@ -25,7 +25,7 @@ impl Binding {
 
     /// Whether pressing one could run the other. A chord equal to a sequence's leader
     /// collides, because the chord fires first.
-    fn collides(&self, other: &Binding, platform: KeyPlatform) -> bool {
+    fn collides(&self, other: &Binding, platform: Platform) -> bool {
         match (self, other) {
             (
                 Binding::Sequence { leader: a, then: x },
@@ -92,7 +92,7 @@ pub enum Press {
 /// Chords to actions, for one platform, with the user's rebinds applied.
 #[derive(Clone, Debug)]
 pub struct Keymap {
-    platform: KeyPlatform,
+    platform: Platform,
     entries: Vec<Entry>,
     /// The actions the user rebound or unbound.
     customized: BTreeSet<Action>,
@@ -100,14 +100,14 @@ pub struct Keymap {
 
 impl Default for Keymap {
     fn default() -> Self {
-        Keymap::from_setting(None, KeyPlatform::current())
+        Keymap::from_setting(None, Platform::current())
     }
 }
 
 impl Keymap {
     /// The platform's defaults with the rebinds in `setting` (the `keybindings_config`
     /// JSON) applied. A setting that does not parse leaves the defaults.
-    pub fn from_setting(setting: Option<&str>, platform: KeyPlatform) -> Keymap {
+    pub fn from_setting(setting: Option<&str>, platform: Platform) -> Keymap {
         let overrides = setting
             .map(|raw| overrides(raw, platform))
             .unwrap_or_default();
@@ -152,7 +152,7 @@ impl Keymap {
         }
     }
 
-    pub fn platform(&self) -> KeyPlatform {
+    pub fn platform(&self) -> Platform {
         self.platform
     }
 
@@ -325,7 +325,7 @@ fn applies(entry: &Entry, focus: Focus) -> bool {
 }
 
 /// ⌘B stays a field's on macOS only: its Linux keys type nothing a field takes.
-fn kept(action: &Action, binding: Binding, platform: KeyPlatform) -> Kept {
+fn kept(action: &Action, binding: Binding, platform: Platform) -> Kept {
     if let Binding::Sequence { .. } = binding {
         return Kept::Not;
     }
@@ -336,7 +336,7 @@ fn kept(action: &Action, binding: Binding, platform: KeyPlatform) -> Kept {
         | Action::SessionNext
         | Action::MarkdownSendAnnotations
         | Action::TerminalSendAnnotations => Kept::ByFieldsAndPages,
-        Action::SessionToggleSidebar if platform == KeyPlatform::Mac => Kept::ByFieldsAndPages,
+        Action::SessionToggleSidebar if platform == Platform::Mac => Kept::ByFieldsAndPages,
         Action::SessionToggleSidebar | Action::UiActionMenu | Action::TerminalSplitVertical => {
             Kept::ByPages
         }
@@ -358,22 +358,22 @@ pub fn page_key(action: &Action) -> Option<PageKey> {
 }
 
 /// The chord `action` is bound to on `platform` before any rebind, as `Chord::parse` reads it.
-pub(crate) fn default_chord(action: &Action, platform: KeyPlatform) -> Option<&'static str> {
+pub(crate) fn default_chord(action: &Action, platform: Platform) -> Option<&'static str> {
     table(platform)
         .iter()
         .find(|(a, _)| a == action)
         .map(|&(_, spec)| spec)
 }
 
-fn table(platform: KeyPlatform) -> &'static [(Action, &'static str)] {
-    if platform == KeyPlatform::Mac {
+fn table(platform: Platform) -> &'static [(Action, &'static str)] {
+    if platform == Platform::Mac {
         MAC
     } else {
         LINUX
     }
 }
 
-fn defaults(platform: KeyPlatform) -> BTreeMap<Action, Binding> {
+fn defaults(platform: Platform) -> BTreeMap<Action, Binding> {
     table(platform)
         .iter()
         .map(|(action, spec)| {
@@ -387,7 +387,7 @@ fn defaults(platform: KeyPlatform) -> BTreeMap<Action, Binding> {
 /// The user's rebinds from `keybindings_config`: a binding, or `None` for an action the user
 /// unbound. Ids saved by earlier versions load under their current names; ids that no longer
 /// exist and bindings that do not parse are left out.
-fn overrides(raw: &str, platform: KeyPlatform) -> BTreeMap<Action, Option<Entry>> {
+fn overrides(raw: &str, platform: Platform) -> BTreeMap<Action, Option<Entry>> {
     let Ok(Value::Object(config)) = serde_json::from_str::<Value>(raw) else {
         return BTreeMap::new();
     };
@@ -428,7 +428,7 @@ fn renamed(id: &str) -> String {
 
 /// The keys a binding stored in `keybindings_config` runs on, as the Tauri app stores it:
 /// `{key, code?, meta?, shift?, ctrl?, alt?}`, or `{leader, then}` with one of those each.
-pub(crate) fn parse_binding(value: &Value, platform: KeyPlatform) -> Option<Binding> {
+pub(crate) fn parse_binding(value: &Value, platform: Platform) -> Option<Binding> {
     if let (Some(leader), Some(then)) = (value.get("leader"), value.get("then")) {
         let leader = stored_chord(leader, platform)?;
         let then = stored_chord(then, platform)?;
@@ -437,12 +437,12 @@ pub(crate) fn parse_binding(value: &Value, platform: KeyPlatform) -> Option<Bind
     stored_chord(value, platform).map(Binding::Chord)
 }
 
-fn stored_chord(value: &Value, platform: KeyPlatform) -> Option<Chord> {
+fn stored_chord(value: &Value, platform: Platform) -> Option<Chord> {
     let key = value.get("key")?.as_str().filter(|key| !key.is_empty())?;
     let code = value.get("code").and_then(Value::as_str);
     let flag = |name: &str| value.get(name).and_then(Value::as_bool) == Some(true);
     let (meta, shift, ctrl, alt) = (flag("meta"), flag("shift"), flag("ctrl"), flag("alt"));
-    let follows_physical_key = shift || (alt && platform == KeyPlatform::Mac);
+    let follows_physical_key = shift || (alt && platform == Platform::Mac);
     let key_name = match code.and_then(key_of_code) {
         Some(physical) if follows_physical_key => physical.to_owned(),
         physical => key_of_name(key).or(physical.map(str::to_owned))?,

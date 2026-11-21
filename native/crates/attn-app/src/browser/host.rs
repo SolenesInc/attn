@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 use attn_client::TileKey;
-use rune::{Chord, Key, KeyEvent, KeyPlatform};
+use rune::{Chord, Key, KeyEvent, Platform};
 use serde_json::{Map, Value};
 
 /// A web engine that holds one page per browser tile, as native views over the window that
@@ -168,7 +168,7 @@ pub fn page_edit(ev: &KeyEvent) -> Option<PageEdit> {
     let Key::Command(c) = ev.key else {
         return None;
     };
-    if ev.mods.alt || (KeyPlatform::current() == KeyPlatform::Mac && ev.mods.ctrl) {
+    if ev.mods.alt || (Platform::current() == Platform::Mac && ev.mods.ctrl) {
         return None;
     }
     match (c, ev.mods.shift) {
@@ -189,7 +189,7 @@ pub fn claims_key(ev: &KeyEvent) -> bool {
         && CLAIMED.with_borrow(|claimed| {
             claimed
                 .iter()
-                .any(|chord| chord.matches_on(ev, KeyPlatform::current()))
+                .any(|chord| chord.matches_on(ev, Platform::current()))
         })
 }
 

@@ -9,7 +9,6 @@ use attn_protocol::{
 };
 use attn_testkit::tree::{pane, row, tile};
 use attn_testkit::{Daemon, Request, Target, World, key_event, message};
-use rune::KeyPlatform;
 use rune::motion_gate::{self, AllowRow, Job, Recording};
 use serde_json::Value;
 
@@ -213,7 +212,7 @@ fn becomes(world: &mut World, desktop: Desktop) {
 }
 
 fn press(world: &mut World, action: Action) {
-    let ev = match Keymap::from_setting(None, KeyPlatform::current()).binding(&action) {
+    let ev = match Keymap::from_setting(None, attn_testkit::platform()).binding(&action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
     };
@@ -592,7 +591,7 @@ fn the_palette_steps_the_width_and_moves_tiles_as_the_keys_do_and_the_shortcut_h
             .and_then(|n| n.name)
             .unwrap_or_default()
     };
-    let keymap = attn_app::Keymap::from_setting(None, rune::KeyPlatform::current());
+    let keymap = attn_app::Keymap::from_setting(None, attn_testkit::platform());
     let keys = |action: Action| keymap.label(keymap.binding(&action).expect("bound"));
     assert_eq!(
         listed("shortcut.shelf.carryLeft"),
@@ -1251,7 +1250,7 @@ fn hiding_the_sidebar() -> Recording {
 }
 
 fn chord_of(action: Action) -> rune::KeyEvent {
-    match Keymap::from_setting(None, KeyPlatform::current()).binding(&action) {
+    match Keymap::from_setting(None, attn_testkit::platform()).binding(&action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
     }

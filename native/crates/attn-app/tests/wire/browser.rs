@@ -13,7 +13,7 @@ use attn_testkit::tree::{pane, row, tile};
 use attn_testkit::{Daemon, Target, World, key_event};
 
 use super::keys::shortcut_records;
-use rune::{Key, KeyEvent, KeyPlatform, Mods};
+use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 
 const DESKTOP: &str = "work/desktop_1";
@@ -280,7 +280,7 @@ fn rest(world: &mut World) {
 
 /// The key `action` has by default on this platform.
 fn chord_of(action: Action) -> KeyEvent {
-    match Keymap::from_setting(None, KeyPlatform::current()).binding(&action) {
+    match Keymap::from_setting(None, attn_testkit::platform()).binding(&action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{action:?} has no single chord: {other:?}"),
     }

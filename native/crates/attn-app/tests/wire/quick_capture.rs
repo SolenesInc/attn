@@ -1886,7 +1886,7 @@ fn a_relaunch_binds_the_cached_shortcut_while_the_daemon_has_none() {
 
 /// Presses the keys the app's default keymap gives `action`, in the panel.
 fn press_action(world: &mut World, action: Action) {
-    let keymap = attn_app::Keymap::from_setting(None, rune::KeyPlatform::current());
+    let keymap = attn_app::Keymap::from_setting(None, attn_testkit::platform());
     let Some(attn_app::Binding::Chord(chord)) = keymap.binding(&action) else {
         panic!("{} has no single chord", action.id());
     };
@@ -1935,7 +1935,7 @@ fn a_text_size_key_bound_to_a_sequence_sizes_the_panel_on_its_second_key() {
     state.settings = Some([("keybindings_config".to_owned(), keybindings.to_owned())].into());
     let daemon = daemon.state(state);
     keeping_settings(&daemon, &[("keybindings_config", keybindings)]);
-    let keymap = attn_app::Keymap::from_setting(Some(keybindings), rune::KeyPlatform::current());
+    let keymap = attn_app::Keymap::from_setting(Some(keybindings), attn_testkit::platform());
     let Some(attn_app::Binding::Sequence { leader, then }) =
         keymap.binding(&Action::UiIncreaseFontSize)
     else {

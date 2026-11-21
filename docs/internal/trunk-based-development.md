@@ -29,9 +29,7 @@ Each check runs in one of two places:
 
 - On the host that lands: the fast gate and the landing tests, both below.
 - On Linux, through `scripts/land-linux.sh`: the scenarios, on the landing
-  runner or on CI's Linux, and, for a landing from a host other than Linux
-  that changes a path of the `native` landing group, the native wire suite
-  (`make test-native-wire`), on the landing runner.
+  runner or on CI's Linux.
 
 A landing selects three kinds of the native app's scenarios, and never one of
 the Tauri app's:
@@ -64,18 +62,11 @@ or that the runner does not finish, runs again on the workflow, and only that
 run blocks the landing.
 Unset, or `github`, is the workflow.
 
-The native wire suite runs on Linux because the native app measures and
-draws text with the fonts of the machine it runs on: 65dce7a01, landed from a
-Mac, passed its landing tests there and failed 382 wire tests on Linux. A
-landing from Linux already runs the suite in its landing tests, so only a
-landing from another host runs it on the landing runner, in the same turn as
-its scenarios and before them. A failure there stops the push and names the
-failed tests. When the clone has no landing runner, no landing runner can be
-reached, or another landing keeps it busy past the limit, the landing says so
-and pushes, and the suite runs on Linux only in CI's Native job after the push.
-The landing runners and CI's Linux all run Ubuntu 24.04 with DejaVu Sans Mono,
-so they agree on fonts; a Fedora host such as ai-sandbox has none of the
-terminal's named fonts and can fail where they pass.
+The native wire suite gives the same result on every host, so a native
+landing runs it only in its landing tests, on the host that lands. It acts as
+a Mac and measures text only with fonts kept in the repository, as
+[Native app](native-app.md#tests) says. A break that shows only when the suite
+acts as Linux shows after the push, in CI's Native job.
 
 A scenario that passed for the landing's diff does not run again. The diff is
 `git diff origin/main...HEAD`, identified by `git patch-id --verbatim`, so it

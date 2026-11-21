@@ -213,7 +213,7 @@ pub(crate) fn harness_toggle(
     let w = which.key();
     let legend = rune::Chord::parse("alt+t")
         .expect("the Alt chord parses")
-        .keycaps_on(rune::KeyPlatform::current())
+        .keycaps_on(rune::Platform::current())
         .swap_remove(0);
     let segments = options.into_iter().map(|option| {
         let picked = option.agent.clone();
@@ -283,7 +283,7 @@ pub(crate) fn yolo_control(which: Which, yolo: &Yolo, keys: String, t: &Tokens) 
 fn spoken(spec: &str) -> String {
     rune::Chord::parse(spec)
         .expect("a picker chord parses")
-        .label_on(rune::KeyPlatform::current())
+        .label_on(rune::Platform::current())
 }
 
 /// What the toggle says while the harness list loads or after it failed to.

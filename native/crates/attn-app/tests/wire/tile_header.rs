@@ -10,7 +10,7 @@ use attn_protocol::{
 };
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Target, World, key_event, message};
-use rune::{Key, KeyEvent, KeyPlatform, Mods, WheelEvent};
+use rune::{Key, KeyEvent, Mods, WheelEvent};
 
 const SIZE: (f32, f32) = (1600.0, 900.0);
 const DESKTOP: &str = "work/desktop_1";
@@ -198,7 +198,7 @@ fn key(world: &mut World, key: Key) {
 }
 
 fn run_command(world: &mut World, query: &str) {
-    let ev = match Keymap::from_setting(None, KeyPlatform::current())
+    let ev = match Keymap::from_setting(None, attn_testkit::platform())
         .binding(&Action::UiCommandPalette)
     {
         Some(Binding::Chord(chord)) => key_event(&chord),
@@ -1621,7 +1621,7 @@ fn a_remote_tile_names_its_outpost_only_in_its_header_and_its_split_opens_on_tha
     );
     outposts(&mut world, vec![studio("studio")]);
 
-    let split = match Keymap::from_setting(None, KeyPlatform::current())
+    let split = match Keymap::from_setting(None, attn_testkit::platform())
         .binding(&Action::TerminalSplitVertical)
     {
         Some(Binding::Chord(chord)) => key_event(&chord),

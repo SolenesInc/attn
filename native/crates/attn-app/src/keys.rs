@@ -1,5 +1,5 @@
 use attn_term::keys;
-use rune::{Chord, ClipboardContent, Ime, Key, KeyEvent, KeyPlatform, Mods, Tx};
+use rune::{Chord, ClipboardContent, Ime, Key, KeyEvent, Mods, Platform, Tx};
 
 use crate::State;
 use crate::action::Action;
@@ -198,7 +198,7 @@ fn clipboard_chord(ev: &KeyEvent) -> Option<Clipboard> {
         return None;
     }
     let m = ev.mods;
-    let mac = KeyPlatform::current() == KeyPlatform::Mac;
+    let mac = Platform::current() == Platform::Mac;
     if mac {
         return match (letter, m.cmd, m.shift) {
             ('v', true, false) => Some(Clipboard::Paste),
@@ -239,7 +239,7 @@ fn clipboard(state: &mut State, id: &str, chord: Clipboard, tx: &mut Tx) -> bool
             });
             text.map(|text| tx.copy(text)).is_some()
         }
-        Clipboard::Paste if KeyPlatform::current() == KeyPlatform::Mac => false,
+        Clipboard::Paste if Platform::current() == Platform::Mac => false,
         Clipboard::Paste => {
             tx.read_clipboard(on_paste);
             true
@@ -255,7 +255,7 @@ fn types_text(ev: &KeyEvent) -> bool {
 
 /// Plain Ctrl and a letter belong to the shell on Linux, whatever the keymap says.
 fn is_shell_ctrl_letter(ev: &KeyEvent) -> bool {
-    KeyPlatform::current() != KeyPlatform::Mac
+    Platform::current() != Platform::Mac
         && ev.mods.ctrl
         && !ev.mods.alt
         && !ev.mods.shift
@@ -272,7 +272,7 @@ fn send_to_terminal(
     let Some(id) = terminal else {
         return false;
     };
-    let platform = KeyPlatform::current();
+    let platform = Platform::current();
     let bytes = match keys::press(ev, tx.physical_key(), tx.key_repeat(), platform) {
         None => return false,
         Some(keys::Press::Bytes(bytes)) => bytes.to_vec(),

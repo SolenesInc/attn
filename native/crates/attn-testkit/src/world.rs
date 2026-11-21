@@ -208,6 +208,7 @@ impl<S: 'static> Driver<'_, S> {
 
 /// The key event the keyboard sends for `chord` on this platform.
 pub fn key_event(chord: &Chord) -> KeyEvent {
+    crate::machine::settle();
     attn_automation::key_event(chord).unwrap_or_else(|why| panic!("{why}"))
 }
 
@@ -261,6 +262,7 @@ impl World {
         prefs: rune::prefs::Prefs,
         instance: &str,
     ) -> World {
+        crate::machine::settle();
         attn_app::use_prefs(prefs);
         attn_app::use_hour_cycle(attn_app::HourCycle::TwentyFour);
         attn_app::record_editor_launches();

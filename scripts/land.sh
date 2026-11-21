@@ -423,11 +423,6 @@ $others
 See which config set the identity with git config --show-origin user.email. If it is not yours, remove it. Then fix these commits with git rebase origin/main --exec 'git commit --amend --no-edit --reset-author' and run scripts/land.sh again."
 }
 
-native_wire_option() {
-  [ "$(uname -s)" != Linux ] || return 0
-  case " ${landing_groups[*]-} " in *" native "*) echo --native-wire ;; esac
-}
-
 scenario_step=""
 stop_scenario_step() {
   [ -n "$scenario_step" ] || return 0
@@ -447,7 +442,7 @@ check_beside_scenarios() {
   trap 'exit 130' INT TERM
   choose_landing_tests "$units_file"
   while IFS= read -r scenario || [ -n "$scenario" ]; do scenarios+=("$scenario"); done < <(scenarios_failed_on_main "$units_file")
-  scripts/land-linux.sh $(native_wire_option) origin/main ${scenarios[@]+"${scenarios[@]}"} &
+  scripts/land-linux.sh origin/main ${scenarios[@]+"${scenarios[@]}"} &
   scenario_step=$!
   run_checks
   local step="$scenario_step"

@@ -540,7 +540,7 @@ pub(crate) fn view(open: &Open, words_: &TextEdit, t: &Tokens) -> El {
         .build(attn_ui::kit(t));
     let save = if open.several() {
         rune::Chord::parse("mod+enter")
-            .map(|c| c.label_on(rune::KeyPlatform::current()))
+            .map(|c| c.label_on(rune::Platform::current()))
             .unwrap_or_default()
     } else {
         "↵".to_owned()

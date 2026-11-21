@@ -6,7 +6,7 @@ use attn_ui::Tokens;
 use attn_ui::blocks::{Block, List};
 use attn_ui::keycap;
 use attn_ui::system::ListRow;
-use rune::{El, KeyPlatform};
+use rune::{El, Platform};
 
 use crate::Action;
 use crate::keymap::{Binding, Keymap};
@@ -229,7 +229,7 @@ fn keycaps(keymap: &Keymap, keys: &Keys) -> Option<Vec<String>> {
 }
 
 fn spoken(keymap: &Keymap, caps: &[String]) -> String {
-    caps.join(if keymap.platform() == KeyPlatform::Mac {
+    caps.join(if keymap.platform() == Platform::Mac {
         ""
     } else {
         "+"

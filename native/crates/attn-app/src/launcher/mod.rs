@@ -16,7 +16,7 @@ use attn_protocol::{
     GetRepoInfoMessage, GetRepoInfoResultMessage, InspectPathMessage, InspectPathResultMessage,
     OutpostInfo, PathInspection, RecentLocation, RecentLocationsResultMessage, RepoInfo,
 };
-use rune::{Chord, Key, KeyEvent, KeyPlatform, TextEdit, Tx};
+use rune::{Chord, Key, KeyEvent, Platform, TextEdit, Tx};
 
 use crate::State;
 use crate::picker::{
@@ -509,7 +509,7 @@ impl Launcher {
         }
         let installed = self.installed_on(state, host)?;
         (agent != TERMINAL && !installed.contains(agent)).then(|| {
-            let keys = if KeyPlatform::current() == KeyPlatform::Mac {
+            let keys = if Platform::current() == Platform::Mac {
                 "⌥1–⌥9"
             } else {
                 "Alt+1–Alt+9"
@@ -1396,7 +1396,7 @@ pub(crate) fn on_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut Tx
     let accel = |spec: &str| {
         Chord::parse(spec)
             .expect("a launcher chord parses")
-            .matches_tx_on(ev, tx, KeyPlatform::current())
+            .matches_tx_on(ev, tx, Platform::current())
     };
     let launcher = state
         .window

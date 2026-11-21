@@ -7,7 +7,7 @@ use attn_protocol::{
     ProfileActionResultMessage, ProfileArrangementChangedMessage, ProfilesChangedMessage,
 };
 use attn_testkit::{Daemon, Request, Target, World, key_event, message};
-use rune::{Key, KeyEvent, KeyPlatform, Mods};
+use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 
 #[test]
@@ -227,7 +227,7 @@ fn letter(world: &mut World, letter: &str) {
 }
 
 fn press_action(world: &mut World, action: &Action) {
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
     let Some(Binding::Chord(chord)) = keymap.binding(action) else {
         panic!("{} has no chord", action.id());
     };

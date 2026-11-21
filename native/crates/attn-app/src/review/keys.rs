@@ -212,7 +212,7 @@ pub(super) fn not_shown(
 /// The keys for what the review shows in `frame`, under the tile, after the frames it offers.
 /// The send key as the default keymap binds it on this platform.
 pub(super) fn send_label() -> String {
-    let keymap = crate::Keymap::from_setting(None, rune::KeyPlatform::current());
+    let keymap = crate::Keymap::from_setting(None, rune::Platform::current());
     keymap
         .binding(&crate::Action::MarkdownSendAnnotations)
         .map(|b| keymap.label(b))

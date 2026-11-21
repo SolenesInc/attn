@@ -657,7 +657,7 @@ fn put_away_written(state: &mut State, tx: &mut Tx) -> bool {
 /// walk the rows of the place it stands in, → drills into the focused row in columns, ← climbs
 /// out, and Escape closes the garden.
 pub(crate) fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    let accel = if rune::KeyPlatform::current() == rune::KeyPlatform::Mac {
+    let accel = if rune::Platform::current() == rune::Platform::Mac {
         ev.mods.cmd
     } else {
         ev.mods.ctrl

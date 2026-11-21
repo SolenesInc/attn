@@ -5,7 +5,6 @@ use attn_protocol::{
 };
 use attn_testkit::tree::pane;
 use attn_testkit::{Request, Target, World, key_event};
-use rune::KeyPlatform;
 
 use super::*;
 
@@ -149,7 +148,7 @@ fn says(world: &World, words: &str) -> bool {
 }
 
 fn show_seeds(world: &mut World) {
-    let ev = match Keymap::from_setting(None, KeyPlatform::current())
+    let ev = match Keymap::from_setting(None, attn_testkit::platform())
         .binding(&Action::UiCommandPalette)
     {
         Some(Binding::Chord(chord)) => key_event(&chord),

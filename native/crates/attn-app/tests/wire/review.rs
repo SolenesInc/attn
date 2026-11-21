@@ -2743,7 +2743,7 @@ fn open_marking_counted(review: ReviewBundle) -> (World, Marks, Marks, Generatio
 
 /// Presses the send key as this platform binds it.
 fn send_key(world: &mut World) {
-    let ev = match attn_app::Keymap::from_setting(None, rune::KeyPlatform::current())
+    let ev = match attn_app::Keymap::from_setting(None, attn_testkit::platform())
         .binding(&attn_app::Action::MarkdownSendAnnotations)
     {
         Some(attn_app::Binding::Chord(chord)) => attn_testkit::key_event(&chord),
@@ -3513,7 +3513,7 @@ fn clears_the_sent_marks_when_the_review_was_delivered_but_its_sent_ref_could_no
 #[test]
 fn names_the_send_key_as_the_platform_binds_it_in_the_key_line_and_the_key_sheet_and_sends_on_it() {
     let (mut world, _, sends) = open_marking(presented());
-    let keymap = attn_app::Keymap::from_setting(None, rune::KeyPlatform::current());
+    let keymap = attn_app::Keymap::from_setting(None, attn_testkit::platform());
     let label = keymap
         .binding(&attn_app::Action::MarkdownSendAnnotations)
         .map(|b| keymap.label(b))
@@ -4631,7 +4631,7 @@ fn names_the_save_key_of_several_lines_as_the_platform_binds_it_and_saves_on_it(
     let mut e = open_calc();
     e.walk_to_row(9);
     type_key(&mut e.world, "i");
-    let label = save_several_chord().label_on(rune::KeyPlatform::current());
+    let label = save_several_chord().label_on(attn_testkit::platform());
     let said = edit_box(&e.world).unwrap();
     assert!(
         said.iter().any(|t| *t == format!("{label} save")),

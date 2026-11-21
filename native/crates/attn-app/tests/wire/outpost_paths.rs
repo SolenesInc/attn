@@ -9,7 +9,6 @@ use attn_protocol::{
 };
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Target, World, key_event, message};
-use rune::KeyPlatform;
 use serde_json::{Value, json};
 
 const DESKTOP: &str = "work/desktop_1";
@@ -108,7 +107,7 @@ fn start(directory: &str, remote: bool, tiles: Vec<Value>, active: &str) -> Worl
 }
 
 fn press(world: &mut World, action: Action) {
-    let ev = match Keymap::from_setting(None, KeyPlatform::current()).binding(&action) {
+    let ev = match Keymap::from_setting(None, attn_testkit::platform()).binding(&action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{action:?} has no single chord: {other:?}"),
     };

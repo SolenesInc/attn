@@ -15,7 +15,7 @@ use attn_protocol::{
     RecentLocationsResultMessage, RepoInfo, SettingsUpdatedMessage, SpawnResultMessage, Worktree,
 };
 use attn_testkit::{Daemon, Node, Request, Target, World, key_event, message};
-use rune::{Chord, Key, KeyEvent, KeyPlatform, Mods};
+use rune::{Chord, Key, KeyEvent, Mods};
 use serde_json::Value;
 
 const HOME: &str = "/home/me";
@@ -394,7 +394,7 @@ fn open(setup: Setup) -> World {
 }
 
 fn press_action(world: &mut World, action: &Action) {
-    let ev = match Keymap::from_setting(None, KeyPlatform::current()).binding(action) {
+    let ev = match Keymap::from_setting(None, attn_testkit::platform()).binding(action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
     };

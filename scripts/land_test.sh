@@ -104,16 +104,6 @@ case "$args" in
       exit 75
     fi
     echo "Waited ${LAND_RUNNER_WAITED:-0}s for the guest checkout land" >&2
-    case "$args" in
-      *--native-wire*)
-        if [ -n "${LAND_RUNNER_WIRE_FAIL:-}" ]; then
-          echo "test wire::$LAND_RUNNER_WIRE_FAIL ... FAILED"
-          echo "Native wire tests failed in 4s"
-          exit 1
-        fi
-        echo "Native wire tests passed in 4s"
-        ;;
-    esac
     scenarios=""
     case "$args" in *"--scenario "*) scenarios="${args#*--scenario }"; scenarios="${scenarios%% *}" ;; esac
     if [ -n "${LAND_RUNNER_HOLD:-}" ]; then
@@ -135,12 +125,6 @@ case "$args" in
 esac
 EOF
 chmod +x "$work/bin/pnpm"
-cat >"$work/bin/uname" <<'EOF'
-#!/usr/bin/env bash
-[ "$*" = -s ] || { echo "unexpected uname $*" >&2; exit 2; }
-echo "${LAND_HOST_OS:-Linux}"
-EOF
-chmod +x "$work/bin/uname"
 export PATH="$work/bin:$PATH"
 export LAND_CLEAN_LOG="$work/cleans"
 export LAND_CHECK_LOG="$work/checks" LAND_MOVE_MAIN="$work/move-main" LAND_OTHER="$work/other"
@@ -598,29 +582,9 @@ first="$(sed -n 's/^runner soak .*--scenario \([^,]*\),.*/\1/p' "$LAND_CHECK_LOG
 [ "$(cut -d' ' -f1 "$(record_for_landing)")" = "$first" ] || { echo 'a stopped landing runner must keep the pass it finished and record no other' >&2; cat "$(record_for_landing)" >&2; exit 1; }
 git reset -q --hard origin/main
 
-printf '// on Linux\n' >>native/crates/demo/src/lib.rs
-land 'Native change from a Linux host' LAND_SELECTED='cargo .'
-if grep -qF -- --native-wire "$LAND_CHECK_LOG"; then echo 'a native change landed from Linux ran the wire suite on the landing runner as well as in its landing tests' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; fi
-
-printf '// from a Mac\n' >>native/crates/demo/src/lib.rs
-land 'Native change from a Mac' LAND_HOST_OS=Darwin LAND_SELECTED='cargo .'
-grep -qE '^runner soak --provider ssh --target runner.invalid --checkout land --turn-limit 654 --out [^ ]+ --native-wire$' "$LAND_CHECK_LOG" || { echo 'a native change landed from a Mac did not run the wire suite on the landing runner' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
-expect_output 'the native wire suite passed on runner.invalid in 4s'
-
-export LAND_HOST_OS=Darwin
-refuses 'a native change from a Mac whose wire suite fails on Linux' LAND_RUNNER_WIRE_FAIL=tiles::a_tile_fits native/crates/demo/src/lib.rs
-unset LAND_HOST_OS
-grep -qF 'the native wire suite failed on Linux, on runner.invalid in 4s, so nothing was pushed to main' "$work/failure" || { echo 'a wire suite that failed on Linux did not stop the push from a Mac' >&2; cat "$work/failure" >&2; exit 1; }
-grep -qxF 'test wire::tiles::a_tile_fits ... FAILED' "$work/failure" || { echo 'the landing did not name the wire test that failed on Linux' >&2; cat "$work/failure" >&2; exit 1; }
-
-printf '// beside a scenario\n' >>native/crates/demo/src/lib.rs
-printf '// beside the wire suite\n' >>app/scripts/real-app-harness/scenario-native-shelf-moves.mjs
-land 'Native and scenario change from a Mac' LAND_HOST_OS=Darwin LAND_SELECTED='cargo .'
-[ "$(grep -c '^runner soak ' "$LAND_CHECK_LOG")" = 1 ] && grep -qE -- '--scenario native-shelf-moves --out [^ ]+ --native-wire$' "$LAND_CHECK_LOG" || { echo 'the wire suite and the scenario did not share one turn on the landing runner' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
-
-printf '// runner down\n' >>native/crates/demo/src/lib.rs
-land 'Native change from a Mac while the landing runner is down' LAND_HOST_OS=Darwin LAND_RUNNER_REACH_EXIT=255 LAND_SELECTED='cargo .'
-expect_output "no landing runner can be reached, so the native wire suite runs on Linux only in CI's Native job, after the push"
+printf '// native\n' >>native/crates/demo/src/lib.rs
+land 'Native change' LAND_SELECTED='cargo .'
+if grep -qF runner "$LAND_CHECK_LOG"; then echo 'a native change ran the wire suite on the landing runner, though the wire suite gives the same result on every host' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; fi
 
 git config attn.landRunner runner.invalid
 refuses 'a landing runner that names no runner' GIT_CONFIG_NOSYSTEM=1 app/scripts/real-app-harness/scenario-native-shelf-moves.mjs

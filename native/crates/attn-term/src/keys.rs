@@ -1,4 +1,4 @@
-use rune::{Key, KeyEvent, KeyPlatform, PhysicalKeyCode as Code};
+use rune::{Key, KeyEvent, PhysicalKeyCode as Code, Platform};
 
 use crate::vt::{KeyInput, OptionAsAlt, mods};
 
@@ -16,10 +16,10 @@ pub fn press(
     ev: &KeyEvent,
     physical: Option<Code>,
     repeat: bool,
-    platform: KeyPlatform,
+    platform: Platform,
 ) -> Option<Press> {
     let m = ev.mods;
-    let mac = platform == KeyPlatform::Mac;
+    let mac = platform == Platform::Mac;
     if mac && m.cmd {
         return None;
     }

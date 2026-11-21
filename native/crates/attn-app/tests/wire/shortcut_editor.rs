@@ -5,7 +5,7 @@ use std::time::Duration;
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{InitialStateMessage, Profile, SettingsUpdatedMessage};
 use attn_testkit::{Daemon, Request, Target, World, key_event, message};
-use rune::{Chord, Key, KeyEvent, KeyPlatform, Mods, PhysicalInput, PhysicalKeyCode, Shortcut};
+use rune::{Chord, Key, KeyEvent, Mods, PhysicalInput, PhysicalKeyCode, Platform, Shortcut};
 use serde_json::{Value, json};
 
 const SETTING: &str = "keybindings_config";
@@ -64,8 +64,8 @@ fn start(overrides: Option<Value>) -> World {
     World::start(keeping(&settings))
 }
 
-fn platform() -> KeyPlatform {
-    KeyPlatform::current()
+fn platform() -> Platform {
+    attn_testkit::platform()
 }
 
 fn defaults() -> Keymap {
@@ -608,7 +608,7 @@ fn resetting_onto_the_leader_of_several_chords_unbinds_every_one_and_keeps_the_d
 
 #[test]
 fn a_modifier_the_keymap_cannot_match_is_refused_rather_than_dropped() {
-    let (spec, refused) = if platform() == KeyPlatform::Mac {
+    let (spec, refused) = if platform() == Platform::Mac {
         ("mod+ctrl+y", "Control")
     } else {
         ("mod+super+y", "Super")
@@ -657,7 +657,7 @@ fn recording_saves_the_accelerator_and_waits_past_a_lone_modifier() {
     };
 
     click(&mut world, &keys_of(&Action::TerminalToggleMaximize));
-    let modifier = if platform() == KeyPlatform::Mac {
+    let modifier = if platform() == Platform::Mac {
         PhysicalKeyCode::SuperLeft
     } else {
         PhysicalKeyCode::ControlLeft

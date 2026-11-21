@@ -2,7 +2,7 @@ use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{Desktop, DesktopPane, InitialStateMessage, Profile, Session};
 use attn_testkit::tree::{pane, row, tile};
 use attn_testkit::{Request, Target, World, key_event};
-use rune::{Key, KeyEvent, KeyPlatform, Mods};
+use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 
 pub(super) fn session(id: &str, agent: &str) -> Session {
@@ -100,14 +100,14 @@ fn work_with_tiles() -> Desktop {
 }
 
 fn close_key() -> KeyEvent {
-    match Keymap::from_setting(None, KeyPlatform::current()).binding(&Action::SessionClose) {
+    match Keymap::from_setting(None, attn_testkit::platform()).binding(&Action::SessionClose) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("close has no single chord: {other:?}"),
     }
 }
 
 fn press(world: &mut World, action: Action) {
-    let ev = match Keymap::from_setting(None, KeyPlatform::current()).binding(&action) {
+    let ev = match Keymap::from_setting(None, attn_testkit::platform()).binding(&action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
     };

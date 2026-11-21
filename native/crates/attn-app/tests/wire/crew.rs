@@ -16,7 +16,7 @@ use attn_protocol::{
     PartyView, Profile, ProfileArrangementChangedMessage, Seed, Session, SettingsUpdatedMessage,
 };
 use attn_testkit::{Answer, Daemon, Request, Target, World, message, tree};
-use rune::{Key, KeyEvent, KeyPlatform, Mods};
+use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 
 use super::settings::Settings;
@@ -1587,7 +1587,7 @@ fn the_model_picker_closes_when_another_layer_replaces_manage_crew() {
 }
 
 fn slot_keys(slot: i64) -> String {
-    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let keymap = Keymap::from_setting(None, attn_testkit::platform());
     let action = Action::desktop_select(slot).expect("a desktop slot");
     keymap.label(keymap.binding(&action).expect("the slot has a key"))
 }

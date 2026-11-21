@@ -6,7 +6,6 @@ use attn_protocol::{
 };
 use attn_testkit::tree::{pane, row, tile};
 use attn_testkit::{Daemon, Target, World, key_event};
-use rune::KeyPlatform;
 use serde_json::json;
 
 const DESKTOP: &str = "work/desktop_1";
@@ -434,7 +433,7 @@ fn escape_closes_the_opener_over_an_open_image_and_the_next_escape_closes_the_im
     world.settle();
     world.gesture(|app| app.click(Target::role("image").name("chart")));
     let open_file =
-        match Keymap::from_setting(None, KeyPlatform::current()).binding(&Action::FileOpen) {
+        match Keymap::from_setting(None, attn_testkit::platform()).binding(&Action::FileOpen) {
             Some(Binding::Chord(chord)) => key_event(&chord),
             other => panic!("the opener has no single chord: {other:?}"),
         };
