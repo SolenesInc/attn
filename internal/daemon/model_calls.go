@@ -108,10 +108,21 @@ func (d *Daemon) modelCallHarness(named string) (agentdriver.Driver, agentdriver
 	}
 	installed := modelCallHarnesses()
 	if !slices.Contains(installed, name) {
-		return nil, nil, fmt.Errorf("no harness named %q is installed; installed: %s", name, strings.Join(installed, ", "))
+		return nil, nil, d.modelCallHarnessRefusal(named, name, installed)
 	}
 	driver := agentdriver.Get(name)
 	return driver, driver.(agentdriver.HeadlessTaskProvider), nil
+}
+
+func (d *Daemon) modelCallHarnessRefusal(named, name string, installed []string) error {
+	answering := strings.Join(installed, " or ")
+	if _, headless := agentdriver.Get(name).(agentdriver.HeadlessTaskProvider); headless {
+		return fmt.Errorf("%s is not installed; model calls are answered by %s", name, answering)
+	}
+	if strings.TrimSpace(named) == "" && strings.TrimSpace(d.setting(setting.ModelCallsAgent)) == "" {
+		return fmt.Errorf("model calls default to the new-session agent %q, which does not answer model calls; set model_calls.agent to %s", name, answering)
+	}
+	return fmt.Errorf("%q does not answer model calls; model calls are answered by %s", name, answering)
 }
 
 func (d *Daemon) modelCallTarget(ctx context.Context, msg *protocol.SenderModelCallMessage) (modelCallTarget, error) {

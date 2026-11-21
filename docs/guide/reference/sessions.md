@@ -171,7 +171,9 @@ The command prints one JSON line with `text`, `harness`, `model` and
 `model_ms`, the model's own time, and exits 0. A request can name a `harness`
 (`claude` or `codex`) and a `tier` (`light`, `standard` or `deep`) or a
 `model`. What it leaves out comes from two settings: `model_calls.agent`, the
-harness (empty uses the harness for new sessions), and `model_calls.model`, a
+harness (empty uses the harness for new sessions, when that is Claude Code or
+Codex; Sigma and plugin harnesses do not answer model calls), and
+`model_calls.model`, a
 tier or a model id (empty uses `standard`). A tier picks that harness's model
 for the tier, as the `model_tier_overrides` setting adjusts. An empty `input`
 is refused, and Codex takes an `input` of at most 1,048,576 characters. When
