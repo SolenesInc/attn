@@ -11,7 +11,7 @@ fi
 args=()
 for arg in "$@"; do
   case "$arg" in
-    --target=*-unknown-linux-gnu) ;;
+    --target=*-unknown-linux-gnu | -Wl,--fix-cortex-a53-843419) ;;
     *) args+=("$arg") ;;
   esac
 done
