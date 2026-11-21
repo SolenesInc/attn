@@ -20,11 +20,10 @@ runs:
       run: |
         entry="$(scripts/rust-cli.sh entry)"
         key="$(basename "$entry")"
-        triple="$(basename "$(dirname "$entry")")"
         channel="$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)"
         {
           echo "entry=$entry"
-          echo "cache-key=attn-cli-$triple-$key"
+          echo "cache-key=attn-cli-$key"
           echo "channel=$channel"
         } >> "$GITHUB_OUTPUT"
 

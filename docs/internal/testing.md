@@ -234,3 +234,10 @@ See [Test history](test-history.md).
 The runner and Makefile also share the pinned native VT artifact between
 worktrees. Before using Go commands directly, run
 `./scripts/build-libghostty-vt.sh` to prepare it for this checkout.
+
+The Rust CLI comes from the machine-wide build store,
+`scripts/lib/rust-build-store.sh`, so a worktree whose CLI sources match one
+already built reuses that build. The store keys each recipe on the contents of
+its input roots and refuses to keep a build that read a file outside them or an
+environment variable the recipe does not declare. The error names the file or
+variable to add to the recipe. An entry no run has used for 7 days is removed.
