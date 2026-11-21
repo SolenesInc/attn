@@ -14,9 +14,6 @@ const WIDTHS: [&str; 6] = [
     "Focus",
 ];
 const SLACK: f32 = 0.5;
-/// How much more a measured width may say than its box draws: the box's layout and the text's
-/// measure round apart by up to a point on some machines' fonts.
-const ONE_POINT: f32 = 1.0 + SLACK;
 
 fn view(_: &(), _: &mut Cx<()>) -> El {
     el()
@@ -445,7 +442,7 @@ fn a_scrolling_list_s_key_names_the_node_that_scrolls() {
 }
 
 #[test]
-fn an_ask_chip_never_draws_wider_than_it_says_with_its_mark_a_step_in_from_every_edge() {
+fn an_ask_chip_draws_as_wide_as_it_says_with_its_mark_a_step_in_from_every_edge() {
     use attn_ui::panel_gallery::{Drawer, Panels, ask_chip};
     let cases = [
         ("Rest", Drawer::Wide, false, false),
@@ -466,7 +463,7 @@ fn an_ask_chip_never_draws_wider_than_it_says_with_its_mark_a_step_in_from_every
         })
         .width();
         assert!(
-            chip.rect[2] <= said + SLACK && said - chip.rect[2] <= ONE_POINT,
+            (chip.rect[2] - said).abs() <= SLACK,
             "{variant}: the chip draws {} wide and says {said}",
             chip.rect[2]
         );
