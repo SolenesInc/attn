@@ -154,6 +154,31 @@ func TestOutpostForwardCallerHangupCancelsTerminalWaitAtHome(t *testing.T) {
 	t.Logf("wait at the home ended on caller EOF: %s", response.CommandRefusal.Message)
 }
 
+func TestTerminalTimeoutBoundsACallTheOutpostForwardHolds(t *testing.T) {
+	home, outpost := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY)), testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
+	home.Vars = append(home.Vars, "SHELL=/bin/bash")
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	forwarding := home.PauseEvery(pausepoint.ForwardSocketCreated)
+	pair.Start()
+	shell := fakeagent.Harness(protocol.SessionAgentShell)
+	target := home.Spawn(pair.App, shell, home.Path("target"))
+	caller := home.Spawn(pair.App, shell, outpost.Path("caller"), func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
+	pair.App.TypeLine(target, "printf '__blocking_%s\\n' ready; read line")
+	pair.App.AwaitScreen(target, "__blocking_ready")
+	for _, args := range [][]string{
+		{"wait", pair.App.Terminal(target), "--until", "prompt", "--timeout", "0.2"},
+		{"run", pair.App.Terminal(target), "true", "--wait", "--timeout", "0.2"},
+	} {
+		forwarded := outpost.Launch(testworld.Invocation{Terminal: pair.App.Terminal(caller), Args: append([]string{"terminal"}, args...)})
+		forwarding.Await()
+		result := forwarded.Wait()
+		forwarding.Release()
+		if result.Code != 124 || !strings.Contains(result.Stderr, "deadline exceeded") {
+			t.Fatalf("terminal %s while the forward to the home is held: %+v, want exit 124 at its deadline", args[0], result)
+		}
+	}
+}
+
 func TestLaunchingLocalShellDoesNotKeepForwardedSocketOpen(t *testing.T) {
 	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
 	pair := testworld.PrepareOutpostPair(t, home, outpost)

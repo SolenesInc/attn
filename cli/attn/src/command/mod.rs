@@ -6,6 +6,7 @@ use attn_protocol::{CommandRefusal, RunCommandMessage};
 use serde_json::{Map, Value as Json};
 use std::io::Read;
 use std::sync::Once;
+use std::time::Instant;
 
 static STALE_PROTOCOL_PROBE: Once = Once::new();
 
@@ -116,6 +117,9 @@ pub trait Family {
     }
     fn before_send(&self, _cmd: &Command, _parsed: &mut Parsed) -> Result<(), Stop> {
         Ok(())
+    }
+    fn deadline(&self, _cmd: &Command, _parsed: &Parsed) -> Option<Instant> {
+        None
     }
     fn exchange(
         &self,
@@ -763,7 +767,8 @@ pub fn send(
     message.args = Some(parsed.args.clone().into_iter().collect());
     message.session_id = (!parsed.session.is_empty()).then(|| parsed.session.clone());
     message.profile_id = (!parsed.profile.is_empty()).then(|| parsed.profile.clone());
-    match Client::new(run.paths, "", &run.terminal).call_command(&message) {
+    let deadline = family.deadline(cmd, parsed);
+    match Client::new(run.paths, "", &run.terminal).call_command(&message, deadline) {
         Err(error) if error.unconnected && cmd.runs_without_daemon => {
             crate::client::run_in_attnd(&message)
         }
@@ -853,6 +858,10 @@ pub fn send_failed(
     cmd: &Command,
     error: &SendError,
 ) -> Stop {
+    if error.deadline_exceeded() {
+        family.fail(cmd.name, &error.to_string());
+        return Stop(EXIT_TIMEOUT);
+    }
     run.fail_send(&family.label(cmd.name), error);
     family.error_exit()
 }

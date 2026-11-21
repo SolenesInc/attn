@@ -10,6 +10,7 @@ use attn_protocol::{
     TerminalRunResult, TerminalWaitResult,
 };
 use std::fmt::Write as _;
+use std::time::{Duration, Instant};
 
 struct Terminal;
 
@@ -143,6 +144,11 @@ impl Family for Terminal {
             parsed.args.insert("desktop".to_string(), only);
         }
         Ok(())
+    }
+
+    fn deadline(&self, _cmd: &Command, parsed: &Parsed) -> Option<Instant> {
+        let seconds = parsed.text("timeout").parse::<f64>().ok()?;
+        Some(Instant::now() + Duration::try_from_secs_f64(seconds).ok()?)
     }
 
     fn present(

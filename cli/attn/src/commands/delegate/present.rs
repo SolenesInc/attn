@@ -190,7 +190,7 @@ fn await_delegation(run: &mut Run<'_>, parsed: &Parsed, accepted: &Reply) -> Res
         message.session_id = (!parsed.session.is_empty()).then(|| parsed.session.clone());
         message.profile_id = (!parsed.profile.is_empty()).then(|| parsed.profile.clone());
         let reply = Client::new(run.paths, "", &run.terminal)
-            .call_command(&message)
+            .call_command(&message, None)
             .map_err(|error| unknown(&error.to_string()))?;
         if !reply.raw_field(&["ok"]).is_ok_and(|ok| ok == "true") {
             let refusal: Option<attn_protocol::CommandRefusal> =
