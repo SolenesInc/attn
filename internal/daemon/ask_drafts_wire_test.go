@@ -168,3 +168,40 @@ func TestADraftThisBuildCannotReadLeavesItsAskReadableAndWritable(t *testing.T) 
 		t.Fatalf("saving over the unreadable draft = %+v", again)
 	}
 }
+
+func TestADraftKeepsTheFilesOfAFileQuestionThroughARestart(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(asker)
+	seed := plantSeedAs(t, cli, asker, "Ship the banner")
+	moveDelegationSeed(t, cli, asker, seed, "tend", "")
+	asked, err := cli.AskOpen(protocol.SessionID(asker), seed, screenshotAsk, "", w.Path("shop"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := protocol.AttachmentOwner{Kind: protocol.AttachmentOwnerKindAsk, ID: asked.ID}
+	shot := quickCapturePNG(t)
+	onQuestion := answerFile(t, w.TrustedApp(), owner, "Pasted screenshot.png", shot, true)
+	draft := protocol.AskDraft{
+		Generation: 1,
+		Answers: []protocol.AskAnswer{
+			{Key: "q1", Picked: []string{"Yes"}},
+			{Key: "q2", Picked: []string{}, Attachments: []string{onQuestion}},
+		},
+	}
+	if saved := saveDraft(app, asked.ID, draft); !saved.Success {
+		t.Fatalf("saving the draft = %+v", saved)
+	}
+
+	w.restart()
+	restored := shownAsk(w.App().Initial.Asks, asked.ID)
+	if restored == nil || !reflect.DeepEqual(restored.Draft, &draft) {
+		t.Fatalf("after a restart the app reads %+v, want the draft %+v", restored, draft)
+	}
+	want := []protocol.AskDraftFile{{Attachment: protocol.Attachment{ID: onQuestion, Name: "Pasted screenshot.png", MediaType: "image/png", Bytes: len(shot)}, Ready: true}}
+	if !reflect.DeepEqual(restored.DraftFiles, want) {
+		t.Fatalf("the draft's files read %+v, want the file question's %+v", restored.DraftFiles, want)
+	}
+}

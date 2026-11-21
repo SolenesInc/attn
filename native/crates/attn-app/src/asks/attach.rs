@@ -49,12 +49,13 @@ pub(crate) struct File {
 impl File {
     /// A file of a draft the daemon kept. One whose upload had not finished cannot finish now,
     /// since its bytes stayed on this side.
-    pub(crate) fn restored(held: &AskDraftFile) -> File {
+    pub(crate) fn restored(held: &AskDraftFile, stop: Stop) -> File {
         File {
             id: held.attachment.id.clone(),
             name: held.attachment.name.clone(),
             size: held.attachment.bytes.max(0) as u64,
             picture: None,
+            stop,
             source: Source::Daemon,
             upload: match held.ready {
                 true => Upload::Done,

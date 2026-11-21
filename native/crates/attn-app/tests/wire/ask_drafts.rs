@@ -75,9 +75,13 @@ fn png() -> Vec<u8> {
 }
 
 fn tray(world: &World) -> Vec<(String, String)> {
+    tray_in(world, "asks.files")
+}
+
+fn tray_in(world: &World, key: &str) -> Vec<(String, String)> {
     world
         .screen()
-        .descendants(Target::key("asks.files"))
+        .descendants(Target::key(key))
         .into_iter()
         .filter_map(|n| {
             let id = n.key.as_deref()?.strip_prefix("asks.file.")?;
@@ -286,5 +290,77 @@ fn a_save_the_daemon_never_answered_is_sent_again_once_it_is_back() {
         saves(&world).len(),
         2,
         "the unanswered save went again once, and only once"
+    );
+}
+
+#[test]
+fn a_file_questions_files_ride_in_the_draft_and_come_back_under_it() {
+    let banner = || {
+        ask(
+            "a-shot",
+            "web",
+            "Banner",
+            10,
+            vec![
+                question("q1", "one", "Ship the banner?", &["Yes", "No"]),
+                question("q2", "file", "If it looks wrong, attach a screenshot", &[]),
+            ],
+        )
+    };
+    let mut world = launched(vec![banner()]);
+    let kept = Kept::default();
+    keeping(&world, &kept);
+    open_sheet(&mut world);
+    world.gesture(|app| app.click(Target::key("asks.q.q1.choice.0")));
+    world.gesture(|app| app.press("tab"));
+    world.gesture(|app| {
+        app.runtime.paste_content(
+            ClipboardContent::new("").with_image(ClipboardImage::from_png(png()).unwrap()),
+        )
+    });
+    world.settle();
+    world.advance(Duration::from_millis(400));
+    let draft = kept.lock().unwrap().clone().expect("the draft was saved");
+    let answers = serde_json::to_value(&draft.answers).unwrap();
+    let file = answers[1]["attachments"][0]
+        .as_str()
+        .expect("q2 carries its file")
+        .to_owned();
+    assert_eq!(
+        answers,
+        serde_json::json!([
+            {"key": "q1", "picked": ["Yes"]},
+            {"key": "q2", "picked": [], "attachments": [file]},
+        ])
+    );
+    assert_eq!(
+        draft.attachments, None,
+        "the question's file went on the note"
+    );
+    drop(world);
+
+    let mut held = banner();
+    held.draft = Some(draft);
+    held.draft_files = Some(vec![AskDraftFile {
+        attachment: Attachment {
+            id: file.clone(),
+            name: "Pasted screenshot.png".into(),
+            media_type: "image/png".into(),
+            bytes: png().len() as i64,
+        },
+        ready: true,
+    }]);
+    let mut world = launched(vec![held]);
+    open_sheet(&mut world);
+    world.settle();
+    assert_eq!(
+        tray_in(&world, "asks.q.q2.files"),
+        [("Pasted screenshot.png".to_owned(), "ready".to_owned())]
+    );
+    assert!(tray_in(&world, "asks.files").is_empty());
+    world.advance(Duration::from_secs(2));
+    assert!(
+        saves(&world).is_empty(),
+        "a draft brought back was saved again unchanged"
     );
 }

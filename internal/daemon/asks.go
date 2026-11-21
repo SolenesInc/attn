@@ -525,7 +525,11 @@ func (d *Daemon) saveAskDraft(msg *protocol.AskDraftSaveMessage, profileID strin
 func (d *Daemon) draftFiles(profileID, askID string, draft *protocol.AskDraft) []protocol.AskDraftFile {
 	owner := protocol.AttachmentOwner{Kind: protocol.AttachmentOwnerKindAsk, ID: askID}
 	var files []protocol.AskDraftFile
-	for _, id := range draft.Attachments {
+	ids := slices.Clone(draft.Attachments)
+	for _, answer := range draft.Answers {
+		ids = append(ids, answer.Attachments...)
+	}
+	for _, id := range ids {
 		a, err := d.store.Attachment(id)
 		if err != nil {
 			d.logf("asks: reading file %s of the draft of %s: %v", id, askID, err)

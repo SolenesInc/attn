@@ -2,14 +2,14 @@
 //! at the next generation once editing pauses, and read back from the ask for an ask this window
 //! holds no draft for, as at start.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use attn_client::Connection;
 use attn_protocol::{AskAnswer, AskDraft, AskDraftSaveMessage, AskDraftSaveResultMessage};
 use rune::{TextEdit, Tx};
 use serde_json::Value;
 
-use super::{Answer, Draft, attach};
+use super::{Answer, Draft, Stop, attach};
 use crate::State;
 
 /// How long editing pauses before the draft is saved: an annotation note's pause, measured to
@@ -40,12 +40,23 @@ pub(super) fn restore(state: &mut State) {
             continue;
         }
         let held = ask.draft_files.as_deref().unwrap_or_default();
-        let files = stored
+        let on_note = stored
             .attachments
             .iter()
             .flatten()
-            .filter_map(|id| held.iter().find(|f| &f.attachment.id == id))
-            .map(attach::File::restored)
+            .map(|id| (id, Stop::Note));
+        let on_questions = stored.answers.iter().flat_map(|a| {
+            a.attachments
+                .iter()
+                .flatten()
+                .map(|id| (id, Stop::Question(a.key.clone())))
+        });
+        let files = on_note
+            .chain(on_questions)
+            .filter_map(|(id, stop)| {
+                let file = held.iter().find(|f| &f.attachment.id == id)?;
+                Some(attach::File::restored(file, stop))
+            })
             .collect();
         let mut draft = Draft {
             answers: restored_answers(&stored.answers),
@@ -156,15 +167,42 @@ impl Draft {
     pub(super) fn kept(&self) -> AskDraft {
         AskDraft {
             generation: self.generation,
-            answers: self
-                .answers
-                .iter()
-                .filter_map(|(key, answer)| answer.kept(key))
-                .collect(),
+            answers: self.kept_answers(),
             note: written(&self.note),
-            attachments: (!self.files.is_empty())
-                .then(|| self.files.iter().map(|f| f.id.clone()).collect()),
+            attachments: self.file_ids(&Stop::Note),
         }
+    }
+
+    /// Each question with something written or a file attached, in key order.
+    fn kept_answers(&self) -> Vec<AskAnswer> {
+        let attached = self.files.iter().filter_map(|f| match &f.stop {
+            Stop::Question(key) => Some(key),
+            Stop::Note => None,
+        });
+        let keys: BTreeSet<&String> = self.answers.keys().chain(attached).collect();
+        keys.into_iter()
+            .filter_map(|key| {
+                let attachments = self.file_ids(&Stop::Question(key.clone()));
+                let written = self.answers.get(key).and_then(|a| a.kept(key));
+                match (written, attachments) {
+                    (Some(answer), attachments) => Some(AskAnswer {
+                        attachments,
+                        ..answer
+                    }),
+                    (None, Some(attachments)) => Some(AskAnswer {
+                        key: key.clone(),
+                        attachments: Some(attachments),
+                        ..AskAnswer::default()
+                    }),
+                    (None, None) => None,
+                }
+            })
+            .collect()
+    }
+
+    fn file_ids(&self, stop: &Stop) -> Option<Vec<String>> {
+        let ids: Vec<String> = self.files_on(stop).map(|f| f.id.clone()).collect();
+        (!ids.is_empty()).then_some(ids)
     }
 
     /// What `kept` holds apart from its generation, and nothing for a draft with nothing written.
@@ -188,6 +226,7 @@ impl Answer {
             other: written(&self.other),
             text: written(&self.text),
             condition: self.condition.as_ref().and_then(written),
+            attachments: None,
         };
         let empty = answer.picked.is_empty()
             && answer.other.is_none()
