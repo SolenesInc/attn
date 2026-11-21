@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -174,6 +178,49 @@ func TestAKittyStorageLimitOfZeroTurnsImagesOff(t *testing.T) {
 		if e.Event == protocol.EventKittyPlacements {
 			t.Errorf("with images off the daemon described placements at seq %d", protocol.Deref(e.Seq))
 		}
+	}
+}
+
+func TestAKittyImageAProgramNamesByFilePathIsServed(t *testing.T) {
+	w := newWorld(t)
+	session := w.Spawn(w.App(), shellHarness, w.Path("shop"))
+	terminal := w.Terminal(session)
+	describer := transportPeer(w, protocol.CapabilityKittyImages)
+	kittyAttach(describer, terminal)
+
+	picture := image.NewNRGBA(image.Rect(0, 0, 3, 2))
+	for i := range picture.Pix {
+		picture.Pix[i] = 0xff
+	}
+	picture.Set(0, 0, color.NRGBA{R: 10, G: 20, B: 30, A: 255})
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, picture); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "diagram.png")
+	if err := os.WriteFile(path, encoded.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	named := base64.StdEncoding.EncodeToString([]byte(path))
+	describer.TypeLine(session, fmt.Sprintf(`printf '\033_Ga=T,t=f,f=100,q=2,i=78;%s\033\\'`, named))
+	placed := testworld.Await(describer, protocol.EventKittyPlacements, func(m protocol.KittyPlacementsMessage) bool {
+		return string(m.ID) == terminal && len(m.Placements) == 1
+	})
+	if p := placed.Placements[0]; p.ImageID != 78 || p.PixelWidth != 3 || p.PixelHeight != 2 {
+		t.Errorf("placement = %+v, want image 78 at the file's 3x2 size", p)
+	}
+	served := kittyImage(describer, terminal, 78)
+	pixels, err := base64.StdEncoding.DecodeString(protocol.Deref(served.DataB64))
+	if !served.Success || err != nil || protocol.Deref(served.Width) != 3 || protocol.Deref(served.Height) != 2 || len(pixels) < 4 ||
+		!bytes.Equal(pixels[:3], []byte{10, 20, 30}) {
+		t.Errorf("image 78 was served as %+v (pixels %v, %v), want the file's 3x2 pixels", served, pixels, err)
+	}
+
+	describer.TypeLine(session, fmt.Sprintf(`printf '\033\033_Ga=t,t=f,f=100,q=2,i=79;%s\033\\'; printf 'mark%%s\n' er-unread`, named))
+	transportAwaitOutput(describer, terminal, "marker-unread")
+	if unread := kittyImage(describer, terminal, 79); unread.Success {
+		t.Errorf("a path the terminal itself parsed was read as image 79 at %dx%d, want the terminal never to open a named file", protocol.Deref(unread.Width), protocol.Deref(unread.Height))
 	}
 }
 

@@ -27,14 +27,10 @@ static GhosttyResult ghosttyvt_install(GhosttyTerminal t, void* userdata) {
 	return ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_PROGRAM_STATUS, (const void*)goProgramStatus);
 }
 
-// Set the kitty image storage limit, and accept images a program names by file
-// path. ghostty_terminal_set reads each value synchronously, so the stack
-// locals need not outlive the call.
-static GhosttyResult ghosttyvt_set_kitty_images(GhosttyTerminal t, uint64_t limit) {
-	GhosttyResult rc = ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT, &limit);
-	if (rc != GHOSTTY_SUCCESS) return rc;
-	bool file_medium = true;
-	return ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_FILE, &file_medium);
+// Set the kitty image storage limit. ghostty_terminal_set reads the value
+// synchronously, so the caller's stack local need not outlive the call.
+static GhosttyResult ghosttyvt_set_kitty_limit(GhosttyTerminal t, uint64_t v) {
+	return ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT, &v);
 }
 
 // Scrollback is a construction-time concern for us but a post-construction
@@ -333,9 +329,9 @@ func (t *Terminal) configure(maxSB int, opts Options) (*Terminal, error) {
 		C.ghostty_terminal_free(t.term)
 		return nil, fmt.Errorf("ghosttyvt: set max scrollback failed: rc=%d", int(rc))
 	}
-	if rc := C.ghosttyvt_set_kitty_images(t.term, C.uint64_t(opts.KittyImageStorageLimit)); rc != C.GHOSTTY_SUCCESS {
+	if rc := C.ghosttyvt_set_kitty_limit(t.term, C.uint64_t(opts.KittyImageStorageLimit)); rc != C.GHOSTTY_SUCCESS {
 		C.ghostty_terminal_free(t.term)
-		return nil, fmt.Errorf("ghosttyvt: set kitty image options failed: rc=%d", int(rc))
+		return nil, fmt.Errorf("ghosttyvt: set kitty image storage limit failed: rc=%d", int(rc))
 	}
 	if rc := C.ghosttyvt_set_continuation(t.term, C.size_t(ContinuationMaxBytes)); rc != C.GHOSTTY_SUCCESS {
 		C.ghostty_terminal_free(t.term)

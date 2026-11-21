@@ -12,8 +12,6 @@ import (
 	"image"
 	"image/color"
 	"image/png"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -72,30 +70,6 @@ func TestKittyPNGTransmissionsAreDecodedWithinGhosttysLimits(t *testing.T) {
 			t.Errorf("%s: pixels %v, want %v", tc.name, img.Data, tc.pixels)
 		case !strings.Contains(response, tc.response) || strings.Contains(response, "dimensions too large"):
 			t.Errorf("%s: response %q, want %q and never a post-decode dimensions rejection", tc.name, response, tc.response)
-		}
-	}
-}
-
-func TestAnImageAProgramNamesByFilePathIsStoredOnEitherScreen(t *testing.T) {
-	term, err := New(20, 8, Options{KittyImageStorageLimit: 10 << 20})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(term.Close)
-	path := filepath.Join(t.TempDir(), "image.png")
-	if err := os.WriteFile(path, encodeWidePNG(t, 4), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	named := base64.StdEncoding.EncodeToString([]byte(path))
-	for i, screen := range []string{"primary", "alternate"} {
-		if screen == "alternate" {
-			term.Write([]byte("\x1b[?1049h"))
-		}
-		id := uint32(90 + i)
-		term.Write([]byte(fmt.Sprintf("\x1b_Ga=t,t=f,f=100,i=%d,q=2;%s\x1b\\", id, named)))
-		img, ok := term.KittyImage(id)
-		if !ok || img.Width != 4 || img.Height != 1 {
-			t.Errorf("%s screen: stored = %v at %dx%d, want the 4x1 image", screen, ok, img.Width, img.Height)
 		}
 	}
 }

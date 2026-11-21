@@ -1,5 +1,11 @@
-use std::fs::File;
-use std::io::Read;
+use std::ffi::OsStr;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Seek, SeekFrom};
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::OpenOptionsExt;
+
+use base64::Engine as _;
+use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD};
 
 use crate::blocks::BlockTable;
 use crate::ghostty::{HandoverScreen, KittyImage, KittyPlacement, Terminal, Theme};
@@ -95,7 +101,10 @@ impl WireFeeder {
                         }
                         wire.extend_from_slice(&bytes);
                     }
-                    Segment::Kitty(bytes) => self.write_apc(&bytes, &mut wire),
+                    Segment::Kitty(bytes) => {
+                        let apc = inline_named_file(&bytes).unwrap_or(bytes);
+                        self.write_apc(&apc, &mut wire);
+                    }
                 }
             }
         }
@@ -226,6 +235,118 @@ impl WireFeeder {
     }
 }
 
+const INLINE_FILE_MAX_BYTES: u64 = (65 << 20) / 4 * 3;
+
+fn inline_named_file(apc: &[u8]) -> Option<Vec<u8>> {
+    let body = apc.strip_prefix(b"\x1b_G")?;
+    let body = body
+        .strip_suffix(WIRE_ST)
+        .or_else(|| body.strip_suffix(b"\x9c"))
+        .unwrap_or(body);
+    let (control, payload) = match body.iter().position(|&b| b == b';') {
+        Some(at) => (&body[..at], &body[at + 1..]),
+        None => (body, &body[body.len()..]),
+    };
+    let mut medium = b'd';
+    let (mut offset, mut size) = (0_u64, 0_u64);
+    let mut direct = b"\x1b_Gt=d".to_vec();
+    for pair in control.split(|&b| b == b',') {
+        let (key, value) = match pair.iter().position(|&b| b == b'=') {
+            Some(at) => (&pair[..at], &pair[at + 1..]),
+            None => (pair, &pair[pair.len()..]),
+        };
+        let number = || std::str::from_utf8(value).ok()?.parse::<u64>().ok();
+        match key {
+            b"t" => medium = value.first().copied().unwrap_or(medium),
+            b"O" => offset = number().unwrap_or_default(),
+            b"S" => size = number().unwrap_or_default(),
+            b"m" => {}
+            _ => {
+                direct.push(b',');
+                direct.extend_from_slice(pair);
+            }
+        }
+    }
+    if medium != b'f' {
+        return None;
+    }
+    match read_named_image_file(payload, offset, size) {
+        Ok(data) => {
+            direct.push(b';');
+            direct.extend_from_slice(STANDARD.encode(data).as_bytes());
+            direct.extend_from_slice(WIRE_ST);
+            Some(direct)
+        }
+        Err(error) => {
+            eprintln!("kitty: did not read an image a program named by path: {error}");
+            None
+        }
+    }
+}
+
+fn read_named_image_file(encoded_path: &[u8], offset: u64, size: u64) -> Result<Vec<u8>, String> {
+    let path = STANDARD
+        .decode(encoded_path)
+        .or_else(|_| STANDARD_NO_PAD.decode(encoded_path))
+        .map_err(|error| format!("the path is not base64: {error}"))?;
+    let resolved =
+        std::fs::canonicalize(OsStr::from_bytes(&path)).map_err(|error| error.to_string())?;
+    if under_system_directory(&resolved) {
+        return Err(format!(
+            "{} is under /proc, /sys or /dev",
+            resolved.display()
+        ));
+    }
+    if size > INLINE_FILE_MAX_BYTES {
+        return Err(format!(
+            "size {size} is larger than one transmission carries"
+        ));
+    }
+    let mut file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NONBLOCK | libc::O_NOCTTY)
+        .open(&resolved)
+        .map_err(|error| format!("{}: {error}", resolved.display()))?;
+    let regular = file
+        .metadata()
+        .map_err(|error| error.to_string())?
+        .is_file();
+    if !regular {
+        return Err(format!("{} is not a regular file", resolved.display()));
+    }
+    file.seek(SeekFrom::Start(offset))
+        .map_err(|error| error.to_string())?;
+    let limit = if size == 0 {
+        INLINE_FILE_MAX_BYTES + 1
+    } else {
+        size
+    };
+    let mut data = Vec::new();
+    file.take(limit)
+        .read_to_end(&mut data)
+        .map_err(|error| error.to_string())?;
+    let read = data.len() as u64;
+    if size > 0 && read != size {
+        return Err(format!(
+            "{} holds {read} bytes at offset {offset}, not the {size} asked for",
+            resolved.display()
+        ));
+    }
+    if read > INLINE_FILE_MAX_BYTES {
+        return Err(format!(
+            "{} is larger than one transmission carries",
+            resolved.display()
+        ));
+    }
+    Ok(data)
+}
+
+fn under_system_directory(path: &std::path::Path) -> bool {
+    path.starts_with("/proc")
+        || path.starts_with("/sys")
+        || (path.starts_with("/dev") && !path.starts_with("/dev/shm"))
+}
+
 fn tracked_rows(
     before: Option<&crate::ghostty::TrackedRef>,
     after: Option<&crate::ghostty::TrackedRef>,
@@ -307,6 +428,31 @@ mod tests {
             serde_json::to_value(adopted.snapshot_blocks()).expect("blocks"),
             before
         );
+    }
+
+    #[test]
+    fn an_image_a_program_names_by_file_path_is_stored_on_either_screen() {
+        use base64::Engine as _;
+        let path =
+            std::env::temp_dir().join(format!("attn-wire-named-image-{}.png", std::process::id()));
+        let mut png = Vec::new();
+        let mut encoder = png::Encoder::new(&mut png, 3, 2);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder
+            .write_header()
+            .expect("png header")
+            .write_image_data(&[255; 24])
+            .expect("png pixels");
+        std::fs::write(&path, &png).expect("write png");
+        let named =
+            base64::engine::general_purpose::STANDARD.encode(path.as_os_str().as_encoded_bytes());
+        let mut feeder = WireFeeder::new(Terminal::new(80, 24).expect("terminal"), mint_epoch());
+        feeder.feed(format!("\x1b_Ga=t,t=f,f=100,i=5,q=2;{named}\x1b\\").as_bytes());
+        let primary = feeder.kitty_image(5).map(|i| (i.width, i.height));
+        feeder.feed(format!("\x1b[?1049h\x1b_Ga=t,t=f,f=100,i=6,q=2;{named}\x1b\\").as_bytes());
+        let alternate = feeder.kitty_image(6).map(|i| (i.width, i.height));
+        std::fs::remove_file(&path).expect("remove png");
+        assert_eq!((primary, alternate), (Some((3, 2)), Some((3, 2))));
     }
 
     #[test]

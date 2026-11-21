@@ -2,7 +2,14 @@ package pty
 
 import (
 	"bytes"
+	"encoding/base64"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
+	"syscall"
 
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
@@ -91,7 +98,7 @@ func (f *wireFeeder) feed(data []byte) ([]byte, string) {
 				f.wire = append(f.wire, seg.Bytes...)
 			}
 		case feedSegKittyAPC:
-			f.writeAPC(seg.Bytes)
+			f.writeAPC(f.inlineNamedFile(seg.Bytes))
 		case feedSegOSC133:
 			f.wire = append(f.wire, seg.Bytes...)
 			f.blocks.write(seg.Bytes)
@@ -220,19 +227,117 @@ func (f *wireFeeder) noteTransmission(apc []byte, stored bool) {
 	)
 }
 
-func parseKittyTransmission(apc []byte) (t kittyTransmission, more bool, ok bool) {
-	body := apc
-	body = bytes.TrimPrefix(body, []byte("\x1b_G"))
-	if len(body) == len(apc) {
-		return t, false, false
+func splitKittyAPC(apc []byte) (control, payload []byte, ok bool) {
+	body, ok := bytes.CutPrefix(apc, []byte("\x1b_G"))
+	if !ok {
+		return nil, nil, false
 	}
 	body = bytes.TrimSuffix(bytes.TrimSuffix(body, []byte("\x1b\\")), []byte{0x9c})
+	control, payload, _ = bytes.Cut(body, []byte(";"))
+	return control, payload, true
+}
 
-	control := body
-	if i := bytes.IndexByte(body, ';'); i >= 0 {
-		control = body[:i]
-		t.payload = uint64(len(body)-i-1) * 3 / 4
+const kittyInlineFileMaxBytes = (65 << 20) / 4 * 3
+
+func (f *wireFeeder) inlineNamedFile(apc []byte) []byte {
+	control, payload, ok := splitKittyAPC(apc)
+	if !ok {
+		return apc
 	}
+	medium := byte('d')
+	var offset, size int64
+	direct := []byte("\x1b_Gt=d")
+	for _, pair := range bytes.Split(control, []byte(",")) {
+		key, value, _ := bytes.Cut(pair, []byte("="))
+		switch string(key) {
+		case "t":
+			if len(value) > 0 {
+				medium = value[0]
+			}
+		case "O":
+			offset, _ = strconv.ParseInt(string(value), 10, 64)
+		case "S":
+			size, _ = strconv.ParseInt(string(value), 10, 64)
+		case "m":
+		default:
+			direct = append(append(direct, ','), pair...)
+		}
+	}
+	if medium != 'f' {
+		return apc
+	}
+	data, err := readNamedImageFile(payload, offset, size)
+	if err != nil {
+		if f.logf != nil {
+			f.logf("pty kitty: did not read an image a program named by path: %v", err)
+		}
+		return apc
+	}
+	direct = append(direct, ';')
+	direct = base64.StdEncoding.AppendEncode(direct, data)
+	return append(direct, wireST...)
+}
+
+func readNamedImageFile(encodedPath []byte, offset, size int64) ([]byte, error) {
+	path, err := base64.StdEncoding.DecodeString(string(encodedPath))
+	if err != nil {
+		path, err = base64.RawStdEncoding.DecodeString(string(encodedPath))
+	}
+	if err != nil {
+		return nil, fmt.Errorf("the path is not base64: %w", err)
+	}
+	resolved, err := filepath.EvalSymlinks(string(path))
+	if err != nil {
+		return nil, err
+	}
+	if resolved, err = filepath.Abs(resolved); err != nil {
+		return nil, err
+	}
+	if underSystemDirectory(resolved) {
+		return nil, fmt.Errorf("%s is under /proc, /sys or /dev", resolved)
+	}
+	if offset < 0 || size < 0 || size > kittyInlineFileMaxBytes {
+		return nil, fmt.Errorf("offset %d and size %d are out of range", offset, size)
+	}
+	file, err := os.OpenFile(resolved, os.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOCTTY, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", resolved)
+	}
+	limit := size
+	if limit == 0 {
+		limit = kittyInlineFileMaxBytes + 1
+	}
+	data, err := io.ReadAll(io.NewSectionReader(file, offset, limit))
+	switch {
+	case err != nil:
+		return nil, err
+	case size > 0 && int64(len(data)) != size:
+		return nil, fmt.Errorf("%s holds %d bytes at offset %d, not the %d asked for", resolved, len(data), offset, size)
+	case len(data) > kittyInlineFileMaxBytes:
+		return nil, fmt.Errorf("%s is larger than one transmission carries (%d bytes)", resolved, kittyInlineFileMaxBytes)
+	}
+	return data, nil
+}
+
+func underSystemDirectory(path string) bool {
+	return strings.HasPrefix(path, "/proc/") || strings.HasPrefix(path, "/sys/") ||
+		(strings.HasPrefix(path, "/dev/") && !strings.HasPrefix(path, "/dev/shm/"))
+}
+
+func parseKittyTransmission(apc []byte) (t kittyTransmission, more bool, ok bool) {
+	control, payload, ok := splitKittyAPC(apc)
+	if !ok {
+		return t, false, false
+	}
+	t.payload = uint64(len(payload)) * 3 / 4
 
 	action := byte('t')
 	var width, height uint64
