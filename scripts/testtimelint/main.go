@@ -23,7 +23,7 @@ var allowed = map[string]string{
 	"internal/jobs/stores_test.go TestRetentionTrimsCompletedJobsBySubSecondAgeAndKeepsDeadOnes":                     "runs in onTheJobDatabase's synctest bubble",
 	"internal/fakeagent/codex_remote.go (*codexRemote).stayConnected":                                                "the fake Codex's own reconnect backoff, which the real Codex has too",
 	"internal/fakeagent/claude_mod.go (*fakeMod).pollLoop":                                                           "the fake Claude mod's own poll retry backoff, which the real mod has too",
-	"internal/fakeagent/app_server.go (*Kit).AppServer":                                                              "real-time poll for a launched app-server; replace with a signal",
+	"internal/fakeagent/app_server.go (*Kit).AppServerAfter":                                                         "real-time poll for a launched app-server; replace with a signal",
 	"internal/fakeagent/app_server.go (*serverView).begin":                                                           "real-time poll for the app-server socket; replace with a signal",
 	"internal/ptybackend/shared_host_integration_test.go waitForSessionIDs":                                          "real-time poll of the shared host; replace with a signal",
 	"internal/ptybackend/shared_host_integration_test.go waitForSessionExit":                                         "real-time poll of the shared host; replace with a signal",
