@@ -2,8 +2,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"strings"
 	"time"
 
@@ -13,26 +11,14 @@ import (
 
 func (d *Daemon) terminalCommands() map[string]command.Handler {
 	return map[string]command.Handler{
-		"terminal ls":    refusedAsArguments(command.Typed(d.runTerminalList)),
-		"terminal open":  refusedAsArguments(command.Typed(d.runTerminalOpen)),
-		"terminal run":   refusedAsArguments(command.Typed(d.runTerminalRun)),
-		"terminal send":  refusedAsArguments(command.Typed(d.runTerminalSend)),
-		"terminal read":  refusedAsArguments(command.Typed(d.runTerminalRead)),
-		"terminal wait":  refusedAsArguments(command.Typed(d.runTerminalWait)),
-		"terminal move":  refusedAsArguments(command.Typed(d.runTerminalMove)),
-		"terminal close": refusedAsArguments(command.Typed(d.runTerminalClose)),
-	}
-}
-
-func refusedAsArguments(handler command.Handler) command.Handler {
-	return func(ctx context.Context, c command.Caller, args json.RawMessage) (any, error) {
-		result, err := handler(ctx, c, args)
-		if err != nil {
-			refusal := command.AsRefusal(err)
-			refusal.Arguments = true
-			return nil, refusal
-		}
-		return result, nil
+		"terminal ls":    command.Typed(d.runTerminalList),
+		"terminal open":  command.Typed(d.runTerminalOpen),
+		"terminal run":   command.Typed(d.runTerminalRun),
+		"terminal send":  command.Typed(d.runTerminalSend),
+		"terminal read":  command.Typed(d.runTerminalRead),
+		"terminal wait":  command.Typed(d.runTerminalWait),
+		"terminal move":  command.Typed(d.runTerminalMove),
+		"terminal close": command.Typed(d.runTerminalClose),
 	}
 }
 
@@ -50,7 +36,7 @@ func terminalDeadline(ctx context.Context, timeout string) (context.Context, con
 }
 
 func timedOut(ctx context.Context, err error) error {
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	if deadline, bounded := ctx.Deadline(); err != nil && bounded && !time.Now().Before(deadline) {
 		return command.Refuse(command.CodeTimeout, "context deadline exceeded")
 	}
 	return err

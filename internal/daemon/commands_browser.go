@@ -176,17 +176,27 @@ func (d *Daemon) runBrowserScroll(ctx context.Context, c command.Caller, a comma
 	return d.browse(ctx, c, browserControl{action: "perform_actions", params: encodedParams(map[string]any{"actions": actions})})
 }
 
-func browserParams(given string) (*string, error) {
+// browserToolMaxActionMs bounds the timeout a tool call may put in params, so
+// the call answers within browserControlDefaultTimeout (20 s): the action's
+// timeout plus browserControlTimeoutMargin (5 s). That is under the shortest
+// tool-call limit of the harnesses that call attn's tools, pi-mcp 1.3.0's 30 s
+// request default, below Claude Code's 60 s and Codex's 300 s.
+const browserToolMaxActionMs = 15000
+
+func browserParams(given string, wait bool) (*string, error) {
 	params := cmp.Or(given, "{}")
 	var object map[string]any
 	if err := json.Unmarshal([]byte(params), &object); err != nil || object == nil {
 		return nil, command.Usage("{params} must be a JSON object")
 	}
+	if timeout, ok := object["timeout"].(float64); ok && !wait && timeout > browserToolMaxActionMs {
+		return nil, command.Usage("a tool call's {params} timeout is at most %d ms, so the call answers within %s; look again with a later call", browserToolMaxActionMs, browserControlDefaultTimeout)
+	}
 	return protocol.Ptr(params), nil
 }
 
 func (d *Daemon) runBrowserCommand(ctx context.Context, c command.Caller, a command.BrowserCommandArgs) (any, error) {
-	params, err := browserParams(a.Params)
+	params, err := browserParams(a.Params, a.Wait)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +208,7 @@ func (d *Daemon) runBrowserScreenshot(ctx context.Context, c command.Caller, a c
 }
 
 func (d *Daemon) runBrowserPDF(ctx context.Context, c command.Caller, a command.BrowserPdfArgs) (any, error) {
-	params, err := browserParams(a.Params)
+	params, err := browserParams(a.Params, a.Wait)
 	if err != nil {
 		return nil, err
 	}

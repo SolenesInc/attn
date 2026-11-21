@@ -109,9 +109,9 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"ask show":                {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"ask close":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"browser open":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
-		"browser snapshot":        {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
-		"browser find":            {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
-		"browser wait":            {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+		"browser snapshot":        {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+		"browser find":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+		"browser wait":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"browser click":           {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"browser type":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"browser press":           {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
@@ -119,7 +119,7 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"browser back":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"browser forward":         {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"browser reload":          {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
-		"browser cookies":         {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+		"browser cookies":         {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"browser command":         {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"browser screenshot":      {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"bad_capture": "Take the capture again; the host answered with data that is not base64.", "write_failed": "Pass a path in a folder you can write to."}},
 		"browser pdf":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"bad_capture": "Take the capture again; the host answered with data that is not base64.", "write_failed": "Pass a path in a folder you can write to."}},
@@ -359,6 +359,7 @@ type BrowserCookiesArgs struct {
 type BrowserCommandArgs struct {
 	Action string `json:"action,omitempty"`
 	Params string `json:"params,omitempty"`
+	Wait   bool   `json:"wait,omitempty"`
 }
 
 type BrowserScreenshotArgs struct {
@@ -368,6 +369,7 @@ type BrowserScreenshotArgs struct {
 type BrowserPdfArgs struct {
 	Path   string `json:"path,omitempty"`
 	Params string `json:"params,omitempty"`
+	Wait   bool   `json:"wait,omitempty"`
 }
 
 type CalloutAnchorsArgs struct {

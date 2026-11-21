@@ -130,6 +130,7 @@ pub const COMMANDS: &[Command] = &[
         args: &[
             Arg { name: "action", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "params", cli: Cli::Flag("params"), value: Value::Text, source: Source::Given, required: false, list: false },
+            Arg { name: "wait", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
         ],
     },
     Command {
@@ -149,6 +150,7 @@ pub const COMMANDS: &[Command] = &[
         args: &[
             Arg { name: "path", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "params", cli: Cli::Flag("params"), value: Value::Text, source: Source::Given, required: false, list: false },
+            Arg { name: "wait", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
         ],
     },
 ];

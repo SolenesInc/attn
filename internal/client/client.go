@@ -1068,7 +1068,7 @@ func commandResult[R any](c *Client, name string, session protocol.SessionID, ar
 }
 
 func (c *Client) BrowserCommand(action string, params string, sessionID protocol.SessionID) (string, error) {
-	result, err := commandResult[protocol.BrowserResult](c, "browser command", sessionID, map[string]any{"action": action, "params": params})
+	result, err := commandResult[protocol.BrowserResult](c, "browser command", sessionID, map[string]any{"action": action, "params": params, "wait": true})
 	if err != nil {
 		return "", err
 	}

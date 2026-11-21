@@ -60,7 +60,6 @@ commands:
     summary: print a semantic page snapshot
     runs: home
     grant: full
-    read_only: true
     doc: |
       Returns a semantic snapshot of the page: its state, and the locators and element references the other commands take.
     result: BrowserResult
@@ -69,7 +68,6 @@ commands:
     summary: find an element and return its reference
     runs: home
     grant: full
-    read_only: true
     doc: |
       Finds the element that `using` and `value` locate, such as using role and value textbox, and returns its reference for `browser_click` and `browser_type`. `name` narrows by accessible name; `all` returns every match.
     args:
@@ -85,7 +83,6 @@ commands:
     summary: wait for an element to be attached, visible, hidden or detached
     runs: home
     grant: full
-    read_only: true
     offered: false
     reason: "It holds the call until the element reaches the state, up to 120 s, past a harness's tool limit (D9). A tool caller looks with browser_snapshot or browser_find."
     doc: |
@@ -172,7 +169,6 @@ commands:
     summary: list cookies for the current page
     runs: home
     grant: full
-    read_only: true
     doc: |
       Lists the cookies of the current page.
     result: BrowserResult
@@ -182,10 +178,11 @@ commands:
     runs: home
     grant: full
     doc: |
-      Calls the WebDriver-shaped action `action` with `params`, a JSON object.
+      Calls the WebDriver-shaped action `action` with `params`, a JSON object. Called as a tool, a `timeout` in `params` is at most 15000 ms, so the call answers within 20 s; on the CLI it is at most 120000.
     args:
       - {name: action, type: name, required: true, cli: pos, placeholder: "<action>", doc: "the action, such as get_title or find_element"}
       - {name: params, type: text, cli: "--params", placeholder: "<json>", doc: "the action's parameters, as a JSON object; {} by default"}
+      - {name: wait, type: bool, cli: internal, doc: "allow a params timeout up to 120000 ms; the CLI always sets it"}
     result: BrowserResult
     examples:
       - {action: find_element, params: '{"using":"label","value":"Email"}'}
@@ -208,10 +205,11 @@ commands:
     runs: home
     grant: full
     doc: |
-      Saves a PDF of the page at `path`, attn-browser.pdf by default, readable only by you, and returns the absolute path. `params` takes the print options as a JSON object.
+      Saves a PDF of the page at `path`, attn-browser.pdf by default, readable only by you, and returns the absolute path. `params` takes the print options as a JSON object; called as a tool, its `timeout` is at most 15000 ms.
     args:
       - {name: path, type: path, cli: pos, local: destination, placeholder: "<path>", doc: "where to save the PDF"}
       - {name: params, type: text, cli: "--params", placeholder: "<json>", doc: "the print options, as a JSON object; {} by default"}
+      - {name: wait, type: bool, cli: internal, doc: "allow a params timeout up to 120000 ms; the CLI always sets it"}
     result: BrowserFileResult
     errors:
       - {code: bad_capture, fix: "Take the capture again; the host answered with data that is not base64."}

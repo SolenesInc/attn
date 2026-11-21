@@ -2,8 +2,10 @@ package daemon_test
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -78,4 +80,50 @@ func TestAnAgentDrivesTheBrowserTileWithTheBrowserTools(t *testing.T) {
 		t.Errorf("browser_pdf with no path = %+v, want attn-browser.pdf in the session's folder", saved)
 	}
 	shapes.finish("browser_")
+}
+
+func TestBrowserCommandsActOnlyForTheCallerTheyCanName(t *testing.T) {
+	t.Setenv("ATTN_BROWSER_HOST_TOKEN", browserHostToken)
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
+	profile := app.SelectedProfile()
+
+	for _, verb := range []string{"browser snapshot", "browser find", "browser cookies", "browser open", "browser click"} {
+		var refused struct {
+			Ok             bool                     `json:"ok"`
+			CommandRefusal *protocol.CommandRefusal `json:"command_refusal"`
+		}
+		frame := `{"cmd":"run_command","command":"` + verb + `","args":{},"caller_id":"terminal-that-shows-nothing","profile_id":"` + profile + `"}`
+		if err := json.Unmarshal(socketReply(t, w, frame), &refused); err != nil {
+			t.Fatal(err)
+		}
+		if refused.Ok || refused.CommandRefusal == nil || refused.CommandRefusal.Code != "no_session" {
+			t.Errorf("%s from a terminal that shows no session = %+v, want the no_session refusal before it reaches any profile's browser", verb, refused)
+		}
+	}
+
+	for _, tc := range []struct {
+		params string
+		bound  bool
+	}{
+		{`{"timeout":15000}`, false},
+		{`{"timeout":15001}`, true},
+		{`{"timeout":120000}`, true},
+	} {
+		result := agent.mustCall(t, "browser_command", map[string]any{"action": "wait_for", "params": tc.params})
+		text := resultText(result)
+		if bounded := strings.Contains(text, "a tool call's params timeout is at most 15000 ms"); !result.IsError || bounded != tc.bound {
+			t.Errorf("browser_command wait_for with %s = %q, want the tool bound refusal: %t", tc.params, text, tc.bound)
+		}
+	}
+	if _, err := w.Client().BrowserCommand("wait_for", `{"timeout":120000}`, protocol.SessionID(session)); err == nil || !strings.Contains(err.Error(), "no browser tile is open") {
+		t.Errorf("the CLI's wait_for with a 120000 ms timeout = %v, want it past the tool bound, refused only for the missing tile", err)
+	}
+	pdf := agent.mustCall(t, "browser_pdf", map[string]any{"params": `{"timeout":60000}`})
+	if text := resultText(pdf); !pdf.IsError || !strings.Contains(text, "at most 15000 ms") {
+		t.Errorf("browser_pdf with a 60000 ms params timeout = %q, want the tool bound refusal", text)
+	}
 }

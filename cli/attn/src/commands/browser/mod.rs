@@ -58,6 +58,9 @@ impl Family for Browser {
     }
 
     fn before_send(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop> {
+        if cmd.name == "command" || cmd.name == "pdf" {
+            parsed.args.insert("wait".to_string(), Json::from(true));
+        }
         let Some(fallback) = default_capture(cmd.name) else {
             return Ok(());
         };

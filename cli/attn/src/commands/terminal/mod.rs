@@ -131,6 +131,10 @@ impl Family for Terminal {
         Stop(1)
     }
 
+    fn refused_line(&self, _verb: &str, message: &str) -> String {
+        format!("terminal: {message}")
+    }
+
     fn before_send(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop> {
         if cmd.name == "move"
             && !parsed.has("desktop")
