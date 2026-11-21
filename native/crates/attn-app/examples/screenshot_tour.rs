@@ -3576,6 +3576,178 @@ fn settings_page_states(dark: bool) {
     snap(&mut world, "settings-connectivity-empty", dark);
 }
 
+/// The empty and failed states of the Settings pages no other scene shows: Paired senders with
+/// none, the Event bus with nothing on it and with its read failed, the Task runner with its
+/// read failed, Models and Background agents with the harness list's read failed, a refused
+/// plugin install, a refused outpost, and Analytics' records read failed.
+fn settings_missing_states(dark: bool) {
+    let mut world = settings_world(
+        dark,
+        "senders",
+        "senders",
+        &[],
+        |_| {},
+        |daemon| {
+            daemon.on("senders_get", |_: &Request| {
+                message(attn_protocol::SendersUpdatedMessage {
+                    senders: Vec::new(),
+                    ..attn_protocol::SendersUpdatedMessage::new()
+                })
+            });
+        },
+    );
+    snap(&mut world, "settings-senders-empty", dark);
+
+    let mut world = settings_world(
+        dark,
+        "eventBus",
+        "event bus",
+        &[],
+        |_| {},
+        |daemon| {
+            daemon.on("bus_status_get", |r: &Request| {
+                message(BusStatusResultMessage {
+                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                    success: true,
+                    ..BusStatusResultMessage::new()
+                })
+            });
+        },
+    );
+    snap(&mut world, "settings-eventBus-empty", dark);
+
+    let mut world = settings_world(
+        dark,
+        "eventBus",
+        "event bus",
+        &[],
+        |_| {},
+        |daemon| {
+            daemon.on("bus_status_get", |r: &Request| {
+                message(BusStatusResultMessage {
+                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                    success: false,
+                    error: Some("reading the event log failed: database is locked".into()),
+                    ..BusStatusResultMessage::new()
+                })
+            });
+        },
+    );
+    snap(&mut world, "settings-eventBus-failed", dark);
+
+    let mut world = settings_world(
+        dark,
+        "backgroundTasks",
+        "task runner",
+        &[],
+        |_| {},
+        |daemon| {
+            daemon.on("task_list", |r: &Request| {
+                message(attn_protocol::TaskListResultMessage {
+                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                    success: false,
+                    error: Some("reading the task queue failed: database is locked".into()),
+                    ..attn_protocol::TaskListResultMessage::new()
+                })
+            });
+        },
+    );
+    snap(&mut world, "settings-backgroundTasks-failed", dark);
+
+    for (section, search) in [
+        ("models", "models"),
+        ("backgroundAgents", "background agents"),
+    ] {
+        let mut world = settings_world(
+            dark,
+            section,
+            search,
+            &[],
+            |_| {},
+            |daemon| {
+                daemon.on("delegation_preferences_get", |r: &Request| {
+                    message(DelegationPreferencesResultMessage {
+                        request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                        success: false,
+                        error: Some(
+                            "reading delegation preferences failed: the daemon is restarting"
+                                .into(),
+                        ),
+                        ..DelegationPreferencesResultMessage::new()
+                    })
+                });
+            },
+        );
+        snap(&mut world, &format!("settings-{section}-failed"), dark);
+    }
+
+    let mut world = settings_world(
+        dark,
+        "plugins",
+        "plugins",
+        &[],
+        |_| {},
+        |daemon| {
+            daemon.on("list_plugins", |_: &Request| {
+                message(attn_protocol::PluginsUpdatedMessage::new())
+            });
+            daemon.on("install_plugin", |_: &Request| {
+                message(attn_protocol::PluginActionResultMessage {
+                    action: "install".into(),
+                    success: false,
+                    error: Some(
+                        "clone failed: repository git@host:team/missing.git not found".into(),
+                    ),
+                    ..attn_protocol::PluginActionResultMessage::new()
+                })
+            });
+        },
+    );
+    click(&mut world, Target::key("settings.plugins.source"));
+    world.gesture(|app| app.type_text("git@host:team/missing.git"));
+    click(&mut world, Target::key("settings.plugins.install"));
+    snap(&mut world, "settings-plugins-refused", dark);
+
+    let mut world = settings_world(
+        dark,
+        "outposts",
+        "outposts",
+        SWITCHED_ON,
+        |_| {},
+        |daemon| {
+            daemon.on("add_outpost", |_: &Request| {
+                json!({"event": "command_error", "cmd": "add_outpost", "success": false, "error": "Address studio:2200 is already paired"})
+            });
+        },
+    );
+    click(&mut world, Target::key("settings.outposts.name"));
+    world.gesture(|app| app.type_text("studio"));
+    click(&mut world, Target::key("settings.outposts.destination"));
+    world.gesture(|app| app.type_text("studio:2200"));
+    click(&mut world, Target::key("settings.outposts.submit"));
+    snap(&mut world, "settings-outposts-refused", dark);
+
+    let mut world = settings_world(
+        dark,
+        "analytics",
+        "analytics",
+        &[("analytics.enabled", "true")],
+        |_| {},
+        |daemon| {
+            daemon.on("list_analytics_records", |r: &Request| {
+                message(attn_protocol::ListAnalyticsRecordsResultMessage {
+                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
+                    success: false,
+                    error: Some("reading the analytics outbox failed: database is locked".into()),
+                    ..attn_protocol::ListAnalyticsRecordsResultMessage::new()
+                })
+            });
+        },
+    );
+    click(&mut world, Target::key("settings.analytics.views.all"));
+    snap(&mut world, "settings-analytics-records-failed", dark);
+}
+
 /// A Settings page in the smallest window at the largest text, its state changed by `change` and
 /// the daemon answering as `answer` scripts it.
 fn settings_smallest_page(
@@ -7202,6 +7374,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
             settings_bottom(dark, "experimental", "experimental", SWITCHED_ON)
         });
         scene("settings_page_states", || settings_page_states(dark));
+        scene("settings_missing_states", || settings_missing_states(dark));
         scene("settings_pricing", || settings_pricing(dark));
         scene("settings_route_picker", || settings_route_picker(dark));
         scene("settings_refused_rows", || settings_refused_rows(dark));
