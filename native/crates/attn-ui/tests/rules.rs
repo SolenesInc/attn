@@ -4,7 +4,8 @@
 use attn_ui::Tokens;
 use attn_ui::blocks::BannerTone;
 use attn_ui::colors::scheme_for;
-use attn_ui::gallery::{BANNERS, BUTTONS, FIELD_BOXES, SIZES, SUBJECTS};
+use attn_ui::colors::{ColorScheme, SCHEMES};
+use attn_ui::gallery::{BANNERS, BUTTONS, FIELD_BOXES, Library, SIZES, SUBJECTS, button_board};
 use rune::motion_gate::check::paint::{C_FILL, C_TEXT, Paint};
 use rune::motion_gate::{Recording, Sampler};
 use rune::render::Instance;
@@ -1618,30 +1619,75 @@ fn a_banner_stands_apart_from_the_title_bar_and_its_words_and_ring_read_on_it() 
     }
 }
 
+thread_local! {
+    static BOARD: std::cell::Cell<Option<(Tokens, bool, bool)>> =
+        const { std::cell::Cell::new(None) };
+}
+
+fn board_view(_: &(), _: &mut Cx<()>) -> El {
+    let (t, disabled, unavailable) = BOARD.with(|cell| cell.get()).expect("the board's colours");
+    let state = Library {
+        disabled,
+        unavailable,
+        ..Library::default()
+    };
+    button_board(&state, &t)
+}
+
+/// The button story's board, in `scheme`'s colours: the story itself draws only attn's.
+fn buttons_in(scheme: &ColorScheme, dark: bool, variant: &str) -> Runtime<()> {
+    let t = scheme.colors(dark).ui;
+    let (disabled, unavailable) = match variant {
+        "Rest" => (false, false),
+        "Disabled" => (true, false),
+        "Unavailable" => (false, true),
+        other => panic!("no button variant {other}"),
+    };
+    BOARD.with(|cell| cell.set(Some((t, disabled, unavailable))));
+    let mut rt = App::new(AppSpec {
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        ..AppSpec::new("buttons", WINDOW, || (), board_view)
+    })
+    .headless_runtime(WINDOW, Env::new(dark, SCALE));
+    rt.frame(0.0);
+    rt
+}
+
+fn keyed(rt: &Runtime<()>, key: &str) -> ElementInfo {
+    rt.elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some(key))
+        .unwrap_or_else(|| panic!("no element {key}"))
+}
+
 #[test]
-fn every_buttons_words_read_on_its_rest_fill_in_dark_and_light() {
-    for dark in [true, false] {
-        let t = tokens(dark);
-        let rt = story(dark, "Library/Button", "Rest");
-        let all = rt.elements();
-        for (look, _) in BUTTONS.iter().filter(|(look, _)| *look != "danger") {
-            for (size, _) in SIZES {
-                let key = format!("button.{look}.{size}");
-                let button = element(&rt, &key);
-                let fill = surface(&rt, &button, t.bg_panel);
-                let word = all
-                    .iter()
-                    .find(|e| {
-                        e.text_color.is_some()
-                            && std::iter::successors(e.parent, |&p| all[p].parent)
-                                .any(|p| all[p].key.as_deref() == Some(key.as_str()))
-                    })
-                    .unwrap_or_else(|| panic!("{key} draws no words"));
-                let reads = contrast(drawn_over(word.text_color.expect("words"), fill), fill);
-                assert!(
-                    reads >= TEXT_READS,
-                    "dark={dark}: {key}'s words read {reads:.2}:1 on its fill"
-                );
+fn every_buttons_words_read_on_its_rest_fill_in_every_scheme() {
+    for scheme in SCHEMES.iter() {
+        for dark in [true, false] {
+            let t = scheme.colors(dark).ui;
+            let rt = buttons_in(scheme, dark, "Rest");
+            let all = rt.elements();
+            for (look, _) in BUTTONS.iter().filter(|(look, _)| *look != "danger") {
+                for (size, _) in SIZES {
+                    let key = format!("button.{look}.{size}");
+                    let button = keyed(&rt, &key);
+                    let fill = surface(&rt, &button, t.bg_panel);
+                    let word = all
+                        .iter()
+                        .find(|e| {
+                            e.text_color.is_some()
+                                && std::iter::successors(e.parent, |&p| all[p].parent)
+                                    .any(|p| all[p].key.as_deref() == Some(key.as_str()))
+                        })
+                        .unwrap_or_else(|| panic!("{key} draws no words"));
+                    let reads = contrast(drawn_over(word.text_color.expect("words"), fill), fill);
+                    assert!(
+                        reads >= TEXT_READS,
+                        "{}, dark={dark}: {key}'s words read {reads:.2}:1 on its fill",
+                        scheme.id
+                    );
+                }
             }
         }
     }
@@ -2173,38 +2219,42 @@ const UNAVAILABLE: f32 = 0.5;
 const DISABLED_LABEL: f32 = 2.95;
 
 #[test]
-fn a_disabled_primary_keeps_its_hue_at_half_strength_and_its_label_reads_on_it() {
-    for (dark, variant) in [true, false]
-        .into_iter()
-        .flat_map(|dark| ["Disabled", "Unavailable"].map(|variant| (dark, variant)))
-    {
-        let t = tokens(dark);
-        let rt = story(dark, "Library/Button", variant);
-        let ground = [t.bg_panel.r, t.bg_panel.g, t.bg_panel.b].map(rune::theme::srgb_encode);
-        let primary = [t.primary.r, t.primary.g, t.primary.b].map(rune::theme::srgb_encode);
-        let half = [0, 1, 2].map(|c| primary[c] * UNAVAILABLE + ground[c] * (1.0 - UNAVAILABLE));
-        for size in ["regular", "compact"] {
-            let key = format!("button.primary.{size}");
-            let button = element(&rt, &key);
-            let fill = rt
-                .instances
-                .iter()
-                .position(|i| near(i.rect, device(button.rect)) && i.fill[3] > 0.0)
-                .unwrap_or_else(|| panic!("{key} {variant}, dark={dark}: draws no fill"));
-            let drawn = shown(&rt, Part::Fill(fill), t.bg_panel);
-            assert!(
-                (0..3).all(|c| (drawn[c] - half[c]).abs() < 0.02),
-                "{key} {variant}, dark={dark}: a disabled Primary is drawn {drawn:?}, not its hue at half strength {half:?}"
-            );
-            let (glyph, _) = *glyphs_in(&rt, &button)
-                .first()
-                .unwrap_or_else(|| panic!("{key} {variant}, dark={dark}: draws no label"));
-            let label = shown(&rt, Part::Fill(glyph), t.bg_panel);
-            let apart = contrast(label, drawn);
-            assert!(
-                apart >= DISABLED_LABEL - ROUNDING,
-                "{key} {variant}, dark={dark}: the label stands {apart:.2}:1 on the fill, under {DISABLED_LABEL}:1"
-            );
+fn a_disabled_primary_keeps_its_hue_at_half_strength_and_its_label_reads_on_it_in_every_scheme() {
+    for scheme in SCHEMES.iter() {
+        for (dark, variant) in [true, false]
+            .into_iter()
+            .flat_map(|dark| ["Disabled", "Unavailable"].map(|variant| (dark, variant)))
+        {
+            let id = scheme.id;
+            let t = scheme.colors(dark).ui;
+            let rt = buttons_in(scheme, dark, variant);
+            let ground = [t.bg_panel.r, t.bg_panel.g, t.bg_panel.b].map(rune::theme::srgb_encode);
+            let primary = [t.primary.r, t.primary.g, t.primary.b].map(rune::theme::srgb_encode);
+            let half =
+                [0, 1, 2].map(|c| primary[c] * UNAVAILABLE + ground[c] * (1.0 - UNAVAILABLE));
+            for size in ["regular", "compact"] {
+                let key = format!("button.primary.{size}");
+                let button = keyed(&rt, &key);
+                let fill = rt
+                    .instances
+                    .iter()
+                    .position(|i| near(i.rect, device(button.rect)) && i.fill[3] > 0.0)
+                    .unwrap_or_else(|| panic!("{id}, {key} {variant}, dark={dark}: draws no fill"));
+                let drawn = shown(&rt, Part::Fill(fill), t.bg_panel);
+                assert!(
+                    (0..3).all(|c| (drawn[c] - half[c]).abs() < 0.02),
+                    "{id}, {key} {variant}, dark={dark}: a disabled Primary is drawn {drawn:?}, not its hue at half strength {half:?}"
+                );
+                let (glyph, _) = *glyphs_in(&rt, &button).first().unwrap_or_else(|| {
+                    panic!("{id}, {key} {variant}, dark={dark}: draws no label")
+                });
+                let label = shown(&rt, Part::Fill(glyph), t.bg_panel);
+                let apart = contrast(label, drawn);
+                assert!(
+                    apart >= DISABLED_LABEL - ROUNDING,
+                    "{id}, {key} {variant}, dark={dark}: the label stands {apart:.2}:1 on the fill, under {DISABLED_LABEL}:1"
+                );
+            }
         }
     }
 }

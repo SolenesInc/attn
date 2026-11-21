@@ -335,7 +335,11 @@ fn buttons(s: &Library, cx: &mut Cx<Library>) -> El {
     if s.rings {
         cx.force_focus_rings();
     }
-    let t = library_tokens(cx);
+    button_board(s, &library_tokens(cx))
+}
+
+/// The button story's board, in the colors `t` holds.
+pub fn button_board(s: &Library, t: &Tokens) -> El {
     let rows = SIZES.iter().map(|&(size_key, size)| {
         let line = if s.long { col() } else { row().items_center() };
         door::gap(line, Space::S16).children(BUTTONS.iter().map(|&(look_key, look)| {
@@ -362,7 +366,7 @@ fn buttons(s: &Library, cx: &mut Cx<Library>) -> El {
                 button
             };
             let button: El = button
-                .build(&t)
+                .build(t)
                 .key(format!("button.{look_key}.{size_key}"))
                 .into();
             if s.narrow {
@@ -372,7 +376,7 @@ fn buttons(s: &Library, cx: &mut Cx<Library>) -> El {
             }
         }))
     });
-    library_stage(&t, door::gap(col(), Space::S24).children(rows))
+    library_stage(t, door::gap(col(), Space::S24).children(rows))
 }
 
 fn triggers(s: &Library, cx: &mut Cx<Library>) -> El {
