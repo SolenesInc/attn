@@ -42,10 +42,13 @@ func TestALaunchThatCarriesTheToolsLeavesTheirFamiliesCLITeachingToTheServer(t *
 		if dropped := !strings.Contains(text, hooks.GardenGuidance()) && !strings.Contains(text, seedCLITeaching); dropped != taught {
 			t.Errorf("%s left out the seed family's CLI teaching: %t, want %t, because its launch carries the tools: %t:\n%s", launch, dropped, taught, taught, text)
 		}
-		for _, kept := range []string{agentGuidanceLead, "`attn agent msg`", "## What attn can do"} {
+		for _, kept := range []string{agentGuidanceLead, "## What attn can do"} {
 			if !strings.Contains(text, kept) {
 				t.Errorf("%s launched without %q, which no tool teaches yet", launch, kept)
 			}
+		}
+		if dropped := !strings.Contains(text, "`attn agent msg`"); dropped != taught {
+			t.Errorf("%s left out the agent and session families' CLI teaching: %t, want %t:\n%s", launch, dropped, taught, text)
 		}
 	}
 }
