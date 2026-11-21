@@ -86,11 +86,10 @@ impl Pane {
             (_, true) => pane.border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle),
             (_, false) => pane,
         };
-        door::frame(pane, top, x, bottom)
-            .scroll(ScrollSpec {
-                stick_bottom: false,
-            })
-            .child(self.content)
-            .scroll_bar_styled(crate::thin_scroll_bar(t))
+        pane.scroll(ScrollSpec {
+            stick_bottom: false,
+        })
+        .child(door::frame(col().w_full(), top, x, bottom).child(self.content))
+        .scroll_bar_styled(crate::thin_scroll_bar(t))
     }
 }

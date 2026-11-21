@@ -161,6 +161,7 @@ struct Script {
     chief: bool,
     shown: Option<GardenReview>,
     candidates: Option<i64>,
+    size: (f32, f32),
 }
 
 impl Script {
@@ -170,6 +171,7 @@ impl Script {
             chief: true,
             shown,
             candidates: None,
+            size: (1400.0, 900.0),
         }
     }
 }
@@ -210,7 +212,7 @@ fn garden(script: Script) -> (World, Showing) {
                 ..SeedTransitionResultMessage::new()
             })
         });
-    let mut world = World::start_sized(daemon, (1400.0, 900.0));
+    let mut world = World::start_sized(daemon, script.size);
     world.open_desktop();
     world.gesture(|app| app.key(board()));
     (world, showing)
@@ -445,6 +447,64 @@ fn lays_the_expanded_review_out_as_the_seeds_it_holds_beside_the_seed_and_the_de
     );
     assert!(has(&world, NEXT), "the rail offers the next seed");
     assert!(world.runtime_is_at_rest());
+}
+
+/// The review expanded in the smallest window at the largest text, reading `item`.
+fn smallest_expanded(item: GardenReviewItem) -> World {
+    let (mut world, _) = garden(Script {
+        size: (800.0, 600.0),
+        ..Script::of(Some(review(vec![item])))
+    });
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some([("uiScale".to_owned(), "1.5".to_owned())].into()),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    click(&mut world, "Expand the garden");
+    click(&mut world, "Continue review");
+    world
+}
+
+/// The seed reader ends before the decision starts, and `key` stands whole and in view
+/// inside the decision.
+fn stands_whole_in_the_decision(world: &World, key: &str) {
+    let screen = world.screen();
+    let at = |target: Target| {
+        screen
+            .bounds(target.clone())
+            .unwrap_or_else(|| panic!("{target:?} is not on the screen"))
+    };
+    let [seed_x, _, seed_w, _] = at(Target::key("garden.review.viewport"));
+    let [x, y, w, h] = at(Target::key("garden.review.decision.viewport"));
+    assert!(
+        seed_x + seed_w <= x,
+        "the seed reader at {seed_x}+{seed_w} runs into the decision at {x}"
+    );
+    let [kx, ky, kw, kh] = at(Target::key(key));
+    assert!(
+        kx >= x && kx + kw <= x + w && ky >= y && ky + kh <= y + h,
+        "{key} at [{kx}, {ky}, {kw}, {kh}] leaves the decision at [{x}, {y}, {w}, {h}]"
+    );
+}
+
+#[test]
+fn the_expanded_review_keeps_the_advice_whole_beside_the_seed_in_the_smallest_window() {
+    let world = smallest_expanded(item());
+    stands_whole_in_the_decision(&world, "garden.review.advice");
+    let explanation = item().explanation.unwrap();
+    let said = advice(&world);
+    assert!(
+        said.iter().any(|s| s.contains("Park")) && said.contains(&explanation),
+        "the recommendation and its rationale both read: {said:?}"
+    );
+
+    let world = smallest_expanded(advised(|i| {
+        i.status = "queued".into();
+        i.recommendation = None;
+        i.explanation = None;
+        i.advisor_state = Some("running".into());
+    }));
+    stands_whole_in_the_decision(&world, "garden.review.waiting");
 }
 
 #[test]
