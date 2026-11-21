@@ -74,13 +74,14 @@ fn compose(panel: &Panel, t: &Tokens) -> Sheet {
             format!("To: {}", panel.label(&panel.mailbox())),
             Type::Name,
             t.text_primary,
-        ),
+        )
+        .wrap(),
     )
     .look(TriggerLook::Quiet)
     .open(picking)
     .disabled(!panel.editable())
     .build(t, super::toggle_picker);
-    let to = El::from(to).description("⌘K").focusable(false);
+    let to = El::from(to).description("⌘K").focusable(false).shrink();
     let recent = Button::new("Recent")
         .look(Look::Quiet)
         .size(Size::Compact)

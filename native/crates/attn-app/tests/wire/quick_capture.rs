@@ -428,6 +428,42 @@ fn the_mailbox_list_opens_with_cmd_k_and_picks_with_the_arrows() {
 }
 
 #[test]
+fn a_long_recipient_stays_out_of_recent_at_the_largest_text() {
+    let mut initial = state(PROFILE);
+    initial.crew = Some(vec![member(
+        "release",
+        "Platform-Engineering-Release-Management",
+        PROFILE,
+        true,
+    )]);
+    initial.settings = Some([("uiScale".to_owned(), "1.5".to_owned())].into());
+    let (daemon, _) = home();
+    let daemon = daemon.state(initial);
+    let mut world = World::start(daemon);
+    open(&mut world);
+    assert!(shows(&world, "To: Platform-Engineering-Release-Management"));
+    let screen = world.capture_screen();
+    let [tx, ty, tw, th] = screen.bounds(Target::key("capture.to")).expect("Send to");
+    let [rx, ..] = screen
+        .bounds(Target::key("capture.recent"))
+        .expect("Recent");
+    assert!(
+        tx + tw <= rx + 0.5,
+        "Send to reaches {}, past Recent at {rx}",
+        tx + tw
+    );
+    world.capture_gesture(|d| d.click_at((tx + tw - 2.0, ty + th / 2.0)));
+    assert!(
+        world
+            .capture_screen()
+            .get(Target::key("capture.to"))
+            .is("expanded"),
+        "a click at the end of the name opens Send to"
+    );
+    rest(&mut world);
+}
+
+#[test]
 fn the_send_to_button_says_whether_its_mailbox_list_is_open() {
     let (daemon, _) = home();
     let mut world = World::start(daemon);

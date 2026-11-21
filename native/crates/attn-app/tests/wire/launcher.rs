@@ -613,6 +613,60 @@ fn a_long_new_worktree_name_ends_inside_the_where_list_in_the_smallest_window_at
 }
 
 #[test]
+fn a_long_repository_name_leaves_the_new_worktree_name_its_field_in_the_smallest_window_at_the_largest_text()
+ {
+    const LONG: &str =
+        "/home/me/projects/customer-identity-and-access-management-platform-services";
+    let mut settings = settings("main_repo");
+    settings.push(("uiScale".to_owned(), "1.5".to_owned()));
+    let daemon = machine(
+        &[REPO],
+        RepoInfo {
+            repo: LONG.into(),
+            worktrees: Vec::new(),
+            ..shop("origin/main")
+        },
+        &settings,
+        vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
+    );
+    daemon.on("get_recent_locations", |_| {
+        message(RecentLocationsResultMessage {
+            success: true,
+            home_path: Some(HOME.into()),
+            recent_locations: vec![RecentLocation {
+                path: LONG.into(),
+                last_seen: "2026-05-16T16:09:00Z".into(),
+                use_count: 1,
+                repo_root: Some(LONG.into()),
+                ..RecentLocation::default()
+            }],
+            ..RecentLocationsResultMessage::new()
+        })
+    });
+    let mut world = World::start_sized(daemon, (800.0, 600.0));
+    world.open_desktop();
+    press_action(&mut world, &Action::SessionNew);
+    press(&mut world, Key::Tab);
+    assert!(where_shows(&world), "no Where list:\n{}", world.screen());
+
+    type_path(&mut world, "new-session", "topic-probe");
+    let [_, _, width, _] = world
+        .screen()
+        .bounds(Target::key("new-session.path.field"))
+        .expect("the name field is laid out");
+    assert!(
+        width > 0.0,
+        "the name field is {width} wide beside the repository's chip"
+    );
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        creates(&world),
+        [(LONG.into(), "topic-probe".into(), "origin/main".into())]
+    );
+    rest(&mut world);
+}
+
+#[test]
 fn a_named_worktree_starts_from_the_default_or_the_current_branch() {
     for (current, default_branch, from) in [
         (false, "origin/main", "origin/main"),

@@ -390,10 +390,15 @@ pub fn ghost(key: impl Into<String>, typed: &str, rest: String, ink: rune::Color
         )
 }
 
-/// A chip that names what a query is inside, such as the project chosen before its place.
+/// A chip that names what a query is inside, such as the project chosen before its place. It
+/// takes at most half the query's line, its name cut short past that, so the query beside it
+/// keeps the other half.
 pub fn chip(t: &Tokens, key: impl Into<String>, said: impl Into<Said>) -> El {
     let chip = words(said, Type::Mono, t.text_secondary)
         .key(key.into())
+        .truncate()
+        .min_w(0.0)
+        .max_w_frac(0.5)
         .fill(t.bg_elevated)
         .border(1.0, t.border);
     door::corner(door::inset(chip, Space::S6, Space::S2), Radius::Tag)
