@@ -231,10 +231,10 @@ check_inputs() {
     undeclared+=("$name")
   done < <(
     {
-      find "$build_dir" -path "$build_dir/incremental" -prune -o -name '*.d' -type f -print0 |
-        xargs -0 grep -l -F -e "$repo/" -e "$repo_real/" 2>/dev/null | while IFS= read -r file; do
-        sed -n 's/^# env-dep:\([^=]*\).*/\1/p' "$file"
-      done
+      { grep -rl -F --include='*.d' --exclude-dir=incremental -e "$repo/" -e "$repo_real/" "$build_dir" || true; } |
+        while IFS= read -r file; do
+          sed -n 's/^# env-dep:\([^=]*\).*/\1/p' "$file"
+        done
       printf '%s' "$script_vars"
     } | LC_ALL=C sort -u
   )
@@ -265,9 +265,9 @@ provide() {
   local key entry built_dir
   key="$(recipe_key)"
   entry="$(entry_for "$key")"
+  provided="$entry/$binary" provided_stored=1
   if [[ -f "$entry/$binary" ]]; then
     touch "$entry"
-    printf '%s\n' "$entry/$binary"
     return
   fi
   mkdir -p "$store"
@@ -276,18 +276,18 @@ provide() {
   cargo_build "$messages"
   built_dir="$(output_dir)"
   check_inputs "$messages" "$built_dir"
+  rm -f "$messages"
   if [[ "$(recipe_key)" != "$key" ]]; then
     echo "warning: $recipe's inputs changed during the build, so this binary is not stored" >&2
-    printf '%s\n' "$built_dir/$binary"
+    provided="$built_dir/$binary" provided_stored=""
     return
   fi
   place_by_rename "$built_dir/$binary" "$entry/$binary"
   evict_idle_entries
-  printf '%s\n' "$entry/$binary"
 }
 
 provide_variants() {
-  local list="$1" name format fault extra built keys="" set_dir pending
+  local list="$1" name format fault extra keys="" set_dir pending
   local names=() binaries=()
   [[ -f "$list" ]] || die "no variant list at $list"
   while read -r name format fault extra <&3 || [[ -n "$name" ]]; do
@@ -296,11 +296,11 @@ provide_variants() {
       die "$list: '$name $format $fault $extra' is not '<name> <snapshot format> [adopt-fault]'"
     variant_format="$format" variant_fault="$fault"
     load_recipe attn-pty-host-variant
-    built="$(provide)"
-    case "$built" in "$store"/*) ;; *) die "pty-host changed while variant $name was building; run again" ;; esac
+    provide
+    [[ -n "$provided_stored" ]] || die "pty-host changed while variant $name was building; run again"
     names+=("$name")
-    binaries+=("$built")
-    keys+="$name $(basename "$(dirname "$built")")"$'\n'
+    binaries+=("$provided")
+    keys+="$name $(basename "$(dirname "$provided")")"$'\n'
   done 3< "$list"
   [[ ${#names[@]} -gt 0 ]] || die "$list lists no variants"
   set_dir="$store/variant-sets/$(printf '%s' "$keys" | shasum -a 256 | cut -d' ' -f1)"
@@ -347,7 +347,7 @@ case "$command" in
     [[ "$name" != attn-pty-host-variant ]] || die "variants come from a list: provide-variants <list-file>"
     load_recipe "$name"
     case "$command" in
-      provide) provide ;;
+      provide) provide; printf '%s\n' "$provided" ;;
       key) recipe_key ;;
       entry) entry_for "$(recipe_key)"; echo ;;
     esac
