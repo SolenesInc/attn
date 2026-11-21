@@ -320,7 +320,8 @@ const HEADING_HANG: Space = Space::S4;
 
 /// A bar across a finder's top, keyed `key`, over a rule, such as the choices that shape what
 /// it starts: its parts across, onto further lines when the line runs out. Where the window is
-/// too short for it and the finder's list, it gives way and scrolls, so the list keeps its floor.
+/// too short for it and the finder's [`grouped`] list, the list gives way first; once the list
+/// is on its floor, the bar gives way and scrolls.
 pub fn bar(t: &Tokens, key: impl Into<String>, parts: Vec<El>) -> El {
     let line = door::gaps(
         row().w_full().items_center().justify_between().flex_wrap(),
@@ -429,12 +430,14 @@ pub fn scrolling_notices(t: &Tokens, key: impl Into<String>, blocks: Vec<Block>)
 const NOTICES_INSET: Space = Space::S12;
 
 /// A finder's list of groups, each under its heading: it scrolls past `max` points, or
-/// sooner where the window is shorter, and keeps [`GROUPED_FLOOR`] however short the window.
+/// sooner where the window is shorter, giving way before the finder's [`bar`], and keeps
+/// [`GROUPED_FLOOR`] however short the window.
 pub fn grouped(key: impl Into<String>, label: &str, rows: Vec<El>, max: f32) -> El {
     list(key, rows)
         .label(label.to_owned())
         .max_h(max)
         .min_h(GROUPED_FLOOR)
+        .shrink_first()
 }
 
 /// A heading and one row of two lines, with the list's inset above and below: 8 + 24 + 47 + 8

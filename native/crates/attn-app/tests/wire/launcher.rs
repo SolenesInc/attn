@@ -2230,35 +2230,63 @@ fn tab_shows_every_control_whole_in_the_smallest_window() {
 /// Three plugins whose names are too long to share a line, beside Claude and Codex.
 const LONG_NAMED: [&str; 3] = ["review-0", "review-1", "review-2"];
 
-fn with_long_named_plugins(launcher: bool) -> World {
+/// Where the smallest window at the largest text shows a launcher: the dialog ⌘N opens over a
+/// desktop with an agent, or the empty desktop's own.
+#[derive(Clone, Copy, Debug)]
+enum Opening {
+    Dialog,
+    EmptyDesktop,
+}
+
+impl Opening {
+    fn key(self) -> &'static str {
+        match self {
+            Opening::Dialog => "new-session",
+            Opening::EmptyDesktop => "launcher",
+        }
+    }
+}
+
+/// The smallest window at 150% text with Claude and Codex, which run YOLO, and `plugins`, each
+/// named too long to share a line, the launcher showing where `opening` puts it.
+fn smallest_at_largest_text(launcher: bool, opening: Opening, plugins: &[&'static str]) -> World {
     let mut settings = settings("main_repo");
     settings.retain(|(key, _)| key != LAUNCHER.0);
     settings.push((LAUNCHER.0.to_owned(), launcher.to_string()));
     settings.push(("uiScale".to_owned(), "1.5".to_owned()));
-    for (n, id) in LONG_NAMED.iter().enumerate() {
+    for id in ["claude", "codex"] {
+        settings.push((format!("{id}_cap_yolo"), "true".to_owned()));
+    }
+    for (n, id) in plugins.iter().enumerate() {
         settings.push((format!("{id}_available"), "true".to_owned()));
         settings.push((
             format!("{id}_display_name"),
             format!("Engineering observability staging review agent {n}"),
         ));
     }
-    let daemon = machine(
-        &PLACES,
-        shop("origin/main"),
-        &settings,
-        vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
-    );
-    daemon.on("delegation_preferences_get", |_| {
+    let desktops = match opening {
+        Opening::Dialog => vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
+        Opening::EmptyDesktop => {
+            let mut desktops = three_desktops();
+            desktops.rotate_left(1);
+            desktops
+        }
+    };
+    let daemon = machine(&PLACES, shop("origin/main"), &settings, desktops);
+    let harnesses: Vec<&str> = ["claude", "codex"]
+        .into_iter()
+        .chain(plugins.iter().copied())
+        .collect();
+    daemon.on("delegation_preferences_get", move |_| {
         message(DelegationPreferencesResultMessage {
             success: true,
             preferences: Some(DelegationPreferences::default()),
             harnesses: Some(
-                ["claude", "codex"]
-                    .into_iter()
-                    .chain(LONG_NAMED)
+                harnesses
+                    .iter()
                     .map(|id| Harness {
-                        id: id.into(),
-                        name: id.into(),
+                        id: (*id).into(),
+                        name: (*id).into(),
                         available: true,
                         ..Harness::default()
                     })
@@ -2269,8 +2297,70 @@ fn with_long_named_plugins(launcher: bool) -> World {
     });
     let mut world = World::start_sized(daemon, (800.0, 600.0));
     world.open_desktop();
-    press_action(&mut world, &Action::SessionNew);
+    if let Opening::Dialog = opening {
+        press_action(&mut world, &Action::SessionNew);
+    }
     world
+}
+
+fn with_long_named_plugins(launcher: bool) -> World {
+    smallest_at_largest_text(launcher, Opening::Dialog, &LONG_NAMED)
+}
+
+#[test]
+fn the_chosen_harness_yolo_and_the_first_recent_show_whole_from_opening_in_the_smallest_window() {
+    for launcher in [true, false] {
+        for opening in [Opening::Dialog, Opening::EmptyDesktop] {
+            for plugins in [&[][..], &LONG_NAMED[..]] {
+                shows_its_controls_and_first_recent_whole(launcher, opening, plugins);
+            }
+        }
+    }
+}
+
+/// With the harnesses stacked, the YOLO switch is past the band's end, and its scroll and ⌥Q
+/// reach it.
+fn shows_its_controls_and_first_recent_whole(
+    launcher: bool,
+    opening: Opening,
+    plugins: &[&'static str],
+) {
+    let mut world = smallest_at_largest_text(launcher, opening, plugins);
+    let w = opening.key();
+    let whole_in_the_band: &[&str] = if plugins.is_empty() {
+        &["agent.claude", "yolo", "yolo.keys"]
+    } else {
+        &["agent.claude"]
+    };
+    for when in ["on opening", "after typing"] {
+        if when == "after typing" {
+            type_path(&mut world, w, "alpha");
+        }
+        let how = format!(
+            "launcher {launcher}, {opening:?} with {} plugins, {when}",
+            plugins.len()
+        );
+        let bounds = |key: String| {
+            world
+                .screen()
+                .bounds(Target::key(key.clone()))
+                .unwrap_or_else(|| panic!("{how}: {key} is laid out"))
+        };
+        let band = bounds(format!("{w}.controls"));
+        for part in whole_in_the_band {
+            let shown = bounds(format!("{w}.{part}"));
+            assert!(
+                inside(shown, band),
+                "{how}: {part} {shown:?} shows whole in its band {band:?}"
+            );
+        }
+        let list = bounds(format!("{w}.locations"));
+        let first = bounds(format!("{w}.row.0"));
+        assert!(
+            inside(first, list),
+            "{how}: the first recent {first:?} shows whole in the list {list:?}"
+        );
+    }
 }
 
 #[test]

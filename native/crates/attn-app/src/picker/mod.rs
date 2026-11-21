@@ -528,6 +528,7 @@ fn opened(state: &mut State, which: Which, tx: &mut Tx) {
     ) {
         ask_catalog(state, tx);
     }
+    show_agent(state, which, tx);
     if state
         .window
         .launching
@@ -595,7 +596,7 @@ fn ask_catalog(state: &mut State, tx: &mut Tx) {
             request_id: id,
             ..DelegationPreferencesGetMessage::new()
         },
-        |state, reply, _| {
+        |state, reply, tx| {
             let result: Option<DelegationPreferencesResultMessage> = reply.parse();
             state.window.launching.catalog = match result {
                 Some(r) if r.success && r.preferences.is_some() => Catalog::Loaded(
@@ -612,6 +613,9 @@ fn ask_catalog(state: &mut State, tx: &mut Tx) {
                 ),
                 None => Catalog::Failed("Failed to load harnesses".into()),
             };
+            for which in [Which::Dialog, Which::Inline] {
+                show_agent(state, which, tx);
+            }
         },
         tx,
     );
@@ -905,13 +909,23 @@ pub(crate) fn agent_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut
     (1..=9).any(|n| pressed(&format!("alt+{n}")))
 }
 
-/// Show the harness a key chose in the controls' band, which scrolls where the window is short,
-/// and tell a screen reader, since the keyboard stays in the path field.
+/// Show the chosen harness in the controls' band, which scrolls where the window is short.
+fn show_agent(state: &State, which: Which, tx: &mut Tx) {
+    if let Some(picker) = state.window.launching.slot(which) {
+        let w = which.key();
+        tx.scroll_into_view_in(
+            format!("{w}.controls"),
+            format!("{w}.agent.{}", picker.agent(state)),
+        );
+    }
+}
+
+/// Show the harness a key chose and tell a screen reader, since the keyboard stays in the path
+/// field.
 fn say_agent(state: &State, which: Which, tx: &mut Tx) {
+    show_agent(state, which, tx);
     if let Some(picker) = state.window.launching.slot(which) {
         let agent = picker.agent(state);
-        let w = which.key();
-        tx.scroll_into_view_in(format!("{w}.controls"), format!("{w}.agent.{agent}"));
         tx.announce(
             agents::named(&state.facts.settings, &agent),
             LiveRegion::Polite,
