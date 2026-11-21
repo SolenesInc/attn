@@ -13,7 +13,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
   scenarioId: 'NATIVE-TERMINAL-FEATURES', tier: 'tier1-local-shell', prefix: 'native-terminal-features',
-  metadata: { focus: 'A shell in the native app scrolls its history, selects and copies, selects a command block, finds through the history and draws a kitty image, without the app taking focus' },
+  metadata: { focus: 'A shell in the native app scrolls its history, selects and copies, selects a command block, finds through the history and draws kitty images placed at a cell and by placeholders, without the app taking focus' },
 });
 const client = new UiAutomationClient({ appPath: options.appPath });
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -34,6 +34,23 @@ sys.stdout.write('\\r\\nafter image\\r\\n')
 sys.stdout.flush()
 `;
 
+const KITTY_PLACEHOLDERS = `import base64, sys
+w, h = 96, 48
+pixels = bytes(v for y in range(h) for x in range(w) for v in (255, x * 255 // w, y * 255 // h))
+data = base64.b64encode(pixels).decode()
+chunks = [data[i:i + 4096] for i in range(0, len(data), 4096)]
+for n, chunk in enumerate(chunks):
+    head = 'a=T,U=1,q=2,f=24,s=96,v=48,i=8,c=8,r=2,' if n == 0 else ''
+    more = 0 if n == len(chunks) - 1 else 1
+    sys.stdout.write(f'\\033_G{head}m={more};{chunk}\\033\\\\')
+marks = [chr(c) for c in (0x305, 0x30D, 0x30E, 0x310, 0x312, 0x33D, 0x33E, 0x33F)]
+for row in range(2):
+    cells = ''.join(chr(0x10EEEE) + marks[row] + marks[col] for col in range(8))
+    sys.stdout.write('\\033[38;5;8m' + cells + '\\033[39m\\r\\n')
+sys.stdout.write('after placeholders\\r\\n')
+sys.stdout.flush()
+`;
+
 try {
   const checksFocus = process.platform === 'darwin';
   const frontmostBefore = checksFocus ? await driver.frontmostBundleId() : null;
@@ -44,6 +61,8 @@ try {
   fs.mkdirSync(cwd, { recursive: true });
   const kitty = path.join(cwd, 'kitty-image.py');
   fs.writeFileSync(kitty, KITTY_IMAGE);
+  const placeholders = path.join(cwd, 'kitty-placeholders.py');
+  fs.writeFileSync(placeholders, KITTY_PLACEHOLDERS);
   await runner.step('spawn_shell', async () => {
     const spawned = observer.waitForMessage((message) => message.event === 'spawn_result' && message.id === id && message, 'shell spawned');
     observer.send({ cmd: 'spawn_session', id, agent: 'shell', cwd, profile_id: observer.profileId, placement: {}, label: 'shop', cols: 100, rows: 30 });
@@ -111,6 +130,24 @@ try {
   await runner.step('draw_a_kitty_image', async () => {
     await run(`clear; python3 ${kitty}`, 'after image');
     await driver.state(`terminal-view:${runtimeId}`, { expect: { images: [{ image: 7, pixels: [96, 48] }] } });
+  });
+
+  await runner.step('draw_a_kitty_image_placed_by_placeholders', async () => {
+    await run(`clear; python3 ${placeholders}`, 'after placeholders');
+    const view = await driver.state(`terminal-view:${runtimeId}`, {
+      expect: { images: { $some: { image: 8, pixels: [96, 48] } } },
+    });
+    const strips = view.images.filter((image) => image.image === 8);
+    const [top, bottom] = strips;
+    runner.assert(
+      strips.length === 2 && top.col === 0 && bottom.row === top.row + 1
+        && strips.every((s) => s.source[2] === 96) && top.source[1] === 0
+        && bottom.source[1] === top.source[3] && top.source[3] + bottom.source[3] === 48,
+      'each row of placeholder cells draws its strip of the image, from the first column',
+      strips,
+    );
+    const rows = await screen('after placeholders');
+    runner.assert(!rows.some((text) => text.includes(String.fromCodePoint(0x10eeee))), 'no placeholder glyph is drawn', rows);
   });
 
   const screenshot = path.join(runner.runDir, 'native-terminal-features.png');

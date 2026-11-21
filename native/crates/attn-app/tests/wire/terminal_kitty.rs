@@ -95,7 +95,8 @@ fn a_placement_asks_for_its_image_once_and_draws_it_when_the_pixels_arrive() {
     assert_eq!(
         drawn(&mut world),
         json!([{"image": 7, "placement": 1, "generation": 1, "row": 2, "col": 3,
-                "size": [20, 40], "z": 0, "pixels": [2, 1]}])
+                "offset": [0, 0], "size": [20, 40], "source": [0, 0, 0, 0], "z": 0,
+                "pixels": [2, 1]}])
     );
 
     describe(&world, 4, vec![placement(1, 7, 2, 2)]);
@@ -317,4 +318,113 @@ fn placed_images_past_the_budget_stay_drawn_and_say_so_and_one_no_longer_placed_
     );
     world.advance(std::time::Duration::from_secs(6));
     assert!(world.runtime_is_at_rest());
+}
+
+/// A two-by-two block of placeholder cells for image 7 in palette color 7, its rows' diacritics
+/// U+0305 and U+030D, as `kitten icat --unicode-placeholder` writes it.
+const PLACEHOLDERS: &str = "\x1b[38;5;7m\u{10EEEE}\u{0305}\u{0305}\u{10EEEE}\u{0305}\u{030D}\r\n\
+                            \u{10EEEE}\u{030D}\u{0305}\u{10EEEE}\u{030D}\u{030D}\x1b[39m\r\n";
+
+fn virtual_placement() -> KittyPlacement {
+    KittyPlacement {
+        image_id: 7,
+        image_generation: 1,
+        r#virtual: true,
+        grid_cols: 2,
+        grid_rows: 2,
+        ..KittyPlacement::default()
+    }
+}
+
+/// Each drawn image's row, column and the part of the picture it shows.
+fn strips(world: &mut World) -> Vec<(Value, Value, Value)> {
+    drawn(world)
+        .as_array()
+        .expect("the view lists its images")
+        .iter()
+        .map(|i| (i["row"].clone(), i["col"].clone(), i["source"].clone()))
+        .collect()
+}
+
+#[test]
+fn a_virtual_placement_draws_over_the_placeholder_cells_the_program_wrote() {
+    let mut world = started();
+    describe(&world, 2, vec![virtual_placement()]);
+    world.settle();
+    assert_eq!(
+        asked(&world),
+        [json!(7)],
+        "a virtual placement's image is asked for"
+    );
+
+    output(&world, 3, PLACEHOLDERS.as_bytes());
+    send_pixels(&world, 7, 1, (4, 4), &[255; 4 * 4 * 4]);
+    world.settle();
+    let view = drawn(&mut world);
+    assert_eq!(
+        strips(&mut world),
+        [
+            (json!(1), json!(0), json!([0, 0, 4, 2])),
+            (json!(2), json!(0), json!([0, 2, 4, 2])),
+        ],
+        "each row of cells draws its half of the image, from the cell the block starts at"
+    );
+    let size = &view[0]["size"];
+    assert_eq!(
+        view[1]["size"], *size,
+        "both strips are the same size: {view}"
+    );
+    assert_eq!(view[0]["z"], json!(-1), "a strip draws under the text");
+
+    let lines: Vec<u8> = (0..40)
+        .flat_map(|n| format!("line {n}\r\n").into_bytes())
+        .collect();
+    output(&world, 4, &lines);
+    world.settle();
+    assert_eq!(
+        strips(&mut world),
+        [],
+        "the image scrolls out of view with its cells"
+    );
+    let cursor_row = view_cursor_row(&mut world);
+    wheel(&mut world, (1 + 40 + 2 - cursor_row) as f32);
+    world.settle();
+    assert_eq!(
+        strips(&mut world)
+            .iter()
+            .map(|(row, ..)| row.clone())
+            .collect::<Vec<_>>(),
+        [json!(1), json!(2)],
+        "scrolled back to, the image draws on its cells in the history"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_virtual_placement_goes_with_the_cells_that_showed_it() {
+    let mut world = started();
+    describe(&world, 2, vec![virtual_placement()]);
+    output(&world, 3, PLACEHOLDERS.as_bytes());
+    send_pixels(&world, 7, 1, (4, 4), &[255; 4 * 4 * 4]);
+    world.settle();
+    assert_eq!(strips(&mut world).len(), 2);
+
+    output(&world, 4, b"\x1b[2;1H\x1b[2K\x1b[3;1H\x1b[2K");
+    world.settle();
+    assert_eq!(strips(&mut world), [], "erased cells show nothing");
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn placeholder_cells_draw_nothing_while_their_image_is_not_known() {
+    let mut world = started();
+    output(&world, 2, PLACEHOLDERS.as_bytes());
+    world.settle();
+    assert_eq!(drawn(&mut world), json!([]));
+    assert_eq!(asked(&world), Vec::<Value>::new());
+    assert!(world.runtime_is_at_rest());
+}
+
+fn view_cursor_row(world: &mut World) -> i64 {
+    view(world)["cursor"][1].as_i64().expect("the cursor shows")
 }

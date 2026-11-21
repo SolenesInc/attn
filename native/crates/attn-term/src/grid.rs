@@ -112,6 +112,8 @@ pub struct Grid {
     pub images_changed: bool,
     /// The screen row the view's top row is, which the images' rows count from.
     image_top: u32,
+    /// Each row's runs of kitty placeholder cells, whose cells draw no glyph.
+    placeholders: Vec<Vec<crate::kitty::Run>>,
     strings: Vec<String>,
     interned: HashMap<String, u32>,
 }
@@ -169,6 +171,14 @@ impl Grid {
         self.overlays = overlays;
         self.overlays_changed = true;
         true
+    }
+
+    /// The runs of kitty placeholder cells in view, by the row of the view they are on.
+    pub fn placeholders(&self) -> impl Iterator<Item = (u16, &crate::kitty::Run)> {
+        self.placeholders
+            .iter()
+            .enumerate()
+            .flat_map(|(row, runs)| runs.iter().map(move |run| (row as u16, run)))
     }
 
     /// The kitty images placed on the terminal, drawn first to last.
@@ -258,6 +268,11 @@ impl Grid {
         self.rows = rows;
         self.cells = vec![Cell::default(); usize::from(cols) * usize::from(rows)];
         self.dirty = vec![true; usize::from(rows)];
+        self.placeholders = vec![Vec::new(); usize::from(rows)];
+    }
+
+    pub(crate) fn set_placeholders(&mut self, row: usize, runs: Vec<crate::kitty::Run>) {
+        self.placeholders[row] = runs;
     }
 
     pub(crate) fn mark(&mut self, row: u16) {

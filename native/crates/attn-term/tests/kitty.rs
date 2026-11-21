@@ -1,7 +1,8 @@
-use attn_term::Vt;
 use attn_term::kitty::{
-    Described, Format, Picture, Placed, Placements, Quad, Viewport, quad, source_rect,
+    Described, Format, Picture, Placed, Placements, Quad, Run, Viewport, Virtual, quad,
+    source_rect, strip,
 };
+use attn_term::{Grid, Vt};
 
 fn described(placement_id: u32, screen_row: i32) -> Described {
     Described {
@@ -171,6 +172,7 @@ fn placed(row: u32, col: i32) -> Placed {
         z: 0,
         row,
         col,
+        offset: [0, 0],
         pixel_width: 100,
         pixel_height: 80,
         source: [0; 4],
@@ -367,4 +369,229 @@ fn a_stored_image_draws_as_rgba_whatever_layout_the_daemon_kept_it_in() {
         let got = Picture::new(1, width, height, format, &pixels).map(|p| p.rgba);
         assert_eq!(got, want, "{name}");
     }
+}
+
+/// U+10EEEE with the diacritics for `marks` (row, column, image id's high byte): 0 is U+0305,
+/// 1 U+030D, 2 U+030E, 3 U+0310.
+fn placeholder(marks: &[usize]) -> String {
+    const DIACRITICS: [char; 4] = ['\u{0305}', '\u{030D}', '\u{030E}', '\u{0310}'];
+    std::iter::once('\u{10EEEE}')
+        .chain(marks.iter().map(|&m| DIACRITICS[m]))
+        .collect()
+}
+
+fn run(col: u16, width: u16, image_id: u32, image_row: u32, image_col: u32) -> Run {
+    Run {
+        col,
+        width,
+        image_id,
+        placement_id: 0,
+        image_row,
+        image_col,
+    }
+}
+
+#[test]
+fn placeholder_cells_group_into_runs_as_kitty_reads_them_and_draw_no_glyph() {
+    let p = placeholder;
+    type Case = (&'static str, String, Vec<(u16, Run)>);
+    let cases: Vec<Case> = vec![
+        (
+            "a row of cells naming each row and column is one run",
+            format!("\x1b[38;5;7m{}{}{}", p(&[1, 0]), p(&[1, 1]), p(&[1, 2])),
+            vec![(0, run(0, 3, 7, 1, 0))],
+        ),
+        (
+            "cells leaving out the column continue the cell to their left",
+            format!("ab\x1b[38;5;7m{}{}{}", p(&[2, 1]), p(&[]), p(&[])),
+            vec![(0, run(2, 3, 7, 2, 1))],
+        ),
+        (
+            "a bare first cell starts at the image's first row and column",
+            format!("\x1b[38;5;7m{}{}", p(&[]), p(&[])),
+            vec![(0, run(0, 2, 7, 0, 0))],
+        ),
+        (
+            "a column that does not follow on starts a new run",
+            format!("\x1b[38;5;7m{}{}", p(&[0, 0]), p(&[0, 3])),
+            vec![(0, run(0, 1, 7, 0, 0)), (0, run(1, 1, 7, 0, 3))],
+        ),
+        (
+            "another image starts a new run",
+            format!("\x1b[38;5;7m{}\x1b[38;5;8m{}", p(&[0, 0]), p(&[0, 1])),
+            vec![(0, run(0, 1, 7, 0, 0)), (0, run(1, 1, 8, 0, 1))],
+        ),
+        (
+            "text between cells ends the run",
+            format!("\x1b[38;5;7m{}x{}", p(&[0, 0]), p(&[0, 1])),
+            vec![(0, run(0, 1, 7, 0, 0)), (0, run(2, 1, 7, 0, 1))],
+        ),
+        (
+            "a truecolor foreground is the image id's low 24 bits, a third diacritic its high byte",
+            format!("\x1b[38;2;1;2;3m{}", p(&[0, 0, 2])),
+            vec![(0, run(0, 1, 0x0201_0203, 0, 0))],
+        ),
+        (
+            "the underline color names the placement",
+            format!("\x1b[38;5;7;58;5;9m{}", p(&[0, 0])),
+            vec![(
+                0,
+                Run {
+                    placement_id: 9,
+                    ..run(0, 1, 7, 0, 0)
+                },
+            )],
+        ),
+        (
+            "each row keeps its own runs",
+            format!("\x1b[38;5;7m{}\r\n{}", p(&[0, 0]), p(&[1, 0])),
+            vec![(0, run(0, 1, 7, 0, 0)), (1, run(0, 1, 7, 1, 0))],
+        ),
+    ];
+    for (name, bytes, want) in cases {
+        let mut vt = Vt::new(20, 3);
+        vt.write(bytes.as_bytes());
+        let mut grid = Grid::default();
+        vt.sync(&mut grid);
+        let got: Vec<(u16, Run)> = grid.placeholders().map(|(row, r)| (row, *r)).collect();
+        assert_eq!(got, want, "{name}");
+        for y in 0..3 {
+            assert!(
+                !grid.row_text(y).contains('\u{10EEEE}'),
+                "{name}: row {y} draws a placeholder glyph"
+            );
+        }
+    }
+}
+
+#[test]
+fn rewriting_a_row_drops_its_placeholder_runs() {
+    let mut vt = Vt::new(20, 3);
+    let mut grid = Grid::default();
+    vt.write(format!("\x1b[38;5;7m{}", placeholder(&[0, 0])).as_bytes());
+    vt.sync(&mut grid);
+    assert_eq!(grid.placeholders().count(), 1);
+    vt.write(b"\x1b[0m\r\x1b[2Kplain");
+    vt.sync(&mut grid);
+    assert_eq!(grid.placeholders().count(), 0);
+    assert_eq!(grid.row_text(0), "plain");
+}
+
+/// Ghostty's own cases for a 500×306 image in 36×80 cells (`graphics_unicode.zig`, "unicode
+/// render placement"), and the edges they leave out.
+#[test]
+fn a_run_draws_its_strip_of_the_image_fitted_and_centred_in_the_placement_cells() {
+    let target = |columns: u32, rows: u32| Virtual {
+        image_id: 1,
+        placement_id: 0,
+        generation: 4,
+        columns,
+        rows,
+    };
+    type Case = (
+        &'static str,
+        Virtual,
+        Run,
+        Option<([u32; 2], [u32; 2], [u32; 4])>,
+    );
+    let cases: Vec<Case> = vec![
+        (
+            "4x2, top row: the image is centred down, its top half shows",
+            target(4, 2),
+            run(0, 4, 1, 0, 0),
+            Some(([0, 36], [144, 44], [0, 0, 500, 153])),
+        ),
+        (
+            "4x2, bottom row: its bottom half shows from the cell's top",
+            target(4, 2),
+            run(0, 4, 1, 1, 0),
+            Some(([0, 0], [144, 44], [0, 153, 500, 153])),
+        ),
+        (
+            "2x2 written four cells wide still fits the placement's two columns",
+            target(2, 2),
+            run(0, 4, 1, 0, 0),
+            Some(([0, 58], [72, 22], [0, 0, 500, 153])),
+        ),
+        (
+            "1x1: the whole image in one cell",
+            target(1, 1),
+            run(0, 4, 1, 0, 0),
+            Some(([0, 29], [36, 22], [0, 0, 500, 306])),
+        ),
+        (
+            "a row past the image's rows shows nothing",
+            target(4, 2),
+            run(0, 4, 1, 2, 0),
+            None,
+        ),
+        (
+            "no size asked fits the image to its size rounded up to whole cells, 14x4",
+            target(0, 0),
+            run(0, 14, 1, 0, 0),
+            Some(([0, 6], [504, 74], [0, 0, 500, 74])),
+        ),
+    ];
+    for (name, target, run, want) in cases {
+        let got = strip(&run, &target, (500, 306), (36, 80), 12)
+            .map(|p| (p.offset, [p.pixel_width, p.pixel_height], p.source));
+        assert_eq!(got, want, "{name}");
+        if let Some(p) = strip(&run, &target, (500, 306), (36, 80), 12) {
+            assert_eq!((p.row, p.col, p.generation, p.z), (12, 0, 4, -1), "{name}");
+        }
+    }
+    let sliver = |image_row: u32| {
+        strip(
+            &run(0, 10, 1, image_row, 0),
+            &target(10, 10),
+            (15, 26),
+            (16, 34),
+            0,
+        )
+    };
+    assert_eq!(
+        sliver(0),
+        None,
+        "a row the image covers by under half an image pixel shows nothing, not the whole image"
+    );
+    assert!(sliver(1).is_some());
+}
+
+#[test]
+fn virtual_placements_are_kept_apart_and_found_by_the_runs_that_name_them() {
+    let virtual_ = |placement_id: u32, image_id: u32| Described {
+        image_id,
+        placement_id,
+        generation: 3,
+        virtual_: true,
+        grid_cols: 4,
+        grid_rows: 2,
+        ..Described::default()
+    };
+    let mut placements = Placements::default();
+    placements.apply(1, &[virtual_(5, 1), virtual_(6, 1), described(2, 0)], 0);
+    assert_eq!(
+        placements
+            .placed()
+            .iter()
+            .map(|p| p.placement_id)
+            .collect::<Vec<_>>(),
+        [2]
+    );
+    let named = Run {
+        placement_id: 6,
+        ..run(0, 1, 1, 0, 0)
+    };
+    assert_eq!(placements.target(&named).map(|v| v.placement_id), Some(6));
+    assert_eq!(
+        placements
+            .target(&run(0, 1, 1, 0, 0))
+            .map(|v| (v.columns, v.rows)),
+        Some((4, 2)),
+        "a run naming no placement shows any of its image's"
+    );
+    assert_eq!(placements.target(&run(0, 1, 9, 0, 0)), None);
+    let mut images: Vec<(u32, u64)> = placements.images().collect();
+    images.sort_unstable();
+    assert_eq!(images, [(1, 3), (1, 3), (1, 10)]);
 }

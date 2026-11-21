@@ -774,6 +774,31 @@ mod tests {
         assert!(restored.plain_text().contains("hello from rust"));
     }
 
+    #[test]
+    fn a_virtual_placement_is_described_with_the_cells_the_program_asked_for() {
+        let mut terminal = Terminal::new(80, 24).expect("create terminal");
+        let pixels = format!("{}==", "A".repeat(86));
+        terminal.write(
+            format!("\x1b_Ga=T,U=1,i=7,p=3,c=4,r=2,f=32,s=4,v=4,q=2;{pixels}\x1b\\").as_bytes(),
+        );
+        terminal.write(format!("\x1b_Ga=T,U=1,i=8,f=32,s=4,v=4,q=2;{pixels}\x1b\\").as_bytes());
+        let mut described: Vec<(u32, u32, bool, u32, u32)> = terminal
+            .kitty_placements(0)
+            .iter()
+            .map(|p| {
+                (
+                    p.image_id,
+                    p.placement_id,
+                    p.is_virtual,
+                    p.grid_cols,
+                    p.grid_rows,
+                )
+            })
+            .collect();
+        described.sort_unstable();
+        assert_eq!(described, [(7, 3, true, 4, 2), (8, 0, true, 0, 0)]);
+    }
+
     use super::Theme;
     use crate::wire::WireFeeder;
 

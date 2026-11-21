@@ -64,6 +64,8 @@ typedef struct {
   bool has_bg;
   uint8_t fg[3];
   uint8_t bg[3];
+  uint32_t fg_id;
+  uint32_t underline_id;
 } AttnCell;
 
 static bool attn_append(uint8_t **buf, size_t *len, size_t *cap, const uint8_t *data, size_t n) {
@@ -570,6 +572,18 @@ int attn_term_row_cells(AttnTerm *t) {
   return ghostty_render_state_row_get(t->rows, GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, &t->cells);
 }
 
+static uint32_t attn_color_id(GhosttyStyleColor color) {
+  switch (color.tag) {
+    case GHOSTTY_STYLE_COLOR_PALETTE:
+      return color.value.palette;
+    case GHOSTTY_STYLE_COLOR_RGB:
+      return ((uint32_t)color.value.rgb.r << 16) | ((uint32_t)color.value.rgb.g << 8) |
+             color.value.rgb.b;
+    default:
+      return 0;
+  }
+}
+
 bool attn_term_next_cell(AttnTerm *t, AttnCell *cell, uint32_t *codepoints, size_t cap) {
   if (!ghostty_render_state_row_cells_next(t->cells)) return false;
   GhosttyCodepointBuffer graphemes = {.ptr = codepoints, .cap = cap, .len = 0};
@@ -580,6 +594,8 @@ bool attn_term_next_cell(AttnTerm *t, AttnCell *cell, uint32_t *codepoints, size
   ghostty_style_default(&style);
   ghostty_render_state_row_cells_get(t->cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE, &style);
   cell->flags = style.flags;
+  cell->fg_id = attn_color_id(style.fg_color);
+  cell->underline_id = attn_color_id(style.underline_color);
   GhosttyColorRgb c;
   cell->has_fg = ghostty_render_state_row_cells_get(
                      t->cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_FG_COLOR, &c) == GHOSTTY_SUCCESS;

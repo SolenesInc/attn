@@ -243,7 +243,9 @@ impl Terminals {
                     "generation": p.generation,
                     "row": i64::from(p.row) - i64::from(top),
                     "col": p.col,
+                    "offset": p.offset,
                     "size": [p.pixel_width, p.pixel_height],
+                    "source": p.source,
                     "z": p.z,
                     "pixels": [image.picture.width, image.picture.height],
                 })

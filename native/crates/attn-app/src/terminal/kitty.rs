@@ -4,7 +4,7 @@ use std::sync::Arc;
 use attn_client::{Commands, KittyFormat};
 use attn_protocol::{GetKittyImageMessage, KittyImageResultMessage, KittyPlacement};
 use attn_term::Image;
-use attn_term::kitty::{Described, Format, Picture};
+use attn_term::kitty::{Described, Format, Picture, strip};
 
 use super::{Term, Terminals};
 
@@ -146,18 +146,18 @@ impl Terminals {
         let Some(term) = self.panes.get(id) else {
             return;
         };
-        for placed in term.placements.placed() {
-            let key = (id.to_owned(), placed.image_id, placed.generation);
-            let asked = (id.to_owned(), placed.image_id);
+        for (image, generation) in term.placements.images() {
+            let key = (id.to_owned(), image, generation);
+            let asked = (id.to_owned(), image);
             if self.images.entries.contains_key(&key)
-                || self.images.asked.get(&asked) == Some(&placed.generation)
+                || self.images.asked.get(&asked) == Some(&generation)
             {
                 continue;
             }
-            self.images.asked.insert(asked, placed.generation);
+            self.images.asked.insert(asked, generation);
             let _ = daemon.send(&GetKittyImageMessage {
                 id: id.into(),
-                image_id: i64::from(placed.image_id),
+                image_id: i64::from(image),
                 ..GetKittyImageMessage::new()
             });
         }
@@ -212,9 +212,8 @@ impl Terminals {
             .iter()
             .flat_map(|(id, term)| {
                 term.placements
-                    .placed()
-                    .iter()
-                    .map(|p| (id.clone(), p.image_id, p.generation))
+                    .images()
+                    .map(|(image, generation)| (id.clone(), image, generation))
             })
             .collect();
         if let Some(said) = self.images.trim(&placed) {
@@ -222,24 +221,47 @@ impl Terminals {
         }
     }
 
-    /// The images terminal `id` draws: each placement whose pixels are kept.
-    pub(super) fn kitty_images(images: &mut Images, id: &str, term: &Term) -> Vec<Image> {
-        term.placements
-            .placed()
-            .iter()
-            .filter_map(|placed| {
-                let key = (id.to_owned(), placed.image_id, placed.generation);
-                let Some(Entry::Present(picture)) = images.entries.get(&key) else {
-                    return None;
-                };
-                let picture = picture.clone();
-                images.touch(&key);
-                Some(Image {
+    /// The images terminal `id` draws, its view's top row at screen row `top`, in `cell`-sized
+    /// cells of device pixels: each placement whose pixels are kept, and the strip of a virtual
+    /// placement each run of placeholder cells in view shows.
+    pub(super) fn kitty_images(
+        images: &mut Images,
+        id: &str,
+        term: &Term,
+        top: u32,
+        cell: (u32, u32),
+    ) -> Vec<Image> {
+        let mut drawn = Vec::new();
+        let mut picture = |image: u32, generation: u64| {
+            let key = (id.to_owned(), image, generation);
+            let Some(Entry::Present(picture)) = images.entries.get(&key) else {
+                return None;
+            };
+            let picture = picture.clone();
+            images.touch(&key);
+            Some(picture)
+        };
+        for placed in term.placements.placed() {
+            if let Some(picture) = picture(placed.image_id, placed.generation) {
+                drawn.push(Image {
                     picture,
                     placed: *placed,
-                })
-            })
-            .collect()
+                });
+            }
+        }
+        for (row, run) in term.grid.placeholders() {
+            let Some(target) = term.placements.target(run) else {
+                continue;
+            };
+            let Some(picture) = picture(target.image_id, target.generation) else {
+                continue;
+            };
+            let size = (picture.width, picture.height);
+            if let Some(placed) = strip(run, target, size, cell, top + u32::from(row)) {
+                drawn.push(Image { picture, placed });
+            }
+        }
+        drawn
     }
 }
 
@@ -252,6 +274,8 @@ fn described(placements: &[KittyPlacement]) -> Vec<Described> {
             placement_id: u32::try_from(p.placement_id).unwrap_or(0),
             generation: u64::try_from(p.image_generation).unwrap_or(0),
             virtual_: p.r#virtual,
+            grid_cols: int(p.grid_cols),
+            grid_rows: int(p.grid_rows),
             z: int(p.z),
             screen_row: int(p.viewport_row),
             col: int(p.viewport_col),

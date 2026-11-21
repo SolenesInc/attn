@@ -207,7 +207,7 @@ export const scenarioCatalog = [
   {
     id: 'native-terminal-features',
     runnerId: 'NATIVE-TERMINAL-FEATURES',
-    label: 'A shell in the native app scrolls, selects and copies, selects a command block, finds through its history and draws a kitty image',
+    label: 'A shell in the native app scrolls, selects and copies, selects a command block, finds through its history and draws kitty images placed at a cell and by placeholders',
     command: ['node', 'scripts/real-app-harness/scenario-native-terminal-features.mjs'],
   },
   {

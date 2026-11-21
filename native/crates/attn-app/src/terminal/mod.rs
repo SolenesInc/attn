@@ -1305,11 +1305,12 @@ impl Terminals {
         self.undrawn = false;
         self.refresh_hovers();
         let theme = self.theme;
+        let metrics = self.metrics();
         let finds = &self.finds;
         let images = &mut self.images;
         let seeds = (&*self.seeds, self.card.as_ref());
         self.panes.iter_mut().map(move |(id, term)| {
-            Terminals::bring_up_to_date(images, finds, seeds, &theme, id, term);
+            Terminals::bring_up_to_date(images, finds, seeds, &theme, metrics, id, term);
             (mark(id), &mut term.grid)
         })
     }
@@ -1321,14 +1322,18 @@ impl Terminals {
         finds: &HashMap<String, find::Finding>,
         (seeds, card): (&std::collections::HashSet<String>, Option<&seeds::SeedCard>),
         theme: &TerminalColors,
+        metrics: Metrics,
         id: &str,
         term: &mut Term,
     ) {
         if Terminals::grid_follows_screen(term) && term.vt.sync(&mut term.grid) {
             term.view.seeds = None;
         }
-        let placed = Terminals::kitty_images(images, id, term);
         let top = term.vt.view_top();
+        let cell = term
+            .slot
+            .map_or((0, 0), |(_, scale)| metrics.pixels((1, 1), scale));
+        let placed = Terminals::kitty_images(images, id, term, top, cell);
         term.grid.set_images(placed, top);
         let mut overlays = Terminals::overlays(term, theme, finds.get(id));
         let previewing = card.filter(|c| c.runtime == id).map(|c| c.seed.as_str());
@@ -1355,9 +1360,19 @@ impl Terminals {
 
     /// Terminal `id` brought up to what its screen holds now, whether or not a frame drew it.
     fn current(&mut self, id: &str) -> Option<&Term> {
+        let metrics = self.metrics();
         let term = self.panes.get_mut(id)?;
         let seeds = (&*self.seeds, self.card.as_ref());
-        Terminals::bring_up_to_date(&mut self.images, &self.finds, seeds, &self.theme, id, term);
+        let theme = &self.theme;
+        Terminals::bring_up_to_date(
+            &mut self.images,
+            &self.finds,
+            seeds,
+            theme,
+            metrics,
+            id,
+            term,
+        );
         Some(term)
     }
 

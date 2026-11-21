@@ -74,6 +74,32 @@ func TestKittyPNGTransmissionsAreDecodedWithinGhosttysLimits(t *testing.T) {
 	}
 }
 
+func TestAVirtualPlacementIsDescribedWithTheCellsTheProgramAskedFor(t *testing.T) {
+	term, err := New(20, 8, Options{KittyImageStorageLimit: 10 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(term.Close)
+	pixels := base64.StdEncoding.EncodeToString(make([]byte, 4*4*4))
+	term.Write([]byte("\x1b_Ga=T,U=1,i=7,p=3,c=4,r=2,f=32,s=4,v=4,q=2;" + pixels + "\x1b\\"))
+	term.Write([]byte("\x1b_Ga=T,U=1,i=8,f=32,s=4,v=4,q=2;" + pixels + "\x1b\\"))
+	got := map[uint32]KittyPlacement{}
+	for _, p := range term.KittyPlacements() {
+		got[p.ImageID] = p
+	}
+	for _, want := range []struct {
+		image, placement, cols, rows uint32
+	}{{7, 3, 4, 2}, {8, 0, 0, 0}} {
+		p, ok := got[want.image]
+		switch {
+		case !ok:
+			t.Errorf("image %d: no placement described in %+v", want.image, got)
+		case !p.Virtual || p.PlacementID != want.placement || p.GridCols != want.cols || p.GridRows != want.rows:
+			t.Errorf("image %d: described %+v, want virtual placement %d over %dx%d cells", want.image, p, want.placement, want.cols, want.rows)
+		}
+	}
+}
+
 func pngChunk(typ string, data []byte) []byte {
 	out := binary.BigEndian.AppendUint32(nil, uint32(len(data)))
 	out = append(out, typ...)

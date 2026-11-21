@@ -5,6 +5,7 @@ use crate::grid::{
     BOLD, Cell, Cursor, CursorStyle, FAINT, Grid, INVISIBLE, ITALIC, Rgb, STRIKETHROUGH, UNDERLINE,
     Width,
 };
+use crate::kitty::{self, PLACEHOLDER, Placeholder};
 use crate::markdown::Look;
 use crate::mouse;
 use attn_ui::colors::TerminalColors;
@@ -41,6 +42,8 @@ struct RawCell {
     has_bg: bool,
     fg: Rgb,
     bg: Rgb,
+    fg_id: u32,
+    underline_id: u32,
 }
 
 const SUCCESS: c_int = 0;
@@ -721,15 +724,25 @@ impl Vt {
                 assert_eq!(unsafe { attn_term_row_cells(t) }, SUCCESS);
                 let mut x = 0;
                 let mut raw = RawCell::default();
+                let mut placeholders = Vec::new();
                 while x < cols
                     && unsafe {
                         attn_term_next_cell(t, &mut raw, codepoints.as_mut_ptr(), codepoints.len())
                     }
                 {
-                    let grapheme = grid.intern(&codepoints[..raw.len as usize]);
+                    let text = match &codepoints[..raw.len as usize] {
+                        [PLACEHOLDER, marks @ ..] => {
+                            let read = Placeholder::read(raw.fg_id, raw.underline_id, marks);
+                            placeholders.push((x as u16, read));
+                            &[][..]
+                        }
+                        text => text,
+                    };
+                    let grapheme = grid.intern(text);
                     grid.cells[y * cols + x] = cell(&raw, grapheme, frame.fg, frame.bg);
                     x += 1;
                 }
+                grid.set_placeholders(y, kitty::runs(placeholders));
                 for rest in x..cols {
                     grid.cells[y * cols + rest] = Cell {
                         fg: frame.fg,

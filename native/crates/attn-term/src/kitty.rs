@@ -2,14 +2,21 @@
 //! kitty parser: it sends the whole set of placements whenever one moves, and each set replaces the
 //! last.
 
+mod placeholders;
+
+pub use placeholders::{PLACEHOLDER, Placeholder, Run, runs, strip};
+
 /// One placement as the daemon describes it, its row relative to the top of the screen.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Described {
     pub image_id: u32,
     pub placement_id: u32,
     pub generation: u64,
-    /// Drawn by the program in its own cells, with no position of its own.
+    /// Drawn by the program in its own placeholder cells, with no position of its own.
     pub virtual_: bool,
+    /// The cells a virtual placement fills, as the program asked; zero where it left it out.
+    pub grid_cols: i32,
+    pub grid_rows: i32,
     pub z: i32,
     pub screen_row: i32,
     pub col: i32,
@@ -27,6 +34,8 @@ pub struct Placed {
     pub z: i32,
     pub row: u32,
     pub col: i32,
+    /// How far right and down of its cell's top-left corner it starts, in device pixels.
+    pub offset: [u32; 2],
     /// The size it draws at, in device pixels.
     pub pixel_width: u32,
     pub pixel_height: u32,
@@ -38,6 +47,7 @@ pub struct Placed {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Placements {
     placed: Vec<Placed>,
+    virtuals: Vec<Virtual>,
     applied: Option<u32>,
 }
 
@@ -50,23 +60,60 @@ impl Placements {
             return false;
         }
         self.applied = Some(seq);
-        self.placed = place(described, history);
+        (self.placed, self.virtuals) = place(described, history);
         true
     }
 
     /// Takes the set a restored screen carries as the whole truth, and any sequence after it.
     pub fn seed(&mut self, described: &[Described], history: u32) {
         self.applied = None;
-        self.placed = place(described, history);
+        (self.placed, self.virtuals) = place(described, history);
     }
 
     /// The placements, drawn first to last: by z, then placement id.
     pub fn placed(&self) -> &[Placed] {
         &self.placed
     }
+
+    /// The virtual placement a run of placeholder cells shows: the one it names, or, when it
+    /// names none, any of its image's.
+    pub fn target(&self, run: &Run) -> Option<&Virtual> {
+        self.virtuals.iter().find(|v| {
+            v.image_id == run.image_id
+                && (run.placement_id == 0 || v.placement_id == run.placement_id)
+        })
+    }
+
+    /// Each image a placement shows, by id and generation, virtual placements included.
+    pub fn images(&self) -> impl Iterator<Item = (u32, u64)> + '_ {
+        let placed = self.placed.iter().map(|p| (p.image_id, p.generation));
+        placed.chain(self.virtuals.iter().map(|v| (v.image_id, v.generation)))
+    }
 }
 
-fn place(described: &[Described], history: u32) -> Vec<Placed> {
+/// A placement the program shows wherever it writes placeholder cells for it, filling
+/// `columns`×`rows` cells; a zero count takes the image's own size in cells.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Virtual {
+    pub image_id: u32,
+    pub placement_id: u32,
+    pub generation: u64,
+    pub columns: u32,
+    pub rows: u32,
+}
+
+fn place(described: &[Described], history: u32) -> (Vec<Placed>, Vec<Virtual>) {
+    let virtuals = described
+        .iter()
+        .filter(|d| d.virtual_)
+        .map(|d| Virtual {
+            image_id: d.image_id,
+            placement_id: d.placement_id,
+            generation: d.generation,
+            columns: u32::try_from(d.grid_cols).unwrap_or(0),
+            rows: u32::try_from(d.grid_rows).unwrap_or(0),
+        })
+        .collect();
     let mut placed: Vec<Placed> = described
         .iter()
         .filter(|d| !d.virtual_ && d.pixel_width > 0 && d.pixel_height > 0)
@@ -80,6 +127,7 @@ fn place(described: &[Described], history: u32) -> Vec<Placed> {
                 z: d.z,
                 row,
                 col: d.col,
+                offset: [0, 0],
                 pixel_width: d.pixel_width as u32,
                 pixel_height: d.pixel_height as u32,
                 source: d.source.map(unsigned),
@@ -87,7 +135,7 @@ fn place(described: &[Described], history: u32) -> Vec<Placed> {
         })
         .collect();
     placed.sort_by_key(|p| (p.z, p.placement_id));
-    placed
+    (placed, virtuals)
 }
 
 /// Where a placement draws in the grid, clipped to it, and the share of its box that survives
@@ -119,8 +167,9 @@ pub fn quad(placed: &Placed, viewport: Viewport) -> Option<Quad> {
     } else {
         1.0
     };
-    let x = placed.col as f32 * viewport.cell.0;
-    let y = (i64::from(placed.row) - i64::from(viewport.top)) as f32 * viewport.cell.1;
+    let x = placed.col as f32 * viewport.cell.0 + placed.offset[0] as f32 / scale;
+    let y = (i64::from(placed.row) - i64::from(viewport.top)) as f32 * viewport.cell.1
+        + placed.offset[1] as f32 / scale;
     let width = placed.pixel_width as f32 / scale;
     let height = placed.pixel_height as f32 / scale;
     let (left, top) = (x.max(0.0), y.max(0.0));

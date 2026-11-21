@@ -5229,8 +5229,8 @@ model KittyPlacement {
   viewport_row: int32;        // top-left, screen-relative; negative = scrolled up
   viewport_col: int32;
   viewport_visible: boolean;  // false: fully off-screen or virtual
-  grid_cols: int32;           // advisory; 0 until a reflow resolves it
-  grid_rows: int32;
+  grid_cols: int32;           // advisory; 0 until a reflow resolves it. Virtual: the
+  grid_rows: int32;           // cells the program asked for, 0 = the image's own size
   pixel_width: int32;         // rendered size (source rect + aspect applied)
   pixel_height: int32;
   source_x: int32;            // resolved source rect in image pixels
