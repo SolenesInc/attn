@@ -390,6 +390,7 @@ enum OutpostUpdatePhase { connecting, building, downloading, sending, verifying,
 model OutpostUpdate {
   phase: OutpostUpdatePhase;
   outcome?: string;
+  cause?: string;
 }
 
 enum OutpostNotebookState { first_sync, syncing, in_sync, error }

@@ -364,14 +364,13 @@ choices once for the whole app:
   a dialog, its sentence, every note and its actions, built by
   `Banner::build_details` from the same banner. Details also stands whenever a
   note is wider than its line or holds a link or a button, whose name the bar
-  may elide. The banner owns its controls' presses, so pressing one in the
+  may elide, and whenever a note is a gist (`Banner::gist`): the bar shows its
+  point, such as why an update failed, and the dialog shows all of it. The banner owns its controls' presses, so pressing one in the
   dialog also closes it. The dialog belongs to the message it opened for, and
   closes once the banner says another. Only the dialog scrolls. A link
   or button in the notes longer than its line ends in an ellipsis and keeps its
   whole name for a screen reader. Its fill is 18% of the tone over
-  the app background. A failure fills the bar with the error colour, darkened until the
-  app background reads on it at 4.5:1, and its controls' focus ring takes that
-  colour.
+  the app background, in every tone, a failure included.
 - **The door.** `attn_ui::system::door` is the one module that calls Rune's raw
   spacing, font, corner and icon methods (`gap`, `padding`, `px`…, `radius`,
   `font`, `TextStyle::new`, `rune::icon` and the rest), the rune-kit setters

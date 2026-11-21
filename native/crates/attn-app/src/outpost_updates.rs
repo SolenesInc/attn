@@ -12,7 +12,7 @@ use rune::{Cx, El, Tx};
 
 use crate::State;
 use crate::closing::{Closing, Tick};
-use crate::outpost::{needs_update, update_text, updating};
+use crate::outpost::{needs_update, update_cause, update_text, updating};
 
 /// The Tauri app's key, so a dismissal carries over from it.
 const CLOSED_PREF: &str = "attn.outpost_updates.dismissed_home_build";
@@ -190,16 +190,27 @@ fn headline(updates: &Updates) -> String {
     format!("Updated {}.", crate::outpost::names(&updated))
 }
 
+/// What one note says of the outposts it names: the step they are at, or why they failed
+/// with the whole failure behind Details.
+#[derive(PartialEq)]
+struct Said {
+    gist: Option<String>,
+    whole: String,
+}
+
 /// One note per step the unfinished updates are at, naming every outpost at it, keyed by
 /// the first of them.
-fn notes(updates: &Updates) -> Vec<(String, String)> {
-    let mut groups: Vec<(String, Vec<&OutpostInfo>)> = Vec::new();
+fn notes(updates: &Updates) -> Vec<(String, Said)> {
+    let mut groups: Vec<(Said, Vec<&OutpostInfo>)> = Vec::new();
     let unfinished = updates
         .updated
         .iter()
         .filter(|o| o.update.as_ref().is_some_and(|u| u.phase != "done"));
     for outpost in unfinished {
-        let said = update_text(outpost).unwrap_or_default();
+        let said = Said {
+            gist: update_cause(outpost).map(str::to_owned),
+            whole: update_text(outpost).unwrap_or_default(),
+        };
         match groups.iter_mut().find(|(s, _)| *s == said) {
             Some((_, group)) => group.push(outpost),
             None => groups.push((said, vec![outpost])),
@@ -209,10 +220,12 @@ fn notes(updates: &Updates) -> Vec<(String, String)> {
         .into_iter()
         .map(|(said, group)| {
             let names: Vec<&str> = group.iter().map(|o| o.name.as_str()).collect();
-            (
-                group[0].id.clone(),
-                format!("{}: {said}", crate::outpost::names(&names)),
-            )
+            let names = crate::outpost::names(&names);
+            let named = Said {
+                gist: said.gist.map(|gist| format!("{names}: {gist}")),
+                whole: format!("{names}: {}", said.whole),
+            };
+            (group[0].id.clone(), named)
         })
         .collect()
 }
@@ -255,9 +268,11 @@ pub(crate) fn said(state: &State) -> Option<blocks::Banner> {
         });
     if !updates.done {
         for (id, said) in notes(&updates) {
-            banner = banner
-                .item()
-                .note(format!("outpost-updates.note.{id}"), said);
+            let key = format!("outpost-updates.note.{id}");
+            banner = match said.gist {
+                Some(gist) => banner.item().gist(key, gist, said.whole),
+                None => banner.item().note(key, said.whole),
+            };
         }
     }
     if let Some(error) = crate::settings::outposts::command_error(state) {

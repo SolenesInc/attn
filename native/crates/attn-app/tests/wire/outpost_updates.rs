@@ -33,6 +33,7 @@ fn at(phase: &str, row: OutpostInfo) -> OutpostInfo {
         update: Some(OutpostUpdate {
             phase: phase.into(),
             outcome: None,
+            cause: None,
         }),
         ..row
     }
@@ -398,6 +399,7 @@ fn an_update_in_progress_a_failure_or_a_different_build_never_closes_by_itself()
         update: Some(OutpostUpdate {
             phase: "failed".into(),
             outcome: Some("ssh: connection refused".into()),
+            cause: None,
         }),
         ..old()
     };
@@ -416,4 +418,49 @@ fn an_update_in_progress_a_failure_or_a_different_build_never_closes_by_itself()
         world.advance(Duration::from_secs(60));
         assert_eq!(banner(&world).as_deref(), Some(said));
     }
+}
+
+const RUST_TARGET_MISSING: &str = "error[E0463]: can't find crate for `core`; note: the `x86_64-unknown-linux-gnu` target may not be installed; help: consider downloading the target with `rustup target add x86_64-unknown-linux-gnu`";
+
+/// `row` after its update failed to build attn for Linux, as the daemon says it.
+fn build_failed(row: OutpostInfo) -> OutpostInfo {
+    OutpostInfo {
+        update: Some(OutpostUpdate {
+            phase: "failed".into(),
+            outcome: Some(format!(
+                "0.13.0 (source git:old, protocol old); install failed: build outpost linux/amd64: make: exit status 2: {RUST_TARGET_MISSING}; full output in /home/sam/.attn/outpost-builds/5f1d/amd64/build.log"
+            )),
+            cause: Some(RUST_TARGET_MISSING.into()),
+        }),
+        ..row
+    }
+}
+
+#[test]
+fn a_failed_build_shows_its_cause_in_the_bar_and_the_whole_failure_in_details() {
+    let (mut world, _prefs) = start(vec![old()]);
+    let whole = build_failed(old()).update.unwrap().outcome.unwrap();
+    list(
+        &mut world,
+        vec![
+            build_failed(named(old(), "sandbox", "ai-sandbox")),
+            build_failed(named(old(), "oma", "oma")),
+        ],
+    );
+    assert_eq!(
+        banner(&world).as_deref(),
+        Some(
+            format!(
+                "Couldn’t update ai-sandbox and oma. ai-sandbox and oma: {RUST_TARGET_MISSING}"
+            )
+            .as_str()
+        )
+    );
+
+    click(&mut world, "outpost-updates.details");
+    let details = world
+        .screen()
+        .find(Target::key("whole.outpost-updates.note.sandbox"))
+        .and_then(|n| n.name);
+    assert_eq!(details, Some(format!("ai-sandbox and oma: {whole}")));
 }

@@ -665,6 +665,7 @@ fn a_row_updates_to_the_home_build_and_is_disabled_while_it_pushes() {
         update: Some(OutpostUpdate {
             phase: phase.into(),
             outcome: outcome.map(str::to_owned),
+            cause: None,
         }),
         ..old.clone()
     };
@@ -719,6 +720,7 @@ fn a_first_install_that_failed_with_no_known_build_still_offers_the_update() {
         update: Some(OutpostUpdate {
             phase: "failed".into(),
             outcome: Some("upload failed".into()),
+            cause: None,
         }),
         ..refused()
     };

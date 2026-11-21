@@ -1,0 +1,8 @@
+GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) CGO_ENABLED=0 go run ./cmd/promptgen
+go build -o "/tmp/out/attnd" ./cmd/attnd
+# github.com/victorarias/attn/internal/ghosttyvt
+internal/ghosttyvt/trackedref.go:6:10: fatal error: 'ghostty/vt.h' file not found
+    6 | #include <ghostty/vt.h>
+      |          ^~~~~~~~~~~~~~
+1 error generated.
+make: *** [build] Error 1

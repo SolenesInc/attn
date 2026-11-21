@@ -80,7 +80,7 @@ func (d *Daemon) startOutpostInstall(row store.Outpost) {
 	push := &outpostPush{cancel: cancel, done: make(chan struct{}), running: true, started: time.Now()}
 	r.pushes[row.ID] = push
 	r.mu.Unlock()
-	d.setOutpostUpdate(row.ID, push, string(protocol.OutpostUpdatePhaseConnecting), "")
+	d.setOutpostUpdate(row.ID, push, string(protocol.OutpostUpdatePhaseConnecting), nil)
 	if !d.life.Go("installOutpost:"+row.ID, func() {
 		defer cancel()
 		d.finishOutpostPush(row.ID, push, d.pushOutpost(ctx, row, push))
@@ -90,7 +90,11 @@ func (d *Daemon) startOutpostInstall(row store.Outpost) {
 	}
 }
 
-func (d *Daemon) setOutpostUpdate(id string, push *outpostPush, phase, outcome string) {
+func (d *Daemon) setOutpostUpdate(id string, push *outpostPush, phase string, failure error) {
+	outcome, cause := "", ""
+	if failure != nil {
+		outcome, cause = failure.Error(), outpostbuild.Cause(failure)
+	}
 	r := &d.outposts
 	r.mu.Lock()
 	current := r.pushes[id] == push
@@ -98,6 +102,9 @@ func (d *Daemon) setOutpostUpdate(id string, push *outpostPush, phase, outcome s
 	push.state = protocol.OutpostUpdate{Phase: protocol.OutpostUpdatePhase(phase)}
 	if outcome != "" {
 		push.state.Outcome = protocol.Ptr(outcome)
+	}
+	if cause != "" {
+		push.state.Cause = protocol.Ptr(cause)
 	}
 	r.mu.Unlock()
 	if current && changed {
@@ -134,11 +141,11 @@ func (d *Daemon) finishOutpostPush(id string, push *outpostPush, err error) {
 	r.mu.Lock()
 	push.running = false
 	r.mu.Unlock()
-	phase, outcome := "done", ""
+	phase := "done"
 	if err != nil {
-		phase, outcome = "failed", err.Error()
+		phase = "failed"
 	}
-	d.setOutpostUpdate(id, push, phase, outcome)
+	d.setOutpostUpdate(id, push, phase, err)
 	close(push.done)
 }
 
@@ -162,7 +169,7 @@ func (d *Daemon) prepareOutpost(ctx context.Context, row store.Outpost, push *ou
 	hostMissing := !different && probe.HostMissing
 	d.noteOutpostHostMissing(row.ID, hostMissing)
 	if push != nil && (force || different || hostMissing) {
-		if err := d.installOutpost(ctx, remote, probe, func(phase string) { d.setOutpostUpdate(row.ID, push, phase, "") }); err != nil {
+		if err := d.installOutpost(ctx, remote, probe, func(phase string) { d.setOutpostUpdate(row.ID, push, phase, nil) }); err != nil {
 			d.outposts.mu.Lock()
 			push.installFailed = true
 			d.outposts.mu.Unlock()
@@ -175,7 +182,7 @@ func (d *Daemon) prepareOutpost(ctx context.Context, row store.Outpost, push *ou
 			return nil, &bridge.Refusal{Peer: peer, Reason: "install", Detail: fmt.Sprintf("%s; install failed: %v", found, err)}
 		}
 		d.noteOutpostHostMissing(row.ID, false)
-		d.setOutpostUpdate(row.ID, push, "restarting", "")
+		d.setOutpostUpdate(row.ID, push, "restarting", nil)
 	} else if different {
 		if probe.Build == nil {
 			return nil, &bridge.Refusal{Reason: "build", Detail: "nothing installed; choose Update in Settings → Outposts at the home to install at " + remote.InstallPath()}

@@ -1,0 +1,23 @@
+GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) CGO_ENABLED=0 go run ./cmd/promptgen
+go build -o "/tmp/out/attnd" ./cmd/attnd
+bash ./scripts/rust-cli.sh build --out "/tmp/out/attn" --target x86_64-unknown-linux-gnu
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.27
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling serde v1.0.229
+   Compiling serde_json v1.0.154
+   Compiling itoa v1.0.18
+   Compiling libc v0.2.191
+   Compiling memchr v2.8.3
+error[E0463]: can't find crate for `core`
+  |
+  = note: the `x86_64-unknown-linux-gnu` target may not be installed
+  = help: consider downloading the target with `rustup target add x86_64-unknown-linux-gnu`
+
+For more information about this error, try `rustc --explain E0463`.
+error: could not compile `itoa` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `memchr` (lib) due to 1 previous error
+make: *** [build] Error 101

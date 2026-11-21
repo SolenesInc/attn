@@ -7851,6 +7851,9 @@ const OutpostStateRefused OutpostState = "refused"
 const OutpostStateStalled OutpostState = "stalled"
 
 type OutpostUpdate struct {
+	// Cause corresponds to the JSON schema field "cause".
+	Cause *string `json:"cause,omitempty,omitzero"`
+
 	// Outcome corresponds to the JSON schema field "outcome".
 	Outcome *string `json:"outcome,omitempty,omitzero"`
 

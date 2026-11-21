@@ -19,7 +19,7 @@ pub enum BannerTone {
     Calm,
     /// Something ended well.
     Good,
-    /// Something failed: the one loud banner, filled in its tone.
+    /// Something failed.
     Bad,
 }
 
@@ -41,6 +41,7 @@ enum Note {
     Words {
         key: String,
         said: Said,
+        whole: Option<Said>,
     },
     Link {
         key: String,
@@ -141,7 +142,7 @@ impl Banner {
 
     /// Opens the dialog that holds the banner whole, offered last among the actions while the bar
     /// may cut something short: a sentence past its lines, a note wider than its line, items past
-    /// the bar's lines, or a note that holds a control, whose name the bar may elide.
+    /// the bar's lines, a gist, or a note that holds a control, whose name the bar may elide.
     pub fn details<S: 'static>(mut self, open: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
         self.details = Some(Box::new(move |b: Button| b.on_press_tx(open)));
         self
@@ -171,6 +172,23 @@ impl Banner {
         self.push(Note::Words {
             key: key.into(),
             said: said.into(),
+            whole: None,
+        });
+        self
+    }
+
+    /// A note the bar shows as its `gist` and Details shows `whole`, for words whose point
+    /// fits a line though all of them do not.
+    pub fn gist(
+        mut self,
+        key: impl Into<String>,
+        gist: impl Into<Said>,
+        whole: impl Into<Said>,
+    ) -> Self {
+        self.push(Note::Words {
+            key: key.into(),
+            said: gist.into(),
+            whole: Some(whole.into()),
         });
         self
     }
@@ -280,7 +298,10 @@ impl Banner {
             between.pt(),
             &self.key,
         );
-        let mut cut_short = cut || notes.iter().any(|note| !matches!(note, Note::Words { .. }));
+        let mut cut_short = cut
+            || notes
+                .iter()
+                .any(|note| !matches!(note, Note::Words { whole: None, .. }));
         let sentence = self.sentence.map(|sentence| {
             let natural = width_of(&sentence.said, Type::Name);
             let least = match column {
@@ -491,6 +512,7 @@ fn named(
     let more = (left > 0).then(|| Note::Words {
         key: format!("{key}.more"),
         said: counting(left).into(),
+        whole: None,
     });
     (shown, more, true)
 }
@@ -525,9 +547,14 @@ impl Note {
 
     fn within(self) -> Note {
         match self {
-            Note::Words { key, said } => Note::Words {
-                key: whole(&key),
+            Note::Words {
+                key,
                 said,
+                whole: all,
+            } => Note::Words {
+                key: whole(&key),
+                said: all.unwrap_or(said),
+                whole: None,
             },
             Note::Link {
                 key,
@@ -645,28 +672,6 @@ impl Paint {
             BannerTone::Good => t.success,
             BannerTone::Bad => t.error,
         };
-        if tone == BannerTone::Bad {
-            let ink = t.bg_app;
-            let fill = colors::moved_until_it_reads(hue, t.text_primary, ink);
-            return Paint {
-                fill,
-                edge: fill,
-                glyph: ink,
-                ink,
-                quiet: ink,
-                link: ink,
-                controls: Tokens {
-                    warning: ink,
-                    primary: ink,
-                    on_primary: colors::mix_srgb(ink, t.shadow, 0.9),
-                    focus: ink,
-                    text_secondary: ink,
-                    text_tertiary: ink,
-                    ..*t
-                },
-                whole: false,
-            };
-        }
         Paint {
             fill: colors::mix_srgb(t.bg_app, hue, TINT),
             edge: colors::mix_srgb(t.border, hue, EDGE),
@@ -704,7 +709,7 @@ impl Paint {
     fn note(&self, note: Note, close: Option<Close>) -> El {
         let t = &self.controls;
         match note {
-            Note::Words { key, said } => self
+            Note::Words { key, said, .. } => self
                 .fit(words(said, Type::Body, self.quiet).key(key))
                 .shrink(),
             Note::Link {

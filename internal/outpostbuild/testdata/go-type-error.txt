@@ -1,0 +1,5 @@
+GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) CGO_ENABLED=0 go run ./cmd/promptgen
+go build -o "/tmp/out/attnd" ./cmd/attnd
+# github.com/victorarias/attn/internal/daemon
+internal/daemon/outpost_update.go:144:2: undefined: setOutpostUpdat
+make: *** [build] Error 1

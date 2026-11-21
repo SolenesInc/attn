@@ -79,7 +79,7 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (Binaries, er
 	if req.Channel == "release" {
 		err = DownloadRelease(ctx, req.ReleaseSource, req.Build.Version, arch, staged)
 	} else {
-		err = req.build(ctx, arch, staging, staged)
+		err = req.build(ctx, arch, filepath.Join(dir, "build.log"), staging, staged)
 	}
 	if err != nil {
 		return Binaries{}, err
@@ -167,7 +167,7 @@ func Download(ctx context.Context, url, output string) error {
 	return nil
 }
 
-func (req Request) build(ctx context.Context, arch, staging string, staged Binaries) error {
+func (req Request) build(ctx context.Context, arch, log, staging string, staged Binaries) error {
 	rustTarget := "x86_64-unknown-linux-gnu"
 	zigTarget := "x86_64-linux-gnu"
 	if arch == "arm64" {
@@ -186,14 +186,14 @@ func (req Request) build(ctx context.Context, arch, staging string, staged Binar
 	if commit, ok := strings.CutPrefix(req.Build.SourceFingerprint, "git:"); ok {
 		gitCommit = commit
 		archive := filepath.Join(staging, "source.tar")
-		if _, err := command(ctx, repo, "git", "archive", "--format=tar", "--output="+archive, commit); err != nil {
+		if _, err := command(ctx, repo, "", "git", "archive", "--format=tar", "--output="+archive, commit); err != nil {
 			return fmt.Errorf("export home build %s from %s: %w", req.Build.SourceFingerprint, repo, err)
 		}
 		source = filepath.Join(staging, "source")
 		if err := os.Mkdir(source, 0700); err != nil {
 			return err
 		}
-		if _, err := command(ctx, staging, "tar", "-xf", archive, "-C", source); err != nil {
+		if _, err := command(ctx, staging, "", "tar", "-xf", archive, "-C", source); err != nil {
 			return err
 		}
 	} else if !strings.HasPrefix(req.Build.SourceFingerprint, "tree:") {
@@ -203,14 +203,14 @@ func (req Request) build(ctx context.Context, arch, staging string, staged Binar
 	if gitCommit != "" {
 		buildArgs = append(buildArgs, "GIT_COMMIT="+gitCommit)
 	}
-	if _, err := command(ctx, source, "make", buildArgs...); err != nil {
+	if _, err := command(ctx, source, log, "make", buildArgs...); err != nil {
 		return fmt.Errorf("build outpost %s: %w", req.Platform, err)
 	}
-	if _, err := command(ctx, source, "make", "build-pty-host-linux-"+arch); err != nil {
+	if _, err := command(ctx, source, log, "make", "build-pty-host-linux-"+arch); err != nil {
 		return fmt.Errorf("build %s for outpost %s: %w", ptyhost.BinaryName, req.Platform, err)
 	}
 	built := filepath.Join(source, "dist", "pty-host", "linux_"+arch, ptyhost.BinaryName)
-	if _, err := command(ctx, source, "cp", built, staged.Host); err != nil {
+	if _, err := command(ctx, source, "", "cp", built, staged.Host); err != nil {
 		return err
 	}
 	if strings.HasPrefix(req.Build.SourceFingerprint, "tree:") {
@@ -239,23 +239,94 @@ func (req Request) prune(current, arch string) error {
 	return nil
 }
 
-func command(ctx context.Context, dir, name string, args ...string) ([]byte, error) {
+type CommandError struct {
+	Name  string
+	Err   error
+	Cause string
+	Log   string
+}
+
+func (e *CommandError) Error() string {
+	said := fmt.Sprintf("%s: %v", e.Name, e.Err)
+	if e.Cause != "" {
+		said += ": " + e.Cause
+	}
+	if e.Log != "" {
+		said += "; full output in " + e.Log
+	}
+	return said
+}
+
+func (e *CommandError) Unwrap() error { return e.Err }
+
+func Cause(err error) string {
+	var failed *CommandError
+	if errors.As(err, &failed) {
+		return failed.Cause
+	}
+	return ""
+}
+
+func command(ctx context.Context, dir, log, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w: %s", name, err, strings.TrimSpace(string(output)))
+	if err == nil {
+		return output, nil
 	}
-	return output, nil
+	failed := &CommandError{Name: name, Err: err, Cause: causeIn(string(output))}
+	if log != "" && os.WriteFile(log, output, 0600) == nil {
+		failed.Log = log
+	}
+	return nil, failed
+}
+
+func causeIn(output string) string {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	for i, line := range lines {
+		if !reportsError(line) {
+			continue
+		}
+		said := []string{strings.TrimSpace(line)}
+		for _, under := range lines[i+1:] {
+			under = strings.TrimSpace(under)
+			if under == "|" {
+				continue
+			}
+			remark, ok := strings.CutPrefix(under, "= ")
+			if !ok {
+				break
+			}
+			said = append(said, remark)
+		}
+		return strings.Join(said, "; ")
+	}
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" && !isMakeReport(line) {
+			return line
+		}
+	}
+	return ""
+}
+
+func reportsError(line string) bool {
+	lower := strings.ToLower(line)
+	return strings.Contains(lower, "error:") || strings.Contains(lower, "error[")
+}
+
+func isMakeReport(line string) bool {
+	name, report, ok := strings.Cut(line, ": ")
+	return ok && (name == "make" || strings.HasPrefix(name, "make[")) && strings.HasPrefix(report, "***")
 }
 
 func (req Request) checkWorktree(ctx context.Context) error {
 	if req.Repository == "" {
 		return fmt.Errorf("source build has no recorded repository path")
 	}
-	actual, err := command(ctx, req.Repository, "bash", "scripts/source-fingerprint.sh", "--field", "fingerprint")
+	actual, err := command(ctx, req.Repository, "", "bash", "scripts/source-fingerprint.sh", "--field", "fingerprint")
 	if err != nil {
 		return err
 	}

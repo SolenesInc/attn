@@ -126,6 +126,12 @@ pub(crate) fn update_text(row: &OutpostInfo) -> Option<String> {
     )
 }
 
+/// Why a failed update failed, in one line, when its outcome says more than that.
+pub(crate) fn update_cause(row: &OutpostInfo) -> Option<&str> {
+    let update = row.update.as_ref().filter(|u| u.phase == "failed")?;
+    update.cause.as_deref().filter(|c| !c.is_empty())
+}
+
 /// Outposts by name as a band says them: one, two joined by "and", or a count past two.
 pub(crate) fn names(names: &[&str]) -> String {
     match names {
