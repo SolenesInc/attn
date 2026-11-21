@@ -9,11 +9,7 @@ groups:
       See what other agents are doing, message one, read your inbox, close or reload one.
     map:
       rows:
-        - {need: "See what other agents are doing, or message one; agent_msg is the chief, a crew member or a seed's tender", tools: [agent_list, agent_peek, agent_msg, agent_msg_status]}
-        - {need: "Read your inbox when attn says you have unread items, or save a file the user attached", tools: [agent_inbox, agent_attachment]}
-        - {need: "Close or reload an agent you dispatched, or close yourself", tools: [agent_close, agent_reload]}
-      notes: |
-        Reach sessions attn runs with agent_msg; native subagents your harness spawned are the only exception. Rename your session with session_rename when its main work no longer matches its name.
+        - {need: "Message, watch or close other agents; read your inbox", tools: [agent_msg, agent_inbox]}
     flags:
       - {name: source-session, placeholder: "<id>", doc: "the session acting (defaults to the current session)"}
       - {name: session, placeholder: "<id>", doc: "the same as --source-session"}
