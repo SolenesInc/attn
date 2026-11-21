@@ -2,7 +2,7 @@ use attn_ui::Tokens;
 use attn_ui::blocks::{Actions, Block, Inline, Menu, Notice, Prose, Sheet, Stack, Status};
 use attn_ui::system::{
     Button, IconSize, ListRow, Look, Size, Trigger, TriggerLook, Type, composer, drop_overlay,
-    file_chip, icon_button, image_tile, keycaps, pick_area, words,
+    file_chip, file_kind, file_size, icon_button, image_tile, keycaps, pick_area, words,
 };
 use rune::{ClipboardContent, Cx, El, SurfaceFit, Tx, col, el};
 use rune_kit::{Placement, popover};
@@ -186,14 +186,14 @@ fn files(panel: &Panel, t: &Tokens) -> El {
             }
             let ready = file.ready();
             let detail = if ready {
-                size(file.size())
+                file_size(file.size())
             } else {
                 "Attaching…".to_owned()
             };
             file_chip(
                 format!("capture.file.{}", file.id),
                 &file.name,
-                kind(&file.name, file.image().is_some()),
+                file_kind(&file.name, file.image().is_some()),
                 &detail,
                 Some(remove),
                 t,
@@ -475,7 +475,7 @@ fn item(panel: &Panel, record: &attn_protocol::QuickCaptureRecord, t: &Tokens) -
             return sent_image(panel, record, file, t);
         }
         words(
-            format!("{} · {}", file.name, size(file.bytes.max(0) as u64)),
+            format!("{} · {}", file.name, file_size(file.bytes.max(0) as u64)),
             Type::Small,
             t.text_secondary,
         )
@@ -550,7 +550,7 @@ fn sent_image(
         ))
         .child(words(file.name.clone(), Type::Small, t.text_tertiary).wrap())
         .child(words(
-            size(file.bytes.max(0) as u64),
+            file_size(file.bytes.max(0) as u64),
             Type::Small,
             t.text_tertiary,
         ))
@@ -594,27 +594,5 @@ fn day_label(ms: i64, today: i64) -> String {
         format!("{month} {}", local.day)
     } else {
         format!("{month} {}, {}", local.day, local.year)
-    }
-}
-
-fn kind(name: &str, image: bool) -> String {
-    match name.rsplit_once('.') {
-        Some((_, extension)) => extension.to_uppercase(),
-        None if image => "IMG".into(),
-        None => "FILE".into(),
-    }
-}
-
-fn size(bytes: u64) -> String {
-    const K: f64 = 1024.0;
-    let b = bytes as f64;
-    if bytes < 1024 {
-        format!("{bytes} B")
-    } else if b < K * K {
-        format!("{:.1} KiB", b / K)
-    } else if b < K * K * K {
-        format!("{:.1} MiB", b / (K * K))
-    } else {
-        format!("{:.1} GiB", b / (K * K * K))
     }
 }

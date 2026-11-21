@@ -82,3 +82,27 @@ pub fn drop_overlay(key: impl Into<String>, said: impl Into<Said>, t: &Tokens) -
         .child(words(said, Type::Body, t.text_primary));
     door::corner(overlay, Radius::Panel)
 }
+
+/// A file's kind as its chip names it: its extension, else IMG for an image or FILE.
+pub fn file_kind(name: &str, image: bool) -> String {
+    match name.rsplit_once('.') {
+        Some((_, extension)) => extension.to_uppercase(),
+        None if image => "IMG".into(),
+        None => "FILE".into(),
+    }
+}
+
+/// A file's size as its chip says it, in binary units.
+pub fn file_size(bytes: u64) -> String {
+    const K: f64 = 1024.0;
+    let b = bytes as f64;
+    if bytes < 1024 {
+        format!("{bytes} B")
+    } else if b < K * K {
+        format!("{:.1} KiB", b / K)
+    } else if b < K * K * K {
+        format!("{:.1} MiB", b / (K * K))
+    } else {
+        format!("{:.1} GiB", b / (K * K * K))
+    }
+}

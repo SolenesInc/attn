@@ -1118,6 +1118,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("system::attachment::file_chip(name)", true),
     ("system::attachment::file_chip(kind)", true),
     ("system::attachment::file_chip(detail)", true),
+    ("system::attachment::file_kind(name)", false),
     ("system::attachment::image_tile(name)", false),
     ("system::attachment::drop_overlay(said)", true),
     ("system::button::Button::new(words)", true),

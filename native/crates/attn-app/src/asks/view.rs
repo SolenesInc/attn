@@ -5,14 +5,14 @@ use attn_protocol::{Ask, AskAnswer, AskQuestion, AskSeedMention, AskThread, Sess
 use attn_ui::blocks::{Block, Disclosure, Inline, List, Popover, Section, Sheet, Stack};
 use attn_ui::system::{
     AskChip, Button, Choice, DotShape, DotSize, FieldState, IconSize, ListRow, Look, Size, Tone,
-    Type, answers, area_box, ask_mark, checks, count_badge, dot, icon_button, keycaps, keys_hint,
-    line_box, tag, words,
+    Type, answers, area_box, ask_mark, checks, count_badge, dot, drop_overlay, file_chip,
+    file_kind, file_size, icon_button, image_tile, keycaps, keys_hint, line_box, tag, words,
 };
 use attn_ui::{Backdrop, Frame, Tokens, glyph};
-use rune::{El, Image, Key, KeyEvent, Side, Tx, col, row};
+use rune::{El, Image, Key, KeyEvent, Side, SurfaceFit, Tx, col, row};
 use rune_kit::{ImageFrame, Markdown, TextArea, TextInput};
 
-use super::{Chip, Item, Kind, Lists, Stop, mentions, questions};
+use super::{Chip, Item, Kind, Lists, Stop, attach, mentions, questions};
 use crate::State;
 use crate::desktop::header_pop::{self, Pop, What};
 use crate::markdown::{images, links};
@@ -70,6 +70,11 @@ pub(super) fn text_key(question: &str) -> String {
 }
 
 pub(super) const NOTE: &str = "asks.note.field";
+pub(super) const ATTACH: &str = "asks.attach";
+
+pub(super) fn remove_file_key(file: &str) -> String {
+    format!("asks.file.{file}.remove")
+}
 const QUOTE: &str = "asks.quote";
 
 fn send_chord() -> &'static str {
@@ -129,6 +134,17 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
                 .and_then(|s| s.texts().iter().find(|t| t.is_selected()))
                 .map(|t| keyed_path(t.path()));
         })
+        .on_drop_files(
+            |state: &mut State, paths: &[std::path::PathBuf], tx: &mut Tx| {
+                state.window.asks.dropping = false;
+                if let Some((id, false)) = state.shown_ask() {
+                    attach::dropped(state, &id, paths, tx);
+                }
+            },
+        )
+        .on_drop_hover(|state: &mut State, over: bool, _: &mut Tx| {
+            state.window.asks.dropping = over && matches!(state.shown_ask(), Some((_, false)));
+        })
         .modal_tx(true, super::close)
         .w_full()
         .max_w(SHEET_W);
@@ -187,7 +203,14 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
             Some(above),
         )
         .center()
-        .child(Frame::dialog(t).draw_clipped(panel));
+        .child(
+            Frame::dialog(t).draw_clipped(
+                panel.children(
+                    asks.dropping
+                        .then(|| drop_overlay("asks.drop", "Drop to attach to your answer", t)),
+                ),
+            ),
+        );
     rune::el()
         .key("asks.layer")
         .absolute(0.0, 0.0)
@@ -567,12 +590,21 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
         _ => format!("Anything else for {}?", item.from),
     };
     match &ask.reply {
-        Some(reply) => blocks.extend(reply.note.as_ref().filter(|n| !n.is_empty()).map(|n| {
-            Block::custom(
-                "asks.note.block",
-                replied_text("asks.note".into(), "Note", n, t),
-            )
-        })),
+        Some(reply) => {
+            blocks.extend(reply.note.as_ref().filter(|n| !n.is_empty()).map(|n| {
+                Block::custom(
+                    "asks.note.block",
+                    replied_text("asks.note".into(), "Note", n, t),
+                )
+            }));
+            blocks.extend(
+                reply
+                    .attachments
+                    .as_ref()
+                    .filter(|files| !files.is_empty())
+                    .map(|files| Block::custom("asks.files.block", sent_files(files, t))),
+            );
+        }
         None => {
             let (id, pressed) = (ask.id.clone(), ask.id.clone());
             blocks.push(Block::custom(
@@ -583,11 +615,16 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
                     "Note",
                     &note_placeholder,
                     move |state: &mut State| state.note(&id),
+                    Some(ask.id.clone()),
                     t,
                 )
                 .on_press_within(move |state: &mut State, _: &mut Tx| {
                     super::activate(state, &pressed, Stop::Note)
                 }),
+            ));
+            blocks.push(Block::custom(
+                "asks.files.block",
+                drafted_files(&ask.id, draft.map_or(&[][..], |d| &d.files[..]), t),
             ));
         }
     }
@@ -821,6 +858,7 @@ fn written(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) ->
                 &question.prompt,
                 &placeholder,
                 move |state: &mut State| &mut state.answer(&ask_id, &q).text,
+                None,
                 t,
             );
             let suggestion = question
@@ -1007,24 +1045,121 @@ fn replied_text(key: String, label: &str, value: &str, t: &Tokens) -> El {
         )
 }
 
-/// A field of several lines that starts three lines high and that its grip drags taller.
+/// A field of several lines that starts three lines high and that its grip drags taller. With
+/// `attaching_to`, a pasted file or image attaches to that ask's answer.
 fn written_field(
     edit: Option<&rune::TextEdit>,
     key: &str,
     label: &str,
     placeholder: &str,
     lens: impl for<'a> Fn(&'a mut State) -> &'a mut rune::TextEdit + 'static,
+    attaching_to: Option<String>,
     t: &Tokens,
 ) -> El {
     let empty = rune::TextEdit::default();
-    let area = TextArea::new(edit.unwrap_or(&empty))
+    let mut area = TextArea::new(edit.unwrap_or(&empty))
         .key(key.to_owned())
         .label(label.to_owned())
         .placeholder(placeholder.to_owned())
         .resizable()
         .on_edit(lens)
         .on_key(field_key);
+    if let Some(ask) = attaching_to {
+        area = area.on_paste(
+            move |state: &mut State, content: &rune::ClipboardContent, tx| {
+                attach::paste(state, &ask, content, tx)
+            },
+        );
+    }
     area_box(area, FieldState::Ready, t).into()
+}
+
+/// The files an answer will carry, each with its remove button, then Attach file.
+fn drafted_files(ask: &str, files: &[attach::File], t: &Tokens) -> El {
+    let tray = files.iter().map(|file| {
+        let (ask_id, file_id) = (ask.to_owned(), file.id.clone());
+        let remove = icon_button(
+            remove_file_key(&file.id),
+            format!("Remove {}", file.name),
+            glyph::TIMES,
+            IconSize::Small,
+        )
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            attach::remove(state, &ask_id, &file_id, tx)
+        })
+        .build(t)
+        .into();
+        let status = match (file.failed(), file.uploading()) {
+            (Some(_), _) => "failed",
+            (None, true) => "uploading",
+            (None, false) => "ready",
+        };
+        let key = format!("asks.file.{}", file.id);
+        if let Some(picture) = file.picture.as_ref().filter(|p| p.is_ready()) {
+            let frame = rune::el()
+                .role("image")
+                .size(attach::TILE.0, attach::TILE.1)
+                .label(file.name.clone())
+                .pixels_fit(picture.pixels(), SurfaceFit::Fill);
+            return image_tile(key, &file.name, Some(frame), attach::TILE, Some(remove), t)
+                .a11y_value(status);
+        }
+        let detail = match status {
+            "failed" => "Failed".to_owned(),
+            "uploading" => "Attaching…".to_owned(),
+            _ => file_size(file.size),
+        };
+        file_chip(
+            key,
+            &file.name,
+            file_kind(&file.name, file.picture.is_some()),
+            &detail,
+            Some(remove),
+            t,
+        )
+        .a11y_value(status)
+    });
+    let id = ask.to_owned();
+    let pick = El::from(
+        Button::new("Attach file")
+            .size(Size::Compact)
+            .look(Look::Plain)
+            .on_press_tx(move |_: &mut State, tx: &mut Tx| attach::pick(&id, tx))
+            .build(t)
+            .key(ATTACH),
+    );
+    let paste = if rune::Platform::current() == rune::Platform::Mac {
+        "⌘V pastes a screenshot"
+    } else {
+        "Ctrl+V pastes a screenshot"
+    };
+    Inline::loose()
+        .key("asks.files")
+        .role("list")
+        .label("Attached files")
+        .w_full()
+        .children(tray)
+        .child(pick)
+        .child(words(paste, Type::Small, t.text_tertiary))
+}
+
+/// The files a replied answer carried, by name and size.
+fn sent_files(files: &[attn_protocol::Attachment], t: &Tokens) -> El {
+    Inline::loose()
+        .key("asks.files")
+        .role("list")
+        .label("Attached files")
+        .w_full()
+        .children(files.iter().map(|file| {
+            file_chip(
+                format!("asks.file.{}", file.id),
+                &file.name,
+                file_kind(&file.name, file.media_type.starts_with("image/")),
+                file_size(file.bytes.max(0) as u64),
+                None,
+                t,
+            )
+        }))
 }
 
 /// A field's keys it does not take as text: ⌘↩ sends, Escape closes the sheet and ⇥ moves the
@@ -1113,7 +1248,18 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
                     .drafts
                     .get(&ask.id)
                     .is_some_and(|d| d.sendable(ask));
-            let said = if sending { "Sending…" } else { "Send" };
+            let waiting = state
+                .window
+                .asks
+                .drafts
+                .get(&ask.id)
+                .is_some_and(|d| d.sends_after_upload);
+            let sendable = sendable && !waiting;
+            let said = if sending || waiting {
+                "Sending…"
+            } else {
+                "Send"
+            };
             El::from(
                 Button::new(said)
                     .look(Look::Primary)

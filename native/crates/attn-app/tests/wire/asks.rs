@@ -23,7 +23,7 @@ fn choice(label: &str) -> AskChoice {
     }
 }
 
-fn question(key: &str, kind: &str, prompt: &str, choices: &[&str]) -> AskPart {
+pub(super) fn question(key: &str, kind: &str, prompt: &str, choices: &[&str]) -> AskPart {
     AskPart {
         question: Some(AskQuestion {
             key: key.into(),
@@ -48,7 +48,13 @@ fn prose(markdown: &str) -> AskPart {
     }
 }
 
-fn ask(id: &str, session: &str, subject: &str, minutes_ago: i64, parts: Vec<AskPart>) -> Ask {
+pub(super) fn ask(
+    id: &str,
+    session: &str,
+    subject: &str,
+    minutes_ago: i64,
+    parts: Vec<AskPart>,
+) -> Ask {
     Ask {
         id: id.into(),
         session_id: session.into(),
@@ -293,7 +299,7 @@ fn name(world: &World, key: &str) -> String {
         .unwrap_or_default()
 }
 
-fn update_asks(world: &mut World, asks: Vec<Ask>) {
+pub(super) fn update_asks(world: &mut World, asks: Vec<Ask>) {
     world.daemon.emit(AsksUpdatedMessage {
         profile_id: "work".into(),
         asks,
@@ -2223,7 +2229,7 @@ fn tab_walks_the_questions_and_the_note_then_the_sheets_controls_and_never_the_l
     open_sheet(&mut world);
     click(&mut world, "asks.row.a-plan");
     let mut walk = vec![focused(&world).unwrap_or_default()];
-    for _ in 0..7 {
+    for _ in 0..8 {
         plain(&mut world, Key::Tab);
         walk.push(focused(&world).unwrap_or_default());
     }
@@ -2235,13 +2241,14 @@ fn tab_walks_the_questions_and_the_note_then_the_sheets_controls_and_never_the_l
             "asks.q.q3.text.field",
             "asks.q.q3.suggestion",
             "asks.note.field",
+            "asks.attach",
             "asks.replied",
             "asks.close",
             "asks.copy",
         ]
     );
     let mut back = Vec::new();
-    for _ in 0..9 {
+    for _ in 0..10 {
         world.gesture(|d| d.press("shift+tab"));
         back.push(focused(&world).unwrap_or_default());
     }
@@ -2250,6 +2257,7 @@ fn tab_walks_the_questions_and_the_note_then_the_sheets_controls_and_never_the_l
         [
             "asks.close",
             "asks.replied",
+            "asks.attach",
             "asks.note.field",
             "asks.q.q3.suggestion",
             "asks.q.q3.text.field",

@@ -42,7 +42,7 @@ mod trigger;
 mod type_role;
 
 pub use ask::{AskChip, ask_mark};
-pub use attachment::{drop_overlay, file_chip, image_tile};
+pub use attachment::{drop_overlay, file_chip, file_kind, file_size, image_tile};
 pub use button::{Button, Look};
 pub use check::Check;
 pub use chip::{

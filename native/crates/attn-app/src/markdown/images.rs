@@ -121,6 +121,13 @@ impl Pictures {
         self.logo.as_ref()
     }
 
+    /// A picture of the PNG `png`, decoded for a tile at most `side` points across, as an answer
+    /// file pasted into an ask shows; none before the window starts decoding.
+    pub(crate) fn of_png(&self, png: std::sync::Arc<[u8]>, side: f32) -> Option<Image> {
+        let cache = self.cache.as_ref()?;
+        Some(cache.load_mime(png, "image/png", side, crate::PICTURE_SCALE))
+    }
+
     /// Whether a picture is still decoding, which will wake the window when it is done.
     pub fn decoding(&self) -> bool {
         self.loads

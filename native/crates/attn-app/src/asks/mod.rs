@@ -1,3 +1,4 @@
+mod attach;
 mod mentions;
 mod view;
 
@@ -38,6 +39,8 @@ pub struct Asks {
     pub(crate) follows_open: Option<String>,
     pub(crate) drafts: HashMap<String, Draft>,
     pub(crate) sending: Option<String>,
+    /// Files are dragged over the sheet.
+    pub(crate) dropping: bool,
     /// Why the daemon refused the answer to an ask, shown under that ask.
     pub(crate) error: Option<(String, String)>,
     /// The ask, and whether it was replied, that the keyboard last moved into.
@@ -57,6 +60,9 @@ pub(crate) struct Draft {
     /// The stop ⇥, the number keys and clicks last made active; the ask's first unanswered
     /// choice question until then.
     pub active: Option<Stop>,
+    pub files: Vec<attach::File>,
+    /// Send was pressed while a file still uploaded: the answer goes once every file is up.
+    pub sends_after_upload: bool,
 }
 
 /// Where ⇥ stops in an open ask, in order: each question, then the note.
@@ -151,6 +157,14 @@ fn input_of(state: &State, ask: &Ask, stop: &Stop) -> String {
 fn controls(state: &State, ask: &Ask, stop: &Stop) -> Vec<String> {
     let mut controls = vec![input_of(state, ask, stop)];
     let Stop::Question(key) = stop else {
+        let files = state.window.asks.drafts.get(&ask.id).map(|d| &d.files[..]);
+        controls.extend(
+            files
+                .unwrap_or_default()
+                .iter()
+                .map(|f| view::remove_file_key(&f.id)),
+        );
+        controls.push(view::ATTACH.to_owned());
         return controls;
     };
     let answer = state
@@ -654,7 +668,10 @@ impl Draft {
     }
 
     pub(crate) fn sendable(&self, ask: &Ask) -> bool {
-        !self.answers(ask).is_empty() || !self.note.text.trim().is_empty()
+        let written = !self.answers(ask).is_empty()
+            || !self.note.text.trim().is_empty()
+            || !self.files.is_empty();
+        written && self.files.iter().all(|f| f.failed().is_none())
     }
 }
 
@@ -908,9 +925,12 @@ pub(crate) fn accept_recommended(state: &mut State, ask: &str) {
 /// moves to the ask after it in its section, or before it, or stays to show the reply; a
 /// refusal keeps what was written and says why.
 pub(crate) fn send(state: &mut State, tx: &mut Tx) {
-    let Some((id, false)) = state.shown_ask() else {
-        return;
-    };
+    if let Some((id, false)) = state.shown_ask() {
+        send_ask(state, id, tx);
+    }
+}
+
+fn send_ask(state: &mut State, id: String, tx: &mut Tx) {
     if state.window.asks.sending.is_some() {
         return;
     }
@@ -921,8 +941,14 @@ pub(crate) fn send(state: &mut State, tx: &mut Tx) {
     if !draft.sendable(&ask) {
         return;
     }
+    if draft.files.iter().any(attach::File::uploading) {
+        draft.sends_after_upload = true;
+        state.window.asks.error = None;
+        return;
+    }
     let answers = draft.answers(&ask);
     let note = draft.note.text.trim().to_owned();
+    let attachments: Vec<String> = draft.files.iter().map(|f| f.id.clone()).collect();
     let after = {
         let lists = Lists::of(&state.facts, state.window.now_ms);
         let section = if lists.snoozed.iter().any(|i| i.ask.id == id) {
@@ -944,20 +970,37 @@ pub(crate) fn send(state: &mut State, tx: &mut Tx) {
             ask_id: id.clone(),
             answers,
             note: (!note.is_empty()).then_some(note),
+            attachments: (!attachments.is_empty()).then_some(attachments),
             ..AskAnswerMessage::new()
         },
         move |state, answer, tx| {
             state.window.asks.sending = None;
             match answer.outcome() {
-                Ok(_) => {
+                Ok(_) if state.shown_ask().is_some_and(|(shown, _)| shown == ask.id) => {
                     state.window.asks.selected = after.or_else(|| Some(ask.id.clone()));
                     follow(state, tx);
                 }
+                Ok(_) => {}
                 Err(why) => state.window.asks.error = Some((ask.id.clone(), why)),
             }
         },
         tx,
     );
+}
+
+/// A file of `ask`'s answer finished uploading, failed or was removed: a send that waited on
+/// its files goes once none is uploading, and stops when one failed.
+fn uploaded(state: &mut State, ask: &str, tx: &mut Tx) {
+    let Some(draft) = state.window.asks.drafts.get_mut(ask) else {
+        return;
+    };
+    if !draft.sends_after_upload || draft.files.iter().any(attach::File::uploading) {
+        return;
+    }
+    draft.sends_after_upload = false;
+    if draft.files.iter().all(|f| f.failed().is_none()) {
+        send_ask(state, ask.to_owned(), tx);
+    }
 }
 
 /// Closes the sheet and opens the agent that holds the ask shown.

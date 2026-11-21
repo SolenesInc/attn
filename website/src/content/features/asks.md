@@ -23,6 +23,8 @@ One question of an ask is active, marked by a bar at its side. The number keys p
 
 Attn types your answer into the agent's conversation as your message. When the ask is about a seed, the answer goes to whoever tends that seed when you answer, and Attn adds the answer to the seed as a note.
 
+When words won't do, show the agent: paste a screenshot into your note, or drop a file on the sheet. The agent gets each file with your answer and saves it with one command.
+
 An agent writes an ask as Markdown:
 
 ```sh
