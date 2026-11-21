@@ -831,6 +831,22 @@ test.describe('Ghostty terminal interactions', () => {
     await expectTerminalInputCount(page, 's-text-paste-linux', 'linux pasted text', 1);
   });
 
+  test('pasted text cannot carry escape bytes into the PTY', async ({ page, daemon }) => {
+    const terminal = await openTerminalSession(page, daemon, 's-paste-escape-bytes');
+    await terminal.focus();
+
+    await terminal.evaluate((element) => {
+      const data = new DataTransfer();
+      data.setData('text/plain', 'before\u001b[201~after');
+      element.dispatchEvent(new ClipboardEvent('paste', {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: data,
+      }));
+    });
+    await expectTerminalInputCount(page, 's-paste-escape-bytes', 'before[201~after', 1);
+  });
+
   test('double-click selects and copies a terminal word', async ({ page, context, daemon }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     const terminal = await openTerminalSession(page, daemon, 's-double-click');
