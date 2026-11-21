@@ -75,4 +75,31 @@ bash "$work/second/scripts/rust-cli.sh" build --out "$work/out/second/attn" 2>/d
 [[ "$(cargo_runs)" == 6 ]]
 [[ -d "$first_entry" ]] || { echo 'eviction removed an entry a hit had just used' >&2; exit 1; }
 [[ ! -e "$second_entry" ]] || { echo 'an entry untouched for 7 days survived a store write' >&2; exit 1; }
+case "$(uname -s)-$(uname -m)" in
+  Darwin-arm64) vt_platform=darwin_arm64 ;;
+  Linux-x86_64) vt_platform=linux_amd64 ;;
+  Linux-aarch64) vt_platform=linux_arm64 ;;
+esac
+mkdir -p "$work/repo/pty-host/src" "$work/repo/pty-host/dep/src" "$work/repo/third_party/ghostty-vt/$vt_platform/"{lib,include}
+printf 'fixture\n' > "$work/repo/ghostty-vt.pin"
+printf '[package]\nname = "attn-pty-host"\nversion = "0.0.0"\nedition = "2021"\n\n[dependencies]\nfixture-dep = { path = "dep" }\n\n[features]\nadopt-fault = []\n' > "$work/repo/pty-host/Cargo.toml"
+printf '[package]\nname = "fixture-dep"\nversion = "0.0.0"\nedition = "2021"\n' > "$work/repo/pty-host/dep/Cargo.toml"
+printf 'pub fn message() -> &'"'"'static str { "fixture" }\n' > "$work/repo/pty-host/dep/src/lib.rs"
+cat > "$work/repo/pty-host/src/main.rs" <<'RS'
+#[cfg(feature = "adopt-fault")]
+compile_error!("this variant does not compile");
+fn main() {
+    println!("{} {}", fixture_dep::message(), env!("ATTN_PTY_HOST_SNAPSHOT_FORMAT"));
+}
+RS
+(cd "$work/repo/pty-host" && cargo generate-lockfile --offline -q)
+printf '%s\n' 'ordinary format-one' 'broken format-two adopt-fault' > "$work/variants"
+if bash "$work/repo/scripts/lib/rust-build-store.sh" provide-variants "$work/variants" > "$work/variants.out" 2> "$work/variants.log"; then
+  echo "provide-variants succeeded although a variant's build failed: $(cat "$work/variants.out")" >&2
+  exit 1
+fi
+grep -q 'this variant does not compile' "$work/variants.log" || { cat "$work/variants.log"; exit 1; }
+[[ "$(find "$store/attn-pty-host-variant" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" == 1 ]] ||
+  { echo 'the store kept an entry for the variant whose build failed' >&2; exit 1; }
+[[ ! -e "$store/variant-sets" ]] || { echo 'provide-variants published a variant set although a build failed' >&2; exit 1; }
 echo 'rust build store: OK'
