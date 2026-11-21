@@ -116,19 +116,23 @@ fn wait_for_poll() -> bool {
     !INTERRUPTED.load(Ordering::SeqCst)
 }
 
+fn stop_following_on_interrupt() {
+    unsafe {
+        libc::signal(
+            libc::SIGINT,
+            interrupted as extern "C" fn(libc::c_int) as libc::sighandler_t,
+        );
+        libc::signal(
+            libc::SIGTERM,
+            interrupted as extern "C" fn(libc::c_int) as libc::sighandler_t,
+        );
+    }
+}
+
 fn transcript(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed) -> Result<(), Stop> {
     let follow = parsed.on("follow");
     if follow {
-        unsafe {
-            libc::signal(
-                libc::SIGINT,
-                interrupted as extern "C" fn(libc::c_int) as libc::sighandler_t,
-            );
-            libc::signal(
-                libc::SIGTERM,
-                interrupted as extern "C" fn(libc::c_int) as libc::sighandler_t,
-            );
-        }
+        stop_following_on_interrupt();
     }
     let mut ask = Parsed {
         args: parsed.args.clone(),
