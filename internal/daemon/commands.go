@@ -38,7 +38,14 @@ func (d *Daemon) serveRunCommand(ctx context.Context, conn net.Conn, msg *protoc
 	}
 	ctx, cancel := d.connectionContext(ctx, conn)
 	defer cancel()
-	reply, after := d.runCommand(ctx, d.callerFromFrame(ctx, msg), msg.Command, args)
+	caller, err := d.callerFromFrame(ctx, msg)
+	if err != nil {
+		if err := json.NewEncoder(conn).Encode(commandResponse(nil, command.AsRefusal(err))); err != nil {
+			d.logf("run_command %s: writing response: %v", msg.Command, err)
+		}
+		return
+	}
+	reply, after := d.runCommand(ctx, caller, msg.Command, args)
 	if err := json.NewEncoder(conn).Encode(reply); err != nil {
 		d.logf("run_command %s: writing response: %v", msg.Command, err)
 	}
@@ -47,22 +54,34 @@ func (d *Daemon) serveRunCommand(ctx context.Context, conn net.Conn, msg *protoc
 	}
 }
 
-func (d *Daemon) callerFromFrame(ctx context.Context, msg *protocol.RunCommandMessage) command.Caller {
+func (d *Daemon) callerFromFrame(ctx context.Context, msg *protocol.RunCommandMessage) (command.Caller, error) {
 	profile := strings.TrimSpace(protocol.Deref(msg.ProfileID))
-	if session := protocol.TrimID(protocol.Deref(msg.SessionID)); session != "" {
-		return command.Caller{Session: session, Profile: profile}
-	}
 	terminal := protocol.TerminalID(strings.TrimSpace(string(protocol.Deref(msg.CallerID))))
+	if session := protocol.TrimID(protocol.Deref(msg.SessionID)); session != "" {
+		if terminal != "" && d.inAnotherProfile(d.callerSession(ctx, terminal), session) {
+			return command.Caller{}, protocol.Refuse(protocol.RefusalNotFound, "unknown session %s", session)
+		}
+		return command.Caller{Session: session, Profile: profile}, nil
+	}
 	if terminal == "" {
-		return command.Caller{Profile: profile}
+		return command.Caller{Profile: profile}, nil
 	}
 	if session := d.callerSession(ctx, terminal); session != "" {
-		return command.Caller{Session: session, Profile: profile}
+		return command.Caller{Session: session, Profile: profile}, nil
 	}
 	if threadProfile, _, ok := harness.ParseCodexThreadTerminal(terminal); ok && profile == "" {
 		profile = threadProfile
 	}
-	return command.Caller{Profile: profile, Terminal: terminal}
+	return command.Caller{Profile: profile, Terminal: terminal}, nil
+}
+
+func (d *Daemon) inAnotherProfile(asking, named protocol.SessionID) bool {
+	if asking == "" || asking == named {
+		return false
+	}
+	askingProfile, askingErr := d.store.SessionProfileID(asking)
+	namedProfile, namedErr := d.store.SessionProfileID(named)
+	return askingErr == nil && namedErr == nil && askingProfile != namedProfile
 }
 
 func (d *Daemon) runCommand(ctx context.Context, c command.Caller, name string, args json.RawMessage) (protocol.Response, func()) {
