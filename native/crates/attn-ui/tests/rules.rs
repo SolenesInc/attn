@@ -1661,27 +1661,58 @@ fn keyed(rt: &Runtime<()>, key: &str) -> ElementInfo {
         .unwrap_or_else(|| panic!("no element {key}"))
 }
 
+const BUTTON_STATES: [&str; 4] = ["rest", "hover", "pressed", "focused"];
+
+/// The board in `scheme`'s colours with the button keyed `key` in `state`.
+fn button_in(scheme: &ColorScheme, dark: bool, key: &str, state: &str) -> Runtime<()> {
+    let mut rt = buttons_in(scheme, dark, "Rest");
+    let button = keyed(&rt, key);
+    let (x, y) = (
+        button.rect[0] + button.rect[2] / 2.0,
+        button.rect[1] + button.rect[3] / 2.0,
+    );
+    match state {
+        "rest" => {}
+        "hover" => hover(&mut rt, &button),
+        "pressed" => {
+            hover(&mut rt, &button);
+            rt.pointer_down(x, y);
+            rt.frame(1.0);
+            rt.frame(1.0);
+        }
+        "focused" => {
+            tab_to(&mut rt, key);
+        }
+        other => panic!("no button state {other}"),
+    }
+    rt
+}
+
+/// The words drawn inside the element keyed `key`, as the frame blends them over `fill`.
+fn words_on(rt: &Runtime<()>, key: &str, fill: [f32; 3]) -> [f32; 3] {
+    let all = rt.elements();
+    let word = all
+        .iter()
+        .find(|e| {
+            e.text_color.is_some()
+                && std::iter::successors(e.parent, |&p| all[p].parent)
+                    .any(|p| all[p].key.as_deref() == Some(key))
+        })
+        .unwrap_or_else(|| panic!("{key} draws no words"));
+    drawn_over(word.text_color.expect("words"), fill)
+}
+
 #[test]
 fn every_buttons_words_read_on_its_rest_fill_in_every_scheme() {
     for scheme in SCHEMES.iter() {
         for dark in [true, false] {
             let t = scheme.colors(dark).ui;
             let rt = buttons_in(scheme, dark, "Rest");
-            let all = rt.elements();
             for (look, _) in BUTTONS.iter().filter(|(look, _)| *look != "danger") {
                 for (size, _) in SIZES {
                     let key = format!("button.{look}.{size}");
-                    let button = keyed(&rt, &key);
-                    let fill = surface(&rt, &button, t.bg_panel);
-                    let word = all
-                        .iter()
-                        .find(|e| {
-                            e.text_color.is_some()
-                                && std::iter::successors(e.parent, |&p| all[p].parent)
-                                    .any(|p| all[p].key.as_deref() == Some(key.as_str()))
-                        })
-                        .unwrap_or_else(|| panic!("{key} draws no words"));
-                    let reads = contrast(drawn_over(word.text_color.expect("words"), fill), fill);
+                    let fill = surface(&rt, &keyed(&rt, &key), t.bg_panel);
+                    let reads = contrast(words_on(&rt, &key, fill), fill);
                     assert!(
                         reads >= TEXT_READS,
                         "{}, dark={dark}: {key}'s words read {reads:.2}:1 on its fill",
@@ -1691,6 +1722,35 @@ fn every_buttons_words_read_on_its_rest_fill_in_every_scheme() {
             }
         }
     }
+}
+
+#[test]
+fn a_primarys_words_read_on_its_fill_at_rest_hover_pressed_and_focused_in_every_scheme() {
+    let mut measured = Vec::new();
+    let mut unread = Vec::new();
+    for scheme in SCHEMES.iter() {
+        for dark in [true, false] {
+            let t = scheme.colors(dark).ui;
+            for (size, _) in SIZES {
+                let key = format!("button.primary.{size}");
+                for state in BUTTON_STATES {
+                    let rt = button_in(scheme, dark, &key, state);
+                    let fill = surface(&rt, &keyed(&rt, &key), t.bg_panel);
+                    let reads = contrast(words_on(&rt, &key, fill), fill);
+                    let line = format!("{}, dark={dark}: {key} {state} {reads:.2}:1", scheme.id);
+                    if reads < TEXT_READS {
+                        unread.push(line.clone());
+                    }
+                    measured.push(line);
+                }
+            }
+        }
+    }
+    println!("{}", measured.join("\n"));
+    assert!(
+        unread.is_empty(),
+        "these Primary labels read under {TEXT_READS}:1 on their fill: {unread:#?}"
+    );
 }
 
 /// Ink of colour `c` as the frame blends it over `below`.
@@ -2214,9 +2274,8 @@ fn an_unchosen_choices_mark_stands_a_controls_step_from_its_ground() {
 
 /// How strongly an unavailable control draws: half strength.
 const UNAVAILABLE: f32 = 0.5;
-/// A disabled Primary's words on its half-strength fill, a step under the 3:1 a control's edge
-/// keeps: attn's light Primary, dark enough to darken a pressed step, measures 2.97:1 there.
-const DISABLED_LABEL: f32 = 2.95;
+/// A disabled Primary's words on its half-strength fill: the 3:1 a control's edge keeps.
+const DISABLED_LABEL: f32 = 3.0;
 
 #[test]
 fn a_disabled_primary_keeps_its_hue_at_half_strength_and_its_label_reads_on_it_in_every_scheme() {

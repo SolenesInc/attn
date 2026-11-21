@@ -402,7 +402,9 @@ choices once for the whole app:
   where every other control's is, a focus ring never cut or dimmed, hover and
   pressed at their measured contrast, every part of a disabled control at
   half strength, one in `primary` neutral but a disabled Primary in its own hue with
-  its words at 2.95:1 or more, and a banner's first action 8 after its
+  its words at 3:1 or more, in whichever of `on_primary` and the text colour
+  reads further there, a Primary's words at 4.5:1 at rest, hover, pressed and
+  focus in every scheme, and a banner's first action 8 after its
   sentence, its glyph and dismiss on its first line, its actions beside its
   sentence or under it, its sentence readable at the smallest window with
   the largest text, a long link elided inside the bar with its ring whole,

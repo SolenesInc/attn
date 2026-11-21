@@ -215,7 +215,7 @@ impl Button {
             }
             Look::Primary if self.disabled => {
                 let fill = t.primary.alpha(disabled::STRENGTH);
-                (fill, fill, t.on_primary)
+                (fill, fill, ink_on_disabled_primary(t))
             }
             Look::Primary => (t.primary, t.primary, t.on_primary),
             Look::Plain => (t.bg_button, t.border_hover, t.text_primary),
@@ -375,5 +375,17 @@ impl Face {
             None => door::corner(face, Radius::Control),
         }
         .layer_opacity(self.strength)
+    }
+}
+
+/// Whichever of `on_primary` and the text colour reads further on a disabled Primary's
+/// half-strength fill, so `on_primary` answers only to the full-strength one.
+fn ink_on_disabled_primary(t: &Tokens) -> Color {
+    let fill = crate::colors::mix_srgb(t.bg_panel, t.primary, disabled::STRENGTH);
+    let reads = |ink: Color| crate::colors::contrast(ink, fill);
+    if reads(t.on_primary) >= reads(t.text_primary) {
+        t.on_primary
+    } else {
+        t.text_primary
     }
 }
