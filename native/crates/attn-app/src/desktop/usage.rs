@@ -210,7 +210,7 @@ fn model(key: &str, model: &SessionUsageModel, t: &Tokens) -> Block {
             )
         })
         .unwrap_or_default();
-    let head = Inline::loose()
+    let head = Inline::joined()
         .w_full()
         .child(
             words(name, Type::Name, t.text_primary)
@@ -225,7 +225,7 @@ fn model(key: &str, model: &SessionUsageModel, t: &Tokens) -> Block {
             t.text_tertiary,
         ));
     let count = |label: &str, value: i64| {
-        Inline::loose()
+        Inline::joined()
             .w_frac(0.5)
             .shrink()
             .min_w(0.0)
@@ -236,7 +236,7 @@ fn model(key: &str, model: &SessionUsageModel, t: &Tokens) -> Block {
             )
             .child(words(grouped(value), Type::Small, t.text_secondary))
     };
-    let pair = |left: El, right: El| Inline::loose().w_full().child(left).child(right);
+    let pair = |left: El, right: El| Inline::top().child(left).child(right);
     let counts = Stack::tight()
         .w_full()
         .child(pair(
