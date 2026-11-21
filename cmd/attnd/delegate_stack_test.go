@@ -132,7 +132,7 @@ func TestDelegateResolvesRelativeCwdFromALinkedWorktree(t *testing.T) {
 	}
 }
 
-func TestDelegateStartsTheRequestItsFlagsDescribeAndRefusesRetiredOnes(t *testing.T) {
+func TestDelegateStartsTheRequestItsFlagsDescribeAndRefusesFlagsThatConflict(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
@@ -188,8 +188,7 @@ func TestDelegateStartsTheRequestItsFlagsDescribeAndRefusesRetiredOnes(t *testin
 		args []string
 		want string
 	}{
-		{args: []string{"--workspace", "old"}, want: "--workspace and --new-workspace retired"},
-		{args: []string{"--seed", "s-abc123"}, want: "pass exactly one of --brief, --brief-file, or --seed"},
+		{args: []string{"--seed", "s-abc123"}, want: "pass exactly one of --brief or --seed"},
 		{args: []string{"--handover"}, want: "--handover requires --seed"},
 		{args: []string{"--choice", "hard"}, want: "--choice requires --role"},
 		{args: []string{"--role", "builder", "--fallback"}, want: "--role and --fallback cannot be combined"},

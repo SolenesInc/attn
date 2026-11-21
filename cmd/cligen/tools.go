@@ -97,7 +97,7 @@ func (g *generator) inputSchema(cmd *catalog.Command) map[string]any {
 	defs := map[string]any{}
 	required := []string{}
 	for _, a := range cmd.Args {
-		if a.CLIOnly {
+		if a.CLIOnly || a.Internal() {
 			continue
 		}
 		t := g.c.ArgType(a)

@@ -56,6 +56,7 @@ type Type struct {
 	Schema      map[string]any `yaml:"json"`
 	Doc         string         `yaml:"doc"`
 	Placeholder string         `yaml:"placeholder"`
+	Clears      bool           `yaml:"clears"`
 }
 
 type Group struct {
@@ -132,6 +133,10 @@ type Arg struct {
 	Placeholder string   `yaml:"placeholder"`
 	Doc         string   `yaml:"doc"`
 }
+
+const CLIInternal = "internal"
+
+func (a Arg) Internal() bool { return a.CLI == CLIInternal }
 
 type Local string
 
@@ -419,7 +424,7 @@ func (c *Catalog) check() []string {
 				add("%s: type %q is not in %s", argWhere, a.Type, TypesFile)
 			}
 			if a.CLI == "" {
-				add("%s: cli is missing; name the mapping: pos, rest, words, a flag, --a|--b or -m+", argWhere)
+				add("%s: cli is missing; name the mapping: pos, rest, words, a flag, --a|--b, -m+ or internal", argWhere)
 			}
 			if items, _ := c.Types[a.Type].Schema["items"].(map[string]any); a.CLI == "words" && (c.Types[a.Type].Schema["type"] != "array" || items["required"] == nil) {
 				add("%s: cli words takes an array of objects whose required fields are the words of each item", argWhere)
@@ -435,6 +440,9 @@ func (c *Catalog) check() []string {
 			}
 			if a.LocalWhen != "" && (a.Local == "" || !slices.ContainsFunc(cmd.Args, func(other Arg) bool { return other.Name == a.LocalWhen })) {
 				add("%s: local_when names %q; it needs local and another arg of this command", argWhere, a.LocalWhen)
+			}
+			if a.Internal() && (a.Required || a.Local != "" || a.CLIOnly) {
+				add("%s: cli internal on an arg that is required, local or cli_only; the CLI fills it alone, and a tool call leaves it out", argWhere)
 			}
 			if a.CLIOnly && (a.Required || a.Local != "") {
 				add("%s: cli_only on an arg that is required or local; a tool must be able to make the call without it", argWhere)

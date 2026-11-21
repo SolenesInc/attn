@@ -93,11 +93,6 @@ var Placements = map[string][]Placement{
 	"decline_update":                   {Placement{LocatorHere, ""}},
 	"delegate":                         {Placement{LocatorHome, ""}},
 	"delegate_status":                  {Placement{LocatorHome, ""}},
-	"delegation_preferences_commit":    {Placement{LocatorHome, ""}},
-	"delegation_preferences_history":   {Placement{LocatorHome, ""}},
-	"delegation_preferences_rollback":  {Placement{LocatorHome, ""}},
-	"delegation_preferences_show":      {Placement{LocatorHome, ""}},
-	"delegation_roles":                 {Placement{LocatorHome, ""}},
 	"delete_worktree":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"doc_collections":                  {Placement{LocatorHome, ""}},
 	"doc_count":                        {Placement{LocatorHome, ""}},
@@ -1080,66 +1075,6 @@ func (m DelegateStatusMessage) Placement() Placement {
 }
 
 func (m DelegateStatusMessage) Locate() string {
-	return ""
-}
-
-func (DelegationPreferencesCommitMessage) CommandName() string {
-	return "delegation_preferences_commit"
-}
-
-func (m DelegationPreferencesCommitMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m DelegationPreferencesCommitMessage) Locate() string {
-	return ""
-}
-
-func (DelegationPreferencesHistoryMessage) CommandName() string {
-	return "delegation_preferences_history"
-}
-
-func (m DelegationPreferencesHistoryMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m DelegationPreferencesHistoryMessage) Locate() string {
-	return ""
-}
-
-func (DelegationPreferencesRollbackMessage) CommandName() string {
-	return "delegation_preferences_rollback"
-}
-
-func (m DelegationPreferencesRollbackMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m DelegationPreferencesRollbackMessage) Locate() string {
-	return ""
-}
-
-func (DelegationPreferencesShowMessage) CommandName() string {
-	return "delegation_preferences_show"
-}
-
-func (m DelegationPreferencesShowMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m DelegationPreferencesShowMessage) Locate() string {
-	return ""
-}
-
-func (DelegationRolesMessage) CommandName() string {
-	return "delegation_roles"
-}
-
-func (m DelegationRolesMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m DelegationRolesMessage) Locate() string {
 	return ""
 }
 

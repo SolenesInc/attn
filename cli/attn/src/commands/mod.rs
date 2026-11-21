@@ -5,6 +5,7 @@ pub mod callout;
 pub mod codex;
 pub mod conversation;
 pub mod crew;
+pub mod delegate;
 pub mod doc;
 pub mod enrollment;
 pub mod instance_env;
@@ -108,7 +109,7 @@ pub fn absolute(path: &str) -> Result<String, io::Error> {
     Ok(crate::paths::join(&working_directory()?, path))
 }
 
-fn working_directory() -> Result<String, io::Error> {
+pub fn working_directory() -> Result<String, io::Error> {
     use std::os::unix::fs::MetadataExt;
     if let Some(pwd) = std::env::var_os("PWD")
         && Path::new(&pwd).is_absolute()

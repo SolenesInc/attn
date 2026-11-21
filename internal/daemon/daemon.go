@@ -2983,16 +2983,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleDelegate(ctx, conn, msg.(*protocol.DelegateMessage), by.Actor())
 	case protocol.CmdAutomationApply, protocol.CmdAutomationValidate, protocol.CmdAutomationDefinitionsGet, protocol.CmdAutomationDefinitionGet, protocol.CmdAutomationRun, protocol.CmdAutomationRunsGet, protocol.CmdAutomationSetEnabled, protocol.CmdAutomationDelete, protocol.CmdAutomationCleanup:
 		d.handleAutomationCommand(conn, cmd, msg)
-	case protocol.CmdDelegationRoles:
-		d.handleDelegationRoles(conn)
-	case protocol.CmdDelegationPreferencesShow:
-		d.handleDelegationPreferencesShow(conn)
-	case protocol.CmdDelegationPreferencesCommit:
-		d.handleDelegationPreferencesCommit(conn, msg.(*protocol.DelegationPreferencesCommitMessage))
-	case protocol.CmdDelegationPreferencesHistory:
-		d.handleDelegationPreferencesHistory(conn, msg.(*protocol.DelegationPreferencesHistoryMessage))
-	case protocol.CmdDelegationPreferencesRollback:
-		d.handleDelegationPreferencesRollback(conn, msg.(*protocol.DelegationPreferencesRollbackMessage))
 	case protocol.CmdDelegateStatus:
 		d.handleDelegateStatus(conn, msg.(*protocol.DelegateStatusMessage))
 

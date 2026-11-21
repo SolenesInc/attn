@@ -1,2 +1,282 @@
+# The delegate family. Write each doc for both surfaces, as seed.yaml says. The
+# role commands read and change the saved table in Settings > Delegation; every
+# change is a new revision, and rollback undoes any of them. `cli: internal`
+# marks an arg the CLI fills itself: no flag, no help line, no tool arg. The
+# role commands' `render` asks for the text the CLI prints. The role commands
+# read and change a table that belongs to no profile, so `anyone` lets a
+# terminal that shows no session run them, as the CLI always could.
 groups:
-  - {name: delegate, usage: "<command>", summary: "start another agent on work you may hand off; roles picks its models"}
+  - name: delegate
+    usage: "<command>"
+    summary: "start another agent on work you may hand off; roles picks its models"
+    flags:
+      - {name: profile, placeholder: "<name|id>", doc: "the garden of this profile; required outside attn when several profiles exist"}
+      - {name: session, placeholder: "<id>", doc: "the session asking (defaults to the current session)"}
+
+  - name: delegate roles
+    summary: the roles agents choose from when delegating, and the saved table behind them
+    doc: |
+      With no command, `delegate_roles` prints the roles agents choose from when delegating. The other commands read and change the saved table in Settings > Delegation. Every change is a new revision; `delegate_roles_rollback` undoes any of them. Each change takes a message, the reason recorded in history. Guidance (a description, instructions and an icon) is for custom roles only. Changing the model or provider clears effort unless an effort is given.
+
+commands:
+  - name: delegate
+    summary: start another agent on work you may hand off
+    core: true
+    runs: home
+    grant: own
+    doc: |
+      Starts another agent in its own session, which the user can open and steer. Every delegation has a seed, which the delegated agent reads when it starts: `brief` plants a new one, and `seed` uses an existing seed's current assignment. `handover` transfers that seed to the new agent, with `note` as the next step; the previous agent keeps running. `authorization` says how far the user lets the task go, written as instructions to the agent; it is saved on the seed, and the opening delivers it. Without it, a delegation keeps the seed's current words.
+
+      `model` is required unless `role` or `fallback` picks the model from the user's delegation roles (`delegate_roles` lists them). `cwd` is the folder or repository on the target machine, `host` or the caller's own. Inside Git, choose one complete checkout: `reuse_checkout` with `branch`, `new_worktree` with `branch` and `from`, or `new_worktree` with `existing_branch`. Outside Git, `cwd` is enough. On the caller's own machine, a relative `cwd` resolves against the CLI's working directory, or the folder a tool caller's session started in. Only a handover's predecessor is exempt from checkout occupancy; any other active session there needs `allow_worktree_reuse`.
+
+      A tool call answers with the operation once attn accepts the request, and `delegate_status` reads it later; the CLI waits until the agent has started and prints its result. Pass the same `request_id` to retry safely: a retry returns the accepted operation instead of starting another.
+    args:
+      - {name: cwd_base, type: path, cli: internal, doc: "the folder a relative cwd resolves against"}
+      - {name: brief, type: markdown, cli: "--brief", doc: "the task: plants a seed for new work"}
+      - {name: brief_file, type: path, cli: "--brief-file", cli_only: true, doc: "a file holding the brief"}
+      - {name: seed, type: seed, cli: "--seed", doc: "an existing seed whose assignment the agent takes"}
+      - {name: priority, type: bool, cli: "--priority", doc: "put the delegate's owed turns first"}
+      - {name: handover, type: bool, cli: "--handover", doc: "transfer the seed to the new agent"}
+      - {name: note, type: text, cli: "-m", doc: "the handover note: the next step"}
+      - {name: authorization, type: text, cli: "--authorization", doc: "how far the user lets this task go, written as instructions to the agent; saved on the seed"}
+      - {name: host, type: name, cli: "--host", doc: "the outpost to run on, by name or id; home selects the home (default: the caller's machine)"}
+      - {name: cwd, type: text, cli: "--cwd", placeholder: "<path>", doc: "the folder or repository on that machine (required)"}
+      - {name: reuse_checkout, type: bool, cli: "--reuse-checkout", doc: "use the checkout at cwd on branch"}
+      - {name: new_worktree, type: bool, cli: "--new-worktree", doc: "create a worktree"}
+      - {name: branch, type: name, cli: "--branch", doc: "the branch to reuse, or the new branch to create"}
+      - {name: from, type: revision, cli: "--from", doc: "the ref a new branch starts from"}
+      - {name: existing_branch, type: name, cli: "--existing-branch", doc: "a local branch for the new worktree"}
+      - {name: worktree_path, type: text, cli: "--worktree-path", placeholder: "<path>", doc: "where the new worktree goes"}
+      - {name: allow_worktree_reuse, type: bool, cli: "--allow-worktree-reuse", doc: "share a checkout another active session uses"}
+      - {name: request_id, type: name, cli: "--request-id", placeholder: "<id>", doc: "a stable retry key; op- is reserved (default: a new one, which the CLI prints)"}
+      - {name: agent, type: name, cli: "--agent", doc: "a configured prompt-capable agent (default: the caller's)"}
+      - {name: model, type: clearable, cli: "--model", placeholder: "<model>", doc: 'pin the model; "default" selects the harness default'}
+      - {name: role, type: name, cli: "--role", doc: "a configured delegation role, with its default choice"}
+      - {name: choice, type: name, cli: "--choice", doc: "an alternative within role"}
+      - {name: fallback, type: bool, cli: "--fallback", doc: "the configured model for work no role fits"}
+      - {name: provider, type: clearable, cli: "--provider", placeholder: "<id>", doc: "the provider for a plugin harness model; with role or fallback"}
+      - {name: effort, type: clearable, cli: "--effort", placeholder: "<level>", doc: 'pin the effort; "default" selects the harness default (default: medium where supported)'}
+      - {name: name, type: text, cli: "--name", doc: "the session's name, at most 48 characters (default: from the brief or the seed's title)"}
+      - {name: desktop, type: clearable, cli: "--desktop", placeholder: "<ref>", doc: "a desktop of your profile for the new agent: its shortcut digit (1-9), its name or its id; the agent opens at the end of that desktop's row without changing what you see (default: the caller's desktop)"}
+      - {name: source_session, type: name, cli: "--source-session", cli_only: true, placeholder: "<id>", doc: "the session delegating (default: the current session)"}
+      - {name: yolo, type: bool, cli: "--yolo", doc: "launch the agent with its approval prompts bypassed"}
+    result: DelegationOperation
+    examples:
+      - {brief: "Fix the flaky checkout test", cwd: /src/shop, new_worktree: true, branch: fix/checkout, from: main, model: default}
+
+  - name: delegate status
+    summary: a delegation's operation, by request or operation id
+    runs: home
+    grant: own
+    read_only: true
+    doc: |
+      Reads a delegation's operation by its request id or operation id: its state, its progress, the session it started, and its result once it has one.
+    args:
+      - {name: id, type: name, required: true, cli: pos, placeholder: "<request-or-operation-id>", doc: "the request id or operation id"}
+      - {name: wait_past, type: text, cli: internal, doc: "answer once the operation changes after this updated_at"}
+    result: DelegationOperation
+
+  - name: delegate roles
+    summary: the roles agents choose from when delegating
+    runs: home
+    anyone: true
+    grant: own
+    read_only: true
+    doc: |
+      Prints the roles agents choose from when delegating: each role that is turned on and has a complete default model, its alternatives with when to pick them, and the fallback for work no role fits.
+    args:
+      - {name: render, type: bool, cli: internal, doc: "answer the text the CLI prints too"}
+    result: DelegateRolesResult
+
+  - name: delegate roles show
+    summary: the whole saved table, or one role's full guidance
+    runs: home
+    anyone: true
+    grant: full
+    read_only: true
+    doc: |
+      Prints the whole saved table: roles turned off, roles that still need a model, alternatives and the fallback. With `role`, prints that role's full guidance and alternatives. The table in the result is what `delegate_roles_apply` takes.
+    args:
+      - {name: render, type: bool, cli: internal, doc: "answer the text the CLI prints too"}
+      - {name: role, type: name, cli: pos, placeholder: "<role>", doc: "the role to read in full"}
+    result: DelegateRolesShowResult
+    errors:
+      - {code: no_role, fix: "Use a role id that delegate_roles_show lists."}
+
+  - name: delegate roles history
+    summary: revisions of the table, newest first
+    runs: home
+    anyone: true
+    grant: full
+    read_only: true
+    doc: |
+      Lists revisions of the table newest first, with who changed what and why.
+    args:
+      - {name: render, type: bool, cli: internal, doc: "answer the text the CLI prints too"}
+      - {name: limit, type: count, cli: "--limit", doc: "how many revisions to list (default 10)"}
+    result: DelegateRolesHistoryResult
+
+  - name: delegate roles install
+    summary: add Attn's maintained roles the table lacks, and the skill they follow
+    runs: home
+    anyone: true
+    grant: full
+    doc: |
+      Adds Attn's maintained roles the table lacks, turns the table and its roles on, and installs the attn-workflow skill they follow for every available harness. Your roles stay. When one of yours already uses an Attn role's id, the Attn role gets a numeric suffix, such as builder-2.
+    args:
+      - {name: render, type: bool, cli: internal, doc: "answer the text the CLI prints too"}
+      - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
+    result: DelegateRolesChangeResult
+    errors:
+      - {code: conflict, fix: "The table changed while the command ran; run it again."}
+
+  - name: delegate roles add
+    summary: add a custom role, a maintained role, or an alternative model for a role
+    runs: home
+    anyone: true
+    grant: full
+    doc: |
+      Adds a role, or an alternative model for a role when `target` is role/alternative. A custom role needs `name`, and its default model comes from the model args. With `builtin`, the role is one of Attn's maintained roles: pathfinder, builder, reviewer, orchestrator or prototyper (`delegate_roles_install` must run once first). An alternative starts from the role's default model; `when` says when an agent should pick it instead of the default, and without a condition it is saved but never picked.
+    args:
+      - {name: render, type: bool, cli: internal, doc: "answer the text the CLI prints too"}
+      - {name: target, type: role_target, required: true, cli: pos, doc: "a role id, or role/alternative"}
+      - {name: name, type: clearable, cli: "--name", doc: "the name people see"}
+      - {name: builtin, type: builtin_role, cli: "--builtin", doc: "make the role one of Attn's maintained roles"}
+      - {name: description, type: clearable, cli: "--description", doc: "what the role is for (custom roles only)"}
+      - {name: instructions, type: clearable, cli: "--instructions", doc: "what the delegated agent is told to do (custom roles only)"}
+      - {name: icon, type: clearable, cli: "--icon", doc: "the role's icon (custom roles only)"}
+      - {name: when, type: clearable, cli: "--when", doc: "when an agent should pick this alternative instead of the default"}
+      - {name: agent, type: clearable, cli: "--agent", doc: "the harness; changing it starts a fresh selection"}
+      - {name: model, type: clearable, cli: "--model", doc: 'the model; "default" selects the harness default'}
+      - {name: provider, type: clearable, cli: "--provider", doc: "the provider for a plugin harness model"}
+      - {name: effort, type: clearable, cli: "--effort", doc: 'the effort; "default" selects the harness default'}
+      - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
+    result: DelegateRolesChangeResult
+    errors:
+      - {code: no_role, fix: "Use a role id that delegate_roles_show lists."}
+      - {code: conflict, fix: "The table changed while the command ran; run it again."}
+
+  - name: delegate roles set
+    summary: change a role, one of its alternatives, or the fallback
+    runs: home
+    anyone: true
+    grant: full
+    doc: |
+      Changes a role, or one of its alternatives when `target` is role/alternative. `default` makes the alternative the role's default. With `fallback`, changes the model agents use when no role fits, and its `instructions`.
+    args:
+      - {name: render, type: bool, cli: internal, doc: "answer the text the CLI prints too"}
+      - {name: target, type: role_target, required: true, unless: fallback, cli: pos, doc: "a role id, or role/alternative"}
+      - {name: fallback, type: bool, cli: "--fallback", doc: "change the fallback for work no role fits"}
+      - {name: default, type: bool, cli: "--default", doc: "make the alternative the role's default"}
+      - {name: name, type: clearable, cli: "--name", doc: "the name people see"}
+      - {name: description, type: clearable, cli: "--description", doc: "what the role is for (custom roles only)"}
+      - {name: instructions, type: clearable, cli: "--instructions", doc: "what the delegated agent is told to do (custom roles only), or the fallback's instructions"}
+      - {name: icon, type: clearable, cli: "--icon", doc: "the role's icon (custom roles only)"}
+      - {name: when, type: clearable, cli: "--when", doc: "when an agent should pick this alternative instead of the default"}
+      - {name: agent, type: clearable, cli: "--agent", doc: "the harness; changing it starts a fresh selection"}
+      - {name: model, type: clearable, cli: "--model", doc: 'the model; "default" selects the harness default'}
+      - {name: provider, type: clearable, cli: "--provider", doc: "the provider for a plugin harness model"}
+      - {name: effort, type: clearable, cli: "--effort", doc: 'the effort; "default" selects the harness default'}
+      - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
+    result: DelegateRolesChangeResult
+    errors:
+      - {code: no_role, fix: "Use a role id that delegate_roles_show lists."}
+      - {code: no_alternative, fix: "Use an alternative that delegate_roles_show lists for the role."}
+      - {code: fallback_with_target, usage: true, fix: "Pass a role or {fallback}, not both."}
+      - {code: conflict, fix: "The table changed while the command ran; run it again."}
+
+  - name: delegate roles copy
+    summary: an editable custom copy of a role
+    runs: home
+    anyone: true
+    grant: full
+    doc: |
+      Makes an editable custom copy of a role, maintained ones included, placed after it in the table.
+    args:
+      - {name: render, type: bool, cli: internal, doc: "answer the text the CLI prints too"}
+      - {name: role, type: name, required: true, cli: pos, placeholder: "<role>", doc: "the role to copy"}
+      - {name: new_role, type: name, required: true, cli: pos, placeholder: "<new-role>", doc: "the id of the copy"}
+      - {name: name, type: clearable, cli: "--name", doc: "the copy's name (default: the role's name with (custom))"}
+      - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
+    result: DelegateRolesChangeResult
+    errors:
+      - {code: no_role, fix: "Use a role id that delegate_roles_show lists."}
+      - {code: conflict, fix: "The table changed while the command ran; run it again."}
+
+  - name: delegate roles rm
+    summary: remove a role or one of its alternatives
+    runs: home
+    anyone: true
+    grant: full
+    doc: |
+      Removes a role, or one of its alternatives when `target` is role/alternative.
+    args:
+      - {name: render, type: bool, cli: internal, doc: "answer the text the CLI prints too"}
+      - {name: target, type: role_target, required: true, cli: pos, doc: "a role id, or role/alternative"}
+      - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
+    result: DelegateRolesChangeResult
+    errors:
+      - {code: no_role, fix: "Use a role id that delegate_roles_show lists."}
+      - {code: no_alternative, fix: "Use an alternative that delegate_roles_show lists for the role."}
+      - {code: conflict, fix: "The table changed while the command ran; run it again."}
+
+  - name: delegate roles enable
+    summary: turn a role on, or the whole table
+    runs: home
+    anyone: true
+    grant: full
+    doc: |
+      Turns `role` on. Without a role, turns the whole table on.
+    args:
+      - {name: render, type: bool, cli: internal, doc: "answer the text the CLI prints too"}
+      - {name: role, type: name, cli: pos, placeholder: "<role>", doc: "the role to turn on"}
+      - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
+    result: DelegateRolesChangeResult
+    errors:
+      - {code: no_role, fix: "Use a role id that delegate_roles_show lists."}
+      - {code: conflict, fix: "The table changed while the command ran; run it again."}
+
+  - name: delegate roles disable
+    summary: turn a role off, or the whole table
+    runs: home
+    anyone: true
+    grant: full
+    doc: |
+      Turns `role` off. Without a role, turns the whole table off, and agents choose harness and model themselves.
+    args:
+      - {name: render, type: bool, cli: internal, doc: "answer the text the CLI prints too"}
+      - {name: role, type: name, cli: pos, placeholder: "<role>", doc: "the role to turn off"}
+      - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
+    result: DelegateRolesChangeResult
+    errors:
+      - {code: no_role, fix: "Use a role id that delegate_roles_show lists."}
+      - {code: conflict, fix: "The table changed while the command ran; run it again."}
+
+  - name: delegate roles apply
+    summary: replace the whole table with an exported one
+    runs: home
+    anyone: true
+    grant: full
+    doc: |
+      Replaces the whole table with `table`, the table `delegate_roles_show` returned. Refused when the table changed since that export.
+    args:
+      - {name: render, type: bool, cli: internal, doc: "answer the text the CLI prints too"}
+      - {name: table, type: delegation_table, required: true, cli: pos, file: true, placeholder: "<file|->", doc: "the table, as delegate_roles_show returns it"}
+      - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
+    result: DelegateRolesChangeResult
+    errors:
+      - {code: not_a_table, fix: "Pass the table delegate_roles_show returns, with only its fields."}
+      - {code: conflict, fix: "Export the table again with delegate_roles_show, change it, and apply that."}
+
+  - name: delegate roles rollback
+    summary: restore an earlier or later revision of the table
+    runs: home
+    anyone: true
+    grant: full
+    doc: |
+      With no `revision`, restores the table that was live before the current one; repeat to keep walking back. With `revision`, restores that one, older or newer: rolling forward is restoring a later revision.
+    args:
+      - {name: render, type: bool, cli: internal, doc: "answer the text the CLI prints too"}
+      - {name: revision, type: table_revision, cli: pos, doc: "the revision to restore, as delegate_roles_history lists it"}
+      - {name: message, type: text, cli: "-m", doc: "the reason recorded in history"}
+    result: DelegateRolesChangeResult

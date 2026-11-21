@@ -118,3 +118,31 @@ types:
         required: [anchor, text]
     doc: "Each step's anchor and its text."
     placeholder: "<anchor> <text>"
+  clearable:
+    json: {type: string}
+    clears: true
+    doc: "Text; an empty value clears it."
+    placeholder: "<text>"
+  role_target:
+    json: {type: string, minLength: 1}
+    doc: "A role id, or role/alternative for one of the role's alternatives."
+    placeholder: "<role>[/<alt>]"
+  builtin_role:
+    json: {type: string, enum: [pathfinder, builder, reviewer, orchestrator, prototyper]}
+    placeholder: "<pathfinder|builder|reviewer|orchestrator|prototyper>"
+  table_revision:
+    json: {type: integer, minimum: 0}
+    doc: "A revision of the delegation table."
+    placeholder: "<revision>"
+  delegation_table:
+    json:
+      type: object
+      properties:
+        revision: {type: integer, minimum: 0}
+        enabled: {type: boolean}
+        workflow_skill_enabled: {type: boolean}
+        roles: {type: array, items: {type: object}}
+        fallback: {type: object}
+      required: [revision, roles, fallback]
+    doc: "The delegation table, as delegate_roles_show returns it in preferences."
+    placeholder: "<file|->"

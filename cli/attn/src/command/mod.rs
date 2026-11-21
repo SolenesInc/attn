@@ -13,6 +13,7 @@ pub enum Cli {
     Choice(&'static [(&'static str, &'static str)]),
     SplitRest,
     Words(&'static [&'static str]),
+    Internal,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

@@ -20,6 +20,8 @@ func (d *Daemon) commandLayer() *command.Layer {
 			{"list": command.Typed(d.runList)},
 			{"activity": command.Typed(d.runActivity), "activity clear": command.Typed(d.runActivityClear)},
 			d.calloutCommands(),
+			d.delegateCommands(),
+			d.delegateRolesCommands(),
 		} {
 			maps.Copy(handlers, family)
 		}

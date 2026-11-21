@@ -67,6 +67,11 @@ func TestLoadRefusesWhatWouldBreakAHarnessOrAnUnmarkedCommand(t *testing.T) {
 		want  []string
 	}{
 		{
+			name:  "an arg the CLI fills that a tool caller would have to pass",
+			files: map[string]string{"seed.yaml": strings.Replace(goodFamily, "cli: pos}", "cli: internal}", 1)},
+			want:  []string{"seed.yaml: seed show", `arg "seed"`, "cli internal on an arg that is required"},
+		},
+		{
 			name:  "a null schema keyword",
 			files: map[string]string{TypesFile: strings.Replace(goodTypes, "minLength: 1}", "minLength: 1, required: null}", 1)},
 			want:  []string{"types.yaml", `type "seed", used by seed show`, `schema keyword "required" is null`},

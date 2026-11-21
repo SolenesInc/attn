@@ -12,11 +12,6 @@ func orDash(value string) string {
 	return value
 }
 
-func firstLine(body string) string {
-	line, _, _ := strings.Cut(strings.TrimSpace(body), "\n")
-	return line
-}
-
 func shortStamp(stamp string) string {
 	t, err := time.Parse(time.RFC3339, stamp)
 	if err != nil {

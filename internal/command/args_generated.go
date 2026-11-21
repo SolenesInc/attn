@@ -15,19 +15,24 @@ const (
 	CodeClearWithReminder        = "clear_with_reminder"
 	CodeClearWithStandby         = "clear_with_standby"
 	CodeClearWithoutWhenMerged   = "clear_without_when_merged"
+	CodeConflict                 = "conflict"
 	CodeDetachNeedsTo            = "detach_needs_to"
 	CodeEmptyWords               = "empty_words"
+	CodeFallbackWithTarget       = "fallback_with_target"
 	CodeInAndAt                  = "in_and_at"
 	CodeInvalidBody              = "invalid_body"
 	CodeNeedsMessage             = "needs_message"
 	CodeNeedsNext                = "needs_next"
 	CodeNeedsStatement           = "needs_statement"
 	CodeNeedsTime                = "needs_time"
+	CodeNoAlternative            = "no_alternative"
 	CodeNoDocument               = "no_document"
+	CodeNoRole                   = "no_role"
 	CodeNoSession                = "no_session"
 	CodeNotACheckID              = "not_a_check_id"
 	CodeNotAPlot                 = "not_a_plot"
 	CodeNotAPRURL                = "not_a_pr_url"
+	CodeNotATable                = "not_a_table"
 	CodeNotExported              = "not_exported"
 	CodeNotInReview              = "not_in_review"
 	CodeNotOnScreen              = "not_on_screen"
@@ -54,54 +59,68 @@ const (
 )
 
 var specs = map[string]spec{
-	"activity":           {readOnly: true, anyone: true, sessionFlag: false},
-	"activity clear":     {readOnly: false, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
-	"callout anchors":    {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}."}},
-	"callout show":       {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}.", "step_needs_text": "Give every step its text.", "unknown_anchor": "Use an anchor that callout_anchors lists.", "too_many_steps": "Show at most 20 steps.", "step_too_long": "Keep each step's text to 160 characters.", "not_on_screen": "Point at an anchor the message lists as on screen.", "app_not_showing_profile": "Ask the user to open the attn app on your profile."}},
-	"list":               {readOnly: true, anyone: true, sessionFlag: false},
-	"seed search":        {readOnly: true, anyone: false, sessionFlag: true},
-	"seed plant":         {readOnly: false, anyone: false, sessionFlag: true},
-	"seed plot":          {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_a_plot": "Pass a plot payload: a JSON object with title, body, checks and children, as attn seed guide describes."}},
-	"seed link":          {readOnly: false, anyone: false, sessionFlag: true},
-	"seed unlink":        {readOnly: false, anyone: false, sessionFlag: true},
-	"seed ready":         {readOnly: true, anyone: false, sessionFlag: true},
-	"seed ls":            {readOnly: true, anyone: false, sessionFlag: true, fixes: map[string]string{"window_without_stale": "Pass {window} together with {stale}, or leave it out.", "plot_and_stale": "Pass {plot} or {stale}, not both.", "standby_with_scope": "Pass {standby} alone.", "bad_window": "Say the window as a duration like 72h or a number of days like 14d."}},
-	"seed show":          {readOnly: true, anyone: false, sessionFlag: true, fixes: map[string]string{"since_and_section": "Pass {since} or {section}, not both.", "bad_bookmark": "Pass the bookmark number a read of the seed printed."}},
-	"seed notes":         {readOnly: true, anyone: false, sessionFlag: true, fixes: map[string]string{"bad_bookmark": "Pass the bookmark number a read of the seed printed."}},
-	"seed prime":         {readOnly: true, anyone: false, sessionFlag: true},
-	"seed guide":         {readOnly: false, anyone: false, sessionFlag: true},
-	"seed tend":          {readOnly: false, anyone: false, sessionFlag: true},
-	"seed note":          {readOnly: false, anyone: false, sessionFlag: true},
-	"seed park":          {readOnly: false, anyone: false, sessionFlag: true},
-	"seed replant":       {readOnly: false, anyone: false, sessionFlag: true},
-	"seed wither":        {readOnly: false, anyone: false, sessionFlag: true},
-	"seed send-to-chief": {readOnly: false, anyone: false, sessionFlag: true},
-	"seed harvest":       {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"pr_without_when_merged": "Pass the pull request together with {when_merged}, or leave it out.", "clear_without_when_merged": "Pass {clear} together with {when_merged}.", "clear_with_reason": "Leave out the reason; write it in a seed note instead.", "clear_with_pr": "Leave out the pull request when you pass {clear}.", "not_a_pr_url": "Pass a pull request URL like https://github.com/owner/repo/pull/12."}},
-	"seed check add":     {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_a_check_id": "Pass a check id like C3, and the statement in {statement}.", "needs_statement": "Pass the statement the seed must prove in {statement}."}},
-	"seed check edit":    {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_a_check_id": "Pass a check id like C3, and the statement in {statement}.", "needs_statement": "Pass the statement the seed must prove in {statement}."}},
-	"seed check remove":  {readOnly: false, anyone: false, sessionFlag: true},
-	"seed check restore": {readOnly: false, anyone: false, sessionFlag: true},
-	"seed check report":  {readOnly: false, anyone: false, sessionFlag: true},
-	"seed check confirm": {readOnly: false, anyone: false, sessionFlag: true},
-	"seed check reject":  {readOnly: false, anyone: false, sessionFlag: true},
-	"seed check uncheck": {readOnly: false, anyone: false, sessionFlag: true},
-	"seed check reopen":  {readOnly: false, anyone: false, sessionFlag: true},
-	"seed watch":         {readOnly: false, anyone: false, sessionFlag: true},
-	"seed unwatch":       {readOnly: false, anyone: false, sessionFlag: true},
-	"seed remind":        {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"clear_with_reminder": "Pass {clear} alone.", "needs_time": "Pass one of {in} or {at}, or {clear}.", "needs_message": "Pass what the reminder says in {message}."}},
-	"seed standby":       {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"clear_with_standby": "Pass {clear} alone.", "in_and_at": "Pass {in} or {at}, not both.", "needs_next": "Pass what to do when mail resumes you in {next}."}},
-	"seed export":        {readOnly: true, anyone: false, sessionFlag: true},
-	"seed edit":          {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_exported": "Export the seed, edit the file, and pass its whole text as {body}.", "not_stamped": "Pass the exported text whole as {body}, its first stamp line included.", "other_seed": "Export the seed you name in {seed}, reapply your change to that export, and pass it as {body}.", "invalid_body": "Keep text below the stamp line, within the body size limit."}},
-	"seed rollback":      {readOnly: false, anyone: false, sessionFlag: true},
-	"seed authorization": {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"empty_words": "Pass the words, or {clear} to remove the authorization.", "words_and_clear": "Pass the words or {clear}, not both."}},
-	"seed attach":        {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"no_document": "Name one document with {path}, {notebook} or {url}.", "two_documents": "Name one document per call.", "transfer_with_note": "Leave out {note}; a managed transfer records its own receipt.", "transfer_needs_local_path": "Pass a local {path} without {repo}, or leave out {mode}.", "transfer_needs_mode": "Pass {mode}: move is recommended, copy keeps the source."}},
-	"seed detach":        {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"reference_needs_path": "Pass the linked {path} without {repo}.", "no_document": "Name one document with {path}, {notebook} or {url}.", "two_documents": "Name one document per call.", "transfer_with_note": "Leave out {note}; a managed transfer records its own receipt.", "transfer_needs_managed_path": "Pass the managed filename in {path} without {repo}, or leave out {to}.", "detach_needs_to": "Pass {to} with the destination, or {reference} to remove an old linked path."}},
-	"seed review start":  {readOnly: false, anyone: false, sessionFlag: true},
-	"seed review show":   {readOnly: true, anyone: false, sessionFlag: true},
-	"seed review cancel": {readOnly: false, anyone: false, sessionFlag: true},
-	"seed review retry":  {readOnly: false, anyone: false, sessionFlag: true},
-	"seed review keep":   {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_in_review": "Pass a seed the review lists; seed review show lists them."}},
-	"state explain":      {readOnly: true, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
+	"activity":                {readOnly: true, anyone: true, sessionFlag: false},
+	"activity clear":          {readOnly: false, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
+	"callout anchors":         {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}."}},
+	"callout show":            {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}.", "step_needs_text": "Give every step its text.", "unknown_anchor": "Use an anchor that callout_anchors lists.", "too_many_steps": "Show at most 20 steps.", "step_too_long": "Keep each step's text to 160 characters.", "not_on_screen": "Point at an anchor the message lists as on screen.", "app_not_showing_profile": "Ask the user to open the attn app on your profile."}},
+	"delegate":                {readOnly: false, anyone: false, sessionFlag: true},
+	"delegate status":         {readOnly: true, anyone: false, sessionFlag: true},
+	"delegate roles":          {readOnly: true, anyone: true, sessionFlag: true},
+	"delegate roles show":     {readOnly: true, anyone: true, sessionFlag: true, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists."}},
+	"delegate roles history":  {readOnly: true, anyone: true, sessionFlag: true},
+	"delegate roles install":  {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"conflict": "The table changed while the command ran; run it again."}},
+	"delegate roles add":      {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "conflict": "The table changed while the command ran; run it again."}},
+	"delegate roles set":      {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "no_alternative": "Use an alternative that delegate_roles_show lists for the role.", "fallback_with_target": "Pass a role or {fallback}, not both.", "conflict": "The table changed while the command ran; run it again."}},
+	"delegate roles copy":     {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "conflict": "The table changed while the command ran; run it again."}},
+	"delegate roles rm":       {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "no_alternative": "Use an alternative that delegate_roles_show lists for the role.", "conflict": "The table changed while the command ran; run it again."}},
+	"delegate roles enable":   {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "conflict": "The table changed while the command ran; run it again."}},
+	"delegate roles disable":  {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "conflict": "The table changed while the command ran; run it again."}},
+	"delegate roles apply":    {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"not_a_table": "Pass the table delegate_roles_show returns, with only its fields.", "conflict": "Export the table again with delegate_roles_show, change it, and apply that."}},
+	"delegate roles rollback": {readOnly: false, anyone: true, sessionFlag: true},
+	"list":                    {readOnly: true, anyone: true, sessionFlag: false},
+	"seed search":             {readOnly: true, anyone: false, sessionFlag: true},
+	"seed plant":              {readOnly: false, anyone: false, sessionFlag: true},
+	"seed plot":               {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_a_plot": "Pass a plot payload: a JSON object with title, body, checks and children, as attn seed guide describes."}},
+	"seed link":               {readOnly: false, anyone: false, sessionFlag: true},
+	"seed unlink":             {readOnly: false, anyone: false, sessionFlag: true},
+	"seed ready":              {readOnly: true, anyone: false, sessionFlag: true},
+	"seed ls":                 {readOnly: true, anyone: false, sessionFlag: true, fixes: map[string]string{"window_without_stale": "Pass {window} together with {stale}, or leave it out.", "plot_and_stale": "Pass {plot} or {stale}, not both.", "standby_with_scope": "Pass {standby} alone.", "bad_window": "Say the window as a duration like 72h or a number of days like 14d."}},
+	"seed show":               {readOnly: true, anyone: false, sessionFlag: true, fixes: map[string]string{"since_and_section": "Pass {since} or {section}, not both.", "bad_bookmark": "Pass the bookmark number a read of the seed printed."}},
+	"seed notes":              {readOnly: true, anyone: false, sessionFlag: true, fixes: map[string]string{"bad_bookmark": "Pass the bookmark number a read of the seed printed."}},
+	"seed prime":              {readOnly: true, anyone: false, sessionFlag: true},
+	"seed guide":              {readOnly: false, anyone: false, sessionFlag: true},
+	"seed tend":               {readOnly: false, anyone: false, sessionFlag: true},
+	"seed note":               {readOnly: false, anyone: false, sessionFlag: true},
+	"seed park":               {readOnly: false, anyone: false, sessionFlag: true},
+	"seed replant":            {readOnly: false, anyone: false, sessionFlag: true},
+	"seed wither":             {readOnly: false, anyone: false, sessionFlag: true},
+	"seed send-to-chief":      {readOnly: false, anyone: false, sessionFlag: true},
+	"seed harvest":            {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"pr_without_when_merged": "Pass the pull request together with {when_merged}, or leave it out.", "clear_without_when_merged": "Pass {clear} together with {when_merged}.", "clear_with_reason": "Leave out the reason; write it in a seed note instead.", "clear_with_pr": "Leave out the pull request when you pass {clear}.", "not_a_pr_url": "Pass a pull request URL like https://github.com/owner/repo/pull/12."}},
+	"seed check add":          {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_a_check_id": "Pass a check id like C3, and the statement in {statement}.", "needs_statement": "Pass the statement the seed must prove in {statement}."}},
+	"seed check edit":         {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_a_check_id": "Pass a check id like C3, and the statement in {statement}.", "needs_statement": "Pass the statement the seed must prove in {statement}."}},
+	"seed check remove":       {readOnly: false, anyone: false, sessionFlag: true},
+	"seed check restore":      {readOnly: false, anyone: false, sessionFlag: true},
+	"seed check report":       {readOnly: false, anyone: false, sessionFlag: true},
+	"seed check confirm":      {readOnly: false, anyone: false, sessionFlag: true},
+	"seed check reject":       {readOnly: false, anyone: false, sessionFlag: true},
+	"seed check uncheck":      {readOnly: false, anyone: false, sessionFlag: true},
+	"seed check reopen":       {readOnly: false, anyone: false, sessionFlag: true},
+	"seed watch":              {readOnly: false, anyone: false, sessionFlag: true},
+	"seed unwatch":            {readOnly: false, anyone: false, sessionFlag: true},
+	"seed remind":             {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"clear_with_reminder": "Pass {clear} alone.", "needs_time": "Pass one of {in} or {at}, or {clear}.", "needs_message": "Pass what the reminder says in {message}."}},
+	"seed standby":            {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"clear_with_standby": "Pass {clear} alone.", "in_and_at": "Pass {in} or {at}, not both.", "needs_next": "Pass what to do when mail resumes you in {next}."}},
+	"seed export":             {readOnly: true, anyone: false, sessionFlag: true},
+	"seed edit":               {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_exported": "Export the seed, edit the file, and pass its whole text as {body}.", "not_stamped": "Pass the exported text whole as {body}, its first stamp line included.", "other_seed": "Export the seed you name in {seed}, reapply your change to that export, and pass it as {body}.", "invalid_body": "Keep text below the stamp line, within the body size limit."}},
+	"seed rollback":           {readOnly: false, anyone: false, sessionFlag: true},
+	"seed authorization":      {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"empty_words": "Pass the words, or {clear} to remove the authorization.", "words_and_clear": "Pass the words or {clear}, not both."}},
+	"seed attach":             {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"no_document": "Name one document with {path}, {notebook} or {url}.", "two_documents": "Name one document per call.", "transfer_with_note": "Leave out {note}; a managed transfer records its own receipt.", "transfer_needs_local_path": "Pass a local {path} without {repo}, or leave out {mode}.", "transfer_needs_mode": "Pass {mode}: move is recommended, copy keeps the source."}},
+	"seed detach":             {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"reference_needs_path": "Pass the linked {path} without {repo}.", "no_document": "Name one document with {path}, {notebook} or {url}.", "two_documents": "Name one document per call.", "transfer_with_note": "Leave out {note}; a managed transfer records its own receipt.", "transfer_needs_managed_path": "Pass the managed filename in {path} without {repo}, or leave out {to}.", "detach_needs_to": "Pass {to} with the destination, or {reference} to remove an old linked path."}},
+	"seed review start":       {readOnly: false, anyone: false, sessionFlag: true},
+	"seed review show":        {readOnly: true, anyone: false, sessionFlag: true},
+	"seed review cancel":      {readOnly: false, anyone: false, sessionFlag: true},
+	"seed review retry":       {readOnly: false, anyone: false, sessionFlag: true},
+	"seed review keep":        {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_in_review": "Pass a seed the review lists; seed review show lists them."}},
+	"state explain":           {readOnly: true, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
 }
 
 type ActivityArgs struct {
@@ -116,6 +135,133 @@ type CalloutAnchorsArgs struct {
 
 type CalloutShowArgs struct {
 	Steps json.RawMessage `json:"steps,omitempty"`
+}
+
+type DelegateArgs struct {
+	CwdBase            string  `json:"cwd_base,omitempty"`
+	Brief              string  `json:"brief,omitempty"`
+	BriefFile          string  `json:"brief_file,omitempty"`
+	Seed               string  `json:"seed,omitempty"`
+	Priority           bool    `json:"priority,omitempty"`
+	Handover           bool    `json:"handover,omitempty"`
+	Note               string  `json:"note,omitempty"`
+	Authorization      string  `json:"authorization,omitempty"`
+	Host               string  `json:"host,omitempty"`
+	Cwd                string  `json:"cwd,omitempty"`
+	ReuseCheckout      bool    `json:"reuse_checkout,omitempty"`
+	NewWorktree        bool    `json:"new_worktree,omitempty"`
+	Branch             string  `json:"branch,omitempty"`
+	From               string  `json:"from,omitempty"`
+	ExistingBranch     string  `json:"existing_branch,omitempty"`
+	WorktreePath       string  `json:"worktree_path,omitempty"`
+	AllowWorktreeReuse bool    `json:"allow_worktree_reuse,omitempty"`
+	RequestID          string  `json:"request_id,omitempty"`
+	Agent              string  `json:"agent,omitempty"`
+	Model              *string `json:"model,omitempty"`
+	Role               string  `json:"role,omitempty"`
+	Choice             string  `json:"choice,omitempty"`
+	Fallback           bool    `json:"fallback,omitempty"`
+	Provider           *string `json:"provider,omitempty"`
+	Effort             *string `json:"effort,omitempty"`
+	Name               string  `json:"name,omitempty"`
+	Desktop            *string `json:"desktop,omitempty"`
+	SourceSession      string  `json:"source_session,omitempty"`
+	Yolo               bool    `json:"yolo,omitempty"`
+}
+
+type DelegateStatusArgs struct {
+	ID       string `json:"id,omitempty"`
+	WaitPast string `json:"wait_past,omitempty"`
+}
+
+type DelegateRolesArgs struct {
+	Render bool `json:"render,omitempty"`
+}
+
+type DelegateRolesShowArgs struct {
+	Render bool   `json:"render,omitempty"`
+	Role   string `json:"role,omitempty"`
+}
+
+type DelegateRolesHistoryArgs struct {
+	Render bool   `json:"render,omitempty"`
+	Limit  *int64 `json:"limit,omitempty"`
+}
+
+type DelegateRolesInstallArgs struct {
+	Render  bool   `json:"render,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type DelegateRolesAddArgs struct {
+	Render       bool    `json:"render,omitempty"`
+	Target       string  `json:"target,omitempty"`
+	Name         *string `json:"name,omitempty"`
+	Builtin      string  `json:"builtin,omitempty"`
+	Description  *string `json:"description,omitempty"`
+	Instructions *string `json:"instructions,omitempty"`
+	Icon         *string `json:"icon,omitempty"`
+	When         *string `json:"when,omitempty"`
+	Agent        *string `json:"agent,omitempty"`
+	Model        *string `json:"model,omitempty"`
+	Provider     *string `json:"provider,omitempty"`
+	Effort       *string `json:"effort,omitempty"`
+	Message      string  `json:"message,omitempty"`
+}
+
+type DelegateRolesSetArgs struct {
+	Render       bool    `json:"render,omitempty"`
+	Target       string  `json:"target,omitempty"`
+	Fallback     bool    `json:"fallback,omitempty"`
+	Default      bool    `json:"default,omitempty"`
+	Name         *string `json:"name,omitempty"`
+	Description  *string `json:"description,omitempty"`
+	Instructions *string `json:"instructions,omitempty"`
+	Icon         *string `json:"icon,omitempty"`
+	When         *string `json:"when,omitempty"`
+	Agent        *string `json:"agent,omitempty"`
+	Model        *string `json:"model,omitempty"`
+	Provider     *string `json:"provider,omitempty"`
+	Effort       *string `json:"effort,omitempty"`
+	Message      string  `json:"message,omitempty"`
+}
+
+type DelegateRolesCopyArgs struct {
+	Render  bool    `json:"render,omitempty"`
+	Role    string  `json:"role,omitempty"`
+	NewRole string  `json:"new_role,omitempty"`
+	Name    *string `json:"name,omitempty"`
+	Message string  `json:"message,omitempty"`
+}
+
+type DelegateRolesRmArgs struct {
+	Render  bool   `json:"render,omitempty"`
+	Target  string `json:"target,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type DelegateRolesEnableArgs struct {
+	Render  bool   `json:"render,omitempty"`
+	Role    string `json:"role,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type DelegateRolesDisableArgs struct {
+	Render  bool   `json:"render,omitempty"`
+	Role    string `json:"role,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type DelegateRolesApplyArgs struct {
+	Render  bool            `json:"render,omitempty"`
+	Table   json.RawMessage `json:"table,omitempty"`
+	Message string          `json:"message,omitempty"`
+}
+
+type DelegateRolesRollbackArgs struct {
+	Render   bool   `json:"render,omitempty"`
+	Revision *int64 `json:"revision,omitempty"`
+	Message  string `json:"message,omitempty"`
 }
 
 type ListArgs struct {

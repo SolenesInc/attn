@@ -2,10 +2,7 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"net"
 	"slices"
 	"sort"
 	"strings"
@@ -134,85 +131,8 @@ func (d *Daemon) installAttnRoles(current, next delegationprefs.Config, install 
 	return paths, nil
 }
 
-func (d *Daemon) handleDelegationPreferencesShow(conn net.Conn) {
-	history, err := d.store.DelegationPreferencesHistory(1)
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	live := store.DelegationPreferencesRevision{Config: delegationprefs.Defaults()}
-	if len(history) > 0 {
-		live = history[0]
-	}
-	d.replyDelegationPreferencesRevision(conn, live)
-}
-
-func (d *Daemon) handleDelegationPreferencesCommit(conn net.Conn, msg *protocol.DelegationPreferencesCommitMessage) {
-	install := protocol.Deref(msg.InstallWorkflowSkill)
-	current, err := d.store.GetDelegationPreferences()
-	var installedPaths []string
-	if err == nil {
-		installedPaths, err = d.installAttnRoles(current, msg.Preferences, install)
-	}
-	var saved store.DelegationPreferencesRevision
-	if err == nil {
-		saved, err = d.store.SaveDelegationPreferences(msg.Preferences, cliDelegationPreferencesNote(msg.Message))
-	}
-	if err != nil {
-		d.replyDelegationPreferencesError(conn, err)
-		return
-	}
-	if !install {
-		d.ensureEnabledWorkflowSkills()
-	}
-	d.publishFact(FactDelegationPreferencesChanged, "preferences", nil)
-	wire := delegationPreferencesRevisionWire(saved)
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, DelegationPreferencesRevision: &wire, WorkflowSkillPaths: installedPaths})
-}
-
-func (d *Daemon) handleDelegationPreferencesHistory(conn net.Conn, msg *protocol.DelegationPreferencesHistoryMessage) {
-	limit := protocol.Deref(msg.Limit)
-	if limit <= 0 {
-		limit = 20
-	}
-	history, err := d.store.DelegationPreferencesHistory(limit)
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	result := protocol.DelegationPreferencesHistoryResult{Revisions: make([]protocol.DelegationPreferencesRevision, 0, len(history))}
-	for _, revision := range history {
-		result.Revisions = append(result.Revisions, delegationPreferencesRevisionWire(revision))
-	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, DelegationPreferencesHistory: &result})
-}
-
-func (d *Daemon) handleDelegationPreferencesRollback(conn net.Conn, msg *protocol.DelegationPreferencesRollbackMessage) {
-	restored, err := d.store.RollbackDelegationPreferences(msg.Revision, cliDelegationPreferencesNote(msg.Message))
-	if err != nil {
-		d.replyDelegationPreferencesError(conn, err)
-		return
-	}
-	d.ensureEnabledWorkflowSkills()
-	d.publishFact(FactDelegationPreferencesChanged, "preferences", nil)
-	d.replyDelegationPreferencesRevision(conn, restored)
-}
-
 func cliDelegationPreferencesNote(message *string) store.DelegationPreferencesNote {
 	return store.DelegationPreferencesNote{Origin: string(protocol.DelegationPreferencesOriginCli), Message: strings.TrimSpace(protocol.Deref(message))}
-}
-
-func (d *Daemon) replyDelegationPreferencesRevision(conn net.Conn, revision store.DelegationPreferencesRevision) {
-	wire := delegationPreferencesRevisionWire(revision)
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, DelegationPreferencesRevision: &wire})
-}
-
-func (d *Daemon) replyDelegationPreferencesError(conn net.Conn, err error) {
-	response := protocol.Response{Ok: false, Error: protocol.Ptr(err.Error())}
-	if errors.Is(err, delegationprefs.ErrConflict) {
-		response.ErrorCode = protocol.Ptr(protocol.ErrorCodeConflict)
-	}
-	_ = json.NewEncoder(conn).Encode(response)
 }
 
 func delegationPreferencesRevisionWire(revision store.DelegationPreferencesRevision) protocol.DelegationPreferencesRevision {

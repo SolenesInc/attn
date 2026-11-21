@@ -1,6 +1,6 @@
 use super::support::{
-    bool_flag, client, daemon_message, has_help_flag, or_dash, parse_flags, parse_interspersed,
-    string_flag,
+    bool_flag, client, daemon_message, has_help_flag, new_uuid, or_dash, parse_flags,
+    parse_interspersed, string_flag,
 };
 use super::{Run, Stop, print_compact_line, print_reply_field, print_stdout};
 use crate::client::{Client, Reply, SendError};
@@ -345,23 +345,6 @@ fn read_full(file: &mut File, buffer: &mut [u8], path: &str) -> Result<usize, St
         }
     }
     Ok(filled)
-}
-
-fn new_uuid() -> String {
-    let mut bytes = [0_u8; 16];
-    File::open("/dev/urandom")
-        .and_then(|mut random| random.read_exact(&mut bytes))
-        .expect("the kernel provides /dev/urandom");
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    let mut text = String::with_capacity(36);
-    for (index, byte) in bytes.iter().enumerate() {
-        if matches!(index, 4 | 6 | 8 | 10) {
-            text.push('-');
-        }
-        let _ = write!(text, "{byte:02x}");
-    }
-    text
 }
 
 fn base64(data: &[u8]) -> String {

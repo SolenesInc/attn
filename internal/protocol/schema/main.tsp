@@ -1362,11 +1362,6 @@ model HarnessModelsResultMessage {
   tier_defaults: TierDefaults;
 }
 
-@extension("x-on", #{ home: true })
-model DelegationRolesMessage {
-  cmd: "delegation_roles";
-}
-
 model DelegationRolesResult {
   revision: safeint;
   roles: DelegationRole[];
@@ -1388,34 +1383,39 @@ model DelegationPreferencesRevision {
   changes: string[];
 }
 
-@extension("x-on", #{ home: true })
-model DelegationPreferencesShowMessage {
-  cmd: "delegation_preferences_show";
-}
-
-@extension("x-on", #{ home: true })
-model DelegationPreferencesCommitMessage {
-  cmd: "delegation_preferences_commit";
-  preferences: DelegationPreferences;
-  message?: string;
-  install_workflow_skill?: boolean;
-}
-
-@extension("x-on", #{ home: true })
-model DelegationPreferencesHistoryMessage {
-  cmd: "delegation_preferences_history";
-  limit?: safeint;
-}
-
 model DelegationPreferencesHistoryResult {
   revisions: DelegationPreferencesRevision[];
 }
 
-@extension("x-on", #{ home: true })
-model DelegationPreferencesRollbackMessage {
-  cmd: "delegation_preferences_rollback";
-  revision?: safeint;
-  message?: string;
+// DelegateRolesResult answers delegate roles: the roles agents choose from.
+// text is the list as the CLI prints it, present when the call asked to render.
+model DelegateRolesResult {
+  ...DelegationRolesResult;
+  text?: string;
+}
+
+// DelegateRolesShowResult answers delegate roles show with the saved table,
+// which delegate roles apply takes. text is the table, or the one role asked
+// for, as the CLI prints it, present when the call asked to render.
+model DelegateRolesShowResult {
+  ...DelegationPreferences;
+  text?: string;
+}
+
+// DelegateRolesHistoryResult answers delegate roles history. text is present
+// when the call asked to render.
+model DelegateRolesHistoryResult {
+  ...DelegationPreferencesHistoryResult;
+  text?: string;
+}
+
+// DelegateRolesChangeResult answers every command that saves a revision of the
+// table. installed lists the skill folders delegate roles install wrote. text
+// is present when the call asked to render.
+model DelegateRolesChangeResult {
+  ...DelegationPreferencesRevision;
+  installed?: string[];
+  text?: string;
 }
 
 enum DelegateAssignmentKind {
@@ -7500,10 +7500,6 @@ model Response {
   data?: string;
   delegate_result?: DelegateResult;
   delegation_operation?: DelegationOperation;
-  delegation_roles?: DelegationRolesResult;
-  delegation_preferences_revision?: DelegationPreferencesRevision;
-  workflow_skill_paths?: string[];
-  delegation_preferences_history?: DelegationPreferencesHistoryResult;
   sessions?: Session[];
   caller_session_id?: SessionID;
   pull_requests?: SessionPullRequest[];

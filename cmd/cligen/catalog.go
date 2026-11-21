@@ -206,7 +206,7 @@ func (g *generator) argDoc(a catalog.Arg, on surface) string {
 
 func (g *generator) argUsage(a catalog.Arg) (string, bool) {
 	switch {
-	case a.CLI == "-m+":
+	case a.CLI == "-m+" || a.Internal():
 		return "", false
 	case a.CLI == "pos" || a.CLI == "rest" || a.CLI == "words":
 		return g.placeholder(a), true
@@ -416,6 +416,22 @@ func (g *generator) subgroupHelp(group, sub *catalog.Group) string {
 	return out.String()
 }
 
+func (g *generator) commandGroupHelp(group, sub *catalog.Group, cmd *catalog.Command) string {
+	var out strings.Builder
+	fmt.Fprintf(&out, "usage: attn %s\n       attn %s <command>\n\n", g.usage("", cmd), sub.Name)
+	writeWrapped(&out, g.cliText(cmd, sub.File+": "+sub.Name, cmp.Or(sub.Doc, cmd.Doc)), "")
+	fmt.Fprintf(&out, "Use attn %s <command> --help for one command's syntax and flags.\n\ncommands:\n", sub.Name)
+	for _, child := range g.c.GroupCommands(sub.Name) {
+		fmt.Fprintf(&out, "  %s\n", g.usage(sub.Name, child))
+		writeWrapped(&out, g.cliText(child, child.File+": "+child.Name, child.Summary), "        ")
+	}
+	out.WriteString("\nflags:\n")
+	for _, line := range g.flagLines(cmd, group) {
+		out.WriteString(line + "\n")
+	}
+	return out.String()
+}
+
 func (g *generator) groupHelp(group *catalog.Group) string {
 	var out strings.Builder
 	bare, hasBare := g.c.Command(group.Name)
@@ -428,7 +444,14 @@ func (g *generator) groupHelp(group *catalog.Group) string {
 		fmt.Fprintf(&out, "       attn %s\n", g.usage(group.Name, bare))
 	}
 	out.WriteByte('\n')
-	writeWrapped(&out, g.cliText(nil, group.File+": "+group.Name, group.Doc), "")
+	if hasBare {
+		writeWrapped(&out, g.cliText(bare, group.File+": "+group.Name, cmp.Or(group.Doc, bare.Doc)), "")
+		for _, values := range bare.Examples {
+			out.WriteString("Example: " + g.example(bare, values) + "\n")
+		}
+	} else {
+		writeWrapped(&out, g.cliText(nil, group.File+": "+group.Name, group.Doc), "")
+	}
 	fmt.Fprintf(&out, "Use attn %s <command> --help for one command's syntax and flags.\n", group.Name)
 	sections := group.Sections
 	if len(sections) == 0 {
@@ -449,6 +472,13 @@ func (g *generator) groupHelp(group *catalog.Group) string {
 		}
 	}
 	out.WriteString("\nflags:\n")
+	if hasBare {
+		for _, a := range bare.Args {
+			if label, ok := g.argUsage(a); ok && isFlag(a) {
+				fmt.Fprintf(&out, "  %-*s %s\n", helpFlagColumn, label, g.cliText(bare, bare.Name+": arg "+a.Name, g.argDoc(a, cliSurface)))
+			}
+		}
+	}
 	fmt.Fprintf(&out, "  %-*s %s\n", helpFlagColumn, "--json", "print the result as JSON (every command that prints a result)")
 	for _, f := range group.Flags {
 		fmt.Fprintf(&out, "  %-*s %s (every command)\n", helpFlagColumn, "--"+f.Name+" "+f.Placeholder, f.Doc)
@@ -472,8 +502,17 @@ func (g *generator) rustHelp(group *catalog.Group) (string, error) {
 		if !strings.HasPrefix(sub.Name, group.Name+" ") {
 			continue
 		}
+		verb := strings.TrimPrefix(sub.Name, group.Name+" ")
+		if cmd, ok := g.c.Command(sub.Name); ok {
+			for j := range entries {
+				if entries[j].verb == verb {
+					entries[j].help = g.commandGroupHelp(group, sub, cmd)
+				}
+			}
+			continue
+		}
 		entries = append(entries, entry{
-			verb:  strings.TrimPrefix(sub.Name, group.Name+" "),
+			verb:  verb,
 			help:  g.subgroupHelp(group, sub),
 			usage: g.subgroupUsage(group.Name, sub.Name),
 		})

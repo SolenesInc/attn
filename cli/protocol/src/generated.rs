@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "233250c8b2ac";
+pub const PROTOCOL_VERSION: &str = "09c9b68d4009";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -3424,6 +3424,53 @@ impl DelegateResultMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DelegateRolesChangeResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub changes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<DelegationPreferencesOrigin>,
+    pub preferences: DelegationPreferences,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restores: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DelegateRolesHistoryResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub revisions: Vec<DelegationPreferencesRevision>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DelegateRolesResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<DelegationFallback>,
+    pub guidance: String,
+    pub revision: i64,
+    #[serde(deserialize_with = "null_as_default")]
+    pub roles: Vec<DelegationRole>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DelegateRolesShowResult {
+    pub enabled: bool,
+    pub fallback: DelegationFallback,
+    pub revision: i64,
+    #[serde(deserialize_with = "null_as_default")]
+    pub roles: Vec<DelegationRole>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    pub workflow_skill_enabled: bool,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DelegateStatusMessage {
     pub cmd: String,
     pub id: String,
@@ -3542,25 +3589,6 @@ impl DelegationPreferencesChangedMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct DelegationPreferencesCommitMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub install_workflow_skill: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
-    pub preferences: DelegationPreferences,
-}
-
-impl DelegationPreferencesCommitMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "delegation_preferences_commit".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DelegationPreferencesGetMessage {
     pub cmd: String,
     pub request_id: String,
@@ -3571,22 +3599,6 @@ impl DelegationPreferencesGetMessage {
     pub fn new() -> Self {
         Self {
             cmd: "delegation_preferences_get".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct DelegationPreferencesHistoryMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limit: Option<i64>,
-}
-
-impl DelegationPreferencesHistoryMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "delegation_preferences_history".to_string(),
             ..Self::default()
         }
     }
@@ -3640,24 +3652,6 @@ pub struct DelegationPreferencesRevision {
     pub restores: Option<i64>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct DelegationPreferencesRollbackMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revision: Option<i64>,
-}
-
-impl DelegationPreferencesRollbackMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "delegation_preferences_rollback".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DelegationPreferencesSaveMessage {
     pub cmd: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3676,20 +3670,6 @@ impl DelegationPreferencesSaveMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct DelegationPreferencesShowMessage {
-    pub cmd: String,
-}
-
-impl DelegationPreferencesShowMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "delegation_preferences_show".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DelegationRole {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub builtin: Option<BuiltinDelegationRole>,
@@ -3702,20 +3682,6 @@ pub struct DelegationRole {
     pub id: String,
     pub instructions: String,
     pub name: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct DelegationRolesMessage {
-    pub cmd: String,
-}
-
-impl DelegationRolesMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "delegation_roles".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DelegationRolesResult {
@@ -9286,12 +9252,6 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delegation_operation: Option<DelegationOperation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub delegation_preferences_history: Option<DelegationPreferencesHistoryResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub delegation_preferences_revision: Option<DelegationPreferencesRevision>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub delegation_roles: Option<DelegationRolesResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub doc_collections_result: Option<DocCollectionsResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub doc_count_result: Option<DocCountResult>,
@@ -9404,8 +9364,6 @@ pub struct Response {
     pub update_request_result: Option<UpdateRequestResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub update_status: Option<UpdateStatus>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workflow_skill_paths: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worktree_keep_result: Option<WorktreeKeepResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

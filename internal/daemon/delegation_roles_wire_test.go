@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -89,7 +90,7 @@ func TestAddingAttnRolesInstallsTheWorkflowSkillBeforeSavingThem(t *testing.T) {
 		}
 	}
 
-	roles, err := w.Client().DelegationRoles()
+	roles, err := offeredRoles(w.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +120,7 @@ func TestADelegateLaunchedInARoleGetsOnlyThatRolesGuidance(t *testing.T) {
 	if !saved.Success {
 		t.Fatalf("saving the roles: %s", protocol.Deref(saved.Error))
 	}
-	if offered, err := cli.DelegationRoles(); err != nil || len(offered.Roles) != 2 || offered.Roles[0].Instructions != "Check {{literal}} carefully\n\nStopping point: Stop once the tests pass" {
+	if offered, err := offeredRoles(cli); err != nil || len(offered.Roles) != 2 || offered.Roles[0].Instructions != "Check {{literal}} carefully\n\nStopping point: Stop once the tests pass" {
 		t.Fatalf("agents are offered %+v, %v; want the roles with their instructions verbatim", offered, err)
 	}
 	skills := delegationWorkflowSkillIn(toolHome, ".agents")
@@ -162,7 +163,13 @@ func TestADelegateLaunchedInARoleGetsOnlyThatRolesGuidance(t *testing.T) {
 	if turnedOff := savePreferences(app, off); !turnedOff.Success || turnedOff.Preferences.Fallback.Selection.Harness != "codex" {
 		t.Errorf("turning the roles off = %+v; want the fallback kept", turnedOff)
 	}
-	if offered, err := cli.DelegationRoles(); err != nil || len(offered.Roles) != 0 || offered.Fallback != nil || offered.Guidance != "" {
+	if offered, err := offeredRoles(cli); err != nil || len(offered.Roles) != 0 || offered.Fallback != nil || offered.Guidance != "" {
 		t.Errorf("with the roles off agents are offered %+v, %v; want nothing", offered, err)
 	}
+}
+
+func offeredRoles(cli *client.Client) (protocol.DelegationRolesResult, error) {
+	var result protocol.DelegateRolesResult
+	err := cli.RunCommand("delegate roles", "", map[string]any{}, &result)
+	return protocol.DelegationRolesResult{Revision: result.Revision, Roles: result.Roles, Fallback: result.Fallback, Guidance: result.Guidance}, err
 }

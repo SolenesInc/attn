@@ -2,6 +2,9 @@ use super::{Run, Stop};
 use crate::client::{Client, SendError};
 use attn::go::flag::{Flag, FlagDefault, FlagError, FlagSet};
 use attn_protocol::CallerSessionMessage;
+use std::fmt::Write as _;
+use std::fs::File;
+use std::io::Read as _;
 
 const SANDBOX_REFUSAL_PREFIX: &str = "the sandbox blocks";
 const DAEMON_ERROR_PREFIX: &str = "daemon error: ";
@@ -129,4 +132,21 @@ pub fn or_dash(value: &str) -> String {
     } else {
         value.to_string()
     }
+}
+
+pub fn new_uuid() -> String {
+    let mut bytes = [0_u8; 16];
+    File::open("/dev/urandom")
+        .and_then(|mut random| random.read_exact(&mut bytes))
+        .expect("the kernel provides /dev/urandom");
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    let mut text = String::with_capacity(36);
+    for (index, byte) in bytes.iter().enumerate() {
+        if matches!(index, 4 | 6 | 8 | 10) {
+            text.push('-');
+        }
+        let _ = write!(text, "{byte:02x}");
+    }
+    text
 }

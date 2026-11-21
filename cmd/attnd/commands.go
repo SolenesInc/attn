@@ -31,7 +31,6 @@ type topLevelCommand struct {
 
 func topLevelCommands() []topLevelCommand {
 	return []topLevelCommand{
-		{names: []string{"delegate"}, run: runDelegate, banner: true},
 		{names: []string{"pr"}, run: runPRCommand},
 		{names: []string{"agent"}, run: runAgent, banner: true},
 		{names: []string{"session"}, run: runSession, banner: true},

@@ -52,7 +52,7 @@ func TestTurningDelegationRolesOffKeepsThemAndHidesThemAcrossARestart(t *testing
 	if !saved.Success || saved.Preferences.Revision != 1 {
 		t.Fatalf("saving a role = %+v", saved)
 	}
-	if roles, err := w.Client().DelegationRoles(); err != nil || len(roles.Roles) != 1 || roles.Roles[0].ID != "build" || roles.Fallback == nil {
+	if roles, err := offeredRoles(w.Client()); err != nil || len(roles.Roles) != 1 || roles.Roles[0].ID != "build" || roles.Fallback == nil {
 		t.Fatalf("roles offered to agents = %+v, %v; want build and the fallback", roles, err)
 	}
 
@@ -67,7 +67,7 @@ func TestTurningDelegationRolesOffKeepsThemAndHidesThemAcrossARestart(t *testing
 	if got := savedPreferences(w.App()); !reflect.DeepEqual(got, *turnedOff.Preferences) {
 		t.Fatalf("after the restart the preferences are %+v, want %+v", got, *turnedOff.Preferences)
 	}
-	if roles, err := w.Client().DelegationRoles(); err != nil || len(roles.Roles) != 0 || roles.Fallback != nil {
+	if roles, err := offeredRoles(w.Client()); err != nil || len(roles.Roles) != 0 || roles.Fallback != nil {
 		t.Fatalf("with the table off agents are offered %+v, %v; want nothing", roles, err)
 	}
 }

@@ -53,6 +53,9 @@ func (g *generator) goArgType(a catalog.Arg) string {
 	if a.List {
 		return "[]string"
 	}
+	if g.c.ArgType(a).Clears {
+		return "*string"
+	}
 	switch g.valueKind(a) {
 	case valueInt:
 		return "*int64"
@@ -210,6 +213,8 @@ func (g *generator) rustCLI(a catalog.Arg) string {
 		return fmt.Sprintf("Cli::Words(&[%s])", strings.Join(fields, ", "))
 	case a.CLI == "-m+":
 		return "Cli::SplitRest"
+	case a.Internal():
+		return "Cli::Internal"
 	case strings.Contains(a.CLI, "|"):
 		var pairs []string
 		flags := strings.Split(a.CLI, "|")
@@ -254,7 +259,7 @@ func (g *generator) rustTable(group string) (string, error) {
 				source = "Source::Stdin"
 			}
 			fmt.Fprintf(&out, "            Arg { name: %s, cli: %s, value: %s, source: %s, required: %v, list: %v },\n",
-				rustString(a.Name), g.rustCLI(a), kinds[g.valueKind(a)], source, a.Required, a.List)
+				rustString(a.Name), g.rustCLI(a), kinds[g.valueKind(a)], source, a.Required && a.Unless == "", a.List)
 		}
 		out.WriteString("        ],\n    },\n")
 	}

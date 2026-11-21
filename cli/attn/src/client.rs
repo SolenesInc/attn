@@ -147,6 +147,7 @@ fn read_reply(connection: &mut UnixStream) -> io::Result<Vec<u8>> {
     Ok(value)
 }
 
+#[derive(Clone)]
 pub struct Reply {
     raw: Vec<u8>,
 }
