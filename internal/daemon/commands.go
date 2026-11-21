@@ -69,18 +69,32 @@ func (d *Daemon) callerFromFrame(ctx context.Context, msg *protocol.RunCommandMe
 		if terminal != "" && d.inAnotherProfile(d.callerSession(ctx, terminal), session) {
 			return command.Caller{}, protocol.Refuse(protocol.RefusalNotFound, "unknown session %s", session)
 		}
-		return command.Caller{Session: session, Profile: profile}, nil
+		return d.framedSessionCaller(session, profile)
 	}
 	if terminal == "" {
 		return command.Caller{Profile: profile}, nil
 	}
 	if session := d.callerSession(ctx, terminal); session != "" {
-		return command.Caller{Session: session, Profile: profile}, nil
+		return d.framedSessionCaller(session, profile)
 	}
 	if threadProfile, _, ok := harness.ParseCodexThreadTerminal(terminal); ok && profile == "" {
 		profile = threadProfile
 	}
 	return command.Caller{Profile: profile, Terminal: terminal}, nil
+}
+
+func (d *Daemon) framedSessionCaller(session protocol.SessionID, requested string) (command.Caller, error) {
+	c := d.sessionCaller(session)
+	if c.Profile == "" {
+		c.Profile = requested
+		return c, nil
+	}
+	if requested != "" {
+		if _, err := d.resolveGardenProfile(session, requested, ""); err != nil {
+			return command.Caller{}, err
+		}
+	}
+	return c, nil
 }
 
 func (d *Daemon) inAnotherProfile(asking, named protocol.SessionID) bool {

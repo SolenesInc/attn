@@ -18,6 +18,10 @@ type Caller struct {
 	Terminal protocol.TerminalID
 }
 
+func (c Caller) Sees(profile string) bool {
+	return c.Profile == "" || c.Profile == profile
+}
+
 const CodeUsage = "usage"
 
 type Refusal struct {

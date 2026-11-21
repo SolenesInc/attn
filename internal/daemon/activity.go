@@ -370,7 +370,7 @@ func (d *Daemon) runActivity(ctx context.Context, c command.Caller, a command.Ac
 		result.Error = protocol.Ptr(err.Error())
 	}
 	for _, session := range d.store.List("") {
-		if !d.sessionGeneratesActivity(session) {
+		if !c.Sees(session.ProfileID) || !d.sessionGeneratesActivity(session) {
 			continue
 		}
 		entry := protocol.ActivityStatusSession{ID: session.ID, Label: session.Label}
@@ -390,7 +390,9 @@ func (d *Daemon) runActivity(ctx context.Context, c command.Caller, a command.Ac
 
 func (d *Daemon) runActivityClear(ctx context.Context, c command.Caller, a command.ActivityClearArgs) (any, error) {
 	sessionID := protocol.SessionID(strings.TrimSpace(a.ID))
-	if !d.store.UpdateSessionActivity(sessionID, "", time.Time{}, "") {
+	session := d.store.Get(sessionID)
+	visible := session != nil && c.Sees(session.ProfileID)
+	if !visible || !d.store.UpdateSessionActivity(sessionID, "", time.Time{}, "") {
 		return nil, command.Refuse(command.CodeSessionNotFound, "no session %q; pass a full session id", a.ID)
 	}
 	d.publishFact(FactSessionActivityChanged, string(sessionID), nil)

@@ -3649,12 +3649,16 @@ func (d *Daemon) runList(ctx context.Context, c command.Caller, a command.ListAr
 	if err != nil {
 		return nil, err
 	}
-	result := protocol.ListResult{Sessions: d.sessionsForBroadcast(d.store.List("")), Profiles: profiles}
-	if result.Sessions == nil {
-		result.Sessions = []protocol.Session{}
+	result := protocol.ListResult{Sessions: []protocol.Session{}, Profiles: []protocol.Profile{}}
+	for _, profile := range profiles {
+		if c.Sees(profile.ID) {
+			result.Profiles = append(result.Profiles, profile)
+		}
 	}
-	if result.Profiles == nil {
-		result.Profiles = []protocol.Profile{}
+	for _, session := range d.sessionsForBroadcast(d.store.List("")) {
+		if c.Sees(session.ProfileID) {
+			result.Sessions = append(result.Sessions, session)
+		}
 	}
 	return result, nil
 }
