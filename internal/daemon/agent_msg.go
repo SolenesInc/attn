@@ -2,10 +2,8 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"strings"
 	"time"
 
@@ -167,12 +165,6 @@ func senderRefusal(code, sender, role string) *command.Refusal {
 		return command.Refuse(role+"_ambiguous_session", "the %s %q matches more than one session; give more of the id", role, sender)
 	}
 	return command.Refuse(role+"_session_not_found", "the %s %q is not a session on this daemon", role, sender)
-}
-
-func (d *Daemon) replyAgentMsgError(conn net.Conn, code, message string) {
-	_ = json.NewEncoder(conn).Encode(protocol.Response{
-		Ok: false, Error: protocol.Ptr(message), ErrorCode: protocol.Ptr(code),
-	})
 }
 
 func agentMessageQueuedDetail(err error) string {

@@ -114,6 +114,14 @@ func TestAnotherProfilesSessionDoesNotExistForTheSessionCommands(t *testing.T) {
 			t.Errorf("session list %v from planter = %v, %v, want neighbour and not stranger", args, listed, err)
 		}
 	}
+	for _, all := range []bool{false, true} {
+		if _, err := run(planter, "session list", map[string]any{"before": "stranger", "all": all}); client.ErrorCode(err) != "unknown_session" {
+			t.Errorf("session list before another profile's session (all %v) = %v, want unknown_session", all, err)
+		}
+	}
+	if _, err := run(cli, "session list", map[string]any{"before": "stranger", "all": true}); err != nil {
+		t.Errorf("session list before any profile's session from outside attn: %v", err)
+	}
 	if _, err := run(cli, "session show", map[string]any{"id": "stranger"}); err != nil {
 		t.Errorf("session show of any profile's session from outside attn: %v", err)
 	}

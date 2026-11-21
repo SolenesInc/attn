@@ -34,10 +34,6 @@ func setCommandPath(path string) {
 	invocation.path = path
 }
 
-func recordAsClosedSession(session protocol.SessionID) {
-	invocation.session = session
-}
-
 func leaveInvocationUnrecorded() {
 	invocation.unrecorded = true
 }

@@ -355,7 +355,11 @@ func (s *Store) sessionLedgerDB(query SessionLedgerQuery, limit int) (SessionLed
 
 	if cursor := strings.TrimSpace(query.Before); cursor != "" {
 		var at string
-		err := s.db.QueryRow("SELECT "+ledgerAt+" FROM sessions_with_runtime AS sessions WHERE id = ?", cursor).Scan(&at)
+		lookup, lookupArgs := "SELECT "+ledgerAt+" FROM sessions_with_runtime AS sessions WHERE id = ?", []any{cursor}
+		if profileID := strings.TrimSpace(query.ProfileID); profileID != "" {
+			lookup, lookupArgs = lookup+" AND profile_id = ?", append(lookupArgs, profileID)
+		}
+		err := s.db.QueryRow(lookup, lookupArgs...).Scan(&at)
 		if errors.Is(err, sql.ErrNoRows) {
 			return SessionLedgerPage{}, &ErrUnknownLedgerCursor{ID: cursor}
 		}
@@ -522,7 +526,7 @@ func (s *Store) sessionLedgerMemory(query SessionLedgerQuery, limit int) (Sessio
 
 	if cursor := strings.TrimSpace(query.Before); cursor != "" {
 		entry := s.ledgerEntryMemoryLocked(protocol.SessionID(cursor))
-		if entry == nil {
+		if entry == nil || query.ProfileID != "" && entry.ProfileID != strings.TrimSpace(query.ProfileID) {
 			return SessionLedgerPage{}, &ErrUnknownLedgerCursor{ID: cursor}
 		}
 		at := ledgerInstant(*entry)

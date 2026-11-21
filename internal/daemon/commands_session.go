@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func (d *Daemon) sessionCommands() map[string]command.Handler {
@@ -111,6 +113,10 @@ func (d *Daemon) runSessionList(ctx context.Context, c command.Caller, a command
 		msg.Until = protocol.Ptr(until)
 	}
 	result, err := d.sessionLedgerPage(msg, false)
+	var unknown *store.ErrUnknownLedgerCursor
+	if errors.As(err, &unknown) {
+		return nil, command.Refuse(command.CodeUnknownSession, "%s", err.Error())
+	}
 	if err != nil {
 		return nil, err
 	}
