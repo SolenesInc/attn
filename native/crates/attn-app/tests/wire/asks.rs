@@ -2478,3 +2478,68 @@ fn the_sheet_is_centred_under_the_title_bar_at_its_sizes_with_its_list_beside_th
         );
     }
 }
+
+#[test]
+fn a_condition_added_under_a_pick_is_sent_with_it_and_shown_once_replied() {
+    let mut world = start(vec![cache_store()], vec![api_working()]);
+    open_sheet(&mut world);
+
+    assert!(!has(&world, "asks.q.q1.condition"));
+    click(&mut world, "asks.q.q1.choice.0");
+    click(&mut world, "asks.q.q1.condition");
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("asks.q.q1.condition.field")
+    );
+    assert_eq!(
+        name(&world, "asks.q.q1.condition.field"),
+        "Condition on Postgres"
+    );
+    type_into(
+        &mut world,
+        "asks.q.q1.condition.field",
+        "skip the Windows VM step",
+    );
+    click(&mut world, "asks.send");
+
+    assert_eq!(
+        sent_answers(&world)[0]["answers"],
+        serde_json::json!([{"key": "q1", "picked": ["Postgres"], "condition": "skip the Windows VM step"}])
+    );
+
+    let answered = AskAnswer {
+        condition: Some("skip the Windows VM step".into()),
+        ..picked("q1", &["Postgres"])
+    };
+    update_asks(
+        &mut world,
+        vec![replied(cache_store(), vec![answered], None)],
+    );
+    letter(&mut world, "r");
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("asks.q.q1.condition"))
+            .value
+            .as_deref(),
+        Some("Condition: skip the Windows VM step")
+    );
+}
+
+#[test]
+fn typing_another_answer_drops_the_pick_and_its_condition() {
+    let mut world = start(vec![cache_store()], vec![api_working()]);
+    open_sheet(&mut world);
+
+    click(&mut world, "asks.q.q1.choice.0");
+    click(&mut world, "asks.q.q1.condition");
+    type_into(&mut world, "asks.q.q1.condition.field", "only today");
+    type_into(&mut world, "asks.q.q1.other.field", "SQLite");
+
+    assert!(!has(&world, "asks.q.q1.condition.field"));
+    click(&mut world, "asks.send");
+    assert_eq!(
+        sent_answers(&world)[0]["answers"],
+        serde_json::json!([{"key": "q1", "picked": [], "other": "SQLite"}])
+    );
+}

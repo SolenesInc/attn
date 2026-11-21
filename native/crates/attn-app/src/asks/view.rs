@@ -52,6 +52,10 @@ pub(super) fn other_key(question: &str) -> String {
     format!("asks.q.{question}.other.field")
 }
 
+pub(super) fn condition_key(question: &str) -> String {
+    format!("asks.q.{question}.condition.field")
+}
+
 pub(super) fn text_key(question: &str) -> String {
     format!("asks.q.{question}.text.field")
 }
@@ -758,6 +762,12 @@ fn choice_list(
             }),
         )
     });
+    let condition = question
+        .choices
+        .iter()
+        .any(|choice| answer.picked(&choice.label))
+        .then(|| condition(ask, question, answer, t))
+        .flatten();
     let group_key = format!("asks.q.{}.choices", question.key);
     let group = if many {
         checks(group_key, &question.prompt)
@@ -786,7 +796,56 @@ fn choice_list(
             Some(El::from(line_box(input, FieldState::Ready, t)))
         }
     };
-    group.children(options).children(other)
+    group.children(options).children(condition).children(other)
+}
+
+/// The condition under the picks: the user's, once replied; while answering, the link that opens
+/// its field, then the field, labelled with what it qualifies.
+fn condition(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) -> Option<El> {
+    let picked = question
+        .choices
+        .iter()
+        .filter(|choice| answer.picked(&choice.label))
+        .map(|choice| choice.label.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let label = format!("Condition on {picked}");
+    let key = format!("asks.q.{}.condition", question.key);
+    match answer {
+        Shown::Replied(a) => a
+            .and_then(|a| a.condition.as_deref())
+            .map(|condition| replied_text(key, &label, &format!("Condition: {condition}"), t)),
+        Shown::Draft(draft) => {
+            let (ask_id, q) = (ask.to_owned(), question.key.clone());
+            Some(match draft.and_then(|a| a.condition.as_ref()) {
+                None => El::from(
+                    Button::new("Add a condition")
+                        .size(Size::Compact)
+                        .look(Look::Plain)
+                        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                            super::add_condition(state, &ask_id, &q, tx)
+                        })
+                        .build(t)
+                        .key(key),
+                )
+                .self_start(),
+                Some(edit) => {
+                    let input = TextInput::new(edit)
+                        .key(condition_key(&question.key))
+                        .label(label)
+                        .placeholder(format!("Your condition on {picked}…"))
+                        .on_edit(move |state: &mut State| {
+                            state
+                                .answer(&ask_id, &q)
+                                .condition
+                                .get_or_insert_with(rune::TextEdit::default)
+                        })
+                        .on_key(field_key);
+                    line_box(input, FieldState::Ready, t).into()
+                }
+            })
+        }
+    }
 }
 
 fn replied_text(key: String, label: &str, value: &str, t: &Tokens) -> El {

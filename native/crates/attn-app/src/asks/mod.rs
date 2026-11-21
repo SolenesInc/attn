@@ -63,6 +63,8 @@ pub(crate) struct Answer {
     pub picked: Vec<String>,
     pub other: TextEdit,
     pub text: TextEdit,
+    /// The condition on the pick, once "Add a condition" opened its field.
+    pub condition: Option<TextEdit>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -339,11 +341,17 @@ impl Draft {
                 if picked.is_empty() && other.is_empty() && text.is_empty() {
                     return None;
                 }
+                let condition = answer
+                    .condition
+                    .as_ref()
+                    .map(|c| c.text.trim())
+                    .filter(|c| !c.is_empty() && !picked.is_empty());
                 Some(AskAnswer {
                     key: q.key.clone(),
                     picked: picked.to_vec(),
                     other: (!other.is_empty()).then(|| other.to_owned()),
                     text: (!text.is_empty()).then(|| text.to_owned()),
+                    condition: condition.map(str::to_owned),
                 })
             })
             .collect()
@@ -571,6 +579,16 @@ pub(crate) fn other_edited(state: &mut State, ask: &str, question: &str, kind: K
     if kind == Kind::One {
         state.answer(ask, question).picked.clear();
     }
+}
+
+/// Opens the field for a condition on the question's pick and moves the keyboard into it.
+pub(crate) fn add_condition(state: &mut State, ask: &str, question: &str, tx: &mut Tx) {
+    state
+        .answer(ask, question)
+        .condition
+        .get_or_insert_with(TextEdit::default);
+    let ring = tx.by_keys() || tx.focus_visible();
+    tx.focus(view::condition_key(question), ring);
 }
 
 /// Picks every recommended answer, when several questions recommend one.
