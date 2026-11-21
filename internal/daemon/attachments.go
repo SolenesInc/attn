@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crashpoint"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -130,6 +131,7 @@ func (d *Daemon) attachmentPut(profileID string, msg *protocol.AttachmentPutMess
 	if err != nil {
 		return nil, err
 	}
+	pausepoint.At(pausepoint.AttachmentRowRead)
 	if a == nil {
 		if msg.Offset != 0 {
 			return nil, fmt.Errorf("next_offset=0, asked for %d", msg.Offset)
@@ -137,8 +139,9 @@ func (d *Daemon) attachmentPut(profileID string, msg *protocol.AttachmentPutMess
 		if err := d.checkAttachmentOwner(profileID, msg.Owner); err != nil {
 			return nil, err
 		}
+		pausepoint.At(pausepoint.AttachmentOwnerChecked)
 		a = &store.StoredAttachment{ProfileID: profileID, Owner: msg.Owner, Attachment: protocol.Attachment{ID: msg.AttachmentID, Name: msg.Name}, State: store.AttachmentStaged}
-		if err := d.store.SaveAttachment(*a); err != nil {
+		if err := d.saveUploadedAttachment(*a); err != nil {
 			return nil, err
 		}
 	}
@@ -166,7 +169,7 @@ func (d *Daemon) attachmentPut(profileID string, msg *protocol.AttachmentPutMess
 			}
 			a.Attachment.MediaType = media
 			a.State = store.AttachmentReady
-			if err := d.store.SaveAttachment(*a); err != nil {
+			if err := d.saveUploadedAttachment(*a); err != nil {
 				return nil, err
 			}
 		} else if !os.IsNotExist(err) {
@@ -219,7 +222,7 @@ func (d *Daemon) attachmentPut(profileID string, msg *protocol.AttachmentPutMess
 		return &protocol.AttachmentPutResult{NextOffset: size, Attachment: &a.Attachment}, nil
 	}
 	a.Attachment.Bytes = size
-	if err := d.store.SaveAttachment(*a); err != nil {
+	if err := d.saveUploadedAttachment(*a); err != nil {
 		return nil, err
 	}
 	if !msg.Final {
@@ -254,10 +257,21 @@ func (d *Daemon) attachmentPut(profileID string, msg *protocol.AttachmentPutMess
 	a.Attachment.MediaType = media
 	a.Attachment.Bytes = size
 	a.State = store.AttachmentReady
-	if err := d.store.SaveAttachment(*a); err != nil {
+	if err := d.saveUploadedAttachment(*a); err != nil {
 		return nil, err
 	}
 	return &protocol.AttachmentPutResult{NextOffset: size, Attachment: &a.Attachment}, nil
+}
+
+func (d *Daemon) saveUploadedAttachment(a store.StoredAttachment) error {
+	err := d.store.SaveAttachment(a)
+	if !errors.Is(err, store.ErrAttachmentNotSaved) {
+		return err
+	}
+	if err := d.removeAttachmentFiles(a); err != nil {
+		d.logf("attachments: removing the bytes of the refused upload %s: %v", a.Attachment.ID, err)
+	}
+	return errAskGone
 }
 
 func (d *Daemon) attachmentDownload(profileID string, msg *protocol.AttachmentGetMessage, chunkBytes int) (*protocol.AttachmentGetResult, error) {
@@ -308,7 +322,7 @@ func (d *Daemon) attachmentDiscard(profileID string, msg *protocol.AttachmentDis
 		return fmt.Errorf("attachment %s was already sent and cannot be removed", msg.AttachmentID)
 	}
 	a.State = store.AttachmentDiscarded
-	if err := d.store.SaveAttachment(*a); err != nil {
+	if err := d.store.SaveAttachment(*a); err != nil && !errors.Is(err, store.ErrAttachmentNotSaved) {
 		return err
 	}
 	return d.removeAttachmentFiles(*a)

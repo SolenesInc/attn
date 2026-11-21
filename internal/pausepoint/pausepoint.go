@@ -138,6 +138,9 @@ const (
 	PtySizesReleased               = "pty-sizes-released"
 	HomeGatewayScreenCaptured      = "home-gateway-screen-captured"
 	RetiredSkillChecked            = "retired-skill-checked"
+	AttachmentRowRead              = "attachment-row-read"
+	AttachmentOwnerChecked         = "attachment-owner-checked"
+	AskFilesDiscarding             = "ask-files-discarding"
 )
 
 type armed struct {

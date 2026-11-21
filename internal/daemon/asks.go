@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
@@ -674,6 +675,7 @@ func (d *Daemon) announceClosedAsks(ids []string) {
 }
 
 func (d *Daemon) removeDiscardedAskFiles(ids []string) {
+	pausepoint.At(pausepoint.AskFilesDiscarding)
 	d.attachmentMu.Lock()
 	defer d.attachmentMu.Unlock()
 	discarded, err := d.store.DiscardedAttachmentsOf(protocol.AttachmentOwnerKindAsk, ids)

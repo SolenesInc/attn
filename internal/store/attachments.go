@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -22,6 +23,8 @@ type StoredAttachment struct {
 	Attachment protocol.Attachment
 	State      AttachmentState
 }
+
+var ErrAttachmentNotSaved = errors.New("the attachment is discarded, committed, or its ask is gone")
 
 const attachmentSelect = `SELECT attachment_id,profile_id,owner_kind,owner_id,name,media_type,byte_count,state FROM attachments`
 
@@ -47,8 +50,23 @@ func (s *Store) Attachment(id string) (*StoredAttachment, error) {
 func (s *Store) SaveAttachment(a StoredAttachment) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec(`INSERT INTO attachments(attachment_id,profile_id,owner_kind,owner_id,name,media_type,byte_count,state) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(attachment_id) DO UPDATE SET media_type=excluded.media_type,byte_count=excluded.byte_count,state=excluded.state WHERE attachments.state!='committed'`, a.Attachment.ID, a.ProfileID, a.Owner.Kind, a.Owner.ID, a.Attachment.Name, a.Attachment.MediaType, a.Attachment.Bytes, a.State)
-	return err
+	result, err := s.db.Exec(`INSERT INTO attachments(attachment_id,profile_id,owner_kind,owner_id,name,media_type,byte_count,state)
+SELECT ?,?,?,?,?,?,?,?
+WHERE ?!='ask' OR EXISTS(SELECT 1 FROM asks WHERE id=? AND answered_at='') OR EXISTS(SELECT 1 FROM attachments WHERE attachment_id=?)
+ON CONFLICT(attachment_id) DO UPDATE SET media_type=excluded.media_type,byte_count=excluded.byte_count,state=excluded.state WHERE attachments.state NOT IN ('committed','discarded')`,
+		a.Attachment.ID, a.ProfileID, a.Owner.Kind, a.Owner.ID, a.Attachment.Name, a.Attachment.MediaType, a.Attachment.Bytes, a.State,
+		a.Owner.Kind, a.Owner.ID, a.Attachment.ID)
+	if err != nil {
+		return err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if changed == 0 {
+		return ErrAttachmentNotSaved
+	}
+	return nil
 }
 
 func (s *Store) AttachmentsIn(states ...AttachmentState) ([]StoredAttachment, error) {
