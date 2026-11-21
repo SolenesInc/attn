@@ -1,8 +1,10 @@
-# The MCP server's `instructions`: the intent map that says when to reach for
-# attn. Claude Code keeps the first 4,096 characters, so the generator refuses a
-# longer map.
+# The MCP server's `description`: one line a harness shows before it reads the
+# server's `instructions`. The `instructions`: the intent map that says when to
+# reach for attn. Claude Code keeps the first 4,096 characters, so the generator
+# refuses a longer map.
 server:
   name: attn
+  description: attn's tools for the work you share with the user and their other agents, starting with seeds in the garden.
   instructions: |
     attn runs you beside the user's other agents. These tools are attn's. Each tool's description holds its rules: read it before the first call. Find a tool by the words in this map.
 

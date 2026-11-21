@@ -104,12 +104,20 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 		}
 		serverBound := reg.Capabilities["server_binding"]
 		var prepared *preparedPluginReload
+		p.Params.AgentTools = nil
 		if serverBound {
-			p.Params.Executable = d.serverLinkFor(opts.Agent).executable(opts)
+			l := d.serverLinkFor(opts.Agent)
+			p.Params.Executable = l.executable(opts)
 			if err := d.prepareLinkedLaunch(opts, launch, reload); err != nil {
 				return nil, err
 			}
+			if reg.Capabilities["agent_tools"] {
+				p.Params.AgentTools = l.clientAgentTools()
+			}
 		} else {
+			if reg.Capabilities["agent_tools"] {
+				p.Params.AgentTools = d.pluginAgentTools(opts.ID)
+			}
 			d.sessionMonitor(sessionID).BeginDriverLaunch(p.Plugin, p.Params.RunID)
 			prepared = &preparedPluginReload{d: d, sessionID: sessionID, pluginName: p.Plugin, runID: p.Params.RunID, route: pluginDriverRoute(reg)}
 		}

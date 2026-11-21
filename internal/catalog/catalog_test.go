@@ -14,6 +14,7 @@ const goodTypes = `types:
 
 const goodServer = `server:
   name: attn
+  description: attn's tools.
   instructions: Reach for attn to track work.
 `
 
@@ -79,7 +80,7 @@ func TestLoadRefusesWhatWouldBreakAHarnessOrAnUnmarkedCommand(t *testing.T) {
 		},
 		{
 			name:  "an intent map over Claude Code's cut",
-			files: map[string]string{ServerFile: "server:\n  name: attn\n  instructions: " + strings.Repeat("x", 4097) + "\n"},
+			files: map[string]string{ServerFile: "server:\n  name: attn\n  description: attn's tools.\n  instructions: " + strings.Repeat("x", 4097) + "\n"},
 			want:  []string{"server.yaml", "4097 characters", "limit of 4096"},
 		},
 		{

@@ -48,6 +48,7 @@ type appServerFlavor struct {
 	hello        map[string]any
 	completions  bool
 	sigmaWire    bool
+	callerHeader string
 }
 
 var appServerFlavors = map[Harness]appServerFlavor{
@@ -55,19 +56,19 @@ var appServerFlavors = map[Harness]appServerFlavor{
 		harness: Sigma, role: "sigma-server", homeVariable: "SIGMA_HOME", homeDir: "sg", rootVariable: "SIGMA_ROOT_CONVERSATION",
 		socket:    func(home string) string { return filepath.Join(home, "sigma.sock") },
 		hello:     map[string]any{"version": "fake", "protocol": 1},
-		sigmaWire: true,
+		sigmaWire: true, callerHeader: "Sigma-Root-Conversation",
 	},
 	SampleServer: {
 		harness: SampleServer, role: "sample-server-server", homeVariable: "SAMPLE_SERVER_HOME", homeDir: "ss", rootVariable: "SAMPLE_SERVER_ROOT_CONVERSATION",
 		socket:      func(home string) string { return filepath.Join(home, "sample-server.sock") },
 		hello:       map[string]any{"server": "sample-server", "version": "fake", "protocol": 1},
-		completions: true,
+		completions: true, callerHeader: "Sample-Server-Root-Conversation",
 	},
 }
 
 var serverViewComposer = composer{prompt: "PROMPT "}
 
-var serverViewFlags = flagSpec{values: map[string]bool{"--conversation": true, "--provider": true, "--model": true, "--effort": true, "--instructions": true, "--target": true}}
+var serverViewFlags = flagSpec{values: map[string]bool{"--conversation": true, "--provider": true, "--model": true, "--effort": true, "--instructions": true, "--target": true, "--mcp-server": true, "--mcp-description": true}}
 
 func appServerProgram(h Harness) func(config) int {
 	flavor := appServerFlavors[h]
@@ -122,6 +123,9 @@ func (n *serverView) begin(*terminal) error {
 		if value := n.args.value(flag); value != "" {
 			start[key] = value
 		}
+	}
+	if name := n.args.value("--mcp-server"); name != "" {
+		start["mcpServers"] = []ServerMCPServer{{Name: name, Description: n.args.value("--mcp-description")}}
 	}
 	return n.call("conversation/start", start)
 }
@@ -223,16 +227,17 @@ func ServerTargets(cwd string) []ServerTarget {
 }
 
 type ServerConversation struct {
-	ID           string         `json:"id"`
-	Cwd          string         `json:"cwd"`
-	Provider     string         `json:"provider,omitempty"`
-	Model        string         `json:"model,omitempty"`
-	Effort       string         `json:"effort,omitempty"`
-	Approvals    string         `json:"approvals,omitempty"`
-	Instructions string         `json:"instructions,omitempty"`
-	Target       string         `json:"target,omitempty"`
-	Ended        map[string]any `json:"ended,omitempty"`
-	Status       string         `json:"status"`
+	ID           string            `json:"id"`
+	Cwd          string            `json:"cwd"`
+	Provider     string            `json:"provider,omitempty"`
+	Model        string            `json:"model,omitempty"`
+	Effort       string            `json:"effort,omitempty"`
+	Approvals    string            `json:"approvals,omitempty"`
+	Instructions string            `json:"instructions,omitempty"`
+	Target       string            `json:"target,omitempty"`
+	MCPServers   []ServerMCPServer `json:"mcpServers,omitempty"`
+	Ended        map[string]any    `json:"ended,omitempty"`
+	Status       string            `json:"status"`
 	requests     map[string]int
 	submitted    int
 	losesSubmit  bool
@@ -268,13 +273,15 @@ type appServer struct {
 	interrupts  map[string]chan struct{}
 	idle        *time.Timer
 	offline     chan struct{}
+	mcp         map[string]mcpRegistration
+	mcpChanged  chan struct{}
 }
 
 func runAppServer(cfg config, flavor appServerFlavor) int {
 	if root := os.Getenv("ATTN_TEST_SERVER_CALLER_ENV"); root != "" {
 		flavor.rootVariable = root
 	}
-	s := &appServer{flavor: flavor, conns: map[*appServerConn]bool{}, convs: map[string]*ServerConversation{}, submissions: map[string]chan ServerSubmission{}, interrupts: map[string]chan struct{}{}}
+	s := &appServer{flavor: flavor, conns: map[*appServerConn]bool{}, convs: map[string]*ServerConversation{}, submissions: map[string]chan ServerSubmission{}, interrupts: map[string]chan struct{}{}, mcp: map[string]mcpRegistration{}}
 	control, err := dialControl(cfg, s.handleKit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fake %s serve: %v\n", flavor.harness, err)
@@ -353,7 +360,13 @@ func (s *appServer) serveConn(c *appServerConn) {
 	lines.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for lines.Scan() {
 		var f serverFrame
-		if json.Unmarshal(lines.Bytes(), &f) != nil || f.ID == nil {
+		if json.Unmarshal(lines.Bytes(), &f) != nil {
+			continue
+		}
+		if f.ID == nil {
+			if f.Method == "@effect/rpc/Interrupt" {
+				s.interruptRegistration(c, f.Params)
+			}
 			continue
 		}
 		result, failure := s.handle(c, *f.ID, f.Method, f.Params)
@@ -372,6 +385,12 @@ func (s *appServer) serveConn(c *appServerConn) {
 	_ = c.conn.Close()
 	s.mu.Lock()
 	delete(s.conns, c)
+	for name, r := range s.mcp {
+		if r.conn == c {
+			delete(s.mcp, name)
+			s.mcpChangedLocked()
+		}
+	}
 	s.mu.Unlock()
 	s.idleSoon()
 }
@@ -520,6 +539,8 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		return answer, ""
 	case methodServerFakeReply:
 		return nil, s.end(p.Conversation, map[string]any{"outcome": "answered", "said": p.Text})
+	case "mcp/register":
+		return s.register(c, id, raw)
 	case "status/watch":
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -659,6 +680,14 @@ func (s *appServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (a
 			s.statusLocked(conv, map[string]string{methodAskApproval: "waiting", methodWork: "working"}[method], nil)
 		}
 		return struct{}{}, nil
+	case methodMCPRegistered:
+		return s.registered(), nil
+	case methodCallTool:
+		return s.callTool(raw)
+	case methodFork:
+		return s.fork(raw)
+	case methodAwaitMCP:
+		return s.awaitMCP(raw)
 	case methodAwaitInterrupt:
 		select {
 		case <-s.interruptsOf(p.ThreadID):

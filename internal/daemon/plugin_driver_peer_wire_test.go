@@ -37,6 +37,7 @@ type driverLaunch struct {
 		ProfileID    string `json:"profile_id"`
 		NotebookRoot string `json:"notebook_root"`
 	} `json:"instructions"`
+	AgentTools *pluginAgentTools `json:"agent_tools"`
 }
 
 type driverClosed struct {

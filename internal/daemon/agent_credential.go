@@ -121,3 +121,27 @@ func (d *Daemon) agentTools(t harness.TerminalID) *agentdriver.AgentTools {
 	}
 	return &agentdriver.AgentTools{URL: d.agentToolsURL(), Credential: d.agentKey.sign(agentCredential{kind: credentialTerminal, name: string(protocol.TrimID(protocol.TerminalID(t)))})}
 }
+
+func (d *Daemon) pluginAgentTools(t harness.TerminalID) *pluginAgentTools {
+	tools := d.agentTools(t)
+	if tools == nil {
+		return nil
+	}
+	return &pluginAgentTools{URL: tools.URL, Credential: tools.Credential, Description: agentToolsCatalog().Description}
+}
+
+func (l *serverLink) agentTools() *agentdriver.AgentTools {
+	d := l.d
+	if l.callerConversationHeader() == "" || !d.on(setting.AgentToolsEnabled) || d.agentKey.err != nil {
+		return nil
+	}
+	return &agentdriver.AgentTools{URL: d.agentToolsURL(), Credential: d.agentKey.sign(agentCredential{kind: credentialServer, name: l.b.agent})}
+}
+
+func (l *serverLink) clientAgentTools() *pluginAgentTools {
+	if p, err := l.connection(); err != nil || l.agentTools() == nil || !p.agentToolsRegistered() {
+		return nil
+	}
+	catalog := agentToolsCatalog()
+	return &pluginAgentTools{Name: catalog.Name, Description: catalog.Description}
+}

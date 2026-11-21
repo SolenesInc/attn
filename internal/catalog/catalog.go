@@ -48,6 +48,7 @@ type Catalog struct {
 
 type Server struct {
 	Name         string `yaml:"name"`
+	Description  string `yaml:"description"`
 	Instructions string `yaml:"instructions"`
 }
 
@@ -293,6 +294,9 @@ func (c *Catalog) check() []string {
 	}
 	if strings.TrimSpace(c.Server.Instructions) == "" {
 		add("%s: server instructions are empty", ServerFile)
+	}
+	if strings.TrimSpace(c.Server.Description) == "" || strings.Contains(strings.TrimSpace(c.Server.Description), "\n") {
+		add("%s: server description must be one line", ServerFile)
 	}
 
 	typeNames := make([]string, 0, len(c.Types))

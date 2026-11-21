@@ -80,6 +80,14 @@ type pluginDriverSpawnParams struct {
 	Metadata        json.RawMessage           `json:"metadata,omitempty"`
 	ResumeSessionID string                    `json:"resume_session_id,omitempty"`
 	Instructions    *pluginLaunchInstructions `json:"instructions,omitempty"`
+	AgentTools      *pluginAgentTools         `json:"agent_tools,omitempty"`
+}
+
+type pluginAgentTools struct {
+	URL         string `json:"url,omitempty"`
+	Credential  string `json:"credential,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description"`
 }
 
 type pluginDriverSpawnResult struct {
@@ -335,6 +343,7 @@ func validatePluginDriverCapabilities(values map[string]bool) (map[string]bool, 
 		"effort_pin":             {},
 		"launch_instructions":    {},
 		"pull_request_reporting": {},
+		"agent_tools":            {},
 	}
 	out := make(map[string]bool, len(values))
 	for name, enabled := range values {

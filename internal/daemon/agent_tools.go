@@ -122,7 +122,7 @@ func (d *Daemon) agentCaller(token string, header http.Header) (command.Caller, 
 		if conversation == "" {
 			return command.Caller{}, "", fmt.Errorf("the %s server's request has no %s header", credential.name, name)
 		}
-		session := l.holder(conversation)
+		session := l.toolsCaller(conversation)
 		if session == "" {
 			return command.Caller{}, "", fmt.Errorf("no session of %s holds conversation %s", credential.name, conversation)
 		}
@@ -138,16 +138,24 @@ func (d *Daemon) sessionCaller(session protocol.SessionID) command.Caller {
 	return c
 }
 
+type agentToolCatalog struct {
+	Name         string                `json:"name"`
+	Description  string                `json:"description"`
+	Instructions string                `json:"instructions"`
+	Tools        []agentToolDefinition `json:"tools"`
+}
+
+var agentToolsCatalog = sync.OnceValue(func() agentToolCatalog {
+	var catalog agentToolCatalog
+	if err := json.Unmarshal(agentToolDefinitions, &catalog); err != nil {
+		panic(err)
+	}
+	return catalog
+})
+
 func (d *Daemon) agentToolServers() map[string]*mcpserver.Server {
 	d.agentToolSet.once.Do(func() {
-		var catalog struct {
-			Name         string                `json:"name"`
-			Instructions string                `json:"instructions"`
-			Tools        []agentToolDefinition `json:"tools"`
-		}
-		if err := json.Unmarshal(agentToolDefinitions, &catalog); err != nil {
-			panic(err)
-		}
+		catalog := agentToolsCatalog()
 		sets := map[string][]mcpserver.Tool{}
 		d.agentToolSet.tools = map[string]agentTool{}
 		for _, def := range catalog.Tools {

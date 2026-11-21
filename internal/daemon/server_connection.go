@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 type serverConnection struct {
@@ -32,6 +33,13 @@ type serverConnection struct {
 	events      linkEvents
 	busy        map[string]string
 	ended       map[string]serverEnded
+	tools       *serverToolsRegistration
+}
+
+type serverToolsRegistration struct {
+	client *effectrpc.Client
+	drop   context.CancelFunc
+	live   bool
 }
 
 func (l *serverLink) connection() (*serverConnection, error) {
@@ -120,6 +128,7 @@ func (p *serverConnection) ensureLocked(ctx context.Context, l *serverLink, opts
 		cancel()
 		if err == nil {
 			p.hold(c, info)
+			p.registerAgentToolsWithAPeer(c)
 			return c, nil
 		}
 		var refused *effectrpc.Error
@@ -189,6 +198,104 @@ func (p *serverConnection) hold(c *effectrpc.Client, info effectrpc.ServerInfo) 
 	p.mu.Unlock()
 	if !p.d.life.Go("appServerStatus", func() { p.watch(c) }) {
 		c.Close()
+	}
+}
+
+func (p *serverConnection) registerAgentTools(l *serverLink, c *effectrpc.Client) {
+	tools := l.agentTools()
+	if tools == nil {
+		return
+	}
+	ctx, drop := context.WithCancel(p.d.life.Context())
+	reg := &serverToolsRegistration{client: c, drop: drop}
+	p.mu.Lock()
+	if p.control != c {
+		p.mu.Unlock()
+		drop()
+		return
+	}
+	if p.tools != nil {
+		p.tools.drop()
+	}
+	p.tools = reg
+	p.mu.Unlock()
+	answer := make(chan error, 1)
+	params := map[string]any{"name": agentToolsCatalog().Name, "url": tools.URL, "headers": map[string]string{"Authorization": "Bearer " + tools.Credential}}
+	if !p.d.life.Go("serverAgentTools", func() {
+		acknowledged := false
+		err := c.Stream(ctx, "mcp/register", params, func(json.RawMessage) {
+			p.mu.Lock()
+			reg.live = p.tools == reg
+			p.mu.Unlock()
+			if !acknowledged {
+				acknowledged = true
+				answer <- nil
+			}
+		})
+		p.mu.Lock()
+		if p.tools == reg {
+			p.tools = nil
+		}
+		p.mu.Unlock()
+		if !acknowledged {
+			answer <- err
+		} else if ctx.Err() == nil {
+			l.logf("the server at %s ended attn's MCP server registration: %v; its agents use the attn CLI until attn connects again", p.socket, err)
+		}
+	}) {
+		drop()
+		return
+	}
+	wait, stop := context.WithTimeout(ctx, serverCallLimit)
+	defer stop()
+	select {
+	case err := <-answer:
+		if err != nil {
+			l.logf("the server at %s refused attn's MCP server (mcp/register): %v; its agents use the attn CLI", p.socket, err)
+		}
+	case <-wait.Done():
+		if ctx.Err() != nil {
+			return
+		}
+		l.logf("the server at %s did not answer mcp/register within %s; its agents get attn's tools once it does", p.socket, serverCallLimit)
+	}
+}
+
+func (p *serverConnection) registerAgentToolsWithAPeer(c *effectrpc.Client) {
+	for _, l := range p.peers() {
+		if l.agentTools() != nil {
+			p.registerAgentTools(l, c)
+			return
+		}
+	}
+}
+
+func (p *serverConnection) agentToolsRegistered() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.tools != nil && p.tools.live && p.tools.client == p.control
+}
+
+func (d *Daemon) agentToolsSettingChanged() {
+	d.serverLinksMu.Lock()
+	connections := make([]*serverConnection, 0, len(d.serverConnections))
+	for _, p := range d.serverConnections {
+		connections = append(connections, p)
+	}
+	d.serverLinksMu.Unlock()
+	for _, p := range connections {
+		p.ensureMu.Lock()
+		p.mu.Lock()
+		c, reg := p.control, p.tools
+		if reg != nil && !d.on(setting.AgentToolsEnabled) {
+			reg.drop()
+			p.tools = nil
+		}
+		p.mu.Unlock()
+		if c != nil && reg == nil {
+			p.registerAgentToolsWithAPeer(c)
+		}
+		p.ensureMu.Unlock()
 	}
 }
 

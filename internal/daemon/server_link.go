@@ -217,6 +217,19 @@ func (l *serverLink) holder(conversation string) protocol.SessionID {
 	return ""
 }
 
+func (l *serverLink) toolsCaller(conversation string) protocol.SessionID {
+	p, err := l.connection()
+	if err != nil {
+		return l.holder(conversation)
+	}
+	for _, peer := range p.peers() {
+		if session := peer.holder(conversation); session != "" {
+			return session
+		}
+	}
+	return ""
+}
+
 func (l *serverLink) ensureServer(ctx context.Context, opts *ptybackend.SpawnOptions) (*effectrpc.Client, error) {
 	p, err := l.connection()
 	if err != nil {
