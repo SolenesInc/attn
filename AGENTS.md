@@ -342,9 +342,9 @@ reference (`internal/prompts/content/skills/attn/references/garden.md`), and
 refuses an entry the command layer runs without `runs` or `grant`. A command
 that is not offered as a tool says `offered: false` and its `reason`;
 `not-offered.yaml` holds the ones the CLI runs outside the command layer. Edit
-the catalog, not those files, then run `make generate-types`. The CLI sends a catalog command as
-`run_command`, and `internal/command` runs it with the handler the daemon gives
-it (`internal/daemon/commands_seed.go`). When the garden reference changes,
+the catalog, not those files, then run `make generate-types`. The CLI sends a
+catalog command as `run_command`, and `internal/command` runs it with the
+handler the daemon gives it (`internal/daemon/commands_seed.go`). When the garden reference changes,
 copy it into `attn_skill/references/garden.md` in
 `internal/prompttest/testdata/agent-delivery.json`, which
 `TestLegacyPromptCompatibility` in `internal/agent` compares.
