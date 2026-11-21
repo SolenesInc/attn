@@ -728,6 +728,8 @@ func (s *appServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (a
 		return s.registered(), nil
 	case methodCallTool:
 		return s.callTool(raw)
+	case methodMCPHeader:
+		return s.mcpHeader(raw)
 	case methodFork:
 		return s.fork(raw)
 	case methodAwaitMCP:

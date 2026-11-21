@@ -145,20 +145,23 @@ func (d *Daemon) credentialCaller(credential agentCredential, header http.Header
 		}
 		return d.sessionCaller(session), who, nil
 	default:
-		l := d.serverLinkFor(credential.name)
-		if l == nil || l.callerConversationHeader() == "" {
-			return command.Caller{}, "", fmt.Errorf("harness %s has no server that names its conversations", credential.name)
+		p := d.serverConnectionAt(credential.name)
+		if p == nil {
+			return command.Caller{}, "", fmt.Errorf("attn holds no server at %s", credential.name)
 		}
-		name := l.callerConversationHeader()
+		name := p.callerConversationHeader()
+		if name == "" {
+			return command.Caller{}, "", fmt.Errorf("no harness of the server at %s names its conversations", credential.name)
+		}
 		conversation := strings.TrimSpace(header.Get(name))
 		if conversation == "" {
-			return command.Caller{}, "", fmt.Errorf("the %s server's request has no %s header", credential.name, name)
+			return command.Caller{}, "", fmt.Errorf("the request from the server at %s has no %s header", credential.name, name)
 		}
-		session := l.toolsCaller(conversation)
+		session := p.toolsCaller(conversation)
 		if session == "" {
-			return command.Caller{}, "", fmt.Errorf("no session of %s holds conversation %s", credential.name, conversation)
+			return command.Caller{}, "", fmt.Errorf("no session of %s holds conversation %s", p.harnesses(), conversation)
 		}
-		return d.sessionCaller(session), credential.name + " conversation " + conversation, nil
+		return d.sessionCaller(session), p.harnesses() + " conversation " + conversation, nil
 	}
 }
 

@@ -118,7 +118,10 @@ func (d *Daemon) uninstallPlugin(client *wsClient, name, action string) {
 	}
 	d.serverLinksMu.Unlock()
 	for _, l := range removed {
-		l.releaseUnlessUsed()
+		if p, err := l.connection(); err == nil {
+			p.releaseUnlessUsed()
+			p.reconcileAgentTools()
+		}
 	}
 
 	d.publishFact(FactPluginUninstalled, name, nil)

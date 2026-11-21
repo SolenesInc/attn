@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/effectrpc"
@@ -16,7 +17,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
-	"github.com/victorarias/attn/internal/setting"
 )
 
 type serverConnection struct {
@@ -108,6 +108,14 @@ func (p *serverConnection) peers() []*serverLink {
 	return peers
 }
 
+func (p *serverConnection) harnesses() string {
+	var names []string
+	for _, l := range p.peers() {
+		names = append(names, l.b.agent)
+	}
+	return strings.Join(names, " or ")
+}
+
 func (p *serverConnection) sessions() map[protocol.SessionID]*serverLink {
 	sessions := make(map[protocol.SessionID]*serverLink)
 	for _, l := range p.peers() {
@@ -116,6 +124,15 @@ func (p *serverConnection) sessions() map[protocol.SessionID]*serverLink {
 		}
 	}
 	return sessions
+}
+
+func (p *serverConnection) toolsCaller(conversation string) protocol.SessionID {
+	for _, peer := range p.peers() {
+		if session := peer.holder(conversation); session != "" {
+			return session
+		}
+	}
+	return ""
 }
 
 func (p *serverConnection) ensure(ctx context.Context, l *serverLink, opts *ptybackend.SpawnOptions, start bool) (*effectrpc.Client, error) {
@@ -132,6 +149,7 @@ func (p *serverConnection) ensureLocked(ctx context.Context, l *serverLink, opts
 		if err := l.validateServerInfo(info, p.socket); err != nil {
 			return nil, err
 		}
+		p.registerAgentToolsLocked(c)
 		return c, nil
 	}
 	deadline := time.Now().Add(serverStartLimit)
@@ -142,7 +160,7 @@ func (p *serverConnection) ensureLocked(ctx context.Context, l *serverLink, opts
 		cancel()
 		if err == nil {
 			p.hold(c, info)
-			p.registerAgentToolsWithAPeer(c)
+			p.registerAgentToolsLocked(c)
 			return c, nil
 		}
 		var refused *effectrpc.Error
@@ -216,8 +234,48 @@ func (p *serverConnection) hold(c *effectrpc.Client, info effectrpc.ServerInfo) 
 	}
 }
 
-func (p *serverConnection) registerAgentTools(l *serverLink, c *effectrpc.Client) {
-	tools := l.agentTools()
+func (p *serverConnection) agentTools() *agentdriver.AgentTools {
+	tools := p.d.agentToolsFor(agentCredential{kind: credentialServer, name: p.socket})
+	if tools == nil || p.callerConversationHeader() == "" {
+		return nil
+	}
+	return tools
+}
+
+func (p *serverConnection) callerConversationHeader() string {
+	for _, l := range p.peers() {
+		if header := l.callerConversationHeader(); header != "" {
+			return header
+		}
+	}
+	return ""
+}
+
+func (p *serverConnection) registerAgentToolsLocked(c *effectrpc.Client) {
+	p.mu.Lock()
+	reg := p.tools
+	p.mu.Unlock()
+	if c != nil && (reg == nil || reg.client != c) {
+		p.registerAgentTools(c)
+	}
+}
+
+func (p *serverConnection) reconcileAgentTools() {
+	p.ensureMu.Lock()
+	defer p.ensureMu.Unlock()
+	wanted := p.agentTools() != nil
+	p.mu.Lock()
+	c, reg := p.control, p.tools
+	if reg != nil && (reg.client != c || !wanted) {
+		reg.drop()
+		p.tools = nil
+	}
+	p.mu.Unlock()
+	p.registerAgentToolsLocked(c)
+}
+
+func (p *serverConnection) registerAgentTools(c *effectrpc.Client) {
+	tools := p.agentTools()
 	if tools == nil {
 		return
 	}
@@ -248,14 +306,12 @@ func (p *serverConnection) registerAgentTools(l *serverLink, c *effectrpc.Client
 			}
 		})
 		p.mu.Lock()
-		if p.tools == reg {
-			p.tools = nil
-		}
+		reg.live = false
 		p.mu.Unlock()
 		if !acknowledged {
 			answer <- err
 		} else if ctx.Err() == nil {
-			l.logf("the server at %s ended attn's MCP server registration: %v; its agents use the attn CLI until attn connects again", p.socket, err)
+			p.d.logf("the server at %s ended attn's MCP server registration: %v; its agents use the attn CLI until attn connects again", p.socket, err)
 		}
 	}) {
 		drop()
@@ -266,22 +322,13 @@ func (p *serverConnection) registerAgentTools(l *serverLink, c *effectrpc.Client
 	select {
 	case err := <-answer:
 		if err != nil {
-			l.logf("the server at %s refused attn's MCP server (mcp/register): %v; its agents use the attn CLI", p.socket, err)
+			p.d.logf("the server at %s refused attn's MCP server (mcp/register): %v; its agents use the attn CLI", p.socket, err)
 		}
 	case <-wait.Done():
 		if ctx.Err() != nil {
 			return
 		}
-		l.logf("the server at %s did not answer mcp/register within %s; its agents get attn's tools once it does", p.socket, serverCallLimit)
-	}
-}
-
-func (p *serverConnection) registerAgentToolsWithAPeer(c *effectrpc.Client) {
-	for _, l := range p.peers() {
-		if l.agentTools() != nil {
-			p.registerAgentTools(l, c)
-			return
-		}
+		p.d.logf("the server at %s did not answer mcp/register within %s; its agents get attn's tools once it does", p.socket, serverCallLimit)
 	}
 }
 
@@ -291,7 +338,7 @@ func (p *serverConnection) agentToolsRegistered() bool {
 	return p.tools != nil && p.tools.live && p.tools.client == p.control
 }
 
-func (d *Daemon) agentToolsSettingChanged() {
+func (d *Daemon) reconcileAgentTools() {
 	d.serverLinksMu.Lock()
 	connections := make([]*serverConnection, 0, len(d.serverConnections))
 	for _, p := range d.serverConnections {
@@ -299,19 +346,14 @@ func (d *Daemon) agentToolsSettingChanged() {
 	}
 	d.serverLinksMu.Unlock()
 	for _, p := range connections {
-		p.ensureMu.Lock()
-		p.mu.Lock()
-		c, reg := p.control, p.tools
-		if reg != nil && !d.on(setting.AgentToolsEnabled) {
-			reg.drop()
-			p.tools = nil
-		}
-		p.mu.Unlock()
-		if c != nil && reg == nil {
-			p.registerAgentToolsWithAPeer(c)
-		}
-		p.ensureMu.Unlock()
+		p.reconcileAgentTools()
 	}
+}
+
+func (d *Daemon) serverConnectionAt(socket string) *serverConnection {
+	d.serverLinksMu.Lock()
+	defer d.serverLinksMu.Unlock()
+	return d.serverConnections[socket]
 }
 
 func (p *serverConnection) finishSnapshotLocked() {

@@ -307,13 +307,18 @@ and register the changed declaration from the same owner.
 
 With `agentTools: true`, also set `callerConversationHeader` in the server
 declaration, such as `"Sample-Server-Root-Conversation"`. While the user has
-attn's tools on, attn registers its MCP server with your server each time it
-connects, with `mcp/register` described below, and `spawn` and `resume` get
+attn's tools on, attn registers its MCP server with your server, with
+`mcp/register` described below, and `spawn` and `resume` get
 `agent_tools: {name, description}` once your server has confirmed the
 registration. A server that refuses `mcp/register` or does not answer it gets
 no `agent_tools` for its views, and attn's log says why. The view starts its
-conversation with that name and description and never sees a secret. When the
-user turns the tools off, attn ends the registration.
+conversation with that name and description and never sees a secret.
+
+Several harness IDs can share one server. They share one registration, which
+attn makes when it connects, or when a harness ID that declares the header
+launches on a connection that has none. The registration lasts while one such
+harness ID remains: uninstalling one leaves the tools working for the others.
+attn ends it when the last one is uninstalled or the user turns the tools off.
 
 Your server sends the registered headers on every request to attn's MCP
 server, and adds the declared header with the root conversation that makes the

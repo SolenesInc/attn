@@ -144,16 +144,8 @@ func (d *Daemon) pluginAgentTools(t harness.TerminalID) *pluginAgentTools {
 	return &pluginAgentTools{URL: tools.URL, Credential: tools.Credential, Description: agentToolsCatalog().Description}
 }
 
-func (l *serverLink) agentTools() *agentdriver.AgentTools {
-	d := l.d
-	if l.callerConversationHeader() == "" || !d.agentToolsServed() {
-		return nil
-	}
-	return &agentdriver.AgentTools{URL: d.agentToolsURL(), Credential: d.agentKey.sign(agentCredential{kind: credentialServer, name: l.b.agent})}
-}
-
 func (l *serverLink) clientAgentTools() *agentdriver.SharedAgentTools {
-	if p, err := l.connection(); err != nil || l.agentTools() == nil || !p.agentToolsRegistered() {
+	if p, err := l.connection(); err != nil || l.callerConversationHeader() == "" || p.agentTools() == nil || !p.agentToolsRegistered() {
 		return nil
 	}
 	catalog := agentToolsCatalog()

@@ -16,6 +16,7 @@ const (
 	methodFork          = "fork"
 	methodAwaitMCP      = "await_mcp"
 	methodRefuseMCP     = "refuse_mcp"
+	methodMCPHeader     = "mcp_header"
 )
 
 // ServerMCPServer is one MCP server a conversation uses, by the name a client registered it with.
@@ -232,6 +233,29 @@ func (s *AppServer) CallTool(conversation, tool string, arguments map[string]any
 	s.t.Helper()
 	var out ServerToolResult
 	s.call(methodCallTool, callToolParams{Conversation: conversation, Tool: tool, Arguments: arguments}, &out)
+	return out
+}
+
+type mcpHeaderParams struct {
+	Server string `json:"server"`
+	Header string `json:"header"`
+}
+
+func (s *appServer) mcpHeader(raw json.RawMessage) (any, error) {
+	var p mcpHeaderParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mcp[p.Server].Headers[p.Header], nil
+}
+
+// MCPHeader is the value of header that a client registered the MCP server named server with, or "" when none.
+func (s *AppServer) MCPHeader(server, header string) string {
+	s.t.Helper()
+	var out string
+	s.call(methodMCPHeader, mcpHeaderParams{Server: server, Header: header}, &out)
 	return out
 }
 

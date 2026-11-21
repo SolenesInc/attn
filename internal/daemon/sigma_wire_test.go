@@ -310,7 +310,8 @@ func TestASigmaSessionStartsWithAttnsToolsWhileAgentToolsAreOn(t *testing.T) {
 			if len(started.MCPServers) != 1 || started.MCPServers[0].Name != "attn" || started.MCPServers[0].Description == "" {
 				t.Fatalf("Sigma started the conversation with MCP servers %+v, want attn with its description", started.MCPServers)
 			}
-			initialized, err := agentToolsCaller{w: w, bearer: agentCredential(t, w, "s.sigma"), headers: map[string]string{"Sigma-Root-Conversation": on.ConversationID}}.connect(t, "")
+			credential := strings.TrimPrefix(server.MCPHeader("attn", "Authorization"), "Bearer ")
+			initialized, err := agentToolsCaller{w: w, bearer: credential, headers: map[string]string{"Sigma-Root-Conversation": on.ConversationID}}.connect(t, "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -322,7 +323,7 @@ func TestASigmaSessionStartsWithAttnsToolsWhileAgentToolsAreOn(t *testing.T) {
 				t.Errorf("the garden's CLI teaching was in Sigma's launch without the tools %t and with them %t, want only without", taught, strings.Contains(started.Instructions, seedCLITeaching))
 			}
 			for _, entry := range append(slices.Clone(on.Argv), on.Env...) {
-				if strings.Contains(entry, "s.sigma.") || strings.Contains(entry, "ATTN_AGENT_CREDENTIAL") {
+				if strings.Contains(entry, credential) || strings.Contains(entry, "ATTN_AGENT_CREDENTIAL") {
 					t.Errorf("Sigma's client was launched with a credential in %q", entry)
 				}
 			}

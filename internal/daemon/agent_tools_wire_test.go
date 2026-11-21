@@ -247,8 +247,9 @@ func TestASharedServersCredentialActsAsTheSessionHoldingTheConversationItsHeader
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")
 	seed := plantForTools(t, w)
-	session, view, _ := appServerSession(t, w, app, fakeagent.Sigma)
-	credential := agentCredential(t, w, "s.sigma")
+	session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+	server.AwaitMCPRegistration("attn", true)
+	credential := strings.TrimPrefix(server.MCPHeader("attn", "Authorization"), "Bearer ")
 
 	agent := agentToolsCaller{w: w, bearer: credential, headers: map[string]string{"Sigma-Root-Conversation": view.ConversationID}}
 	agent.mustCall(t, "seed_note", map[string]any{"seed": seed, "text": "From the Sigma conversation."})

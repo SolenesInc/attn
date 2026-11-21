@@ -104,7 +104,7 @@ func (d *Daemon) settingChanged(key, value string) {
 		d.configureOutposts()
 	}
 	if key == setting.AgentToolsEnabled.Key {
-		d.life.Go("agentToolsSettingChanged", d.agentToolsSettingChanged)
+		d.life.Go("reconcileAgentTools", d.reconcileAgentTools)
 	}
 	if harness, ok := isAgentExecutableSettingKey(key); ok {
 		d.invalidateHarnessModels(harness)

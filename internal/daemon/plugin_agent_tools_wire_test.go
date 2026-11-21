@@ -185,3 +185,107 @@ func TestASharedServerPluginGetsTheToolsAndEachConversationActsAsItsOwnSession(t
 	setSetting(t, app, "agent_tools_enabled", "true")
 	server.AwaitMCPRegistration("attn", true)
 }
+
+func registerServerAlias(t *testing.T, w *world, app *testworld.Peer, plugin, agent string, tools bool) *driverPeer {
+	t.Helper()
+	d := dialDriver(t, w, plugin)
+	d.agent = agent
+	d.mu.Lock()
+	d.holdLaunch = true
+	d.mu.Unlock()
+	declaration := serverDriverDeclaration(w)
+	if tools {
+		declaration = toolsServerDeclaration(w)
+	}
+	if err := d.call("driver.register", map[string]any{"agent": agent, "server": declaration, "capabilities": map[string]bool{"server_binding": true, "resume": true, "agent_tools": tools}}, &d.registered); err != nil {
+		t.Fatal(err)
+	}
+	awaitDriverAvailable(app, agent)
+	return d
+}
+
+func spawnAliasView(w *world, app *testworld.Peer, driver *driverPeer, edit ...func(*protocol.SpawnSessionMessage)) toolsServerView {
+	w.T.Helper()
+	return spawnToolsServerView(w, app, driver, append([]func(*protocol.SpawnSessionMessage){func(m *protocol.SpawnSessionMessage) { m.Agent = driver.agent }}, edit...)...)
+}
+
+func uninstallServerAlias(t *testing.T, w *world, app *testworld.Peer, plugin string, views ...toolsServerView) {
+	t.Helper()
+	for _, view := range views {
+		if closed := closeFromApp(app, view.session); !closed.Accepted {
+			t.Fatal(protocol.Deref(closed.Error))
+		}
+		awaitClosed(app, view.session)
+	}
+	writePluginManifest(t, filepath.Join(w.Dir, "plugins", plugin), plugin, "exit 0")
+	pluginsAct(t, app, protocol.UninstallPluginMessage{Cmd: protocol.CmdUninstallPlugin, Name: plugin}, "uninstall", plugin)
+}
+
+func TestASharedServerKeepsTheToolsForItsOtherAliasesWhenOneIsUninstalled(t *testing.T) {
+	w := newWorld(t, fakeagent.SampleServer)
+	app := w.App()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	seed := plantForTools(t, w)
+	first := registerServerAlias(t, w, app, "first-plugin", "aaa-first", true)
+	second := registerServerAlias(t, w, app, "second-plugin", "bbb-second", true)
+	firstView := spawnAliasView(w, app, first)
+	secondView := spawnAliasView(w, app, second)
+	server := w.AppServer(fakeagent.SampleServer)
+	if firstView.tools == nil || secondView.tools == nil {
+		t.Fatalf("both aliases' views should carry agent_tools: %+v and %+v", firstView.tools, secondView.tools)
+	}
+
+	uninstallServerAlias(t, w, app, "first-plugin", firstView)
+
+	called := server.CallTool(secondView.conversation, "seed_note", map[string]any{"seed": seed, "text": "after the other alias left"})
+	if called.Refused != "" || called.IsError {
+		t.Fatalf("the remaining alias's conversation calling seed_note: refused %q, %s", called.Refused, called.Text())
+	}
+	if author, _ := newestNoteAuthor(t, w, seed); author != secondView.session {
+		t.Errorf("the remaining alias's note is by %s, want its session %s", author, secondView.session)
+	}
+	if again := spawnAliasView(w, app, second); again.tools == nil || again.tools.Name != "attn" {
+		t.Errorf("a new view of the remaining alias carried agent_tools %+v, want the server's name and description", again.tools)
+	}
+	if initializes, _ := server.ControlCounts(); initializes != 1 {
+		t.Errorf("attn connected to the server %d times, want one connection throughout", initializes)
+	}
+}
+
+func TestAnOptedInAliasJoiningAConnectedServerGetsTheToolsUntilItLeaves(t *testing.T) {
+	w := newWorld(t, fakeagent.SampleServer)
+	app := w.App()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	seed := plantForTools(t, w)
+	plain := registerServerAlias(t, w, app, "plain-plugin", "aaa-plain", false)
+	plainView := spawnAliasView(w, app, plain)
+	server := w.AppServer(fakeagent.SampleServer)
+	if plainView.tools != nil || len(server.MCPRegistered()) != 0 {
+		t.Fatalf("an alias without agent_tools gave its view %+v and the server %+v, want neither", plainView.tools, server.MCPRegistered())
+	}
+
+	late := registerServerAlias(t, w, app, "late-plugin", "bbb-late", true)
+	spawned := spawnAliasView(w, app, late)
+	if spawned.tools == nil || spawned.tools.Name != "attn" {
+		t.Fatalf("the joining alias's driver.spawn carried agent_tools %+v, want the server's name and description", spawned.tools)
+	}
+	called := server.CallTool(spawned.conversation, "seed_note", map[string]any{"seed": seed, "text": "from the joining alias"})
+	if called.Refused != "" || called.IsError {
+		t.Fatalf("the joining alias's conversation calling seed_note: refused %q, %s", called.Refused, called.Text())
+	}
+	if author, _ := newestNoteAuthor(t, w, seed); author != spawned.session {
+		t.Errorf("the joining alias's note is by %s, want its session %s", author, spawned.session)
+	}
+	fork := "fork-of-" + spawned.conversation
+	server.Fork(spawned.conversation, fork)
+	resumed := spawnAliasView(w, app, late, func(m *protocol.SpawnSessionMessage) { m.ResumeSessionID = protocol.Ptr(fork) })
+	if resumed.tools == nil || resumed.tools.Name != "attn" {
+		t.Errorf("the joining alias's driver.resume carried agent_tools %+v, want the server's name and description", resumed.tools)
+	}
+	if initializes, _ := server.ControlCounts(); initializes != 1 {
+		t.Errorf("attn connected to the server %d times, want one connection throughout", initializes)
+	}
+
+	uninstallServerAlias(t, w, app, "late-plugin", spawned, resumed)
+	server.AwaitMCPRegistration("attn", false)
+}
