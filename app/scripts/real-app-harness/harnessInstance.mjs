@@ -63,7 +63,6 @@ function installedApp(appName) {
     const appPath = path.join(os.homedir(), 'Applications', `${appName}.app`);
     return {
       appPath,
-      appExecutable: appExecutableInAppTree(appPath),
       appDaemon: path.join(appPath, 'Contents', 'MacOS', 'attnd'),
       appCli: path.join(appPath, 'Contents', 'MacOS', 'attn'),
     };
@@ -71,7 +70,6 @@ function installedApp(appName) {
   const appPath = path.join(xdgDataHome(), appName);
   return {
     appPath,
-    appExecutable: appExecutableInAppTree(appPath),
     appDaemon: path.join(appPath, 'bin', 'attnd'),
     appCli: path.join(appPath, 'bin', 'attn'),
   };
@@ -124,7 +122,6 @@ function resolveViaAuthority(instance) {
     bundleId: resolved.bundleId,
     appName: resolved.appName,
     appPath: resolved.appPath,
-    appExecutable: resolved.appExecutable,
     appDaemon: resolved.appDaemon,
     appCli: resolved.appCli,
     appLocalDataDir: resolved.appLocalDataDir,

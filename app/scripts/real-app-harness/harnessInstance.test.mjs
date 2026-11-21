@@ -166,7 +166,6 @@ describe('single authority (attn instance resolve)', { skip: !ATTN_BIN }, () => 
       assert.equal(resources.bundleId, r.bundleId);
       assert.equal(resources.appName, r.appName);
       assert.equal(resources.appPath, r.appPath);
-      assert.equal(resources.appExecutable, r.appExecutable);
       assert.equal(resources.appDaemon, r.appDaemon);
       assert.equal(resources.appCli, r.appCli);
       assert.equal(resources.appLocalDataDir, r.appLocalDataDir);
