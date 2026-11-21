@@ -1,0 +1,71 @@
+usage: attn delegate (--brief TEXT | --brief-file PATH | --seed ID)
+       (--repo REPOSITORY | --cwd PATH) [role/model options] [checkout options]
+
+Every delegation has a seed. A brief creates one; --seed uses its current
+assignment. The delegated agent reads the seed when it starts.
+
+assignment:
+  --brief TEXT / --brief-file PATH   create a seed for new work
+  --seed ID                          use an existing seed
+  --priority                         put the delegate's owed turns first
+  --handover                         transfer that seed to a new agent
+  -m TEXT                            optional handover note: the next step
+  --authorization TEXT               how far the user lets this task go: the
+                                     steps to take beyond the project's
+                                     guidance and the steps to stop before,
+                                     written as instructions to the agent.
+                                     Saved on the seed; the opening delivers
+                                     it. Without it, a delegation or handover
+                                     keeps the seed's current words
+
+folder and Git:
+  --host NAME                        target outpost name/id; home selects the home
+                                     defaults to the source session's machine
+  --repo REPOSITORY                  a Git repository by name: owner/name, host/owner/name,
+                                     a clone URL, or a name attn has seen. attn uses its
+                                     clone on the target machine, or clones it there first
+  --cwd PATH                         a folder on that machine; use instead of --repo
+  --reuse-checkout --branch NAME     use the checkout on this branch
+  --new-worktree --branch NAME --from REF
+                                     create branch and worktree
+  --new-worktree --existing-branch NAME
+                                     create worktree for a local branch
+  --worktree-path PATH               optional new-worktree destination
+  --allow-worktree-reuse             explicitly share an occupied checkout
+
+Inside Git, choose one complete checkout form. Outside Git, cwd is enough.
+Handover leaves the previous agent running. It needs no force/confirm flag.
+Paths are expanded and checked on the target machine. On your own machine,
+relative cwd is based on your shell's directory. An unknown or unreachable
+host refuses before acceptance. Retries keep the accepted machine and path.
+
+session options:
+	--request-id <id>          stable retry key (generated and printed when omitted; op- is reserved)
+  --agent <name>             configured prompt-capable built-in or plugin agent
+  --model <name>             pin the model; "default" selects the harness default
+  --role <id>                use a configured role and its default choice
+  --choice <id>              use an alternative within --role
+  --fallback                 use the configured unmatched-work fallback
+  --provider <id>            provider for a plugin harness model
+  --effort <level>           pin the agent's effort; the harness reports its levels
+                             in Settings; defaults to medium when supported
+  --name <text>              session name (max 48 chars; defaults from brief or seed title)
+  --desktop <ref>            desktop of your profile for the new agent: its
+                             shortcut digit (1-9), its name as shown
+                             (case-insensitive) or its id; the agent opens
+                             at the end of that desktop's row without changing
+                             what you see. Defaults to the source session's
+                             desktop.
+  --source-session <id>      source session (defaults to the current session)
+  --yolo                     bypass agent approval prompts
+
+Only a handover's predecessor is exempt from checkout occupancy. Any unrelated
+active session requires --allow-worktree-reuse.
+
+discovery:
+  attn delegate roles [--json]  complete active roles, choices, and fallback
+  attn delegate roles --help    change the saved roles, with history and rollback
+
+inspection:
+  attn delegate status <request-or-operation-id>
+

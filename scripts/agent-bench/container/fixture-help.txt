@@ -1,0 +1,62 @@
+usage: attn <command>
+
+## What attn can do
+
+attn runs you beside the user's other agents. Check this list before you work around a problem, tell the user something can't be done, or guess at a command.
+
+- `attn <command> --help` shows a command's syntax. `attn --help` lists every command. Never run `attn` with no command, because it starts a session, and never leave out a command's arguments to see what it does. If attn reports an unknown command, check `attn --version` and `which -a attn`, then try `"$ATTN_WRAPPER_PATH"`.
+- `attn skill --reference <name>` prints the rules for a capability. Read it before you first use that capability.
+- `attn guide [<topic>]` is the user guide. Use it to answer the user's questions about attn.
+
+| When you need to | Run | Reference |
+|---|---|---|
+| Track work, read a plan, record progress | `attn seed` | `garden` |
+| Start another agent on work you may hand off | `attn delegate` | `delegation` |
+| Change the models and harnesses each role uses | `attn delegate roles` | `delegation-roles` |
+| Report on work delegated to you | `attn seed note`, `attn seed check` | `delegated-agent` |
+| Deliver through the repository's pull requests or trunk | `attn pr` | `delivery` |
+| See what other agents are doing, or message one. `chief` names the Chief | `attn agent list`, `attn agent peek`, `attn agent msg`, `attn agent inbox` | `converse-and-observe` |
+| Close or reload an agent, wrap up, or close yourself | `attn agent close`, `attn agent reload` | `wrap-up` |
+| Read past sessions, or rename or snooze a session | `attn session` | `converse-and-observe` |
+| Wait for a time, a pull request, another seed or the user, with your session closed | `attn seed standby` | `garden` |
+| Open a shell, read a terminal, move between desktops | `attn terminal` | `terminal` |
+| Show the user a markdown document | `attn open` | `markdown` |
+| Write anything longer than a few sentences for a reader | | `showing` |
+| Use the in-app browser | `attn browser` | `browser` |
+| Point at something in the app | `attn callout` | `callouts` |
+| Read or add to the Notebook, the user's journal and knowledge | `attn journal append`, your file tools | `notebook` |
+| Work with permanent agents that keep a charter and letters | `attn crew` | `charter`, guide `crew` |
+| Run an agent on a schedule or an event | `attn automation` | guide `automations` |
+| Read or change settings | `attn settings list`, `attn settings get`, `attn settings set` | |
+
+Other commands:
+  presence [--session-id|--seed-ids] check whether the shell runs inside attn, or print only its session or seeds
+  ask [list|close]                  ask the user something they answer from attn
+  turn open|settle                  put yourself in the user's queue, or take yourself out
+  vent [withdraw]                   report what got in your way
+  handoff -m "<letter>"             file this crew member's letter; its session ends
+  onboarding [done|again]           show, finish or restart the Chief's onboarding
+  skill [--reference <name>|--list] print the map above, or a capability's rules
+  guide [<topic>]                   read the user guide
+  send <command>                    send files and a message to a session as the user; pair, senders, unpair
+  refine --token-stdin              clean up dictated text as a paired sender
+  list                              list sessions and profiles
+  activity [clear <id>]             what each agent is doing right now
+  state explain <id>                replay why a session's state is what it is
+  conversation <command>            list, keep forever or forget attn's conversation copies
+  worktree <command>                every tracked worktree, the sweep and the keep pin
+  preflight                         diagnose tools, paths, routing, and launch settings
+  codex status|update|restart       shared Codex versions, its update and restart
+  update status [--json]            how attn was installed and whether an update is available
+  plugin <command>                  install, link, list or remove plugins
+  debug <command>                   probe debug artifacts (incidents, logs)
+  db <command>                      database maintenance (restore from backup)
+  bus <command>                     event bus: consumer cursors, lag, kill switch
+  enrollment <command>              this data folder's enrollment: status, leave
+  doc <command>                     document store: collections, documents, live queries
+  vision-check <image> <question>   answer a question about an image (single LLM call)
+  daemon [ensure|stop]              run the daemon, ensure it is running, or stop it
+  instance <status|resolve|list>    show / resolve the active instance's resources
+  instance-env <instance|--unset>   print shell commands for selecting an instance
+  prompts <command>                 inspect prompt sources and scenario composition
+  version [--json]                  print version, channel and commit

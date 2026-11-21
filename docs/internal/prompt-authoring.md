@@ -136,19 +136,15 @@ Locally, review the change with `compare` and `context`. To run the CI checks so
 intentional wording changes. Never regenerate them to make tests pass.
 
 When a change moves or cuts what agents are told, check that they still find
-each capability. `node scripts/agent-eval.mjs --attn ./attn` starts real headless
-agents with the launch instructions and a plain request, and reports whether
-each reaches the right command. It spends model tokens, so CI doesn't run it.
-Actions are recorded, not run, so a pass means the agent found the command, not
-that the command works. The review scenario is the exception: its probe gives
-the agent a real attn change and runs `attn review` and `attn open` on the
-daemon of the instance that `--instance <name>` selects, then judges the
-document with `attn review check`. Run it with `--parallel 1`, because agents
-pick their own path for the document. It logs in through the tool home that
-`app/scripts/onboarding-rehearsal` sets up, so run the rehearsal once first.
-Add a probe when you add a capability to the attn map.
+each capability. The [agent bench](../../scripts/agent-bench/README.md) starts
+real Claude Code, Codex and Sigma sessions on a non-production instance, gives
+each a plain request, and judges the end state: its probes pass when the agent
+reaches the right command through the CLI or attn's tools, and its tasks pass on
+the garden's end state. `bun scripts/agent-bench/instance/bench.ts --instance
+<name> --tasks probes` runs the probes. It spends model tokens, so CI doesn't
+run it. Add a probe when you add a capability to the attn map.
 
-`scripts/agent-eval.mjs` tells you what agents find before a change lands. To
+The agent bench tells you what agents find before a change lands. To
 see what delegated agents did in real work after it landed, run
 `node scripts/workflow-scorecard.mjs collect`, then
 `node scripts/workflow-scorecard.mjs --since <date>`; its usage text lists the

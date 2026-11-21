@@ -1,0 +1,59 @@
+usage: attn ask [flags] < ask.md
+       attn ask list
+       attn ask close <id>
+
+Ask the user what you cannot settle alone. They answer from attn, without
+opening your terminal.
+
+When a delegation assigned you a seed, the ask is about that seed; --seed makes
+it about another seed you tend. The user sees which seed it concerns. The
+answer goes to whoever tends the seed by then, and the seed keeps it as a note
+(attn seed notes <id>).
+
+To ask permission for a risky action, name the exact action and its target in
+the question, such as the command, branch or environment. The answer approves
+only what the question names.
+
+The ask is markdown. Question blocks in it ask the user something; an ask
+without one just tells them something:
+
+  :::question            pick one choice
+  :::question-multi      pick any number of choices
+  :::question-text       write an answer
+
+A block's first line is the question; the rest is context. Choices are
+"- [ ] label" or "- [ ] label — why"; "Recommended: <label>" marks yours.
+
+  attn ask --subject "Cache store" <<'ASK'
+  Deploys empty the cache, so the first requests after one are slow.
+
+  :::question
+  Which store should keep the cache?
+  - [ ] Postgres — already deployed
+  - [ ] Redis — faster, one more service
+  Recommended: Postgres
+  :::
+  ASK
+
+Images (![alt](path)) resolve against the working directory, or beside
+--file. attn copies them when the ask opens, at most 5 MiB in all, so the
+user sees them as they were. An image that cannot be read refuses the ask.
+
+attn ask prints the ask's id and returns at once. Carry on with work that does
+not depend on the answer. When the user answers, attn types the answer into
+the conversation as their message, approvals included. By then they have
+likely moved on and will not read what you write back there. If their answer
+asks you something, reply with a new ask. If you still need them, ask again.
+
+commands:
+  (none)                 open an ask from stdin or --file
+  list                   your open asks and those about seeds you tend
+  close <id>             withdraw an ask you no longer need answered
+
+flags:
+  --seed <id>            a seed you tend that the ask is about (defaults to
+                         the seed your delegation assigned you)
+  --subject <text>       the ask's subject (defaults to its first question)
+  --file <path>          read the ask from a file; images resolve beside it
+  --session <id>         session id (defaults to the current session)
+  --json                 print the result as JSON
