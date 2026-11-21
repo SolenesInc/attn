@@ -446,7 +446,7 @@ fn quiet_controls_are_faint_until_their_row_is_selected_and_a_tree_row_steps_in(
 }
 
 #[test]
-fn a_rows_hover_controls_take_its_badges_room_and_leave_its_kept_controls_in_view_and_tab_before_them()
+fn a_rows_hover_controls_take_its_badges_room_and_leave_its_kept_controls_in_view_and_tab_after_them()
  {
     for dark in [true, false] {
         for variant in ROW_VARIANTS {
@@ -489,8 +489,8 @@ fn a_rows_hover_controls_take_its_badges_room_and_leave_its_kept_controls_in_vie
     }
     assert_eq!(
         reached,
-        ["row.crew.actions", "row.crew.start"],
-        "Tab reaches a row's hover controls, then what it keeps in view, as they stand left to right"
+        ["row.crew.start", "row.crew.actions"],
+        "Tab reaches what a row keeps in view, then its hover controls, as rows tabbed before the system"
     );
 }
 

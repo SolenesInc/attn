@@ -735,6 +735,7 @@ impl ListRow {
                     } else {
                         row().h(band).items_center()
                     }
+                    .child(inline)
                     .children(over.map(|over| {
                         part(
                             row()
@@ -743,8 +744,7 @@ impl ListRow {
                                 .child(over),
                             "hover-pin",
                         )
-                    }))
-                    .child(inline),
+                    })),
                 )
                 .map(|kept| part(kept, "kept")),
                 None,

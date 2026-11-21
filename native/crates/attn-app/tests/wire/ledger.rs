@@ -1436,3 +1436,26 @@ fn a_remote_row_names_its_outpost_reopens_by_session_and_shows_why_the_outpost_r
     assert_eq!(reads(&world).len(), before + 1);
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_clicked_closed_row_tabs_to_its_reopen_before_its_menu() {
+    let mut world = world();
+    open(&mut world);
+    click(&mut world, "ledger.scope.closed");
+    assert_eq!(rows(&world), ["docs", "ledger"]);
+    click(&mut world, "ledger.row.docs");
+    plain(&mut world, Key::Tab);
+    plain(&mut world, Key::Text(" ".into()));
+
+    let actions: Vec<_> = world
+        .daemon
+        .sent_of("session_reopen")
+        .iter()
+        .map(|r| r["session_id"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(actions, ["docs"], "Space after one Tab reopens the row");
+    assert!(
+        !has(&world, "ledger.row.docs-menu"),
+        "the menu stays closed"
+    );
+}
