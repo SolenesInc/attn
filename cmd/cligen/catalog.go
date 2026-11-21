@@ -584,20 +584,16 @@ func (g *generator) reference(group *catalog.Group) (string, error) {
 		if text := strings.TrimSpace(section.Text); text != "" {
 			out.WriteString("\n" + g.cliText(nil, group.File+": section "+section.Title, text) + "\n")
 		}
+		if len(section.Commands) > 0 {
+			out.WriteString("\n")
+		}
 		for _, name := range section.Commands {
 			cmd, _ := g.c.Command(name)
 			command := group.Name + " " + g.usage(group.Name, cmd)
 			if cmd.Name == group.Name {
 				command = g.usage(group.Name, cmd)
 			}
-			fmt.Fprintf(&out, "\n    attn %s\n\n", command)
-			out.WriteString(strings.TrimSpace(g.cliText(cmd, cmd.File+": "+cmd.Name, cmd.Doc)) + "\n")
-			if len(cmd.Examples) > 0 {
-				out.WriteString("\n")
-				for _, values := range cmd.Examples {
-					out.WriteString("    " + g.example(cmd, values) + "\n")
-				}
-			}
+			fmt.Fprintf(&out, "- `attn %s`: %s\n", command, g.cliText(cmd, cmd.File+": "+cmd.Name, cmd.Summary))
 		}
 	}
 	if err := g.fail(); err != nil {

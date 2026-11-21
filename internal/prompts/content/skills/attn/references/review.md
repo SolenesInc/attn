@@ -29,15 +29,8 @@ Keep the frontmatter that `attn review start` wrote. If you write the whole file
 
 To present the same document again after you change the code, revise the review, then run `attn review start <document>` with no `--base`, check it and open it. The base stays where it was, or moves to what the user last reviewed, so the user sees only what changed since their notes. An open tile reloads by itself.
 
-    attn review start <document> [--base <commit>] [--repository <dir>] [--json]
-
-Snapshots the working tree of `--repository` as head, and writes frame (brief unless the document already picks one), repository, base and head into the frontmatter of `<document>`. Creates the document when it is missing, and leaves the text below the frontmatter as written. Run it again before presenting a revision: it takes a fresh head and keeps the base. `--base` defaults to the head of the last review the user sent on this document, else the document's base; without one the review is a tour of unchanged code.
-
-    attn review start review.md --base HEAD
-
-    attn review check <document> [--json]
-
-Lists the problems of `<document>`, each with its line and the fix. An empty list means the document is ready to open. On the CLI it exits 1 when there are problems, and `attn open` prints the same problems as warnings.
+- `attn review start <document> [--base <commit>] [--repository <dir>] [--json]`: snapshot the working tree as head and write the review's frontmatter
+- `attn review check <document> [--json]`: list the document's problems, each with its line and the fix
 
 ## Write the review
 
@@ -162,11 +155,7 @@ A question from the user arrives as their message, with the lines it is about an
 
 The user is still reading, so leave the files alone. When the question shows that something needs to change, say so in the answer and make the change after the user sends the review.
 
-    attn review answer <question-id> --doc <document> -m <answer> [--json]
-
-Answers a question the user asked on the review. The question arrives as the user's message with this command and the question's id; the answer shows under the line in the user's review.
-
-    attn review answer q1 --doc review.md -m "It retries once, at review.go:42."
+- `attn review answer <question-id> --doc <document> -m <answer> [--json]`: answer a question the user asked on the review
 
 ## Act on the verdict
 

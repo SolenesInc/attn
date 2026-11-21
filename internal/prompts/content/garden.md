@@ -31,4 +31,4 @@ Other verbs: `park` (pause and release your claim), `wither` (abandon), `replant
 
 When attn sends an update notification, run the read that the notification names. Reading acknowledges the update and keeps you aware. It does not authorize or require you to act on the update. Act on an update, or interrupt the user, only when the update genuinely requires your action or the user's attention.
 
-`attn seed --help` lists every command, and `attn seed <verb> --help` gives its syntax. `attn skill --reference garden` covers those verbs in depth, moving a seed another agent tends, closing a plot, and artifacts.
+`attn seed --help` lists every command, and `attn seed <verb> --help` gives its syntax. `attn skill --reference garden` holds the rules that span those verbs: who may move a seed another agent tends, closing a seed or a plot, checks, rings, standby and artifacts.

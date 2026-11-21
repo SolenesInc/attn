@@ -8,9 +8,4 @@ The user can mark up the document and send their notes to you as one message.
 
 ## Opening a document
 
-    attn open <file.md|seed-id> [--json]
-
-Opens the markdown file at `<file.md>`, or the seed `<seed-id>` (pass one of the two), in a tile next to your session. The tile reloads whenever the file changes. A review document's problems come back as `problems`; the tile opens anyway.
-
-    attn open notes/plan.md
-    attn open s-7k3f9m
+- `attn open <file.md|seed-id> [--json]`: show the user a markdown document or a seed in a tile

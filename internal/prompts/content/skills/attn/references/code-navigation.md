@@ -8,31 +8,19 @@ For each language attn uses a definition: the server's command, the file extensi
 
 attn looks for the command's program in this machine's code navigation folder, then on `PATH`. `attn nav status`, run inside the repository, prints the folder, the definition of each language, where each program was found or why it was not, and the servers running with their state.
 
-    attn nav status [--repository <dir>] [--json]
-
-The server definitions for the repository in `--repository`, where each program was found or why it was not, and the language servers running on this machine with their memory and, for one still starting, when its start began.
+- `attn nav status [--repository <dir>] [--json]`: the server definitions for a repository and the servers running here
 
 ## Set up a server
 
 1. Find how this machine and this repository already run a server for the language. Developers usually have one: installed by their editor or a version manager outside `PATH`, or provided by the repository's own tooling. Search the home folder for the program, and read the repository's setup scripts and documentation for how its developers get one. Reuse what works here before you install anything.
 2. Install a server only when this machine has none. Install it for this user with the language's usual installer, such as `go install golang.org/x/tools/gopls@latest` or `npm install -g typescript-language-server typescript`, never with `sudo`.
 3. Link the program when it is not on `PATH`: `attn nav link <absolute-path-to-program>`. `--as <name>` links it under the name the definition's command uses.
-4. Set a definition with `attn nav set <language> '<json>'` when the built-in one does not fit, or the language has none. `attn nav set` below describes the fields.
+4. Set a definition with `attn nav set <language> '<json>'` when the built-in one does not fit, or the language has none. `attn nav set --help` describes the fields.
 5. Prove it: run `attn nav check <path>:<line>` from the repository, on a line of a file in the review that uses a name defined elsewhere. Setup is done when it resolves a definition. The review updates its key line on its own.
 
-    attn nav link <program> [--as <name>] [--json]
-
-Links the server's program at `<program>` into this machine's code navigation folder, which attn searches before PATH. Use it for a server your editor installed outside PATH, such as Neovim's mason folder. `--as` links it under the name the definition's command uses.
-
-    attn nav set <language> <definition> [--repository <dir>] [--json]
-
-Sets how to launch the server for `<language>` in the repositories with this repository's origin. Outposts with a clone use it too. `<definition>` is JSON, such as {"command": ["jdtls"], "extensions": [".java"], "roots": ["MODULE.bazel"], "settings": {}, "prepare": {"command": ["tools/ide/setup_classpath.py"], "inputs": ["**/BUILD.bazel", "MODULE.bazel"]}}. command and extensions are required. roots are files that mark a workspace folder. settings go to the server at start. prepare runs from the workspace folder before the server starts, and again before a start once a file its inputs match has changed.
-
-    attn nav check <path>:<line> [--repository <dir>] [--json]
-
-Asks for the definition of each name on the line `<path>:<line>`, in order, and answers with the first that resolves. Starts the server when it is not running. Setup is done when this resolves a real definition. Called as a tool, a server still starting after 20 s answers `starting` with the time so far and keeps starting: call again, and a running server answers at once. On the CLI the command waits for the answer.
-
-    attn nav check internal/daemon/review.go:42
+- `attn nav link <program> [--as <name>] [--json]`: link a server's program into this machine's code navigation folder
+- `attn nav set <language> <definition> [--repository <dir>] [--json]`: set how to launch the server for a language
+- `attn nav check <path>:<line> [--repository <dir>] [--json]`: resolve a definition on a line, starting the server when it is not running
 
 ## When the repository generates what the server needs
 
@@ -46,10 +34,5 @@ A failed server's reason is in the key line and in `attn nav status`, which show
 
 `attn nav unlink <name>` removes a link. `attn nav rm <language>` removes a set definition, so the built-in one applies again.
 
-    attn nav unlink <name> [--json]
-
-Removes the link `<name>` from this machine's code navigation folder.
-
-    attn nav rm <language> [--repository <dir>] [--json]
-
-Removes the definition set for `<language>`, so the built-in one applies again.
+- `attn nav unlink <name> [--json]`: remove a link
+- `attn nav rm <language> [--repository <dir>] [--json]`: remove the definition set for a language

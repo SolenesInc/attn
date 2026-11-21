@@ -24,7 +24,7 @@ groups:
         commands: [callout anchors]
       - title: Showing a callout
         text: |
-          Put the agent or desktop the user should go to on the last step, because Enter and → go there only from the last step. If a fixed anchor is missing, the command refuses the whole callout and names the anchors on screen. Choose a visible anchor from that answer.
+          Run `callout_anchors` first, to pick an anchor the user can see. Put the agent or desktop the user should go to on the last step, because Enter and → go there only from the last step. If a fixed anchor is missing, the command refuses the whole callout and names the anchors on screen. Choose a visible anchor from that answer.
 
           The command returns once the app accepts the callout. Continue your work, because there is no completion callback.
 

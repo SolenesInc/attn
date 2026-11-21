@@ -25,7 +25,7 @@ groups:
           1. Find how this machine and this repository already run a server for the language. Developers usually have one: installed by their editor or a version manager outside `PATH`, or provided by the repository's own tooling. Search the home folder for the program, and read the repository's setup scripts and documentation for how its developers get one. Reuse what works here before you install anything.
           2. Install a server only when this machine has none. Install it for this user with the language's usual installer, such as `go install golang.org/x/tools/gopls@latest` or `npm install -g typescript-language-server typescript`, never with `sudo`.
           3. Link the program when it is not on `PATH`: `attn nav link <absolute-path-to-program>`. `--as <name>` links it under the name the definition's command uses.
-          4. Set a definition with `attn nav set <language> '<json>'` when the built-in one does not fit, or the language has none. `attn nav set` below describes the fields.
+          4. Set a definition with `attn nav set <language> '<json>'` when the built-in one does not fit, or the language has none. `attn nav set --help` describes the fields.
           5. Prove it: run `attn nav check <path>:<line>` from the repository, on a line of a file in the review that uses a name defined elsewhere. Setup is done when it resolves a definition. The review updates its key line on its own.
         commands: [nav link, nav set, nav check]
       - title: When the repository generates what the server needs

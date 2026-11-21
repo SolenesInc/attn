@@ -8,13 +8,11 @@ The fixed anchors are `sidebar`, `home`, `commands`, `garden`, `asks`, `desktops
 
 `agent:<who>` accepts a session id, short id or crew name. `desktop:<which>` accepts a slot digit, name or id. Both address only the profile of the pointing session. The app reveals the target when it can. Otherwise the app shows the step with the target's name.
 
-    attn callout anchors [--json]
-
-Lists every anchor with its description, and for each fixed anchor whether it is on screen now. Run it before `attn callout show` to pick an anchor the user can see. When the app is not showing your profile, the list still comes back with `app_showing_profile` false and no anchor marked on screen.
+- `attn callout anchors [--json]`: list the anchors and which are on screen
 
 ## Showing a callout
 
-Put the agent or desktop the user should go to on the last step, because Enter and → go there only from the last step. If a fixed anchor is missing, the command refuses the whole callout and names the anchors on screen. Choose a visible anchor from that answer.
+Run `attn callout anchors` first, to pick an anchor the user can see. Put the agent or desktop the user should go to on the last step, because Enter and → go there only from the last step. If a fixed anchor is missing, the command refuses the whole callout and names the anchors on screen. Choose a visible anchor from that answer.
 
 The command returns once the app accepts the callout. Continue your work, because there is no completion callback.
 
@@ -24,9 +22,4 @@ A callout with several steps lets the user try what it points at. Another overla
 
 The desktop app must be showing your profile. With no such app, `attn callout anchors` still lists the directory and says so, and `attn callout show` refuses. Use `--session <id>` only when pointing from another session.
 
-    attn callout show <anchor> <text> [<anchor> <text>]... [--json]
-
-Shows a callout: each step's text beside its anchor, in order. Put the agent or desktop the user should go to on the last step, because Enter and → go there only from the last step. If a fixed anchor is missing, the whole callout is refused and the message names the anchors on screen. A new callout replaces the one showing. The call returns when the app accepts the callout.
-
-    attn callout show garden "Work you and your agents track"
-    attn callout show sidebar "Your agents, the ones waiting on you first" agent:a1b2 "Needs your review on the migration plan"
+- `attn callout show <anchor> <text> [<anchor> <text>]... [--json]`: show a callout the user steps through

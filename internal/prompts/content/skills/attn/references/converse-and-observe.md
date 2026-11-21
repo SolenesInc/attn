@@ -153,8 +153,8 @@ sessions compact on the home machine or an outpost. Plugin
 sessions compact on the home machine when
 their driver supports native compaction. attn refuses a session without a
 compaction path, and the refusal says why. Compact when you will resume as yourself.
-`attn seed standby` already compacts when it closes you (Standby
-(`attn skill --reference garden`)). A
+`attn seed standby` already compacts when it closes you
+(`attn seed standby --help`). A
 crew member cannot close itself, and its next session starts fresh from
 its letter, so a compact before a member's letter carries nothing over.
 

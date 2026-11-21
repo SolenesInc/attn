@@ -12,15 +12,8 @@ Use `attn terminal` inside an attn agent to open terminals, inspect them, type i
 
 An opened terminal is an ordinary interactive shell. The command enters the shell's history, so the user can recall it with ↑. The terminal records you as its parent and keeps running after your session closes. Close the terminal when its work is done.
 
-    attn terminal open [--host <outpost|home>] [--down] [--desktop <ref>] [--cwd <dir>] [-- <command>...] [--json]
-
-Opens a shell at the end of your desktop's row, keeping the user's focus where it was, and returns its terminal id. `--down` stacks it below you, or below the terminal you most recently opened in your column. `--desktop` opens it on that desktop, creating a missing numbered one. `--host` selects an outpost by name or id, or home; `--cwd` names a directory on that machine, and without it a shell on another machine starts in its home directory. With the words after `--`, open waits up to 30 s for the shell's first OSC 133 prompt, then types the command.
-
-    attn terminal open -- pnpm dev
-
-    attn terminal close <terminal> [--desktop <ref>] [--json]
-
-Closes the shell `<terminal>`. It closes shells only; close an agent with `attn agent close`.
+- `attn terminal open [--host <outpost|home>] [--down] [--desktop <ref>] [--cwd <dir>] [-- <command>...] [--json]`: open a shell beside you, or on a desktop or outpost
+- `attn terminal close <terminal> [--desktop <ref>] [--json]`: close a shell
 
 ## Reach
 
@@ -38,15 +31,8 @@ Typing goes straight to the terminal, as keyboard input does. `send --text` writ
 
 Keys: C-a through C-z, C-\, C-], C-^, C-_, Escape, Enter, Tab, Backspace, Space, Up, Down, Left, Right, Home, End, Delete, Insert, PageUp, PageDown, F1 through F12. send writes bytes directly, as a keyboard does.
 
-    attn terminal ls [--desktop <ref>] [--all] [--json]
-
-Lists the terminals of your desktop, or of the desktop `--desktop` names, or with `--all` of every desktop in your profile: each one's id, name, agent, state, desktop, position and the session that opened it.
-
-    attn terminal send <terminal> [--text "<text>" | --keys <key>...] [--desktop <ref>] [--json]
-
-Types into `<terminal>` as a keyboard does: `--text` as literal bytes, without Enter, or `--keys` by name: C-a through C-z, C-\\, C-], C-^, C-_, Escape, Enter, Tab, Backspace, Space, Up, Down, Left, Right, Home, End, Delete, Insert, PageUp, PageDown, F1 through F12. Anyone may type into a shell; into an agent only when it is you or below you in your delegation chain, or you are the profile's chief.
-
-    attn terminal send 4f2a --keys C-c
+- `attn terminal ls [--desktop <ref>] [--all] [--json]`: list the terminals on your desktop, or on every desktop
+- `attn terminal send <terminal> [--text "<text>" | --keys <key>...] [--desktop <ref>] [--json]`: type text or keys into a terminal
 
 ## Move
 
@@ -59,11 +45,7 @@ The terminal goes beside the destination's active tile. Your profile's current d
     attn terminal move 8
     attn terminal move <shell-id> 8
 
-    attn terminal move [<terminal>] <desktop> [--json]
-
-Moves `<terminal>`, or your own session's terminal, to `<desktop>`: its shortcut digit, its name as shown or its id. A missing numbered desktop is created. The terminal keeps running beside the destination's active tile. Anyone may move a shell; an agent only when it is you or below you in your delegation chain, or you are the profile's chief.
-
-    attn terminal move 8
+- `attn terminal move [<terminal>] <desktop> [--json]`: move a terminal to another desktop
 
 ## Reading and waiting
 
@@ -73,16 +55,6 @@ Moves `<terminal>`, or your own session's terminal, to `<desktop>`: its shortcut
 
 `wait --until prompt` waits for the shell prompt. `wait --until exit` waits for the terminal process to exit. `--timeout <seconds>` bounds either wait and `run --wait`. When the timeout expires, the command exits 124. Without `--timeout`, waiting continues until the condition is met or your CLI connection closes. If the worker restarts or disconnects, the call fails visibly. It never leaves a command queued for later.
 
-    attn terminal read <terminal> [--last | --scrollback] [--lines <n>] [--json]
-
-Returns the rendered screen of `<terminal>`; with `--last` or `--scrollback`, the retained scrollback, of which `--lines` selects the last n lines, or the last completed command's block, which needs OSC 133 shell integration.
-
-    attn terminal run <terminal> "<command>" [--wait] [--timeout <seconds>] [--desktop <ref>] [--json]
-
-Types `"<command>"` into the shell `<terminal>` at its prompt, through the shell, preserving history, and returns the id of the last completed block without waiting for the command. The shell needs OSC 133 shell integration. Read the command's output with `attn terminal read` and its `last` mode once it is done. Anyone may run a command in a shell.
-
-    attn terminal run 4f2a "make test"
-
-    attn terminal wait <terminal> --until prompt|exit [--timeout <seconds>] [--json]
-
-Waits until `<terminal>` shows its shell prompt, or until its process exits, and exits with the exit code. `--timeout` gives up after that many seconds and exits 124.
+- `attn terminal read <terminal> [--last | --scrollback] [--lines <n>] [--json]`: read a terminal's screen, scrollback or last command
+- `attn terminal run <terminal> "<command>" [--wait] [--timeout <seconds>] [--desktop <ref>] [--json]`: type a command into a shell at its prompt
+- `attn terminal wait <terminal> --until prompt|exit [--timeout <seconds>] [--json]`: wait for a shell's prompt or a terminal's exit

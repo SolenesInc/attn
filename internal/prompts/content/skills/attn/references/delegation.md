@@ -169,7 +169,7 @@ Launch failures leave transferred ownership and created worktrees and branches i
 
 When the delegate's work is complete, you can harvest the delegate's seed
 without `--force`, even while the delegate's session is live.
-Moving a seed another agent tends (`attn skill --reference garden`)
+Tending a seed (`attn skill --reference garden`)
 says who else can move a seed without `--force`. The log records the move and
 whose claim the move ended, and the delegate's watch delivers the seed update.
 

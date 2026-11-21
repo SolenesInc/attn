@@ -1,7 +1,7 @@
 # The seed family. Write each doc for both surfaces: name an arg by its tool
 # name in backticks (`summary`) and another command by its tool name in
-# backticks (`seed_show`). The CLI's help and the garden reference print them as
-# the flag (`-m`) and the command (`attn seed show`). `local` marks an arg that
+# backticks (`seed_show`). The CLI's help prints them as the flag (`-m`) and
+# the command (`attn seed show`). `local` marks an arg that
 # names something on the caller's machine (path, destination, evidence or
 # commit): the CLI resolves it in its working directory, and the daemon that
 # launched the agent resolves a tool call's in the folder the session started
@@ -39,25 +39,15 @@ groups:
       name: garden
       title: "The garden: seeds, plots, and reporting"
       intro: |
-        The garden is where work lives, inside your session's profile. Seeds belong to their planting profile for life. Lists, relationships, claims and delegations stay in that profile. Outside attn, seed commands require `--profile <name|id>` when several profiles exist. Run `attn seed prime` for working rules.
+        The garden is where work lives, inside your session's profile. Seeds belong to their planting profile for life. Lists, relationships, claims and delegations stay in that profile. Outside attn, seed commands require `--profile <name|id>` when several profiles exist.
 
-        Before you write a plot, read `attn seed guide` for body authoring, a complete plot example and completion checks. `attn seed --help` lists every command, and `attn seed <command> --help` gives one command's syntax and flags.
+        The garden section of your launch prompt, which `attn seed prime` prints again, teaches ids and slugs, the user's words for garden things, when to plant and the loop. This reference holds the rules that span commands. Each section lists its commands; `attn seed <command> --help` gives a command's flags, its full behavior and examples. Before you write a plot, read `attn seed guide` for body authoring, a complete plot example and completion checks.
     sections:
-      - title: Speaking the user's language
-        text: |
-          Garden words have Jira-style equivalents: seed = ticket, ready = todo, plot = epic, harvested = done. Use the Garden word by default. When the user uses one of those Jira words, mirror it for that concept for the rest of the exchange. Do not correct them or switch the other concepts unless they do.
-      - title: Speaking of seeds
-        text: |
-          Every command prints a seed as `id  slug  title`. `attn seed`, `attn delegate --seed` and `attn ask --seed` take either the id or the slug. `attn open` and `attn agent msg` take the id. Give other agents the id, because attn refuses a slug that two seeds share and the refusal lists each match. To the user, say the slug: `mermaid-rendered-grid` (`s-7k3f9m`) on the first mention, then the slug alone. Never make a person decode an id.
       - title: Planting work
-        text: |
-          Track work that outlives this turn in seeds, not in markdown TODO lists or your harness's todo tool, because those end with the session. Examples are a bug you found, a follow-up you are not doing now, and a piece you split off. Search before you plant, so you find work that already exists instead of planting it twice. Plant work before you start it, so the claim and the log exist while you work. Under a plot, plant with `--part-of <plot>` so the new seed stays with the plot's plan. If you discover work while tending another seed, add `--discovered-from <seed>` so the origin is on record. Before your turn ends, plant what is still undone.
-
-          Every seed body, including the body of a plot child, is a work prompt for someone without this conversation. WRITING A BODY in `attn seed guide` says what the prompt contains.
         commands: [seed search, seed plant]
       - title: Planting a plot
         text: |
-          Keep the shared plan in the parent. In each child, name the child's own work. Also name each parent section, sibling result, or artifact the child needs, and say why. The agent that tends the child reads those sources before it starts, because a delegation does not include related bodies automatically. The example in `attn seed guide` shows complete bodies and dependencies.
+          Keep the shared plan in the parent, and give each child the work prompt your launch prompt describes. Children are parallel by default. To order them, name the siblings a child waits for in `after` in the plot payload, or run `attn seed link <a> blocks <b>`: a blocked seed stays out of `attn seed ready` until its blocker closes. The example in `attn seed guide` shows complete bodies and dependencies.
         commands: [seed plot, seed link, seed unlink]
       - title: Finding and reading work
         text: |
@@ -77,14 +67,18 @@ groups:
 
           Repeating a move to the same state succeeds without rewriting the seed or ringing anyone. A different reason goes on the seed's log as a quiet note. To move between harvested and withered, run `attn seed replant <id>` first.
         commands: [seed tend, seed note, seed park, seed replant, seed wither, seed send-to-chief]
-      - title: Closing a seed or a plot
+      - title: Closing a seed
+        text: |
+          Harvest a seed when the outcome and the verification its body asks for are complete. An ask about the seed keeps it open: an agent's harvest refuses while the user has not answered, and names each open ask. The answer comes to whoever tends the seed, so end your turn and harvest after you act on the answer, or withdraw an ask that no longer matters with `attn ask close <id>`. The user's own harvest and any wither withdraw the seed's open asks, and the command names them.
+        commands: [seed harvest]
+      - title: Closing a plot
         text: |
           Harvest and wither refuse on a plot while any direct child is planted, growing or parked, even with `--force` or `--when-merged`. The refusal names each open child. To close the plot, first close each open child or move its follow-ups out. To give up your claim on the plot without closing it, run `attn seed replant <plot>`. When the last open child closes, attn adds a ringing note to the plot and names the plot in the output. The plot keeps its state.
+      - title: Harvesting on a merge
+        text: |
+          When the only thing left on a seed is a pull request merging, say so once with `attn seed harvest <id> --when-merged -m "<outcome and verification>"` and let attn close it. With no pull request url, the command takes this session's single open pull request. A seed you were growing is parked, and attn releases your claim. Every surface then shows `harvests when owner/repo#n merges`. When the merge lands, attn harvests the seed as the member `attn`, with your reason. If a pull request closes without merging, attn clears the arming and rings instead, and the seed stays where it was. If the seed has gained open children or an open ask, attn clears the arming at the merge and explains why. `--when-merged --clear` takes the arming back.
 
-          When the only thing left on a seed is a pull request merging, say so once with `attn seed harvest <id> --when-merged` and let attn close it. A seed you were growing is parked, and attn releases your claim. Every surface then shows `harvests when owner/repo#n merges`. When the merge lands, attn harvests the seed as the member `attn`, with your reason. If a pull request closes without merging, attn clears the arming and rings instead, and the seed stays where it was. If the seed has gained open children or an open ask, attn clears the arming at the merge and explains why. Use `--when-merged` only when the merge is genuinely the last step. Review notes to answer, docs to write, and evidence to attach are work, and work belongs to a tender.
-
-          An ask about the seed keeps it open, and its answer comes to whoever tends the seed. The user's own harvest and any wither withdraw the seed's open asks, and the command names them.
-        commands: [seed harvest]
+          Use `--when-merged` only when the merge is genuinely the last step. Review notes to answer, docs to write, and evidence to attach are work, and work belongs to a tender.
       - title: Checks
         text: |
           A check is a numbered statement (C1) that a seed must prove. attn stores the check on the seed as data, with its latest report and verdict. Cite the check by id in the body. Define checks with `checks` in plot JSON, with `--check "<statement>"` on plant, or later with `attn seed check add`. Each gives the check the next free id in the plot tree and prints that id. A plot check marked shared applies to every seed below the plot that has no children, and each of those seeds needs its own report for it. `attn seed show` lists a seed's checks, including inherited ones, as open, reported, confirmed or rejected.
@@ -97,9 +91,11 @@ groups:
 
           A bell carries the seed, what moved, and the read that shows it: `attn seed show <id> --since <N>`, where N is the bookmark just before the first change the bell covers. Later changes join the unread bell, and the same read returns them too. Any `show` or `notes` of the seed resets the bell for the next meaningful move. You cannot recall updates already read or handed to an agent.
         commands: [seed watch, seed unwatch]
-      - title: Reminders and standby
+      - title: Standby
         text: |
-          Standby closes your session for a wait that needs nobody in it: a time, a pull request, another seed or another agent. If you tend no seed for the work, plant one first. A wait on the user is different. Ask with `attn ask` and end your turn. Your session stays open, so the user can find you, talk to you and run commands in your terminal, and attn types the answer into this conversation.
+          Standby closes your session for a wait that needs nobody in it: a time, a pull request, another seed or another agent. If you tend no seed for the work, plant one first. A wait on the user is different. Ask with `attn ask` and end your turn. Your session stays open, so the user can find you, talk to you and run commands in your terminal, and attn types the answer into this conversation. While you have an open ask, about this seed, another seed or none, attn refuses a standby that would close you, and names each ask. When the user tells you to close while an ask is open, run `attn seed standby <id> --stay -m "…"`, then `attn agent close --self`: the seed stays on standby, and the answer resumes you.
+
+          Only the seed's tender puts it on standby, from its own session, with a note that says what to do next. The seed stays claimed while the session is closed. `--in` and `--at` also set the seed's reminder, so the session resumes at that time if nothing else arrives first. A seed holds one reminder; `attn seed remind` sets one without closing the session.
 
           Seed mail is a reminder, a message sent with `attn agent msg <seed-id>`, an answer to an ask about the seed, or an update from a PR watch on the seed. The setting `garden.tender_resume` chooses which mail resumes a session: `any` (the default), `watches` (PR watches and reminders) or `off`. attn resumes a tender at most 48 times per seed in 24 hours. When it cannot resume one, it notes the reason on the seed and notifies the user, and the mail stays unread.
 
