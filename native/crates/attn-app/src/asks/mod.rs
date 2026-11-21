@@ -108,6 +108,8 @@ fn stop_of(ask: &Ask, focused: &str) -> Option<Stop> {
         .find(|q| {
             focused == view::text_key(&q.key)
                 || focused == view::suggestion_key(&q.key)
+                || focused == view::condition_key(&q.key)
+                || focused == view::add_condition_key(&q.key)
                 || focused == view::other_key(&q.key)
                 || (0..q.choices.len()).any(|i| focused == view::choice_key(&q.key, i))
         })
@@ -144,13 +146,25 @@ fn input_of(state: &State, ask: &Ask, stop: &Stop) -> String {
     }
 }
 
-/// The controls ⇥ visits in a stop, in order: its input, then a written question's Use the
-/// suggestion while its field is empty.
+/// The controls ⇥ visits in a stop, in order: its input, then a choice question's condition
+/// once it has a pick, or a written question's Use the suggestion while its field is empty.
 fn controls(state: &State, ask: &Ask, stop: &Stop) -> Vec<String> {
     let mut controls = vec![input_of(state, ask, stop)];
     let Stop::Question(key) = stop else {
         return controls;
     };
+    let answer = state
+        .window
+        .asks
+        .drafts
+        .get(&ask.id)
+        .and_then(|d| d.answers.get(key));
+    if answer.is_some_and(|a| !a.picked.is_empty()) {
+        controls.push(match answer.and_then(|a| a.condition.as_ref()) {
+            Some(_) => view::condition_key(key),
+            None => view::add_condition_key(key),
+        });
+    }
     let suggested = questions(ask).any(|q| {
         &q.key == key
             && Kind::of(q) == Kind::Text
@@ -859,6 +873,7 @@ pub(crate) fn add_condition(state: &mut State, ask: &str, question: &str, tx: &m
         .answer(ask, question)
         .condition
         .get_or_insert_with(TextEdit::default);
+    activate(state, ask, Stop::Question(question.to_owned()));
     let ring = tx.by_keys() || tx.focus_visible();
     tx.focus(view::condition_key(question), ring);
 }

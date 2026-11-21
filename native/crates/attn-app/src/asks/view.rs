@@ -57,6 +57,10 @@ pub(super) fn condition_key(question: &str) -> String {
     format!("asks.q.{question}.condition.field")
 }
 
+pub(super) fn add_condition_key(question: &str) -> String {
+    format!("asks.q.{question}.condition")
+}
+
 pub(super) fn suggestion_key(question: &str) -> String {
     format!("asks.q.{question}.suggestion")
 }
@@ -938,7 +942,7 @@ fn condition(ask: &str, question: &AskQuestion, answer: &Shown<'_>, t: &Tokens) 
         .collect::<Vec<_>>()
         .join(", ");
     let label = format!("Condition on {picked}");
-    let key = format!("asks.q.{}.condition", question.key);
+    let key = add_condition_key(&question.key);
     match answer {
         Shown::Replied(a) => a
             .and_then(|a| a.condition.as_deref())

@@ -2160,16 +2160,16 @@ fn number_keys_pick_in_the_active_question_and_tab_moves_it_to_the_written_field
     let mut world = start(vec![release_plan()], vec![api_working()]);
     open_sheet(&mut world);
     assert_eq!(active(&world), ["q1"]);
-    let rows_before: Vec<_> = (0..3)
-        .map(|i| world.rect(&format!("asks.q.q2.choice.{i}")))
+    let rows_before: Vec<_> = (0..2)
+        .map(|i| world.rect(&format!("asks.q.q1.choice.{i}")))
         .collect();
 
     letter(&mut world, "1");
     assert!(checked(&world, "asks.q.q1.choice.0"), "1 picks eu");
     assert_eq!(active(&world), ["q2"], "a one-choice pick moves on");
     assert_eq!(focused(&world).as_deref(), Some("asks.q.q2.choice.0"));
-    let rows_after: Vec<_> = (0..3)
-        .map(|i| world.rect(&format!("asks.q.q2.choice.{i}")))
+    let rows_after: Vec<_> = (0..2)
+        .map(|i| world.rect(&format!("asks.q.q1.choice.{i}")))
         .collect();
     assert_eq!(rows_before, rows_after, "the keycaps keep their room");
 
@@ -2194,7 +2194,11 @@ fn number_keys_pick_in_the_active_question_and_tab_moves_it_to_the_written_field
 
     world.gesture(|app| app.press("shift+tab"));
     assert_eq!(active(&world), ["q2"]);
-    assert_eq!(focused(&world).as_deref(), Some("asks.q.q2.choice.1"));
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("asks.q.q2.condition"),
+        "Shift+Tab enters a question at its last control"
+    );
 
     send_key(&mut world);
     assert_eq!(
@@ -2784,4 +2788,34 @@ fn a_follow_up_ask_says_what_it_follows_and_unfolds_to_the_earlier_answer() {
     assert_eq!(shown(&world).as_deref(), Some("Pool size"));
     assert_eq!(name(&world, "asks.follows"), "Follows a-gone");
     rest_but_for_ages(&mut world);
+}
+
+#[test]
+fn tab_reaches_a_picks_condition_inside_its_question() {
+    let mut world = start(vec![release_plan()], vec![api_working()]);
+    open_sheet(&mut world);
+    letter(&mut world, "1");
+    assert_eq!(active(&world), ["q2"]);
+
+    world.gesture(|d| d.press("shift+tab"));
+    assert_eq!(focused(&world).as_deref(), Some("asks.q.q1.condition"));
+    assert_eq!(active(&world), ["q1"]);
+    world.gesture(|d| d.press("space"));
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("asks.q.q1.condition.field")
+    );
+    world.gesture(|app| app.type_text("only eu-west"));
+
+    plain(&mut world, Key::Tab);
+    assert_eq!(focused(&world).as_deref(), Some("asks.q.q2.choice.0"));
+    assert_eq!(active(&world), ["q2"]);
+    world.gesture(|d| d.press("shift+tab"));
+    assert_eq!(
+        focused(&world).as_deref(),
+        Some("asks.q.q1.condition.field")
+    );
+    assert_eq!(active(&world), ["q1"]);
+    world.gesture(|d| d.press("shift+tab"));
+    assert_eq!(focused(&world).as_deref(), Some("asks.q.q1.choice.0"));
 }
