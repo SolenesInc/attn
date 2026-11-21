@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "73d2441767d6";
+pub const PROTOCOL_VERSION: &str = "91f5d4b2cf45";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -7785,6 +7785,12 @@ impl PluginsUpdatedMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PresenceResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub seed_ids: Vec<String>,
+    pub session_id: SessionID,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Profile {

@@ -39,7 +39,7 @@ var catalogFamilies = map[string]bool{
 	"plugin":           false,
 	"pr":               false,
 	"preflight":        false,
-	"presence":         false,
+	"presence":         true,
 	"profile":          false,
 	"profile-env":      false,
 	"prompts":          false,

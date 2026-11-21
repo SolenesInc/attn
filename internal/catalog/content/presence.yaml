@@ -1,2 +1,21 @@
+# The presence family: whether the caller runs inside attn, and as which session.
 groups:
-  - {name: presence, usage: "[--session-id|--seed-ids]", summary: "check whether the shell runs inside attn, or print only its session or seeds"}
+  - name: presence
+    usage: "[--session-id|--seed-ids]"
+    summary: "check whether the shell runs inside attn, or print only its session or seeds"
+    map:
+      rows:
+        - {need: "Your session and the seeds it works on", tools: [presence]}
+
+commands:
+  - name: presence
+    summary: whether you run inside attn, your session and the seeds you work on
+    runs: home
+    grant: full
+    read_only: true
+    doc: |
+      Says whether you run inside attn, and as which session, with the seeds the session works on: the seed its delegation assigned it, then each growing seed it tends.
+    args:
+      - {name: session_id, type: bool, cli: "--session-id", cli_only: true, one_of: only, doc: "print only the session id; exits 1 outside a session"}
+      - {name: seed_ids, type: bool, cli: "--seed-ids", cli_only: true, one_of: only, doc: "print only the ids of the seeds the session works on, one a line; exits 1 when there is none"}
+    result: PresenceResult

@@ -4722,6 +4722,13 @@ model Vent {
   send?: VentSend;
 }
 
+// The calling session and the seeds it works on (`attn presence`): the seed
+// its delegation assigned it, then each seed it tends that is growing.
+model PresenceResult {
+  session_id: SessionID;
+  seed_ids: string[];
+}
+
 // The vent an agent took back (`attn vent withdraw`).
 model VentWithdrawResult {
   id: string;

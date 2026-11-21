@@ -8457,6 +8457,14 @@ type PluginsUpdatedMessage struct {
 	Plugins []PluginInfo `json:"plugins"`
 }
 
+type PresenceResult struct {
+	// SeedIds corresponds to the JSON schema field "seed_ids".
+	SeedIds []string `json:"seed_ids"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
 type Profile struct {
 	// CurrentDesktopID corresponds to the JSON schema field "current_desktop_id".
 	CurrentDesktopID string `json:"current_desktop_id"`

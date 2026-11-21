@@ -123,6 +123,7 @@ var specs = map[string]spec{
 	"onboarding done":         {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
 	"onboarding again":        {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
 	"open":                    {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_target": "Pass {path} or {seed}."}},
+	"presence":                {readOnly: true, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
 	"review start":            {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
 	"review check":            {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
 	"review answer":           {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled.", "no_question": "Answer a question that is still open on the document."}},
@@ -420,6 +421,11 @@ type OnboardingAgainArgs struct {
 type OpenArgs struct {
 	Path string `json:"path,omitempty"`
 	Seed string `json:"seed,omitempty"`
+}
+
+type PresenceArgs struct {
+	SessionID bool `json:"session_id,omitempty"`
+	SeedIds   bool `json:"seed_ids,omitempty"`
 }
 
 type ReviewStartArgs struct {

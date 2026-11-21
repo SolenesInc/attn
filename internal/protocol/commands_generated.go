@@ -43,6 +43,7 @@ var CommandRuns = map[string]Locator{
 	"onboarding done":         LocatorHome,
 	"onboarding again":        LocatorHome,
 	"open":                    LocatorHome,
+	"presence":                LocatorHome,
 	"review start":            LocatorHere,
 	"review check":            LocatorHere,
 	"review answer":           LocatorHome,

@@ -32,6 +32,7 @@ func (d *Daemon) commandLayer() *command.Layer {
 			d.turnCommands(),
 			d.ventCommands(),
 			d.onboardingCommands(),
+			d.presenceCommands(),
 			d.handoffCommands(),
 		} {
 			maps.Copy(handlers, family)
