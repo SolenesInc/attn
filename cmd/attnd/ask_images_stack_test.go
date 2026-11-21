@@ -42,6 +42,12 @@ func TestAnAsksImagesFromAnOutpostShowAtTheHomeAfterTheSourceIsGone(t *testing.T
 	if got := askImage(t, pair.App, asked.ID, outpost.Path("work", "shots", "before.png")); !bytes.Equal(got, shot) {
 		t.Fatalf("the home shows %d bytes for the outpost's image, want its %d", len(got), len(shot))
 	}
+
+	writeAskFile(t, askFile, "About the work.\n\n:::question\nShip it?\n- [ ] Yes\n- [ ] No\n:::\n")
+	unknown := outpost.Run(testworld.Invocation{Terminal: terminal, Args: []string{"ask", "--file", askFile, "--seed", "s-nope00"}})
+	if want := "`attn seed search <words>` finds a seed"; unknown.Code == 0 || !strings.Contains(unknown.Stderr, want) {
+		t.Errorf("an ask about an unknown seed, refused by the home, answered code %d and %q, want a refusal that says: %s", unknown.Code, unknown.Stderr, want)
+	}
 }
 
 func TestAnAskWithAnImageFromAnOutpostAgentsToolShowsAtTheHome(t *testing.T) {
@@ -66,6 +72,10 @@ func TestAnAskWithAnImageFromAnOutpostAgentsToolShowsAtTheHome(t *testing.T) {
 	missing := tools.call(t, "ask", map[string]any{"markdown": "Gone: ![gone](shots/gone.png)" + question})
 	if want := filepath.Join(shop, "shots", "gone.png"); !missing.IsError || !strings.Contains(missing.Text, want) {
 		t.Errorf("an ask showing a missing image answered error=%v %q, want a refusal naming %s", missing.IsError, missing.Text, want)
+	}
+	unknown := tools.call(t, "ask", map[string]any{"markdown": "About the work." + question, "seed": "s-nope00"})
+	if want := "not_found: "; !unknown.IsError || !strings.HasPrefix(unknown.Text, want) || !strings.Contains(unknown.Text, "`seed_search` with {\"words\": \"<words>\"}") {
+		t.Errorf("an ask about an unknown seed, refused by the home, answered error=%v %q, want the code %q and the seed_search tool", unknown.IsError, unknown.Text, want)
 	}
 	untended := tools.call(t, "ask", map[string]any{"markdown": "About the work." + question, "seed": o.seed})
 	if want := "tend it first (`seed_tend` with {\"seed\": \"" + o.seed + "\"})"; !untended.IsError || !strings.Contains(untended.Text, want) {

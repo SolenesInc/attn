@@ -182,7 +182,11 @@ func mentionArgs(c *Catalog, cmd *Command, words []string) (string, bool, error)
 			list = append(list, words[i])
 		}
 		i--
-		out = append(out, mentionArg{arg.Name, list})
+		if arg.List || c.ArgType(*arg).Schema["type"] == "array" {
+			out = append(out, mentionArg{arg.Name, list})
+		} else {
+			out = append(out, mentionArg{arg.Name, strings.Join(list, " ")})
+		}
 	}
 	if len(out) == 0 {
 		return "", shell, nil
