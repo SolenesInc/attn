@@ -622,18 +622,9 @@ type AskChoice struct {
 	Label string `json:"label"`
 }
 
-type AskCloseMessage struct {
-	// AskID corresponds to the JSON schema field "ask_id".
-	AskID string `json:"ask_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Reason corresponds to the JSON schema field "reason".
-	Reason *string `json:"reason,omitempty,omitzero"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
+type AskCloseResult struct {
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
 }
 
 type AskImage struct {
@@ -676,14 +667,6 @@ type AskImageResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
-}
-
-type AskListMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
 }
 
 type AskListResult struct {
@@ -799,17 +782,6 @@ type AskSeedMentionsResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
-}
-
-type AskShowMessage struct {
-	// AskID corresponds to the JSON schema field "ask_id".
-	AskID string `json:"ask_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
 }
 
 type AskShowResult struct {
@@ -9526,14 +9498,8 @@ type ReposUpdatedMessage struct {
 }
 
 type Response struct {
-	// AskListResult corresponds to the JSON schema field "ask_list_result".
-	AskListResult *AskListResult `json:"ask_list_result,omitempty,omitzero"`
-
 	// AskOpenResult corresponds to the JSON schema field "ask_open_result".
 	AskOpenResult *Ask `json:"ask_open_result,omitempty,omitzero"`
-
-	// AskShowResult corresponds to the JSON schema field "ask_show_result".
-	AskShowResult *AskShowResult `json:"ask_show_result,omitempty,omitzero"`
 
 	// Authors corresponds to the JSON schema field "authors".
 	Authors []AuthorState `json:"authors,omitempty,omitzero"`

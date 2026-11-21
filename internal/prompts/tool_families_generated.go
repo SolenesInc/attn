@@ -11,7 +11,7 @@ var catalogFamilies = map[string]bool{
 	"_update-apply":    false,
 	"activity":         true,
 	"agent":            true,
-	"ask":              false,
+	"ask":              true,
 	"automation":       false,
 	"browser":          false,
 	"bus":              false,

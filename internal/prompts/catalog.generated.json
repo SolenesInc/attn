@@ -528,9 +528,25 @@
                 },
                 "children": [
                   {
-                    "kind": "text",
-                    "id": "ask.guidance",
-                    "source": "content/ask/guidance.md"
+                    "kind": "choose",
+                    "condition": {
+                      "field": {
+                        "name": "agent_tools",
+                        "kind": "flag",
+                        "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                      },
+                      "test": "enabled"
+                    },
+                    "children": [
+                      {
+                        "kind": "compose"
+                      },
+                      {
+                        "kind": "text",
+                        "id": "ask.guidance",
+                        "source": "content/ask/guidance.md"
+                      }
+                    ]
                   }
                 ]
               },
@@ -7345,5 +7361,5 @@
       ]
     }
   ],
-  "definitions_hash": "33e1124e8e4ce30a0aebe6614dd868160a5ca4516dcf45c012456b354f4f84c8"
+  "definitions_hash": "16b5ea9f3671ba39348914d03fd077128d5e75078bed8c3dcf70c0f9963527ab"
 }

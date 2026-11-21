@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "91f5d4b2cf45";
+pub const PROTOCOL_VERSION: &str = "cd50ae3c91fa";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -463,22 +463,8 @@ pub struct AskChoice {
     pub label: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct AskCloseMessage {
-    pub ask_id: String,
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-    pub session_id: SessionID,
-}
-
-impl AskCloseMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "ask_close".to_string(),
-            ..Self::default()
-        }
-    }
+pub struct AskCloseResult {
+    pub id: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AskImage {
@@ -520,21 +506,6 @@ impl AskImageResultMessage {
     pub fn new() -> Self {
         Self {
             event: "ask_image_result".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct AskListMessage {
-    pub cmd: String,
-    pub session_id: SessionID,
-}
-
-impl AskListMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "ask_list".to_string(),
             ..Self::default()
         }
     }
@@ -635,22 +606,6 @@ impl AskSeedMentionsResultMessage {
     pub fn new() -> Self {
         Self {
             event: "ask_seed_mentions_result".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct AskShowMessage {
-    pub ask_id: String,
-    pub cmd: String,
-    pub session_id: SessionID,
-}
-
-impl AskShowMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "ask_show".to_string(),
             ..Self::default()
         }
     }
@@ -8889,11 +8844,7 @@ impl ReposUpdatedMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ask_list_result: Option<AskListResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ask_open_result: Option<Ask>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ask_show_result: Option<AskShowResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authors: Option<Vec<AuthorState>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -14181,14 +14132,8 @@ impl WorktreesUpdatedMessage {
         }
     }
 }
-impl ResponseField for AskListResult {
-    const FIELD: &'static str = "ask_list_result";
-}
 impl ResponseField for Ask {
     const FIELD: &'static str = "ask_open_result";
-}
-impl ResponseField for AskShowResult {
-    const FIELD: &'static str = "ask_show_result";
 }
 impl ResponseField for CodexStatusResult {
     const FIELD: &'static str = "codex_status_result";

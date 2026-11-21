@@ -4510,8 +4510,10 @@ model AskReply {
   answered_at: string;
 }
 
-// seed_id names a seed the session tends; without it the ask is about the
-// session's stake, when it has one.
+// The home's half of `attn ask`: the daemon on the asker's machine read the
+// images the markdown shows and sends the ask with them. seed_id names a seed
+// the session tends; without it the ask is about the session's stake, when it
+// has one.
 @extension("x-on", #{ home: true })
 model AskOpenMessage {
   cmd: "ask_open";
@@ -4568,12 +4570,6 @@ model AskSeedMentionsResultMessage {
   mentions: AskSeedMention[];
 }
 
-@extension("x-on", #{ home: true })
-model AskListMessage {
-  cmd: "ask_list";
-  session_id: SessionID;
-}
-
 // enabled says whether the session launched with asks; asks are its open ones.
 model AskListResult {
   enabled: boolean;
@@ -4591,14 +4587,6 @@ model OverseenAsk {
   from: ActorView;
 }
 
-// Read one open ask the session holds or oversees.
-@extension("x-on", #{ home: true })
-model AskShowMessage {
-  cmd: "ask_show";
-  session_id: SessionID;
-  ask_id: string;
-}
-
 // held is false for an ask the session oversees and does not hold. markdown
 // is the ask as its agent wrote it.
 model AskShowResult {
@@ -4608,14 +4596,9 @@ model AskShowResult {
   held: boolean;
 }
 
-@extension("x-on", #{ home: true })
-model AskCloseMessage {
-  cmd: "ask_close";
-  session_id: SessionID;
-  ask_id: string;
-  // Required when the session oversees the ask and does not hold it. The
-  // ask's seed keeps it as a note, and the asker gets it as mail.
-  reason?: string;
+// The ask a session withdrew (`attn ask close`).
+model AskCloseResult {
+  id: string;
 }
 
 // picked holds choice labels; other is the user's own choice on a one/any
@@ -7336,8 +7319,6 @@ model Response {
   worktree_sweep_log_result?: WorktreeSweepLogResult;
   worktree_refresh_result?: WorktreeRefreshResult;
   ask_open_result?: Ask;
-  ask_list_result?: AskListResult;
-  ask_show_result?: AskShowResult;
   session_list_result?: SessionListResult;
   session_show_result?: SessionShowResult;
   update_status?: UpdateStatus;

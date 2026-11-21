@@ -94,6 +94,10 @@ var specs = map[string]spec{
 	"agent inbox":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Pass {session}, or run it inside an attn session.", "message_not_found": "Pass the id of a message your inbox notified you about.", "message_not_notified": "Read it after its notification lands."}},
 	"agent msg-status":        {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Pass {session}, or run it inside an attn session.", "message_not_found": "Pass the id agent_msg answered for a message you sent."}},
 	"agent attachment":        {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"ask":                     {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"ask list":                {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"ask show":                {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"ask close":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 	"callout anchors":         {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}."}},
 	"callout show":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}.", "step_needs_text": "Give every step its text.", "unknown_anchor": "Use an anchor that callout_anchors lists.", "too_many_steps": "Show at most 20 steps.", "step_too_long": "Keep each step's text to 160 characters.", "not_on_screen": "Point at an anchor the message lists as on screen.", "app_not_showing_profile": "Ask the user to open the attn app on your profile."}},
 	"delegate":                {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
@@ -231,6 +235,25 @@ type AgentAttachmentArgs struct {
 	Capture    string `json:"capture,omitempty"`
 	Attachment string `json:"attachment,omitempty"`
 	Out        string `json:"out,omitempty"`
+}
+
+type AskArgs struct {
+	Markdown string `json:"markdown,omitempty"`
+	Subject  string `json:"subject,omitempty"`
+	Seed     string `json:"seed,omitempty"`
+	BaseDir  string `json:"base_dir,omitempty"`
+}
+
+type AskListArgs struct {
+}
+
+type AskShowArgs struct {
+	Ask string `json:"ask,omitempty"`
+}
+
+type AskCloseArgs struct {
+	Ask    string `json:"ask,omitempty"`
+	Reason string `json:"reason,omitempty"`
 }
 
 type CalloutAnchorsArgs struct {

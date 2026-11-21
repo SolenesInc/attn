@@ -31,10 +31,7 @@ var Placements = map[string][]Placement{
 	"agent_catalog":                    {Placement{LocatorMachine, "host"}},
 	"agent_launch_close":               {Placement{LocatorSession, "session_id"}},
 	"apply_monitor_view":               {Placement{LocatorHome, ""}},
-	"ask_close":                        {Placement{LocatorHome, ""}},
-	"ask_list":                         {Placement{LocatorHome, ""}},
 	"ask_open":                         {Placement{LocatorHome, ""}},
-	"ask_show":                         {Placement{LocatorHome, ""}},
 	"automation_apply":                 {Placement{LocatorHome, ""}},
 	"automation_cleanup":               {Placement{LocatorHome, ""}},
 	"automation_definition_get":        {Placement{LocatorHome, ""}},
@@ -288,30 +285,6 @@ func (m ApplyMonitorViewMessage) Locate() string {
 	return ""
 }
 
-func (AskCloseMessage) CommandName() string {
-	return "ask_close"
-}
-
-func (m AskCloseMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AskCloseMessage) Locate() string {
-	return ""
-}
-
-func (AskListMessage) CommandName() string {
-	return "ask_list"
-}
-
-func (m AskListMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AskListMessage) Locate() string {
-	return ""
-}
-
 func (AskOpenMessage) CommandName() string {
 	return "ask_open"
 }
@@ -321,18 +294,6 @@ func (m AskOpenMessage) Placement() Placement {
 }
 
 func (m AskOpenMessage) Locate() string {
-	return ""
-}
-
-func (AskShowMessage) CommandName() string {
-	return "ask_show"
-}
-
-func (m AskShowMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AskShowMessage) Locate() string {
 	return ""
 }
 

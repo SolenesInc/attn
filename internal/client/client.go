@@ -855,14 +855,11 @@ func (c *Client) AskOpen(sessionID protocol.SessionID, seedID, markdown, subject
 }
 
 func (c *Client) AskList(sessionID protocol.SessionID) (*protocol.AskListResult, error) {
-	resp, err := c.send(protocol.AskListMessage{Cmd: protocol.CmdAskList, SessionID: sessionID})
-	if err != nil {
+	var result protocol.AskListResult
+	if err := c.RunCommand("ask list", sessionID, struct{}{}, &result); err != nil {
 		return nil, err
 	}
-	if resp.AskListResult == nil {
-		return nil, errors.New("daemon returned no ask list")
-	}
-	return resp.AskListResult, nil
+	return &result, nil
 }
 
 func (c *Client) AgentTurn(sessionID protocol.SessionID, action protocol.AgentTurnAction) (*protocol.AgentTurnResult, error) {
@@ -886,23 +883,19 @@ func (c *Client) WithdrawVent(sessionID protocol.SessionID, ventID string) error
 }
 
 func (c *Client) AskShow(sessionID protocol.SessionID, askID string) (*protocol.AskShowResult, error) {
-	resp, err := c.send(protocol.AskShowMessage{Cmd: protocol.CmdAskShow, SessionID: sessionID, AskID: askID})
-	if err != nil {
+	var result protocol.AskShowResult
+	if err := c.RunCommand("ask show", sessionID, map[string]string{"ask": askID}, &result); err != nil {
 		return nil, err
 	}
-	if resp.AskShowResult == nil {
-		return nil, errors.New("daemon returned no ask")
-	}
-	return resp.AskShowResult, nil
+	return &result, nil
 }
 
 func (c *Client) AskClose(sessionID protocol.SessionID, askID, reason string) error {
-	msg := protocol.AskCloseMessage{Cmd: protocol.CmdAskClose, SessionID: sessionID, AskID: askID}
+	args := map[string]string{"ask": askID}
 	if reason = strings.TrimSpace(reason); reason != "" {
-		msg.Reason = protocol.Ptr(reason)
+		args["reason"] = reason
 	}
-	_, err := c.send(msg)
-	return err
+	return c.RunCommand("ask close", sessionID, args, &protocol.AskCloseResult{})
 }
 
 func (c *Client) AppendJournal(sourceSessionID protocol.SessionID, date string, entry string) (*protocol.JournalAppendResult, error) {

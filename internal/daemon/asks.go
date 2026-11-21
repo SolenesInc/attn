@@ -39,37 +39,31 @@ func (d *Daemon) launchedWithAsks(sessionID protocol.SessionID) bool {
 	return d.asksSettingOn()
 }
 
-func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
+func (d *Daemon) askOpen(msg *protocol.AskOpenMessage) (protocol.Ask, error) {
 	session, err := d.askingSession(protocol.TrimID(msg.SessionID))
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return protocol.Ask{}, err
 	}
 	parts, err := ask.Parse(msg.Markdown)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return protocol.Ask{}, err
 	}
 	images, err := parseAskImages(msg.Images)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return protocol.Ask{}, err
 	}
 	to, err := d.askAddressOf(session, strings.TrimSpace(protocol.Deref(msg.SeedID)))
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return protocol.Ask{}, err
 	}
 	if key, _ := to.Member(); !key.IsZero() {
 		if _, retired := d.retiredCrewMember(key.String()); retired {
-			d.sendError(conn, "you are retired, so the user takes no new asks from you; file your letter with `attn handoff`")
-			return
+			return protocol.Ask{}, errors.New("you are retired, so the user takes no new asks from you; file your letter with `attn handoff`")
 		}
 	}
 	id, err := ask.NewID()
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return protocol.Ask{}, err
 	}
 	stored := store.Ask{
 		ID:        id,
@@ -82,12 +76,10 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 	}
 	opened, err := d.describeAsk(stored, parts)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return protocol.Ask{}, err
 	}
 	if err := writeAskImages(id, images); err != nil {
-		d.sendError(conn, fmt.Sprintf("keep the ask's images: %v", err))
-		return
+		return protocol.Ask{}, fmt.Errorf("keep the ask's images: %v", err)
 	}
 	err = d.store.AddAsk(stored)
 	if err != nil {
@@ -95,18 +87,24 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 	}
 	switch {
 	case errors.Is(err, store.ErrAskerGone):
-		d.sendError(conn, errSessionNotLive(session.ID).Error())
-		return
+		return protocol.Ask{}, errSessionNotLive(session.ID)
 	case errors.Is(err, store.ErrAskSeedClosed):
 		seedID, _ := to.TenderOf()
-		d.sendError(conn, fmt.Sprintf("%s closed before the ask was saved; ask again", seedID))
-		return
+		return protocol.Ask{}, fmt.Errorf("%s closed before the ask was saved; ask again", seedID)
 	case err != nil:
+		return protocol.Ask{}, err
+	}
+	d.publishFact(FactAskOpened, id, nil)
+	return opened.wire, nil
+}
+
+func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
+	opened, err := d.askOpen(msg)
+	if err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AskOpenResult: &opened.wire})
-	d.publishFact(FactAskOpened, id, nil)
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AskOpenResult: &opened})
 }
 
 func (d *Daemon) askAddressOf(session *protocol.Session, ref string) (who.Address, error) {
@@ -215,11 +213,9 @@ func (d *Daemon) askerOf(a store.Ask) who.Party {
 	return who.Session(a.SessionID)
 }
 
-func (d *Daemon) handleAskList(conn net.Conn, msg *protocol.AskListMessage) {
-	sessionID := protocol.TrimID(msg.SessionID)
+func (d *Daemon) askList(sessionID protocol.SessionID) (*protocol.AskListResult, error) {
 	if d.store.Get(sessionID) == nil {
-		d.sendError(conn, errSessionNotLive(sessionID).Error())
-		return
+		return nil, errSessionNotLive(sessionID)
 	}
 	result := &protocol.AskListResult{Enabled: d.launchedWithAsks(sessionID), Asks: []protocol.Ask{}, Overseen: []protocol.OverseenAsk{}}
 	held := d.askAddressHeldBy(sessionID)
@@ -234,7 +230,7 @@ func (d *Daemon) handleAskList(conn net.Conn, msg *protocol.AskListMessage) {
 			result.Overseen = append(result.Overseen, protocol.OverseenAsk{Ask: a.wire, From: d.actorView(d.askerOf(a.stored).Actor())})
 		}
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AskListResult: result})
+	return result, nil
 }
 
 func (d *Daemon) reachableOpenAsk(sessionID protocol.SessionID, askID string) (shownAsk, askReach, error) {
@@ -254,39 +250,34 @@ func (d *Daemon) reachableOpenAsk(sessionID protocol.SessionID, askID string) (s
 	return shown, reach, nil
 }
 
-func (d *Daemon) handleAskShow(conn net.Conn, msg *protocol.AskShowMessage) {
-	shown, reach, err := d.reachableOpenAsk(protocol.TrimID(msg.SessionID), msg.AskID)
+func (d *Daemon) askShow(sessionID protocol.SessionID, askID string) (*protocol.AskShowResult, error) {
+	shown, reach, err := d.reachableOpenAsk(sessionID, askID)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AskShowResult: &protocol.AskShowResult{
+	return &protocol.AskShowResult{
 		Ask: shown.wire, Markdown: shown.stored.Markdown, From: d.actorView(d.askerOf(shown.stored).Actor()), Held: reach == askHeld,
-	}})
+	}, nil
 }
 
-func (d *Daemon) handleAskClose(conn net.Conn, msg *protocol.AskCloseMessage) {
-	sessionID := protocol.TrimID(msg.SessionID)
-	shown, reach, err := d.reachableOpenAsk(sessionID, msg.AskID)
+func (d *Daemon) askClose(sessionID protocol.SessionID, askID, reason string) (*protocol.AskCloseResult, error) {
+	shown, reach, err := d.reachableOpenAsk(sessionID, askID)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
-	reason := strings.TrimSpace(protocol.Deref(msg.Reason))
+	reason = strings.TrimSpace(reason)
 	if reach == askOverseen && reason == "" {
-		d.sendError(conn, fmt.Sprintf("%s is not your ask. Say why you withdraw it, and attn tells its asker: attn ask close %s -m \"<why>\"",
-			shown.stored.ID, shown.stored.ID))
-		return
+		return nil, fmt.Errorf("%s is not your ask. Say why you withdraw it, and attn tells its asker: attn ask close %s -m \"<why>\"",
+			shown.stored.ID, shown.stored.ID)
 	}
 	if err := d.store.CloseAsk(shown.stored.ID); err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
 	if reach == askOverseen {
 		d.tellWithdrawnAsk(sessionID, shown.stored, reason)
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true})
 	d.announceClosedAsks([]string{shown.stored.ID})
+	return &protocol.AskCloseResult{ID: shown.stored.ID}, nil
 }
 
 func (d *Daemon) tellWithdrawnAsk(overseer protocol.SessionID, withdrawn store.Ask, reason string) {

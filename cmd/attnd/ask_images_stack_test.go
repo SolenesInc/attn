@@ -44,6 +44,31 @@ func TestAnAsksImagesFromAnOutpostShowAtTheHomeAfterTheSourceIsGone(t *testing.T
 	}
 }
 
+func TestAnAskWithAnImageFromAnOutpostAgentsToolShowsAtTheHome(t *testing.T) {
+	o := newOutpostTools(t, fakeagent.Claude)
+	turnAsksOn(o.pair.App)
+	shop := o.outpost.Path("shop")
+	shot := writeImage(t, filepath.Join(shop, "shots", "before.png"), 2048)
+	_, claude := o.spawn(fakeagent.Claude, shop)
+	tools := claudeToolEndpoint(t, claude)
+
+	question := "\n\n:::question\nShip it?\n- [ ] Yes\n- [ ] No\n:::\n"
+	for _, markdown := range []string{
+		"Relative: ![before](shots/before.png)" + question,
+		"Absolute: ![before](" + filepath.Join(shop, "shots", "before.png") + ")" + question,
+	} {
+		var asked protocol.Ask
+		tools.structured(t, "ask", map[string]any{"markdown": markdown}, &asked)
+		if got := askImage(t, o.pair.App, asked.ID, filepath.Join(shop, "shots", "before.png")); !bytes.Equal(got, shot) {
+			t.Fatalf("%q: the home shows %d bytes for the outpost's image, want its %d", markdown, len(got), len(shot))
+		}
+	}
+	missing := tools.call(t, "ask", map[string]any{"markdown": "Gone: ![gone](shots/gone.png)" + question})
+	if want := filepath.Join(shop, "shots", "gone.png"); !missing.IsError || !strings.Contains(missing.Text, want) {
+		t.Errorf("an ask showing a missing image answered error=%v %q, want a refusal naming %s", missing.IsError, missing.Text, want)
+	}
+}
+
 func TestAnAsksImagesStayWithItAndOnesOverTheLimitAreRefused(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
