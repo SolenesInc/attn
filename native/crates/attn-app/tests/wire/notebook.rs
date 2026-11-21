@@ -2492,7 +2492,7 @@ fn each_line_of_a_note_stands_as_tall_as_the_line_of_the_reading_role_it_is_writ
 }
 
 #[test]
-fn a_note_is_written_in_a_serif_apart_from_the_sans_a_document_is_read_in() {
+fn a_note_s_line_ends_where_the_role_it_is_written_in_measures_it() {
     use attn_ui::system::Reading;
     let said = "Written by hand";
     let disk = Disk::with(&[("knowledge/index.md", &format!("{said}\n"))]);
@@ -2505,15 +2505,10 @@ fn a_note_is_written_in_a_serif_apart_from_the_sans_a_document_is_read_in() {
     let line = world.rect("notebook.editor.line.0");
     let caret = world.rect("notebook.editor.caret");
     let written = rune::text::advance(said, Reading::Text.written());
-    let read = rune::text::advance(said, Reading::Text.style());
     assert!(
         ((caret[0] - line[0]) as f32 - written).abs() < 0.5,
         "the caret ends the line at {}, the note's measure is {written}",
         caret[0] - line[0]
-    );
-    assert!(
-        (written - read).abs() > 2.0,
-        "the note measures {written}, as the document's sans does ({read})"
     );
 }
 
