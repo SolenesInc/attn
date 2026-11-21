@@ -433,8 +433,8 @@ Probed on 2.1.330 with a real account, on a non-production instance with
   `mcp__attn__*` allow rule does not cover a script. That run passed the check.
 - Auto mode reads `autoMode.{allow, soft_deny, hard_deny, environment}` from
   policy, flag (`--settings`) and user settings, not from project settings
-  (read in the bundle). `claude [--settings <json>] auto-mode config` prints
-  the result. Measured for `allow`: the list is the concatenation of the
+  (read in the 2.1.330 bundle). `claude [--settings <json>] auto-mode config` prints
+  the result. Measured for `allow` on 2.1.330: the list is the concatenation of the
   sources, and a `"$defaults"` entry in any source puts the built-in entries
   back:
 
