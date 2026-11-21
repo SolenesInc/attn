@@ -223,7 +223,7 @@ func TestAutomationRunRecreatesItsClosedLaunchDesktop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	session := protocol.Deref(result.Run.SessionID)
+	session := protocol.Deref(result.SessionID)
 	w.Launched(string(session))
 	desktop, _ := viewProfile(t, w, profile).paneOf(t, string(session))
 	if desktop.ID == old || desktop.Name != "Nightly check" {

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"strings"
 	"time"
 
@@ -52,7 +51,7 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID int, requestID,
 	canonicalInput := input
 	if spec.Location.Type == "repository_worktree" {
 		if input == "{}" {
-			return nil, fmt.Errorf("automation %d works on a pull request; give it one with --pr-url <url>", definitionID)
+			return nil, protocol.Refuse(protocol.RefusalInvalidInput, "automation %d works on a pull request; give it one: {attn automation run %d --pr-url <url>}", definitionID, definitionID)
 		}
 		pr, err := automation.ParsePullRequestInput(json.RawMessage(input))
 		if err != nil {
@@ -111,42 +110,4 @@ func (d *Daemon) mintAutomationSeedID() (string, error) {
 		return d.mintUnplantedSeedID(*schema)
 	}
 	return d.mintSeedID()
-}
-func (d *Daemon) handleAutomationCommand(conn net.Conn, cmd string, msg any) {
-	ctx := context.Background()
-	scope := ""
-	if cmd != protocol.CmdAutomationValidate {
-		var err error
-		scope, err = d.automationSocketScope(msg)
-		if err != nil {
-			_ = json.NewEncoder(conn).Encode(automationResultError(err))
-			return
-		}
-	}
-	var result any
-	switch cmd {
-	case protocol.CmdAutomationApply:
-		result = d.actionAutomationApply(ctx, msg.(*protocol.AutomationApplyMessage), scope)
-	case protocol.CmdAutomationValidate:
-		result = d.actionAutomationValidate(msg.(*protocol.AutomationValidateMessage))
-	case protocol.CmdAutomationDefinitionsGet:
-		result = d.actionAutomationDefinitionsGet(msg.(*protocol.AutomationDefinitionsGetMessage), scope)
-	case protocol.CmdAutomationDefinitionGet:
-		result = d.actionAutomationDefinitionGet(msg.(*protocol.AutomationDefinitionGetMessage), scope)
-	case protocol.CmdAutomationRun:
-		result = d.actionAutomationRun(ctx, msg.(*protocol.AutomationRunMessage), scope)
-	case protocol.CmdAutomationRunsGet:
-		result = d.actionAutomationRunsGet(msg.(*protocol.AutomationRunsGetMessage), scope)
-	case protocol.CmdAutomationSetEnabled:
-		result = d.actionAutomationSetEnabled(ctx, msg.(*protocol.AutomationSetEnabledMessage), scope)
-	case protocol.CmdAutomationDelete:
-		result = d.actionAutomationDelete(ctx, msg.(*protocol.AutomationDeleteMessage), scope)
-	case protocol.CmdAutomationCleanup:
-		result = d.actionAutomationCleanup(ctx, msg.(*protocol.AutomationCleanupMessage), scope)
-	}
-	_ = json.NewEncoder(conn).Encode(result)
-}
-
-func automationResultError(err error) map[string]any {
-	return map[string]any{"success": false, "error": err.Error()}
 }

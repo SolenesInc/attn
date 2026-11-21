@@ -1,10 +1,7 @@
 package daemon
 
 import (
-	"encoding/json"
-	"fmt"
-	"net"
-	"strconv"
+	"errors"
 
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -149,7 +146,7 @@ func (d *Daemon) launchDesktopFromRef(profileID, itemName, ref string, name *str
 	}
 	desktop, err := d.resolveDesktopRef(profile, ref)
 	if err == nil && name != nil {
-		return store.LaunchDesktopSetting{}, fmt.Errorf("--desktop-name needs --launch-desktop own or an empty slot")
+		return store.LaunchDesktopSetting{}, errors.New("a desktop name needs a launch desktop of own or an empty slot")
 	}
 	if err == nil {
 		return store.LaunchDesktopSetting{DesktopID: desktop.ID}, nil
@@ -158,31 +155,4 @@ func (d *Daemon) launchDesktopFromRef(profileID, itemName, ref string, name *str
 		return store.LaunchDesktopSetting{DesktopID: numbered, DesktopName: newName}, nil
 	}
 	return store.LaunchDesktopSetting{}, err
-}
-
-func (d *Daemon) handleLaunchDesktopCommand(conn net.Conn, cmd string, message any) {
-	var result protocol.LaunchDesktopResultMessage
-	switch cmd {
-	case protocol.CmdLaunchDesktopGet:
-		msg := message.(*protocol.LaunchDesktopGetMessage)
-		result = d.launchDesktopResult(msg.Cmd, msg.RequestID, string(msg.Kind), msg.ItemID, nil, nil, nil)
-	case protocol.CmdLaunchDesktopSet:
-		msg := message.(*protocol.LaunchDesktopSetMessage)
-		if msg.Kind == protocol.LaunchDesktopKindAutomation {
-			scope, err := d.automationSocketScope(msg)
-			if err == nil {
-				id, parseErr := strconv.Atoi(msg.ItemID)
-				err = parseErr
-				if err == nil && d.automationOutOfScope(id, scope) {
-					err = fmt.Errorf("automation %q does not exist", msg.ItemID)
-				}
-			}
-			if err != nil {
-				_ = json.NewEncoder(conn).Encode(automationResultError(err))
-				return
-			}
-		}
-		result = d.launchDesktopResult(msg.Cmd, msg.RequestID, string(msg.Kind), msg.ItemID, msg.Setting, msg.DesktopRef, msg.DesktopName)
-	}
-	_ = json.NewEncoder(conn).Encode(result)
 }

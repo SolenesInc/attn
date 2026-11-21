@@ -36,6 +36,7 @@ pub enum Source {
     Given,
     Stdin,
     File,
+    FileOrStdin,
 }
 
 pub struct Arg {
@@ -647,9 +648,12 @@ fn read_inputs(
             .and_then(Json::as_str)
             .map(str::to_string);
         match arg.source {
-            Source::File => {
+            Source::File | Source::FileOrStdin => {
                 let path = given.unwrap_or_default();
                 let path = path.trim();
+                if path.is_empty() && matches!(arg.source, Source::File) {
+                    continue;
+                }
                 let bytes = if path.is_empty() || path == "-" {
                     read_stdin(family.read_stdin_error(arg))
                 } else {

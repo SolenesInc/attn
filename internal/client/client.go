@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -33,127 +32,66 @@ type Client struct {
 	dial           func() (net.Conn, error)
 }
 
-type automationResult struct {
-	Success bool    `json:"success"`
-	Error   *string `json:"error,omitempty"`
-}
-
-func (c *Client) sendAutomation(msg any, out any) error {
-	if c.gardenProfile != "" || c.gardenSession != "" {
-		raw, err := json.Marshal(msg)
-		if err != nil {
-			return err
-		}
-		var fields map[string]any
-		if err := json.Unmarshal(raw, &fields); err != nil {
-			return err
-		}
-		if fields["source_session_id"] == nil {
-			fields["source_session_id"] = c.gardenSession
-		}
-		if fields["profile_id"] == nil {
-			fields["profile_id"] = c.gardenProfile
-		}
-		msg = fields
-	}
-	conn, err := c.connect()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	if err := c.writeFrame(conn, msg); err != nil {
-		return err
-	}
-	var raw json.RawMessage
-	if err := json.NewDecoder(conn).Decode(&raw); err != nil {
-		return err
-	}
-	var probe automationResult
-	if err := json.Unmarshal(raw, &probe); err != nil {
-		return err
-	}
-	noteReply(probe.Success, nil)
-	if !probe.Success {
-		return fmt.Errorf("daemon error: %s", protocol.Deref(probe.Error))
-	}
-	return json.Unmarshal(raw, out)
-}
-
-func (c *Client) AutomationApply(raw string) (*protocol.AutomationApplyResultMessage, error) {
+func (c *Client) AutomationApply(raw string) (*protocol.AutomationDefinitionSummary, error) {
 	return c.AutomationApplyWithNamedDesktop(raw, nil, nil)
 }
-func (c *Client) AutomationApplyWithNamedDesktop(raw string, desktop, name *string) (*protocol.AutomationApplyResultMessage, error) {
-	var result protocol.AutomationApplyResultMessage
-	if err := c.sendAutomation(protocol.AutomationApplyMessage{Cmd: protocol.CmdAutomationApply, DefinitionYaml: raw, LaunchDesktop: desktop, LaunchDesktopName: name}, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
+
+func (c *Client) AutomationApplyWithNamedDesktop(raw string, desktop, name *string) (*protocol.AutomationDefinitionSummary, error) {
+	return commandResult[protocol.AutomationDefinitionSummary](c, "automation apply", "", command.AutomationApplyArgs{Definition: raw, LaunchDesktop: protocol.Deref(desktop), DesktopName: protocol.Deref(name)})
 }
 
 func (c *Client) AutomationValidate(raw string) error {
-	var result protocol.AutomationValidateResultMessage
-	return c.sendAutomation(protocol.AutomationValidateMessage{Cmd: protocol.CmdAutomationValidate, DefinitionYaml: raw}, &result)
+	_, err := commandResult[protocol.AutomationValidateResult](c, "automation validate", "", command.AutomationValidateArgs{Definition: raw})
+	return err
 }
 
-func (c *Client) AutomationDefinitions() (*protocol.AutomationDefinitionsResultMessage, error) {
-	var result protocol.AutomationDefinitionsResultMessage
-	if err := c.sendAutomation(protocol.AutomationDefinitionsGetMessage{Cmd: protocol.CmdAutomationDefinitionsGet}, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
+func (c *Client) AutomationDefinitions() (*protocol.AutomationListResult, error) {
+	return commandResult[protocol.AutomationListResult](c, "automation list", "", command.AutomationListArgs{})
 }
 
-func (c *Client) AutomationDefinition(id int) (*protocol.AutomationDefinitionResultMessage, error) {
-	var result protocol.AutomationDefinitionResultMessage
-	if err := c.sendAutomation(protocol.AutomationDefinitionGetMessage{Cmd: protocol.CmdAutomationDefinitionGet, DefinitionID: id}, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
+func (c *Client) AutomationDefinition(id int) (*protocol.AutomationShowResult, error) {
+	return commandResult[protocol.AutomationShowResult](c, "automation show", "", command.AutomationShowArgs{ID: automationID(id)})
 }
 
-func (c *Client) AutomationRun(id int, requestID, input string) (*protocol.AutomationRunResultMessage, error) {
-	var result protocol.AutomationRunResultMessage
-	if err := c.sendAutomation(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: id, RequestID: requestID, InputJson: protocol.Ptr(input)}, &result); err != nil {
-		return nil, err
+func (c *Client) AutomationRun(id int, requestID, input string) (*protocol.AutomationRunSummary, error) {
+	args := command.AutomationRunArgs{ID: automationID(id), RequestID: requestID}
+	if input != "" {
+		args.Input = json.RawMessage(input)
 	}
-	return &result, nil
+	return commandResult[protocol.AutomationRunSummary](c, "automation run", "", args)
 }
 
-func (c *Client) AutomationRunPullRequest(id int, requestID, prURL string) (*protocol.AutomationRunResultMessage, error) {
-	var result protocol.AutomationRunResultMessage
-	if err := c.sendAutomation(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: id, RequestID: requestID, PRURL: protocol.Ptr(prURL)}, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
+func (c *Client) AutomationRunPullRequest(id int, requestID, prURL string) (*protocol.AutomationRunSummary, error) {
+	return commandResult[protocol.AutomationRunSummary](c, "automation run", "", command.AutomationRunArgs{ID: automationID(id), RequestID: requestID, PRURL: prURL})
 }
 
-func (c *Client) AutomationRuns(id int) (*protocol.AutomationRunsResultMessage, error) {
-	var result protocol.AutomationRunsResultMessage
-	if err := c.sendAutomation(protocol.AutomationRunsGetMessage{Cmd: protocol.CmdAutomationRunsGet, DefinitionID: id}, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
+func (c *Client) AutomationRuns(id int) (*protocol.AutomationRunsResult, error) {
+	return commandResult[protocol.AutomationRunsResult](c, "automation runs", "", command.AutomationRunsArgs{ID: automationID(id)})
 }
 
-func (c *Client) AutomationSetEnabled(id int, enabled bool) (*protocol.AutomationSetEnabledResultMessage, error) {
-	var result protocol.AutomationSetEnabledResultMessage
-	if err := c.sendAutomation(protocol.AutomationSetEnabledMessage{Cmd: protocol.CmdAutomationSetEnabled, DefinitionID: id, Enabled: enabled}, &result); err != nil {
-		return nil, err
+func (c *Client) AutomationSetEnabled(id int, enabled bool) (*protocol.AutomationDefinitionSummary, error) {
+	if enabled {
+		return commandResult[protocol.AutomationDefinitionSummary](c, "automation enable", "", command.AutomationEnableArgs{ID: automationID(id)})
 	}
-	return &result, nil
+	return commandResult[protocol.AutomationDefinitionSummary](c, "automation disable", "", command.AutomationDisableArgs{ID: automationID(id)})
 }
 
 func (c *Client) AutomationDelete(id int) error {
-	var result protocol.AutomationDeleteResultMessage
-	return c.sendAutomation(protocol.AutomationDeleteMessage{Cmd: protocol.CmdAutomationDelete, DefinitionID: id}, &result)
+	_, err := commandResult[protocol.AutomationDeleteResult](c, "automation delete", "", command.AutomationDeleteArgs{ID: automationID(id)})
+	return err
 }
 
-func (c *Client) AutomationCleanup(id int) (*protocol.AutomationCleanupResultMessage, error) {
-	var result protocol.AutomationCleanupResultMessage
-	if err := c.sendAutomation(protocol.AutomationCleanupMessage{Cmd: protocol.CmdAutomationCleanup, DefinitionID: id}, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
+func (c *Client) AutomationCleanup(id int) (*protocol.AutomationCleanupResult, error) {
+	return commandResult[protocol.AutomationCleanupResult](c, "automation cleanup", "", command.AutomationCleanupArgs{ID: automationID(id)})
+}
+
+func (c *Client) SetAutomationLaunchDesktop(id int, desktop string, name *string) (*protocol.LaunchDesktopItem, error) {
+	return commandResult[protocol.LaunchDesktopItem](c, "automation set", "", command.AutomationSetArgs{ID: automationID(id), LaunchDesktop: desktop, DesktopName: protocol.Deref(name)})
+}
+
+func automationID(id int) *int64 {
+	value := int64(id)
+	return &value
 }
 
 type ListResult struct {
@@ -1194,15 +1132,6 @@ func socketLive(path string) bool {
 	}
 	_ = conn.Close()
 	return true
-}
-
-func (c *Client) SetAutomationLaunchDesktop(id int, desktop string, name *string) (*protocol.LaunchDesktopResultMessage, error) {
-	var result protocol.LaunchDesktopResultMessage
-	msg := protocol.LaunchDesktopSetMessage{Cmd: protocol.CmdLaunchDesktopSet, Kind: protocol.LaunchDesktopKindAutomation, ItemID: strconv.Itoa(id), DesktopRef: &desktop, DesktopName: name}
-	if err := c.sendAutomation(msg, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
 }
 
 func (c *Client) SnoozeSession(callerID, sessionID protocol.SessionID, until time.Time) error {

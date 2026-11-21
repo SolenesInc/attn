@@ -278,7 +278,7 @@ func TestEachManualReviewChecksOutItsOwnHead(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		reviewer := testworld.AwaitSession(r.app, string(protocol.Deref(run.Run.SessionID)), func(s protocol.Session) bool { return s.Directory != "" })
+		reviewer := testworld.AwaitSession(r.app, string(protocol.Deref(run.SessionID)), func(s protocol.Session) bool { return s.Directory != "" })
 		if got := strings.TrimSpace(runGit(t, reviewer.Directory, "rev-parse", "HEAD")); got != head {
 			t.Errorf("review %d checked out %s in %s, want %s", i, got, reviewer.Directory, head)
 		}
@@ -295,8 +295,8 @@ func TestCleanupRemovesOnlyFinishedCleanReviewCheckoutsAndKeepsTheirHistory(t *t
 		if err != nil {
 			t.Fatal(err)
 		}
-		checkouts[name] = *run.Run
-		r.w.Launched(string(protocol.Deref(run.Run.SessionID)))
+		checkouts[name] = *run
+		r.w.Launched(string(protocol.Deref(run.SessionID)))
 	}
 	r.github.request(42, r.head, false)
 	r.refresh()
@@ -314,7 +314,7 @@ func TestCleanupRemovesOnlyFinishedCleanReviewCheckoutsAndKeepsTheirHistory(t *t
 		t.Fatal(err)
 	}
 
-	cleanup := func(id int) *protocol.AutomationCleanupResultMessage {
+	cleanup := func(id int) *protocol.AutomationCleanupResult {
 		t.Helper()
 		result, err := r.cli.AutomationCleanup(id)
 		if err != nil {

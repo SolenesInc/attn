@@ -6,7 +6,6 @@ use std::fmt::Write as _;
 use std::fs::File;
 use std::io::Read as _;
 
-const SANDBOX_REFUSAL_PREFIX: &str = "the sandbox blocks";
 const DAEMON_ERROR_PREFIX: &str = "daemon error: ";
 
 pub const fn bool_flag(name: &'static str) -> Flag<'static> {
@@ -84,24 +83,6 @@ pub fn current_session(run: &Run<'_>) -> Result<SessionLookup, SendError> {
         )));
     }
     Ok(SessionLookup::Found(session))
-}
-
-pub fn current_session_or_exit(run: &mut Run<'_>) -> Result<String, Stop> {
-    let cause = match current_session(run) {
-        Ok(SessionLookup::Found(session)) => return Ok(session),
-        Ok(SessionLookup::NotShowing(message)) => message,
-        Err(error) => {
-            let message = error.to_string();
-            if message.starts_with(SANDBOX_REFUSAL_PREFIX) {
-                eprintln!("attn: {message}");
-                return Err(Stop(1));
-            }
-            run.refusal = error.refusal;
-            message
-        }
-    };
-    eprintln!("attn: resolve current session: {cause}");
-    Err(Stop(1))
 }
 
 pub fn daemon_message(error: &SendError) -> String {

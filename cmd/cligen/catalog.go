@@ -203,7 +203,7 @@ func (g *generator) argDoc(a catalog.Arg, on surface) string {
 		return ""
 	}
 	switch {
-	case on == cliSurface && a.Stdin:
+	case on == cliSurface && a.Stdin && !a.File:
 		return doc + "; - reads stdin"
 	case on == cliSurface && a.Local == catalog.LocalCommit:
 		return doc + " in the current directory"

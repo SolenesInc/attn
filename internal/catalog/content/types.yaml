@@ -198,3 +198,15 @@ types:
     json: {type: string, minLength: 1}
     doc: "A terminal id or a unique prefix of one, as terminal_ls lists them. A session id or prefix, or a crew member's name, works when that session shows in exactly one terminal. Only terminals of your profile."
     placeholder: "<terminal>"
+  automation_id:
+    json: {type: integer, minimum: 1}
+    doc: "An automation's id, as automation list prints it."
+    placeholder: "<definition-id>"
+  automation_yaml:
+    json: {type: string, minLength: 1}
+    doc: "An automation definition in YAML, starting with api_version: attn.dev/automations/v1alpha1."
+    placeholder: "<file>"
+  occurrence_input:
+    json: {type: object}
+    doc: "The occurrence's structured input, as JSON; empty by default."
+    placeholder: "<file>"

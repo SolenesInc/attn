@@ -264,6 +264,8 @@ func (g *generator) rustTable(group string) (string, error) {
 		for _, a := range cmd.Args {
 			source := "Source::Given"
 			switch {
+			case a.File && a.Stdin:
+				source = "Source::FileOrStdin"
 			case a.File:
 				source = "Source::File"
 			case a.Stdin:

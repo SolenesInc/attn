@@ -85,10 +85,7 @@ fn native_command(name: &str, verb: Option<&str>, argv: &[OsString]) -> Option<N
         ("pr", _) => native(pr::run, false),
         ("settings", _) => native(settings::run, false),
         ("crew", _) => native(crew::run, true),
-        ("automation", _) => Native {
-            help: Some(automation::USAGE),
-            ..native(automation::run, true)
-        },
+        ("automation", _) => native(automation::run, true),
         ("callout", _) => native(callout::run, false),
         ("send", _) => native(send::run, true),
         ("model", _) => Native {

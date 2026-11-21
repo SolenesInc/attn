@@ -28,10 +28,12 @@ const (
 	CodeCrewMemberAsleep            = "crew_member_asleep"
 	CodeCursorMismatch              = "cursor_mismatch"
 	CodeCursorPastEnd               = "cursor_past_end"
+	CodeDeletedElsewhere            = "deleted_elsewhere"
 	CodeDesktopNameNeedsDesktop     = "desktop_name_needs_desktop"
 	CodeDetachNeedsTo               = "detach_needs_to"
 	CodeEmptyWords                  = "empty_words"
 	CodeFallbackWithTarget          = "fallback_with_target"
+	CodeIDMismatch                  = "id_mismatch"
 	CodeInAndAt                     = "in_and_at"
 	CodeInvalidBody                 = "invalid_body"
 	CodeInvalidCursor               = "invalid_cursor"
@@ -71,6 +73,7 @@ const (
 	CodeReferenceNeedsPath          = "reference_needs_path"
 	CodeReviewOff                   = "review_off"
 	CodeReviewerWithoutFormalReview = "reviewer_without_formal_review"
+	CodeRevisionConflict            = "revision_conflict"
 	CodeSessionNotFound             = "session_not_found"
 	CodeSessionOrCrewMemberNotFound = "session_or_crew_member_not_found"
 	CodeSinceAndSection             = "since_and_section"
@@ -89,6 +92,7 @@ const (
 	CodeUnknownAnchor               = "unknown_anchor"
 	CodeUnknownKey                  = "unknown_key"
 	CodeUnknownSession              = "unknown_session"
+	CodeValidation                  = "validation"
 	CodeWindowWithoutStale          = "window_without_stale"
 	CodeWordsAndClear               = "words_and_clear"
 	CodeWriteFailed                 = "write_failed"
@@ -111,6 +115,17 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"ask show":                {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"ask amend":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"ask close":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+		"automation apply":        {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"desktop_name_needs_desktop": "Pass {launch_desktop} own or an empty slot with {desktop_name}.", "validation": "Fix the definition; {attn automation validate --file <file>} checks it without saving.", "revision_conflict": "Read the automation again with {attn automation show <id>} and apply your change to it.", "deleted_elsewhere": "Remove the id from the definition to create it again.", "id_mismatch": "Remove the id from the definition to create a new automation."}},
+		"automation validate":     {readOnly: true, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"automation list":         {readOnly: true, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"automation show":         {readOnly: true, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"automation set":          {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"automation enable":       {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"automation disable":      {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"automation run":          {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"automation runs":         {readOnly: true, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"automation cleanup":      {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"automation delete":       {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
 		"browser open":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"browser snapshot":        {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"browser find":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
@@ -315,6 +330,56 @@ type AskAmendArgs struct {
 type AskCloseArgs struct {
 	Ask    string `json:"ask,omitempty"`
 	Reason string `json:"reason,omitempty"`
+}
+
+type AutomationApplyArgs struct {
+	Definition    string `json:"definition,omitempty"`
+	LaunchDesktop string `json:"launch_desktop,omitempty"`
+	DesktopName   string `json:"desktop_name,omitempty"`
+}
+
+type AutomationValidateArgs struct {
+	Definition string `json:"definition,omitempty"`
+}
+
+type AutomationListArgs struct {
+}
+
+type AutomationShowArgs struct {
+	ID *int64 `json:"id,omitempty"`
+}
+
+type AutomationSetArgs struct {
+	ID            *int64 `json:"id,omitempty"`
+	LaunchDesktop string `json:"launch_desktop,omitempty"`
+	DesktopName   string `json:"desktop_name,omitempty"`
+}
+
+type AutomationEnableArgs struct {
+	ID *int64 `json:"id,omitempty"`
+}
+
+type AutomationDisableArgs struct {
+	ID *int64 `json:"id,omitempty"`
+}
+
+type AutomationRunArgs struct {
+	ID        *int64          `json:"id,omitempty"`
+	Input     json.RawMessage `json:"input,omitempty"`
+	PRURL     string          `json:"pr_url,omitempty"`
+	RequestID string          `json:"request_id,omitempty"`
+}
+
+type AutomationRunsArgs struct {
+	ID *int64 `json:"id,omitempty"`
+}
+
+type AutomationCleanupArgs struct {
+	ID *int64 `json:"id,omitempty"`
+}
+
+type AutomationDeleteArgs struct {
+	ID *int64 `json:"id,omitempty"`
 }
 
 type BrowserOpenArgs struct {

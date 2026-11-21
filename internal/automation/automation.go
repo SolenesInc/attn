@@ -77,7 +77,7 @@ type Snapshot struct {
 	CatchUp            string          `json:"catch_up,omitempty"`
 }
 
-var errEnabledManagedOutsideSpec = errors.New("enabled is managed outside the spec; use 'attn automation enable' or 'attn automation disable'")
+var errEnabledManagedOutsideSpec = protocol.Refuse(protocol.RefusalInvalidInput, "enabled is managed outside the spec; use {attn automation enable <id>} or {attn automation disable <id>}")
 
 var errPolicyRemoved = errors.New("policy has been removed; scheduled triggers take continuity and catch_up directly")
 

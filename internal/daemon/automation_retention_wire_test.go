@@ -126,8 +126,8 @@ func TestRetentionRemovesFinishedCleanCheckoutsAndKeepsDirtyAndLiveOnes(t *testi
 		if err != nil {
 			t.Fatal(err)
 		}
-		checkouts[name] = *run.Run
-		r.w.Launched(string(protocol.Deref(run.Run.SessionID)))
+		checkouts[name] = *run
+		r.w.Launched(string(protocol.Deref(run.SessionID)))
 	}
 	for _, name := range []string{"clean", "dirty"} {
 		if err := r.cli.Unregister(protocol.Deref(checkouts[name].SessionID)); err != nil {

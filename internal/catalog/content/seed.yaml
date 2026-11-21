@@ -167,7 +167,7 @@ commands:
 
       Children are parallel by default; `after` names the siblings a child waits for, by step slug or full title. `part_of` plants the plot inside another plot, and `discovered_from` records the seed whose work turned up the plot; give each by id or slug. A shared check is proven by each seed below the plot that has no children. The plot, its children and their edges commit together. Prints the plot's id and each child's id and step slug, then up to 3 similar open seeds across all planted titles, each naming the new seed it resembles. Planting always proceeds; wither a new seed if a suggestion is the same work.
     args:
-      - {name: plot, type: plot, required: true, cli: "-f", file: true, doc: "the plot payload to read; - or omitted reads stdin"}
+      - {name: plot, type: plot, required: true, cli: "-f", file: true, stdin: true, doc: "the plot payload to read; - or omitted reads stdin"}
     result: SeedPlotResult
     errors:
       - {code: not_a_plot, fix: 'Pass a plot payload: a JSON object with title, body, checks and children, as {attn seed guide} describes.'}

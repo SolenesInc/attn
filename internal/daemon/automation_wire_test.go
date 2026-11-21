@@ -107,7 +107,7 @@ func applyAutomation(t *testing.T, cli *client.Client, spec string) protocol.Aut
 	if err != nil {
 		t.Fatalf("apply automation: %v", err)
 	}
-	return *applied.Definition
+	return *applied
 }
 
 func setAutomationEnabled(t *testing.T, cli *client.Client, id int, enabled bool) protocol.AutomationDefinitionSummary {
@@ -116,7 +116,7 @@ func setAutomationEnabled(t *testing.T, cli *client.Client, id int, enabled bool
 	if err != nil {
 		t.Fatalf("set %d enabled=%t: %v", id, enabled, err)
 	}
-	return *result.Definition
+	return *result
 }
 
 func TestTheAppsAutomationCommandsAnswerTheirRequestsAndAnnounceOnlyChanges(t *testing.T) {
@@ -157,7 +157,7 @@ func TestTheAppsAutomationCommandsAnswerTheirRequestsAndAnnounceOnlyChanges(t *t
 	if stale.Success || protocol.Deref(stale.ErrorCode) != "revision_conflict" || !strings.Contains(protocol.Deref(stale.Error), "changed elsewhere") {
 		t.Errorf("an app apply against revision 1 = %+v, want it refused as a revision conflict", stale)
 	}
-	if current, err := cli.AutomationDefinition(1); err != nil || current.Definition.Revision != 2 || strings.Contains(protocol.Deref(current.SpecYaml), "stale editor") {
+	if current, err := cli.AutomationDefinition(1); err != nil || current.Definition.Revision != 2 || strings.Contains(current.SpecYaml, "stale editor") {
 		t.Errorf("after the refused apply the definition is %+v (%v), want revision 2 untouched", current, err)
 	}
 
@@ -477,8 +477,8 @@ location: {type: directory, path: %q}
 	if err != nil {
 		t.Fatalf("retrying the same request = %v, want the stored run", err)
 	}
-	if retried.Run == nil || retried.Run.ID != failed[0].ID || retried.Run.State != "failed" {
-		t.Errorf("retrying the same request answered %+v, want the failed run %s", retried.Run, failed[0].ID)
+	if retried.ID != failed[0].ID || retried.State != "failed" {
+		t.Errorf("retrying the same request answered %+v, want the failed run %s", retried, failed[0].ID)
 	}
 	if runs := automationRuns(t, cli, 1); len(runs) != 1 {
 		t.Errorf("runs after the retry = %+v, want the one failed run", runs)

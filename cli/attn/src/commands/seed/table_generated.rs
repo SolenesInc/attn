@@ -37,7 +37,7 @@ pub const COMMANDS: &[Command] = &[
         runs_without_daemon: false,
         usage: &[],
         args: &[
-            Arg { name: "plot", cli: Cli::Flag("f"), value: Value::Json, source: Source::File, required: true, list: false },
+            Arg { name: "plot", cli: Cli::Flag("f"), value: Value::Json, source: Source::FileOrStdin, required: true, list: false },
         ],
     },
     Command {

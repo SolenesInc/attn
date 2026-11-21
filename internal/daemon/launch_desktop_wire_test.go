@@ -148,7 +148,7 @@ func TestANewAutomationStartsOnItsOwnNamedDesktopWithoutTakingFocus(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	session := protocol.Deref(run.Run.SessionID)
+	session := protocol.Deref(run.SessionID)
 	w.Launched(string(session))
 	assertBackgroundPlacement(t, w, profile, string(session), own, current, active)
 }

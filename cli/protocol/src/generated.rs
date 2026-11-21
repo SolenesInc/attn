@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "20ce2e3d1939";
+pub const PROTOCOL_VERSION: &str = "e7069526ef92";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -981,6 +981,15 @@ impl AutomationCleanupMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AutomationCleanupResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub cleaned: Vec<String>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub kept_active: Vec<String>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub kept_dirty: Vec<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AutomationCleanupResultMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cleaned: Option<Vec<String>>,
@@ -1140,6 +1149,10 @@ impl AutomationDeleteMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AutomationDeleteResult {
+    pub deleted: i64,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AutomationDeleteResultMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -1165,6 +1178,11 @@ pub struct AutomationGuardCheck {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     pub outcome: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AutomationListResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub definitions: Vec<AutomationDefinitionSummary>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AutomationProvenance {
@@ -1273,6 +1291,14 @@ impl AutomationRunsGetMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AutomationRunsResult {
+    pub definition_id: i64,
+    #[serde(deserialize_with = "null_as_default")]
+    pub runs: Vec<AutomationRunSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub truncated: Option<bool>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AutomationRunsResultMessage {
     pub definition_id: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1379,6 +1405,11 @@ impl AutomationSetEnabledResultMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AutomationShowResult {
+    pub definition: AutomationDefinitionSummary,
+    pub spec_yaml: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AutomationValidateMessage {
     pub cmd: String,
     pub definition_yaml: String,
@@ -1394,6 +1425,10 @@ impl AutomationValidateMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AutomationValidateResult {
+    pub valid: bool,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AutomationValidateResultMessage {

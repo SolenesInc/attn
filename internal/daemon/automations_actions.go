@@ -421,20 +421,3 @@ func (d *Daemon) automationOutOfScope(id int, scope string) bool {
 func automationNotFound(id int) string {
 	return fmt.Sprintf("automation %d not found", id)
 }
-
-// automationSocketScope uses the same profile selection as Garden socket requests.
-func (d *Daemon) automationSocketScope(msg any) (string, error) {
-	raw, err := json.Marshal(msg)
-	if err != nil {
-		return "", err
-	}
-	var caller struct {
-		SourceSessionID protocol.SessionID `json:"source_session_id"`
-		ProfileID       string             `json:"profile_id"`
-	}
-	if err := json.Unmarshal(raw, &caller); err != nil {
-		return "", err
-	}
-	profile, err := d.resolveGardenProfile(caller.SourceSessionID, caller.ProfileID, "")
-	return profile.ID, err
-}

@@ -28,7 +28,7 @@ func TestSingletonContractEditsSupersedeSessionsWithoutStoppingThem(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacySession := protocol.Deref(initial.Run.SessionID)
+	legacySession := protocol.Deref(initial.SessionID)
 	legacy := w.Launched(string(legacySession))
 	legacy.Prompted()
 	legacy.Exit(1)
@@ -46,7 +46,7 @@ func TestSingletonContractEditsSupersedeSessionsWithoutStoppingThem(t *testing.T
 		})
 		return run
 	}
-	first := awaitRun(initial.Run.ID)
+	first := awaitRun(initial.ID)
 	session := protocol.Deref(first.SessionID)
 	agent := w.Launched(string(session))
 	agent.Prompted()

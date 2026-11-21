@@ -52,7 +52,7 @@ func TestLaunchDesktopsAreInstallSettingsVisibleThroughTheCLI(t *testing.T) {
 		}
 	}
 	rejected := s.Attn("automation", "set", "1", "--launch-desktop", "1", "--desktop-name", "Ignored")
-	if rejected.Code == 0 || !strings.Contains(rejected.Stderr, "--desktop-name needs --launch-desktop own") {
+	if rejected.Code == 0 || !strings.Contains(rejected.Stderr, "a desktop name needs a launch desktop of own") {
 		t.Fatalf("existing desktop accepted ignored name: %+v", rejected)
 	}
 	assert()

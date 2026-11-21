@@ -41,7 +41,7 @@ func (d *Daemon) automationRunPullRequest(ctx context.Context, definitionID int,
 		return nil, err
 	}
 	if spec.Location.Type != "repository_worktree" {
-		return nil, errors.New("--pr-url requires a repository_worktree automation")
+		return nil, errors.New("a pull request runs only an automation whose location is repository_worktree")
 	}
 	host, owner, repository, number, err := automation.ParsePullRequestURL(rawURL)
 	if err != nil {

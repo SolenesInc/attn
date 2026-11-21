@@ -39,7 +39,7 @@ const listed = () => cliJSON('automation', 'list') || [];
 const listRow = (id) => listed().find((row) => row.id === id) || null;
 const byName = (name) => listed().find((row) => row.name === name)?.id;
 const showFails = (id) => {
-  try { cli('automation', 'show', id); return false; } catch (error) { return String(error.stderr || error.message).includes('automation: daemon error'); }
+  try { cli('automation', 'show', id); return false; } catch (error) { return String(error.stderr || error.message).includes('automation show: daemon error'); }
 };
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const suffix = Date.now().toString(36);

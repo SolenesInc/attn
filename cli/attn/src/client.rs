@@ -67,18 +67,6 @@ struct ReplyHead {
 }
 
 #[derive(Deserialize)]
-struct AutomationReplyHead {
-    #[serde(default)]
-    success: bool,
-    #[serde(default)]
-    error: Option<String>,
-}
-
-fn garden_command(cmd: &str) -> bool {
-    cmd.starts_with("seed_") || cmd.starts_with("crew_")
-}
-
-#[derive(Deserialize)]
 struct NamedCmd {
     cmd: String,
 }
@@ -205,7 +193,6 @@ pub struct Client<'a> {
     paths: &'a Paths<'a>,
     socket_path: String,
     caller: String,
-    garden_scope: Option<(String, String)>,
 }
 
 impl<'a> Client<'a> {
@@ -219,47 +206,11 @@ impl<'a> Client<'a> {
             paths,
             socket_path,
             caller: caller.trim().to_string(),
-            garden_scope: None,
         }
-    }
-
-    pub fn with_garden_scope(mut self, profile: &str, session: &str) -> Self {
-        self.garden_scope = (!profile.is_empty() || !session.is_empty())
-            .then(|| (profile.to_string(), session.to_string()));
-        self
-    }
-
-    fn scoped_frame<M: Serialize>(
-        &self,
-        message: &M,
-        in_scope: fn(&str) -> bool,
-    ) -> Result<Vec<u8>, SendError> {
-        let Some((profile, session)) = &self.garden_scope else {
-            return self.frame(message);
-        };
-        let mut fields =
-            serde_json::to_value(message).map_err(|error| SendError::plain(error.to_string()))?;
-        if let Some(object) = fields.as_object_mut()
-            && object
-                .get("cmd")
-                .and_then(Value::as_str)
-                .is_some_and(in_scope)
-        {
-            for (key, value) in [("profile_id", profile), ("source_session_id", session)] {
-                let empty = match object.get(key) {
-                    None | Some(Value::Null) => true,
-                    Some(existing) => existing.as_str() == Some(""),
-                };
-                if empty {
-                    object.insert(key.to_string(), Value::from(value.as_str()));
-                }
-            }
-        }
-        self.frame(&fields)
     }
 
     pub fn call<M: Serialize>(&self, message: &M) -> Result<Reply, SendError> {
-        let frame = self.scoped_frame(message, garden_command)?;
+        let frame = self.frame(message)?;
         self.exchange(&frame).map(|raw| Reply { raw })
     }
 
@@ -271,21 +222,6 @@ impl<'a> Client<'a> {
     ) -> Result<Reply, SendError> {
         let frame = self.frame(message)?;
         self.round_trip(&frame, deadline).map(|raw| Reply { raw })
-    }
-
-    pub fn call_automation<M: Serialize>(&self, message: &M) -> Result<Reply, SendError> {
-        let frame = self.scoped_frame(message, |_| true)?;
-        let raw = self.round_trip(&frame, None)?;
-        let head: AutomationReplyHead = serde_json::from_slice(&raw)
-            .map_err(|error| SendError::plain(format!("receive response: {error}")))?;
-        if head.success {
-            return Ok(Reply { raw });
-        }
-        Err(SendError {
-            message: format!("daemon error: {}", head.error.unwrap_or_default()),
-            refusal: Some(REFUSAL_UNCLASSIFIED.to_string()),
-            unconnected: false,
-        })
     }
 
     pub fn call_field<M: Serialize>(

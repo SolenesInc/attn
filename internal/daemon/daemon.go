@@ -2974,12 +2974,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleGetSettings(conn, msg.(*protocol.GetSettingsMessage))
 	case protocol.CmdSetSetting:
 		d.handleSetSetting(conn, msg.(*protocol.SetSettingMessage))
-	case protocol.CmdLaunchDesktopGet, protocol.CmdLaunchDesktopSet:
-		d.handleLaunchDesktopCommand(conn, cmd, msg)
 	case protocol.CmdDelegate:
 		d.handleDelegate(ctx, conn, msg.(*protocol.DelegateMessage), by.Actor())
-	case protocol.CmdAutomationApply, protocol.CmdAutomationValidate, protocol.CmdAutomationDefinitionsGet, protocol.CmdAutomationDefinitionGet, protocol.CmdAutomationRun, protocol.CmdAutomationRunsGet, protocol.CmdAutomationSetEnabled, protocol.CmdAutomationDelete, protocol.CmdAutomationCleanup:
-		d.handleAutomationCommand(conn, cmd, msg)
 	case protocol.CmdDelegateStatus:
 		d.handleDelegateStatus(conn, msg.(*protocol.DelegateStatusMessage))
 

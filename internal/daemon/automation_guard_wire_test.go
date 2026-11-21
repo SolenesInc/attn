@@ -189,7 +189,7 @@ location: {type: directory, path: %q}
 		if err != nil {
 			t.Fatalf("run %s: %v", requestID, err)
 		}
-		return awaitRunState(t, w, app, started.Run.ID, delivered)
+		return awaitRunState(t, w, app, started.ID, delivered)
 	}
 	awaitCheck := func(outcome string) protocol.AutomationDefinitionSummary {
 		t.Helper()

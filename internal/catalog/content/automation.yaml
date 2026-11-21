@@ -1,2 +1,142 @@
+# The automation family. Docs follow seed.yaml's rules: name an arg by its tool
+# name in backticks, and the CLI's help prints it as the flag.
 groups:
-  - {name: automation, usage: "<command>", summary: "run an agent on a schedule or an event"}
+  - name: automation
+    usage: "<command>"
+    summary: "run an agent on a schedule or an event"
+    map:
+      rows:
+        - {need: "Run an agent on a schedule or an event", tools: [automation_list, automation_apply]}
+    doc: |
+      An automation starts a steerable agent on a schedule or an event, from a definition written in YAML. Every definition belongs to a profile. Inside attn, your session's profile applies; outside, pass --profile <name|id> when several profiles exist. `attn guide automations` explains automations to the user.
+    flags:
+      - {name: profile, placeholder: "<name|id>", doc: "the profile whose automations these are; required outside attn when several profiles exist"}
+    sections:
+      - title: Commands
+        commands: [automation apply, automation validate, automation list, automation show, automation set, automation enable, automation disable, automation run, automation runs, automation cleanup, automation delete]
+
+commands:
+  - name: automation apply
+    summary: create or update an automation from its definition
+    runs: home
+    grant: full
+    doc: |
+      Saves `definition`, creating the automation, or updating the one whose id the definition names. `launch_desktop` chooses where its sessions open; `desktop_name` names the new desktop of own or an empty slot, and defaults to the automation's name. Prints the saved automation.
+    args:
+      - {name: definition, type: automation_yaml, required: true, cli: "--file", file: true}
+      - {name: launch_desktop, type: desktop, cli: "--launch-desktop"}
+      - {name: desktop_name, type: name, cli: "--desktop-name", doc: "the name of the new desktop of own or an empty slot; the automation's name by default"}
+    errors:
+      - {code: desktop_name_needs_desktop, usage: true, fix: "Pass {launch_desktop} own or an empty slot with {desktop_name}."}
+      - {code: validation, fix: "Fix the definition; {attn automation validate --file <file>} checks it without saving."}
+      - {code: revision_conflict, fix: "Read the automation again with {attn automation show <id>} and apply your change to it."}
+      - {code: deleted_elsewhere, fix: "Remove the id from the definition to create it again."}
+      - {code: id_mismatch, fix: "Remove the id from the definition to create a new automation."}
+    result: AutomationDefinitionSummary
+
+  - name: automation validate
+    summary: check a definition without saving it
+    runs: home
+    grant: full
+    read_only: true
+    doc: |
+      Checks `definition` as apply would, without saving it.
+    args:
+      - {name: definition, type: automation_yaml, required: true, cli: "--file", file: true}
+    result: AutomationValidateResult
+
+  - name: automation list
+    summary: list your profile's automations
+    runs: home
+    grant: full
+    read_only: true
+    doc: |
+      Lists your profile's automations with their trigger, next run, last run and guard check.
+    result: AutomationListResult
+
+  - name: automation show
+    summary: print an automation's definition
+    runs: home
+    grant: full
+    read_only: true
+    doc: |
+      Prints the automation's saved definition as YAML, under comment lines for its profile, launch desktop, last run and guard check.
+    args:
+      - {name: id, type: automation_id, required: true, cli: pos}
+    result: AutomationShowResult
+
+  - name: automation set
+    summary: choose where an automation's sessions open
+    runs: home
+    grant: full
+    doc: |
+      Saves the desktop the automation's sessions open on. `desktop_name` names the new desktop of own or an empty slot, and defaults to the automation's name.
+    args:
+      - {name: id, type: automation_id, required: true, cli: pos}
+      - {name: launch_desktop, type: desktop, required: true, cli: "--launch-desktop"}
+      - {name: desktop_name, type: name, cli: "--desktop-name", doc: "the name of the new desktop of own or an empty slot; the automation's name by default"}
+    result: LaunchDesktopItem
+
+  - name: automation enable
+    summary: let an automation's trigger start runs
+    runs: home
+    grant: full
+    doc: |
+      Turns the automation on, so its trigger starts runs. Prints the automation.
+    args:
+      - {name: id, type: automation_id, required: true, cli: pos}
+    result: AutomationDefinitionSummary
+
+  - name: automation disable
+    summary: stop an automation's trigger from starting runs
+    runs: home
+    grant: full
+    doc: |
+      Turns the automation off, so its trigger starts no runs; a run already started goes on. Prints the automation.
+    args:
+      - {name: id, type: automation_id, required: true, cli: pos}
+    result: AutomationDefinitionSummary
+
+  - name: automation run
+    summary: start a run now
+    runs: home
+    grant: full
+    doc: |
+      Starts a run of the automation now and prints it, without waiting for its session. `input` is the occurrence's structured input; `pr_url` resolves one GitHub pull request into it instead, for a repository_worktree automation. A retry with the same `request_id` returns the run the first request started.
+    args:
+      - {name: id, type: automation_id, required: true, cli: pos}
+      - {name: input, type: occurrence_input, cli: "--input-file", file: true, one_of: input, placeholder: "<file>", doc: "the occurrence's structured input, a JSON object; empty by default"}
+      - {name: pr_url, type: url, cli: "--pr-url", one_of: input, doc: "a GitHub pull request to resolve into the occurrence's input"}
+      - {name: request_id, type: text, cli: "--request-id", placeholder: "<id>", doc: "a key for retrying an uncertain request; a fresh one by default"}
+    result: AutomationRunSummary
+
+  - name: automation runs
+    summary: list an automation's runs
+    runs: home
+    grant: full
+    read_only: true
+    doc: |
+      Lists the automation's runs, newest first; `truncated` says older runs were left out.
+    args:
+      - {name: id, type: automation_id, required: true, cli: pos}
+    result: AutomationRunsResult
+
+  - name: automation cleanup
+    summary: remove the worktrees of an automation's finished runs
+    runs: home
+    grant: full
+    doc: |
+      Removes the worktrees of the automation's finished runs. A worktree with uncommitted changes is kept, and so is one whose thread is still in use; the result lists each run under cleaned, kept_dirty or kept_active.
+    args:
+      - {name: id, type: automation_id, required: true, cli: pos}
+    result: AutomationCleanupResult
+
+  - name: automation delete
+    summary: delete an automation
+    runs: home
+    grant: full
+    doc: |
+      Deletes the automation. Its runs' sessions stay.
+    args:
+      - {name: id, type: automation_id, required: true, cli: pos}
+    result: AutomationDeleteResult

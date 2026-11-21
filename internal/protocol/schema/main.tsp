@@ -5116,6 +5116,35 @@ model AutomationCleanupResultMessage {
   kept_active?: string[];
 }
 
+model AutomationListResult {
+  definitions: AutomationDefinitionSummary[];
+}
+
+model AutomationShowResult {
+  definition: AutomationDefinitionSummary;
+  spec_yaml: string;
+}
+
+model AutomationRunsResult {
+  definition_id: safeint;
+  runs: AutomationRunSummary[];
+  truncated?: boolean;
+}
+
+model AutomationValidateResult {
+  valid: boolean;
+}
+
+model AutomationDeleteResult {
+  deleted: safeint;
+}
+
+model AutomationCleanupResult {
+  cleaned: string[];
+  kept_dirty: string[];
+  kept_active: string[];
+}
+
 // Compact change signal: canonical state lives in SQLite, so clients re-read
 // (automation_definitions_get / automation_runs_get) on receipt rather than
 // trusting a broadcast payload.
