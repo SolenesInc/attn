@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/command"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -36,6 +38,19 @@ func TestAnotherProfilesSessionDoesNotExistForACommandsCaller(t *testing.T) {
 		}
 		if err := note(cli, "from outside attn"); err != nil {
 			t.Errorf("a caller with no terminal notes as planter: %v", err)
+		}
+
+		sideThread := cli.WithCaller(protocol.TerminalID(harness.CodexThreadTerminal(side.ID, "side-thread")))
+		var listed protocol.PullRequestListResult
+		for _, named := range []string{"planter", "plant"} {
+			if err := sideThread.RunCommand("pr ls", protocol.SessionID(named), command.PRLsArgs{}, &listed); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("the caller %q is not a session on this daemon", named)) {
+				t.Errorf("a shared Codex conversation in another profile lists the pull requests of --session %s = %v, want a refusal saying %s is not a session here", named, err, named)
+			}
+		}
+		for _, named := range []string{"stranger", "strang"} {
+			if err := sideThread.RunCommand("pr ls", protocol.SessionID(named), command.PRLsArgs{}, &listed); err != nil || listed.SessionID != "stranger" {
+				t.Errorf("a shared Codex conversation lists --session %s of its own profile = %+v, %v, want stranger's", named, listed, err)
+			}
 		}
 
 		notes, err := cli.SeedNotes("planter", planted.ID, client.SeedNotesQuery{})

@@ -88,6 +88,8 @@ func (d *Daemon) callerFromFrame(ctx context.Context, msg *protocol.RunCommandMe
 				return command.Caller{}, unknownFramedSession(role, session)
 			}
 			asking = command.Caller{Session: session, Profile: profile}
+		} else if _, remote := OriginOf(ctx); !remote {
+			asking.Profile, _, _ = harness.ParseCodexThreadTerminal(terminal)
 		}
 	}
 	if named := protocol.TrimID(protocol.Deref(msg.SessionID)); named != "" {
