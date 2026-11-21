@@ -1038,7 +1038,13 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
     if !rules.fixed_harness {
         body = body.child(harness_list(&shown, &rules, t));
     }
-    body = body.child(main(state, p, &view, t));
+    body = body.child(
+        system::ring_scroll(main(state, p, &view, t).key("settings.route-picker.main"))
+            .scroll(rune::ScrollSpec {
+                stick_bottom: false,
+            })
+            .scroll_bar_styled(attn_ui::scroll_bar(t)),
+    );
     let surface = Frame::menu(t).draw_holding(
         col()
             .key(PICKER)
@@ -1266,6 +1272,7 @@ fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
     let query = p.query.text.clone();
     let mut rows = Vec::new();
     let mut index = 0;
+    let mut floor = 0.0;
     if query.is_empty() || !view.can_pin_model {
         let next = view.with_model(None);
         let selected = view.value.model.is_empty();
@@ -1281,6 +1288,7 @@ fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
             });
         }
         rows.push(item.build(t).focus_selected(selected));
+        floor = ListRow::height();
         index += 1;
     }
     let mut previous = String::new();
@@ -1293,6 +1301,9 @@ fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
             } else {
                 tier_label(&option_row.group)
             };
+            if index == 0 {
+                floor += ListRow::note_height(Type::Label);
+            }
             rows.push(ListRow::note(
                 format!("settings.route-picker.group.{}", option_row.group),
                 header,
@@ -1369,6 +1380,13 @@ fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
             selected,
             disabled,
         );
+        if index == 0 {
+            floor += if detail.is_empty() {
+                ListRow::height()
+            } else {
+                ListRow::two_line_height()
+            };
+        }
         if !detail.is_empty() {
             item = item.subtitle(detail.clone(), t).description(detail);
         }
@@ -1393,7 +1411,7 @@ fn model_list(p: &Picker, view: &View, t: &Tokens) -> El {
         .role("listbox")
         .label("Model")
         .max_h(MODELS_TALLEST)
-        .min_h(0.0)
+        .min_h(floor)
         .shrink()
         .scroll(rune::ScrollSpec {
             stick_bottom: false,

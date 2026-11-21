@@ -7,6 +7,13 @@ const OFFSET: f32 = 2.0;
 /// How far a focus ring reaches outside its control.
 pub const RING_REACH: f32 = WIDTH + OFFSET;
 
+/// A scrolling box reaching out by the focus ring's reach on every side, its neighbours where
+/// they were and its content inset by that reach, so the rings of the controls it holds stay
+/// whole inside its clip and revealing one shows its ring.
+pub fn ring_scroll(e: El) -> El {
+    super::door::ring_room_around(e)
+}
+
 /// The ring a focusable control draws while the keyboard is on it, outside its edge.
 pub(crate) fn ring(e: El, t: &Tokens) -> El {
     e.focus_ring(WIDTH, OFFSET, t.warning)

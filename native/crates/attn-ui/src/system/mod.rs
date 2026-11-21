@@ -56,7 +56,7 @@ pub use dot::{DotShape, DotSize, RINGED_DOT, dot, ringed_dot};
 pub use drop_zone::drop_zone;
 pub use expander::{expander, opens_in_place};
 pub use field_box::{FieldState, area_box, code_box, line_box, number_box};
-pub use focus::RING_REACH;
+pub use focus::{RING_REACH, ring_scroll};
 pub use group_head::GroupHead;
 pub use icon_box::icon_box;
 pub use icon_button::{IconButton, icon_button};

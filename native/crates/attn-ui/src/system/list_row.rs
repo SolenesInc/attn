@@ -184,6 +184,11 @@ impl ListRow {
         }))
     }
 
+    /// How tall a note without keys stands: one line of `kind`.
+    pub fn note_height(kind: Type) -> f32 {
+        door::line_height(kind)
+    }
+
     /// The room between the sections of one list.
     pub fn section_gap() -> f32 {
         Space::S16.pt()

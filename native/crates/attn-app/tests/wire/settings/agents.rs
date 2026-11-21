@@ -1381,3 +1381,77 @@ fn a_refused_rate_shows_its_reason_and_retry_whole_in_the_smallest_window_at_the
         rest(&mut world);
     }
 }
+
+const LONG_MODEL: &str =
+    "anthropic.claude-opus-5-5-20261101-v1:0-with-extended-thinking-eu-north-1";
+
+/// Agents in the smallest window at the largest text, Claude's route picker open from its
+/// default model.
+fn smallest_picker() -> World {
+    let mut world = on_agents(&both(&[("uiScale", "1.5")]));
+    world.resize((800.0, 600.0));
+    world.settle();
+    let chip = "settings.route.default-claude";
+    world.gesture(|app| app.update(|_, tx| tx.scroll_center_in_instant("settings.body", chip)));
+    world.settle();
+    open_route(&mut world, "Claude default model");
+    world
+}
+
+fn inside(inner: [f64; 4], outer: [f64; 4]) -> bool {
+    inner[1] >= outer[1] - 0.5
+        && inner[1] + inner[3] <= outer[1] + outer[3] + 0.5
+        && inner[0] >= outer[0] - 0.5
+        && inner[0] + inner[2] <= outer[0] + outer[2] + 0.5
+}
+
+#[test]
+fn a_route_picker_with_an_exact_id_typed_keeps_its_effort_inside_it_in_the_smallest_window() {
+    let mut world = smallest_picker();
+    click(&mut world, "settings.route-picker.filter");
+    world.gesture(|app| app.type_text(LONG_MODEL));
+    world.settle();
+    let effort = "settings.route-picker.effort-control";
+    world.gesture(|app| app.update(|_, tx| tx.scroll_into_view(effort)));
+    world.settle();
+    let picker = world.rect("settings.route-picker");
+    let at = world.rect(effort);
+    assert!(
+        inside(at, picker),
+        "the effort control, revealed, at {at:?} is not whole inside the picker at {picker:?}"
+    );
+    rest(&mut world);
+}
+
+fn one_whole_model(world: &mut World) -> bool {
+    let list = world.rect("settings.route-picker.models");
+    let picker = world.rect("settings.route-picker");
+    let options: Vec<String> = world
+        .screen()
+        .descendants(Target::key("settings.route-picker.models"))
+        .into_iter()
+        .filter(|n| n.role == "list-box-option")
+        .filter_map(|n| n.key)
+        .collect();
+    options.iter().any(|key| {
+        let at = world.rect(key);
+        inside(at, list) && inside(at, picker)
+    })
+}
+
+#[test]
+fn a_route_picker_shows_at_least_one_whole_model_in_the_smallest_window() {
+    let mut world = smallest_picker();
+    assert!(
+        one_whole_model(&mut world),
+        "no model is whole as the picker opens"
+    );
+    click(&mut world, "settings.route-picker.filter");
+    world.gesture(|app| app.type_text("opus"));
+    world.settle();
+    assert!(
+        one_whole_model(&mut world),
+        "no model is whole under its tier with a filter typed"
+    );
+    rest(&mut world);
+}
