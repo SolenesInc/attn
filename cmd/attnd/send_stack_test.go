@@ -111,7 +111,7 @@ func awaitCapturePrompt(t *testing.T, agent *fakeagent.Run, capture sendOutput) 
 		t.Fatalf("delivered prompt = %q", prompt)
 	}
 	for _, a := range capture.Attachments {
-		if !strings.Contains(prompt, "attn agent attachment "+capture.ID+" "+a.ID+" --out <path>") {
+		if !strings.Contains(prompt, "attn agent attachment "+a.ID+" --out <path>") {
 			t.Fatalf("prompt lacks the pull command for %s: %q", a.Name, prompt)
 		}
 	}
@@ -120,7 +120,7 @@ func awaitCapturePrompt(t *testing.T, agent *fakeagent.Run, capture sendOutput) 
 func pullCaptureFile(t *testing.T, s *testworld.Stack, terminal string, capture sendOutput, index int, want []byte) {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), capture.Attachments[index].Name)
-	pulled := s.Run(testworld.Invocation{Terminal: terminal, Args: []string{"agent", "attachment", capture.ID, capture.Attachments[index].ID, "--out", out}})
+	pulled := s.Run(testworld.Invocation{Terminal: terminal, Args: []string{"agent", "attachment", capture.Attachments[index].ID, "--out", out}})
 	if pulled.Code != 0 {
 		t.Fatalf("agent attachment: %+v", pulled)
 	}

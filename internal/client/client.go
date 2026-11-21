@@ -260,7 +260,7 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 			return nil, err
 		}
 		cmd, _ := fields["cmd"].(string)
-		if strings.HasPrefix(cmd, "seed_") || cmd == protocol.CmdOpenSeed || cmd == protocol.CmdDelegateStatus || cmd == protocol.CmdDelegate || strings.HasPrefix(cmd, "crew_") || cmd == protocol.CmdQuickCaptureAttachmentGet {
+		if strings.HasPrefix(cmd, "seed_") || cmd == protocol.CmdOpenSeed || cmd == protocol.CmdDelegateStatus || cmd == protocol.CmdDelegate || strings.HasPrefix(cmd, "crew_") || cmd == protocol.CmdAttachmentGet {
 			if fields["profile_id"] == nil || fields["profile_id"] == "" {
 				fields["profile_id"] = c.gardenProfile
 			}

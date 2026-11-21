@@ -150,13 +150,13 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
 const attn = process.env.ATTN_WRAPPER_PATH || ${JSON.stringify(appCliInTree(options.appPath))};
-const item = JSON.parse(execFileSync(attn, ['agent', 'inbox', process.argv[2], '--json'], { encoding: 'utf8' }));
 const receipts = [];
-for (const attachment of item.attachments || []) {
-  const out = path.join(process.cwd(), attachment.id + path.extname(attachment.name));
-  execFileSync(attn, ['agent', 'attachment', item.source_id, attachment.id, '--out', out]);
-  const dimensions = attachment.media_type.startsWith('image/') ? execFileSync('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', out], { encoding: 'utf8' }) : undefined;
-  receipts.push({ captureId: item.source_id, attachmentId: attachment.id, name: attachment.name, mediaType: attachment.media_type, bytes: fs.statSync(out).size,
+for (const [, quotedName, mediaType, , id] of process.argv[2].matchAll(/File ("(?:[^"\\\\]|\\\\.)*") \\(([^,]+), (\\d+) bytes\\)\\. To save the file, run:\\s*attn agent attachment ([0-9a-f-]{36}) /g)) {
+  const name = JSON.parse(quotedName);
+  const out = path.join(process.cwd(), id + path.extname(name));
+  execFileSync(attn, ['agent', 'attachment', id, '--out', out]);
+  const dimensions = mediaType.startsWith('image/') ? execFileSync('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', out], { encoding: 'utf8' }) : undefined;
+  receipts.push({ attachmentId: id, name, mediaType, bytes: fs.statSync(out).size,
     sha256: crypto.createHash('sha256').update(fs.readFileSync(out)).digest('hex'), dimensions });
 }
 fs.writeFileSync(${JSON.stringify(path.join(runner.runDir, 'mailbox-image-receipt.json'))}, JSON.stringify(receipts));
@@ -274,8 +274,8 @@ try {
     writeMockAgentFixture(home, { version: 1, turns: [
       { includes: 'This is a new session', actions: [{ type: 'reply', text: 'CAPTURE_CREW_AWAKE', state: 'idle' }] },
       { includes: 'sent through Quick Capture', actions: [
-        { type: 'capture', from: 'prompt', pattern: 'attn agent attachment ([0-9a-f-]{36}) ', name: 'capture' },
-        { type: 'exec', cmd: process.execPath, args: [path.join(runner.runDir, 'inspect-capture.mjs'), '{{capture}}'] },
+        { type: 'capture', from: 'prompt', pattern: '(sent through Quick Capture[\\s\\S]*attn agent attachment [\\s\\S]*)', name: 'message' },
+        { type: 'exec', cmd: process.execPath, args: [path.join(runner.runDir, 'inspect-capture.mjs'), '{{message}}'] },
         { type: 'reply', text: 'CAPTURE_IMAGE_INSPECTED', state: 'idle' },
       ] },
     ] });

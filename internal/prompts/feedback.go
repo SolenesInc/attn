@@ -2,7 +2,7 @@ package prompts
 
 func feedbackEvents() []Event {
 	return []Event{
-		On("quick-capture-file", "cli_output", "Retrieve one Quick Capture attachment.", template("session.quick-capture-file", "content/session/quick-capture-file.md", TextField("name", "Quoted file name"), TextField("media_type", "Media type"), TextField("bytes", "Byte count"), TextField("capture_id", "Capture ID"), TextField("attachment_id", "Attachment ID"))),
+		On("quick-capture-file", "cli_output", "Retrieve one Quick Capture attachment.", template("session.quick-capture-file", "content/session/quick-capture-file.md", TextField("name", "Quoted file name"), TextField("media_type", "Media type"), TextField("bytes", "Byte count"), TextField("attachment_id", "Attachment ID"))),
 		On("quick-capture-file-saved", "cli_output", "Inspect a downloaded Quick Capture attachment.", template("session.quick-capture-file-saved", "content/session/quick-capture-file-saved.md", TextField("path", "Saved file path"))),
 		On("quick-capture", "user_message", "A Quick Capture the user sent: typed into the conversation by its ring, or printed by attn agent inbox when read first.", template("session.quick-capture", "content/session/quick-capture-item.md", TextField("message", "User message"), TextField("files", "File retrieval instructions"))),
 		On("inbox-notification", "user_message", "Generic notification directing the recipient to the durable inbox.", Use("session.inbox-notification", "content/session/inbox-notification.md")),

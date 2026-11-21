@@ -19,8 +19,8 @@ use std::sync::Arc;
 
 use attn_client::{Commands, Connection, Facts, Reply, Slices, Store, Subscription};
 use attn_protocol::{
-    QuickCaptureGetMessage, QuickCaptureMailbox, QuickCaptureRecord, QuickCaptureResultMessage,
-    QuickCaptureSendMessage,
+    AttachmentResultMessage, QuickCaptureGetMessage, QuickCaptureMailbox, QuickCaptureRecord,
+    QuickCaptureResultMessage, QuickCaptureSendMessage,
 };
 use rune::{AppSpec, Key, KeyEvent, TextEdit, Tx};
 use serde::Serialize;
@@ -387,16 +387,17 @@ impl Panel {
     }
 }
 
-/// The commands the panel sends, each answered by a `quick_capture_result`.
+/// The commands the panel sends, each answered by a `quick_capture_result` or, for files, an
+/// `attachment_result`.
 #[derive(Serialize)]
 #[serde(untagged)]
 enum Message {
     Send(QuickCaptureSendMessage),
     Get(QuickCaptureGetMessage),
     List(attn_protocol::QuickCaptureListMessage),
-    Put(attn_protocol::QuickCaptureAttachmentPutMessage),
-    Discard(attn_protocol::QuickCaptureAttachmentDiscardMessage),
-    Download(attn_protocol::QuickCaptureAttachmentGetMessage),
+    Put(attn_protocol::AttachmentPutMessage),
+    Discard(attn_protocol::AttachmentDiscardMessage),
+    Download(attn_protocol::AttachmentGetMessage),
 }
 
 impl Message {
@@ -415,27 +416,55 @@ impl Message {
 
 /// The result an answer carries when the daemon did what was asked, or why it did not.
 pub(crate) fn result(answer: Answer) -> Result<attn_protocol::QuickCaptureResult, Failure> {
-    let reply = match answer {
-        Answer::Reply(reply) => reply,
-        Answer::NotSent | Answer::Dropped => return Err(Failure::Lost),
-    };
-    let message: Option<QuickCaptureResultMessage> = reply.parse();
-    match message {
-        Some(m) if m.success => Ok(m.result.unwrap_or_default()),
-        Some(m) => Err(Failure::Refused {
-            code: m.error_code.unwrap_or_default(),
-            error: m
-                .error
-                .filter(|e| !e.is_empty())
-                .unwrap_or_else(|| "Quick capture request failed".into()),
-        }),
-        None => Err(Failure::Refused {
-            code: String::new(),
-            error: reply.body["error"]
-                .as_str()
-                .unwrap_or("Quick capture request failed")
-                .to_owned(),
-        }),
+    let reply = replied(answer)?;
+    match reply.parse::<QuickCaptureResultMessage>() {
+        Some(m) => outcome(m.success, m.error_code, m.error, m.result),
+        None => Err(unreadable(&reply)),
+    }
+}
+
+/// The result a file request's answer carries, or why the daemon refused it.
+pub(crate) fn attachment_result(
+    answer: Answer,
+) -> Result<attn_protocol::AttachmentResult, Failure> {
+    let reply = replied(answer)?;
+    match reply.parse::<AttachmentResultMessage>() {
+        Some(m) => outcome(m.success, m.error_code, m.error, m.result),
+        None => Err(unreadable(&reply)),
+    }
+}
+
+fn replied(answer: Answer) -> Result<Reply, Failure> {
+    match answer {
+        Answer::Reply(reply) => Ok(reply),
+        Answer::NotSent | Answer::Dropped => Err(Failure::Lost),
+    }
+}
+
+fn outcome<R: Default>(
+    success: bool,
+    code: Option<String>,
+    error: Option<String>,
+    result: Option<R>,
+) -> Result<R, Failure> {
+    if success {
+        return Ok(result.unwrap_or_default());
+    }
+    Err(Failure::Refused {
+        code: code.unwrap_or_default(),
+        error: error
+            .filter(|e| !e.is_empty())
+            .unwrap_or_else(|| "Quick capture request failed".into()),
+    })
+}
+
+fn unreadable(reply: &Reply) -> Failure {
+    Failure::Refused {
+        code: String::new(),
+        error: reply.body["error"]
+            .as_str()
+            .unwrap_or("Quick capture request failed")
+            .to_owned(),
     }
 }
 

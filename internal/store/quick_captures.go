@@ -13,22 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-type QuickCaptureAssetState string
-
-const (
-	QuickCaptureAssetStaged    QuickCaptureAssetState = "staged"
-	QuickCaptureAssetReady     QuickCaptureAssetState = "ready"
-	QuickCaptureAssetCommitted QuickCaptureAssetState = "committed"
-	QuickCaptureAssetDiscarded QuickCaptureAssetState = "discarded"
-)
-
-type QuickCaptureAsset struct {
-	ProfileID  string
-	CaptureID  string
-	Attachment protocol.QuickCaptureAttachment
-	State      QuickCaptureAssetState
-}
-
 func quickCaptureSubmission(msg protocol.QuickCaptureSendMessage) string {
 	msg.RequestID = nil
 	msg.ProfileID = nil
@@ -76,13 +60,13 @@ func (s *Store) SaveQuickCapture(profileID string, msg protocol.QuickCaptureSend
 	}
 	for position, id := range msg.AttachmentIds {
 		var state string
-		if err := tx.QueryRow(`SELECT state FROM quick_capture_attachments WHERE profile_id=? AND capture_id=? AND attachment_id=?`, profileID, msg.CaptureID, id).Scan(&state); err != nil {
+		if err := tx.QueryRow(`SELECT state FROM attachments WHERE attachment_id=? AND profile_id=? AND owner_kind='quick_capture' AND owner_id=?`, id, profileID, msg.CaptureID).Scan(&state); err != nil {
 			return fmt.Errorf("attachment %s is not ready: %w", id, err)
 		}
 		if state != "ready" {
 			return fmt.Errorf("attachment %s is %s, expected ready", id, state)
 		}
-		if _, err := tx.Exec(`UPDATE quick_capture_attachments SET state='committed',position=? WHERE profile_id=? AND capture_id=? AND attachment_id=?`, position, profileID, msg.CaptureID, id); err != nil {
+		if _, err := tx.Exec(`UPDATE attachments SET state='committed',position=? WHERE attachment_id=?`, position, id); err != nil {
 			return err
 		}
 	}
@@ -140,14 +124,14 @@ func quickCaptureRecord(q quickCaptureQuery, profileID, id string) (*protocol.Qu
 	if err != nil {
 		return nil, err
 	}
-	r.Attachments = []protocol.QuickCaptureAttachment{}
-	rows, err := q.Query(`SELECT attachment_id,name,media_type,byte_count FROM quick_capture_attachments WHERE profile_id=? AND capture_id=? AND state='committed' ORDER BY position,attachment_id`, profileID, id)
+	r.Attachments = []protocol.Attachment{}
+	rows, err := q.Query(`SELECT attachment_id,name,media_type,byte_count FROM attachments WHERE profile_id=? AND owner_kind='quick_capture' AND owner_id=? AND state='committed' ORDER BY position,attachment_id`, profileID, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var a protocol.QuickCaptureAttachment
+		var a protocol.Attachment
 		if err := rows.Scan(&a.ID, &a.Name, &a.MediaType, &a.Bytes); err != nil {
 			return nil, err
 		}
@@ -213,46 +197,10 @@ func (s *Store) QuickCaptures(profileID string, limit int, cursor string) ([]pro
 	return result, next, nil
 }
 
-func (s *Store) QuickCaptureAsset(profileID, quickCapture, id string) (*QuickCaptureAsset, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	a := &QuickCaptureAsset{ProfileID: profileID, CaptureID: quickCapture}
-	a.Attachment.ID = id
-	err := s.db.QueryRow(`SELECT name,media_type,byte_count,state FROM quick_capture_attachments WHERE profile_id=? AND capture_id=? AND attachment_id=?`, profileID, quickCapture, id).Scan(&a.Attachment.Name, &a.Attachment.MediaType, &a.Attachment.Bytes, &a.State)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	return a, err
-}
-func (s *Store) SaveQuickCaptureAsset(a QuickCaptureAsset) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err := s.db.Exec(`INSERT INTO quick_capture_attachments(profile_id,capture_id,attachment_id,name,media_type,byte_count,state) VALUES(?,?,?,?,?,?,?) ON CONFLICT(profile_id,capture_id,attachment_id) DO UPDATE SET media_type=excluded.media_type,byte_count=excluded.byte_count,state=excluded.state WHERE quick_capture_attachments.state!='committed'`, a.ProfileID, a.CaptureID, a.Attachment.ID, a.Attachment.Name, a.Attachment.MediaType, a.Attachment.Bytes, a.State)
-	return err
-}
 func (s *Store) QuickCaptureDraftAssets(profileID string) ([]protocol.QuickCaptureDraftAsset, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	rows, err := s.db.Query(`SELECT capture_id,attachment_id,name,state,byte_count FROM quick_capture_attachments WHERE profile_id=? AND state IN ('staged','ready') ORDER BY capture_id,attachment_id`, profileID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	result := []protocol.QuickCaptureDraftAsset{}
-	for rows.Next() {
-		var a protocol.QuickCaptureDraftAsset
-		if err := rows.Scan(&a.CaptureID, &a.AttachmentID, &a.Name, &a.State, &a.NextOffset); err != nil {
-			return nil, err
-		}
-		result = append(result, a)
-	}
-	return result, rows.Err()
-}
-
-func (s *Store) QuickCaptureDiscardedAssets(profileID string) ([]protocol.QuickCaptureDraftAsset, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	rows, err := s.db.Query(`SELECT capture_id,attachment_id,name,state,byte_count FROM quick_capture_attachments WHERE profile_id=? AND state='discarded'`, profileID)
+	rows, err := s.db.Query(`SELECT owner_id,attachment_id,name,state,byte_count FROM attachments WHERE profile_id=? AND owner_kind='quick_capture' AND state IN ('staged','ready') ORDER BY owner_id,attachment_id`, profileID)
 	if err != nil {
 		return nil, err
 	}

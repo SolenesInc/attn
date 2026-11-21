@@ -77,7 +77,7 @@ try {
   receipt('sent', { capture, bytes: bytes.length, sha256: digest });
 
   const out = `${W.R.root}/pulled.csv`;
-  const pulled = await remote(`cd ${quote(W.R.root)} && ATTN_INSTANCE=${quote(o.instance)} ATTN_TERMINAL_ID=${quote(opened.terminal_id)} ATTN_INSIDE_APP=1 ${quote(W.R.binary)} agent attachment ${quote(capture.id)} ${quote(capture.attachments[0].id)} --out ${quote(out)} && sha256sum ${quote(out)}`);
+  const pulled = await remote(`cd ${quote(W.R.root)} && ATTN_INSTANCE=${quote(o.instance)} ATTN_TERMINAL_ID=${quote(opened.terminal_id)} ATTN_INSIDE_APP=1 ${quote(W.R.binary)} agent attachment ${quote(capture.attachments[0].id)} --out ${quote(out)} && sha256sum ${quote(out)}`);
   const remoteDigest = pulled.trim().split('\n').at(-1).split(/\s+/)[0];
   receipt('pulled on the outpost', { output: pulled, sha256: remoteDigest });
   if (remoteDigest !== digest) throw new Error(`outpost bytes differ: ${remoteDigest} != ${digest}`);

@@ -25,6 +25,17 @@ func quickCaptureCall(t *testing.T, cli *testworld.Peer, msg any) *protocol.Quic
 	}
 	return r
 }
+func attachmentCall(t *testing.T, cli *testworld.Peer, msg any) *protocol.AttachmentResult {
+	t.Helper()
+	r, err := cli.Attachment(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+func ownedBy(capture string) protocol.AttachmentOwner {
+	return protocol.AttachmentOwner{Kind: protocol.AttachmentOwnerKindQuickCapture, ID: capture}
+}
 func startChief(t *testing.T, s *testworld.Stack) string {
 	t.Helper()
 	if set := s.Attn("crew", "set", "chief", "--agent", "claude"); set.Code != 0 {
@@ -37,12 +48,12 @@ func uploadQuickCaptureChunks(t *testing.T, cli *testworld.Peer, quickCapture, i
 	const chunkBytes = 524288
 	for offset := 0; offset < len(data); {
 		end := min(len(data), offset+chunkBytes)
-		msg := protocol.QuickCaptureAttachmentPutMessage{Cmd: protocol.CmdQuickCaptureAttachmentPut, CaptureID: quickCapture, AttachmentID: id, Name: "screenshot.png", Offset: offset, DataBase64: base64.StdEncoding.EncodeToString(data[offset:end]), Final: end == len(data)}
-		r := quickCaptureCall(t, cli, msg)
+		msg := protocol.AttachmentPutMessage{Cmd: protocol.CmdAttachmentPut, Owner: ownedBy(quickCapture), AttachmentID: id, Name: "screenshot.png", Offset: offset, DataBase64: base64.StdEncoding.EncodeToString(data[offset:end]), Final: end == len(data)}
+		r := attachmentCall(t, cli, msg)
 		if r.Upload.NextOffset != end {
 			t.Fatalf("offset %d, wanted %d", r.Upload.NextOffset, end)
 		}
-		retry := quickCaptureCall(t, cli, msg)
+		retry := attachmentCall(t, cli, msg)
 		if retry.Upload.NextOffset != end {
 			t.Fatal("chunk replay changed receipt")
 		}
@@ -79,7 +90,7 @@ func TestQuickCaptureRestartAndCLIFileRetrieval(t *testing.T) {
 	}
 	chief := startChief(t, s)
 	read := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture}, Session: chief})
-	if read.Code != 0 || !strings.Contains(read.Stdout, "Message from the user, sent through Quick Capture.") || !strings.Contains(read.Stdout, msg.Content) || !strings.Contains(read.Stdout, "attn agent attachment "+quickCapture+" "+id) || strings.Contains(read.Stdout, "another agent") {
+	if read.Code != 0 || !strings.Contains(read.Stdout, "Message from the user, sent through Quick Capture.") || !strings.Contains(read.Stdout, msg.Content) || !strings.Contains(read.Stdout, "attn agent attachment "+id+" --out <path>") || strings.Contains(read.Stdout, "another agent") {
 		t.Fatalf("CLI attribution %+v", read)
 	}
 	reread := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture, "--json"}, Session: chief})
@@ -89,7 +100,7 @@ func TestQuickCaptureRestartAndCLIFileRetrieval(t *testing.T) {
 		t.Fatalf("reread %+v", entry)
 	}
 	output := filepath.Join(t.TempDir(), "received.png")
-	downloaded := s.Attn("agent", "attachment", quickCapture, id, "--out", output)
+	downloaded := s.Attn("agent", "attachment", id, "--out", output)
 	if downloaded.Code != 0 {
 		t.Fatalf("download %+v", downloaded)
 	}
@@ -100,7 +111,7 @@ func TestQuickCaptureRestartAndCLIFileRetrieval(t *testing.T) {
 	if _, format, err := image.Decode(bytes.NewReader(saved)); err != nil || format != "png" {
 		t.Fatalf("agent image decode %s %v", format, err)
 	}
-	again := s.Attn("agent", "attachment", quickCapture, id, "--out", output)
+	again := s.Attn("agent", "attachment", id, "--out", output)
 	if again.Code == 0 {
 		t.Fatal("download overwrote existing file")
 	}
@@ -124,14 +135,14 @@ func TestQuickCaptureInstalledFileRecoversAfterProcessCrash(t *testing.T) {
 		t.Fatal(err)
 	}
 	quickCapture, id := uuid.NewString(), uuid.NewString()
-	msg := protocol.QuickCaptureAttachmentPutMessage{Cmd: protocol.CmdQuickCaptureAttachmentPut, CaptureID: quickCapture, AttachmentID: id, Name: "screenshot.png", DataBase64: base64.StdEncoding.EncodeToString(b.Bytes()), Final: true}
+	msg := protocol.AttachmentPutMessage{Cmd: protocol.CmdAttachmentPut, Owner: ownedBy(quickCapture), AttachmentID: id, Name: "screenshot.png", DataBase64: base64.StdEncoding.EncodeToString(b.Bytes()), Final: true}
 	if _, err := s.TrustedApp().QuickCapture(msg); err == nil {
 		t.Fatal("crashed upload returned success")
 	}
 	s.AwaitCrash()
 	s.Start()
 	quickCaptureCall(t, s.TrustedApp(), protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("chief")}, AttachmentIds: []string{id}})
-	saved := quickCaptureCall(t, s.TrustedApp(), protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: id})
+	saved := attachmentCall(t, s.TrustedApp(), protocol.AttachmentGetMessage{Cmd: protocol.CmdAttachmentGet, AttachmentID: id})
 	data, err := base64.StdEncoding.DecodeString(saved.Download.DataBase64)
 	if err != nil || !bytes.Equal(data, b.Bytes()) {
 		t.Fatalf("recovered image differs %v", err)
@@ -146,14 +157,14 @@ func TestQuickCapturePDFAttachmentRoundTripsThroughCLI(t *testing.T) {
 	chief := startChief(t, s)
 	data := []byte("%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n")
 	quickCapture, id := uuid.NewString(), uuid.NewString()
-	quickCaptureCall(t, app, protocol.QuickCaptureAttachmentPutMessage{Cmd: protocol.CmdQuickCaptureAttachmentPut, CaptureID: quickCapture, AttachmentID: id, Name: "notes.pdf", DataBase64: base64.StdEncoding.EncodeToString(data), Final: true})
+	attachmentCall(t, app, protocol.AttachmentPutMessage{Cmd: protocol.CmdAttachmentPut, Owner: ownedBy(quickCapture), AttachmentID: id, Name: "notes.pdf", DataBase64: base64.StdEncoding.EncodeToString(data), Final: true})
 	quickCaptureCall(t, app, protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("chief")}, AttachmentIds: []string{id}})
 	read := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture}, Session: chief})
 	if read.Code != 0 || !strings.Contains(read.Stdout, "File \"notes.pdf\" (application/pdf") || !strings.Contains(read.Stdout, "Inspect the saved file with your tools.") {
 		t.Fatalf("PDF inbox: %+v", read)
 	}
 	output := filepath.Join(t.TempDir(), "received.pdf")
-	download := s.Attn("agent", "attachment", quickCapture, id, "--out", output)
+	download := s.Attn("agent", "attachment", id, "--out", output)
 	if download.Code != 0 {
 		t.Fatalf("PDF download: %+v", download)
 	}
@@ -170,11 +181,11 @@ func TestDamagedQuickCaptureDraftDoesNotBlockDaemonRestart(t *testing.T) {
 	quickCapture, id := uuid.NewString(), uuid.NewString()
 	data := []byte("%PDF-1.4\nQuick Capture recovery fixture\n%%EOF\n")
 	crashApp := s.TrustedApp()
-	if _, err := crashApp.QuickCapture(protocol.QuickCaptureAttachmentPutMessage{Cmd: protocol.CmdQuickCaptureAttachmentPut, CaptureID: quickCapture, AttachmentID: id, Name: "notes.pdf", DataBase64: base64.StdEncoding.EncodeToString(data), Final: true}); err == nil {
+	if _, err := crashApp.Attachment(protocol.AttachmentPutMessage{Cmd: protocol.CmdAttachmentPut, Owner: ownedBy(quickCapture), AttachmentID: id, Name: "notes.pdf", DataBase64: base64.StdEncoding.EncodeToString(data), Final: true}); err == nil {
 		t.Fatal("crashed upload returned success")
 	}
 	s.AwaitCrash()
-	if err := os.Truncate(filepath.Join(s.Dir, "quick-captures", crashApp.SelectedProfile(), quickCapture, id), int64(len(data)-1)); err != nil {
+	if err := os.Truncate(filepath.Join(s.Dir, "attachments", crashApp.SelectedProfile(), id), int64(len(data)-1)); err != nil {
 		t.Fatal(err)
 	}
 	s.Start()
@@ -186,7 +197,7 @@ func TestDamagedQuickCaptureDraftDoesNotBlockDaemonRestart(t *testing.T) {
 	if _, err := app.QuickCapture(protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("chief")}, AttachmentIds: []string{id}}); err == nil || !strings.Contains(err.Error(), "staged") {
 		t.Fatalf("damaged file was accepted: %v", err)
 	}
-	quickCaptureCall(t, app, protocol.QuickCaptureAttachmentDiscardMessage{Cmd: protocol.CmdQuickCaptureAttachmentDiscard, CaptureID: quickCapture, AttachmentID: id})
+	attachmentCall(t, app, protocol.AttachmentDiscardMessage{Cmd: protocol.CmdAttachmentDiscard, AttachmentID: id})
 	list = quickCaptureCall(t, app, protocol.QuickCaptureListMessage{Cmd: protocol.CmdQuickCaptureList, Limit: 1})
 	if len(list.List.DraftAssets) != 0 {
 		t.Fatalf("discard retained the damaged draft: %+v", list.List)

@@ -34,7 +34,7 @@ func TestAnOutpostSessionDownloadsAFileTheUserAttachedOnTheHomeOntoTheOutpost(t 
 	if err := os.MkdirAll(outpost.Path("shell"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	got := outpost.Run(testworld.Invocation{Args: []string{"agent", "attachment", capture, attachment, "--out", "banner.png"}, Terminal: pair.App.Terminal(id), Dir: outpost.Path("shell")})
+	got := outpost.Run(testworld.Invocation{Args: []string{"agent", "attachment", attachment, "--out", "banner.png"}, Terminal: pair.App.Terminal(id), Dir: outpost.Path("shell")})
 	if got.Code != 0 {
 		t.Fatalf("download on the outpost exited %d: %s", got.Code, got.Stderr)
 	}
@@ -58,7 +58,7 @@ func TestAnOutpostSessionDownloadsAFileTheUserAttachedOnTheHomeOntoTheOutpost(t 
 	quickCaptureCall(t, app, protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: foreign, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID("stranger"))}, Content: "the other profile's banner", AttachmentIds: []string{foreignAttachment}})
 
 	for _, args := range [][]string{{"--out", "mine.png"}, {"--out", "named.png", "--session", "stranger"}} {
-		got := outpost.Run(testworld.Invocation{Args: append([]string{"agent", "attachment", foreign, foreignAttachment}, args...), Terminal: pair.App.Terminal(id), Dir: outpost.Path("shell")})
+		got := outpost.Run(testworld.Invocation{Args: append([]string{"agent", "attachment", foreignAttachment}, args...), Terminal: pair.App.Terminal(id), Dir: outpost.Path("shell")})
 		if _, err := os.Stat(outpost.Path("shell") + "/" + args[1]); got.Code == 0 || err == nil {
 			t.Errorf("the outpost session fetched another profile's attachment with %q: exit %d, %s", args, got.Code, got.Stderr)
 		}

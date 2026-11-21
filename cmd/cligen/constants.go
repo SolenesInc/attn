@@ -63,6 +63,7 @@ func writeConstants(out *strings.Builder) {
 		{"STATE_UNKNOWN", protocol.StateUnknown},
 		{"STATE_SCHEDULED", protocol.StateScheduled},
 		{"QUICK_CAPTURE_MAILBOX_SESSION", string(protocol.QuickCaptureMailboxKindSession)},
+		{"ATTACHMENT_OWNER_QUICK_CAPTURE", string(protocol.AttachmentOwnerKindQuickCapture)},
 		{"SHARED_CODEX_RESTART_PENDING", string(protocol.SharedCodexRestartPending)},
 		{"SHARED_CODEX_RESTART_RESTARTING", string(protocol.SharedCodexRestartRestarting)},
 		{"SHARED_CODEX_RESTART_FAILED", string(protocol.SharedCodexRestartFailed)},

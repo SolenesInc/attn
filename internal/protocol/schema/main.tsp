@@ -910,7 +910,7 @@ model QuickCaptureMailbox {
   member_id?: string;
   session_id?: SessionID;
 }
-model QuickCaptureAttachment {
+model Attachment {
   id: string;
   name: string;
   media_type: string;
@@ -921,7 +921,7 @@ model QuickCaptureRecord {
   mailbox: QuickCaptureMailbox;
   content: string;
   created_at: string;
-  attachments: QuickCaptureAttachment[];
+  attachments: Attachment[];
   read_at?: string;
 }
 enum QuickCaptureDraftState { staged, ready }
@@ -964,14 +964,23 @@ model QuickCaptureListMessage {
   limit: safeint;
   cursor?: string;
 }
+model QuickCaptureResult {
+  record?: QuickCaptureRecord;
+  list?: QuickCaptureListResult;
+}
+enum AttachmentOwnerKind { quick_capture, ask }
+model AttachmentOwner {
+  kind: AttachmentOwnerKind;
+  id: string;
+}
 @extension("x-on", #{ home: true })
-model QuickCaptureAttachmentPutMessage {
+model AttachmentPutMessage {
   profile_id?: string;
-  cmd: "quick_capture_attachment_put";
+  cmd: "attachment_put";
   // Required on the command socket: the token of a paired sender.
   sender_token?: string;
   request_id?: string;
-  capture_id: string;
+  owner: AttachmentOwner;
   attachment_id: string;
   name: string;
   offset: safeint;
@@ -979,40 +988,45 @@ model QuickCaptureAttachmentPutMessage {
   final: boolean;
 }
 @extension("x-on", #{ home: true })
-model QuickCaptureAttachmentGetMessage {
+model AttachmentGetMessage {
   source_session_id?: SessionID;
   profile_id?: string;
-  cmd: "quick_capture_attachment_get";
+  cmd: "attachment_get";
   request_id?: string;
-  capture_id: string;
   attachment_id: string;
   offset: safeint;
 }
 @extension("x-on", #{ home: true })
-model QuickCaptureAttachmentDiscardMessage {
+model AttachmentDiscardMessage {
   profile_id?: string;
-  cmd: "quick_capture_attachment_discard";
+  cmd: "attachment_discard";
   // Required on the command socket: the token of a paired sender.
   sender_token?: string;
   request_id?: string;
-  capture_id: string;
   attachment_id: string;
 }
-model QuickCaptureAttachmentPutResult {
+model AttachmentPutResult {
   next_offset: safeint;
-  attachment?: QuickCaptureAttachment;
+  attachment?: Attachment;
 }
-model QuickCaptureAttachmentGetResult {
+model AttachmentGetResult {
   data_base64: string;
   next_offset: safeint;
   eof: boolean;
 }
-model QuickCaptureResult {
-  record?: QuickCaptureRecord;
-  list?: QuickCaptureListResult;
-  upload?: QuickCaptureAttachmentPutResult;
-  download?: QuickCaptureAttachmentGetResult;
+model AttachmentResult {
+  upload?: AttachmentPutResult;
+  download?: AttachmentGetResult;
   discarded?: boolean;
+}
+model AttachmentResultMessage {
+  profile_id: string;
+  event: "attachment_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  error_code?: string;
+  result?: AttachmentResult;
 }
 model QuickCaptureResultMessage {
   profile_id: string;
@@ -7029,6 +7043,7 @@ model Response {
   session_reopen_result?: SessionReopenResult;
   codex_status_result?: CodexStatusResult;
   quick_capture_result?: QuickCaptureResult;
+  attachment_result?: AttachmentResult;
   sender_pairing?: SenderPairingRequest;
   paired_sender_token?: PairedSenderToken;
   paired_senders?: PairedSender[];
@@ -7659,7 +7674,7 @@ model AgentPeerMessage {
 // peer body or the daemon-authored action text for another mailbox kind.
 model AgentInboxItem {
   address: string;
-  attachments?: QuickCaptureAttachment[];
+  attachments?: Attachment[];
   item_id: string;
   kind: string;
   source_id?: string;

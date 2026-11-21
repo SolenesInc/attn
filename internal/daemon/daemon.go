@@ -223,7 +223,7 @@ type Daemon struct {
 	serverLinksMu            sync.Mutex
 	serverLinks              map[string]*serverLink
 	serverConnections        map[string]*serverConnection
-	quickCaptureAssetMu      sync.Mutex
+	attachmentMu             sync.Mutex
 	inboxMu                  sync.Mutex
 	inboxStates              map[who.Address]*inboxDeliveryState
 	inboxUnsubscribe         func()
@@ -714,8 +714,8 @@ func (d *Daemon) Start() error {
 	d.applyHeadlessTasksMode()
 	pausepoint.At(pausepoint.DaemonEnrollmentLoaded)
 	d.copyImagesOfAsksOpenedBeforeImagesTravelled()
-	if err := d.recoverQuickCaptureAssets(); err != nil {
-		d.logf("quick capture asset recovery incomplete: %v", err)
+	if err := d.recoverAttachments(); err != nil {
+		d.logf("attachment recovery incomplete: %v", err)
 	}
 	if err := d.startBridgeSocket(); err != nil {
 		return fmt.Errorf("start bridge socket: %w", err)
@@ -3053,8 +3053,10 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdRenameSession:
 		d.handleRenameSessionConn(conn, msg.(*protocol.RenameSessionMessage))
 
-	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureAttachmentPut, protocol.CmdQuickCaptureAttachmentGet, protocol.CmdQuickCaptureAttachmentDiscard:
+	case protocol.CmdQuickCaptureSend:
 		d.handleQuickCapture(conn, msg)
+	case protocol.CmdAttachmentPut, protocol.CmdAttachmentGet, protocol.CmdAttachmentDiscard:
+		d.handleAttachment(conn, msg)
 	case protocol.CmdSenderPair:
 		d.handleSenderPair(conn, msg.(*protocol.SenderPairMessage), caller)
 	case protocol.CmdSenderList:

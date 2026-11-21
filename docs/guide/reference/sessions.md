@@ -144,7 +144,7 @@ send to: each live agent session of its profile, never a shell, with its id,
 label, agent, state, the outpost's id (`host`) and name (`host_label`) when it
 runs on an outpost, and when you last focused it in Attn. Repeat `--file` to
 send more files. Attn types the message into the agent's conversation as yours. For each file, the message has an
-`attn agent attachment … --out <path>` command that saves the file where the
+`attn agent attachment <attachment-id> --out <path>` command that saves the file where the
 agent runs, including on an outpost.
 
 To see a profile's paired programs, open the **Paired senders** list in

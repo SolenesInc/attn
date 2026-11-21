@@ -41,6 +41,7 @@ pub const STATE_IDLE: &str = "idle";
 pub const STATE_UNKNOWN: &str = "unknown";
 pub const STATE_SCHEDULED: &str = "scheduled";
 pub const QUICK_CAPTURE_MAILBOX_SESSION: &str = "session";
+pub const ATTACHMENT_OWNER_QUICK_CAPTURE: &str = "quick_capture";
 pub const SHARED_CODEX_RESTART_PENDING: &str = "pending";
 pub const SHARED_CODEX_RESTART_RESTARTING: &str = "restarting";
 pub const SHARED_CODEX_RESTART_FAILED: &str = "failed";
@@ -294,14 +295,13 @@ pub mod prompts {
     pub struct SessionQuickCaptureFile<'a> {
         pub attachment_id: &'a str,
         pub bytes: &'a str,
-        pub capture_id: &'a str,
         pub media_type: &'a str,
         pub name: &'a str,
     }
 
     #[must_use]
     pub fn session_quick_capture_file(values: &SessionQuickCaptureFile<'_>) -> String {
-        ["File ".to_string(), values.name.to_string(), " (".to_string(), values.media_type.to_string(), ", ".to_string(), values.bytes.to_string(), " bytes). To save the file, run:\n  attn agent attachment ".to_string(), values.capture_id.to_string(), " ".to_string(), values.attachment_id.to_string(), " --out <path>\nInspect the saved file with your tools.".to_string()].concat()
+        ["File ".to_string(), values.name.to_string(), " (".to_string(), values.media_type.to_string(), ", ".to_string(), values.bytes.to_string(), " bytes). To save the file, run:\n  attn agent attachment ".to_string(), values.attachment_id.to_string(), " --out <path>\nInspect the saved file with your tools.".to_string()].concat()
     }
 
     pub struct SessionQuickCaptureFileSaved<'a> {
@@ -378,7 +378,7 @@ pub mod prompts {
 
         #[test]
         fn session_quick_capture_file_matches_go() {
-            assert_eq!(session_quick_capture_file(&SessionQuickCaptureFile { attachment_id: "value of attachment_id", bytes: "value of bytes", capture_id: "value of capture_id", media_type: "value of media_type", name: "value of name" }), "File value of name (value of media_type, value of bytes bytes). To save the file, run:\n  attn agent attachment value of capture_id value of attachment_id --out <path>\nInspect the saved file with your tools.");
+            assert_eq!(session_quick_capture_file(&SessionQuickCaptureFile { attachment_id: "value of attachment_id", bytes: "value of bytes", media_type: "value of media_type", name: "value of name" }), "File value of name (value of media_type, value of bytes bytes). To save the file, run:\n  attn agent attachment value of attachment_id --out <path>\nInspect the saved file with your tools.");
         }
 
         #[test]

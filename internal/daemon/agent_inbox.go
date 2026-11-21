@@ -270,7 +270,7 @@ func agentInboxText(result *protocol.AgentInboxBatchResult) string {
 		}
 		switch item.Kind {
 		case string(inbox.QuickCapture):
-			lines = append(lines, inbox.QuickCaptureText(item.Content, protocol.Deref(item.SourceID), item.Attachments))
+			lines = append(lines, inbox.QuickCaptureText(item.Content, item.Attachments))
 		case string(inbox.Notice):
 			lines = append(lines, content)
 		case string(inbox.PeerMessage):

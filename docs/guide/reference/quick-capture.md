@@ -53,8 +53,9 @@ A crew member between sessions, the Chief included, gets a new session for the m
 seconds after your last keystroke in that agent's terminal, so it never lands on
 top of what you are typing.
 
-For each attached file, the message includes an `attn agent attachment` command
-that saves the file where the agent runs.
+For each attached file, the message includes an
+`attn agent attachment <attachment-id> --out <path>` command that saves the file
+where the agent runs.
 
 The run that a capture starts is yours, so the agent goes into your
 [queue](queue.md) when it stops, and you see its reply.

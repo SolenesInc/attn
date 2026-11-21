@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "ed3ace8ad17d";
+pub const PROTOCOL_VERSION: &str = "321a97263efd";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -138,7 +138,7 @@ pub struct AgentInboxBatchResult {
 pub struct AgentInboxItem {
     pub address: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub attachments: Option<Vec<QuickCaptureAttachment>>,
+    pub attachments: Option<Vec<Attachment>>,
     pub content: String,
     pub created_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -722,6 +722,132 @@ pub struct AttachSnapshot {
     pub rows: i64,
     pub scrollback_truncated: bool,
     pub snapshot_b64: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Attachment {
+    pub bytes: i64,
+    pub id: String,
+    pub media_type: String,
+    pub name: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AttachmentDiscardMessage {
+    pub attachment_id: String,
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sender_token: Option<String>,
+}
+
+impl AttachmentDiscardMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "attachment_discard".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AttachmentGetMessage {
+    pub attachment_id: String,
+    pub cmd: String,
+    pub offset: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_session_id: Option<SessionID>,
+}
+
+impl AttachmentGetMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "attachment_get".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AttachmentGetResult {
+    pub data_base64: String,
+    pub eof: bool,
+    pub next_offset: i64,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AttachmentOwner {
+    pub id: String,
+    pub kind: AttachmentOwnerKind,
+}
+pub type AttachmentOwnerKind = String;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AttachmentPutMessage {
+    pub attachment_id: String,
+    pub cmd: String,
+    pub data_base64: String,
+    pub r#final: bool,
+    pub name: String,
+    pub offset: i64,
+    pub owner: AttachmentOwner,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sender_token: Option<String>,
+}
+
+impl AttachmentPutMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "attachment_put".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AttachmentPutResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachment: Option<Attachment>,
+    pub next_offset: i64,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AttachmentResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discarded: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub download: Option<AttachmentGetResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upload: Option<AttachmentPutResult>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AttachmentResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+    pub event: String,
+    pub profile_id: String,
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<AttachmentResult>,
+    pub success: bool,
+}
+
+impl AttachmentResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "attachment_result".to_string(),
+            ..Self::default()
+        }
+    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AuthorState {
@@ -7598,96 +7724,6 @@ impl QueryReposMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct QuickCaptureAttachment {
-    pub bytes: i64,
-    pub id: String,
-    pub media_type: String,
-    pub name: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct QuickCaptureAttachmentDiscardMessage {
-    pub attachment_id: String,
-    pub capture_id: String,
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sender_token: Option<String>,
-}
-
-impl QuickCaptureAttachmentDiscardMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "quick_capture_attachment_discard".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct QuickCaptureAttachmentGetMessage {
-    pub attachment_id: String,
-    pub capture_id: String,
-    pub cmd: String,
-    pub offset: i64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-}
-
-impl QuickCaptureAttachmentGetMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "quick_capture_attachment_get".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct QuickCaptureAttachmentGetResult {
-    pub data_base64: String,
-    pub eof: bool,
-    pub next_offset: i64,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct QuickCaptureAttachmentPutMessage {
-    pub attachment_id: String,
-    pub capture_id: String,
-    pub cmd: String,
-    pub data_base64: String,
-    pub r#final: bool,
-    pub name: String,
-    pub offset: i64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sender_token: Option<String>,
-}
-
-impl QuickCaptureAttachmentPutMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "quick_capture_attachment_put".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct QuickCaptureAttachmentPutResult {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub attachment: Option<QuickCaptureAttachment>,
-    pub next_offset: i64,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QuickCaptureDraftAsset {
     pub attachment_id: String,
     pub capture_id: String,
@@ -7774,7 +7810,7 @@ impl QuickCaptureReadMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QuickCaptureRecord {
     #[serde(deserialize_with = "null_as_default")]
-    pub attachments: Vec<QuickCaptureAttachment>,
+    pub attachments: Vec<Attachment>,
     pub content: String,
     pub created_at: String,
     pub id: String,
@@ -7785,15 +7821,9 @@ pub struct QuickCaptureRecord {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QuickCaptureResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub discarded: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub download: Option<QuickCaptureAttachmentGetResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub list: Option<QuickCaptureListResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub record: Option<QuickCaptureRecord>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub upload: Option<QuickCaptureAttachmentPutResult>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QuickCaptureResultMessage {
@@ -8247,6 +8277,8 @@ impl ReposUpdatedMessage {
 pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ask_open_result: Option<Ask>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachment_result: Option<AttachmentResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authors: Option<Vec<AuthorState>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -13334,6 +13366,9 @@ impl WorktreeSweptEvent {
 }
 impl ResponseField for Ask {
     const FIELD: &'static str = "ask_open_result";
+}
+impl ResponseField for AttachmentResult {
+    const FIELD: &'static str = "attachment_result";
 }
 impl ResponseField for CodexStatusResult {
     const FIELD: &'static str = "codex_status_result";

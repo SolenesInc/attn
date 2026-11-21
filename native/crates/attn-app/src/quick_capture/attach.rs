@@ -5,13 +5,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use attn_protocol::{
-    QuickCaptureAttachmentDiscardMessage, QuickCaptureAttachmentPutMessage, QuickCaptureListMessage,
+    AttachmentDiscardMessage, AttachmentOwner, AttachmentPutMessage, QuickCaptureListMessage,
 };
 use base64::Engine;
 use rune::Tx;
 
 use super::draft::{Folder, StoredFile, commit};
-use super::{Busy, Draft, Message, Panel, Window, result};
+use super::{Busy, Draft, Message, Panel, Window, attachment_result, result};
 
 /// The bytes one upload request carries.
 const CHUNK: u64 = 524_288;
@@ -278,10 +278,8 @@ pub(crate) fn remove(panel: &mut Panel, id: &str, tx: &mut Tx) {
 /// Has the daemon forget a file the person removed, once no upload of it is in flight, and
 /// frees the draft when it answers.
 fn discard_removed(panel: &mut Panel, id: String, tx: &mut Tx) {
-    let capture = panel.draft.id.clone();
     discard_one(
         panel,
-        capture,
         id,
         |panel, failure, tx| {
             panel.busy = Busy::Idle;
@@ -303,7 +301,6 @@ pub(super) fn forget(panel: &mut Panel, discarded: &Draft, tx: &mut Tx) {
     for file in &discarded.files {
         discard_one(
             panel,
-            discarded.id.clone(),
             file.id.clone(),
             |panel, failure, _| {
                 if failure.is_some() {
@@ -318,21 +315,19 @@ pub(super) fn forget(panel: &mut Panel, discarded: &Draft, tx: &mut Tx) {
 
 fn discard_one(
     panel: &mut Panel,
-    capture: String,
     attachment: String,
     then: impl FnOnce(&mut Panel, Option<String>, &mut Tx) + 'static,
     tx: &mut Tx,
 ) {
     panel.ask(
         |request_id| {
-            Message::Discard(QuickCaptureAttachmentDiscardMessage {
+            Message::Discard(AttachmentDiscardMessage {
                 request_id: Some(request_id),
-                capture_id: capture,
                 attachment_id: attachment,
-                ..QuickCaptureAttachmentDiscardMessage::new()
+                ..AttachmentDiscardMessage::new()
             })
         },
-        move |panel, answer, tx| then(panel, result(answer).err().map(|f| f.say()), tx),
+        move |panel, answer, tx| then(panel, attachment_result(answer).err().map(|f| f.say()), tx),
         tx,
     );
 }
@@ -435,18 +430,21 @@ fn put(panel: &mut Panel, id: String, offset: u64, tx: &mut Tx) {
         Err(why) => return fail(panel, why),
     };
     let capture = panel.draft.id.clone();
-    let message = QuickCaptureAttachmentPutMessage {
-        capture_id: capture.clone(),
+    let message = AttachmentPutMessage {
+        owner: AttachmentOwner {
+            kind: "quick_capture".into(),
+            id: capture.clone(),
+        },
         attachment_id: id.clone(),
         name: name.clone(),
         offset: offset as i64,
         data_base64: base64::engine::general_purpose::STANDARD.encode(bytes),
         r#final: offset + CHUNK >= size,
-        ..QuickCaptureAttachmentPutMessage::new()
+        ..AttachmentPutMessage::new()
     };
     panel.ask(
         |request_id| {
-            Message::Put(QuickCaptureAttachmentPutMessage {
+            Message::Put(AttachmentPutMessage {
                 request_id: Some(request_id),
                 ..message
             })
@@ -458,7 +456,7 @@ fn put(panel: &mut Panel, id: String, offset: u64, tx: &mut Tx) {
             if removed(panel, &id) {
                 return discard_removed(panel, id, tx);
             }
-            match result(answer).map(|r| r.upload) {
+            match attachment_result(answer).map(|r| r.upload) {
                 Ok(Some(upload)) => {
                     let next = upload.next_offset.max(0) as u64;
                     if next < size {

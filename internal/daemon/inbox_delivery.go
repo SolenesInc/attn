@@ -558,7 +558,7 @@ func (d *Daemon) inboxPaste(a who.Address, profileID string, bell bool) (inboxPa
 			if err != nil {
 				return inboxPaste{}, fmt.Errorf("quick capture %s: %w", item.Source, err)
 			}
-			texts = append(texts, inbox.QuickCaptureText(item.Text, item.Source, record.Attachments))
+			texts = append(texts, inbox.QuickCaptureText(item.Text, record.Attachments))
 			paste.captures = append(paste.captures, item.Source)
 		} else {
 			texts = append(texts, item.Text)

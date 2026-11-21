@@ -69,7 +69,11 @@ func (d *Daemon) runAgentAttachment(ctx context.Context, c command.Caller, a com
 		return nil, err
 	}
 	defer func() { temp.Close(); os.Remove(temp.Name()) }()
-	msg := protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: a.Capture, AttachmentID: a.Attachment}
+	id := a.Attachment
+	if a.QuotedAttachment != "" {
+		id = a.QuotedAttachment
+	}
+	msg := protocol.AttachmentGetMessage{Cmd: protocol.CmdAttachmentGet, AttachmentID: id}
 	if c.Session != "" {
 		msg.SourceSessionID = protocol.Ptr(c.Session)
 	}
@@ -77,7 +81,7 @@ func (d *Daemon) runAgentAttachment(ctx context.Context, c command.Caller, a com
 		msg.ProfileID = protocol.Ptr(c.Profile)
 	}
 	for {
-		result, err := Call[protocol.QuickCaptureResult](ctx, d.router(), msg)
+		result, err := Call[protocol.AttachmentResult](ctx, d.router(), msg)
 		if err != nil {
 			return nil, err
 		}

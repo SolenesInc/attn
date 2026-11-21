@@ -524,7 +524,7 @@ fn item(panel: &Panel, record: &attn_protocol::QuickCaptureRecord, t: &Tokens) -
 fn sent_image(
     panel: &Panel,
     record: &attn_protocol::QuickCaptureRecord,
-    file: &attn_protocol::QuickCaptureAttachment,
+    file: &attn_protocol::Attachment,
     t: &Tokens,
 ) -> El {
     let key = (record.id.clone(), file.id.clone());

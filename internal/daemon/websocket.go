@@ -919,9 +919,12 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("handleSeedReviewKeepWS", func() { d.handleSeedReviewKeepWS(client, msg.(*protocol.SeedReviewKeepMessage)) })
 	case protocol.CmdSeedReviewDraft:
 		d.life.Go("handleSeedReviewDraftWS", func() { d.handleSeedReviewDraftWS(client, msg.(*protocol.SeedReviewDraftMessage)) })
-	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList, protocol.CmdQuickCaptureAttachmentPut, protocol.CmdQuickCaptureAttachmentGet, protocol.CmdQuickCaptureAttachmentDiscard:
+	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList:
 		selected := client.selectedProfile()
 		d.life.Go("handleQuickCaptureWS", func() { d.handleQuickCaptureWS(client, selected, msg) })
+	case protocol.CmdAttachmentPut, protocol.CmdAttachmentGet, protocol.CmdAttachmentDiscard:
+		selected := client.selectedProfile()
+		d.life.Go("handleAttachmentWS", func() { d.handleAttachmentWS(client, selected, msg) })
 	case protocol.CmdCrewStart:
 		start := msg.(*protocol.CrewStartMessage)
 		start.ProfileID = client.profileOr(start.ProfileID)

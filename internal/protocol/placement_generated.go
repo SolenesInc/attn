@@ -28,181 +28,181 @@ type Placed interface {
 }
 
 var Placements = map[string][]Placement{
-	"agent_catalog":                    {Placement{LocatorMachine, "host"}},
-	"agent_launch_close":               {Placement{LocatorSession, "session_id"}},
-	"apply_monitor_view":               {Placement{LocatorHome, ""}},
-	"ask_open":                         {Placement{LocatorHome, ""}},
-	"automation_apply":                 {Placement{LocatorHome, ""}},
-	"automation_cleanup":               {Placement{LocatorHome, ""}},
-	"automation_definition_get":        {Placement{LocatorHome, ""}},
-	"automation_definitions_get":       {Placement{LocatorHome, ""}},
-	"automation_delete":                {Placement{LocatorHome, ""}},
-	"automation_run":                   {Placement{LocatorHome, ""}},
-	"automation_runs_get":              {Placement{LocatorHome, ""}},
-	"automation_schedule_preview":      {Placement{LocatorHome, ""}},
-	"automation_set_enabled":           {Placement{LocatorHome, ""}},
-	"automation_validate":              {Placement{LocatorHome, ""}},
-	"browse_directory":                 {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"caller_session":                   {Placement{LocatorHere, ""}},
-	"checkout_inspect":                 {Placement{LocatorMachine, "host"}},
-	"claude_mod_reach":                 {Placement{LocatorSession, "session_id"}},
-	"claude_mod_reach_report":          {Placement{LocatorHome, ""}},
-	"code_nav":                         {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"code_nav_setup":                   {Placement{LocatorHome, ""}},
-	"codex_status":                     {Placement{LocatorHere, ""}},
-	"collapse_repo":                    {Placement{LocatorHome, ""}},
-	"compacting_close_begin":           {Placement{LocatorSession, "session_id"}},
-	"compacting_close_check":           {Placement{LocatorHome, ""}},
-	"compacting_close_finish":          {Placement{LocatorHome, ""}},
-	"connect_outpost_in_terminal":      {Placement{LocatorHome, ""}},
-	"conversation_readiness":           {Placement{LocatorMachine, "host"}},
-	"create_worktree":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"create_worktree_from_branch":      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"crew_apply":                       {Placement{LocatorHome, ""}},
-	"crew_charter_get":                 {Placement{LocatorHome, ""}},
-	"crew_charter_set":                 {Placement{LocatorHome, ""}},
-	"crew_close":                       {Placement{LocatorHome, ""}},
-	"crew_handoff_get":                 {Placement{LocatorHome, ""}},
-	"crew_handoffs_get":                {Placement{LocatorHome, ""}},
-	"crew_rename":                      {Placement{LocatorHome, ""}},
-	"crew_set":                         {Placement{LocatorHome, ""}},
-	"crew_start":                       {Placement{LocatorHome, ""}},
-	"decline_update":                   {Placement{LocatorHere, ""}},
-	"delegate":                         {Placement{LocatorHome, ""}},
-	"delegate_status":                  {Placement{LocatorHome, ""}},
-	"delete_worktree":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"doc_collections":                  {Placement{LocatorHome, ""}},
-	"doc_count":                        {Placement{LocatorHome, ""}},
-	"doc_define":                       {Placement{LocatorHome, ""}},
-	"doc_delete":                       {Placement{LocatorHome, ""}},
-	"doc_get":                          {Placement{LocatorHome, ""}},
-	"doc_put":                          {Placement{LocatorHome, ""}},
-	"doc_query":                        {Placement{LocatorHome, ""}},
-	"doc_subscribe":                    {Placement{LocatorHome, ""}},
-	"doc_undefine":                     {Placement{LocatorHome, ""}},
-	"drop_outpost_copy":                {Placement{LocatorHere, ""}},
-	"fetch_pr_details":                 {Placement{LocatorHome, ""}},
-	"files_edited":                     {Placement{LocatorHere, ""}},
-	"forward_analytics":                {Placement{LocatorHome, ""}},
-	"get_kitty_image":                  {Placement{LocatorTerminal, "id"}},
-	"get_repo_info":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"get_screen_snapshot":              {Placement{LocatorTerminal, "id"}},
-	"get_settings":                     {Placement{LocatorHere, ""}},
-	"home_update_notice":               {Placement{LocatorMachine, "host"}},
-	"hook_compaction":                  {Placement{LocatorHere, ""}},
-	"hook_notification":                {Placement{LocatorHere, ""}},
-	"hook_stop_failure":                {Placement{LocatorHere, ""}},
-	"inbox_ring_settle":                {Placement{LocatorHome, ""}},
-	"inject_test_pr":                   {Placement{LocatorHere, ""}},
-	"inject_test_session":              {Placement{LocatorHere, ""}},
-	"inspect_path":                     {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"kept_conversation_forget":         {Placement{LocatorHome, ""}},
-	"kept_conversation_keep":           {Placement{LocatorHome, ""}},
-	"kept_conversation_list":           {Placement{LocatorHome, ""}},
-	"launch_committed":                 {Placement{LocatorTerminal, "terminal_id"}},
-	"launch_desktop_get":               {Placement{LocatorHome, ""}},
-	"launch_desktop_set":               {Placement{LocatorHome, ""}},
-	"link_rename":                      {Placement{LocatorSession, "session_id"}},
-	"model_call_log":                   {Placement{LocatorHome, ""}},
-	"monitor_assistant_window":         {Placement{LocatorSession, "session_id"}},
-	"monitor_command":                  {Placement{LocatorSession, "session_id"}},
-	"monitor_last_assistant":           {Placement{LocatorSession, "session_id"}},
-	"monitor_state_trace":              {Placement{LocatorSession, "session_id"}},
-	"monitor_transcript_page":          {Placement{LocatorSession, "session_id"}},
-	"mute_pr":                          {Placement{LocatorHome, ""}},
-	"mute_repo":                        {Placement{LocatorHome, ""}},
-	"notebook_folders":                 {Placement{LocatorHere, ""}},
-	"notebook_sync_report":             {Placement{LocatorHome, ""}},
-	"open_markdown":                    {Placement{LocatorHome, ""}},
-	"open_seed":                        {Placement{LocatorHome, ""}},
-	"open_sent_files":                  {Placement{LocatorTerminal, "terminal_id"}, Placement{LocatorHome, ""}},
-	"pty_resize":                       {Placement{LocatorTerminal, "id"}},
-	"pull_request_created":             {Placement{LocatorTerminal, "terminal_id"}, Placement{LocatorHome, ""}},
-	"pull_request_forget":              {Placement{LocatorHome, ""}},
-	"pull_request_link":                {Placement{LocatorSession, "session_id"}},
-	"pull_request_list":                {Placement{LocatorHome, ""}},
-	"pull_request_unwatch":             {Placement{LocatorHome, ""}},
-	"pull_request_watch":               {Placement{LocatorHome, ""}},
-	"query":                            {Placement{LocatorHome, ""}},
-	"query_authors":                    {Placement{LocatorHome, ""}},
-	"query_prs":                        {Placement{LocatorHome, ""}},
-	"query_repos":                      {Placement{LocatorHome, ""}},
-	"quick_capture_attachment_discard": {Placement{LocatorHome, ""}},
-	"quick_capture_attachment_get":     {Placement{LocatorHome, ""}},
-	"quick_capture_attachment_put":     {Placement{LocatorHome, ""}},
-	"quick_capture_get":                {Placement{LocatorHome, ""}},
-	"quick_capture_list":               {Placement{LocatorHome, ""}},
-	"quick_capture_send":               {Placement{LocatorHome, ""}},
-	"record_analytics":                 {Placement{LocatorHere, ""}},
-	"rename_session":                   {Placement{LocatorHome, ""}},
-	"reopen_inspect":                   {Placement{LocatorMachine, "host"}},
-	"reopen_worktree":                  {Placement{LocatorMachine, "host"}},
-	"restart_shared_codex":             {Placement{LocatorHere, ""}},
-	"review_edit":                      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"review_file":                      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"review_search":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"review_sent":                      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"run_command":                      {Placement{LocatorCommand, "command"}},
-	"seed_artifact_transfer":           {Placement{LocatorHome, ""}},
-	"seed_artifact_transfer_here":      {Placement{LocatorMachine, "host"}},
-	"seed_authorization":               {Placement{LocatorHome, ""}},
-	"seed_check":                       {Placement{LocatorHome, ""}},
-	"seed_note":                        {Placement{LocatorHome, ""}},
-	"seed_review_cancel":               {Placement{LocatorHome, ""}},
-	"seed_review_keep":                 {Placement{LocatorHome, ""}},
-	"seed_review_retry":                {Placement{LocatorHome, ""}},
-	"seed_review_show":                 {Placement{LocatorHome, ""}},
-	"seed_review_start":                {Placement{LocatorHome, ""}},
-	"seed_send_to_chief":               {Placement{LocatorHome, ""}},
-	"seed_transition":                  {Placement{LocatorHome, ""}},
-	"sender_list":                      {Placement{LocatorHome, ""}},
-	"sender_model_call":                {Placement{LocatorHome, ""}},
-	"sender_pair":                      {Placement{LocatorHome, ""}},
-	"sender_sessions":                  {Placement{LocatorHome, ""}},
-	"sender_unpair":                    {Placement{LocatorHome, ""}},
-	"session_input_reopened":           {Placement{LocatorHome, ""}},
-	"session_list":                     {Placement{LocatorHome, ""}},
-	"session_place":                    {Placement{LocatorSession, "session_id"}},
-	"session_pull_request_save":        {Placement{LocatorHome, ""}},
-	"session_reopen":                   {Placement{LocatorHome, ""}},
-	"session_show":                     {Placement{LocatorHome, ""}},
-	"set_session_context_window_cap":   {Placement{LocatorHome, ""}},
-	"set_session_priority":             {Placement{LocatorHome, ""}},
-	"set_session_resume_id":            {Placement{LocatorHere, ""}},
-	"set_setting":                      {Placement{LocatorSetting, "key"}},
-	"snooze_turn":                      {Placement{LocatorHome, ""}},
-	"start_update":                     {Placement{LocatorHere, ""}},
-	"state":                            {Placement{LocatorHere, ""}},
-	"stop":                             {Placement{LocatorHere, ""}},
-	"terminal_exited":                  {Placement{LocatorHome, ""}},
-	"terminal_kill":                    {Placement{LocatorTerminal, "terminal_id"}},
-	"terminal_launch":                  {Placement{LocatorTerminal, "terminal_id"}},
-	"terminal_pointer_activity":        {Placement{LocatorTerminal, "id"}},
-	"terminal_read_text":               {Placement{LocatorTerminal, "terminal_id"}},
-	"terminal_remove":                  {Placement{LocatorTerminal, "terminal_id"}},
-	"terminal_restart":                 {Placement{LocatorTerminal, "terminal_id"}},
-	"terminal_shell":                   {Placement{LocatorMachine, "host"}},
-	"terminal_start":                   {Placement{LocatorMachine, "host"}},
-	"terminal_theme":                   {Placement{LocatorMachine, "host"}},
-	"terminal_wait_block":              {Placement{LocatorTerminal, "terminal_id"}},
-	"terminal_write":                   {Placement{LocatorTerminal, "terminal_id"}},
-	"tile_asset_read":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"tile_document_changed":            {Placement{LocatorHome, ""}},
-	"tile_document_read":               {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"tile_documents_watch":             {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"transcript_activity":              {Placement{LocatorSession, "session_id"}},
-	"unregister":                       {Placement{LocatorHome, ""}},
-	"update_outpost":                   {Placement{LocatorHome, ""}},
-	"update_request":                   {Placement{LocatorHome, ""}},
-	"update_status":                    {Placement{LocatorHome, ""}},
-	"wake_turn":                        {Placement{LocatorHome, ""}},
-	"worktree_keep":                    {Placement{LocatorHere, ""}},
-	"worktree_list":                    {Placement{LocatorHere, ""}},
-	"worktree_refresh":                 {Placement{LocatorHere, ""}},
-	"worktree_removal_prepare":         {Placement{LocatorHome, ""}},
-	"worktree_removed":                 {Placement{LocatorHome, ""}},
-	"worktree_seed_owners":             {Placement{LocatorHome, ""}},
-	"worktree_sweep_log":               {Placement{LocatorHere, ""}},
+	"agent_catalog":                  {Placement{LocatorMachine, "host"}},
+	"agent_launch_close":             {Placement{LocatorSession, "session_id"}},
+	"apply_monitor_view":             {Placement{LocatorHome, ""}},
+	"ask_open":                       {Placement{LocatorHome, ""}},
+	"attachment_discard":             {Placement{LocatorHome, ""}},
+	"attachment_get":                 {Placement{LocatorHome, ""}},
+	"attachment_put":                 {Placement{LocatorHome, ""}},
+	"automation_apply":               {Placement{LocatorHome, ""}},
+	"automation_cleanup":             {Placement{LocatorHome, ""}},
+	"automation_definition_get":      {Placement{LocatorHome, ""}},
+	"automation_definitions_get":     {Placement{LocatorHome, ""}},
+	"automation_delete":              {Placement{LocatorHome, ""}},
+	"automation_run":                 {Placement{LocatorHome, ""}},
+	"automation_runs_get":            {Placement{LocatorHome, ""}},
+	"automation_schedule_preview":    {Placement{LocatorHome, ""}},
+	"automation_set_enabled":         {Placement{LocatorHome, ""}},
+	"automation_validate":            {Placement{LocatorHome, ""}},
+	"browse_directory":               {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"caller_session":                 {Placement{LocatorHere, ""}},
+	"checkout_inspect":               {Placement{LocatorMachine, "host"}},
+	"claude_mod_reach":               {Placement{LocatorSession, "session_id"}},
+	"claude_mod_reach_report":        {Placement{LocatorHome, ""}},
+	"code_nav":                       {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"code_nav_setup":                 {Placement{LocatorHome, ""}},
+	"codex_status":                   {Placement{LocatorHere, ""}},
+	"collapse_repo":                  {Placement{LocatorHome, ""}},
+	"compacting_close_begin":         {Placement{LocatorSession, "session_id"}},
+	"compacting_close_check":         {Placement{LocatorHome, ""}},
+	"compacting_close_finish":        {Placement{LocatorHome, ""}},
+	"connect_outpost_in_terminal":    {Placement{LocatorHome, ""}},
+	"conversation_readiness":         {Placement{LocatorMachine, "host"}},
+	"create_worktree":                {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"create_worktree_from_branch":    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"crew_apply":                     {Placement{LocatorHome, ""}},
+	"crew_charter_get":               {Placement{LocatorHome, ""}},
+	"crew_charter_set":               {Placement{LocatorHome, ""}},
+	"crew_close":                     {Placement{LocatorHome, ""}},
+	"crew_handoff_get":               {Placement{LocatorHome, ""}},
+	"crew_handoffs_get":              {Placement{LocatorHome, ""}},
+	"crew_rename":                    {Placement{LocatorHome, ""}},
+	"crew_set":                       {Placement{LocatorHome, ""}},
+	"crew_start":                     {Placement{LocatorHome, ""}},
+	"decline_update":                 {Placement{LocatorHere, ""}},
+	"delegate":                       {Placement{LocatorHome, ""}},
+	"delegate_status":                {Placement{LocatorHome, ""}},
+	"delete_worktree":                {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"doc_collections":                {Placement{LocatorHome, ""}},
+	"doc_count":                      {Placement{LocatorHome, ""}},
+	"doc_define":                     {Placement{LocatorHome, ""}},
+	"doc_delete":                     {Placement{LocatorHome, ""}},
+	"doc_get":                        {Placement{LocatorHome, ""}},
+	"doc_put":                        {Placement{LocatorHome, ""}},
+	"doc_query":                      {Placement{LocatorHome, ""}},
+	"doc_subscribe":                  {Placement{LocatorHome, ""}},
+	"doc_undefine":                   {Placement{LocatorHome, ""}},
+	"drop_outpost_copy":              {Placement{LocatorHere, ""}},
+	"fetch_pr_details":               {Placement{LocatorHome, ""}},
+	"files_edited":                   {Placement{LocatorHere, ""}},
+	"forward_analytics":              {Placement{LocatorHome, ""}},
+	"get_kitty_image":                {Placement{LocatorTerminal, "id"}},
+	"get_repo_info":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"get_screen_snapshot":            {Placement{LocatorTerminal, "id"}},
+	"get_settings":                   {Placement{LocatorHere, ""}},
+	"home_update_notice":             {Placement{LocatorMachine, "host"}},
+	"hook_compaction":                {Placement{LocatorHere, ""}},
+	"hook_notification":              {Placement{LocatorHere, ""}},
+	"hook_stop_failure":              {Placement{LocatorHere, ""}},
+	"inbox_ring_settle":              {Placement{LocatorHome, ""}},
+	"inject_test_pr":                 {Placement{LocatorHere, ""}},
+	"inject_test_session":            {Placement{LocatorHere, ""}},
+	"inspect_path":                   {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"kept_conversation_forget":       {Placement{LocatorHome, ""}},
+	"kept_conversation_keep":         {Placement{LocatorHome, ""}},
+	"kept_conversation_list":         {Placement{LocatorHome, ""}},
+	"launch_committed":               {Placement{LocatorTerminal, "terminal_id"}},
+	"launch_desktop_get":             {Placement{LocatorHome, ""}},
+	"launch_desktop_set":             {Placement{LocatorHome, ""}},
+	"link_rename":                    {Placement{LocatorSession, "session_id"}},
+	"model_call_log":                 {Placement{LocatorHome, ""}},
+	"monitor_assistant_window":       {Placement{LocatorSession, "session_id"}},
+	"monitor_command":                {Placement{LocatorSession, "session_id"}},
+	"monitor_last_assistant":         {Placement{LocatorSession, "session_id"}},
+	"monitor_state_trace":            {Placement{LocatorSession, "session_id"}},
+	"monitor_transcript_page":        {Placement{LocatorSession, "session_id"}},
+	"mute_pr":                        {Placement{LocatorHome, ""}},
+	"mute_repo":                      {Placement{LocatorHome, ""}},
+	"notebook_folders":               {Placement{LocatorHere, ""}},
+	"notebook_sync_report":           {Placement{LocatorHome, ""}},
+	"open_markdown":                  {Placement{LocatorHome, ""}},
+	"open_seed":                      {Placement{LocatorHome, ""}},
+	"open_sent_files":                {Placement{LocatorTerminal, "terminal_id"}, Placement{LocatorHome, ""}},
+	"pty_resize":                     {Placement{LocatorTerminal, "id"}},
+	"pull_request_created":           {Placement{LocatorTerminal, "terminal_id"}, Placement{LocatorHome, ""}},
+	"pull_request_forget":            {Placement{LocatorHome, ""}},
+	"pull_request_link":              {Placement{LocatorSession, "session_id"}},
+	"pull_request_list":              {Placement{LocatorHome, ""}},
+	"pull_request_unwatch":           {Placement{LocatorHome, ""}},
+	"pull_request_watch":             {Placement{LocatorHome, ""}},
+	"query":                          {Placement{LocatorHome, ""}},
+	"query_authors":                  {Placement{LocatorHome, ""}},
+	"query_prs":                      {Placement{LocatorHome, ""}},
+	"query_repos":                    {Placement{LocatorHome, ""}},
+	"quick_capture_get":              {Placement{LocatorHome, ""}},
+	"quick_capture_list":             {Placement{LocatorHome, ""}},
+	"quick_capture_send":             {Placement{LocatorHome, ""}},
+	"record_analytics":               {Placement{LocatorHere, ""}},
+	"rename_session":                 {Placement{LocatorHome, ""}},
+	"reopen_inspect":                 {Placement{LocatorMachine, "host"}},
+	"reopen_worktree":                {Placement{LocatorMachine, "host"}},
+	"restart_shared_codex":           {Placement{LocatorHere, ""}},
+	"review_edit":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"review_file":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"review_search":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"review_sent":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"run_command":                    {Placement{LocatorCommand, "command"}},
+	"seed_artifact_transfer":         {Placement{LocatorHome, ""}},
+	"seed_artifact_transfer_here":    {Placement{LocatorMachine, "host"}},
+	"seed_authorization":             {Placement{LocatorHome, ""}},
+	"seed_check":                     {Placement{LocatorHome, ""}},
+	"seed_note":                      {Placement{LocatorHome, ""}},
+	"seed_review_cancel":             {Placement{LocatorHome, ""}},
+	"seed_review_keep":               {Placement{LocatorHome, ""}},
+	"seed_review_retry":              {Placement{LocatorHome, ""}},
+	"seed_review_show":               {Placement{LocatorHome, ""}},
+	"seed_review_start":              {Placement{LocatorHome, ""}},
+	"seed_send_to_chief":             {Placement{LocatorHome, ""}},
+	"seed_transition":                {Placement{LocatorHome, ""}},
+	"sender_list":                    {Placement{LocatorHome, ""}},
+	"sender_model_call":              {Placement{LocatorHome, ""}},
+	"sender_pair":                    {Placement{LocatorHome, ""}},
+	"sender_sessions":                {Placement{LocatorHome, ""}},
+	"sender_unpair":                  {Placement{LocatorHome, ""}},
+	"session_input_reopened":         {Placement{LocatorHome, ""}},
+	"session_list":                   {Placement{LocatorHome, ""}},
+	"session_place":                  {Placement{LocatorSession, "session_id"}},
+	"session_pull_request_save":      {Placement{LocatorHome, ""}},
+	"session_reopen":                 {Placement{LocatorHome, ""}},
+	"session_show":                   {Placement{LocatorHome, ""}},
+	"set_session_context_window_cap": {Placement{LocatorHome, ""}},
+	"set_session_priority":           {Placement{LocatorHome, ""}},
+	"set_session_resume_id":          {Placement{LocatorHere, ""}},
+	"set_setting":                    {Placement{LocatorSetting, "key"}},
+	"snooze_turn":                    {Placement{LocatorHome, ""}},
+	"start_update":                   {Placement{LocatorHere, ""}},
+	"state":                          {Placement{LocatorHere, ""}},
+	"stop":                           {Placement{LocatorHere, ""}},
+	"terminal_exited":                {Placement{LocatorHome, ""}},
+	"terminal_kill":                  {Placement{LocatorTerminal, "terminal_id"}},
+	"terminal_launch":                {Placement{LocatorTerminal, "terminal_id"}},
+	"terminal_pointer_activity":      {Placement{LocatorTerminal, "id"}},
+	"terminal_read_text":             {Placement{LocatorTerminal, "terminal_id"}},
+	"terminal_remove":                {Placement{LocatorTerminal, "terminal_id"}},
+	"terminal_restart":               {Placement{LocatorTerminal, "terminal_id"}},
+	"terminal_shell":                 {Placement{LocatorMachine, "host"}},
+	"terminal_start":                 {Placement{LocatorMachine, "host"}},
+	"terminal_theme":                 {Placement{LocatorMachine, "host"}},
+	"terminal_wait_block":            {Placement{LocatorTerminal, "terminal_id"}},
+	"terminal_write":                 {Placement{LocatorTerminal, "terminal_id"}},
+	"tile_asset_read":                {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"tile_document_changed":          {Placement{LocatorHome, ""}},
+	"tile_document_read":             {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"tile_documents_watch":           {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"transcript_activity":            {Placement{LocatorSession, "session_id"}},
+	"unregister":                     {Placement{LocatorHome, ""}},
+	"update_outpost":                 {Placement{LocatorHome, ""}},
+	"update_request":                 {Placement{LocatorHome, ""}},
+	"update_status":                  {Placement{LocatorHome, ""}},
+	"wake_turn":                      {Placement{LocatorHome, ""}},
+	"worktree_keep":                  {Placement{LocatorHere, ""}},
+	"worktree_list":                  {Placement{LocatorHere, ""}},
+	"worktree_refresh":               {Placement{LocatorHere, ""}},
+	"worktree_removal_prepare":       {Placement{LocatorHome, ""}},
+	"worktree_removed":               {Placement{LocatorHome, ""}},
+	"worktree_seed_owners":           {Placement{LocatorHome, ""}},
+	"worktree_sweep_log":             {Placement{LocatorHere, ""}},
 }
 
 func SocketPlacement(command string, frame []byte) (Placement, bool) {
@@ -277,6 +277,42 @@ func (m AskOpenMessage) Placement() Placement {
 }
 
 func (m AskOpenMessage) Locate() string {
+	return ""
+}
+
+func (AttachmentDiscardMessage) CommandName() string {
+	return "attachment_discard"
+}
+
+func (m AttachmentDiscardMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AttachmentDiscardMessage) Locate() string {
+	return ""
+}
+
+func (AttachmentGetMessage) CommandName() string {
+	return "attachment_get"
+}
+
+func (m AttachmentGetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AttachmentGetMessage) Locate() string {
+	return ""
+}
+
+func (AttachmentPutMessage) CommandName() string {
+	return "attachment_put"
+}
+
+func (m AttachmentPutMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AttachmentPutMessage) Locate() string {
 	return ""
 }
 
@@ -1471,42 +1507,6 @@ func (m QueryReposMessage) Placement() Placement {
 }
 
 func (m QueryReposMessage) Locate() string {
-	return ""
-}
-
-func (QuickCaptureAttachmentDiscardMessage) CommandName() string {
-	return "quick_capture_attachment_discard"
-}
-
-func (m QuickCaptureAttachmentDiscardMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m QuickCaptureAttachmentDiscardMessage) Locate() string {
-	return ""
-}
-
-func (QuickCaptureAttachmentGetMessage) CommandName() string {
-	return "quick_capture_attachment_get"
-}
-
-func (m QuickCaptureAttachmentGetMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m QuickCaptureAttachmentGetMessage) Locate() string {
-	return ""
-}
-
-func (QuickCaptureAttachmentPutMessage) CommandName() string {
-	return "quick_capture_attachment_put"
-}
-
-func (m QuickCaptureAttachmentPutMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m QuickCaptureAttachmentPutMessage) Locate() string {
 	return ""
 }
 

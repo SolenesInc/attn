@@ -5,11 +5,11 @@ use std::time::Duration;
 use attn_app::Action;
 use attn_app::quick_capture::DEFAULT_SHORTCUT;
 use attn_protocol::{
-    CrewMember, CrewUpdatedMessage, InitialStateMessage, Profile, ProfileArrangementChangedMessage,
-    QuickCaptureAttachment, QuickCaptureAttachmentGetResult, QuickCaptureAttachmentPutResult,
-    QuickCaptureDraftAsset, QuickCaptureListResult, QuickCaptureReadMessage, QuickCaptureRecord,
-    QuickCaptureResult, QuickCaptureResultMessage, QuickCaptureUnreadMessage,
-    SettingsUpdatedMessage,
+    Attachment, AttachmentGetResult, AttachmentPutResult, AttachmentResult,
+    AttachmentResultMessage, CrewMember, CrewUpdatedMessage, InitialStateMessage, Profile,
+    ProfileArrangementChangedMessage, QuickCaptureDraftAsset, QuickCaptureListResult,
+    QuickCaptureReadMessage, QuickCaptureRecord, QuickCaptureResult, QuickCaptureResultMessage,
+    QuickCaptureUnreadMessage, SettingsUpdatedMessage,
 };
 use attn_testkit::{Answer, Daemon, Request, Target, World, message};
 use base64::Engine;
@@ -86,6 +86,25 @@ fn refusal(code: &str, error: &str) -> Value {
     })
 }
 
+fn attachment_answer(result: AttachmentResult) -> Value {
+    message(AttachmentResultMessage {
+        profile_id: PROFILE.into(),
+        success: true,
+        result: Some(result),
+        ..AttachmentResultMessage::new()
+    })
+}
+
+fn attachment_refusal(error: &str) -> Value {
+    message(AttachmentResultMessage {
+        profile_id: PROFILE.into(),
+        success: false,
+        error: Some(error.into()),
+        error_code: Some("internal".into()),
+        ..AttachmentResultMessage::new()
+    })
+}
+
 fn kept_send(kept: &Kept, request: &Request) -> Value {
     let mut kept = kept.lock().unwrap();
     let ids: Vec<String> = request["attachment_ids"]
@@ -98,7 +117,7 @@ fn kept_send(kept: &Kept, request: &Request) -> Value {
         .iter()
         .map(|id| {
             let asset = kept.assets.iter().find(|a| &a.attachment_id == id).unwrap();
-            QuickCaptureAttachment {
+            Attachment {
                 id: id.clone(),
                 name: asset.name.clone(),
                 media_type: "image/png".into(),
@@ -166,18 +185,18 @@ fn kept_put(kept: &Kept, request: &Request) -> Value {
     };
     kept.assets.retain(|a| a.attachment_id != id);
     kept.assets.push(QuickCaptureDraftAsset {
-        capture_id: request["capture_id"].as_str().unwrap().into(),
+        capture_id: request["owner"]["id"].as_str().unwrap().into(),
         attachment_id: id,
         name: request["name"].as_str().unwrap().into(),
         state: state.into(),
         next_offset: next,
     });
-    answer(QuickCaptureResult {
-        upload: Some(QuickCaptureAttachmentPutResult {
+    attachment_answer(AttachmentResult {
+        upload: Some(AttachmentPutResult {
             next_offset: next,
             attachment: None,
         }),
-        ..QuickCaptureResult::default()
+        ..AttachmentResult::default()
     })
 }
 
@@ -187,13 +206,13 @@ fn kept_download(kept: &Kept, request: &Request) -> Value {
     let bytes = &kept.bytes[request["attachment_id"].as_str().unwrap()];
     let offset = request["offset"].as_u64().unwrap() as usize;
     let end = (offset + 1).min(bytes.len());
-    answer(QuickCaptureResult {
-        download: Some(QuickCaptureAttachmentGetResult {
+    attachment_answer(AttachmentResult {
+        download: Some(AttachmentGetResult {
             data_base64: base64::engine::general_purpose::STANDARD.encode(&bytes[offset..end]),
             next_offset: end as i64,
             eof: end == bytes.len(),
         }),
-        ..QuickCaptureResult::default()
+        ..AttachmentResult::default()
     })
 }
 
@@ -201,9 +220,9 @@ fn kept_discard(kept: &Kept, request: &Request) -> Value {
     let mut kept = kept.lock().unwrap();
     kept.assets
         .retain(|a| a.attachment_id != request["attachment_id"]);
-    answer(QuickCaptureResult {
+    attachment_answer(AttachmentResult {
         discarded: Some(true),
-        ..QuickCaptureResult::default()
+        ..AttachmentResult::default()
     })
 }
 
@@ -218,15 +237,11 @@ fn home() -> (Daemon, Kept) {
     let k = kept.clone();
     daemon.on("quick_capture_list", move |r| kept_list(&k, r));
     let k = kept.clone();
-    daemon.on("quick_capture_attachment_put", move |r| kept_put(&k, r));
+    daemon.on("attachment_put", move |r| kept_put(&k, r));
     let k = kept.clone();
-    daemon.on("quick_capture_attachment_get", move |r| {
-        kept_download(&k, r)
-    });
+    daemon.on("attachment_get", move |r| kept_download(&k, r));
     let k = kept.clone();
-    daemon.on("quick_capture_attachment_discard", move |r| {
-        kept_discard(&k, r)
-    });
+    daemon.on("attachment_discard", move |r| kept_discard(&k, r));
     (daemon, kept)
 }
 
@@ -629,10 +644,7 @@ fn pastes_a_screenshot_through_the_draft_folder_and_uploads_its_bytes_before_sen
     let sent = world.daemon.sent_of("quick_capture_send");
     assert_eq!(sent[0]["attachment_ids"], json!([id]));
     assert_eq!(sent[0]["content"], "");
-    assert_eq!(
-        world.daemon.sent_of("quick_capture_attachment_put").len(),
-        1
-    );
+    assert_eq!(world.daemon.sent_of("attachment_put").len(), 1);
     assert!(!stored.exists(), "a kept send forgets the draft's files");
     rest(&mut world);
 }
@@ -690,7 +702,7 @@ fn recent_shows_the_picture_of_a_sent_image_read_in_chunks_from_the_daemon() {
         .expect("Recent shows the sent screenshot's picture");
     assert_eq!((w, h), (132.0, 84.0));
     assert_eq!(
-        world.daemon.sent_of("quick_capture_attachment_get").len(),
+        world.daemon.sent_of("attachment_get").len(),
         png().len(),
         "the picture is read a chunk at a time until the daemon says it ended"
     );
@@ -797,7 +809,7 @@ fn drops_a_multi_megabyte_file_and_uploads_it_in_chunks() {
         .trim_start_matches("capture.file.")
         .to_owned();
     assert_eq!(kept.lock().unwrap().bytes[&id], bytes);
-    let puts = world.daemon.sent_of("quick_capture_attachment_put");
+    let puts = world.daemon.sent_of("attachment_put");
     assert_eq!(puts.len(), 6, "3 MB in 512 KiB chunks");
     assert!(puts.iter().all(|p| p.to_string().len() < 800_000));
     let stored = draft_on_disk(&world, PROFILE).unwrap();
@@ -815,10 +827,7 @@ fn reconciles_a_ready_file_after_a_restart_and_sends_without_uploading_it_again(
         d.runtime
             .paste_content(ClipboardContent::new("").with_image(image));
     });
-    assert_eq!(
-        world.daemon.sent_of("quick_capture_attachment_put").len(),
-        1
-    );
+    assert_eq!(world.daemon.sent_of("attachment_put").len(), 1);
 
     world.restart_capture();
     open(&mut world);
@@ -830,7 +839,7 @@ fn reconciles_a_ready_file_after_a_restart_and_sends_without_uploading_it_again(
     );
     press(&mut world, "enter");
     assert_eq!(
-        world.daemon.sent_of("quick_capture_attachment_put").len(),
+        world.daemon.sent_of("attachment_put").len(),
         1,
         "the daemon said it holds the file"
     );
@@ -858,13 +867,7 @@ fn removing_a_file_saves_the_draft_without_it_then_has_the_daemon_forget_it() {
             .is_none()
     );
     assert_eq!(draft_on_disk(&world, PROFILE).unwrap()["files"], json!([]));
-    assert_eq!(
-        world
-            .daemon
-            .sent_of("quick_capture_attachment_discard")
-            .len(),
-        1
-    );
+    assert_eq!(world.daemon.sent_of("attachment_discard").len(), 1);
     assert!(kept.lock().unwrap().assets.is_empty());
     rest(&mut world);
 }
@@ -1104,7 +1107,7 @@ fn a_file_uploading_when_the_profile_changes_stays_with_its_draft_and_finishes_o
     let (daemon, kept) = home();
     let holding = std::sync::atomic::AtomicBool::new(true);
     let k = kept.clone();
-    daemon.on("quick_capture_attachment_put", move |r| {
+    daemon.on("attachment_put", move |r| {
         if holding.swap(false, std::sync::atomic::Ordering::Relaxed) {
             vec![]
         } else {
@@ -1121,7 +1124,7 @@ fn a_file_uploading_when_the_profile_changes_stays_with_its_draft_and_finishes_o
         d.runtime
             .drop_files(vec![dropped.clone()], Some((200.0, 200.0)))
     });
-    let first = world.daemon.sent_of("quick_capture_attachment_put")[0].clone();
+    let first = world.daemon.sent_of("attachment_put")[0].clone();
     assert_eq!(
         (first["profile_id"].as_str(), first["offset"].as_u64()),
         (Some(PROFILE), Some(0))
@@ -1139,10 +1142,7 @@ fn a_file_uploading_when_the_profile_changes_stays_with_its_draft_and_finishes_o
     let late = kept_put(&kept, &first);
     world.daemon.reply_to(&first, late);
     world.settle();
-    assert_eq!(
-        world.daemon.sent_of("quick_capture_attachment_put").len(),
-        1
-    );
+    assert_eq!(world.daemon.sent_of("attachment_put").len(), 1);
     assert_eq!(message_text(&world), "B retained draft");
     let a = draft_on_disk(&world, PROFILE).unwrap();
     assert_eq!(a["text"], "A retained draft");
@@ -1150,7 +1150,7 @@ fn a_file_uploading_when_the_profile_changes_stays_with_its_draft_and_finishes_o
 
     switch_to(&mut world, PROFILE, "Work");
     assert_eq!(message_text(&world), "A retained draft");
-    let puts = world.daemon.sent_of("quick_capture_attachment_put");
+    let puts = world.daemon.sent_of("attachment_put");
     assert_eq!(
         puts.len(),
         2,
@@ -1211,7 +1211,7 @@ const SECOND: &str = "a3e1f0c2-2222-4222-8222-0000000000bb";
 fn held_puts(daemon: &Daemon, kept: &Kept) -> Arc<std::sync::atomic::AtomicBool> {
     let holding = Arc::new(std::sync::atomic::AtomicBool::new(true));
     let (h, k) = (holding.clone(), kept.clone());
-    daemon.on("quick_capture_attachment_put", move |r| {
+    daemon.on("attachment_put", move |r| {
         if h.load(std::sync::atomic::Ordering::Relaxed) {
             vec![]
         } else {
@@ -1257,12 +1257,7 @@ fn text_pastes_into_the_message_without_attaching_anything() {
                 .find(Target::key("capture.files"))
                 .is_none()
         );
-        assert!(
-            world
-                .daemon
-                .sent_of("quick_capture_attachment_put")
-                .is_empty()
-        );
+        assert!(world.daemon.sent_of("attachment_put").is_empty());
         rest(&mut world);
     }
 }
@@ -1282,7 +1277,7 @@ fn a_copied_web_image_attaches_beside_its_html_and_leaves_the_message_alone() {
         );
     });
     assert_eq!(message_text(&world), "Existing message");
-    let put = &world.daemon.sent_of("quick_capture_attachment_put")[0];
+    let put = &world.daemon.sent_of("attachment_put")[0];
     assert_eq!(put["name"], "Pasted screenshot");
     assert_eq!(
         kept.lock().unwrap().bytes[put["attachment_id"].as_str().unwrap()],
@@ -1335,14 +1330,17 @@ fn enter_while_composing_stays_with_the_input_method() {
 #[test]
 fn a_failed_upload_keeps_the_restored_image_and_sends_nothing() {
     let (daemon, _) = home();
-    daemon.on("quick_capture_attachment_put", |_| {
-        refusal("internal", "Upload storage unavailable")
+    daemon.on("attachment_put", |_| {
+        attachment_refusal("Upload storage unavailable")
     });
     let mut world = World::start(daemon);
     let capture = relaunch_with(&mut world, "", &[(IMAGE, "screenshot.png", &png())]);
     press(&mut world, "enter");
-    let put = &world.daemon.sent_of("quick_capture_attachment_put")[0];
-    assert_eq!(put["capture_id"], capture.as_str());
+    let put = &world.daemon.sent_of("attachment_put")[0];
+    assert_eq!(
+        (put["owner"]["kind"].as_str(), put["owner"]["id"].as_str()),
+        (Some("quick_capture"), Some(capture.as_str()))
+    );
     assert_eq!(put["final"], true);
     assert!(world.daemon.sent_of("quick_capture_send").is_empty());
     assert_eq!(
@@ -1367,29 +1365,18 @@ fn removing_a_file_mid_upload_discards_it_after_the_upload_answers() {
     let (daemon, kept) = home();
     let holding = held_puts(&daemon, &kept);
     let mut world = World::start(daemon);
-    let capture = relaunch_with(&mut world, "", &[(IMAGE, "remove.png", &png())]);
-    let upload = world.daemon.sent_of("quick_capture_attachment_put")[0].clone();
+    relaunch_with(&mut world, "", &[(IMAGE, "remove.png", &png())]);
+    let upload = world.daemon.sent_of("attachment_put")[0].clone();
     world.capture_gesture(|d| d.click(Target::role("button").name("Remove remove.png")));
-    assert!(
-        world
-            .daemon
-            .sent_of("quick_capture_attachment_discard")
-            .is_empty()
-    );
+    assert!(world.daemon.sent_of("attachment_discard").is_empty());
 
     holding.store(false, std::sync::atomic::Ordering::Relaxed);
     let answer = kept_put(&kept, &upload);
     world.daemon.reply_to(&upload, answer);
     world.settle();
-    let discarded = world.daemon.sent_of("quick_capture_attachment_discard");
+    let discarded = world.daemon.sent_of("attachment_discard");
     assert_eq!(discarded.len(), 1);
-    assert_eq!(
-        (
-            discarded[0]["capture_id"].as_str(),
-            discarded[0]["attachment_id"].as_str()
-        ),
-        (Some(capture.as_str()), Some(IMAGE))
-    );
+    assert_eq!(discarded[0]["attachment_id"].as_str(), Some(IMAGE));
     assert!(kept.lock().unwrap().assets.is_empty());
     assert_eq!(draft_on_disk(&world, PROFILE).unwrap()["files"], json!([]));
     assert!(world.daemon.sent_of("quick_capture_send").is_empty());
@@ -1399,7 +1386,7 @@ fn removing_a_file_mid_upload_discards_it_after_the_upload_answers() {
 #[test]
 fn a_send_waits_until_the_daemon_forgot_a_removed_file() {
     let (daemon, kept) = home();
-    daemon.answer_in_turn("quick_capture_attachment_discard", [Answer::Hold]);
+    daemon.answer_in_turn("attachment_discard", [Answer::Hold]);
     let mut world = World::start(daemon);
     let capture = relaunch_with(
         &mut world,
@@ -1407,7 +1394,7 @@ fn a_send_waits_until_the_daemon_forgot_a_removed_file() {
         &[(IMAGE, "removed.png", &png())],
     );
     world.capture_gesture(|d| d.click(Target::role("button").name("Remove removed.png")));
-    let discard = world.daemon.sent_of("quick_capture_attachment_discard")[0].clone();
+    let discard = world.daemon.sent_of("attachment_discard")[0].clone();
     press(&mut world, "enter");
     assert!(world.daemon.sent_of("quick_capture_send").is_empty());
 
@@ -1438,12 +1425,7 @@ fn a_removal_the_disk_refuses_keeps_the_file_through_edits_and_a_relaunch() {
         world.capture_gesture(|d| d.click(Target::role("button").name("Remove retained.png")));
         assert!(alert(&world).unwrap().starts_with("Cannot remove file: "));
     }
-    assert!(
-        world
-            .daemon
-            .sent_of("quick_capture_attachment_discard")
-            .is_empty()
-    );
+    assert!(world.daemon.sent_of("attachment_discard").is_empty());
     press(&mut world, "mod+a");
     type_text(&mut world, "Edited after storage recovered");
     assert!(
@@ -1478,7 +1460,7 @@ fn edits_and_a_removal_made_while_another_file_uploads_are_kept() {
             (SECOND, "second.pdf", b"%PDF-1.4\n"),
         ],
     );
-    let puts = world.daemon.sent_of("quick_capture_attachment_put");
+    let puts = world.daemon.sent_of("attachment_put");
     type_text(&mut world, " edited while uploading");
     world.capture_gesture(|d| d.click(Target::role("button").name("Remove first.pdf")));
     holding.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -1495,7 +1477,7 @@ fn edits_and_a_removal_made_while_another_file_uploads_are_kept() {
         json!([{"id": SECOND, "name": "second.pdf"}])
     );
     assert_eq!(
-        world.daemon.sent_of("quick_capture_attachment_discard")[0]["attachment_id"],
+        world.daemon.sent_of("attachment_discard")[0]["attachment_id"],
         IMAGE
     );
     rest(&mut world);
@@ -1514,10 +1496,7 @@ fn a_disconnect_mid_upload_keeps_the_files_and_staging_resumes_on_reconnect() {
             (SECOND, "second.pdf", b"%PDF-1.4\n"),
         ],
     );
-    assert_eq!(
-        world.daemon.sent_of("quick_capture_attachment_put").len(),
-        2
-    );
+    assert_eq!(world.daemon.sent_of("attachment_put").len(), 2);
     world.daemon.disconnect();
     world.settle();
     assert!(alert(&world).is_some());
@@ -1533,7 +1512,7 @@ fn a_disconnect_mid_upload_keeps_the_files_and_staging_resumes_on_reconnect() {
     holding.store(false, std::sync::atomic::Ordering::Relaxed);
     world.advance(Duration::from_secs(30));
     assert_eq!(world.daemon.connections(), 2);
-    let puts = world.daemon.sent_of("quick_capture_attachment_put");
+    let puts = world.daemon.sent_of("attachment_put");
     assert_eq!(
         puts.len(),
         4,
@@ -1575,7 +1554,7 @@ fn uploads_a_restored_file_from_where_the_daemon_says_it_stopped() {
             &[(IMAGE, "retained.bin", &bytes)],
         );
         press(&mut world, "enter");
-        let puts = world.daemon.sent_of("quick_capture_attachment_put");
+        let puts = world.daemon.sent_of("attachment_put");
         assert_eq!(puts[0]["offset"].as_u64(), Some(offset), "length {length}");
         assert_eq!(puts.last().unwrap()["final"], true);
         assert!(
@@ -1647,20 +1626,14 @@ fn a_read_receipt_that_lands_while_a_page_loads_still_shows() {
 #[test]
 fn a_discarded_draft_stays_cleared_when_the_daemon_could_not_forget_its_files() {
     let (daemon, _) = home();
-    daemon.on("quick_capture_attachment_discard", |_| {
-        refusal("internal", "Storage offline")
+    daemon.on("attachment_discard", |_| {
+        attachment_refusal("Storage offline")
     });
     let mut world = World::start(daemon);
     relaunch_with(&mut world, "Throw away", &[(IMAGE, "gone.png", &png())]);
     world.capture_gesture(|d| d.click(Target::role("button").name("Recent messages")));
     world.capture_gesture(|d| d.click(Target::role("button").name("Discard draft")));
-    assert_eq!(
-        world
-            .daemon
-            .sent_of("quick_capture_attachment_discard")
-            .len(),
-        1
-    );
+    assert_eq!(world.daemon.sent_of("attachment_discard").len(), 1);
     world.restart_capture();
     open(&mut world);
     assert_eq!(message_text(&world), "");
@@ -1684,12 +1657,7 @@ fn a_clear_the_disk_refuses_keeps_the_draft_and_asks_the_daemon_nothing() {
         world.capture_gesture(|d| d.click(Target::role("button").name("Discard draft")));
     }
     assert!(alert(&world).unwrap().starts_with("Cannot clear draft: "));
-    assert!(
-        world
-            .daemon
-            .sent_of("quick_capture_attachment_discard")
-            .is_empty()
-    );
+    assert!(world.daemon.sent_of("attachment_discard").is_empty());
     world.capture_gesture(|d| d.click(Target::role("button").name("Back to draft")));
     assert_eq!(message_text(&world), "Keep me");
     rest(&mut world);
@@ -1708,7 +1676,7 @@ fn a_file_attached_after_the_draft_was_saved_keeps_its_bytes_and_uploads_them() 
         d.runtime
             .paste_content(ClipboardContent::new("").with_image(image));
     });
-    let put = &world.daemon.sent_of("quick_capture_attachment_put")[0];
+    let put = &world.daemon.sent_of("attachment_put")[0];
     let id = put["attachment_id"].as_str().unwrap().to_owned();
     assert_eq!(
         std::fs::read(
@@ -2311,12 +2279,7 @@ fn a_restored_draft_uploads_and_sends_while_the_panels_app_starts_and_binds_its_
         None,
         "no shortcut binds before the panel's app runs"
     );
-    assert!(
-        !world
-            .daemon
-            .sent_of("quick_capture_attachment_put")
-            .is_empty()
-    );
+    assert!(!world.daemon.sent_of("attachment_put").is_empty());
 
     world.capture_runs();
     assert_eq!(world.capture_shortcut().as_deref(), Some("ctrl+alt+b"));

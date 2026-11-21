@@ -1216,17 +1216,6 @@
                 }
               },
               {
-                "name": "capture_id",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "capture_id",
-                    "kind": "text",
-                    "description": "Capture ID"
-                  }
-                }
-              },
-              {
                 "name": "attachment_id",
                 "node": {
                   "kind": "input",
@@ -7425,5 +7414,5 @@
       ]
     }
   ],
-  "definitions_hash": "9005f7910abd3fcbed0bff4aaaeff71c052dcb0cb4ed8fce683845fda423855d"
+  "definitions_hash": "885d4cdfab5322f500d3b72573c2f79ed1bc3c5d27a989337aa861072e4bd4eb"
 }

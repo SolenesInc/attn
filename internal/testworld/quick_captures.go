@@ -17,6 +17,22 @@ import (
 )
 
 func (p *Peer) QuickCapture(msg any) (*protocol.QuickCaptureResult, error) {
+	return awaitResult[protocol.QuickCaptureResult](p, msg, protocol.EventQuickCaptureResult)
+}
+
+func (p *Peer) Attachment(msg any) (*protocol.AttachmentResult, error) {
+	return awaitResult[protocol.AttachmentResult](p, msg, protocol.EventAttachmentResult)
+}
+
+type resultFrame[R any] struct {
+	RequestID string  `json:"request_id"`
+	Success   bool    `json:"success"`
+	Error     *string `json:"error"`
+	ErrorCode *string `json:"error_code"`
+	Result    *R      `json:"result"`
+}
+
+func awaitResult[R any](p *Peer, msg any, event string) (*R, error) {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return nil, err
@@ -40,10 +56,10 @@ func (p *Peer) QuickCapture(msg any) (*protocol.QuickCaptureResult, error) {
 		p.mu.Lock()
 		for i := range p.frames {
 			frame := &p.frames[i]
-			if frame.consumed || frame.event != protocol.EventQuickCaptureResult {
+			if frame.consumed || frame.event != event {
 				continue
 			}
-			var response protocol.QuickCaptureResultMessage
+			var response resultFrame[R]
 			if err := json.Unmarshal(frame.raw, &response); err != nil {
 				p.mu.Unlock()
 				return nil, err
@@ -66,7 +82,7 @@ func (p *Peer) QuickCapture(msg any) (*protocol.QuickCaptureResult, error) {
 		select {
 		case <-grew:
 		case <-ctx.Done():
-			return nil, fmt.Errorf("await quick capture %s: %w", id, ctx.Err())
+			return nil, fmt.Errorf("await %s %s: %w", event, id, ctx.Err())
 		}
 	}
 }

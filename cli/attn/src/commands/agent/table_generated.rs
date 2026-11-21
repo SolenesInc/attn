@@ -83,8 +83,8 @@ pub const COMMANDS: &[Command] = &[
         runs_without_daemon: false,
         usage: &[],
         args: &[
-            Arg { name: "capture", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "attachment", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
+            Arg { name: "quoted_attachment", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "out", cli: Cli::Flag("out"), value: Value::Text, source: Source::Given, required: true, list: false },
         ],
     },

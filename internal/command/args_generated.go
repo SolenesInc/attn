@@ -278,9 +278,9 @@ type AgentMsgStatusArgs struct {
 }
 
 type AgentAttachmentArgs struct {
-	Capture    string `json:"capture,omitempty"`
-	Attachment string `json:"attachment,omitempty"`
-	Out        string `json:"out,omitempty"`
+	Attachment       string `json:"attachment,omitempty"`
+	QuotedAttachment string `json:"quoted_attachment,omitempty"`
+	Out              string `json:"out,omitempty"`
 }
 
 type AskArgs struct {

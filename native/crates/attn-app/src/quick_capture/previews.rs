@@ -5,11 +5,11 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use attn_protocol::{QuickCaptureAttachmentGetMessage, QuickCaptureRecord};
+use attn_protocol::{AttachmentGetMessage, QuickCaptureRecord};
 use base64::Engine;
 use rune::{Image, ImageCache, Tx};
 
-use super::{Message, Panel, result};
+use super::{Message, Panel, attachment_result};
 
 /// The largest an image draws in the panel, in points at the largest text size: each picture
 /// holds only the pixels that fill a square this size, however large the image.
@@ -150,22 +150,21 @@ fn download(
     tx: &mut Tx,
 ) {
     let generation = panel.history.generation;
-    let (capture_id, attachment_id) = key.clone();
+    let attachment_id = key.1.clone();
     panel.ask(
         |request_id| {
-            Message::Download(QuickCaptureAttachmentGetMessage {
+            Message::Download(AttachmentGetMessage {
                 request_id: Some(request_id),
-                capture_id,
                 attachment_id,
                 offset,
-                ..QuickCaptureAttachmentGetMessage::new()
+                ..AttachmentGetMessage::new()
             })
         },
         move |panel, answer, tx| {
             if generation != panel.history.generation {
                 return;
             }
-            let chunk = result(answer)
+            let chunk = attachment_result(answer)
                 .map_err(|failure| failure.say())
                 .and_then(|r| {
                     r.download

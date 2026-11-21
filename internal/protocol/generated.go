@@ -155,7 +155,7 @@ type AgentInboxItem struct {
 	Address string `json:"address"`
 
 	// Attachments corresponds to the JSON schema field "attachments".
-	Attachments []QuickCaptureAttachment `json:"attachments,omitempty,omitzero"`
+	Attachments []Attachment `json:"attachments,omitempty,omitzero"`
 
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`
@@ -925,6 +925,155 @@ type AttachSnapshot struct {
 
 	// SnapshotB64 corresponds to the JSON schema field "snapshot_b64".
 	SnapshotB64 string `json:"snapshot_b64"`
+}
+
+type Attachment struct {
+	// Bytes corresponds to the JSON schema field "bytes".
+	Bytes int `json:"bytes"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// MediaType corresponds to the JSON schema field "media_type".
+	MediaType string `json:"media_type"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+}
+
+type AttachmentDiscardMessage struct {
+	// AttachmentID corresponds to the JSON schema field "attachment_id".
+	AttachmentID string `json:"attachment_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SenderToken corresponds to the JSON schema field "sender_token".
+	SenderToken *string `json:"sender_token,omitempty,omitzero"`
+}
+
+type AttachmentGetMessage struct {
+	// AttachmentID corresponds to the JSON schema field "attachment_id".
+	AttachmentID string `json:"attachment_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Offset corresponds to the JSON schema field "offset".
+	Offset int `json:"offset"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+}
+
+type AttachmentGetResult struct {
+	// DataBase64 corresponds to the JSON schema field "data_base64".
+	DataBase64 string `json:"data_base64"`
+
+	// Eof corresponds to the JSON schema field "eof".
+	Eof bool `json:"eof"`
+
+	// NextOffset corresponds to the JSON schema field "next_offset".
+	NextOffset int `json:"next_offset"`
+}
+
+type AttachmentOwner struct {
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind AttachmentOwnerKind `json:"kind"`
+}
+
+type AttachmentOwnerKind string
+
+const AttachmentOwnerKindAsk AttachmentOwnerKind = "ask"
+const AttachmentOwnerKindQuickCapture AttachmentOwnerKind = "quick_capture"
+
+type AttachmentPutMessage struct {
+	// AttachmentID corresponds to the JSON schema field "attachment_id".
+	AttachmentID string `json:"attachment_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DataBase64 corresponds to the JSON schema field "data_base64".
+	DataBase64 string `json:"data_base64"`
+
+	// Final corresponds to the JSON schema field "final".
+	Final bool `json:"final"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Offset corresponds to the JSON schema field "offset".
+	Offset int `json:"offset"`
+
+	// Owner corresponds to the JSON schema field "owner".
+	Owner AttachmentOwner `json:"owner"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SenderToken corresponds to the JSON schema field "sender_token".
+	SenderToken *string `json:"sender_token,omitempty,omitzero"`
+}
+
+type AttachmentPutResult struct {
+	// Attachment corresponds to the JSON schema field "attachment".
+	Attachment *Attachment `json:"attachment,omitempty,omitzero"`
+
+	// NextOffset corresponds to the JSON schema field "next_offset".
+	NextOffset int `json:"next_offset"`
+}
+
+type AttachmentResult struct {
+	// Discarded corresponds to the JSON schema field "discarded".
+	Discarded *bool `json:"discarded,omitempty,omitzero"`
+
+	// Download corresponds to the JSON schema field "download".
+	Download *AttachmentGetResult `json:"download,omitempty,omitzero"`
+
+	// Upload corresponds to the JSON schema field "upload".
+	Upload *AttachmentPutResult `json:"upload,omitempty,omitzero"`
+}
+
+type AttachmentResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// ErrorCode corresponds to the JSON schema field "error_code".
+	ErrorCode *string `json:"error_code,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Result corresponds to the JSON schema field "result".
+	Result *AttachmentResult `json:"result,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type AuthorState struct {
@@ -8317,114 +8466,6 @@ type QueryReposMessage struct {
 	Filter *string `json:"filter,omitempty,omitzero"`
 }
 
-type QuickCaptureAttachment struct {
-	// Bytes corresponds to the JSON schema field "bytes".
-	Bytes int `json:"bytes"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-
-	// MediaType corresponds to the JSON schema field "media_type".
-	MediaType string `json:"media_type"`
-
-	// Name corresponds to the JSON schema field "name".
-	Name string `json:"name"`
-}
-
-type QuickCaptureAttachmentDiscardMessage struct {
-	// AttachmentID corresponds to the JSON schema field "attachment_id".
-	AttachmentID string `json:"attachment_id"`
-
-	// CaptureID corresponds to the JSON schema field "capture_id".
-	CaptureID string `json:"capture_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-
-	// SenderToken corresponds to the JSON schema field "sender_token".
-	SenderToken *string `json:"sender_token,omitempty,omitzero"`
-}
-
-type QuickCaptureAttachmentGetMessage struct {
-	// AttachmentID corresponds to the JSON schema field "attachment_id".
-	AttachmentID string `json:"attachment_id"`
-
-	// CaptureID corresponds to the JSON schema field "capture_id".
-	CaptureID string `json:"capture_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Offset corresponds to the JSON schema field "offset".
-	Offset int `json:"offset"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
-}
-
-type QuickCaptureAttachmentGetResult struct {
-	// DataBase64 corresponds to the JSON schema field "data_base64".
-	DataBase64 string `json:"data_base64"`
-
-	// Eof corresponds to the JSON schema field "eof".
-	Eof bool `json:"eof"`
-
-	// NextOffset corresponds to the JSON schema field "next_offset".
-	NextOffset int `json:"next_offset"`
-}
-
-type QuickCaptureAttachmentPutMessage struct {
-	// AttachmentID corresponds to the JSON schema field "attachment_id".
-	AttachmentID string `json:"attachment_id"`
-
-	// CaptureID corresponds to the JSON schema field "capture_id".
-	CaptureID string `json:"capture_id"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// DataBase64 corresponds to the JSON schema field "data_base64".
-	DataBase64 string `json:"data_base64"`
-
-	// Final corresponds to the JSON schema field "final".
-	Final bool `json:"final"`
-
-	// Name corresponds to the JSON schema field "name".
-	Name string `json:"name"`
-
-	// Offset corresponds to the JSON schema field "offset".
-	Offset int `json:"offset"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-
-	// SenderToken corresponds to the JSON schema field "sender_token".
-	SenderToken *string `json:"sender_token,omitempty,omitzero"`
-}
-
-type QuickCaptureAttachmentPutResult struct {
-	// Attachment corresponds to the JSON schema field "attachment".
-	Attachment *QuickCaptureAttachment `json:"attachment,omitempty,omitzero"`
-
-	// NextOffset corresponds to the JSON schema field "next_offset".
-	NextOffset int `json:"next_offset"`
-}
-
 type QuickCaptureDraftAsset struct {
 	// AttachmentID corresponds to the JSON schema field "attachment_id".
 	AttachmentID string `json:"attachment_id"`
@@ -8521,7 +8562,7 @@ type QuickCaptureReadMessage struct {
 
 type QuickCaptureRecord struct {
 	// Attachments corresponds to the JSON schema field "attachments".
-	Attachments []QuickCaptureAttachment `json:"attachments"`
+	Attachments []Attachment `json:"attachments"`
 
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`
@@ -8540,20 +8581,11 @@ type QuickCaptureRecord struct {
 }
 
 type QuickCaptureResult struct {
-	// Discarded corresponds to the JSON schema field "discarded".
-	Discarded *bool `json:"discarded,omitempty,omitzero"`
-
-	// Download corresponds to the JSON schema field "download".
-	Download *QuickCaptureAttachmentGetResult `json:"download,omitempty,omitzero"`
-
 	// List corresponds to the JSON schema field "list".
 	List *QuickCaptureListResult `json:"list,omitempty,omitzero"`
 
 	// Record corresponds to the JSON schema field "record".
 	Record *QuickCaptureRecord `json:"record,omitempty,omitzero"`
-
-	// Upload corresponds to the JSON schema field "upload".
-	Upload *QuickCaptureAttachmentPutResult `json:"upload,omitempty,omitzero"`
 }
 
 type QuickCaptureResultMessage struct {
@@ -8980,6 +9012,9 @@ type ReposUpdatedMessage struct {
 type Response struct {
 	// AskOpenResult corresponds to the JSON schema field "ask_open_result".
 	AskOpenResult *Ask `json:"ask_open_result,omitempty,omitzero"`
+
+	// AttachmentResult corresponds to the JSON schema field "attachment_result".
+	AttachmentResult *AttachmentResult `json:"attachment_result,omitempty,omitzero"`
 
 	// Authors corresponds to the JSON schema field "authors".
 	Authors []AuthorState `json:"authors,omitempty,omitzero"`

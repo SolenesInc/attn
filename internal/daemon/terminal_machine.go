@@ -25,7 +25,7 @@ func (d *Daemon) machineParts() map[string]machinePart {
 	runs(parts, false, d.receiveHomeUpdateNotice)
 	runs(parts, false, d.terminalExited)
 	d.registerMonitorParts(parts)
-	runs(parts, true, d.readQuickCaptureAttachment)
+	runs(parts, true, d.readAttachment)
 	runs(parts, false, d.receiveNotebookSyncReport)
 	runs(parts, false, d.receiveForwardedAnalytics)
 	runs(parts, false, d.receiveNotebookFolders)

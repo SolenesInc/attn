@@ -45,10 +45,21 @@ func decideSenderPairing(t *testing.T, app *testworld.Peer, pairingID string, al
 func authoringAs(token *string, profileID string) []any {
 	captureID, attachmentID := uuid.NewString(), uuid.NewString()
 	return []any{
-		protocol.QuickCaptureAttachmentPutMessage{Cmd: protocol.CmdQuickCaptureAttachmentPut, ProfileID: &profileID, SenderToken: token, CaptureID: captureID, AttachmentID: attachmentID, Name: "notes.txt", DataBase64: base64.StdEncoding.EncodeToString([]byte("notes")), Final: true},
-		protocol.QuickCaptureAttachmentDiscardMessage{Cmd: protocol.CmdQuickCaptureAttachmentDiscard, ProfileID: &profileID, SenderToken: token, CaptureID: captureID, AttachmentID: attachmentID},
+		protocol.AttachmentPutMessage{Cmd: protocol.CmdAttachmentPut, ProfileID: &profileID, SenderToken: token, Owner: protocol.AttachmentOwner{Kind: protocol.AttachmentOwnerKindQuickCapture, ID: captureID}, AttachmentID: attachmentID, Name: "notes.txt", DataBase64: base64.StdEncoding.EncodeToString([]byte("notes")), Final: true},
+		protocol.AttachmentDiscardMessage{Cmd: protocol.CmdAttachmentDiscard, ProfileID: &profileID, SenderToken: token, AttachmentID: attachmentID},
 		protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, ProfileID: &profileID, SenderToken: token, CaptureID: uuid.NewString(), Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID("target"))}, Content: "As the user", AttachmentIds: []string{}},
 	}
+}
+
+func author(cli *client.Client, msg any) error {
+	var err error
+	switch msg.(type) {
+	case protocol.AttachmentPutMessage, protocol.AttachmentDiscardMessage:
+		_, err = cli.Attachment(msg)
+	default:
+		_, err = cli.QuickCapture(msg)
+	}
+	return err
 }
 
 func TestOnlyAPairedSenderAuthorsQuickCapturesOnTheCommandSocket(t *testing.T) {
@@ -59,7 +70,7 @@ func TestOnlyAPairedSenderAuthorsQuickCapturesOnTheCommandSocket(t *testing.T) {
 
 	for _, token := range []*string{nil, protocol.Ptr("not-a-paired-token")} {
 		for _, msg := range authoringAs(token, profileID) {
-			if _, err := cli.QuickCapture(msg); err == nil || !strings.Contains(err.Error(), "attn send pair") {
+			if err := author(cli, msg); err == nil || !strings.Contains(err.Error(), "attn send pair") {
 				t.Fatalf("%T with token %v: %v", msg, token, err)
 			}
 		}
@@ -105,7 +116,7 @@ func TestOnlyAPairedSenderAuthorsQuickCapturesOnTheCommandSocket(t *testing.T) {
 		t.Fatalf("pairing a taken name: %+v", o)
 	}
 	for _, msg := range authoringAs(&paired.token.Token, profileID) {
-		if _, err := cli.QuickCapture(msg); err != nil {
+		if err := author(cli, msg); err != nil {
 			t.Fatalf("paired %T: %v", msg, err)
 		}
 	}
@@ -118,7 +129,7 @@ func TestOnlyAPairedSenderAuthorsQuickCapturesOnTheCommandSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, msg := range authoringAs(&paired.token.Token, profileID) {
-		if _, err := cli.QuickCapture(msg); err == nil || !strings.Contains(err.Error(), "no paired sender") {
+		if err := author(cli, msg); err == nil || !strings.Contains(err.Error(), "no paired sender") {
 			t.Fatalf("unpaired %T: %v", msg, err)
 		}
 	}
@@ -189,7 +200,7 @@ func TestAPairedSenderBelongsToTheProfileTheAppShowed(t *testing.T) {
 		}
 	}
 	for _, msg := range authoringAs(&sideSender.Token, home) {
-		if _, err := cli.QuickCapture(msg); err == nil || !strings.Contains(err.Error(), `"Side"`) || !strings.Contains(err.Error(), home) {
+		if err := author(cli, msg); err == nil || !strings.Contains(err.Error(), `"Side"`) || !strings.Contains(err.Error(), home) {
 			t.Fatalf("Side's sender authoring %T in Home: %v", msg, err)
 		}
 	}
@@ -203,7 +214,7 @@ func TestAPairedSenderBelongsToTheProfileTheAppShowed(t *testing.T) {
 		t.Fatalf("delete Side: %+v", deleted)
 	}
 	for _, msg := range authoringAs(&sideSender.Token, side.ID) {
-		if _, err := cli.QuickCapture(msg); err == nil || !strings.Contains(err.Error(), "no paired sender") {
+		if err := author(cli, msg); err == nil || !strings.Contains(err.Error(), "no paired sender") {
 			t.Fatalf("a deleted profile's sender authoring %T: %v", msg, err)
 		}
 	}

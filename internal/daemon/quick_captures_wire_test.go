@@ -23,6 +23,10 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
+func ownedBy(capture string) protocol.AttachmentOwner {
+	return protocol.AttachmentOwner{Kind: protocol.AttachmentOwnerKindQuickCapture, ID: capture}
+}
+
 func toTheChief() protocol.QuickCaptureMailbox {
 	return toMember("chief")
 }
@@ -65,9 +69,9 @@ func quickCapturePNG(t *testing.T) []byte {
 	}
 	return b.Bytes()
 }
-func uploadQuickCapture(t *testing.T, cli *testworld.Peer, quickCapture, id string, data []byte, final bool) *protocol.QuickCaptureAttachmentPutResult {
+func uploadQuickCapture(t *testing.T, cli *testworld.Peer, quickCapture, id string, data []byte, final bool) *protocol.AttachmentPutResult {
 	t.Helper()
-	r, err := cli.QuickCapture(protocol.QuickCaptureAttachmentPutMessage{Cmd: protocol.CmdQuickCaptureAttachmentPut, CaptureID: quickCapture, AttachmentID: id, Name: "screenshot.png", DataBase64: base64.StdEncoding.EncodeToString(data), Final: final})
+	r, err := cli.Attachment(protocol.AttachmentPutMessage{Cmd: protocol.CmdAttachmentPut, Owner: ownedBy(quickCapture), AttachmentID: id, Name: "screenshot.png", DataBase64: base64.StdEncoding.EncodeToString(data), Final: final})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +101,7 @@ func TestQuickCaptureFilesRequireFinalizationPreserveBytesAndDiscardOnlyDrafts(t
 	if err := os.Remove(source); err != nil {
 		t.Fatal(err)
 	}
-	r, err := app.QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: id})
+	r, err := app.Attachment(protocol.AttachmentGetMessage{Cmd: protocol.CmdAttachmentGet, AttachmentID: id})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,24 +109,24 @@ func TestQuickCaptureFilesRequireFinalizationPreserveBytesAndDiscardOnlyDrafts(t
 	if err != nil || !bytes.Equal(decoded, data) || !r.Download.Eof {
 		t.Fatalf("saved pixels changed: %v", err)
 	}
-	if _, err := app.QuickCapture(protocol.QuickCaptureAttachmentDiscardMessage{Cmd: protocol.CmdQuickCaptureAttachmentDiscard, CaptureID: quickCapture, AttachmentID: id}); err == nil {
+	if _, err := app.Attachment(protocol.AttachmentDiscardMessage{Cmd: protocol.CmdAttachmentDiscard, AttachmentID: id}); err == nil {
 		t.Fatal("discard deleted committed asset")
 	}
 	changed := append([]byte(nil), data...)
 	changed[0] ^= 1
-	if _, err := app.QuickCapture(protocol.QuickCaptureAttachmentPutMessage{Cmd: protocol.CmdQuickCaptureAttachmentPut, CaptureID: quickCapture, AttachmentID: id, Name: "screenshot.png", DataBase64: base64.StdEncoding.EncodeToString(changed), Final: true}); err == nil {
+	if _, err := app.Attachment(protocol.AttachmentPutMessage{Cmd: protocol.CmdAttachmentPut, Owner: ownedBy(quickCapture), AttachmentID: id, Name: "screenshot.png", DataBase64: base64.StdEncoding.EncodeToString(changed), Final: true}); err == nil {
 		t.Fatal("conflicting replay accepted")
 	}
 	draft, draftID := uuid.NewString(), uuid.NewString()
 	uploadQuickCapture(t, app, draft, draftID, data, false)
-	if _, err := app.QuickCapture(protocol.QuickCaptureAttachmentDiscardMessage{Cmd: protocol.CmdQuickCaptureAttachmentDiscard, CaptureID: draft, AttachmentID: draftID}); err != nil {
+	if _, err := app.Attachment(protocol.AttachmentDiscardMessage{Cmd: protocol.CmdAttachmentDiscard, AttachmentID: draftID}); err != nil {
 		t.Fatal(err)
 	}
 	list, err := app.QuickCapture(protocol.QuickCaptureListMessage{Cmd: protocol.CmdQuickCaptureList, Limit: 100})
 	if err != nil || len(list.List.DraftAssets) != 0 {
 		t.Fatalf("discard leaves drafts %+v %v", list, err)
 	}
-	if _, err := app.QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: draft, AttachmentID: draftID}); err == nil {
+	if _, err := app.Attachment(protocol.AttachmentGetMessage{Cmd: protocol.CmdAttachmentGet, AttachmentID: draftID}); err == nil {
 		t.Fatal("discarded asset retrieved")
 	}
 }
@@ -157,8 +161,8 @@ func TestAppQuickCaptureRequestsAreCorrelatedAndEmptyOrMalformedMailboxsRefused(
 	w := newWorld(t)
 	app := w.TrustedApp()
 	quickCapture, asset := uuid.NewString(), uuid.NewString()
-	req := protocol.QuickCaptureAttachmentPutMessage{Cmd: protocol.CmdQuickCaptureAttachmentPut, RequestID: protocol.Ptr("upload"), CaptureID: quickCapture, AttachmentID: asset, Name: "screenshot.png", DataBase64: base64.StdEncoding.EncodeToString(quickCapturePNG(t)), Final: true}
-	r := testworld.Request(app, req, protocol.EventQuickCaptureResult, func(r protocol.QuickCaptureResultMessage) bool { return r.RequestID == "upload" })
+	req := protocol.AttachmentPutMessage{Cmd: protocol.CmdAttachmentPut, RequestID: protocol.Ptr("upload"), Owner: ownedBy(quickCapture), AttachmentID: asset, Name: "screenshot.png", DataBase64: base64.StdEncoding.EncodeToString(quickCapturePNG(t)), Final: true}
+	r := testworld.Request(app, req, protocol.EventAttachmentResult, func(r protocol.AttachmentResultMessage) bool { return r.RequestID == "upload" })
 	if !r.Success || r.Result.Upload.Attachment == nil {
 		t.Fatalf("app upload %+v", r)
 	}
@@ -239,12 +243,23 @@ func TestQuickCaptureHistoryRefusesTheAgentSocket(t *testing.T) {
 			t.Fatalf("agent history %T: %v", msg, err)
 		}
 	}
-	if _, err := cli.QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: asset}); err != nil {
+	if _, err := cli.Attachment(protocol.AttachmentGetMessage{Cmd: protocol.CmdAttachmentGet, AttachmentID: asset}); err != nil {
 		t.Fatalf("agent retrieval refused: %v", err)
 	}
 	if r := quickCaptureRecord(t, app, quickCapture); r.ReadAt != nil {
 		t.Fatalf("agent mutated quick capture: %+v", r)
 	}
+}
+
+func askAsPeer(peer *testworld.Peer, msg any) error {
+	var err error
+	switch msg.(type) {
+	case protocol.AttachmentPutMessage, protocol.AttachmentDiscardMessage:
+		_, err = peer.Attachment(msg)
+	default:
+		_, err = peer.QuickCapture(msg)
+	}
+	return err
 }
 
 func TestQuickCaptureAuthoringRequiresTheTrustedAppIdentity(t *testing.T) {
@@ -274,14 +289,14 @@ func TestQuickCaptureAuthoringRequiresTheTrustedAppIdentity(t *testing.T) {
 		for _, msg := range []any{send,
 			protocol.QuickCaptureGetMessage{Cmd: protocol.CmdQuickCaptureGet, CaptureID: quickCapture},
 			protocol.QuickCaptureListMessage{Cmd: protocol.CmdQuickCaptureList, Limit: 1},
-			protocol.QuickCaptureAttachmentPutMessage{Cmd: protocol.CmdQuickCaptureAttachmentPut, CaptureID: quickCapture, AttachmentID: asset},
-			protocol.QuickCaptureAttachmentDiscardMessage{Cmd: protocol.CmdQuickCaptureAttachmentDiscard, CaptureID: quickCapture, AttachmentID: asset},
+			protocol.AttachmentPutMessage{Cmd: protocol.CmdAttachmentPut, Owner: ownedBy(quickCapture), AttachmentID: asset},
+			protocol.AttachmentDiscardMessage{Cmd: protocol.CmdAttachmentDiscard, AttachmentID: asset},
 		} {
-			if _, err := peer.QuickCapture(msg); client.ErrorCode(err) != protocol.ErrorCodeUnauthorizedClient || !strings.Contains(err.Error(), "authenticated attn app") {
+			if err := askAsPeer(peer, msg); client.ErrorCode(err) != protocol.ErrorCodeUnauthorizedClient || !strings.Contains(err.Error(), "authenticated attn app") {
 				t.Fatalf("untrusted authoring %T: %v", msg, err)
 			}
 		}
-		if _, err := peer.QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: asset}); err != nil {
+		if _, err := peer.Attachment(protocol.AttachmentGetMessage{Cmd: protocol.CmdAttachmentGet, AttachmentID: asset}); err != nil {
 			t.Fatalf("retrieval blocked: %v", err)
 		}
 	}
@@ -449,10 +464,9 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 			chiefs[profile].reply("Ready. <!-- attn:state=idle -->")
 		}
 		chiefA, chiefB := protocol.SessionID(chiefs[profileA].id), protocol.SessionID(chiefs[profileB].id)
-		quickCapture, file, draft := uuid.NewString(), uuid.NewString(), uuid.NewString()
+		quickCapture, file, fileB := uuid.NewString(), uuid.NewString(), uuid.NewString()
 		bytesA, bytesB := []byte("profile A file"), []byte("profile B file")
 		uploadQuickCapture(t, a, quickCapture, file, bytesA, true)
-		uploadQuickCapture(t, a, draft, file, bytesA, true)
 		msg := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: chiefMailboxes[profileA], Content: "A request", AttachmentIds: []string{file}}
 		if _, err := a.QuickCapture(msg); err != nil {
 			t.Fatal(err)
@@ -465,10 +479,10 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 		if _, err := b.QuickCapture(protocol.QuickCaptureGetMessage{Cmd: protocol.CmdQuickCaptureGet, CaptureID: quickCapture}); client.ErrorCode(err) != protocol.ErrorCodeQuickCaptureNotFound {
 			t.Fatalf("other-profile get: %v", err)
 		}
-		if _, err := b.QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: file}); err == nil {
+		if _, err := b.Attachment(protocol.AttachmentGetMessage{Cmd: protocol.CmdAttachmentGet, AttachmentID: file}); err == nil {
 			t.Fatal("other profile downloaded file")
 		}
-		if _, err := cli.WithGardenProfile(profileB, chiefB).QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: file}); err == nil {
+		if _, err := cli.WithGardenProfile(profileB, chiefB).Attachment(protocol.AttachmentGetMessage{Cmd: protocol.CmdAttachmentGet, AttachmentID: file}); err == nil {
 			t.Fatal("other-profile CLI downloaded file")
 		}
 		if _, _, err := cli.AgentInboxEntry(quickCapture, chiefB); err == nil {
@@ -481,10 +495,10 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 		if _, err := b.QuickCapture(protocol.QuickCaptureListMessage{Cmd: protocol.CmdQuickCaptureList, Limit: 1, Cursor: &quickCapture}); err == nil {
 			t.Fatal("other profile used A cursor")
 		}
-		if _, err := b.QuickCapture(protocol.QuickCaptureAttachmentDiscardMessage{Cmd: protocol.CmdQuickCaptureAttachmentDiscard, CaptureID: draft, AttachmentID: file}); err != nil {
+		if _, err := b.Attachment(protocol.AttachmentDiscardMessage{Cmd: protocol.CmdAttachmentDiscard, AttachmentID: file}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := a.QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: draft, AttachmentID: file}); err != nil {
+		if _, err := a.Attachment(protocol.AttachmentGetMessage{Cmd: protocol.CmdAttachmentGet, AttachmentID: file}); err != nil {
 			t.Fatalf("other-profile discard deleted A file: %v", err)
 		}
 		synctest.Wait()
@@ -493,7 +507,11 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 				t.Fatalf("other profile got quick capture event: %+v", event)
 			}
 		}
-		uploadQuickCapture(t, b, quickCapture, file, bytesB, true)
+		if _, err := b.Attachment(protocol.AttachmentPutMessage{Cmd: protocol.CmdAttachmentPut, Owner: ownedBy(quickCapture), AttachmentID: file, Name: "screenshot.png", DataBase64: base64.StdEncoding.EncodeToString(bytesB), Final: true}); err == nil || !strings.Contains(err.Error(), "another owner") {
+			t.Fatalf("profile B took over A's attachment id: %v", err)
+		}
+		uploadQuickCapture(t, b, quickCapture, fileB, bytesB, true)
+		msg.AttachmentIds = []string{fileB}
 		msg.Content = "B request"
 		msg.Mailbox = chiefMailboxes[profileB]
 		if _, err := b.QuickCapture(msg); err != nil {
@@ -533,10 +551,11 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 		w.restart()
 		for _, owner := range []struct {
 			profile string
+			file    string
 			bytes   []byte
-		}{{profileA, bytesA}, {profileB, bytesB}} {
+		}{{profileA, file, bytesA}, {profileB, fileB, bytesB}} {
 			app := w.TrustedApp(owner.profile)
-			r, err := app.QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: file})
+			r, err := app.Attachment(protocol.AttachmentGetMessage{Cmd: protocol.CmdAttachmentGet, AttachmentID: owner.file})
 			if err != nil {
 				t.Fatal(err)
 			}

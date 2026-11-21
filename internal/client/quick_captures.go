@@ -27,3 +27,14 @@ func (c *Client) AgentInboxEntry(id string, sessionID protocol.SessionID) (*prot
 	}
 	return result.Message, result.Item, nil
 }
+
+func (c *Client) Attachment(msg any) (*protocol.AttachmentResult, error) {
+	response, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if response.AttachmentResult == nil {
+		return nil, fmt.Errorf("daemon returned no attachment receipt")
+	}
+	return response.AttachmentResult, nil
+}

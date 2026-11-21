@@ -8,10 +8,10 @@ use crate::paths::{base, os_error_text};
 use attn::go::flag::{Flag, FlagDefault, FlagSet, Value};
 use attn::go::quote::quote;
 use attn::go::tabwriter;
-use attn_protocol::go_values::QUICK_CAPTURE_MAILBOX_SESSION;
+use attn_protocol::go_values::{ATTACHMENT_OWNER_QUICK_CAPTURE, QUICK_CAPTURE_MAILBOX_SESSION};
 use attn_protocol::{
-    PairedSender, PairedSenderToken, QuickCaptureAttachmentDiscardMessage,
-    QuickCaptureAttachmentPutMessage, QuickCaptureMailbox, QuickCaptureResult,
+    AttachmentDiscardMessage, AttachmentOwner, AttachmentPutMessage, AttachmentResult,
+    PairedSender, PairedSenderToken, QuickCaptureMailbox, QuickCaptureResult,
     QuickCaptureSendMessage, SenderListMessage, SenderPairMessage, SenderPairingRequest,
     SenderSession, SenderSessionsMessage, SenderUnpairMessage, SessionShowMessage,
     SessionShowResult,
@@ -22,6 +22,10 @@ use std::io::{self, BufRead, Read};
 
 const CHUNK_BYTES: usize = 524_288;
 const CAPTURE_FIELD: &str = "quick_capture_result";
+const ATTACHMENT_FIELD: &str = "attachment_result";
+const CAPTURE_RECEIPT: (&str, &str) = (CAPTURE_FIELD, "daemon returned no quick capture receipt");
+const ATTACHMENT_RECEIPT: (&str, &str) =
+    (ATTACHMENT_FIELD, "daemon returned no attachment receipt");
 
 const HELP: &str = r"usage: attn send <session> --token-stdin [--file <path>]... [-m <text>] [--json]
        attn send sessions --token-stdin [--json]
@@ -210,13 +214,10 @@ impl Capture<'_> {
         &self,
         run: &mut Run<'_>,
         message: &M,
+        (field, missing): (&str, &str),
     ) -> Result<Reply, String> {
         self.client
-            .call_field(
-                message,
-                CAPTURE_FIELD,
-                "daemon returned no quick capture receipt",
-            )
+            .call_field(message, field, missing)
             .map_err(|error| {
                 run.refusal.clone_from(&error.refusal);
                 daemon_message(&error)
@@ -248,7 +249,7 @@ impl Capture<'_> {
             let id = new_uuid();
             attachment_ids.push(id.clone());
             if let Err(cause) = self.upload(run, &profile_id, &capture_id, &id, path) {
-                self.discard(&profile_id, &capture_id, &attachment_ids);
+                self.discard(&profile_id, &attachment_ids);
                 return Err(format!("{path}: {cause}"));
             }
         }
@@ -263,17 +264,17 @@ impl Capture<'_> {
         };
         message.content.clone_from(&self.message);
         message.attachment_ids.clone_from(&attachment_ids);
-        self.call_daemon(run, &message).inspect_err(|_| {
-            self.discard(&profile_id, &capture_id, &attachment_ids);
-        })
+        self.call_daemon(run, &message, CAPTURE_RECEIPT)
+            .inspect_err(|_| {
+                self.discard(&profile_id, &attachment_ids);
+            })
     }
 
-    fn discard(&self, profile_id: &str, capture_id: &str, attachment_ids: &[String]) {
+    fn discard(&self, profile_id: &str, attachment_ids: &[String]) {
         for id in attachment_ids {
-            let mut message = QuickCaptureAttachmentDiscardMessage::new();
+            let mut message = AttachmentDiscardMessage::new();
             message.profile_id = Some(profile_id.to_string());
             message.sender_token = Some(self.token.clone());
-            message.capture_id = capture_id.to_string();
             message.attachment_id.clone_from(id);
             let _ = self.client.call(&message);
         }
@@ -305,18 +306,21 @@ impl Capture<'_> {
                 return Err("EOF".to_string());
             }
             let last = offset + read == size;
-            let mut message = QuickCaptureAttachmentPutMessage::new();
+            let mut message = AttachmentPutMessage::new();
             message.profile_id = Some(profile_id.to_string());
             message.sender_token = Some(self.token.clone());
-            message.capture_id = capture_id.to_string();
+            message.owner = AttachmentOwner {
+                kind: ATTACHMENT_OWNER_QUICK_CAPTURE.to_string(),
+                id: capture_id.to_string(),
+            };
             message.attachment_id = id.to_string();
             message.name = base(path).to_string();
             message.offset = i64::try_from(offset).unwrap_or(i64::MAX);
             message.data_base64 = base64(&chunk[..read]);
             message.r#final = last;
-            let result: QuickCaptureResult = self
-                .call_daemon(run, &message)?
-                .value(CAPTURE_FIELD)
+            let result: AttachmentResult = self
+                .call_daemon(run, &message, ATTACHMENT_RECEIPT)?
+                .value(ATTACHMENT_FIELD)
                 .map_err(|error| daemon_message(&error))?;
             let expected = i64::try_from(offset + read).unwrap_or(i64::MAX);
             if result.upload.as_ref().map(|upload| upload.next_offset) != Some(expected) {

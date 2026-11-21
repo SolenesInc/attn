@@ -163,7 +163,7 @@ func TestEveryAgentToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T)
 		t.Fatal(err)
 	}
 	saved := filepath.Join(w.Path("shop"), "screenshot.png")
-	shapes.call("agent_attachment", map[string]any{"capture": capture, "attachment": attachment, "out": saved})
+	shapes.call("agent_attachment", map[string]any{"attachment": attachment, "out": saved})
 	if data, err := os.ReadFile(saved); err != nil || !bytes.Equal(data, quickCapturePNG(t)) {
 		t.Errorf("agent_attachment wrote %d bytes, %v; want the uploaded screenshot", len(data), err)
 	}
