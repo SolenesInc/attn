@@ -365,22 +365,6 @@ func runDaemonStop(endTerminals bool) {
 	}
 }
 
-func runList() {
-	warnIfDaemonVersionMismatch()
-	c := client.New("")
-	result, err := c.List("")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		exit(1)
-	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(result); err != nil {
-		fmt.Fprintf(os.Stderr, "error encoding list: %v\n", err)
-		exit(1)
-	}
-}
-
 func detectPresence() (sessionID string, present bool, err error) {
 	terminal, err := harness.ResolveTerminalFromEnv()
 	if err != nil {

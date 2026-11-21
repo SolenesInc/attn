@@ -38,7 +38,7 @@ pub const TOP_LEVEL: &[TopLevel] = &[
     TopLevel { name: "instance", usage: "instance <status|resolve|list>", summary: "show / resolve the active instance's resources", hidden: false },
     TopLevel { name: "instance-env", usage: "instance-env <instance|--unset>", summary: "print shell commands for selecting an instance", hidden: false },
     TopLevel { name: "journal", usage: "journal <command>", summary: "read or add to the Notebook", hidden: false },
-    TopLevel { name: "list", usage: "list", summary: "list sessions and profiles", hidden: false },
+    TopLevel { name: "list", usage: "list [--json]", summary: "list sessions and profiles", hidden: false },
     TopLevel { name: "model", usage: "model <command>", summary: "call a model through attn as a paired sender; log", hidden: false },
     TopLevel { name: "nav", usage: "nav <command>", summary: "code navigation for a review", hidden: false },
     TopLevel { name: "onboarding", usage: "onboarding [done|again]", summary: "show, finish or restart the Chief's onboarding", hidden: false },

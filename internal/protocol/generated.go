@@ -7011,6 +7011,14 @@ type ListPluginsMessage struct {
 	Cmd string `json:"cmd"`
 }
 
+type ListResult struct {
+	// Profiles corresponds to the JSON schema field "profiles".
+	Profiles []Profile `json:"profiles"`
+
+	// Sessions corresponds to the JSON schema field "sessions".
+	Sessions []Session `json:"sessions"`
+}
+
 type ListWorktreesMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`

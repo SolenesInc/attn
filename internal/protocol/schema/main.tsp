@@ -7623,6 +7623,12 @@ model Response {
   doc_subscribe_result?: DocSubscribeResult;
 }
 
+// Every session on this daemon and every profile, as attn list prints them.
+model ListResult {
+  sessions: Session[];
+  profiles: Profile[];
+}
+
 // One recorded state observation and its fate. Outcome separates the ways an
 // observation can fail to reach the store: "vetoed" is a driver transition
 // filter refusing it before the store door, "discarded" is the store's own

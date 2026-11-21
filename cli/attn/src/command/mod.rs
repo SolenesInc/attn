@@ -49,22 +49,30 @@ pub const CODE_USAGE: &str = "usage";
 
 pub trait Family {
     fn group(&self) -> &'static str;
+    fn flags(&self) -> &'static [&'static str];
     fn commands(&self) -> &'static [Command];
     fn group_help(&self) -> &'static str;
     fn help(&self, verb: &str) -> &'static str;
     fn usage(&self, verb: &str) -> &'static str;
+    fn label(&self, verb: &str) -> String {
+        if verb.is_empty() {
+            self.group().to_string()
+        } else {
+            format!("{} {verb}", self.group())
+        }
+    }
     fn usage_error(&self, verb: &str, message: &str) -> Stop {
-        eprintln!("{} {verb}: {message}", self.group());
+        let label = self.label(verb);
+        eprintln!("{label}: {message}");
         eprintln!(
-            "usage: attn {} {} (attn {} {verb} --help)",
+            "usage: attn {} {} (attn {label} --help)",
             self.group(),
-            self.usage(verb),
-            self.group()
+            self.usage(verb)
         );
         Stop(2)
     }
     fn fail(&self, verb: &str, message: &str) -> Stop {
-        eprintln!("{} {verb}: {message}", self.group());
+        eprintln!("{}: {message}", self.label(verb));
         Stop(1)
     }
     fn answered_here(&self, _cmd: &Command) -> Option<&'static str> {
@@ -93,22 +101,35 @@ pub trait Family {
 
 pub fn run_group(run: &mut Run<'_>, family: &dyn Family, args: &[String]) -> Result<(), Stop> {
     let group = family.group();
-    let Some(verb) = args
-        .first()
-        .filter(|verb| !["-h", "--help"].contains(&verb.as_str()))
-    else {
+    let first = args.first().map(String::as_str);
+    if first.is_some_and(|word| ["-h", "--help"].contains(&word)) {
         crate::commands::print_stdout(family.group_help());
         return Ok(());
+    }
+    let verb = first.and_then(|word| {
+        family
+            .commands()
+            .iter()
+            .find(|cmd| !cmd.name.is_empty() && cmd.name == word)
+    });
+    let bare = family.commands().iter().find(|cmd| cmd.name.is_empty());
+    let (cmd, words) = match (verb, bare, first) {
+        (Some(cmd), _, _) => (cmd, &args[1..]),
+        (None, Some(cmd), _) => (cmd, args),
+        (None, None, None) => {
+            crate::commands::print_stdout(family.group_help());
+            return Ok(());
+        }
+        (None, None, Some(word)) => {
+            run.path = group.to_string();
+            run.usage_error = Some(crate::commands::USAGE_UNKNOWN_COMMAND);
+            eprintln!("{group}: unknown command {}", quote(word.as_bytes()));
+            eprintln!("usage: attn {group} <command> (attn {group} --help)");
+            return Err(Stop(2));
+        }
     };
-    let Some(cmd) = family.commands().iter().find(|cmd| cmd.name == verb) else {
-        run.path = group.to_string();
-        run.usage_error = Some(crate::commands::USAGE_UNKNOWN_COMMAND);
-        eprintln!("{group}: unknown command {}", quote(verb.as_bytes()));
-        eprintln!("usage: attn {group} <command> (attn {group} --help)");
-        return Err(Stop(2));
-    };
-    run.path = format!("{group} {verb}");
-    run_command(run, family, cmd, &args[1..])
+    run.path = family.label(cmd.name);
+    run_command(run, family, cmd, words)
 }
 
 pub struct Parsed {
@@ -152,19 +173,15 @@ fn flag_default(arg: &Arg) -> FlagDefault<'static> {
     }
 }
 
-pub fn flags_of(cmd: &Command) -> Vec<Flag<'static>> {
-    let mut flags = vec![
-        Flag {
-            name: "profile",
+pub fn flags_of(group_flags: &[&'static str], cmd: &Command) -> Vec<Flag<'static>> {
+    let mut flags: Vec<Flag<'static>> = group_flags
+        .iter()
+        .map(|name| Flag {
+            name,
             default: FlagDefault::String(""),
             usage: "",
-        },
-        Flag {
-            name: "session",
-            default: FlagDefault::String(""),
-            usage: "",
-        },
-    ];
+        })
+        .collect();
     if cmd.result {
         flags.push(Flag {
             name: "json",
@@ -299,7 +316,7 @@ fn read_stdin(what: &str) -> Result<Vec<u8>, String> {
 }
 
 fn parse(family: &dyn Family, cmd: &Command, argv: &[String]) -> Result<Parsed, ParseStop> {
-    let definitions = flags_of(cmd);
+    let definitions = flags_of(family.flags(), cmd);
     let mut fs = FlagSet::new("", &definitions);
     let positionals = split_positionals(&mut fs, argv)?;
     let mut values = positional_values(cmd, &positionals)?;
@@ -309,9 +326,17 @@ fn parse(family: &dyn Family, cmd: &Command, argv: &[String]) -> Result<Parsed, 
     Ok(Parsed {
         args: values,
         json: cmd.result && fs.bool("json"),
-        profile: fs.string("profile").trim().to_string(),
-        session: fs.string("session").trim().to_string(),
+        profile: group_flag(family, &fs, "profile"),
+        session: group_flag(family, &fs, "session"),
     })
+}
+
+fn group_flag(family: &dyn Family, fs: &FlagSet<'_>, name: &str) -> String {
+    if family.flags().contains(&name) {
+        fs.string(name).trim().to_string()
+    } else {
+        String::new()
+    }
 }
 
 fn split_positionals(fs: &mut FlagSet<'_>, argv: &[String]) -> Result<Vec<String>, ParseStop> {
@@ -518,11 +543,11 @@ pub fn run_command(
     }
     family.before_send(cmd, &mut parsed)?;
     let mut message = RunCommandMessage::new();
-    message.command = format!("{} {}", family.group(), cmd.name);
+    message.command = family.label(cmd.name);
     message.args = Some(parsed.args.clone().into_iter().collect());
     message.session_id = (!parsed.session.is_empty()).then(|| parsed.session.clone());
     message.profile_id = (!parsed.profile.is_empty()).then(|| parsed.profile.clone());
-    let label = format!("{} {}", family.group(), cmd.name);
+    let label = family.label(cmd.name);
     let reply = Client::new(run.paths, "", &run.terminal)
         .call_command(&message)
         .map_err(|error| run.fail_send(&label, &error))?;
@@ -579,7 +604,7 @@ pub fn decode<T: serde::de::DeserializeOwned>(
 ) -> Result<T, Stop> {
     result
         .whole()
-        .map_err(|error| run.fail_send(&format!("{} {}", family.group(), cmd.name), &error))
+        .map_err(|error| run.fail_send(&family.label(cmd.name), &error))
 }
 
 pub fn print_result(
@@ -590,7 +615,7 @@ pub fn print_result(
 ) -> Result<(), Stop> {
     let raw = result
         .raw_field(&[])
-        .map_err(|error| run.fail_send(&format!("{} {}", family.group(), cmd.name), &error))?;
+        .map_err(|error| run.fail_send(&family.label(cmd.name), &error))?;
     crate::commands::print_json(raw.as_bytes());
     Ok(())
 }

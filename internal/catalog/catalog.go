@@ -237,16 +237,20 @@ func (c *Catalog) Group(name string) (*Group, bool) {
 
 func (c *Catalog) LayerFamilies() []string {
 	var out []string
-	for i := range c.Groups {
-		name := c.Groups[i].Name
-		if strings.Contains(name, " ") {
-			continue
-		}
-		if slices.ContainsFunc(c.GroupCommands(name), (*Command).ThroughLayer) {
-			out = append(out, name)
+	for _, top := range c.TopLevel() {
+		if slices.ContainsFunc(c.FamilyCommands(top.Name), (*Command).ThroughLayer) {
+			out = append(out, top.Name)
 		}
 	}
 	return out
+}
+
+func (c *Catalog) FamilyCommands(family string) []*Command {
+	var out []*Command
+	if bare, ok := c.Command(family); ok {
+		out = append(out, bare)
+	}
+	return append(out, c.GroupCommands(family)...)
 }
 
 func (c *Catalog) GroupCommands(group string) []*Command {

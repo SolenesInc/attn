@@ -3693,6 +3693,21 @@ func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage) {
 	json.NewEncoder(conn).Encode(resp)
 }
 
+func (d *Daemon) runList(ctx context.Context, c command.Caller, a command.ListArgs) (any, error) {
+	profiles, err := d.liveProtocolProfiles()
+	if err != nil {
+		return nil, err
+	}
+	result := protocol.ListResult{Sessions: d.sessionsForBroadcast(d.store.List("")), Profiles: profiles}
+	if result.Sessions == nil {
+		result.Sessions = []protocol.Session{}
+	}
+	if result.Profiles == nil {
+		result.Profiles = []protocol.Profile{}
+	}
+	return result, nil
+}
+
 func (d *Daemon) handleQueryPRs(conn net.Conn, msg *protocol.QueryPRsMessage) {
 	prs := d.store.ListPRs(protocol.Deref(msg.Filter))
 	resp := protocol.Response{

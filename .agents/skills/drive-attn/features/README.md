@@ -85,9 +85,8 @@ In the index, "both" means people and agents.
 - A verb that calls a harness CLI itself, outside the daemon, never reaches
   the mock agent. The recipe for such a verb puts a stand-in on `PATH`, as
   [vision-check.md](vision-check.md) does.
-- `--help` is not universal. `attn list` ignores its arguments and prints
-  every session, and `attn plugin` and `attn automation` take `--help` as an
-  unknown subcommand. Read the source of these commands instead of running
+- `--help` is not universal. `attn plugin` and `attn automation` take
+  `--help` as an unknown subcommand. Read the source of these commands instead of running
   `--help`.
 - `./attn` is this checkout's build, run in the instance shell. `wsctl` and
   `bridge` are the shell functions the env file defines. Every command is

@@ -54,9 +54,10 @@ func Typed[A any](run func(ctx context.Context, c Caller, args A) (any, error)) 
 }
 
 type spec struct {
-	readOnly bool
-	anyone   bool
-	fixes    map[string]string
+	readOnly    bool
+	anyone      bool
+	sessionFlag bool
+	fixes       map[string]string
 }
 
 type Layer struct {
@@ -93,6 +94,9 @@ func (l *Layer) Run(ctx context.Context, c Caller, name string, args json.RawMes
 		return nil, Usage("%q is not a command", name)
 	}
 	if c.Terminal != "" && !specs[name].anyone && (!specs[name].readOnly || c.Profile == "") {
+		if !specs[name].sessionFlag {
+			return nil, Refuse("no_session", "terminal %s is not showing a session", c.Terminal)
+		}
 		return nil, Refuse("no_session", "terminal %s is not showing a session; pass {session} <id> to identify the caller; {profile} <name|id> selects a garden and does not identify a session", c.Terminal)
 	}
 	result, err := handler(ctx, c, args)

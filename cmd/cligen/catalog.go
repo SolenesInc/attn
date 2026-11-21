@@ -51,7 +51,7 @@ func writeCatalog(cliRoot, referencesDir, goRoot string) error {
 		return err
 	}
 	for _, name := range c.LayerFamilies() {
-		group, _ := c.Group(name)
+		group := g.family(name)
 		rust, err := g.rustHelp(group)
 		if err != nil {
 			return err
@@ -408,13 +408,22 @@ func (g *generator) subgroupHelp(group, sub *catalog.Group) string {
 
 func (g *generator) groupHelp(group *catalog.Group) string {
 	var out strings.Builder
-	fmt.Fprintf(&out, "usage: attn %s <command>\n\n", group.Name)
+	bare, hasBare := g.c.Command(group.Name)
+	verbs := g.c.GroupCommands(group.Name)
+	if hasBare && len(verbs) == 0 {
+		return "usage: attn " + g.verbHelp(group, bare)
+	}
+	fmt.Fprintf(&out, "usage: attn %s <command>\n", group.Name)
+	if hasBare {
+		fmt.Fprintf(&out, "       attn %s\n", g.usage(group.Name, bare))
+	}
+	out.WriteByte('\n')
 	writeWrapped(&out, g.cliText(nil, group.File+": "+group.Name, group.Doc), "")
 	fmt.Fprintf(&out, "Use attn %s <command> --help for one command's syntax and flags.\n", group.Name)
 	sections := group.Sections
 	if len(sections) == 0 {
 		sections = []catalog.Section{{Title: "Commands"}}
-		for _, cmd := range g.c.GroupCommands(group.Name) {
+		for _, cmd := range verbs {
 			sections[0].Commands = append(sections[0].Commands, cmd.Name)
 		}
 	}
@@ -440,12 +449,13 @@ func (g *generator) groupHelp(group *catalog.Group) string {
 func (g *generator) rustHelp(group *catalog.Group) (string, error) {
 	type entry struct{ verb, help, usage string }
 	var entries []entry
-	for _, cmd := range g.c.GroupCommands(group.Name) {
-		entries = append(entries, entry{
-			verb:  strings.TrimPrefix(cmd.Name, group.Name+" "),
-			help:  g.verbHelp(group, cmd),
-			usage: g.usage(group.Name, cmd),
-		})
+	for _, cmd := range g.c.FamilyCommands(group.Name) {
+		verb := verbOf(group.Name, cmd)
+		usage := g.usage(group.Name, cmd)
+		if verb == "" {
+			usage = strings.TrimSpace(strings.TrimPrefix(usage, group.Name))
+		}
+		entries = append(entries, entry{verb: verb, help: g.verbHelp(group, cmd), usage: usage})
 	}
 	for i := range g.c.Groups {
 		sub := &g.c.Groups[i]

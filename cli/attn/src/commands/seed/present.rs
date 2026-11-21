@@ -58,6 +58,10 @@ impl Family for Seed {
         "seed"
     }
 
+    fn flags(&self) -> &'static [&'static str] {
+        super::table_generated::FLAGS
+    }
+
     fn commands(&self) -> &'static [Command] {
         super::table_generated::COMMANDS
     }

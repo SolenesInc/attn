@@ -56,7 +56,7 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
 }
 
 fn group_flags(run: &mut Run<'_>, group: &str, args: &[String]) -> Result<(), Stop> {
-    let mut fs = FlagSet::new("", &flags_of(&GROUP));
+    let mut fs = FlagSet::new("", &flags_of(table_generated::FLAGS, &GROUP));
     match fs.parse(args) {
         Ok(()) => Ok(()),
         Err(FlagError::Help) => {

@@ -20,6 +20,10 @@ impl Family for State {
         "state"
     }
 
+    fn flags(&self) -> &'static [&'static str] {
+        table_generated::FLAGS
+    }
+
     fn commands(&self) -> &'static [Command] {
         table_generated::COMMANDS
     }

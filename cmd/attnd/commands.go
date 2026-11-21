@@ -46,8 +46,6 @@ func topLevelCommands() []topLevelCommand {
 		{names: []string{"onboarding"}, run: runOnboarding, banner: true},
 		{names: []string{"skill"}, run: runSkill},
 		{names: []string{"guide"}, run: runGuide},
-		{names: []string{"list"}, run: runList, banner: true,
-			help: func(w io.Writer) { fmt.Fprintln(w, "usage: attn list\n\nPrint sessions and profiles as JSON.") }},
 		{names: []string{"activity"}, run: runActivity, banner: true,
 			help: func(w io.Writer) { fmt.Fprint(w, activityUsage) }},
 		{names: []string{"preflight"}, run: runPreflight, banner: true},

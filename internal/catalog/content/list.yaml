@@ -1,2 +1,10 @@
-groups:
-  - {name: list, usage: "", summary: "list sessions and profiles"}
+commands:
+  - name: list
+    summary: "list sessions and profiles"
+    runs: home
+    grant: full
+    read_only: true
+    anyone: true
+    doc: |
+      Lists every session on this daemon and every profile, as JSON.
+    result: ListResult
