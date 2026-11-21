@@ -102,6 +102,15 @@ From SDK 0.5.0, `client.driver({ ..., skillDirs })` names the homes whose
 Attn installs the attn-workflow skill there for its own delegation roles, and
 refuses those roles on a harness that declares none.
 
+## Give the harness attn's tools
+
+From SDK 0.6.0, `client.driver({ ..., agentTools: true })` asks for attn's MCP
+server. While the user has attn's tools on, `spawn` and `resume` receive
+`agent_tools`: `{url, credential, description}` for a harness in the terminal,
+or `{name, description}` for the view of a shared server that declares
+`callerConversationHeader`, which attn registers its server with. The guide's
+"Give the harness attn's tools" says how the harness uses each.
+
 ## Bind a shared app-server
 
 With SDK 0.3.0, `client.driver({ id, spawn, resume, server })` can bind a harness

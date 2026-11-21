@@ -46,7 +46,37 @@ createServer((socket) => {
   if (firstPrompt) accept("you", firstPrompt);
 });
 
-createInterface({ input: process.stdin }).on("line", (line) => accept("you", line));
+createInterface({ input: process.stdin }).on("line", (line) => {
+  if (line.startsWith("/tool ")) void callTool(line.slice("/tool ".length));
+  else accept("you", line);
+});
+
+async function callTool(line: string): Promise<void> {
+  const url = process.env.SAMPLE_ATTN_TOOLS_URL;
+  if (!url) {
+    console.log("tool: attn gave this launch no tools");
+    return;
+  }
+  const space = line.indexOf(" ");
+  const name = space < 0 ? line : line.slice(0, space);
+  const args = space < 0 ? {} : JSON.parse(line.slice(space + 1));
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.SAMPLE_ATTN_TOOLS_CREDENTIAL}`,
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+  });
+  if (!response.ok) {
+    console.log(`tool ${name}: ${response.status} ${(await response.text()).trim()}`);
+    return;
+  }
+  const { result } = (await response.json()) as { result: { isError?: boolean; content: { text?: string }[]; structuredContent?: unknown } };
+  const text = result.content.map((part) => part.text ?? "").join("") || JSON.stringify(result.structuredContent);
+  console.log(`tool ${name}${result.isError ? " refused" : ""}: ${text}`);
+}
 
 function flag(name: string): string {
   const value = args[args.indexOf(name) + 1];

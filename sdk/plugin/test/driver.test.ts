@@ -105,7 +105,7 @@ describe("AttnPluginClient driver", () => {
         protocol: "attn-app-server-v1", executable: "sample", serveArgs: ["serve"],
         homeEnv: "SAMPLE_HOME", defaultHome: ".sample", socketName: "sample.sock",
         initialize: { server: "sample", protocol: { exact: 1 } },
-        callerConversationEnv: "SAMPLE_ROOT_CONVERSATION", onClose: "leave-running",
+        callerConversationEnv: "SAMPLE_ROOT_CONVERSATION", callerConversationHeader: "Sample-Root-Conversation", onClose: "leave-running",
         recovery: "numbered-completions", targets: true,
       },
     };
@@ -118,7 +118,7 @@ describe("AttnPluginClient driver", () => {
         protocol: "attn-app-server-v1", executable: "sample", serve_args: ["serve"],
         home_env: "SAMPLE_HOME", default_home: ".sample", socket_name: "sample.sock",
         initialize: { server: "sample", protocol: { exact: 1 } },
-        caller_conversation_env: "SAMPLE_ROOT_CONVERSATION", on_close: "leave-running",
+        caller_conversation_env: "SAMPLE_ROOT_CONVERSATION", caller_conversation_header: "Sample-Root-Conversation", on_close: "leave-running",
         recovery: "numbered-completions", targets: true,
       },
     });
@@ -350,6 +350,20 @@ describe("AttnPluginClient driver", () => {
     client.driver({ ...baseDriver, deliver: () => accepted(), attributedInput: true });
 
     await expect(client.connect()).rejects.toThrow(/does not support driver capability "attributed_input".*13595cac/);
+  });
+
+  test("asks for attn's tools, and names the daemon build that gives them", async () => {
+    const daemon = await startDaemon();
+    const client = connectable(daemon);
+    client.driver({ ...baseDriver, agentTools: true });
+    await client.connect();
+    const registered = daemon.requests.find(request => request.method === "driver.register");
+    expect(registered?.params).toMatchObject({ capabilities: { agent_tools: true } });
+
+    const older = await startDaemon({ "driver.register": new Error('unsupported driver capability "agent_tools"') });
+    const refused = connectable(older);
+    refused.driver({ ...baseDriver, agentTools: true });
+    await expect(refused.connect()).rejects.toThrow(/does not support driver capability "agent_tools"; upgrade attn to source build [0-9a-f]{40} or newer/);
   });
 
   test("answers health from the driver", async () => {

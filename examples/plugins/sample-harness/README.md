@@ -25,6 +25,11 @@ plugin and `attn guide writing-harness-plugins` explain the rest.
   the run. The harness remembers each `input_id`, so a retry after a lost reply
   is one submission. A plugin restart loses nothing, because the plugin keeps no
   state.
+- `agentTools` asks for attn's tools. With the experimental setting Agent tools
+  on, the plugin passes the endpoint to the harness in its environment, and a
+  line `/tool seed_note {"seed":"<id>","text":"…"}` calls a tool as the
+  session. The SDK from npm, 0.4.0, predates `agentTools`, so pack the SDK from
+  the checkout as `attn guide writing-harness-plugins` describes to try it.
 - It leaves out `compact` and `models`, so attn offers neither for this harness.
 
 `src/harness.ts` is the stand-in for a native agent. A real plugin launches the

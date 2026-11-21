@@ -25,6 +25,7 @@ client.driver({
   attributedInput: true,
   safeDuringQuestion: true,
   stateReporting: true,
+  agentTools: true,
   spawn: (params, run) => launch(params, run, randomUUID()),
   resume: (params, run) => {
     const conversationId = params.resume_session_id || storedConversation(params);
@@ -62,7 +63,12 @@ async function launch(params: DriverSpawnParams, run: DriverRun, conversationId:
     inputSocketPath(params.run_id),
   ];
   if (params.initial_prompt) argv.push("--prompt", params.initial_prompt);
-  return { argv, cwd: params.cwd };
+  const env: Record<string, string> = {};
+  if (params.agent_tools?.url) {
+    env.SAMPLE_ATTN_TOOLS_URL = params.agent_tools.url;
+    env.SAMPLE_ATTN_TOOLS_CREDENTIAL = params.agent_tools.credential;
+  }
+  return { argv, env, cwd: params.cwd };
 }
 
 function storedConversation(params: DriverSpawnParams): string {

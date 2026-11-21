@@ -16,6 +16,7 @@ function view(launch: DriverSpawnParams) {
   }
   if (launch.effort) argv.push("--effort", launch.effort);
   if (launch.instructions) argv.push("--instructions", launch.instructions.content);
+  if (launch.agent_tools?.name) argv.push("--mcp-server", launch.agent_tools.name, "--mcp-description", launch.agent_tools.description);
   if (launch.initial_prompt) argv.push("--", launch.initial_prompt);
   return { argv };
 }
@@ -29,6 +30,7 @@ client.driver({
   modelPin: true,
   effortPin: true,
   launchInstructions: true,
+  agentTools: true,
   server: {
     protocol: "attn-app-server-v1",
     executable,
@@ -39,6 +41,7 @@ client.driver({
     socketName: "sample-server.sock",
     initialize: { server: "sample-server", protocol: { exact: 1 } },
     callerConversationEnv: "SAMPLE_SERVER_ROOT_CONVERSATION",
+    callerConversationHeader: "Sample-Server-Root-Conversation",
     onClose: "leave-running",
     recovery: "numbered-completions",
     targets: true,

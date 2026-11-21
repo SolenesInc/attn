@@ -10,10 +10,11 @@ or in any language that speaks the JSON-RPC described below.
 What you need: `bun` on the machine that runs the Attn daemon, and an Attn
 daemon built from source revision `13595cac6922bb7b2d3d89d62e4879be500f7aa3`
 or later. No release carries that revision yet, so an older daemon refuses the
-registration with `unsupported driver capability "attributed_input"` or one of
-the other two capabilities listed below, and the SDK turns that refusal into
-the revision to upgrade to. A terminal-only plugin that declares none of the
-three runs on any API 7 daemon. Shared servers additionally need the
+registration with `unsupported driver capability "attributed_input"`,
+`"safe_during_question"` or `"compaction"`, and the SDK turns that refusal into
+the revision to upgrade to. A terminal-only plugin that declares none of those
+runs on any API 7 daemon. Declaring `agent_tools` needs a daemon built from
+revision `327521b2fb82f71a2f146f51b9aa6a85b18fb969` or later. Shared servers additionally need the
 `server_binding` capability described below.
 
 ## From nothing to a running harness
@@ -85,6 +86,7 @@ await client.connect();
 | `yolo`, `initialPrompt`, `modelPin`, `effortPin`, `launchInstructions` | the same names, in snake case | passes `yolo`, `initial_prompt` (needed to delegate to the harness), `model`, `effort` and `instructions` to `spawn` and `resume` |
 | `stateReporting` | `state_reporting` | takes the launch's state only from `run.state` and stops inferring it from the terminal, so report every start and end of a turn |
 | `pullRequestReporting` | `pull_request_reporting` | with `launchInstructions`, leaves out the instruction that tells the agent to report its own pull requests |
+| `agentTools: true` | `agent_tools` | passes `agent_tools`, attn's MCP server, to `spawn` and `resume`, as [Give the harness attn's tools](#give-the-harness-attns-tools) describes |
 
 `attributedInput`, `safeDuringQuestion` and `compact` need `deliver`. The SDK
 refuses an invalid declaration when you call `client.driver`.
@@ -116,6 +118,34 @@ one per model provider, list each one. Attn keeps attn-workflow in each folder m
 own copy: when your driver registers, when roles are added, and before each
 launch of one of its roles. A daemon released before `skillDirs` ignores it
 and keeps refusing those roles.
+
+### Give the harness attn's tools
+
+attn serves its tools as an MCP server. With `agentTools: true`, from SDK
+0.6.0, `spawn` and `resume` receive `agent_tools` while the user has attn's
+tools on (the experimental setting Agent tools, `agent_tools_enabled`). Without
+the declaration, or with the setting off, the field is absent and the agent
+uses the attn CLI.
+
+A harness that runs in the terminal gets
+`{url, credential, description}`. Give it to the harness however the harness
+takes an MCP server: a Streamable HTTP server at `url`, with the header
+`Authorization: Bearer <credential>` on every request. The credential belongs
+to the terminal, not to one conversation: each call acts as the session the
+terminal shows at that moment, so after the agent clears or resumes into
+another conversation, its calls act as that conversation's session. The
+credential lasts while the terminal does. `description` is one line saying
+what the tools are for, for a harness that lists its servers before it reads
+them. The server's `instructions` hold attn's intent map, the text that says
+when to reach for each tool. `examples/plugins/sample-harness` passes the
+endpoint to its harness in the environment, and the harness's `/tool <name>
+<json>` line calls a tool.
+
+A shared server gets the endpoint from attn itself; see
+[Shared servers and attn's tools](#shared-servers-and-attns-tools).
+
+A daemon built before `agent_tools` refuses the registration, and the SDK
+names the build to upgrade to.
 
 ## What happens at launch
 
@@ -259,6 +289,27 @@ the harness ID. An open native conversation has one server-harness and profile
 owner, so another harness ID cannot open it while that session stays open. To change a registered server declaration, restart the daemon
 and register the changed declaration from the same owner.
 
+### Shared servers and attn's tools
+
+With `agentTools: true`, also set `callerConversationHeader` in the server
+declaration, such as `"Sample-Server-Root-Conversation"`. While the user has
+attn's tools on, attn registers its MCP server with your server each time it
+connects, with `mcp/register` described below, and `spawn` and `resume` get
+`agent_tools: {name, description}` once your server has confirmed the
+registration. A server that refuses `mcp/register` or does not answer it gets
+no `agent_tools` for its views, and attn's log says why. The view starts its
+conversation with that name and description and never sees a secret. When the
+user turns the tools off, attn ends the registration.
+
+Your server sends the registered headers on every request to attn's MCP
+server, and adds the declared header with the root conversation that makes the
+call: the conversation the user started, not a subagent. One registration
+covers every conversation of the server, and attn acts as the session that
+holds the named conversation. A conversation no session holds, such as a fork
+nobody opened in attn yet, is refused with a message that names it. Once the
+fork opens in attn, it is its own session, and its calls act as that session.
+`examples/plugins/sample-server` passes the name and description to its view.
+
 ### Shared server RPC contract
 
 The server uses the existing line-delimited Effect RPC framing. A request is
@@ -271,7 +322,12 @@ The required calls are `initialize {client, version, protocol}`,
 `conversation/submit {conversation, author, requestId, text}`, `models/list`,
 `status/watch` and `conversation/list`. An interrupting binding also supports
 `conversation/interrupt {conversation}`. A target-capable binding supports
-`targets/list {cwd}` returning `[{id, name, available, detail}]`.
+`targets/list {cwd}` returning `[{id, name, available, detail}]`. A binding
+with `caller_conversation_header` supports `mcp/register {name, url, headers}`,
+a stream whose first item `{name}` confirms the registration. The registration
+lasts while the stream does: attn ends it with `@effect/rpc/Interrupt`, and
+closing the connection ends it too. `conversation/start` then takes
+`mcpServers: [{name, description}]`.
 
 `conversation/submit` takes durable custody before replying. Repeating its
 `requestId` must return the original admission without submitting twice.
@@ -326,17 +382,18 @@ A shared-server registration adds `capabilities: {"server_binding": true}` and
 `server` to `driver.register`. Its keys are `protocol`, `executable`, optional
 `executable_env`, `serve_args`, `home_env`, `default_home`, `socket_name`,
 `initialize`, `caller_conversation_env`, `on_close`, `recovery`, and optional
-`targets`. Their values match the SDK declaration above. The SDK translates
-camel case option names to these snake case wire names. `server_binding` and
-`message_delivery` are mutually exclusive. The server supplies models and state
-without `model_discovery` or `state_reporting`.
+`caller_conversation_header` and `targets`. Their values match the SDK
+declaration above. The SDK translates camel case option names to these snake
+case wire names. `server_binding` and `message_delivery` are mutually
+exclusive. The server supplies models and state without `model_discovery` or
+`state_reporting`.
 
 Attn to plugin, each answered with a result or a JSON-RPC error:
 
 | Method | Params | Result |
 |---|---|---|
 | `attn.health` | `now` | `{"ok":true}` or `{"ok":false,"message":"…"}`, every 15 seconds |
-| `driver.spawn`, `driver.resume` | `agent`, `session_id`, `run_id`, `cwd`, and when set `label`, `executable`, `yolo`, `model`, `effort`, `initial_prompt`, `metadata`, `resume_session_id`, `instructions`, and for server views `conversation_id`, `execution_target` | `{"argv":["…"],"env":{…},"cwd":"…"}` |
+| `driver.spawn`, `driver.resume` | `agent`, `session_id`, `run_id`, `cwd`, and when set `label`, `executable`, `yolo`, `model`, `effort`, `initial_prompt`, `metadata`, `resume_session_id`, `instructions`, `agent_tools`, and for server views `conversation_id`, `execution_target` | `{"argv":["…"],"env":{…},"cwd":"…"}` |
 | `driver.resume_available` | `conversations`: `agent`, `cwd`, `resume_session_id` | `{"availability":[` the same fields plus `available` and `reason` `]}` |
 | `driver.models` | `agent` | `{"models":[…],"detail":"…"}` |
 | `driver.deliver_message` | `session_id`, `run_id`, `input_id`, `text`, and with `attributed_input` `voice` and `conversation_id` | `{"ok":true}`; `{"ok":false,"status":"deferred"}`; `{"ok":false,"status":"rejected","reason":"…"}`; `{"ok":false,"status":"target_ended"}` |

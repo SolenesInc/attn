@@ -22,6 +22,8 @@ export type ServerBinding = {
  socketName: string;
  initialize: { server?: string; protocol: { exact: number; min?: never } | { min: number; exact?: never } };
  callerConversationEnv: `${string}_ROOT_CONVERSATION`;
+ /** The HTTP header the server names the calling root conversation in on each request to attn's MCP server. With `agentTools`, attn registers its MCP server with the server (`mcp/register`). */
+ callerConversationHeader?: string;
  onClose: "interrupt" | "leave-running";
  recovery: "last-run" | "numbered-completions";
  targets?: boolean;
@@ -43,10 +45,20 @@ export function serverRegistration(server: ServerBinding | undefined): Record<st
   protocol: server.protocol, executable: server.executable, executable_env: server.executableEnv,
   serve_args: server.serveArgs, home_env: server.homeEnv, default_home: server.defaultHome,
   socket_name: server.socketName, initialize: server.initialize,
-  caller_conversation_env: server.callerConversationEnv, on_close: server.onClose,
+  caller_conversation_env: server.callerConversationEnv, caller_conversation_header: server.callerConversationHeader, on_close: server.onClose,
   recovery: server.recovery, targets: server.targets,
  };
 }
+
+/**
+ * attn's MCP server for the launch, sent while the user has attn's tools on.
+ * A harness in the terminal gets the endpoint and its credential, which acts as
+ * whichever session the terminal shows at each call. A shared-server client gets
+ * the name attn registered its MCP server under with the server.
+ */
+export type DriverAgentTools =
+  | { url: string; credential: string; description: string; name?: never }
+  | { name: string; description: string; url?: never; credential?: never };
 
 export type DriverSpawnParams = {
   executable?: string;
@@ -64,6 +76,7 @@ export type DriverSpawnParams = {
   metadata?: unknown;
   resume_session_id?: string;
   instructions?: DriverLaunchInstructions;
+  agent_tools?: DriverAgentTools;
 };
 
 export type DriverVoice = "user" | "attn";
@@ -187,6 +200,8 @@ export type DriverPromises = {
   effortPin?: boolean;
   /** `spawn` and `resume` honor `instructions`. */
   launchInstructions?: boolean;
+  /** `spawn` and `resume` give the harness `agent_tools`. */
+  agentTools?: boolean;
   /** The driver reports every turn start and end with `run.state(...)`; attn stops inferring state from the terminal. */
   stateReporting?: boolean;
   /** With `launchInstructions`, attn does not ask the agent to report its pull requests itself. */
@@ -219,8 +234,12 @@ export function targetEnded(reason = "Target ended"): DriverDeliverResult {
   return { ok: false, status: "target_ended", reason };
 }
 
-const minimumDaemonBuild = "13595cac6922bb7b2d3d89d62e4879be500f7aa3";
-const buildGatedCapabilities = ["attributed_input", "safe_during_question", "compaction"];
+const minimumDaemonBuilds: Record<string, string> = {
+  attributed_input: "13595cac6922bb7b2d3d89d62e4879be500f7aa3",
+  safe_during_question: "13595cac6922bb7b2d3d89d62e4879be500f7aa3",
+  compaction: "13595cac6922bb7b2d3d89d62e4879be500f7aa3",
+  agent_tools: "327521b2fb82f71a2f146f51b9aa6a85b18fb969",
+};
 
 export function driverCapabilities(definition: DriverDefinition): Record<string, boolean> {
   const { deliver, resume, resumeAvailable, compact, models, server } = definition;
@@ -250,6 +269,7 @@ export function driverCapabilities(definition: DriverDefinition): Record<string,
     model_pin: !!definition.modelPin,
     effort_pin: !!definition.effortPin,
     launch_instructions: !!definition.launchInstructions,
+    agent_tools: !!definition.agentTools,
     state_reporting: !!definition.stateReporting,
     pull_request_reporting: !!definition.pullRequestReporting,
   };
@@ -260,10 +280,11 @@ export function driverCapabilities(definition: DriverDefinition): Record<string,
 export function explainRegistrationError(error: Error): Error {
   const unsupported = /unsupported driver capability "([a-z_]+)"/.exec(error.message)?.[1];
   if (unsupported === "server_binding") { return new Error("this attn daemon does not support server_binding; upgrade attn to a build supporting attn-app-server-v1"); }
-  if (!unsupported || !buildGatedCapabilities.includes(unsupported)) {
+  const minimum = unsupported && minimumDaemonBuilds[unsupported];
+  if (!minimum) {
     return error;
   }
   return new Error(
-    `this attn daemon does not support driver capability "${unsupported}"; upgrade attn to source build ${minimumDaemonBuild} or newer`,
+    `this attn daemon does not support driver capability "${unsupported}"; upgrade attn to source build ${minimum} or newer`,
   );
 }
