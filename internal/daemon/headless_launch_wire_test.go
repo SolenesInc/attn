@@ -73,7 +73,7 @@ func TestToolFreeHeadlessTasksRunReadOnlyWithOnlyTheirProvidersEnvironment(t *te
 			},
 			forbidden:  []string{"--mcp-config", "--allowedTools", "--bare", "--add-dir"},
 			keptEnv:    []string{"ANTHROPIC_BASE_URL"},
-			droppedEnv: []string{"OPENAI_BASE_URL", "GH_TOKEN", "UNRELATED_SECRET", "ATTN_SESSION_ID", "CODEX_THREAD_ID"},
+			droppedEnv: []string{"OPENAI_BASE_URL", "CODEX_CA_CERTIFICATE", "GH_TOKEN", "UNRELATED_SECRET", "ATTN_SESSION_ID", "CODEX_THREAD_ID"},
 			fixedEnv:   []string{"CLAUDE_CODE_DISABLE_AUTO_MEMORY=1"},
 			capped: func(task *fakeagent.HeadlessTask) bool {
 				window, _ := envEntry(task.Env, "CLAUDE_CODE_AUTO_COMPACT_WINDOW")
@@ -88,7 +88,7 @@ func TestToolFreeHeadlessTasksRunReadOnlyWithOnlyTheirProvidersEnvironment(t *te
 				{"-c", `web_search="disabled"`}, {"--ignore-user-config"}, {"--ignore-rules"}, {"--ephemeral"},
 			},
 			forbidden:  []string{"workspace-write", "--add-dir", "--dangerously-bypass-approvals-and-sandbox"},
-			keptEnv:    []string{"OPENAI_BASE_URL", "CODEX_HOME"},
+			keptEnv:    []string{"OPENAI_BASE_URL", "CODEX_HOME", "CODEX_CA_CERTIFICATE"},
 			droppedEnv: []string{"ANTHROPIC_BASE_URL", "GH_TOKEN", "UNRELATED_SECRET", "ATTN_SESSION_ID", "CODEX_THREAD_ID"},
 			capped: func(task *fakeagent.HeadlessTask) bool {
 				return slices.Contains(task.Argv, "model_auto_compact_token_limit=150000")
@@ -106,7 +106,7 @@ func TestToolFreeHeadlessTasksRunReadOnlyWithOnlyTheirProvidersEnvironment(t *te
 			for key, value := range map[string]string{
 				"ANTHROPIC_BASE_URL": "https://anthropic.example", "OPENAI_BASE_URL": "https://openai.example",
 				"GH_TOKEN": "gh-token", "UNRELATED_SECRET": "secret", "ATTN_SESSION_ID": "someone-else",
-				"CODEX_THREAD_ID": "thread",
+				"CODEX_THREAD_ID": "thread", "CODEX_CA_CERTIFICATE": "/dummy/ca.pem",
 			} {
 				t.Setenv(key, value)
 			}

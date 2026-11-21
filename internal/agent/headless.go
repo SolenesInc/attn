@@ -181,7 +181,7 @@ func headlessEnvironment(provider string) []string {
 	allowedPrefixes := []string{"LC_"}
 	switch provider {
 	case "codex":
-		for _, name := range []string{"CODEX_HOME", "CODEX_ACCESS_TOKEN", "CODEX_API_KEY"} {
+		for _, name := range []string{"CODEX_HOME", "CODEX_ACCESS_TOKEN", "CODEX_API_KEY", "CODEX_CA_CERTIFICATE"} {
 			allowedExact[name] = true
 		}
 		allowedPrefixes = append(allowedPrefixes, "OPENAI_", "AZURE_OPENAI_", "AWS_", "GOOGLE_")
