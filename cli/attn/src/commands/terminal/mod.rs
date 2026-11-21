@@ -137,6 +137,11 @@ impl Family for Terminal {
     }
 
     fn before_send(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop> {
+        if matches!(cmd.name, "open" | "run") {
+            parsed
+                .args
+                .insert("wait_for_shell".to_string(), serde_json::Value::Bool(true));
+        }
         if cmd.name == "move"
             && !parsed.has("desktop")
             && let Some(only) = parsed.args.remove("terminal")

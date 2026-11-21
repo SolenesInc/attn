@@ -1011,19 +1011,21 @@ type TerminalLsArgs struct {
 }
 
 type TerminalOpenArgs struct {
-	Host    string   `json:"host,omitempty"`
-	Down    bool     `json:"down,omitempty"`
-	Desktop string   `json:"desktop,omitempty"`
-	Cwd     string   `json:"cwd,omitempty"`
-	Command []string `json:"command,omitempty"`
+	Host         string   `json:"host,omitempty"`
+	Down         bool     `json:"down,omitempty"`
+	Desktop      string   `json:"desktop,omitempty"`
+	Cwd          string   `json:"cwd,omitempty"`
+	Command      []string `json:"command,omitempty"`
+	WaitForShell bool     `json:"wait_for_shell,omitempty"`
 }
 
 type TerminalRunArgs struct {
-	Terminal string `json:"terminal,omitempty"`
-	Command  string `json:"command,omitempty"`
-	Wait     bool   `json:"wait,omitempty"`
-	Timeout  string `json:"timeout,omitempty"`
-	Desktop  string `json:"desktop,omitempty"`
+	Terminal     string `json:"terminal,omitempty"`
+	Command      string `json:"command,omitempty"`
+	Wait         bool   `json:"wait,omitempty"`
+	Timeout      string `json:"timeout,omitempty"`
+	WaitForShell bool   `json:"wait_for_shell,omitempty"`
+	Desktop      string `json:"desktop,omitempty"`
 }
 
 type TerminalSendArgs struct {

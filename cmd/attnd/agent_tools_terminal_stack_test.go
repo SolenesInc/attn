@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -26,6 +27,9 @@ func TestAToolCallOpensABashShellRunsACommandWithoutWaitingAndReadsTheLastBlock(
 	var opened protocol.TerminalOpenResult
 	tools.structured(t, "terminal_open", map[string]any{"command": []string{"printf tool-ready"}}, &opened)
 	app.AwaitScreen(string(opened.SessionID), "tool-ready")
+	if atPrompt := s.Run(testworld.Invocation{Session: session, Args: []string{"terminal", "wait", string(opened.TerminalID), "--until", "prompt"}}); atPrompt.Code != 0 {
+		t.Fatalf("attn terminal wait --until prompt after the opened command: %+v", atPrompt)
+	}
 	var ran protocol.TerminalRunResult
 	tools.structured(t, "terminal_run", map[string]any{"terminal": string(opened.TerminalID), "command": "printf 'ran-by-tool\\n'"}, &ran)
 	if protocol.Deref(ran.TerminalID) != opened.TerminalID || ran.LastBlockID == nil || ran.Block != nil {
@@ -97,4 +101,40 @@ func TestATerminalRunWhoseTimeoutPassesBeforeItTypesNeverTypes(t *testing.T) {
 	if screen := run("read", terminal, "--scrollback"); strings.Contains(screen.Stdout, "late-") {
 		t.Fatalf("the command whose timeout passed was typed after all:\n%s", screen.Stdout)
 	}
+}
+
+func TestTerminalToolsAnswerWithoutWaitingOnTheShell(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(testworld.WorkerPTY))
+	s.Vars = append(s.Vars, "SHELL=/bin/bash")
+	waiting := s.PauseEvery(pausepoint.PtyWaitBlock)
+	s.Start()
+	app := s.App()
+	mark := app.EventCount()
+	requireStdout(t, s.Attn("settings", "set", "agent_tools_enabled", "true"), "true")
+	testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["agent_tools_enabled"] == "true"
+	})
+	session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+	tools := claudeToolEndpoint(t, s.LaunchedCarrying(app.Terminal(session)))
+
+	var opened protocol.TerminalOpenResult
+	tools.structured(t, "terminal_open", map[string]any{"command": []string{"printf tool-ready"}}, &opened)
+	waiting.Await()
+	waiting.Release()
+	app.AwaitScreen(string(opened.SessionID), "tool-ready")
+	shell := string(opened.TerminalID)
+	atPrompt := s.Launch(testworld.Invocation{Session: session, Args: []string{"terminal", "wait", shell, "--until", "prompt"}})
+	waiting.Await()
+	waiting.Release()
+	if result := atPrompt.Wait(); result.Code != 0 {
+		t.Fatalf("attn terminal wait --until prompt after the opened command: %+v", result)
+	}
+
+	var reading protocol.TerminalRunResult
+	tools.structured(t, "terminal_run", map[string]any{"terminal": shell, "command": "IFS= read -r line"}, &reading)
+	busy := tools.call(t, "terminal_run", map[string]any{"terminal": shell, "command": "printf never-typed"})
+	if !busy.IsError || !strings.Contains(busy.Text, "prompt rule: ") {
+		t.Fatalf("terminal_run while the shell runs the tool's earlier command = %+v, want a prompt rule refusal at once", busy)
+	}
+	tools.structured(t, "terminal_send", map[string]any{"terminal": shell, "keys": []string{"C-c"}}, &protocol.TerminalInputResult{})
 }

@@ -29,6 +29,7 @@ pub const COMMANDS: &[Command] = &[
             Arg { name: "desktop", cli: Cli::Flag("desktop"), value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "cwd", cli: Cli::Flag("cwd"), value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "command", cli: Cli::AfterDashes, value: Value::Text, source: Source::Given, required: false, list: true },
+            Arg { name: "wait_for_shell", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
         ],
     },
     Command {
@@ -41,6 +42,7 @@ pub const COMMANDS: &[Command] = &[
             Arg { name: "command", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "wait", cli: Cli::Flag("wait"), value: Value::Bool, source: Source::Given, required: false, list: false },
             Arg { name: "timeout", cli: Cli::Flag("timeout"), value: Value::Text, source: Source::Given, required: false, list: false },
+            Arg { name: "wait_for_shell", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
             Arg { name: "desktop", cli: Cli::Flag("desktop"), value: Value::Text, source: Source::Given, required: false, list: false },
         ],
     },

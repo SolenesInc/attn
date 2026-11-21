@@ -321,28 +321,39 @@ func (d *Daemon) runTerminalOpen(ctx context.Context, c command.Caller, a comman
 		return nil, rejection.reason()
 	}
 	terminal := d.primaryTerminal(id)
-	if line != "" {
-		ctx, cancel := context.WithTimeout(ctx, terminalFirstPromptTripwire)
-		defer cancel()
-		err := d.waitForTerminalFirstPrompt(ctx, terminal)
-		if err == nil && ctx.Err() == nil {
-			var state protocol.TerminalText
-			state, err = Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: terminal, Mode: protocol.TerminalReadModeScreen})
-			if err == nil {
-				err = d.typeInput(ctx, terminal, state, line+"\r")
+	if line != "" && !a.WaitForShell {
+		d.life.Go("type the command of an opened terminal", func() {
+			if err := d.typeFirstCommand(d.life.Context(), terminal, id, line); err != nil {
+				d.logf("terminal open: %v", err)
 			}
-		}
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return nil, protocol.Refuse(protocol.RefusalLimit, "first prompt wait exceeded limit=%s; %s. Terminal %s stays open; nothing was typed. Use `{attn terminal send %s}` to continue", terminalFirstPromptTripwire, terminalFirstPromptReceipt, id, id)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("opened terminal %s, but command was not typed: %v", id, err)
-		}
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
+		})
+	}
+	if line != "" && a.WaitForShell {
+		if err := d.typeFirstCommand(ctx, terminal, id, line); err != nil {
+			return nil, err
 		}
 	}
 	return protocol.TerminalOpenResult{TerminalID: terminal, SessionID: id, DesktopID: placed.desktopID, PaneID: placed.paneID}, nil
+}
+
+func (d *Daemon) typeFirstCommand(ctx context.Context, terminal protocol.TerminalID, id protocol.SessionID, line string) error {
+	ctx, cancel := context.WithTimeout(ctx, terminalFirstPromptTripwire)
+	defer cancel()
+	err := d.waitForTerminalFirstPrompt(ctx, terminal)
+	if err == nil && ctx.Err() == nil {
+		var state protocol.TerminalText
+		state, err = Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: terminal, Mode: protocol.TerminalReadModeScreen})
+		if err == nil {
+			err = d.typeInput(ctx, terminal, state, line+"\r")
+		}
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return protocol.Refuse(protocol.RefusalLimit, "first prompt wait exceeded limit=%s; %s. Terminal %s stays open; nothing was typed. Use `{attn terminal send %s}` to continue", terminalFirstPromptTripwire, terminalFirstPromptReceipt, id, id)
+	}
+	if err != nil {
+		return fmt.Errorf("opened terminal %s, but command was not typed: %v", id, err)
+	}
+	return ctx.Err()
 }
 
 func shellCommand(words []string) string {
@@ -391,9 +402,22 @@ func (d *Daemon) awaitTypedCommandFinish(ctx context.Context, terminal protocol.
 	}
 }
 
+func (d *Daemon) typedCommandUnfinished(terminal protocol.TerminalID, state protocol.TerminalText) bool {
+	stored, ok := d.typedCommands.Load(terminal)
+	if !ok {
+		return false
+	}
+	typed := stored.(typedCommand)
+	if state.LastBlockID != typed.afterBlockID || time.Since(typed.typedAt) > typedCommandFinishTripwire {
+		d.typedCommands.CompareAndDelete(terminal, typed)
+		return false
+	}
+	return true
+}
+
 type terminalInput struct {
-	target, desktop, data string
-	run, wait             bool
+	target, desktop, data   string
+	run, wait, waitForShell bool
 }
 
 func (d *Daemon) inputTerminal(ctx context.Context, caller *protocol.Session, in terminalInput) (*protocol.TerminalInputResult, *selectedTerminal, error) {
@@ -410,7 +434,9 @@ func (d *Daemon) inputTerminal(ctx context.Context, caller *protocol.Session, in
 		if target.Agent != protocol.AgentShellValue {
 			return nil, nil, errors.New("run rule: run requires a shell; use send to type into an agent")
 		}
-		d.awaitTypedCommandFinish(ctx, target.terminal)
+		if in.waitForShell {
+			d.awaitTypedCommandFinish(ctx, target.terminal)
+		}
 		if ctx.Err() != nil {
 			return nil, nil, ctx.Err()
 		}
@@ -428,6 +454,9 @@ func (d *Daemon) inputTerminal(ctx context.Context, caller *protocol.Session, in
 			if err != nil {
 				return nil, nil, err
 			}
+		}
+		if d.typedCommandUnfinished(target.terminal, state) {
+			return nil, nil, errors.New("prompt rule: the command attn typed into this shell has not finished; read the terminal, and run again once it shows its prompt")
 		}
 		if !state.AtPrompt {
 			return nil, nil, errors.New("prompt rule: shell is busy; use send to type into its running program")

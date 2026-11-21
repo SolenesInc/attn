@@ -52,7 +52,7 @@ func (d *Daemon) runTerminalRun(ctx context.Context, c command.Caller, a command
 		return nil, err
 	}
 	defer cancel()
-	input, target, err := d.inputTerminal(ctx, caller, terminalInput{target: a.Terminal, desktop: a.Desktop, data: a.Command + "\r", run: true, wait: a.Wait})
+	input, target, err := d.inputTerminal(ctx, caller, terminalInput{target: a.Terminal, desktop: a.Desktop, data: a.Command + "\r", run: true, wait: a.Wait, waitForShell: a.WaitForShell})
 	if err != nil {
 		return nil, timedOut(ctx, err)
 	}
