@@ -141,6 +141,8 @@ go ./cmd/attnd TestPRWaitReadyReportsEachActionableUpdateOnceAcrossInvocations
 go ./cmd/attnd TestSettingsCLIDiscoversReadsAndSavesDaemonSettings
 go ./cmd/attnd TestTheCLIWarnsWhenItsReleaseDiffersFromTheRunningDaemons
 go ./cmd/attnd TestTheCLINamesThePathItSearchedWhenAttndIsMissing
+go ./cmd/attnd TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict
+go ./cmd/attnd TestTheCommandsAnAgentRunsFromItsSessionActOnThatSession
 
 group clickhouse ^internal/daemon/analytics|^internal/analytics/|^internal/ingest/|^cmd/attn-ingest/|^internal/testworld/ingest\.go$|^internal/fakeclickhouse/
 go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall

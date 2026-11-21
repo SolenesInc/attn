@@ -791,11 +791,11 @@ fn refuse(
     refusal: &CommandRefusal,
 ) -> Stop {
     let message = render_mentions(cmd, &refusal.message);
-    if refusal.code == CODE_NO_SESSION {
-        return family.no_session(cmd.name, &message);
-    }
     if refusal.code == CODE_USAGE || cmd.usage.contains(&refusal.code.as_str()) {
         return family.usage_error(cmd.name, &message);
+    }
+    if refusal.code == CODE_NO_SESSION {
+        return family.no_session(cmd.name, &message);
     }
     if refusal.code == CODE_TIMEOUT {
         family.fail(cmd.name, &message);
