@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
@@ -35,7 +36,7 @@ const (
 
 var gates = []string{"any", "own", "full"}
 
-var errorCodePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+var errorCodePattern = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^[a-z][a-z0-9_]*$`) })
 
 var grantNames = []string{"read_repo", "push_repo", "push_workflows", "push_default_branch", "use_host", "net_read", "net_write", "steer", "approve"}
 
@@ -432,7 +433,7 @@ func (c *Catalog) check() []string {
 		codes := map[string]bool{}
 		for _, e := range cmd.Errors {
 			switch {
-			case !errorCodePattern.MatchString(e.Code):
+			case !errorCodePattern().MatchString(e.Code):
 				add("%s: error code %q is not a lower_snake_case name", where, e.Code)
 			case codes[e.Code]:
 				add("%s: error %q is listed twice", where, e.Code)

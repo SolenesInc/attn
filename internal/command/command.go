@@ -85,11 +85,11 @@ func WithoutDaemon(handlers map[string]Handler) (*Layer, error) {
 func newLayer(handlers map[string]Handler, serves func(spec) bool) (*Layer, error) {
 	var problems []string
 	for name := range handlers {
-		if s, ok := specs[name]; !ok || !serves(s) {
+		if s, ok := specs()[name]; !ok || !serves(s) {
 			problems = append(problems, fmt.Sprintf("handler for %q, which is not a catalog command this layer serves", name))
 		}
 	}
-	for name, s := range specs {
+	for name, s := range specs() {
 		if _, ok := handlers[name]; !ok && serves(s) {
 			problems = append(problems, fmt.Sprintf("no handler for %q", name))
 		}
@@ -106,8 +106,8 @@ func (l *Layer) Run(ctx context.Context, c Caller, name string, args json.RawMes
 	if !ok {
 		return nil, Usage("%q is not a command", name)
 	}
-	if c.Terminal != "" && !specs[name].anyone && (!specs[name].readOnly || c.Profile == "") {
-		if !specs[name].sessionFlag {
+	if c.Terminal != "" && !specs()[name].anyone && (!specs()[name].readOnly || c.Profile == "") {
+		if !specs()[name].sessionFlag {
 			return nil, Refuse("no_session", "terminal %s is not showing a session", c.Terminal)
 		}
 		return nil, Refuse("no_session", "terminal %s is not showing a session; pass {session} <id> to identify the caller; {profile} <name|id> selects a garden and does not identify a session", c.Terminal)
@@ -116,7 +116,7 @@ func (l *Layer) Run(ctx context.Context, c Caller, name string, args json.RawMes
 	if err != nil {
 		refusal := AsRefusal(err)
 		if refusal.Fix == "" {
-			refusal.Fix = specs[name].fixes[refusal.Code]
+			refusal.Fix = specs()[name].fixes[refusal.Code]
 		}
 		return nil, refusal
 	}

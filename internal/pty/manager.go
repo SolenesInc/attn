@@ -597,7 +597,7 @@ func pathOverlay(env []string) []string {
 
 const postLoginEnvKey = "ATTN_POST_LOGIN_ENV"
 
-var shellVariableName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+var shellVariableName = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`) })
 
 func loginShellCommand(shellPath string, argv, env, overlay []string) *exec.Cmd {
 	args := []string{"-l", "-c"}
@@ -617,7 +617,7 @@ func postLoginExports(overlay []string) string {
 	var script strings.Builder
 	for _, entry := range overlay {
 		key, value, _ := strings.Cut(entry, "=")
-		if shellVariableName.MatchString(key) {
+		if shellVariableName().MatchString(key) {
 			script.WriteString("export " + key + "=" + shellQuote(value) + "\n")
 		}
 	}

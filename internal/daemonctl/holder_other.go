@@ -11,9 +11,7 @@ import (
 	"strings"
 )
 
-var lsofPath = resolveLsofPath()
-
-func resolveLsofPath() string {
+func lsofPath() string {
 	if p, err := exec.LookPath("lsof"); err == nil {
 		return p
 	}
@@ -21,7 +19,7 @@ func resolveLsofPath() string {
 }
 
 func pidHoldsPIDFile(pid int, pidPath string) (bool, error) {
-	cmd := exec.Command(lsofPath, "-t", "--", pidPath)
+	cmd := exec.Command(lsofPath(), "-t", "--", pidPath)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

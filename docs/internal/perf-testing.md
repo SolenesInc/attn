@@ -18,7 +18,9 @@ each one fails by name instead of as a count.
 
 | `GODEBUG=inittrace=1 attn version`, Linux unless named | Init allocations |
 | --- | --- |
-| Today, with attn's own MCP server serving `/mcp` | 4,175 |
+| Today, Linux and macOS arm64 | 4,240 and 4,341 |
+| With the command layer's `specs` map and the catalog and PTY regexps built at init, 8c45cb04c; macOS also resolved `lsof` | 4,420 and 4,575 |
+| With attn's own MCP server serving `/mcp`, c083e3a80 | 4,175 |
 | With the MCP SDK serving `/mcp`, de51fea3e (encoding/gob 372, jsonschema-go 296, go-sdk/mcp 183, oauthex 27) | 5,074 |
 | Before the MCP SDK, cac9c2fbe | 4,141 |
 | With ask image discovery on goldmark's parser alone | 3,664 |
