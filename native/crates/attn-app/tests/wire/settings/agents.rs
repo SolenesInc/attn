@@ -1739,3 +1739,23 @@ fn a_picker_that_moves_over_the_window_keeps_the_keyboard_in_its_filter() {
     assert_eq!(focused.as_deref(), Some("settings.route-picker.filter"));
     rest(&mut world);
 }
+
+#[test]
+fn down_from_the_filter_the_picker_opens_in_moves_into_the_models() {
+    let mut world = on_agents(&both(&[("default_model_claude", "opus")]));
+    open_route(&mut world, "Claude default model");
+    world.settle();
+    press(&mut world, Key::Down);
+    let focused = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.focused)
+        .and_then(|e| e.key)
+        .unwrap_or_default();
+    assert_eq!(
+        focused, "settings.route-picker.model.0",
+        "Down from the filter"
+    );
+    rest(&mut world);
+}

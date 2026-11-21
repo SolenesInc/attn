@@ -1236,7 +1236,8 @@ fn main(state: &State, p: &Picker, view: &View, t: &Tokens) -> El {
                         .expect("the picker is open while its filter shows")
                         .query
                 })
-                .on_submit(submit_filter),
+                .on_submit(submit_filter)
+                .on_key(down_into_models),
             FieldState::Ready,
             t,
         )));
@@ -1549,6 +1550,25 @@ fn effort_control(p: &Picker, view: &View, t: &Tokens) -> Option<El> {
     ))
 }
 
+/// Down in the filter moves to the first model that can be picked.
+fn down_into_models(state: &mut State, key: &KeyEvent, tx: &mut Tx) -> bool {
+    if key.key != Key::Down {
+        return false;
+    }
+    let Some((_, shown, rules)) = current(state) else {
+        return false;
+    };
+    let view = view(state, &shown, &rules);
+    let p = picker(state).expect("current found the picker");
+    match model_keys(p, &view).into_iter().find(|(_, on)| *on) {
+        Some((first, _)) => {
+            tx.focus(first, true);
+            true
+        }
+        None => false,
+    }
+}
+
 /// Up and Down move through a list, Home and End go to its ends, and Left and Right move
 /// between the harnesses, the models and the efforts.
 fn on_key(state: &mut State, key: &KeyEvent, tx: &mut Tx) -> bool {
@@ -1592,12 +1612,6 @@ fn on_key(state: &mut State, key: &KeyEvent, tx: &mut Tx) -> bool {
             if zone(keys) {
                 return step(keys, tx);
             }
-        }
-        if focused == FILTER && key.key == Key::Down {
-            if let Some(k) = first_of(&models, None) {
-                tx.focus(k, true);
-            }
-            return true;
         }
         return false;
     }
