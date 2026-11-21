@@ -2803,6 +2803,37 @@ fn a_multi_choice_condition_stays_while_any_pick_remains_and_goes_with_the_last(
 }
 
 #[test]
+fn accept_all_recommended_keeps_a_multi_choice_condition_and_drops_a_one_choice_one_for_a_new_pick()
+{
+    let mut world = start(vec![rollout()], vec![api_working()]);
+    open_sheet(&mut world);
+
+    click(&mut world, "asks.q.q1.choice.1");
+    click(&mut world, "asks.q.q1.condition");
+    type_into(&mut world, "asks.q.q1.condition.field", "only in the day");
+    click(&mut world, "asks.q.q2.choice.0");
+    click(&mut world, "asks.q.q2.choice.1");
+    click(&mut world, "asks.q.q2.condition");
+    type_into(&mut world, "asks.q.q2.condition.field", "after the freeze");
+    click(&mut world, "asks.accept");
+
+    assert!(checked(&world, "asks.q.q2.choice.0"));
+    assert!(!checked(&world, "asks.q.q2.choice.1"));
+    assert!(has(&world, "asks.q.q2.condition.field"));
+    assert!(checked(&world, "asks.q.q1.choice.0"));
+    assert!(!has(&world, "asks.q.q1.condition.field"));
+    click(&mut world, "asks.send");
+    assert_eq!(
+        sent_answers(&world)[0]["answers"],
+        serde_json::json!([
+            {"key": "q1", "picked": ["eu"]},
+            {"key": "q2", "picked": ["smoke"], "condition": "after the freeze"},
+            {"key": "q3", "picked": [], "text": "Monday"},
+        ])
+    );
+}
+
+#[test]
 fn typing_another_answer_drops_the_pick_and_its_condition() {
     let mut world = start(vec![cache_store()], vec![api_working()]);
     open_sheet(&mut world);

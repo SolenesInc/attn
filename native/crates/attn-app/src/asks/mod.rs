@@ -452,9 +452,15 @@ pub(crate) struct Answer {
 }
 
 impl Answer {
-    /// Replaces the picks. The condition qualified the picks it was written for, so it goes.
-    fn replace_picks(&mut self, picked: Vec<String>) {
-        if self.picked != picked {
+    /// Replaces the picks. The condition qualified the picks it was written for: in a one-choice
+    /// question it goes with a different pick, in a multi-choice one it qualifies the set and
+    /// stays while any pick remains.
+    fn replace_picks(&mut self, kind: Kind, picked: Vec<String>) {
+        let still_qualifies = match kind {
+            Kind::Any => !picked.is_empty(),
+            Kind::One | Kind::Text | Kind::File | Kind::Unknown => self.picked == picked,
+        };
+        if !still_qualifies {
             self.condition = None;
         }
         self.picked = picked;
@@ -979,18 +985,17 @@ fn choose(state: &mut State, ask: &str, question: &str, kind: Kind, label: &str)
     let answer = state.answer(ask, question);
     match kind {
         Kind::One => {
-            answer.replace_picks(vec![label.to_owned()]);
+            answer.replace_picks(kind, vec![label.to_owned()]);
             answer.other = TextEdit::default();
         }
         Kind::Any => {
-            if let Some(at) = answer.picked.iter().position(|p| p == label) {
-                answer.picked.remove(at);
+            let mut picked = answer.picked.clone();
+            if let Some(at) = picked.iter().position(|p| p == label) {
+                picked.remove(at);
             } else {
-                answer.picked.push(label.to_owned());
+                picked.push(label.to_owned());
             }
-            if answer.picked.is_empty() {
-                answer.condition = None;
-            }
+            answer.replace_picks(kind, picked);
         }
         Kind::Text | Kind::File | Kind::Unknown => {}
     }
@@ -999,7 +1004,7 @@ fn choose(state: &mut State, ask: &str, question: &str, kind: Kind, label: &str)
 /// A one-choice question's written answer replaces its pick.
 pub(crate) fn other_edited(state: &mut State, ask: &str, question: &str, kind: Kind) {
     if kind == Kind::One {
-        state.answer(ask, question).replace_picks(Vec::new());
+        state.answer(ask, question).replace_picks(kind, Vec::new());
     }
 }
 
@@ -1028,11 +1033,11 @@ pub(crate) fn accept_recommended(state: &mut State, ask: &str) {
         match kind {
             Kind::Text => {
                 answer.text = rewritten(&answer.text, value);
-                answer.replace_picks(Vec::new());
+                answer.replace_picks(kind, Vec::new());
                 answer.other = TextEdit::default();
             }
             Kind::One | Kind::Any => {
-                answer.replace_picks(vec![value]);
+                answer.replace_picks(kind, vec![value]);
                 answer.other = TextEdit::default();
                 answer.text = TextEdit::default();
             }
