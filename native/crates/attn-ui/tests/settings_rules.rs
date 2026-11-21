@@ -1270,6 +1270,9 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::miniature::Miniature::tile(name)", true),
     ("blocks::screen::Screen::showing(shown)", false),
     ("blocks::shelf::Shelf::chip(label)", false),
+    ("blocks::shelf::Shelf::cap(label)", false),
+    ("blocks::shelf::Shelf::cap(caption)", false),
+    ("blocks::shelf::Shelf::cap_width(caption)", false),
 ];
 
 #[test]
