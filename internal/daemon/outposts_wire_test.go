@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -380,6 +381,7 @@ type refusingInstallSSH struct {
 	*outpostssh.Client
 	probes, installs int
 	probing          chan struct{}
+	failure          error
 }
 
 func (r *refusingInstallSSH) EnsureMaster(context.Context) error   { return nil }
@@ -399,6 +401,9 @@ func (r *refusingInstallSSH) Probe(ctx context.Context) (outpostssh.Probe, error
 func (r *refusingInstallSSH) Stage(_ context.Context, _ outpostbuild.Binaries, _ bridge.Build, phase func(string)) error {
 	r.installs++
 	phase("verifying")
+	if r.failure != nil {
+		return r.failure
+	}
 	return fmt.Errorf("the outpost refused this install")
 }
 func (r *refusingInstallSSH) Bridge(context.Context) (net.Conn, error) {
@@ -443,6 +448,31 @@ func TestAnUnpairedOutpostDoesNotRepeatARefusedInstall(t *testing.T) {
 			t.Fatalf("explicit Update and later retries: installs=%d probes=%d, want two installs and continued probes", ssh.installs, ssh.probes)
 		}
 		t.Logf("Add refused once, probes continued across retries, and explicit Update attempted once more: installs=%d probes=%d", ssh.installs, ssh.probes)
+	})
+}
+
+func TestAFailedBuildStepGivesTheUpdateItsCause(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		t.Setenv("ATTN_HARNESS_DATA_DIR", w.Dir)
+		t.Setenv("ATTN_HARNESS_OUTPOST_BINARY", "fixture-build")
+		cause := "error[E0463]: can't find crate for `core`"
+		ssh := &refusingInstallSSH{
+			Client:  outpostssh.For("fixture", "unused", "default"),
+			failure: fmt.Errorf("build outpost linux/amd64: %w", &outpostbuild.CommandError{Name: "make", Err: errors.New("exit status 2"), Cause: cause, Log: "/data/build.log"}),
+		}
+		w.daemon.UseOutpostSSH(ssh)
+		app := w.App()
+		setSetting(t, app, "outposts_enabled", "true")
+		app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: "fixture"})
+		row := testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+			return len(m.Outposts) == 1 && m.Outposts[0].Update != nil && m.Outposts[0].Update.Phase == protocol.OutpostUpdatePhaseFailed
+		}).Outposts[0]
+		if got := protocol.Deref(row.Update.Cause); got != cause {
+			t.Fatalf("update cause = %q, want %q (outcome %q)", got, cause, protocol.Deref(row.Update.Outcome))
+		}
+		if outcome := protocol.Deref(row.Update.Outcome); !strings.Contains(outcome, cause) || !strings.Contains(outcome, "full output in /data/build.log") {
+			t.Fatalf("outcome %q lost the cause or the log", outcome)
+		}
 	})
 }
 

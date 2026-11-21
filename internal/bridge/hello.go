@@ -26,9 +26,12 @@ type Refusal struct {
 	Peer   *Identity `json:"-"`
 	Reason string    `json:"reason"`
 	Detail string    `json:"detail"`
+	Err    error     `json:"-"`
 }
 
 func (r *Refusal) Error() string { return r.Detail }
+
+func (r *Refusal) Unwrap() error { return r.Err }
 
 type hello struct {
 	Bridge int `json:"bridge"`

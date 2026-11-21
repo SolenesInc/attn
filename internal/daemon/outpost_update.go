@@ -179,7 +179,7 @@ func (d *Daemon) prepareOutpost(ctx context.Context, row store.Outpost, push *ou
 				found = probe.Build.String()
 				peer = &bridge.Identity{Build: *probe.Build}
 			}
-			return nil, &bridge.Refusal{Peer: peer, Reason: "install", Detail: fmt.Sprintf("%s; install failed: %v", found, err)}
+			return nil, &bridge.Refusal{Peer: peer, Reason: "install", Detail: fmt.Sprintf("%s; install failed: %v", found, err), Err: err}
 		}
 		d.noteOutpostHostMissing(row.ID, false)
 		d.setOutpostUpdate(row.ID, push, "restarting", nil)
