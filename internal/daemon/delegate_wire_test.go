@@ -403,6 +403,7 @@ func TestADelegateAtACustomDirectoryStaysBesideItsCaller(t *testing.T) {
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(target, "trusted")
 	request := delegateFrom(string(source.ID), target, "Work in the target directory", fakeagent.Codex)
 	result, err := cli.Delegate(request)
 	if err != nil {

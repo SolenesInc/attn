@@ -50,6 +50,7 @@ func TestADelegatedWorktreeStartsFromTheExactBaseWhereItWasAsked(t *testing.T) {
 	if err := os.MkdirAll(outsideGit, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(outsideGit, "trusted")
 
 	for _, row := range []struct {
 		name, source, cwd   string

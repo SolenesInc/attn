@@ -221,13 +221,16 @@ func signStackOutOfGitHub(s *testworld.Stack) {
 func awaitCodexReviewDelivered(t *testing.T, s *testworld.Stack, app *testworld.Peer, started protocol.AutomationRunSummary, session string) {
 	t.Helper()
 	app.TypeLine(session, "")
-	if opening := s.Launched(session).Prompted(); opening == "" {
+	agent := s.Launched(session)
+	if opening := agent.Prompted(); opening == "" {
 		t.Fatal("the agent started no turn past the modal")
 	}
 	delivered := awaitStackRun(t, s, app, started.ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
 	if delivered.State != "delivered" {
 		t.Fatalf("after its first turn started the run is %+v, want delivered", delivered)
 	}
+	agent.Reply("Reviewed. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 }
 
 func TestTurningOffAReviewAutomationAfterItsCodexLaunchedKeepsTheRunPendingAcrossARestartWhileGitHubIsSignedOutUntilItDelivers(t *testing.T) {
