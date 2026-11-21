@@ -344,3 +344,32 @@ func TestAnAppServerCompactionShowsTheSessionCompactingUntilItEnds(t *testing.T)
 		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	})
 }
+
+func TestAResumedIdleAppServerConversationShowsACompactionBeforeItsFirstPrompt(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		holder, view, server := appServerSession(t, w, app, h)
+		testworld.AwaitSession(app, holder, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+		conversation := "outline-conversation"
+		server.StartedElsewhere(conversation, w.Path("shop"), "write an outline")
+		resumed, _, _ := w.RequestSpawn(app, h, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+			m.ResumeSessionID = protocol.Ptr(conversation)
+		})
+		if !resumed.Success {
+			t.Fatalf("resume the idle conversation: %s", protocol.Deref(resumed.Error))
+		}
+		session := string(resumed.ID)
+		if again := w.Launched(session); again.ConversationID != conversation || view.ConversationID == conversation {
+			t.Fatalf("the resumed TUI opened %s, want %s beside the held %s", again.ConversationID, conversation, view.ConversationID)
+		}
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		server.Compacting(conversation, "manual")
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool {
+			return s.State == protocol.SessionStateWorking && protocol.Deref(s.StateReason) == "compacting"
+		})
+		server.Compacted(conversation, "manual")
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	})
+}

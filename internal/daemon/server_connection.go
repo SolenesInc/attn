@@ -478,7 +478,7 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 	}
 }
 
-func (p *serverConnection) reconcile(l *serverLink, ids []protocol.SessionID) {
+func (p *serverConnection) reconcile(l *serverLink, ids []protocol.SessionID, launching bool) {
 	p.mu.Lock()
 	c, ready := p.control, p.ready
 	p.mu.Unlock()
@@ -495,8 +495,10 @@ func (p *serverConnection) reconcile(l *serverLink, ids []protocol.SessionID) {
 			return
 		}
 		var last map[string]*serverEnded
+		conversations := make(map[string]bool, len(ids))
 		for _, id := range ids {
 			conversation := p.d.linkConversation(id)
+			conversations[conversation] = true
 			if status, busy := p.busy[conversation]; busy {
 				l.observe(id, sessionmonitor.StateSourceServerReport, status, nil)
 				continue
@@ -509,6 +511,7 @@ func (p *serverConnection) reconcile(l *serverLink, ids []protocol.SessionID) {
 				l.observeQuiet(id, ended)
 			}
 		}
+		p.openFeeds(c, conversations, launching)
 	})
 }
 

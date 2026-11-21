@@ -268,7 +268,7 @@ func (l *serverLink) tracksCompletions() bool {
 func (l *serverLink) launchStarted(id protocol.SessionID) {
 	p, err := l.connection()
 	if err == nil {
-		p.reconcile(l, []protocol.SessionID{id})
+		p.reconcile(l, []protocol.SessionID{id}, true)
 	}
 }
 
@@ -474,7 +474,7 @@ func (l *serverLink) recoverProcesses(ctx context.Context) {
 			return
 		}
 		if p, err := l.connection(); err == nil {
-			p.reconcile(l, l.sessions())
+			p.reconcile(l, l.sessions(), false)
 		}
 	})
 }
