@@ -170,14 +170,14 @@ Notices are attn's own messages to an agent:
 - a delegation that failed after attn accepted it, addressed to the session
   that started it, so an agent whose `delegate` tool call returned at
   acceptance learns of the failure
-- a command that `terminal_open` called as a tool did not type, because the
-  shell showed no first prompt in time, or the terminal ended or the daemon
-  restarted first, addressed to the session that opened the terminal. The
-  daemon records the command before the tool answers, so a restart before
-  the first prompt sends the notice when the daemon starts again. The daemon
-  marks the command just before it types it, so a restart after that mark
-  sends a notice that the command may have run, and to read the terminal
-  before running it again
+- a command that `terminal_open` called as a tool did not type, or may have
+  run, addressed to the session that opened the terminal. Nothing is typed
+  when the shell shows no first prompt in time, or the terminal ends or the
+  daemon restarts first. The daemon records the command before the tool
+  answers, so a restart sends the notice when the daemon starts again. A
+  restart while the daemon types the command cannot tell whether it ran, so
+  that notice says the command may have run and to read the terminal before
+  running it again
 
 ## Coalescing
 
