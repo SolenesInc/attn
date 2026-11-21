@@ -22,14 +22,14 @@ Each run gets its own profile, so seeds and slugs never collide between runs, an
 
 The numbers come from attn itself:
 
-- Input and output tokens and cost come from `attn session show --json`. Cost is at API prices. A model attn has no price for, such as Codex's, shows as `+ unpriced`.
+- Input and output tokens and cost come from `attn session show --json` for the session the prompt went to. Cost is at API prices. A model attn has no price for, such as Codex's, shows as `+ unpriced`. Other sessions a run starts, such as the delegate in `msg-delegate`, are stopped once the run is judged and not counted.
 - Turns, attn calls, searches and help reads come from `attn session transcript --json`. An attn call is a tool of attn's server, a tool named inside a code-mode script, or an `attn` command the agent ran in its shell.
 
 Each run keeps `transcript.jsonl`, `calls.json`, `screen.txt` and `result.json` in `instance/runs/<stamp>/<task>/<cell>/<n>/`, beside `results.json` and `table.md` for the whole run.
 
 ### Harness homes
 
-By default, the agents run with your own `~/.claude` and `~/.codex`. Your global `CLAUDE.md`, plugins and MCP servers then add to every Claude Code prompt, which raises input tokens. To measure attn alone, make a bench home once and pass `--tool-home <dir>`. The driver then starts the daemon with `CLAUDE_CONFIG_DIR=<dir>/.claude`, `CODEX_HOME=<dir>/.codex` and `ATTN_TOOL_HOME=<dir>`. To make the home, sign each harness in:
+By default, the agents run with your own `~/.claude` and `~/.codex`. Your global `CLAUDE.md`, plugins and MCP servers then add to every Claude Code prompt, which raises input tokens, and Claude Code adds an entry for each run's folder to your `~/.claude.json`, as it does for any folder it runs in. To measure attn alone, make a bench home once and pass `--tool-home <dir>`. The driver then starts the daemon with `CLAUDE_CONFIG_DIR=<dir>/.claude`, `CODEX_HOME=<dir>/.codex` and `ATTN_TOOL_HOME=<dir>`. To make the home, sign each harness in:
 
 ```sh
 CLAUDE_CONFIG_DIR=~/attn-agent-bench-home/.claude claude    # then /login

@@ -111,12 +111,13 @@ async function atPrompt(session: string) {
   const deadline = Date.now() + LAUNCH_DEADLINE_MS
   let trusted = false
   while (Date.now() < deadline) {
-    const me = agents().find((a) => a.id === session)
-    if (me && ["idle", "waiting_input"].includes(me.state)) return
     if (!trusted && /Trust this folder\?|Do you trust the files in this folder\?/.test(screen(session))) {
       wsctl(["input", "--id", session, "--enter"])
       trusted = true
+      continue
     }
+    const me = agents().find((a) => a.id === session)
+    if (me && ["idle", "waiting_input"].includes(me.state)) return
     await wait(POLL_MS)
   }
   throw new Error(`the session never reached its prompt: ${agents().find((a) => a.id === session)?.state ?? "gone"}`)
@@ -302,6 +303,7 @@ function forgetCodexTrust() {
 
 const build = spawnSync("go", ["build", "-o", wsctlBinary, "./scripts/wsctl"], { cwd: repository, encoding: "utf8" })
 if (build.status !== 0) throw new Error(`go build ./scripts/wsctl: ${build.stderr}`)
+const taskSettings = [...new Set(tasks.flatMap((t) => Object.keys(t.settings ?? {})))]
 const results: RunResult[] = []
 try {
   for (const codeMode of [false, true]) {
@@ -313,7 +315,7 @@ try {
       setting(`default_model_${cell.harness.agent}`, cell.harness.model)
       if (cell.harness.agent === "sigma") setting("sigma_enabled", "true")
       for (const task of tasks) {
-        for (const [name, value] of Object.entries(task.settings ?? {})) setting(name, value)
+        for (const name of taskSettings) setting(name, task.settings?.[name] ?? "")
         const jobs = Array.from({ length: runs }, (_, i) => i + 1)
         await Promise.all(
           Array.from({ length: Math.min(parallel, jobs.length) }, async () => {
