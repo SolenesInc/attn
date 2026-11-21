@@ -139,15 +139,16 @@ pub(crate) fn middle_laid_out(state: &mut State, rect: [f32; 4]) {
 }
 
 /// The middle's `content` across the whole middle, its parts in a row whose end is measured
-/// with what the bar held and had given up as `state`'s view built it. A commit measures again
-/// only so many times, so while a step taken waits to be measured, the end's layout asks for
-/// one more commit.
+/// with what the bar held and had given up as `state`'s view built it. The end is its own
+/// element for each set of steps drawn, so a drawing reports where it ends even where the last
+/// one ended. A commit measures again only so many times, so while a step taken waits to be
+/// measured, the end's layout asks for one more commit.
 pub(crate) fn filled(state: &State, content: rune::El) -> rune::El {
     let held = contents(state);
     let drawn = given_up(state);
     content.grow(1.0).shrink().child(
         rune::el()
-            .key("titlebar.middle.end")
+            .key(format!("titlebar.middle.end.{drawn:?}"))
             .w(0.0)
             .on_measure(move |state: &mut State, [x, ..]: [f32; 4]| {
                 state.window.queue_bar_room.content_right = Some((x, held.clone(), drawn));

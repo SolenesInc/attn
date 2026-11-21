@@ -2,6 +2,10 @@
 static ALLOCATOR: attn_testkit::allocations::Counting = attn_testkit::allocations::Counting;
 
 mod wire {
+    /// The title bar's leading points macOS's traffic lights take. The bar's room is measured
+    /// beside them on every platform, since Linux reports none.
+    pub(crate) const MACOS_WINDOW_CONTROLS: f32 = 69.0;
+
     pub(crate) fn mac() -> bool {
         rune::KeyPlatform::current() == rune::KeyPlatform::Mac
     }

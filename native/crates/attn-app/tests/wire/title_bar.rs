@@ -63,7 +63,7 @@ fn the_title_bar_keeps_its_tools_left_and_its_panels_right_in_the_tauri_apps_ord
 fn the_first_title_bar_control_stands_one_gap_past_the_lights_at_every_text_size_and_the_bar_is_even_without_them()
  {
     let mut world = world();
-    let lights: f32 = 69.0;
+    let lights = super::MACOS_WINDOW_CONTROLS;
     world.window_controls_take(lights);
     let mut gaps = Vec::new();
     for tenths in 7..=15 {

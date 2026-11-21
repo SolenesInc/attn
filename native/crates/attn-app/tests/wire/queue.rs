@@ -11,6 +11,7 @@ use attn_protocol::{
 use attn_testkit::{Daemon, Target, WALL_START_MS, World};
 use rune::KeyPlatform;
 
+use super::MACOS_WINDOW_CONTROLS;
 use super::sidebar::{chord, desktop, pane, session, state};
 
 /// An RFC 3339 instant `minutes` before every world starts.
@@ -2354,9 +2355,6 @@ fn arranged_on(world: &mut World, message: &InitialStateMessage, current: &str, 
     world.settle();
 }
 
-/// The title bar's leading points macOS's traffic lights take. The bar's room is measured
-/// beside them on every platform, since Linux reports none.
-const MACOS_WINDOW_CONTROLS: f32 = 69.0;
 /// Wide enough for every chip of eight desktops, the runs chip and the waiting pill.
 const ROOMY: (f32, f32) = (1400.0, 900.0);
 /// At Home, too narrow for the chips of eight desktops beside the waiting pill and the runs chip
@@ -2900,14 +2898,26 @@ fn a_queue_bar_narrowed_to_the_smallest_window_keeps_off_the_toolbar_from_its_fi
                 .clone()
         };
         let middle = frames("titlebar.middle");
-        let end = frames("titlebar.middle.end");
+        let ends: Vec<_> = recording
+            .tracks
+            .iter()
+            .filter(|t| {
+                t.path
+                    .rsplit('/')
+                    .next()
+                    .is_some_and(|k| k.starts_with("titlebar.middle.end."))
+            })
+            .flat_map(|t| t.frames.iter())
+            .collect();
+        assert!(!ends.is_empty(), "{scale}: the middle's end is drawn");
         let past: Vec<_> = middle
             .iter()
-            .zip(&end)
-            .filter_map(|((n, m), (_, e))| {
-                let over = e.rect[0] - (m.rect[0] + m.rect[2]);
-                (over > 0.5).then_some((*n, over))
+            .flat_map(|(n, m)| {
+                ends.iter()
+                    .filter(move |(at, _)| at == n)
+                    .map(move |(_, e)| (*n, e.rect[0] - (m.rect[0] + m.rect[2])))
             })
+            .filter(|(_, over)| *over > 0.5)
             .collect();
         assert!(
             past.is_empty(),
