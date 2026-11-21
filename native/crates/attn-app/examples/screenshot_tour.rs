@@ -3442,21 +3442,33 @@ fn settings_refused_rows(dark: bool) {
 }
 
 /// Claude's route picker on the Agents page: as it opens on its discovered models, the longest
-/// real model id among them; with a filter that matches nothing; and with an exact model id typed.
+/// real model id among them; with a filter that matches nothing; and with an exact model id typed;
+/// the first and the last again in the smallest window at the largest text.
 fn settings_route_picker(dark: bool) {
     const LONG_MODEL: &str =
         "anthropic.claude-opus-5-5-20261101-v1:0-with-extended-thinking-eu-north-1";
-    let shots: [(&str, Option<&str>); 3] = [
-        ("settings-route-picker", None),
-        ("settings-route-picker-no-match", Some("zz-no-such-model")),
-        ("settings-route-picker-exact", Some(LONG_MODEL)),
+    let shots: [(&str, Option<&str>, bool); 5] = [
+        ("settings-route-picker", None, false),
+        (
+            "settings-route-picker-no-match",
+            Some("zz-no-such-model"),
+            false,
+        ),
+        ("settings-route-picker-exact", Some(LONG_MODEL), false),
+        ("settings-smallest-route-picker", None, true),
+        (
+            "settings-smallest-route-picker-exact",
+            Some(LONG_MODEL),
+            true,
+        ),
     ];
-    for (name, typed) in shots {
+    for (name, typed, smallest) in shots {
+        let scale: &[(&str, &str)] = if smallest { &[("uiScale", "1.5")] } else { &[] };
         let mut world = settings_world(
             dark,
             "agents",
             "agents",
-            &[],
+            scale,
             |_| {},
             |daemon| {
                 daemon.on("delegation_preferences_get", |r: &Request| {
@@ -3507,6 +3519,9 @@ fn settings_route_picker(dark: bool) {
                 });
             },
         );
+        if smallest {
+            world.resize((800.0, 600.0));
+        }
         let chip = "settings.route.default-claude";
         world.gesture(|app| app.update(|_, tx| tx.scroll_center_in_instant("settings.body", chip)));
         world.gesture(move |app| app.update(move |_, tx| tx.focus(chip.to_owned(), true)));
