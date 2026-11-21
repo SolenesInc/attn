@@ -390,16 +390,16 @@ func (d *Daemon) runSeedHarvest(_ context.Context, c command.Caller, args comman
 	switch {
 	case !args.WhenMerged && !args.Clear:
 		if args.PR != "" {
-			return nil, command.Refuse(command.CodePRWithoutWhenMerged, "needs exactly one seed id, got 2: attn seed harvest s-7k3f9m")
+			return nil, command.Refuse(command.CodePRWithoutWhenMerged, "needs exactly one seed id, got 2: {attn seed harvest s-7k3f9m}")
 		}
 	case !args.WhenMerged:
-		return nil, command.Refuse(command.CodeClearWithoutWhenMerged, "{clear} disarms harvest-on-merge; say the whole thing: `attn seed harvest <id> --when-merged --clear`")
+		return nil, command.Refuse(command.CodeClearWithoutWhenMerged, "{clear} disarms harvest-on-merge; say the whole thing: `{attn seed harvest <id> --when-merged --clear}`")
 	case args.Clear:
 		if args.Reason != "" {
-			return nil, command.Refuse(command.CodeClearWithReason, "{clear} takes no reason; put it on the log with `attn seed note <id> -m \"…\"`")
+			return nil, command.Refuse(command.CodeClearWithReason, "{clear} takes no reason; put it on the log with `{attn seed note <id> -m \"…\"}`")
 		}
 		if args.PR != "" {
-			return nil, command.Refuse(command.CodeClearWithPR, "needs exactly one seed id, got 2: attn seed harvest s-7k3f9m --when-merged --clear")
+			return nil, command.Refuse(command.CodeClearWithPR, "needs exactly one seed id, got 2: {attn seed harvest s-7k3f9m --when-merged --clear}")
 		}
 		msg.ClearHarvestWhen = protocol.Ptr(true)
 	default:
@@ -597,7 +597,7 @@ func (d *Daemon) runSeedExport(ctx context.Context, c command.Caller, args comma
 }
 
 func editRecipe(id string) string {
-	return fmt.Sprintf("edit takes an exported file; run attn seed export %s, edit it, then attn seed edit %s -m - < %s.md", id, id, id)
+	return fmt.Sprintf("edit takes an exported file; run {attn seed export %s}, edit it, then {attn seed edit %s -m - < %s.md}", id, id, id)
 }
 
 type stampedBody struct {
@@ -638,14 +638,14 @@ func (d *Daemon) runSeedEdit(_ context.Context, c command.Caller, args command.S
 		return nil, command.Refuse(command.CodeOtherSeed, "this export belongs to %s, not %s; %s", stamped.seedID, msg.SeedID, editRecipe(msg.SeedID))
 	}
 	if err := garden.ValidateBodyEdit(stamped.body); err != nil {
-		return nil, command.Refuse(command.CodeInvalidBody, "%v", err)
+		return nil, command.Refuse(command.CodeInvalidBody, "%s", protocol.MentionedText(err))
 	}
 	msg.Body, msg.BaseBodySHA256 = stamped.body, stamped.bodySHA256
 	result, err := d.applySeedBodyEdit(&msg, d.sessionOrOwner(c.Session))
 	if err != nil {
 		var conflict seedBodyConflictError
 		if errors.As(err, &conflict) {
-			err = fmt.Errorf("%w; run attn seed export %s and reapply your change", err, msg.SeedID)
+			err = protocol.Refuse(protocol.RefusalConflict, "%s; run {attn seed export %s} and reapply your change", protocol.MentionedText(err), msg.SeedID)
 		}
 		return nil, gardenFailure("edit", err)
 	}

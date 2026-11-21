@@ -114,20 +114,20 @@ const MaxStandbyNoteBytes = 8 << 10
 func ValidateStandby(s Standby, seedID string) error {
 	note := strings.TrimSpace(s.Note)
 	if note == "" {
-		return protocol.Refuse(protocol.RefusalInvalidInput, "standby needs a note saying what to do when mail arrives: attn seed standby %s -m \"<what to do next>\"", seedID)
+		return protocol.Refuse(protocol.RefusalInvalidInput, "standby needs a note saying what to do when mail arrives: {attn seed standby %s -m \"<what to do next>\"}", seedID)
 	}
 	if n := len(note); n > MaxStandbyNoteBytes {
-		return protocol.Refuse(protocol.RefusalLimit, "that standby note is %d bytes and the limit is %d; put the detail on the seed with attn seed note and point the note at it", n, MaxStandbyNoteBytes)
+		return protocol.Refuse(protocol.RefusalLimit, "that standby note is %d bytes and the limit is %d; put the detail on the seed with {attn seed note} and point the note at it", n, MaxStandbyNoteBytes)
 	}
 	return nil
 }
 
 func ValidateReminder(r Reminder, seedID string) error {
 	if strings.TrimSpace(r.Message) == "" {
-		return protocol.Refuse(protocol.RefusalInvalidInput, "a reminder needs the message it posts: attn seed remind %s --in 20m -m \"…\"", seedID)
+		return protocol.Refuse(protocol.RefusalInvalidInput, "a reminder needs the message it posts: {attn seed remind %s --in 20m -m \"…\"}", seedID)
 	}
 	if r.At.IsZero() {
-		return protocol.Refuse(protocol.RefusalInvalidInput, "a reminder needs a time: attn seed remind %s --in 20m or --at <RFC3339 time>", seedID)
+		return protocol.Refuse(protocol.RefusalInvalidInput, "a reminder needs a time: {attn seed remind %s --in 20m} or --at <RFC3339 time>", seedID)
 	}
 	return nil
 }
@@ -241,7 +241,7 @@ const (
 func ValidatePlant(title, body string) error {
 	trimmed := strings.TrimSpace(title)
 	if trimmed == "" {
-		return protocol.Refuse(protocol.RefusalInvalidInput, "a seed needs a title: `attn seed plant \"what this is\"`")
+		return protocol.Refuse(protocol.RefusalInvalidInput, "a seed needs a title: `{attn seed plant \"what this is\"}`")
 	}
 	if n := len([]rune(trimmed)); n > MaxTitleChars {
 		return protocol.Refuse(protocol.RefusalLimit, "that title is %d characters and the limit is %d; a title names the work in a line — the detail goes in the body (`-m`, or `-m -` to read stdin)", n, MaxTitleChars)

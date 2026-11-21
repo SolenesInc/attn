@@ -6,6 +6,10 @@
 # commit): the CLI resolves it in its working directory, and the daemon that
 # launched the agent resolves a tool call's in the folder the session started
 # in. `cli_only` keeps an arg out of the tool.
+# A refusal's message or fix, here or in Go, names an arg as {name} and another
+# command as {attn seed tend <id> --for <name>}: the CLI prints the flag and the
+# command line, and a tool caller reads the argument name and the tool with its
+# arguments. The generator and a test refuse a command named in plain words.
 groups:
   - name: seed
     summary: track work in the garden; plant, tend, note and harvest seeds
@@ -170,7 +174,7 @@ commands:
       - {name: plot, type: plot, required: true, cli: "-f", file: true, doc: "the plot payload to read; - or omitted reads stdin"}
     result: SeedPlotResult
     errors:
-      - {code: not_a_plot, fix: 'Pass a plot payload: a JSON object with title, body, checks and children, as attn seed guide describes.'}
+      - {code: not_a_plot, fix: 'Pass a plot payload: a JSON object with title, body, checks and children, as {attn seed guide} describes.'}
 
   - name: seed link
     summary: relate two seeds

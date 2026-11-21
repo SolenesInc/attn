@@ -41,7 +41,7 @@ func Link(seeds []Seed, fromID, kind, toID string) (Seed, bool, error) {
 	if kind == EdgePartOf {
 		if parent, ok := ParentOf(from); ok {
 			return Seed{}, false, protocol.Refuse(protocol.RefusalWrongState,
-				"%s is already part of %s, and a seed sits in one plot: `attn seed unlink %s part-of %s` first, then link it to %s",
+				"%s is already part of %s, and a seed sits in one plot: `{attn seed unlink %s part-of %s}` first, then link it to %s",
 				from.ID, parent, from.ID, parent, to.ID)
 		}
 	}
@@ -83,11 +83,11 @@ func Unlink(seeds []Seed, fromID, kind, toID string) (Seed, error) {
 func linkEnds(seeds []Seed, fromID, kind, toID string) (Seed, Seed, error) {
 	from, ok := find(seeds, fromID)
 	if !ok {
-		return Seed{}, Seed{}, protocol.Refuse(protocol.RefusalNotFound, "no seed %s is planted here; `attn seed ls` lists the garden", fromID)
+		return Seed{}, Seed{}, protocol.Refuse(protocol.RefusalNotFound, "no seed %s is planted here; `{attn seed ls}` lists the garden", fromID)
 	}
 	to, ok := find(seeds, toID)
 	if !ok {
-		return Seed{}, Seed{}, protocol.Refuse(protocol.RefusalNotFound, "no seed %s is planted here; `attn seed ls` lists the garden", toID)
+		return Seed{}, Seed{}, protocol.Refuse(protocol.RefusalNotFound, "no seed %s is planted here; `{attn seed ls}` lists the garden", toID)
 	}
 	if from.ID == to.ID {
 		return Seed{}, Seed{}, protocol.Refuse(protocol.RefusalInvalidInput, "%s cannot %s itself", from.ID, kind)
@@ -111,12 +111,12 @@ func cycleRefusal(fromID, kind, toID string, path []string) error {
 	if kind == EdgePartOf {
 		return protocol.Refuse(protocol.RefusalWrongState,
 			"%s is already inside %s (%s), so making %s part of %s would put the plot inside itself.\n"+
-				"Unlink an edge in that chain first: attn seed unlink %s part-of %s",
+				"Unlink an edge in that chain first: {attn seed unlink %s part-of %s}",
 			toID, fromID, chain, fromID, toID, toID, path[0])
 	}
 	return protocol.Refuse(protocol.RefusalWrongState,
 		"%s already blocks %s (%s), so %s blocking %s would deadlock them — neither would ever be ready.\n"+
-			"Unlink an edge in that chain first: attn seed unlink %s blocks %s",
+			"Unlink an edge in that chain first: {attn seed unlink %s blocks %s}",
 		toID, fromID, chain, fromID, toID, toID, path[0])
 }
 

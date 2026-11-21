@@ -386,12 +386,14 @@ type openAsksError struct {
 
 func (e *openAsksError) Refusal() protocol.Refusal { return protocol.RefusalWrongState }
 
-func (e *openAsksError) Error() string {
+func (e *openAsksError) Error() string { return protocol.CLIText(e.Mentioned()) }
+
+func (e *openAsksError) Mentioned() string {
 	asks := make([]string, len(e.asks))
 	for i, ask := range e.asks {
 		asks[i] = fmt.Sprintf("%s (%q)", ask.ID, ask.Subject)
 	}
-	return fmt.Sprintf("%s has %d open ask(s) to the user: %s. The answer comes to whoever tends the seed: end your turn, and harvest after you act on the answer. Withdraw an ask that no longer matters with `attn ask close <id>`. If you do not tend the seed, `attn seed tend %s` first",
+	return fmt.Sprintf("%s has %d open ask(s) to the user: %s. The answer comes to whoever tends the seed: end your turn, and harvest after you act on the answer. Withdraw an ask that no longer matters with `{attn ask close <id>}`. If you do not tend the seed, `{attn seed tend %s}` first",
 		e.seedID, len(asks), strings.Join(asks, ", "), e.seedID)
 }
 
@@ -413,7 +415,9 @@ type heldAsksError struct {
 
 func (e *heldAsksError) Refusal() protocol.Refusal { return protocol.RefusalWrongState }
 
-func (e *heldAsksError) Error() string {
+func (e *heldAsksError) Error() string { return protocol.CLIText(e.Mentioned()) }
+
+func (e *heldAsksError) Mentioned() string {
 	asks := make([]string, len(e.asks))
 	for i, ask := range e.asks {
 		if seedID, ok := ask.To.TenderOf(); ok {
@@ -422,7 +426,7 @@ func (e *heldAsksError) Error() string {
 			asks[i] = fmt.Sprintf("%s (%q)", ask.ID, ask.Subject)
 		}
 	}
-	return fmt.Sprintf("this session has %d open ask(s) to the user: %s. A session that waits on the user stays open, so the user can find it: end your turn, and attn types the answer into this conversation. If the user told you to close, run `attn seed standby %s --stay -m \"…\"`, then `attn agent close --self -m \"…\"`",
+	return fmt.Sprintf("this session has %d open ask(s) to the user: %s. A session that waits on the user stays open, so the user can find it: end your turn, and attn types the answer into this conversation. If the user told you to close, run `{attn seed standby %s --stay -m \"…\"}`, then `{attn agent close --self -m \"…\"}`",
 		len(asks), strings.Join(asks, ", "), e.standbySeedID)
 }
 

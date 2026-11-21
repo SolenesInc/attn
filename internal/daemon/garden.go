@@ -196,7 +196,7 @@ func (d *Daemon) readSeed(id string) (garden.Seed, docstore.Document, error) {
 		return garden.Seed{}, docstore.Document{}, err
 	}
 	if !found {
-		return garden.Seed{}, docstore.Document{}, protocol.Refuse(protocol.RefusalNotFound, "no seed %s is planted here; `attn seed ls` lists the garden", id)
+		return garden.Seed{}, docstore.Document{}, protocol.Refuse(protocol.RefusalNotFound, "no seed %s is planted here; `{attn seed ls}` lists the garden", id)
 	}
 	seed, err := garden.Decode(doc.Body)
 	if err != nil {
@@ -1249,7 +1249,7 @@ func (d *Daemon) seedLink(msg *seedLinkRequest, by who.Actor) (*protocol.SeedLin
 		}, nil
 	}
 	return nil, gardenFailure(verb, protocol.Refuse(protocol.RefusalConflict,
-		"%s was rewritten under all %d attempts to %s it; read it again with `attn seed show %s` and decide from what it says now",
+		"%s was rewritten under all %d attempts to %s it; read it again with `{attn seed show %s}` and decide from what it says now",
 		from, attempts, verb, from))
 }
 
@@ -1384,14 +1384,14 @@ func (d *Daemon) validateDispatchCrown(crown string, sourceSessionID protocol.Se
 	}
 	if garden.Closed(seed.Status) {
 		return protocol.Refuse(protocol.RefusalWrongState,
-			"%s is %s, so there is no open work to dispatch at; reopen it first with `attn seed replant %s`",
+			"%s is %s, so there is no open work to dispatch at; reopen it first with `{attn seed replant %s}`",
 			crown, seed.Status, crown)
 	}
 	if d.seedClaimHolds(seed) && seed.Tender != d.partyOfSession(sourceSessionID) {
 		tender := d.partyName(seed.Tender)
 		return protocol.Refuse(protocol.RefusalNotTender,
 			"%s is being tended by %s, and a seed has one tender at a time; dispatching here would hand it to a new agent.\n"+
-				"Wait for %s to harvest or park it, plant the work as its own seed, or say what you need on the log: attn seed note %s -m \"…\"",
+				"Wait for %s to harvest or park it, plant the work as its own seed, or say what you need on the log: {attn seed note %s -m \"…\"}",
 			crown, tender, tender, crown)
 	}
 	return nil
@@ -1661,7 +1661,7 @@ func (d *Daemon) seedTransitionAsk(msg *protocol.SeedTransitionMessage, verb gar
 		return ask, string(sessionID), nil
 	}
 	if verb != garden.VerbTend {
-		return garden.Ask{}, "", protocol.Refuse(protocol.RefusalInvalidInput, "--for names who claims a seed, so only tend takes it: attn seed tend %s --for %s", msg.SeedID, assignee)
+		return garden.Ask{}, "", protocol.Refuse(protocol.RefusalInvalidInput, "--for names who claims a seed, so only tend takes it: {attn seed tend %s --for %s}", msg.SeedID, assignee)
 	}
 	seed, _, err := d.readSeed(msg.SeedID)
 	if err != nil {
@@ -1731,7 +1731,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 	comment = strings.TrimSpace(comment)
 	if comment != "" && verb != garden.VerbPark {
 		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalInvalidInput,
-			"a lifecycle comment belongs to Park; use `attn seed note %s -m \"…\"` for %s", id, verb)
+			"a lifecycle comment belongs to Park; use `{attn seed note %s -m \"…\"}` for %s", id, verb)
 	}
 	if comment != "" {
 		if err := garden.ValidateNote(comment); err != nil {
@@ -1946,7 +1946,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 		}
 	}
 	return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalConflict,
-		"%s was rewritten under all %d attempts to %s it; read it again with `attn seed show %s` and decide from what it says now",
+		"%s was rewritten under all %d attempts to %s it; read it again with `{attn seed show %s}` and decide from what it says now",
 		id, attempts, verb, id)
 }
 
@@ -2007,7 +2007,7 @@ func resolveNoteArtifact(kind string, artifact *garden.ArtifactReference, body s
 	if !garden.CarriesArtifact(kind) {
 		if artifact != nil {
 			return nil, "", protocol.Refuse(protocol.RefusalInvalidInput,
-				"a %s note carries no artifact; `attn seed attach` and `attn seed detach` are what associate a document", kind)
+				"a %s note carries no artifact; `{attn seed attach}` and `{attn seed detach}` are what associate a document", kind)
 		}
 		return nil, body, nil
 	}

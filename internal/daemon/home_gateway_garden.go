@@ -177,7 +177,7 @@ func (g gardenRead) homeGatewaySeed(seed garden.Seed) homegateway.HomeGatewaySee
 func (d *Daemon) homeGatewayProfileSeed(conn *homeGatewayConn, id string) (garden.Seed, error) {
 	seed, _, err := d.readSeed(id)
 	if err == nil && seed.ProfileID != conn.phone.ProfileID {
-		return garden.Seed{}, protocol.Refuse(protocol.RefusalNotFound, "no seed %s is planted here; `attn seed ls` lists the garden", id)
+		return garden.Seed{}, protocol.Refuse(protocol.RefusalNotFound, "no seed %s is planted here; `{attn seed ls}` lists the garden", id)
 	}
 	return seed, err
 }

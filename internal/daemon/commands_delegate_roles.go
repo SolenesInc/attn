@@ -192,7 +192,7 @@ func (d *Daemon) runDelegateRolesApply(ctx context.Context, c command.Caller, a 
 	decoder := json.NewDecoder(bytes.NewReader(a.Table))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&table); err != nil {
-		return nil, command.Refuse("not_a_table", "read the table: %v; the table takes the fields attn delegate roles show --json prints", err)
+		return nil, command.Refuse("not_a_table", "read the table: %v; the table takes the fields {attn delegate roles show --json} prints", err)
 	}
 	live, err := d.store.GetDelegationPreferences()
 	if err != nil {
@@ -200,7 +200,7 @@ func (d *Daemon) runDelegateRolesApply(ctx context.Context, c command.Caller, a 
 	}
 	saved, _, err := d.commitDelegationPreferences(live, table, a.Message, false)
 	if errors.Is(err, delegationprefs.ErrConflict) {
-		return nil, command.Refuse("conflict", "the table changed after revision %d; export it again with attn delegate roles show --json", table.Revision)
+		return nil, command.Refuse("conflict", "the table changed after revision %d; export it again with {attn delegate roles show --json}", table.Revision)
 	}
 	if err != nil {
 		return nil, err
@@ -555,7 +555,7 @@ func findRole(cfg *protocol.DelegationPreferences, roleID string) (*protocol.Del
 			return &cfg.Roles[i], nil
 		}
 	}
-	return nil, command.Refuse("no_role", "no role %q; attn delegate roles show lists them", roleID)
+	return nil, command.Refuse("no_role", "no role %q; {attn delegate roles show} lists them", roleID)
 }
 
 func findChoice(role *protocol.DelegationRole, choiceID string) (*protocol.DelegationChoice, error) {

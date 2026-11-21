@@ -30,7 +30,7 @@ func (d *Daemon) runAgentClose(ctx context.Context, c command.Caller, a command.
 	case strings.TrimSpace(a.Reason) == "":
 		return nil, command.Refuse("close_reason_required", `a close needs a reason: {reason} "why this session is done". The session row stays in the ledger and the reason is what the next reader gets`)
 	case c.Session == "":
-		return nil, command.Refuse(command.CodeNoSender, "no caller: this shell is not an attn session, so pass --source-session <id> (`attn agent list` names the sessions)")
+		return nil, command.Refuse(command.CodeNoSender, "no caller: this shell is not an attn session, so pass --source-session <id> (`{attn agent list}` names the sessions)")
 	}
 	if a.Self {
 		target = string(c.Session)
@@ -47,7 +47,7 @@ func (d *Daemon) runAgentClose(ctx context.Context, c command.Caller, a command.
 	result, closing, refusal := d.beginAgentClose(msg)
 	if refusal != nil {
 		if refusal.code == "session_not_found" {
-			return nil, command.Refuse(refusal.code, "no session matches %q; `attn agent list` names sessions; to close yourself, use `attn agent close --self -m \"reason\"`", target)
+			return nil, command.Refuse(refusal.code, "no session matches %q; `{attn agent list}` names sessions; to close yourself, use `{attn agent close --self -m \"reason\"}`", target)
 		}
 		return nil, command.Refuse(refusal.code, "%s", refusal.message)
 	}

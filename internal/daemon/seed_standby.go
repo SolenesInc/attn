@@ -20,7 +20,7 @@ func (d *Daemon) seedStandbyRequest(msg *seedStandbyRequest, setter who.Actor) (
 	at, in := protocol.Deref(msg.At), protocol.Deref(msg.In)
 	if protocol.Deref(msg.Clear) {
 		if note != "" || stay || at != "" || in != "" {
-			return nil, nil, protocol.Refuse(protocol.RefusalInvalidInput, "--clear takes no note, time or --stay, and leaves the reminder: attn seed standby %s --clear", seedID)
+			return nil, nil, protocol.Refuse(protocol.RefusalInvalidInput, "--clear takes no note, time or --stay, and leaves the reminder: {attn seed standby %s --clear}", seedID)
 		}
 		result, err := d.writeSeedStandby(seedID, nil, nil, setter)
 		return result, nil, err
@@ -47,7 +47,7 @@ func (d *Daemon) seedStandbyRequest(msg *seedStandbyRequest, setter who.Actor) (
 	}
 	caller := d.store.Get(callerID)
 	if caller == nil || seed.Tender.IsZero() || seed.Tender != d.partyOfSession(caller.ID) {
-		return nil, nil, protocol.Refuse(protocol.RefusalNotTender, "only %s's tender can put it on standby, from its own session; tend it first: attn seed tend %s", seedID, seedID)
+		return nil, nil, protocol.Refuse(protocol.RefusalNotTender, "only %s's tender can put it on standby, from its own session; tend it first: {attn seed tend %s}", seedID, seedID)
 	}
 	closeSelf := !stay && d.sessionCloseError(caller.ID) == nil
 	if closeSelf {
@@ -122,7 +122,7 @@ func (d *Daemon) writeSeedStandby(seedID string, standby *garden.Standby, remind
 		return &protocol.SeedStandbyResult{Seed: d.seedWire(seed, written), Changed: true}, nil
 	}
 	return nil, protocol.Refuse(protocol.RefusalConflict,
-		"%s was rewritten under all %d attempts to save its standby; read it again with `attn seed show %s`", seedID, attempts, seedID)
+		"%s was rewritten under all %d attempts to save its standby; read it again with `{attn seed show %s}`", seedID, attempts, seedID)
 }
 
 func (d *Daemon) endStandbyOnceMailRead(addresses ...who.Address) {
@@ -183,7 +183,7 @@ func (d *Daemon) unreadStandbyMailRefusal(session *protocol.Session, goingOnStan
 		}
 		if attempt.Unread > 0 {
 			return protocol.Refuse(protocol.RefusalWrongState,
-				"%s goes on standby with %d unread item(s) in its mailbox, and a session on standby never closes on mail it has not read; read them with `attn agent inbox`, then close", seedID, attempt.Unread)
+				"%s goes on standby with %d unread item(s) in its mailbox, and a session on standby never closes on mail it has not read; read them with `{attn agent inbox}`, then close", seedID, attempt.Unread)
 		}
 	}
 	return nil

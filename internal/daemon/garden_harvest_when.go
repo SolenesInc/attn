@@ -26,16 +26,16 @@ func (d *Daemon) applyHarvestWhenRequest(
 	seedID := strings.TrimSpace(msg.SeedID)
 	if verb != garden.VerbHarvest {
 		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalInvalidInput,
-			"harvest is the move that waits on a pull request: attn seed harvest %s --when-merged", seedID)
+			"harvest is the move that waits on a pull request: {attn seed harvest %s --when-merged}", seedID)
 	}
 	if strings.TrimSpace(protocol.Deref(msg.Comment)) != "" {
 		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalInvalidInput,
-			"a lifecycle comment belongs to Park; use `attn seed note %s -m \"…\"` for %s", seedID, verb)
+			"a lifecycle comment belongs to Park; use `{attn seed note %s -m \"…\"}` for %s", seedID, verb)
 	}
 	if protocol.Deref(msg.ClearHarvestWhen) {
 		if strings.TrimSpace(ask.Reason) != "" {
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalInvalidInput,
-				"--clear takes no reason; put it on the log with `attn seed note %s -m \"…\"`", seedID)
+				"--clear takes no reason; put it on the log with `{attn seed note %s -m \"…\"}`", seedID)
 		}
 		if msg.WhenMerged != nil && strings.TrimSpace(protocol.Deref(msg.WhenMerged.PullRequestURL)) != "" {
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalInvalidInput,
@@ -63,7 +63,7 @@ func (d *Daemon) armHarvestWhenMerged(
 	}
 	if garden.Closed(seed.Status) {
 		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalWrongState,
-			"%s is %s and waits on nothing; replant it first: attn seed replant %s", seed.ID, seed.Status, seed.ID)
+			"%s is %s and waits on nothing; replant it first: {attn seed replant %s}", seed.ID, seed.Status, seed.ID)
 	}
 	if err := garden.ValidateReason(ask.Reason, seed.ID); err != nil {
 		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
@@ -119,7 +119,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		}
 		if garden.Closed(seed.Status) {
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalWrongState,
-				"%s is %s and waits on nothing; replant it first: attn seed replant %s", seed.ID, seed.Status, seed.ID)
+				"%s is %s and waits on nothing; replant it first: {attn seed replant %s}", seed.ID, seed.Status, seed.ID)
 		}
 		next := seed
 		next.HarvestWhen = &condition
@@ -193,7 +193,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		return settled, doc, details, err
 	}
 	return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalConflict,
-		"%s was rewritten under all %d attempts to arm it; read it again with `attn seed show %s` and decide from what it says now",
+		"%s was rewritten under all %d attempts to arm it; read it again with `{attn seed show %s}` and decide from what it says now",
 		seedID, attempts, seedID)
 }
 
@@ -327,7 +327,7 @@ func (d *Daemon) clearHarvestWhen(
 		return next, written, nil
 	}
 	return garden.Seed{}, docstore.Document{}, protocol.Refuse(protocol.RefusalConflict,
-		"%s was rewritten under all %d attempts to clear its harvest condition; read it again with `attn seed show %s`",
+		"%s was rewritten under all %d attempts to clear its harvest condition; read it again with `{attn seed show %s}`",
 		seedID, attempts, seedID)
 }
 
@@ -374,8 +374,8 @@ func (d *Daemon) harvestWhenAttachment(
 func (d *Daemon) harvestWhenPullRequest(seedID string, url string, sessionID protocol.SessionID) (store.SessionPullRequestRecord, error) {
 	sessionID = protocol.TrimID(sessionID)
 	if sessionID == "" {
-		return store.SessionPullRequestRecord{}, fmt.Errorf(
-			"harvest --when-merged needs a session to track the pull request; run `attn seed harvest %s --when-merged <pr-url>` from an attn session", seedID)
+		return store.SessionPullRequestRecord{}, protocol.Refuse(protocol.RefusalInvalidInput,
+			"harvest --when-merged needs a session to track the pull request; run `{attn seed harvest %s --when-merged <pr-url>}` from an attn session", seedID)
 	}
 	if url = strings.TrimSpace(url); url != "" {
 		named, err := d.sessionPullRequestIdentity(sessionID, sessionID, url)
@@ -404,15 +404,15 @@ func (d *Daemon) harvestWhenPullRequest(seedID string, url string, sessionID pro
 	case 1:
 		return open[0], nil
 	case 0:
-		return store.SessionPullRequestRecord{}, fmt.Errorf(
-			"%s has no open pull request; pass the url: attn seed harvest %s --when-merged <pr-url>", sessionID, seedID)
+		return store.SessionPullRequestRecord{}, protocol.Refuse(protocol.RefusalInvalidInput,
+			"%s has no open pull request; pass the url: {attn seed harvest %s --when-merged <pr-url>}", sessionID, seedID)
 	default:
 		urls := make([]string, 0, len(open))
 		for _, rec := range open {
 			urls = append(urls, rec.URL)
 		}
-		return store.SessionPullRequestRecord{}, fmt.Errorf(
-			"%s has %d open pull requests (%s); say which one to wait on: attn seed harvest %s --when-merged <pr-url>",
+		return store.SessionPullRequestRecord{}, protocol.Refuse(protocol.RefusalInvalidInput,
+			"%s has %d open pull requests (%s); say which one to wait on: {attn seed harvest %s --when-merged <pr-url>}",
 			sessionID, len(open), strings.Join(urls, ", "), seedID)
 	}
 }

@@ -430,6 +430,9 @@ func (c *Catalog) check() []string {
 			case strings.TrimSpace(e.Fix) == "":
 				add("%s: error %q has no fix", where, e.Code)
 			}
+			for _, problem := range c.MentionProblems(e.Fix) {
+				add("%s: error %q: %s", where, e.Code, problem)
+			}
 			codes[e.Code] = true
 		}
 		args := map[string]bool{}

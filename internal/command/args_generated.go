@@ -133,7 +133,7 @@ var specs = map[string]spec{
 	"review answer":           {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled.", "no_question": "Answer a question that is still open on the document."}},
 	"seed search":             {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 	"seed plant":              {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
-	"seed plot":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_a_plot": "Pass a plot payload: a JSON object with title, body, checks and children, as attn seed guide describes."}},
+	"seed plot":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_a_plot": "Pass a plot payload: a JSON object with title, body, checks and children, as {attn seed guide} describes."}},
 	"seed link":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 	"seed unlink":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 	"seed ready":              {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},

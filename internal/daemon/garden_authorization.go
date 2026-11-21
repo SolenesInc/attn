@@ -43,7 +43,7 @@ func (d *Daemon) seedAuthorizationRequest(msg *protocol.SeedAuthorizationMessage
 	text := strings.TrimSpace(protocol.Deref(msg.Text))
 	clear := protocol.Deref(msg.Clear)
 	if text != "" && clear {
-		return nil, fmt.Errorf("pass the new words or --clear, not both: attn seed authorization %s \"…\" | --clear", msg.SeedID)
+		return nil, protocol.Refuse(protocol.RefusalInvalidInput, "pass the new words or --clear, not both: {attn seed authorization %s \"…\"} | --clear", msg.SeedID)
 	}
 	if text == "" && !clear {
 		seed, doc, err := d.readSeed(msg.SeedID)

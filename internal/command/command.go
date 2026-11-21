@@ -132,7 +132,7 @@ func AsRefusal(err error) *Refusal {
 	if class := protocol.RefusalOf(err); class != nil {
 		code = *class
 	}
-	return &Refusal{Code: string(code), Message: err.Error()}
+	return &Refusal{Code: string(code), Message: protocol.MentionedText(err)}
 }
 
 func Response(result any, refusal *Refusal) protocol.Response {
@@ -144,7 +144,7 @@ func Response(result any, refusal *Refusal) protocol.Response {
 		reply.CommandRefusal.Fix = protocol.Ptr(refusal.Fix)
 	}
 	if !refusal.Arguments {
-		reply.Error = protocol.Ptr(refusal.Message)
+		reply.Error = protocol.Ptr(protocol.CLIText(refusal.Message))
 		reply.Refusal = protocol.Ptr(protocol.Refusal(refusal.Code))
 	}
 	return reply

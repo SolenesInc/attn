@@ -150,7 +150,7 @@ func ValidatePlotSpec(spec PlotSpec) error {
 		return err
 	}
 	if len(spec.Children) == 0 {
-		return protocol.Refuse(protocol.RefusalInvalidInput, "a plot is a crown with children and this payload has none; to plant one seed use `attn seed plant`")
+		return protocol.Refuse(protocol.RefusalInvalidInput, "a plot is a crown with children and this payload has none; to plant one seed use `{attn seed plant}`")
 	}
 	slugs := make(map[string]int, len(spec.Children))
 	for i, child := range spec.Children {
@@ -253,12 +253,14 @@ type OpenChildrenError struct {
 
 func (e *OpenChildrenError) Refusal() protocol.Refusal { return protocol.RefusalWrongState }
 
-func (e *OpenChildrenError) Error() string {
+func (e *OpenChildrenError) Error() string { return protocol.CLIText(e.Mentioned()) }
+
+func (e *OpenChildrenError) Mentioned() string {
 	children := make([]string, len(e.Children))
 	for i, child := range e.Children {
 		children[i] = child.ID + " " + child.Status
 	}
-	return fmt.Sprintf("%s has %d open child seeds (%s); a plot closes after them: `attn seed replant %s` hands it back if your part is done, or close or move those seeds first", e.PlotID, len(children), strings.Join(children, ", "), e.PlotID)
+	return fmt.Sprintf("%s has %d open child seeds (%s); a plot closes after them: `{attn seed replant %s}` hands it back if your part is done, or close or move those seeds first", e.PlotID, len(children), strings.Join(children, ", "), e.PlotID)
 }
 
 func CheckPlotClose(seed Seed, openChildren []Seed) error {

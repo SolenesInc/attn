@@ -9,11 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/victorarias/attn/internal/buildinfo"
+	"github.com/victorarias/attn/internal/catalog"
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/mcpserver"
@@ -283,13 +283,18 @@ func (def agentToolDefinition) usage(message string) *command.Refusal {
 	return &command.Refusal{Code: command.CodeUsage, Message: message, Fix: "Call " + def.Name + " with only the arguments its input schema lists, and every one it requires.", Arguments: true}
 }
 
-var refusalArgPattern = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`\{([a-z_]+)\}`) })
+var toolCatalog = sync.OnceValue(func() *catalog.Catalog {
+	c, err := catalog.Builtin()
+	if err != nil {
+		panic(fmt.Sprintf("agent tools: catalog: %v", err))
+	}
+	return c
+})
 
 func (def agentToolDefinition) refusalText(r *command.Refusal) string {
-	render := func(text string) string { return refusalArgPattern().ReplaceAllString(text, "$1") }
-	text := r.Code + ": " + render(r.Message)
+	text := r.Code + ": " + toolCatalog().ToolText(r.Message)
 	if r.Fix != "" {
-		text += "\nFix: " + render(r.Fix)
+		text += "\nFix: " + toolCatalog().ToolText(r.Fix)
 	}
 	return text
 }

@@ -183,7 +183,7 @@ func (d *Daemon) resolveSeedRef(ref, profileID string) (string, error) {
 	}
 	switch len(read.Documents) {
 	case 0:
-		return "", protocol.Refuse(protocol.RefusalNotFound, "%q is neither a seed id nor the slug of a seed in this profile: a seed id is %q followed by 6 characters, like s-7k3f9m; `attn seed search <words>` finds a seed by what it says", ref, "s-")
+		return "", protocol.Refuse(protocol.RefusalNotFound, "%q is neither a seed id nor the slug of a seed in this profile: a seed id is %q followed by 6 characters, like s-7k3f9m; `{attn seed search <words>}` finds a seed by what it says", ref, "s-")
 	case 1:
 		return read.Documents[0].ID, nil
 	}

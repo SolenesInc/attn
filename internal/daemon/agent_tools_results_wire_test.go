@@ -354,3 +354,24 @@ func TestAToolCallDoesTheCallersWorkInTheFolderTheSessionStartedIn(t *testing.T)
 		}
 	}
 }
+
+func TestARefusalNamesTheToolToAToolCallerAndTheCommandToTheCLI(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
+	seed := plantForTools(t, w)
+
+	refused := agent.mustCall(t, "seed_standby", map[string]any{"seed": seed, "next": "Resume the rollout.", "stay": true})
+	want := "not_tender: seed standby: only " + seed + "'s tender can put it on standby, from its own session; tend it first: `seed_tend` with {\"seed\": \"" + seed + "\"}"
+	if text := resultText(refused); !refused.IsError || text != want {
+		t.Errorf("seed_standby on a seed nobody tends answered\n%q\nwant\n%q", text, want)
+	}
+
+	err := w.Client().RunCommand("seed standby", protocol.SessionID(session), map[string]any{"seed": seed, "next": "Resume the rollout.", "stay": true}, &struct{}{})
+	cli := "only " + seed + "'s tender can put it on standby, from its own session; tend it first: attn seed tend " + seed
+	if err == nil || !strings.HasSuffix(err.Error(), cli) {
+		t.Errorf("seed standby through run_command answered %v, want it to end with %q", err, cli)
+	}
+}

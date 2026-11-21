@@ -38,7 +38,7 @@ func (d *Daemon) seedReminderRequest(msg *seedReminderRequest, setter who.Actor)
 	seedID := strings.TrimSpace(msg.SeedID)
 	if protocol.Deref(msg.Clear) {
 		if msg.At != nil || msg.In != nil || msg.Message != nil {
-			return nil, protocol.Refuse(protocol.RefusalInvalidInput, "--clear takes no time or message: attn seed remind %s --clear", seedID)
+			return nil, protocol.Refuse(protocol.RefusalInvalidInput, "--clear takes no time or message: {attn seed remind %s --clear}", seedID)
 		}
 		return d.writeSeedReminder(seedID, nil, setter)
 	}
@@ -79,7 +79,7 @@ func reminderTime(seedID, at, in string, now time.Time) (time.Time, error) {
 		}
 		when = parsed
 	default:
-		return time.Time{}, protocol.Refuse(protocol.RefusalInvalidInput, "a reminder needs a time: attn seed remind %s --in 20m -m \"…\"", seedID)
+		return time.Time{}, protocol.Refuse(protocol.RefusalInvalidInput, "a reminder needs a time: {attn seed remind %s --in 20m -m \"…\"}", seedID)
 	}
 	return when.UTC().Truncate(time.Second), nil
 }
@@ -104,7 +104,7 @@ func (d *Daemon) writeSeedReminder(seedID string, reminder *garden.Reminder, set
 		}
 		if reminder != nil && garden.Closed(seed.Status) {
 			return nil, protocol.Refuse(protocol.RefusalWrongState,
-				"%s is %s and takes no reminder; replant it first: attn seed replant %s", seed.ID, seed.Status, seed.ID)
+				"%s is %s and takes no reminder; replant it first: {attn seed replant %s}", seed.ID, seed.Status, seed.ID)
 		}
 		if err := d.checkSeedStanding(seed, setter, "set its reminder"); err != nil {
 			return nil, err
@@ -130,7 +130,7 @@ func (d *Daemon) writeSeedReminder(seedID string, reminder *garden.Reminder, set
 		return &protocol.SeedReminderResult{Seed: d.seedWire(seed, written), Changed: true}, nil
 	}
 	return nil, protocol.Refuse(protocol.RefusalConflict,
-		"%s was rewritten under all %d attempts to save its reminder; read it again with `attn seed show %s`", seedID, attempts, seedID)
+		"%s was rewritten under all %d attempts to save its reminder; read it again with `{attn seed show %s}`", seedID, attempts, seedID)
 }
 
 func (d *Daemon) seedReminderHandler(context.Context, *jobs.Job) (any, error) {

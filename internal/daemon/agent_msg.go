@@ -43,7 +43,7 @@ func agentMessageGuardVerdict(counts inbox.PeerGuardCounts) string {
 
 func (d *Daemon) runAgentMsg(ctx context.Context, c command.Caller, a command.AgentMsgArgs) (any, error) {
 	if c.Session == "" {
-		return nil, command.Refuse(command.CodeNoSender, "no sender: this shell is not an attn session, so pass --source-session <id> (`attn agent list` names the sessions)")
+		return nil, command.Refuse(command.CodeNoSender, "no sender: this shell is not an attn session, so pass --source-session <id> (`{attn agent list}` names the sessions)")
 	}
 	sender, errCode := d.resolveSessionByIDOrPrefix(string(c.Session))
 	if sender == nil {
@@ -79,7 +79,7 @@ func (d *Daemon) runAgentMsg(ctx context.Context, c command.Caller, a command.Ag
 	} else {
 		// A target in another profile is answered exactly like an unknown one.
 		notFound := func() error {
-			return command.Refuse("session_or_crew_member_not_found", "no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", protocol.TrimID(targetRef))
+			return command.Refuse("session_or_crew_member_not_found", "no session or crew member matches %q; `{attn agent list}` names sessions and `{attn crew list}` names members", protocol.TrimID(targetRef))
 		}
 		member, found, memberErr := d.crewMemberIn(sender.ProfileID, string(targetRef))
 		if found {
@@ -93,7 +93,7 @@ func (d *Daemon) runAgentMsg(ctx context.Context, c command.Caller, a command.Ag
 				if code == "session_not_found" {
 					return nil, notFound()
 				}
-				return nil, command.Refuse(code, "%q matches more than one session; give more of the id (`attn agent list --json` carries full ids)", protocol.TrimID(targetRef))
+				return nil, command.Refuse(code, "%q matches more than one session; give more of the id (`{attn agent list --json}` carries full ids)", protocol.TrimID(targetRef))
 			}
 			if target.ProfileID != sender.ProfileID {
 				return nil, notFound()

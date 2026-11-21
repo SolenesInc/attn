@@ -138,7 +138,7 @@ func (d *Daemon) seedOfSessionProfile(sessionID protocol.SessionID, seedID strin
 		return garden.Seed{}, err
 	}
 	if seed.ProfileID != session.ProfileID {
-		return garden.Seed{}, fmt.Errorf("no seed %s is planted here; `attn seed ls` lists the garden", seed.ID)
+		return garden.Seed{}, protocol.Refuse(protocol.RefusalNotFound, "no seed %s is planted here; `{attn seed ls}` lists the garden", seed.ID)
 	}
 	return seed, nil
 }

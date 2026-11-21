@@ -48,7 +48,7 @@ func SearchWords(query string) ([]string, error) {
 	}
 	words := docstore.Words(trimmed)
 	if len(words) == 0 {
-		return nil, protocol.Refuse(protocol.RefusalInvalidInput, "a search needs words to look for: `attn seed search <words>`")
+		return nil, protocol.Refuse(protocol.RefusalInvalidInput, "a search needs words to look for: `{attn seed search <words>}`")
 	}
 	return words, nil
 }

@@ -186,7 +186,7 @@ func validateCheckText(id, text string) error {
 
 func validateCheckLine(id, field, text string) error {
 	if n := utf8.RuneCountInString(text); n > MaxCheckSummaryChars {
-		return protocol.Refuse(protocol.RefusalLimit, "max_check_%s_chars=%d, and this %s for %s is %d; the long version goes in a note (`attn seed note`)", field, MaxCheckSummaryChars, field, id, n)
+		return protocol.Refuse(protocol.RefusalLimit, "max_check_%s_chars=%d, and this %s for %s is %d; the long version goes in a note (`{attn seed note}`)", field, MaxCheckSummaryChars, field, id, n)
 	}
 	return nil
 }
@@ -427,7 +427,7 @@ func ParseCheckEvidence(raw string, artifacts []CheckEvidence) (CheckEvidence, e
 func ApplyCheckMove(tree PlotTree, id string, move CheckMove, artifacts []CheckEvidence, now time.Time) (Seed, Note, error) {
 	seed, ok := tree.byID[id]
 	if !ok {
-		return Seed{}, Note{}, protocol.Refuse(protocol.RefusalNotFound, "no seed %s is planted here; `attn seed ls` lists the garden", id)
+		return Seed{}, Note{}, protocol.Refuse(protocol.RefusalNotFound, "no seed %s is planted here; `{attn seed ls}` lists the garden", id)
 	}
 	checkID := strings.TrimSpace(move.CheckID)
 	if err := ValidateCheckID(checkID); err != nil {
@@ -507,9 +507,9 @@ func applyDefinitionMove(tree PlotTree, next *Seed, checkID string, move CheckMo
 	case CheckVerbAdd:
 		if index >= 0 {
 			if next.Checks[index].Removed {
-				return "", "", protocol.Refuse(protocol.RefusalWrongState, "%s was removed from %s, and a removed id is never reused so what cites it keeps its meaning; bring it back with: attn seed check restore %s %s, or leave the id out and attn picks the next free one, %s", checkID, next.ID, next.ID, checkID, tree.NextCheckID(next.ID))
+				return "", "", protocol.Refuse(protocol.RefusalWrongState, "%s was removed from %s, and a removed id is never reused so what cites it keeps its meaning; bring it back with: {attn seed check restore %s %s}, or leave the id out and attn picks the next free one, %s", checkID, next.ID, next.ID, checkID, tree.NextCheckID(next.ID))
 			}
-			return "", "", protocol.Refuse(protocol.RefusalConflict, "%s already defines %s; change its statement with: attn seed check edit %s %s -m \"…\", or leave the id out and attn picks the next free one, %s", next.ID, checkID, next.ID, checkID, tree.NextCheckID(next.ID))
+			return "", "", protocol.Refuse(protocol.RefusalConflict, "%s already defines %s; change its statement with: {attn seed check edit %s %s -m \"…\"}, or leave the id out and attn picks the next free one, %s", next.ID, checkID, next.ID, checkID, tree.NextCheckID(next.ID))
 		}
 		if err := tree.RefuseUsedCheckIDs(next.ID, []Check{{ID: checkID}}); err != nil {
 			return "", "", err
@@ -533,7 +533,7 @@ func applyDefinitionMove(tree PlotTree, next *Seed, checkID string, move CheckMo
 	switch move.Verb {
 	case CheckVerbEdit:
 		if check.Removed {
-			return "", "", protocol.Refuse(protocol.RefusalWrongState, "%s is removed from %s; restore it before editing it: attn seed check restore %s %s", checkID, next.ID, next.ID, checkID)
+			return "", "", protocol.Refuse(protocol.RefusalWrongState, "%s is removed from %s; restore it before editing it: {attn seed check restore %s %s}", checkID, next.ID, next.ID, checkID)
 		}
 		if err := validateCheckText(checkID, text); err != nil {
 			return "", "", err
@@ -542,7 +542,7 @@ func applyDefinitionMove(tree PlotTree, next *Seed, checkID string, move CheckMo
 		return checkID + " edited", fmt.Sprintf("%s (was: %s; any result answered the old wording)", text, check.Text), nil
 	case CheckVerbRemove:
 		if check.Removed {
-			return "", "", protocol.Refuse(protocol.RefusalWrongState, "%s is already removed from %s; `attn seed check restore %s %s` brings it back", checkID, next.ID, next.ID, checkID)
+			return "", "", protocol.Refuse(protocol.RefusalWrongState, "%s is already removed from %s; `{attn seed check restore %s %s}` brings it back", checkID, next.ID, next.ID, checkID)
 		}
 		next.Checks[index].Removed = true
 		return checkID + " removed", "", nil
@@ -569,7 +569,7 @@ func applyResultMove(seedID, checkID string, result CheckResult, move CheckMove,
 	case CheckVerbConfirm, CheckVerbReject:
 		confirmed := move.Verb == CheckVerbConfirm
 		if !confirmed && summary == "" {
-			return "", "", result, protocol.Refuse(protocol.RefusalInvalidInput, "a rejection says what would prove %s: attn seed check reject %s %s -m \"<what would prove it>\"", checkID, seedID, checkID)
+			return "", "", result, protocol.Refuse(protocol.RefusalInvalidInput, "a rejection says what would prove %s: {attn seed check reject %s %s -m \"<what would prove it>\"}", checkID, seedID, checkID)
 		}
 		if err := validateCheckLine(checkID, "reason", summary); err != nil {
 			return "", "", result, err
@@ -599,7 +599,7 @@ func buildCheckReport(seedID, checkID string, move CheckMove, artifacts []CheckE
 	var problems []error
 	var text ReportText
 	if strings.TrimSpace(move.Summary) == "" {
-		problems = append(problems, protocol.Refuse(protocol.RefusalInvalidInput, "a report says in a line what proves %s: attn seed check report %s %s -m \"<summary line>\" --evidence <file|artifact|url>", checkID, seedID, checkID))
+		problems = append(problems, protocol.Refuse(protocol.RefusalInvalidInput, "a report says in a line what proves %s: {attn seed check report %s %s -m \"<summary line>\" --evidence <file|artifact|url>}", checkID, seedID, checkID))
 	} else if parsed, err := ParseReportText(move.Summary); err != nil {
 		problems = append(problems, err)
 	} else {
@@ -660,7 +660,7 @@ func notEffective(seedID, checkID string, effective []EffectiveCheck) error {
 		}
 	}
 	if len(ids) == 0 {
-		return protocol.Refuse(protocol.RefusalNotFound, "%s has no check %s; it has no checks at all. Define one with: attn seed check add %s -m \"<statement>\"", seedID, checkID, seedID)
+		return protocol.Refuse(protocol.RefusalNotFound, "%s has no check %s; it has no checks at all. Define one with: {attn seed check add %s -m \"<statement>\"}", seedID, checkID, seedID)
 	}
 	return protocol.Refuse(protocol.RefusalNotFound, "%s has no check %s; its checks are %s", seedID, checkID, strings.Join(ids, ", "))
 }

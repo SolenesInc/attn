@@ -301,6 +301,9 @@ fn flag_mention(name: &str) -> String {
 }
 
 fn mention(cmd: &Command, name: &str) -> Option<String> {
+    if name.starts_with("attn ") {
+        return Some(name.to_string());
+    }
     if ["profile", "session", "json"].contains(&name) {
         return Some(flag_mention(name));
     }

@@ -229,11 +229,10 @@ func (d *Daemon) rollbackSeedBody(msg *seedRollbackRequest, by who.Actor) (*prot
 	if err != nil {
 		var conflict seedBodyConflictError
 		if errors.As(err, &conflict) {
-			retry := fmt.Sprintf("attn seed rollback %s", seed.ID)
 			if msg.Version != nil {
-				retry += fmt.Sprintf(" %d", *msg.Version)
+				return nil, protocol.Refuse(protocol.RefusalConflict, "%v; run {attn seed rollback %s %d} again", err, seed.ID, *msg.Version)
 			}
-			return nil, fmt.Errorf("%w; run %s again", err, retry)
+			return nil, protocol.Refuse(protocol.RefusalConflict, "%v; run {attn seed rollback %s} again", err, seed.ID)
 		}
 		return nil, err
 	}

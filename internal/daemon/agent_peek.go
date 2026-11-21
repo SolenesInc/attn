@@ -35,11 +35,11 @@ func (d *Daemon) runAgentPeek(ctx context.Context, c command.Caller, a command.A
 	switch {
 	case session != nil:
 	case errCode == "session_not_found":
-		return nil, command.Refuse(errCode, "no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", target)
+		return nil, command.Refuse(errCode, "no session or crew member matches %q; `{attn agent list}` names sessions and `{attn crew list}` names members", target)
 	case errCode == "ambiguous_session":
-		return nil, command.Refuse(errCode, "%q matches more than one session; give more of the id (`attn agent list --json` carries full ids)", target)
+		return nil, command.Refuse(errCode, "%q matches more than one session; give more of the id (`{attn agent list --json}` carries full ids)", target)
 	case errCode == "crew_member_asleep":
-		return nil, command.Refuse(errCode, "%s is between sessions; `attn agent peek` never starts a session for a crew member. `attn crew start %s` starts one", target, target)
+		return nil, command.Refuse(errCode, "%s is between sessions; `{attn agent peek}` never starts a session for a crew member. `{attn crew start %s}` starts one", target, target)
 	default:
 		return nil, errors.New(errCode)
 	}

@@ -123,7 +123,7 @@ func Transition(seed Seed, verb Verb, ask Ask, standing Standing, openChildren [
 	}
 	if rule.claims && ask.Claimant.IsZero() {
 		return Outcome{}, protocol.Refuse(protocol.RefusalInvalidInput,
-			"tending %s records who claims it, and the user never claims a seed; run it from an attn session, or assign it to a crew member: attn seed tend %s --for <name>", seed.ID, seed.ID)
+			"tending %s records who claims it, and the user never claims a seed; run it from an attn session, or assign it to a crew member: {attn seed tend %s --for <name>}", seed.ID, seed.ID)
 	}
 	by := MeansTender
 	var displaced *who.Party
@@ -147,10 +147,10 @@ func Transition(seed Seed, verb Verb, ask Ask, standing Standing, openChildren [
 		return Outcome{Seed: seed}, nil
 	}
 	if rule.needsReason && reason == "" {
-		return Outcome{}, protocol.Refuse(protocol.RefusalInvalidInput, "harvesting %s records what got done: attn seed harvest %s -m \"what got done\"", seed.ID, seed.ID)
+		return Outcome{}, protocol.Refuse(protocol.RefusalInvalidInput, "harvesting %s records what got done: {attn seed harvest %s -m \"what got done\"}", seed.ID, seed.ID)
 	}
 	if reason != "" && !rule.keepsReason {
-		return Outcome{}, protocol.Refuse(protocol.RefusalInvalidInput, "%s records no reason; put it on the log instead: attn seed note %s -m \"…\"", verb, seed.ID)
+		return Outcome{}, protocol.Refuse(protocol.RefusalInvalidInput, "%s records no reason; put it on the log instead: {attn seed note %s -m \"…\"}", verb, seed.ID)
 	}
 
 	next := seed
@@ -181,7 +181,7 @@ func refuseState(seed Seed, verb Verb) error {
 	switch {
 	case Closed(seed.Status):
 		return protocol.Refuse(protocol.RefusalWrongState,
-			"%s is %s, and a closed seed reopens before it moves again: `attn seed replant %s`, then %s it",
+			"%s is %s, and a closed seed reopens before it moves again: `{attn seed replant %s}`, then %s it",
 			seed.ID, seed.Status, seed.ID, verb)
 	default:
 		return protocol.Refuse(protocol.RefusalWrongState, "%s is %s and cannot be %sed from there", seed.ID, seed.Status, verb)
@@ -236,10 +236,10 @@ func ParseNoteKind(raw string) (string, error) {
 		return kind, nil
 	}
 	if kind == NoteKindCheck {
-		return "", protocol.Refuse(protocol.RefusalInvalidInput, "a check note is written by the check move it records: `attn seed check report|confirm|reject|uncheck|reopen <id> <C#>`; a plain note keeps kind note")
+		return "", protocol.Refuse(protocol.RefusalInvalidInput, "a check note is written by the check move it records: `{attn seed check report|confirm|reject|uncheck|reopen <id> <C#>}`; a plain note keeps kind note")
 	}
 	if kind == NoteKindEdit {
-		return "", protocol.Refuse(protocol.RefusalInvalidInput, "an edit entry is written by `attn seed edit` or `attn seed rollback`; a plain note keeps kind note")
+		return "", protocol.Refuse(protocol.RefusalInvalidInput, "an edit entry is written by `{attn seed edit}` or `{attn seed rollback}`; a plain note keeps kind note")
 	}
 	if kind == NoteKindMove || kind == NoteKindLink {
 		return "", protocol.Refuse(protocol.RefusalInvalidInput, "a %s entry is written by the change it records; a plain note keeps kind note", kind)
@@ -248,7 +248,7 @@ func ParseNoteKind(raw string) (string, error) {
 		return "", protocol.Refuse(protocol.RefusalInvalidInput, "an answer entry is written when the user answers an ask; a plain note keeps kind note")
 	}
 	if kind == NoteKindAuthorization {
-		return "", protocol.Refuse(protocol.RefusalInvalidInput, "an authorization entry is written when attn delegate --authorization or attn seed authorization changes the seed's authorization; a plain note keeps kind note")
+		return "", protocol.Refuse(protocol.RefusalInvalidInput, "an authorization entry is written when {attn delegate --authorization} or {attn seed authorization} changes the seed's authorization; a plain note keeps kind note")
 	}
 	return "", protocol.Refuse(protocol.RefusalInvalidInput, "%q is not a kind of note; the kinds are %s", raw, strings.Join(NoteKinds, ", "))
 }
@@ -261,7 +261,7 @@ const (
 
 func ValidateReason(reason, seedID string) error {
 	if n := utf8.RuneCountInString(strings.TrimSpace(reason)); n > MaxReasonChars {
-		return protocol.Refuse(protocol.RefusalLimit, "that reason is %d characters and the limit is %d; the detail belongs on the log (`attn seed note %s -m …`)", n, MaxReasonChars, seedID)
+		return protocol.Refuse(protocol.RefusalLimit, "that reason is %d characters and the limit is %d; the detail belongs on the log (`{attn seed note %s -m …}`)", n, MaxReasonChars, seedID)
 	}
 	return nil
 }
@@ -276,7 +276,7 @@ func TrimReason(reason string) string {
 
 func ValidateNote(body string) error {
 	if strings.TrimSpace(body) == "" {
-		return protocol.Refuse(protocol.RefusalInvalidInput, "a note needs something in it: `attn seed note <id> -m \"what happened\"`")
+		return protocol.Refuse(protocol.RefusalInvalidInput, "a note needs something in it: `{attn seed note <id> -m \"what happened\"}`")
 	}
 	if n := len(body); n > MaxNoteBytes {
 		return protocol.Refuse(protocol.RefusalLimit, "that note is %d bytes and the limit is %d; a note is what happened and what you learned, not an archive", n, MaxNoteBytes)

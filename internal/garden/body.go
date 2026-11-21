@@ -60,10 +60,6 @@ func Stamp(id, body string) string {
 	return fmt.Sprintf("<!-- attn-seed %s body-sha256 %s -->\n%s", id, BodySHA256(body), body)
 }
 
-func EditRecipe(id string) string {
-	return fmt.Sprintf("edit takes an exported file; run attn seed export %s, edit it, then attn seed edit %s -m - < %s.md", id, id, id)
-}
-
 func ValidateBodyEdit(body string) error {
 	if strings.TrimSpace(body) == "" {
 		return protocol.Refuse(protocol.RefusalInvalidInput, "a body edit needs nonempty text; empty or whitespace-only bodies are refused")
