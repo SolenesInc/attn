@@ -43,10 +43,10 @@ type RepositoryTrust struct {
 }
 
 type AgentPluginLaunch struct {
-	Plugin       string
-	Resume       bool
-	Params       pluginDriverSpawnParams
-	Instructions *pluginLaunchIntent
+	Plugin             string
+	Resume             bool
+	Params             pluginDriverSpawnParams
+	LaunchInstructions bool
 }
 
 func (launch *AgentLaunch) driverRunID() string {
@@ -124,8 +124,8 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 			d.sessionMonitor(sessionID).BeginDriverLaunch(p.Plugin, p.Params.RunID)
 			prepared = &preparedPluginReload{d: d, sessionID: sessionID, pluginName: p.Plugin, runID: p.Params.RunID, route: pluginDriverRoute(reg)}
 		}
-		if p.Instructions != nil {
-			p.Params.Instructions = p.Instructions.carrying(p.Params.AgentTools != nil)
+		if p.LaunchInstructions {
+			p.Params.Instructions = renderPluginLaunchInstructions(launch.Context, launch.Profile, p.Params.AgentTools != nil)
 		}
 		result, err := d.resolvePluginDriverLaunch(reg, p.Params, p.Resume)
 		if err != nil {

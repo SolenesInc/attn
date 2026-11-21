@@ -616,13 +616,7 @@ func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptyback
 	if metadata := strings.TrimSpace(d.store.GetAgentMetadata(session.ID)); metadata != "" && json.Valid([]byte(metadata)) {
 		params.Metadata = json.RawMessage(metadata)
 	}
-	launch.Plugin = &AgentPluginLaunch{Plugin: reg.PluginName, Resume: true, Params: params}
-	if reg.Capabilities["launch_instructions"] {
-		intent, err := d.preparePluginLaunchIntent(session.ID, session.ProfileID, !reg.Capabilities["pull_request_reporting"])
-		if err != nil {
-			return nil, err
-		}
-		launch.Plugin.Instructions = intent
-	}
+	launch.Plugin = &AgentPluginLaunch{Plugin: reg.PluginName, Resume: true, Params: params, LaunchInstructions: reg.Capabilities["launch_instructions"]}
+	launch.Context.SelfReportPullRequests = !reg.Capabilities["pull_request_reporting"]
 	return launch, nil
 }

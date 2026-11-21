@@ -14,22 +14,9 @@ type pluginLaunchInstructions struct {
 	ProfileID string `json:"profile_id,omitempty"`
 }
 
-type pluginLaunchIntent struct {
-	Launch    hooks.Launch
-	ProfileID string
-}
-
-func (d *Daemon) preparePluginLaunchIntent(sessionID protocol.SessionID, profileID string, selfReportPullRequests bool) (*pluginLaunchIntent, error) {
-	launch, _, err := d.prepareLaunchContext(sessionID, selfReportPullRequests)
-	if err != nil {
-		return nil, err
-	}
-	return &pluginLaunchIntent{Launch: launch, ProfileID: profileID}, nil
-}
-
-func (i pluginLaunchIntent) carrying(agentTools bool) *pluginLaunchInstructions {
-	i.Launch.AgentTools = agentTools
-	return &pluginLaunchInstructions{Kind: pluginInstructionKindAgent, Content: i.Launch.Instructions(), ProfileID: i.ProfileID}
+func renderPluginLaunchInstructions(launch hooks.Launch, profileID string, agentTools bool) *pluginLaunchInstructions {
+	launch.AgentTools = agentTools
+	return &pluginLaunchInstructions{Kind: pluginInstructionKindAgent, Content: launch.Instructions(), ProfileID: profileID}
 }
 
 func (d *Daemon) prepareLaunchContext(sessionID protocol.SessionID, selfReportPullRequests bool) (hooks.Launch, []string, error) {
