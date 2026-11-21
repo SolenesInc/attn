@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -142,4 +143,54 @@ func TestAnAnswerCarriesItsFilesToTheAgentAndTheSeedNote(t *testing.T) {
 	if body := listed.Notes[0].Body; !strings.Contains(body, `File "for the other ask.png"`) || !strings.Contains(body, "attn agent attachment "+theirs+" --out <path>") {
 		t.Errorf("the seed's answer note reads %q, want the file line", body)
 	}
+}
+
+func TestAnAsksUnsentFilesAreDiscardedWhenItGoesAwayAndItsSentFilesStay(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.TrustedApp()
+		setSetting(t, app, "asks_enabled", "true")
+		asker := w.bubbleClaude(t, app, "shop")
+		open := func() protocol.Ask {
+			ask, err := asker.cli.AskOpen(protocol.SessionID(asker.id), "", cacheAsk, "", w.Path("shop"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return *ask
+		}
+		upload := func(ask protocol.Ask, name string) string {
+			owner := protocol.AttachmentOwner{Kind: protocol.AttachmentOwnerKindAsk, ID: ask.ID}
+			return answerFile(t, app, owner, name, []byte(name), true)
+		}
+		onDisk := func(id string) bool {
+			found, err := filepath.Glob(filepath.Join(filepath.Dir(w.Socket), "attachments", "*", id))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return len(found) == 1
+		}
+
+		withdrawn, answered := open(), open()
+		draft := upload(withdrawn, "draft.txt")
+		sent, left := upload(answered, "sent.txt"), upload(answered, "left-out.txt")
+		if reply := answerWithFiles(app, answered.ID, "Numbers attached.", sent); !reply.Success {
+			t.Fatalf("answering failed: %s", protocol.Deref(reply.Error))
+		}
+		if err := asker.cli.AskClose(protocol.SessionID(asker.id), withdrawn.ID, ""); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(25 * time.Hour)
+		w.restart()
+
+		for id, want := range map[string]bool{draft: false, left: false, sent: true} {
+			if got := onDisk(id); got != want {
+				t.Errorf("after the asks went away and the daemon restarted, %s on disk = %v, want %v", id, got, want)
+			}
+		}
+		addressee := w.Client().WithCaller(protocol.TerminalID(asker.self))
+		saved := filepath.Join(w.Path("shop"), sent)
+		var result any
+		if err := addressee.RunCommand("agent attachment", "", map[string]any{"attachment": sent, "out": saved}, &result); err != nil {
+			t.Errorf("the sent file of a forgotten ask cannot be fetched: %v", err)
+		}
+	})
 }
