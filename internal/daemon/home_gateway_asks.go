@@ -109,7 +109,7 @@ func homeGatewayAsk(wire protocol.Ask) homegateway.HomeGatewayAsk {
 	}
 	if wire.Reply != nil {
 		out.Reply = &homegateway.HomeGatewayAskReply{
-			Answers:    homeGatewayAskAnswers(wire.Reply.Answers),
+			Answers:    homeGatewayAskAnswers(wire.Reply.Answers, wire.Reply.Attachments),
 			Note:       wire.Reply.Note,
 			AnsweredAt: parseAskTime(wire.Reply.AnsweredAt),
 		}
@@ -146,10 +146,15 @@ func homeGatewayAskQuestion(question *protocol.AskQuestion) *homegateway.HomeGat
 	return out
 }
 
-func homeGatewayAskAnswers(answers []protocol.AskAnswer) []homegateway.HomeGatewayAskAnswer {
+func homeGatewayAskAnswers(answers []protocol.AskAnswer, files []protocol.Attachment) []homegateway.HomeGatewayAskAnswer {
+	onQuestion, _ := ask.FilesByQuestion(answers, files)
 	out := make([]homegateway.HomeGatewayAskAnswer, 0, len(answers))
 	for _, answer := range answers {
-		out = append(out, homegateway.HomeGatewayAskAnswer{Key: answer.Key, Picked: answer.Picked, Other: answer.Other, Text: answer.Text, Condition: answer.Condition})
+		shown := homegateway.HomeGatewayAskAnswer{Key: answer.Key, Picked: answer.Picked, Other: answer.Other, Text: answer.Text, Condition: answer.Condition}
+		for _, file := range onQuestion[answer.Key] {
+			shown.AttachmentNames = append(shown.AttachmentNames, file.Name)
+		}
+		out = append(out, shown)
 	}
 	return out
 }

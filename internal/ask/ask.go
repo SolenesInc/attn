@@ -27,6 +27,7 @@ var openers = map[string]protocol.AskQuestionKind{
 	":::question":       protocol.AskQuestionKindOne,
 	":::question-multi": protocol.AskQuestionKindAny,
 	":::question-text":  protocol.AskQuestionKindText,
+	":::question-file":  protocol.AskQuestionKindFile,
 }
 
 type LineError struct {
@@ -161,7 +162,7 @@ func strayDirective(directive string, line int) *LineError {
 	if directive == ":::" {
 		return &LineError{Line: line, Message: "::: closes no question block"}
 	}
-	return &LineError{Line: line, Message: fmt.Sprintf("%q opens no question block; use :::question, :::question-multi or :::question-text", directive)}
+	return &LineError{Line: line, Message: fmt.Sprintf("%q opens no question block; use :::question, :::question-multi, :::question-text or :::question-file", directive)}
 }
 
 func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber, earlierDefaultLine int, strict bool) (protocol.AskQuestion, time.Duration, error) {
@@ -229,6 +230,12 @@ func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber
 	}
 	if question.Kind == protocol.AskQuestionKindText && len(question.Choices) > 0 {
 		return question, 0, &LineError{Line: firstLineNumber - 1, Message: ":::question-text takes no choices"}
+	}
+	if strict && question.Kind == protocol.AskQuestionKindFile && len(question.Choices) > 0 {
+		return question, 0, &LineError{Line: firstLineNumber - 1, Message: ":::question-file takes no choices"}
+	}
+	if strict && question.Kind == protocol.AskQuestionKindFile && recommended != "" {
+		return question, 0, &LineError{Line: firstLineNumber - 1, Message: ":::question-file takes no Recommended:"}
 	}
 	if question.Kind == protocol.AskQuestionKindAny && len(question.Choices) == 0 {
 		return question, 0, &LineError{Line: firstLineNumber - 1, Message: ":::question-multi needs choices"}

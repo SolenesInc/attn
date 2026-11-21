@@ -5914,6 +5914,29 @@
                               }
                             }
                           ]
+                        },
+                        {
+                          "kind": "when",
+                          "condition": {
+                            "field": {
+                              "name": "question_files",
+                              "kind": "text",
+                              "description": "The files the user attached to a :::question-file, rendered by the adapter: one retrieval line each in an answer, their names in a follow-up.",
+                              "trim_space": true
+                            },
+                            "test": "present"
+                          },
+                          "children": [
+                            {
+                              "kind": "input",
+                              "field": {
+                                "name": "question_files",
+                                "kind": "text",
+                                "description": "The files the user attached to a :::question-file, rendered by the adapter: one retrieval line each in an answer, their names in a follow-up.",
+                                "trim_space": true
+                              }
+                            }
+                          ]
                         }
                       ]
                     }
@@ -6087,6 +6110,29 @@
                           "name": "text",
                           "kind": "text",
                           "description": "The user's written answer, quoted by the adapter."
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "when",
+                    "condition": {
+                      "field": {
+                        "name": "question_files",
+                        "kind": "text",
+                        "description": "The files the user attached to a :::question-file, rendered by the adapter: one retrieval line each in an answer, their names in a follow-up.",
+                        "trim_space": true
+                      },
+                      "test": "present"
+                    },
+                    "children": [
+                      {
+                        "kind": "input",
+                        "field": {
+                          "name": "question_files",
+                          "kind": "text",
+                          "description": "The files the user attached to a :::question-file, rendered by the adapter: one retrieval line each in an answer, their names in a follow-up.",
+                          "trim_space": true
                         }
                       }
                     ]
@@ -7878,5 +7924,5 @@
       ]
     }
   ],
-  "definitions_hash": "87f396c72af7018c7f645c01ac9739822839eeabc93357f61336c1b13141f8f2"
+  "definitions_hash": "eb607750ef1933a49baed51ec46d6b3a9cf87b48a79fb61e9c023aa7711ba6d9"
 }

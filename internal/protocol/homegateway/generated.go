@@ -46,6 +46,9 @@ type HomeGatewayAsk struct {
 }
 
 type HomeGatewayAskAnswer struct {
+	// AttachmentNames corresponds to the JSON schema field "attachment_names".
+	AttachmentNames []string `json:"attachment_names,omitempty,omitzero"`
+
 	// Condition corresponds to the JSON schema field "condition".
 	Condition *string `json:"condition,omitempty,omitzero"`
 
@@ -202,6 +205,7 @@ type HomeGatewayAskQuestion struct {
 type HomeGatewayAskQuestionKind string
 
 const HomeGatewayAskQuestionKindAny HomeGatewayAskQuestionKind = "any"
+const HomeGatewayAskQuestionKindFile HomeGatewayAskQuestionKind = "file"
 const HomeGatewayAskQuestionKindOne HomeGatewayAskQuestionKind = "one"
 const HomeGatewayAskQuestionKindText HomeGatewayAskQuestionKind = "text"
 const HomeGatewayAskQuestionKindUnknown HomeGatewayAskQuestionKind = "unknown"

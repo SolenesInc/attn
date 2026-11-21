@@ -154,6 +154,7 @@ enum HomeGatewayAskQuestionKind {
   one,
   any,
   text,
+  file,
   kind_unknown: "unknown",
 }
 
@@ -190,12 +191,14 @@ model HomeGatewayAskPart {
 
 // picked holds choice labels; other is your own choice on a one or any
 // question; text answers a text question; condition qualifies a pick.
+// attachment_names name the files attached to a file question.
 model HomeGatewayAskAnswer {
   key: string;
   picked: string[];
   other?: string;
   text?: string;
   condition?: string;
+  attachment_names?: string[];
 }
 
 // attachment_names are the names of the files the answer carried.

@@ -60,6 +60,12 @@
   },
   "HomeGatewayAskAnswer": {
     "properties": {
+      "attachment_names": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "condition": {
         "type": "string"
       },
@@ -325,6 +331,7 @@
       "one",
       "any",
       "text",
+      "file",
       "unknown"
     ],
     "type": "string"

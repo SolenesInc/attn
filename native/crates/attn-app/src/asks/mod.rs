@@ -44,6 +44,8 @@ pub struct Asks {
     pub(crate) sending: Option<String>,
     /// Files are dragged over the sheet.
     pub(crate) dropping: bool,
+    /// Files are dragged over the drop zone of the file question with this key.
+    pub(crate) dropping_on: Option<String>,
     /// Why the daemon refused the answer to an ask, shown under that ask.
     pub(crate) error: Option<(String, String)>,
     /// The ask, and whether it was replied, that the keyboard last moved into.
@@ -77,6 +79,7 @@ pub(crate) enum Stop {
 
 pub(crate) fn stops(ask: &Ask) -> Vec<Stop> {
     questions(ask)
+        .filter(|q| Kind::of(q) != Kind::Unknown)
         .map(|q| Stop::Question(q.key.clone()))
         .chain([Stop::Note])
         .collect()
@@ -89,16 +92,46 @@ pub(crate) fn active(state: &State, ask: &Ask) -> Stop {
     if let Some(stop) = draft.and_then(|d| d.active.clone()) {
         return stop;
     }
-    let choosing: Vec<&AskQuestion> = questions(ask)
-        .filter(|q| Kind::of(q) != Kind::Text)
-        .collect();
+    let choosing: Vec<&AskQuestion> = questions(ask).filter(|q| Kind::of(q).chooses()).collect();
     choosing
         .iter()
         .find(|q| !chosen(draft, q))
         .or(choosing.first())
         .copied()
-        .or(questions(ask).next())
-        .map_or(Stop::Note, |q| Stop::Question(q.key.clone()))
+        .map_or_else(
+            || stops(ask).swap_remove(0),
+            |q| Stop::Question(q.key.clone()),
+        )
+}
+
+/// Files dropped on the sheet, outside a file question's drop zone, attach where
+/// attach_target says.
+pub(crate) fn drop_on_sheet(state: &mut State, paths: &[std::path::PathBuf], tx: &mut Tx) {
+    if let Some(ask) = shown_open(state) {
+        let to = attach_target(state, &ask);
+        attach::dropped(state, &ask.id, &to, paths, tx);
+    }
+}
+
+/// A paste while no field holds the keyboard attaches where attach_target says.
+pub(crate) fn paste_on_sheet(state: &mut State, content: &rune::ClipboardContent, tx: &mut Tx) {
+    if let Some(ask) = shown_open(state) {
+        let to = attach_target(state, &ask);
+        attach::paste(state, &ask.id, &to, content, tx);
+    }
+}
+
+/// Where a paste outside a field or a drop on the sheet attaches in the ask: the active stop
+/// when it is a file question, else the note.
+pub(crate) fn attach_target(state: &State, ask: &Ask) -> Stop {
+    match active(state, ask) {
+        Stop::Question(key)
+            if questions(ask).any(|q| q.key == key && Kind::of(q) == Kind::File) =>
+        {
+            Stop::Question(key)
+        }
+        _ => Stop::Note,
+    }
 }
 
 /// A choice question has a pick, or another answer written in its Other field.
@@ -109,13 +142,22 @@ fn chosen(draft: Option<&Draft>, question: &AskQuestion) -> bool {
 }
 
 /// The stop whose control is keyed `focused`.
-fn stop_of(ask: &Ask, focused: &str) -> Option<Stop> {
+fn stop_of(state: &State, ask: &Ask, focused: &str) -> Option<Stop> {
     if focused == view::NOTE {
         return Some(Stop::Note);
+    }
+    let draft = state.window.asks.drafts.get(&ask.id);
+    if let Some(file) = draft
+        .into_iter()
+        .flat_map(|d| &d.files)
+        .find(|f| focused == view::remove_file_key(&f.id))
+    {
+        return Some(file.stop.clone());
     }
     questions(ask)
         .find(|q| {
             focused == view::text_key(&q.key)
+                || focused == view::drop_key(&q.key)
                 || focused == view::suggestion_key(&q.key)
                 || focused == view::condition_key(&q.key)
                 || focused == view::add_condition_key(&q.key)
@@ -134,8 +176,11 @@ fn input_of(state: &State, ask: &Ask, stop: &Stop) -> String {
     let Some(question) = questions(ask).find(|q| &q.key == key) else {
         return view::NOTE.to_owned();
     };
-    if Kind::of(question) == Kind::Text {
-        return view::text_key(key);
+    match Kind::of(question) {
+        Kind::Text => return view::text_key(key),
+        Kind::File => return view::drop_key(key),
+        Kind::Unknown => return view::NOTE.to_owned(),
+        Kind::One | Kind::Any => {}
     }
     let picked = state
         .window
@@ -159,17 +204,17 @@ fn input_of(state: &State, ask: &Ask, stop: &Stop) -> String {
 /// once it has a pick, or a written question's Use the suggestion while its field is empty.
 fn controls(state: &State, ask: &Ask, stop: &Stop) -> Vec<String> {
     let mut controls = vec![input_of(state, ask, stop)];
+    let draft = state.window.asks.drafts.get(&ask.id);
+    let removes = draft
+        .into_iter()
+        .flat_map(|d| d.files_on(stop))
+        .map(|f| view::remove_file_key(&f.id));
     let Stop::Question(key) = stop else {
-        let files = state.window.asks.drafts.get(&ask.id).map(|d| &d.files[..]);
-        controls.extend(
-            files
-                .unwrap_or_default()
-                .iter()
-                .map(|f| view::remove_file_key(&f.id)),
-        );
+        controls.extend(removes);
         controls.push(view::ATTACH.to_owned());
         return controls;
     };
+    controls.extend(removes);
     let answer = state
         .window
         .asks
@@ -233,7 +278,7 @@ pub(crate) fn tab(state: &mut State, by: isize, tx: &mut Tx) -> bool {
     };
     let focused = tx.focused().filter(|f| *f != SHEET).map(str::to_owned);
     let here = match &focused {
-        Some(focused) => match stop_of(&ask, focused) {
+        Some(focused) => match stop_of(state, &ask, focused) {
             Some(stop) => stop,
             None => return false,
         },
@@ -286,7 +331,7 @@ pub(crate) fn number(state: &mut State, n: usize, tx: &mut Tx) -> bool {
         return false;
     };
     let kind = Kind::of(&question);
-    if kind == Kind::Text || n == 0 {
+    if !kind.chooses() || n == 0 {
         return false;
     }
     if n == question.choices.len() + 1 {
@@ -320,7 +365,7 @@ pub(crate) fn pick(
         return;
     };
     let draft = state.window.asks.drafts.get(ask);
-    let unpicked = |q: &&&AskQuestion| Kind::of(q) != Kind::Text && !chosen(draft, q);
+    let unpicked = |q: &&&AskQuestion| Kind::of(q).chooses() && !chosen(draft, q);
     let all: Vec<&AskQuestion> = questions(&found).collect();
     let at = all.iter().position(|q| q.key == question).unwrap_or(0);
     let next = all[at + 1..]
@@ -395,15 +440,24 @@ pub(crate) enum Kind {
     One,
     Any,
     Text,
+    File,
+    /// A kind a newer daemon asks that this app cannot answer.
+    Unknown,
 }
 
 impl Kind {
     pub(crate) fn of(question: &AskQuestion) -> Kind {
         match question.kind.as_str() {
+            "one" => Kind::One,
             "any" => Kind::Any,
             "text" => Kind::Text,
-            _ => Kind::One,
+            "file" => Kind::File,
+            _ => Kind::Unknown,
         }
+    }
+
+    pub(crate) fn chooses(self) -> bool {
+        matches!(self, Kind::One | Kind::Any)
     }
 }
 
@@ -657,6 +711,16 @@ impl Draft {
     pub(crate) fn answers(&self, ask: &Ask) -> Vec<AskAnswer> {
         questions(ask)
             .filter_map(|q| {
+                let stop = Stop::Question(q.key.clone());
+                let files: Vec<String> = self.files_on(&stop).map(|f| f.id.clone()).collect();
+                if !files.is_empty() {
+                    return Some(AskAnswer {
+                        key: q.key.clone(),
+                        picked: Vec::new(),
+                        attachments: Some(files),
+                        ..AskAnswer::default()
+                    });
+                }
                 let answer = self.answers.get(&q.key)?;
                 let picked = &answer.picked;
                 let other = answer.other.text.trim();
@@ -675,9 +739,15 @@ impl Draft {
                     other: (!other.is_empty()).then(|| other.to_owned()),
                     text: (!text.is_empty()).then(|| text.to_owned()),
                     condition: condition.map(str::to_owned),
+                    attachments: None,
                 })
             })
             .collect()
+    }
+
+    /// The files attached at a stop: a file question, or the note.
+    pub(crate) fn files_on<'a>(&'a self, stop: &'a Stop) -> impl Iterator<Item = &'a attach::File> {
+        self.files.iter().filter(move |f| f.stop == *stop)
     }
 
     pub(crate) fn sendable(&self, ask: &Ask) -> bool {
@@ -895,7 +965,7 @@ fn choose(state: &mut State, ask: &str, question: &str, kind: Kind, label: &str)
                 answer.condition = None;
             }
         }
-        Kind::Text => {}
+        Kind::Text | Kind::File | Kind::Unknown => {}
     }
 }
 
@@ -939,6 +1009,7 @@ pub(crate) fn accept_recommended(state: &mut State, ask: &str) {
                 answer.other = TextEdit::default();
                 answer.text = TextEdit::default();
             }
+            Kind::File | Kind::Unknown => {}
         }
     }
 }
@@ -972,7 +1043,7 @@ fn send_ask(state: &mut State, id: String, tx: &mut Tx) {
     }
     let answers = draft.answers(&ask);
     let note = draft.note.text.trim().to_owned();
-    let attachments: Vec<String> = draft.files.iter().map(|f| f.id.clone()).collect();
+    let attachments: Vec<String> = draft.files_on(&Stop::Note).map(|f| f.id.clone()).collect();
     let after = {
         let lists = Lists::of(&state.facts, state.window.now_ms);
         let section = if lists.snoozed.iter().any(|i| i.ask.id == id) {
@@ -1157,11 +1228,13 @@ fn markdown(ask: &Ask, from: &str) -> String {
 
 fn question_block(question: &AskQuestion, opened_at: &str) -> String {
     let opener = match Kind::of(question) {
-        Kind::One => ":::question",
-        Kind::Any => ":::question-multi",
-        Kind::Text => ":::question-text",
+        Kind::One => ":::question".to_owned(),
+        Kind::Any => ":::question-multi".to_owned(),
+        Kind::Text => ":::question-text".to_owned(),
+        Kind::File => ":::question-file".to_owned(),
+        Kind::Unknown => format!(":::question-{}", question.kind),
     };
-    let mut lines = vec![opener.to_owned(), question.prompt.clone()];
+    let mut lines = vec![opener, question.prompt.clone()];
     lines.extend(question.context.clone().filter(|c| !c.is_empty()));
     lines.extend(question.choices.iter().map(|c| match &c.description {
         Some(d) if !d.is_empty() => format!("- [ ] {} — {d}", c.label),

@@ -199,3 +199,96 @@ func TestAnAsksUnsentFilesAreDiscardedWhenItGoesAwayAndItsSentFilesStay(t *testi
 		}
 	})
 }
+
+const screenshotAsk = `The banner moved.
+
+:::question
+Ship the new banner?
+- [ ] Yes
+- [ ] No
+:::
+
+:::question-file
+If it looks wrong on your screen, attach a screenshot
+:::
+`
+
+func TestAFileQuestionCarriesItsFilesUnderItOrStaysUnanswered(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	setSetting(t, app, "phone_access_enabled", "true")
+	phone := connectPhone(t, w, "phone", app.SelectedProfile())
+	phone.welcomed()
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	agent := w.Launched(asker)
+	seed := plantSeedAs(t, cli, asker, "Ship the banner")
+	moveDelegationSeed(t, cli, asker, seed, "tend", "")
+	attached, err := cli.AskOpen(protocol.SessionID(asker), "", screenshotAsk, "", w.Path("shop"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	skipped, err := cli.AskOpen(protocol.SessionID(asker), seed, screenshotAsk, "", w.Path("shop"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	onPhone := phone.showsAsks(func(asks []homegateway.HomeGatewayAsk) bool {
+		return slices.ContainsFunc(asks, func(a homegateway.HomeGatewayAsk) bool { return a.ID == attached.ID })
+	})
+	for _, a := range onPhone {
+		if a.ID == attached.ID && (a.Parts[2].Question == nil || a.Parts[2].Question.Kind != homegateway.HomeGatewayAskQuestionKindFile) {
+			t.Errorf("the phone shows the file question as %+v, want kind file", a.Parts[2].Question)
+		}
+	}
+
+	trusted := w.TrustedApp()
+	owner := protocol.AttachmentOwner{Kind: protocol.AttachmentOwnerKindAsk, ID: attached.ID}
+	shot := answerFile(t, trusted, owner, "Pasted screenshot.png", quickCapturePNG(t), true)
+	log := answerFile(t, trusted, owner, "console.txt", []byte("TypeError at banner.js:12\n"), true)
+	requestID := uuid.NewString()
+	answered := testworld.Request(trusted, protocol.AskAnswerMessage{
+		Cmd: protocol.CmdAskAnswer, RequestID: requestID, AskID: attached.ID,
+		Answers: []protocol.AskAnswer{
+			{Key: "q1", Picked: []string{"Yes"}},
+			{Key: "q2", Picked: []string{}, Attachments: []string{shot}},
+		},
+		Note: protocol.Ptr("Console attached."), Attachments: []string{log},
+	}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == requestID })
+	if !answered.Success {
+		t.Fatalf("answering the file question failed: %s", protocol.Deref(answered.Error))
+	}
+	typed := agent.Prompted()
+	question, afterQuestion, _ := strings.Cut(typed, "## 2. If it looks wrong on your screen, attach a screenshot\n\n")
+	underQuestion, note, _ := strings.Cut(afterQuestion, "They added:")
+	if question == typed || !strings.HasPrefix(underQuestion, `File "Pasted screenshot.png" (image/png, `) || !strings.Contains(underQuestion, "attn agent attachment "+shot+" --out <path>") || strings.Contains(underQuestion, "console.txt") {
+		t.Errorf("the agent was typed %q, want the screenshot's file line under the file question and nothing else", typed)
+	}
+	if !strings.Contains(note, `File "console.txt"`) || strings.Contains(note, "Pasted screenshot.png") {
+		t.Errorf("the agent was typed %q, want the note's file alone after the note", typed)
+	}
+	replied := phone.showsAsks(func(asks []homegateway.HomeGatewayAsk) bool {
+		return slices.ContainsFunc(asks, func(a homegateway.HomeGatewayAsk) bool { return a.ID == attached.ID && a.Reply != nil })
+	})
+	for _, a := range replied {
+		if a.ID == attached.ID && (len(a.Reply.Answers) != 2 || !slices.Equal(a.Reply.Answers[1].AttachmentNames, []string{"Pasted screenshot.png"})) {
+			t.Errorf("the phone shows the replied answers %+v, want the screenshot named under the file question", a.Reply.Answers)
+		}
+	}
+
+	requestID = uuid.NewString()
+	answered = testworld.Request(trusted, protocol.AskAnswerMessage{
+		Cmd: protocol.CmdAskAnswer, RequestID: requestID, AskID: skipped.ID,
+		Answers: []protocol.AskAnswer{{Key: "q1", Picked: []string{"No"}}},
+	}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == requestID })
+	if !answered.Success {
+		t.Fatalf("answering without the file failed: %s", protocol.Deref(answered.Error))
+	}
+	listed, err := cli.SeedNotes("", seed, client.SeedNotesQuery{Limit: 1})
+	if err != nil || len(listed.Notes) != 1 {
+		t.Fatalf("the seed's notes are %+v, %v", listed, err)
+	}
+	if body := listed.Notes[0].Body; !strings.Contains(body, "## 2. If it looks wrong on your screen, attach a screenshot\n\nUnanswered.") {
+		t.Errorf("the seed's answer note reads %q, want the file question Unanswered.", body)
+	}
+}

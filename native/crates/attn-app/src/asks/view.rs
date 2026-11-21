@@ -65,6 +65,10 @@ pub(super) fn suggestion_key(question: &str) -> String {
     format!("asks.q.{question}.suggestion")
 }
 
+pub(super) fn drop_key(question: &str) -> String {
+    format!("asks.q.{question}.drop")
+}
+
 pub(super) fn text_key(question: &str) -> String {
     format!("asks.q.{question}.text.field")
 }
@@ -138,11 +142,10 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
         .on_drop_files(
             |state: &mut State, paths: &[std::path::PathBuf], tx: &mut Tx| {
                 state.window.asks.dropping = false;
-                if let Some((id, false)) = state.shown_ask() {
-                    attach::dropped(state, &id, paths, tx);
-                }
+                super::drop_on_sheet(state, paths, tx);
             },
         )
+        .on_paste_content(super::paste_on_sheet)
         .on_drop_hover(|state: &mut State, over: bool, _: &mut Tx| {
             state.window.asks.dropping = over && matches!(state.shown_ask(), Some((_, false)));
         })
@@ -208,7 +211,7 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
             Frame::dialog(t).draw_clipped(
                 panel.children(
                     asks.dropping
-                        .then(|| drop_overlay("asks.drop", "Drop to attach to your answer", t)),
+                        .then(|| drop_overlay("asks.drop", drop_said(state), t)),
                 ),
             ),
         );
@@ -558,9 +561,16 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
                     Some(answers) => Shown::Replied(answers.iter().find(|a| a.key == question.key)),
                     None => Shown::Draft(draft.and_then(|d| d.answers.get(&question.key))),
                 };
-                let active = ask.reply.is_none()
-                    && super::active(state, ask) == Stop::Question(question.key.clone());
-                question_section(&ask.id, index, question, answer, active, &prose, t)
+                let stop = Stop::Question(question.key.clone());
+                let active = ask.reply.is_none() && super::active(state, ask) == stop;
+                let files = match &ask.reply {
+                    Some(reply) => Files::Sent(sent_on(reply, Some(&question.key))),
+                    None => Files::Drafted(
+                        draft.into_iter().flat_map(|d| d.files_on(&stop)).collect(),
+                        state.window.asks.dropping_on.as_ref() == Some(&question.key),
+                    ),
+                };
+                question_section(&ask.id, index, question, answer, files, active, &prose, t)
             }
             None => Block::custom(
                 format!("asks.part.{at}.block"),
@@ -598,13 +608,13 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
                     replied_text("asks.note".into(), "Note", n, t),
                 )
             }));
-            blocks.extend(
-                reply
-                    .attachments
-                    .as_ref()
-                    .filter(|files| !files.is_empty())
-                    .map(|files| Block::custom("asks.files.block", sent_files(files, t))),
-            );
+            let on_note = sent_on(reply, None);
+            if !on_note.is_empty() {
+                blocks.push(Block::custom(
+                    "asks.files.block",
+                    sent_files("asks.files", &on_note, t),
+                ));
+            }
             if let Some(edit) = state.window.asks.follow_ups.get(&ask.id) {
                 let id = ask.id.clone();
                 blocks.push(Block::custom(
@@ -638,9 +648,13 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
                     super::activate(state, &pressed, Stop::Note)
                 }),
             ));
+            let on_note: Vec<&attach::File> = draft
+                .into_iter()
+                .flat_map(|d| d.files_on(&Stop::Note))
+                .collect();
             blocks.push(Block::custom(
                 "asks.files.block",
-                drafted_files(&ask.id, draft.map_or(&[][..], |d| &d.files[..]), t),
+                drafted_files(&ask.id, &on_note, t),
             ));
         }
     }
@@ -769,11 +783,13 @@ impl Shown<'_> {
 
 /// A question, numbered, its words linking the seeds they name, then what it says about itself
 /// and the choices or the field that answer it.
+#[allow(clippy::too_many_arguments)]
 fn question_section(
     ask: &str,
     index: usize,
     question: &AskQuestion,
     answer: Shown<'_>,
+    files: Files<'_>,
     active: bool,
     prose: &Prose<'_>,
     t: &Tokens,
@@ -807,6 +823,21 @@ fn question_section(
     let body = match kind {
         Kind::Text => written(ask, question, &answer, t),
         Kind::One | Kind::Any => choice_list(ask, question, kind, &answer, active, t),
+        Kind::File => match files {
+            Files::Drafted(files, dropping) => drop_zone(ask, &question.key, &files, dropping, t),
+            Files::Sent(files) if files.is_empty() => {
+                words("Not answered", Type::Small, t.text_tertiary)
+                    .key(format!("asks.q.{}.files", question.key))
+            }
+            Files::Sent(files) => sent_files(&format!("asks.q.{}.files", question.key), &files, t),
+        },
+        Kind::Unknown => words(
+            "This kind of question is new to this app. Update attn to answer it.",
+            Type::Small,
+            t.text_tertiary,
+        )
+        .key(format!("asks.q.{}.unknown", question.key))
+        .wrap(),
     };
     let (ask_id, key) = (ask.to_owned(), question.key.clone());
     Section::new(format!("asks.q.{}", question.key), question.prompt.clone())
@@ -1083,16 +1114,136 @@ fn written_field(
     if let Some(ask) = attaching_to {
         area = area.on_paste(
             move |state: &mut State, content: &rune::ClipboardContent, tx| {
-                attach::paste(state, &ask, content, tx)
+                attach::paste(state, &ask, &Stop::Note, content, tx)
             },
         );
     }
     area_box(area, FieldState::Ready, t).into()
 }
 
-/// The files an answer will carry, each with its remove button, then Attach file.
-fn drafted_files(ask: &str, files: &[attach::File], t: &Tokens) -> El {
-    let tray = files.iter().map(|file| {
+/// The files at a stop of an answer, while it is written, or once it was sent.
+enum Files<'a> {
+    /// The files attached so far, and whether a drag is over the stop's drop zone.
+    Drafted(Vec<&'a attach::File>, bool),
+    Sent(Vec<&'a attn_protocol::Attachment>),
+}
+
+/// The files a reply carried on a question, or with no question on its note.
+fn sent_on<'a>(
+    reply: &'a attn_protocol::AskReply,
+    question: Option<&str>,
+) -> Vec<&'a attn_protocol::Attachment> {
+    let on = |id: &str| {
+        reply
+            .answers
+            .iter()
+            .find(|a| a.attachments.iter().flatten().any(|f| f == id))
+            .map(|a| a.key.as_str())
+    };
+    reply
+        .attachments
+        .iter()
+        .flatten()
+        .filter(|f| on(&f.id) == question)
+        .collect()
+}
+
+/// What a drop on the sheet attaches to, as its overlay says.
+fn drop_said(state: &State) -> String {
+    let question =
+        super::shown_open(state).and_then(|ask| match super::attach_target(state, &ask) {
+            Stop::Question(key) => questions(&ask).position(|q| q.key == key),
+            Stop::Note => None,
+        });
+    match question {
+        Some(at) => format!("Drop to attach to question {}", at + 1),
+        None => "Drop to attach to your answer".to_owned(),
+    }
+}
+
+/// A file question's answer: the files attached to it, then Attach file, in a zone that takes
+/// files dropped on it.
+fn drop_zone(ask: &str, question: &str, files: &[&attach::File], dropping: bool, t: &Tokens) -> El {
+    let (ask_id, key) = (ask.to_owned(), question.to_owned());
+    let pick = El::from(
+        Button::new("Attach file")
+            .size(Size::Compact)
+            .look(Look::Plain)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                super::activate(state, &ask_id, Stop::Question(key.clone()));
+                attach::pick(&ask_id, Stop::Question(key.clone()), tx)
+            })
+            .build(t)
+            .key(drop_key(question)),
+    );
+    let paste = if rune::Platform::current() == rune::Platform::Mac {
+        "Drop a file here, or ⌘V pastes a screenshot"
+    } else {
+        "Drop a file here, or Ctrl+V pastes a screenshot"
+    };
+    let (ask_id, key) = (ask.to_owned(), question.to_owned());
+    let hovered = question.to_owned();
+    Inline::loose()
+        .key(format!("asks.q.{question}.files"))
+        .role("list")
+        .label("Attached files")
+        .w_full()
+        .children(file_tray(ask, files, t))
+        .child(pick)
+        .child(words(paste, Type::Small, t.text_tertiary))
+        .children(dropping.then(|| {
+            drop_overlay(
+                format!("asks.q.{question}.dropping"),
+                "Drop to attach to this question",
+                t,
+            )
+        }))
+        .on_drop_files(
+            move |state: &mut State, paths: &[std::path::PathBuf], tx: &mut Tx| {
+                state.window.asks.dropping_on = None;
+                let to = Stop::Question(key.clone());
+                super::activate(state, &ask_id, to.clone());
+                attach::dropped(state, &ask_id, &to, paths, tx);
+            },
+        )
+        .on_drop_hover(move |state: &mut State, over: bool, _: &mut Tx| {
+            state.window.asks.dropping_on = over.then(|| hovered.clone());
+        })
+}
+
+/// The files an answer will carry on its note, each with its remove button, then Attach file.
+fn drafted_files(ask: &str, files: &[&attach::File], t: &Tokens) -> El {
+    let id = ask.to_owned();
+    let pick = El::from(
+        Button::new("Attach file")
+            .size(Size::Compact)
+            .look(Look::Plain)
+            .on_press_tx(move |_: &mut State, tx: &mut Tx| attach::pick(&id, Stop::Note, tx))
+            .build(t)
+            .key(ATTACH),
+    );
+    let paste = if rune::Platform::current() == rune::Platform::Mac {
+        "⌘V pastes a screenshot"
+    } else {
+        "Ctrl+V pastes a screenshot"
+    };
+    Inline::loose()
+        .key("asks.files")
+        .role("list")
+        .label("Attached files")
+        .w_full()
+        .children(file_tray(ask, files, t))
+        .child(pick)
+        .child(words(paste, Type::Small, t.text_tertiary))
+}
+
+/// Each file of a draft as a tile or a chip, with its remove button.
+fn file_tray<'a>(
+    ask: &'a str,
+    files: &'a [&'a attach::File],
+    t: &'a Tokens,
+) -> impl Iterator<Item = El> + 'a {
+    files.iter().map(move |file| {
         let (ask_id, file_id) = (ask.to_owned(), file.id.clone());
         let remove = icon_button(
             remove_file_key(&file.id),
@@ -1134,35 +1285,13 @@ fn drafted_files(ask: &str, files: &[attach::File], t: &Tokens) -> El {
             t,
         )
         .a11y_value(status)
-    });
-    let id = ask.to_owned();
-    let pick = El::from(
-        Button::new("Attach file")
-            .size(Size::Compact)
-            .look(Look::Plain)
-            .on_press_tx(move |_: &mut State, tx: &mut Tx| attach::pick(&id, tx))
-            .build(t)
-            .key(ATTACH),
-    );
-    let paste = if rune::Platform::current() == rune::Platform::Mac {
-        "⌘V pastes a screenshot"
-    } else {
-        "Ctrl+V pastes a screenshot"
-    };
-    Inline::loose()
-        .key("asks.files")
-        .role("list")
-        .label("Attached files")
-        .w_full()
-        .children(tray)
-        .child(pick)
-        .child(words(paste, Type::Small, t.text_tertiary))
+    })
 }
 
 /// The files a replied answer carried, by name and size.
-fn sent_files(files: &[attn_protocol::Attachment], t: &Tokens) -> El {
+fn sent_files(key: &str, files: &[&attn_protocol::Attachment], t: &Tokens) -> El {
     Inline::loose()
-        .key("asks.files")
+        .key(key.to_owned())
         .role("list")
         .label("Attached files")
         .w_full()
@@ -1563,6 +1692,8 @@ fn previewed(ask: &Ask, key: &str, t: &Tokens) -> El {
     let questions = questions(ask).enumerate().map(|(n, q)| {
         let lines: Vec<El> = match Kind::of(q) {
             Kind::Text => vec![words("Written answer", Type::Small, t.text_tertiary)],
+            Kind::File => vec![words("A file or screenshot", Type::Small, t.text_tertiary)],
+            Kind::Unknown => vec![words("Update attn to answer", Type::Small, t.text_tertiary)],
             _ => q
                 .choices
                 .iter()

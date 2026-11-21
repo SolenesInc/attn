@@ -18,6 +18,7 @@ Pipe the ask as markdown to `attn ask`. The command prints the ask's id and retu
 
 - The user reads the ask cold, without this conversation. In a few short sentences, say what the decision affects, what you know, why you recommend a choice, what waits on the answer, and what you will do if it stays unanswered.
 - When work can go ahead without the answer, add `Default: <choice> after <duration>` to a one-choice question, such as `Default: Postgres after 2h`. An ask takes one default. When no answer has come by then, attn tells you to go with that choice. The ask stays open, and a later answer reaches you as usual.
+- To ask for a screenshot or a file, add a `:::question-file` block that says what to attach. The user pastes or drops the file in, and the answer gives you the command that saves it.
 - To ask permission for a risky action, name the exact action and its target in the question, such as the command, branch or environment. The permission you get covers only the action the question names. A permission question takes no default: silence is not permission.
 - Ask only what you cannot settle yourself, a few questions at a time.
 - After you ask, carry on with work that does not depend on the answer. When none is left, end your turn. Do not wait or poll. Your session stays open, so the user can find you, talk to you and run commands in your terminal: while any of your asks is open, attn refuses a standby that would close it.

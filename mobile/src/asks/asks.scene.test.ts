@@ -256,6 +256,47 @@ describe('asks on the phone', () => {
     )
   })
 
+  it('leaves a file question to the native app and shows the files sent to it once replied', () => {
+    const fileAsk = ask('a-file', 2, [
+      { markdown: null, question: choiceQuestion },
+      {
+        markdown: null,
+        question: {
+          key: 'q2',
+          kind: 'file',
+          prompt: 'If it looks wrong, attach a screenshot',
+          context: null,
+          choices: [],
+          recommended: null,
+          default: null,
+        },
+      },
+    ])
+    Scene.scene(
+      { update, view },
+      Scene.given(online(personal)),
+      arrive(personal, [fileAsk]),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      Scene.expect(Scene.testId('ask-file-elsewhere')).toHaveText('Answer this in the native app.'),
+      arrive(personal, [
+        {
+          ...fileAsk,
+          reply: {
+            answers: [
+              { key: 'q1', picked: ['Postgres'], other: '', text: '', condition: '', files: [] },
+              { key: 'q2', picked: [], other: '', text: '', condition: '', files: ['Pasted screenshot.png'] },
+            ],
+            note: '',
+            files: ['Pasted screenshot.png'],
+            answeredAt: now,
+          },
+        },
+      ]),
+      Scene.expect(Scene.testId('ask-question-q2')).toContainText('Pasted screenshot.png'),
+      Scene.expect(Scene.text('Not answered')).not.toExist(),
+    )
+  })
+
   it('sends a written answer and a note with Send, and keeps them when sending fails', () => {
     const textAsk = ask('a-name', 2, [
       {
@@ -565,7 +606,14 @@ describe('asks on the phone', () => {
           ...plain,
           reply: {
             answers: [
-              { key: 'q1', picked: ['Postgres'], other: '', text: '', condition: 'skip the Windows VM step' },
+              {
+                key: 'q1',
+                picked: ['Postgres'],
+                other: '',
+                text: '',
+                condition: 'skip the Windows VM step',
+                files: [],
+              },
             ],
             note: '',
             files: [],

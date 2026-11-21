@@ -591,6 +591,9 @@ type AskAmendMessage struct {
 }
 
 type AskAnswer struct {
+	// Attachments corresponds to the JSON schema field "attachments".
+	Attachments []string `json:"attachments,omitempty,omitzero"`
+
 	// Condition corresponds to the JSON schema field "condition".
 	Condition *string `json:"condition,omitempty,omitzero"`
 
@@ -812,6 +815,7 @@ type AskQuestion struct {
 type AskQuestionKind string
 
 const AskQuestionKindAny AskQuestionKind = "any"
+const AskQuestionKindFile AskQuestionKind = "file"
 const AskQuestionKindOne AskQuestionKind = "one"
 const AskQuestionKindText AskQuestionKind = "text"
 

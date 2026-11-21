@@ -1,7 +1,7 @@
 import type { HomeGatewayAsk, HomeGatewayAskAnswer } from '../homeGateway/generated'
 import { Schema } from 'effect'
 
-export const QuestionKind = Schema.Literals(['one', 'any', 'text', 'unknown'])
+export const QuestionKind = Schema.Literals(['one', 'any', 'text', 'file', 'unknown'])
 
 export const Question = Schema.Struct({
   key: Schema.String,
@@ -29,7 +29,11 @@ export const Answer = Schema.Struct({
 })
 export type Answer = typeof Answer.Type
 
-export const RepliedAnswer = Schema.Struct({ ...Answer.fields, condition: Schema.String })
+export const RepliedAnswer = Schema.Struct({
+  ...Answer.fields,
+  condition: Schema.String,
+  files: Schema.Array(Schema.String),
+})
 export type RepliedAnswer = typeof RepliedAnswer.Type
 
 export const PhoneAsk = Schema.Struct({
@@ -68,6 +72,7 @@ const fromHomeGatewayAnswer = (answer: HomeGatewayAskAnswer): RepliedAnswer => (
   other: answer.other ?? '',
   text: answer.text ?? '',
   condition: answer.condition ?? '',
+  files: answer.attachment_names ?? [],
 })
 
 export const fromHomeGatewayAsk = (ask: HomeGatewayAsk): PhoneAsk => ({

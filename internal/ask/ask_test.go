@@ -57,6 +57,10 @@ func TestParseReadsQuestionBlocksBetweenMarkdown(t *testing.T) {
 			":::question\nWhich?\n- [ ] Wait until after lunch\n- [ ] B\nDefault: wait until after lunch after 1h30m\n:::",
 			`[{"question":{"choices":[{"label":"Wait until after lunch"},{"label":"B"}],"default":{"choice":"Wait until after lunch","due_at":"2026-11-21T19:10:12Z"},"key":"q1","kind":"one","prompt":"Which?"}}]`,
 		},
+		"a file question keeps its context": {
+			":::question-file\nAttach a screenshot\nOnly if it looks wrong.\n:::",
+			`[{"question":{"choices":[],"context":"Only if it looks wrong.","key":"q1","kind":"file","prompt":"Attach a screenshot"}}]`,
+		},
 		"a question without choices takes a written answer": {
 			":::question\nAnything else?\n:::",
 			`[{"question":{"choices":[],"key":"q1","kind":"text","prompt":"Anything else?"}}]`,
@@ -79,18 +83,20 @@ func TestParseRefusesMalformedAsks(t *testing.T) {
 		markdown string
 		want     string
 	}{
-		"empty":                {"  \n", "an ask needs markdown"},
-		"unclosed":             {"intro\n:::question\nWhy?\n- [ ] A", "line 2: question block has no closing :::"},
-		"unclosed before next": {":::question\nWhich?\n- [ ] A\n:::question\nAnother?\n- [ ] B\n:::", "line 1: question block has no closing :::"},
-		"unknown block":        {"::: question\nWhich?\n- [ ] A\n:::", `line 1: "::: question" opens no question block; use :::question, :::question-multi or :::question-text`},
-		"unknown block inside": {":::question\nWhich?\n- [ ] A\n:::note\n:::", `line 4: ":::note" opens no question block; use :::question, :::question-multi or :::question-text`},
-		"stray closer":         {"Intro\n:::", "line 2: ::: closes no question block"},
-		"no question":          {":::question\n\n- [ ] A\n:::", "line 1: question block has no question"},
-		"text with choices":    {":::question-text\nWhy?\n- [ ] A\n:::", "line 1: :::question-text takes no choices"},
-		"multi without":        {":::question-multi\nWhich?\n:::", "line 1: :::question-multi needs choices"},
-		"unknown recommended":  {":::question\nWhich?\n- [ ] A\nRecommended: B\n:::", `line 1: Recommended: names one choice, and "B" is none of them`},
-		"two recommended":      {":::question\nWhich?\n- [ ] A\n- [ ] B\nRecommended: A\nRecommended: B\n:::", "line 6: a question takes one Recommended: line"},
-		"duplicate choice":     {":::question\nWhich?\n- [ ] A\n- [ ] a\n:::", `line 4: choice "a" appears twice`},
+		"empty":                 {"  \n", "an ask needs markdown"},
+		"unclosed":              {"intro\n:::question\nWhy?\n- [ ] A", "line 2: question block has no closing :::"},
+		"unclosed before next":  {":::question\nWhich?\n- [ ] A\n:::question\nAnother?\n- [ ] B\n:::", "line 1: question block has no closing :::"},
+		"unknown block":         {"::: question\nWhich?\n- [ ] A\n:::", `line 1: "::: question" opens no question block; use :::question, :::question-multi, :::question-text or :::question-file`},
+		"unknown block inside":  {":::question\nWhich?\n- [ ] A\n:::note\n:::", `line 4: ":::note" opens no question block; use :::question, :::question-multi, :::question-text or :::question-file`},
+		"stray closer":          {"Intro\n:::", "line 2: ::: closes no question block"},
+		"no question":           {":::question\n\n- [ ] A\n:::", "line 1: question block has no question"},
+		"text with choices":     {":::question-text\nWhy?\n- [ ] A\n:::", "line 1: :::question-text takes no choices"},
+		"file with choices":     {":::question-file\nWhich?\n- [ ] A\n:::", "line 1: :::question-file takes no choices"},
+		"file with recommended": {":::question-file\nWhich?\nRecommended: a screenshot\n:::", "line 1: :::question-file takes no Recommended:"},
+		"multi without":         {":::question-multi\nWhich?\n:::", "line 1: :::question-multi needs choices"},
+		"unknown recommended":   {":::question\nWhich?\n- [ ] A\nRecommended: B\n:::", `line 1: Recommended: names one choice, and "B" is none of them`},
+		"two recommended":       {":::question\nWhich?\n- [ ] A\n- [ ] B\nRecommended: A\nRecommended: B\n:::", "line 6: a question takes one Recommended: line"},
+		"duplicate choice":      {":::question\nWhich?\n- [ ] A\n- [ ] a\n:::", `line 4: choice "a" appears twice`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := ask.Parse(tc.markdown, opened)
@@ -136,6 +142,11 @@ func TestOpeningRefusesAMalformedDefaultAndReadingKeepsItAsContext(t *testing.T)
 			":::question-text\nWhy?\nDefault: A after 2h\n:::",
 			"line 3: Default: goes in a :::question with choices, where the user picks one",
 			`[{"question":{"choices":[],"context":"Default: A after 2h","key":"q1","kind":"text","prompt":"Why?"}}]`,
+		},
+		"on file": {
+			":::question-file\nA screenshot?\nDefault: A after 2h\n:::",
+			"line 3: Default: goes in a :::question with choices, where the user picks one",
+			`[{"question":{"choices":[],"context":"Default: A after 2h","key":"q1","kind":"file","prompt":"A screenshot?"}}]`,
 		},
 		"without choices": {
 			":::question\nWhy?\nDefault: A after 2h\n:::",
@@ -278,7 +289,7 @@ func TestReplyOpensWithTheAskAndEndsWithTheReminder(t *testing.T) {
 }
 
 func TestReplyRefusesAnswersTheAskCannotHold(t *testing.T) {
-	parts, err := ask.Parse(":::question\nWhich?\n- [ ] A\n- [ ] B\n:::\n:::question-text\nWhy?\n:::", opened)
+	parts, err := ask.Parse(":::question\nWhich?\n- [ ] A\n- [ ] B\n:::\n:::question-text\nWhy?\n:::\n:::question-file\nA screenshot?\n:::", opened)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,6 +307,9 @@ func TestReplyRefusesAnswersTheAskCannotHold(t *testing.T) {
 		"condition without a pick": {[]protocol.AskAnswer{{Key: "q1", Picked: []string{}, Other: protocol.Ptr("C"), Condition: protocol.Ptr("only today")}}, "", "question q1 takes a condition only on a pick"},
 		"condition on text":        {[]protocol.AskAnswer{{Key: "q2", Picked: []string{}, Text: protocol.Ptr("x"), Condition: protocol.Ptr("only today")}}, "", "question q2 takes a condition only on a pick"},
 		"text for one":             {[]protocol.AskAnswer{{Key: "q1", Picked: []string{}, Text: protocol.Ptr("x")}}, "", "question q1 takes a choice"},
+		"files for one":            {[]protocol.AskAnswer{{Key: "q1", Picked: []string{"A"}, Attachments: []string{"f-1"}}}, "", "question q1 takes no files"},
+		"files for text":           {[]protocol.AskAnswer{{Key: "q2", Picked: []string{}, Text: protocol.Ptr("x"), Attachments: []string{"f-1"}}}, "", "question q2 takes no files"},
+		"text for file":            {[]protocol.AskAnswer{{Key: "q3", Picked: []string{}, Text: protocol.Ptr("x")}}, "", "question q3 takes files"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := ask.Reply(a, tc.answers, tc.note, nil)

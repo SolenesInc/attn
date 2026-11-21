@@ -1,4 +1,4 @@
-//! Files an answer carries on its note. Each one uploads to the daemon as soon as it is added,
+//! Files an answer carries on its note and its file questions. Each one uploads to the daemon as soon as it is added,
 //! owned by its ask, so a send names files the daemon already holds.
 
 use std::path::{Path, PathBuf};
@@ -10,6 +10,7 @@ use attn_protocol::{
 use base64::Engine;
 use rune::{ClipboardContent, FileDialogOptions, Image, Tx};
 
+use super::Stop;
 use crate::State;
 
 /// The bytes one upload request carries, as Quick Capture's do.
@@ -36,6 +37,8 @@ pub(crate) struct File {
     pub name: String,
     pub size: u64,
     pub picture: Option<Image>,
+    /// Where it is attached: a file question, or the note.
+    pub stop: Stop,
     source: Source,
     upload: Upload,
 }
@@ -53,12 +56,18 @@ impl File {
     }
 }
 
-/// A paste into the note: copied files attach, else an image, as a screenshot pastes; plain
-/// text is left to the note.
-pub(crate) fn paste(state: &mut State, ask: &str, content: &ClipboardContent, tx: &mut Tx) -> bool {
+/// A paste at a stop: copied files attach, else an image, as a screenshot pastes; plain text is
+/// left to the field it was pasted in.
+pub(crate) fn paste(
+    state: &mut State,
+    ask: &str,
+    to: &Stop,
+    content: &ClipboardContent,
+    tx: &mut Tx,
+) -> bool {
     if !content.files().is_empty() {
         let files = content.files().iter().map(|p| on_disk(p)).collect();
-        add(state, ask, files, tx);
+        add(state, ask, to, files, tx);
         return true;
     }
     if let Some(image) = content.image() {
@@ -66,6 +75,7 @@ pub(crate) fn paste(state: &mut State, ask: &str, content: &ClipboardContent, tx
         add(
             state,
             ask,
+            to,
             vec![("Pasted screenshot.png".into(), Source::Png(png))],
             tx,
         );
@@ -74,21 +84,21 @@ pub(crate) fn paste(state: &mut State, ask: &str, content: &ClipboardContent, tx
     false
 }
 
-/// Files dropped on the sheet attach to the answer of the ask it shows.
-pub(crate) fn dropped(state: &mut State, ask: &str, paths: &[PathBuf], tx: &mut Tx) {
+/// Files dropped on the sheet attach at a stop of the ask it shows.
+pub(crate) fn dropped(state: &mut State, ask: &str, to: &Stop, paths: &[PathBuf], tx: &mut Tx) {
     let files = paths.iter().map(|p| on_disk(p)).collect();
-    add(state, ask, files, tx);
+    add(state, ask, to, files, tx);
 }
 
-/// Asks which file to attach to the answer of `ask`.
-pub(crate) fn pick(ask: &str, tx: &mut Tx) {
+/// Asks which file to attach at a stop of the ask.
+pub(crate) fn pick(ask: &str, to: Stop, tx: &mut Tx) {
     let ask = ask.to_owned();
     let options = FileDialogOptions {
         title: "Attach a file to your answer".into(),
         ..FileDialogOptions::default()
     };
     tx.open_file(options, move |state: &mut State, chosen, tx| match chosen {
-        Ok(Some(path)) => add(state, &ask, vec![on_disk(&path)], tx),
+        Ok(Some(path)) => add(state, &ask, &to, vec![on_disk(&path)], tx),
         Ok(None) => {}
         Err(why) => state.window.asks.error = Some((ask, format!("Cannot choose a file: {why}"))),
     });
@@ -102,7 +112,7 @@ fn on_disk(path: &Path) -> (String, Source) {
     (name, Source::Path(path.to_owned()))
 }
 
-fn add(state: &mut State, ask: &str, files: Vec<(String, Source)>, tx: &mut Tx) {
+fn add(state: &mut State, ask: &str, to: &Stop, files: Vec<(String, Source)>, tx: &mut Tx) {
     for (name, source) in files {
         let size = match &source {
             Source::Path(path) => match std::fs::metadata(path) {
@@ -132,6 +142,7 @@ fn add(state: &mut State, ask: &str, files: Vec<(String, Source)>, tx: &mut Tx) 
             name,
             size,
             picture,
+            stop: to.clone(),
             source,
             upload: Upload::Running,
         });

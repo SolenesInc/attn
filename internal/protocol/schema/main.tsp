@@ -4247,6 +4247,7 @@ enum AskQuestionKind {
   one,
   any,
   text,
+  file,
 }
 
 model AskChoice {
@@ -4319,7 +4320,8 @@ model AskThread {
 }
 
 // What the user sent when they answered an ask; answered_at is an ISO timestamp.
-// attachments are the files the answer carried, in the order sent.
+// attachments are every file the answer carried, on its note and on its file
+// questions, in the order sent; each file question's answer names its own.
 model AskReply {
   answers: AskAnswer[];
   note?: string;
@@ -4435,13 +4437,15 @@ model AskCloseResult {
 
 // picked holds choice labels; other is the user's own choice on a one/any
 // question; text is the answer to a text question. condition qualifies a pick
-// on a one/any question, and needs one.
+// on a one/any question, and needs one. attachments answer a file question:
+// ready files uploaded with attachment_put, owned by this ask.
 model AskAnswer {
   key: string;
   picked: string[];
   other?: string;
   text?: string;
   condition?: string;
+  attachments?: string[];
 }
 
 // attachments name ready files uploaded with attachment_put, owned by this ask.

@@ -115,6 +115,7 @@ export interface Default {
 
 export enum HomeGatewayAskQuestionKind {
     Any = "any",
+    File = "file",
     One = "one",
     Text = "text",
     Unknown = "unknown",
@@ -137,20 +138,22 @@ export interface Reply {
 }
 
 export interface AnswerElement {
-    condition?: string;
-    key:        string;
-    other?:     string;
-    picked:     string[];
-    text?:      string;
+    attachment_names?: string[];
+    condition?:        string;
+    key:               string;
+    other?:            string;
+    picked:            string[];
+    text?:             string;
     [property: string]: any;
 }
 
 export interface HomeGatewayAskAnswer {
-    condition?: string;
-    key:        string;
-    other?:     string;
-    picked:     string[];
-    text?:      string;
+    attachment_names?: string[];
+    condition?:        string;
+    key:               string;
+    other?:            string;
+    picked:            string[];
+    text?:             string;
     [property: string]: any;
 }
 
@@ -1542,6 +1545,7 @@ const typeMap: any = {
         { json: "note", js: "note", typ: u(undefined, "") },
     ], "any"),
     "AnswerElement": o([
+        { json: "attachment_names", js: "attachment_names", typ: u(undefined, a("")) },
         { json: "condition", js: "condition", typ: u(undefined, "") },
         { json: "key", js: "key", typ: "" },
         { json: "other", js: "other", typ: u(undefined, "") },
@@ -1549,6 +1553,7 @@ const typeMap: any = {
         { json: "text", js: "text", typ: u(undefined, "") },
     ], "any"),
     "HomeGatewayAskAnswer": o([
+        { json: "attachment_names", js: "attachment_names", typ: u(undefined, a("")) },
         { json: "condition", js: "condition", typ: u(undefined, "") },
         { json: "key", js: "key", typ: "" },
         { json: "other", js: "other", typ: u(undefined, "") },
@@ -1948,6 +1953,7 @@ const typeMap: any = {
     ], "any"),
     "HomeGatewayAskQuestionKind": [
         "any",
+        "file",
         "one",
         "text",
         "unknown",

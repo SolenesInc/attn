@@ -179,7 +179,7 @@ const repliedAnswer = <Message>(
   answer: RepliedAnswer | undefined,
   h: HtmlBuilder<Message>,
 ): Html => {
-  const shown = [...(answer?.picked ?? []), answer?.other ?? '', answer?.text ?? '']
+  const shown = [...(answer?.picked ?? []), answer?.other ?? '', answer?.text ?? '', ...(answer?.files ?? [])]
     .filter(Boolean)
     .join(' · ')
   const replied = h.p([h.Class(`replied${shown ? '' : ' none'}`)], [shown || 'Not answered'])
@@ -233,12 +233,17 @@ const questionCard = <Message>(
         ? repliedAnswer(question, replied, h)
         : question.kind === 'text'
           ? writtenAnswer(question, answer, open.sending, actions, h)
-          : question.kind === 'unknown'
+          : question.kind === 'file'
             ? h.p(
-                [h.Class('muted')],
-                ['This phone app does not know this kind of question yet; answer it on your computer.'],
+                [h.Class('muted'), h.DataAttribute('testid', 'ask-file-elsewhere')],
+                ['Answer this in the native app.'],
               )
-            : choiceList(question, answer, answersInOneTap(ask), open.sending, actions, h),
+            : question.kind === 'unknown'
+              ? h.p(
+                  [h.Class('muted')],
+                  ['This phone app does not know this kind of question yet; answer it on your computer.'],
+                )
+              : choiceList(question, answer, answersInOneTap(ask), open.sending, actions, h),
     ],
   )
 }

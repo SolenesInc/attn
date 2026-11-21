@@ -12,11 +12,12 @@ func askRecipient() Recipient {
 	other := text("other", "The user's own answer to a choice question.")
 	condition := text("condition", "The user's condition on their pick.")
 	written := text("text", "The user's written answer, quoted by the adapter.")
+	questionFiles := Trimmed(text("question_files", "The files the user attached to a :::question-file, rendered by the adapter: one retrieval line each in an answer, their names in a follow-up."))
 	choices := Choose(flag("recommended", "The user picked the agent's recommendation alone."),
 		fragment("entry-recommended", picked), fragment("entry-picked", picked))
 	answer := Choose(flag("unanswered", "The user left this question unanswered."),
 		fragment("entry-unanswered"),
-		Compose(When(Present(picked), choices), When(Present(condition), fragment("entry-condition", condition)), When(Present(other), fragment("entry-other", other)), When(Present(written), Input(written))))
+		Compose(When(Present(picked), choices), When(Present(condition), fragment("entry-condition", condition)), When(Present(other), fragment("entry-other", other)), When(Present(written), Input(written)), When(Present(questionFiles), Input(questionFiles))))
 	entry := Use("ask.entry", "content/ask/entry.md",
 		Bind("index", Input(text("index", "The question's position, from 1."))),
 		Bind("prompt", Input(text("prompt", "The question as the agent asked it."))),

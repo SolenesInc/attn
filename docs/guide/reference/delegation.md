@@ -130,11 +130,16 @@ yourself, or anyone withers it, its open asks close.
 
 Your answer can carry files. Paste a screenshot or a copied file into the note
 with Cmd+V (Ctrl+V on Linux), drop files on the sheet, or press **Attach file**.
-Each file shows under the note and uploads as you add it; its × takes it off.
-**Send** waits for a file still uploading. The agent's copy of your answer names
-each file with the `attn agent attachment` command that saves it, and so does the
-seed's note. The phone app shows the names of the files an answer carried, but
-cannot attach any.
+An agent can also ask for a file with a file question, which holds its own
+**Attach file** and takes files dropped on it. While Tab or a click has made a
+file question active, a paste outside a text field and a drop anywhere on the
+sheet go to that question; otherwise they go to the note. Each file shows where
+you attached it and uploads as you add it; its × takes it off. **Send** waits
+for a file still uploading. The agent's copy of your answer names each file with
+the `attn agent attachment` command that saves it, under the question it
+answers or after your note, and so does the seed's note. The phone app shows the
+names of the files an answer carried, but cannot attach any: it shows a file
+question as "Answer this in the native app."
 
 An agent can read the open asks of the agents below it in its delegation chain,
 and the Chief can read every ask in its profile. `attn ask list` shows them

@@ -270,3 +270,126 @@ fn an_ask_closed_while_its_send_waits_on_a_file_leaves_send_working_for_the_next
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0]["ask_id"], "a-later");
 }
+
+/// The files in a tray, as (id, name, status), in order.
+fn tray_in(world: &World, key: &str) -> Vec<(String, String, String)> {
+    world
+        .screen()
+        .descendants(Target::key(key))
+        .into_iter()
+        .filter_map(|n| {
+            let id = n.key.as_deref()?.strip_prefix("asks.file.")?;
+            (!id.contains('.')).then(|| {
+                (
+                    id.to_owned(),
+                    n.name.clone().unwrap_or_default(),
+                    n.value.clone().unwrap_or_default(),
+                )
+            })
+        })
+        .collect()
+}
+
+fn middle_of(world: &mut World, key: &str) -> (f32, f32) {
+    let [x, y, w, h] = world.rect(key);
+    ((x + w / 2.0) as f32, (y + h / 2.0) as f32)
+}
+
+#[test]
+fn a_file_question_takes_what_is_pasted_or_dropped_while_it_is_active_and_sends_it() {
+    let screenshot = ask(
+        "a-shot",
+        "web",
+        "Banner",
+        10,
+        vec![
+            question("q1", "one", "Ship the banner?", &["Yes", "No"]),
+            question("q2", "file", "If it looks wrong, attach a screenshot", &[]),
+        ],
+    );
+    let mut world = start(vec![screenshot], vec![api_working(), web_waiting()]);
+    let held = Held::default();
+    let h = held.clone();
+    world.daemon.on("attachment_put", move |r| hold(&h, r));
+    let console = world.data_dir().with_file_name("console.txt");
+    std::fs::write(&console, b"TypeError at banner.js:12\n").unwrap();
+    let notes = world.data_dir().with_file_name("notes.txt");
+    std::fs::write(&notes, b"looked fine on the Mac\n").unwrap();
+    let elsewhere = world.data_dir().with_file_name("elsewhere.txt");
+    std::fs::write(&elsewhere, b"dropped beside the zone\n").unwrap();
+    open_sheet(&mut world);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("asks.q.q2.choice.0"))
+            .is_none(),
+        "the file question shows choices"
+    );
+
+    world.gesture(|app| app.click(Target::key("asks.q.q1.choice.0")));
+    world.gesture(|app| app.press("tab"));
+    let focused = world.screen().focused().and_then(|n| n.key);
+    assert_eq!(focused.as_deref(), Some("asks.q.q2.drop"));
+    world.gesture(|app| {
+        app.runtime.paste_content(
+            ClipboardContent::new("").with_image(ClipboardImage::from_png(png()).unwrap()),
+        )
+    });
+    let zone = middle_of(&mut world, "asks.q.q2.files");
+    world.gesture(|app| app.runtime.drop_files(vec![console.clone()], Some(zone)));
+    let beside = middle_of(&mut world, "asks.q.q1.prompt");
+    world.gesture(|app| {
+        app.runtime
+            .drop_files(vec![elsewhere.clone()], Some(beside))
+    });
+    world.settle();
+
+    let on_question = tray_in(&world, "asks.q.q2.files");
+    let names: Vec<&str> = on_question.iter().map(|(_, n, _)| n.as_str()).collect();
+    assert_eq!(
+        names,
+        ["Pasted screenshot.png", "console.txt", "elsewhere.txt"]
+    );
+    assert!(tray_in(&world, "asks.files").is_empty());
+
+    world.gesture(|app| app.click(Target::key(NOTE)));
+    world.gesture(|app| app.runtime.drop_files(vec![notes.clone()], Some(beside)));
+    world.settle();
+    let on_note = tray_in(&world, "asks.files");
+    assert_eq!(on_note.len(), 1);
+    assert_eq!(on_note[0].1, "notes.txt");
+    assert_eq!(tray_in(&world, "asks.q.q2.files").len(), 3);
+
+    world.gesture(|app| app.press("mod+enter"));
+    world.settle();
+    let sent = answers(&world);
+    assert_eq!(sent.len(), 1);
+    let ids: Vec<&str> = on_question.iter().map(|(id, _, _)| id.as_str()).collect();
+    assert_eq!(
+        sent[0]["answers"],
+        serde_json::json!([
+            {"key": "q1", "picked": ["Yes"]},
+            {"key": "q2", "picked": [], "attachments": ids},
+        ])
+    );
+    assert_eq!(sent[0]["attachments"], serde_json::json!([on_note[0].0]));
+    assert_eq!(held.lock().unwrap()[&on_question[0].0], png());
+}
+
+#[test]
+fn a_question_of_a_kind_the_app_does_not_know_is_not_shown_as_a_choice_question() {
+    let ranked = ask(
+        "a-rank",
+        "web",
+        "Rank",
+        10,
+        vec![question("q1", "rank", "Rank these", &["A", "B"])],
+    );
+    let mut world = start(vec![ranked], vec![api_working(), web_waiting()]);
+    open_sheet(&mut world);
+    let screen = world.screen();
+    assert!(screen.find(Target::key("asks.q.q1.choice.0")).is_none());
+    assert!(screen.find(Target::key("asks.q.q1.unknown")).is_some());
+    world.gesture(|app| app.press("1"));
+    assert!(answers(&world).is_empty());
+}

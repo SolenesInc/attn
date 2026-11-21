@@ -458,7 +458,11 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 func (d *Daemon) commitAnswer(profileID string, stored store.Ask, wire protocol.Ask, msg *protocol.AskAnswerMessage) error {
 	d.attachmentMu.Lock()
 	defer d.attachmentMu.Unlock()
-	files, err := d.answerFiles(profileID, stored.ID, msg.Attachments)
+	ids := slices.Clone(msg.Attachments)
+	for _, answer := range msg.Answers {
+		ids = append(ids, answer.Attachments...)
+	}
+	files, err := d.answerFiles(profileID, stored.ID, ids)
 	if err != nil {
 		return err
 	}
