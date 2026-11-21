@@ -91,3 +91,35 @@ func TestEveryDelegateToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing
 		t.Errorf("offered delegate tools this test never called: %v", uncalled)
 	}
 }
+
+func TestADelegateCallerReadsAndDelegatesNothingOfAnotherProfile(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	home := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	seed := plantForTools(t, w)
+	var started protocol.DelegationOperation
+	if err := w.Client().RunCommand("delegate", protocol.SessionID(home), map[string]any{"brief": "Default profile work", "cwd": w.Path("shop"), "model": "default", "request_id": "default-profile-1"}, &started); err != nil {
+		t.Fatal(err)
+	}
+
+	sideApp := w.AppOn(createProfile(app, "Side").ID)
+	side := w.Spawn(sideApp, fakeagent.Claude, w.Path("side"))
+	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, sideApp.Terminal(side))}
+	for _, tc := range []struct {
+		tool, command string
+		args          map[string]any
+	}{
+		{"delegate_status", "delegate status", map[string]any{"id": "default-profile-1"}},
+		{"delegate_status", "delegate status", map[string]any{"id": started.OperationID}},
+		{"delegate", "delegate", map[string]any{"seed": seed, "cwd": w.Path("side"), "model": "default"}},
+	} {
+		if refused := agent.mustCall(t, tc.tool, tc.args); !refused.IsError || !strings.Contains(resultText(refused), `belongs to profile "Default"`) {
+			t.Errorf("%s %v from the Side profile's session answered %s, want a refusal naming the Default profile", tc.tool, tc.args, resultText(refused))
+		}
+		var answer map[string]any
+		if err := w.Client().RunCommand(tc.command, protocol.SessionID(side), tc.args, &answer); err == nil || !strings.Contains(err.Error(), `belongs to profile "Default"`) {
+			t.Errorf("run_command %s %v as the Side profile's session answered %v, %v, want a refusal naming the Default profile", tc.command, tc.args, answer, err)
+		}
+	}
+}
