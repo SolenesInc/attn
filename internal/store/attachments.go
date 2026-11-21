@@ -77,6 +77,32 @@ func (s *Store) AttachmentsIn(states ...AttachmentState) ([]StoredAttachment, er
 	return result, nil
 }
 
+func (s *Store) DiscardedAttachmentsOf(kind protocol.AttachmentOwnerKind, ownerIDs []string) ([]StoredAttachment, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := []StoredAttachment{}
+	for _, ownerID := range ownerIDs {
+		rows, err := s.db.Query(attachmentSelect+` WHERE owner_kind=? AND owner_id=? AND state=?`, kind, ownerID, AttachmentDiscarded)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			a, err := scanAttachment(rows)
+			if err != nil {
+				rows.Close()
+				return nil, err
+			}
+			result = append(result, a)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
 func commitAttachments(tx *sql.Tx, profileID string, owner protocol.AttachmentOwner, ids []string) error {
 	for position, id := range ids {
 		var name string

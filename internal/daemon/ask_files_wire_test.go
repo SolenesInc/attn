@@ -178,14 +178,19 @@ func TestAnAsksUnsentFilesAreDiscardedWhenItGoesAwayAndItsSentFilesStay(t *testi
 		if err := asker.cli.AskClose(protocol.SessionID(asker.id), withdrawn.ID, ""); err != nil {
 			t.Fatal(err)
 		}
-		w.advance(25 * time.Hour)
-		w.restart()
-
-		for id, want := range map[string]bool{draft: false, left: false, sent: true} {
-			if got := onDisk(id); got != want {
-				t.Errorf("after the asks went away and the daemon restarted, %s on disk = %v, want %v", id, got, want)
+		expectOnDisk := func(when string, want map[string]bool) {
+			t.Helper()
+			for id, wanted := range want {
+				if got := onDisk(id); got != wanted {
+					t.Errorf("%s, %s on disk = %v, want %v", when, id, got, wanted)
+				}
 			}
 		}
+		expectOnDisk("right after the withdrawn ask closed", map[string]bool{draft: false, left: true, sent: true})
+		w.advance(25 * time.Hour)
+		expectOnDisk("right after the answered ask was forgotten", map[string]bool{draft: false, left: false, sent: true})
+		w.restart()
+		expectOnDisk("after the daemon restarted", map[string]bool{draft: false, left: false, sent: true})
 		addressee := w.Client().WithCaller(protocol.TerminalID(asker.self))
 		saved := filepath.Join(w.Path("shop"), sent)
 		var result any

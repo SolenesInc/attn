@@ -606,11 +606,27 @@ func (d *Daemon) announceClosedAsks(ids []string) {
 		return
 	}
 	d.forgetAskImages(ids)
+	d.removeDiscardedAskFiles(ids)
 	d.coalesceSnapshots(func() {
 		for _, id := range ids {
 			d.publishFact(FactAskClosed, id, nil)
 		}
 	})
+}
+
+func (d *Daemon) removeDiscardedAskFiles(ids []string) {
+	d.attachmentMu.Lock()
+	defer d.attachmentMu.Unlock()
+	discarded, err := d.store.DiscardedAttachmentsOf(protocol.AttachmentOwnerKindAsk, ids)
+	if err != nil {
+		d.logf("asks: reading the discarded files of %v: %v", ids, err)
+		return
+	}
+	for _, a := range discarded {
+		if err := d.removeAttachmentFiles(a); err != nil {
+			d.logf("asks: removing the discarded file %s: %v", a.Attachment.ID, err)
+		}
+	}
 }
 
 func (d *Daemon) forgetAskImages(ids []string) {
