@@ -1490,3 +1490,49 @@ func TestTheStandbyViewNamesItsTenderWithItsDispatcherOnlyWhileTheTenderIsClosed
 		t.Fatalf("the standby of %s after its tender resumed = %+v, want it on standby with no tender until the tender reads its mail", seed, standby)
 	}
 }
+
+func TestALiveDelegateNamesItsDispatcherWhileThatDispatcherIsAClosedTenderOnStandby(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "parent")
+	cwd := w.Path("api")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	w.SetCodexFolderTrust(cwd, "trusted")
+	delegate := func(from protocol.SessionID, text string) (*protocol.DelegateResult, *fakeagent.Run) {
+		t.Helper()
+		request := brief(cwd, text)
+		request.Agent = protocol.Ptr(string(fakeagent.Codex))
+		request.SourceSessionID = protocol.Ptr(from)
+		delegated, err := cli.Delegate(request)
+		if err != nil {
+			t.Fatalf("%s delegates: %v", from, err)
+		}
+		run := w.Launched(string(delegated.SessionID))
+		run.Prompted()
+		return delegated, run
+	}
+	middle, middleRun := delegate("parent", "Investigate the tracked task.")
+	leaf, _ := delegate(middle.SessionID, "Fix the parser the investigation found.")
+	namesMiddle := func(s protocol.Session) bool { return protocol.Deref(s.DispatcherSessionID) == middle.SessionID }
+	testworld.AwaitSession(app, string(leaf.SessionID), namesMiddle)
+
+	mark := len(app.Log())
+	onStandbyAndClosed(t, w, cli, middle, middleRun)
+	testworld.AwaitSince(app, mark, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+		return standbyTenderIn(m, middle.SeedID, func(tender *protocol.StandbyTender) bool { return tender != nil })
+	})
+	testworld.AwaitSessionSince(app, mark, string(leaf.SessionID), namesMiddle)
+
+	fresh := w.ConnectApp()
+	for _, s := range fresh.Initial.Sessions {
+		if s.ID == leaf.SessionID && !namesMiddle(s) {
+			t.Fatalf("a client connecting while %s is on standby sees %s dispatched by session %q, want %s", middle.SessionID, leaf.SessionID, protocol.Deref(s.DispatcherSessionID), middle.SessionID)
+		}
+	}
+	tender := lifeShow(t, cli, middle.SeedID).Seed.Standby.Tender
+	if tender == nil || tender.SessionID != middle.SessionID || protocol.Deref(tender.DispatcherSessionID) != "parent" {
+		t.Fatalf("the standby tender of %s = %+v, want closed session %s under parent", middle.SeedID, tender, middle.SessionID)
+	}
+}

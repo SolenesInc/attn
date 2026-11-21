@@ -60,7 +60,9 @@ func (d *Daemon) sessionTree(ctx context.Context, c command.Caller, profileID st
 		}
 		for _, seed := range onStandby.(*protocol.SeedListResult).Seeds {
 			if seed.Standby != nil && seed.Standby.Tender != nil {
-				nodes = append(nodes, dormantTreeNode(profile.ID, seed, time.Now()))
+				node := dormantTreeNode(profile.ID, seed, time.Now())
+				nodes = append(nodes, node)
+				byID[node.session.ID] = node
 			}
 		}
 	}

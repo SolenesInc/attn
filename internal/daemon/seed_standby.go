@@ -217,14 +217,11 @@ func (g gardenRead) standbyView(seed garden.Seed) *protocol.SeedStandbyView {
 }
 
 func (g gardenRead) standbyTender(tender who.Party) *protocol.StandbyTender {
-	sessionID, isSession := tender.Session()
-	if !isSession || g.parties.sessions[sessionID].open {
+	entry := g.daemon.closedSessionOf(g.parties, tender)
+	if entry == nil {
 		return nil
 	}
-	entry := g.daemon.store.SessionLedgerEntry(sessionID)
-	if entry == nil || protocol.Deref(entry.ClosedAt) == "" {
-		return nil
-	}
+	sessionID := entry.ID
 	view := &protocol.StandbyTender{SessionID: sessionID, Label: entry.Label, Agent: entry.Agent}
 	if dispatcher, dispatched := g.daemon.gardenDispatchersBySession()[sessionID]; dispatched {
 		view.Dispatcher = protocol.Ptr(g.parties.actor(dispatcher))
@@ -233,6 +230,30 @@ func (g gardenRead) standbyTender(tender who.Party) *protocol.StandbyTender {
 		}
 	}
 	return view
+}
+
+func (d *Daemon) closedSessionOf(p parties, party who.Party) *protocol.SessionLedgerEntry {
+	sessionID, isSession := party.Session()
+	if !isSession || p.sessions[sessionID].open {
+		return nil
+	}
+	entry := d.store.SessionLedgerEntry(sessionID)
+	if entry == nil || protocol.Deref(entry.ClosedAt) == "" {
+		return nil
+	}
+	return entry
+}
+
+func (d *Daemon) isStandbyTender(p parties, party who.Party) bool {
+	for seedID, row := range p.standby {
+		if row.Tender != party {
+			continue
+		}
+		if seed, _, err := d.readSeed(seedID); err == nil && standbyOf(seed, &row) != nil {
+			return d.closedSessionOf(p, party) != nil
+		}
+	}
+	return false
 }
 
 func (d *Daemon) publishStandbyViewChanged(addresses ...who.Address) {

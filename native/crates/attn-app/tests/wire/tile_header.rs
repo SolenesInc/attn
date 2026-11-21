@@ -1123,6 +1123,20 @@ fn a_chain_walks_the_whole_tree_from_its_root_with_each_agents_depth() {
     rest(&mut world);
 }
 
+fn session_actor(id: &str) -> ActorView {
+    ActorView {
+        name: format!("s-{id}"),
+        r#ref: format!("session:s-{id}"),
+    }
+}
+
+fn delegate_of_standby_tender(id: &str, label: &str, tender: &str) -> Session {
+    Session {
+        dispatcher: Some(session_actor(tender)),
+        ..delegate_of(id, label, tender)
+    }
+}
+
 fn on_standby(id: &str, tender: &str, label: &str, dispatcher: &str) -> Seed {
     let mut seed = super::garden::seed(id, "Publish the plugin SDK");
     seed.standby = Some(SeedStandbyView {
@@ -1133,7 +1147,7 @@ fn on_standby(id: &str, tender: &str, label: &str, dispatcher: &str) -> Seed {
             label: label.into(),
             agent: "claude".into(),
             dispatcher_session_id: Some(format!("s-{dispatcher}")),
-            ..StandbyTender::default()
+            dispatcher: Some(session_actor(dispatcher)),
         }),
         ..SeedStandbyView::default()
     });
@@ -1204,7 +1218,7 @@ fn a_live_delegate_of_an_agent_on_standby_finds_its_chain_through_the_dormant_ro
     let mut world = start_from(InitialStateMessage {
         desktops: Some(vec![desktop("a")]),
         sessions: Some(vec![
-            delegate_of("a", "release notes", "gone"),
+            delegate_of_standby_tender("a", "release notes", "gone"),
             session("b", "docs", None),
             session("root", "root session", None),
         ]),

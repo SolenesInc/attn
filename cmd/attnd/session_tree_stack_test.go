@@ -232,7 +232,7 @@ func TestSessionTreeKeepsAgentReadsInTheirProfileWithoutConsumingSeedNotificatio
 	t.Fatalf("tree consumed the pending seed notification: %+v", inbox.Items)
 }
 
-func TestSessionTreeShowsAClosedDelegateOnStandbyUnderItsDispatcherWithWhatItWaitsFor(t *testing.T) {
+func TestSessionTreeShowsAClosedDelegateOnStandbyUnderItsDispatcherWithWhatItWaitsForAndItsLiveDelegates(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
@@ -254,6 +254,15 @@ func TestSessionTreeShowsAClosedDelegateOnStandbyUnderItsDispatcherWithWhatItWai
 	started.JSON(t, &result)
 	run := s.Launched(result.SessionID)
 	run.Prompted()
+	fixing := s.Run(testworld.Invocation{Session: result.SessionID, Args: []string{
+		"delegate", "--brief", "Fix the flaky discount test", "--cwd", cwd, "--name", "fixer", "--model", "default",
+	}})
+	if fixing.Code != 0 {
+		t.Fatalf("delegate from the merger exited %d: %s", fixing.Code, fixing.Stderr)
+	}
+	var fixer delegated
+	fixing.JSON(t, &fixer)
+	s.Launched(fixer.SessionID).Prompted()
 	run.Reply("Waiting on CI. <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, result.SessionID, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
 
@@ -280,5 +289,8 @@ func TestSessionTreeShowsAClosedDelegateOnStandbyUnderItsDispatcherWithWhatItWai
 	}
 	if fields := strings.Fields(row); !strings.Contains(row, "claude") || !slices.Contains(fields, "standby") || !strings.HasSuffix(row, "· Merge once CI is green") {
 		t.Errorf("the dormant row is missing its harness, standby state or what it waits for: %s", row)
+	}
+	if !strings.Contains(got.Stdout, row+"\n   └─ "+fixer.SessionID[:8]+"  fixer") {
+		t.Errorf("tree is missing the merger's live delegate under its dormant row:\n%s", got.Stdout)
 	}
 }

@@ -1592,6 +1592,11 @@ func (d *Daemon) decorateSessionDispatcher(session *protocol.Session, dispatcher
 	session.DispatcherSessionID = nil
 	if sessionID, ok := d.sessionOfActor(dispatcher); ok {
 		session.DispatcherSessionID = protocol.Ptr(sessionID)
+		return
+	}
+	party, isParty := dispatcher.Party()
+	if sessionID, isSession := party.Session(); isParty && isSession && d.isStandbyTender(parties, party) {
+		session.DispatcherSessionID = protocol.Ptr(sessionID)
 	}
 }
 

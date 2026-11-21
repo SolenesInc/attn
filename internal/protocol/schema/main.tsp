@@ -221,7 +221,7 @@ model Session {
   crew_member_name?: string;    // That member's name, present with crew_member.
   delegated_from_chief?: boolean; // True when this session was delegated from the chief of staff (recorded by the Garden dispatch)
   seed_id?: string;             // The seed this session reports to: the crown a delegation was dispatched at, or the seed planted for it. Read from the session's dispatch record at broadcast, never stored on the session — the record is the single answer to what a session reports to. Absent for a session no delegation bound.
-  dispatcher_session_id?: SessionID; // The live session for this session's dispatcher, resolved from its dispatch record at broadcast and never stored on the session. Absent when nothing resolves.
+  dispatcher_session_id?: SessionID; // The session for this session's dispatcher, resolved from its dispatch record at broadcast and never stored on the session: the live session, or the closed session while that dispatcher is a standby tender. Absent when nothing resolves.
   dispatcher?: ActorView;       // Who dispatched this session, read from the dispatch record; present even when no live session resolves.
   delegation_role?: SessionDelegationRole;
   turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief); never stored, and never recomputed by a client.
