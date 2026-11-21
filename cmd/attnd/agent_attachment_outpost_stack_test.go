@@ -42,4 +42,25 @@ func TestAnOutpostSessionDownloadsAFileTheUserAttachedOnTheHomeOntoTheOutpost(t 
 	if err != nil || !bytes.Equal(saved, data) {
 		t.Fatalf("the outpost's copy differs from the attached file: %d bytes, %v", len(saved), err)
 	}
+
+	side := testworld.Request(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
+	if !side.Success {
+		t.Fatalf("create Side: %+v", side)
+	}
+	if err := home.InjectSession("stranger", "stranger", home.Path("stranger"), protocol.SessionAgentClaude, side.Profile.ID); err != nil {
+		t.Fatalf("register stranger: %v", err)
+	}
+	if selected := testworld.Request(app, protocol.ProfileSelectMessage{Cmd: protocol.CmdProfileSelect, ProfileID: side.Profile.ID, RequestID: "select-side"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "select-side" }); selected.Error != nil {
+		t.Fatalf("select Side: %s", *selected.Error)
+	}
+	foreign, foreignAttachment := uuid.NewString(), uuid.NewString()
+	uploadQuickCaptureChunks(t, app, foreign, foreignAttachment, data)
+	quickCaptureCall(t, app, protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: foreign, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID("stranger"))}, Content: "the other profile's banner", AttachmentIds: []string{foreignAttachment}})
+
+	for _, args := range [][]string{{"--out", "mine.png"}, {"--out", "named.png", "--session", "stranger"}} {
+		got := outpost.Run(testworld.Invocation{Args: append([]string{"agent", "attachment", foreign, foreignAttachment}, args...), Terminal: pair.App.Terminal(id), Dir: outpost.Path("shell")})
+		if _, err := os.Stat(outpost.Path("shell") + "/" + args[1]); got.Code == 0 || err == nil {
+			t.Errorf("the outpost session fetched another profile's attachment with %q: exit %d, %s", args, got.Code, got.Stderr)
+		}
+	}
 }

@@ -74,19 +74,31 @@ func (d *Daemon) serveRunCommand(ctx context.Context, conn net.Conn, msg *protoc
 }
 
 func (d *Daemon) callerFromFrame(ctx context.Context, msg *protocol.RunCommandMessage) (command.Caller, error) {
-	profile := strings.TrimSpace(protocol.Deref(msg.ProfileID))
+	requested := strings.TrimSpace(protocol.Deref(msg.ProfileID))
 	terminal := protocol.TerminalID(strings.TrimSpace(string(protocol.Deref(msg.CallerID))))
-	if session := protocol.TrimID(protocol.Deref(msg.SessionID)); session != "" {
-		if terminal != "" && d.inAnotherProfile(d.callerSession(ctx, terminal), session) {
-			return command.Caller{}, protocol.Refuse(protocol.RefusalNotFound, "unknown session %s", session)
+	var asking command.Caller
+	if terminal != "" {
+		if session := d.callerSession(ctx, terminal); session != "" {
+			profile, known := d.knownSessionProfile(session)
+			if !known {
+				return command.Caller{}, unknownFramedSession(session)
+			}
+			asking = command.Caller{Session: session, Profile: profile}
 		}
-		return d.framedSessionCaller(session, profile)
 	}
-	if terminal == "" {
-		return command.Caller{Profile: profile}, nil
+	if named := protocol.TrimID(protocol.Deref(msg.SessionID)); named != "" {
+		session, profile, err := d.resolveFramedSession(named, asking.Profile)
+		if err != nil {
+			return command.Caller{}, err
+		}
+		return d.sessionCallerFor(session, profile, requested)
 	}
-	if session := d.callerSession(ctx, terminal); session != "" {
-		return d.framedSessionCaller(session, profile)
+	if asking.Session != "" {
+		return d.sessionCallerFor(asking.Session, asking.Profile, requested)
+	}
+	profile, err := d.requestedProfileID(requested)
+	if err != nil {
+		return command.Caller{}, err
 	}
 	if threadProfile, _, ok := harness.ParseCodexThreadTerminal(terminal); ok && profile == "" {
 		profile = threadProfile
@@ -94,27 +106,53 @@ func (d *Daemon) callerFromFrame(ctx context.Context, msg *protocol.RunCommandMe
 	return command.Caller{Profile: profile, Terminal: terminal}, nil
 }
 
-func (d *Daemon) framedSessionCaller(session protocol.SessionID, requested string) (command.Caller, error) {
-	c := d.sessionCaller(session)
-	if c.Profile == "" {
-		c.Profile = requested
-		return c, nil
-	}
+func (d *Daemon) sessionCallerFor(session protocol.SessionID, profile, requested string) (command.Caller, error) {
 	if requested != "" {
 		if _, err := d.resolveGardenProfile(session, requested, ""); err != nil {
 			return command.Caller{}, err
 		}
 	}
-	return c, nil
+	return command.Caller{Session: session, Profile: profile}, nil
 }
 
-func (d *Daemon) inAnotherProfile(asking, named protocol.SessionID) bool {
-	if asking == "" || asking == named {
-		return false
+func (d *Daemon) resolveFramedSession(named protocol.SessionID, scope string) (protocol.SessionID, string, error) {
+	if profile, known := d.knownSessionProfile(named); known && (scope == "" || profile == scope) {
+		return named, profile, nil
 	}
-	askingProfile, askingErr := d.store.SessionProfileID(asking)
-	namedProfile, namedErr := d.store.SessionProfileID(named)
-	return askingErr == nil && namedErr == nil && askingProfile != namedProfile
+	session, code := d.resolveSessionReference(string(named), scope)
+	switch {
+	case session != nil:
+		return session.ID, session.ProfileID, nil
+	case code == "ambiguous_session":
+		return "", "", command.Refuse("ambiguous_session", "session %s matches more than one session; give more of the id", named)
+	default:
+		return "", "", unknownFramedSession(named)
+	}
+}
+
+func (d *Daemon) knownSessionProfile(id protocol.SessionID) (string, bool) {
+	if session := d.store.Get(id); session != nil {
+		return session.ProfileID, true
+	}
+	if entry := d.store.SessionLedgerEntry(id); entry != nil {
+		return entry.ProfileID, true
+	}
+	return "", false
+}
+
+func unknownFramedSession(id protocol.SessionID) error {
+	return command.Refuse(command.CodeSessionNotFound, "unknown session %s", id)
+}
+
+func (d *Daemon) requestedProfileID(requested string) (string, error) {
+	if requested == "" || d.enrollmentStatus().IsOutpost() {
+		return requested, nil
+	}
+	profile, err := d.resolveGardenProfile("", requested, "")
+	if err != nil {
+		return "", err
+	}
+	return profile.ID, nil
 }
 
 func (d *Daemon) runCommand(ctx context.Context, c command.Caller, name string, args json.RawMessage) (protocol.Response, func()) {

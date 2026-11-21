@@ -54,11 +54,8 @@ func (d *Daemon) mailboxSession(c command.Caller) (*protocol.Session, error) {
 	if c.Session == "" {
 		return nil, command.Refuse(command.CodeNoSession, "no session identity: run this inside an attn session or pass {session} <id>")
 	}
-	session, code := d.resolveSessionByIDOrPrefix(string(c.Session))
+	session := d.store.Get(c.Session)
 	if session == nil {
-		if code == "ambiguous_session" {
-			return nil, command.Refuse("ambiguous_session", "the session %q matches more than one session; give more of the id", c.Session)
-		}
 		return nil, command.Refuse(command.CodeSessionNotFound, "the session %q is not on this daemon", c.Session)
 	}
 	return session, nil

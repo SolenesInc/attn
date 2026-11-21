@@ -58,9 +58,9 @@ func (d *Daemon) runAgentClose(ctx context.Context, c command.Caller, a command.
 }
 
 func (d *Daemon) beginAgentClose(msg *agentCloseRequest) (*protocol.AgentCloseResult, sessionCloseInFlight, *agentCloseRefusal) {
-	caller, errCode := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID))
+	caller := d.store.Get(msg.SourceSessionID)
 	if caller == nil {
-		return nil, sessionCloseInFlight{}, &agentCloseRefusal{"sender_" + errCode, fmt.Sprintf(
+		return nil, sessionCloseInFlight{}, &agentCloseRefusal{"sender_session_not_found", fmt.Sprintf(
 			"the caller %q is not a session on this daemon; a close is attributed to the session that asked for it", protocol.TrimID(msg.SourceSessionID))}
 	}
 

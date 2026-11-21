@@ -20,9 +20,9 @@ func (d *Daemon) runAgentReload(ctx context.Context, c command.Caller, a command
 	if c.Session == "" {
 		return nil, command.Refuse(command.CodeNoSender, "no caller; run inside a session or pass --source-session <id>")
 	}
-	caller, code := d.resolveSessionByIDOrPrefix(string(c.Session))
+	caller := d.store.Get(c.Session)
 	if caller == nil {
-		return nil, senderRefusal(code, string(c.Session), "caller")
+		return nil, senderRefusal(string(c.Session), "caller")
 	}
 	targets := slices.Clone(a.Targets)
 	if a.All {

@@ -45,9 +45,9 @@ func (d *Daemon) runAgentMsg(ctx context.Context, c command.Caller, a command.Ag
 	if c.Session == "" {
 		return nil, command.Refuse(command.CodeNoSender, "no sender: this shell is not an attn session, so pass --source-session <id> (`{attn agent list}` names the sessions)")
 	}
-	sender, errCode := d.resolveSessionByIDOrPrefix(string(c.Session))
+	sender := d.store.Get(c.Session)
 	if sender == nil {
-		return nil, senderRefusal(errCode, string(c.Session), "sender")
+		return nil, senderRefusal(string(c.Session), "sender")
 	}
 	msg := agentMsgTarget(a.Target)
 
@@ -160,10 +160,7 @@ func agentMsgTarget(target string) agentMsgTargets {
 	return agentMsgTargets{TargetSessionID: target}
 }
 
-func senderRefusal(code, sender, role string) *command.Refusal {
-	if code == "ambiguous_session" {
-		return command.Refuse(role+"_ambiguous_session", "the %s %q matches more than one session; give more of the id", role, sender)
-	}
+func senderRefusal(sender, role string) *command.Refusal {
 	return command.Refuse(role+"_session_not_found", "the %s %q is not a session on this daemon", role, sender)
 }
 
