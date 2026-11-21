@@ -4304,6 +4304,27 @@ model Ask {
   created_at: string;
   re?: AskThread;
   reply?: AskReply;
+  // What the user has written for the open ask and not sent, as the native app
+  // last saved it. It goes when the ask is answered or closed.
+  draft?: AskDraft;
+  // The files the draft names, from the ask's own attachments. A file that is
+  // not ready never finished uploading.
+  draft_files?: AskDraftFile[];
+}
+
+// An unsent answer, saved whole. attachments name the note's files, uploaded
+// with attachment_put and owned by the ask. A save whose generation is not past
+// the stored one is refused.
+model AskDraft {
+  generation: safeint;
+  answers: AskAnswer[];
+  note?: string;
+  attachments?: string[];
+}
+
+model AskDraftFile {
+  attachment: Attachment;
+  ready: boolean;
 }
 
 // The earlier ask a follow-up ask follows, copied when the follow-up opens,
@@ -4483,6 +4504,24 @@ model AskFollowUpResultMessage {
   ask_id: string;
   success: boolean;
   error?: string;
+}
+
+model AskDraftSaveMessage {
+  cmd: "ask_draft_save";
+  request_id: string;
+  ask_id: string;
+  draft: AskDraft;
+}
+
+// stale says the daemon holds a draft at generation or later, and kept it.
+model AskDraftSaveResultMessage {
+  event: "ask_draft_save_result";
+  request_id: string;
+  ask_id: string;
+  success: boolean;
+  error?: string;
+  stale?: boolean;
+  generation: safeint;
 }
 
 // The profile's open asks, oldest first, then the asks the user answered in the
@@ -8937,6 +8976,7 @@ alias DaemonEvent =
   | CommandErrorMessage
   | AskAnswerResultMessage
   | AskFollowUpResultMessage
+  | AskDraftSaveResultMessage
   | AskImageResultMessage
   | AskSeedMentionsResultMessage
   | AsksUpdatedMessage

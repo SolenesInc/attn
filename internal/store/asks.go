@@ -20,6 +20,14 @@ var (
 	ErrAskSeedClosed = errors.New("the seed the ask is about is no longer open")
 )
 
+type StaleAskDraftError struct {
+	Generation int
+}
+
+func (e *StaleAskDraftError) Error() string {
+	return fmt.Sprintf("the ask's draft is already at generation %d", e.Generation)
+}
+
 type Ask struct {
 	ID         string
 	SessionID  protocol.SessionID
@@ -31,6 +39,7 @@ type Ask struct {
 	Re         *protocol.AskThread
 	Amendments []AskAmendment
 	Reply      *protocol.AskReply
+	Draft      *protocol.AskDraft
 }
 
 type AskAmendment struct {
@@ -40,7 +49,7 @@ type AskAmendment struct {
 
 const (
 	askedColumns = "id, session_id, address, subject, markdown, base_dir, created_at, re_ask_id, re_subject, re_answer, re_answered_at"
-	askColumns   = askedColumns + ", answered_at, answers, note"
+	askColumns   = askedColumns + ", answered_at, answers, note, COALESCE((SELECT draft FROM ask_drafts WHERE ask_id = asks.id), '')"
 )
 
 const openAsk = "answered_at = ''"
@@ -163,6 +172,43 @@ func (s *Store) AmendAsk(id, markdown string, at time.Time) error {
 		markdown, at.UTC().Format(sortableTimeFormat), id))
 }
 
+func (s *Store) SaveAskDraft(id string, draft protocol.AskDraft, at time.Time) error {
+	encoded, err := json.Marshal(draft)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return ErrAskNotOpen
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var open int
+	if err := tx.QueryRow("SELECT count(*) FROM asks WHERE id = ? AND "+openAsk, id).Scan(&open); err != nil {
+		return err
+	}
+	if open == 0 {
+		return ErrAskNotOpen
+	}
+	var stored int
+	err = tx.QueryRow("SELECT generation FROM ask_drafts WHERE ask_id = ?", id).Scan(&stored)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if err == nil && draft.Generation <= stored {
+		return &StaleAskDraftError{Generation: stored}
+	}
+	if _, err := tx.Exec("INSERT INTO ask_drafts (ask_id, generation, draft, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(ask_id) DO UPDATE SET generation = excluded.generation, draft = excluded.draft, updated_at = excluded.updated_at",
+		id, draft.Generation, string(encoded), at.UTC().Format(sortableTimeFormat)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) GetOpenAsk(id string) (Ask, error) {
 	a, err := s.getAsk(id, " AND "+openAsk)
 	if errors.Is(err, ErrAskGone) {
@@ -241,6 +287,9 @@ func replyToAsk(tx *sql.Tx, profileID, id string, reply protocol.AskReply, at ti
 	}
 	if err := expectOpenAsk(tx.Exec("UPDATE asks SET answered_at = ?, answers = ?, note = ? WHERE id = ? AND "+openAsk,
 		at.UTC().Format(sortableTimeFormat), string(answers), protocol.Deref(reply.Note), id)); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM ask_drafts WHERE ask_id = ?", id); err != nil {
 		return err
 	}
 	ids := make([]string, len(reply.Attachments))
@@ -335,10 +384,16 @@ func deleteAsks(db rowsQuerier, query string, args ...any) ([]string, error) {
 
 func scanAsk(row interface{ Scan(...any) error }) (Ask, error) {
 	var a Ask
-	var address, reAskID, reSubject, reAnswer, reAnsweredAt, answeredAt, answers, note string
+	var address, reAskID, reSubject, reAnswer, reAnsweredAt, answeredAt, answers, note, draft string
 	if err := row.Scan(&a.ID, &a.SessionID, &address, &a.Subject, &a.Markdown, &a.BaseDir, &a.CreatedAt,
-		&reAskID, &reSubject, &reAnswer, &reAnsweredAt, &answeredAt, &answers, &note); err != nil {
+		&reAskID, &reSubject, &reAnswer, &reAnsweredAt, &answeredAt, &answers, &note, &draft); err != nil {
 		return Ask{}, err
+	}
+	if draft != "" {
+		a.Draft = &protocol.AskDraft{}
+		if err := json.Unmarshal([]byte(draft), a.Draft); err != nil {
+			return Ask{}, fmt.Errorf("ask %s draft: %w", a.ID, err)
+		}
 	}
 	if reAskID != "" {
 		a.Re = &protocol.AskThread{AskID: reAskID, Subject: nonEmptyPtr(reSubject), Answer: nonEmptyPtr(reAnswer), AnsweredAt: nonEmptyPtr(reAnsweredAt)}

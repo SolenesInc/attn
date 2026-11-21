@@ -486,6 +486,59 @@ func (d *Daemon) commitAnswer(profileID string, stored store.Ask, wire protocol.
 	return nil
 }
 
+func (d *Daemon) handleAskDraftSave(client *wsClient, msg *protocol.AskDraftSaveMessage) {
+	result := protocol.AskDraftSaveResultMessage{Event: protocol.EventAskDraftSaveResult, RequestID: msg.RequestID, AskID: msg.AskID, Generation: msg.Draft.Generation}
+	var stale *store.StaleAskDraftError
+	switch err := d.saveAskDraft(msg, client.selectedProfile()); {
+	case errors.As(err, &stale):
+		result.Stale, result.Generation = protocol.Ptr(true), stale.Generation
+	case err != nil:
+		result.Error = protocol.Ptr(err.Error())
+	default:
+		result.Success = true
+	}
+	d.sendToClient(client, result)
+}
+
+func (d *Daemon) saveAskDraft(msg *protocol.AskDraftSaveMessage, profileID string) error {
+	stored, err := d.store.GetOpenAsk(strings.TrimSpace(msg.AskID))
+	if errors.Is(err, store.ErrAskNotOpen) {
+		return errAskGone
+	}
+	if err != nil {
+		return err
+	}
+	shown, err := d.readAsk(stored)
+	if err != nil {
+		return err
+	}
+	if !askShownIn(profileID, shown.profileID) {
+		return errAskGone
+	}
+	err = d.store.SaveAskDraft(stored.ID, msg.Draft, d.clock.Now())
+	if errors.Is(err, store.ErrAskNotOpen) {
+		return errAskGone
+	}
+	return err
+}
+
+func (d *Daemon) draftFiles(profileID, askID string, draft *protocol.AskDraft) []protocol.AskDraftFile {
+	owner := protocol.AttachmentOwner{Kind: protocol.AttachmentOwnerKindAsk, ID: askID}
+	var files []protocol.AskDraftFile
+	for _, id := range draft.Attachments {
+		a, err := d.store.Attachment(id)
+		if err != nil {
+			d.logf("asks: reading file %s of the draft of %s: %v", id, askID, err)
+			continue
+		}
+		if a == nil || a.ProfileID != profileID || a.Owner != owner || (a.State != store.AttachmentStaged && a.State != store.AttachmentReady) {
+			continue
+		}
+		files = append(files, protocol.AskDraftFile{Attachment: a.Attachment, Ready: a.State == store.AttachmentReady})
+	}
+	return files
+}
+
 func (d *Daemon) answerFiles(profileID, askID string, ids []string) ([]protocol.Attachment, error) {
 	owner := protocol.AttachmentOwner{Kind: protocol.AttachmentOwnerKindAsk, ID: askID}
 	files := make([]protocol.Attachment, 0, len(ids))
@@ -799,7 +852,7 @@ func (d *Daemon) projectAsks() {
 			data, ok := snapshots[profileID]
 			if !ok {
 				var err error
-				data, err = json.Marshal(asksSnapshot(profileID, asks))
+				data, err = json.Marshal(d.asksSnapshot(profileID, asks))
 				if err != nil {
 					d.logf("asks snapshot: %v", err)
 					return
@@ -811,12 +864,17 @@ func (d *Daemon) projectAsks() {
 	})
 }
 
-func asksSnapshot(profileID string, asks []shownAsk) *protocol.AsksUpdatedMessage {
+func (d *Daemon) asksSnapshot(profileID string, asks []shownAsk) *protocol.AsksUpdatedMessage {
 	message := &protocol.AsksUpdatedMessage{Event: protocol.EventAsksUpdated, ProfileID: profileID, Asks: []protocol.Ask{}}
 	for _, a := range asks {
-		if askShownIn(profileID, a.profileID) {
-			message.Asks = append(message.Asks, a.wire)
+		if !askShownIn(profileID, a.profileID) {
+			continue
 		}
+		wire := a.wire
+		if draft := a.stored.Draft; draft != nil && a.stored.Reply == nil {
+			wire.Draft, wire.DraftFiles = draft, d.draftFiles(profileID, a.stored.ID, draft)
+		}
+		message.Asks = append(message.Asks, wire)
 	}
 	return message
 }

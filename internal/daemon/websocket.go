@@ -554,7 +554,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Settings:               d.settingsSnapshot(d.profileForClient(client)),
 		Warnings:               d.getWarnings(),
 		Crew:                   state.Crew,
-		Asks:                   asksSnapshot(client.selectedProfile(), d.asks()).Asks,
+		Asks:                   d.asksSnapshot(client.selectedProfile(), d.asks()).Asks,
 		Vents:                  d.ventsSnapshot(client.selectedProfile()).Vents,
 		SharedCodex:            d.codexShared().wireState(client.selectedProfile()),
 		Outposts:               d.outpostsUpdatedMessage().Outposts,
@@ -1190,6 +1190,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 			}
 		}
 		d.handleAskFollowUp(client, followUp)
+	case protocol.CmdAskDraftSave:
+		d.handleAskDraftSave(client, msg.(*protocol.AskDraftSaveMessage))
 	case protocol.CmdSetVentDismissed:
 		d.handleSetVentDismissed(client, msg.(*protocol.SetVentDismissedMessage))
 	case protocol.CmdPlantVentSeed:

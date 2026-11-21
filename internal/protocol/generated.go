@@ -542,6 +542,12 @@ type Ask struct {
 	// CrewMember corresponds to the JSON schema field "crew_member".
 	CrewMember *string `json:"crew_member,omitempty,omitzero"`
 
+	// Draft corresponds to the JSON schema field "draft".
+	Draft *AskDraft `json:"draft,omitempty,omitzero"`
+
+	// DraftFiles corresponds to the JSON schema field "draft_files".
+	DraftFiles []AskDraftFile `json:"draft_files,omitempty,omitzero"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
@@ -666,6 +672,65 @@ type AskDefault struct {
 
 	// DueAt corresponds to the JSON schema field "due_at".
 	DueAt string `json:"due_at"`
+}
+
+type AskDraft struct {
+	// Answers corresponds to the JSON schema field "answers".
+	Answers []AskAnswer `json:"answers"`
+
+	// Attachments corresponds to the JSON schema field "attachments".
+	Attachments []string `json:"attachments,omitempty,omitzero"`
+
+	// Generation corresponds to the JSON schema field "generation".
+	Generation int `json:"generation"`
+
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
+}
+
+type AskDraftFile struct {
+	// Attachment corresponds to the JSON schema field "attachment".
+	Attachment Attachment `json:"attachment"`
+
+	// Ready corresponds to the JSON schema field "ready".
+	Ready bool `json:"ready"`
+}
+
+type AskDraftSaveMessage struct {
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Draft corresponds to the JSON schema field "draft".
+	Draft AskDraft `json:"draft"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type AskDraftSaveResultMessage struct {
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Generation corresponds to the JSON schema field "generation".
+	Generation int `json:"generation"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Stale corresponds to the JSON schema field "stale".
+	Stale *bool `json:"stale,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type AskFollowUpMessage struct {

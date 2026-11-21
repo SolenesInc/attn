@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "2a3b971768f2";
+pub const PROTOCOL_VERSION: &str = "4c10a198b659";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -393,6 +393,10 @@ pub struct Ask {
     pub created_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crew_member: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub draft: Option<AskDraft>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub draft_files: Option<Vec<AskDraftFile>>,
     pub id: String,
     #[serde(deserialize_with = "null_as_default")]
     pub parts: Vec<AskPart>,
@@ -498,6 +502,60 @@ pub struct AskCloseResult {
 pub struct AskDefault {
     pub choice: String,
     pub due_at: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AskDraft {
+    #[serde(deserialize_with = "null_as_default")]
+    pub answers: Vec<AskAnswer>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachments: Option<Vec<String>>,
+    pub generation: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AskDraftFile {
+    pub attachment: Attachment,
+    pub ready: bool,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AskDraftSaveMessage {
+    pub ask_id: String,
+    pub cmd: String,
+    pub draft: AskDraft,
+    pub request_id: String,
+}
+
+impl AskDraftSaveMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "ask_draft_save".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AskDraftSaveResultMessage {
+    pub ask_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    pub generation: i64,
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stale: Option<bool>,
+    pub success: bool,
+}
+
+impl AskDraftSaveResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "ask_draft_save_result".to_string(),
+            ..Self::default()
+        }
+    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AskFollowUpMessage {
