@@ -79,7 +79,15 @@ The agent receives a message headed "Markdown Annotations" that gives the file's
 <details>
 <summary>Why wasn't my batch sent?</summary>
 
-When the agent is waiting on an approval prompt in its terminal, Attn does not send: the Enter that submits the batch would answer the prompt. The batch stays as it is, and the panel or tile header says why. Answer the prompt, then send again. A [Sigma](using-sigma.md) session takes the batch during an approval without answering it. The agent reads it after you answer, or at once when only a subagent waits on the approval.
+The agent was waiting on an approval prompt. During an approval, Attn sends a batch only to an agent that takes it without answering the prompt, and holds it everywhere else. A held batch stays as it is, and the panel or tile header says why. Answer the prompt, then send again.
+
+Attn sends the batch during an approval to:
+
+- Claude Code with the [Claude mod](using-claude-mod.md) connected, when Claude asked for approval during a turn. The mod takes the batch, so it leaves the panel or tile as sent. Claude reads it after the tool call you approve. If you refuse, the batch starts a new turn.
+- A [Sigma](using-sigma.md) session, always. The agent reads the batch after you answer, or at once when only a subagent waits on the approval.
+- A [harness plugin](writing-harness-plugins.md) that declares `safeDuringQuestion`, when the prompt came during a turn.
+
+Attn holds the batch for Claude Code when the prompt shows outside a turn or the mod is not connected, for Codex, and for other harness plugins. Typed into a terminal, the Enter that submits the batch would answer the prompt.
 </details>
 
 <details>

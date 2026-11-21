@@ -81,7 +81,7 @@ await client.connect();
 | `deliver` | `message_delivery` | hands annotations, messages and compaction notices to the plugin instead of typing them |
 | `compact` | `compaction` | compacts the conversation before a session closes itself with `--compact` |
 | `attributedInput: true` | `attributed_input` | tells `deliver` who is speaking and which conversation it is for |
-| `safeDuringQuestion: true` | `safe_during_question` | delivers text while a permission question is open, because your `deliver` cannot answer it |
+| `safeDuringQuestion: true` | `safe_during_question` | delivers text while a permission question that came during a turn is open, because your `deliver` cannot answer it |
 | `yolo`, `initialPrompt`, `modelPin`, `effortPin`, `launchInstructions` | the same names, in snake case | passes `yolo`, `initial_prompt` (needed to delegate to the harness), `model`, `effort` and `instructions` to `spawn` and `resume` |
 | `stateReporting` | `state_reporting` | takes the launch's state only from `run.state` and stops inferring it from the terminal, so report every start and end of a turn |
 | `pullRequestReporting` | `pull_request_reporting` | with `launchInstructions`, leaves out the instruction that tells the agent to report its own pull requests |
