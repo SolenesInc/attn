@@ -1,6 +1,8 @@
 package daemon_test
 
 import (
+	"database/sql"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -125,5 +127,44 @@ func TestAClosedAskTakesNoDraft(t *testing.T) {
 	draft.Generation = 2
 	if refused := saveDraft(app, asked.ID, draft); refused.Success || refused.Error == nil {
 		t.Fatalf("a draft saved for a closed ask = %+v, want it refused", refused)
+	}
+}
+
+func TestADraftThisBuildCannotReadLeavesItsAskReadableAndWritable(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(asker)
+	seed := plantSeedAs(t, cli, asker, "Pick the cache store")
+	moveDelegationSeed(t, cli, asker, seed, "tend", "")
+	asked, err := cli.AskOpen(protocol.SessionID(asker), seed, cacheAsk, "", w.Path("shop"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved := saveDraft(app, asked.ID, protocol.AskDraft{Generation: 3, Note: protocol.Ptr("kept for later")}); !saved.Success {
+		t.Fatalf("saving the draft = %+v", saved)
+	}
+
+	w.stop()
+	db, err := sql.Open("sqlite3", filepath.Join(w.Dir, "attn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("UPDATE ask_drafts SET draft = ? WHERE ask_id = ?", `{"generation":3,"answers":{"q1":{"files":["f-1"]}}}`, asked.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	w.start()
+
+	app = w.App()
+	shown := shownAsk(app.Initial.Asks, asked.ID)
+	if shown == nil || shown.Draft != nil {
+		t.Fatalf("after a later build's draft the app reads %+v, want the ask without a draft", shown)
+	}
+	if again := saveDraft(app, asked.ID, protocol.AskDraft{Generation: 4, Note: protocol.Ptr("written again")}); !again.Success {
+		t.Fatalf("saving over the unreadable draft = %+v", again)
 	}
 }

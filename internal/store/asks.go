@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/victorarias/attn/internal/garden"
@@ -392,7 +393,8 @@ func scanAsk(row interface{ Scan(...any) error }) (Ask, error) {
 	if draft != "" {
 		a.Draft = &protocol.AskDraft{}
 		if err := json.Unmarshal([]byte(draft), a.Draft); err != nil {
-			return Ask{}, fmt.Errorf("ask %s draft: %w", a.ID, err)
+			log.Printf("[store] ask %s: its draft does not read, so it shows without one: %v", a.ID, err)
+			a.Draft = nil
 		}
 	}
 	if reAskID != "" {
