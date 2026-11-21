@@ -5,7 +5,9 @@
 # names something on the caller's machine (path, destination, evidence or
 # commit): the CLI resolves it in its working directory, and the daemon that
 # launched the agent resolves a tool call's in the folder the session started
-# in. `cli_only` keeps an arg out of the tool.
+# in. `cli_only` keeps an arg out of the tool. `piped` marks a required arg
+# that the CLI reads from stdin when its flag is omitted, so the CLI's usage
+# shows it in brackets while the tool's schema still requires it.
 # A refusal's message or fix, here or in Go, names an arg as {name} and another
 # command as {attn seed tend <id> --for <name>}: the CLI prints the flag and the
 # command line, and a tool caller reads the argument name and the tool with its

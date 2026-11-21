@@ -313,7 +313,7 @@ func (g *generator) usageForm(verb string, args []catalog.Arg) string {
 		if !ok {
 			continue
 		}
-		optional := !a.Required || a.File
+		optional := !a.Required || a.File || a.Piped
 		if strings.Contains(a.CLI, "|") {
 			if a.Required {
 				text = "(" + text + ")"

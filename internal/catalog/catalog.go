@@ -138,6 +138,7 @@ type Arg struct {
 	CLI         string   `yaml:"cli"`
 	Stdin       bool     `yaml:"stdin"`
 	File        bool     `yaml:"file"`
+	Piped       bool     `yaml:"piped"`
 	Local       Local    `yaml:"local"`
 	LocalWhen   string   `yaml:"local_when"`
 	CLIOnly     bool     `yaml:"cli_only"`

@@ -270,7 +270,7 @@ func (g *generator) rustTable(group string) (string, error) {
 				source = "Source::Stdin"
 			}
 			fmt.Fprintf(&out, "            Arg { name: %s, cli: %s, value: %s, source: %s, required: %v, list: %v },\n",
-				rustString(a.Name), g.rustCLI(cmd, a), kinds[g.valueKind(a)], source, a.Required && a.Unless == "", a.List)
+				rustString(a.Name), g.rustCLI(cmd, a), kinds[g.valueKind(a)], source, a.Required && a.Unless == "" && !a.Piped, a.List)
 		}
 		out.WriteString("        ],\n    },\n")
 	}

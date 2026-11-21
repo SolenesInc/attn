@@ -83,6 +83,16 @@ func TestAnAgentAsksAboutASeedItTends(t *testing.T) {
 	refused(t, inSession(question, "ask", "--seed", untended.ID), 1, "ask: nobody is tending "+untended.ID)
 }
 
+func TestAskHelpShowsTheFileFlagAsOptionalBecauseTheMarkdownMayBePiped(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	help := s.Attn("ask", "--help")
+	if help.Code != 0 || !strings.Contains(help.Stdout, "attn ask [--file <path>] [--subject <text>]") {
+		t.Errorf("attn ask --help exited %d and printed %q, want a usage line with [--file <path>] in brackets", help.Code, help.Stdout)
+	}
+}
+
 func enableAsks(t *testing.T, app *testworld.Peer) {
 	t.Helper()
 	enabled := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "asks_enabled", Value: "true", RequestID: protocol.Ptr("asks")},

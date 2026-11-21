@@ -14,7 +14,7 @@ pub const COMMANDS: &[Command] = &[
         runs_without_daemon: false,
         usage: &[],
         args: &[
-            Arg { name: "markdown", cli: Cli::Flag("file"), value: Value::Text, source: Source::Given, required: true, list: false },
+            Arg { name: "markdown", cli: Cli::Flag("file"), value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "subject", cli: Cli::Flag("subject"), value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "seed", cli: Cli::Flag("seed"), value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "base_dir", cli: Cli::Internal, value: Value::Text, source: Source::Given, required: false, list: false },
