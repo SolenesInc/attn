@@ -517,6 +517,7 @@ fn open_view(id: &SurfaceId, open: &Open, notice_actions: f32, t: &Tokens) -> El
         .top(top)
         .article(key(id, "scroll"), title)
         .keeps_room(super::editor::room_for_whole_lines(3.0))
+        .keeps_at_least(super::editor::room_for_whole_lines(1.0))
         .notices(conflict(id, open, notice_actions, t))
         .notices(save_error(open))
         .push(Block::custom(key(id, "editor.block"), editor))

@@ -604,17 +604,7 @@ fn a_failed_save_keeps_its_actions_whole_then_three_lines_in_the_smallest_window
             [y, h],
             [wy, wh]
         );
-        let whole = screen
-            .descendants(scroll)
-            .into_iter()
-            .filter_map(|n| n.key)
-            .filter(|key| key.starts_with(&format!("{document}.editor.line.")))
-            .filter(|key| {
-                screen
-                    .bounds(Target::key(key))
-                    .is_some_and(|[_, top, _, lh]| top >= y - 0.5 && top + lh <= y + h + 0.5)
-            })
-            .count();
+        let whole = whole_lines_in_view(&world, document);
         let alert = alert(document, &failure);
         assert!(
             whole >= 3,
@@ -679,6 +669,146 @@ fn in_the_smallest_window_a_failed_save_keeps_its_actions_whole_then_a_tiles_not
         "notebook.tile.n",
         tile,
     );
+}
+
+/// How many of the note's lines show whole in its view.
+fn whole_lines_in_view(world: &World, document: &str) -> usize {
+    let screen = world.screen();
+    let scroll = Target::key(format!("{document}.scroll"));
+    let [_, y, _, h] = screen.bounds(scroll.clone()).unwrap();
+    screen
+        .descendants(scroll)
+        .into_iter()
+        .filter_map(|n| n.key)
+        .filter(|key| key.starts_with(&format!("{document}.editor.line.")))
+        .filter(|key| {
+            screen
+                .bounds(Target::key(key))
+                .is_some_and(|[_, top, _, lh]| top >= y - 0.5 && top + lh <= y + h + 0.5)
+        })
+        .count()
+}
+
+/// A write error too long for its band reads to its end from the keyboard: from Find in note,
+/// Shift-Tab reaches its sentence, and Page Down scrolls the sentence, the note staying where it
+/// was.
+fn a_long_write_error_reads_to_its_end_from_the_keyboard<W>(
+    document: &str,
+    world_of: fn(Window) -> W,
+) where
+    W: FnOnce(&Disk) -> World,
+{
+    let (disk, mut world, line) = typed_far_down(world_of(SMALLEST), document);
+    let held = world.daemon.sent_of("fs_write").pop().unwrap();
+    fail(&world.daemon, &held, &disk, &NESTED_PATH);
+    world.settle();
+    let editor = format!("{document}.editor");
+    let note = Target::key(format!("{document}.scroll"));
+    let (top, scrolled, selection) = (
+        top_of(&world, &line),
+        world.screen().scrolled(note.clone()),
+        world.screen().get(Target::key(&editor)).selection,
+    );
+    let sentence = "notebook.save-error.sentence";
+    world.gesture(|d| d.press("mod+f"));
+    let mut path = vec![keyboard_at(&world)];
+    while path.len() < 12 && path.last().map(String::as_str) != Some(sentence) {
+        world.gesture(|d| d.press("shift+tab"));
+        path.push(keyboard_at(&world));
+    }
+    assert_eq!(
+        path.last().map(String::as_str),
+        Some(sentence),
+        "Shift-Tab from Find in note passes {path:?}"
+    );
+    world.gesture(|d| d.press("pagedown"));
+    world.settle();
+    let screen = world.screen();
+    assert!(
+        screen
+            .scrolled(Target::key(sentence))
+            .is_some_and(|y| y > 0.0),
+        "Page Down leaves the sentence at its start"
+    );
+    assert_eq!(screen.scrolled(note), scrolled, "Page Down moved the note");
+    assert!(
+        (top_of(&world, &line) - top).abs() < 0.5,
+        "the caret's line left {top}"
+    );
+    assert_eq!(screen.get(Target::key(&editor)).selection, selection);
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_long_write_error_reads_to_its_end_from_the_keyboard_in_the_smallest_window() {
+    a_long_write_error_reads_to_its_end_from_the_keyboard("notebook", fullscreen);
+}
+
+#[test]
+fn a_long_write_error_in_an_editor_tile_reads_to_its_end_from_the_keyboard() {
+    a_long_write_error_reads_to_its_end_from_the_keyboard("notebook.tile.n", tile);
+}
+
+/// An editor tile stacked over an agent, with its file tree open, at the largest text.
+fn stacked_tile_with_its_tree_open(disk: &Disk) -> World {
+    const STACKED: Window = Window {
+        size: (1200.0, 800.0),
+        text: 1.5,
+    };
+    let note = editor_tile("n", r#"{"path":"knowledge/index.md"}"#);
+    let mut world = start_in(disk, Some(row(vec![below(note, pane("a"))])), STACKED);
+    let fold = Target::key("notebook.tile.n.fold.tree");
+    if world.screen().get(fold.clone()).name.as_deref() == Some("Show file tree") {
+        world.gesture(|d| d.click(fold));
+    }
+    world
+}
+
+/// A conflict in a tile too short for its notice and three lines keeps a whole line of the
+/// draft in view, so the person sees what Overwrite anyway would write, and both recovery
+/// actions show when Shift-Tab from Find in note reaches them.
+#[test]
+fn a_conflict_in_a_short_stacked_editor_tile_keeps_a_line_of_the_draft_and_its_recovery() {
+    let document = "notebook.tile.n";
+    let (disk, mut world, _) = typed_far_down(stacked_tile_with_its_tree_open, document);
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("notebook.tile.n.fold.tree"))
+            .name
+            .as_deref(),
+        Some("Hide file tree")
+    );
+    let held = world.daemon.sent_of("fs_write").pop().unwrap();
+    fail(&world.daemon, &held, &disk, &Failure::Conflict);
+    world.settle();
+    let whole = whole_lines_in_view(&world, document);
+    assert!(
+        whole >= 1,
+        "the conflict leaves {whole} whole lines of the draft"
+    );
+    world.gesture(|d| d.press("mod+f"));
+    for action in ["document.overwrite", "document.reload"] {
+        world.gesture(|d| d.press("shift+tab"));
+        world.settle();
+        let key = format!("{document}.{action}");
+        assert_eq!(keyboard_at(&world), key);
+        let screen = world.screen();
+        let [_, y, _, h] = screen.bounds(Target::key(&key)).unwrap();
+        let [_, by, _, bh] = screen
+            .bounds(Target::key(format!("{document}.document.sheet.notices")))
+            .unwrap();
+        assert!(
+            y >= by - 0.5 && y + h <= by + bh + 0.5,
+            "{key} at {:?} is out of view in its band at {:?}",
+            [y, h],
+            [by, bh]
+        );
+    }
+    assert!(whole_lines_in_view(&world, document) >= 1);
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
 }
 
 /// What has the keyboard: its key, else its name, else its role.

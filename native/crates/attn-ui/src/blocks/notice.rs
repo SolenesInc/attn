@@ -4,7 +4,7 @@ use rune_kit::ScrollBar;
 use super::block::{Block, Kind};
 use super::measure::COPY_FLOOR;
 use crate::Tokens;
-use crate::system::{Radius, Said, Size, Space, Tone, Type, door, words};
+use crate::system::{Radius, Said, Size, Space, Tone, Type, door, focus, words};
 
 const DOT: f32 = 6.0;
 const EDGE: f32 = 0.45;
@@ -121,15 +121,31 @@ impl Notice {
             door::on_band(said, Type::Small, Size::Regular)
         };
         let said = if pinned {
-            let sentence = col()
-                .key(format!("{}.sentence", self.key))
+            let sentence_key = format!("{}.sentence", self.key);
+            let words_key = format!("{sentence_key}.words");
+            let overflows = rune::memo::layout(&sentence_key)
+                .zip(rune::memo::layout(&words_key))
+                .is_some_and(|(view, words)| words[3] > view[3] + 0.5);
+            let sentence = col().key(sentence_key);
+            let sentence = if overflows {
+                focus::ring(
+                    sentence
+                        .role("group")
+                        .label(self.said.text())
+                        .focusable(true),
+                    t,
+                )
+            } else {
+                sentence
+            };
+            let sentence = sentence
                 .shrink()
                 .min_h(Size::Regular.height())
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
                 .child(door::sides(
-                    col().w_full().child(said),
+                    col().key(words_key).w_full().child(said),
                     Space::S0,
                     NOTICE_INSET_X,
                 ))

@@ -25,6 +25,7 @@ pub struct Sheet {
     fits: Option<f32>,
     room: f32,
     opens: Opens,
+    least: f32,
     article: Option<(String, String)>,
     body_key: Option<String>,
     blocks: Vec<Block>,
@@ -49,6 +50,7 @@ impl Sheet {
             fits: None,
             room: 0.0,
             opens: Opens::AtStart,
+            least: 0.0,
             article: None,
             body_key: None,
             blocks: Vec::new(),
@@ -98,6 +100,14 @@ impl Sheet {
         self
     }
 
+    /// The body never goes shorter than `points`, however short the sheet: past that, the
+    /// notices give way, scrolling inside their band, so the person still sees what they are
+    /// about, as a draft a save conflict would overwrite.
+    pub fn keeps_at_least(mut self, points: f32) -> Self {
+        self.least = points;
+        self
+    }
+
     pub fn fits(mut self, tallest: f32) -> Self {
         self.fits = Some(tallest);
         self
@@ -141,7 +151,8 @@ impl Sheet {
     /// recovers from it, such as a save that failed: under the title line, over the top and
     /// the body. They give way to the room the body keeps ([`Self::keeps_room`]): their
     /// sentences scroll, down to their first line. Their actions stay whole, before that room:
-    /// the body gives up room only once the notices are at their first lines.
+    /// the body gives up room only once the notices are at their first lines, and only down to
+    /// what it keeps at least ([`Self::keeps_at_least`]). Past that, the band scrolls.
     pub fn notices(mut self, notices: impl IntoIterator<Item = Notice>) -> Self {
         self.notices.extend(notices);
         self
@@ -190,22 +201,44 @@ impl Sheet {
             .children(self.close);
         let header = door::frame(header, Space::S16, Space::S16, Space::S12)
             .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle);
+        let room_key = format!("{key}.room");
+        let top_key = format!("{key}.top");
+        let top_height = self
+            .top
+            .as_ref()
+            .and_then(|_| rune::memo::layout_size(&top_key))
+            .map_or(0.0, |[_, h]| h);
         let top = self.top.map(|top| {
             door::frame(top, Space::S4, Space::S16, Space::S4)
+                .key(top_key)
                 .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
                 .shrink_first()
         });
+        let spare =
+            rune::memo::layout_size(&room_key).map(|[_, h]| (h - top_height - self.least).max(0.0));
         let notices = (!self.notices.is_empty()).then(|| {
             let floor = self.notices.iter().map(Notice::floor).sum::<f32>()
                 + NOTICES_GAP.pt() * (self.notices.len() - 1) as f32
                 + 2.0 * NOTICES_INSET_Y.pt();
             let notices = door::gap(col().w_full(), NOTICES_GAP)
                 .children(self.notices.into_iter().map(|notice| notice.pinned(t)));
-            door::frame(notices, NOTICES_INSET_Y, Space::S16, NOTICES_INSET_Y)
-                .key(format!("{key}.notices"))
-                .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-                .shrink_first()
-                .min_h(floor)
+            let band = door::frame(notices, NOTICES_INSET_Y, Space::S16, NOTICES_INSET_Y)
+                .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle);
+            match spare.filter(|spare| *spare < floor) {
+                Some(spare) => scrolling(
+                    col()
+                        .key(format!("{key}.notices"))
+                        .w_full()
+                        .child(band.h(floor)),
+                    Opens::AtStart,
+                    t,
+                )
+                .h(spare),
+                None => band
+                    .key(format!("{key}.notices"))
+                    .shrink_first()
+                    .min_h(floor),
+            }
         });
         let body = match self.fill {
             Some(body) => body.key(format!("{key}.body")).grow(1.0).min_h(0.0),
@@ -228,7 +261,7 @@ impl Sheet {
                 if self.fits.is_some() {
                     body.shrink().min_h(self.room)
                 } else {
-                    body.grow_from(1.0, self.room).shrink().min_h(0.0)
+                    body.grow_from(1.0, self.room).shrink().min_h(self.least)
                 }
             }
         };
@@ -247,12 +280,16 @@ impl Sheet {
             Some(tallest) => sheet.max_h(tallest).shrink(),
             None => sheet.h_full(),
         };
-        let sheet = sheet
-            .child(header)
+        let room = col()
+            .key(room_key)
+            .w_full()
+            .grow(1.0)
+            .shrink()
+            .min_h(0.0)
             .children(notices)
             .children(top)
-            .child(body)
-            .children(footer);
+            .child(body);
+        let sheet = sheet.child(header).child(room).children(footer);
         if self.framed {
             door::clip_corner(
                 door::corner(sheet, Radius::Panel)

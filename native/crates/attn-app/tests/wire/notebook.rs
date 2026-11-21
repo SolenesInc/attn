@@ -8,7 +8,7 @@ use attn_protocol::{
     Desktop, DesktopPane, FsChangedMessage, InitialStateMessage, Profile,
     ProfileArrangementChangedMessage, Session,
 };
-use attn_testkit::tree::{pane, row};
+use attn_testkit::tree::{below, pane, row};
 use attn_testkit::{Answer, Daemon, Target, World, key_event};
 use rune::KeyPlatform;
 use serde_json::{Value, json};

@@ -153,12 +153,15 @@ fn a_controls_box_takes_in_everything_it_draws_at_any_width() {
         for variant in variants(story_name) {
             let rt = story(story_name, variant);
             for control in rt.elements().iter().filter(|e| e.focusable) {
-                for part in within(&rt, control) {
+                for part in within(&rt, control)
+                    .into_iter()
+                    .filter(|part| part.visible[2] > 0.0 && part.visible[3] > 0.0)
+                {
                     assert!(
-                        holds(control.rect, part.rect),
-                        "{story_name} {variant}: {} at {:?} reaches outside its control {} at {:?}",
+                        holds(control.rect, part.visible),
+                        "{story_name} {variant}: {} draws at {:?}, outside its control {} at {:?}",
                         part.path,
-                        part.rect,
+                        part.visible,
                         control.path,
                         control.rect
                     );
