@@ -35,6 +35,10 @@ func setCodexFolderTrust(codexHome, dir, level string) error {
 		config["projects"] = projects
 	}
 	projects[dir] = map[string]any{"trust_level": level}
+	return writeCodexConfig(codexHome, config)
+}
+
+func writeCodexConfig(codexHome string, config map[string]any) error {
 	if err := os.MkdirAll(codexHome, 0o755); err != nil {
 		return err
 	}

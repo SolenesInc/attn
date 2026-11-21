@@ -344,6 +344,11 @@ func (w *World) SetCodexFolderTrust(dir, level string) {
 	w.kit.SetCodexFolderTrust(dir, level)
 }
 
+func (w *World) AddCodexMCPServer(name string) {
+	w.T.Helper()
+	w.kit.AddCodexMCPServer(name)
+}
+
 func (w *World) CodexFolderTrust(dir string) string {
 	w.T.Helper()
 	return w.kit.CodexFolderTrust(dir)

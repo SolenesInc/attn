@@ -83,6 +83,7 @@ type codexAppServer struct {
 	terminalsListed chan struct{}
 	listed          chan struct{}
 	held            map[string]*codexHeldReply
+	modelCalls      map[string]*codexModelCall
 
 	compactRefusal string
 }
@@ -364,18 +365,20 @@ func (s *codexAppServer) unload(id string) {
 }
 
 type codexServerParams struct {
-	ThreadID       string            `json:"threadId"`
-	Name           string            `json:"name"`
-	ExpectedTurnID string            `json:"expectedTurnId"`
-	CWD            string            `json:"cwd"`
-	Model          string            `json:"model"`
-	ServiceTier    string            `json:"serviceTier"`
-	Ephemeral      bool              `json:"ephemeral"`
-	Text           string            `json:"text"`
-	Items          []json.RawMessage `json:"items"`
-	DevInstruction string            `json:"developerInstructions"`
-	WorkspaceRoots []string          `json:"runtimeWorkspaceRoots"`
-	Config         map[string]any    `json:"config"`
+	ThreadID         string            `json:"threadId"`
+	Name             string            `json:"name"`
+	ExpectedTurnID   string            `json:"expectedTurnId"`
+	CWD              string            `json:"cwd"`
+	Model            string            `json:"model"`
+	ServiceTier      string            `json:"serviceTier"`
+	Ephemeral        bool              `json:"ephemeral"`
+	Text             string            `json:"text"`
+	Items            []json.RawMessage `json:"items"`
+	DevInstruction   string            `json:"developerInstructions"`
+	BaseInstructions string            `json:"baseInstructions"`
+	Effort           string            `json:"effort"`
+	WorkspaceRoots   []string          `json:"runtimeWorkspaceRoots"`
+	Config           map[string]any    `json:"config"`
 	CodexPermissions
 	Input []struct {
 		Text string `json:"text"`
@@ -404,6 +407,9 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 	case "config/batchWrite":
 		return map[string]any{}, nil, s.writeConfig(m.Params)
 	case "thread/start":
+		if isCodexModelCall(p) {
+			return s.startModelCall(conn, p)
+		}
 		return s.start(conn, p)
 	case "thread/resume":
 		return s.resume(conn, p)
@@ -501,6 +507,9 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 		s.mu.Unlock()
 		return map[string]any{"data": ids}, nil, nil
 	case "turn/start":
+		if call := s.modelCall(p.ThreadID); call != nil {
+			return s.modelCallTurn(call, p)
+		}
 		return s.turn(conn, p)
 	case "turn/interrupt":
 		return s.endTurn(methodFakeHalt, p)

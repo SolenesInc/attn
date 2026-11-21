@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -168,23 +169,63 @@ func writeCodexOutputSchema(request HeadlessTaskRequest) (string, func(), error)
 
 const codexPromptFromStdin = "-"
 
-func codexFeatureLocks() []string {
-	return []string{
-		"-c", "features.apps=false",
-		"-c", "features.hooks=false",
-		"-c", "features.plugins=false",
-		"-c", "features.browser_use=false",
-		"-c", "features.in_app_browser=false",
-		"-c", "features.computer_use=false",
-		"-c", "features.image_generation=false",
-		"-c", "features.memories=false",
-		"-c", "features.multi_agent=false",
-		"-c", "features.goals=false",
-		"-c", "features.shell_snapshot=false",
-		"-c", "features.standalone_web_search=false",
-		"-c", "features.tool_suggest=false",
-		"-c", "features.workspace_dependencies=false",
+var codexFeatureLockSettings = []hooks.CodexSetting{
+	{Key: "features.apps", Value: false},
+	{Key: "features.hooks", Value: false},
+	{Key: "features.plugins", Value: false},
+	{Key: "features.browser_use", Value: false},
+	{Key: "features.in_app_browser", Value: false},
+	{Key: "features.computer_use", Value: false},
+	{Key: "features.image_generation", Value: false},
+	{Key: "features.memories", Value: false},
+	{Key: "features.multi_agent", Value: false},
+	{Key: "features.goals", Value: false},
+	{Key: "features.shell_snapshot", Value: false},
+	{Key: "features.standalone_web_search", Value: false},
+	{Key: "features.tool_suggest", Value: false},
+	{Key: "features.workspace_dependencies", Value: false},
+}
+
+var codexNoToolSettings = []hooks.CodexSetting{
+	{Key: "approval_policy", Value: "never"},
+	{Key: "features.shell_tool", Value: false},
+	{Key: "features.unified_exec", Value: false},
+	{Key: "web_search", Value: "disabled"},
+	{Key: "features.view_image", Value: false},
+	{Key: "features.sleep_tool", Value: false},
+	{Key: "tools.experimental_request_user_input.enabled", Value: false},
+	{Key: "agents.enabled", Value: false},
+	{Key: "skills.include_instructions", Value: false},
+	{Key: "include_permissions_instructions", Value: false},
+	{Key: "include_apps_instructions", Value: false},
+	{Key: "include_collaboration_mode_instructions", Value: false},
+	{Key: "include_environment_context", Value: false},
+}
+
+func codexSettingArgs(settings []hooks.CodexSetting) []string {
+	args := make([]string, 0, 2*len(settings))
+	for _, setting := range settings {
+		args = append(args, "-c", setting.Override())
 	}
+	return args
+}
+
+func codexFeatureLocks() []string {
+	return codexSettingArgs(codexFeatureLockSettings)
+}
+
+func CodexToolFreeConfig(userMCPServers []string) map[string]any {
+	config := map[string]any{}
+	for _, setting := range slices.Concat(codexNoToolSettings, codexFeatureLockSettings) {
+		config[setting.Key] = setting.Value
+	}
+	if window := HeadlessContextWindowCap(); window > 0 {
+		config["model_auto_compact_token_limit"] = window
+	}
+	for _, name := range userMCPServers {
+		config["mcp_servers."+name+".enabled"] = false
+	}
+	return config
 }
 
 func codexContextWindowCapArgs(window int) []string {
@@ -294,20 +335,8 @@ func codexToolFreeHeadlessArgs(request HeadlessTaskRequest, window int, instruct
 		"--skip-git-repo-check",
 		"--sandbox", "read-only",
 		"-m", strings.TrimSpace(request.Model),
-		"-c", `approval_policy="never"`,
-		"-c", "features.shell_tool=false",
-		"-c", "features.unified_exec=false",
-		"-c", `web_search="disabled"`,
-		"-c", "features.view_image=false",
-		"-c", "features.sleep_tool=false",
-		"-c", "tools.experimental_request_user_input.enabled=false",
-		"-c", "agents.enabled=false",
-		"-c", "skills.include_instructions=false",
-		"-c", "include_permissions_instructions=false",
-		"-c", "include_apps_instructions=false",
-		"-c", "include_collaboration_mode_instructions=false",
-		"-c", "include_environment_context=false",
 	}
+	args = append(args, codexSettingArgs(codexNoToolSettings)...)
 	if effort := strings.TrimSpace(request.ReasoningEffort); effort != "" {
 		args = append(args, "-c", `model_reasoning_effort="`+effort+`"`)
 	}

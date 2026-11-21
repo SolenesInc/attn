@@ -184,8 +184,12 @@ must be on.
 While a paired program exists and you used Attn or made a model call in the
 last 4 hours, Attn keeps one Claude process started and waiting, so a call
 waits only for the model. It holds 200 to 300 MB of memory and uses no CPU
-while it waits. A call to Codex, or to Claude when no process is waiting,
-starts its process when the call arrives and waits for that start too. Run
+while it waits. A call to Claude when no process is waiting starts its process
+when the call arrives and waits for that start too. A call to Codex runs on
+the Codex app-server your Codex sessions use, while one runs for your profile,
+and starts Codex for the call otherwise. Every Codex call sends the
+`AGENTS.md` in your Codex home folder to the model with the call's
+instructions. Run
 `attn model call --help` for the details.
 
 `attn model log` lists the calls your paired programs made in the last 30

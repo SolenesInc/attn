@@ -368,3 +368,34 @@ func TestAModelCallOnASigmaDefaultSaysToPickAHarnessThatAnswers(t *testing.T) {
 		t.Fatalf("a call naming nothing with sigma for new sessions = %+v, want exit 1 and %q", result, want)
 	}
 }
+
+func TestACodexModelCallRunsOnTheSharedAppServerWhileItRuns(t *testing.T) {
+	s, token := modelCallStack(t)
+	s.AddCodexMCPServer("users-own")
+	s.Spare()
+
+	cold := callModel(s, token, map[string]any{"harness": "codex"})
+	task := s.HeadlessTask()
+	if task.Harness != fakeagent.Codex || !slices.Contains(task.Argv, "exec") {
+		t.Fatalf("with no shared app-server running, a Codex call reached %+v, want a cold codex exec", task)
+	}
+	task.Answer("Cold.")
+	answered(t, cold.Wait())
+
+	app := s.App()
+	s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+	s.CodexServer()
+	call := callModel(s, token, map[string]any{"harness": "codex", "tier": "light"})
+	task = s.HeadlessTask()
+	if task.Harness != fakeagent.Codex || !slices.Contains(task.Argv, "--listen") ||
+		task.Model != "gpt-6-luna" || task.Prompt != "Summarize in one line.\n\nthe long text" {
+		t.Fatalf("with the shared app-server running, a Codex call reached %+v, want a tool-free conversation on that server with the light model, the instructions and the input", task)
+	}
+	task.Answer("A one-line summary.")
+	if answer := answered(t, call.Wait()); protocol.Deref(answer.Text) != "A one-line summary." || answer.Harness != "codex" || answer.Model != "gpt-6-luna" {
+		t.Fatalf("attn model call = %+v", answer)
+	}
+	if servers := s.CodexServers(); len(servers) != 1 {
+		t.Fatalf("Codex app-servers launched = %v, want only the shared one", servers)
+	}
+}

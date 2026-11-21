@@ -17,7 +17,8 @@ harness.
 - [Codex](harnesses/codex.md): plain Codex, local memories, updates and
   headless runs.
 - [Codex app-server and `--remote`](harnesses/codex-app-server.md): the shared
-  app-server that shared Codex runs on, and attn tools over MCP there.
+  app-server that shared Codex runs on, attn tools over MCP there, and model
+  calls on it.
 - [Sigma](harnesses/sigma.md): the Sigma server, named Nisse until 2026-11-14,
   and attn tools over MCP there.
 

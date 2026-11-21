@@ -196,6 +196,24 @@ func (k *Kit) SetCodexFolderTrust(dir, level string) {
 	}
 }
 
+// AddCodexMCPServer adds an MCP server to the user's Codex config.
+func (k *Kit) AddCodexMCPServer(name string) {
+	k.t.Helper()
+	config, err := readCodexConfig(k.cfg.CodexHome)
+	if err == nil {
+		servers, _ := config["mcp_servers"].(map[string]any)
+		if servers == nil {
+			servers = map[string]any{}
+			config["mcp_servers"] = servers
+		}
+		servers[name] = map[string]any{"command": "true"}
+		err = writeCodexConfig(k.cfg.CodexHome, config)
+	}
+	if err != nil {
+		k.t.Fatal(err)
+	}
+}
+
 func (k *Kit) CodexFolderTrust(dir string) string {
 	k.t.Helper()
 	config, err := readCodexConfig(k.cfg.CodexHome)

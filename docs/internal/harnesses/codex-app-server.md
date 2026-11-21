@@ -463,3 +463,36 @@ isolated `CODEX_HOME` (seed `s-z7cfmc`):
   `tools.mcp__attn_core__seed_note`. The server's name `attn-core` becomes
   `attn_core` in the tool name. MCP calls are made by the app-server, outside
   the sandbox.
+
+## Model calls on the shared app-server
+
+A Codex model call runs as one ephemeral conversation on the profile's shared
+app-server while it runs (`internal/daemon/model_call_codex.go`), on its own
+connection. Probed on 0.171.0 with attn's shared-server settings, a stand-in
+Responses API set as `openai_base_url`, and a user config with an MCP server,
+and read in the source at rust-v0.171.0, 2026-11-21 (seed `s-2apqpm`):
+
+- `thread/start` builds the conversation's settings from the server's `-c`
+  settings with the request's `config` laid over them
+  (`load_with_overrides` in `request_processors/thread_processor.rs`). With
+  `features.hooks=false` there, the conversation fired none of the hooks the
+  server was started with, while a conversation started without it on the
+  same server fired SessionStart, UserPromptSubmit and Stop. With the settings
+  `codex exec` gets for a tool-free run and
+  `mcp_servers.<name>.enabled=false` for each of the user's MCP servers, the
+  request declared only `exec` and `wait`, as `codex exec` does.
+- The server reads the user's `config.toml`, so the conversation keeps the
+  user's own settings, such as `developer_instructions`, where
+  `codex exec --ignore-user-config` drops them.
+- A conversation with no subscribed connection and no running turn unloads
+  after a delay (`thread_lifecycle.rs`), so closing the call's connection
+  ends it. An ephemeral conversation is never written to disk.
+- Measured with gpt-6.1-terra on a non-production instance, 10 calls 10 s
+  apart: 2.95 s median wall time on the shared app-server against 4.48 s
+  through `codex exec`. A conversation started ahead of the call answered in
+  2.14 s median in a direct probe. The rest of the difference is the
+  conversation's start: a WebSocket connection and a prewarm request, about
+  0.9 s together. The first turn of every conversation also fetches the
+  account's git attribution policy over HTTP before it calls the model, about
+  0.5 s (`ext/git-attribution/src/lib.rs`), and no setting skips it.
+

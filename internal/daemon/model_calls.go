@@ -221,7 +221,7 @@ func (d *Daemon) handleSenderModelCall(conn net.Conn, msg *protocol.SenderModelC
 	answered := make(chan modelCallOutcome, 1)
 	var target atomic.Pointer[modelCallTarget]
 	var bySpare atomic.Bool
-	if !d.life.Go("modelCallAnswer", func() { answered <- d.answerModelCall(ctx, msg, &target, &bySpare) }) {
+	if !d.life.Go("modelCallAnswer", func() { answered <- d.answerModelCall(ctx, sender.ProfileID, msg, &target, &bySpare) }) {
 		return
 	}
 	var outcome modelCallOutcome
@@ -269,7 +269,7 @@ func (d *Daemon) handleSenderModelCall(conn net.Conn, msg *protocol.SenderModelC
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SenderModelCallResult: &response})
 }
 
-func (d *Daemon) answerModelCall(ctx context.Context, msg *protocol.SenderModelCallMessage, resolved *atomic.Pointer[modelCallTarget], bySpare *atomic.Bool) modelCallOutcome {
+func (d *Daemon) answerModelCall(ctx context.Context, profile string, msg *protocol.SenderModelCallMessage, resolved *atomic.Pointer[modelCallTarget], bySpare *atomic.Bool) modelCallOutcome {
 	d.modelCallSpare.used(d)
 	target, err := d.modelCallTarget(ctx, msg)
 	if err != nil {
@@ -297,6 +297,15 @@ func (d *Daemon) answerModelCall(ctx context.Context, msg *protocol.SenderModelC
 	}
 	defer os.RemoveAll(workDir)
 	request.WorkDir = workDir
+	if socket := d.codexShared().runningSocket(profile); target.harness == "codex" && socket != "" {
+		bySpare.Store(true)
+		result, err := answerModelCallOnSharedCodex(ctx, socket, request)
+		if !errors.Is(err, errSharedCodexUnusable) {
+			return modelCallOutcome{target: target, result: result, err: err}
+		}
+		bySpare.Store(false)
+		d.logf("model call: the shared Codex app-server of profile %s could not take the call, so it runs cold: %v", profile, err)
+	}
 	result, err := agentdriver.AnswerModelCall(ctx, target.provider, request)
 	if err != nil {
 		err = fmt.Errorf("%s: %w", target.harness, err)

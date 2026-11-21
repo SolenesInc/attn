@@ -178,7 +178,8 @@ Read in the source at openai/codex rust-v0.163.0 and probed on 0.162.1 and
 
 ## Headless runs
 
-attn runs `codex exec` for headless tasks, turn verdicts and cold model calls
+attn runs `codex exec` for headless tasks, turn verdicts, and model calls
+while the profile's shared app-server is not running
 (`internal/agent/codex.go`). Probed on 0.167.0 with attn's arguments, a
 loopback Responses API set as `openai_base_url`, and the model catalog of a
 signed-in `CODEX_HOME` passed as `model_catalog_json`, 2026-11-20 (seed
@@ -228,3 +229,12 @@ signed-in `CODEX_HOME` passed as `model_catalog_json`, 2026-11-20 (seed
   `model.base_instructions`. Only such a catalog entry produces that request.
   With attn's tool-free arguments, every model in a signed-in catalog declared
   tools and got the instructions once (seed `s-fhpsxz`).
+
+Probed on 0.171.0 the same way, with a `CODEX_HOME` holding an `AGENTS.md`,
+and read in the source at rust-v0.171.0, 2026-11-21 (seed `s-2apqpm`):
+
+- Every conversation sends the `AGENTS.md` (or `AGENTS.override.md`) in
+  `CODEX_HOME` as a user message after the instructions, under
+  `--ignore-user-config` too. No setting turns it off: the user's instructions
+  come from `CODEX_HOME` for every root conversation
+  (`codex-home/src/instructions/mod.rs`, `core/src/thread_manager.rs`).
