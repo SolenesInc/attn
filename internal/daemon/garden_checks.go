@@ -21,6 +21,7 @@ type seedCheckOutcome struct {
 	note           protocol.SeedNote
 	ringRecipients []string
 	attached       []protocol.SeedCheckAttachment
+	liveDelegate   *protocol.SessionID
 }
 
 func (d *Daemon) handleSeedCheckWS(client *wsClient, msg *protocol.SeedCheckMessage) {
@@ -103,9 +104,16 @@ func (d *Daemon) applySeedCheck(ctx context.Context, msg *protocol.SeedCheckMess
 		if err != nil {
 			return seedCheckOutcome{}, err
 		}
-		outcome := seedCheckOutcome{seed: read.withSeed(next, written).seed(next, written), checkID: attempt.CheckID, note: notes[0], attached: attached}
+		updated := read.withSeed(next, written)
+		outcome := seedCheckOutcome{seed: updated.seed(next, written), checkID: attempt.CheckID, note: notes[0], attached: attached}
 		if ring {
 			outcome.ringRecipients = recipients
+		}
+		if verb == garden.CheckVerbConfirm {
+			tally := updated.plots.EffectiveCheckTally(next.ID)
+			if tally.Total > 0 && tally.Confirmed == tally.Total {
+				outcome.liveDelegate = d.liveDelegateToClose(next, sessionID)
+			}
 		}
 		return outcome, nil
 	}
@@ -425,7 +433,7 @@ func (d *Daemon) handleSeedCheck(ctx context.Context, conn net.Conn, msg *protoc
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok: true,
 		SeedCheckResult: &protocol.SeedCheckResult{
-			Seed: outcome.seed, CheckID: outcome.checkID, Note: outcome.note, RingRecipients: outcome.ringRecipients, Attached: outcome.attached,
+			Seed: outcome.seed, CheckID: outcome.checkID, Note: outcome.note, RingRecipients: outcome.ringRecipients, Attached: outcome.attached, LiveDelegate: outcome.liveDelegate,
 		},
 	})
 }

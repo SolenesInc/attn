@@ -310,7 +310,7 @@ func (t PlotTree) SharedCheckRollups(id string) []SharedCheckRollup {
 		}
 		if leaves == nil {
 			for _, member := range t.InPlot(id) {
-				if member.ID != id && t.leaf(member.ID) {
+				if member.ID != id && member.Status != StatusWithered && t.leaf(member.ID) {
 					leaves = append(leaves, member)
 				}
 			}
@@ -328,6 +328,9 @@ func (t PlotTree) SharedCheckRollups(id string) []SharedCheckRollup {
 func (t PlotTree) CheckTally(crownID string) CheckTally {
 	tally := t.EffectiveCheckTally(crownID)
 	for _, seed := range t.descendants(crownID) {
+		if seed.Status == StatusWithered {
+			continue
+		}
 		tally.AddTally(t.EffectiveCheckTally(seed.ID))
 	}
 	return tally

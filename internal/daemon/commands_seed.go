@@ -511,7 +511,7 @@ func (d *Daemon) runSeedCheck(ctx context.Context, c command.Caller, verb string
 	if err != nil {
 		return nil, gardenFailure("check", err)
 	}
-	return &protocol.SeedCheckResult{Seed: outcome.seed, CheckID: outcome.checkID, Note: outcome.note, RingRecipients: outcome.ringRecipients, Attached: outcome.attached}, nil
+	return &protocol.SeedCheckResult{Seed: outcome.seed, CheckID: outcome.checkID, Note: outcome.note, RingRecipients: outcome.ringRecipients, Attached: outcome.attached, LiveDelegate: outcome.liveDelegate}, nil
 }
 
 func (d *Daemon) runSeedWatch(c command.Caller, seed string, unwatch bool) (any, error) {

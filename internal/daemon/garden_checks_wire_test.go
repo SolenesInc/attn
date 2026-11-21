@@ -142,6 +142,109 @@ func TestPlotProgressCountsEveryCheckOnceByState(t *testing.T) {
 	})
 }
 
+func TestWitheredChildrenLeavePlotCheckRollupsAndTalliesClean(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		sessions := spawnCheckSessions(w, app, "planner")
+		plot := checksPlot(t, cli, sessions["planner"])
+		daemonChild, appChild := plot.Children[0].ID, plot.Children[1].ID
+
+		checkMoveOK(t, cli, checkMove(daemonChild, "C1", "confirm", "verified"))
+		checkMoveOK(t, cli, checkMove(daemonChild, "C5", "confirm", "verified"))
+		gardenNudgeMove(t, cli, sessions["planner"], appChild, "wither")
+
+		crown := checksShow(t, cli, plot.Crown.ID)
+		want := protocol.SeedCheckTally{Total: 3, Confirmed: 2}
+		if crown.PlotProgress == nil || crown.PlotProgress.Checks == nil || *crown.PlotProgress.Checks != want {
+			t.Errorf("plot progress checks = %+v, want %+v", crown.PlotProgress.Checks, want)
+		}
+		if len(crown.SharedChecks) != 1 || len(crown.SharedChecks[0].Seeds) != 1 || crown.SharedChecks[0].Seeds[0].SeedID != daemonChild {
+			t.Errorf("shared check rollup = %+v, want only non-withered leaf %s", crown.SharedChecks, daemonChild)
+		}
+	})
+}
+
+func TestConfirmingLastCheckOrClosingReportsLiveDelegateToOtherSessions(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	orchestrator := spawnPanes(w, app, w.Path("orchestrator"))[0].session
+	cwd := w.Path("orchestrator", "work")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	w.SetCodexFolderTrust(cwd, "trusted")
+	planted, err := cli.SeedPlantWith(protocol.SessionID(orchestrator), client.Plant{
+		Title: "delegate work",
+		Body:  protocol.Ptr("Implement the delegated work."),
+		Checks: []protocol.SeedCheckDefinition{
+			{ID: protocol.Ptr("C1"), Text: "First check."},
+			{ID: protocol.Ptr("C2"), Text: "Second check."},
+		},
+	})
+	if err != nil {
+		t.Fatalf("plant: %v", err)
+	}
+	delegated, err := cli.Delegate(delegateAtSeed(orchestrator, cwd, planted.ID))
+	if err != nil {
+		t.Fatalf("delegate: %v", err)
+	}
+	w.Launched(string(delegated.SessionID))
+
+	first := checkMove(planted.ID, "C1", "confirm", "checked")
+	first.SourceSessionID = protocol.Ptr(protocol.SessionID(orchestrator))
+	if got := checkMoveOK(t, cli, first).LiveDelegate; got != nil {
+		t.Errorf("confirming C1 with C2 still open reported live_delegate %q, want nil", *got)
+	}
+
+	second := checkMove(planted.ID, "C2", "confirm", "checked")
+	second.SourceSessionID = protocol.Ptr(protocol.SessionID(orchestrator))
+	if got := protocol.Deref(checkMoveOK(t, cli, second).LiveDelegate); got != delegated.SessionID {
+		t.Errorf("confirming last check C2 reported live_delegate %q, want %q", got, delegated.SessionID)
+	}
+
+	harvested := gardenNudgeMove(t, cli, orchestrator, planted.ID, "harvest")
+	if got := protocol.Deref(harvested.LiveDelegate); got != delegated.SessionID {
+		t.Errorf("orchestrator harvest reported live_delegate %q, want %q", got, delegated.SessionID)
+	}
+
+	planted2, err := cli.SeedPlantWith(protocol.SessionID(orchestrator), client.Plant{
+		Title: "self harvest",
+		Body:  protocol.Ptr("Delegate closes its own seed."),
+	})
+	if err != nil {
+		t.Fatalf("plant2: %v", err)
+	}
+	delegated2, err := cli.Delegate(delegateAtSeed(orchestrator, cwd, planted2.ID))
+	if err != nil {
+		t.Fatalf("delegate2: %v", err)
+	}
+	w.Launched(string(delegated2.SessionID))
+	selfHarvest := gardenNudgeMove(t, cli, string(delegated2.SessionID), planted2.ID, "harvest")
+	if selfHarvest.LiveDelegate != nil {
+		t.Errorf("delegate harvesting its own seed reported live_delegate %q, want nil", *selfHarvest.LiveDelegate)
+	}
+
+	planted3, err := cli.SeedPlantWith(protocol.SessionID(orchestrator), client.Plant{
+		Title: "closed delegate wither",
+		Body:  protocol.Ptr("Delegate already exited before close."),
+	})
+	if err != nil {
+		t.Fatalf("plant3: %v", err)
+	}
+	delegated3, err := cli.Delegate(delegateAtSeed(orchestrator, cwd, planted3.ID))
+	if err != nil {
+		t.Fatalf("delegate3: %v", err)
+	}
+	w.Launched(string(delegated3.SessionID))
+	if err := cli.Unregister(delegated3.SessionID); err != nil {
+		t.Fatalf("unregister delegated3: %v", err)
+	}
+	withered := gardenNudgeMove(t, cli, orchestrator, planted3.ID, "wither")
+	if withered.LiveDelegate != nil {
+		t.Errorf("withering after delegate exited reported live_delegate %q, want nil", *withered.LiveDelegate)
+	}
+}
+
 func TestACheckIDNamesOneStatementInAPlotTree(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()

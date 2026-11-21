@@ -226,6 +226,7 @@ pub(super) fn render_move(result: &SeedCheckResult, rang: bool) -> String {
             result.seed.id, result.seed.status
         );
     }
+    render::live_delegate_nudge(&mut line, result.live_delegate.as_deref());
     line
 }
 

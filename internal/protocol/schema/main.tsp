@@ -6222,6 +6222,9 @@ model SeedCheckResult {
   // Present when the move rang: who the ring goes to, as session ids or
   // member names. Empty rings nobody.
   "ring_recipients"?: string[];
+  // Present on confirm when every check on the seed is now confirmed and
+  // another live delegated session last worked it.
+  "live_delegate"?: SessionID;
 }
 
 model SeedCheckAttachment {
@@ -6701,6 +6704,9 @@ model SeedTransitionResult {
   // The open asks to the seed's tender that the close withdrew from the user,
   // so the closer can tell the user. Absent when none was open.
   "closed_asks"?: SeedClosedAsk[];
+  // Present on harvest and wither when the seed closed and another live
+  // delegated session last worked it.
+  "live_delegate"?: SessionID;
 }
 
 model SeedClosedAsk {

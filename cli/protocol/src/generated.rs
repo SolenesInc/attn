@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "5f972dd5e7e1";
+pub const PROTOCOL_VERSION: &str = "8a7389a322bf";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -9294,6 +9294,8 @@ pub struct SeedCheckResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attached: Option<Vec<SeedCheckAttachment>>,
     pub check_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub live_delegate: Option<SessionID>,
     pub note: SeedNote,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ring_recipients: Option<Vec<String>>,
@@ -10145,6 +10147,8 @@ pub struct SeedTransitionResult {
     pub closed_asks: Option<Vec<SeedClosedAsk>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub handoff: Option<SeedNote>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub live_delegate: Option<SessionID>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub moved: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -1647,9 +1647,28 @@ func (d *Daemon) seedTransition(msg *protocol.SeedTransitionMessage, by who.Acto
 	}
 	if details.Moved && garden.Closed(seed.Status) {
 		_, result.Unblocked = d.seedUnblocked(seed.ID)
+		result.LiveDelegate = d.liveDelegateToClose(seed, protocol.SessionID(sessionID))
 	}
 
 	return result, nil
+}
+
+func (d *Daemon) liveDelegateToClose(seed garden.Seed, callerSessionID protocol.SessionID) *protocol.SessionID {
+	execID := protocol.TrimID(seed.LastExecutionID)
+	if execID == "" || execID == callerSessionID {
+		return nil
+	}
+	if _, ok := d.gardenDispatch(execID); !ok {
+		return nil
+	}
+	if _, member := d.seedResumeMember(seed, execID); member {
+		return nil
+	}
+	live := d.store.Get(execID)
+	if live == nil || !d.sessionHasLiveWorker(live.ID) {
+		return nil
+	}
+	return protocol.Ptr(execID)
 }
 
 func (d *Daemon) seedTransitionAsk(msg *protocol.SeedTransitionMessage, verb garden.Verb, by who.Actor) (garden.Ask, string, error) {

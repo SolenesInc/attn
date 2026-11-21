@@ -10400,6 +10400,9 @@ type SeedCheckResult struct {
 	// CheckID corresponds to the JSON schema field "check_id".
 	CheckID string `json:"check_id"`
 
+	// LiveDelegate corresponds to the JSON schema field "live_delegate".
+	LiveDelegate *SessionID `json:"live_delegate,omitempty,omitzero"`
+
 	// Note corresponds to the JSON schema field "note".
 	Note SeedNote `json:"note"`
 
@@ -11553,6 +11556,9 @@ type SeedTransitionResult struct {
 
 	// Handoff corresponds to the JSON schema field "handoff".
 	Handoff *SeedNote `json:"handoff,omitempty,omitzero"`
+
+	// LiveDelegate corresponds to the JSON schema field "live_delegate".
+	LiveDelegate *SessionID `json:"live_delegate,omitempty,omitzero"`
 
 	// Moved corresponds to the JSON schema field "moved".
 	Moved *bool `json:"moved,omitempty,omitzero"`
