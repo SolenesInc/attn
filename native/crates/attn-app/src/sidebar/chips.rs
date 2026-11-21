@@ -150,6 +150,7 @@ pub(crate) fn chip(
         format!("{prefix}.{slot}"),
         label,
         system::number_chip(slot, chip.current, chip.empty, t),
+        false,
         system::Size::Compact,
         t,
     )
@@ -219,6 +220,7 @@ fn extras_chip(key: &str, extras: Extras, look: Look, t: &Tokens) -> Option<El> 
                 waiting_words(waiting, look)
             ),
             system::chip_edge(words(format!("+{count}"), Type::Tag, ink), t),
+            false,
             system::Size::Compact,
             t,
         )
@@ -242,6 +244,7 @@ fn overview_chip(keys: Option<String>, t: &Tokens) -> El {
             system::icon(&attn_ui::icon::OVERVIEW, IconSize::Small, t.text_dimmed),
             t,
         ),
+        false,
         system::Size::Small,
         t,
     )
@@ -262,6 +265,7 @@ fn strip_chip(chip: &Chip, drop: Option<DesktopMark>, t: &Tokens) -> El {
         format!("queue.desktop.{slot}"),
         label,
         face,
+        false,
         system::Size::Small,
         t,
     )
@@ -296,6 +300,7 @@ fn strip_extras(extras: Extras, t: &Tokens) -> Option<El> {
                 waiting_words(waiting, Look::Strip)
             ),
             face,
+            false,
             system::Size::Small,
             t,
         )
@@ -429,6 +434,7 @@ fn rail_chip(chip: &Chip, t: &Tokens) -> El {
         format!("rail.desktop.{}", chip.number),
         label,
         face,
+        false,
         system::Size::Small,
         t,
     )

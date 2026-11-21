@@ -47,7 +47,7 @@ impl Shelf {
         current: bool,
         t: &Tokens,
     ) -> El {
-        chip_button(key, label, face, current, t).focusable(false)
+        chip_button(key, label, face, current, crate::system::Size::Small, t).focusable(false)
     }
 
     /// The accent ring over a chip while what it brings arrives, keyed `key`, its corners

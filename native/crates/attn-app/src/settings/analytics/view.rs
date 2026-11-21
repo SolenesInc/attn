@@ -262,11 +262,18 @@ fn views(state: &State, view: usize, t: &Tokens) -> Block {
             Some(count) => format!("{name} {count}"),
             None => (*name).to_owned(),
         };
-        chip_button(format!("settings.analytics.views.{id}"), label, face, on, t)
-            .role("tab")
-            .focus_selected(on)
-            .preserve_focus_on_press(true)
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| super::switch_view(state, i, tx))
+        chip_button(
+            format!("settings.analytics.views.{id}"),
+            label,
+            face,
+            on,
+            attn_ui::system::Size::Small,
+            t,
+        )
+        .role("tab")
+        .focus_selected(on)
+        .preserve_focus_on_press(true)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| super::switch_view(state, i, tx))
     });
     Block::control(
         "settings.analytics.views.slot",
