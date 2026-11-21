@@ -3,14 +3,14 @@ use std::time::Duration;
 
 use attn_app::Action;
 use attn_protocol::{
-    Ask, AskAnswer, AskAnswerResultMessage, AskChoice, AskPart, AskQuestion, AskReply,
+    Ask, AskAnswer, AskAnswerResultMessage, AskChoice, AskDefault, AskPart, AskQuestion, AskReply,
     AsksUpdatedMessage, InitialStateMessage, Session, SessionStateChangedMessage,
 };
 use attn_protocol::{
     GardenSeedsUpdatedMessage, PartyView, Seed, SeedDocument, SeedDocumentGetResultMessage,
     SeedStandbyView, StandbyTender,
 };
-use attn_testkit::{Daemon, Target, World, message};
+use attn_testkit::{Daemon, Target, WALL_START_MS, World, message};
 use rune::{Key, KeyEvent, Mods};
 
 use super::queue::{ago, one_desktop};
@@ -439,6 +439,65 @@ fn a_click_on_a_choices_name_still_picks_it() {
     world.gesture(|app| app.click_at(at));
 
     assert!(checked(&world, "asks.q.q1.choice.1"));
+}
+
+fn defaulting(mut ask: Ask, choice: &str, in_minutes: i64) -> Ask {
+    let question = ask
+        .parts
+        .iter_mut()
+        .find_map(|p| p.question.as_mut().filter(|q| q.kind == "one"))
+        .unwrap();
+    question.default = Some(AskDefault {
+        choice: choice.into(),
+        due_at: ago(-in_minutes),
+    });
+    ask
+}
+
+#[test]
+fn an_unanswered_default_reads_its_due_time_on_the_users_clock_in_the_ask_and_its_row() {
+    let mut world = start(
+        vec![defaulting(cache_store(), "Postgres", 90)],
+        vec![api_working()],
+    );
+    open_sheet(&mut world);
+
+    let due = rune::time::LocalTime::at(WALL_START_MS + 90 * 60_000);
+    let clock = format!("{}:{:02}", due.hour, due.minute);
+    let said = name(&world, "asks.default");
+    assert!(
+        said.starts_with("No answer by ") && said.contains(&clock),
+        "{said}"
+    );
+    assert!(said.ends_with(", and api goes with Postgres"), "{said}");
+    assert!(
+        name(&world, "asks.row.a-cache1").contains(&format!("default {clock}")),
+        "{}",
+        name(&world, "asks.row.a-cache1")
+    );
+
+    click(&mut world, "asks.subject");
+    world.clipboard.set_text("");
+    letter(&mut world, "c");
+    let copied = world.clipboard.text().map(|t| t.to_string()).unwrap();
+    assert!(
+        copied.contains("Recommended: Postgres\nDefault: Postgres after 2h\n:::"),
+        "{copied}"
+    );
+
+    update_asks(
+        &mut world,
+        vec![replied(
+            defaulting(cache_store(), "Postgres", 90),
+            vec![picked("q1", &["Redis"])],
+            None,
+        )],
+    );
+    letter(&mut world, "r");
+    assert_eq!(rows(&world), ["a-cache1"]);
+    assert!(has(&world, "asks.subject"));
+    assert!(!has(&world, "asks.default"));
+    assert!(!name(&world, "asks.row.a-cache1").contains("default "));
 }
 
 #[test]

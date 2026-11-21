@@ -244,6 +244,12 @@ fn list_row(item: &Item<'_>, selected: bool, now_ms: i64, t: &Tokens) -> El {
     if item.questions > 1 {
         about.push(format!("{} questions", item.questions));
     }
+    if let Some(due) = super::default_of(ask).filter(|_| ask.reply.is_none()) {
+        about.push(format!(
+            "default {}",
+            queue::wake_time_short(Some(&due.due_at), now_ms)
+        ));
+    }
     if let Some(until) = item.snoozed_until {
         about.push(format!(
             "until {}",
@@ -468,6 +474,21 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
             &ask.subject,
         ),
     ));
+    if let Some(due) = super::default_of(ask).filter(|_| ask.reply.is_none()) {
+        let said = format!(
+            "No answer by {}, and {} goes with {}",
+            queue::wake_time_long(Some(&due.due_at), state.window.now_ms),
+            item.from,
+            due.choice
+        );
+        blocks.push(Block::custom(
+            "asks.default.block",
+            words(said, Type::Small, t.text_secondary)
+                .key("asks.default")
+                .selectable(true)
+                .wrap(),
+        ));
+    }
     let draft = state.window.asks.drafts.get(&ask.id);
     let reply_answers = ask.reply.as_ref().map(|r| r.answers.as_slice());
     let mut index = 0;

@@ -4,7 +4,9 @@ mod view;
 use std::collections::{BTreeMap, HashMap};
 
 use attn_client::Facts;
-use attn_protocol::{Ask, AskAnswer, AskAnswerMessage, AskQuestion, Session, StandbyTender};
+use attn_protocol::{
+    Ask, AskAnswer, AskAnswerMessage, AskDefault, AskQuestion, Session, StandbyTender,
+};
 use rune::{TextEdit, Tx};
 
 use crate::State;
@@ -278,6 +280,11 @@ pub(crate) fn crew_display_name(id: &str) -> String {
 
 pub(crate) fn questions(ask: &Ask) -> impl Iterator<Item = &AskQuestion> {
     ask.parts.iter().filter_map(|p| p.question.as_ref())
+}
+
+/// The choice the agent goes with when no answer comes in time, and when.
+pub(crate) fn default_of(ask: &Ask) -> Option<&AskDefault> {
+    questions(ask).find_map(|q| q.default.as_ref())
 }
 
 /// Asks show while the setting is on or while any ask exists.
@@ -688,7 +695,7 @@ fn markdown(ask: &Ask, from: &str) -> String {
     let mut blocks = vec![format!("# {}", ask.subject)];
     for part in &ask.parts {
         match (&part.question, &part.markdown) {
-            (Some(question), _) => blocks.push(question_block(question)),
+            (Some(question), _) => blocks.push(question_block(question, &ask.created_at)),
             (None, Some(prose)) => blocks.push(prose.clone()),
             (None, None) => {}
         }
@@ -697,7 +704,7 @@ fn markdown(ask: &Ask, from: &str) -> String {
     blocks.join("\n\n") + "\n"
 }
 
-fn question_block(question: &AskQuestion) -> String {
+fn question_block(question: &AskQuestion, opened_at: &str) -> String {
     let opener = match Kind::of(question) {
         Kind::One => ":::question",
         Kind::Any => ":::question-multi",
@@ -716,6 +723,25 @@ fn question_block(question: &AskQuestion) -> String {
             .filter(|r| !r.is_empty())
             .map(|r| format!("Recommended: {r}")),
     );
+    lines.extend(question.default.as_ref().and_then(|d| {
+        let waited = queue::epoch_ms(&d.due_at)? - queue::epoch_ms(opened_at)?;
+        Some(format!("Default: {} after {}", d.choice, duration(waited)))
+    }));
     lines.push(":::".to_owned());
     lines.join("\n")
+}
+
+/// A wait as the agent wrote it after `Default: <choice> after`: whole hours, minutes and
+/// seconds, such as 2h, 1h30m or 45s. The due time drops the fraction of a second the ask
+/// opened at, so the wait rounds to the nearest second.
+fn duration(waited_ms: i64) -> String {
+    let seconds = (waited_ms + 500) / 1000;
+    let (h, m, s) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
+    let mut out = String::new();
+    for (n, unit) in [(h, "h"), (m, "m"), (s, "s")] {
+        if n > 0 {
+            out.push_str(&format!("{n}{unit}"));
+        }
+    }
+    if out.is_empty() { "0s".into() } else { out }
 }
