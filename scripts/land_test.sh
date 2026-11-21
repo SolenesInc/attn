@@ -126,7 +126,6 @@ esac
 EOF
 chmod +x "$work/bin/pnpm"
 export PATH="$work/bin:$PATH"
-export LAND_CLEAN_LOG="$work/cleans"
 export LAND_CHECK_LOG="$work/checks" LAND_MOVE_MAIN="$work/move-main" LAND_OTHER="$work/other"
 export LAND_REMOTE="$work/remote" LAND_SOAK_REFS="$work/soak-refs" LAND_REJECT_MAIN="$work/reject-main"
 export selected=$'go ./internal/example TestExample\ncargo example --lib'
@@ -165,12 +164,6 @@ printf '%s\n' "landing-tests $*" >>"$LAND_CHECK_LOG"
 exit "${LAND_TESTS_EXIT:-0}"
 EOF
 chmod +x scripts/landing-tests.sh
-cat >scripts/native-build-clean <<'EOF'
-#!/usr/bin/env bash
-echo cleaned >>"$LAND_CLEAN_LOG"
-echo "native-build-clean: removed an old build"
-EOF
-chmod +x scripts/native-build-clean
 cp "$root/scripts/land-linux.sh" scripts/land-linux.sh
 mkdir -p app/scripts/real-app-harness
 cp "$root"/app/scripts/real-app-harness/{landing-scenarios,scenarioCatalog,matrixDigest}.mjs app/scripts/real-app-harness/
@@ -206,10 +199,7 @@ expect_checks() {
 }
 
 printf 'kept\n' >kept.txt
-: >"$LAND_CLEAN_LOG"
 land 'Add the kept file'
-[ "$(cat "$LAND_CLEAN_LOG")" = cleaned ] || { echo 'a landing did not clean old native build output after its push' >&2; exit 1; }
-expect_output 'native-build-clean: removed an old build'
 if grep -qF 'WARNING' "$work/output"; then
   echo 'a landing that undoes nothing warned' >&2
   cat "$work/output" >&2

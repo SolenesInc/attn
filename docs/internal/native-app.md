@@ -565,29 +565,15 @@ keeps growing with its incremental builds: the largest measured 22.3 GiB on oma
 and 14.2 GiB on ai-sandbox. A build removed after 3 unused days costs one cold
 rebuild.
 
-`scripts/native-build-clean` removes, from the build root:
-
-- the output of a checkout that no longer exists
-- a build not built for 3 days
-- while the root is over its budget of 64 GiB, the least recently built output
-- while the disk holding the root has less than its free-space floor of 32 GiB
-  free, the least recently built output
-
-The floor leaves room for the largest checkout measured to grow back while
-another checkout builds cold. It is what keeps a disk shared with other work
-from filling: the day ai-sandbox's 600 GB disk filled, the build root held
-65 GiB, within its budget.
-
-It never removes a build whose cargo lock a running build holds: it takes the
-lock first and keeps it while it removes. When it removes anything, or the root
-is over budget or the disk under its floor, it prints the budget, the floor, the
-size, each build it removed and why, each build it kept because a running build
-holds its lock, and the free space it left. It warns when every build left is in
-use and the root is still over budget or the disk still under its floor.
-`ATTN_NATIVE_BUILD_BUDGET_MIB` sets the budget and
-`ATTN_NATIVE_BUILD_FREE_FLOOR_MIB` the floor. `scripts/land.sh` runs it
-after every push, so a removed worktree's output goes at the next land on that
-machine.
+attn removes none of this output. Each machine removes it: on the agent
+machines, `rust-target-trim` from shell-config runs every 6 hours and removes a
+checkout's build directory once the checkout is gone or no build has touched it
+for 3 days. On 2026-11-21 the build roots held 67 GiB in 10 checkouts on the
+Mac, 116 GiB in 9 on ai-sandbox and 272 GiB in 15 on oma, with 224 GiB,
+249 GiB and 1.3 TiB free. A Linux runner builds only its own few checkouts.
+Removing a build while another checkout builds or tests is not safe: cargo
+releases a build directory's lock between the commands of one landing, so a
+build in use can look idle.
 
 ## Edit-to-test loop
 

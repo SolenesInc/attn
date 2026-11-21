@@ -145,9 +145,6 @@ share a file with it, and names each commit whose whole change could be applied
 again on top of the landing. It misses a commit that the landing only partly
 undoes, and one whose lines a later commit changed.
 
-After the push, `land.sh` runs `scripts/native-build-clean`, which removes old
-Rust build output. [Native app](native-app.md#build-output) says what it removes.
-
 The scenarios and the gate run side by side, once each. From 6 to 17 November
 2026 the rest of `land.sh` after the scenarios took 145 s at the median, against
 291 s for one scenario on CI, so a gate failure stops the landing minutes before

@@ -241,8 +241,6 @@ function runScenarios(options, provider, root, destination, execute) {
     if (options.action === 'soak') runSoak(options, execute);
     else runMatrix(options, execute);
   } catch (error) { testError = error; }
-  try { execute(['scripts/native-build-clean']); }
-  catch (error) { console.error(`Pruning native build output failed: ${error.message}`); }
   try { collect(provider, root, destination); }
   catch (error) { if (!testError) throw error; console.error(`Artifact collection failed: ${error.message}`); }
   if (testError) throw testError;

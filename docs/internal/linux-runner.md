@@ -88,11 +88,6 @@ dependencies from `app/pnpm-lock.yaml` through
 `app/package.json` or the lockfile changed, so a fresh `--checkout` runs
 scenarios with no manual install.
 
-After its scenarios, `test` and `soak` run `scripts/native-build-clean` on the
-guest, which keeps native build output within the budget
-[Native app](native-app.md#build-output) describes, as `land.sh` does after a
-push.
-
 The runner starts Xvfb with `-noreset`, so short-lived window probes cannot reset the display while GTK initializes the app. CI acceptance and soak runs use the same setting.
 
 The runner saves the packaged app's stdout and stderr as `app-launch-<id>.log` in the artifacts directory. For the serial matrix, the artifacts directory is the artifacts root. If the app exits early, the runner reports the exit code, the signal, and the log path.
