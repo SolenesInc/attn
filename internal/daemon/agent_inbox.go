@@ -122,12 +122,11 @@ func (d *Daemon) agentInboxEntry(recipient *protocol.Session, messageID string) 
 		return nil, nil, peerMessageRefusal(d, asked, err)
 	}
 	result.Message = d.peerMessageResult(record)
-	return result, func() {
-		if readNow {
-			d.endStandbyOnceMailRead(record.To)
-			d.kickInboxAfterCommit(record.To)
-		}
-	}, nil
+	if !readNow {
+		return result, nil, nil
+	}
+	d.endStandbyOnceMailRead(record.To)
+	return result, func() { d.kickInboxAfterCommit(record.To) }, nil
 }
 
 func (d *Daemon) agentInboxBatch(recipientSessionID protocol.SessionID, limit int) (*protocol.AgentInboxBatchResult, func(), error) {
@@ -172,10 +171,8 @@ func (d *Daemon) agentInboxBatch(recipientSessionID protocol.SessionID, limit in
 		}
 		items = append(items, item)
 	}
-	after := func() {
-		d.endStandbyOnceMailRead(read...)
-		d.kickInboxAfterCommit(addresses...)
-	}
+	d.endStandbyOnceMailRead(read...)
+	after := func() { d.kickInboxAfterCommit(addresses...) }
 	result := &protocol.AgentInboxBatchResult{Items: items, Remaining: remaining}
 	if len(items) > 0 && d.inNotificationRun(recipientSessionID) {
 		switch {

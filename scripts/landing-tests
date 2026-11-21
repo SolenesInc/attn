@@ -118,6 +118,7 @@ go ./cmd/attnd TestACodexUpdateInstalledFromTheAppRunsInATileAndSharedCodexMoves
 go ./internal/daemon TestACodexInstalledWhileARestartPreparesGetsARestartOfItsOwn
 go ./internal/daemon TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText
 go ./internal/daemon TestAnEmptyGitDirectoryDoesNotMakeASessionsFolderARepository
+go ./internal/daemon TestSeedMailResumesACrewMemberTenderOnStandbyWithItsNote
 
 group pty-host ^pty-host/|^internal/ptyhost/
 go ./internal/ptybackend TestSharedHost_ReapingAHostDuringASpawnStopsTheHostAndItsTerminal
