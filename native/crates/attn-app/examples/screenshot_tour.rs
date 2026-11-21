@@ -4056,6 +4056,22 @@ fn route_picker_callers(dark: bool) {
     );
     picker_states(
         dark,
+        "delegation-fallback",
+        "settings.route.delegation.fallback",
+        Some("settings.body"),
+        move || {
+            settings_world(
+                dark,
+                "delegation",
+                "delegation",
+                &[],
+                |_| {},
+                delegation_answers,
+            )
+        },
+    );
+    picker_states(
+        dark,
         "activity",
         "settings.route.activity",
         Some("settings.body"),
