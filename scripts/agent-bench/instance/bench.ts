@@ -19,12 +19,26 @@ const arg = (name: string) => {
 const flag = (name: string) => process.argv.includes(`--${name}`)
 const list = (value: string | undefined, fallback: string) => (value ?? fallback).split(",").filter(Boolean)
 
-const instance = arg("instance")
-if (!instance || ["default", "dev"].includes(instance))
-  throw new Error("pass --instance <name>: a non-production instance this run may start, change and clean (not default or dev)")
 const grid = flag("grid")
 const attnBinary = resolve(arg("attn") ?? join(repository, "attn"))
 if (!existsSync(attnBinary)) throw new Error(`${attnBinary} does not exist: run make build, or pass --attn <binary>`)
+const withoutAttnEnv = () => Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(ATTN_|CLAUDE|CODEX_)/.test(key)))
+
+function newInstance(requested: string | undefined) {
+  const usage = "pass --instance <name>: a new instance this run creates, changes and cleans"
+  if (!requested) throw new Error(usage)
+  const attn = (args: string[]) => spawnSync(attnBinary, args, { env: withoutAttnEnv(), encoding: "utf8" })
+  const resolved = attn(["instance", "resolve", "--instance", requested])
+  if (resolved.status !== 0) throw new Error(`${usage}: ${resolved.stderr.trim()}`)
+  const name: string = JSON.parse(resolved.stdout).instance
+  if (name === "" || name === "dev") throw new Error(`${usage}: --instance ${requested} is attn's ${name || "default"} instance`)
+  const listed = attn(["instance", "list", "--json"])
+  if (listed.status !== 0) throw new Error(`attn instance list --json exited ${listed.status}: ${listed.stderr.trim()}`)
+  if (JSON.parse(listed.stdout).instances.some((i: { instance: string }) => i.instance === name))
+    throw new Error(`${usage}: instance ${name} already exists, so the bench leaves it alone. Pick a new name, or clean it with: attn instance clean ${name}`)
+  return name
+}
+const instance = newInstance(arg("instance"))
 const toolHome = arg("tool-home") && resolve(arg("tool-home")!)
 const runs = Number(arg("runs") ?? (grid ? 2 : 1))
 const parallel = Number(arg("parallel") ?? 2)
@@ -65,9 +79,8 @@ const workRoot = mkdtempSync(join(realpathSync(tmpdir()), "attn-agent-bench-"))
 mkdirSync(out, { recursive: true })
 
 const baseEnv = (): NodeJS.ProcessEnv => {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(ATTN_|CLAUDE|CODEX_)/.test(key)))
   return {
-    ...env,
+    ...withoutAttnEnv(),
     ATTN_INSTANCE: instance,
     ATTN_HEADLESS_TASKS: "off",
     ...(toolHome ? { ATTN_TOOL_HOME: toolHome, CLAUDE_CONFIG_DIR: join(toolHome, ".claude"), CODEX_HOME: join(toolHome, ".codex") } : {}),
@@ -95,9 +108,17 @@ function startDaemon(codeMode: boolean) {
   if (started) attnRaw(["daemon", "stop"])
   daemonEnv = env
   attnRaw(["daemon", "ensure"])
+  if (!started && outposts.length > 0) {
+    setting("outposts_enabled", "true")
+    for (const o of outposts) {
+      const added = json(wsctl(["outposts", "--add", o.name, "--destination", o.ssh, "--until", "connected"]).trim().split("\n").at(-1)!)
+      addedOutposts.push(added.outposts.find((row: { name: string }) => row.name === o.name).id)
+    }
+  }
   started = true
 }
 let started = false
+const addedOutposts: string[] = []
 
 const setting = (name: string, value: string) => attnRaw(["settings", "set", name, value])
 
@@ -335,6 +356,12 @@ try {
   writeFileSync(join(out, "table.md"), report)
   console.log(report)
   forgetCodexTrust()
-  if (!keep) spawnSync(attnBinary, ["instance", "clean", instance], { env: baseEnv(), stdio: "inherit" })
+  if (!keep) {
+    for (const id of addedOutposts) {
+      const r = run(wsctlBinary, ["outposts", "--remove", id], daemonEnv)
+      if (r.status !== 0) console.error(`wsctl outposts --remove ${id}: ${r.stderr.trim()}`)
+    }
+    spawnSync(attnBinary, ["instance", "clean", instance], { env: baseEnv(), stdio: "inherit" })
+  }
   console.log(`runs: ${out}\nwork folders: ${workRoot}${keep ? `\ninstance ${instance} kept; clean it with: attn instance clean ${instance}` : ""}`)
 }

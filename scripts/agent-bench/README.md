@@ -18,6 +18,8 @@ bun scripts/agent-bench/instance/bench.ts --instance bench --tasks standby --har
 
 The driver starts the instance's daemon with headless model tasks off, runs every cell, prints the table, and ends with `attn instance clean <name>`. Pass `--keep` to leave the instance running for inspection.
 
+`--instance` must name a new instance, because the run changes the instance's settings and cleans it. The driver asks attn for the canonical name, so `Bench` and ` bench ` both mean `bench`. Before it runs anything, it refuses the default and `dev` instances and any instance that `attn instance list` already shows. To run again on a name you kept, clean it first with `attn instance clean <name>`.
+
 Each run gets its own profile, so seeds and slugs never collide between runs, and its own folder under the system temp folder. The driver starts the session through the daemon as the app does (`spawn_session` with `scripts/wsctl`). It waits for the prompt and sets up the task, acting as the user or as the agent's own session. Then it types the prompt into the terminal and waits until the session is back at its prompt or has closed itself. Before judging, it reads the garden, the asks and the inboxes through the instance's CLI.
 
 The numbers come from attn itself:
@@ -46,7 +48,7 @@ A cell is a harness, a setting and a place:
 |---|---|---|
 | `--harness` | `claude`, `claude-code-mode`, `codex`, `sigma`, each with an optional `@<model>` that sets `default_model_<harness>` | `claude,codex` |
 | `--tools` | `on`, `off`: `agent_tools_enabled` | `on` |
-| `--outpost` | `<outpost name>=<ssh destination>`, repeatable as a comma list, for an outpost the instance already has | none: the home only |
+| `--outpost` | `<outpost name>=<ssh destination>`, repeatable as a comma list | none: the home only |
 | `--tasks` | task and probe ids, or `probes` for every probe | the seven tasks |
 | `--runs` | runs per cell | 1 |
 | `--parallel` | runs of one cell at a time | 2 |
@@ -55,7 +57,7 @@ A cell is a harness, a setting and a place:
 
 `sigma` turns `sigma_enabled` on, and needs `sigma` on `PATH` or `sigma_executable` set. Its model picks its path: an OpenAI model runs Sigma's own loop, a Claude model runs its Claude path.
 
-On an outpost, the driver makes each run's folder over SSH and runs Claude Code, Codex and Sigma there. It skips code mode, and refuses `present-change`, whose clone is made on this machine.
+For each `--outpost`, the driver turns `outposts_enabled` on, adds the outpost to the new instance and waits for it to connect, so the destination must take ssh without a prompt. Before it cleans the instance, it removes those outposts, which stops the instance's daemon on each outpost and leaves its pairing; with `--keep` they stay, so remove them in the instance's Settings before you clean it. On an outpost, the driver makes each run's folder over SSH and runs Claude Code, Codex and Sigma there. It skips code mode, and refuses `present-change`, whose clone is made on this machine.
 
 ### Tasks
 
