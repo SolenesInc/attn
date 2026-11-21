@@ -320,7 +320,7 @@ pub(crate) fn catalog_note(state: &State, which: Which, t: &Tokens) -> Option<El
 fn controls(state: &State, which: Which, choice: &Choice, offer: &Offer, t: &Tokens) -> El {
     let toggle = harness_toggle(state, which, agent_options(state, choice, offer), t);
     let yolo = yolo_control(which, &yolo(state, choice, offer), spoken("alt+q"), t);
-    attn_ui::finder::bar(t, vec![toggle, yolo])
+    attn_ui::finder::bar(t, format!("{}.controls", which.key()), vec![toggle, yolo])
 }
 
 fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {

@@ -318,16 +318,19 @@ pub fn heading(head: El) -> El {
 /// What a group heading's own inset falls short of a row's.
 const HEADING_HANG: Space = Space::S4;
 
-/// A bar across a finder's top, over a rule, such as the choices that shape what it starts:
-/// its parts across, onto further lines when the line runs out.
-pub fn bar(t: &Tokens, parts: Vec<El>) -> El {
+/// A bar across a finder's top, keyed `key`, over a rule, such as the choices that shape what
+/// it starts: its parts across, onto further lines when the line runs out. Where the window is
+/// too short for it and the finder's list, it gives way and scrolls, so the list keeps its floor.
+pub fn bar(t: &Tokens, key: impl Into<String>, parts: Vec<El>) -> El {
     let line = door::gaps(
         row().w_full().items_center().justify_between().flex_wrap(),
         Space::S8,
         Space::S16,
     )
     .children(parts);
-    door::inset(line, OPTION_LINE, Space::S8).border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
+    scrolling(key, OPTION_LINE, Space::S8, line)
+        .scroll_bar_styled(crate::scroll_bar(t))
+        .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
 }
 
 /// A finder's query under its title: the title in `Label`, the query's box, and a line under
@@ -426,7 +429,14 @@ pub fn scrolling_notices(t: &Tokens, key: impl Into<String>, blocks: Vec<Block>)
 const NOTICES_INSET: Space = Space::S12;
 
 /// A finder's list of groups, each under its heading: it scrolls past `max` points, or
-/// sooner where the window is shorter.
+/// sooner where the window is shorter, and keeps [`GROUPED_FLOOR`] however short the window.
 pub fn grouped(key: impl Into<String>, label: &str, rows: Vec<El>, max: f32) -> El {
-    list(key, rows).label(label.to_owned()).max_h(max)
+    list(key, rows)
+        .label(label.to_owned())
+        .max_h(max)
+        .min_h(GROUPED_FLOOR)
 }
+
+/// A heading and one row of two lines, with the list's inset above and below: 8 + 24 + 47 + 8
+/// points, as the launcher lays them out.
+const GROUPED_FLOOR: f32 = 87.0;

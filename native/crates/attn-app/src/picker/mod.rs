@@ -905,10 +905,13 @@ pub(crate) fn agent_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut
     (1..=9).any(|n| pressed(&format!("alt+{n}")))
 }
 
-/// Tell a screen reader the harness a key chose, since the keyboard stays in the path field.
+/// Show the harness a key chose in the controls' band, which scrolls where the window is short,
+/// and tell a screen reader, since the keyboard stays in the path field.
 fn say_agent(state: &State, which: Which, tx: &mut Tx) {
     if let Some(picker) = state.window.launching.slot(which) {
         let agent = picker.agent(state);
+        let w = which.key();
+        tx.scroll_into_view_in(format!("{w}.controls"), format!("{w}.agent.{agent}"));
         tx.announce(
             agents::named(&state.facts.settings, &agent),
             LiveRegion::Polite,

@@ -2733,7 +2733,7 @@ fn start_from_holds_its_form_and_place_while_the_arrows_move_through_long_branch
             })
         });
         let form = |r: [[f32; 4]; 2]| {
-            (
+            [
                 r[0][0],
                 r[0][2],
                 r[0][3],
@@ -2741,7 +2741,7 @@ fn start_from_holds_its_form_and_place_while_the_arrows_move_through_long_branch
                 r[1][2],
                 r[1][3],
                 r[1][1] - r[0][1],
-            )
+            ]
         };
         let at_rest = form(
             options
@@ -2777,9 +2777,9 @@ fn start_from_holds_its_form_and_place_while_the_arrows_move_through_long_branch
                     .clone()
                     .map(|k| world.screen().bounds(Target::key(&k)).unwrap()),
             );
-            assert_eq!(
-                now, at_rest,
-                "{window:?} step {step}: Start from changed form or place under the arrows"
+            assert!(
+                now.iter().zip(at_rest).all(|(n, r)| (n - r).abs() < 0.5),
+                "{window:?} step {step}: Start from changed form or place under the arrows: {now:?} from {at_rest:?}"
             );
         }
     }

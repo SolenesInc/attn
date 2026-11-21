@@ -86,7 +86,11 @@ fn controls(state: &State, launcher: &Launcher, terminal: bool, t: &Tokens) -> E
             t,
         )
     });
-    attn_ui::finder::bar(t, std::iter::once(toggle).chain(yolo).collect())
+    attn_ui::finder::bar(
+        t,
+        format!("{}.controls", which.key()),
+        std::iter::once(toggle).chain(yolo).collect(),
+    )
 }
 
 /// What a start under way says: where it starts, and how long a stalled outpost has not

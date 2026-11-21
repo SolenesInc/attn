@@ -2226,3 +2226,99 @@ fn tab_shows_every_control_whole_in_the_smallest_window() {
     world.resize((533.0, 400.0));
     super::reach::tab_round_shows_whole(&mut world, "").unwrap_or_else(|why| panic!("{why}"));
 }
+
+/// Three plugins whose names are too long to share a line, beside Claude and Codex.
+const LONG_NAMED: [&str; 3] = ["review-0", "review-1", "review-2"];
+
+fn with_long_named_plugins(launcher: bool) -> World {
+    let mut settings = settings("main_repo");
+    settings.retain(|(key, _)| key != LAUNCHER.0);
+    settings.push((LAUNCHER.0.to_owned(), launcher.to_string()));
+    settings.push(("uiScale".to_owned(), "1.5".to_owned()));
+    for (n, id) in LONG_NAMED.iter().enumerate() {
+        settings.push((format!("{id}_available"), "true".to_owned()));
+        settings.push((
+            format!("{id}_display_name"),
+            format!("Engineering observability staging review agent {n}"),
+        ));
+    }
+    let daemon = machine(
+        &PLACES,
+        shop("origin/main"),
+        &settings,
+        vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
+    );
+    daemon.on("delegation_preferences_get", |_| {
+        message(DelegationPreferencesResultMessage {
+            success: true,
+            preferences: Some(DelegationPreferences::default()),
+            harnesses: Some(
+                ["claude", "codex"]
+                    .into_iter()
+                    .chain(LONG_NAMED)
+                    .map(|id| Harness {
+                        id: id.into(),
+                        name: id.into(),
+                        available: true,
+                        ..Harness::default()
+                    })
+                    .collect(),
+            ),
+            ..DelegationPreferencesResultMessage::new()
+        })
+    });
+    let mut world = World::start_sized(daemon, (800.0, 600.0));
+    world.open_desktop();
+    press_action(&mut world, &Action::SessionNew);
+    world
+}
+
+#[test]
+fn harnesses_that_stack_leave_the_recents_in_view_and_each_one_reachable() {
+    for launcher in [true, false] {
+        let mut world = with_long_named_plugins(launcher);
+        let list = world
+            .screen()
+            .bounds(Target::key(LOCATIONS.0))
+            .expect("the locations are laid out");
+        let first = world
+            .screen()
+            .bounds(Target::key(format!("{}0", LOCATIONS.1)))
+            .expect("the first recent is laid out");
+        assert!(
+            inside(first, list),
+            "launcher {launcher}: the first recent {first:?} shows whole in the list {list:?}"
+        );
+
+        for (chord, agent) in [
+            ("alt+t", "shell"),
+            ("alt+1", "claude"),
+            ("alt+2", "codex"),
+            ("alt+3", "review-0"),
+            ("alt+4", "review-1"),
+            ("alt+5", "review-2"),
+        ] {
+            let chord = Chord::parse(chord).unwrap();
+            world.gesture(|app| app.key(key_event(&chord)));
+            shows_whole_in_its_band(&world, launcher, agent);
+        }
+    }
+}
+
+fn shows_whole_in_its_band(world: &World, launcher: bool, agent: &str) {
+    let key = format!("new-session.agent.{agent}");
+    let option = world.screen().get(Target::key(key.clone()));
+    assert!(
+        option.is("checked"),
+        "launcher {launcher}: {agent} is chosen"
+    );
+    let band = world
+        .screen()
+        .bounds(Target::key("new-session.controls"))
+        .expect("the harness band is laid out");
+    let shown = world.screen().bounds(Target::key(key)).unwrap();
+    assert!(
+        inside(shown, band),
+        "launcher {launcher}: {agent} {shown:?} shows whole in its band {band:?}"
+    );
+}
