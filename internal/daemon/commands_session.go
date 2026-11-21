@@ -29,6 +29,41 @@ func (d *Daemon) sessionCommands() map[string]command.Handler {
 	}
 }
 
+func (d *Daemon) callerScope(c command.Caller) string {
+	if c.Session != "" {
+		if session := d.store.Get(c.Session); session != nil {
+			return session.ProfileID
+		}
+		if entry := d.store.SessionLedgerEntry(c.Session); entry != nil {
+			return entry.ProfileID
+		}
+	}
+	return c.Profile
+}
+
+func (d *Daemon) ledgerEntryInScope(c command.Caller, id string) (*protocol.SessionLedgerEntry, error) {
+	id = strings.TrimSpace(id)
+	entry := d.store.SessionLedgerEntry(protocol.SessionID(id))
+	if entry == nil {
+		return nil, command.Refuse(command.CodeSessionNotFound, "no session %q in the ledger", id)
+	}
+	if scope := d.callerScope(c); scope != "" && entry.ProfileID != scope {
+		return nil, command.Refuse(command.CodeSessionNotFound, "no session %q in the ledger", id)
+	}
+	return entry, nil
+}
+
+func (d *Daemon) liveSessionInScope(c command.Caller, id protocol.SessionID) error {
+	session := d.store.Get(id)
+	if session == nil {
+		return fmt.Errorf("unknown live session %s", id)
+	}
+	if scope := d.callerScope(c); scope != "" && session.ProfileID != scope {
+		return fmt.Errorf("unknown live session %s", id)
+	}
+	return nil
+}
+
 var sessionListPresets = map[string]int{"today": 0, "yesterday": 1, "7d": 6, "30d": 29}
 
 func (d *Daemon) runSessionList(ctx context.Context, c command.Caller, a command.SessionListArgs) (any, error) {
@@ -62,7 +97,14 @@ func (d *Daemon) runSessionList(ctx context.Context, c command.Caller, a command
 			msg.Limit = protocol.Ptr(int(*a.Limit))
 		}
 	}
-	for field, value := range map[**string]string{&msg.Before: a.Before, &msg.ProfileID: a.Profile, &msg.Repository: a.Repository} {
+	profile := strings.TrimSpace(a.Profile)
+	if scope := d.callerScope(c); scope != "" {
+		if profile != "" && profile != scope {
+			return &protocol.SessionListResult{Entries: []protocol.SessionLedgerEntry{}}, nil
+		}
+		profile = scope
+	}
+	for field, value := range map[**string]string{&msg.Before: a.Before, &msg.ProfileID: profile, &msg.Repository: a.Repository} {
 		if value = strings.TrimSpace(value); value != "" {
 			*field = protocol.Ptr(value)
 		}
@@ -140,9 +182,9 @@ func sessionListInstant(name, raw string, now time.Time) (string, error) {
 }
 
 func (d *Daemon) runSessionShow(ctx context.Context, c command.Caller, a command.SessionShowArgs) (any, error) {
-	entry := d.store.SessionLedgerEntry(protocol.SessionID(strings.TrimSpace(a.ID)))
-	if entry == nil {
-		return nil, command.Refuse(command.CodeSessionNotFound, "no session %q in the ledger", strings.TrimSpace(a.ID))
+	entry, err := d.ledgerEntryInScope(c, a.ID)
+	if err != nil {
+		return nil, err
 	}
 	result := &protocol.SessionShowResult{Entry: *entry}
 	d.decorateLedgerEntryWithUsage(&result.Entry)
@@ -175,6 +217,9 @@ func (d *Daemon) runSessionPriority(ctx context.Context, c command.Caller, a com
 	if err != nil {
 		return nil, err
 	}
+	if err := d.liveSessionInScope(c, id); err != nil {
+		return nil, err
+	}
 	if err := d.setSessionPriority(&protocol.SetSessionPriorityMessage{SessionID: id, Priority: a.Priority == "on"}); err != nil {
 		return nil, err
 	}
@@ -184,6 +229,9 @@ func (d *Daemon) runSessionPriority(ctx context.Context, c command.Caller, a com
 func (d *Daemon) runSessionRename(ctx context.Context, c command.Caller, a command.SessionRenameArgs) (any, error) {
 	id, err := sessionTarget(c, a.Target)
 	if err != nil {
+		return nil, err
+	}
+	if err := d.liveSessionInScope(c, id); err != nil {
 		return nil, err
 	}
 	name := strings.TrimSpace(a.Name)
@@ -213,7 +261,10 @@ func (d *Daemon) snoozeEach(c command.Caller, ids []string, until *time.Time) pr
 	for _, raw := range ids {
 		id := protocol.TrimID(protocol.SessionID(raw))
 		outcome := protocol.SessionSnoozeOutcome{SessionID: id}
-		err := d.authorizeSnooze(c.Session, id, action)
+		err := d.liveSessionInScope(c, id)
+		if err == nil {
+			err = d.authorizeSnooze(c.Session, id, action)
+		}
 		if err == nil && until != nil {
 			stamp := until.UTC().Format(time.RFC3339Nano)
 			if err = d.handleSnoozeTurn(&protocol.SnoozeTurnMessage{SessionID: id, Until: stamp}); err == nil {
@@ -285,6 +336,9 @@ func (d *Daemon) runSessionReopen(ctx context.Context, c command.Caller, a comma
 			names[i] = string(known)
 		}
 		return nil, command.Refuse(command.CodeUnknownAction, "%q is not a reopen action; the actions are %s", string(action), strings.Join(names, ", "))
+	}
+	if _, err := d.ledgerEntryInScope(c, a.ID); err != nil {
+		return nil, err
 	}
 	outcome, err := d.reopenSession(protocol.SessionID(strings.TrimSpace(a.ID)), action)
 	if err != nil {

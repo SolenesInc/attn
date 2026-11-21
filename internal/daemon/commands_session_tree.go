@@ -20,14 +20,7 @@ type sessionTreeNode struct {
 }
 
 func (d *Daemon) sessionTree(ctx context.Context, c command.Caller, profileID string) (*protocol.SessionListResult, error) {
-	callerProfileID := ""
-	if c.Session != "" {
-		caller := d.store.Get(c.Session)
-		if caller == nil {
-			return nil, fmt.Errorf("caller session %s is not in the live list", c.Session)
-		}
-		callerProfileID = caller.ProfileID
-	}
+	callerProfileID := d.callerScope(c)
 	inView := func(profile string) bool {
 		return (callerProfileID == "" || profile == callerProfileID) && (profileID == "" || profile == profileID)
 	}
