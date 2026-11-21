@@ -2699,24 +2699,17 @@ fn a_notices_actions_share_a_line_wherever_its_line_holds_them_at_every_text_siz
 const FACTS: &[&str] = &["facts.session.state.changed", "facts.pr.updated"];
 const MONO: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
 
-fn words_right(rt: &Runtime<()>, e: &ElementInfo) -> f32 {
-    shown_glyphs(rt, e.rect)
-        .iter()
-        .map(|g| g[0] + g[2])
-        .fold(f32::NEG_INFINITY, f32::max)
-}
-
 #[test]
 fn an_end_columns_numbers_and_title_share_its_right_edge() {
     for variant in ["Rest", "Focus"] {
         let rt = block_story(true, "Blocks/Diagnostics table", variant);
         for column in 0..2 {
-            let edge = words_right(&rt, &element(&rt, &format!("facts.head.{column}")));
+            let right = |e: &ElementInfo| e.rect[0] + e.rect[2];
+            let edge = right(&element(&rt, &format!("facts.head.{column}")));
             for row in FACTS {
-                let cell = element(&rt, &format!("{row}.cell.{column}"));
-                let at = words_right(&rt, &cell);
+                let at = right(&element(&rt, &format!("{row}.cell.{column}")));
                 assert!(
-                    (at - edge).abs() <= GLYPH_SLACK,
+                    (at - edge).abs() <= 0.5,
                     "{variant} {row}: column {column}'s number ends at {at}, off its title's end \
                      at {edge}"
                 );
