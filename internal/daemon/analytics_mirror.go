@@ -58,7 +58,7 @@ func (d *Daemon) derivedFactTraits(ev bus.Event) analytics.Derived {
 		if session == nil {
 			return analytics.Derived{}
 		}
-		return analytics.Derived{Session: d.sessionTraitsOf(session), Repo: repoTraits(session.Directory)}
+		return analytics.Derived{Session: d.sessionTraitsOf(session), Repo: repoTraits(d.localDirectory(session))}
 	case strings.HasPrefix(ev.Name, worktreeFactPrefix):
 		return analytics.Derived{Repo: repoTraits(ev.Subject)}
 	default:
