@@ -550,11 +550,16 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, shelf: El, t: &Tokens)
                 }),
         )
         .children((given_up < GivenUp::Shelf).then(|| super::crowding::part(shelf, Part::Shelf)))
-        .children((!crowded).then(|| runs_chip(state, t)).flatten())
         .children(
-            (given_up < GivenUp::Chips)
-                .then(|| super::crowding::part(desktops(state, bands, crowded, t), Part::Chips)),
-        );
+            (!crowded)
+                .then(|| runs_chip(state, t))
+                .flatten()
+                .map(|runs| super::crowding::part(runs, Part::Runs)),
+        )
+        .children((given_up < GivenUp::Chips).then(|| {
+            let gathered = gathered_width(state, bands);
+            super::crowding::part(desktops(state, bands, crowded, t), Part::Chips { gathered })
+        }));
     super::crowding::filled(state, bar)
 }
 
@@ -577,6 +582,19 @@ fn desktops(state: &State, bands: &Bands<'_>, crowded: bool, t: &Tokens) -> El {
             t,
         ))
         .child(rune::el().w(BADGE_OVERHANG))
+}
+
+/// How wide the queue bar's desktop chips stand once a crowded bar gathers them.
+fn gathered_width(state: &State, bands: &Bands<'_>) -> f32 {
+    let (kept, extras) = slotted(chips(state, turns_on(bands)), true);
+    let size = system::Size::Compact;
+    let widths: Vec<f32> = kept
+        .iter()
+        .map(|c| system::chip_width(&c.slot.unwrap_or_default().to_string(), size))
+        .chain((extras.count > 0).then(|| system::chip_width(&format!("+{}", extras.count), size)))
+        .chain([BADGE_OVERHANG])
+        .collect();
+    widths.iter().sum::<f32>() + Inline::joined_gap() * (widths.len() - 1) as f32
 }
 
 /// The queue bar's count of automation runs and of those that need the user; pressing it walks

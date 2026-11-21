@@ -23,7 +23,7 @@ use crate::sidebar::AgentState;
 const CHIP_PX: f32 = 112.0;
 const LIVE_DOT_PX: f32 = 28.0;
 const MARK: DotSize = DotSize::Small;
-const CAPS_PX: f32 = 104.0;
+const CAP_PX: f32 = 52.0;
 /// How long the width label shows after fewer or more tiles.
 const WIDTH_LABEL_SECONDS: f64 = 1.5;
 /// How long a chip flashes when its tile arrives on the shelf.
@@ -170,6 +170,11 @@ fn chip(
     }
 }
 
+/// The room the caps take: one cap on each side that has columns off screen.
+fn caps_px(before: usize, after: usize) -> f32 {
+    [before, after].iter().filter(|&&n| n > 0).count() as f32 * CAP_PX
+}
+
 /// How many chips show either side when the shelf is `available` points wide; the rest go
 /// into the caps, the chips nearest the screen kept.
 fn allot(available: f32, before: usize, after: usize, live: f32) -> (usize, usize) {
@@ -177,7 +182,9 @@ fn allot(available: f32, before: usize, after: usize, live: f32) -> (usize, usiz
     if (before + after) as f32 <= without_caps {
         return (before, after);
     }
-    let room = ((available - live - CAPS_PX) / CHIP_PX).floor().max(0.0) as usize;
+    let room = ((available - live - caps_px(before, after)) / CHIP_PX)
+        .floor()
+        .max(0.0) as usize;
     let (mut left, mut right) = (0, 0);
     while left + right < room && (left < before || right < after) {
         if right < after && (right <= left || left >= before) {
@@ -262,7 +269,7 @@ impl Shelf {
         Some(Shelf {
             desktop: desktop.id.clone(),
             active: desktop.active_pane_id.clone(),
-            least_px: live + CAPS_PX,
+            least_px: live + caps_px(before.len(), after.len()),
             capped_before: before.len() - left,
             shown_after: right,
             before,

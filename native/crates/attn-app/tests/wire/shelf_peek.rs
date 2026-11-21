@@ -791,3 +791,29 @@ fn enter_sends_nothing_more_while_a_reply_is_unanswered_and_a_dropped_daemon_lea
     world.advance(Duration::from_secs(7));
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn the_smallest_window_at_large_text_keeps_the_cap_that_reaches_the_columns_off_screen() {
+    let columns = ["a", "b", "d", "e", "f", "g", "h", "i", "c", "j"];
+    for size in [(800.0, 600.0), (900.0, 600.0)] {
+        let daemon = daemon_with(desktop(row(columns.into_iter().map(pane))), session("c"))
+            .rewriting(|m| {
+                if m["event"] == "initial_state" {
+                    m["settings"]["uiScale"] = serde_json::json!("1.5");
+                }
+            });
+        let mut world = World::start_as_instance(daemon, "default");
+        world.resize(size);
+        world.open_desktop();
+        assert!(
+            world.runtime().presented("shelf.cap.after").is_some(),
+            "at {size:?} the shelf keeps the cap over the columns after the screen"
+        );
+        click(&mut world, "shelf.cap.after");
+        peek_at(&mut world, "c");
+        assert!(
+            peek(&world).is_some(),
+            "at {size:?} a column in the cap peeks"
+        );
+    }
+}

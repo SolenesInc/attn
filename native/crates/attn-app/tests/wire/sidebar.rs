@@ -1417,3 +1417,67 @@ fn a_launching_agent_leads_with_the_emoji_the_tauri_app_picks_for_it_until_logos
         "without logos it shows its state's dot"
     );
 }
+
+#[test]
+fn a_narrow_sidebar_at_large_text_keeps_an_automation_run_s_name_clear_of_its_pull_request() {
+    use attn_protocol::{AutomationProvenance, SessionPullRequest};
+    let mut agent = session("s1", "idle");
+    agent.label = "build-and-release-platform-本番の権限を移行する作業ツリー".into();
+    agent.automation = Some(AutomationProvenance {
+        run_id: "r1".into(),
+        definition_id: 1,
+        definition_name: "Nightly verify that deployment artifacts match the signed manifests"
+            .into(),
+        trigger_type: "scheduled".into(),
+        ..AutomationProvenance::default()
+    });
+    agent.pull_requests = Some(vec![SessionPullRequest {
+        repository: "github.com/victorarias/attn".into(),
+        number: 812,
+        state: "open".into(),
+        created_at: "2026-08-30T12:00:00Z".into(),
+        ..SessionPullRequest::default()
+    }]);
+    let mut message = state(
+        vec![agent],
+        vec![desktop("d1", "a", "Work", vec![pane("d1", "p1", "s1")])],
+    );
+    let settings = message.settings.as_mut().unwrap();
+    settings.insert("uiScale".into(), "1.5".into());
+    settings.insert("sidebar_width".into(), "200".into());
+    let world = World::start_sized(Daemon::scripted().state(message), (800.0, 600.0));
+    let elements = world.runtime().elements();
+    let drawn = |key: &str| {
+        elements
+            .iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .map(|e| e.visible)
+            .unwrap_or_else(|| panic!("{key} is drawn"))
+    };
+    let [row_x, _, row_w, _] = drawn("sidebar.session.s1");
+    let parts = [
+        "sidebar.session.s1.name",
+        "sidebar.session.s1.pr",
+        "sidebar.session.s1.run",
+    ]
+    .map(|key| (key, drawn(key)));
+    let [_, _, name_w, _] = parts[0].1;
+    assert!(name_w >= 46.0, "the name keeps its first word: {name_w}");
+    for (i, (key, [x, _, w, _])) in parts.iter().enumerate() {
+        assert!(
+            *x >= row_x - 0.5 && x + w <= row_x + row_w + 0.5,
+            "{key} at {x}..{} stays in the row at {row_x}..{}",
+            x + w,
+            row_x + row_w
+        );
+        for (other, [ox, _, ow, _]) in &parts[i + 1..] {
+            let over = (x + w).min(ox + ow) - x.max(*ox);
+            assert!(
+                over <= 0.5,
+                "{other} lies {over} over {key}: {ox}..{} and {x}..{}",
+                ox + ow,
+                x + w
+            );
+        }
+    }
+}

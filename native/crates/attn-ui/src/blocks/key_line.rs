@@ -256,14 +256,14 @@ impl KeyLine {
                 line(row())
                     .children(tabs)
                     .child(hints(status.into_iter().chain(shown).collect()))
-                    .children(self.end),
+                    .children(self.end.map(El::shrink_first)),
             ),
             KeyFit::Under => door::gap(toolbar, Space::S4)
                 .child(
                     line(row())
                         .children(tabs)
                         .child(row().grow(1.0))
-                        .children(self.end),
+                        .children(self.end.map(El::shrink_first)),
                 )
                 .child(hints(status.into_iter().chain(shown).collect()).w_full()),
             KeyFit::Tabs => door::gap(toolbar, Space::S4)
@@ -271,7 +271,7 @@ impl KeyLine {
                     line(row())
                         .children(tabs)
                         .child(row().grow(1.0))
-                        .children(self.end),
+                        .children(self.end.map(El::shrink_first)),
                 )
                 .children(status.map(|status| hints(vec![status]).w_full())),
         }

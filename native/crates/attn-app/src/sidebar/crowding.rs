@@ -5,6 +5,8 @@
 //! back once the bar is as wide as that step's content last needed, for as long as what the bar
 //! holds is unchanged.
 
+use rune::Tx;
+
 use crate::State;
 
 /// What the title bar has given up, each step on top of those before it.
@@ -95,10 +97,12 @@ struct Crowding {
 pub(crate) struct Room {
     bar_w: Option<f32>,
     middle: Option<[f32; 4]>,
-    /// Where the content ended, and what the bar held then.
-    content_right: Option<(f32, Contents)>,
+    /// Where the content ended, and what the bar held and had given up then.
+    content_right: Option<(f32, Contents, GivenUp)>,
     widths: Widths,
     crowding: Option<Crowding>,
+    /// A step was taken, and the bar has not been measured since.
+    unsettled: bool,
 }
 
 /// The last step the title bar has taken.
@@ -125,7 +129,7 @@ pub(crate) fn bar_laid_out(state: &mut State, [_, _, w, _]: [f32; 4]) {
 pub(crate) fn middle_laid_out(state: &mut State, rect: [f32; 4]) {
     let room = &mut state.window.queue_bar_room;
     let flush = match (room.middle, &room.content_right) {
-        (Some([x, _, w, _]), Some((right, _))) => (right - (x + w)).abs() <= 0.5,
+        (Some([x, _, w, _]), Some((right, ..))) => (right - (x + w)).abs() <= 0.5,
         _ => true,
     };
     room.middle = Some(rect);
@@ -135,23 +139,32 @@ pub(crate) fn middle_laid_out(state: &mut State, rect: [f32; 4]) {
 }
 
 /// The middle's `content` across the whole middle, its parts in a row whose end is measured
-/// with what the bar held as `state`'s view built it.
+/// with what the bar held and had given up as `state`'s view built it. A commit measures again
+/// only so many times, so while a step taken waits to be measured, the end's layout asks for
+/// one more commit.
 pub(crate) fn filled(state: &State, content: rune::El) -> rune::El {
     let held = contents(state);
-    content
-        .grow(1.0)
-        .shrink()
-        .child(rune::el().key("titlebar.middle.end").w(0.0).on_measure(
-            move |state: &mut State, [x, ..]: [f32; 4]| {
-                state.window.queue_bar_room.content_right = Some((x, held.clone()));
+    let drawn = given_up(state);
+    content.grow(1.0).shrink().child(
+        rune::el()
+            .key("titlebar.middle.end")
+            .w(0.0)
+            .on_measure(move |state: &mut State, [x, ..]: [f32; 4]| {
+                state.window.queue_bar_room.content_right = Some((x, held.clone(), drawn));
                 measure(state);
-            },
-        ))
+            })
+            .on_layout_tx(|state: &mut State, _, tx: &mut Tx| {
+                if !state.window.queue_bar_room.unsettled {
+                    tx.live_only();
+                }
+            }),
+    )
 }
 
 fn measure(state: &mut State) {
     let room = &mut state.window.queue_bar_room;
-    let (Some(bar_w), Some([x, _, w, _]), Some((content_right, contents))) =
+    room.unsettled = false;
+    let (Some(bar_w), Some([x, _, w, _]), Some((content_right, contents, drawn))) =
         (room.bar_w, room.middle, room.content_right.clone())
     else {
         return;
@@ -166,10 +179,14 @@ fn measure(state: &mut State) {
             contents: contents.clone(),
         };
     }
+    let mut last = crowding.taken.last().map_or(GivenUp::Nothing, |(s, _)| *s);
+    if drawn != last {
+        room.unsettled = true;
+        return;
+    }
     let overflow = content_right - (x + w);
     if overflow > 0.5 {
         let mut left = overflow;
-        let mut last = crowding.taken.last().map_or(GivenUp::Nothing, |(s, _)| *s);
         while left > 0.5 {
             let Some(next) = STEPS
                 .into_iter()
@@ -178,8 +195,9 @@ fn measure(state: &mut State) {
                 break;
             };
             crowding.taken.push((next, bar_w + left));
+            room.unsettled = true;
             last = next;
-            match room.widths.freed_by(next) {
+            match room.widths.freed_by(next, &contents) {
                 Some(freed) => left -= freed,
                 None => break,
             }
@@ -203,6 +221,8 @@ pub(crate) struct Widths {
     strip: f32,
     profile: f32,
     chips: f32,
+    gathered: f32,
+    runs: f32,
     shelf: f32,
 }
 
@@ -214,24 +234,33 @@ pub(crate) enum Part {
     Caret,
     Strip,
     Profile,
-    Chips,
+    /// The desktop chips, with how wide they stand gathered.
+    Chips {
+        gathered: f32,
+    },
+    Runs,
     Shelf,
 }
 
 impl Widths {
-    /// The room `step` frees, when it is known before the step is taken: the part it removes
-    /// and the gap before it, or for the crumbs all of the pill's trail but its caret.
-    /// Gathering the desktops and saying only the waiting number leave something in the part's
-    /// place, so what they free is measured after.
-    fn freed_by(&self, step: GivenUp) -> Option<f32> {
+    /// The room `step` frees from a bar holding `contents`, when it is known before the step is
+    /// taken: the part it removes and the gap before it, for the crumbs all of the pill's trail
+    /// but its caret, and for gathering the desktops the runs chip and what the chips stand
+    /// past their gathered width. Saying only the waiting number leaves something in the
+    /// pill's place, so what it frees is measured after.
+    fn freed_by(&self, step: GivenUp, contents: &Contents) -> Option<f32> {
         let gap = attn_ui::blocks::Inline::joined_gap();
         match step {
             GivenUp::Crumbs => Some((self.trail - self.caret).max(0.0)),
+            GivenUp::Desktops => {
+                let runs = if contents.runs { self.runs + gap } else { 0.0 };
+                Some(runs + (self.chips - self.gathered).max(0.0))
+            }
             GivenUp::Strip => Some(self.strip + gap),
             GivenUp::ProfileName => Some((self.profile - PROFILE_SHORT_W).max(0.0)),
             GivenUp::Chips => Some(self.chips + gap),
             GivenUp::Shelf => Some(self.shelf + gap),
-            GivenUp::Nothing | GivenUp::Desktops | GivenUp::PillWord => None,
+            GivenUp::Nothing | GivenUp::PillWord => None,
         }
     }
 }
@@ -246,7 +275,11 @@ pub(crate) fn part(content: rune::El, part: Part) -> rune::El {
             Part::Caret => widths.caret = w,
             Part::Strip => widths.strip = w,
             Part::Profile => widths.profile = w,
-            Part::Chips => widths.chips = w,
+            Part::Chips { gathered } => {
+                widths.chips = w;
+                widths.gathered = gathered;
+            }
+            Part::Runs => widths.runs = w,
             Part::Shelf => widths.shelf = w,
         }
     })

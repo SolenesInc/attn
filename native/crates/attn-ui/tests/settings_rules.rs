@@ -1130,6 +1130,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("system::chip::keys_hint(what)", true),
     ("system::chip::slot_badge(slot)", false),
     ("system::chip::chip_button(label)", false),
+    ("system::chip::chip_width(said)", false),
     ("system::chip::keycaps_width(keys)", false),
     ("system::chip::keys_hint_width(keys)", false),
     ("system::chip::keys_hint_width(what)", false),

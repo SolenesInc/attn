@@ -7865,3 +7865,31 @@ fn the_smallest_popped_out_review_at_the_largest_text_keeps_its_document_in_view
         );
     }
 }
+
+#[test]
+fn in_the_smallest_window_at_large_text_the_chosen_frame_stays_whole_and_all_keys_gives_way() {
+    let mut world = start_with_tree(row(vec![document_tile("m", DOC, None)]), (800.0, 600.0));
+    world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+        settings: Some(
+            [("uiScale".to_owned(), "1.5".to_owned())]
+                .into_iter()
+                .collect(),
+        ),
+        ..attn_protocol::SettingsUpdatedMessage::new()
+    });
+    world.settle();
+    serve(&world);
+    deliver(&mut world, &map_document(), Some(map_bundle("map")));
+    assert_eq!(frame_tabs(&world), ["1 Brief", "2 Walkthrough", "3 Map *"]);
+    let elements = world.runtime().elements();
+    let chosen = elements
+        .iter()
+        .find(|e| e.key.as_deref() == Some("tile.m.review.frame.3"))
+        .expect("the Map's tab is drawn");
+    assert!(
+        chosen.rect[2] > 0.0 && chosen.visible[2] >= chosen.rect[2] - 0.5,
+        "the chosen frame shows {} of its {}",
+        chosen.visible[2],
+        chosen.rect[2]
+    );
+}

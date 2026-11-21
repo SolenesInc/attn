@@ -569,6 +569,7 @@ impl ListRow {
             }
         });
         let title = title.map(|title| title.min_w(TITLE_FLOOR));
+        let titled = title.is_some();
         let subtitle_key = self
             .subtitle_key
             .unwrap_or_else(|| format!("{}.subtitle", self.key));
@@ -649,8 +650,12 @@ impl ListRow {
                 on_band(
                     door::gap(row().items_center(), Space::S6)
                         .key(format!("{}.badges", self.key))
+                        .shrink()
+                        .min_w(0.0)
                         .children(self.badges),
-                ),
+                )
+                .shrink()
+                .min_w(0.0),
                 "badges-band",
             ))
         });
@@ -672,7 +677,8 @@ impl ListRow {
         let (words, under, subtitle) = if wraps {
             (lines(title_line, under, subtitle), None, None)
         } else {
-            (title_line.grow(1.0), under, subtitle)
+            let floor = if titled { TITLE_FLOOR } else { 0.0 };
+            (title_line.grow(1.0).min_w(floor), under, subtitle)
         };
         let words = part(words, "words");
         let fading = door::gap(row(), Space::S8)

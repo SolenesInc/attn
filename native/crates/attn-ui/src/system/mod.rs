@@ -46,8 +46,8 @@ pub use attachment::{drop_overlay, file_chip, image_tile};
 pub use button::{Button, Look};
 pub use check::Check;
 pub use chip::{
-    chip_button, chip_edge, count_badge, keycaps, keycaps_width, keys_hint, keys_hint_width,
-    number_chip, slot_badge,
+    chip_button, chip_edge, chip_width, count_badge, keycaps, keycaps_width, keys_hint,
+    keys_hint_width, number_chip, slot_badge,
 };
 pub use choice::{Choice, answers, checks, choices};
 pub use composer::composer;

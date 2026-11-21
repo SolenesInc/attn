@@ -39,6 +39,14 @@ fn chip_frame(face: El) -> El {
     door::corner(door::inset(chip, Space::S4, Space::S0), Radius::Tag)
 }
 
+/// How wide [`chip_button`] at `size` draws a [`number_chip`] or a [`chip_edge`] that says
+/// `said`.
+pub fn chip_width(said: &str, size: super::Size) -> f32 {
+    let frame = (door::line_height(Type::Tag) + 2.0 * Space::S2.pt())
+        .max(door::width(said, Type::Tag) + 2.0 * Space::S4.pt());
+    size.height().max(frame + 2.0 * Space::S4.pt())
+}
+
 /// How many things wait, as a round count in `fill` with `ink`, such as the turns waiting on a
 /// desktop hung off its chip's corner.
 pub fn count_badge(count: usize, fill: Color, ink: Color) -> El {
@@ -85,10 +93,18 @@ pub fn keys_hint(
 ) -> El {
     let keys: Vec<String> = keys.into_iter().map(Into::into).collect();
     let what = what.into();
+    let least = keycaps_width(keys.iter().map(String::as_str));
     door::gap(row().items_center(), Space::S6)
+        .min_w(least)
         .label(format!("{} {}", keys.join(" "), what.text()))
         .child(keycaps(keys, t).a11y_hidden())
-        .child(words(what, Type::Small, t.text_tertiary).a11y_hidden())
+        .child(
+            words(what, Type::Small, t.text_tertiary)
+                .single_line()
+                .truncate()
+                .shrink()
+                .a11y_hidden(),
+        )
 }
 
 /// Which desktop a thing is on, as its slot number tucked against its mark on `ground`.
