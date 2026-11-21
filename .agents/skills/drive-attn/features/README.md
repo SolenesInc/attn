@@ -299,7 +299,11 @@ CLI's help and have not run: the garden.md steps that arm a harvest without a
 url and take the arming back, the garden.md `bridge` steps, and the Driving it
 section of every other file. The live run used its own shell, not the env file
 and its prefix. Those were checked only against a stand-in `attn`, not an
-instance. A file whose recipe ran live says so here.
+instance. The Driving it section of [agent-tools.md](agent-tools.md) ran live
+on Linux at commit `347c1d475`, with real Claude Code, Codex and Sigma, the
+sample harness and the app under Xvfb, except plain Codex, which no fresh
+instance can start, and the outpost step, which needs a second machine. A file
+whose recipe ran live says so here.
 
 ### Agents and sessions
 
@@ -353,6 +357,7 @@ instance. A file whose recipe ran live says so here.
 ### Agent toolkit and operations
 
 - [Agent guidance](agent-guidance.md) (agents): What attn tells the agents it runs: session instructions, the attn map, references and prompts.
+- [Agent tools](agent-tools.md) (agents): Agents call attn through MCP tools instead of the attn CLI, behind an experimental setting.
 - [Document store](doc-store.md) (agents): Collections of documents with live queries, for agents and plugins.
 - [Vents](vents.md) (agents): Agents report what got in their way, for the user to review later, like a bug report.
 - [Vision check](vision-check.md) (agents): Ask a model one question about an image.
