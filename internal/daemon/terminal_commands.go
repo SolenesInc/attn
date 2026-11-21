@@ -402,18 +402,24 @@ func (d *Daemon) typeInput(ctx context.Context, terminal protocol.TerminalID, st
 	return nil
 }
 
-func (d *Daemon) awaitTypedCommandFinish(ctx context.Context, terminal protocol.TerminalID) {
+func (d *Daemon) awaitTypedCommandFinish(ctx context.Context, terminal protocol.TerminalID) error {
 	stored, ok := d.typedCommands.Load(terminal)
 	if !ok {
-		return
+		return nil
 	}
 	typed := stored.(typedCommand)
-	finishing, cancel := context.WithDeadline(ctx, typed.typedAt.Add(typedCommandFinishTripwire))
+	finishBy := typed.typedAt.Add(typedCommandFinishTripwire)
+	finishing, cancel := context.WithDeadline(ctx, finishBy)
 	defer cancel()
-	_, _ = Call[protocol.TerminalWaitResult](finishing, d.router(), protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: terminal, Until: protocol.TerminalWaitUntilPrompt, AfterBlockID: protocol.Ptr(typed.afterBlockID)})
-	if ctx.Err() == nil {
+	_, err := Call[protocol.TerminalWaitResult](finishing, d.router(), protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: terminal, Until: protocol.TerminalWaitUntilPrompt, AfterBlockID: protocol.Ptr(typed.afterBlockID)})
+	if err == nil {
 		d.typedCommands.CompareAndDelete(terminal, typed)
+		return nil
 	}
+	if time.Now().Before(finishBy) {
+		return err
+	}
+	return nil
 }
 
 func (d *Daemon) typedCommandUnfinished(terminal protocol.TerminalID, state protocol.TerminalText) bool {
@@ -449,7 +455,9 @@ func (d *Daemon) inputTerminal(ctx context.Context, caller *protocol.Session, in
 			return nil, nil, errors.New("run rule: run requires a shell; use send to type into an agent")
 		}
 		if in.waitForShell {
-			d.awaitTypedCommandFinish(ctx, target.terminal)
+			if err := d.awaitTypedCommandFinish(ctx, target.terminal); err != nil {
+				return nil, nil, err
+			}
 		}
 		if ctx.Err() != nil {
 			return nil, nil, ctx.Err()
