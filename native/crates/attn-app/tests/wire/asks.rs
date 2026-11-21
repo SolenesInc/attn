@@ -416,6 +416,33 @@ fn a_drag_selects_the_subject_a_part_and_a_choice_and_the_copy_key_copies_it() {
     );
 }
 
+/// Drags across the first line of the text keyed `key`, from the edge of its box to past its end.
+fn drag_from_edge(world: &mut World, key: &str) {
+    let [x, y, w, h] = world.rect(key);
+    let line = (y + h.min(16.0) / 2.0) as f32;
+    let (from, to) = ((x as f32, line), ((x + w) as f32 + 4.0, line));
+    world.gesture(|app| {
+        app.drag_from(from, to);
+        app.release(to);
+    });
+    world.settle();
+}
+
+#[test]
+fn a_drag_that_starts_at_the_edge_of_a_part_in_a_wide_window_selects_its_first_line() {
+    let mut world = start(vec![cache_store()], vec![api_working()]);
+    world.resize((1200.0, 800.0));
+    open_sheet(&mut world);
+    type_into(&mut world, NOTE, "draft");
+
+    drag_from_edge(&mut world, "asks.part.0");
+
+    assert_eq!(
+        copied(&mut world).as_deref(),
+        Some("Deploys empty the cache.")
+    );
+}
+
 #[test]
 fn the_copy_key_copies_the_selection_though_a_field_held_the_keyboard() {
     let mut world = start(vec![cache_store()], vec![api_working()]);

@@ -28,6 +28,7 @@ const SHEET_W: f32 = 1020.0;
 const SHEET_H: f32 = 880.0;
 const RAIL_W: f32 = 264.0;
 const MEASURE: f32 = 700.0;
+const NO_PROSE_MEASURE: f32 = 0.0;
 /// Under its greatest size the sheet stays 96 points narrower than the window and 120 points
 /// shorter, centred under the title bar. Past the least size below, its margins give way to
 /// it, down to the tightest.
@@ -336,7 +337,7 @@ impl<'a> Prose<'a> {
         Markdown::new(source)
             .selectable(true)
             .text_links(mentions::seed_links(self.names))
-            .style(crate::markdown::look(self.t))
+            .style(crate::markdown::look(self.t).prose_measure(NO_PROSE_MEASURE))
             .on_link_tx(move |state: &mut State, href: &str, tx: &mut Tx| {
                 match mentions::seed_of(href) {
                     Some(seed) => super::open_seed(state, seed, tx),
