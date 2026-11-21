@@ -2568,11 +2568,11 @@ fn a_crowded_queue_bar_keeps_the_window_s_desktop_and_gathers_the_rest_into_the_
         count.rect[2]
     );
     let bounds = |key: &str| world.screen().bounds(Target::key(key)).unwrap();
-    let [cap_x, _, cap_w, _] = bounds("shelf.cap.after");
+    let [shelf_x, _, shelf_w, _] = bounds("shelf.slot");
     let [current, ..] = bounds("queue-bar.desktop.1");
     assert!(
-        cap_x + cap_w <= current,
-        "the shelf's cap stops before the desktop chips"
+        shelf_x + shelf_w <= current,
+        "the shelf stops before the desktop chips"
     );
 
     arranged_on(&mut world, &message, "d3", 8);
