@@ -68,7 +68,7 @@ func buildAttnFromCommit(commit string) (string, error) {
 	bin := filepath.Join(source, "bin")
 	for _, step := range [][]string{
 		{"bash", "scripts/build-libghostty-vt.sh"},
-		{"go", "build", "-ldflags", "-w", "-o", filepath.Join(bin, "attnd"), "./cmd/attnd"},
+		{"go", "build", "-buildvcs=false", "-ldflags", "-w", "-o", filepath.Join(bin, "attnd"), "./cmd/attnd"},
 		{"bash", "scripts/rust-cli.sh", "build", "--out", filepath.Join(bin, "attn")},
 	} {
 		build := exec.Command(step[0], step[1:]...)
