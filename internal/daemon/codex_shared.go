@@ -977,7 +977,7 @@ func (r *codexShared) loadConfig(config map[string]any, sessionID protocol.Sessi
 
 func offerAgentTools(config map[string]any, tools *agentdriver.AgentTools) {
 	if tools != nil {
-		for _, setting := range hooks.CodexAgentToolServers(tools.URL, tools.Credential) {
+		for _, setting := range hooks.CodexAgentToolServers(tools.URL, hooks.CodexSetting{Key: "http_headers.Authorization", Value: "Bearer " + tools.Credential}) {
 			config[setting.Key] = setting.Value
 		}
 	}

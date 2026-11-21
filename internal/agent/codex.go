@@ -119,6 +119,9 @@ func (c *Codex) BuildEnv(opts SpawnOpts) []string {
 	if opts.SocketPath != "" {
 		env = append(env, "ATTN_SOCKET_PATH="+opts.SocketPath)
 	}
+	if opts.AgentTools != nil && opts.CodexRemote == "" {
+		env = append(env, AgentCredentialEnv+"="+opts.AgentTools.Credential)
+	}
 	if opts.Executable != "" && opts.Executable != c.DefaultExecutable() {
 		env = append(env, c.ExecutableEnvVar()+"="+opts.Executable)
 	}
@@ -329,7 +332,7 @@ func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
 	if opts.CodexRemote == "" {
 		overrides = append(overrides, hooks.GenerateCodexConfigOverrides(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, opts.launchSpec())...)
 		if tools := opts.AgentTools; tools != nil {
-			for _, setting := range hooks.CodexAgentToolServers(tools.URL, tools.Credential) {
+			for _, setting := range hooks.CodexAgentToolServers(tools.URL, hooks.CodexSetting{Key: "bearer_token_env_var", Value: AgentCredentialEnv}) {
 				overrides = append(overrides, setting.Override())
 			}
 		}

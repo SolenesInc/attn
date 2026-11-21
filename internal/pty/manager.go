@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -574,13 +575,15 @@ func normalizeAgent(agent string, external bool) string {
 func buildSpawnCommand(opts SpawnOptions, shellPath string, env []string) *exec.Cmd {
 	if opts.AgentLoginShell {
 		overlay := MergeEnvironment(pathOverlay(env), opts.AgentEnv)
-		return loginShellCommand(shellPath, opts.AgentArgv, overlay)
+		return loginShellCommand(shellPath, opts.AgentArgv, env, overlay)
 	}
 	command := opts.AgentArgv[0]
 	if resolved, ok := ResolveCommandPath(command, env); ok {
 		command = resolved
 	}
-	return exec.Command(command, opts.AgentArgv[1:]...)
+	cmd := exec.Command(command, opts.AgentArgv[1:]...)
+	cmd.Env = env
+	return cmd
 }
 
 func pathOverlay(env []string) []string {
@@ -592,18 +595,33 @@ func pathOverlay(env []string) []string {
 	return nil
 }
 
-func loginShellCommand(shellPath string, argv, overlay []string) *exec.Cmd {
+const postLoginEnvKey = "ATTN_POST_LOGIN_ENV"
+
+var shellVariableName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func loginShellCommand(shellPath string, argv, env, overlay []string) *exec.Cmd {
 	args := []string{"-l", "-c"}
 	if filepath.Base(shellPath) == "fish" {
 		args = append(args, "exec $argv")
 	} else {
 		args = append(args, `exec "$@"`, "attn-agent")
 	}
-	args = append(args, "/usr/bin/env")
-	args = append(args, overlay...)
-	args = append(args, "/bin/sh", "-c", `exec "$@"`, "attn-agent")
+	args = append(args, "/bin/sh", "-c", `eval "$`+postLoginEnvKey+`"; unset `+postLoginEnvKey+`; exec "$@"`, "attn-agent")
 	args = append(args, argv...)
-	return exec.Command(shellPath, args...)
+	cmd := exec.Command(shellPath, args...)
+	cmd.Env = MergeEnvironment(env, []string{postLoginEnvKey + "=" + postLoginExports(overlay)})
+	return cmd
+}
+
+func postLoginExports(overlay []string) string {
+	var script strings.Builder
+	for _, entry := range overlay {
+		key, value, _ := strings.Cut(entry, "=")
+		if shellVariableName.MatchString(key) {
+			script.WriteString("export " + key + "=" + shellQuote(value) + "\n")
+		}
+	}
+	return script.String()
 }
 
 func ResolveCommandPath(command string, env []string) (string, bool) {
@@ -648,7 +666,7 @@ func buildSpawnEnv(opts SpawnOptions, agent, wrapperPath string) []string {
 		shellEnv = readCachedShellEnvFromProcess()
 	}
 	env = MergeEnvironment(env, shellEnv)
-	env = filterEnvKeys(env, "ATTN_DAEMON_MANAGED", "ATTN_AUTO_APPROVE", "ATTN_MODEL", "ATTN_EFFORT", "ATTN_EXECUTION_TARGET", "ATTN_AUTO_COMPACT_WINDOW", "ATTN_CHIEF_AUTO_COMPACT_WINDOW", "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_DAEMON_ENV",
+	env = filterEnvKeys(env, "ATTN_DAEMON_MANAGED", "ATTN_AUTO_APPROVE", "ATTN_MODEL", "ATTN_EFFORT", "ATTN_EXECUTION_TARGET", "ATTN_AUTO_COMPACT_WINDOW", "ATTN_CHIEF_AUTO_COMPACT_WINDOW", "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_DAEMON_ENV", "ATTN_PTY_AGENT_ENV",
 		pausepoint.EnvPoints, pausepoint.EnvSocket)
 
 	env = config.WithoutAgentSessionIdentityEnv(env)
@@ -672,7 +690,7 @@ func buildSpawnEnv(opts SpawnOptions, agent, wrapperPath string) []string {
 	if len(opts.AgentEnv) > 0 {
 		env = MergeEnvironment(env, opts.AgentEnv)
 	}
-	env = filterEnvKeys(env, "ATTN_DAEMON_MANAGED", "ATTN_AUTO_APPROVE", "ATTN_MODEL", "ATTN_EFFORT", "ATTN_EXECUTION_TARGET", "ATTN_AUTO_COMPACT_WINDOW", "ATTN_CHIEF_AUTO_COMPACT_WINDOW", "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_DAEMON_ENV",
+	env = filterEnvKeys(env, "ATTN_DAEMON_MANAGED", "ATTN_AUTO_APPROVE", "ATTN_MODEL", "ATTN_EFFORT", "ATTN_EXECUTION_TARGET", "ATTN_AUTO_COMPACT_WINDOW", "ATTN_CHIEF_AUTO_COMPACT_WINDOW", "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_DAEMON_ENV", "ATTN_PTY_AGENT_ENV",
 		pausepoint.EnvPoints, pausepoint.EnvSocket)
 	env = MergeEnvironment(env, opts.DaemonEnv)
 	env = filterEnvKeys(env, "ATTN_HOST", "ATTN_PTY_HOST_NAME")

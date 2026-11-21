@@ -61,6 +61,7 @@ func PrepareLaunch(opts SpawnOptions, logf LogFunc) (PreparedLaunch, error) {
 			cleanupDir = launch.overlayDir
 		} else {
 			cmd = buildSpawnCommand(opts, shellPath, cmdEnv)
+			attemptEnv = cmd.Env
 		}
 
 		prepared.Attempts = append(prepared.Attempts, PreparedLaunchAttempt{

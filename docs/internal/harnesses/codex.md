@@ -29,6 +29,11 @@ Read in the source at openai/codex 60947e2341.
   with `codex exec`; captures on `s-vadq83`). `bearer_token_env_var` names the
   environment variable that holds the bearer token, and
   `http_headers.Authorization="Bearer ..."` sends that header on every request.
+  Set as `-c mcp_servers.<name>.bearer_token_env_var="ATTN_AGENT_CREDENTIAL"`,
+  every request carries `Authorization: Bearer` and the variable's value
+  (probed on 0.167.0 with `codex exec` and a dummy token; seed `s-j5h91y`).
+  Plain Codex takes the attn tools' credential this way, so its arguments name
+  only the variable.
   With `default_tools_approval_mode = "approve"` the server's tools run without
   asking, for a direct call and for a subagent spawned with the multi-agent
   tools, which calls with the same header (probed on 0.171.0 with `codex exec`

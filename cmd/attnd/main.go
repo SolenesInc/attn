@@ -114,7 +114,6 @@ func runPTYWorker() {
 	var unattendedLaunchJSON string
 	fs.BoolVar(&cfg.AgentLoginShell, "agent-login-shell", false, "run the prepared agent through a login shell")
 	fs.Func("agent-arg", "prepared agent argument (repeat for each argument)", func(value string) error { cfg.AgentArgv = append(cfg.AgentArgv, value); return nil })
-	fs.Func("agent-env", "prepared agent environment entry (repeat for each entry)", func(value string) error { cfg.AgentEnv = append(cfg.AgentEnv, value); return nil })
 	fs.StringVar(&unattendedLaunchJSON, "unattended-launch-json", "", "immutable unattended launch contract as JSON")
 	fs.StringVar(&cfg.ExternalCWD, "external-cwd", "", "external plugin driver working directory")
 	fs.StringVar(&cfg.AdoptHandoff, "adopt-handoff", "", "handoff file left by the worker image this one replaces")
@@ -164,6 +163,12 @@ func runPTYWorker() {
 	if daemonEnvJSON := os.Getenv("ATTN_PTY_DAEMON_ENV"); daemonEnvJSON != "" {
 		if err := json.Unmarshal([]byte(daemonEnvJSON), &cfg.DaemonEnv); err != nil {
 			fmt.Fprintf(os.Stderr, "pty-worker error: invalid ATTN_PTY_DAEMON_ENV: %v\n", err)
+			exit(1)
+		}
+	}
+	if agentEnvJSON := os.Getenv("ATTN_PTY_AGENT_ENV"); agentEnvJSON != "" {
+		if err := json.Unmarshal([]byte(agentEnvJSON), &cfg.AgentEnv); err != nil {
+			fmt.Fprintf(os.Stderr, "pty-worker error: invalid ATTN_PTY_AGENT_ENV: %v\n", err)
 			exit(1)
 		}
 	}

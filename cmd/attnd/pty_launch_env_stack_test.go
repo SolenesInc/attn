@@ -28,7 +28,7 @@ func TestAShellPaneInheritsNeitherTheClaudeSessionThatStartedTheDaemonNorItsWork
 		switch key, _, _ := strings.Cut(pair, "="); key {
 		case "CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_EFFORT", "CLAUDE_CODE_DISABLE_AGENT_VIEW", "CLAUDE_CODE_DISABLE_AUTO_MEMORY", "ATTN_CLAUDE_MOD_SOCKET":
 			t.Errorf("a shell pane inherited %s from the Claude session that started the daemon", pair)
-		case "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_EXTERNAL_ENV", "ATTN_PTY_DAEMON_ENV":
+		case "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_EXTERNAL_ENV", "ATTN_PTY_DAEMON_ENV", "ATTN_PTY_AGENT_ENV":
 			t.Errorf("a shell pane inherited its worker's transport variable %s", pair)
 		}
 	}

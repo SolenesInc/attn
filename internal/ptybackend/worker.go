@@ -551,9 +551,6 @@ func (b *WorkerBackend) spawnArgs(opts SpawnOptions, session *workerSession) ([]
 	for _, arg := range opts.AgentArgv {
 		args = append(args, "--agent-arg", arg)
 	}
-	for _, entry := range opts.AgentEnv {
-		args = append(args, "--agent-env", entry)
-	}
 	args, err := appendUnattendedLaunchArgs(args, opts.UnattendedLaunch)
 	if err != nil {
 		return nil, err
@@ -652,6 +649,7 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 		"ATTN_AUTO_COMPACT_WINDOW",
 		"ATTN_CACHED_SHELL_ENV",
 		"ATTN_PTY_DAEMON_ENV",
+		"ATTN_PTY_AGENT_ENV",
 	)
 	workerEnv = append(workerEnv, "ATTN_PTY_WORKER=1", "ATTN_PTY_HOST_NAME="+opts.HostName)
 	if len(opts.LoginShellEnv) > 0 {
@@ -665,6 +663,13 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 			return fmt.Errorf("encode daemon routing environment: %w", err)
 		}
 		workerEnv = append(workerEnv, "ATTN_PTY_DAEMON_ENV="+string(envJSON))
+	}
+	if len(opts.AgentEnv) > 0 {
+		envJSON, err := json.Marshal(opts.AgentEnv)
+		if err != nil {
+			return fmt.Errorf("encode agent environment: %w", err)
+		}
+		workerEnv = append(workerEnv, "ATTN_PTY_AGENT_ENV="+string(envJSON))
 	}
 	cmd.Env = workerEnv
 	readyReader, readyWriter, err := os.Pipe()

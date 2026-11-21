@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -33,8 +34,7 @@ func TestLoginShellPreservesAgentArgumentsAndEnvironment(t *testing.T) {
 			}
 			check := func(t *testing.T, args []string, value string) {
 				argv := append([]string{probe, "-c", `printf '%s\000' "$ATTN_ARGV_PROBE" "$@"`, "probe"}, args...)
-				cmd := loginShellCommand(path, argv, []string{"ATTN_ARGV_PROBE=" + value})
-				cmd.Env = os.Environ()
+				cmd := loginShellCommand(path, argv, os.Environ(), []string{"ATTN_ARGV_PROBE=" + value})
 				var stderr bytes.Buffer
 				cmd.Stderr = &stderr
 				out, err := cmd.Output()
@@ -47,7 +47,11 @@ func TestLoginShellPreservesAgentArgumentsAndEnvironment(t *testing.T) {
 					t.Fatalf("received %q, want %q", got, want)
 				}
 			}
-			check(t, hostileArguments, "it's \"$HOME\" `x`\n-n")
+			secret := "it's \"$HOME\" `x`\n-n"
+			if args := loginShellCommand(path, []string{probe}, os.Environ(), []string{"ATTN_ARGV_PROBE=" + secret}).Args; slices.ContainsFunc(args, func(arg string) bool { return strings.Contains(arg, secret) }) {
+				t.Fatalf("the login shell's arguments %q carry an environment value", args)
+			}
+			check(t, hostileArguments, secret)
 			text := rapid.String().Filter(func(s string) bool { return !strings.ContainsRune(s, 0) })
 			for i := 0; i < randomLaunchesPerShell; i++ {
 				check(t, rapid.SliceOf(text).Example(i), text.Example(i+randomLaunchesPerShell))

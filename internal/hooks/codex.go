@@ -39,7 +39,7 @@ func (s CodexSetting) Override() string {
 	return s.Key + "=" + string(value)
 }
 
-func CodexAgentToolServers(url, credential string) []CodexSetting {
+func CodexAgentToolServers(url string, auth CodexSetting) []CodexSetting {
 	var settings []CodexSetting
 	for _, server := range []struct {
 		name, tools string
@@ -51,7 +51,7 @@ func CodexAgentToolServers(url, credential string) []CodexSetting {
 		key := "mcp_servers." + server.name + "."
 		settings = append(settings,
 			CodexSetting{key + "url", url + "?tools=" + server.tools},
-			CodexSetting{key + "http_headers.Authorization", "Bearer " + credential},
+			CodexSetting{key + auth.Key, auth.Value},
 			CodexSetting{key + "default_tools_approval_mode", "approve"},
 		)
 		if server.omit != nil {

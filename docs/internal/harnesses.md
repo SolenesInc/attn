@@ -61,6 +61,23 @@ Plugin driver payloads retain the `session_id` wire spelling for the terminal.
 Close notifications, including those completed after restart, use the original
 terminal identity.
 
+## The agent credential stays out of arguments
+
+Any local user can read a process's arguments, so no process attn starts holds
+the credential for the attn tools in its arguments: not the PTY worker or host,
+the login shell, the launcher (`attn -s`), nor the harness. A terminal's harness
+receives the credential in its environment, as `ATTN_AGENT_CREDENTIAL` or a
+variable its plugin names, and its configuration names the variable: Claude
+Code expands `${ATTN_AGENT_CREDENTIAL}` in its `--mcp-config` header, and plain
+Codex names it with `bearer_token_env_var`. Shared Codex receives its server's
+credential in each conversation's `config` over the app-server connection.
+Every variable a launch adds to an agent's environment travels this way, so a
+new one needs no care of its own.
+`TestNoProcessALaunchStartsHoldsTheAgentCredentialInItsArguments` (`cmd/attnd`)
+records every process that Claude Code and shared Codex launches start, on both
+PTY runtimes and both launch paths, and fails on any credential the daemon
+signed that appears in their arguments.
+
 ## The running version in the transcript
 
 Each harness writes the version of the running process into its transcript, so

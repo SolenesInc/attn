@@ -137,9 +137,11 @@ another conversation, its calls act as that conversation's session. The
 credential lasts while the terminal does. `description` is one line saying
 what the tools are for, for a harness that lists its servers before it reads
 them. The server's `instructions` hold attn's intent map, the text that says
-when to reach for each tool. `examples/plugins/sample-harness` passes the
-endpoint to its harness in the environment, and the harness's `/tool <name>
-<json>` line calls a tool.
+when to reach for each tool. Pass the credential in `env`, never in `argv`:
+any local user can read a process's arguments, while its environment is the
+user's own. `examples/plugins/sample-harness` passes the endpoint to its
+harness in the environment, and the harness's `/tool <name> <json>` line calls
+a tool.
 
 A shared server gets the endpoint from attn itself; see
 [Shared servers and attn's tools](#shared-servers-and-attns-tools).
