@@ -961,7 +961,10 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 Some(marking) => slot.children(super::annotating::layers(
                     &pane.runtime_id,
                     marking,
-                    cx.terminals.slot_size(&pane.runtime_id).unwrap_or_default(),
+                    (
+                        cx.terminals.slot_size(&pane.runtime_id).unwrap_or_default(),
+                        super::annotating::Room::of(cx.terminals, &pane.runtime_id),
+                    ),
                     (
                         held.then_some(cx.keys.send_annotations.as_deref())
                             .flatten(),

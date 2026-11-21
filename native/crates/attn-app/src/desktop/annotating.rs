@@ -28,13 +28,14 @@ const NUDGE: f32 = 10.0;
 const NUDGE_FAR: f32 = 40.0;
 
 /// What terminal `id`'s marks put over its slot: the panel listing them, the notice of a drag
-/// that marked nothing, and the popup over a mark. `slot` is the slot's size in points;
-/// `send_key` names the send key while this terminal holds the keyboard; `unreachable` names
-/// the session's machine while the marks cannot reach it.
+/// that marked nothing, and the popup over a mark. `slot` is the slot's size in points and
+/// `room` where in it the popup may open; `send_key` names the send key while this terminal
+/// holds the keyboard; `unreachable` names the session's machine while the marks cannot reach
+/// it.
 pub(super) fn layers(
     id: &str,
     marking: &Marking,
-    slot: (f32, f32),
+    (slot, room): ((f32, f32), Room),
     (send_key, unreachable): (Option<&str>, Option<&str>),
     t: &Tokens,
 ) -> Vec<El> {
@@ -45,7 +46,7 @@ pub(super) fn layers(
     let popup = marking
         .popup
         .as_ref()
-        .and_then(|p| Some(popup(id, p, marking.mark(&p.mark)?, slot, t)));
+        .and_then(|p| Some(popup(id, p, marking.mark(&p.mark)?, (slot, room), t)));
     panel.into_iter().chain(notice).chain(popup).collect()
 }
 
@@ -71,7 +72,8 @@ fn box_at(state: &State, id: &str, moves: Moves) -> Option<((f32, f32), (f32, f3
         Moves::Popup => {
             let popup = marking.popup.as_ref()?;
             let size = popup.size?;
-            Some((popup_at(popup, size, slot), size))
+            let room = Room::of(&state.terminals, id);
+            Some((popup_at(popup, size, slot, room), size))
         }
     }
 }
@@ -150,20 +152,42 @@ fn nudge_popup(state: &mut State, id: &str, ev: &KeyEvent) -> bool {
     true
 }
 
-fn popup_at(popup: &Popup, size: (f32, f32), slot: (f32, f32)) -> (f32, f32) {
+/// Where over a terminal a popup may open: anywhere, or only below its point while a find or
+/// filter bar stands over the terminal's top.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Room {
+    Anywhere,
+    UnderBars,
+}
+
+impl Room {
+    pub(super) fn of(terminals: &crate::terminal::Terminals, id: &str) -> Room {
+        if terminals.finding(id).is_some() || terminals.filtering(id).is_some() {
+            Room::UnderBars
+        } else {
+            Room::Anywhere
+        }
+    }
+}
+
+fn popup_at(popup: &Popup, size: (f32, f32), slot: (f32, f32), room: Room) -> (f32, f32) {
     match popup.moved {
         Some(at) => clamped(at, size, slot),
-        None => place(popup.at, size, slot),
+        None => place_in(popup.at, size, slot, room),
     }
 }
 
 /// Where a box of `size` opens for a point `at` in a slot of `slot`: centred above it, or else
 /// below it, or else beside it, kept inside the slot, as the Tauri popup places itself.
 pub(crate) fn place(at: (f32, f32), size: (f32, f32), slot: (f32, f32)) -> (f32, f32) {
+    place_in(at, size, slot, Room::Anywhere)
+}
+
+fn place_in(at: (f32, f32), size: (f32, f32), slot: (f32, f32), room: Room) -> (f32, f32) {
     let clamp = |v: f32, low: f32, high: f32| v.min(high.max(low)).max(low);
     let left = clamp(at.0 - size.0 / 2.0, MARGIN, slot.0 - size.0 - MARGIN);
     let above = at.1 - size.1 - GAP;
-    if above >= MARGIN {
+    if room == Room::Anywhere && above >= MARGIN {
         return (left, above);
     }
     let below = at.1 + GAP;
@@ -195,7 +219,7 @@ fn popup(
     id: &str,
     popup: &Popup,
     mark: &crate::terminal::Annotation,
-    slot: (f32, f32),
+    (slot, room): ((f32, f32), Room),
     t: &Tokens,
 ) -> El {
     let picked = annotations::label_by_id(&mark.label);
@@ -309,7 +333,7 @@ fn popup(
     .under(Some(under))
     .build(t);
     let (left, top) = match popup.size {
-        Some(size) => popup_at(popup, size, slot),
+        Some(size) => popup_at(popup, size, slot, room),
         None => (popup.at.0, popup.at.1 - GAP),
     };
     let measured = id.to_owned();

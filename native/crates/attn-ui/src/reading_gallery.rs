@@ -665,7 +665,14 @@ fn toolbar_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
             .child(quiet("toolbar.pick.0", "👍 I agree", &t))
             .child(quiet("toolbar.pick.1", "Cut this", &t))
     });
+    let grip = s.long.then(|| {
+        crate::system::words(crate::glyph::GRABBER, Type::Small, t.text_tertiary)
+            .key("toolbar.grip")
+            .align(rune::Align::Center)
+            .w_full()
+    });
     let toolbar = Toolbar::new("toolbar", "Annotate selection")
+        .head(grip)
         .group([
             tool("toolbar.delete", crate::glyph::BAN, "Delete", t.error),
             tool(

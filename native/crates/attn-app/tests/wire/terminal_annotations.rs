@@ -1393,3 +1393,44 @@ fn the_panel_of_a_long_draft_stays_inside_a_short_terminal() {
         top + height
     );
 }
+
+#[test]
+fn a_marks_popup_leaves_an_open_find_bar_whole() {
+    let mut state = showing(vec![agent_pane()], "daemon-1");
+    state.settings = Some(std::collections::BTreeMap::from([(
+        "uiScale".into(),
+        "1.5".into(),
+    )]));
+    let daemon = Daemon::scripted().state(state);
+    daemon
+        .on("session_messages_get", |_| {
+            message(messages_result(&[("m1", MESSAGE)], "ready"))
+        })
+        .on("session_annotations_get", |_| draft_result(Vec::new(), 0))
+        .on("session_annotations_save", |_| saved());
+    let mut world = World::start_sized(daemon, (800.0, 600.0));
+    world.open_desktop();
+    output(
+        &world,
+        1,
+        format!("{}{MESSAGE}\r\n", "\r\n".repeat(4)).as_bytes(),
+    );
+    world.settle();
+    let find = if mac() { "mod+f" } else { "mod+shift+f" };
+    world.gesture(|app| app.press(find));
+    world.gesture(|app| app.type_text("cache"));
+    drag_with(&mut world, alt(), (4, 4), (20, 4));
+    assert_eq!(
+        annotations(&mut world)["marks"][0]["quote"],
+        "cache keeps every"
+    );
+    let [bx, by, bw, bh] = world.rect("terminal.r1.find");
+    let [px, py, pw, ph] = world.rect("terminal.r1.annotation.popup");
+    let apart = px >= bx + bw || px + pw <= bx || py >= by + bh || py + ph <= by;
+    assert!(
+        apart,
+        "the popup at {:?} covers the find bar at {:?}",
+        [px, py, pw, ph],
+        [bx, by, bw, bh]
+    );
+}
