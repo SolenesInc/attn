@@ -17,11 +17,19 @@ use crate::State;
 const PAUSE: f64 = 0.4;
 
 /// What the daemon holds of a draft as far as this window knows: what it was last sent, or
-/// nothing known once a save never reached it, which the next poll saves again.
+/// nothing known once a save never reached it, which the next poll saves again, or what a refused
+/// save held, which waits for the next edit.
 #[derive(Debug, PartialEq)]
 pub(super) enum Held {
     Sent(Value),
     Unknown,
+    Refused { form: Value, why: String },
+}
+
+impl Held {
+    fn settled(&self, form: &Value) -> bool {
+        matches!(self, Held::Sent(sent) | Held::Refused { form: sent, .. } if sent == form)
+    }
 }
 
 impl Default for Held {
@@ -96,7 +104,7 @@ pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) {
     let mut wake = f64::INFINITY;
     for (id, draft) in &mut state.window.asks.drafts {
         let form = draft.form();
-        if matches!(&draft.saved, Held::Sent(sent) if *sent == form) {
+        if draft.saved.settled(&form) {
             draft.pending = None;
             continue;
         }
@@ -124,13 +132,16 @@ pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) {
 
 /// Saves the draft for ask `id` at the next generation. A daemon that took a later generation
 /// from elsewhere refuses it; this window's draft is the one being written, so it saves again past
-/// that generation. A save the daemon never answered leaves what it holds unknown.
+/// that generation. A save the daemon never answered leaves what it holds unknown, and one it
+/// refused leaves the reason for the sheet to show, unless the ask left meanwhile; the next edit
+/// saves again.
 fn save(state: &mut State, id: &str, tx: &mut Tx) {
     let Some(draft) = state.window.asks.drafts.get_mut(id) else {
         return;
     };
     draft.generation += 1;
-    draft.saved = Held::Sent(draft.form());
+    let form = draft.form();
+    draft.saved = Held::Sent(form.clone());
     draft.pending = None;
     let message = AskDraftSaveMessage {
         ask_id: id.to_owned(),
@@ -154,6 +165,19 @@ fn save(state: &mut State, id: &str, tx: &mut Tx) {
                     draft.generation = r.generation;
                     save(state, &id, tx);
                 }
+                Some(r) if !r.success => {
+                    let open = state
+                        .facts
+                        .asks
+                        .iter()
+                        .any(|a| a.id == id && a.reply.is_none());
+                    if open {
+                        draft.saved = Held::Refused {
+                            form,
+                            why: r.error.unwrap_or_else(|| "the daemon refused it".into()),
+                        };
+                    }
+                }
                 Some(_) => {}
             }
         },
@@ -162,6 +186,14 @@ fn save(state: &mut State, id: &str, tx: &mut Tx) {
 }
 
 impl Draft {
+    /// Why the daemon refused the last save, until a save is taken.
+    pub(super) fn refusal(&self) -> Option<&str> {
+        match &self.saved {
+            Held::Refused { why, .. } => Some(why),
+            _ => None,
+        }
+    }
+
     /// The draft as the daemon keeps it: every answer with something written, the note and the
     /// note's files, as written.
     pub(super) fn kept(&self) -> AskDraft {

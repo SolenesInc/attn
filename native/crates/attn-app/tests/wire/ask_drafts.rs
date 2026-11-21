@@ -294,6 +294,88 @@ fn a_save_the_daemon_never_answered_is_sent_again_once_it_is_back() {
 }
 
 #[test]
+fn a_refused_save_says_the_draft_was_not_saved_and_the_next_edit_saves_it_again() {
+    let mut world = launched(vec![launch()]);
+    world.daemon.on("ask_draft_save", |r| {
+        message(AskDraftSaveResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            ask_id: r["ask_id"].as_str().unwrap().into(),
+            success: false,
+            error: Some("disk full".into()),
+            ..AskDraftSaveResultMessage::new()
+        })
+    });
+    open_sheet(&mut world);
+    type_into(&mut world, NOTE, "Ask me before Friday");
+    world.advance(Duration::from_millis(400));
+    assert_eq!(saves(&world).len(), 1);
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("asks.draft-error"))
+            .name
+            .as_deref(),
+        Some("Your draft was not saved: disk full")
+    );
+    assert_eq!(field_text(&world, NOTE), "Ask me before Friday");
+
+    world.advance(Duration::from_secs(30));
+    assert_eq!(
+        saves(&world).len(),
+        1,
+        "a refused save went again with nothing new written"
+    );
+
+    let kept = Kept::default();
+    keeping(&world, &kept);
+    type_into(&mut world, NOTE, " today");
+    world.advance(Duration::from_millis(400));
+    assert_eq!(
+        kept.lock()
+            .unwrap()
+            .clone()
+            .expect("saved again")
+            .note
+            .as_deref(),
+        Some("Ask me before Friday today")
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("asks.draft-error"))
+            .is_none(),
+        "the message stayed after a save the daemon took"
+    );
+}
+
+#[test]
+fn a_save_refused_because_the_ask_was_answered_meanwhile_says_nothing() {
+    let mut world = launched(vec![launch()]);
+    world.daemon.on("ask_draft_save", |r| {
+        message(AskDraftSaveResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            ask_id: r["ask_id"].as_str().unwrap().into(),
+            success: false,
+            error: Some("this ask was already answered or withdrawn".into()),
+            ..AskDraftSaveResultMessage::new()
+        })
+    });
+    open_sheet(&mut world);
+    type_into(&mut world, NOTE, "Too late");
+    let mut answered = launch();
+    answered.reply = Some(attn_protocol::AskReply::default());
+    update_asks(&mut world, vec![answered]);
+    world.advance(Duration::from_millis(400));
+    world.advance(Duration::from_millis(400));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("asks.draft-error"))
+            .is_none()
+    );
+}
+
+#[test]
 fn a_file_questions_files_ride_in_the_draft_and_come_back_under_it() {
     let banner = || {
         ask(

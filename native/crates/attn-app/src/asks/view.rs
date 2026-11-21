@@ -656,24 +656,29 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
             ));
         }
     }
-    blocks.extend(
-        state
-            .window
-            .asks
-            .error
-            .as_ref()
-            .filter(|(id, _)| *id == ask.id)
-            .map(|(_, why)| {
-                Block::custom(
-                    "asks.error.block",
-                    words(why.clone(), Type::Small, t.error)
-                        .key("asks.error")
-                        .role("alert")
-                        .label(why.clone())
-                        .wrap(),
-                )
-            }),
-    );
+    let refused = state
+        .window
+        .asks
+        .error
+        .as_ref()
+        .filter(|(id, _)| *id == ask.id)
+        .map(|(_, why)| ("asks.error", why.clone()));
+    let unsaved = draft.and_then(|d| d.refusal()).map(|why| {
+        (
+            "asks.draft-error",
+            format!("Your draft was not saved: {why}"),
+        )
+    });
+    blocks.extend(refused.into_iter().chain(unsaved).map(|(key, why)| {
+        Block::custom(
+            format!("{key}.block"),
+            words(why.clone(), Type::Small, t.error)
+                .key(key)
+                .role("alert")
+                .label(why)
+                .wrap(),
+        )
+    }));
     blocks
 }
 
