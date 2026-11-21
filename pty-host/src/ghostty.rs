@@ -799,6 +799,35 @@ mod tests {
         assert_eq!(described, [(7, 3, true, 4, 2), (8, 0, true, 0, 0)]);
     }
 
+    #[test]
+    fn an_image_a_program_names_by_file_path_is_stored_on_either_screen() {
+        use base64::Engine as _;
+        let path =
+            std::env::temp_dir().join(format!("attn-kitty-file-medium-{}.png", std::process::id()));
+        let mut png = Vec::new();
+        let mut encoder = png::Encoder::new(&mut png, 3, 2);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder
+            .write_header()
+            .expect("png header")
+            .write_image_data(&[255; 24])
+            .expect("png pixels");
+        std::fs::write(&path, &png).expect("write png");
+        let named =
+            base64::engine::general_purpose::STANDARD.encode(path.to_string_lossy().as_bytes());
+        let transmit = |id: u32| format!("\x1b_Ga=t,t=f,f=100,i={id},q=2;{named}\x1b\\");
+        let mut terminal = Terminal::new(80, 24).expect("create terminal");
+        let size =
+            |terminal: &Terminal, id| terminal.kitty_image(id, 0).map(|i| (i.width, i.height));
+        terminal.write(transmit(5).as_bytes());
+        let primary = size(&terminal, 5);
+        terminal.write(b"\x1b[?1049h");
+        terminal.write(transmit(6).as_bytes());
+        let alternate = size(&terminal, 6);
+        std::fs::remove_file(&path).expect("remove png");
+        assert_eq!((primary, alternate), (Some((3, 2)), Some((3, 2))));
+    }
+
     use super::Theme;
     use crate::wire::WireFeeder;
 

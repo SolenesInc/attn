@@ -139,6 +139,11 @@ static GhosttyResult attn_configure(AttnGhosttyTerminal *attn,
       attn->terminal, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT,
       &kitty_bytes);
   if (rc != GHOSTTY_SUCCESS) return rc;
+  bool file_medium = true;
+  rc = ghostty_terminal_set(
+      attn->terminal, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_FILE,
+      &file_medium);
+  if (rc != GHOSTTY_SUCCESS) return rc;
   size_t continuation = 65U << 20;
   rc = ghostty_terminal_set(
       attn->terminal, GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES,
