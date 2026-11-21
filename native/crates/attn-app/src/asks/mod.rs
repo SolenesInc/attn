@@ -1,5 +1,6 @@
 mod attach;
 mod mentions;
+mod saving;
 mod view;
 
 use std::collections::{BTreeMap, HashMap};
@@ -15,6 +16,7 @@ use crate::State;
 use crate::shell::Layer;
 use crate::sidebar::queue;
 
+pub(crate) use saving::poll as save_drafts;
 pub(crate) use view::{ChipLevel, chip, chip_widths, marker, preview, sheet, title_button};
 
 pub(crate) const SETTING: &str = "asks_enabled";
@@ -68,6 +70,11 @@ pub(crate) struct Draft {
     pub files: Vec<attach::File>,
     /// Send was pressed while a file still uploaded: the answer goes once every file is up.
     pub sends_after_upload: bool,
+    generation: i64,
+    /// What the daemon holds of this draft, as `saving` compares it.
+    saved: serde_json::Value,
+    /// What was written, and when it is saved unless it changes before then.
+    pending: Option<(serde_json::Value, f64)>,
 }
 
 /// Where ⇥ stops in an open ask, in order: each question, then the note.
@@ -903,6 +910,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
         .asks
         .follow_ups
         .retain(|id, _| listed.contains(id));
+    saving::restore(state);
     if !is_open(state) {
         return;
     }

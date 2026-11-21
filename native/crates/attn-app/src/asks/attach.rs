@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use attn_protocol::{
-    AttachmentDiscardMessage, AttachmentOwner, AttachmentPutMessage, AttachmentResultMessage,
+    AskDraftFile, AttachmentDiscardMessage, AttachmentOwner, AttachmentPutMessage,
+    AttachmentResultMessage,
 };
 use base64::Engine;
 use rune::{ClipboardContent, FileDialogOptions, Image, Tx};
@@ -19,10 +20,12 @@ const CHUNK: u64 = 524_288;
 /// The side of a pasted image's tile in the tray.
 pub(crate) const TILE: (f32, f32) = (84.0, 58.0);
 
-/// Where a file's bytes come from: a file on disk, read a chunk at a time, or a pasted image.
+/// Where a file's bytes come from: a file on disk, read a chunk at a time, a pasted image, or the
+/// daemon, which holds a file a saved draft brought back.
 enum Source {
     Path(PathBuf),
     Png(Arc<[u8]>),
+    Daemon,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -44,6 +47,22 @@ pub(crate) struct File {
 }
 
 impl File {
+    /// A file of a draft the daemon kept. One whose upload had not finished cannot finish now,
+    /// since its bytes stayed on this side.
+    pub(crate) fn restored(held: &AskDraftFile) -> File {
+        File {
+            id: held.attachment.id.clone(),
+            name: held.attachment.name.clone(),
+            size: held.attachment.bytes.max(0) as u64,
+            picture: None,
+            source: Source::Daemon,
+            upload: match held.ready {
+                true => Upload::Done,
+                false => Upload::Failed("it was still uploading when attn closed".into()),
+            },
+        }
+    }
+
     pub(crate) fn uploading(&self) -> bool {
         self.upload == Upload::Running
     }
@@ -131,10 +150,11 @@ fn add(state: &mut State, ask: &str, to: &Stop, files: Vec<(String, Source)>, tx
                 }
             },
             Source::Png(png) => png.len() as u64,
+            Source::Daemon => continue,
         };
         let picture = match &source {
             Source::Png(png) => state.pictures.of_png(png.clone(), TILE.0.max(TILE.1)),
-            Source::Path(_) => None,
+            Source::Path(_) | Source::Daemon => None,
         };
         let id = uuid::Uuid::new_v4().to_string();
         state.draft(ask).files.push(File {
@@ -194,6 +214,7 @@ fn put(state: &mut State, ask: String, id: String, offset: u64, tx: &mut Tx) {
             let end = (start + CHUNK as usize).min(png.len());
             Ok(png[start..end].to_vec())
         }
+        Source::Daemon => Err("the daemon already holds it".to_owned()),
     };
     let bytes = match chunk {
         Ok(bytes) => bytes,

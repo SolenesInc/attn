@@ -270,7 +270,7 @@ fn scroll_to(world: &mut World, key: &str) {
     panic!("{key} stays below the ask's view");
 }
 
-fn checked(world: &World, key: &str) -> bool {
+pub(super) fn checked(world: &World, key: &str) -> bool {
     world
         .screen()
         .get(Target::key(key))
@@ -2154,7 +2154,7 @@ fn active(world: &World) -> Vec<String> {
         .collect()
 }
 
-fn field_text(world: &World, key: &str) -> String {
+pub(super) fn field_text(world: &World, key: &str) -> String {
     world
         .screen()
         .get(Target::key(key))
