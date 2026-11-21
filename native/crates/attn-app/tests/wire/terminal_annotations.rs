@@ -1341,3 +1341,55 @@ fn an_agent_in_its_own_window_is_marked_and_sent_from_there_and_its_draft_comes_
     world.advance(Duration::from_millis(2200));
     assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
 }
+
+#[test]
+fn the_panel_of_a_long_draft_stays_inside_a_short_terminal() {
+    let marks = (0..8)
+        .map(|i| SessionAnnotation {
+            id: format!("a{i}"),
+            comment: "Keep only the rows the window shows, and read the rest again when it scrolls back to them.".into(),
+            ..stored_mark("this-is-wrong")
+        })
+        .collect::<Vec<_>>();
+    let mut state = showing(
+        vec![
+            agent_pane(),
+            attn_protocol::DesktopPane {
+                session_id: "s2".into(),
+                ..pane("t2", "r2")
+            },
+        ],
+        "daemon-1",
+    );
+    let desktop = state.desktops.as_mut().unwrap().first_mut().unwrap();
+    desktop.tree_json = attn_testkit::tree::below(
+        attn_testkit::tree::pane("t1"),
+        attn_testkit::tree::pane("t2"),
+    )
+    .to_string();
+    state.settings = Some(std::collections::BTreeMap::from([(
+        "uiScale".into(),
+        "1.5".into(),
+    )]));
+    let daemon = Daemon::scripted().state(state);
+    daemon
+        .on("session_messages_get", |_| {
+            message(messages_result(&[("m1", MESSAGE)], "ready"))
+        })
+        .on("session_annotations_get", move |_| {
+            draft_result(marks.clone(), 1)
+        })
+        .on("session_annotations_save", |_| saved());
+    let mut world = World::start_sized(daemon, (800.0, 600.0));
+    world.open_desktop();
+    output(&world, 1, format!("{MESSAGE}\r\n").as_bytes());
+    world.settle();
+    let [_, top, _, height] = world.rect("terminal.r1");
+    let [_, y, _, h] = world.rect("terminal.r1.annotation.panel");
+    assert!(
+        y >= top && y + h <= top + height,
+        "the panel stands from {y} to {} in a terminal from {top} to {}",
+        y + h,
+        top + height
+    );
+}
