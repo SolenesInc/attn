@@ -1,8 +1,10 @@
-use attn_client::Refusal;
+use attn_client::{Connection, Refusal};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Banner, BannerTone, Stack};
 use attn_ui::system::{Part, Said, Type, words};
 use rune::{Cx, El};
+
+use crate::State;
 
 pub(crate) fn connecting(t: &Tokens) -> El {
     words("Connecting to the daemon", Type::Body, t.text_secondary)
@@ -10,7 +12,25 @@ pub(crate) fn connecting(t: &Tokens) -> El {
         .role("status")
 }
 
-pub(crate) fn reconnecting<S>(t: &Tokens, cx: &Cx<S>, start_failed: Option<&str>) -> El {
+pub(crate) fn banner(state: &State, t: &Tokens, cx: &Cx<State>) -> Option<El> {
+    let banner = said(state)?.details(crate::shell::opens_details(crate::shell::Band::Connection));
+    Some(banner.build(t, cx))
+}
+
+/// The message the banner shows: why the daemon is not answering.
+pub(crate) fn identity(state: &State) -> Option<String> {
+    start_failed(state).map(|why| why.unwrap_or_default().to_owned())
+}
+
+fn start_failed(state: &State) -> Option<Option<&str>> {
+    match &state.facts.connection {
+        Connection::Reconnecting { start_failed } => Some(start_failed.as_deref()),
+        _ => None,
+    }
+}
+
+pub(crate) fn said(state: &State) -> Option<Banner> {
+    let start_failed = start_failed(state)?;
     let tone = if start_failed.is_some() {
         BannerTone::Bad
     } else {
@@ -30,9 +50,10 @@ pub(crate) fn reconnecting<S>(t: &Tokens, cx: &Cx<S>, start_failed: Option<&str>
             }
         }
     };
-    Banner::new("connection", "Daemon connection", tone)
-        .announces("connection.reconnecting", status)
-        .build(t, cx)
+    Some(
+        Banner::new("connection", "Daemon connection", tone)
+            .announces("connection.reconnecting", status),
+    )
 }
 
 pub(crate) fn refused(t: &Tokens, refusal: &Refusal) -> El {

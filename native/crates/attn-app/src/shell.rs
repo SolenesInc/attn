@@ -172,6 +172,7 @@ pub enum Layer {
 pub enum Band {
     UpdateRun,
     OutpostUpdates,
+    Connection,
     SharedCodex,
     Warnings,
 }
@@ -198,6 +199,7 @@ fn message(state: &State, band: Band) -> Option<u64> {
         Band::OutpostUpdates => crate::outpost_updates::identity(state),
         Band::SharedCodex => crate::shared_codex::identity(state),
         Band::Warnings => crate::warnings::identity(state),
+        Band::Connection => crate::connection::identity(state),
     }?;
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     identity.hash(&mut hasher);
@@ -226,6 +228,7 @@ fn banner_details(state: &State, band: Band, shown: u64, t: &Tokens, layers: &mu
         Band::OutpostUpdates => crate::outpost_updates::said(state),
         Band::SharedCodex => crate::shared_codex::said(state),
         Band::Warnings => crate::warnings::said(state),
+        Band::Connection => crate::connection::said(state),
     };
     if let Some(banner) = banner {
         banner.build_details(
@@ -544,12 +547,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         }
         Connection::Refused(refusal) => centered(&t, connection::refused(&t, refusal)),
     };
-    let banner = match connection {
-        Connection::Reconnecting { start_failed } => {
-            Some(connection::reconnecting(&t, cx, start_failed.as_deref()))
-        }
-        _ => None,
-    };
+    let banner = connection::banner(state, &t, cx);
     let bands = matches!(
         connection,
         Connection::Connected | Connection::Reconnecting { .. }

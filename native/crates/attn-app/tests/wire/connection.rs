@@ -363,3 +363,74 @@ fn a_missing_daemon_names_its_install_command_without_marks_and_its_path_as_writ
         "The daemon is not answering, and starting it failed: no attnd beside /Applications/attn-`canary`.app/Contents/MacOS/attn-app; install the app with make install INSTANCE=<name> APP=native. Retrying."
     );
 }
+
+const HEALTH_TIMEOUT: &str = "/home/user/.local/share/attn-ensure-paused/bin/attnd daemon ensure failed (exit status: 1): daemon ensure error: daemon pid 2875852 did not answer health (health_timeout=15s); left running; retry, or restart with `ATTN_INSTANCE=ensure-paused attn daemon stop` then `ATTN_INSTANCE=ensure-paused attn daemon ensure` in the same environment: Get \"http://127.0.0.1:41597/health\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)";
+
+fn shown(world: &World, key: &str) -> [f32; 4] {
+    let rt = world.runtime();
+    let said = rt
+        .elements()
+        .iter()
+        .find(|e| e.key.as_deref() == Some(key))
+        .unwrap_or_else(|| panic!("no {key}"))
+        .clone();
+    let ink = said.text_ink.expect("a text");
+    let within = |outer: [f32; 4], inner: [f32; 4]| {
+        inner[0] + 0.5 >= outer[0]
+            && inner[1] + 0.5 >= outer[1]
+            && inner[0] + inner[2] <= outer[0] + outer[2] + 0.5
+            && inner[1] + inner[3] <= outer[1] + outer[3] + 0.5
+    };
+    assert!(
+        within(said.visible, said.rect) && within(said.rect, ink),
+        "{key} shows in part: {:?} of {:?}, ink {ink:?}",
+        said.visible,
+        said.rect
+    );
+    said.rect
+}
+
+#[test]
+fn an_unresponsive_daemon_s_reason_and_restart_commands_read_whole_at_the_smallest_window() {
+    let state = InitialStateMessage {
+        settings: Some([("uiScale".to_owned(), "1.5".to_owned())].into()),
+        ..InitialStateMessage::new()
+    };
+    let mut world = World::start_sized(Daemon::scripted().state(state), (800.0, 600.0));
+    world.daemon.fail_starts(Some(HEALTH_TIMEOUT));
+    world.daemon.stop();
+    world.settle();
+    world.advance(ms(1000));
+    let whole =
+        format!("The daemon is not answering, and starting it failed: {HEALTH_TIMEOUT}. Retrying.");
+    assert_eq!(reconnecting(&world).as_deref(), Some(whole.as_str()));
+    let bar = world.rect("connection");
+    let clamped = shown(&world, "connection.reconnecting");
+
+    let details = world.screen().get(Target::key("connection.details"));
+    assert_eq!(details.role, "button", "Details is one press away");
+    world.gesture(|app| app.click(Target::key("connection.details")));
+
+    let read = world
+        .screen()
+        .get(Target::key("whole.connection.reconnecting"))
+        .name
+        .unwrap_or_default();
+    assert_eq!(read, whole);
+    let whole_said = shown(&world, "whole.connection.reconnecting");
+    assert!(
+        whole_said[3] * whole_said[2] > clamped[3] * clamped[2] * 1.5,
+        "Details shows more of the reason than the bar's lines: {whole_said:?} against {clamped:?}"
+    );
+    assert_eq!(world.rect("connection"), bar, "Details changed the bar");
+
+    world.daemon.fail_starts(None);
+    world.advance(ms(1500));
+    let screen = world.screen();
+    assert!(
+        screen.find(Target::key("connection")).is_none()
+            && screen.find(Target::key("connection.whole")).is_none(),
+        "the banner and its Details close once the daemon answers:\n{screen}"
+    );
+    assert!(world.runtime_is_at_rest());
+}

@@ -2045,6 +2045,35 @@ fn daemon_start_failed(dark: bool) {
     snap(&mut world, "daemon-start-failed", dark);
 }
 
+/// The daemon took the socket but never answered health, and starting it again failed: the band
+/// says why and how to restart it by hand, the longest reason it shows.
+fn daemon_unresponsive(dark: bool) -> World {
+    let mut world = document_world(dark, |_| {});
+    world.daemon.fail_starts(Some(
+        "/home/user/.local/share/attn-ensure-paused/bin/attnd daemon ensure failed (exit status: 1): daemon ensure error: daemon pid 2875852 did not answer health (health_timeout=15s); left running; retry, or restart with `ATTN_INSTANCE=ensure-paused attn daemon stop` then `ATTN_INSTANCE=ensure-paused attn daemon ensure` in the same environment: Get \"http://127.0.0.1:41597/health\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
+    ));
+    world.daemon.stop();
+    world.settle();
+    world.advance(std::time::Duration::from_millis(1000));
+    snap(&mut world, "daemon-unresponsive", dark);
+    world
+}
+
+/// The unresponsive daemon's band with its Details open, at a window too small for the band to
+/// say it whole: the reason and both commands whole.
+fn daemon_unresponsive_details(dark: bool) {
+    let mut world = daemon_unresponsive(dark);
+    if world
+        .screen()
+        .find(Target::key("connection.details"))
+        .is_none()
+    {
+        return;
+    }
+    click(&mut world, Target::key("connection.details"));
+    snap(&mut world, "daemon-unresponsive-details", dark);
+}
+
 /// A daemon on another protocol: the window says so and stops.
 fn daemon_refused(dark: bool) {
     let state = InitialStateMessage {
@@ -7999,6 +8028,12 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("tile_notices", || tile_notices(dark));
         scene("daemon_reconnecting", || daemon_reconnecting(dark));
         scene("daemon_start_failed", || daemon_start_failed(dark));
+        scene("daemon_unresponsive", || {
+            daemon_unresponsive(dark);
+        });
+        scene("daemon_unresponsive_details", || {
+            daemon_unresponsive_details(dark)
+        });
         scene("daemon_refused", || daemon_refused(dark));
         scene("notice_failed", || notice_failed(dark));
         scene("leader", || leader(dark));
