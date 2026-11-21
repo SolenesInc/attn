@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/effectrpc"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/transcript"
@@ -171,6 +172,7 @@ func (f *serverFeed) apply(ctx context.Context, item serverViewItem, live bool) 
 				f.p.d.store.SaveServerUsageBaseline(f.session, string(encoded))
 			}
 		}
+		pausepoint.At(pausepoint.ServerFeedBaselined)
 	}
 	if f.usageChanged {
 		f.usageChanged = false

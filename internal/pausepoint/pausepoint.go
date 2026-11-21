@@ -73,6 +73,7 @@ const (
 	SessionCloseReleased           = "session-close-released"
 	SessionExitObserved            = "session-process-exit-observed"
 	AgentTerminalStarted           = "agent-terminal-started"
+	ServerFeedBaselined            = "server-feed-baselined"
 	TerminalStarting               = "terminal-starting"
 	TerminalRuntimeEnding          = "terminal-runtime-ending"
 	AgentLaunchCommitReporting     = "agent-launch-commit-reporting"

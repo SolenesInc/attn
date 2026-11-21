@@ -6,7 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -50,13 +52,23 @@ func TestAResumedAppServerConversationCountsOnlyTheUsageAfterTheResume(t *testin
 	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
 		w := newWorld(t, h)
 		app := w.App()
-		_, _, server := appServerSession(t, w, app, h)
+		first, _, server := appServerSession(t, w, app, h)
 		server.StartedElsewhere("earlier-conversation", w.Path("shop"), "price the cart")
 		server.SetUsage("earlier-conversation", "openai/gpt-5.5", serverUsage(5000))
 
-		resumed, _, _ := w.RequestSpawn(app, h, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
-			m.ResumeSessionID = protocol.Ptr("earlier-conversation")
-		})
+		started := w.PauseAt(pausepoint.AgentTerminalStarted)
+		baselined := w.PauseAt(pausepoint.ServerFeedBaselined)
+		resume := protocol.SpawnSessionMessage{
+			Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(uuid.NewString()), Agent: string(h),
+			Cwd: w.Path("shop"), ProfileID: app.SelectedProfile(), Placement: &protocol.SessionPlacement{}, Cols: 100, Rows: 30,
+			ResumeSessionID: protocol.Ptr("earlier-conversation"),
+		}
+		app.Send(resume)
+		started.Await()
+		baselined.Await()
+		baselined.Release()
+		started.Release()
+		resumed := testworld.Await(app, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == resume.ID })
 		if !resumed.Success {
 			t.Fatalf("resume the earlier conversation: %s", protocol.Deref(resumed.Error))
 		}
@@ -69,7 +81,10 @@ func TestAResumedAppServerConversationCountsOnlyTheUsageAfterTheResume(t *testin
 		w.restart()
 		app = w.App()
 		rejoinAppServer(t, w, h)
+		started.Await()
+		started.Release()
 		server = w.AppServerAfter(h, launched)
+		w.Launched(first)
 		w.Launched(session)
 		server.SetUsage("earlier-conversation", "openai/gpt-5.5", serverUsage(5150))
 		awaitUsageTokens(app, session, 150)

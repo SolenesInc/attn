@@ -393,6 +393,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		}
 		return &spawnOutcome{err: fmt.Errorf("persist terminal launch intent: %w", err)}
 	}
+	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
 	pausepoint.At(pausepoint.SessionLinkSetting)
 	previousLink := d.store.SessionLink(session.ID)
 	if err := d.store.SetSessionLink(session.ID, linkKind(req.link)); err != nil {
@@ -565,7 +566,6 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		}
 		return &spawnOutcome{err: errors.Join(req.placed.err, cleanupErr)}
 	}
-	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
 	d.publishFact(fact, string(session.ID), nil)
 	if req.existingSession != nil {
 		d.publishFact(FactSessionRespawned, string(session.ID), ptyRespawn{Terminal: string(plan.spawnOpts.ID)})
