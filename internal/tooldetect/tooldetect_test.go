@@ -29,9 +29,10 @@ func TestMarkdownEditsAgainstTheSharedCorpus(t *testing.T) {
 		ToolName  string          `json:"tool_name"`
 		ToolInput json.RawMessage `json:"tool_input"`
 		Cwd       string          `json:"cwd"`
+		Home      string          `json:"home"`
 		Want      []string        `json:"want"`
 	}](t, "markdown-edits.json") {
-		if got := tooldetect.MarkdownEdits(c.ToolName, c.ToolInput, c.Cwd); !slices.Equal(got, c.Want) && len(got)+len(c.Want) > 0 {
+		if got := tooldetect.MarkdownEdits(c.ToolName, c.ToolInput, c.Cwd, c.Home); !slices.Equal(got, c.Want) && len(got)+len(c.Want) > 0 {
 			t.Errorf("%s: got %q, want %q", c.Name, got, c.Want)
 		}
 	}

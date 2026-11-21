@@ -340,7 +340,8 @@ impl Hook<'_> {
         }
         let tool_name = text(input.tool_name);
         let cwd = text(input.cwd);
-        let edited = detect::markdown_edits(&tool_name, input.tool_input, &cwd);
+        let home = std::env::var("HOME").unwrap_or_default();
+        let edited = detect::markdown_edits(&tool_name, input.tool_input, &cwd, &home);
         if !edited.is_empty() {
             let mut message = FilesEditedMessage::new();
             message.id.clone_from(&id);

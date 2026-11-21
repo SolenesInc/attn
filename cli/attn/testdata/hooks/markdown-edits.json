@@ -14,5 +14,11 @@
   {"name": "shell rewrite", "tool_name": "Bash", "tool_input": {"command": "sed -i '' s/a/b/ notes.md"}, "cwd": "", "want": []},
   {"name": "read", "tool_name": "Read", "tool_input": {"file_path": "/repo/notes.md"}, "cwd": "", "want": []},
   {"name": "same file twice", "tool_name": "apply_patch", "tool_input": {"command": "*** Update File: /repo/notes.md\n*** Update File: /repo/notes.md"}, "cwd": "", "want": ["/repo/notes.md"]},
-  {"name": "malformed", "tool_name": "Edit", "tool_input": "not an object", "cwd": "", "want": []}
+  {"name": "malformed", "tool_name": "Edit", "tool_input": "not an object", "cwd": "", "want": []},
+  {"name": "sigma write resolves home-relative against the user's home", "tool_name": "write", "tool_input": {"path": "~/notes.md", "content": "# Notes\n"}, "cwd": "/repo", "home": "/home/me", "want": ["/home/me/notes.md"]},
+  {"name": "sigma edit takes a file URL", "tool_name": "edit", "tool_input": {"path": "file:///home/me/my%20notes.md", "edits": []}, "cwd": "/repo", "home": "/home/me", "want": ["/home/me/my notes.md"]},
+  {"name": "sigma edit resolves against the session's folder", "tool_name": "edit", "tool_input": {"path": "docs/plan.md", "edits": []}, "cwd": "/repo", "home": "/home/me", "want": ["/repo/docs/plan.md"]},
+  {"name": "a file URL on localhost", "tool_name": "write", "tool_input": {"path": "file://localhost/repo/notes.md"}, "cwd": "/repo", "home": "/home/me", "want": ["/repo/notes.md"]},
+  {"name": "patched home-relative, file URL and relative files", "tool_name": "apply_patch", "tool_input": {"patch": "*** Begin Patch\n*** Add File: ~/notes.md\n+# Notes\n*** Update File: file:///repo/plan.md\n@@\n-a\n+b\n*** Add File: docs/extra.md\n+# Extra\n*** End Patch"}, "cwd": "/repo", "home": "/home/me", "want": ["/home/me/notes.md", "/repo/plan.md", "/repo/docs/extra.md"]},
+  {"name": "home-relative without a home", "tool_name": "write", "tool_input": {"path": "~/notes.md"}, "cwd": "/repo", "home": "", "want": []}
 ]

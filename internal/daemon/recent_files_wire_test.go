@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -309,6 +310,22 @@ func paths(files []protocol.FileActivity) []string {
 		out = append(out, file.Path)
 	}
 	return out
+}
+
+func TestAMarkdownFileAnAppServerAgentEditsThroughAFileURLIsARecentFileAtItsPath(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		session, view, server := appServerSession(t, w, app, h)
+		notes := w.Path("notes", "my notes.md")
+		writeMarkdownFile(t, notes)
+		promptUntilWorking(app, session, view, server, "write my notes")
+		server.ToolCall(view.ConversationID, writeMarkdownCall((&url.URL{Scheme: "file", Path: notes}).String()))
+		awaitServerFeed(app, session, view.ConversationID, server, 100)
+		if got := paths(recentFiles(app, 0, "")); !slices.Equal(got, []string{notes}) {
+			t.Fatalf("recent files = %q, want the notes the agent wrote at %s", got, notes)
+		}
+	})
 }
 
 func TestAMarkdownFileAnAppServerAgentEditsIsARecentFile(t *testing.T) {

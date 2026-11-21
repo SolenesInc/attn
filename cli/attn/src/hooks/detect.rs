@@ -30,7 +30,7 @@ struct SendFilesInput<'a> {
     files: Raw<'a>,
 }
 
-pub fn markdown_edits(tool_name: &str, tool_input: Raw<'_>, cwd: &str) -> Vec<String> {
+pub fn markdown_edits(tool_name: &str, tool_input: Raw<'_>, cwd: &str, home: &str) -> Vec<String> {
     let paths = match tool_name {
         "Edit" | "Write" | "MultiEdit" | "NotebookEdit" | "edit" | "write" => {
             edited_file_paths(tool_input).unwrap_or_default()
@@ -39,10 +39,50 @@ pub fn markdown_edits(tool_name: &str, tool_input: Raw<'_>, cwd: &str) -> Vec<St
         _ => return Vec::new(),
     };
     let markdown = paths
-        .into_iter()
-        .filter(|path| is_markdown(path.trim()))
+        .iter()
+        .map(|path| path.trim())
+        .filter(|path| is_markdown(path))
+        .filter_map(|path| expand_home_or_file_url(path, home))
         .collect();
     resolve_unique(markdown, cwd)
+}
+
+fn expand_home_or_file_url(path: &str, home: &str) -> Option<String> {
+    if path == "~" || path.starts_with("~/") {
+        return (!home.is_empty()).then(|| format!("{home}{}", &path[1..]));
+    }
+    Some(
+        path.strip_prefix("file://")
+            .and_then(local_file_url_path)
+            .unwrap_or_else(|| path.to_string()),
+    )
+}
+
+fn local_file_url_path(rest: &str) -> Option<String> {
+    let slash = rest.find('/')?;
+    if !matches!(&rest[..slash], "" | "localhost") {
+        return None;
+    }
+    let path = &rest[slash..];
+    let path = &path[..path.find(['?', '#']).unwrap_or(path.len())];
+    percent_decoded(path)
+}
+
+fn percent_decoded(text: &str) -> Option<String> {
+    let bytes = text.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut at = 0;
+    while at < bytes.len() {
+        if bytes[at] == b'%' {
+            let hex = text.get(at + 1..at + 3)?;
+            decoded.push(u8::from_str_radix(hex, 16).ok()?);
+            at += 3;
+        } else {
+            decoded.push(bytes[at]);
+            at += 1;
+        }
+    }
+    String::from_utf8(decoded).ok()
 }
 
 fn edited_file_paths(tool_input: Raw<'_>) -> Option<Vec<String>> {
@@ -291,6 +331,8 @@ mod tests {
         #[serde(borrow)]
         tool_input: &'a RawValue,
         cwd: String,
+        #[serde(default)]
+        home: String,
         want: Vec<String>,
     }
 
@@ -300,7 +342,12 @@ mod tests {
         let cases: Vec<MarkdownEditCase<'_>> = serde_json::from_str(&corpus).unwrap();
         assert!(!cases.is_empty());
         for case in cases {
-            let got = markdown_edits(&case.tool_name, Some(case.tool_input), &case.cwd);
+            let got = markdown_edits(
+                &case.tool_name,
+                Some(case.tool_input),
+                &case.cwd,
+                &case.home,
+            );
             assert_eq!(got, case.want, "{}", case.name);
         }
     }

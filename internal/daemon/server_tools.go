@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"os"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -14,7 +15,8 @@ func (d *Daemon) serverToolFinished(sessionID protocol.SessionID, name string, i
 	if session == nil {
 		return
 	}
-	if edited := tooldetect.MarkdownEdits(name, input, session.Directory); len(edited) > 0 {
+	home, _ := os.UserHomeDir()
+	if edited := tooldetect.MarkdownEdits(name, input, session.Directory, home); len(edited) > 0 {
 		d.recordEditedFiles(sessionID, edited)
 	}
 	for _, url := range tooldetect.PullRequestsCreated(name, input, output) {

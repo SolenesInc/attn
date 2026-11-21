@@ -2,6 +2,7 @@ package tooldetect
 
 import (
 	"encoding/json"
+	"net/url"
 	"path/filepath"
 	"strings"
 )
@@ -14,7 +15,7 @@ func (in toolInput) text(key string) string {
 	return value
 }
 
-func MarkdownEdits(name string, raw json.RawMessage, cwd string) []string {
+func MarkdownEdits(name string, raw json.RawMessage, cwd, home string) []string {
 	var input toolInput
 	if json.Unmarshal(raw, &input) != nil {
 		return nil
@@ -38,7 +39,7 @@ func MarkdownEdits(name string, raw json.RawMessage, cwd string) []string {
 			markdown = append(markdown, path)
 		}
 	}
-	return resolveToolPaths(markdown, cwd)
+	return resolveToolPaths(markdown, cwd, home)
 }
 
 func patchTargets(patch string) []string {
@@ -56,27 +57,41 @@ func patchTargets(patch string) []string {
 	return targets
 }
 
-func resolveToolPaths(paths []string, cwd string) []string {
+func resolveToolPaths(paths []string, cwd, home string) []string {
 	seen := map[string]bool{}
 	var resolved []string
 	for _, path := range paths {
-		path = strings.TrimSpace(path)
-		switch {
-		case path == "":
-			continue
-		case filepath.IsAbs(path):
-			path = filepath.Clean(path)
-		case cwd == "":
-			continue
-		default:
-			path = filepath.Join(cwd, path)
-		}
-		if !seen[path] {
+		path, ok := resolveToolPath(strings.TrimSpace(path), cwd, home)
+		if ok && !seen[path] {
 			seen[path] = true
 			resolved = append(resolved, path)
 		}
 	}
 	return resolved
+}
+
+func resolveToolPath(path, cwd, home string) (string, bool) {
+	switch {
+	case path == "":
+		return "", false
+	case path == "~" || strings.HasPrefix(path, "~/"):
+		if home == "" {
+			return "", false
+		}
+		path = home + path[1:]
+	case strings.HasPrefix(path, "file://"):
+		if parsed, err := url.Parse(path); err == nil && (parsed.Host == "" || parsed.Host == "localhost") {
+			path = parsed.Path
+		}
+	}
+	switch {
+	case filepath.IsAbs(path):
+		return filepath.Clean(path), true
+	case cwd == "":
+		return "", false
+	default:
+		return filepath.Join(cwd, path), true
+	}
 }
 
 func PullRequestsCreated(name string, raw json.RawMessage, output string) []string {
