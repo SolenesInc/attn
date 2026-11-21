@@ -7774,20 +7774,6 @@ const OnboardingActionAgain OnboardingAction = "again"
 const OnboardingActionDone OnboardingAction = "done"
 const OnboardingActionShow OnboardingAction = "show"
 
-type OnboardingMessage struct {
-	// Action corresponds to the JSON schema field "action".
-	Action OnboardingAction `json:"action"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
-}
-
 type OnboardingPath string
 
 const OnboardingPathFull OnboardingPath = "full"

@@ -1,18 +1,16 @@
 package client
 
 import (
-	"errors"
+	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 func (c *Client) Onboarding(action protocol.OnboardingAction) (*protocol.OnboardingResult, error) {
-	response, err := c.send(protocol.OnboardingMessage{Cmd: protocol.CmdOnboarding, Action: action})
-	if err != nil {
+	name := strings.TrimSuffix("onboarding "+string(action), " "+string(protocol.OnboardingActionShow))
+	var result protocol.OnboardingResult
+	if err := c.RunCommand(name, "", struct{}{}, &result); err != nil {
 		return nil, err
 	}
-	if response.OnboardingResult == nil {
-		return nil, errors.New("daemon returned no onboarding result")
-	}
-	return response.OnboardingResult, nil
+	return &result, nil
 }

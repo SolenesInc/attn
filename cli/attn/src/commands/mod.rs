@@ -16,6 +16,7 @@ pub mod journal;
 pub mod list;
 pub mod model;
 pub mod nav;
+pub mod onboarding;
 pub mod open;
 pub mod pr;
 pub mod review;

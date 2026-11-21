@@ -34,7 +34,7 @@ var catalogFamilies = map[string]bool{
 	"list":             true,
 	"model":            false,
 	"nav":              true,
-	"onboarding":       false,
+	"onboarding":       true,
 	"open":             true,
 	"plugin":           false,
 	"pr":               false,

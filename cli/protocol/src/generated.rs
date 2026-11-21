@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "201e30d551bd";
+pub const PROTOCOL_VERSION: &str = "9391b91a05ff";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -7195,25 +7195,6 @@ impl NotificationsUpdatedMessage {
     }
 }
 pub type OnboardingAction = String;
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct OnboardingMessage {
-    pub action: OnboardingAction,
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-}
-
-impl OnboardingMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "onboarding".to_string(),
-            ..Self::default()
-        }
-    }
-}
 pub type OnboardingPath = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OnboardingResult {

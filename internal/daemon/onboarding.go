@@ -1,26 +1,34 @@
 package daemon
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"net"
 
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) handleOnboarding(conn net.Conn, msg *protocol.OnboardingMessage) {
-	result, err := d.onboarding(msg)
-	if err != nil {
-		d.sendError(conn, "onboarding: "+err.Error())
-		return
+func (d *Daemon) onboardingCommands() map[string]command.Handler {
+	run := func(action protocol.OnboardingAction) command.Handler {
+		return command.Typed(func(_ context.Context, c command.Caller, _ struct{}) (any, error) {
+			result, err := d.onboarding(c, action)
+			if err != nil {
+				return nil, fmt.Errorf("onboarding: %w", err)
+			}
+			return result, nil
+		})
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, OnboardingResult: result})
+	return map[string]command.Handler{
+		"onboarding":       run(protocol.OnboardingActionShow),
+		"onboarding done":  run(protocol.OnboardingActionDone),
+		"onboarding again": run(protocol.OnboardingActionAgain),
+	}
 }
 
-func (d *Daemon) onboarding(msg *protocol.OnboardingMessage) (*protocol.OnboardingResult, error) {
+func (d *Daemon) onboarding(c command.Caller, action protocol.OnboardingAction) (*protocol.OnboardingResult, error) {
 	var mutate func(*crew.Member)
-	switch msg.Action {
+	switch action {
 	case protocol.OnboardingActionShow:
 	case protocol.OnboardingActionDone:
 		mutate = func(member *crew.Member) { member.FirstDay = nil }
@@ -31,10 +39,8 @@ func (d *Daemon) onboarding(msg *protocol.OnboardingMessage) (*protocol.Onboardi
 			}
 			member.FirstDay.Onboarding = protocol.OnboardingPathFull
 		}
-	default:
-		return nil, fmt.Errorf("unknown action %q; use show, done or again", msg.Action)
 	}
-	chief, err := d.crewAskedMember(askerOf(msg.SourceSessionID, msg.ProfileID), crew.ChiefAlias)
+	chief, err := d.crewAskedMember(crewAsker{session: c.Session, profileID: c.Profile}, crew.ChiefAlias)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +52,7 @@ func (d *Daemon) onboarding(msg *protocol.OnboardingMessage) (*protocol.Onboardi
 		if err != nil {
 			return nil, err
 		}
-		d.logf("chief: %s ran onboarding %s for %s in profile %s", protocol.Deref(msg.SourceSessionID), msg.Action, chief.Name, chief.ProfileID)
+		d.logf("chief: %s ran onboarding %s for %s in profile %s", c.Session, action, chief.Name, chief.ProfileID)
 	}
 	result := &protocol.OnboardingResult{Chief: chief.Name, Configured: chief.Agent != ""}
 	if path, pending := chief.PendingOnboarding(); pending {

@@ -1,2 +1,41 @@
+# The onboarding family: the Chief's onboarding in the asking profile.
 groups:
-  - {name: onboarding, usage: "[done|again]", summary: "show, finish or restart the Chief's onboarding"}
+  - name: onboarding
+    usage: "[done|again]"
+    summary: "show, finish or restart the Chief's onboarding"
+    map:
+      rows:
+        - {need: "Show or finish the Chief's onboarding", tools: [onboarding]}
+    flags:
+      - {name: profile, placeholder: "<name|id>", doc: "the profile whose crew to address, by name or id; inside attn, your session's profile"}
+    doc: |
+      Shows, finishes or restarts the Chief's onboarding in your profile. The full path is for a new user; the tour is for a user who used attn before the Chief.
+    sections:
+      - title: Onboarding
+        commands: [onboarding, onboarding done, onboarding again]
+
+commands:
+  - name: onboarding
+    summary: whether the Chief's onboarding is pending, and which path it takes
+    runs: home
+    grant: full
+    read_only: true
+    doc: |
+      Shows whether the Chief's onboarding is pending, and which path it takes: the full path for a new user, or the tour for a user who used attn before the Chief.
+    result: OnboardingResult
+
+  - name: onboarding done
+    summary: mark onboarding finished
+    runs: home
+    grant: full
+    doc: |
+      Marks the Chief's onboarding finished. `onboarding_again` runs the full path again.
+    result: OnboardingResult
+
+  - name: onboarding again
+    summary: start the full path again in the Chief's next session
+    runs: home
+    grant: full
+    doc: |
+      Starts the full path again in the Chief's next session. It doesn't wake the Chief. An awake Chief can run it, then start the full path in its current conversation.
+    result: OnboardingResult

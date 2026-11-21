@@ -117,6 +117,9 @@ var specs = map[string]spec{
 	"nav unlink":              {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
 	"nav set":                 {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
 	"nav rm":                  {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"onboarding":              {readOnly: true, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+	"onboarding done":         {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+	"onboarding again":        {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
 	"open":                    {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_target": "Pass {path} or {seed}."}},
 	"review start":            {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
 	"review check":            {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
@@ -396,6 +399,15 @@ type NavSetArgs struct {
 type NavRmArgs struct {
 	Language   string `json:"language,omitempty"`
 	Repository string `json:"repository,omitempty"`
+}
+
+type OnboardingArgs struct {
+}
+
+type OnboardingDoneArgs struct {
+}
+
+type OnboardingAgainArgs struct {
 }
 
 type OpenArgs struct {

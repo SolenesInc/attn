@@ -7903,16 +7903,6 @@ model CrewApplyResultMessage {
 enum OnboardingAction { show, done, again }
 enum OnboardingPath { full, tour }
 
-// Show, finish or restart the Chief's onboarding in the asking profile.
-@extension("x-on", #{ home: true })
-model OnboardingMessage {
-  cmd: "onboarding";
-  action: OnboardingAction;
-  // The calling session's profile, else this profile.
-  profile_id?: string;
-  source_session_id?: SessionID;
-}
-
 model OnboardingResult {
   chief: string;
   configured: boolean;
