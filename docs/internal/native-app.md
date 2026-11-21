@@ -365,8 +365,9 @@ choices once for the whole app:
   `Banner::build_details` from the same banner. Details also stands whenever a
   note is wider than its line or holds a link or a button, whose name the bar
   may elide, and whenever a note is a gist (`Banner::gist`): the bar shows its
-  point, such as why an update failed, and the dialog shows all of it. The banner owns its controls' presses, so pressing one in the
-  dialog also closes it. The dialog belongs to the message it opened for, and
+  point, such as why an update failed, and the dialog shows all of it. The
+  banner owns its controls' presses, so pressing one in the dialog also closes
+  it. The dialog belongs to the message it opened for, and
   closes once the banner says another. Only the dialog scrolls. A link
   or button in the notes longer than its line ends in an ellipsis and keeps its
   whole name for a screen reader. Its fill is 18% of the tone over

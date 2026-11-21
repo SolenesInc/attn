@@ -88,8 +88,9 @@ The first build takes about a minute. Later builds reuse Go's build cache and
 rebuild the host, which takes about 30 seconds. If either binary can't be
 downloaded or built, the update fails with the reason and installs nothing. A
 failed build shows the compiler's error in the banner, and **Details** names the
-file under the home's data directory that holds the build's whole output. Running shells keep their processes,
-whether they run on a worker or in the shared terminal host. Each old binary
+file under the home's data directory that holds the build's whole output.
+Running shells keep their processes, whether they run on a worker or in the
+shared terminal host. Each old binary
 stays beside the new one as `attn.previous` and `attn-pty-host.previous`. Attn
 refuses the installation if the outpost's database needs a newer build.
 
