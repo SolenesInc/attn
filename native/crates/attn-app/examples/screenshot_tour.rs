@@ -4006,13 +4006,26 @@ fn settings_route_picker(dark: bool) {
 /// a query that matches some, an exact model id, and one that matches nothing.
 fn route_picker_callers(dark: bool) {
     let settings = |section: &'static str, search: &'static str| {
-        move || settings_world(dark, section, search, &[], |_| {}, delegation_answers)
+        move || {
+            settings_world(
+                dark,
+                section,
+                search,
+                &[
+                    ("claude_cap_headless_task", "true"),
+                    ("codex_cap_headless_task", "true"),
+                ],
+                |_| {},
+                delegation_answers,
+            )
+        }
     };
     picker_states(
         dark,
         "agents",
         "settings.route.default-claude",
         Some("settings.body"),
+        None,
         settings("agents", "agents"),
     );
     picker_states(
@@ -4020,6 +4033,7 @@ fn route_picker_callers(dark: bool) {
         "delegation-role",
         "settings.route.delegation.builder/default",
         Some("settings.body"),
+        None,
         move || {
             let mut world = settings_world(
                 dark,
@@ -4038,6 +4052,7 @@ fn route_picker_callers(dark: bool) {
         "delegation-alternative",
         "settings.route.delegation.builder/fast",
         Some("settings.body"),
+        None,
         move || {
             let mut world = settings_world(
                 dark,
@@ -4049,8 +4064,18 @@ fn route_picker_callers(dark: bool) {
             );
             open_builder(&mut world);
             world.gesture(|app| {
-                app.click(Target::key("settings.delegation.alternative.builder/fast"))
+                app.update(|_, tx| {
+                    tx.scroll_center_in_instant(
+                        "settings.body",
+                        "settings.delegation.alternative.builder/fast",
+                    );
+                    tx.focus(
+                        "settings.delegation.alternative.builder/fast".to_owned(),
+                        true,
+                    )
+                })
             });
+            tap(&mut world, Key::Enter);
             world
         },
     );
@@ -4059,6 +4084,7 @@ fn route_picker_callers(dark: bool) {
         "delegation-fallback",
         "settings.route.delegation.fallback",
         Some("settings.body"),
+        None,
         move || {
             settings_world(
                 dark,
@@ -4075,6 +4101,7 @@ fn route_picker_callers(dark: bool) {
         "activity",
         "settings.route.activity",
         Some("settings.body"),
+        Some("claude"),
         settings("backgroundAgents", "background agents"),
     );
     picker_states(
@@ -4082,6 +4109,7 @@ fn route_picker_callers(dark: bool) {
         "garden-advisor",
         "settings.route.garden-advisor",
         Some("settings.body"),
+        Some("claude"),
         settings("backgroundAgents", "background agents"),
     );
     picker_states(
@@ -4089,6 +4117,7 @@ fn route_picker_callers(dark: bool) {
         "automation",
         "settings.route.automation",
         None,
+        Some("claude"),
         move || automation_form(dark),
     );
     picker_states(
@@ -4096,6 +4125,7 @@ fn route_picker_callers(dark: bool) {
         "crew-launch",
         "settings.route.crew.chief",
         None,
+        Some("claude"),
         move || {
             let mut world = crew_page(dark);
             click(&mut world, Target::key("crew.roster.chief"));
@@ -4113,6 +4143,7 @@ fn picker_states(
     caller: &str,
     chip: &'static str,
     body: Option<&'static str>,
+    harness: Option<&'static str>,
     world: impl Fn() -> World,
 ) {
     let states: [(&str, bool, Option<&str>); 5] = [
@@ -4137,6 +4168,12 @@ fn picker_states(
         world.gesture(move |app| app.update(move |_, tx| tx.focus(chip.to_owned(), true)));
         if open {
             tap(&mut world, Key::Text(" ".into()));
+            let listed = harness
+                .map(|h| Target::key(format!("settings.route-picker.harness.{h}")))
+                .filter(|target| world.screen().find(target.clone()).is_some());
+            if let Some(target) = listed {
+                click(&mut world, target);
+            }
         }
         if let Some(typed) = typed {
             world.gesture(|app| {
