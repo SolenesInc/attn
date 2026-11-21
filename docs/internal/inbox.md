@@ -171,8 +171,10 @@ Notices are attn's own messages to an agent:
   that started it, so an agent whose `delegate` tool call returned at
   acceptance learns of the failure
 - a command that `terminal_open` called as a tool did not type, because the
-  shell showed no first prompt in time or the terminal ended first, addressed
-  to the session that opened the terminal
+  shell showed no first prompt in time, or the terminal ended or the daemon
+  restarted first, addressed to the session that opened the terminal. The
+  daemon records the command before the tool answers, so a restart before
+  the first prompt sends the notice when the daemon starts again
 
 ## Coalescing
 

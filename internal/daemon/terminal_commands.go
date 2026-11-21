@@ -324,9 +324,20 @@ func (d *Daemon) runTerminalOpen(ctx context.Context, c command.Caller, a comman
 	}
 	terminal := d.primaryTerminal(id)
 	if line != "" && !a.WaitForShell {
+		if err := d.store.RecordTerminalOpenCommand(store.TerminalOpenCommand{Terminal: terminal, Opener: caller.ID, Command: line}, time.Now()); err != nil {
+			return nil, fmt.Errorf("opened terminal %s, but could not keep its command, so nothing will be typed: %w", terminal, err)
+		}
 		opener := caller.ID
 		d.life.Go("type the command of an opened terminal", func() {
-			if err := d.typeFirstCommand(d.life.Context(), terminal, id, line); err != nil {
+			err := d.typeFirstCommand(d.life.Context(), terminal, id, line)
+			switch {
+			case err == nil:
+				if err := d.store.ForgetTerminalOpenCommand(terminal); err != nil {
+					d.logf("terminal open: command for %s typed; forgetting it: %v", terminal, err)
+				}
+			case d.stopping():
+				d.logf("terminal open: command for %s not typed across daemon stop; the next start tells %s: %v", terminal, opener, err)
+			default:
 				d.noticeCommandNotTyped(opener, terminal, err)
 			}
 		})
@@ -340,14 +351,31 @@ func (d *Daemon) runTerminalOpen(ctx context.Context, c command.Caller, a comman
 }
 
 func (d *Daemon) noticeCommandNotTyped(opener protocol.SessionID, terminal protocol.TerminalID, failure error) {
-	if d.stopping() {
-		d.logf("terminal open: command for %s not typed across daemon stop: %v", terminal, failure)
+	notice, savedAt := commandNotTypedNotice(opener, terminal, failure), time.Now()
+	if err := d.store.NoticeTerminalOpenCommandNotTyped(terminal, notice, savedAt); err != nil {
+		d.logf("terminal open: command for %s not typed (%v); telling %s: %v", terminal, failure, opener, err)
 		return
 	}
-	text := prompts.RenderText("terminal", "command-not-typed", prompts.Values{"terminal": string(terminal), "failure": failure.Error()})
-	if _, err := d.sendToInbox(inbox.Item{ID: "terminal-command-not-typed/" + string(terminal), To: who.ToSession(opener), Kind: inbox.Notice, Source: "terminal", Text: text}); err != nil {
-		d.logf("terminal open: command for %s not typed (%v); telling %s: %v", terminal, failure, opener, err)
+	d.deliverSavedInbox(notice.To, notice.ID, savedAt)
+}
+
+func (d *Daemon) noticeCommandsCutByRestart() {
+	pending, err := d.store.TerminalOpenCommands()
+	if err != nil {
+		d.logf("terminal open: reading the commands the last run did not type: %v", err)
+		return
 	}
+	for _, command := range pending {
+		failure := fmt.Errorf("the daemon restarted before attn typed %s", command.Command)
+		if err := d.store.NoticeTerminalOpenCommandNotTyped(command.Terminal, commandNotTypedNotice(command.Opener, command.Terminal, failure), time.Now()); err != nil {
+			d.logf("terminal open: command for %s cut by a restart; telling %s: %v", command.Terminal, command.Opener, err)
+		}
+	}
+}
+
+func commandNotTypedNotice(opener protocol.SessionID, terminal protocol.TerminalID, failure error) inbox.Item {
+	text := prompts.RenderText("terminal", "command-not-typed", prompts.Values{"terminal": string(terminal), "failure": failure.Error()})
+	return inbox.Item{ID: "terminal-command-not-typed/" + string(terminal), To: who.ToSession(opener), Kind: inbox.Notice, Source: "terminal", Text: text}
 }
 
 func (d *Daemon) typeFirstCommand(ctx context.Context, terminal protocol.TerminalID, id protocol.SessionID, line string) error {

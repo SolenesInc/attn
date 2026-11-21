@@ -743,6 +743,7 @@ func (d *Daemon) Start() error {
 	}()
 
 	previousRunSessions := d.storedSessionIDs()
+	d.noticeCommandsCutByRestart()
 	if d.listener == nil {
 		unixListener, err := listenUnixAtomically(d.socketPath)
 		if err != nil {
