@@ -242,4 +242,5 @@ already built reuses that build. The store keys each recipe on the contents of
 its input roots and refuses to keep a build that read a file outside them or an
 environment variable the recipe does not declare. The error names the file or
 variable to add to the recipe. An entry no run has used for 7 days is removed,
-and deleting the directory is always safe.
+and deleting the directory is always safe. A run that selects a native app test
+gets `attn-app` from the store too, as [Native app](native-app.md) describes.

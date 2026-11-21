@@ -168,6 +168,35 @@ store_test_binary() {
   export "${env_var?}"
 }
 
+native_app_tests_selected() {
+  local arg list_args=() run=. run_value_next="" listed
+  for arg in "$@"; do
+    if [ -n "$run_value_next" ]; then
+      run="$arg" run_value_next=""
+      continue
+    fi
+    case "$arg" in
+      -run) run_value_next=1 ;;
+      -run=*) run="${arg#*=}" ;;
+      -json | -v) ;;
+      *) list_args+=("$arg") ;;
+    esac
+  done
+  listed="$("$go_bin" test -vet=off -list "${run%%/*}" ${list_args[@]+"${list_args[@]}"} 2>/dev/null)" || {
+    echo "test-go: could not list the run's tests, so attn-app is not provided" >&2
+    return 1
+  }
+  grep -q '^TestTheNativeApp' <<<"$listed"
+}
+
+start_native_app_provide() {
+  case "${ATTN_E2E_BIN:-}" in "$e2e_store"/*) return 0 ;; esac
+  [ -z "${ATTN_NATIVE_APP_BIN:-}" ] && [ -z "${CI:-}" ] || return 0
+  native_app_tests_selected "$@" || return 0
+  bash "$root/scripts/lib/rust-build-store.sh" provide attn-app >"$test_root/attn-app-path" &
+  test_binary_builds+=("$!")
+}
+
 provide_test_binaries() {
   local arg build_pid compile_ahead=() test_binary_builds=()
   while [ "$1" != -- ]; do
@@ -186,6 +215,7 @@ provide_test_binaries() {
   if [ "${#test_binary_builds[@]}" -gt 0 ] && [ "${#compile_ahead[@]}" -gt 0 ]; then
     "$go_bin" list -test -deps -export "${compile_ahead[@]}" >/dev/null 2>&1 || true
   fi
+  start_native_app_provide "$@"
   for build_pid in ${test_binary_builds[@]+"${test_binary_builds[@]}"}; do
     wait "$build_pid" || {
       [ ! -f "$test_root/pty-host-build.log" ] || cat "$test_root/pty-host-build.log" >&2
@@ -195,14 +225,19 @@ provide_test_binaries() {
   store_test_binary ATTN_E2E_BIN attn
   store_test_binary ATTN_FAKEAGENT_BIN fakeagent
   store_test_binary ATTN_TEST_PTY_HOST attn-pty-host
+  if [ -f "$test_root/attn-app-path" ]; then
+    ATTN_NATIVE_APP_BIN="$(cat "$test_root/attn-app-path")"
+    export ATTN_NATIVE_APP_BIN
+    echo "test-go: attn-app $ATTN_NATIVE_APP_BIN" >&2
+  fi
 }
 
 if [ "${1:-}" = "--provide-test-binaries" ]; then
   test_binaries_out="$2"
   shift 2
   unset GOMAXPROCS
-  provide_test_binaries "$@" --
-  printf '%s\n%s\n%s\n' "$ATTN_E2E_BIN" "$ATTN_FAKEAGENT_BIN" "$ATTN_TEST_PTY_HOST" >"$test_binaries_out"
+  provide_test_binaries "$@"
+  printf '%s\n%s\n%s\n%s\n' "$ATTN_E2E_BIN" "$ATTN_FAKEAGENT_BIN" "$ATTN_TEST_PTY_HOST" "${ATTN_NATIVE_APP_BIN:-}" >"$test_binaries_out"
   exit 0
 fi
 
@@ -263,7 +298,7 @@ any_job_selected() {
   return 1
 }
 
-provide_test_binaries -- "$@"
+provide_test_binaries -- "$@" ./...
 
 list_tests() {
   local package_dir="$1" tests_file="$2"

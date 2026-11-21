@@ -6,44 +6,12 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 )
 
-var nativeAppBinary = sync.OnceValues(func() (string, error) {
-	if binary := os.Getenv("ATTN_NATIVE_APP_BIN"); binary != "" {
-		return binary, nil
-	}
-	root, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}").Output()
-	if err != nil {
-		return "", fmt.Errorf("find the repository to build attn-app: %w", err)
-	}
-	workspace := filepath.Join(strings.TrimSpace(string(root)), "native")
-	build := exec.Command("cargo", "build", "--locked", "-p", "attn-app")
-	build.Dir = workspace
-	build.Env = withoutToolchainOverride(os.Environ())
-	if output, err := build.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("build attn-app: %w\n%s", err, output)
-	}
-	target := os.Getenv("CARGO_TARGET_DIR")
-	if target == "" {
-		target = filepath.Join(workspace, "target")
-	}
-	return filepath.Join(target, "debug", "attn-app"), nil
-})
-
-func withoutToolchainOverride(env []string) []string {
-	kept := env[:0:0]
-	for _, kv := range env {
-		if !strings.HasPrefix(kv, "RUSTUP_TOOLCHAIN=") {
-			kept = append(kept, kv)
-		}
-	}
-	return kept
-}
+const nativeAppTestPrefix = "TestTheNativeApp"
 
 // NativeApp is the native app with no window, against this stack's daemon, driven over its
 // automation protocol.
@@ -55,17 +23,21 @@ type NativeApp struct {
 }
 
 // StartNativeApp runs `attn-app --automation-headless` against the running daemon and returns
-// once its automation server listens. ATTN_NATIVE_APP_BIN names a prebuilt binary; without
-// it the test builds the native workspace's debug attn-app. CI's Daemon jobs have no Rust
-// for the native workspace, so there the test skips and the Native job runs it.
+// once its automation server listens. The binary comes from ATTN_NATIVE_APP_BIN, which
+// scripts/test-go.sh sets for a run that selects a test named TestTheNativeApp…, the prefix
+// it selects by. CI's Daemon jobs have no Rust for the native workspace, so there the test
+// skips and the Native job runs it.
 func (s *Stack) StartNativeApp() *NativeApp {
 	s.T.Helper()
-	if os.Getenv("ATTN_NATIVE_APP_BIN") == "" && os.Getenv("CI") != "" {
+	if !strings.HasPrefix(s.T.Name(), nativeAppTestPrefix) {
+		s.T.Fatalf("%s starts the native app, so its name must start with %s: scripts/test-go.sh builds attn-app only for those tests", s.T.Name(), nativeAppTestPrefix)
+	}
+	binary := os.Getenv("ATTN_NATIVE_APP_BIN")
+	if binary == "" && os.Getenv("CI") != "" {
 		s.T.Skip("CI's Native job runs native app stack tests, with ATTN_NATIVE_APP_BIN")
 	}
-	binary, err := nativeAppBinary()
-	if err != nil {
-		s.T.Fatal(err)
+	if binary == "" {
+		s.T.Fatal("ATTN_NATIVE_APP_BIN is unset: run native app tests through scripts/test-go.sh, which provides attn-app")
 	}
 	manifest := filepath.Join(s.Dir, "native-app", "ui-automation.json")
 	running := s.Launch(Invocation{Binary: binary, Args: []string{"--automation-headless", "--manifest", manifest}})

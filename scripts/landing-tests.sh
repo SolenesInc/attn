@@ -189,9 +189,12 @@ if [ -n "$cargo_entries" ]; then
 fi
 
 if [ -n "$go_entries" ]; then
-  ./scripts/test-go.sh --provide-test-binaries "$work/test-binaries" $(awk '!seen[$2]++ { print $2 }' <<<"$go_entries")
-  { read -r ATTN_E2E_BIN; read -r ATTN_FAKEAGENT_BIN; read -r ATTN_TEST_PTY_HOST; } <"$work/test-binaries"
-  export ATTN_E2E_BIN ATTN_FAKEAGENT_BIN ATTN_TEST_PTY_HOST
+  go_packages=()
+  while IFS= read -r package; do go_packages+=("$package"); done < <(awk '!seen[$2]++ { print $2 }' <<<"$go_entries")
+  ./scripts/test-go.sh --provide-test-binaries "$work/test-binaries" "${go_packages[@]}" -- \
+    -run "^($(awk '!seen[$3]++ { print $3 }' <<<"$go_entries" | paste -sd'|' -))\$" "${go_packages[@]}"
+  { read -r ATTN_E2E_BIN; read -r ATTN_FAKEAGENT_BIN; read -r ATTN_TEST_PTY_HOST; read -r ATTN_NATIVE_APP_BIN; } <"$work/test-binaries"
+  export ATTN_E2E_BIN ATTN_FAKEAGENT_BIN ATTN_TEST_PTY_HOST ATTN_NATIVE_APP_BIN
 fi
 
 app_entries="$(awk '$1 == "vitest" || $1 == "playwright"' <<<"$entries")"
