@@ -152,7 +152,11 @@ impl Family for Terminal {
     }
 
     fn deadline(&self, _cmd: &Command, parsed: &Parsed) -> Option<Instant> {
-        let seconds = parsed.text("timeout").parse::<f64>().ok()?;
+        let seconds = parsed
+            .text("timeout")
+            .parse::<f64>()
+            .ok()
+            .filter(|seconds| *seconds > 0.0)?;
         Some(Instant::now() + Duration::try_from_secs_f64(seconds).ok()?)
     }
 
