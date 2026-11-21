@@ -148,10 +148,14 @@ func (d *Daemon) homeConn(status enrollment.Status) (*bridge.Conn, string, error
 		return conn, name, nil
 	}
 	if notice := d.homeUpdateNoticeText(name); notice != "" {
-		return nil, name, fmt.Errorf("%s; this call did not run", notice)
+		return nil, name, &homeUnreachableError{home: name, message: notice + "; this call did not run"}
 	}
-	return nil, name, fmt.Errorf("%s is unreachable; this needs it now", name)
+	return nil, name, &homeUnreachableError{home: name, message: name + " is unreachable; this needs it now"}
 }
+
+type homeUnreachableError struct{ home, message string }
+
+func (e *homeUnreachableError) Error() string { return e.message }
 
 func (d *Daemon) sessionKnownHere(id protocol.SessionID) bool {
 	_, copied := d.store.SessionHost(id)

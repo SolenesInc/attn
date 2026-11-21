@@ -35,23 +35,26 @@ func (p *OutpostPair) Start() {
 }
 func (p *OutpostPair) Connect() {
 	p.Home.T.Helper()
-	p.SSH.Route(p.Destination, p.Outpost)
 	if result := p.Home.Attn("settings", "set", "outposts_enabled", "true"); result.Code != 0 {
 		p.Home.T.Fatalf("enable outposts: %+v", result)
 	}
 	p.App = p.Home.App()
-	p.App.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: p.Destination})
-	update := Await(p.App, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+	p.Host = p.Enroll("outpost", p.Destination, p.Outpost)
+}
+
+func (p *OutpostPair) Enroll(name, destination string, outpost *Stack) string {
+	p.Home.T.Helper()
+	p.SSH.Route(destination, outpost)
+	p.App.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: name, Destination: destination})
+	var host string
+	Await(p.App, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 		for _, row := range m.Outposts {
-			if row.Name == "outpost" && row.State == protocol.OutpostStateConnected {
+			if row.Name == name && row.State == protocol.OutpostStateConnected {
+				host = row.ID
 				return true
 			}
 		}
 		return false
 	})
-	for _, row := range update.Outposts {
-		if row.Name == "outpost" {
-			p.Host = row.ID
-		}
-	}
+	return host
 }

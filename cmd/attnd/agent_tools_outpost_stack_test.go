@@ -1,10 +1,9 @@
 package main_test
 
 import (
-	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,100 +11,299 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-type bearerTransport string
-
-func (b bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	r = r.Clone(r.Context())
-	r.Header.Set("Authorization", "Bearer "+string(b))
-	return http.DefaultTransport.RoundTrip(r)
+type outpostTools struct {
+	t             *testing.T
+	home, outpost *testworld.Stack
+	pair          *testworld.OutpostPair
+	remote        *testworld.Peer
+	seed          string
 }
 
-func TestAnOutpostSessionsToolCallRunsOnTheHomeAsThatSession(t *testing.T) {
-	home, outpost := testworld.NewStack(t, testworld.WithoutAgentKit()), testworld.NewStack(t)
-	for _, stack := range []*testworld.Stack{home, outpost} {
-		stack.Vars = append(stack.Vars, "SHELL=/bin/bash")
-	}
+func newOutpostTools(t *testing.T, harness fakeagent.Harness) *outpostTools {
+	t.Helper()
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t, testworld.WithAgents(harness))
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	home.Start()
 	outpost.Start()
-	requireStdout(t, home.Attn("settings", "set", "agent_tools_enabled", "true"), "true")
-	remote := outpost.App()
+	o := &outpostTools{t: t, home: home, outpost: outpost, pair: pair, remote: outpost.App()}
 	pair.Connect()
-	testworld.Await(remote, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["agent_tools_enabled"] == "true" })
-	seed := plant(t, home, "Work done on the outpost")
-	id := home.Spawn(pair.App, fakeagent.Harness(protocol.SessionAgentShell), outpost.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
-	terminal := pair.App.Terminal(id)
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	o.setTools("true")
+	o.seed = plant(t, home, "Work done on the outpost").ID
+	return o
+}
 
-	key, err := os.ReadFile(filepath.Join(outpost.Dir, "agent-key"))
-	if err != nil {
-		t.Fatalf("the outpost keeps no agent key of its own: %v", err)
+func (o *outpostTools) setTools(value string) {
+	o.t.Helper()
+	mark := o.remote.EventCount()
+	requireStdout(o.t, o.home.Attn("settings", "set", "agent_tools_enabled", value), value)
+	testworld.AwaitSince(o.remote, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["agent_tools_enabled"] == value
+	})
+}
+
+func (o *outpostTools) spawn(harness fakeagent.Harness, dir string) (string, *fakeagent.Run) {
+	o.t.Helper()
+	id := o.home.Spawn(o.pair.App, harness, dir, func(m *protocol.SpawnSessionMessage) { m.Host = &o.pair.Host })
+	return id, o.outpost.LaunchedCarrying(o.pair.App.Terminal(id))
+}
+
+func (o *outpostTools) newestNote() protocol.SeedNote {
+	o.t.Helper()
+	shown := showSeed(o.t, o.home, "", o.seed)
+	if len(shown.Notes) == 0 {
+		o.t.Fatalf("seed %s has no notes at the home", o.seed)
 	}
-	secret, err := hex.DecodeString(strings.TrimSpace(string(key)))
+	return shown.Notes[0]
+}
+
+func (o *outpostTools) requireNoteBy(session, text string) {
+	o.t.Helper()
+	if note := o.newestNote(); note.Body != text || stackAuthorSession(note) != protocol.SessionID(session) {
+		o.t.Fatalf("the home's newest note on %s is %q by %s, want %q by %s", o.seed, note.Body, stackAuthorSession(note), text, session)
+	}
+}
+
+func (o *outpostTools) restartOutpost() {
+	o.t.Helper()
+	mark := len(o.pair.App.Log())
+	o.outpost.Stop()
+	outpostReachSince(o.pair.App, mark, "outpost", protocol.OutpostReachUnreachable)
+	mark = o.pair.App.EventCount()
+	o.outpost.Start()
+	stopRetries := o.home.FireTimers(bridge.RetryTimer)
+	defer stopRetries()
+	outpostReachSince(o.pair.App, mark, "outpost", protocol.OutpostReachReachable)
+}
+
+type toolEndpoint struct{ url, bearer string }
+
+type toolAnswer struct {
+	IsError    bool
+	Text       string
+	Structured json.RawMessage
+}
+
+func claudeToolEndpoint(t *testing.T, claude *fakeagent.Run) toolEndpoint {
+	t.Helper()
+	var raw string
+	for i, arg := range claude.Argv {
+		if arg == "--mcp-config" && i+1 < len(claude.Argv) {
+			raw = claude.Argv[i+1]
+		}
+	}
+	var config struct {
+		MCPServers map[string]struct {
+			URL     string            `json:"url"`
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal([]byte(raw), &config); err != nil {
+		t.Fatalf("claude launched as %q, want --mcp-config with the attn server: %v", claude.Argv, err)
+	}
+	server := config.MCPServers["attn"]
+	authorization := os.Expand(server.Headers["Authorization"], func(name string) string {
+		for _, entry := range claude.Env {
+			if key, value, _ := strings.Cut(entry, "="); key == name {
+				return value
+			}
+		}
+		return ""
+	})
+	bearer, _ := strings.CutPrefix(authorization, "Bearer ")
+	if server.URL == "" || bearer == "" {
+		t.Fatalf("--mcp-config %s with Authorization %q names no attn server with a credential", raw, authorization)
+	}
+	return toolEndpoint{url: server.URL, bearer: bearer}
+}
+
+func (e toolEndpoint) at(stack *testworld.Stack) toolEndpoint {
+	return toolEndpoint{url: "http://" + stack.WSAddr + "/mcp", bearer: e.bearer}
+}
+
+func (e toolEndpoint) post(t *testing.T, tool string, args map[string]any) (int, []byte) {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": tool, "arguments": args}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	mac := hmac.New(sha256.New, secret)
-	mac.Write([]byte("t." + terminal))
-	credential := "t." + terminal + "." + hex.EncodeToString(mac.Sum(nil))
-
-	client := mcp.NewClient(&mcp.Implementation{Name: "stack-test", Version: "1"}, nil)
-	session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: "http://" + outpost.WSAddr + "/mcp", HTTPClient: &http.Client{Transport: bearerTransport(credential)}}, nil)
-	if err != nil {
-		t.Fatalf("the outpost's /mcp refused its own session's credential: %v", err)
-	}
-	defer session.Close()
-	noted, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "seed_note", Arguments: map[string]any{"seed": seed.ID, "text": "Noted through the outpost's tools"}})
-	if err != nil || noted.IsError {
-		t.Fatalf("seed_note through the outpost: %+v, %v", noted, err)
-	}
-	shown := showSeed(t, home, "", seed.ID)
-	if len(shown.Notes) == 0 || shown.Notes[0].Body != "Noted through the outpost's tools" || stackAuthorSession(shown.Notes[0]) != protocol.SessionID(id) {
-		t.Fatalf("the home's newest note is not the outpost session's: %+v", shown.Notes)
-	}
-
-	if err := os.WriteFile(filepath.Join(outpost.Path("shell"), "retry.log"), []byte("3 passes\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	attached, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "seed_attach", Arguments: map[string]any{"seed": seed.ID, "path": "retry.log", "mode": "copy"}})
+	req, err := http.NewRequest(http.MethodPost, e.url, bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if attached.IsError {
-		t.Fatalf("seed_attach of retry.log, a file in the outpost session's folder, refused: %s", toolText(attached))
-	}
-	shown = showSeed(t, home, "", seed.ID)
-	if !slices.ContainsFunc(shown.Artifacts, func(a protocol.SeedArtifact) bool { return a.Filename == "retry.log" }) {
-		t.Errorf("the home's seed has artifacts %+v, want retry.log copied from the outpost", shown.Artifacts)
-	}
-
-	home.Stop()
-	refused, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "seed_show", Arguments: map[string]any{"seed": seed.ID}})
+	req.Header.Set("Authorization", "Bearer "+e.bearer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer resp.Body.Close()
+	reply, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode, reply
+}
+
+func (e toolEndpoint) call(t *testing.T, tool string, args map[string]any) toolAnswer {
+	t.Helper()
+	status, reply := e.post(t, tool, args)
+	var answer struct {
+		Result struct {
+			IsError bool `json:"isError"`
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			Structured json.RawMessage `json:"structuredContent"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(reply, &answer); status != http.StatusOK || err != nil {
+		t.Fatalf("%s at %s answered %d %q (%v)", tool, e.url, status, reply, err)
+	}
+	result := toolAnswer{IsError: answer.Result.IsError, Structured: answer.Result.Structured}
+	for _, content := range answer.Result.Content {
+		result.Text += content.Text
+	}
+	return result
+}
+
+func (e toolEndpoint) structured(t *testing.T, tool string, args map[string]any, into any) {
+	t.Helper()
+	answer := e.call(t, tool, args)
+	if answer.IsError {
+		t.Fatalf("%s %v refused: %s", tool, args, answer.Text)
+	}
+	if err := json.Unmarshal(answer.Structured, into); err != nil {
+		t.Fatalf("%s answered %s: %v", tool, answer.Structured, err)
+	}
+}
+
+func TestAClaudeOnAnOutpostRunsHomeToolsAtTheHomeAsItsSessionAndHereToolsWithoutTheBridge(t *testing.T) {
+	o := newOutpostTools(t, fakeagent.Claude)
+	shop := o.outpost.Path("shop")
+	if err := os.MkdirAll(shop, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	session, claude := o.spawn(fakeagent.Claude, shop)
+	tools := claudeToolEndpoint(t, claude)
+	if want := "http://" + o.outpost.WSAddr + "/mcp"; tools.url != want {
+		t.Fatalf("the outpost's claude was given the tools at %s, want %s, its own daemon's", tools.url, want)
+	}
+
+	var noted protocol.SeedNoteResult
+	tools.structured(t, "seed_note", map[string]any{"seed": o.seed, "text": "Noted through the outpost's tools"}, &noted)
+	o.requireNoteBy(session, "Noted through the outpost's tools")
+
+	write := func(name, text string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(shop, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("plan.md", "the plan\n")
+	var attached, retried protocol.SeedArtifactResult
+	tools.structured(t, "seed_attach", map[string]any{"seed": o.seed, "path": "plan.md", "mode": "move"}, &attached)
+	if _, err := os.Stat(filepath.Join(shop, "plan.md")); !os.IsNotExist(err) {
+		t.Errorf("plan.md is still in the outpost session's folder after a move: %v", err)
+	}
+	tools.structured(t, "seed_attach", map[string]any{"seed": o.seed, "path": "plan.md", "mode": "move"}, &retried)
+	if protocol.Deref(retried.OperationID) != protocol.Deref(attached.OperationID) || !protocol.Deref(retried.Recovered) {
+		t.Errorf("seed_attach of plan.md again after the move answered operation %q recovered %v, want the first call's operation %q recovered", protocol.Deref(retried.OperationID), protocol.Deref(retried.Recovered), protocol.Deref(attached.OperationID))
+	}
+
+	tools.structured(t, "seed_check_add", map[string]any{"seed": o.seed, "statement": "C1=Retries pass"}, &struct{}{})
+	write("retry.log", "3 passes\n")
+	var reported protocol.SeedCheckResult
+	tools.structured(t, "seed_check_report", map[string]any{"seed": o.seed, "id": "C1", "summary": "Passed", "evidence": []any{"retry.log"}}, &reported)
+	if len(reported.Attached) != 1 || reported.Attached[0].Filename != "retry.log" {
+		t.Errorf("seed_check_report attached %+v, want retry.log copied from the outpost session's folder", reported.Attached)
+	}
+	shown := showSeed(t, o.home, "", o.seed)
+	for _, name := range []string{"plan.md", "retry.log"} {
+		if !slices.ContainsFunc(shown.Artifacts, func(a protocol.SeedArtifact) bool { return a.Filename == name }) {
+			t.Errorf("the home's seed has artifacts %+v, want %s from the outpost", shown.Artifacts, name)
+		}
+	}
+
+	o.restartOutpost()
+	tools.structured(t, "seed_note", map[string]any{"seed": o.seed, "text": "After the outpost restarted"}, &noted)
+	o.requireNoteBy(session, "After the outpost restarted")
+
+	disconnectOutpost(o.pair)
+	guide := tools.call(t, "seed_guide", map[string]any{})
+	if guide.IsError || guide.Text == "" {
+		t.Errorf("seed_guide, a here tool, with the bridge down answered error=%v %q, want the guide", guide.IsError, guide.Text)
+	}
+	refused := tools.call(t, "seed_note", map[string]any{"seed": o.seed, "text": "With the bridge down"})
 	name, err := os.Hostname()
 	if err != nil {
 		t.Fatal(err)
 	}
-	text := toolText(refused)
-	if !refused.IsError || !strings.Contains(text, name) {
-		t.Errorf("seed_show with the home down answered %q, want a refusal naming the home %s", text, name)
+	if want := "home_unreachable: " + name + " is unreachable; this needs it now\nFix: Nothing ran. Make the same call again once " + name + " is reachable."; !refused.IsError || refused.Text != want {
+		t.Errorf("seed_note with the bridge down answered error=%v %q, want %q", refused.IsError, refused.Text, want)
 	}
-	t.Logf("seed_show with the home down: %s", text)
+	t.Logf("seed_note with the bridge down: %s", refused.Text)
+	o.requireNoteBy(session, "After the outpost restarted")
 }
 
-func toolText(r *mcp.CallToolResult) string {
-	var text string
-	for _, content := range r.Content {
-		if c, ok := content.(*mcp.TextContent); ok {
-			text += c.Text
+func TestAnOutpostAgentsCredentialIsRefusedByTheHomeAndByAnotherOutpost(t *testing.T) {
+	o := newOutpostTools(t, fakeagent.Claude)
+	other := testworld.NewStack(t)
+	other.Start()
+	o.pair.Enroll("other", "other-outpost", other)
+	_, claude := o.spawn(fakeagent.Claude, o.outpost.Path("shop"))
+	tools := claudeToolEndpoint(t, claude)
+
+	if answer := tools.call(t, "seed_show", map[string]any{"seed": o.seed}); answer.IsError {
+		t.Fatalf("the outpost refused its own agent's credential: %s", answer.Text)
+	}
+	for name, elsewhere := range map[string]*testworld.Stack{"the home": o.home, "another outpost": other} {
+		status, reply := tools.at(elsewhere).post(t, "seed_show", map[string]any{"seed": o.seed})
+		if status != http.StatusUnauthorized || !strings.Contains(string(reply), "not signed by this daemon's agent key") {
+			t.Errorf("%s answered the outpost agent's credential with %d %q, want 401 naming its agent key", name, status, reply)
 		}
 	}
-	return text
+}
+
+func TestTurningTheToolsOffAtTheHomeRefusesTheNextCallOfAnAgentRunningOnAnOutpost(t *testing.T) {
+	o := newOutpostTools(t, fakeagent.Claude)
+	session, claude := o.spawn(fakeagent.Claude, o.outpost.Path("shop"))
+	tools := claudeToolEndpoint(t, claude)
+	var noted protocol.SeedNoteResult
+	tools.structured(t, "seed_note", map[string]any{"seed": o.seed, "text": "While the tools are on"}, &noted)
+
+	o.setTools("false")
+	refused := tools.call(t, "seed_note", map[string]any{"seed": o.seed, "text": "After the home turned them off"})
+	if !refused.IsError || !strings.HasPrefix(refused.Text, "setting_off: ") || !strings.Contains(refused.Text, "agent_tools_enabled") {
+		t.Errorf("seed_note after the home turned the tools off answered error=%v %q, want the setting's refusal", refused.IsError, refused.Text)
+	}
+	o.requireNoteBy(session, "While the tools are on")
+
+	o.setTools("true")
+	tools.structured(t, "seed_note", map[string]any{"seed": o.seed, "text": "On again"}, &noted)
+	o.requireNoteBy(session, "On again")
+}
+
+func TestASharedCodexOnAnOutpostRunsHomeToolsAsTheSessionShowingItsConversation(t *testing.T) {
+	o := newOutpostTools(t, fakeagent.Codex)
+	shop := o.outpost.Path("shop")
+	o.outpost.SetCodexFolderTrust(shop, "trusted")
+	session, codex := o.spawn(fakeagent.Codex, shop)
+	o.pair.App.TypeLine(session, "find the flaky checkout test")
+	codex.Prompted()
+	codex.Reply("It races the tax lookup. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(o.pair.App, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+
+	result := o.outpost.CodexServer().CallTool(codex.ConversationID, "attn-core", "seed_note", map[string]any{"seed": o.seed, "text": "Noted by the outpost's Codex"})
+	if result.IsError {
+		t.Fatalf("seed_note from the outpost's Codex conversation %s was refused: %s", codex.ConversationID, result.Text)
+	}
+	o.requireNoteBy(session, "Noted by the outpost's Codex")
 }
