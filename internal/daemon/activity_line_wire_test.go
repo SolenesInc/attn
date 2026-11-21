@@ -93,10 +93,11 @@ func TestAnAppServerSessionsActivityLineSaysWhatItDidSinceTheLastLine(t *testing
 		app := w.App()
 		setSetting(t, app, "activity.enabled", "true")
 		setSetting(t, app, "activity.config", `{"agent":"claude"}`)
-		app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, DashboardVisible: true})
 		session, view, server := appServerSession(t, w, app, h, func(m *protocol.SpawnSessionMessage) {
 			m.Label = protocol.Ptr("checkout")
 		})
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, DashboardVisible: true})
 		serverActivityTurn(t, w, app, view, server, session, "start on the tests", "Starting on the tests.")
 		awaitActivityTask(app, session, func(task protocol.Task) bool { return task.State == "done" })
 
