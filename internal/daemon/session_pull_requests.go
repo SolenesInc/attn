@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"slices"
@@ -36,59 +35,6 @@ func (d *Daemon) handlePullRequestCreated(conn net.Conn, msg *protocol.PullReque
 		return
 	}
 	d.sendOK(conn)
-}
-
-func (d *Daemon) handlePullRequestForget(conn net.Conn, msg *protocol.PullRequestForgetMessage, caller protocol.SessionID) {
-	rec, err := d.sessionPullRequestIdentity(caller, msg.ID, msg.URL)
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	if err := d.forgetSessionPullRequest(rec); err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	d.sendOK(conn)
-}
-
-func (d *Daemon) handlePullRequestWatch(conn net.Conn, msg *protocol.PullRequestWatchMessage, caller protocol.SessionID) {
-	rec, err := d.sessionPullRequestIdentity(caller, msg.ID, msg.URL)
-	if err == nil {
-		err = d.watchSessionPullRequest(rec, protocol.Deref(msg.SeedID), prreadiness.Mode(msg.Mode), protocol.Deref(msg.Reviewer))
-	}
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	d.sendOK(conn)
-}
-
-func (d *Daemon) handlePullRequestUnwatch(conn net.Conn, msg *protocol.PullRequestUnwatchMessage, caller protocol.SessionID) {
-	rec, err := d.sessionPullRequestIdentity(caller, msg.ID, msg.URL)
-	if err == nil {
-		if seedID := protocol.Deref(msg.SeedID); seedID != "" {
-			err = d.unwatchSeedPullRequest(rec, seedID)
-		} else {
-			err = d.unwatchSessionPullRequest(rec)
-		}
-	}
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	d.sendOK(conn)
-}
-
-func (d *Daemon) handlePullRequestList(conn net.Conn, msg *protocol.PullRequestListMessage, caller protocol.SessionID) {
-	pullRequests, err := d.listPullRequests(caller, protocol.TrimID(msg.ID), strings.TrimSpace(protocol.Deref(msg.SeedID)))
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	if pullRequests == nil {
-		pullRequests = []protocol.SessionPullRequest{}
-	}
-	json.NewEncoder(conn).Encode(protocol.Response{Ok: true, PullRequests: pullRequests})
 }
 
 func (d *Daemon) listPullRequests(caller, sessionID protocol.SessionID, seedID string) ([]protocol.SessionPullRequest, error) {

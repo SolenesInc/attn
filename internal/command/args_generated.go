@@ -14,6 +14,7 @@ const (
 	CodeAppNotShowingProfile        = "app_not_showing_profile"
 	CodeBadBookmark                 = "bad_bookmark"
 	CodeBadCapture                  = "bad_capture"
+	CodeBadMode                     = "bad_mode"
 	CodeBadUntil                    = "bad_until"
 	CodeBadWindow                   = "bad_window"
 	CodeClearWithPR                 = "clear_with_pr"
@@ -69,6 +70,7 @@ const (
 	CodePRWithoutWhenMerged         = "pr_without_when_merged"
 	CodeReferenceNeedsPath          = "reference_needs_path"
 	CodeReviewOff                   = "review_off"
+	CodeReviewerWithoutFormalReview = "reviewer_without_formal_review"
 	CodeSessionNotFound             = "session_not_found"
 	CodeSessionOrCrewMemberNotFound = "session_or_crew_member_not_found"
 	CodeSinceAndSection             = "since_and_section"
@@ -164,6 +166,12 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"onboarding done":         {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
 		"onboarding again":        {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
 		"open":                    {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_target": "Pass {path} or {seed}."}},
+		"pr record":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+		"pr ls":                   {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+		"pr forget":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+		"pr watch":                {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"bad_mode": "Pass {mode} green, codex or formal-review.", "reviewer_without_formal_review": "Pass {reviewer} together with {mode} formal-review, or leave it out."}},
+		"pr unwatch":              {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+		"pr status":               {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"presence":                {readOnly: true, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
 		"review start":            {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
 		"review check":            {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
@@ -618,6 +626,35 @@ type OnboardingAgainArgs struct {
 
 type OpenArgs struct {
 	Path string `json:"path,omitempty"`
+	Seed string `json:"seed,omitempty"`
+}
+
+type PRRecordArgs struct {
+	URL string `json:"url,omitempty"`
+}
+
+type PRLsArgs struct {
+	Seed string `json:"seed,omitempty"`
+}
+
+type PRForgetArgs struct {
+	URL string `json:"url,omitempty"`
+}
+
+type PRWatchArgs struct {
+	URL      string `json:"url,omitempty"`
+	Seed     string `json:"seed,omitempty"`
+	Mode     string `json:"mode,omitempty"`
+	Reviewer string `json:"reviewer,omitempty"`
+}
+
+type PRUnwatchArgs struct {
+	URL  string `json:"url,omitempty"`
+	Seed string `json:"seed,omitempty"`
+}
+
+type PRStatusArgs struct {
+	URL  string `json:"url,omitempty"`
 	Seed string `json:"seed,omitempty"`
 }
 

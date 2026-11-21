@@ -70,6 +70,13 @@ types:
   url:
     json: {type: string, format: uri}
     placeholder: "<url>"
+  pr_url:
+    json: {type: string, minLength: 1}
+    doc: "A pull request's URL, such as https://github.com/owner/repo/pull/12."
+    placeholder: "<url>"
+  pr_watch_mode:
+    json: {type: string, enum: [green, codex, formal-review]}
+    placeholder: "<mode>"
   revision:
     json: {type: string, minLength: 1}
     placeholder: "<rev>"

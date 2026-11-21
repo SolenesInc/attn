@@ -160,6 +160,30 @@ model SessionPullRequest {
   watch_last_checked_at?: string;
 }
 
+// The result of pr record, pr forget and pr unwatch. seed is the seed
+// reference the call named, when it named one.
+model PullRequestResult {
+  session_id: SessionID;
+  url: string;
+  seed?: string;
+}
+
+model PullRequestWatchResult {
+  session_id: SessionID;
+  url: string;
+  mode: PullRequestWatchMode;
+  reviewer?: string;
+  seed?: string;
+}
+
+// The result of pr ls and pr status: with seed, the pull requests watched for
+// that seed's tender; without it, the session's own.
+model PullRequestListResult {
+  session_id: SessionID;
+  seed?: string;
+  pull_requests: SessionPullRequest[];
+}
+
 model AutomationProvenance {
   run_id: string;
   definition_id: safeint;
@@ -1095,44 +1119,6 @@ model PullRequestCreatedMessage {
   id: SessionID;
   url: string;
   terminal_id?: TerminalID;
-}
-
-// The way out: drops one recorded pull request from a session.
-@extension("x-on", #{ home: true })
-model PullRequestForgetMessage {
-  cmd: "pull_request_forget";
-  id: SessionID;
-  url: string;
-}
-
-@extension("x-on", #{ home: true })
-model PullRequestWatchMessage {
-  cmd: "pull_request_watch";
-  id: SessionID;
-  url: string;
-  mode: PullRequestWatchMode;
-  reviewer?: string;
-  // Addresses the watch to this seed's tender instead of the session. The
-  // session still records the pull request.
-  seed_id?: string;
-}
-
-@extension("x-on", #{ home: true })
-model PullRequestUnwatchMessage {
-  cmd: "pull_request_unwatch";
-  id: SessionID;
-  url: string;
-  seed_id?: string;
-}
-
-// The reply's pull_requests: with seed_id, the pull requests watched for that
-// seed's tender, which must be in the session's profile; without it, the
-// session's own, also after the session closed.
-@extension("x-on", #{ home: true })
-model PullRequestListMessage {
-  cmd: "pull_request_list";
-  id: SessionID;
-  seed_id?: string;
 }
 
 model DelegationSelection {
@@ -7022,7 +7008,6 @@ model Response {
   delegation_operation?: DelegationOperation;
   sessions?: Session[];
   caller_session_id?: SessionID;
-  pull_requests?: SessionPullRequest[];
   profiles?: Profile[];
   prs?: PR[];
   repos?: RepoState[];

@@ -8325,17 +8325,6 @@ type PullRequestCreatedMessage struct {
 	URL string `json:"url"`
 }
 
-type PullRequestForgetMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID SessionID `json:"id"`
-
-	// URL corresponds to the JSON schema field "url".
-	URL string `json:"url"`
-}
-
 type PullRequestLinkKind string
 
 const PullRequestLinkKindForget PullRequestLinkKind = "forget"
@@ -8369,15 +8358,15 @@ type PullRequestLinkResult struct {
 	Applied bool `json:"applied"`
 }
 
-type PullRequestListMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
+type PullRequestListResult struct {
+	// PullRequests corresponds to the JSON schema field "pull_requests".
+	PullRequests []SessionPullRequest `json:"pull_requests"`
 
-	// ID corresponds to the JSON schema field "id".
-	ID SessionID `json:"id"`
+	// Seed corresponds to the JSON schema field "seed".
+	Seed *string `json:"seed,omitempty,omitzero"`
 
-	// SeedID corresponds to the JSON schema field "seed_id".
-	SeedID *string `json:"seed_id,omitempty,omitzero"`
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
 }
 
 type PullRequestProvenance struct {
@@ -8397,35 +8386,12 @@ type PullRequestProvenance struct {
 	URL string `json:"url"`
 }
 
-type PullRequestUnwatchMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
+type PullRequestResult struct {
+	// Seed corresponds to the JSON schema field "seed".
+	Seed *string `json:"seed,omitempty,omitzero"`
 
-	// ID corresponds to the JSON schema field "id".
-	ID SessionID `json:"id"`
-
-	// SeedID corresponds to the JSON schema field "seed_id".
-	SeedID *string `json:"seed_id,omitempty,omitzero"`
-
-	// URL corresponds to the JSON schema field "url".
-	URL string `json:"url"`
-}
-
-type PullRequestWatchMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID SessionID `json:"id"`
-
-	// Mode corresponds to the JSON schema field "mode".
-	Mode PullRequestWatchMode `json:"mode"`
-
-	// Reviewer corresponds to the JSON schema field "reviewer".
-	Reviewer *string `json:"reviewer,omitempty,omitzero"`
-
-	// SeedID corresponds to the JSON schema field "seed_id".
-	SeedID *string `json:"seed_id,omitempty,omitzero"`
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
 
 	// URL corresponds to the JSON schema field "url".
 	URL string `json:"url"`
@@ -8436,6 +8402,23 @@ type PullRequestWatchMode string
 const PullRequestWatchModeCodex PullRequestWatchMode = "codex"
 const PullRequestWatchModeFormalReview PullRequestWatchMode = "formal-review"
 const PullRequestWatchModeGreen PullRequestWatchMode = "green"
+
+type PullRequestWatchResult struct {
+	// Mode corresponds to the JSON schema field "mode".
+	Mode PullRequestWatchMode `json:"mode"`
+
+	// Reviewer corresponds to the JSON schema field "reviewer".
+	Reviewer *string `json:"reviewer,omitempty,omitzero"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed *string `json:"seed,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// URL corresponds to the JSON schema field "url".
+	URL string `json:"url"`
+}
 
 type QueryAuthorsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
@@ -9122,9 +9105,6 @@ type Response struct {
 
 	// Prs corresponds to the JSON schema field "prs".
 	Prs []PR `json:"prs,omitempty,omitzero"`
-
-	// PullRequests corresponds to the JSON schema field "pull_requests".
-	PullRequests []SessionPullRequest `json:"pull_requests,omitempty,omitzero"`
 
 	// QuickCaptureResult corresponds to the JSON schema field "quick_capture_result".
 	QuickCaptureResult *QuickCaptureResult `json:"quick_capture_result,omitempty,omitzero"`

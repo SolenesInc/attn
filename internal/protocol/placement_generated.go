@@ -121,11 +121,7 @@ var Placements = map[string][]Placement{
 	"open_sent_files":                {Placement{LocatorTerminal, "terminal_id"}, Placement{LocatorHome, ""}},
 	"pty_resize":                     {Placement{LocatorTerminal, "id"}},
 	"pull_request_created":           {Placement{LocatorTerminal, "terminal_id"}, Placement{LocatorHome, ""}},
-	"pull_request_forget":            {Placement{LocatorHome, ""}},
 	"pull_request_link":              {Placement{LocatorSession, "session_id"}},
-	"pull_request_list":              {Placement{LocatorHome, ""}},
-	"pull_request_unwatch":           {Placement{LocatorHome, ""}},
-	"pull_request_watch":             {Placement{LocatorHome, ""}},
 	"query":                          {Placement{LocatorHome, ""}},
 	"query_authors":                  {Placement{LocatorHome, ""}},
 	"query_prs":                      {Placement{LocatorHome, ""}},
@@ -1402,18 +1398,6 @@ func (m PullRequestCreatedMessage) Locate() string {
 	return ""
 }
 
-func (PullRequestForgetMessage) CommandName() string {
-	return "pull_request_forget"
-}
-
-func (m PullRequestForgetMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m PullRequestForgetMessage) Locate() string {
-	return ""
-}
-
 func (PullRequestLinkMessage) CommandName() string {
 	return "pull_request_link"
 }
@@ -1424,42 +1408,6 @@ func (m PullRequestLinkMessage) Placement() Placement {
 
 func (m PullRequestLinkMessage) Locate() string {
 	return string(m.SessionID)
-}
-
-func (PullRequestListMessage) CommandName() string {
-	return "pull_request_list"
-}
-
-func (m PullRequestListMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m PullRequestListMessage) Locate() string {
-	return ""
-}
-
-func (PullRequestUnwatchMessage) CommandName() string {
-	return "pull_request_unwatch"
-}
-
-func (m PullRequestUnwatchMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m PullRequestUnwatchMessage) Locate() string {
-	return ""
-}
-
-func (PullRequestWatchMessage) CommandName() string {
-	return "pull_request_watch"
-}
-
-func (m PullRequestWatchMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m PullRequestWatchMessage) Locate() string {
-	return ""
 }
 
 func (QueryMessage) CommandName() string {

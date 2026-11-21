@@ -93,6 +93,9 @@ pub trait Family {
         eprintln!("{}: {message}", self.label(verb));
         Stop(1)
     }
+    fn error_exit(&self) -> Stop {
+        Stop(1)
+    }
     fn refused_line(&self, verb: &str, message: &str) -> String {
         format!("{}: daemon error: {message}", self.label(verb))
     }
@@ -784,8 +787,8 @@ pub fn ask(
     cmd: &Command,
     parsed: &Parsed,
 ) -> Result<Answer, Stop> {
-    let reply = send(run, family, cmd, parsed)
-        .map_err(|error| run.fail_send(&family.label(cmd.name), &error))?;
+    let reply =
+        send(run, family, cmd, parsed).map_err(|error| send_failed(run, family, cmd, &error))?;
     Ok(answer(run, reply))
 }
 
@@ -839,9 +842,19 @@ fn refuse(
         );
         run.refusal.clone_from(&error.refusal);
         eprintln!("{error}");
-        return Stop(1);
+        return family.error_exit();
     }
     family.fail(cmd.name, &message)
+}
+
+pub fn send_failed(
+    run: &mut Run<'_>,
+    family: &dyn Family,
+    cmd: &Command,
+    error: &SendError,
+) -> Stop {
+    run.fail_send(&family.label(cmd.name), error);
+    family.error_exit()
 }
 
 pub fn result(reply: &Reply) -> Reply {
@@ -856,7 +869,7 @@ pub fn decode<T: serde::de::DeserializeOwned>(
 ) -> Result<T, Stop> {
     result
         .whole()
-        .map_err(|error| run.fail_send(&family.label(cmd.name), &error))
+        .map_err(|error| send_failed(run, family, cmd, &error))
 }
 
 pub fn print_result(
@@ -867,7 +880,7 @@ pub fn print_result(
 ) -> Result<(), Stop> {
     let raw = result
         .raw_field(&[])
-        .map_err(|error| run.fail_send(&family.label(cmd.name), &error))?;
+        .map_err(|error| send_failed(run, family, cmd, &error))?;
     crate::commands::print_json(raw.as_bytes());
     Ok(())
 }

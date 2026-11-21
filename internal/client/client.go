@@ -714,48 +714,26 @@ func (c *Client) RecordPullRequestCreated(id protocol.SessionID, url string) err
 }
 
 func (c *Client) ForgetSessionPullRequest(id protocol.SessionID, url string) error {
-	msg := protocol.PullRequestForgetMessage{
-		Cmd: protocol.CmdPullRequestForget,
-		ID:  id,
-		URL: url,
-	}
-	_, err := c.send(msg)
-	return err
+	var result protocol.PullRequestResult
+	return c.RunCommand("pr forget", id, command.PRForgetArgs{URL: url}, &result)
 }
 
 func (c *Client) WatchSessionPullRequest(id protocol.SessionID, seedID, url string, mode protocol.PullRequestWatchMode, reviewer string) error {
-	msg := protocol.PullRequestWatchMessage{
-		Cmd: protocol.CmdPullRequestWatch, ID: id, URL: url, Mode: mode,
-	}
-	if strings.TrimSpace(reviewer) != "" {
-		msg.Reviewer = protocol.Ptr(strings.TrimSpace(reviewer))
-	}
-	if strings.TrimSpace(seedID) != "" {
-		msg.SeedID = protocol.Ptr(strings.TrimSpace(seedID))
-	}
-	_, err := c.send(msg)
-	return err
+	var result protocol.PullRequestWatchResult
+	return c.RunCommand("pr watch", id, command.PRWatchArgs{URL: url, Seed: seedID, Mode: string(mode), Reviewer: reviewer}, &result)
 }
 
 func (c *Client) UnwatchSessionPullRequest(id protocol.SessionID, seedID, url string) error {
-	msg := protocol.PullRequestUnwatchMessage{Cmd: protocol.CmdPullRequestUnwatch, ID: id, URL: url}
-	if strings.TrimSpace(seedID) != "" {
-		msg.SeedID = protocol.Ptr(strings.TrimSpace(seedID))
-	}
-	_, err := c.send(msg)
-	return err
+	var result protocol.PullRequestResult
+	return c.RunCommand("pr unwatch", id, command.PRUnwatchArgs{URL: url, Seed: seedID}, &result)
 }
 
 func (c *Client) PullRequests(id protocol.SessionID, seedID string) ([]protocol.SessionPullRequest, error) {
-	msg := protocol.PullRequestListMessage{Cmd: protocol.CmdPullRequestList, ID: id}
-	if strings.TrimSpace(seedID) != "" {
-		msg.SeedID = protocol.Ptr(strings.TrimSpace(seedID))
-	}
-	resp, err := c.send(msg)
-	if err != nil {
+	var result protocol.PullRequestListResult
+	if err := c.RunCommand("pr ls", id, command.PRLsArgs{Seed: seedID}, &result); err != nil {
 		return nil, err
 	}
-	return resp.PullRequests, nil
+	return result.PullRequests, nil
 }
 
 func (c *Client) StartDelegation(msg protocol.DelegateMessage) (*protocol.DelegationOperation, error) {

@@ -385,7 +385,7 @@ func (c *Catalog) check() []string {
 		switch cmd.Runs {
 		case RunsHome, RunsHere:
 		case "":
-			if cmd.IsOffered() || !top {
+			if cmd.IsOffered() {
 				add("%s: runs is missing; name where the command runs: home or here", where)
 			}
 			if len(cmd.Args) > 0 || cmd.Result != "" || len(cmd.Errors) > 0 || cmd.Grant != "" {

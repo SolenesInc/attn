@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "321a97263efd";
+pub const PROTOCOL_VERSION: &str = "db43cc7db362";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -7551,22 +7551,6 @@ impl PullRequestCreatedMessage {
         }
     }
 }
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct PullRequestForgetMessage {
-    pub cmd: String,
-    pub id: SessionID,
-    pub url: String,
-}
-
-impl PullRequestForgetMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "pull_request_forget".to_string(),
-            ..Self::default()
-        }
-    }
-}
 pub type PullRequestLinkKind = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PullRequestLinkMessage {
@@ -7596,21 +7580,12 @@ pub struct PullRequestLinkResult {
     pub applied: bool,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct PullRequestListMessage {
-    pub cmd: String,
-    pub id: SessionID,
+pub struct PullRequestListResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub pull_requests: Vec<SessionPullRequest>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_id: Option<String>,
-}
-
-impl PullRequestListMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "pull_request_list".to_string(),
-            ..Self::default()
-        }
-    }
+    pub seed: Option<String>,
+    pub session_id: SessionID,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PullRequestProvenance {
@@ -7622,45 +7597,23 @@ pub struct PullRequestProvenance {
     pub url: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct PullRequestUnwatchMessage {
-    pub cmd: String,
-    pub id: SessionID,
+pub struct PullRequestResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_id: Option<String>,
+    pub seed: Option<String>,
+    pub session_id: SessionID,
     pub url: String,
 }
-
-impl PullRequestUnwatchMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "pull_request_unwatch".to_string(),
-            ..Self::default()
-        }
-    }
-}
+pub type PullRequestWatchMode = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct PullRequestWatchMessage {
-    pub cmd: String,
-    pub id: SessionID,
+pub struct PullRequestWatchResult {
     pub mode: PullRequestWatchMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reviewer: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seed_id: Option<String>,
+    pub seed: Option<String>,
+    pub session_id: SessionID,
     pub url: String,
 }
-
-impl PullRequestWatchMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "pull_request_watch".to_string(),
-            ..Self::default()
-        }
-    }
-}
-pub type PullRequestWatchMode = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QueryAuthorsMessage {
     pub cmd: String,
@@ -8344,8 +8297,6 @@ pub struct Response {
     pub profiles: Option<Vec<Profile>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prs: Option<Vec<PR>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pull_requests: Option<Vec<SessionPullRequest>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quick_capture_result: Option<QuickCaptureResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

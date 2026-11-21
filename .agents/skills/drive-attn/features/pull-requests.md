@@ -34,7 +34,8 @@ from GitHub, with approve, merge and mute.
 
 ### Agents
 
-- `attn pr` (`cli/attn/src/commands/pr.rs`, and `cmd/attnd/pr.go` for `wait-ready`): `record`, `forget`, `ls`, `watch` (`--mode green|codex|formal-review`, `--reviewer`), `unwatch`, `status`, and `wait-ready` (with `--repo`, `--mode`, `--timeout`, `--interval`, `--since`, `--reset`, `--ignore-author`, `--json`). Inside a session, the session is implied. Outside a session, `--session <id>` names the session. `wait-ready` exits 0 ready, 1 checks failed, 2 usage, 3 changes requested, 4 new feedback, 5 error, merged or closed, and 124 timeout.
+- `attn pr` (`cli/attn/src/commands/pr/`, `internal/catalog/content/pr.yaml`, and `cmd/attnd/pr.go` for `wait-ready`): `record`, `forget`, `ls`, `watch` (`--mode green|codex|formal-review`, `--reviewer`), `unwatch`, `status`, and `wait-ready` (with `--repo`, `--mode`, `--timeout`, `--interval`, `--since`, `--reset`, `--ignore-author`, `--json`). Inside a session, the session is implied. Outside a session, `--session <id>` names the session. `wait-ready` exits 0 ready, 1 checks failed, 2 usage, 3 changes requested, 4 new feedback, 5 error, merged or closed, and 124 timeout.
+- The tools `pr_record`, `pr_forget`, `pr_ls`, `pr_watch`, `pr_unwatch` and `pr_status` when `agent_tools_enabled` is on. They act as the calling session and take no session. `wait-ready` is not a tool: `pr_watch` is its form, and its updates arrive in the inbox.
 - `attn settings get|set pull_requests.own_comments` (`quiet` or `ring`; unset reads empty and means quiet), a profile setting ([settings.md](settings.md)).
 - Prompts: the self-report guidance for harnesses without hooks, which tells the agent to run `attn pr record` (`internal/prompts/content/session/pull-request-guidance.md`). A watch's update reaches the agent as an inbox notice, "Pull request monitor: <what happened> for <pull request>." (`internal/daemon/session_pull_request_refresh.go`). See [inbox.md](inbox.md) for how the agent reads the notice.
 
@@ -119,7 +120,7 @@ Preconditions:
 
 ## Tests
 
-- Wire: `native/crates/attn-app/tests/wire/home_pull_requests.rs` (Home's Pull Requests card), `native/crates/attn-app/tests/wire/tile_header.rs` (the pull request on the tile header), `native/crates/attn-app/tests/wire/settings/hygiene.rs` (muted repositories and authors), `native/crates/attn-app/tests/wire/settings/agents.rs` (the own comments switch), `internal/daemon/session_pull_request*_wire_test.go`, `internal/daemon/pr_*_wire_test.go` (`pr_host_discovery_wire_test.go` for several hosts), `internal/daemon/github_polling_wire_test.go`, `internal/daemon/gh_warning_wire_test.go`. Shared with [automations.md](automations.md): `internal/daemon/automation_review_demand_wire_test.go`, `internal/daemon/automation_review_origin_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/home_pull_requests.rs` (Home's Pull Requests card), `native/crates/attn-app/tests/wire/tile_header.rs` (the pull request on the tile header), `native/crates/attn-app/tests/wire/settings/hygiene.rs` (muted repositories and authors), `native/crates/attn-app/tests/wire/settings/agents.rs` (the own comments switch), `internal/daemon/agent_tools_pr_wire_test.go` (the pr tools), `internal/daemon/session_pull_request*_wire_test.go`, `internal/daemon/pr_*_wire_test.go` (`pr_host_discovery_wire_test.go` for several hosts), `internal/daemon/github_polling_wire_test.go`, `internal/daemon/gh_warning_wire_test.go`. Shared with [automations.md](automations.md): `internal/daemon/automation_review_demand_wire_test.go`, `internal/daemon/automation_review_origin_wire_test.go`.
 - Stack: `cmd/attnd/pr_stack_test.go`.
 - Kernel: `internal/github/*_test.go`, `internal/prreadiness/*_test.go`, `cli/attn/src/hooks/detect.rs`.
 

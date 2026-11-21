@@ -236,6 +236,9 @@ func (g *generator) argUsage(a catalog.Arg) (string, bool) {
 
 func (g *generator) usage(group string, cmd *catalog.Command) string {
 	verb := strings.TrimPrefix(cmd.Name, group+" ")
+	if !cmd.ThroughLayer() {
+		return strings.TrimSpace(verb + " " + cmd.Usage)
+	}
 	forms := []string{g.usageForm(verb, cmd.Args)}
 	if escape := unlessTarget(cmd); escape != "" {
 		var main, alone []catalog.Arg
@@ -394,6 +397,9 @@ func shellWord(value string) string {
 }
 
 func (g *generator) flagLines(cmd *catalog.Command, group *catalog.Group) []string {
+	if !cmd.ThroughLayer() {
+		return nil
+	}
 	var lines []string
 	add := func(label, doc string) {
 		lines = append(lines, fmt.Sprintf("  %-*s %s", helpFlagColumn, label, doc))

@@ -1,2 +1,122 @@
+# The pr family. Each command acts for the calling session, or for `--session`
+# on the CLI. A doc names an arg by its tool name in backticks (`url`) and
+# another command by its tool name (`pr_watch`).
 groups:
-  - {name: pr, usage: "<command>", summary: "deliver through the repository's pull requests or trunk"}
+  - name: pr
+    usage: "<command>"
+    summary: "deliver through the repository's pull requests or trunk"
+    map:
+      rows:
+        - {need: "Record a pull request you opened, or watch it", tools: [pr_record, pr_watch]}
+    doc: |
+      Records the pull requests a session opens and watches them. A recorded pull request shows on the session's header with its status, which attn keeps fresh. A watch delivers readiness and feedback to the agent inbox until it stops.
+
+      `--seed <id>` addresses a watch to a seed instead of the session. Updates go to whoever tends the seed when they arrive, so a handover moves the watch with no new watch. Harvesting or withering the seed stops its watches and clears their unread updates.
+    flags:
+      - {name: session, placeholder: "<id>", doc: "the session to act for (defaults to the current session)"}
+    sections:
+      - title: Recording
+        commands: [pr record, pr ls, pr forget]
+      - title: Watching
+        commands: [pr watch, pr unwatch, pr status, pr wait-ready]
+
+commands:
+  - name: pr record
+    summary: record a pull request opened by a session
+    runs: home
+    grant: full
+    doc: |
+      Records a pull request this session opened, right after `gh pr create` prints its URL. attn attaches it to the session, shows it on the session header and keeps its status fresh. Recording one already recorded changes nothing. `skill` with `reference` delivery says how this repository delivers a change.
+    args:
+      - {name: url, type: pr_url, required: true, cli: pos}
+    result: PullRequestResult
+
+  - name: pr ls
+    summary: list a session's pull requests or a seed's watches, with status
+    runs: home
+    grant: full
+    read_only: true
+    doc: |
+      Lists the pull requests this session recorded, with state, watch mode, readiness and watch health, also after the session closed. With `seed`, lists the pull requests watched for that seed instead.
+    args:
+      - {name: seed, type: seed, cli: "--seed", doc: "list the pull requests watched for this seed"}
+    result: PullRequestListResult
+
+  - name: pr forget
+    summary: stop recording a pull request
+    runs: home
+    grant: full
+    doc: |
+      Drops a recorded pull request from the session, with its watch. It leaves the session header.
+    args:
+      - {name: url, type: pr_url, required: true, cli: pos}
+    result: PullRequestResult
+
+  - name: pr watch
+    summary: durably watch readiness and feedback
+    runs: home
+    grant: full
+    doc: |
+      Records the pull request if needed and watches it until it merges or closes, or until `pr_unwatch`. Updates arrive in the agent inbox: state changes (ready, changes requested, failed checks, merged, closed), feedback (comments, review comments, review bodies, reopened review threads) and monitoring outages. The call returns at once.
+
+      `mode` says when the pull request is ready: green waits for passing checks, codex also for Codex's review, and formal-review for an approving review, from `reviewer` when given. Watching again changes the mode.
+
+      Because agents post as the user, a watch skips the feedback the user's GitHub account wrote. Feedback by others, including the author of a pull request under review, and state changes still reach the agent. To have a watch deliver the user's feedback too, the user runs `attn settings set pull_requests.own_comments ring`.
+
+      `seed` addresses the watch to the seed's tender; an unknown or closed seed is refused.
+    args:
+      - {name: url, type: pr_url, required: true, cli: pos}
+      - {name: seed, type: seed, cli: "--seed", doc: "send the updates to whoever tends this seed"}
+      - {name: mode, type: pr_watch_mode, cli: "--mode", doc: "when the pull request counts as ready: green (the default), codex or formal-review"}
+      - {name: reviewer, type: name, cli: "--reviewer", placeholder: "<login>", doc: "the reviewer whose approval counts, only with formal-review"}
+    result: PullRequestWatchResult
+    errors:
+      - {code: bad_mode, usage: true, fix: 'Pass {mode} green, codex or formal-review.'}
+      - {code: reviewer_without_formal_review, usage: true, fix: 'Pass {reviewer} together with {mode} formal-review, or leave it out.'}
+    examples:
+      - {url: "https://github.com/owner/repo/pull/12", mode: codex}
+
+  - name: pr unwatch
+    summary: stop a durable watch
+    runs: home
+    grant: full
+    doc: |
+      Stops this session's watch of the pull request and clears its unread updates. The pull request stays recorded. With `seed`, stops the seed's watch instead.
+    args:
+      - {name: url, type: pr_url, required: true, cli: pos}
+      - {name: seed, type: seed, cli: "--seed", doc: "stop the watch addressed to this seed"}
+    result: PullRequestResult
+
+  - name: pr status
+    summary: show recorded watch/readiness state
+    runs: home
+    grant: full
+    read_only: true
+    doc: |
+      Lists the pull requests this session watches, with mode, readiness and watch health. `url` narrows it to one pull request. With `seed`, lists the seed's watches instead.
+    args:
+      - {name: url, type: pr_url, cli: pos}
+      - {name: seed, type: seed, cli: "--seed", doc: "list the watches addressed to this seed"}
+    result: PullRequestListResult
+
+  - name: pr wait-ready
+    summary: wait for the next actionable update
+    usage: "<number-or-url> [options]"
+    offered: false
+    reason: "Waits on the caller's machine, polling GitHub with the caller's gh and printing progress; pr_watch is the tool form, and its updates arrive in the inbox."
+    doc: |
+      Waits in the foreground for the next actionable update on a pull request, polling GitHub with your own `gh`, and prints progress until then. It does not skip the user's feedback. A later wait resumes after what the last one reported.
+
+      Options:
+
+      `--repo [host/]owner/repository`: required when the target is a number.
+
+      `--mode green|codex|formal-review`, and `--reviewer <login>`, optional only with formal-review.
+
+      `--timeout <duration>`: default 30m. `--interval <duration>`: default 20s; Codex deadlines wake independently.
+
+      `--since <RFC3339>`: report feedback after this time instead of resuming. `--reset`: baseline feedback from the current state. `--ignore-author <login>`: skip a login; repeats.
+
+      `--json`: print one machine-readable result.
+
+      Exit codes: 0 ready, 1 checks failed, 3 changes requested, 4 feedback, 5 merged, closed, a monitoring outage or an error, 2 usage, 124 timeout.

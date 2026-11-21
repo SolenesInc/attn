@@ -14,7 +14,6 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/github/githubschema"
-	"github.com/victorarias/attn/internal/prompttest"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -164,8 +163,6 @@ func TestPRWaitReadyReportsEachActionableUpdateOnceAcrossInvocations(t *testing.
 	old := ghComment{id: "old", author: "ana", body: "looks fine so far", at: now.Add(-time.Hour)}
 	fresh := ghComment{id: "new", author: "ben", body: "please rename the helper", at: now}
 
-	prompttest.Equal(t, "pr-help", map[string]string{"attn pr --help": s.Attn("pr", "--help").Stdout})
-
 	for _, tc := range []struct {
 		args []string
 		want string
@@ -282,6 +279,7 @@ func TestPRSessionCommandsRecordForgetAndWatchASessionsPullRequests(t *testing.T
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	const url = "https://github.com/acme/widgets/pull/"
+	s.Start()
 
 	for _, tc := range []struct {
 		args []string
@@ -289,18 +287,19 @@ func TestPRSessionCommandsRecordForgetAndWatchASessionsPullRequests(t *testing.T
 	}{
 		{args: []string{"record", url + "1"}, want: "no session"},
 		{args: []string{"ls"}, want: "no session"},
-		{args: []string{"record", "--session", "s1"}, want: "needs exactly one pull request url"},
-		{args: []string{"forget", "--session", "s1", "a", "b"}, want: "needs exactly one pull request url"},
-		{args: []string{"watch", url + "1", "--session", "s1", "--mode", "codex", "--reviewer", "victor"}, want: "--reviewer is only valid with --mode formal-review"},
+		{args: []string{"record", "--session", "s1"}, want: "takes 1 argument (url), got none"},
+		{args: []string{"forget", "--session", "s1", "a", "b"}, want: "takes 1 argument (url), got 2"},
 	} {
 		if refused := s.Attn(append([]string{"pr"}, tc.args...)...); refused.Code != 2 || !strings.Contains(refused.Stderr, tc.want) {
 			t.Errorf("pr %q exited %d with %q, want usage exit 2 saying %q", tc.args, refused.Code, refused.Stderr, tc.want)
 		}
 	}
 
-	s.Start()
 	id := s.Spawn(s.App(), fakeagent.Claude, s.Path("shop"))
 	s.Launched(id)
+	if refused := s.Attn("pr", "watch", url+"1", "--session", id, "--mode", "codex", "--reviewer", "victor"); refused.Code != 2 || !strings.Contains(refused.Stderr, "--reviewer is only valid with --mode formal-review") {
+		t.Errorf("pr watch with a reviewer in codex mode exited %d with %q, want usage exit 2 naming --reviewer and --mode", refused.Code, refused.Stderr)
+	}
 	for i, args := range [][]string{
 		{url + "1", "--session", id},
 		{"--session", id, url + "2"},
