@@ -7480,3 +7480,31 @@ fn the_file_views_head_keeps_its_path_on_one_line_and_its_key_hints_give_way_fir
         );
     }
 }
+
+#[test]
+fn the_note_box_stays_inside_its_tile_in_the_smallest_window_at_large_text() {
+    let mut world = review_in(
+        row(vec![document_tile("m", DOC, None)]),
+        (800.0, 600.0),
+        Some("1.5"),
+    );
+    let [x, y, w, _] = world
+        .screen()
+        .bounds(Target::key("tile.m.review.keys"))
+        .unwrap();
+    world.gesture(|app| app.click_at((x + w - 12.0, y + 12.0)));
+    press(&mut world, Key::Down);
+    type_key(&mut world, "c");
+    world.settle();
+    let screen = world.screen();
+    let [bx, _, bw, _] = screen
+        .bounds(Target::role("dialog").name("Write a note"))
+        .expect("the note box");
+    let [tx, _, tw, _] = screen.bounds(Target::key("tile.m")).expect("the tile");
+    assert!(
+        bx >= tx - 0.5 && bx + bw <= tx + tw + 0.5,
+        "the note box spans {bx}..{} in a tile spanning {tx}..{}",
+        bx + bw,
+        tx + tw
+    );
+}

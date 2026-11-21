@@ -992,12 +992,9 @@ pub(crate) fn body(
                 .as_ref()
                 .filter(|c| c.tile == tile)
                 .map(|c| {
-                    marks::composer_view(c, &reviews.composer_text, t).pin(
-                        Some(space::S6),
-                        Some(space::S6),
-                        Some(space::S6),
-                        None,
-                    )
+                    col()
+                        .pin(Some(space::S6), Some(space::S6), Some(space::S6), None)
+                        .child(marks::composer_view(c, &reviews.composer_text, t))
                 }),
         )
         .children(review.sending.as_ref().map(|(verdict, destination)| {
