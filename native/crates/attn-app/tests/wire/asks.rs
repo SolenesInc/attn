@@ -4,7 +4,7 @@ use std::time::Duration;
 use attn_app::Action;
 use attn_protocol::{
     Ask, AskAnswer, AskAnswerResultMessage, AskChoice, AskDefault, AskPart, AskQuestion, AskReply,
-    AsksUpdatedMessage, InitialStateMessage, Session, SessionStateChangedMessage,
+    AskThread, AsksUpdatedMessage, InitialStateMessage, Session, SessionStateChangedMessage,
 };
 use attn_protocol::{
     GardenSeedsUpdatedMessage, PartyView, Seed, SeedDocument, SeedDocumentGetResultMessage,
@@ -2542,4 +2542,63 @@ fn typing_another_answer_drops_the_pick_and_its_condition() {
         sent_answers(&world)[0]["answers"],
         serde_json::json!([{"key": "q1", "picked": [], "other": "SQLite"}])
     );
+}
+
+#[test]
+fn a_follow_up_ask_says_what_it_follows_and_unfolds_to_the_earlier_answer() {
+    let mut follow_up = ask(
+        "a-follow",
+        "web",
+        "Postgres version",
+        5,
+        vec![question("q1", "one", "Which version?", &["16", "17"])],
+    );
+    follow_up.re = Some(AskThread {
+        ask_id: "a-cache1".into(),
+        subject: Some("Cache store".into()),
+        answer: Some(
+            "**1. Which store should keep the cache?**\n\nAnswer: Postgres (the recommended choice)\n\n> Keep it boring.".into(),
+        ),
+        answered_at: Some(ago(10)),
+    });
+    let mut after_gone = ask(
+        "a-after",
+        "web",
+        "Pool size",
+        4,
+        vec![question("q1", "one", "How many?", &["10", "20"])],
+    );
+    after_gone.re = Some(AskThread {
+        ask_id: "a-gone".into(),
+        ..AskThread::default()
+    });
+    let mut world = start(vec![follow_up, after_gone], vec![web_waiting()]);
+    open_sheet(&mut world);
+
+    assert_eq!(shown(&world).as_deref(), Some("Postgres version"));
+    assert_eq!(
+        name(&world, "asks.follows"),
+        "Follows Cache store · you answered 10m ago"
+    );
+    assert!(!has(&world, "asks.follows.answer"));
+    click(&mut world, "asks.follows");
+    let answer: Vec<String> = world
+        .screen()
+        .descendants(Target::key("asks.follows.answer"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert!(
+        answer
+            .iter()
+            .any(|said| said.contains("Answer: Postgres (the recommended choice)")),
+        "{answer:?}"
+    );
+    click(&mut world, "asks.follows");
+    assert!(!has(&world, "asks.follows.answer"));
+
+    letter(&mut world, "j");
+    assert_eq!(shown(&world).as_deref(), Some("Pool size"));
+    assert_eq!(name(&world, "asks.follows"), "Follows a-gone");
+    rest_but_for_ages(&mut world);
 }

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use attn_protocol::{Ask, AskAnswer, AskQuestion, AskSeedMention, Session};
-use attn_ui::blocks::{Block, Inline, List, Popover, Section, Sheet, Stack};
+use attn_protocol::{Ask, AskAnswer, AskQuestion, AskSeedMention, AskThread, Session};
+use attn_ui::blocks::{Block, Disclosure, Inline, List, Popover, Section, Sheet, Stack};
 use attn_ui::system::{
     AskChip, Button, Choice, DotShape, DotSize, FieldState, IconSize, ListRow, Look, Size, Tone,
     Type, answers, area_box, ask_mark, checks, count_badge, dot, icon_button, keycaps, keys_hint,
@@ -467,6 +467,9 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
             words(standby.answer.clone(), Type::Small, t.text_secondary).key("asks.resumes"),
         ));
     }
+    if let Some(re) = &ask.re {
+        blocks.push(follows(state, &ask.id, re, &prose, t));
+    }
     blocks.push(Block::custom(
         "asks.subject.block",
         prose.text(
@@ -595,6 +598,56 @@ fn snooze_button(snoozed: bool, from: &str, t: &Tokens) -> El {
         ("Snooze", format!("Snooze {from} and its asks (s)"))
     };
     ask_button(SNOOZE, said, &help, t, super::toggle_snooze)
+}
+
+/// What a follow-up ask follows: the earlier ask's subject and when the person answered it, which
+/// unfolds to that answer; the earlier ask's id alone when it was gone before this one opened.
+fn follows(state: &State, ask_id: &str, re: &AskThread, prose: &Prose, t: &Tokens) -> Block {
+    let Some(subject) = &re.subject else {
+        return Block::custom(
+            "asks.follows.block",
+            words(
+                format!("Follows {}", re.ask_id),
+                Type::Small,
+                t.text_secondary,
+            )
+            .key("asks.follows")
+            .selectable(true)
+            .wrap(),
+        );
+    };
+    let answered = match &re.answered_at {
+        Some(at) => format!(
+            "you answered {}",
+            crate::garden::model::ago(at, state.window.now_ms)
+        ),
+        None => "not answered".to_owned(),
+    };
+    let open = state.window.asks.follows_open.as_deref() == Some(ask_id);
+    let id = ask_id.to_owned();
+    let fold = Disclosure::new(
+        "asks.follows",
+        format!("Follows {subject} · {answered}"),
+        open,
+        move |state: &mut State, _: &mut Tx| {
+            let folds = &mut state.window.asks.follows_open;
+            *folds = if folds.as_deref() == Some(id.as_str()) {
+                None
+            } else {
+                Some(id.clone())
+            };
+        },
+    )
+    .body_key("asks.follows.answer");
+    match &re.answer {
+        Some(answer) => fold
+            .push(Block::custom(
+                "asks.follows.answer.block",
+                col().w_full().child(prose.markdown(answer)),
+            ))
+            .build(t),
+        None => fold.disabled(true).build(t),
+    }
 }
 
 /// Copy ask, Open agent, Snooze and Open in Garden: what to do with the ask besides answering it.

@@ -34,6 +34,8 @@ pub struct Asks {
     /// picked or the one picked is gone.
     pub(crate) selected: Option<String>,
     pub(crate) show_replied: bool,
+    /// The ask whose "Follows …" line is unfolded to show the earlier answer.
+    pub(crate) follows_open: Option<String>,
     pub(crate) drafts: HashMap<String, Draft>,
     pub(crate) sending: Option<String>,
     /// Why the daemon refused the answer to an ask, shown under that ask.
