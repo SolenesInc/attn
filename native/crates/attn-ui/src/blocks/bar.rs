@@ -3,10 +3,6 @@ use rune::{El, row};
 use crate::Tokens;
 use crate::system::{Size, Space, door};
 
-/// The narrowest a bar's field gets: its search mark, and room for a short query of about ten
-/// characters in `Body`.
-const FIELD_FLOOR: f32 = 120.0;
-
 /// The strip across the top of a panel that holds where the panel stands and what it can do,
 /// with a rule under it. Its first part takes the room the others leave. A bar of words stands as
 /// tall as one with compact buttons.
@@ -29,16 +25,9 @@ impl Bar {
         }
     }
 
-    /// What grows to fill the bar, such as a trail.
+    /// What grows to fill the bar, such as a trail or a field.
     pub fn lead(mut self, lead: El) -> Self {
-        self.lead = Some(lead.min_w(0.0));
-        self
-    }
-
-    /// A field that grows to fill the bar, such as a find field, keeping room for a short query
-    /// where the bar is narrow.
-    pub fn field(mut self, field: El) -> Self {
-        self.lead = Some(field.min_w(FIELD_FLOOR));
+        self.lead = Some(lead);
         self
     }
 
@@ -82,7 +71,7 @@ impl Bar {
             .items_center()
             .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
             .children(self.start)
-            .children(self.lead.map(|lead| lead.grow(1.0)))
+            .children(self.lead.map(|lead| lead.grow(1.0).min_w(0.0)))
             .children(self.items);
         let tall = if self.slim { Space::S0 } else { Space::S6 };
         door::gap(door::inset(bar, Space::S16, tall), Space::S8)

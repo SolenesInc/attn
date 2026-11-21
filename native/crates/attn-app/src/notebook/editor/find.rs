@@ -3,8 +3,8 @@
 //! panel does in the Tauri editor.
 
 use attn_ui::Tokens;
-use attn_ui::blocks::Bar;
-use attn_ui::system::{Type, search_field, words};
+use attn_ui::blocks::Inline;
+use attn_ui::system::{SEARCH_FLOOR, Type, search_field, words};
 use rune::{El, Key, KeyEvent, TextEdit, Tx};
 use rune_kit::{Button, ButtonVariant, ControlSize, TextInput};
 
@@ -158,14 +158,18 @@ pub(crate) fn bar(
         n => format!("{n} matches"),
     };
     Some(
-        Bar::new(format!("{key}.findbar"))
-            .slim()
-            .field(search_field(field, t).into())
-            .push(words(found, Type::Label, t.text_tertiary).key(format!("{key}.findcount")))
-            .push(button("Previous", prev_key, Some(true)))
-            .push(button("Next", next_key, Some(false)))
-            .push(button("Close", close_key, None))
-            .build(t)
+        Inline::joined()
+            .key(format!("{key}.findbar"))
+            .w_full()
+            .child(
+                El::from(search_field(field, t))
+                    .grow(1.0)
+                    .min_w(SEARCH_FLOOR),
+            )
+            .child(words(found, Type::Label, t.text_tertiary).key(format!("{key}.findcount")))
+            .child(button("Previous", prev_key, Some(true)))
+            .child(button("Next", next_key, Some(false)))
+            .child(button("Close", close_key, None))
             .role("search")
             .label("Find in note"),
     )

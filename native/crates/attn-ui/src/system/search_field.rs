@@ -4,6 +4,10 @@ use rune_kit::TextInput;
 use super::{Control, IconSize, Size, Space, Type, door, focus, icon, layers};
 use crate::Tokens;
 
+/// The narrowest a search field gets where its line is short: its mark, and room for a short
+/// query of about ten characters in `Body`.
+pub const SEARCH_FLOOR: f32 = 120.0;
+
 /// A field that narrows a list as it is typed into, led by the search icon: compact, so it
 /// sits in a list among its rows.
 pub fn search_field(input: TextInput, t: &Tokens) -> Control {

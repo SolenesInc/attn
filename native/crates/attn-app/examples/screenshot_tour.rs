@@ -3076,6 +3076,17 @@ fn notebook_tile_finder(dark: bool) {
     snap(&mut world, "notebook-tile-finder", dark);
 }
 
+/// The editor tile's find bar over its open note, with a query that matches.
+fn notebook_tile_find(dark: bool) {
+    let mut world = notebook_tile_open(dark);
+    click(&mut world, Target::key("notebook.tile.n.editor"));
+    world.gesture(|app| app.press("mod+f"));
+    world.settle();
+    world.gesture(|app| app.type_text("note"));
+    world.settle();
+    snap(&mut world, "notebook-tile-find", dark);
+}
+
 /// The fullscreen notebook with `index.md` open.
 fn notebook_note(dark: bool) {
     let mut world = start(notebook_daemon(
@@ -8021,6 +8032,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("notebook_tile_empty", || notebook_tile_empty(dark));
         scene("notebook_tile_note", || notebook_tile_note(dark));
         scene("notebook_tile_finder", || notebook_tile_finder(dark));
+        scene("notebook_tile_find", || notebook_tile_find(dark));
         for (tile, failure) in [
             (false, Failure::Conflict),
             (false, Failure::WriteError),

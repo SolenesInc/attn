@@ -74,7 +74,7 @@ pub use reading::{
     written_cell,
 };
 pub use said::{Part, Said};
-pub use search_field::search_field;
+pub use search_field::{SEARCH_FLOOR, search_field};
 pub use segmented::{Segment, Segmented};
 pub use size::Size;
 pub(crate) use space::Space;
