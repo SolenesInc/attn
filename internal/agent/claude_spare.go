@@ -201,7 +201,7 @@ func (s *claudeSpare) answer(ctx context.Context, request ModelCallRequest) (Mod
 		}
 		text := claudeResultString(event.Result)
 		if event.IsError {
-			return ModelCallResult{}, fmt.Errorf("claude: %s", classifyHeadlessFailure(text))
+			return ModelCallResult{}, fmt.Errorf("claude: %s", ClassifyHeadlessFailure(text))
 		}
 		return modelCallAnswer(text, ModelCallResult{
 			ModelTime:    time.Duration(event.DurationAPIMs) * time.Millisecond,
@@ -260,7 +260,7 @@ func (s *claudeSpare) diagnostics() string {
 		return ""
 	}
 	if text := strings.TrimSpace(s.stderr.String()); text != "" {
-		return ": " + classifyHeadlessFailure(text)
+		return ": " + ClassifyHeadlessFailure(text)
 	}
 	return ""
 }

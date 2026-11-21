@@ -297,16 +297,12 @@ func (d *Daemon) answerModelCall(ctx context.Context, profile string, msg *proto
 	}
 	defer os.RemoveAll(workDir)
 	request.WorkDir = workDir
+	var result agentdriver.ModelCallResult
 	if socket := d.codexShared().runningSocket(profile); target.harness == "codex" && socket != "" {
-		bySpare.Store(true)
-		result, err := answerModelCallOnSharedCodex(ctx, socket, request)
-		if !errors.Is(err, errSharedCodexUnusable) {
-			return modelCallOutcome{target: target, result: result, err: err}
-		}
-		bySpare.Store(false)
-		d.logf("model call: the shared Codex app-server of profile %s could not take the call, so it runs cold: %v", profile, err)
+		result, err = answerModelCallOnSharedCodex(ctx, socket, request)
+	} else {
+		result, err = agentdriver.AnswerModelCall(ctx, target.provider, request)
 	}
-	result, err := agentdriver.AnswerModelCall(ctx, target.provider, request)
 	if err != nil {
 		err = fmt.Errorf("%s: %w", target.harness, err)
 	}

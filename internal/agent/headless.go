@@ -83,7 +83,7 @@ func runHeadlessCommand(
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		diagnostics := classifyHeadlessFailure(reportedFailure(stdout.Bytes()) + "\n" + stderr.String())
+		diagnostics := ClassifyHeadlessFailure(reportedFailure(stdout.Bytes()) + "\n" + stderr.String())
 		return HeadlessTaskResult{
 			Diagnostics:   diagnostics,
 			FailureOutput: headlessFailureOutput(stdout.String(), stderr.String()),
@@ -219,7 +219,7 @@ func headlessEnvironment(provider string) []string {
 	return launchenv.WithActiveAttnFirst(env, launchenv.ActiveAttnExecutable())
 }
 
-func classifyHeadlessFailure(output string) string {
+func ClassifyHeadlessFailure(output string) string {
 	lower := strings.ToLower(output)
 	switch {
 	case strings.Contains(lower, "input_too_large"):

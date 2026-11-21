@@ -15,8 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/codexshared"
 )
 
-var errSharedCodexUnusable = errors.New("the shared Codex app-server could not take the call")
-
 func (r *codexShared) runningSocket(profile string) string {
 	r.mu.Lock()
 	s := r.servers[profile]
@@ -49,14 +47,10 @@ func codexUserMCPServers() ([]string, error) {
 	return names, nil
 }
 
-func sharedCodexUnusable(err error) error {
-	return fmt.Errorf("%w: %w", errSharedCodexUnusable, err)
-}
-
 func answerModelCallOnSharedCodex(ctx context.Context, socket string, request agentdriver.ModelCallRequest) (agentdriver.ModelCallResult, error) {
 	servers, err := codexUserMCPServers()
 	if err != nil {
-		return agentdriver.ModelCallResult{}, sharedCodexUnusable(err)
+		return agentdriver.ModelCallResult{}, err
 	}
 	finished := make(chan struct{})
 	defer close(finished)
@@ -71,7 +65,7 @@ func answerModelCallOnSharedCodex(ctx context.Context, socket string, request ag
 		}
 	})
 	if err != nil {
-		return agentdriver.ModelCallResult{}, sharedCodexUnusable(err)
+		return agentdriver.ModelCallResult{}, err
 	}
 	defer client.Close()
 
@@ -88,7 +82,7 @@ func answerModelCallOnSharedCodex(ctx context.Context, socket string, request ag
 		} `json:"thread"`
 	}
 	if err := sharedCodexCall(ctx, client, "thread/start", start, &thread); err != nil {
-		return agentdriver.ModelCallResult{}, sharedCodexUnusable(err)
+		return agentdriver.ModelCallResult{}, err
 	}
 	turn := map[string]any{"threadId": thread.Thread.ID, "input": []map[string]string{{"type": "text", "text": request.Input}}}
 	if effort := strings.TrimSpace(request.ReasoningEffort); effort != "" {
@@ -100,7 +94,10 @@ func answerModelCallOnSharedCodex(ctx context.Context, socket string, request ag
 		} `json:"turn"`
 	}
 	if err := sharedCodexCall(ctx, client, "turn/start", turn, &started); err != nil {
-		return agentdriver.ModelCallResult{}, sharedCodexUnusable(err)
+		if ctx.Err() != nil {
+			return agentdriver.ModelCallResult{}, err
+		}
+		return agentdriver.ModelCallResult{}, errors.New(agentdriver.ClassifyHeadlessFailure(err.Error()))
 	}
 	return awaitSharedCodexTurn(ctx, client, events, thread.Thread.ID, started.Turn.ID)
 }
@@ -168,7 +165,7 @@ func awaitSharedCodexTurn(ctx context.Context, client *codexshared.Client, event
 					if params.Turn.Error != nil && params.Turn.Error.Message != "" {
 						failure = params.Turn.Error.Message
 					}
-					return agentdriver.ModelCallResult{}, fmt.Errorf("the Codex turn ended %s: %s", params.Turn.Status, failure)
+					return agentdriver.ModelCallResult{}, fmt.Errorf("the turn ended %s: %s", params.Turn.Status, agentdriver.ClassifyHeadlessFailure(failure))
 				}
 				if result.Text = strings.TrimSpace(text); result.Text == "" {
 					return agentdriver.ModelCallResult{}, errors.New("the model returned no text")
