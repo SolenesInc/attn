@@ -2016,6 +2016,78 @@ fn a_url_that_holds_a_seeds_name_stays_one_link_that_opens_the_whole_url() {
     assert_eq!(world.opened_links(), [url]);
 }
 
+const NOTES: &str = "https://example.com/notes";
+const MIGRATION_LINK: &str = "attn-seed:s-cache1";
+
+fn start_on_links() -> World {
+    let mut world = start_with_seeds(
+        vec![ask(
+            "a-links",
+            "api",
+            "Links",
+            30,
+            vec![
+                prose(&format!(
+                    "Read [the notes]({NOTES}) before cache-migration lands."
+                )),
+                question("q1", "text", "Ready?", &[]),
+            ],
+        )],
+        vec![api_working()],
+        vec![migration(None)],
+    );
+    mentions_answered(&world, &[("cache-migration", "s-cache1")]);
+    open_sheet(&mut world);
+    world
+}
+
+/// Drags from the first letter of link `link` to past the end of the text `holder`.
+fn drag_from_link(world: &mut World, link: &str, holder: &str) {
+    let [x, y, _, h] = world.rect(link);
+    let [hx, _, hw, _] = world.rect(holder);
+    let line = (y + h / 2.0) as f32;
+    let (from, to) = ((x as f32 + 1.0, line), ((hx + hw) as f32 + 4.0, line));
+    world.gesture(|app| {
+        app.drag_from(from, to);
+        app.release(to);
+    });
+    world.settle();
+}
+
+#[test]
+fn a_drag_that_starts_on_a_link_selects_and_the_copy_key_copies_it_though_the_note_held_the_keyboard()
+ {
+    for (link, rest) in [
+        (NOTES, "the notes before cache-migration lands."),
+        (MIGRATION_LINK, "cache-migration lands."),
+    ] {
+        let mut world = start_on_links();
+        type_into(&mut world, NOTE, "draft");
+        assert_eq!(focused(&world).as_deref(), Some(NOTE));
+
+        drag_from_link(&mut world, link, "asks.part.0");
+
+        assert_eq!(copied(&mut world).as_deref(), Some(rest), "from {link}");
+        assert!(world.opened_links().is_empty(), "a drag opens nothing");
+        assert_eq!(garden_heading(&world), None, "a drag opens no seed");
+    }
+}
+
+#[test]
+fn a_click_on_a_link_in_an_asks_words_still_opens_it() {
+    let mut world = start_on_links();
+    type_into(&mut world, NOTE, "draft");
+
+    world.gesture(|app| app.click(Target::key(NOTES)));
+    assert_eq!(world.opened_links(), [NOTES]);
+
+    world.gesture(|app| app.click(Target::key(MIGRATION_LINK)));
+    assert_eq!(
+        garden_heading(&world).as_deref(),
+        Some("Cache store migration")
+    );
+}
+
 #[test]
 fn tab_walks_the_sheet_and_stays_in_it_and_never_stops_on_the_list_of_asks() {
     let mut world = start(
