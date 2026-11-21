@@ -2759,3 +2759,28 @@ fn a_compact_tables_one_line_row_is_as_tall_as_its_text() {
         );
     }
 }
+
+#[test]
+fn a_tables_column_title_shows_wherever_its_values_show() {
+    for variant in ["Rest", "Long", "Narrow", "Narrow long", "Smallest long"] {
+        let rt = block_story(true, "Blocks/Diagnostics table", variant);
+        for column in 0..2 {
+            let title = shown_glyphs(&rt, element(&rt, &format!("facts.head.{column}")).rect);
+            let suffix = format!(".cell.{column}");
+            let cells: Vec<_> = rt
+                .elements()
+                .into_iter()
+                .filter(|e| e.key.as_deref().is_some_and(|k| k.ends_with(&suffix)))
+                .collect();
+            assert!(!cells.is_empty(), "{variant}: column {column} has no cells");
+            for cell in cells {
+                let value = shown_glyphs(&rt, cell.rect);
+                assert!(
+                    value.is_empty() || !title.is_empty(),
+                    "{variant} {:?}: column {column}'s value shows and its title does not",
+                    cell.key
+                );
+            }
+        }
+    }
+}

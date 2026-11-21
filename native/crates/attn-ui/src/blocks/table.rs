@@ -154,6 +154,7 @@ impl<S: 'static> Table<S> {
             lead: self.rows.iter().any(|r| r.leading.is_some()),
             action: self.rows.iter().any(TableRow::has_end),
             dimmed: self.dimmed,
+            values: self.rows.iter().any(|r| !r.cells.is_empty()),
             compact: self.compact,
         };
         let head_key = self
@@ -201,6 +202,7 @@ struct Grid {
     lead: bool,
     action: bool,
     dimmed: bool,
+    values: bool,
 }
 
 impl Grid {
@@ -324,7 +326,10 @@ impl Grid {
         self.mark_column() + FLEX_FLOOR
     }
 
-    /// The head on the columns, one line high, so a narrow table names only the columns on it.
+    /// The head on the columns. A table whose rows show values lays its titles out as every row
+    /// lays its cells, so where a narrow table wraps a row's values under its name, their titles
+    /// wrap over them and no value shows without its name. A table of controls, which name
+    /// themselves, keeps its head one line high and names only the columns on it.
     fn head(&self, head: &str, t: &Tokens) -> El {
         let label = |title: &Said| words(title.clone(), Type::Label, t.text_tertiary);
         let line = self.line(
@@ -332,7 +337,11 @@ impl Grid {
             |column| label(&self.fixed[column.0].0).key(format!("{head}.{}", column.0)),
             None,
         );
-        let line = door::clip(line.max_h(door::line_height(Type::Label)));
+        let line = if self.values {
+            line
+        } else {
+            door::clip(line.max_h(door::line_height(Type::Label)))
+        };
         self.padded(line, Space::S8)
             .fill(t.bg_elevated)
             .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)

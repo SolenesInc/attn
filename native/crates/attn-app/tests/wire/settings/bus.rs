@@ -379,3 +379,37 @@ fn a_tables_head_is_a_row_read_as_columns() {
         ("row", Some("Columns"))
     );
 }
+
+/// Every metric title of the producers' head lies inside the head as drawn.
+fn titles_show(world: &mut World) {
+    let head = world.rect("settings.bus.producers.head");
+    for column in 0..5 {
+        let title = world.rect(&format!("settings.bus.producers.head.{column}"));
+        assert!(
+            title[1] >= head[1] && title[1] + title[3] <= head[1] + head[3] + 0.5,
+            "producers' title {column} at {title:?} lies outside the head {head:?}"
+        );
+    }
+}
+
+#[test]
+fn the_metric_titles_show_when_a_narrower_window_wraps_the_numbers() {
+    let (daemon, _) = accepting(&[]);
+    daemon.on("bus_status_get", answering(status()));
+    let mut world = World::start(daemon);
+    world.resize((950.0, 700.0));
+    open(&mut world);
+    click(&mut world, "settings.nav.eventBus");
+    titles_show(&mut world);
+}
+
+#[test]
+fn the_metric_titles_show_in_the_smallest_window_at_the_largest_text() {
+    let (daemon, _) = accepting(&[("uiScale", "1.5")]);
+    daemon.on("bus_status_get", answering(status()));
+    let mut world = World::start(daemon);
+    world.resize((800.0, 600.0));
+    open(&mut world);
+    click(&mut world, "settings.nav.eventBus");
+    titles_show(&mut world);
+}
