@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"strings"
@@ -200,13 +199,9 @@ func TestAnAgentExitFocusesTheMostRecentlyUsedTileLikeClosingItsTile(t *testing.
 	}
 }
 
-func openTerminal(t *testing.T, w *world, caller string, direction *protocol.TerminalDirection) protocol.SessionID {
+func openTerminal(t *testing.T, w *world, caller string, down bool) protocol.SessionID {
 	t.Helper()
-	answer, err := w.Client().TerminalCommand(context.Background(), protocol.TerminalOpenMessage{Cmd: protocol.CmdTerminalOpen, CallerSessionID: protocol.SessionID(caller), Direction: direction})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return answer.TerminalOpenResult.SessionID
+	return terminalDo[protocol.TerminalOpenResult](t, w.Client(), "terminal open", protocol.SessionID(caller), map[string]any{"down": down}).SessionID
 }
 
 func TestAnAgentsTerminalGoesToTheRowsEndAndStacksOnlyWhenAskedTo(t *testing.T) {
@@ -217,7 +212,7 @@ func TestAnAgentsTerminalGoesToTheRowsEndAndStacksOnlyWhenAskedTo(t *testing.T) 
 	requestShowSession(app, second)
 	profileID := app.SelectedProfile()
 	desktop, activePane := viewProfile(t, w, profileID).paneOf(t, second)
-	beside := openTerminal(t, w, first, nil)
+	beside := openTerminal(t, w, first, false)
 	view := viewProfile(t, w, profileID).desktops[desktop.ID]
 	if got, want := rowOf(t, view), fmt.Sprintf("%s %s %s", first, second, beside); got != want {
 		t.Fatalf("the terminal opened into row %q, want %q", got, want)
@@ -225,12 +220,12 @@ func TestAnAgentsTerminalGoesToTheRowsEndAndStacksOnlyWhenAskedTo(t *testing.T) 
 	if view.ActivePaneID != activePane {
 		t.Fatalf("an agent's terminal took focus: %s, want %s", view.ActivePaneID, activePane)
 	}
-	another := openTerminal(t, w, first, nil)
+	another := openTerminal(t, w, first, false)
 	view = viewProfile(t, w, profileID).desktops[desktop.ID]
 	if got, want := rowOf(t, view), fmt.Sprintf("%s %s %s %s", first, second, beside, another); got != want {
 		t.Fatalf("a caller's second terminal made row %q, want %q", got, want)
 	}
-	below := openTerminal(t, w, second, protocol.Ptr(protocol.TerminalDirectionDown))
+	below := openTerminal(t, w, second, true)
 	view = viewProfile(t, w, profileID).desktops[desktop.ID]
 	if got, want := rowOf(t, view), fmt.Sprintf("%s %s/%s %s %s", first, second, below, beside, another); got != want {
 		t.Fatalf("--direction down made row %q, want %q", got, want)
@@ -259,15 +254,15 @@ func TestDirectionDownStacksUnderTheCallerAfterATerminalAtTheRowsEnd(t *testing.
 			t.Fatalf("a terminal took focus: %s, want %s", view.ActivePaneID, activePane)
 		}
 	}
-	down := protocol.Ptr(protocol.TerminalDirectionDown)
+	down := true
 
-	atEnd := openTerminal(t, w, caller, nil)
+	atEnd := openTerminal(t, w, caller, false)
 	row(fmt.Sprintf("%s %s %s", caller, other, atEnd))
 	under := openTerminal(t, w, caller, down)
 	row(fmt.Sprintf("%s/%s %s %s", caller, under, other, atEnd))
 	underThat := openTerminal(t, w, caller, down)
 	row(fmt.Sprintf("%s/%s/%s %s %s", caller, under, underThat, other, atEnd))
-	alsoAtEnd := openTerminal(t, w, caller, nil)
+	alsoAtEnd := openTerminal(t, w, caller, false)
 	row(fmt.Sprintf("%s/%s/%s %s %s %s", caller, under, underThat, other, atEnd, alsoAtEnd))
 	exitShells(app, string(atEnd), string(under), string(underThat), string(alsoAtEnd))
 }
@@ -353,18 +348,10 @@ func TestMovingATerminalToADesktopAnchorsOnTheColumnOfItsActiveTile(t *testing.T
 	desktop.desktopID = current.ID
 	desktop.stack(second, first)
 	requestShowSession(app, first)
-	call := func(message any) *protocol.Response {
-		t.Helper()
-		answer, err := cli.TerminalCommand(context.Background(), message)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return answer
-	}
-	shell := call(protocol.TerminalOpenMessage{Cmd: protocol.CmdTerminalOpen, CallerSessionID: protocol.SessionID(third)}).TerminalOpenResult
-	call(protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: protocol.SessionID(third), Target: string(shell.TerminalID), Desktop: "8"})
+	shell := terminalDo[protocol.TerminalOpenResult](t, cli, "terminal open", protocol.SessionID(third), map[string]any{})
+	terminalDo[protocol.TerminalMoveResult](t, cli, "terminal move", protocol.SessionID(third), map[string]any{"terminal": string(shell.TerminalID), "desktop": "8"})
 	desktop.requireRow(fmt.Sprintf("%s/%s %s", first, second, third))
-	back := call(protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: protocol.SessionID(third), Target: string(shell.TerminalID), Desktop: current.ID}).TerminalMoveResult
+	back := terminalDo[protocol.TerminalMoveResult](t, cli, "terminal move", protocol.SessionID(third), map[string]any{"terminal": string(shell.TerminalID), "desktop": current.ID})
 	if back.DesktopID != current.ID {
 		t.Fatalf("the terminal moved to %s, want %s", back.DesktopID, current.ID)
 	}

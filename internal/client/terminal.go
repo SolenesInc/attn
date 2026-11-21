@@ -8,7 +8,15 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (c *Client) TerminalCommand(ctx context.Context, message any) (*protocol.Response, error) {
+func TerminalCommand[R any](ctx context.Context, c *Client, name string, session protocol.SessionID, args any) (*R, error) {
+	raw, err := json.Marshal(args)
+	if err != nil {
+		return nil, err
+	}
+	msg := protocol.RunCommandMessage{Cmd: protocol.CmdRunCommand, Command: name, SessionID: protocol.Ptr(session)}
+	if err := json.Unmarshal(raw, &msg.Args); err != nil {
+		return nil, err
+	}
 	conn, err := c.connect()
 	if err != nil {
 		return nil, err
@@ -16,7 +24,7 @@ func (c *Client) TerminalCommand(ctx context.Context, message any) (*protocol.Re
 	defer conn.Close()
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
-	if err := c.writeFrame(conn, message); err != nil {
+	if err := c.writeFrame(conn, msg); err != nil {
 		return nil, err
 	}
 	var response protocol.Response
@@ -28,7 +36,18 @@ func (c *Client) TerminalCommand(ctx context.Context, message any) (*protocol.Re
 	}
 	noteReply(response.Ok, response.Refusal)
 	if !response.Ok {
+		if refusal := response.CommandRefusal; refusal != nil {
+			return nil, &DaemonError{Code: refusal.Code, Message: refusal.Message}
+		}
 		return nil, fmt.Errorf("%s", protocol.Deref(response.Error))
 	}
-	return &response, nil
+	raw, err = json.Marshal(response.CommandResult)
+	if err != nil {
+		return nil, err
+	}
+	var result R
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }

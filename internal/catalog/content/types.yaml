@@ -168,3 +168,14 @@ types:
     json: {type: string}
     clears: true
     placeholder: "<text>"
+  seconds:
+    json: {type: string, minLength: 1}
+    doc: "A positive number of seconds, such as 30 or 0.5."
+    placeholder: "<seconds>"
+  wait_until:
+    json: {type: string, enum: [prompt, exit]}
+    placeholder: "prompt|exit"
+  terminal_ref:
+    json: {type: string, minLength: 1}
+    doc: "A terminal id or a unique prefix of one, as terminal_ls lists them. A session id or prefix, or a crew member's name, works when that session shows in exactly one terminal. Only terminals of your profile."
+    placeholder: "<terminal>"

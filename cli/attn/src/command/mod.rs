@@ -18,6 +18,8 @@ pub enum Cli {
     Words(&'static [&'static str]),
     Internal,
     Shares(&'static str, &'static str),
+    AfterDashes,
+    FlagWords(&'static str),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -60,6 +62,8 @@ pub fn unresolved_session(message: &str) -> Stop {
     eprintln!("attn: resolve current session: {shown}");
     Stop(1)
 }
+const CODE_TIMEOUT: &str = "timeout";
+const EXIT_TIMEOUT: u8 = 124;
 
 pub trait Family {
     fn group(&self) -> &'static str;
@@ -309,7 +313,7 @@ fn mention(cmd: &Command, name: &str) -> Option<String> {
     }
     let arg = cmd.args.iter().find(|arg| arg.name == name)?;
     match arg.cli {
-        Cli::Flag(flag) => Some(flag_mention(flag)),
+        Cli::Flag(flag) | Cli::FlagWords(flag) => Some(flag_mention(flag)),
         Cli::Choice(choices) => Some(
             choices
                 .iter()
@@ -353,13 +357,15 @@ fn read_stdin(what: &str) -> Result<Vec<u8>, String> {
 fn parse(family: &dyn Family, cmd: &Command, argv: &[String]) -> Result<Parsed, ParseStop> {
     let definitions = flags_of(family.flags(), cmd);
     let mut fs = FlagSet::new("", &definitions);
+    let (argv, taken) = take_word_args(cmd, argv)?;
     let positional_slots = cmd
         .args
         .iter()
         .filter(|arg| matches!(arg.cli, Cli::Pos))
         .count();
-    let positionals = split_positionals(&mut fs, argv, positional_slots)?;
+    let positionals = split_positionals(&mut fs, &argv, positional_slots)?;
     let mut values = positional_values(cmd, &positionals)?;
+    values.extend(taken);
     flag_values(family, cmd, &fs, &mut values)?;
     read_inputs(family, cmd, &mut values)?;
     split_text(cmd, &mut values);
@@ -375,6 +381,55 @@ fn parse(family: &dyn Family, cmd: &Command, argv: &[String]) -> Result<Parsed, 
         .find(|session| !session.is_empty())
         .unwrap_or_default(),
     })
+}
+
+fn take_word_args(
+    cmd: &Command,
+    argv: &[String],
+) -> Result<(Vec<String>, Map<String, Json>), ParseStop> {
+    let mut taken = Map::new();
+    let mut argv = argv.to_vec();
+    if let Some(arg) = cmd
+        .args
+        .iter()
+        .find(|arg| matches!(arg.cli, Cli::AfterDashes))
+        && let Some(at) = argv.iter().position(|word| word == "--")
+    {
+        let words: Vec<Json> = argv.split_off(at)[1..]
+            .iter()
+            .map(|word| Json::from(word.clone()))
+            .collect();
+        taken.insert(arg.name.to_string(), Json::from(words));
+    }
+    for arg in cmd.args {
+        let Cli::FlagWords(flag) = arg.cli else {
+            continue;
+        };
+        let spelled = format!("--{flag}");
+        let mut words = Vec::new();
+        let mut kept = Vec::new();
+        let mut rest = argv.into_iter().peekable();
+        while let Some(word) = rest.next() {
+            if word != spelled {
+                kept.push(word);
+                continue;
+            }
+            let before = words.len();
+            while let Some(next) = rest.next_if(|next| !next.starts_with("--")) {
+                words.push(Json::from(next));
+            }
+            if words.len() == before {
+                return Err(ParseStop::Usage(format!(
+                    "{spelled} needs at least one word"
+                )));
+            }
+        }
+        argv = kept;
+        if !words.is_empty() {
+            taken.insert(arg.name.to_string(), Json::from(words));
+        }
+    }
+    Ok((argv, taken))
 }
 
 fn group_flag(family: &dyn Family, fs: &FlagSet<'_>, name: &str) -> String {
@@ -741,6 +796,10 @@ fn refuse(
     }
     if refusal.code == CODE_USAGE || cmd.usage.contains(&refusal.code.as_str()) {
         return family.usage_error(cmd.name, &message);
+    }
+    if refusal.code == CODE_TIMEOUT {
+        family.fail(cmd.name, &message);
+        return Stop(EXIT_TIMEOUT);
     }
     if reply.present("error") {
         let error = SendError::refused(

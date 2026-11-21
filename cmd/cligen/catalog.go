@@ -153,8 +153,10 @@ func (g *generator) argMention(cmd *catalog.Command, a catalog.Arg) string {
 		return "`" + strings.ReplaceAll(a.CLI, "|", "` or `") + "`"
 	case a.CLI == "pos" || a.CLI == "rest" || a.CLI == "words":
 		return "`" + g.placeholder(a) + "`"
+	case a.AfterDashes():
+		return "the words after `--`"
 	default:
-		return "`" + a.CLI + "`"
+		return "`" + strings.TrimSuffix(a.CLI, "...") + "`"
 	}
 }
 
@@ -174,7 +176,9 @@ func isSplitHead(cmd *catalog.Command, a catalog.Arg) bool {
 	return slices.ContainsFunc(cmd.Args, func(other catalog.Arg) bool { return other.CLI == "-m+" })
 }
 
-func isFlag(a catalog.Arg) bool { return strings.HasPrefix(a.CLI, "-") && a.CLI != "-m+" }
+func isFlag(a catalog.Arg) bool {
+	return strings.HasPrefix(a.CLI, "-") && a.CLI != "-m+" && !a.AfterDashes()
+}
 
 func (g *generator) placeholder(a catalog.Arg) string {
 	if a.Placeholder != "" {
@@ -217,6 +221,10 @@ func (g *generator) argUsage(a catalog.Arg) (string, bool) {
 		return "", false
 	case a.CLI == "pos" || a.CLI == "rest" || a.CLI == "words":
 		return g.placeholder(a), true
+	case a.AfterDashes():
+		return "-- " + g.placeholder(a) + "...", true
+	case a.FlagWords() != "":
+		return "--" + a.FlagWords() + " " + g.placeholder(a) + "...", true
 	case strings.Contains(a.CLI, "|"):
 		return strings.Join(strings.Split(a.CLI, "|"), " | "), true
 	case a.Type == "bool":
@@ -315,7 +323,7 @@ func (g *generator) usageForm(verb string, args []catalog.Arg) string {
 		} else if optional {
 			text = "[" + text + "]"
 		}
-		if a.List {
+		if a.List && !a.AfterDashes() && a.FlagWords() == "" {
 			text += "..."
 		}
 		parts = append(parts, text)
@@ -351,6 +359,12 @@ func (g *generator) example(cmd *catalog.Command, values map[string]any) string 
 			}
 		case a.CLI == "pos":
 			words = append(words, shellWord(fmt.Sprint(value)))
+		case a.AfterDashes() || a.FlagWords() != "":
+			words = append(words, strings.TrimSuffix(a.CLI, "..."))
+			items, _ := value.([]any)
+			for _, item := range items {
+				words = append(words, shellWord(fmt.Sprint(item)))
+			}
 		case strings.Contains(a.CLI, "|"):
 			words = append(words, "--"+fmt.Sprint(value))
 		case a.Type == "bool":

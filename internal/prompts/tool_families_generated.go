@@ -51,7 +51,7 @@ var catalogFamilies = map[string]bool{
 	"settings":         false,
 	"skill":            true,
 	"state":            true,
-	"terminal":         false,
+	"terminal":         true,
 	"ticket":           false,
 	"turn":             true,
 	"update":           false,

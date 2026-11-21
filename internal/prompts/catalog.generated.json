@@ -253,10 +253,26 @@
                         ]
                       },
                       {
-                        "kind": "text",
-                        "id": "session.attn-map.terminal",
-                        "source": "content/session/attn-map/terminal.md",
-                        "keep_final_newline": true
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.terminal",
+                            "source": "content/session/attn-map/terminal.md",
+                            "keep_final_newline": true
+                          }
+                        ]
                       },
                       {
                         "kind": "choose",
@@ -303,10 +319,26 @@
                         ]
                       },
                       {
-                        "kind": "text",
-                        "id": "session.attn-map.browser",
-                        "source": "content/session/attn-map/browser.md",
-                        "keep_final_newline": true
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.browser",
+                            "source": "content/session/attn-map/browser.md",
+                            "keep_final_newline": true
+                          }
+                        ]
                       },
                       {
                         "kind": "choose",
@@ -7361,5 +7393,5 @@
       ]
     }
   ],
-  "definitions_hash": "16b5ea9f3671ba39348914d03fd077128d5e75078bed8c3dcf70c0f9963527ab"
+  "definitions_hash": "ab19aa9446bb499bd09db3f071c6c47db6ded785f597a2b5253751dc1059bde9"
 }

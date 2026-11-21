@@ -138,7 +138,7 @@ func TestOutpostForwardCallerHangupCancelsTerminalWaitAtHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	if err := json.NewEncoder(conn).Encode(protocol.TerminalWaitMessage{Cmd: protocol.CmdTerminalWait, CallerSessionID: protocol.SessionID(id), Target: pair.App.Terminal(id), Until: protocol.TerminalWaitUntilPrompt}); err != nil {
+	if err := json.NewEncoder(conn).Encode(protocol.RunCommandMessage{Cmd: protocol.CmdRunCommand, Command: "terminal wait", SessionID: protocol.Ptr(protocol.SessionID(id)), Args: map[string]any{"terminal": pair.App.Terminal(id), "until": "prompt"}}); err != nil {
 		t.Fatal(err)
 	}
 	waiting.Await()
@@ -147,11 +147,11 @@ func TestOutpostForwardCallerHangupCancelsTerminalWaitAtHome(t *testing.T) {
 	}
 	waiting.Release()
 	var response protocol.Response
-	if err := json.NewDecoder(conn).Decode(&response); err != nil || !strings.Contains(protocol.Deref(response.Error), "context canceled") {
+	if err := json.NewDecoder(conn).Decode(&response); err != nil || response.CommandRefusal == nil || !strings.Contains(response.CommandRefusal.Message, "context canceled") {
 		t.Fatalf("wait did not end when caller hung up: %+v, %v", response, err)
 	}
 	writeFifo(t, fifo, "done\n")
-	t.Logf("wait at the home ended on caller EOF: %s", protocol.Deref(response.Error))
+	t.Logf("wait at the home ended on caller EOF: %s", response.CommandRefusal.Message)
 }
 
 func TestLaunchingLocalShellDoesNotKeepForwardedSocketOpen(t *testing.T) {

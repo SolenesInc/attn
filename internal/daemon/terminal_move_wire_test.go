@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -58,11 +59,11 @@ func TestTerminalMovePreservesPlacementAndDelegationAuthority(t *testing.T) {
 	}
 	move := func(caller, session, ref string) *protocol.TerminalMoveResult {
 		t.Helper()
-		response, err := cli.TerminalCommand(context.Background(), protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: protocol.SessionID(caller), Target: session, Desktop: ref})
+		response, err := client.TerminalCommand[protocol.TerminalMoveResult](context.Background(), cli, "terminal move", protocol.SessionID(caller), map[string]any{"terminal": session, "desktop": ref})
 		if err != nil {
 			t.Fatalf("moving %s to %q as %q: %v", session, ref, caller, err)
 		}
-		return response.TerminalMoveResult
+		return response
 	}
 
 	moved := move(string(s.ID), string(s.ID), fmt.Sprint(protocol.Deref(ops.ShortcutSlot)))
@@ -101,7 +102,7 @@ func TestTerminalMovePreservesPlacementAndDelegationAuthority(t *testing.T) {
 	if got := move(string(s.ID), string(delegate.SessionID), "web"); !protocol.Deref(got.Unchanged) {
 		t.Errorf("moving a delegate onto the desktop it is on reports %+v; want unchanged", got)
 	}
-	_, err = cli.TerminalCommand(context.Background(), protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: tt.ID, Target: string(delegate.SessionID), Desktop: "ops"})
+	_, err = client.TerminalCommand[protocol.TerminalMoveResult](context.Background(), cli, "terminal move", tt.ID, map[string]any{"terminal": string(delegate.SessionID), "desktop": "ops"})
 	if err == nil || !strings.Contains(err.Error(), "may move itself or an agent in its delegation chain") {
 		t.Errorf("a session moving another's delegate was answered %v; want a refusal naming who may move it", err)
 	}
@@ -143,7 +144,7 @@ func TestTerminalMovePreservesPlacementAndDelegationAuthority(t *testing.T) {
 		t.Errorf("a pane arriving on the desktop the user sees took its active pane %q; want %s, unchanged", desktops[home].ActivePaneID, resident)
 	}
 
-	_, err = cli.TerminalCommand(context.Background(), protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: s.ID, Target: string(s.ID), Desktop: "nope"})
+	_, err = client.TerminalCommand[protocol.TerminalMoveResult](context.Background(), cli, "terminal move", s.ID, map[string]any{"terminal": string(s.ID), "desktop": "nope"})
 	if err == nil || !strings.Contains(err.Error(), `unknown desktop "nope"`) || !strings.Contains(err.Error(), "2 Ops") {
 		t.Errorf("an unknown desktop was answered %v; want a refusal listing the desktops", err)
 	}
@@ -189,11 +190,10 @@ func TestTerminalMoveCreatesTheMissingNumberedDesktop(t *testing.T) {
 		{name: "by the digit of the desktop it just created", session: other.ID, ref: "5", slot: 5},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			response, err := cli.TerminalCommand(context.Background(), protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: c.session, Target: string(c.session), Desktop: c.ref})
+			result, err := client.TerminalCommand[protocol.TerminalMoveResult](context.Background(), cli, "terminal move", c.session, map[string]any{"terminal": string(c.session), "desktop": c.ref})
 			if err != nil {
 				t.Fatalf("moving %s to %q: %v", c.session, c.ref, err)
 			}
-			result := response.TerminalMoveResult
 			want := profiles.NumberedDesktopID(profile, c.slot)
 			if result.DesktopID != want || protocol.Deref(result.DesktopCreated) != c.created {
 				t.Errorf("the move reports desktop %s, created %v; want %s, created %v", result.DesktopID, protocol.Deref(result.DesktopCreated), want, c.created)
@@ -218,37 +218,32 @@ func TestTerminalMoveReachesShellsAcrossDesktopsAndHonorsProfiles(t *testing.T) 
 	app, cli := w.App(), w.Client()
 	caller := protocol.SessionID(w.Spawn(app, fakeagent.Claude, w.Path("caller")))
 	opener := protocol.SessionID(w.Spawn(app, fakeagent.Claude, w.Path("opener")))
-	call := func(message any) *protocol.Response {
-		t.Helper()
-		r, err := cli.TerminalCommand(context.Background(), message)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return r
-	}
-	shell := call(protocol.TerminalOpenMessage{Cmd: protocol.CmdTerminalOpen, CallerSessionID: opener}).TerminalOpenResult
-	moved := call(protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: caller, Target: string(shell.TerminalID), Desktop: "8"}).TerminalMoveResult
+	shell := terminalDo[protocol.TerminalOpenResult](t, cli, "terminal open", opener, map[string]any{})
+	moved := terminalDo[protocol.TerminalMoveResult](t, cli, "terminal move", caller, map[string]any{"terminal": string(shell.TerminalID), "desktop": "8"})
 	if moved.TerminalID != shell.TerminalID || moved.DesktopID != profiles.NumberedDesktopID(app.SelectedProfile(), 8) {
 		t.Fatalf("another agent's shell move: %+v", moved)
 	}
-	for _, message := range []any{
-		protocol.TerminalInputMessage{Cmd: protocol.CmdTerminalInput, CallerSessionID: caller, Target: string(shell.TerminalID), Data: "never typed"},
-		protocol.TerminalCloseMessage{Cmd: protocol.CmdTerminalClose, CallerSessionID: caller, Target: string(shell.TerminalID)},
+	for _, attempt := range []struct {
+		name string
+		args map[string]any
+	}{
+		{"terminal send", map[string]any{"terminal": string(shell.TerminalID), "text": "never typed"}},
+		{"terminal close", map[string]any{"terminal": string(shell.TerminalID)}},
 	} {
-		_, err := cli.TerminalCommand(context.Background(), message)
+		_, err := client.TerminalCommand[map[string]any](context.Background(), cli, attempt.name, caller, attempt.args)
 		if err == nil || !strings.Contains(err.Error(), "--desktop "+moved.DesktopID) {
 			t.Fatalf("typing and closing still need the desktop: %v", err)
 		}
 	}
-	call(protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: caller, Target: string(shell.TerminalID), Desktop: "1"})
+	terminalDo[protocol.TerminalMoveResult](t, cli, "terminal move", caller, map[string]any{"terminal": string(shell.TerminalID), "desktop": "1"})
 	startConfiguredChief(t, w, cli)
 	chief := chiefSession(t, cli)
-	call(protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: chief, Target: string(caller), Desktop: "8"})
+	terminalDo[protocol.TerminalMoveResult](t, cli, "terminal move", chief, map[string]any{"terminal": string(caller), "desktop": "8"})
 	id := uuid.NewString()
 	profile := mustProfileRequest(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: id, Name: "Other"}, id).Profile
 	otherApp := w.AppOn(profile.ID)
 	foreign := w.Spawn(otherApp, fakeagent.Claude, w.Path("foreign"))
-	_, err := cli.TerminalCommand(context.Background(), protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: caller, Target: otherApp.Terminal(foreign), Desktop: "8"})
+	_, err := client.TerminalCommand[protocol.TerminalMoveResult](context.Background(), cli, "terminal move", caller, map[string]any{"terminal": otherApp.Terminal(foreign), "desktop": "8"})
 	if err == nil || !strings.Contains(err.Error(), "not found in the caller's profile") {
 		t.Fatalf("foreign terminal must not be found: %v", err)
 	}

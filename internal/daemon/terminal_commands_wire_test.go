@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -29,17 +30,10 @@ func TestTerminalCommandsAddressEachTileOfASharedConversation(t *testing.T) {
 	if shown := sessionShownIn(t, w, app, secondTerminal); shown != caller {
 		t.Fatalf("second terminal shows %s", shown)
 	}
-	call := func(message any) *protocol.Response {
-		t.Helper()
-		r, err := cli.TerminalCommand(context.Background(), message)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return r
-	}
-	listed := call(protocol.TerminalListMessage{Cmd: protocol.CmdTerminalList, CallerSessionID: protocol.SessionID(caller), All: protocol.Ptr(true)})
+	me := protocol.SessionID(caller)
+	listed := terminalDo[protocol.TerminalListResult](t, cli, "terminal ls", me, map[string]any{"all": true})
 	entries := map[string]protocol.TerminalEntry{}
-	for _, entry := range listed.TerminalEntries {
+	for _, entry := range listed.Terminals {
 		if string(entry.SessionID) == caller {
 			entries[string(entry.TerminalID)] = entry
 		}
@@ -48,42 +42,42 @@ func TestTerminalCommandsAddressEachTileOfASharedConversation(t *testing.T) {
 		t.Fatalf("listed terminals: %+v", entries)
 	}
 	for _, ref := range []string{caller, caller[:8]} {
-		_, err := cli.TerminalCommand(context.Background(), protocol.TerminalReadMessage{Cmd: protocol.CmdTerminalRead, CallerSessionID: protocol.SessionID(caller), Target: ref, Mode: protocol.TerminalReadModeScreen})
+		_, err := client.TerminalCommand[protocol.TerminalReadResult](context.Background(), cli, "terminal read", me, map[string]any{"terminal": ref})
 		if err == nil || !strings.Contains(err.Error(), firstTerminal) || !strings.Contains(err.Error(), secondTerminal) {
 			t.Fatalf("ambiguous session %s: %v", ref, err)
 		}
 	}
-	_, err := cli.TerminalCommand(context.Background(), protocol.TerminalListMessage{Cmd: protocol.CmdTerminalList, CallerSessionID: protocol.SessionID(caller)})
+	_, err := client.TerminalCommand[protocol.TerminalListResult](context.Background(), cli, "terminal ls", me, map[string]any{})
 	if err == nil || !strings.Contains(err.Error(), "pass --desktop") {
 		t.Fatalf("ambiguous caller desktop: %v", err)
 	}
-	_, err = cli.TerminalCommand(context.Background(), protocol.TerminalInputMessage{Cmd: protocol.CmdTerminalInput, CallerSessionID: protocol.SessionID(caller), Target: firstTerminal, Desktop: protocol.Ptr(elsewhere.ID), Data: "wrong desktop"})
+	_, err = client.TerminalCommand[protocol.TerminalInputResult](context.Background(), cli, "terminal send", me, map[string]any{"terminal": firstTerminal, "desktop": elsewhere.ID, "text": "wrong desktop"})
 	if err == nil || !strings.Contains(err.Error(), "--desktop "+home) {
 		t.Fatalf("selected terminal desktop: %v", err)
 	}
 	for _, target := range []struct{ id, desktop, text string }{{firstTerminal, home, "first independent draft"}, {secondTerminal, elsewhere.ID, "second independent draft"}} {
 		testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(target.id)}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == target.id })
-		input := call(protocol.TerminalInputMessage{Cmd: protocol.CmdTerminalInput, CallerSessionID: protocol.SessionID(caller), Target: entries[target.id].ShortID, Desktop: protocol.Ptr(target.desktop), Data: target.text})
-		if input.TerminalInputResult == nil || string(input.TerminalInputResult.TerminalID) != target.id {
+		input := terminalDo[protocol.TerminalInputResult](t, cli, "terminal send", me, map[string]any{"terminal": entries[target.id].ShortID, "desktop": target.desktop, "text": target.text})
+		if string(input.TerminalID) != target.id {
 			t.Fatalf("input target: %+v", input)
 		}
 		app.AwaitTerminalScreen(target.id, target.text)
-		read := call(protocol.TerminalReadMessage{Cmd: protocol.CmdTerminalRead, CallerSessionID: protocol.SessionID(caller), Target: target.id, Mode: protocol.TerminalReadModeScreen})
-		if read.TerminalReadResult == nil || !strings.Contains(read.TerminalReadResult.Text, target.text) {
-			t.Fatalf("read selected terminal: %+v", read.TerminalReadResult)
+		read := terminalDo[protocol.TerminalReadResult](t, cli, "terminal read", me, map[string]any{"terminal": target.id})
+		if !strings.Contains(read.Text, target.text) {
+			t.Fatalf("read selected terminal: %+v", read)
 		}
 	}
-	firstRead := call(protocol.TerminalReadMessage{Cmd: protocol.CmdTerminalRead, CallerSessionID: protocol.SessionID(caller), Target: firstTerminal, Mode: protocol.TerminalReadModeScreen})
-	secondRead := call(protocol.TerminalReadMessage{Cmd: protocol.CmdTerminalRead, CallerSessionID: protocol.SessionID(caller), Target: secondTerminal, Mode: protocol.TerminalReadModeScreen})
-	if strings.Contains(firstRead.TerminalReadResult.Text, "second independent draft") || strings.Contains(secondRead.TerminalReadResult.Text, "first independent draft") {
-		t.Fatalf("drafts crossed terminals: first=%q second=%q", firstRead.TerminalReadResult.Text, secondRead.TerminalReadResult.Text)
+	firstRead := terminalDo[protocol.TerminalReadResult](t, cli, "terminal read", me, map[string]any{"terminal": firstTerminal})
+	secondRead := terminalDo[protocol.TerminalReadResult](t, cli, "terminal read", me, map[string]any{"terminal": secondTerminal})
+	if strings.Contains(firstRead.Text, "second independent draft") || strings.Contains(secondRead.Text, "first independent draft") {
+		t.Fatalf("drafts crossed terminals: first=%q second=%q", firstRead.Text, secondRead.Text)
 	}
-	_, err = cli.TerminalCommand(context.Background(), protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: protocol.SessionID(caller), Target: caller, Desktop: home})
+	_, err = client.TerminalCommand[protocol.TerminalMoveResult](context.Background(), cli, "terminal move", me, map[string]any{"terminal": caller, "desktop": home})
 	if err == nil || !strings.Contains(err.Error(), firstTerminal) || !strings.Contains(err.Error(), secondTerminal) {
 		t.Fatalf("ambiguous move must name both terminals: %v", err)
 	}
-	moved := call(protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: protocol.SessionID(caller), Target: secondTerminal, Desktop: home}).TerminalMoveResult
-	if moved == nil || string(moved.TerminalID) != secondTerminal || moved.DesktopID != home {
+	moved := terminalDo[protocol.TerminalMoveResult](t, cli, "terminal move", me, map[string]any{"terminal": secondTerminal, "desktop": home})
+	if string(moved.TerminalID) != secondTerminal || moved.DesktopID != home {
 		t.Fatalf("moving the selected terminal: %+v", moved)
 	}
 	for _, terminal := range []string{firstTerminal, secondTerminal} {
@@ -91,4 +85,13 @@ func TestTerminalCommandsAddressEachTileOfASharedConversation(t *testing.T) {
 			t.Fatalf("terminal %s on %s, want %s", terminal, desktop, home)
 		}
 	}
+}
+
+func terminalDo[R any](t *testing.T, cli *client.Client, name string, caller protocol.SessionID, args map[string]any) *R {
+	t.Helper()
+	result, err := client.TerminalCommand[R](context.Background(), cli, name, caller, args)
+	if err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	return result
 }

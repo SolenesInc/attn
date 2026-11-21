@@ -15,13 +15,7 @@ func commandMetadata(blocksDuringRecovery bool, log bool) CommandMetadata {
 }
 
 var CommandMeta = map[string]CommandMetadata{
-	protocol.CmdTerminalList:     commandMetadata(false, true),
-	protocol.CmdTerminalOpen:     commandMetadata(true, true),
-	protocol.CmdTerminalInput:    commandMetadata(true, true),
-	protocol.CmdTerminalRead:     commandMetadata(false, true),
-	protocol.CmdTerminalWait:     commandMetadata(false, true),
 	protocol.CmdTerminalReadText: commandMetadata(false, false),
-	protocol.CmdTerminalClose:    commandMetadata(true, true),
 
 	protocol.CmdUpdateOutpost:                 commandMetadata(false, true),
 	protocol.CmdAddOutpost:                    commandMetadata(false, true),
@@ -201,7 +195,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdDesktopShowSession:            commandMetadata(false, true),
 	protocol.CmdDesktopShowLeaf:               commandMetadata(false, true),
 	protocol.CmdDesktopMoveLeaf:               commandMetadata(false, true),
-	protocol.CmdTerminalMove:                  commandMetadata(false, true),
 	protocol.CmdDesktopRemoveLeaf:             commandMetadata(false, true),
 	protocol.CmdDesktopCloseTile:              commandMetadata(true, true),
 	protocol.CmdDesktopSetSplitRatio:          commandMetadata(false, true),

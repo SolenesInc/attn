@@ -182,23 +182,16 @@ var Placements = map[string][]Placement{
 	"start_update":                     {Placement{LocatorHere, ""}},
 	"state":                            {Placement{LocatorHere, ""}},
 	"stop":                             {Placement{LocatorHere, ""}},
-	"terminal_close":                   {Placement{LocatorHome, ""}},
 	"terminal_exited":                  {Placement{LocatorHome, ""}},
-	"terminal_input":                   {Placement{LocatorHome, ""}},
 	"terminal_kill":                    {Placement{LocatorTerminal, "terminal_id"}},
 	"terminal_launch":                  {Placement{LocatorTerminal, "terminal_id"}},
-	"terminal_list":                    {Placement{LocatorHome, ""}},
-	"terminal_move":                    {Placement{LocatorHome, ""}},
-	"terminal_open":                    {Placement{LocatorHome, ""}},
 	"terminal_pointer_activity":        {Placement{LocatorTerminal, "id"}},
-	"terminal_read":                    {Placement{LocatorHome, ""}},
 	"terminal_read_text":               {Placement{LocatorTerminal, "terminal_id"}},
 	"terminal_remove":                  {Placement{LocatorTerminal, "terminal_id"}},
 	"terminal_restart":                 {Placement{LocatorTerminal, "terminal_id"}},
 	"terminal_shell":                   {Placement{LocatorMachine, "host"}},
 	"terminal_start":                   {Placement{LocatorMachine, "host"}},
 	"terminal_theme":                   {Placement{LocatorMachine, "host"}},
-	"terminal_wait":                    {Placement{LocatorHome, ""}},
 	"terminal_wait_block":              {Placement{LocatorTerminal, "terminal_id"}},
 	"terminal_write":                   {Placement{LocatorTerminal, "terminal_id"}},
 	"tile_asset_read":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
@@ -2173,18 +2166,6 @@ func (m StopMessage) Locate() string {
 	return ""
 }
 
-func (TerminalCloseMessage) CommandName() string {
-	return "terminal_close"
-}
-
-func (m TerminalCloseMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m TerminalCloseMessage) Locate() string {
-	return ""
-}
-
 func (TerminalExitedMessage) CommandName() string {
 	return "terminal_exited"
 }
@@ -2194,18 +2175,6 @@ func (m TerminalExitedMessage) Placement() Placement {
 }
 
 func (m TerminalExitedMessage) Locate() string {
-	return ""
-}
-
-func (TerminalInputMessage) CommandName() string {
-	return "terminal_input"
-}
-
-func (m TerminalInputMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m TerminalInputMessage) Locate() string {
 	return ""
 }
 
@@ -2233,42 +2202,6 @@ func (m TerminalLaunchMessage) Locate() string {
 	return string(m.TerminalID)
 }
 
-func (TerminalListMessage) CommandName() string {
-	return "terminal_list"
-}
-
-func (m TerminalListMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m TerminalListMessage) Locate() string {
-	return ""
-}
-
-func (TerminalMoveMessage) CommandName() string {
-	return "terminal_move"
-}
-
-func (m TerminalMoveMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m TerminalMoveMessage) Locate() string {
-	return ""
-}
-
-func (TerminalOpenMessage) CommandName() string {
-	return "terminal_open"
-}
-
-func (m TerminalOpenMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m TerminalOpenMessage) Locate() string {
-	return ""
-}
-
 func (TerminalPointerActivityMessage) CommandName() string {
 	return "terminal_pointer_activity"
 }
@@ -2279,18 +2212,6 @@ func (m TerminalPointerActivityMessage) Placement() Placement {
 
 func (m TerminalPointerActivityMessage) Locate() string {
 	return string(m.ID)
-}
-
-func (TerminalReadMessage) CommandName() string {
-	return "terminal_read"
-}
-
-func (m TerminalReadMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m TerminalReadMessage) Locate() string {
-	return ""
 }
 
 func (TerminalReadTextMessage) CommandName() string {
@@ -2363,18 +2284,6 @@ func (m TerminalThemeMessage) Placement() Placement {
 
 func (m TerminalThemeMessage) Locate() string {
 	return string(m.Host)
-}
-
-func (TerminalWaitMessage) CommandName() string {
-	return "terminal_wait"
-}
-
-func (m TerminalWaitMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m TerminalWaitMessage) Locate() string {
-	return ""
 }
 
 func (TerminalWaitBlockMessage) CommandName() string {

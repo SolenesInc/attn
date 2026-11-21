@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
@@ -80,7 +80,7 @@ func (d *Daemon) terminalTarget(caller *protocol.Session, ref string) (*selected
 		}
 		if ref != "" && strings.HasPrefix(string(session.ID), ref) {
 			if match != nil {
-				return nil, fmt.Errorf("target rule: %q matches multiple sessions; use a terminal id from attn terminal ls --all", ref)
+				return nil, command.Refuse("target_ambiguous", "target rule: %q matches multiple sessions; use a terminal id from `{attn terminal ls --all}`", ref)
 			}
 			match = session
 		}
@@ -97,7 +97,7 @@ func (d *Daemon) terminalTarget(caller *protocol.Session, ref string) (*selected
 		}
 	}
 	if match == nil {
-		return nil, fmt.Errorf("target rule: terminal %q not found in the caller's profile; attn terminal ls --all lists its terminals", ref)
+		return nil, command.Refuse("target_not_found", "target rule: terminal %q not found in the caller's profile; `{attn terminal ls --all}` lists its terminals", ref)
 	}
 	ids := d.terminalsOf(match.ID)
 	if len(ids) != 1 {
@@ -105,7 +105,7 @@ func (d *Daemon) terminalTarget(caller *protocol.Session, ref string) (*selected
 		for i, id := range ids {
 			terminals[i] = string(id)
 		}
-		return nil, fmt.Errorf("target rule: session %s shows in %d terminals (%s); pass one terminal id from attn terminal ls --all", match.ID, len(ids), strings.Join(terminals, ", "))
+		return nil, command.Refuse("target_ambiguous", "target rule: session %s shows in %d terminals (%s); pass one terminal id from `{attn terminal ls --all}`", match.ID, len(ids), strings.Join(terminals, ", "))
 	}
 	return &selectedTerminal{Session: match, terminal: ids[0]}, nil
 }
@@ -175,23 +175,23 @@ func (d *Daemon) connectionContext(parent context.Context, conn net.Conn) (conte
 	return ctx, cancel
 }
 
-func (d *Daemon) handleTerminalList(conn net.Conn, msg *protocol.TerminalListMessage) {
-	caller, err := d.terminalCaller(msg.CallerSessionID)
+func (d *Daemon) runTerminalList(_ context.Context, c command.Caller, a command.TerminalLsArgs) (any, error) {
+	caller, err := d.terminalCaller(c.Session)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
+	}
+	if a.All && a.Desktop != "" {
+		return nil, command.Usage("choose {all} or {desktop}")
 	}
 	_, desktops, err := d.store.ProfileArrangement(caller.ProfileID)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
 	filter := ""
-	if !protocol.Deref(msg.All) || protocol.Deref(msg.Desktop) != "" {
-		desktop, err := d.terminalDesktop(caller, protocol.Deref(msg.Desktop))
+	if !a.All {
+		desktop, err := d.terminalDesktop(caller, a.Desktop)
 		if err != nil {
-			d.sendError(conn, err.Error())
-			return
+			return nil, err
 		}
 		filter = desktop.ID
 	}
@@ -212,7 +212,7 @@ func (d *Daemon) handleTerminalList(conn net.Conn, msg *protocol.TerminalListMes
 			entries = append(entries, protocol.TerminalEntry{TerminalID: pane.RuntimeID, SessionID: session.ID, ShortID: shortSessionID(protocol.SessionID(pane.RuntimeID)), Agent: session.Agent, Name: name, State: decorated.State, DesktopID: desktop.ID, DesktopLabel: desktop.Name, Position: protocol.Ptr(positions[pane.PaneID]), OpenedBy: session.ParentSessionID})
 		}
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TerminalEntries: entries})
+	return protocol.TerminalListResult{Terminals: entries}, nil
 }
 
 func terminalPositions(node layouttree.Node, path string, out map[string]string) {
@@ -235,31 +235,27 @@ func terminalPositions(node layouttree.Node, path string, out map[string]string)
 	}
 }
 
-func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMessage) {
-	caller, err := d.terminalCaller(msg.CallerSessionID)
+func (d *Daemon) runTerminalOpen(ctx context.Context, c command.Caller, a command.TerminalOpenArgs) (any, error) {
+	caller, err := d.terminalCaller(c.Session)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
-	host, err := d.resolveCallerHost(caller.ID, msg.Host)
+	host, err := d.resolveCallerHost(caller.ID, nonEmptyHost(a.Host))
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
-	msg.Host = nonEmptyHost(host)
-	if protocol.Deref(msg.Command) != "" {
-		shell, err := Call[protocol.TerminalShellResult](context.Background(), d.router(), protocol.TerminalShellMessage{Cmd: protocol.CmdTerminalShell, Host: protocol.Deref(msg.Host)})
+	line := shellCommand(a.Command)
+	if line != "" {
+		shell, err := Call[protocol.TerminalShellResult](context.Background(), d.router(), protocol.TerminalShellMessage{Cmd: protocol.CmdTerminalShell, Host: host})
 		if err != nil {
-			d.sendError(conn, err.Error())
-			return
+			return nil, err
 		}
 		if !shell.IntegrationExpected {
-			d.sendError(conn, fmt.Sprintf("OSC 133 rule: shell %s is known to provide no command marks (or ATTN_NO_SHELL_INTEGRATION is set); open with a command needs its first prompt. No terminal was opened; use open without a command and send instead", shell.Shell))
-			return
+			return nil, fmt.Errorf("OSC 133 rule: shell %s is known to provide no command marks (or ATTN_NO_SHELL_INTEGRATION is set); open with a command needs its first prompt. No terminal was opened; use open without a command and send instead", shell.Shell)
 		}
 	}
 	var desktop profiles.Desktop
-	if ref := protocol.Deref(msg.Desktop); ref != "" {
+	if ref := a.Desktop; ref != "" {
 		var profile profiles.Profile
 		profile, err = d.liveLaunchProfile(caller.ProfileID)
 		if err == nil {
@@ -276,22 +272,20 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 		desktop, err = d.terminalDesktop(caller, "")
 	}
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
 	direction := layouttree.DirectionVertical
-	if protocol.Deref(msg.Direction) == protocol.TerminalDirectionDown {
+	if a.Down {
 		direction = layouttree.DirectionHorizontal
 	}
 	anchor := desktop.ActivePaneID
-	if protocol.Deref(msg.Desktop) == "" {
+	if a.Desktop == "" {
 		callerPanes := 0
 		for _, pane := range desktop.Panes {
 			if pane.SessionID == caller.ID {
 				callerPanes++
 				if callerPanes > 1 {
-					d.sendError(conn, "placement rule: caller has several terminal tiles; pass --desktop <ref> to open on that desktop")
-					return
+					return nil, errors.New("placement rule: caller has several terminal tiles; pass --desktop <ref> to open on that desktop")
 				}
 				anchor = pane.PaneID
 			}
@@ -314,7 +308,7 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 			anchor = previous[newest].pane
 		}
 	}
-	cwd := protocol.Deref(msg.Cwd)
+	cwd := a.Cwd
 	if cwd == "" {
 		cwd = caller.Directory
 		if host != protocol.Deref(caller.Host) {
@@ -322,38 +316,44 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 		}
 	}
 	id := protocol.SessionID(uuid.NewString())
-	placed, rejection := d.runSpawnPipelineReporting(&protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: id, ProfileID: caller.ProfileID, Agent: protocol.AgentShellValue, Host: msg.Host, Cwd: cwd, Cols: 80, Rows: 24}, internalSpawnPolicy{launchPlacement: &launchPlacement{desktopID: desktop.ID, anchorPaneID: anchor, direction: direction}, parentSessionID: caller.ID})
+	placed, rejection := d.runSpawnPipelineReporting(&protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: id, ProfileID: caller.ProfileID, Agent: protocol.AgentShellValue, Host: nonEmptyHost(host), Cwd: cwd, Cols: 80, Rows: 24}, internalSpawnPolicy{launchPlacement: &launchPlacement{desktopID: desktop.ID, anchorPaneID: anchor, direction: direction}, parentSessionID: caller.ID})
 	if rejection != nil {
-		d.sendError(conn, rejection.reason().Error())
-		return
+		return nil, rejection.reason()
 	}
 	terminal := d.primaryTerminal(id)
-	if command := protocol.Deref(msg.Command); command != "" {
-		connectionCtx, cancelConnection := d.connectionContext(d.life.Context(), conn)
-		defer cancelConnection()
-		ctx, cancel := context.WithTimeout(connectionCtx, terminalFirstPromptTripwire)
+	if line != "" {
+		ctx, cancel := context.WithTimeout(ctx, terminalFirstPromptTripwire)
 		defer cancel()
 		err := d.waitForTerminalFirstPrompt(ctx, terminal)
 		if err == nil && ctx.Err() == nil {
 			var state protocol.TerminalText
 			state, err = Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: terminal, Mode: protocol.TerminalReadModeScreen})
 			if err == nil {
-				err = d.typeInput(ctx, terminal, state, command+"\r")
+				err = d.typeInput(ctx, terminal, state, line+"\r")
 			}
 		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			d.sendError(conn, fmt.Sprintf("first prompt wait exceeded limit=%s; %s. Terminal %s stays open; nothing was typed. Use attn terminal send %s to continue", terminalFirstPromptTripwire, terminalFirstPromptReceipt, id, id))
-			return
+			return nil, command.Refuse("first_prompt_timeout", "first prompt wait exceeded limit=%s; %s. Terminal %s stays open; nothing was typed. Use `{attn terminal send %s}` to continue", terminalFirstPromptTripwire, terminalFirstPromptReceipt, id, id)
 		}
 		if err != nil {
-			d.sendError(conn, fmt.Sprintf("opened terminal %s, but command was not typed: %v", id, err))
-			return
+			return nil, fmt.Errorf("opened terminal %s, but command was not typed: %v", id, err)
 		}
 		if ctx.Err() != nil {
-			return
+			return nil, ctx.Err()
 		}
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TerminalOpenResult: &protocol.TerminalOpenResult{TerminalID: terminal, SessionID: id, DesktopID: placed.desktopID, PaneID: placed.paneID}})
+	return protocol.TerminalOpenResult{TerminalID: terminal, SessionID: id, DesktopID: placed.desktopID, PaneID: placed.paneID}, nil
+}
+
+func shellCommand(words []string) string {
+	if len(words) == 1 {
+		return words[0]
+	}
+	quoted := make([]string, len(words))
+	for i, word := range words {
+		quoted[i] = "'" + strings.ReplaceAll(word, "'", `'\''`) + "'"
+	}
+	return strings.Join(quoted, " ")
 }
 
 func (d *Daemon) waitForTerminalFirstPrompt(ctx context.Context, terminal protocol.TerminalID) error {
@@ -391,62 +391,53 @@ func (d *Daemon) awaitTypedCommandFinish(ctx context.Context, terminal protocol.
 	}
 }
 
-func (d *Daemon) handleTerminalInput(conn net.Conn, msg *protocol.TerminalInputMessage) {
-	caller, err := d.terminalCaller(msg.CallerSessionID)
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	target, err := d.terminalTarget(caller, msg.Target)
+type terminalInput struct {
+	target, desktop, data string
+	run, wait             bool
+}
+
+func (d *Daemon) inputTerminal(ctx context.Context, caller *protocol.Session, in terminalInput) (*protocol.TerminalInputResult, *selectedTerminal, error) {
+	target, err := d.terminalTarget(caller, in.target)
 	if err == nil {
-		err = d.terminalAct(caller, target, protocol.Deref(msg.Desktop), "type into")
+		err = d.terminalAct(caller, target, in.desktop, "type into")
 	}
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, nil, err
 	}
 	result := &protocol.TerminalInputResult{TerminalID: target.terminal}
 	var state protocol.TerminalText
-	if protocol.Deref(msg.Run) {
+	if in.run {
 		if target.Agent != protocol.AgentShellValue {
-			d.sendError(conn, "run rule: run requires a shell; use send to type into an agent")
-			return
+			return nil, nil, errors.New("run rule: run requires a shell; use send to type into an agent")
 		}
-		connectionCtx, cancelConnection := d.connectionContext(d.life.Context(), conn)
-		defer cancelConnection()
-		d.awaitTypedCommandFinish(connectionCtx, target.terminal)
-		if connectionCtx.Err() != nil {
-			return
+		d.awaitTypedCommandFinish(ctx, target.terminal)
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
 		}
 		state, err = Call[protocol.TerminalText](context.Background(), d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: protocol.TerminalReadModeScreen})
 		if err != nil {
-			d.sendError(conn, err.Error())
-			return
+			return nil, nil, err
 		}
-		if !state.IntegrationSeen && protocol.Deref(msg.Wait) {
-			ctx, cancel := context.WithTimeout(connectionCtx, terminalFirstPromptTripwire)
+		if !state.IntegrationSeen && in.wait {
+			prompt, cancel := context.WithTimeout(ctx, terminalFirstPromptTripwire)
 			defer cancel()
-			if err := d.waitForTerminalFirstPrompt(ctx, target.terminal); err != nil {
-				d.sendError(conn, err.Error())
-				return
+			if err := d.waitForTerminalFirstPrompt(prompt, target.terminal); err != nil {
+				return nil, nil, err
 			}
-			state, err = Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: protocol.TerminalReadModeScreen})
+			state, err = Call[protocol.TerminalText](prompt, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: protocol.TerminalReadModeScreen})
 			if err != nil {
-				d.sendError(conn, err.Error())
-				return
+				return nil, nil, err
 			}
 		}
 		if !state.AtPrompt {
-			d.sendError(conn, "prompt rule: shell is busy; use send to type into its running program")
-			return
+			return nil, nil, errors.New("prompt rule: shell is busy; use send to type into its running program")
 		}
 		result.LastBlockID = protocol.Ptr(state.LastBlockID)
 	}
-	if err := d.typeInput(context.Background(), target.terminal, state, msg.Data); err != nil {
-		d.sendError(conn, err.Error())
-		return
+	if err := d.typeInput(context.Background(), target.terminal, state, in.data); err != nil {
+		return nil, nil, err
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TerminalInputResult: result})
+	return result, target, nil
 }
 
 func protocolTerminalBlock(block *pty.TextBlock) *protocol.TerminalBlock {
@@ -460,47 +451,41 @@ func protocolTerminalBlock(block *pty.TextBlock) *protocol.TerminalBlock {
 	return &protocol.TerminalBlock{ID: strconv.FormatUint(block.ID, 10), Command: block.Command, ExitCode: code, Output: block.Output}
 }
 
-func (d *Daemon) handleTerminalRead(conn net.Conn, msg *protocol.TerminalReadMessage) {
-	caller, err := d.terminalCaller(msg.CallerSessionID)
+func (d *Daemon) runTerminalRead(_ context.Context, c command.Caller, a command.TerminalReadArgs) (any, error) {
+	caller, err := d.terminalCaller(c.Session)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
-	target, err := d.terminalTarget(caller, msg.Target)
+	mode := protocol.TerminalReadModeScreen
+	if a.Mode != "" {
+		mode = protocol.TerminalReadMode(a.Mode)
+	}
+	lines := 0
+	if a.Lines != nil {
+		if *a.Lines < 1 {
+			return nil, command.Usage("{lines} must be positive; got %d", *a.Lines)
+		}
+		if mode != protocol.TerminalReadModeScrollback {
+			return nil, command.Usage("{lines} reads the scrollback only")
+		}
+		lines = int(*a.Lines)
+	}
+	target, err := d.terminalTarget(caller, a.Terminal)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
-	if protocol.Deref(msg.Lines) < 0 {
-		d.sendError(conn, "lines rule: --lines must be positive")
-		return
-	}
-	info, err := Call[protocol.TerminalText](context.Background(), d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: msg.Mode, Lines: protocol.Deref(msg.Lines)})
+	info, err := Call[protocol.TerminalText](context.Background(), d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: mode, Lines: lines})
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TerminalReadResult: &protocol.TerminalReadResult{Text: info.Text, Block: info.Block}})
+	return protocol.TerminalReadResult{Text: info.Text, Block: info.Block}, nil
 }
 
-func (d *Daemon) handleTerminalWait(conn net.Conn, msg *protocol.TerminalWaitMessage) {
-	caller, err := d.terminalCaller(msg.CallerSessionID)
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+func (d *Daemon) waitTerminal(ctx context.Context, target *selectedTerminal, until protocol.TerminalWaitUntil, after *string) (protocol.TerminalWaitResult, error) {
+	if until == protocol.TerminalWaitUntilPrompt && target.Agent != protocol.AgentShellValue {
+		return protocol.TerminalWaitResult{}, errors.New("prompt rule: wait --until prompt requires a shell; use wait --until exit for an agent")
 	}
-	target, err := d.terminalTarget(caller, msg.Target)
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	if msg.Until == protocol.TerminalWaitUntilPrompt && target.Agent != protocol.AgentShellValue {
-		d.sendError(conn, "prompt rule: wait --until prompt requires a shell; use wait --until exit for an agent")
-		return
-	}
-	ctx, cancel := d.connectionContext(d.life.Context(), conn)
-	defer cancel()
-	result, err := Call[protocol.TerminalWaitResult](ctx, d.router(), protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: target.terminal, Until: msg.Until, AfterBlockID: msg.AfterBlockID})
+	result, err := Call[protocol.TerminalWaitResult](ctx, d.router(), protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: target.terminal, Until: until, AfterBlockID: after})
 	if err != nil && ctx.Err() == nil {
 		if terminals := d.terminalsOf(target.ID); len(terminals) == 1 && terminals[0] == target.terminal {
 			if exit := d.store.GetSessionExit(target.ID); exit != nil {
@@ -508,37 +493,27 @@ func (d *Daemon) handleTerminalWait(conn net.Conn, msg *protocol.TerminalWaitMes
 			}
 		}
 	}
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TerminalWaitResult: &result})
+	return result, err
 }
 
-func (d *Daemon) handleTerminalClose(conn net.Conn, msg *protocol.TerminalCloseMessage) {
-	caller, err := d.terminalCaller(msg.CallerSessionID)
+func (d *Daemon) runTerminalClose(_ context.Context, c command.Caller, a command.TerminalCloseArgs) (any, error) {
+	caller, err := d.terminalCaller(c.Session)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
-	target, err := d.terminalTarget(caller, msg.Target)
+	target, err := d.terminalTarget(caller, a.Terminal)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
 	if target.Agent != protocol.AgentShellValue {
-		d.sendError(conn, "close rule: terminal close only closes shells; use attn agent close for an agent")
-		return
+		return nil, command.Refuse("close_rule", "close rule: terminal close only closes shells; use `{attn agent close}` for an agent")
 	}
-	if err := d.terminalAct(caller, target, protocol.Deref(msg.Desktop), "close"); err != nil {
-		d.sendError(conn, err.Error())
-		return
+	if err := d.terminalAct(caller, target, a.Desktop, "close"); err != nil {
+		return nil, err
 	}
 	closing, err := d.beginSessionClose(target.ID, store.SessionClose{By: who.Session(caller.ID).Actor(), Reason: "shell closed by attn terminal close"}, nil)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
-	d.sendOK(conn)
-	d.finishSessionClose(target.ID, closing)
+	return command.Then{Result: protocol.TerminalCloseResult{TerminalID: target.terminal}, After: func() { d.finishSessionClose(target.ID, closing) }}, nil
 }

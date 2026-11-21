@@ -3215,12 +3215,18 @@ enum TerminalWaitUntil {
   prompt,
   exit
 }
-@extension("x-on", #{ home: true })
-model TerminalListMessage {
-  cmd: "terminal_list";
-  caller_session_id: SessionID;
-  desktop?: string;
-  all?: boolean;
+model TerminalListResult {
+  terminals: TerminalEntry[];
+}
+model TerminalRunResult {
+  terminal_id?: TerminalID;
+  last_block_id?: int64;
+  block?: TerminalBlock;
+  exited?: boolean;
+  exit_code?: int32;
+}
+model TerminalCloseResult {
+  terminal_id: TerminalID;
 }
 model TerminalEntry {
   terminal_id: TerminalID;
@@ -3234,55 +3240,19 @@ model TerminalEntry {
   position?: string;
   opened_by?: SessionID;
 }
-@extension("x-on", #{ home: true })
-model TerminalOpenMessage {
-  cmd: "terminal_open";
-  host?: string;
-  caller_session_id: SessionID;
-  desktop?: string;
-  direction?: TerminalDirection;
-  cwd?: string;
-  command?: string;
-}
 model TerminalOpenResult {
   terminal_id: TerminalID;
   session_id: SessionID;
   desktop_id: string;
   pane_id: string;
 }
-@extension("x-on", #{ home: true })
-model TerminalInputMessage {
-  cmd: "terminal_input";
-  caller_session_id: SessionID;
-  target: string;
-  desktop?: string;
-  data: string;
-  run?: boolean;
-  wait?: boolean;
-}
 model TerminalInputResult {
   terminal_id: TerminalID;
   last_block_id?: int64;
 }
-@extension("x-on", #{ home: true })
-model TerminalReadMessage {
-  cmd: "terminal_read";
-  caller_session_id: SessionID;
-  target: string;
-  mode: TerminalReadMode;
-  lines?: int32;
-}
 model TerminalReadResult {
   text: string;
   block?: TerminalBlock;
-}
-@extension("x-on", #{ home: true })
-model TerminalWaitMessage {
-  cmd: "terminal_wait";
-  caller_session_id: SessionID;
-  target: string;
-  until: TerminalWaitUntil;
-  after_block_id?: int64;
 }
 model TerminalBlock {
   id: int64;
@@ -3294,13 +3264,6 @@ model TerminalWaitResult {
   block?: TerminalBlock;
   exited?: boolean;
   exit_code?: int32;
-}
-@extension("x-on", #{ home: true })
-model TerminalCloseMessage {
-  cmd: "terminal_close";
-  caller_session_id: SessionID;
-  target: string;
-  desktop?: string;
 }
 
 // Machine parts of terminal commands. The home runs a command's home part and
@@ -3560,13 +3523,6 @@ model TerminalShellResult {
   home: string; // Empty when the machine cannot tell
 }
 
-@extension("x-on", #{ home: true })
-model TerminalMoveMessage {
-  cmd: "terminal_move";
-  caller_session_id: SessionID;
-  target: string;
-  desktop: string;
-}
 
 model TerminalMoveResult {
   terminal_id: TerminalID;
@@ -7312,13 +7268,7 @@ model Response {
   update_status?: UpdateStatus;
   update_request_result?: UpdateRequestResult;
   session_reopen_result?: SessionReopenResult;
-  terminal_entries?: TerminalEntry[];
-  terminal_open_result?: TerminalOpenResult;
   codex_status_result?: CodexStatusResult;
-  terminal_input_result?: TerminalInputResult;
-  terminal_read_result?: TerminalReadResult;
-  terminal_wait_result?: TerminalWaitResult;
-  terminal_move_result?: TerminalMoveResult;
   quick_capture_result?: QuickCaptureResult;
   sender_pairing?: SenderPairingRequest;
   paired_sender_token?: PairedSenderToken;

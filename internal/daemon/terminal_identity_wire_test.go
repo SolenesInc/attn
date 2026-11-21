@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
@@ -135,7 +136,7 @@ func TestUnplacedAgentsKeepTheirTerminalAcrossPlacementAndRestart(t *testing.T) 
 					t.Fatal(protocol.Deref(result.Error))
 				}
 			case "move":
-				if _, err := s.Client().TerminalCommand(context.Background(), protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: successor.ID, Target: string(terminal), Desktop: desktop.ID}); err != nil {
+				if _, err := client.TerminalCommand[protocol.TerminalMoveResult](context.Background(), s.Client(), "terminal move", successor.ID, map[string]any{"terminal": string(terminal), "desktop": desktop.ID}); err != nil {
 					t.Fatal(err)
 				}
 			case "place":

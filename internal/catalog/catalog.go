@@ -151,6 +151,15 @@ const CLIInternal = "internal"
 
 func (a Arg) Internal() bool { return a.CLI == CLIInternal }
 
+func (a Arg) AfterDashes() bool { return a.CLI == "--" }
+
+func (a Arg) FlagWords() string {
+	if name, ok := strings.CutSuffix(a.CLI, "..."); ok && strings.HasPrefix(name, "--") && len(name) > 2 {
+		return strings.TrimPrefix(name, "--")
+	}
+	return ""
+}
+
 type Local string
 
 const (
@@ -450,6 +459,9 @@ func (c *Catalog) check() []string {
 			}
 			if items, _ := c.Types[a.Type].Schema["items"].(map[string]any); a.CLI == "words" && (c.Types[a.Type].Schema["type"] != "array" || items["required"] == nil) {
 				add("%s: cli words takes an array of objects whose required fields are the words of each item", argWhere)
+			}
+			if (a.AfterDashes() || a.FlagWords() != "") && !a.List {
+				add("%s: cli %q takes several words, so the arg is a list", argWhere, a.CLI)
 			}
 			if a.CLI == "pos" && a.OneOf != "" {
 				if problem := c.sharedPositionalProblem(cmd, a); problem != "" {

@@ -3030,24 +3030,10 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.sendError(conn, "only the attn app can start or decline an update; run `attn update request` to ask the user")
 	case protocol.CmdSessionReopen:
 		d.handleSessionReopen(conn, msg.(*protocol.SessionReopenMessage))
-	case protocol.CmdTerminalList:
-		d.handleTerminalList(conn, msg.(*protocol.TerminalListMessage))
-	case protocol.CmdTerminalOpen:
-		d.handleTerminalOpen(conn, msg.(*protocol.TerminalOpenMessage))
 	case protocol.CmdCodexStatus:
 		d.handleCodexStatus(conn, msg.(*protocol.CodexStatusMessage))
 	case protocol.CmdRestartSharedCodex:
 		d.handleRestartSharedCodexCLI(conn, msg.(*protocol.RestartSharedCodexMessage))
-	case protocol.CmdTerminalInput:
-		d.handleTerminalInput(conn, msg.(*protocol.TerminalInputMessage))
-	case protocol.CmdTerminalRead:
-		d.handleTerminalRead(conn, msg.(*protocol.TerminalReadMessage))
-	case protocol.CmdTerminalWait:
-		d.handleTerminalWait(conn, msg.(*protocol.TerminalWaitMessage))
-	case protocol.CmdTerminalClose:
-		d.handleTerminalClose(conn, msg.(*protocol.TerminalCloseMessage))
-	case protocol.CmdTerminalMove:
-		d.handleTerminalMove(conn, msg.(*protocol.TerminalMoveMessage))
 	case protocol.CmdDropOutpostCopy:
 		if err := d.dropStaleCopy(); err != nil {
 			d.sendError(conn, err.Error())
