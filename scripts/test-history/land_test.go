@@ -14,8 +14,8 @@ import (
 	"github.com/victorarias/attn/internal/testhistory"
 )
 
-func otherLaneRun(id, commit, unit string, outcome testhistory.Outcome, finished time.Time) testhistory.Receipt {
-	receipt := otherLaneFailure(id, commit, unit, finished)
+func ciRun(id, commit, unit string, outcome testhistory.Outcome, finished time.Time) testhistory.Receipt {
+	receipt := ciFailure(id, commit, unit, finished)
 	receipt.Results[0].Outcome = outcome
 	return receipt
 }
@@ -34,11 +34,11 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 	start := time.Now().Add(-time.Hour).Truncate(time.Second)
 	repo.write("scripts/landing-tests", "group go \\.go$\ngo ./p TestA\ngo ./p TestRenamed\n")
 	repo.write("p/p_test.go", "package p\n\nimport \"testing\"\n\nfunc TestA(t *testing.T) {}\n")
-	repo.write("q/q_test.go", "package q\n\nimport \"testing\"\n\nfunc TestRecent(t *testing.T) {}\n\nfunc TestCleared(t *testing.T) {}\n\nfunc TestStillRed(t *testing.T) {}\n")
+	repo.write("q/q_test.go", "package q\n\nimport \"testing\"\n\nfunc TestRecent(t *testing.T) {}\n\nfunc TestCleared(t *testing.T) {}\n\nfunc TestStillRed(t *testing.T) {}\n\nfunc TestOtherPlatform(t *testing.T) {}\n")
 	repo.write("q/elsewhere_plan9_test.go", "package q\n\nimport \"testing\"\n\nfunc TestElsewhere(t *testing.T) {}\n")
 	failedAt := repo.commit("tests", start)
 	shareIn := func(lane testhistory.Lane, id, commit, unit string, outcome testhistory.Outcome) {
-		run := otherLaneRun(id, commit, unit, outcome, start.Add(time.Minute))
+		run := ciRun(id, commit, unit, outcome, start.Add(time.Minute))
 		run.Lane = lane
 		body, err := json.Marshal(run)
 		if err != nil {
@@ -47,7 +47,7 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 		service.add("github.com/"+checkoutRepository, id, body)
 	}
 	share := func(id, commit, unit string, outcome testhistory.Outcome) {
-		shareIn(otherLane(), id, commit, unit, outcome)
+		shareIn(hostLane(), id, commit, unit, outcome)
 	}
 	linux := testhistory.Lane{OS: "linux", Arch: "amd64"}
 	mac := testhistory.Lane{OS: "darwin", Arch: "arm64"}
@@ -57,6 +57,7 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 	share("elsewhere-fails", failedAt, "go ./q TestElsewhere", testhistory.Fail)
 	shareIn(linux, "scenario-fails", failedAt, "native native-chief-slot", testhistory.Fail)
 	shareIn(mac, "mac-scenario-fails", failedAt, "native native-mac-only", testhistory.Fail)
+	shareIn(otherLane(), "other-platform-fails", failedAt, "go ./q TestOtherPlatform", testhistory.Fail)
 	for i := range testhistory.ClearedAfter {
 		repo.gitAt(start.Add(time.Duration(i+1)*time.Second), "commit", "-q", "--allow-empty", "-m", fmt.Sprintf("main %d", i))
 		commit := repo.git("rev-parse", "HEAD")
@@ -109,13 +110,13 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 	service.mu.Unlock()
 	out, units, code = land("go")
 	if code != 0 || units != "go ./p TestA, go ./p TestRenamed, go ./q TestRecent, native native-chief-slot" {
-		t.Fatalf("land --group go exited %d and chose %s, want the go group's baseline, though the change touches only docs, and the uncleared failures, the native scenario that failed on Linux included and the one that failed only on macOS left out, for land.sh's scenario step on Linux:\n%s", code, units, out)
+		t.Fatalf("land --group go exited %d and chose %s, want the go group's baseline, though the change touches only docs, and the uncleared failures on this host's platform, the native scenario that failed on Linux included and the one that failed only on macOS left out, for land.sh's scenario step on Linux:\n%s", code, units, out)
 	}
 	for _, want := range []string{
 		"landing tests for " + short(head) + ":",
 		"ADDED       go ./q TestRecent",
 		"ADDED       native native-chief-slot",
-		fmt.Sprintf("failed on %s at %s; passed on 1 main revisions since, runs until %d more pass", otherLane(), short(failedAt), testhistory.ClearedAfter-1),
+		fmt.Sprintf("failed on %s at %s; passed on 1 main revisions since, runs until %d more pass", hostLane(), short(failedAt), testhistory.ClearedAfter-1),
 		fmt.Sprintf("failed on linux/amd64 at %s; passed on 1 main revisions since, runs until %d more pass", short(failedAt), testhistory.ClearedAfter-1),
 		"RED         go ./q TestStillRed",
 		"still red on main: the sheriff owns it; landings run it once it passes on main",
@@ -132,6 +133,9 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 
 	if strings.Contains(out, "native-mac-only") {
 		t.Fatalf("land listed a scenario that failed only on macOS, which no landing's scenario step on Linux clears:\n%s", out)
+	}
+	if strings.Contains(out, "TestOtherPlatform") {
+		t.Fatalf("land listed a test that failed only on %s, which a landing on %s cannot clear:\n%s", otherLane(), hostLane(), out)
 	}
 
 	if _, _, code := land("missing"); code == 0 {
@@ -154,7 +158,7 @@ func TestLandLeavesFilesStillRedOnMainOutOfTheVitestSuite(t *testing.T) {
 	repo.write("scripts/landing-tests", "group app ^app/\nvitest .\n")
 	repo.write("app/scripts/real-app-harness/red.test.mjs", "test\n")
 	failedAt := repo.commit("tests", start)
-	body, err := json.Marshal(otherLaneRun("red-fails", failedAt, "vitest scripts/real-app-harness/red.test.mjs", testhistory.Fail, start.Add(time.Minute)))
+	body, err := json.Marshal(ciRun("red-fails", failedAt, "vitest scripts/real-app-harness/red.test.mjs", testhistory.Fail, start.Add(time.Minute)))
 	if err != nil {
 		t.Fatal(err)
 	}

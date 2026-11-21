@@ -143,10 +143,10 @@ type Standing struct {
 	Lanes []LaneStanding `json:"lanes,omitempty"`
 }
 
-func (h Health) Standing(unit string) (Standing, bool) {
+func (h Health) Standing(unit, hostOS string) (Standing, bool) {
 	var lanes []LaneStanding
 	for lane, revisions := range h.units[unit] {
-		if !landingsRunItIn(unit, lane) {
+		if !landingsRunItIn(unit, lane, hostOS) {
 			continue
 		}
 		if standing, ok := h.laneStanding(lane, revisions); ok {

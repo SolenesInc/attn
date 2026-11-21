@@ -78,6 +78,7 @@ func TestStandingFollowsTheSpecification(t *testing.T) {
 	cases := []struct {
 		name     string
 		unit     string
+		host     string
 		receipts []th.Receipt
 		standing bool
 		anchor   string
@@ -131,7 +132,7 @@ func TestStandingFollowsTheSpecification(t *testing.T) {
 				receipt(on("c01", mac), caseResult(unit, "renders", th.Fail), result(unit, th.Fail)),
 				receipt(on("c02", mac), caseResult(unit, "renders its rows", th.Pass), result(unit, th.Pass)),
 			}, standing: true, anchor: "c01", lane: "darwin/arm64", passes: 1, cases: []string{"renders"}},
-		{name: "a failure in another lane is cleared only by passes there",
+		{name: "passes on another platform clear nothing",
 			receipts: []th.Receipt{
 				receipt(on("c01", linux), result(unit, th.Fail)),
 				receipt(on("c02", mac), result(unit, th.Pass)),
@@ -140,12 +141,24 @@ func TestStandingFollowsTheSpecification(t *testing.T) {
 			}, standing: true, anchor: "c01", lane: "linux/amd64", passes: 1},
 		{name: "the least cleared lane decides",
 			receipts: []th.Receipt{
-				receipt(on("c01", mac), result(unit, th.Fail)),
+				receipt(on("c01", raceLinux), result(unit, th.Fail)),
 				receipt(on("c02", linux), result(unit, th.Fail)),
-				receipt(on("c03", mac), result(unit, th.Pass)),
-				receipt(on("c04", mac), result(unit, th.Pass)),
+				receipt(on("c03", raceLinux), result(unit, th.Pass)),
+				receipt(on("c04", raceLinux), result(unit, th.Pass)),
 				receipt(on("c05", linux), result(unit, th.Pass)),
 			}, standing: true, anchor: "c02", lane: "linux/amd64", passes: 1},
+		{name: "a failure only on another platform is no candidate on this host",
+			host: "linux",
+			receipts: []th.Receipt{
+				receipt(on("c01", mac), result(unit, th.Fail)),
+			}},
+		{name: "a native scenario counts only its Linux failures, whatever the host",
+			unit: "native agent-reload", host: "darwin",
+			receipts: []th.Receipt{
+				receipt(on("c03", mac), result("native agent-reload", th.Fail)),
+				receipt(on("c01", linux), result("native agent-reload", th.Fail)),
+				receipt(on("c02", linux), result("native agent-reload", th.Pass)),
+			}, standing: true, anchor: "c01", lane: "linux/amd64", passes: 1},
 		{name: "dirty and unlanded failures are not health evidence",
 			receipts: []th.Receipt{
 				receipt(on("c02", mac, true), result(unit, th.Fail)),
@@ -169,7 +182,11 @@ func TestStandingFollowsTheSpecification(t *testing.T) {
 			if of == "" {
 				of = unit
 			}
-			standing, ok := th.BuildHealth(tc.receipts, main).Standing(of)
+			host := tc.host
+			if host == "" {
+				host = tc.receipts[0].Lane.OS
+			}
+			standing, ok := th.BuildHealth(tc.receipts, main).Standing(of, host)
 			if ok != tc.standing {
 				t.Fatalf("standing = %v, want %v (%+v)", ok, tc.standing, standing)
 			}
@@ -238,11 +255,12 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 		gone      = "vitest src/gone.test.tsx"
 		scenario  = "native agent-reload"
 		macOnly   = "native mac-only"
+		macTest   = "vitest src/mac-only.test.tsx"
 		elsewhere = "go ./p TestElsewhere"
 		playwrite = "playwright e2e/x.spec.ts"
 	)
 	list := recipes(t, "group app ^app/\nvitest src/a.test.tsx\nvitest src/b.test.tsx\ngroup e2e ^app/e2e/\nplaywright e2e/x.spec.ts\n")
-	inventory := th.Inventory{a: true, b: true, recent: true, red: true, cleared: true, changed: true, playwrite: true, elsewhere: true}
+	inventory := th.Inventory{a: true, b: true, recent: true, red: true, cleared: true, changed: true, playwrite: true, elsewhere: true, macTest: true}
 	history := []th.Receipt{
 		receipt(on(at(1), linux), result(cleared, th.Fail), result(scenario, th.Fail), result(gone, th.Fail)),
 		receipt(on(at(1), linux), result(elsewhere, th.Fail)),
@@ -250,7 +268,7 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 		receipt(on(at(2), linux), result(recent, th.Fail)),
 		receipt(on(at(2), linux), result(red, th.Pass)),
 		receipt(on(at(2), linux), result(scenario, th.Pass)),
-		receipt(on(at(1), mac), result(macOnly, th.Fail)),
+		receipt(on(at(1), mac), result(macOnly, th.Fail), result(macTest, th.Fail)),
 		receipt(on(at(2), mac), result(macOnly, th.Pass)),
 		receipt(on(at(3), mac), result(scenario, th.Fail)),
 		receipt(on(at(3), linux), result(red, th.Fail)),
@@ -263,7 +281,7 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 	}
 	request := th.SelectRequest{
 		Groups: list.Groups[:1], ChangedTests: []string{changed}, Inventory: inventory,
-		Health: th.BuildHealth(history, main),
+		Health: th.BuildHealth(history, main), HostOS: "linux",
 	}
 	selection := th.Select(request)
 	want := map[string]th.Status{
@@ -271,7 +289,7 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 		cleared: th.Cleared, gone: th.Missing, scenario: th.Selected,
 	}
 	if got := statuses(selection); !reflect.DeepEqual(got, want) {
-		t.Fatalf("statuses = %v, want %v: the matched group's baseline, the changed test and a failure with %d of %d passes run; one still red since its last failure is listed, not run; one with %d passes has cleared; a native scenario that has passed on Linux since runs too, though no inventory lists it, and counts only its Linux failures, the lane the scenario step runs; one that failed only on macOS is no candidate; a test gone from the checkout is missing; a Go failure that has passed since joins an app-only landing", got, want, n-1, n, n)
+		t.Fatalf("statuses = %v, want %v: the matched group's baseline, the changed test and a failure with %d of %d passes run; one still red since its last failure is listed, not run; one with %d passes has cleared; a native scenario that has passed on Linux since runs too, though no inventory lists it, and counts only its Linux failures, the lane the scenario step runs; a scenario or a test that failed only on macOS is no candidate on a Linux host; a test gone from the checkout is missing; a Go failure that has passed since joins an app-only landing", got, want, n-1, n, n)
 	}
 	for _, choice := range selection.Choices {
 		if choice.Unit == recent && choice.PassesLeft() != 1 {
@@ -468,7 +486,8 @@ func propertyRequest(t *rapid.T, main th.Mainline, history []th.Receipt) th.Sele
 	for _, u := range units {
 		inventory[u] = true
 	}
-	return th.SelectRequest{Groups: list.Groups, Inventory: inventory, Health: th.BuildHealth(history, main)}
+	host := rapid.SampledFrom([]string{mac.OS, linux.OS}).Draw(t, "host")
+	return th.SelectRequest{Groups: list.Groups, Inventory: inventory, Health: th.BuildHealth(history, main), HostOS: host}
 }
 
 func decisions(selection th.Selection) []string {
@@ -515,8 +534,9 @@ func TestNoEvidenceButAFreshPassClearsAFailure(t *testing.T) {
 		noise := rapid.SampledFrom([]th.Result{cached(units[0]), result(units[0], th.Skip), result(units[0], th.Interrupted), result(units[0], th.ExpectedFailure)}).Draw(t, "noise")
 		where := at{rapid.SampledFrom(list).Draw(t, "commit"), rapid.SampledFrom([]th.Lane{mac, linux}).Draw(t, "lane"), false}
 		after := th.BuildHealth(append(history, receipt(where, noise)), main)
-		was, hadStanding := before.Standing(units[0])
-		now, hasStanding := after.Standing(units[0])
+		host := rapid.SampledFrom([]string{mac.OS, linux.OS}).Draw(t, "host")
+		was, hadStanding := before.Standing(units[0], host)
+		now, hasStanding := after.Standing(units[0], host)
 		if hadStanding != hasStanding || hadStanding && now.PassesSince != was.PassesSince {
 			t.Fatalf("%v at %v changed the standing from %+v to %+v", noise.Outcome, where, was, now)
 		}

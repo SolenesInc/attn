@@ -103,13 +103,17 @@ func otherLane() testhistory.Lane {
 	return testhistory.Lane{OS: "linux", Arch: "amd64"}
 }
 
-func otherLaneFailure(id, commit, unit string, finished time.Time) testhistory.Receipt {
+func hostLane() testhistory.Lane {
+	return testhistory.Lane{OS: runtime.GOOS, Arch: runtime.GOARCH}
+}
+
+func ciFailure(id, commit, unit string, finished time.Time) testhistory.Receipt {
 	exit := testhistory.Exit{Code: 1}
 	return testhistory.Receipt{
 		Schema: testhistory.Schema, InvocationID: id, Runner: testhistory.RunnerGo,
 		Source:      testhistory.Source{Kind: "ci", RunID: "1", Attempt: "1", Job: "daemon"},
 		Revision:    testhistory.Revision{Commit: commit},
-		Lane:        otherLane(),
+		Lane:        hostLane(),
 		Diagnostics: testhistory.Diagnostics{MachineClass: "github-hosted 4cpu/16GB"},
 		Command:     testhistory.Command{StartedAt: finished.Add(-time.Minute), FinishedAt: &finished, Exit: &exit},
 		Results:     []testhistory.Result{{Unit: unit, Attempt: 1, Outcome: testhistory.Fail}},
@@ -156,23 +160,26 @@ func TestSelectChoosesTheCheckoutsTestsFromItsHistory(t *testing.T) {
 	repo.write("q/q_test.go", fmt.Sprintf(testSource, "q", "C", "first", "D"))
 	firstMain := repo.commit("the baseline", start)
 	repo.runTests("./p", "./q")
-	repo.receive(otherLaneFailure("ci-c-fails", firstMain, "go ./q TestC", start.Add(time.Minute)))
-	nativeFails := otherLaneFailure("ci-native-fails", firstMain, "native agent-reload", start.Add(time.Minute))
+	repo.receive(ciFailure("ci-c-fails", firstMain, "go ./q TestC", start.Add(time.Minute)))
+	elsewhere := ciFailure("ci-e-fails-elsewhere", firstMain, "go ./q TestE", start.Add(time.Minute))
+	elsewhere.Lane = otherLane()
+	repo.receive(elsewhere)
+	nativeFails := ciFailure("ci-native-fails", firstMain, "native agent-reload", start.Add(time.Minute))
 	nativeFails.Lane = testhistory.Lane{OS: "linux", Arch: "amd64"}
 	repo.receive(nativeFails)
 
 	repo.git("checkout", "-q", "-b", "side")
 	repo.write("side/side.go", "package side\n")
 	sideCommit := repo.commit("work merged into main", start.Add(2*time.Minute))
-	repo.receive(otherLaneFailure("ci-d-fails-off-main", sideCommit, "go ./q TestD", start.Add(3*time.Minute)))
+	repo.receive(ciFailure("ci-d-fails-off-main", sideCommit, "go ./q TestD", start.Add(3*time.Minute)))
 	repo.git("checkout", "-q", "main")
 	repo.gitAt(start.Add(4*time.Minute), "merge", "-q", "--no-ff", "-m", "merge side", "side")
 
 	repo.write("q/q_test.go", fmt.Sprintf(testSource, "q", "C", "second", "D"))
 	landed := repo.commit("land on main", time.Now().Add(time.Hour))
 	repo.runTests("./p", "./q")
-	repo.receive(otherLaneFailure("ci-a-fails", landed, "go ./p TestA", time.Now().Add(2*time.Hour)))
-	recovered := otherLaneFailure("recovered-without-finish", firstMain, "go ./p TestA", start)
+	repo.receive(ciFailure("ci-a-fails", landed, "go ./p TestA", time.Now().Add(2*time.Hour)))
+	recovered := ciFailure("recovered-without-finish", firstMain, "go ./p TestA", start)
 	recovered.Command.FinishedAt, recovered.Command.Exit, recovered.Complete = nil, nil, false
 	repo.receive(recovered)
 	if out, code := repo.history("capture", "go", "--unit", "go ./p TestA", "--", "-count=1", "-run", "^TestA$", "./p"); code != 0 {
@@ -208,13 +215,18 @@ func TestSelectChoosesTheCheckoutsTestsFromItsHistory(t *testing.T) {
 			}
 		}
 		baseline := choiceOf(t, selection, "go ./p TestA")
-		if baseline.Status != testhistory.Selected || baseline.Standing.Anchor.Commit != landed || baseline.Standing.Lane != otherLane().String() {
+		if baseline.Status != testhistory.Selected || baseline.Standing.Anchor.Commit != landed || baseline.Standing.Lane != hostLane().String() {
 			t.Fatalf("baseline TestA: %+v %+v", baseline, baseline.Standing)
 		}
 		nominated := choiceOf(t, selection, "go ./q TestC")
 		standing := nominated.Standing
-		if nominated.Status != testhistory.Red || standing.Lane != otherLane().String() || standing.PassesSince != 0 || standing.Anchor.Commit != firstMain {
-			t.Fatalf("a failure in another lane, cleared only by passes there, has not passed since and must stand red, listed and not run: %+v %+v", nominated, standing)
+		if nominated.Status != testhistory.Selected || standing.Lane != hostLane().String() || standing.PassesSince != 1 || standing.Anchor.Commit != firstMain {
+			t.Fatalf("a failure in this host's lane that has passed there once since runs: %+v %+v", nominated, standing)
+		}
+		for _, choice := range selection.Choices {
+			if choice.Unit == "go ./q TestE" {
+				t.Fatalf("a failure only on another platform, which a landing here cannot clear, became a candidate: %+v", choice)
+			}
 		}
 		if native := choiceOf(t, selection, "native agent-reload"); native.Status != testhistory.Red {
 			t.Fatalf("a native scenario red on main must stand red like any other test, not unavailable: %+v", native)
@@ -278,7 +290,7 @@ func TestSelectChoosesTheCheckoutsTestsFromItsHistory(t *testing.T) {
 		if strings.Join(point.Changed, " ") != "go ./q TestC" {
 			t.Fatalf("changed tests at the landed commit = %v, want its own change, not the checkout's", point.Changed)
 		}
-		if failures := point.Failures["go ./p TestA"]; len(failures) != 1 || failures[0] != otherLane().String() {
+		if failures := point.Failures["go ./p TestA"]; len(failures) != 1 || failures[0] != hostLane().String() {
 			t.Fatalf("failures at the landed commit = %v", point.Failures)
 		}
 		shared, _ := filepath.Glob(filepath.Join(testhistory.Spool{Dir: repo.spool}.MirrorDir(), "*"+testhistory.MirrorSuffix))

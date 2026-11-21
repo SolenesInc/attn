@@ -190,8 +190,9 @@ system.
   typecheck, lint, generated-file and script checks, and the landing tests, then
   push to `main`. The landing tests are the
   `scripts/landing-tests` groups the changed paths match, the tests the change
-  touches, and every test that failed on `main` and has since passed there,
-  until it has passed on 30 later `main` commits. `--baseline` runs the groups
+  touches, and every test that failed on `main` in a lane the landing runs it
+  in and has since passed there, until it has passed on 30 later `main`
+  commits. `--baseline` runs the groups
   alone
 - `make test`: Full Go suite (`make test-v` verbose, `make test-watch` on file
   changes), for CI or diagnosing a suite-wide failure

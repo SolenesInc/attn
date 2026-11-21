@@ -128,7 +128,8 @@ fast gate:
 - The landing tests. `land.sh` chooses a few tests for the commit it is about to
   push, not a suite: the groups of `scripts/landing-tests` that match the
   changed paths, the tests the landing changes, and every test that failed on
-  `main` and has since passed there, until it clears. A change under `native/`
+  `main` in a lane the landing runs it in and has since passed there, until it
+  clears. A change under `native/`
   runs every test of the `native/` workspace, and a change under
   `app/scripts/real-app-harness/` runs the harness's tests, and a change under
   `app/src/browser/` the browser runtime's. A test that is still red on `main` is

@@ -72,7 +72,7 @@ func (c selectionContext) request(at tree, base string, groupNames []string) (te
 	}
 	return testhistory.SelectRequest{
 		Groups: groups, ChangedTests: changed.tests, Inventory: inventory,
-		Health: testhistory.BuildHealth(c.receipts, c.main),
+		Health: testhistory.BuildHealth(c.receipts, c.main), HostOS: c.key.Lane.OS,
 	}, nil
 }
 
@@ -260,7 +260,7 @@ func explainCommand(args []string) int {
 	result := explanation{Unit: *unit, ClearedAfter: testhistory.ClearedAfter, Command: testhistory.RecipeCommand(*unit), Freshness: context.freshness()}
 	result.Note = inventory.Unavailable(*unit)
 	result.Available = result.Note == ""
-	if standing, ok := testhistory.BuildHealth(context.receipts, context.main).Standing(*unit); ok {
+	if standing, ok := testhistory.BuildHealth(context.receipts, context.main).Standing(*unit, context.key.Lane.OS); ok {
 		result.Standing = &standing
 	}
 	if cost, ok := costs.UnitMS(*unit); ok {
@@ -275,7 +275,7 @@ func explainCommand(args []string) int {
 		fmt.Println("  unavailable: " + result.Note)
 	}
 	if result.Standing == nil {
-		fmt.Println("  no failure on main: landings run it only from the baseline or when they change it")
+		fmt.Println("  no failure on main in the lane a landing here runs it in: landings run it only from the baseline or when they change it")
 	} else {
 		for _, lane := range result.Standing.Lanes {
 			fmt.Printf("  %s: %s\n", lane.Lane, lane.Describe())

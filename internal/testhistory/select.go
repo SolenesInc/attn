@@ -75,8 +75,16 @@ func runsInTheScenarioStep(unit string) bool {
 
 const scenarioStepOS = "linux"
 
-func landingsRunItIn(unit, lane string) bool {
-	return !runsInTheScenarioStep(unit) || strings.HasPrefix(lane, scenarioStepOS+"/")
+func landingOS(unit, hostOS string) string {
+	if runsInTheScenarioStep(unit) {
+		return scenarioStepOS
+	}
+	return hostOS
+}
+
+func landingsRunItIn(unit, lane, hostOS string) bool {
+	laneOS, _, _ := strings.Cut(lane, "/")
+	return laneOS == landingOS(unit, hostOS)
 }
 
 func (inventory Inventory) Has(unit string) bool {
@@ -103,6 +111,7 @@ type SelectRequest struct {
 	ChangedTests []string
 	Inventory    Inventory
 	Health       Health
+	HostOS       string
 }
 
 type Status string
@@ -157,7 +166,7 @@ func Select(request SelectRequest) Selection {
 			return choice
 		}
 		choice := &Choice{Unit: unit, Command: RecipeCommand(unit)}
-		if standing, ok := request.Health.Standing(unit); ok {
+		if standing, ok := request.Health.Standing(unit, request.HostOS); ok {
 			choice.Standing = &standing
 		}
 		choices[unit] = choice
@@ -177,7 +186,7 @@ func Select(request SelectRequest) Selection {
 		choose(unit).Changed = true
 	}
 	for _, unit := range request.Health.FailureUnits() {
-		if _, ok := request.Health.Standing(unit); ok {
+		if _, ok := request.Health.Standing(unit, request.HostOS); ok {
 			choose(unit)
 		}
 	}
