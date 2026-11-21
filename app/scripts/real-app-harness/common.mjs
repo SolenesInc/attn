@@ -161,7 +161,7 @@ export function isDirectoryUnderRoot(directory, roots) {
   return roots.some((root) => directory === root || directory.startsWith(root + path.sep));
 }
 
-export async function sweepStaleHarnessSessions(observer, {
+export async function sweepHarnessLeftovers(observer, {
   sessionRootDir = process.env.ATTN_REAL_APP_SESSION_ROOT || path.join(os.tmpdir(), 'attn-real-app-sessions'),
   log = (m) => console.log(`[harness] ${m}`),
   timeoutMs = 15_000,
@@ -177,17 +177,16 @@ export async function sweepStaleHarnessSessions(observer, {
   })()])];
   const isUnderSessionRoot = (directory) => isDirectoryUnderRoot(directory, rootCandidates);
   const stale = [...observer.sessionsById.values()].filter((session) => isUnderSessionRoot(session.directory));
-  if (stale.length === 0) {
-    return { swept: 0 };
+  if (stale.length > 0) {
+    log(`stale harness sessions=${stale.length} from a previous run — sweeping: `
+      + stale.map((session) => `${session.id} label=${session.label} state=${session.state}`).join('; '));
+    const staleIds = new Set(stale.map((session) => session.id));
+    await observer.unregisterMatchingSessions((session) => staleIds.has(session.id), timeoutMs);
   }
-
-  log(`stale harness sessions=${stale.length} from a previous run — sweeping: `
-    + stale.map((session) => `${session.id} label=${session.label} state=${session.state}`).join('; '));
-
-  const staleIds = new Set(stale.map((session) => session.id));
-
-  await observer.unregisterMatchingSessions((session) => staleIds.has(session.id), timeoutMs);
-
+  const closed = await observer.closeLeftoverNumberedDesktops();
+  if (closed.length > 0) {
+    log(`closed empty numbered desktops from a previous run: ${closed.map((desktop) => `${desktop.shortcut_slot}:${desktop.id}`).join(', ')}`);
+  }
   return { swept: stale.length };
 }
 
@@ -310,7 +309,7 @@ export async function launchFreshAppAndConnect(client, observer, {
   await observer.connect();
   await pinMockAgentExecutables(client, observer, agentExecutables);
   if (sweepStaleSessions) {
-    await sweepStaleHarnessSessions(observer);
+    await sweepHarnessLeftovers(observer);
   }
 }
 
@@ -324,7 +323,7 @@ export async function launchFreshNativeAppAndConnect(client, observer) {
     await client.request('wait', { target: { key: 'whats-new-dialog' }, gone: true });
   }
   await observer.connect();
-  await sweepStaleHarnessSessions(observer);
+  await sweepHarnessLeftovers(observer);
 }
 
 export async function waitForAppCurrentDesktop(client, desktopId, timeoutMs = 15_000) {

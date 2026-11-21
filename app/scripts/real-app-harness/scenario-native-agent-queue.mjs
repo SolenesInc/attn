@@ -71,7 +71,6 @@ try {
 
   await runner.step('launch_app_with_queue_mode', async () => {
     await launchFreshNativeAppAndConnect(client, observer);
-    await observer.closeLeftoverNumberedDesktops();
     observer.send({ cmd: 'set_setting', key: 'queue_mode_enabled', value: 'true' });
     await driver.waitFor({ key: 'sidebar.queue' });
   });

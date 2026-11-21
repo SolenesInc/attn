@@ -250,7 +250,6 @@ async function main() {
   try {
     await runner.step('launch_app_with_queue_mode', async () => {
       await launchFreshAppAndConnect(client, observer);
-      await observer.closeLeftoverNumberedDesktops();
       for (const key of ['queue_mode_enabled', 'auto_settle_enabled', 'auto_settle_arm_seconds', 'auto_settle_countdown_seconds']) {
         queueDaemonSettingRestore(observer, key);
       }

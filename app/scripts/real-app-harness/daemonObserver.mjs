@@ -206,13 +206,19 @@ export class DaemonObserver {
 
   async closeLeftoverNumberedDesktops() {
     if (isProductionHarnessTarget({ wsUrl: this.wsUrl })) return [];
-    const leftovers = this.desktops.filter((desktop) => desktop.shortcut_slot
-      && desktop.panes.length === 0 && desktop.id !== this.currentDesktopId());
+    const isCurrent = (desktop) => desktop.id === this.currentDesktopId();
+    const leftovers = this.desktops
+      .filter((desktop) => desktop.shortcut_slot && desktop.panes.length === 0
+        && !(isCurrent(desktop) && desktop.shortcut_slot === 1))
+      .sort((a, b) => isCurrent(a) - isCurrent(b));
+    const closed = [];
     for (const desktop of leftovers) {
-      await this.profileCommand('desktop_close', { desktop_id: desktop.id, expected_revision: desktop.revision });
+      if (this.desktops.length === 1) break;
+      await this.profileCommand('desktop_close', { desktop_id: desktop.id, expected_revision: this.desktop(desktop.id).revision });
       await this.waitFor(() => !this.desktop(desktop.id), `arrangement without numbered desktop ${desktop.shortcut_slot}`);
+      closed.push(desktop);
     }
-    return leftovers;
+    return closed;
   }
 
   setCurrentDesktop(desktopId) {
