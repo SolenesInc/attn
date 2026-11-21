@@ -29,6 +29,41 @@ func GenerateCodexConfigOverrides(terminalID, socketPath, wrapperPath string, la
 	return overrides
 }
 
+type CodexSetting struct {
+	Key   string
+	Value any
+}
+
+func (s CodexSetting) Override() string {
+	value, err := json.Marshal(s.Value)
+	if err != nil {
+		panic(fmt.Sprintf("codex setting %s: %v", s.Key, err))
+	}
+	return s.Key + "=" + string(value)
+}
+
+func CodexAgentToolServers(url, credential string) []CodexSetting {
+	var settings []CodexSetting
+	for _, server := range []struct {
+		name, tools string
+		omit        []string
+	}{
+		{name: "attn-core", tools: "core", omit: []string{"deferred"}},
+		{name: "attn", tools: "rest"},
+	} {
+		key := "mcp_servers." + server.name + "."
+		settings = append(settings,
+			CodexSetting{key + "url", url + "?tools=" + server.tools},
+			CodexSetting{key + "http_headers.Authorization", "Bearer " + credential},
+			CodexSetting{key + "default_tools_approval_mode", "approve"},
+		)
+		if server.omit != nil {
+			settings = append(settings, CodexSetting{key + "omit_tools_from", server.omit})
+		}
+	}
+	return settings
+}
+
 func GenerateCodexServerConfigOverrides(wrapperPath, socketPath, profile string) []string {
 	wrapper := hookWrapper(wrapperPath)
 	environment := "env " + shellQuote(harness.CodexSharedProfileEnv+"="+profile) + " " + shellQuote("ATTN_TERMINAL_ID=") + " " + shellQuote("ATTN_SESSION_ID=") + " "

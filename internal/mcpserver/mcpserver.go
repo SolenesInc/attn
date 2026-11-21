@@ -43,7 +43,7 @@ type Content struct {
 
 func Text(text string) Content { return Content{Type: "text", Text: text} }
 
-type Call func(ctx context.Context, tool string, arguments json.RawMessage) Result
+type Call func(ctx context.Context, tool string, arguments, meta json.RawMessage) Result
 
 type Server struct {
 	name         string
@@ -143,6 +143,7 @@ func (s *Server) answer(ctx context.Context, req request, call Call) (any, *rpcE
 		var params struct {
 			Name      string          `json:"name"`
 			Arguments json.RawMessage `json:"arguments"`
+			Meta      json.RawMessage `json:"_meta"`
 		}
 		if err := decodeParams(req.Params, &params); err != nil {
 			return nil, err
@@ -150,7 +151,7 @@ func (s *Server) answer(ctx context.Context, req request, call Call) (any, *rpcE
 		if !slices.ContainsFunc(s.tools, func(t Tool) bool { return t.Name == params.Name }) {
 			return nil, &rpcError{Code: codeInvalidParams, Message: fmt.Sprintf("unknown tool %q", params.Name)}
 		}
-		return call(ctx, params.Name, params.Arguments), nil
+		return call(ctx, params.Name, params.Arguments, params.Meta), nil
 	default:
 		return nil, &rpcError{Code: codeMethodNotFound, Message: fmt.Sprintf("method %q is not served; this server answers initialize, ping, tools/list and tools/call", req.Method)}
 	}

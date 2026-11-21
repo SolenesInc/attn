@@ -750,12 +750,13 @@ func (r *codexShared) proxied(v *codexView, proxy *codexProxy) {
 	r.viewsChanged(v.profile)
 }
 
-func identifySideConversationTools(m *codexshared.Message, params map[string]any, terminal harness.TerminalID) error {
+func (r *codexShared) identifySideConversationTools(m *codexshared.Message, params map[string]any, terminal harness.TerminalID) error {
 	config, _ := params["config"].(map[string]any)
 	if config == nil {
 		config = make(map[string]any)
 	}
 	config["shell_environment_policy.set.ATTN_TERMINAL_ID"] = terminal
+	offerAgentTools(config, r.d.agentTools(terminal))
 	params["config"] = config
 	raw, err := json.Marshal(params)
 	if err != nil {
@@ -786,7 +787,7 @@ func (r *codexShared) prepare(connection context.Context, v *codexView, m *codex
 	}
 	if ephemeral, _ := params["ephemeral"].(bool); ephemeral {
 		if method == "thread/fork" {
-			return nil, identifySideConversationTools(m, params, v.terminal)
+			return nil, r.identifySideConversationTools(m, params, v.terminal)
 		}
 		return nil, nil
 	}
@@ -796,6 +797,7 @@ func (r *codexShared) prepare(connection context.Context, v *codexView, m *codex
 		config = make(map[string]any)
 	}
 	r.capContext(config, sessionID)
+	offerAgentTools(config, r.d.sharedCodexAgentTools(v.profile))
 	if _, bound := r.d.crewMemberForSession(sessionID); bound {
 		config["features.memories"] = false
 		config["memories.generate_memories"] = false
@@ -966,6 +968,20 @@ func (r *codexShared) launching(v *codexView, method string, params map[string]a
 func (r *codexShared) capContext(config map[string]any, sessionID protocol.SessionID) {
 	if limit := r.d.launchContextWindowCap(sessionID, string(protocol.SessionAgentCodex)); limit > 0 {
 		config["model_auto_compact_token_limit"] = limit
+	}
+}
+
+func (r *codexShared) serves(profile string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.servers[profile] != nil
+}
+
+func offerAgentTools(config map[string]any, tools *agentdriver.AgentTools) {
+	if tools != nil {
+		for _, setting := range hooks.CodexAgentToolServers(tools.URL, tools.Credential) {
+			config[setting.Key] = setting.Value
+		}
 	}
 }
 

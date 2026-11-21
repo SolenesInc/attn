@@ -17,7 +17,7 @@ harness.
 - [Codex](harnesses/codex.md): plain Codex, local memories, updates and
   headless runs.
 - [Codex app-server and `--remote`](harnesses/codex-app-server.md): the shared
-  app-server that shared Codex runs on.
+  app-server that shared Codex runs on, and attn tools over MCP there.
 - [Sigma](harnesses/sigma.md): the Sigma server, named Nisse until 2026-11-14.
 
 This file keeps the facts that hold across harnesses.
@@ -30,9 +30,11 @@ same identity under `ATTN_SESSION_ID`. A terminal can change conversations with
 command starts. Hooks apply to the conversation shown when the report arrives.
 Under shared Codex, hooks and commands run in the app-server and name their
 conversation instead: a hook by the `session_id` on its stdin, a command by
-`CODEX_THREAD_ID`. A `/side` conversation has no session of its own: attn sets
-`ATTN_TERMINAL_ID` on its shell tools, so its commands act as the session of the
-terminal that shows it, and its hooks resolve to no session. Sigma runs
+`CODEX_THREAD_ID`, and an attn tool call by the `threadId` in its `_meta`. A
+`/side` conversation has no session of its own: attn sets `ATTN_TERMINAL_ID` on
+its shell tools and gives it its terminal's credential for the tools, so its
+commands and tool calls act as the session of the terminal that shows it, and
+its hooks resolve to no session. Sigma runs
 commands in its server, and names the conversation people started by
 `SIGMA_ROOT_CONVERSATION`. Native harness conversation ids remain separate text
 values.

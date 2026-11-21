@@ -328,6 +328,11 @@ func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
 	}
 	if opts.CodexRemote == "" {
 		overrides = append(overrides, hooks.GenerateCodexConfigOverrides(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, opts.launchSpec())...)
+		if tools := opts.AgentTools; tools != nil {
+			for _, setting := range hooks.CodexAgentToolServers(tools.URL, tools.Credential) {
+				overrides = append(overrides, setting.Override())
+			}
+		}
 	}
 	return overrides
 }

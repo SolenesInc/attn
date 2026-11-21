@@ -108,7 +108,7 @@ type codexServerThread struct {
 	question            bool
 	instructions        string
 	compactLimit        string
-	memoryConfig        map[string]any
+	config              map[string]any
 	workspaceRoots      []string
 	parent              string
 	shellEnv            map[string]string
@@ -588,7 +588,7 @@ func (s *codexAppServer) start(conn *codexServerConn, p codexServerParams) (any,
 		return map[string]any{"thread": map[string]any{"id": id.String(), "ephemeral": true}}, nil, nil
 	}
 	t.instructions, t.compactLimit, t.workspaceRoots, t.c.approvals = p.DevInstruction, p.compactLimit(), p.WorkspaceRoots, p.CodexPermissions
-	t.memoryConfig = p.Config
+	t.config = p.Config
 	s.mu.Lock()
 	s.threads[t.c.conversation] = t
 	s.mu.Unlock()
@@ -613,7 +613,7 @@ func (s *codexAppServer) forkSide(conn *codexServerConn, p codexServerParams) (a
 	}
 	t := s.newThread(id.String(), parent.c.cwd, parent.c.model, "", "fork", time.Now().UTC(), conn)
 	t.c.turnID = uuid.NewString()
-	t.shellEnv = map[string]string{}
+	t.shellEnv, t.config = map[string]string{}, p.Config
 	for key, value := range p.Config {
 		if name, ok := strings.CutPrefix(key, codexShellEnvPrefix); ok {
 			t.shellEnv[name] = fmt.Sprint(value)
@@ -661,7 +661,7 @@ func (s *codexAppServer) resume(conn *codexServerConn, p codexServerParams) (any
 		}
 		s.mu.Lock()
 		t.compactLimit, t.c.approvals = p.compactLimit(), approvals
-		t.memoryConfig = p.Config
+		t.config = p.Config
 		s.threads[p.ThreadID] = t
 		s.mu.Unlock()
 	}
@@ -1177,6 +1177,28 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		s.compactRefusal = p.Text
 		s.mu.Unlock()
 		return struct{}{}, nil
+	case methodCallMCPTool:
+		var call mcpToolCall
+		if err := json.Unmarshal(raw, &call); err != nil {
+			return nil, err
+		}
+		t, err := s.loaded(call.ThreadID)
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		config, root := t.config, call.ThreadID
+		for parent := t.parent; parent != ""; {
+			root = parent
+			if next := s.threads[parent]; next != nil {
+				parent = next.parent
+			} else {
+				parent = ""
+			}
+		}
+		s.mu.Unlock()
+		call.Meta = map[string]any{"threadId": call.ThreadID, "sessionId": root}
+		return callCodexTool(config, call)
 	case methodRunTool:
 		t, err := s.loaded(p.ThreadID)
 		if err != nil {
@@ -1244,7 +1266,7 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if t := s.threads[p.ThreadID]; t != nil {
-			return t.memoryConfig, nil
+			return t.config, nil
 		}
 		return nil, fmt.Errorf("conversation %s is not loaded here", p.ThreadID)
 	case methodCompactLimit:
@@ -1288,7 +1310,7 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		}
 		started := time.Now().UTC()
 		t := s.newThread(id.String(), parent.c.cwd, parent.c.model, codexRolloutPath(filepath.Join(s.cfg.CodexHome, "sessions"), id.String(), started), "subagent", started, nil)
-		t.parent, t.subscribers = p.ThreadID, map[*codexServerConn]bool{}
+		t.parent, t.subscribers, t.config = p.ThreadID, map[*codexServerConn]bool{}, parent.config
 		if err := s.write(t); err != nil {
 			return nil, err
 		}

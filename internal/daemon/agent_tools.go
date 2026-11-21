@@ -15,6 +15,7 @@ import (
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/command"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/mcpserver"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
@@ -45,6 +46,7 @@ type agentCall struct {
 	caller command.Caller
 	who    string
 	after  func()
+	named  func(meta json.RawMessage) (command.Caller, string, *command.Refusal)
 }
 
 type agentToolServers struct {
@@ -72,8 +74,8 @@ func (d *Daemon) agentToolsHandler() http.Handler {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
-		server.Serve(w, r, func(ctx context.Context, tool string, arguments json.RawMessage) mcpserver.Result {
-			return d.callAgentTool(ctx, call, d.agentToolSet.tools[tool], arguments)
+		server.Serve(w, r, func(ctx context.Context, tool string, arguments, meta json.RawMessage) mcpserver.Result {
+			return d.callAgentTool(ctx, call, d.agentToolSet.tools[tool], arguments, meta)
 		})
 		if call.after != nil {
 			_ = http.NewResponseController(w).Flush()
@@ -87,18 +89,51 @@ func (d *Daemon) agentCallFor(r *http.Request) (*agentCall, error) {
 	if !strings.EqualFold(scheme, "Bearer") || strings.TrimSpace(token) == "" {
 		return nil, errors.New("no bearer token")
 	}
-	caller, who, err := d.agentCaller(strings.TrimSpace(token), r.Header)
+	call, err := d.agentCaller(strings.TrimSpace(token), r.Header)
 	if err != nil {
 		return nil, fmt.Errorf("invalid token: %w", err)
+	}
+	return call, nil
+}
+
+func (d *Daemon) agentCaller(token string, header http.Header) (*agentCall, error) {
+	credential, err := d.agentKey.verify(token)
+	if err != nil {
+		return nil, err
+	}
+	if profile, ok := strings.CutPrefix(credential.name, sharedCodexServerPrefix); ok && credential.kind == credentialServer {
+		if !d.codexShared().serves(profile) {
+			return nil, fmt.Errorf("profile %s runs no shared Codex", profile)
+		}
+		return &agentCall{who: "shared Codex of profile " + profile, named: func(meta json.RawMessage) (command.Caller, string, *command.Refusal) {
+			return d.sharedCodexCaller(profile, meta)
+		}}, nil
+	}
+	caller, who, err := d.credentialCaller(credential, header)
+	if err != nil {
+		return nil, err
 	}
 	return &agentCall{caller: caller, who: who}, nil
 }
 
-func (d *Daemon) agentCaller(token string, header http.Header) (command.Caller, string, error) {
-	credential, err := d.agentKey.verify(token)
-	if err != nil {
-		return command.Caller{}, "", err
+func (d *Daemon) sharedCodexCaller(profile string, meta json.RawMessage) (command.Caller, string, *command.Refusal) {
+	var named struct {
+		ThreadID string `json:"threadId"`
 	}
+	_ = json.Unmarshal(meta, &named)
+	conversation := strings.TrimSpace(named.ThreadID)
+	if conversation == "" {
+		return command.Caller{}, "shared Codex of profile " + profile, &command.Refusal{Code: "no_conversation", Message: "the call's _meta names no Codex conversation in threadId", Fix: "Call the tool from a Codex conversation; Codex names it in _meta.threadId."}
+	}
+	who := "shared Codex conversation " + conversation
+	session, _, _ := d.codexShared().resolveCaller(harness.CodexThreadTerminal(profile, conversation))
+	if session == "" {
+		return command.Caller{}, who, &command.Refusal{Code: "no_session", Message: fmt.Sprintf("no session of profile %s holds Codex conversation %s", profile, conversation), Fix: "Call the tool from a conversation that an attn session shows."}
+	}
+	return d.sessionCaller(session), who, nil
+}
+
+func (d *Daemon) credentialCaller(credential agentCredential, header http.Header) (command.Caller, string, error) {
 	switch credential.kind {
 	case credentialTerminal:
 		terminal := protocol.TerminalID(credential.name)
@@ -198,11 +233,14 @@ func (def agentToolDefinition) offered() mcpserver.Tool {
 	return tool
 }
 
-func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, tool agentTool, arguments json.RawMessage) mcpserver.Result {
+func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, tool agentTool, arguments, meta json.RawMessage) mcpserver.Result {
 	def := tool.def
 	var args map[string]any
 	var refusal *command.Refusal
-	if !d.on(setting.AgentToolsEnabled) {
+	if call.named != nil {
+		call.caller, call.who, refusal = call.named(meta)
+	}
+	if refusal == nil && !d.on(setting.AgentToolsEnabled) {
 		refusal = &command.Refusal{Code: "setting_off", Message: setting.AgentToolsEnabled.Refusal().Error(), Fix: "Use the attn CLI until the setting is on."}
 	}
 	if refusal == nil {

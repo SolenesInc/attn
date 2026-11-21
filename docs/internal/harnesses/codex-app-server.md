@@ -425,3 +425,36 @@ shared Codex tile follows:
   `parentThreadId` only for a subagent
   (`app-server-protocol/src/protocol/v2/thread_data.rs`,
   `app-server/src/request_processors/thread_processor.rs`).
+
+## attn tools over MCP
+
+Probed on 0.171.0 with a real model, on a non-production attn instance with
+`agent_tools_enabled` on, two `--remote` TUIs on one app-server, and an
+isolated `CODEX_HOME` (seed `s-z7cfmc`):
+
+- A per-thread `config` of `mcp_servers.<name>.url`,
+  `mcp_servers.<name>.http_headers.Authorization`,
+  `mcp_servers.<name>.default_tools_approval_mode = "approve"` and
+  `mcp_servers.<name>.omit_tools_from = ["deferred"]` on `thread/start` gives
+  that conversation the server. Its tools run without a question under
+  `on-request` approvals. A subagent the server spawns calls with its parent's
+  entry. An ephemeral `/side` fork takes the entry its `thread/fork` `config`
+  gives it.
+- A conversation keeps the server entry it loaded with. When a second TUI
+  resumes a conversation that the first still shows, the resume's `config` is
+  ignored (as for every resume of a subscribed conversation, above), so the
+  entry, its bearer token included, stays the first TUI's.
+- Every `tools/call` names its conversation in `params._meta`: `threadId` is
+  the calling thread, a subagent's own thread for a subagent, and `sessionId`
+  is the root thread. `_meta["x-codex-turn-metadata"]` repeats both as
+  `thread_id` and `session_id`, with `parent_thread_id` for a subagent. A side
+  conversation's `threadId` is its ephemeral thread. attn resolves the caller
+  from `threadId`, because it is what `CODEX_THREAD_ID` holds for the CLI, so a
+  tool call and a CLI command from one thread resolve through the same path
+  (`codexShared.resolveCaller`), a subagent through its parent.
+- With `features.code_mode = true` and `workspace-write` without network, one
+  `exec` script called `tools.mcp__attn_core__seed_show({seed})`, read
+  `structuredContent.seed.title` from the `CallToolResult`, and passed it to
+  `tools.mcp__attn_core__seed_note`. The server's name `attn-core` becomes
+  `attn_core` in the tool name. MCP calls are made by the app-server, outside
+  the sandbox.
