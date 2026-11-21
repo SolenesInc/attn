@@ -17,7 +17,6 @@ jobs:
     runs-on: ${{ inputs.os }}
     env:
       CARGO_BUILD_BUILD_DIR: ${{ github.workspace }}/native/target
-      RUSTUP_TOOLCHAIN: 1.99.1
     defaults:
       run:
         working-directory: native
@@ -42,7 +41,7 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: '1.99.1'
+          toolchain: '1.100.0'
           components: clippy, rustfmt
 
       - name: Ensure ghostty-vt artifacts
@@ -102,18 +101,9 @@ jobs:
         working-directory: .
         run: ./scripts/build-libghostty-vt.sh
 
-      - name: Read the repository's Rust pin
-        if: runner.os == 'Linux'
-        id: root-rust
-        working-directory: .
-        run: echo "channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
-
-      # The attn CLI builds with the repository's pin, not the native workspace's.
       - name: Ensure the attn CLI
         if: runner.os == 'Linux'
         uses: ./.github/actions/cache-attn-cli
-        env:
-          RUSTUP_TOOLCHAIN: ${{ steps.root-rust.outputs.channel }}
         with:
           out: ${{ runner.temp }}/attn-cli-out/attn
 
@@ -125,7 +115,6 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: .
         env:
-          RUSTUP_TOOLCHAIN: ${{ steps.root-rust.outputs.channel }}
           ATTN_NATIVE_APP_BIN: ${{ github.workspace }}/native/target/debug/attn-app
         run: ./scripts/test-go.sh --packages -run '^TestTheNativeApp' -v ./cmd/attnd
 

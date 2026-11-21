@@ -79,13 +79,13 @@ fn decode_png(
     match info.color_type {
         png::ColorType::Rgba => rgba.extend_from_slice(source),
         png::ColorType::Rgb => {
-            for pixel in source.chunks_exact(3) {
-                rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], 255]);
+            for &[red, green, blue] in source.as_chunks::<3>().0 {
+                rgba.extend_from_slice(&[red, green, blue, 255]);
             }
         }
         png::ColorType::GrayscaleAlpha => {
-            for pixel in source.chunks_exact(2) {
-                rgba.extend_from_slice(&[pixel[0], pixel[0], pixel[0], pixel[1]]);
+            for &[gray, alpha] in source.as_chunks::<2>().0 {
+                rgba.extend_from_slice(&[gray, gray, gray, alpha]);
             }
         }
         png::ColorType::Grayscale => {

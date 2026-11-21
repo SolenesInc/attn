@@ -259,7 +259,7 @@ cmd_install() {
     local started=$SECONDS
     local inputs
     inputs="$(cd "$src" && cat .github/actions/setup-linux-app-deps/packages.txt go.mod .tool-versions \
-        rust-toolchain.toml native/rust-toolchain.toml app/scripts/real-app-harness/vm/provision.sh | sha256sum | cut -c1-16)"
+        rust-toolchain.toml app/scripts/real-app-harness/vm/provision.sh | sha256sum | cut -c1-16)"
     if [ "$(wsl cat .attn-windows-vm-provisioned 2>/dev/null)" != "$inputs" ]; then
         "${runner[@]}" provision "${target[@]}"
         wsl "echo $inputs >.attn-windows-vm-provisioned"

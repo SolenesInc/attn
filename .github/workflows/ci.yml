@@ -318,7 +318,7 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: '1.95.0'
+          toolchain: '1.100.0'
 
       - name: Cache pty-host test builds
         uses: Swatinem/rust-cache@v2

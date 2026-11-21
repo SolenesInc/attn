@@ -70,8 +70,7 @@ fn status(result: &CodeNavStatusResult) -> String {
                 .started_at
                 .as_deref()
                 .and_then(seconds_since)
-                .map(|seconds| format!(" {seconds}s"))
-                .unwrap_or_default(),
+                .map_or_default(|seconds| format!(" {seconds}s")),
             server.pid
         );
         if let Some(rss) = server.rss_bytes {

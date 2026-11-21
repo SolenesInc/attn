@@ -16,9 +16,8 @@ The native app is attn's desktop app, written in Rust on
 | `attn-automation` | the automation server that drives a running app |
 | `attn-testkit` | the scripted daemon and the world wire tests run in |
 
-`native/rust-toolchain.toml` pins Rust 1.99.1, which Rune needs. The rest of the
-repository keeps its own pin in `rust-toolchain.toml`. Run cargo from `native/`,
-so rustup picks the workspace's toolchain:
+`native/` builds with the Rust that `rust-toolchain.toml` pins for the whole
+repository. Run cargo from `native/`:
 
 ```sh
 cd native

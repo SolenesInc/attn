@@ -131,9 +131,7 @@ pub fn sent_files(tool_name: &str, tool_input: Raw<'_>, cwd: &str) -> Vec<String
     if tool_name != "SendUserFile" {
         return Vec::new();
     }
-    sent_file_paths(tool_input)
-        .map(|paths| resolve_unique(paths, cwd))
-        .unwrap_or_default()
+    sent_file_paths(tool_input).map_or_default(|paths| resolve_unique(paths, cwd))
 }
 
 fn sent_file_paths(tool_input: Raw<'_>) -> Option<Vec<String>> {
@@ -434,7 +432,10 @@ mod tests {
     #[test]
     fn pull_request_without_a_tool_response() {
         let input = raw(r#"{"command":"gh pr create --fill"}"#);
-        assert!(pull_requests_created("Bash", Some(&input), None).is_empty());
+        assert_eq!(
+            pull_requests_created("Bash", Some(&input), None),
+            Vec::<String>::new()
+        );
     }
 
     #[derive(Deserialize)]
@@ -458,13 +459,13 @@ mod tests {
         for line in lines {
             let payload: CapturedPayload<'_> = serde_json::from_str(line).unwrap();
             assert_eq!(payload.tool_name, "Bash");
-            assert!(
+            assert_eq!(
                 pull_requests_created(
                     &payload.tool_name,
                     Some(payload.tool_input),
                     Some(payload.tool_response)
-                )
-                .is_empty()
+                ),
+                Vec::<String>::new()
             );
 
             let gh_create = raw(r#"{"command":"gh pr create --fill"}"#);
@@ -476,7 +477,7 @@ mod tests {
             if payload.tool_response.get().contains("/pull/71") {
                 assert_eq!(created, ["https://github.com/victorarias/attn/pull/71"]);
             } else {
-                assert!(created.is_empty());
+                assert_eq!(created, Vec::<String>::new());
             }
         }
     }

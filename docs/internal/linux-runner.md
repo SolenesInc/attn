@@ -155,7 +155,7 @@ The landing prints where it keeps the log from the machine.
 [What land.sh does](trunk-based-development.md#what-landsh-does) says what
 happens when the machine is down or a scenario fails there.
 
-Reprovision after a change to `packages.txt`, `go.mod`, `.tool-versions` or a
+Reprovision after a change to `packages.txt`, `go.mod`, `.tool-versions` or
 `rust-toolchain.toml`.
 
 ## Extending providers

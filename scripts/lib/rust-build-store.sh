@@ -51,18 +51,18 @@ load_recipe() {
   local vt="third_party/ghostty-vt/$(vt_platform)"
   case "$recipe" in
     attn)
-      workspace=cli binary=attn profile=release toolchain=rust-toolchain.toml
+      workspace=cli binary=attn profile=release
       cargo_args=(--release)
       roots=(cli)
       ;;
     attn-pty-host)
-      workspace=pty-host binary=attn-pty-host profile=release toolchain=rust-toolchain.toml
+      workspace=pty-host binary=attn-pty-host profile=release
       cargo_args=(--release)
       roots=(pty-host ghostty-vt.pin "$vt/lib" "$vt/include")
       declared=("ATTN_PTY_HOST_SNAPSHOT_FORMAT=$(bash "$repo/scripts/snapshot-format.sh")")
       ;;
     attn-pty-host-variant)
-      workspace=pty-host binary=attn-pty-host profile=debug toolchain=rust-toolchain.toml
+      workspace=pty-host binary=attn-pty-host profile=debug
       cargo_args=()
       [[ -z "$variant_fault" ]] || cargo_args=(--features adopt-fault)
       target_dir="$repo/pty-host/target/test-variants/$variant_name"
@@ -70,7 +70,7 @@ load_recipe() {
       declared=("ATTN_PTY_HOST_SNAPSHOT_FORMAT=$variant_format")
       ;;
     attn-app)
-      workspace=native binary=attn-app profile=debug toolchain=native/rust-toolchain.toml
+      workspace=native binary=attn-app profile=debug
       cargo_args=(-p attn-app)
       roots=(native cli/protocol
         internal/colors/schemes ghostty-vt-native.lock ghostty-vt-wasm.lock scripts/snapshot-format.sh "$vt/lib" "$vt/include")
@@ -89,7 +89,7 @@ recipe_key() {
     cd "$repo"
     printf '%s\n' "$recipe" "$triple" "$profile" ${cargo_args[@]+"${cargo_args[@]}"}
     printf 'env %s\n' ${declared[@]+"${declared[@]}"}
-    cat "$toolchain"
+    cat rust-toolchain.toml
     if [[ -n "$link_target" ]]; then
       printf '%s\n' "$link_target"
       cat scripts/rust-zig-linker.sh scripts/rust-zig-ar.sh
@@ -101,8 +101,8 @@ recipe_key() {
 ensure_toolchain() {
   local channel installed
   command -v rustup >/dev/null || return 0
-  channel="$(sed -n 's/^channel = "\(.*\)"$/\1/p' "$repo/$toolchain")"
-  [[ -n "$channel" ]] || die "$toolchain names no channel"
+  channel="$(sed -n 's/^channel = "\(.*\)"$/\1/p' "$repo/rust-toolchain.toml")"
+  [[ -n "$channel" ]] || die "rust-toolchain.toml names no channel"
   installed="$(rustup toolchain list)"
   [[ $'\n'"$installed" == *$'\n'"$channel"-* ]] && return 0
   (cd "$repo/$workspace" && env -u RUSTUP_TOOLCHAIN rustup toolchain install) >&2

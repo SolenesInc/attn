@@ -755,7 +755,7 @@ mod tests {
         let mut terminal = Terminal::new(80, 24).expect("create terminal");
         terminal.write(b"hello from rust\r\n");
         let snapshot = terminal.snapshot();
-        assert!(!snapshot.is_empty());
+        assert_ne!(snapshot, b"");
         let restored = Terminal::restore(&snapshot).expect("restore terminal");
         assert!(restored.plain_text().contains("hello from rust"));
     }

@@ -76,12 +76,8 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: '1.95.0'
+          toolchain: '1.100.0'
           targets: aarch64-apple-darwin
-
-      - name: Install the native workspace's Rust
-        working-directory: native
-        run: rustup toolchain install "$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
 
       - name: Import Apple signing credentials
         id: signing

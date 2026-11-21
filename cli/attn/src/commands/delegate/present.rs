@@ -195,7 +195,7 @@ fn await_delegation(run: &mut Run<'_>, parsed: &Parsed, accepted: &Reply) -> Res
         if !reply.raw_field(&["ok"]).is_ok_and(|ok| ok == "true") {
             let refusal: Option<attn_protocol::CommandRefusal> =
                 reply.value("command_refusal").ok().flatten();
-            return Err(unknown(&refusal.map(|r| r.message).unwrap_or_default()));
+            return Err(unknown(&refusal.map_or_default(|r| r.message)));
         }
         let next = command::result(&reply);
         if field(&next, "updated_at") == field(&operation, "updated_at")

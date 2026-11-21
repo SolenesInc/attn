@@ -18,9 +18,8 @@ impl ShellTitle {
                 match payload.split(';').next().unwrap_or_default() {
                     "C" => {
                         self.in_command = true;
-                        self.command = command_line(payload)
-                            .map(|command| bounded_title(&command))
-                            .unwrap_or_default();
+                        self.command =
+                            command_line(payload).map_or_default(|command| bounded_title(&command));
                         self.program_title.clear();
                     }
                     "A" | "D" => {

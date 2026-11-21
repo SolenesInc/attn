@@ -107,7 +107,6 @@ native_macos:
   - 'native/**'
   - '!native/Cargo.toml'
   - '!native/Cargo.lock'
-  - '!native/rust-toolchain.toml'
   - '!native/crates/attn-app/Cargo.toml'
   - '!native/crates/attn-app/examples/screenshot_tour.rs'
   - '!native/crates/attn-app/src/browser/**'

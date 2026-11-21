@@ -304,9 +304,7 @@ impl<'a> Client<'a> {
         }
         let limit = usize::try_from(MAX_SOCKET_FRAME_BYTES).unwrap_or(usize::MAX);
         if frame.len() > limit {
-            let cmd = serde_json::from_slice::<NamedCmd>(&frame)
-                .map(|named| named.cmd)
-                .unwrap_or_default();
+            let cmd = serde_json::from_slice::<NamedCmd>(&frame).map_or_default(|named| named.cmd);
             return Err(SendError::plain(format!(
                 "{cmd} request: max_socket_frame_bytes={MAX_SOCKET_FRAME_BYTES}, asked for {} bytes",
                 frame.len()

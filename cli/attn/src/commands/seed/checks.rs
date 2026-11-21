@@ -132,13 +132,12 @@ pub(super) fn report_evidence(parsed: &mut Parsed) -> Result<(), String> {
         .args
         .get("evidence")
         .and_then(Json::as_array)
-        .map(|list| {
+        .map_or_default(|list| {
             list.iter()
                 .filter_map(Json::as_str)
                 .map(str::to_string)
                 .collect()
-        })
-        .unwrap_or_default();
+        });
     let mut files: Vec<(String, String)> = Vec::new();
     let mut evidence = Vec::new();
     for raw in given {
@@ -149,8 +148,7 @@ pub(super) fn report_evidence(parsed: &mut Parsed) -> Result<(), String> {
             Ok(Evidence::File(path)) => {
                 let base = Path::new(&path)
                     .file_name()
-                    .map(|name| name.to_string_lossy().into_owned())
-                    .unwrap_or_default();
+                    .map_or_default(|name| name.to_string_lossy().into_owned());
                 match files.iter().find(|(name, _)| *name == base) {
                     None => {
                         files.push((base, path.clone()));

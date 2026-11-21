@@ -306,7 +306,7 @@ mod tests {
     fn plain_text_preserves_native_replies_and_color_subscription() {
         let terminal = Terminal::new(80, 24).expect("terminal");
         let queries = TerminalQueries::detect(b"ordinary terminal output\r\n");
-        assert!(queries.replies_before_feed(&Theme::default()).is_empty());
+        assert_eq!(queries.replies_before_feed(&Theme::default()), b"");
         assert_eq!(
             queries.replies_after_feed(&terminal, b"\x1b[0n"),
             b"\x1b[0n"
@@ -334,11 +334,10 @@ mod tests {
     fn scans_a_query_split_across_output_chunks() {
         let mut stream = TerminalQueryStream::default();
         let (queries, complete) = stream.scan(b"\x1b[6");
-        assert!(complete.is_empty());
-        assert!(
-            queries
-                .replies_after_feed(&Terminal::new(80, 24).unwrap(), &[])
-                .is_empty()
+        assert_eq!(complete, b"");
+        assert_eq!(
+            queries.replies_after_feed(&Terminal::new(80, 24).unwrap(), &[]),
+            b""
         );
 
         let (queries, complete) = stream.scan(b"n");

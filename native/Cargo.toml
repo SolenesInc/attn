@@ -6,16 +6,16 @@ members = ["crates/*"]
 edition = "2024"
 
 [workspace.dependencies]
-rune = { git = "https://github.com/SolenesInc/rune", rev = "871109b2db080132132a0bc82a6b81f8d7427613" }
-rune-kit = { git = "https://github.com/SolenesInc/rune", rev = "871109b2db080132132a0bc82a6b81f8d7427613" }
-rune-mac = { git = "https://github.com/SolenesInc/rune", rev = "871109b2db080132132a0bc82a6b81f8d7427613" }
-rune-perf = { git = "https://github.com/SolenesInc/rune", rev = "871109b2db080132132a0bc82a6b81f8d7427613" }
-procwatch = { git = "https://github.com/SolenesInc/rune", rev = "871109b2db080132132a0bc82a6b81f8d7427613" }
+rune = { git = "https://github.com/SolenesInc/rune", rev = "2000c6d17bf64c93c2635eecb11a1a71f38480b8" }
+rune-kit = { git = "https://github.com/SolenesInc/rune", rev = "2000c6d17bf64c93c2635eecb11a1a71f38480b8" }
+rune-mac = { git = "https://github.com/SolenesInc/rune", rev = "2000c6d17bf64c93c2635eecb11a1a71f38480b8" }
+rune-perf = { git = "https://github.com/SolenesInc/rune", rev = "2000c6d17bf64c93c2635eecb11a1a71f38480b8" }
+procwatch = { git = "https://github.com/SolenesInc/rune", rev = "2000c6d17bf64c93c2635eecb11a1a71f38480b8" }
 
 # Rune's own [patch.crates-io], repeated: cargo ignores a dependency's [patch].
 # Keep this list equal to Rune's at the pinned rev.
 [patch.crates-io]
-parley_engine = { git = "https://github.com/SolenesInc/rune", rev = "871109b2db080132132a0bc82a6b81f8d7427613" }
+parley_engine = { git = "https://github.com/SolenesInc/rune", rev = "2000c6d17bf64c93c2635eecb11a1a71f38480b8" }
 
 # Named instances' app: release, with the app's own crate unoptimized, so an
 # edit to it rebuilds fast. What ships is always release.

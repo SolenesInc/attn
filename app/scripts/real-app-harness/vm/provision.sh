@@ -72,7 +72,6 @@ if ! command -v rustup >/dev/null; then
 fi
 rust_version="$(awk -F '"' '/^channel =/ {print $2}' "$root/rust-toolchain.toml")"
 rustup toolchain install "$rust_version" --profile minimal
-rustup toolchain install "$(awk -F '"' '/^channel =/ {print $2}' "$root/native/rust-toolchain.toml")" --profile minimal
 rustup default "$rust_version"
 printf '\nRunner tools:\n'
 go version

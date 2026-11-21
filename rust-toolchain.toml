@@ -3,5 +3,5 @@
 # enforces whichever lint set rustup last installed, and a stricter release
 # turns a green main red locally with no CI signal.
 [toolchain]
-channel = "1.95.0"
+channel = "1.100.0"
 components = ["clippy", "rustfmt"]
