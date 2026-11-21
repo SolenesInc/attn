@@ -22,6 +22,7 @@ var CommandRuns = map[string]Locator{
 	"delegate roles disable":  LocatorHome,
 	"delegate roles apply":    LocatorHome,
 	"delegate roles rollback": LocatorHome,
+	"guide":                   LocatorHere,
 	"list":                    LocatorHome,
 	"nav status":              LocatorHere,
 	"nav check":               LocatorHere,
@@ -84,5 +85,6 @@ var CommandRuns = map[string]Locator{
 	"session unsnooze":        LocatorHome,
 	"session rename":          LocatorHome,
 	"session reopen":          LocatorHome,
+	"skill":                   LocatorHere,
 	"state explain":           LocatorHome,
 }

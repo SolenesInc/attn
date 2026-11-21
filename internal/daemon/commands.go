@@ -10,6 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/reading"
 )
 
 func (d *Daemon) commandLayer() *command.Layer {
@@ -26,6 +27,7 @@ func (d *Daemon) commandLayer() *command.Layer {
 			d.openCommands(),
 			d.navCommands(),
 			d.sessionCommands(),
+			reading.Handlers(),
 		} {
 			maps.Copy(handlers, family)
 		}
@@ -48,7 +50,7 @@ func (d *Daemon) serveRunCommand(ctx context.Context, conn net.Conn, msg *protoc
 	defer cancel()
 	caller, err := d.callerFromFrame(ctx, msg)
 	if err != nil {
-		if err := json.NewEncoder(conn).Encode(commandResponse(nil, command.AsRefusal(err))); err != nil {
+		if err := json.NewEncoder(conn).Encode(command.Response(nil, command.AsRefusal(err))); err != nil {
 			d.logf("run_command %s: writing response: %v", msg.Command, err)
 		}
 		return
@@ -109,22 +111,7 @@ func (d *Daemon) inAnotherProfile(asking, named protocol.SessionID) bool {
 func (d *Daemon) runCommand(ctx context.Context, c command.Caller, name string, args json.RawMessage) (protocol.Response, func()) {
 	result, refusal := d.commandLayer().Run(ctx, c, name, args)
 	if then, ok := result.(command.Then); ok {
-		return commandResponse(then.Result, nil), then.After
+		return command.Response(then.Result, nil), then.After
 	}
-	return commandResponse(result, refusal), nil
-}
-
-func commandResponse(result any, refusal *command.Refusal) protocol.Response {
-	if refusal == nil {
-		return protocol.Response{Ok: true, CommandResult: result}
-	}
-	reply := protocol.Response{Ok: false, CommandRefusal: &protocol.CommandRefusal{Code: refusal.Code, Message: refusal.Message}}
-	if refusal.Fix != "" {
-		reply.CommandRefusal.Fix = protocol.Ptr(refusal.Fix)
-	}
-	if !refusal.Arguments {
-		reply.Error = protocol.Ptr(refusal.Message)
-		reply.Refusal = protocol.Ptr(protocol.Refusal(refusal.Code))
-	}
-	return reply
+	return command.Response(result, refusal), nil
 }

@@ -16,6 +16,7 @@ const REVIEW_VERBS: &str = "start, show, cancel, retry, or keep";
 const GROUP: Command = Command {
     name: "",
     result: false,
+    runs_without_daemon: false,
     usage: &[],
     args: &[],
 };

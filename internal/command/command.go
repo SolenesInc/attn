@@ -58,10 +58,11 @@ func Typed[A any](run func(ctx context.Context, c Caller, args A) (any, error)) 
 }
 
 type spec struct {
-	readOnly    bool
-	anyone      bool
-	sessionFlag bool
-	fixes       map[string]string
+	readOnly          bool
+	anyone            bool
+	sessionFlag       bool
+	runsWithoutDaemon bool
+	fixes             map[string]string
 }
 
 type Layer struct {
@@ -74,14 +75,22 @@ type Then struct {
 }
 
 func New(handlers map[string]Handler) (*Layer, error) {
+	return newLayer(handlers, func(spec) bool { return true })
+}
+
+func WithoutDaemon(handlers map[string]Handler) (*Layer, error) {
+	return newLayer(handlers, func(s spec) bool { return s.runsWithoutDaemon })
+}
+
+func newLayer(handlers map[string]Handler, serves func(spec) bool) (*Layer, error) {
 	var problems []string
 	for name := range handlers {
-		if _, ok := specs[name]; !ok {
-			problems = append(problems, fmt.Sprintf("handler for %q, which is not a catalog command", name))
+		if s, ok := specs[name]; !ok || !serves(s) {
+			problems = append(problems, fmt.Sprintf("handler for %q, which is not a catalog command this layer serves", name))
 		}
 	}
-	for name := range specs {
-		if _, ok := handlers[name]; !ok {
+	for name, s := range specs {
+		if _, ok := handlers[name]; !ok && serves(s) {
 			problems = append(problems, fmt.Sprintf("no handler for %q", name))
 		}
 	}
@@ -124,4 +133,19 @@ func AsRefusal(err error) *Refusal {
 		code = *class
 	}
 	return &Refusal{Code: string(code), Message: err.Error()}
+}
+
+func Response(result any, refusal *Refusal) protocol.Response {
+	if refusal == nil {
+		return protocol.Response{Ok: true, CommandResult: result}
+	}
+	reply := protocol.Response{Ok: false, CommandRefusal: &protocol.CommandRefusal{Code: refusal.Code, Message: refusal.Message}}
+	if refusal.Fix != "" {
+		reply.CommandRefusal.Fix = protocol.Ptr(refusal.Fix)
+	}
+	if !refusal.Arguments {
+		reply.Error = protocol.Ptr(refusal.Message)
+		reply.Refusal = protocol.Ptr(protocol.Refusal(refusal.Code))
+	}
+	return reply
 }

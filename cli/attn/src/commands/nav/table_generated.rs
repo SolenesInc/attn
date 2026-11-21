@@ -11,6 +11,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "status",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "repository", cli: Cli::Flag("repository"), value: Value::Text, source: Source::Given, required: false, list: false },
@@ -19,6 +20,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "at", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -29,6 +31,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "link",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "program", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -38,6 +41,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "unlink",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "name", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -46,6 +50,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "set",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "language", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -56,6 +61,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "rm",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "language", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },

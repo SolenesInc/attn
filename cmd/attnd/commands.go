@@ -42,8 +42,6 @@ func topLevelCommands() []topLevelCommand {
 		{names: []string{"handoff"}, run: func() { runHandoff(os.Args[2:]) }, banner: true,
 			help: writeHandoffHelp},
 		{names: []string{"onboarding"}, run: runOnboarding, banner: true},
-		{names: []string{"skill"}, run: runSkill},
-		{names: []string{"guide"}, run: runGuide},
 		{names: []string{"preflight"}, run: runPreflight, banner: true},
 		{names: []string{"update"}, run: runUpdate, banner: true,
 			help: func(w io.Writer) { fmt.Fprintln(w, updateUsage) }},
@@ -70,6 +68,7 @@ func topLevelCommands() []topLevelCommand {
 		{names: []string{"_update-apply"}, run: runUpdateApply, checks: checkNothing, unrecorded: true},
 		{names: []string{"_bridge"}, run: runBridge, unrecorded: true},
 		{names: []string{"_probe-tui"}, run: runProbeTUI},
+		{names: []string{"_run-command"}, run: runWithoutDaemon, checks: checkNothing, unrecorded: true},
 	}
 }
 

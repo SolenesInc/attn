@@ -331,22 +331,24 @@ Never hand-edit `internal/protocol/generated.go`,
 `cmd/cligen`, which reads Go constants, settings and prompts the CLI uses, so
 changing one of those also needs `make generate-types`.
 
-The catalog in `internal/catalog/content/*.yaml` defines each command once,
-and every top-level CLI command is in it: the CLI refuses a name the catalog
-does not hold. `cmd/cligen` generates from it the CLI's top-level table and
-`attn --help` list (`cli/attn/src/commands/top_level_generated.rs`), the seed
-family's CLI help and parse table
-(`cli/attn/src/commands/seed/help_generated.rs` and `table_generated.rs`),
-each command's arguments (`internal/command/args_generated.go`), the machine
-each command runs on (`internal/protocol/commands_generated.go`) and the garden
-reference (`internal/prompts/content/skills/attn/references/garden.md`), and
-refuses an entry the command layer runs without `runs` or `grant`. A command
-that is not offered as a tool says `offered: false` and its `reason`;
-`not-offered.yaml` holds the ones the CLI runs outside the command layer. Edit
-the catalog, not those files, then run `make generate-types`. The CLI sends a
-catalog command as `run_command`, and `internal/command` runs it with the
-handler the daemon gives it (`internal/daemon/commands_seed.go`). When the garden reference changes,
-copy it into `attn_skill/references/garden.md` in
+The catalog in `internal/catalog/content/*.yaml` defines each command once, and
+every top-level CLI command is in it: the CLI refuses a name the catalog does
+not hold. `cmd/cligen` generates from it the CLI's top-level table and `attn
+--help` list (`cli/attn/src/commands/top_level_generated.rs`), each family's CLI
+help and parse table (`cli/attn/src/commands/<family>/help_generated.rs` and
+`table_generated.rs`), each command's arguments
+(`internal/command/args_generated.go`), the machine each command runs on
+(`internal/protocol/commands_generated.go`) and the garden reference
+(`internal/prompts/content/skills/attn/references/garden.md`), and refuses an
+entry the command layer runs without `runs` or `grant`. A command that is not
+offered as a tool says `offered: false` and its `reason`; `not-offered.yaml`
+holds the ones the CLI runs outside the command layer. Edit the catalog, not
+those files, then run `make generate-types`. The CLI sends a catalog command as
+`run_command`, and `internal/command` runs it with the handler the daemon gives
+it (`internal/daemon/commands_seed.go`, `internal/reading`). A
+`runs_without_daemon` command also answers when the CLI cannot reach a daemon:
+the CLI then runs it in `attnd _run-command` through the same handler. When the
+garden reference changes, copy it into `attn_skill/references/garden.md` in
 `internal/prompttest/testdata/agent-delivery.json`, which
 `TestLegacyPromptCompatibility` in `internal/agent` compares.
 

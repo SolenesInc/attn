@@ -11,6 +11,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "cwd_base", cli: Cli::Internal, value: Value::Text, source: Source::Given, required: false, list: false },
@@ -47,6 +48,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "status",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -56,6 +58,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "roles",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "render", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
@@ -64,6 +67,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "roles show",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "render", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
@@ -73,6 +77,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "roles history",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "render", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
@@ -82,6 +87,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "roles install",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "render", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
@@ -91,6 +97,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "roles add",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "render", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
@@ -111,6 +118,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "roles set",
         result: true,
+        runs_without_daemon: false,
         usage: &["fallback_with_target"],
         args: &[
             Arg { name: "render", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
@@ -132,6 +140,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "roles copy",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "render", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
@@ -144,6 +153,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "roles rm",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "render", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
@@ -154,6 +164,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "roles enable",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "render", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
@@ -164,6 +175,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "roles disable",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "render", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
@@ -174,6 +186,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "roles apply",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "render", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
@@ -184,6 +197,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "roles rollback",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "render", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },

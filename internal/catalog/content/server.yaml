@@ -16,6 +16,7 @@ server:
     | Track new work, find existing work, split a plan | seed_search, seed_plant, seed_plot, seed_link |
     | Change a seed's body, checks, files or reminders | seed_edit, seed_check_add, seed_attach, seed_remind |
     | Wait for a time, a pull request or another seed, with your session closed | seed_standby |
+    | Read the rules for an attn capability, or the user guide to answer the user's questions about attn | skill, guide |
 
     A seed is one unit of work in the garden, with an id like s-7k3f9m, a slug made of its title's words, a markdown body, checks (C1, C2) and a log. A plot is a seed with children. Tools take the id or the slug. Give other agents the id, because a slug two seeds share is refused. To the user, say the slug.
 

@@ -16,7 +16,12 @@ import (
 func TestTheGuideListsItsPagesAndPrintsEachForTheTerminal(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
+	t.Run("with no daemon running", func(t *testing.T) { requireGuide(t, s) })
+	s.Start()
+	t.Run("through the daemon", func(t *testing.T) { requireGuide(t, s) })
+}
 
+func requireGuide(t *testing.T, s *testworld.Stack) {
 	index := s.Attn("guide")
 	requireStdout(t, index, "attn guide <topic>", "Tutorials", "Reference",
 		"getting-started", "building-with-roles",
@@ -25,6 +30,10 @@ func TestTheGuideListsItsPagesAndPrintsEachForTheTerminal(t *testing.T) {
 		"Before you install", "Why did my desktop disappear?")
 
 	requireStdout(t, s.Attn("guide", "getting-started"), "# Getting started", "The home screen, with the Chief at the top of the sidebar")
+
+	if shell := s.Run(testworld.Invocation{Args: []string{"guide"}, Terminal: "a-shell-with-no-session"}); shell.Code != 0 || shell.Stdout != index.Stdout {
+		t.Errorf("attn guide from a terminal that shows no session exited %d:\n%s%s", shell.Code, shell.Stdout, shell.Stderr)
+	}
 
 	queue := s.Attn("guide", "queue")
 	requireStdout(t, queue, "# Queue flow", "```text", "anyone else waiting?")

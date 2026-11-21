@@ -20,6 +20,7 @@ const RECORD_ANALYTICS_DEADLINE: Duration = Duration::from_secs(2);
 pub struct SendError {
     message: String,
     pub refusal: Option<String>,
+    pub unconnected: bool,
 }
 
 impl SendError {
@@ -27,6 +28,7 @@ impl SendError {
         Self {
             message,
             refusal: None,
+            unconnected: false,
         }
     }
 
@@ -38,6 +40,7 @@ impl SendError {
             } else {
                 refusal
             }),
+            unconnected: false,
         }
     }
 
@@ -284,6 +287,7 @@ impl<'a> Client<'a> {
         Err(SendError {
             message: format!("daemon error: {}", head.error.unwrap_or_default()),
             refusal: Some(REFUSAL_UNCLASSIFIED.to_string()),
+            unconnected: false,
         })
     }
 
@@ -326,8 +330,10 @@ impl<'a> Client<'a> {
     }
 
     fn connect(&self) -> Result<UnixStream, SendError> {
-        UnixStream::connect(&self.socket_path)
-            .map_err(|error| SendError::plain(self.explain_connect_error(&error)))
+        UnixStream::connect(&self.socket_path).map_err(|error| SendError {
+            unconnected: true,
+            ..SendError::plain(self.explain_connect_error(&error))
+        })
     }
 
     fn explain_connect_error(&self, error: &io::Error) -> String {
@@ -473,7 +479,37 @@ fn check_reply(reply: Vec<u8>) -> Result<Vec<u8>, SendError> {
             head.refusal
                 .unwrap_or_else(|| REFUSAL_UNCLASSIFIED.to_string()),
         ),
+        unconnected: false,
     })
+}
+
+pub fn run_in_attnd<M: Serialize>(message: &M) -> Result<Reply, SendError> {
+    let fail = |what: &str, error: &dyn fmt::Display| SendError::plain(format!("{what}: {error}"));
+    let attnd = crate::route::attnd_beside_this_binary()
+        .map_err(|error| fail("find attnd beside this executable", &error))?;
+    let frame = serde_json::to_vec(message).map_err(|error| fail("encode the command", &error))?;
+    let mut child = std::process::Command::new(&attnd)
+        .arg("_run-command")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|error| fail(&format!("run attnd at {}", attnd.display()), &error))?;
+    child
+        .stdin
+        .take()
+        .expect("stdin is piped")
+        .write_all(&frame)
+        .map_err(|error| fail("send the command to attnd", &error))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|error| fail("wait for attnd", &error))?;
+    if !output.status.success() {
+        return Err(SendError::plain(format!(
+            "attnd _run-command exited with {}",
+            output.status
+        )));
+    }
+    Ok(Reply { raw: output.stdout })
 }
 
 pub struct ReplyStream {

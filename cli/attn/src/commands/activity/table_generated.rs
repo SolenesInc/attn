@@ -11,6 +11,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
         ],
@@ -18,6 +19,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "clear",
         result: false,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },

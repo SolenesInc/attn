@@ -11,6 +11,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "search",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "words", cli: Cli::Rest, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -20,6 +21,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "plant",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "title", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -32,6 +34,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "plot",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "plot", cli: Cli::Flag("f"), value: Value::Json, source: Source::File, required: true, list: false },
@@ -40,6 +43,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "link",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "a", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -50,6 +54,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "unlink",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "a", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -60,6 +65,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "ready",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "plot", cli: Cli::Flag("plot"), value: Value::Text, source: Source::Given, required: false, list: false },
@@ -69,6 +75,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "ls",
         result: true,
+        runs_without_daemon: false,
         usage: &["plot_and_stale", "standby_with_scope"],
         args: &[
             Arg { name: "plot", cli: Cli::Flag("plot"), value: Value::Text, source: Source::Given, required: false, list: false },
@@ -81,6 +88,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "show",
         result: true,
+        runs_without_daemon: false,
         usage: &["since_and_section", "bad_bookmark"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -91,6 +99,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "notes",
         result: true,
+        runs_without_daemon: false,
         usage: &["bad_bookmark"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -102,6 +111,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "prime",
         result: false,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
         ],
@@ -109,6 +119,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "guide",
         result: false,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
         ],
@@ -116,6 +127,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "tend",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -127,6 +139,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "note",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -138,6 +151,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "park",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -148,6 +162,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "replant",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -158,6 +173,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "wither",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -168,6 +184,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "send-to-chief",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -177,6 +194,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "harvest",
         result: true,
+        runs_without_daemon: false,
         usage: &["pr_without_when_merged", "clear_without_when_merged", "clear_with_reason", "clear_with_pr", "not_a_pr_url"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -190,6 +208,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check add",
         result: true,
+        runs_without_daemon: false,
         usage: &["not_a_check_id", "needs_statement"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -202,6 +221,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check edit",
         result: true,
+        runs_without_daemon: false,
         usage: &["not_a_check_id", "needs_statement"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -213,6 +233,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check remove",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -224,6 +245,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check restore",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -235,6 +257,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check report",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -249,6 +272,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check confirm",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -260,6 +284,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check reject",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -271,6 +296,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check uncheck",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -282,6 +308,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "check reopen",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -293,6 +320,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "watch",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -301,6 +329,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "unwatch",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -309,6 +338,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "remind",
         result: true,
+        runs_without_daemon: false,
         usage: &["clear_with_reminder", "needs_time", "needs_message"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -321,6 +351,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "standby",
         result: true,
+        runs_without_daemon: false,
         usage: &["clear_with_standby", "in_and_at", "needs_next"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -334,6 +365,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "export",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -343,6 +375,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "edit",
         result: true,
+        runs_without_daemon: false,
         usage: &["not_exported"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -353,6 +386,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "rollback",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -362,6 +396,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "authorization",
         result: true,
+        runs_without_daemon: false,
         usage: &["empty_words", "words_and_clear"],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -372,6 +407,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "attach",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -386,6 +422,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "detach",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "seed", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -401,6 +438,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "review start",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
         ],
@@ -408,6 +446,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "review show",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "review", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: false, list: false },
@@ -416,6 +455,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "review cancel",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "review", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -424,6 +464,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "review retry",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "review", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -433,6 +474,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "review keep",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "review", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },

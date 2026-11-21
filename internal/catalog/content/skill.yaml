@@ -1,2 +1,20 @@
-groups:
-  - {name: skill, usage: "[--reference <name>|--list]", summary: "print the map above, or a capability's rules"}
+# The skill family: one command that prints what attn offers agents and the
+# rules for each capability. With no daemon running, attnd answers it.
+commands:
+  - name: skill
+    summary: print the map of what attn can do, or a capability's rules
+    runs: here
+    grant: any
+    read_only: true
+    anyone: true
+    runs_without_daemon: true
+    doc: |
+      Prints the map of what attn can do. `reference` prints one capability's rules instead, such as garden or delegation; read a capability's rules before you first use it. `list` prints the names of the bundled references, one per line. The text matches the running release.
+    args:
+      - {name: reference, type: name, cli: "--reference", one_of: part, doc: "print this capability's rules, e.g. garden"}
+      - {name: list, type: bool, cli: "--list", one_of: part, doc: "list the bundled reference names"}
+    errors:
+      - {code: no_such_reference, fix: "Use one of the names `skill` with `list` prints."}
+      - {code: list_and_reference, usage: true, fix: "Pass {reference} or {list}, not both."}
+    examples:
+      - {reference: garden}

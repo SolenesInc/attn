@@ -1,2 +1,18 @@
-groups:
-  - {name: guide, usage: "[<topic>]", summary: "read the user guide"}
+# The guide family: one command that prints the user guide for the terminal.
+# With no daemon running, attnd answers it.
+commands:
+  - name: guide
+    summary: read the user guide
+    runs: here
+    grant: any
+    read_only: true
+    anyone: true
+    runs_without_daemon: true
+    doc: |
+      Prints the user guide's index: each page's topic, title and outline. `topic` prints one page instead, with its diagrams drawn as text. Use it to answer the user's questions about attn. `attn --help` lists commands.
+    args:
+      - {name: topic, type: name, cli: pos, placeholder: "<topic>", doc: "the page to print, as the index names it"}
+    errors:
+      - {code: no_such_topic, fix: "Use one of the topics `guide` without `topic` lists."}
+    examples:
+      - {topic: queue}

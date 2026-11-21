@@ -11,6 +11,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "anchors",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
         ],
@@ -18,6 +19,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "show",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "steps", cli: Cli::Words(&["anchor", "text"]), value: Value::Json, source: Source::Given, required: true, list: false },

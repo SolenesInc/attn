@@ -89,24 +89,25 @@ type Reference struct {
 }
 
 type Command struct {
-	Name     string           `yaml:"name"`
-	Summary  string           `yaml:"summary"`
-	Core     bool             `yaml:"core"`
-	Runs     Runs             `yaml:"runs"`
-	Grant    string           `yaml:"grant"`
-	MayNeed  []string         `yaml:"may_need"`
-	Doc      string           `yaml:"doc"`
-	Args     []Arg            `yaml:"args"`
-	ReadOnly bool             `yaml:"read_only"`
-	Anyone   bool             `yaml:"anyone"`
-	Result   string           `yaml:"result"`
-	Errors   []Error          `yaml:"errors"`
-	Examples []map[string]any `yaml:"examples"`
-	Offered  *bool            `yaml:"offered"`
-	Reason   string           `yaml:"reason"`
-	Usage    string           `yaml:"usage"`
-	Hidden   bool             `yaml:"hidden"`
-	File     string           `yaml:"-"`
+	Name              string           `yaml:"name"`
+	Summary           string           `yaml:"summary"`
+	Core              bool             `yaml:"core"`
+	Runs              Runs             `yaml:"runs"`
+	Grant             string           `yaml:"grant"`
+	MayNeed           []string         `yaml:"may_need"`
+	Doc               string           `yaml:"doc"`
+	Args              []Arg            `yaml:"args"`
+	ReadOnly          bool             `yaml:"read_only"`
+	Anyone            bool             `yaml:"anyone"`
+	RunsWithoutDaemon bool             `yaml:"runs_without_daemon"`
+	Result            string           `yaml:"result"`
+	Errors            []Error          `yaml:"errors"`
+	Examples          []map[string]any `yaml:"examples"`
+	Offered           *bool            `yaml:"offered"`
+	Reason            string           `yaml:"reason"`
+	Usage             string           `yaml:"usage"`
+	Hidden            bool             `yaml:"hidden"`
+	File              string           `yaml:"-"`
 }
 
 type Error struct {
@@ -386,6 +387,9 @@ func (c *Catalog) check() []string {
 			if !slices.Contains(grantNames, need) {
 				add("%s: may_need names %q; accepted values are %s", where, need, strings.Join(grantNames, ", "))
 			}
+		}
+		if cmd.RunsWithoutDaemon && cmd.Runs != RunsHere {
+			add("%s: runs_without_daemon needs runs: here; a command that answers with no daemon runs on the caller's machine", where)
 		}
 		if !cmd.IsOffered() {
 			if strings.TrimSpace(cmd.Reason) == "" {

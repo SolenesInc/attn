@@ -11,6 +11,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "explain",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },

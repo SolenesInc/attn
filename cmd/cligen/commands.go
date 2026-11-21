@@ -114,7 +114,7 @@ func writeCommandTables(c *catalog.Catalog, cliRoot, goRoot string) error {
 			}
 			fixes = fmt.Sprintf(", fixes: map[string]string{%s}", strings.Join(pairs, ", "))
 		}
-		fmt.Fprintf(&args, "\t%q: {readOnly: %v, anyone: %v, sessionFlag: %v%s},\n", cmd.Name, cmd.ReadOnly, cmd.Anyone, g.takesSessionFlag(cmd), fixes)
+		fmt.Fprintf(&args, "\t%q: {readOnly: %v, anyone: %v, sessionFlag: %v, runsWithoutDaemon: %v%s},\n", cmd.Name, cmd.ReadOnly, cmd.Anyone, g.takesSessionFlag(cmd), cmd.RunsWithoutDaemon, fixes)
 	}
 	args.WriteString("}\n")
 	for _, cmd := range c.Commands {
@@ -251,8 +251,8 @@ func (g *generator) rustTable(group string) (string, error) {
 				usage = append(usage, rustString(e.Code))
 			}
 		}
-		fmt.Fprintf(&out, "    Command {\n        name: %s,\n        result: %v,\n        usage: &[%s],\n        args: &[\n",
-			rustString(verbOf(group, cmd)), cmd.Result != "", strings.Join(usage, ", "))
+		fmt.Fprintf(&out, "    Command {\n        name: %s,\n        result: %v,\n        runs_without_daemon: %v,\n        usage: &[%s],\n        args: &[\n",
+			rustString(verbOf(group, cmd)), cmd.Result != "", cmd.RunsWithoutDaemon, strings.Join(usage, ", "))
 		for _, a := range cmd.Args {
 			source := "Source::Given"
 			switch {

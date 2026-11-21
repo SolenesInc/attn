@@ -11,6 +11,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "instructions",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -20,6 +21,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "transcript",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -30,6 +32,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "list",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "closed", cli: Cli::Flag("closed"), value: Value::Bool, source: Source::Given, required: false, list: false },
@@ -48,6 +51,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "show",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -56,6 +60,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "priority",
         result: false,
+        runs_without_daemon: false,
         usage: &["no_session"],
         args: &[
             Arg { name: "priority", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -65,6 +70,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "snooze",
         result: true,
+        runs_without_daemon: false,
         usage: &["bad_until"],
         args: &[
             Arg { name: "ids", cli: Cli::Rest, value: Value::Text, source: Source::Given, required: true, list: true },
@@ -74,6 +80,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "unsnooze",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
             Arg { name: "ids", cli: Cli::Rest, value: Value::Text, source: Source::Given, required: true, list: true },
@@ -82,6 +89,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "rename",
         result: false,
+        runs_without_daemon: false,
         usage: &["no_session"],
         args: &[
             Arg { name: "name", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
@@ -91,6 +99,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "reopen",
         result: true,
+        runs_without_daemon: false,
         usage: &["unknown_action"],
         args: &[
             Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },

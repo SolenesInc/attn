@@ -11,6 +11,7 @@ pub const COMMANDS: &[Command] = &[
     Command {
         name: "",
         result: true,
+        runs_without_daemon: false,
         usage: &[],
         args: &[
         ],

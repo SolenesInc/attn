@@ -44,6 +44,7 @@ pub struct Arg {
 pub struct Command {
     pub name: &'static str,
     pub result: bool,
+    pub runs_without_daemon: bool,
     pub usage: &'static [&'static str],
     pub args: &'static [Arg],
 }
@@ -632,9 +633,13 @@ pub fn ask(
     message.args = Some(parsed.args.clone().into_iter().collect());
     message.session_id = (!parsed.session.is_empty()).then(|| parsed.session.clone());
     message.profile_id = (!parsed.profile.is_empty()).then(|| parsed.profile.clone());
-    let reply = Client::new(run.paths, "", &run.terminal)
-        .call_command(&message)
-        .map_err(|error| run.fail_send(&family.label(cmd.name), &error))?;
+    let reply = match Client::new(run.paths, "", &run.terminal).call_command(&message) {
+        Err(error) if error.unconnected && cmd.runs_without_daemon => {
+            crate::client::run_in_attnd(&message)
+        }
+        sent => sent,
+    }
+    .map_err(|error| run.fail_send(&family.label(cmd.name), &error))?;
     Ok(match refusal_of(&reply) {
         Some(refusal) => Answer::Refused(reply, refusal),
         None => Answer::Result(reply),

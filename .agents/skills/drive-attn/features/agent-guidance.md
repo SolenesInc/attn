@@ -31,11 +31,11 @@ in [crew.md](crew.md), delegation openings and the attn-workflow skill in
 ### People
 
 - Nothing in the app shows what agents are told. The settings that change it belong to their features: asks, usage analytics and the attn-workflow skill.
-- Their own shell: `attn skill` and `attn prompts`, below, print what agents are told. Neither needs a daemon.
+- Their own shell: `attn skill` and `attn prompts`, below, print what agents are told. Neither needs a daemon: with none running, `attnd` answers `attn skill` itself.
 
 ### Agents
 
-- `attn skill` (`cmd/attnd/skill.go`): no flag prints the attn map, `--list` names the references, `--reference <name>` prints that reference.
+- `attn skill` (`internal/catalog/content/skill.yaml`, handler in `internal/reading/reading.go`): no flag prints the attn map, `--list` names the references, `--reference <name>` prints that reference. The running daemon answers; when the CLI cannot connect to one (none runs, or a sandbox blocks the socket), it runs `attnd _run-command` (`cmd/attnd/run_command.go`), which runs the same handler. The same command is the `skill` tool on `/mcp`, and a terminal that shows no session may run it.
 - The attn map names wrapping up and closing yourself, and the wrap-up reference also covers "can I close you?". The routine is `attn skill --reference wrap-up`. `converse-and-observe` also points to the routine and names `attn agent close --self -m "reason"`.
 - `attn prompts` (`cmd/attnd/prompts.go`): `list`, `show <recipient>`, `render <recipient> <event>` and `explain <recipient> <event>`, with `--set name=value` and `--json`.
 - `attn presence` (`cmd/attnd/main.go`), which tells a shell whether it runs inside attn.
@@ -88,19 +88,20 @@ Preconditions:
 - **Durability across restarts**: guidance is fixed when a harness starts. Claude Code gets the current guidance on every launch, a resume included. A Codex conversation resumed through the shared app-server keeps the developer instructions it started with (`docs/internal/harnesses/codex-app-server.md`). The references come from the running binary, so an agent always reads the installed version's.
 - **Linux**: `attn skill`, `attn prompts` and `attn presence` work the same where the CLI runs on Linux.
 - **Harnesses**: Claude Code reads the launch instructions as appended system instructions. Codex reads them as developer instructions. A plugin harness gets the instructions only when its driver asks for them (the `launch_instructions` capability). A Claude Code or Codex session attn did not launch has no attn map. Claude Code launches with its own `ListAgents` tool denied unless the daemon runs with `ATTN_CLAUDE_PEER_MESSAGING` on. Peers message each other through `attn agent msg` ([inbox.md](inbox.md)).
-- **Compatibility across versions**: an agent an earlier build started keeps the text it launched with. The prompt compatibility tests and `internal/prompttest/testdata/` check the text that those agents rely on, and `app/src/prompts/render.compatibility.test.ts` checks the app's renderer against it. `attn skill` prints the copy bundled with the running build.
+- **Compatibility across versions**: an agent an earlier build started keeps the text it launched with. The prompt compatibility tests and `internal/prompttest/testdata/` check the text that those agents rely on, and `app/src/prompts/render.compatibility.test.ts` checks the app's renderer against it. `attn skill` prints the copy bundled with the running daemon, or with the `attnd` beside the CLI when no daemon runs.
 
 ## Tests
 
 - Wire: `internal/daemon/agent_guidance_wire_test.go`, `internal/daemon/agent_skill_wire_test.go`, `internal/daemon/attn_skill_install_wire_test.go`, `internal/daemon/settings_skill_read_wire_test.go`, `internal/daemon/plugin_launch_instructions_wire_test.go`.
-- Stack: `cmd/attnd/skill_stack_test.go`, `cmd/attnd/prompts_stack_test.go`.
+- Wire: `internal/daemon/agent_tools_reading_wire_test.go` calls the `skill` and `guide` tools.
+- Stack: `cmd/attnd/skill_stack_test.go`, `cmd/attnd/prompts_stack_test.go`, each skill check with no daemon and through one.
 - Scenario: `prompt-composition`.
 - Kernel: `internal/prompts/*_test.go`, `cmd/prompt-editor/*_test.go`, `cmd/attnd/prompt_compatibility_test.go`, `internal/*/prompt_compatibility_test.go`.
 - App: `app/src/prompts/render.compatibility.test.ts`.
 
 ## Gotchas
 
-- Prompts and references are embedded at build time. After editing `internal/prompts/content/**`, run `make build` before `./attn prompts` or `./attn skill` show the change, and relaunch the agent before it reads the change.
+- Prompts and references are embedded at build time. After editing `internal/prompts/content/**`, run `make build` before `./attn prompts` shows the change, restart the instance's daemon before `./attn skill` does, and relaunch the agent before it reads the change.
 - The prompt editor (`go run ./cmd/prompt-editor`, `cmd/prompt-editor/main.go`, with `docs/internal/prompt-authoring.md`) is how maintainers change the text. It is not a way in for people or agents, so nothing here drives it. Its tests are under Kernel.
 - `attn prompts` is a preview: it says so, and it is not proof that an agent received the text. The proof is the mock agent's launch record.
 - An input left out of `--set` is false or absent. `render session launch` without `--set garden_available=true` drops the garden guidance that every real launch carries.

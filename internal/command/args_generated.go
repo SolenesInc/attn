@@ -28,6 +28,7 @@ const (
 	CodeInvalidCursor            = "invalid_cursor"
 	CodeInvalidEvidence          = "invalid_evidence"
 	CodeInvalidResponse          = "invalid_response"
+	CodeListAndReference         = "list_and_reference"
 	CodeModelUnavailable         = "model_unavailable"
 	CodeNavOff                   = "nav_off"
 	CodeNeedsMessage             = "needs_message"
@@ -39,6 +40,8 @@ const (
 	CodeNoQuestion               = "no_question"
 	CodeNoRole                   = "no_role"
 	CodeNoSession                = "no_session"
+	CodeNoSuchReference          = "no_such_reference"
+	CodeNoSuchTopic              = "no_such_topic"
 	CodeNoTarget                 = "no_target"
 	CodeNotACheckID              = "not_a_check_id"
 	CodeNotAPlot                 = "not_a_plot"
@@ -73,87 +76,89 @@ const (
 )
 
 var specs = map[string]spec{
-	"activity":                {readOnly: true, anyone: true, sessionFlag: false},
-	"activity clear":          {readOnly: false, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
-	"callout anchors":         {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}."}},
-	"callout show":            {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}.", "step_needs_text": "Give every step its text.", "unknown_anchor": "Use an anchor that callout_anchors lists.", "too_many_steps": "Show at most 20 steps.", "step_too_long": "Keep each step's text to 160 characters.", "not_on_screen": "Point at an anchor the message lists as on screen.", "app_not_showing_profile": "Ask the user to open the attn app on your profile."}},
-	"delegate":                {readOnly: false, anyone: false, sessionFlag: true},
-	"delegate status":         {readOnly: true, anyone: false, sessionFlag: true},
-	"delegate roles":          {readOnly: true, anyone: true, sessionFlag: true},
-	"delegate roles show":     {readOnly: true, anyone: true, sessionFlag: true, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists."}},
-	"delegate roles history":  {readOnly: true, anyone: true, sessionFlag: true},
-	"delegate roles install":  {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"conflict": "The table changed while the command ran; run it again."}},
-	"delegate roles add":      {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "conflict": "The table changed while the command ran; run it again."}},
-	"delegate roles set":      {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "no_alternative": "Use an alternative that delegate_roles_show lists for the role.", "fallback_with_target": "Pass a role or {fallback}, not both.", "conflict": "The table changed while the command ran; run it again."}},
-	"delegate roles copy":     {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "conflict": "The table changed while the command ran; run it again."}},
-	"delegate roles rm":       {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "no_alternative": "Use an alternative that delegate_roles_show lists for the role.", "conflict": "The table changed while the command ran; run it again."}},
-	"delegate roles enable":   {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "conflict": "The table changed while the command ran; run it again."}},
-	"delegate roles disable":  {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "conflict": "The table changed while the command ran; run it again."}},
-	"delegate roles apply":    {readOnly: false, anyone: true, sessionFlag: true, fixes: map[string]string{"not_a_table": "Pass the table delegate_roles_show returns, with only its fields.", "conflict": "Export the table again with delegate_roles_show, change it, and apply that."}},
-	"delegate roles rollback": {readOnly: false, anyone: true, sessionFlag: true},
-	"list":                    {readOnly: true, anyone: true, sessionFlag: false},
-	"nav status":              {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
-	"nav check":               {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
-	"nav link":                {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
-	"nav unlink":              {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
-	"nav set":                 {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
-	"nav rm":                  {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
-	"open":                    {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"no_target": "Pass {path} or {seed}."}},
-	"review start":            {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
-	"review check":            {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
-	"review answer":           {readOnly: false, anyone: false, sessionFlag: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled.", "no_question": "Answer a question that is still open on the document."}},
-	"seed search":             {readOnly: true, anyone: false, sessionFlag: true},
-	"seed plant":              {readOnly: false, anyone: false, sessionFlag: true},
-	"seed plot":               {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_a_plot": "Pass a plot payload: a JSON object with title, body, checks and children, as attn seed guide describes."}},
-	"seed link":               {readOnly: false, anyone: false, sessionFlag: true},
-	"seed unlink":             {readOnly: false, anyone: false, sessionFlag: true},
-	"seed ready":              {readOnly: true, anyone: false, sessionFlag: true},
-	"seed ls":                 {readOnly: true, anyone: false, sessionFlag: true, fixes: map[string]string{"window_without_stale": "Pass {window} together with {stale}, or leave it out.", "plot_and_stale": "Pass {plot} or {stale}, not both.", "standby_with_scope": "Pass {standby} alone.", "bad_window": "Say the window as a duration like 72h or a number of days like 14d."}},
-	"seed show":               {readOnly: true, anyone: false, sessionFlag: true, fixes: map[string]string{"since_and_section": "Pass {since} or {section}, not both.", "bad_bookmark": "Pass the bookmark number a read of the seed printed."}},
-	"seed notes":              {readOnly: true, anyone: false, sessionFlag: true, fixes: map[string]string{"bad_bookmark": "Pass the bookmark number a read of the seed printed."}},
-	"seed prime":              {readOnly: true, anyone: false, sessionFlag: true},
-	"seed guide":              {readOnly: false, anyone: false, sessionFlag: true},
-	"seed tend":               {readOnly: false, anyone: false, sessionFlag: true},
-	"seed note":               {readOnly: false, anyone: false, sessionFlag: true},
-	"seed park":               {readOnly: false, anyone: false, sessionFlag: true},
-	"seed replant":            {readOnly: false, anyone: false, sessionFlag: true},
-	"seed wither":             {readOnly: false, anyone: false, sessionFlag: true},
-	"seed send-to-chief":      {readOnly: false, anyone: false, sessionFlag: true},
-	"seed harvest":            {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"pr_without_when_merged": "Pass the pull request together with {when_merged}, or leave it out.", "clear_without_when_merged": "Pass {clear} together with {when_merged}.", "clear_with_reason": "Leave out the reason; write it in a seed note instead.", "clear_with_pr": "Leave out the pull request when you pass {clear}.", "not_a_pr_url": "Pass a pull request URL like https://github.com/owner/repo/pull/12."}},
-	"seed check add":          {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_a_check_id": "Pass a check id like C3, and the statement in {statement}.", "needs_statement": "Pass the statement the seed must prove in {statement}."}},
-	"seed check edit":         {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_a_check_id": "Pass a check id like C3, and the statement in {statement}.", "needs_statement": "Pass the statement the seed must prove in {statement}."}},
-	"seed check remove":       {readOnly: false, anyone: false, sessionFlag: true},
-	"seed check restore":      {readOnly: false, anyone: false, sessionFlag: true},
-	"seed check report":       {readOnly: false, anyone: false, sessionFlag: true},
-	"seed check confirm":      {readOnly: false, anyone: false, sessionFlag: true},
-	"seed check reject":       {readOnly: false, anyone: false, sessionFlag: true},
-	"seed check uncheck":      {readOnly: false, anyone: false, sessionFlag: true},
-	"seed check reopen":       {readOnly: false, anyone: false, sessionFlag: true},
-	"seed watch":              {readOnly: false, anyone: false, sessionFlag: true},
-	"seed unwatch":            {readOnly: false, anyone: false, sessionFlag: true},
-	"seed remind":             {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"clear_with_reminder": "Pass {clear} alone.", "needs_time": "Pass one of {in} or {at}, or {clear}.", "needs_message": "Pass what the reminder says in {message}."}},
-	"seed standby":            {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"clear_with_standby": "Pass {clear} alone.", "in_and_at": "Pass {in} or {at}, not both.", "needs_next": "Pass what to do when mail resumes you in {next}."}},
-	"seed export":             {readOnly: true, anyone: false, sessionFlag: true},
-	"seed edit":               {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_exported": "Export the seed, edit the file, and pass its whole text as {body}.", "not_stamped": "Pass the exported text whole as {body}, its first stamp line included.", "other_seed": "Export the seed you name in {seed}, reapply your change to that export, and pass it as {body}.", "invalid_body": "Keep text below the stamp line, within the body size limit."}},
-	"seed rollback":           {readOnly: false, anyone: false, sessionFlag: true},
-	"seed authorization":      {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"empty_words": "Pass the words, or {clear} to remove the authorization.", "words_and_clear": "Pass the words or {clear}, not both."}},
-	"seed attach":             {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"no_document": "Name one document with {path}, {notebook} or {url}.", "two_documents": "Name one document per call.", "transfer_with_note": "Leave out {note}; a managed transfer records its own receipt.", "transfer_needs_local_path": "Pass a local {path} without {repo}, or leave out {mode}.", "transfer_needs_mode": "Pass {mode}: move is recommended, copy keeps the source."}},
-	"seed detach":             {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"reference_needs_path": "Pass the linked {path} without {repo}.", "no_document": "Name one document with {path}, {notebook} or {url}.", "two_documents": "Name one document per call.", "transfer_with_note": "Leave out {note}; a managed transfer records its own receipt.", "transfer_needs_managed_path": "Pass the managed filename in {path} without {repo}, or leave out {to}.", "detach_needs_to": "Pass {to} with the destination, or {reference} to remove an old linked path."}},
-	"seed review start":       {readOnly: false, anyone: false, sessionFlag: true},
-	"seed review show":        {readOnly: true, anyone: false, sessionFlag: true},
-	"seed review cancel":      {readOnly: false, anyone: false, sessionFlag: true},
-	"seed review retry":       {readOnly: false, anyone: false, sessionFlag: true},
-	"seed review keep":        {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_in_review": "Pass a seed the review lists; seed review show lists them."}},
-	"session instructions":    {readOnly: true, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the id of a session in the ledger.", "transcript_unavailable": "Ask again once the session has written its conversation.", "conversation_too_large": "Read the conversation with session_transcript instead.", "model_unavailable": "Choose a model for session instructions in Settings, or read the conversation with session_transcript.", "invalid_response": "Ask again, or read the conversation with session_transcript.", "invalid_evidence": "Ask again, or read the conversation with session_transcript."}},
-	"session transcript":      {readOnly: true, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the id of a session in the ledger.", "transcript_unavailable": "Read again once the session has written its conversation.", "invalid_cursor": "Pass a cursor an earlier read ended on, or leave out {after}.", "cursor_mismatch": "Pass a cursor from a read of this session, or leave out {after}.", "cursor_past_end": "Pass the cursor the last read ended on."}},
-	"session list":            {readOnly: true, anyone: true, sessionFlag: false, fixes: map[string]string{"unknown_session": "Pass to {before} the id a previous page's notice named."}},
-	"session show":            {readOnly: true, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the id of a session in the ledger."}},
-	"session priority":        {readOnly: false, anyone: true, sessionFlag: false, fixes: map[string]string{"no_session": "Pass {target}, or run it inside an attn session."}},
-	"session snooze":          {readOnly: false, anyone: true, sessionFlag: false, fixes: map[string]string{"bad_until": "Pass {until} as an RFC3339 instant, a positive duration like 1h, or tomorrow, saturday or monday, optionally with HH:MM."}},
-	"session unsnooze":        {readOnly: false, anyone: true, sessionFlag: false},
-	"session rename":          {readOnly: false, anyone: true, sessionFlag: false, fixes: map[string]string{"no_session": "Pass {target}, or run it inside an attn session."}},
-	"session reopen":          {readOnly: false, anyone: true, sessionFlag: false, fixes: map[string]string{"unknown_action": "Pass one of the actions session_show lists for the session."}},
-	"state explain":           {readOnly: true, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
+	"activity":                {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false},
+	"activity clear":          {readOnly: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
+	"callout anchors":         {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}."}},
+	"callout show":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}.", "step_needs_text": "Give every step its text.", "unknown_anchor": "Use an anchor that callout_anchors lists.", "too_many_steps": "Show at most 20 steps.", "step_too_long": "Keep each step's text to 160 characters.", "not_on_screen": "Point at an anchor the message lists as on screen.", "app_not_showing_profile": "Ask the user to open the attn app on your profile."}},
+	"delegate":                {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"delegate status":         {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"delegate roles":          {readOnly: true, anyone: true, sessionFlag: true, runsWithoutDaemon: false},
+	"delegate roles show":     {readOnly: true, anyone: true, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists."}},
+	"delegate roles history":  {readOnly: true, anyone: true, sessionFlag: true, runsWithoutDaemon: false},
+	"delegate roles install":  {readOnly: false, anyone: true, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"conflict": "The table changed while the command ran; run it again."}},
+	"delegate roles add":      {readOnly: false, anyone: true, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "conflict": "The table changed while the command ran; run it again."}},
+	"delegate roles set":      {readOnly: false, anyone: true, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "no_alternative": "Use an alternative that delegate_roles_show lists for the role.", "fallback_with_target": "Pass a role or {fallback}, not both.", "conflict": "The table changed while the command ran; run it again."}},
+	"delegate roles copy":     {readOnly: false, anyone: true, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "conflict": "The table changed while the command ran; run it again."}},
+	"delegate roles rm":       {readOnly: false, anyone: true, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "no_alternative": "Use an alternative that delegate_roles_show lists for the role.", "conflict": "The table changed while the command ran; run it again."}},
+	"delegate roles enable":   {readOnly: false, anyone: true, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "conflict": "The table changed while the command ran; run it again."}},
+	"delegate roles disable":  {readOnly: false, anyone: true, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_role": "Use a role id that delegate_roles_show lists.", "conflict": "The table changed while the command ran; run it again."}},
+	"delegate roles apply":    {readOnly: false, anyone: true, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_a_table": "Pass the table delegate_roles_show returns, with only its fields.", "conflict": "Export the table again with delegate_roles_show, change it, and apply that."}},
+	"delegate roles rollback": {readOnly: false, anyone: true, sessionFlag: true, runsWithoutDaemon: false},
+	"guide":                   {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: true, fixes: map[string]string{"no_such_topic": "Use one of the topics `guide` without `topic` lists."}},
+	"list":                    {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false},
+	"nav status":              {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"nav check":               {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"nav link":                {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"nav unlink":              {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"nav set":                 {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"nav rm":                  {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"open":                    {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_target": "Pass {path} or {seed}."}},
+	"review start":            {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"review check":            {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
+	"review answer":           {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"review_off": "Ask the user to turn on the experimental setting code_review_enabled.", "no_question": "Answer a question that is still open on the document."}},
+	"seed search":             {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed plant":              {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed plot":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_a_plot": "Pass a plot payload: a JSON object with title, body, checks and children, as attn seed guide describes."}},
+	"seed link":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed unlink":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed ready":              {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed ls":                 {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"window_without_stale": "Pass {window} together with {stale}, or leave it out.", "plot_and_stale": "Pass {plot} or {stale}, not both.", "standby_with_scope": "Pass {standby} alone.", "bad_window": "Say the window as a duration like 72h or a number of days like 14d."}},
+	"seed show":               {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"since_and_section": "Pass {since} or {section}, not both.", "bad_bookmark": "Pass the bookmark number a read of the seed printed."}},
+	"seed notes":              {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"bad_bookmark": "Pass the bookmark number a read of the seed printed."}},
+	"seed prime":              {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed guide":              {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed tend":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed note":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed park":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed replant":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed wither":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed send-to-chief":      {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed harvest":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"pr_without_when_merged": "Pass the pull request together with {when_merged}, or leave it out.", "clear_without_when_merged": "Pass {clear} together with {when_merged}.", "clear_with_reason": "Leave out the reason; write it in a seed note instead.", "clear_with_pr": "Leave out the pull request when you pass {clear}.", "not_a_pr_url": "Pass a pull request URL like https://github.com/owner/repo/pull/12."}},
+	"seed check add":          {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_a_check_id": "Pass a check id like C3, and the statement in {statement}.", "needs_statement": "Pass the statement the seed must prove in {statement}."}},
+	"seed check edit":         {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_a_check_id": "Pass a check id like C3, and the statement in {statement}.", "needs_statement": "Pass the statement the seed must prove in {statement}."}},
+	"seed check remove":       {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed check restore":      {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed check report":       {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed check confirm":      {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed check reject":       {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed check uncheck":      {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed check reopen":       {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed watch":              {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed unwatch":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed remind":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"clear_with_reminder": "Pass {clear} alone.", "needs_time": "Pass one of {in} or {at}, or {clear}.", "needs_message": "Pass what the reminder says in {message}."}},
+	"seed standby":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"clear_with_standby": "Pass {clear} alone.", "in_and_at": "Pass {in} or {at}, not both.", "needs_next": "Pass what to do when mail resumes you in {next}."}},
+	"seed export":             {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed edit":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_exported": "Export the seed, edit the file, and pass its whole text as {body}.", "not_stamped": "Pass the exported text whole as {body}, its first stamp line included.", "other_seed": "Export the seed you name in {seed}, reapply your change to that export, and pass it as {body}.", "invalid_body": "Keep text below the stamp line, within the body size limit."}},
+	"seed rollback":           {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed authorization":      {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"empty_words": "Pass the words, or {clear} to remove the authorization.", "words_and_clear": "Pass the words or {clear}, not both."}},
+	"seed attach":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_document": "Name one document with {path}, {notebook} or {url}.", "two_documents": "Name one document per call.", "transfer_with_note": "Leave out {note}; a managed transfer records its own receipt.", "transfer_needs_local_path": "Pass a local {path} without {repo}, or leave out {mode}.", "transfer_needs_mode": "Pass {mode}: move is recommended, copy keeps the source."}},
+	"seed detach":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"reference_needs_path": "Pass the linked {path} without {repo}.", "no_document": "Name one document with {path}, {notebook} or {url}.", "two_documents": "Name one document per call.", "transfer_with_note": "Leave out {note}; a managed transfer records its own receipt.", "transfer_needs_managed_path": "Pass the managed filename in {path} without {repo}, or leave out {to}.", "detach_needs_to": "Pass {to} with the destination, or {reference} to remove an old linked path."}},
+	"seed review start":       {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed review show":        {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed review cancel":      {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed review retry":       {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"seed review keep":        {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_in_review": "Pass a seed the review lists; seed review show lists them."}},
+	"session instructions":    {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the id of a session in the ledger.", "transcript_unavailable": "Ask again once the session has written its conversation.", "conversation_too_large": "Read the conversation with session_transcript instead.", "model_unavailable": "Choose a model for session instructions in Settings, or read the conversation with session_transcript.", "invalid_response": "Ask again, or read the conversation with session_transcript.", "invalid_evidence": "Ask again, or read the conversation with session_transcript."}},
+	"session transcript":      {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the id of a session in the ledger.", "transcript_unavailable": "Read again once the session has written its conversation.", "invalid_cursor": "Pass a cursor an earlier read ended on, or leave out {after}.", "cursor_mismatch": "Pass a cursor from a read of this session, or leave out {after}.", "cursor_past_end": "Pass the cursor the last read ended on."}},
+	"session list":            {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"unknown_session": "Pass to {before} the id a previous page's notice named."}},
+	"session show":            {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the id of a session in the ledger."}},
+	"session priority":        {readOnly: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Pass {target}, or run it inside an attn session."}},
+	"session snooze":          {readOnly: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"bad_until": "Pass {until} as an RFC3339 instant, a positive duration like 1h, or tomorrow, saturday or monday, optionally with HH:MM."}},
+	"session unsnooze":        {readOnly: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false},
+	"session rename":          {readOnly: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Pass {target}, or run it inside an attn session."}},
+	"session reopen":          {readOnly: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"unknown_action": "Pass one of the actions session_show lists for the session."}},
+	"skill":                   {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: true, fixes: map[string]string{"no_such_reference": "Use one of the names `skill` with `list` prints.", "list_and_reference": "Pass {reference} or {list}, not both."}},
+	"state explain":           {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
 }
 
 type ActivityArgs struct {
@@ -295,6 +300,10 @@ type DelegateRolesRollbackArgs struct {
 	Render   bool   `json:"render,omitempty"`
 	Revision *int64 `json:"revision,omitempty"`
 	Message  string `json:"message,omitempty"`
+}
+
+type GuideArgs struct {
+	Topic string `json:"topic,omitempty"`
 }
 
 type ListArgs struct {
@@ -665,6 +674,11 @@ type SessionRenameArgs struct {
 type SessionReopenArgs struct {
 	ID     string `json:"id,omitempty"`
 	Action string `json:"action,omitempty"`
+}
+
+type SkillArgs struct {
+	Reference string `json:"reference,omitempty"`
+	List      bool   `json:"list,omitempty"`
 }
 
 type StateExplainArgs struct {

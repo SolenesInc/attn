@@ -1,7 +1,8 @@
 use crate::commands::{
     Run, Stop, activity, automation, browser, callout, codex, conversation, crew, delegate, doc,
-    enrollment, instance_env, instance_resolve, journal, list, model, nav, open, pr, print_stdout,
-    review, seed, send, session, settings, state, terminal, ticket, top_level, worktree,
+    enrollment, guide, instance_env, instance_resolve, journal, list, model, nav, open, pr,
+    print_stdout, review, seed, send, session, settings, skill, state, terminal, ticket, top_level,
+    worktree,
 };
 use crate::hooks::{COMMANDS, Failure, Hook, terminal_from_env};
 use crate::instance::Paths;
@@ -68,6 +69,8 @@ fn native_command(name: &str, verb: Option<&str>, argv: &[OsString]) -> Option<N
         ("list", _) => native(list::run, true),
         ("activity", _) => native(activity::run, true),
         ("session", _) => native(session::run, true),
+        ("skill", _) => native(skill::run, false),
+        ("guide", _) => native(guide::run, false),
         ("ticket", _) => native(ticket::run, true),
         ("delegate", _) => native(delegate::run, true),
         ("doc", Some("watch")) => return None,
@@ -279,7 +282,7 @@ fn hand_off_to_attnd(argv: Vec<OsString>) -> ExitCode {
     ExitCode::from(EXIT_NOT_FOUND)
 }
 
-fn attnd_beside_this_binary() -> io::Result<PathBuf> {
+pub fn attnd_beside_this_binary() -> io::Result<PathBuf> {
     let resolved = fs::canonicalize(std::env::current_exe()?)?;
     Ok(resolved.with_file_name("attnd"))
 }
