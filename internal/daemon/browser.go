@@ -3,7 +3,6 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -109,16 +108,14 @@ func (d *Daemon) browserTargetFor(sessionID protocol.SessionID) (browserTarget, 
 	}, nil
 }
 
-func (d *Daemon) handleOpenBrowser(conn net.Conn, msg *protocol.OpenBrowserMessage) {
-	targetURL, err := validateBrowserURL(msg.URL)
+func (d *Daemon) openBrowser(rawURL string, session protocol.SessionID) error {
+	targetURL, err := validateBrowserURL(rawURL)
 	if err != nil {
-		d.sendError(conn, "open_browser: "+err.Error())
-		return
+		return err
 	}
-	target, err := d.browserTargetFor(protocol.Deref(msg.SessionID))
+	target, err := d.browserTargetFor(session)
 	if err != nil {
-		d.sendError(conn, "open_browser: "+err.Error())
-		return
+		return err
 	}
 	alreadyOpen := browserTileOn(target.layout)
 	if _, _, err := d.openAgentTile(target.location, agentTile{
@@ -126,14 +123,21 @@ func (d *Daemon) handleOpenBrowser(conn net.Conn, msg *protocol.OpenBrowserMessa
 		tileKind: string(layouttree.TileKindBrowser),
 		params:   targetURL,
 	}, false); err != nil {
-		d.sendError(conn, fmt.Sprintf("open_browser: %v", err))
-		return
+		return err
 	}
 	if alreadyOpen {
 		d.sendBrowserNavigation(target, targetURL)
 	}
 	d.logf("open_browser: %s on desktop %s", targetURL, target.desktopID)
-	d.sendOK(conn)
+	return nil
+}
+
+type browserControl struct {
+	action   string
+	params   *string
+	selector *string
+	text     *string
+	session  protocol.SessionID
 }
 
 func (d *Daemon) sendBrowserNavigation(target browserTarget, targetURL string) {
@@ -183,21 +187,21 @@ func normalizeBrowserAction(action string) (string, error) {
 	}
 }
 
-func (d *Daemon) runBrowserControl(msg *protocol.BrowserControlMessage) browserControlResult {
-	action, err := normalizeBrowserAction(msg.Action)
+func (d *Daemon) runBrowserControl(msg *browserControl) browserControlResult {
+	action, err := normalizeBrowserAction(msg.action)
 	if err != nil {
 		return browserControlResult{err: err.Error()}
 	}
-	selector := strings.TrimSpace(protocol.Deref(msg.Selector))
+	selector := strings.TrimSpace(protocol.Deref(msg.selector))
 	if (action == "click" || action == "type") && selector == "" {
 		return browserControlResult{err: action + " requires --selector"}
 	}
-	if action == "type" && msg.Text == nil {
+	if action == "type" && msg.text == nil {
 		return browserControlResult{err: "type requires --text"}
 	}
 	var params map[string]any
-	if msg.Params != nil {
-		if err := json.Unmarshal([]byte(*msg.Params), &params); err != nil {
+	if msg.params != nil {
+		if err := json.Unmarshal([]byte(*msg.params), &params); err != nil {
 			return browserControlResult{err: "params must be a JSON object: " + err.Error()}
 		}
 		if params == nil {
@@ -209,7 +213,7 @@ func (d *Daemon) runBrowserControl(msg *protocol.BrowserControlMessage) browserC
 		return browserControlResult{err: err.Error()}
 	}
 	if action == "navigate" {
-		target := protocol.Deref(msg.Text)
+		target := protocol.Deref(msg.text)
 		if value, ok := params["url"].(string); ok {
 			target = value
 		}
@@ -217,18 +221,18 @@ func (d *Daemon) runBrowserControl(msg *protocol.BrowserControlMessage) browserC
 		if err != nil {
 			return browserControlResult{err: "navigate: " + err.Error()}
 		}
-		msg.Text = protocol.Ptr(targetURL)
-		if msg.Params != nil {
+		msg.text = protocol.Ptr(targetURL)
+		if msg.params != nil {
 			params["url"] = targetURL
 			normalized, marshalErr := json.Marshal(params)
 			if marshalErr != nil {
 				return browserControlResult{err: "navigate: " + marshalErr.Error()}
 			}
-			msg.Params = protocol.Ptr(string(normalized))
+			msg.params = protocol.Ptr(string(normalized))
 		}
 	}
 
-	target, err := d.browserTargetFor(protocol.Deref(msg.SessionID))
+	target, err := d.browserTargetFor(msg.session)
 	if err != nil {
 		return browserControlResult{err: err.Error()}
 	}
@@ -243,7 +247,7 @@ func (d *Daemon) runLocalBrowserControl(
 	target browserTarget,
 	action string,
 	selector string,
-	msg *protocol.BrowserControlMessage,
+	msg *browserControl,
 	controlTimeout time.Duration,
 ) browserControlResult {
 	host := d.browserHost()
@@ -256,13 +260,13 @@ func (d *Daemon) runLocalBrowserControl(
 		DesktopID: target.desktopID,
 		TileID:    browserTileID,
 		Action:    action,
-		Params:    msg.Params,
+		Params:    msg.params,
 	}
 	if selector != "" {
 		request.Selector = protocol.Ptr(selector)
 	}
-	if msg.Text != nil {
-		request.Text = msg.Text
+	if msg.text != nil {
+		request.Text = msg.text
 	}
 	result, err := d.browserControl.ask(host, controlTimeout, func(requestID string) bool {
 		request.RequestID = requestID
@@ -272,15 +276,6 @@ func (d *Daemon) runLocalBrowserControl(
 		return browserControlResult{err: fmt.Sprintf("generate browser control request id: %v", err)}
 	}
 	return result
-}
-
-func (d *Daemon) handleBrowserControl(conn net.Conn, msg *protocol.BrowserControlMessage) {
-	result := d.runBrowserControl(msg)
-	if result.err != "" {
-		d.sendError(conn, "browser_control: "+result.err)
-		return
-	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, Data: protocol.Ptr(result.data)})
 }
 
 func (d *Daemon) handleBrowserControlResult(client *wsClient, msg *protocol.BrowserControlResultMessage) {

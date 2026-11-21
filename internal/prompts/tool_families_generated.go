@@ -13,7 +13,7 @@ var catalogFamilies = map[string]bool{
 	"agent":            true,
 	"ask":              false,
 	"automation":       false,
-	"browser":          false,
+	"browser":          true,
 	"bus":              false,
 	"callout":          true,
 	"codex":            false,

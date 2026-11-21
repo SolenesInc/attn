@@ -10,6 +10,7 @@ const (
 	CodeAmbiguousSession            = "ambiguous_session"
 	CodeAppNotShowingProfile        = "app_not_showing_profile"
 	CodeBadBookmark                 = "bad_bookmark"
+	CodeBadCapture                  = "bad_capture"
 	CodeBadUntil                    = "bad_until"
 	CodeBadWindow                   = "bad_window"
 	CodeClearWithPR                 = "clear_with_pr"
@@ -80,6 +81,7 @@ const (
 	CodeUnknownSession              = "unknown_session"
 	CodeWindowWithoutStale          = "window_without_stale"
 	CodeWordsAndClear               = "words_and_clear"
+	CodeWriteFailed                 = "write_failed"
 )
 
 var specs = map[string]spec{
@@ -93,6 +95,21 @@ var specs = map[string]spec{
 	"agent inbox":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Pass {session}, or run it inside an attn session.", "message_not_found": "Pass the id of a message your inbox notified you about.", "message_not_notified": "Read it after its notification lands."}},
 	"agent msg-status":        {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Pass {session}, or run it inside an attn session.", "message_not_found": "Pass the id agent_msg answered for a message you sent."}},
 	"agent attachment":        {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"browser open":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"browser snapshot":        {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"browser find":            {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"browser wait":            {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"browser click":           {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"browser type":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"browser press":           {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"browser scroll":          {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"browser back":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"browser forward":         {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"browser reload":          {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"browser cookies":         {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"browser command":         {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+	"browser screenshot":      {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"bad_capture": "Take the capture again; the host answered with data that is not base64.", "write_failed": "Pass a path in a folder you can write to."}},
+	"browser pdf":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"bad_capture": "Take the capture again; the host answered with data that is not base64.", "write_failed": "Pass a path in a folder you can write to."}},
 	"callout anchors":         {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}."}},
 	"callout show":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}.", "step_needs_text": "Give every step its text.", "unknown_anchor": "Use an anchor that callout_anchors lists.", "too_many_steps": "Show at most 20 steps.", "step_too_long": "Keep each step's text to 160 characters.", "not_on_screen": "Point at an anchor the message lists as on screen.", "app_not_showing_profile": "Ask the user to open the attn app on your profile."}},
 	"delegate":                {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
@@ -221,6 +238,74 @@ type AgentAttachmentArgs struct {
 	Capture    string `json:"capture,omitempty"`
 	Attachment string `json:"attachment,omitempty"`
 	Out        string `json:"out,omitempty"`
+}
+
+type BrowserOpenArgs struct {
+	URL string `json:"url,omitempty"`
+}
+
+type BrowserSnapshotArgs struct {
+}
+
+type BrowserFindArgs struct {
+	Using string `json:"using,omitempty"`
+	Value string `json:"value,omitempty"`
+	Name  string `json:"name,omitempty"`
+	All   bool   `json:"all,omitempty"`
+}
+
+type BrowserWaitArgs struct {
+	Using   string `json:"using,omitempty"`
+	Value   string `json:"value,omitempty"`
+	Name    string `json:"name,omitempty"`
+	State   string `json:"state,omitempty"`
+	Timeout *int64 `json:"timeout,omitempty"`
+}
+
+type BrowserClickArgs struct {
+	Selector string `json:"selector,omitempty"`
+	Element  string `json:"element,omitempty"`
+}
+
+type BrowserTypeArgs struct {
+	Selector string  `json:"selector,omitempty"`
+	Element  string  `json:"element,omitempty"`
+	Text     *string `json:"text,omitempty"`
+}
+
+type BrowserPressArgs struct {
+	Text string `json:"text,omitempty"`
+}
+
+type BrowserScrollArgs struct {
+	X *int64 `json:"x,omitempty"`
+	Y *int64 `json:"y,omitempty"`
+}
+
+type BrowserBackArgs struct {
+}
+
+type BrowserForwardArgs struct {
+}
+
+type BrowserReloadArgs struct {
+}
+
+type BrowserCookiesArgs struct {
+}
+
+type BrowserCommandArgs struct {
+	Action string `json:"action,omitempty"`
+	Params string `json:"params,omitempty"`
+}
+
+type BrowserScreenshotArgs struct {
+	Path string `json:"path,omitempty"`
+}
+
+type BrowserPdfArgs struct {
+	Path   string `json:"path,omitempty"`
+	Params string `json:"params,omitempty"`
 }
 
 type CalloutAnchorsArgs struct {

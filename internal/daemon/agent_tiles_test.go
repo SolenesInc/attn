@@ -1,8 +1,6 @@
 package daemon
 
 import (
-	"encoding/json"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -32,20 +30,9 @@ func setupAgentDesktopOn(t *testing.T, d *Daemon) (*Daemon, profiles.Desktop) {
 	return d, desktop
 }
 
-func openBrowserFor(t *testing.T, d *Daemon, sessionID, url string) protocol.Response {
+func openBrowserFor(t *testing.T, d *Daemon, sessionID, url string) error {
 	t.Helper()
-	clientConn, serverConn := net.Pipe()
-	defer clientConn.Close()
-	msg := &protocol.OpenBrowserMessage{Cmd: protocol.CmdOpenBrowser, URL: url}
-	if sessionID != "" {
-		msg.SessionID = protocol.Ptr(protocol.SessionID(sessionID))
-	}
-	go d.handleOpenBrowser(serverConn, msg)
-	var resp protocol.Response
-	if err := json.NewDecoder(clientConn).Decode(&resp); err != nil {
-		t.Fatalf("decode open_browser response: %v", err)
-	}
-	return resp
+	return d.openBrowser(url, protocol.SessionID(sessionID))
 }
 
 func desktopTile(t *testing.T, d *Daemon, desktopID, tileID string) layouttree.TileLeaf {

@@ -1074,19 +1074,8 @@ func (c *Client) OpenSentFiles(sessionID protocol.SessionID, paths []string) err
 }
 
 func (c *Client) OpenBrowser(url string, sessionID protocol.SessionID) error {
-	msg := protocol.OpenBrowserMessage{
-		Cmd: protocol.CmdOpenBrowser,
-		URL: url,
-	}
-	if sessionID != "" {
-		msg.SessionID = protocol.Ptr(sessionID)
-	}
-	_, err := c.send(msg)
+	_, err := commandResult[protocol.BrowserOpenResult](c, "browser open", sessionID, map[string]any{"url": url})
 	return err
-}
-
-func (c *Client) BrowserControl(action string, selector string, text string, sessionID protocol.SessionID) (string, error) {
-	return c.BrowserCommand(action, "", selector, text, sessionID)
 }
 
 func (c *Client) CalloutShow(sessionID protocol.SessionID, steps []protocol.CalloutShowStep) (*protocol.CalloutShowResult, error) {
@@ -1105,28 +1094,20 @@ func commandResult[R any](c *Client, name string, session protocol.SessionID, ar
 	return &result, nil
 }
 
-func (c *Client) BrowserCommand(action string, params string, selector string, text string, sessionID protocol.SessionID) (string, error) {
-	msg := protocol.BrowserControlMessage{
-		Cmd:    protocol.CmdBrowserControl,
-		Action: action,
-	}
-	if params != "" {
-		msg.Params = protocol.Ptr(params)
-	}
-	if selector != "" {
-		msg.Selector = protocol.Ptr(selector)
-	}
-	if text != "" || action == "type" {
-		msg.Text = protocol.Ptr(text)
-	}
-	if sessionID != "" {
-		msg.SessionID = protocol.Ptr(sessionID)
-	}
-	resp, err := c.send(msg)
+func (c *Client) BrowserCommand(action string, params string, sessionID protocol.SessionID) (string, error) {
+	result, err := commandResult[protocol.BrowserResult](c, "browser command", sessionID, map[string]any{"action": action, "params": params})
 	if err != nil {
 		return "", err
 	}
-	return protocol.Deref(resp.Data), nil
+	return result.Data, nil
+}
+
+func (c *Client) BrowserType(selector, text string, sessionID protocol.SessionID) (string, error) {
+	result, err := commandResult[protocol.BrowserResult](c, "browser type", sessionID, map[string]any{"selector": selector, "text": text})
+	if err != nil {
+		return "", err
+	}
+	return result.Data, nil
 }
 
 func (c *Client) QueryPRs(filter string) ([]protocol.PR, error) {

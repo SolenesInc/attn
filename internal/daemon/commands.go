@@ -29,6 +29,7 @@ func (d *Daemon) commandLayer() *command.Layer {
 			d.sessionCommands(),
 			reading.Handlers(),
 			d.agentCommands(),
+			d.browserCommands(),
 		} {
 			maps.Copy(handlers, family)
 		}

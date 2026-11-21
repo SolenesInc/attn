@@ -1560,26 +1560,6 @@ type BrowseDirectoryResultMessage struct {
 	Success bool `json:"success"`
 }
 
-type BrowserControlMessage struct {
-	// Action corresponds to the JSON schema field "action".
-	Action string `json:"action"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Params corresponds to the JSON schema field "params".
-	Params *string `json:"params,omitempty,omitzero"`
-
-	// Selector corresponds to the JSON schema field "selector".
-	Selector *string `json:"selector,omitempty,omitzero"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
-
-	// Text corresponds to the JSON schema field "text".
-	Text *string `json:"text,omitempty,omitzero"`
-}
-
 type BrowserControlRequestMessage struct {
 	// Action corresponds to the JSON schema field "action".
 	Action string `json:"action"`
@@ -1621,6 +1601,21 @@ type BrowserControlResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+}
+
+type BrowserFileResult struct {
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+}
+
+type BrowserOpenResult struct {
+	// URL corresponds to the JSON schema field "url".
+	URL string `json:"url"`
+}
+
+type BrowserResult struct {
+	// Data corresponds to the JSON schema field "data".
+	Data string `json:"data"`
 }
 
 type BuiltinDelegationRole string
@@ -7813,17 +7808,6 @@ type OnboardingResult struct {
 
 	// Pending corresponds to the JSON schema field "pending".
 	Pending *OnboardingPath `json:"pending,omitempty,omitzero"`
-}
-
-type OpenBrowserMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
-
-	// URL corresponds to the JSON schema field "url".
-	URL string `json:"url"`
 }
 
 type OpenMarkdownMessage struct {

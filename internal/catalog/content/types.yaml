@@ -154,3 +154,13 @@ types:
     json: {type: string, pattern: "^.+:[0-9]+$"}
     doc: "A file and a line in it, as path:line."
     placeholder: "<path>:<line>"
+  milliseconds:
+    json: {type: integer, minimum: 0}
+    placeholder: "<ms>"
+  pixels:
+    json: {type: integer}
+    placeholder: "<px>"
+  typed_text:
+    json: {type: string}
+    clears: true
+    placeholder: "<text>"

@@ -31,13 +31,13 @@ func TestBrowserCommandsRefuseWhatTheHostCannotRun(t *testing.T) {
 		{"params that are not an object", "find_element", "null", "JSON object"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := cli.BrowserCommand(tc.action, tc.params, "", "", ""); err == nil || !strings.Contains(err.Error(), tc.want) {
+			if _, err := cli.BrowserCommand(tc.action, tc.params, ""); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("browser %s = %v, want it refused naming %q", tc.action, err, tc.want)
 			}
 		})
 	}
-	for _, action := range []string{"snapshot", "click", "type", "reload", "navigate", "screenshot", "find_element", "perform_actions", "get_all_cookies", "print_page", "wait_for"} {
-		if _, err := cli.BrowserCommand(action, "", "#query", "https://example.com", ""); err == nil || !strings.Contains(err.Error(), "no browser tile is open") {
+	for _, action := range []string{"snapshot", "reload", "navigate", "screenshot", "find_element", "perform_actions", "get_all_cookies", "print_page", "wait_for"} {
+		if _, err := cli.BrowserCommand(action, `{"url":"https://example.com"}`, ""); err == nil || !strings.Contains(err.Error(), "no browser tile is open") {
 			t.Errorf("browser %s = %v, want it accepted up to finding its browser tile", action, err)
 		}
 	}
@@ -89,7 +89,7 @@ func TestBrowserControlIsBrokeredToTheHostThatWasAsked(t *testing.T) {
 
 	answered := make(chan browserControlAnswer, 1)
 	go func() {
-		data, err := w.Client().BrowserCommand("type", "", "#query", "browser text", "")
+		data, err := w.Client().BrowserType("#query", "browser text", "")
 		answered <- browserControlAnswer{data, err}
 	}()
 	request := testworld.Await(host, protocol.EventBrowserControlRequest, func(r protocol.BrowserControlRequestMessage) bool { return r.Action == "type" })
@@ -142,7 +142,7 @@ func TestOnlyTheAppsOriginWithTheHostTokenBecomesTheBrowserHost(t *testing.T) {
 			defer candidate.Close()
 			answered := make(chan browserControlAnswer, 1)
 			go func() {
-				data, err := cli.BrowserCommand("snapshot", "", "", "", "")
+				data, err := cli.BrowserCommand("snapshot", "", "")
 				answered <- browserControlAnswer{data, err}
 			}()
 			if !tc.host {

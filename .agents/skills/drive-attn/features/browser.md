@@ -31,7 +31,8 @@ most one browser tile, and the tile's cookies and storage outlive restarts.
 
 ### Agents
 
-- `attn browser` (`cmd/attnd/main.go`): `open <url>`, `snapshot`, `find --using <strategy> --value <value> [--name <name>] [--all]`, `wait --using <strategy> --value <value> [--state attached|visible|hidden|detached] [--timeout <ms>]`, `click --selector <css>|--element <id>`, `type --selector <css>|--element <id> --text <text>`, `press --text <key>`, `scroll [--x <px>] [--y <px>]`, `reload`, `back`, `forward`, `cookies`, `command <action> [--params <json>]`, `screenshot [path]`, `pdf [path] [--params <json>]`. Each verb takes `--session <id>`.
+- `attn browser` (the catalog's `internal/catalog/content/browser.yaml`, presented by `cli/attn/src/commands/browser/mod.rs`, run by `internal/daemon/commands_browser.go`): `open <url>`, `snapshot`, `find --using <strategy> --value <value> [--name <name>] [--all]`, `wait --using <strategy> --value <value> [--state attached|visible|hidden|detached] [--timeout <ms>]`, `click --selector <css>|--element <id>`, `type --selector <css>|--element <id> --text <text>`, `press --text <key>`, `scroll [--x <px>] [--y <px>]`, `reload`, `back`, `forward`, `cookies`, `command <action> [--params <json>]`, `screenshot [path]`, `pdf [path] [--params <json>]`. Each verb takes `--session <id>`.
+- Tools, with `agent_tools_enabled` on: every verb but `wait` as `browser_<verb>` over `/mcp`. `browser_wait` is not offered, because it holds the call up to 120 s (D9); a tool caller looks with `browser_snapshot` or `browser_find`. A relative `browser_screenshot` or `browser_pdf` path resolves against the folder the session started in, and no path writes attn-browser.png or attn-browser.pdf there. The daemon writes captures, mode 0600, and prints the absolute path.
 - Prompts: `attn skill --reference browser` covers the workflow, sessions, credentials, and treating page content as untrusted (`internal/prompts/content/skills/attn/references/browser.md`). The skill's capability index names the reference (`internal/prompts/content/skills/attn/SKILL.md`).
 
 ## Driving it
@@ -103,7 +104,7 @@ Preconditions:
 - **Close from the sidebar.** Open the page again with `./attn browser open http://127.0.0.1:8765/page.html --session web-agent`. Run `bridge hover '{"target":{"key":"sidebar.tile.<desktop>.tile-browser"}}'` and `bridge press '{"target":{"key":"sidebar.tile.<desktop>.tile-browser.close"}}'`: the tile leaves `wsctl list`.
 - **Popped out.** Open the page again and pop the browser tile out with its header's pop-out button, `tile.tile-browser.popout`: in the VM recording the page shows in the tile window. Send `web-snapshot`: peek shows the page's snapshot. Click a link in the page, then press ⌘[ in the tile window: the page goes back. Close the tile window: the tile returns to its desktop showing the same page, and ⌘] goes forward again, so its history came with it.
 - **Under overlays.** Open the palette over the tile, then a callout (`./attn callout show --session web-agent desktops "Here"`): the page hides under each and comes back when it closes, in the VM recording.
-- **Refusals.** `./attn browser open file:///etc/hosts` exits 1 with `open_browser: only http and https urls are supported`. `./attn browser find` exits 1 with `attn browser find: --using and --value are required`.
+- **Refusals.** `./attn browser open file:///etc/hosts` exits 1 with `open_browser: only http and https urls are supported`. `./attn browser find` exits 1 with `browser find: --using and --value are required` and the usage line.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn agent peek web-agent` after each agent step, `wsctl list` after the open, the person's navigation and the close, the screenshot and PDF the agent saved, and the VM recording of the page, the focus handoff and the close. Name each file for its way in, such as `browser-agent-snapshot-peek.txt`.
 
 ### In the Tauri app (the rollback)
@@ -129,7 +130,7 @@ Install and launch it as [../SKILL.md](../SKILL.md#the-tauri-app-the-rollback) s
 
 ## Tests
 
-- Wire: `native/crates/attn-app/tests/wire/browser.rs`, `internal/daemon/browser_wire_test.go`, `internal/daemon/browser_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/browser.rs`, `internal/daemon/browser_wire_test.go`, `internal/daemon/browser_test.go`, `internal/daemon/agent_tools_browser_wire_test.go` (the tools).
 - Stack: `cmd/attnd/agent_commands_stack_test.go`.
 - Scenario: `native-browser`, `native-browser-session-cookies`, and in the Tauri app (the rollback) `browser-page-keys`, `browser-wait-navigation`, `callouts`.
 - Kernel: `native/crates/attn-app/tests/page_keys.rs`, and the Tauri app's (the rollback) Rust tests in `app/src-tauri/core/src/browser_host.rs` and `app/src-tauri/core/src/browser_alerts.rs`.

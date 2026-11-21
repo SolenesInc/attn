@@ -2954,9 +2954,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 
 	if origin, remote := OriginOf(ctx); remote {
 		switch cmd {
-		case protocol.CmdOpenBrowser, protocol.CmdBrowserControl:
-			d.sendError(conn, fmt.Sprintf("%s is not supported from %s", cmd, origin.Name))
-			return
 		case protocol.CmdOpenSentFiles:
 			if msg.(*protocol.OpenSentFilesMessage).TerminalID == nil {
 				d.sendError(conn, fmt.Sprintf("open_sent_files is not supported from %s", origin.Name))
@@ -3206,10 +3203,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleOpenSeed(conn, msg.(*protocol.OpenSeedMessage))
 	case protocol.CmdOpenSentFiles:
 		d.handleOpenSentFiles(conn, msg.(*protocol.OpenSentFilesMessage))
-	case protocol.CmdOpenBrowser:
-		d.handleOpenBrowser(conn, msg.(*protocol.OpenBrowserMessage))
-	case protocol.CmdBrowserControl:
-		d.handleBrowserControl(conn, msg.(*protocol.BrowserControlMessage))
 	case protocol.CmdListWorktrees:
 		d.handleListWorktrees(conn, msg.(*protocol.ListWorktreesMessage))
 	case protocol.CmdCreateWorktree:
