@@ -55,8 +55,6 @@ var Placements = map[string][]Placement{
 	"browse_directory":                 {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"browser_control":                  {Placement{LocatorHome, ""}},
 	"caller_session":                   {Placement{LocatorHere, ""}},
-	"callout_anchors":                  {Placement{LocatorHome, ""}},
-	"callout_show":                     {Placement{LocatorHome, ""}},
 	"checkout_inspect":                 {Placement{LocatorMachine, "host"}},
 	"claude_mod_reach":                 {Placement{LocatorSession, "session_id"}},
 	"claude_mod_reach_report":          {Placement{LocatorHome, ""}},
@@ -608,30 +606,6 @@ func (m CallerSessionMessage) Placement() Placement {
 }
 
 func (m CallerSessionMessage) Locate() string {
-	return ""
-}
-
-func (CalloutAnchorsMessage) CommandName() string {
-	return "callout_anchors"
-}
-
-func (m CalloutAnchorsMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CalloutAnchorsMessage) Locate() string {
-	return ""
-}
-
-func (CalloutShowMessage) CommandName() string {
-	return "callout_show"
-}
-
-func (m CalloutShowMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CalloutShowMessage) Locate() string {
 	return ""
 }
 

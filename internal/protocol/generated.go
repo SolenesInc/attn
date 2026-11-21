@@ -1900,14 +1900,6 @@ const CalloutAnchorQueue CalloutAnchor = "queue"
 const CalloutAnchorSettingsButton CalloutAnchor = "settings-button"
 const CalloutAnchorSidebar CalloutAnchor = "sidebar"
 
-type CalloutAnchorsMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
-}
-
 type CalloutAnchorsRequestMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
@@ -1941,17 +1933,6 @@ type CalloutResultMessage struct {
 	RequestID string `json:"request_id"`
 }
 
-type CalloutShowMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
-
-	// Steps corresponds to the JSON schema field "steps".
-	Steps []CalloutShowStep `json:"steps"`
-}
-
 type CalloutShowRequestMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
@@ -1967,6 +1948,11 @@ type CalloutShowRequestMessage struct {
 
 	// Steps corresponds to the JSON schema field "steps".
 	Steps []CalloutStep `json:"steps"`
+}
+
+type CalloutShowResult struct {
+	// Steps corresponds to the JSON schema field "steps".
+	Steps int `json:"steps"`
 }
 
 type CalloutShowStep struct {
@@ -9746,10 +9732,6 @@ type Response struct {
 
 	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
 	CallerSessionID *SessionID `json:"caller_session_id,omitempty,omitzero"`
-
-	// CalloutAnchorsResult corresponds to the JSON schema field
-	// "callout_anchors_result".
-	CalloutAnchorsResult *CalloutAnchorsResult `json:"callout_anchors_result,omitempty,omitzero"`
 
 	// CodeNavCheckResult corresponds to the JSON schema field
 	// "code_nav_check_result".

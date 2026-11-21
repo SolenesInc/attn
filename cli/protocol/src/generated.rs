@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "c526226a3254";
+pub const PROTOCOL_VERSION: &str = "233250c8b2ac";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -1703,21 +1703,6 @@ pub struct CalloutAnchorInfo {
     pub on_screen: Option<bool>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CalloutAnchorsMessage {
-    pub cmd: String,
-    pub session_id: SessionID,
-}
-
-impl CalloutAnchorsMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "callout_anchors".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CalloutAnchorsRequestMessage {
     pub event: String,
     pub profile_id: String,
@@ -1759,23 +1744,6 @@ impl CalloutResultMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CalloutShowMessage {
-    pub cmd: String,
-    pub session_id: SessionID,
-    #[serde(deserialize_with = "null_as_default")]
-    pub steps: Vec<CalloutShowStep>,
-}
-
-impl CalloutShowMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "callout_show".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CalloutShowRequestMessage {
     pub event: String,
     pub from: String,
@@ -1793,6 +1761,10 @@ impl CalloutShowRequestMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CalloutShowResult {
+    pub steps: i64,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CalloutShowStep {
@@ -9262,8 +9234,6 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub caller_session_id: Option<SessionID>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub callout_anchors_result: Option<CalloutAnchorsResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code_nav_check_result: Option<CodeNavCheckResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code_nav_define_result: Option<CodeNavDefineResult>,
@@ -14691,9 +14661,6 @@ impl ResponseField for Ask {
 }
 impl ResponseField for AskShowResult {
     const FIELD: &'static str = "ask_show_result";
-}
-impl ResponseField for CalloutAnchorsResult {
-    const FIELD: &'static str = "callout_anchors_result";
 }
 impl ResponseField for CodeNavCheckResult {
     const FIELD: &'static str = "code_nav_check_result";

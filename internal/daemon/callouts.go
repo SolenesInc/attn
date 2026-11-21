@@ -1,14 +1,15 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -38,19 +39,19 @@ type calloutReply struct {
 
 func (d *Daemon) calloutSteps(session *protocol.Session, raw []protocol.CalloutShowStep) ([]protocol.CalloutStep, error) {
 	if len(raw) == 0 {
-		return nil, fmt.Errorf("a callout needs at least one step")
+		return nil, command.Usage("a callout needs at least one step")
 	}
 	if len(raw) > calloutMaxSteps {
-		return nil, fmt.Errorf("a callout has at most %d steps; this one has %d", calloutMaxSteps, len(raw))
+		return nil, command.Refuse(command.CodeTooManySteps, "a callout has at most %d steps; this one has %d", calloutMaxSteps, len(raw))
 	}
 	steps := make([]protocol.CalloutStep, 0, len(raw))
 	for i, input := range raw {
 		length := utf8.RuneCountInString(input.Text)
 		if length > calloutMaxTextCharacters {
-			return nil, fmt.Errorf("step %d is %d characters; the limit is %d", i+1, length, calloutMaxTextCharacters)
+			return nil, command.Refuse(command.CodeStepTooLong, "step %d is %d characters; the limit is %d", i+1, length, calloutMaxTextCharacters)
 		}
 		if strings.TrimSpace(input.Text) == "" {
-			return nil, fmt.Errorf("step %d needs its text", i+1)
+			return nil, command.Refuse(command.CodeStepNeedsText, "step %d needs its text", i+1)
 		}
 		anchor := strings.TrimSpace(input.Anchor)
 		step := protocol.CalloutStep{Anchor: protocol.CalloutAnchor(anchor), Text: input.Text}
@@ -58,7 +59,7 @@ func (d *Daemon) calloutSteps(session *protocol.Session, raw []protocol.CalloutS
 		case strings.HasPrefix(anchor, "agent:"):
 			target, _ := d.resolveAgentPeekTarget(crewAsker{profileID: session.ProfileID}, strings.TrimPrefix(anchor, "agent:"))
 			if target == nil || target.ProfileID != session.ProfileID {
-				return nil, fmt.Errorf("%s is not an agent in your profile", anchor)
+				return nil, command.Refuse(command.CodeUnknownAnchor, "%s is not an agent in your profile", anchor)
 			}
 			step.Anchor = protocol.CalloutAnchorAgent
 			step.SessionID = protocol.Ptr(target.ID)
@@ -70,7 +71,7 @@ func (d *Daemon) calloutSteps(session *protocol.Session, raw []protocol.CalloutS
 			}
 			desktop, err := d.resolveDesktopRef(profile, strings.TrimPrefix(anchor, "desktop:"))
 			if err != nil {
-				return nil, fmt.Errorf("%s is not a desktop in your profile", anchor)
+				return nil, command.Refuse(command.CodeUnknownAnchor, "%s is not a desktop in your profile", anchor)
 			}
 			step.Anchor = protocol.CalloutAnchorDesktop
 			step.DesktopID = protocol.Ptr(desktop.ID)
@@ -87,7 +88,7 @@ func (d *Daemon) calloutSteps(session *protocol.Session, raw []protocol.CalloutS
 				for _, info := range calloutAnchorDirectory {
 					names = append(names, info.Name)
 				}
-				return nil, fmt.Errorf("unknown anchor %q; anchors: %s", anchor, strings.Join(names, ", "))
+				return nil, command.Refuse(command.CodeUnknownAnchor, "unknown anchor %q; anchors: %s", anchor, strings.Join(names, ", "))
 			}
 		}
 		steps = append(steps, step)
@@ -103,7 +104,7 @@ func (d *Daemon) calloutApp(profileID string) (*wsClient, error) {
 			return app, nil
 		}
 	}
-	return nil, fmt.Errorf("the attn app is not showing your profile")
+	return nil, command.Refuse(command.CodeAppNotShowingProfile, "the attn app is not showing your profile")
 }
 
 func (d *Daemon) requestCallout(app *wsClient, profileID string, message func(string) any) (protocol.CalloutResultMessage, error) {
@@ -123,59 +124,76 @@ func (d *Daemon) requestCallout(app *wsClient, profileID string, message func(st
 	return reply.result, reply.err
 }
 
-func (d *Daemon) handleCalloutShow(conn net.Conn, msg *protocol.CalloutShowMessage) {
-	session := d.store.Get(msg.SessionID)
-	if session == nil {
-		d.sendError(conn, "session not found")
-		return
+func (d *Daemon) calloutCommands() map[string]command.Handler {
+	return map[string]command.Handler{
+		"callout anchors": command.Typed(d.runCalloutAnchors),
+		"callout show":    command.Typed(d.runCalloutShow),
 	}
-	steps, err := d.calloutSteps(session, msg.Steps)
+}
+
+func (d *Daemon) calloutSession(c command.Caller) (*protocol.Session, error) {
+	if c.Session == "" {
+		return nil, command.Refuse(command.CodeNoSession, "no session; pass {session} <id>, or run inside an attn session")
+	}
+	session := d.store.Get(c.Session)
+	if session == nil {
+		return nil, command.Refuse(command.CodeUnknownSession, "session not found")
+	}
+	return session, nil
+}
+
+func (d *Daemon) runCalloutShow(ctx context.Context, c command.Caller, a command.CalloutShowArgs) (any, error) {
+	session, err := d.calloutSession(c)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
+	}
+	var raw []protocol.CalloutShowStep
+	if err := json.Unmarshal(a.Steps, &raw); err != nil {
+		return nil, command.Usage("{steps}: %v", err)
+	}
+	steps, err := d.calloutSteps(session, raw)
+	if err != nil {
+		return nil, err
 	}
 	app, err := d.calloutApp(session.ProfileID)
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
 	result, err := d.requestCallout(app, session.ProfileID, func(id string) any {
 		return protocol.CalloutShowRequestMessage{Event: protocol.EventCalloutShowRequest, RequestID: id, ProfileID: session.ProfileID, From: sessionDisplayName(session), Steps: steps}
 	})
-	if err == nil && len(result.Missing) > 0 {
-		err = fmt.Errorf("not on screen: %s; on screen now: %s", calloutAnchorNames(result.Missing), calloutAnchorNames(result.OnScreen))
-	}
 	if err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, Data: protocol.Ptr(fmt.Sprintf("showing a callout with %d %s; the user steps through it", len(steps), plural(len(steps), "step", "steps")))})
+	if len(result.Missing) > 0 {
+		return nil, command.Refuse(command.CodeNotOnScreen, "not on screen: %s; on screen now: %s", calloutAnchorNames(result.Missing), calloutAnchorNames(result.OnScreen))
+	}
+	return protocol.CalloutShowResult{Steps: len(steps)}, nil
 }
 
-func (d *Daemon) handleCalloutAnchors(conn net.Conn, msg *protocol.CalloutAnchorsMessage) {
-	session := d.store.Get(msg.SessionID)
-	if session == nil {
-		d.sendError(conn, "session not found")
-		return
+func (d *Daemon) runCalloutAnchors(ctx context.Context, c command.Caller, _ command.CalloutAnchorsArgs) (any, error) {
+	session, err := d.calloutSession(c)
+	if err != nil {
+		return nil, err
 	}
 	app, err := d.calloutApp(session.ProfileID)
 	result := protocol.CalloutAnchorsResult{Anchors: slices.Clone(calloutAnchorDirectory), AppShowingProfile: app != nil}
-	if err == nil {
-		reply, err := d.requestCallout(app, session.ProfileID, func(id string) any {
-			return protocol.CalloutAnchorsRequestMessage{Event: protocol.EventCalloutAnchorsRequest, RequestID: id, ProfileID: session.ProfileID}
-		})
-		if err != nil {
-			d.sendError(conn, err.Error())
-			return
-		}
-		for i, info := range result.Anchors {
-			if strings.Contains(info.Name, ":") {
-				continue
-			}
-			result.Anchors[i].OnScreen = protocol.Ptr(slices.Contains(reply.OnScreen, protocol.CalloutAnchor(result.Anchors[i].Name)))
-		}
+	if err != nil {
+		return result, nil
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, CalloutAnchorsResult: &result})
+	reply, err := d.requestCallout(app, session.ProfileID, func(id string) any {
+		return protocol.CalloutAnchorsRequestMessage{Event: protocol.EventCalloutAnchorsRequest, RequestID: id, ProfileID: session.ProfileID}
+	})
+	if err != nil {
+		return nil, err
+	}
+	for i, info := range result.Anchors {
+		if strings.Contains(info.Name, ":") {
+			continue
+		}
+		result.Anchors[i].OnScreen = protocol.Ptr(slices.Contains(reply.OnScreen, protocol.CalloutAnchor(result.Anchors[i].Name)))
+	}
+	return result, nil
 }
 
 func calloutAnchorNames(anchors []protocol.CalloutAnchor) string {

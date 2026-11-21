@@ -419,7 +419,10 @@ func (c *Catalog) check() []string {
 				add("%s: type %q is not in %s", argWhere, a.Type, TypesFile)
 			}
 			if a.CLI == "" {
-				add("%s: cli is missing; name the mapping: pos, rest, a flag, --a|--b or -m+", argWhere)
+				add("%s: cli is missing; name the mapping: pos, rest, words, a flag, --a|--b or -m+", argWhere)
+			}
+			if items, _ := c.Types[a.Type].Schema["items"].(map[string]any); a.CLI == "words" && (c.Types[a.Type].Schema["type"] != "array" || items["required"] == nil) {
+				add("%s: cli words takes an array of objects whose required fields are the words of each item", argWhere)
 			}
 			if a.Unless != "" && !slices.ContainsFunc(cmd.Args, func(other Arg) bool { return other.Name == a.Unless && other.Type == "bool" }) {
 				add("%s: unless names %q, which is not a bool arg of this command", argWhere, a.Unless)

@@ -7,6 +7,7 @@ import "encoding/json"
 var _ json.RawMessage
 
 const (
+	CodeAppNotShowingProfile     = "app_not_showing_profile"
 	CodeBadBookmark              = "bad_bookmark"
 	CodeBadWindow                = "bad_window"
 	CodeClearWithPR              = "clear_with_pr"
@@ -23,11 +24,13 @@ const (
 	CodeNeedsStatement           = "needs_statement"
 	CodeNeedsTime                = "needs_time"
 	CodeNoDocument               = "no_document"
+	CodeNoSession                = "no_session"
 	CodeNotACheckID              = "not_a_check_id"
 	CodeNotAPlot                 = "not_a_plot"
 	CodeNotAPRURL                = "not_a_pr_url"
 	CodeNotExported              = "not_exported"
 	CodeNotInReview              = "not_in_review"
+	CodeNotOnScreen              = "not_on_screen"
 	CodeNotStamped               = "not_stamped"
 	CodeOtherSeed                = "other_seed"
 	CodePlotAndStale             = "plot_and_stale"
@@ -36,11 +39,16 @@ const (
 	CodeSessionNotFound          = "session_not_found"
 	CodeSinceAndSection          = "since_and_section"
 	CodeStandbyWithScope         = "standby_with_scope"
+	CodeStepNeedsText            = "step_needs_text"
+	CodeStepTooLong              = "step_too_long"
+	CodeTooManySteps             = "too_many_steps"
 	CodeTransferNeedsLocalPath   = "transfer_needs_local_path"
 	CodeTransferNeedsManagedPath = "transfer_needs_managed_path"
 	CodeTransferNeedsMode        = "transfer_needs_mode"
 	CodeTransferWithNote         = "transfer_with_note"
 	CodeTwoDocuments             = "two_documents"
+	CodeUnknownAnchor            = "unknown_anchor"
+	CodeUnknownSession           = "unknown_session"
 	CodeWindowWithoutStale       = "window_without_stale"
 	CodeWordsAndClear            = "words_and_clear"
 )
@@ -48,6 +56,8 @@ const (
 var specs = map[string]spec{
 	"activity":           {readOnly: true, anyone: true, sessionFlag: false},
 	"activity clear":     {readOnly: false, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
+	"callout anchors":    {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}."}},
+	"callout show":       {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}.", "step_needs_text": "Give every step its text.", "unknown_anchor": "Use an anchor that callout_anchors lists.", "too_many_steps": "Show at most 20 steps.", "step_too_long": "Keep each step's text to 160 characters.", "not_on_screen": "Point at an anchor the message lists as on screen.", "app_not_showing_profile": "Ask the user to open the attn app on your profile."}},
 	"list":               {readOnly: true, anyone: true, sessionFlag: false},
 	"seed search":        {readOnly: true, anyone: false, sessionFlag: true},
 	"seed plant":         {readOnly: false, anyone: false, sessionFlag: true},
@@ -99,6 +109,13 @@ type ActivityArgs struct {
 
 type ActivityClearArgs struct {
 	ID string `json:"id,omitempty"`
+}
+
+type CalloutAnchorsArgs struct {
+}
+
+type CalloutShowArgs struct {
+	Steps json.RawMessage `json:"steps,omitempty"`
 }
 
 type ListArgs struct {

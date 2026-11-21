@@ -274,14 +274,6 @@ func (c *Client) RunCommand(name string, session protocol.SessionID, args any, o
 	return json.Unmarshal(raw, out)
 }
 
-func seedResult[R any](c *Client, name string, session protocol.SessionID, args any) (*R, error) {
-	var result R
-	if err := c.RunCommand(name, session, args, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
 type Plant struct {
 	Title          string                         `json:"title"`
 	Body           *string                        `json:"body,omitempty"`
@@ -310,7 +302,7 @@ func (c *Client) SeedPlantWith(sessionID protocol.SessionID, plant Plant) (*prot
 		Plant
 		Checks []string `json:"checks,omitempty"`
 	}{plant, checks}
-	return seedResult[protocol.SeedPlantResult](c, "seed plant", sessionID, args)
+	return commandResult[protocol.SeedPlantResult](c, "seed plant", sessionID, args)
 }
 
 type PlotChild struct {
@@ -330,7 +322,7 @@ type Plot struct {
 }
 
 func (c *Client) SeedPlot(sessionID protocol.SessionID, plot Plot) (*protocol.SeedPlotResult, error) {
-	return seedResult[protocol.SeedPlotResult](c, "seed plot", sessionID, map[string]any{"plot": plot})
+	return commandResult[protocol.SeedPlotResult](c, "seed plot", sessionID, map[string]any{"plot": plot})
 }
 
 func (c *Client) SeedSearch(sessionID protocol.SessionID, query string, limit int) (*protocol.SeedSearchResult, error) {
@@ -338,7 +330,7 @@ func (c *Client) SeedSearch(sessionID protocol.SessionID, query string, limit in
 	if limit != 0 {
 		args["limit"] = limit
 	}
-	return seedResult[protocol.SeedSearchResult](c, "seed search", sessionID, args)
+	return commandResult[protocol.SeedSearchResult](c, "seed search", sessionID, args)
 }
 
 func (c *Client) SeedList(sessionID protocol.SessionID, stale bool, staleWindowSeconds int) (*protocol.SeedListResult, error) {
@@ -349,19 +341,19 @@ func (c *Client) SeedList(sessionID protocol.SessionID, stale bool, staleWindowS
 	if staleWindowSeconds > 0 {
 		args["window"] = fmt.Sprintf("%ds", staleWindowSeconds)
 	}
-	return seedResult[protocol.SeedListResult](c, "seed ls", sessionID, args)
+	return commandResult[protocol.SeedListResult](c, "seed ls", sessionID, args)
 }
 
 func (c *Client) SeedListStandby(sessionID protocol.SessionID) (*protocol.SeedListResult, error) {
-	return seedResult[protocol.SeedListResult](c, "seed ls", sessionID, map[string]any{"standby": true})
+	return commandResult[protocol.SeedListResult](c, "seed ls", sessionID, map[string]any{"standby": true})
 }
 
 func (c *Client) SeedShow(sessionID protocol.SessionID, seedID string) (*protocol.SeedShowResult, error) {
-	return seedResult[protocol.SeedShowResult](c, "seed show", sessionID, map[string]any{"seed": seedID})
+	return commandResult[protocol.SeedShowResult](c, "seed show", sessionID, map[string]any{"seed": seedID})
 }
 
 func (c *Client) SeedShowSince(sessionID protocol.SessionID, seedID string, bookmark int) (*protocol.SeedShowResult, error) {
-	return seedResult[protocol.SeedShowResult](c, "seed show", sessionID, map[string]any{"seed": seedID, "since": bookmark})
+	return commandResult[protocol.SeedShowResult](c, "seed show", sessionID, map[string]any{"seed": seedID, "since": bookmark})
 }
 
 func (c *Client) SeedEdit(seedID, body, baseBodySHA256, note string) (*protocol.SeedEditResult, error) {
@@ -370,17 +362,17 @@ func (c *Client) SeedEdit(seedID, body, baseBodySHA256, note string) (*protocol.
 	if note != "" {
 		args["note"] = note
 	}
-	return seedResult[protocol.SeedEditResult](c, "seed edit", "", args)
+	return commandResult[protocol.SeedEditResult](c, "seed edit", "", args)
 }
 
 func (c *Client) SeedReminder(seedID string, opts SeedReminderOptions) (*protocol.SeedReminderResult, error) {
 	args := map[string]any{"seed": seedID, "in": opts.In, "at": opts.At, "message": opts.Message, "clear": opts.Clear}
-	return seedResult[protocol.SeedReminderResult](c, "seed remind", "", args)
+	return commandResult[protocol.SeedReminderResult](c, "seed remind", "", args)
 }
 
 func (c *Client) SeedStandby(seedID string, opts SeedStandbyOptions) (*protocol.SeedStandbyResult, error) {
 	args := map[string]any{"seed": seedID, "next": opts.Note, "in": opts.In, "at": opts.At, "stay": opts.Stay, "clear": opts.Clear}
-	return seedResult[protocol.SeedStandbyResult](c, "seed standby", "", args)
+	return commandResult[protocol.SeedStandbyResult](c, "seed standby", "", args)
 }
 
 func (c *Client) SeedRollback(seedID string, version *int) (*protocol.SeedRollbackResult, error) {
@@ -388,7 +380,7 @@ func (c *Client) SeedRollback(seedID string, version *int) (*protocol.SeedRollba
 	if version != nil {
 		args["version"] = *version
 	}
-	return seedResult[protocol.SeedRollbackResult](c, "seed rollback", "", args)
+	return commandResult[protocol.SeedRollbackResult](c, "seed rollback", "", args)
 }
 
 func (c *Client) SeedLink(seedID, kind, toSeedID string, unlink bool) (*protocol.SeedLinkResult, error) {
@@ -396,11 +388,11 @@ func (c *Client) SeedLink(seedID, kind, toSeedID string, unlink bool) (*protocol
 	if unlink {
 		name = "seed unlink"
 	}
-	return seedResult[protocol.SeedLinkResult](c, name, "", map[string]any{"a": seedID, "relation": kind, "b": toSeedID})
+	return commandResult[protocol.SeedLinkResult](c, name, "", map[string]any{"a": seedID, "relation": kind, "b": toSeedID})
 }
 
 func (c *Client) SeedReady(sessionID protocol.SessionID, plot string, all bool) (*protocol.SeedReadyResult, error) {
-	return seedResult[protocol.SeedReadyResult](c, "seed ready", sessionID, map[string]any{"plot": plot, "all": all})
+	return commandResult[protocol.SeedReadyResult](c, "seed ready", sessionID, map[string]any{"plot": plot, "all": all})
 }
 
 func (c *Client) SeedNotes(sessionID protocol.SessionID, seedID string, query SeedNotesQuery) (*protocol.SeedNotesResult, error) {
@@ -411,7 +403,7 @@ func (c *Client) SeedNotes(sessionID protocol.SessionID, seedID string, query Se
 	if query.Since != nil {
 		args["since"] = *query.Since
 	}
-	return seedResult[protocol.SeedNotesResult](c, "seed notes", sessionID, args)
+	return commandResult[protocol.SeedNotesResult](c, "seed notes", sessionID, args)
 }
 
 func (c *Client) SeedWatch(sessionID protocol.SessionID, seedID string, unwatch bool) (*protocol.SeedWatchResult, error) {
@@ -419,7 +411,7 @@ func (c *Client) SeedWatch(sessionID protocol.SessionID, seedID string, unwatch 
 	if unwatch {
 		name = "seed unwatch"
 	}
-	return seedResult[protocol.SeedWatchResult](c, name, sessionID, map[string]any{"seed": strings.TrimSpace(seedID)})
+	return commandResult[protocol.SeedWatchResult](c, name, sessionID, map[string]any{"seed": strings.TrimSpace(seedID)})
 }
 
 func optional(value string) *string {

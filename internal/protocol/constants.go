@@ -302,8 +302,6 @@ const (
 	CmdMarkdownAnnotationsSave       = "markdown_annotations_save"
 	CmdMarkdownAnnotationsSubmit     = "markdown_annotations_submit"
 	CmdOpenBrowser                   = "open_browser"
-	CmdCalloutShow                   = "callout_show"
-	CmdCalloutAnchors                = "callout_anchors"
 	CmdCalloutResult                 = "callout_result"
 	CmdBrowserControl                = "browser_control"
 	CmdBrowserControlResult          = "browser_control_result"

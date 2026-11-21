@@ -106,3 +106,15 @@ types:
           required: [text]
     doc: "A plot payload."
     placeholder: "<path>"
+  callout_steps:
+    json:
+      type: array
+      items:
+        type: object
+        properties:
+          anchor: {type: string, minLength: 1, description: "A fixed anchor such as garden, agent:<who> or desktop:<which>."}
+          text: {type: string, minLength: 1, maxLength: 160}
+        additionalProperties: false
+        required: [anchor, text]
+    doc: "Each step's anchor and its text."
+    placeholder: "<anchor> <text>"

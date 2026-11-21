@@ -42,7 +42,7 @@ func (g *generator) valueKind(a catalog.Arg) valueKind {
 		return valueInt
 	case "boolean":
 		return valueBool
-	case "object":
+	case "object", "array":
 		return valueJSON
 	default:
 		return valueText
@@ -202,6 +202,12 @@ func (g *generator) rustCLI(a catalog.Arg) string {
 		return "Cli::Pos"
 	case a.CLI == "rest":
 		return "Cli::Rest"
+	case a.CLI == "words":
+		var fields []string
+		for _, field := range g.wordFields(a) {
+			fields = append(fields, rustString(field))
+		}
+		return fmt.Sprintf("Cli::Words(&[%s])", strings.Join(fields, ", "))
 	case a.CLI == "-m+":
 		return "Cli::SplitRest"
 	case strings.Contains(a.CLI, "|"):
@@ -254,4 +260,18 @@ func (g *generator) rustTable(group string) (string, error) {
 	}
 	out.WriteString("];\n")
 	return out.String(), nil
+}
+
+func (g *generator) wordFields(a catalog.Arg) []string {
+	items, _ := g.c.ArgType(a).Schema["items"].(map[string]any)
+	var fields []string
+	switch required := items["required"].(type) {
+	case []any:
+		for _, field := range required {
+			fields = append(fields, fmt.Sprint(field))
+		}
+	case []string:
+		fields = required
+	}
+	return fields
 }

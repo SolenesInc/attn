@@ -41,8 +41,8 @@ func TestAnAgentShowsACalloutAndGetsItsRefusals(t *testing.T) {
 		t.Fatalf("callout show = %+v", result)
 	}
 	refused(t, s.Run(testworld.Invocation{Session: session, Args: []string{"callout", "show", "garden"}}), 1,
-		`callout show: an anchor needs its text: "garden" is the last argument`)
-	if help := s.Attn("callout", "--help"); help.Code != 0 || !strings.Contains(help.Stdout, "attn callout anchors [--json]") {
+		`callout show: each anchor needs its text: "garden" is the last argument`)
+	if help := s.Attn("callout", "--help"); help.Code != 0 || !strings.Contains(help.Stdout, "  anchors [--json]\n") {
 		t.Fatalf("callout help = %+v", help)
 	}
 }

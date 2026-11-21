@@ -23,8 +23,9 @@ ends the callout with Esc. Callouts are always on.
 
 ### Agents
 
-- `attn callout anchors [--json]` and `attn callout show <anchor> <text> [<anchor> <text>]... [--session <id>]` (`cli/attn/src/commands/callout.rs`).
-- Prompts: `attn skill --reference callouts` covers when to point, the anchors and the limits (`internal/prompts/content/skills/attn/references/callouts.md`). The skill's capability index names the reference (`internal/prompts/content/skills/attn/SKILL.md`).
+- `attn callout anchors [--json]` and `attn callout show <anchor> <text> [<anchor> <text>]... [--json] [--session <id>]`. The catalog defines both (`internal/catalog/content/callout.yaml`); the CLI presents them (`cli/attn/src/commands/callout/mod.rs`) and the command layer runs them (`internal/daemon/callouts.go`).
+- Tools, with `agent_tools_enabled` on: `callout_anchors` and `callout_show` over `/mcp`. `callout_show` takes `steps`, a list of `{anchor, text}`.
+- Prompts: `attn skill --reference callouts` covers when to point, the anchors and the limits. The catalog generates it (`internal/prompts/content/skills/attn/references/callouts.md`). The skill's capability index names the reference (`internal/prompts/content/skills/attn/SKILL.md`).
 
 ## Driving it
 
@@ -58,7 +59,7 @@ Preconditions:
 - **Point at an agent.** Run `wsctl input --id <agent> --text "point-agent" --enter`: `bridge dom_wait '{"selector":".callout-ring","timeoutMs":5000}'` matches over the shell's row. Run `bridge native_key '{"key":"Enter"}'`: the callout ends and `bridge get_state` shows `activeLeaf.sessionId` on `co-shell`.
 - **End it.** Show the garden callout again with `point-garden`, then run `bridge native_key '{"key":"Escape"}'`: `.callout-card` is absent. Show it again, click `[aria-label="End callout"]` natively and check that the card is absent. Show it again and open the palette with ⇧⌘K: the callout ends as the palette opens. Show it again and click outside the card natively: the callout ends. These show one step. Show a callout with several steps and open the palette: the card hides, and comes back on the same step when the palette closes. Click outside it natively: the card stays, and Enter, → and Esc go to what you clicked until you click the card.
 - **A missing anchor refuses the whole callout.** Run `wsctl input --id <agent> --text "point-queue" --enter`. Peek shows the command failing with `not on screen: queue; on screen now:` and the anchors that are. No card appears.
-- **From the person's shell.** Run `./attn callout show --session co-agent garden "Pointed from the shell"`. It prints `showing a callout with 1 step; the user steps through it` and exits 0, and the card names `co-agent`. `./attn callout show garden` exits 1 with `callout show: an anchor needs its text: "garden" is the last argument`.
+- **From the person's shell.** Run `./attn callout show --session co-agent garden "Pointed from the shell"`. It prints `showing a callout with 1 step; the user steps through it` and exits 0, and the card names `co-agent`. `./attn callout show garden` exits 1 with `callout show: each anchor needs its text: "garden" is the last argument` and the usage line.
 - **No app.** Quit the app with `./attn instance stop-app`, then run `./attn callout anchors --session co-agent`. It lists the anchors and exits 1 with `callout anchors: the attn app is not showing your profile`. `./attn callout show --session co-agent garden "x"` exits 1 with the same reason. Launch the app again with `bridge --launch --wait-ready ping`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn agent peek co-agent` after each agent call, and `bridge dom_text '{"selector":".callout-card"}'` at each step. Capture `bridge capture_native_window_screenshot '{"path":"<P>/callouts-tour.png"}'` on the first step and `<P>/callouts-agent.png` with the agent ring, `<P>` written out. Name each file for its way in, such as `callouts-agent-tour-peek.txt`.
 
@@ -93,7 +94,7 @@ Steps:
 
 ## Tests
 
-- Wire: `native/crates/attn-app/tests/wire/callouts.rs` (the native app), `internal/daemon/callouts_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/callouts.rs` (the native app), `internal/daemon/callouts_wire_test.go`, `internal/daemon/agent_tools_callout_wire_test.go` (the tools).
 - Stack: `cmd/attnd/callout_stack_test.go`.
 - Scenario: `native-callouts` in the native app, `callouts` in the Tauri app.
 - App: `app/src/App.callouts.test.tsx`.

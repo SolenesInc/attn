@@ -144,7 +144,7 @@ func (g *generator) argMention(cmd *catalog.Command, a catalog.Arg) string {
 		return "the first line of `" + a.CLI + "`"
 	case strings.Contains(a.CLI, "|"):
 		return "`" + strings.ReplaceAll(a.CLI, "|", "` or `") + "`"
-	case a.CLI == "pos" || a.CLI == "rest":
+	case a.CLI == "pos" || a.CLI == "rest" || a.CLI == "words":
 		return "`" + g.placeholder(a) + "`"
 	default:
 		return "`" + a.CLI + "`"
@@ -208,7 +208,7 @@ func (g *generator) argUsage(a catalog.Arg) (string, bool) {
 	switch {
 	case a.CLI == "-m+":
 		return "", false
-	case a.CLI == "pos" || a.CLI == "rest":
+	case a.CLI == "pos" || a.CLI == "rest" || a.CLI == "words":
 		return g.placeholder(a), true
 	case strings.Contains(a.CLI, "|"):
 		return strings.Join(strings.Split(a.CLI, "|"), " | "), true
@@ -324,6 +324,14 @@ func (g *generator) example(cmd *catalog.Command, values map[string]any) string 
 		switch {
 		case a.CLI == "rest":
 			words = append(words, strings.Fields(fmt.Sprint(value))...)
+		case a.CLI == "words":
+			items, _ := value.([]any)
+			for _, item := range items {
+				fields, _ := item.(map[string]any)
+				for _, field := range g.wordFields(a) {
+					words = append(words, shellWord(fmt.Sprint(fields[field])))
+				}
+			}
 		case a.CLI == "pos":
 			words = append(words, shellWord(fmt.Sprint(value)))
 		case strings.Contains(a.CLI, "|"):

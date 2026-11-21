@@ -12,6 +12,7 @@ pub enum Cli {
     Flag(&'static str),
     Choice(&'static [(&'static str, &'static str)]),
     SplitRest,
+    Words(&'static [&'static str]),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -230,7 +231,11 @@ fn wrong_args(cmd: &Command, positionals: &[String]) -> String {
             .collect();
         format!("{}: {}", positionals.len(), quoted.join(" "))
     };
-    if let Some(rest) = cmd.args.iter().find(|arg| matches!(arg.cli, Cli::Rest)) {
+    if let Some(rest) = cmd
+        .args
+        .iter()
+        .find(|arg| matches!(arg.cli, Cli::Rest | Cli::Words(_)))
+    {
         return format!("needs {}, got {got}", rest.name);
     }
     let pos: Vec<&Arg> = cmd
@@ -361,6 +366,13 @@ fn positional_values(
     positionals: &[String],
 ) -> Result<Map<String, Json>, ParseStop> {
     let mut values = Map::new();
+    if let Some((arg, fields)) = cmd.args.iter().find_map(|arg| match arg.cli {
+        Cli::Words(fields) => Some((arg, fields)),
+        _ => None,
+    }) {
+        values.insert(arg.name.to_string(), word_items(cmd, positionals, fields)?);
+        return Ok(values);
+    }
     if let Some(arg) = cmd.args.iter().find(|arg| matches!(arg.cli, Cli::Rest)) {
         let words = positionals.join(" ");
         if arg.required && words.trim().is_empty() {
@@ -394,6 +406,33 @@ fn positional_values(
         values.insert(arg.name.to_string(), value);
     }
     Ok(values)
+}
+
+fn word_items(cmd: &Command, positionals: &[String], fields: &[&str]) -> Result<Json, ParseStop> {
+    if positionals.is_empty() {
+        return Err(ParseStop::Usage(wrong_args(cmd, positionals)));
+    }
+    if !positionals.len().is_multiple_of(fields.len()) {
+        let last = &positionals[positionals.len() - 1];
+        return Err(ParseStop::Usage(format!(
+            "each {} needs its {}: {} is the last argument",
+            fields[0],
+            fields[fields.len() - 1],
+            quote(last.as_bytes())
+        )));
+    }
+    Ok(Json::from(
+        positionals
+            .chunks(fields.len())
+            .map(|words| {
+                fields
+                    .iter()
+                    .zip(words)
+                    .map(|(field, word)| ((*field).to_string(), Json::from(word.clone())))
+                    .collect::<Map<String, Json>>()
+            })
+            .collect::<Vec<_>>(),
+    ))
 }
 
 fn flag_values(

@@ -1173,20 +1173,20 @@ func (c *Client) BrowserControl(action string, selector string, text string, ses
 	return c.BrowserCommand(action, "", selector, text, sessionID)
 }
 
-func (c *Client) CalloutShow(sessionID protocol.SessionID, steps []protocol.CalloutShowStep) (string, error) {
-	resp, err := c.send(protocol.CalloutShowMessage{Cmd: protocol.CmdCalloutShow, SessionID: sessionID, Steps: steps})
-	if err != nil {
-		return "", err
-	}
-	return protocol.Deref(resp.Data), nil
+func (c *Client) CalloutShow(sessionID protocol.SessionID, steps []protocol.CalloutShowStep) (*protocol.CalloutShowResult, error) {
+	return commandResult[protocol.CalloutShowResult](c, "callout show", sessionID, map[string]any{"steps": steps})
 }
 
 func (c *Client) CalloutAnchors(sessionID protocol.SessionID) (*protocol.CalloutAnchorsResult, error) {
-	resp, err := c.send(protocol.CalloutAnchorsMessage{Cmd: protocol.CmdCalloutAnchors, SessionID: sessionID})
-	if err != nil {
+	return commandResult[protocol.CalloutAnchorsResult](c, "callout anchors", sessionID, map[string]any{})
+}
+
+func commandResult[R any](c *Client, name string, session protocol.SessionID, args any) (*R, error) {
+	var result R
+	if err := c.RunCommand(name, session, args, &result); err != nil {
 		return nil, err
 	}
-	return resp.CalloutAnchorsResult, nil
+	return &result, nil
 }
 
 func (c *Client) BrowserCommand(action string, params string, selector string, text string, sessionID protocol.SessionID) (string, error) {

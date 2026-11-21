@@ -3132,11 +3132,8 @@ model OpenBrowserMessage {
   session_id?: SessionID;
 }
 
-@extension("x-on", #{ home: true })
-model CalloutShowMessage { cmd: "callout_show"; session_id: SessionID; steps: CalloutShowStep[]; }
 model CalloutShowStep { anchor: string; text: string; }
-@extension("x-on", #{ home: true })
-model CalloutAnchorsMessage { cmd: "callout_anchors"; session_id: SessionID; }
+model CalloutShowResult { steps: int32; }
 model CalloutAnchorsResult { anchors: CalloutAnchorInfo[]; app_showing_profile: boolean; }
 model CalloutAnchorInfo { name: string; description: string; on_screen?: boolean; }
 
@@ -7486,7 +7483,6 @@ model Response {
   settings_list?: SettingsListResult;
   setting?: SettingEntry;
   ok: boolean;
-  callout_anchors_result?: CalloutAnchorsResult;
   error?: string;
   // A machine-readable name for what went wrong, beside the human-readable
   // `error` text. Present only where a caller has to branch on the answer:

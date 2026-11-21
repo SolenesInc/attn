@@ -1,2 +1,67 @@
+# The callout family. Write each doc for both surfaces, as seed.yaml says.
 groups:
-  - {name: callout, usage: "<command>", summary: "point at something in the app"}
+  - name: callout
+    usage: "<command>"
+    summary: "point at something in the app"
+    doc: |
+      Point at the attn app with short callouts. List the anchors first to see which are on screen, then show a callout. Agent anchors take a session id, short id or crew name (agent:<who>); desktop anchors take a slot digit, name or id (desktop:<which>). On the last step, Enter or → goes there; on an earlier step it moves on. A callout has at most 20 steps, each at most 160 characters. A new callout replaces the one showing.
+    flags:
+      - {name: session, placeholder: "<id>", doc: "point from this session (defaults to the current session)"}
+    reference:
+      name: callouts
+      title: "Callouts"
+      intro: |
+        Point at the attn app when the user asks where something is, during a guided first day, or when you name another agent the user should go to. A callout is short text beside a named part of the app window. The user steps through it.
+    sections:
+      - title: Anchors
+        text: |
+          The fixed anchors are `sidebar`, `home`, `commands`, `garden`, `asks`, `desktops`, `queue`, `crew` and `settings-button`. Which of them are visible depends on the sidebar's shape. `queue` is the waiting-turns card in queue flow.
+
+          `agent:<who>` accepts a session id, short id or crew name. `desktop:<which>` accepts a slot digit, name or id. Both address only the profile of the pointing session. The app reveals the target when it can. Otherwise the app shows the step with the target's name.
+        commands: [callout anchors]
+      - title: Showing a callout
+        text: |
+          Put the agent or desktop the user should go to on the last step, because Enter and → go there only from the last step. If a fixed anchor is missing, the command refuses the whole callout and names the anchors on screen. Choose a visible anchor from that answer.
+
+          The command returns once the app accepts the callout. Continue your work, because there is no completion callback.
+
+          The user advances the callout with Enter or →. On every step except the last, either key moves to the next step. On a last step that names an agent or desktop, either key goes to it and ends the callout. Esc, the card's ×, a new callout or a profile switch ends the callout. A callout with one step also ends on another overlay or a click elsewhere.
+
+          A callout with several steps lets the user try what it points at. Another overlay, such as the command palette, hides the card, and the card comes back on the same step when the overlay closes. After a click elsewhere the card stays, and Enter, → and Esc go to what the user clicked until they click the card.
+
+          The desktop app must be showing your profile. With no such app, `callout_anchors` still lists the directory and says so, and `callout_show` refuses. Use `--session <id>` only when pointing from another session.
+        commands: [callout show]
+
+commands:
+  - name: callout anchors
+    summary: list the anchors and which are on screen
+    runs: home
+    grant: full
+    doc: |
+      Lists every anchor with its description, and for each fixed anchor whether it is on screen now. Run it before `callout_show` to pick an anchor the user can see. When the app is not showing your profile, the list still comes back with `app_showing_profile` false and no anchor marked on screen.
+    result: CalloutAnchorsResult
+    errors:
+      - {code: no_session, fix: "Run inside an attn session, or pass {session} <id>."}
+      - {code: unknown_session, fix: "Pass the id of a live session in {session}."}
+
+  - name: callout show
+    summary: show a callout the user steps through
+    runs: home
+    grant: full
+    doc: |
+      Shows a callout: each step's text beside its anchor, in order. Put the agent or desktop the user should go to on the last step, because Enter and → go there only from the last step. If a fixed anchor is missing, the whole callout is refused and the message names the anchors on screen. A new callout replaces the one showing. The call returns when the app accepts the callout.
+    args:
+      - {name: steps, type: callout_steps, required: true, cli: words, placeholder: "<anchor> <text> [<anchor> <text>]...", doc: "each step's anchor and its text, at most 20 steps of at most 160 characters"}
+    result: CalloutShowResult
+    errors:
+      - {code: no_session, fix: "Run inside an attn session, or pass {session} <id>."}
+      - {code: unknown_session, fix: "Pass the id of a live session in {session}."}
+      - {code: step_needs_text, fix: "Give every step its text."}
+      - {code: unknown_anchor, fix: "Use an anchor that callout_anchors lists."}
+      - {code: too_many_steps, fix: "Show at most 20 steps."}
+      - {code: step_too_long, fix: "Keep each step's text to 160 characters."}
+      - {code: not_on_screen, fix: "Point at an anchor the message lists as on screen."}
+      - {code: app_not_showing_profile, fix: "Ask the user to open the attn app on your profile."}
+    examples:
+      - {steps: [{anchor: garden, text: "Work you and your agents track"}]}
+      - {steps: [{anchor: sidebar, text: "Your agents, the ones waiting on you first"}, {anchor: "agent:a1b2", text: "Needs your review on the migration plan"}]}

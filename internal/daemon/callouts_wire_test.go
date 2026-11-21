@@ -58,14 +58,18 @@ func TestCalloutsReachOnlyTheTrustedAppShowingTheCallersProfile(t *testing.T) {
 	mobile := calloutAppPeer(w.World, "http://localhost:3000", browserHostToken)
 	selectProfile(mobile, profileID)
 
-	answered := make(chan browserControlAnswer, 1)
+	type shown struct {
+		result *protocol.CalloutShowResult
+		err    error
+	}
+	answered := make(chan shown, 1)
 	go func() {
-		data, err := cli.CalloutShow(session.ID, []protocol.CalloutShowStep{
+		result, err := cli.CalloutShow(session.ID, []protocol.CalloutShowStep{
 			{Anchor: "garden", Text: "Work tracked here"},
 			{Anchor: "agent:" + string(session.ID)[:8], Text: "Enter goes to this agent"},
 			{Anchor: "desktop:" + desktopID, Text: "Enter goes to this desktop"},
 		})
-		answered <- browserControlAnswer{data, err}
+		answered <- shown{result, err}
 	}()
 	request := testworld.Await[protocol.CalloutShowRequestMessage](target, protocol.EventCalloutShowRequest, nil)
 	if request.ProfileID != profileID || len(request.Steps) != 3 || request.From == "" || request.Steps[1].Anchor != protocol.CalloutAnchorAgent || protocol.Deref(request.Steps[1].SessionID) != session.ID || protocol.Deref(request.Steps[1].Label) == "" || protocol.Deref(request.Steps[2].DesktopID) != desktopID {
@@ -77,8 +81,8 @@ func TestCalloutsReachOnlyTheTrustedAppShowingTheCallersProfile(t *testing.T) {
 	newest.Send(protocol.CalloutResultMessage{Cmd: protocol.CmdCalloutResult, RequestID: request.RequestID, Missing: []protocol.CalloutAnchor{protocol.CalloutAnchorGarden}})
 	browserPeerCaughtUp(newest)
 	target.Send(protocol.CalloutResultMessage{Cmd: protocol.CmdCalloutResult, RequestID: request.RequestID, OnScreen: []protocol.CalloutAnchor{protocol.CalloutAnchorGarden}})
-	if got := <-answered; got.err != nil || got.data != "showing a callout with 3 steps; the user steps through it" {
-		t.Fatalf("callout show = %q (%v), want the target app's acceptance", got.data, got.err)
+	if got := <-answered; got.err != nil || got.result.Steps != 3 {
+		t.Fatalf("callout show = %+v (%v), want the target app's acceptance of 3 steps", got.result, got.err)
 	}
 
 	listed := make(chan *protocol.CalloutAnchorsResult, 1)
