@@ -3,6 +3,7 @@ package ask
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/shortid"
@@ -15,7 +16,11 @@ const (
 	maxSubjectRunes  = 120
 )
 
-const recommendedPrefix = "Recommended:"
+const (
+	recommendedPrefix = "Recommended:"
+	defaultPrefix     = "Default:"
+	defaultAfter      = " after "
+)
 
 var openers = map[string]protocol.AskQuestionKind{
 	":::question":       protocol.AskQuestionKindOne,
@@ -30,7 +35,7 @@ type LineError struct {
 
 func (e *LineError) Error() string { return fmt.Sprintf("line %d: %s", e.Line, e.Message) }
 
-func Parse(markdown string) ([]protocol.AskPart, error) {
+func Parse(markdown string, openedAt time.Time) ([]protocol.AskPart, error) {
 	if len(markdown) > MaxMarkdownBytes {
 		return nil, fmt.Errorf("an ask holds at most %d KiB of markdown", MaxMarkdownBytes>>10)
 	}
@@ -48,6 +53,7 @@ func Parse(markdown string) ([]protocol.AskPart, error) {
 	lines := strings.Split(strings.ReplaceAll(markdown, "\r\n", "\n"), "\n")
 	var fence codeFence
 	questions := 0
+	defaultLine := 0
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
 		trimmed := strings.TrimSpace(line)
@@ -68,9 +74,16 @@ func Parse(markdown string) ([]protocol.AskPart, error) {
 		if questions > MaxQuestions {
 			return nil, &LineError{Line: i + 1, Message: fmt.Sprintf("an ask holds at most %d questions", MaxQuestions)}
 		}
-		question, err := parseQuestion(kind, lines[i+1:end], i+2)
+		question, after, err := parseQuestion(kind, lines[i+1:end], i+2)
 		if err != nil {
 			return nil, err
+		}
+		if question.Default != nil {
+			if defaultLine != 0 {
+				return nil, &LineError{Line: i + 1, Message: fmt.Sprintf("an ask takes one Default:, and the question on line %d already has one", defaultLine)}
+			}
+			defaultLine = i + 1
+			question.Default.DueAt = openedAt.Add(after).UTC().Format(time.RFC3339)
 		}
 		question.Key = fmt.Sprintf("q%d", questions)
 		flushProse()
@@ -145,10 +158,11 @@ func strayDirective(directive string, line int) *LineError {
 	return &LineError{Line: line, Message: fmt.Sprintf("%q opens no question block; use :::question, :::question-multi or :::question-text", directive)}
 }
 
-func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber int) (protocol.AskQuestion, error) {
+func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber int) (protocol.AskQuestion, time.Duration, error) {
 	question := protocol.AskQuestion{Kind: kind, Choices: []protocol.AskChoice{}}
 	var context []string
 	recommended := ""
+	fallback, fallbackLine := "", 0
 	var fence codeFence
 	for offset, line := range body {
 		trimmed := strings.TrimSpace(line)
@@ -158,12 +172,13 @@ func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber
 			continue
 		}
 		if isDirective(trimmed) {
-			return question, strayDirective(trimmed, firstLineNumber+offset)
+			return question, 0, strayDirective(trimmed, firstLineNumber+offset)
 		}
 		choice, isChoice := parseChoice(trimmed)
 		recommendation, isRecommendation := strings.CutPrefix(trimmed, recommendedPrefix)
+		defaulted, isDefault := strings.CutPrefix(trimmed, defaultPrefix)
 		if question.Prompt == "" {
-			if isChoice || isRecommendation {
+			if isChoice || isRecommendation || isDefault {
 				break
 			}
 			if trimmed != "" {
@@ -173,11 +188,11 @@ func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber
 		}
 		if isChoice {
 			if len(question.Choices) == MaxChoices {
-				return question, &LineError{Line: firstLineNumber + offset, Message: fmt.Sprintf("a question offers at most %d choices", MaxChoices)}
+				return question, 0, &LineError{Line: firstLineNumber + offset, Message: fmt.Sprintf("a question offers at most %d choices", MaxChoices)}
 			}
 			for _, existing := range question.Choices {
 				if strings.EqualFold(existing.Label, choice.Label) {
-					return question, &LineError{Line: firstLineNumber + offset, Message: fmt.Sprintf("choice %q appears twice", choice.Label)}
+					return question, 0, &LineError{Line: firstLineNumber + offset, Message: fmt.Sprintf("choice %q appears twice", choice.Label)}
 				}
 			}
 			question.Choices = append(question.Choices, choice)
@@ -185,40 +200,77 @@ func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber
 		}
 		if isRecommendation {
 			if recommended != "" {
-				return question, &LineError{Line: firstLineNumber + offset, Message: "a question takes one Recommended: line"}
+				return question, 0, &LineError{Line: firstLineNumber + offset, Message: "a question takes one Recommended: line"}
 			}
 			recommended = strings.TrimSpace(recommendation)
+			continue
+		}
+		if isDefault {
+			if fallbackLine != 0 {
+				return question, 0, &LineError{Line: firstLineNumber + offset, Message: "a question takes one Default: line"}
+			}
+			fallback, fallbackLine = strings.TrimSpace(defaulted), firstLineNumber+offset
 			continue
 		}
 		fence.track(line)
 		context = append(context, line)
 	}
 	if question.Prompt == "" {
-		return question, &LineError{Line: firstLineNumber - 1, Message: "question block has no question"}
+		return question, 0, &LineError{Line: firstLineNumber - 1, Message: "question block has no question"}
 	}
 	if question.Kind == protocol.AskQuestionKindOne && len(question.Choices) == 0 {
 		question.Kind = protocol.AskQuestionKindText
 	}
 	if question.Kind == protocol.AskQuestionKindText && len(question.Choices) > 0 {
-		return question, &LineError{Line: firstLineNumber - 1, Message: ":::question-text takes no choices"}
+		return question, 0, &LineError{Line: firstLineNumber - 1, Message: ":::question-text takes no choices"}
 	}
 	if question.Kind == protocol.AskQuestionKindAny && len(question.Choices) == 0 {
-		return question, &LineError{Line: firstLineNumber - 1, Message: ":::question-multi needs choices"}
+		return question, 0, &LineError{Line: firstLineNumber - 1, Message: ":::question-multi needs choices"}
 	}
 	if recommended != "" {
 		if question.Kind != protocol.AskQuestionKindText {
 			label, ok := choiceLabel(question.Choices, recommended)
 			if !ok {
-				return question, &LineError{Line: firstLineNumber - 1, Message: fmt.Sprintf("Recommended: names one choice, and %q is none of them", recommended)}
+				return question, 0, &LineError{Line: firstLineNumber - 1, Message: fmt.Sprintf("Recommended: names one choice, and %q is none of them", recommended)}
 			}
 			recommended = label
 		}
 		question.Recommended = protocol.Ptr(recommended)
 	}
+	var after time.Duration
+	if fallbackLine != 0 {
+		var err error
+		if question.Default, after, err = parseDefault(question, fallback, fallbackLine); err != nil {
+			return question, 0, err
+		}
+	}
 	if text := strings.Trim(strings.Join(context, "\n"), "\n"); strings.TrimSpace(text) != "" {
 		question.Context = protocol.Ptr(text)
 	}
-	return question, nil
+	return question, after, nil
+}
+
+func parseDefault(question protocol.AskQuestion, line string, lineNumber int) (*protocol.AskDefault, time.Duration, error) {
+	refuse := func(format string, args ...any) (*protocol.AskDefault, time.Duration, error) {
+		return nil, 0, &LineError{Line: lineNumber, Message: fmt.Sprintf(format, args...)}
+	}
+	if question.Kind != protocol.AskQuestionKindOne {
+		return refuse("Default: goes in a :::question with choices, where the user picks one")
+	}
+	cut := strings.LastIndex(line, defaultAfter)
+	if cut < 0 {
+		return refuse("Default: reads \"Default: <choice> after <duration>\", such as \"Default: %s after 2h\"", question.Choices[0].Label)
+	}
+	named, duration := strings.TrimSpace(line[:cut]), strings.TrimSpace(line[cut+len(defaultAfter):])
+	label, ok := choiceLabel(question.Choices, named)
+	if !ok {
+		return refuse("Default: names one choice, and %q is none of them", named)
+	}
+	after, err := time.ParseDuration(duration)
+	if err != nil || after <= 0 {
+		return refuse("Default: waits a positive duration such as 30m or 2h, got %q", duration)
+	}
+	return &protocol.AskDefault{Choice: label}, after, nil
 }
 
 func parseChoice(line string) (protocol.AskChoice, bool) {

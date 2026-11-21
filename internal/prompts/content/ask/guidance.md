@@ -17,7 +17,8 @@ Pipe the ask as markdown to `attn ask`. The command prints the ask's id and retu
     ASK
 
 - The user reads the ask cold, without this conversation. In a few short sentences, say what the decision affects, what you know, why you recommend a choice, what waits on the answer, and what you will do if it stays unanswered.
-- To ask permission for a risky action, name the exact action and its target in the question, such as the command, branch or environment. The permission you get covers only the action the question names.
+- When work can go ahead without the answer, add `Default: <choice> after <duration>` to a one-choice question, such as `Default: Postgres after 2h`. An ask takes one default. When no answer has come by then, attn tells you to go with that choice. The ask stays open, and a later answer reaches you as usual.
+- To ask permission for a risky action, name the exact action and its target in the question, such as the command, branch or environment. The permission you get covers only the action the question names. A permission question takes no default: silence is not permission.
 - Ask only what you cannot settle yourself, a few questions at a time.
 - After you ask, carry on with work that does not depend on the answer. When none is left, end your turn. Do not wait or poll. Your session stays open, so the user can find you, talk to you and run commands in your terminal: while any of your asks is open, attn refuses a standby that would close it.
 - An ask about your seed keeps the seed open: attn refuses to harvest it until the user answers. Harvest after you act on the answer, and withdraw an ask that no longer matters with `attn ask close <id>`.

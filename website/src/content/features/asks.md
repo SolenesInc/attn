@@ -32,6 +32,9 @@ Which store should keep the cache?
 - [ ] Postgres — already deployed
 - [ ] Redis — faster, one more service
 Recommended: Postgres
+Default: Postgres after 2h
 :::
 ASK
 ```
+
+When work can go ahead without you, a one-choice question can name a default. If you haven't answered by then, Attn tells the agent to go with that choice. The ask stays open, and your answer still reaches the agent when you send it. Asks for permission never take a default.

@@ -10,6 +10,7 @@ export const Question = Schema.Struct({
   context: Schema.NullOr(Schema.String),
   choices: Schema.Array(Schema.Struct({ label: Schema.String, description: Schema.NullOr(Schema.String) })),
   recommended: Schema.NullOr(Schema.String),
+  default: Schema.NullOr(Schema.Struct({ choice: Schema.String, dueAt: Schema.Finite })),
 })
 export type Question = typeof Question.Type
 
@@ -68,6 +69,9 @@ export const fromHomeGatewayAsk = (ask: HomeGatewayAsk): PhoneAsk => ({
             description: choice.description ?? null,
           })),
           recommended: part.question.recommended ?? null,
+          default: part.question.default
+            ? { choice: part.question.default.choice, dueAt: part.question.default.due_at.getTime() }
+            : null,
         }
       : null,
   })),

@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/ask"
 	"github.com/victorarias/attn/internal/protocol"
 )
+
+var opened = time.Date(2026, 11, 21, 17, 40, 12, 0, time.UTC)
 
 func TestParseReadsQuestionBlocksBetweenMarkdown(t *testing.T) {
 	for name, tc := range map[string]struct {
@@ -50,13 +53,17 @@ func TestParseReadsQuestionBlocksBetweenMarkdown(t *testing.T) {
 			":::question-text\nBanner?\nRecommended: Welcome back\n:::",
 			`[{"question":{"choices":[],"key":"q1","kind":"text","prompt":"Banner?","recommended":"Welcome back"}}]`,
 		},
+		"a default names its choice in any case and falls due after its duration": {
+			":::question\nWhich?\n- [ ] Wait until after lunch\n- [ ] B\nDefault: wait until after lunch after 1h30m\n:::",
+			`[{"question":{"choices":[{"label":"Wait until after lunch"},{"label":"B"}],"default":{"choice":"Wait until after lunch","due_at":"2026-11-21T19:10:12Z"},"key":"q1","kind":"one","prompt":"Which?"}}]`,
+		},
 		"a question without choices takes a written answer": {
 			":::question\nAnything else?\n:::",
 			`[{"question":{"choices":[],"key":"q1","kind":"text","prompt":"Anything else?"}}]`,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			parts, err := ask.Parse(tc.markdown)
+			parts, err := ask.Parse(tc.markdown, opened)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -72,21 +79,30 @@ func TestParseRefusesMalformedAsks(t *testing.T) {
 		markdown string
 		want     string
 	}{
-		"empty":                {"  \n", "an ask needs markdown"},
-		"unclosed":             {"intro\n:::question\nWhy?\n- [ ] A", "line 2: question block has no closing :::"},
-		"unclosed before next": {":::question\nWhich?\n- [ ] A\n:::question\nAnother?\n- [ ] B\n:::", "line 1: question block has no closing :::"},
-		"unknown block":        {"::: question\nWhich?\n- [ ] A\n:::", `line 1: "::: question" opens no question block; use :::question, :::question-multi or :::question-text`},
-		"unknown block inside": {":::question\nWhich?\n- [ ] A\n:::note\n:::", `line 4: ":::note" opens no question block; use :::question, :::question-multi or :::question-text`},
-		"stray closer":         {"Intro\n:::", "line 2: ::: closes no question block"},
-		"no question":          {":::question\n\n- [ ] A\n:::", "line 1: question block has no question"},
-		"text with choices":    {":::question-text\nWhy?\n- [ ] A\n:::", "line 1: :::question-text takes no choices"},
-		"multi without":        {":::question-multi\nWhich?\n:::", "line 1: :::question-multi needs choices"},
-		"unknown recommended":  {":::question\nWhich?\n- [ ] A\nRecommended: B\n:::", `line 1: Recommended: names one choice, and "B" is none of them`},
-		"two recommended":      {":::question\nWhich?\n- [ ] A\n- [ ] B\nRecommended: A\nRecommended: B\n:::", "line 6: a question takes one Recommended: line"},
-		"duplicate choice":     {":::question\nWhich?\n- [ ] A\n- [ ] a\n:::", `line 4: choice "a" appears twice`},
+		"empty":                     {"  \n", "an ask needs markdown"},
+		"unclosed":                  {"intro\n:::question\nWhy?\n- [ ] A", "line 2: question block has no closing :::"},
+		"unclosed before next":      {":::question\nWhich?\n- [ ] A\n:::question\nAnother?\n- [ ] B\n:::", "line 1: question block has no closing :::"},
+		"unknown block":             {"::: question\nWhich?\n- [ ] A\n:::", `line 1: "::: question" opens no question block; use :::question, :::question-multi or :::question-text`},
+		"unknown block inside":      {":::question\nWhich?\n- [ ] A\n:::note\n:::", `line 4: ":::note" opens no question block; use :::question, :::question-multi or :::question-text`},
+		"stray closer":              {"Intro\n:::", "line 2: ::: closes no question block"},
+		"no question":               {":::question\n\n- [ ] A\n:::", "line 1: question block has no question"},
+		"text with choices":         {":::question-text\nWhy?\n- [ ] A\n:::", "line 1: :::question-text takes no choices"},
+		"multi without":             {":::question-multi\nWhich?\n:::", "line 1: :::question-multi needs choices"},
+		"unknown recommended":       {":::question\nWhich?\n- [ ] A\nRecommended: B\n:::", `line 1: Recommended: names one choice, and "B" is none of them`},
+		"two recommended":           {":::question\nWhich?\n- [ ] A\n- [ ] B\nRecommended: A\nRecommended: B\n:::", "line 6: a question takes one Recommended: line"},
+		"default on multi":          {":::question-multi\nWhich?\n- [ ] A\nDefault: A after 2h\n:::", "line 4: Default: goes in a :::question with choices, where the user picks one"},
+		"default on text":           {":::question-text\nWhy?\nDefault: A after 2h\n:::", "line 3: Default: goes in a :::question with choices, where the user picks one"},
+		"default without choices":   {":::question\nWhy?\nDefault: A after 2h\n:::", "line 3: Default: goes in a :::question with choices, where the user picks one"},
+		"default names no choice":   {":::question\nWhich?\n- [ ] A\nDefault: B after 2h\n:::", `line 4: Default: names one choice, and "B" is none of them`},
+		"default without after":     {":::question\nWhich?\n- [ ] A\nDefault: A\n:::", `line 4: Default: reads "Default: <choice> after <duration>", such as "Default: A after 2h"`},
+		"default after no duration": {":::question\nWhich?\n- [ ] A\nDefault: A after lunch\n:::", `line 4: Default: waits a positive duration such as 30m or 2h, got "lunch"`},
+		"default after no time":     {":::question\nWhich?\n- [ ] A\nDefault: A after 0s\n:::", `line 4: Default: waits a positive duration such as 30m or 2h, got "0s"`},
+		"two defaults":              {":::question\nWhich?\n- [ ] A\nDefault: A after 1h\nDefault: A after 2h\n:::", "line 5: a question takes one Default: line"},
+		"defaults in two questions": {":::question\nWhich?\n- [ ] A\nDefault: A after 1h\n:::\n:::question\nAnd?\n- [ ] B\nDefault: B after 1h\n:::", "line 6: an ask takes one Default:, and the question on line 1 already has one"},
+		"duplicate choice":          {":::question\nWhich?\n- [ ] A\n- [ ] a\n:::", `line 4: choice "a" appears twice`},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := ask.Parse(tc.markdown)
+			_, err := ask.Parse(tc.markdown, opened)
 			if err == nil || err.Error() != tc.want {
 				t.Fatalf("err = %v, want %q", err, tc.want)
 			}
@@ -109,7 +125,7 @@ func TestSubjectFallsBackToTheFirstQuestionThenTheProse(t *testing.T) {
 		"nothing but code":               {"", "```\ncode\n```", "Question"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			parts, err := ask.Parse(tc.markdown)
+			parts, err := ask.Parse(tc.markdown, opened)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -121,9 +137,9 @@ func TestSubjectFallsBackToTheFirstQuestionThenTheProse(t *testing.T) {
 }
 
 func TestReplyRendersEachAnswerForTheAgent(t *testing.T) {
-	parts, err := ask.Parse(":::question\nWhich store?\n- [ ] Postgres\n- [ ] Redis\nRecommended: Postgres\n:::\n" +
-		":::question-multi\nWhich platforms?\n- [ ] macOS\n- [ ] Linux, glibc only\n:::\n" +
-		":::question-text\nBanner text?\n:::")
+	parts, err := ask.Parse(":::question\nWhich store?\n- [ ] Postgres\n- [ ] Redis\nRecommended: Postgres\n:::\n"+
+		":::question-multi\nWhich platforms?\n- [ ] macOS\n- [ ] Linux, glibc only\n:::\n"+
+		":::question-text\nBanner text?\n:::", opened)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +211,7 @@ func TestReplyOpensWithTheAskAndEndsWithTheReminder(t *testing.T) {
 }
 
 func TestReplyRefusesAnswersTheAskCannotHold(t *testing.T) {
-	parts, err := ask.Parse(":::question\nWhich?\n- [ ] A\n- [ ] B\n:::\n:::question-text\nWhy?\n:::")
+	parts, err := ask.Parse(":::question\nWhich?\n- [ ] A\n- [ ] B\n:::\n:::question-text\nWhy?\n:::", opened)
 	if err != nil {
 		t.Fatal(err)
 	}

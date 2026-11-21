@@ -95,6 +95,14 @@ type HomeGatewayAskChoice struct {
 	Label string `json:"label"`
 }
 
+type HomeGatewayAskDefault struct {
+	// Choice corresponds to the JSON schema field "choice".
+	Choice string `json:"choice"`
+
+	// DueAt corresponds to the JSON schema field "due_at".
+	DueAt time.Time `json:"due_at"`
+}
+
 type HomeGatewayAskEvent struct {
 	// Ask corresponds to the JSON schema field "ask".
 	Ask HomeGatewayAsk `json:"ask"`
@@ -165,6 +173,9 @@ type HomeGatewayAskQuestion struct {
 
 	// Context corresponds to the JSON schema field "context".
 	Context *string `json:"context,omitempty,omitzero"`
+
+	// Default corresponds to the JSON schema field "default".
+	Default *HomeGatewayAskDefault `json:"default,omitempty,omitzero"`
 
 	// Key corresponds to the JSON schema field "key".
 	Key string `json:"key"`

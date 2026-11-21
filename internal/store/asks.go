@@ -38,14 +38,18 @@ const (
 
 const openAsk = "answered_at = ''"
 
-func (s *Store) AddAsk(a Ask) error {
+func (s *Store) AddAsk(a Ask, defaultDueAt time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
 		return fmt.Errorf("asks need the SQLite store")
 	}
-	query := "INSERT INTO asks (" + askedColumns + ") SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ? AND closed_at = '')"
-	args := []any{a.ID, a.SessionID, a.To.String(), a.Subject, a.Markdown, a.BaseDir, a.CreatedAt, a.SessionID}
+	dueAt := ""
+	if !defaultDueAt.IsZero() {
+		dueAt = defaultDueAt.UTC().Format(sortableTimeFormat)
+	}
+	query := "INSERT INTO asks (" + askedColumns + ", default_due_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ? AND closed_at = '')"
+	args := []any{a.ID, a.SessionID, a.To.String(), a.Subject, a.Markdown, a.BaseDir, a.CreatedAt, dueAt, a.SessionID}
 	if seedID, ok := a.To.TenderOf(); ok {
 		_, seeds, found, err := readCollection(s.db, garden.Namespace, garden.CollectionSeeds)
 		if err != nil {
@@ -192,6 +196,36 @@ func expectOpenAsk(result sql.Result, err error) error {
 		return ErrAskNotOpen
 	}
 	return nil
+}
+
+func (s *Store) AsksWithDefaultDue(now time.Time) ([]Ask, error) {
+	return s.queryAsks("SELECT "+askColumns+" FROM asks WHERE default_due_at != '' AND default_due_at <= ? AND "+openAsk+" ORDER BY default_due_at, id",
+		now.UTC().Format(sortableTimeFormat))
+}
+
+func (s *Store) FireAskDefault(id string, notice inbox.Item, now time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return false, nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec("UPDATE asks SET default_due_at = '' WHERE id = ? AND default_due_at != '' AND default_due_at <= ? AND "+openAsk,
+		id, now.UTC().Format(sortableTimeFormat))
+	if err != nil {
+		return false, err
+	}
+	if n, err := result.RowsAffected(); err != nil || n == 0 {
+		return false, err
+	}
+	if err := putInbox(tx, notice, now); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
 }
 
 func (s *Store) ForgetRepliesBefore(cutoff time.Time) ([]string, error) {

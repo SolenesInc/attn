@@ -45,7 +45,8 @@ func (d *Daemon) askOpen(msg *protocol.AskOpenMessage) (protocol.Ask, error) {
 	if err != nil {
 		return protocol.Ask{}, err
 	}
-	parts, err := ask.Parse(msg.Markdown)
+	openedAt := d.clock.Now()
+	parts, err := ask.Parse(msg.Markdown, openedAt)
 	if err != nil {
 		return protocol.Ask{}, err
 	}
@@ -73,7 +74,7 @@ func (d *Daemon) askOpen(msg *protocol.AskOpenMessage) (protocol.Ask, error) {
 		Subject:   ask.Subject(protocol.Deref(msg.Subject), parts),
 		Markdown:  msg.Markdown,
 		BaseDir:   msg.BaseDir,
-		CreatedAt: d.clock.Now().UTC().Format(time.RFC3339Nano),
+		CreatedAt: openedAt.UTC().Format(time.RFC3339Nano),
 	}
 	opened, err := d.describeAsk(stored, parts)
 	if err != nil {
@@ -82,7 +83,7 @@ func (d *Daemon) askOpen(msg *protocol.AskOpenMessage) (protocol.Ask, error) {
 	if err := writeAskImages(id, images); err != nil {
 		return protocol.Ask{}, fmt.Errorf("keep the ask's images: %v", err)
 	}
-	err = d.store.AddAsk(stored)
+	err = d.store.AddAsk(stored, defaultDueAt(opened.wire))
 	if err != nil {
 		d.forgetAskImages([]string{id})
 	}
@@ -512,7 +513,11 @@ func (d *Daemon) asks() []shownAsk {
 }
 
 func (d *Daemon) readAsk(a store.Ask) (shownAsk, error) {
-	parts, err := ask.Parse(a.Markdown)
+	openedAt, err := time.Parse(time.RFC3339Nano, a.CreatedAt)
+	if err != nil {
+		return shownAsk{}, fmt.Errorf("ask %s opened at %q: %w", a.ID, a.CreatedAt, err)
+	}
+	parts, err := ask.Parse(a.Markdown, openedAt)
 	if err != nil {
 		return shownAsk{}, err
 	}

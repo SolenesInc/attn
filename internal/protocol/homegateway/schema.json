@@ -146,6 +146,22 @@
     ],
     "type": "object"
   },
+  "HomeGatewayAskDefault": {
+    "properties": {
+      "choice": {
+        "type": "string"
+      },
+      "due_at": {
+        "format": "date-time",
+        "type": "string"
+      }
+    },
+    "required": [
+      "choice",
+      "due_at"
+    ],
+    "type": "object"
+  },
   "HomeGatewayAskEvent": {
     "properties": {
       "ask": {
@@ -269,6 +285,9 @@
       },
       "context": {
         "type": "string"
+      },
+      "default": {
+        "$ref": "HomeGatewayAskDefault.json"
       },
       "key": {
         "type": "string"

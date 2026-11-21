@@ -4256,6 +4256,7 @@ model AskChoice {
 
 // One question of an ask. key is stable within its ask ("q1", "q2", ...).
 // recommended names a choice label; on a text question it is a suggested answer.
+// default is set on a one-choice question only.
 model AskQuestion {
   key: string;
   kind: AskQuestionKind;
@@ -4263,6 +4264,14 @@ model AskQuestion {
   context?: string;
   choices: AskChoice[];
   recommended?: string;
+  default?: AskDefault;
+}
+
+// The choice the agent goes with when no answer has come by due_at, an
+// RFC3339 time. At due_at attn tells the agent once; the ask stays open.
+model AskDefault {
+  choice: string;
+  due_at: string;
 }
 
 // An ask reads as its parts in order: markdown, or one question.

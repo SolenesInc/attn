@@ -168,6 +168,7 @@ func (d *Daemon) startJobQueue(home bool) error {
 		d.registerConversationKeepCron(runner)
 		d.registerCodexUpdateCheckCron(runner)
 		d.registerSeedReminderCron(runner)
+		d.registerAskDefaultCron(runner)
 		if err := runner.RegisterCron(
 			automationScheduleKind,
 			automationScheduleInterval(),

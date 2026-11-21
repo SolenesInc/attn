@@ -1,0 +1,1 @@
+ALTER TABLE asks ADD COLUMN default_due_at TEXT NOT NULL DEFAULT '';

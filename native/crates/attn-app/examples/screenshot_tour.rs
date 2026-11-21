@@ -5219,6 +5219,7 @@ fn cache_ask(session: &str) -> Ask {
                         choice("Redis", "faster, one more service"),
                     ],
                     recommended: Some("Postgres".into()),
+                    default: None,
                 }),
                 ..AskPart::default()
             },

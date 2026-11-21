@@ -57,7 +57,7 @@ func upgradedWithChiefAsk(t *testing.T, answeredBeforeUpgrade bool) (*testworld.
 	}
 	legacy := who.Member(key).Address()
 	askID := uuid.NewString()
-	if err := before.AddAsk(store.Ask{ID: askID, SessionID: old, To: legacy, Subject: "Cache", Markdown: cacheAsk, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}); err != nil {
+	if err := before.AddAsk(store.Ask{ID: askID, SessionID: old, To: legacy, Subject: "Cache", Markdown: cacheAsk, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}, time.Time{}); err != nil {
 		t.Fatal(err)
 	}
 	if answeredBeforeUpgrade {

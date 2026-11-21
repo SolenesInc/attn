@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "db43cc7db362";
+pub const PROTOCOL_VERSION: &str = "94aa154ec346";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -467,6 +467,11 @@ pub struct AskCloseResult {
     pub id: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AskDefault {
+    pub choice: String,
+    pub due_at: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AskImage {
     pub data_base64: String,
     pub path: String,
@@ -554,6 +559,8 @@ pub struct AskQuestion {
     pub choices: Vec<AskChoice>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<AskDefault>,
     pub key: String,
     pub kind: AskQuestionKind,
     pub prompt: String,

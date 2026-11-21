@@ -86,6 +86,7 @@ const choiceQuestion: Question = {
     { label: 'Redis', description: 'one more service' },
   ],
   recommended: 'Postgres',
+  default: null,
 }
 
 const ask = (
@@ -235,6 +236,25 @@ describe('asks on the phone', () => {
     )
   })
 
+  it('says when an unanswered default falls due and which choice the agent takes', () => {
+    const defaulted = ask('a-default', 5, [
+      {
+        markdown: null,
+        question: { ...choiceQuestion, default: { choice: 'Postgres', dueAt: now + 90 * 60_000 } },
+      },
+    ])
+    Scene.scene(
+      { update, view },
+      Scene.given(online(personal)),
+      arrive(personal, [defaulted]),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      Scene.tap((simulation) => {
+        const [line] = entries('ask-default-due', simulation.html)
+        expect(line).toMatch(/^No answer by .*\d:\d\d.*, and cache-store goes with Postgres$/)
+      }),
+    )
+  })
+
   it('sends a written answer and a note with Send, and keeps them when sending fails', () => {
     const textAsk = ask('a-name', 2, [
       {
@@ -246,6 +266,7 @@ describe('asks on the phone', () => {
           context: null,
           choices: [],
           recommended: 'phone_asks',
+          default: null,
         },
       },
     ])

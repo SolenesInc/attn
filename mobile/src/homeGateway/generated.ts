@@ -1,12 +1,13 @@
 // To parse this data:
 //
-//   import { Convert, HomeGatewayAsk, HomeGatewayAskAnswer, HomeGatewayAskAnswerCommand, HomeGatewayAskAnswerResult, HomeGatewayAskChoice, HomeGatewayAskEvent, HomeGatewayAskImage, HomeGatewayAskImageChunk, HomeGatewayAskImageError, HomeGatewayAskPart, HomeGatewayAskQuestion, HomeGatewayAskQuestionKind, HomeGatewayAskReply, HomeGatewayAskSeedMentions, HomeGatewayAskSeedMentionsResult, HomeGatewayAsks, HomeGatewayCheckState, HomeGatewayCheckTally, HomeGatewayCrewMemberBetweenSessions, HomeGatewayCrewStart, HomeGatewayCrewStartResult, HomeGatewayGarden, HomeGatewayGardenSeeds, HomeGatewayHello, HomeGatewayPing, HomeGatewayPlotProgress, HomeGatewayPong, HomeGatewayProfile, HomeGatewayRefused, HomeGatewaySeed, HomeGatewaySeedChanged, HomeGatewaySeedCheck, HomeGatewaySeedDetail, HomeGatewaySeedError, HomeGatewaySeedGet, HomeGatewaySeedLogEntry, HomeGatewaySeedMention, HomeGatewaySeedMove, HomeGatewaySeedNoteCommand, HomeGatewaySeedResult, HomeGatewaySeedStatus, HomeGatewaySeedVerb, HomeGatewaySession, HomeGatewaySessionState, HomeGatewaySessions, HomeGatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./generated";
+//   import { Convert, HomeGatewayAsk, HomeGatewayAskAnswer, HomeGatewayAskAnswerCommand, HomeGatewayAskAnswerResult, HomeGatewayAskChoice, HomeGatewayAskDefault, HomeGatewayAskEvent, HomeGatewayAskImage, HomeGatewayAskImageChunk, HomeGatewayAskImageError, HomeGatewayAskPart, HomeGatewayAskQuestion, HomeGatewayAskQuestionKind, HomeGatewayAskReply, HomeGatewayAskSeedMentions, HomeGatewayAskSeedMentionsResult, HomeGatewayAsks, HomeGatewayCheckState, HomeGatewayCheckTally, HomeGatewayCrewMemberBetweenSessions, HomeGatewayCrewStart, HomeGatewayCrewStartResult, HomeGatewayGarden, HomeGatewayGardenSeeds, HomeGatewayHello, HomeGatewayPing, HomeGatewayPlotProgress, HomeGatewayPong, HomeGatewayProfile, HomeGatewayRefused, HomeGatewaySeed, HomeGatewaySeedChanged, HomeGatewaySeedCheck, HomeGatewaySeedDetail, HomeGatewaySeedError, HomeGatewaySeedGet, HomeGatewaySeedLogEntry, HomeGatewaySeedMention, HomeGatewaySeedMove, HomeGatewaySeedNoteCommand, HomeGatewaySeedResult, HomeGatewaySeedStatus, HomeGatewaySeedVerb, HomeGatewaySession, HomeGatewaySessionState, HomeGatewaySessions, HomeGatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./generated";
 //
 //   const homeGatewayAsk = Convert.toHomeGatewayAsk(json);
 //   const homeGatewayAskAnswer = Convert.toHomeGatewayAskAnswer(json);
 //   const homeGatewayAskAnswerCommand = Convert.toHomeGatewayAskAnswerCommand(json);
 //   const homeGatewayAskAnswerResult = Convert.toHomeGatewayAskAnswerResult(json);
 //   const homeGatewayAskChoice = Convert.toHomeGatewayAskChoice(json);
+//   const homeGatewayAskDefault = Convert.toHomeGatewayAskDefault(json);
 //   const homeGatewayAskEvent = Convert.toHomeGatewayAskEvent(json);
 //   const homeGatewayAskImage = Convert.toHomeGatewayAskImage(json);
 //   const homeGatewayAskImageChunk = Convert.toHomeGatewayAskImageChunk(json);
@@ -89,6 +90,7 @@ export interface PartElement {
 export interface Question {
     choices:      ChoiceElement[];
     context?:     string;
+    default?:     Default;
     key:          string;
     kind:         HomeGatewayAskQuestionKind;
     prompt:       string;
@@ -99,6 +101,12 @@ export interface Question {
 export interface ChoiceElement {
     description?: string;
     label:        string;
+    [property: string]: any;
+}
+
+export interface Default {
+    choice: string;
+    due_at: Date;
     [property: string]: any;
 }
 
@@ -160,6 +168,12 @@ export enum HomeGatewayAskAnswerResultEvent {
 export interface HomeGatewayAskChoice {
     description?: string;
     label:        string;
+    [property: string]: any;
+}
+
+export interface HomeGatewayAskDefault {
+    choice: string;
+    due_at: Date;
     [property: string]: any;
 }
 
@@ -236,6 +250,7 @@ export interface HomeGatewayAskPart {
 export interface HomeGatewayAskQuestion {
     choices:      ChoiceElement[];
     context?:     string;
+    default?:     Default;
     key:          string;
     kind:         HomeGatewayAskQuestionKind;
     prompt:       string;
@@ -862,6 +877,14 @@ export class Convert {
         return JSON.stringify(uncast(value, r("HomeGatewayAskChoice")), null, 2);
     }
 
+    public static toHomeGatewayAskDefault(json: string): HomeGatewayAskDefault {
+        return cast(JSON.parse(json), r("HomeGatewayAskDefault"));
+    }
+
+    public static homeGatewayAskDefaultToJson(value: HomeGatewayAskDefault): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskDefault")), null, 2);
+    }
+
     public static toHomeGatewayAskEvent(json: string): HomeGatewayAskEvent {
         return cast(JSON.parse(json), r("HomeGatewayAskEvent"));
     }
@@ -1457,6 +1480,7 @@ const typeMap: any = {
     "Question": o([
         { json: "choices", js: "choices", typ: a(r("ChoiceElement")) },
         { json: "context", js: "context", typ: u(undefined, "") },
+        { json: "default", js: "default", typ: u(undefined, r("Default")) },
         { json: "key", js: "key", typ: "" },
         { json: "kind", js: "kind", typ: r("HomeGatewayAskQuestionKind") },
         { json: "prompt", js: "prompt", typ: "" },
@@ -1465,6 +1489,10 @@ const typeMap: any = {
     "ChoiceElement": o([
         { json: "description", js: "description", typ: u(undefined, "") },
         { json: "label", js: "label", typ: "" },
+    ], "any"),
+    "Default": o([
+        { json: "choice", js: "choice", typ: "" },
+        { json: "due_at", js: "due_at", typ: Date },
     ], "any"),
     "Reply": o([
         { json: "answered_at", js: "answered_at", typ: Date },
@@ -1499,6 +1527,10 @@ const typeMap: any = {
     "HomeGatewayAskChoice": o([
         { json: "description", js: "description", typ: u(undefined, "") },
         { json: "label", js: "label", typ: "" },
+    ], "any"),
+    "HomeGatewayAskDefault": o([
+        { json: "choice", js: "choice", typ: "" },
+        { json: "due_at", js: "due_at", typ: Date },
     ], "any"),
     "HomeGatewayAskEvent": o([
         { json: "ask", js: "ask", typ: r("Ask") },
@@ -1545,6 +1577,7 @@ const typeMap: any = {
     "HomeGatewayAskQuestion": o([
         { json: "choices", js: "choices", typ: a(r("ChoiceElement")) },
         { json: "context", js: "context", typ: u(undefined, "") },
+        { json: "default", js: "default", typ: u(undefined, r("Default")) },
         { json: "key", js: "key", typ: "" },
         { json: "kind", js: "kind", typ: r("HomeGatewayAskQuestionKind") },
         { json: "prompt", js: "prompt", typ: "" },

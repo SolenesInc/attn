@@ -170,6 +170,13 @@ model HomeGatewayAskQuestion {
   context?: string;
   choices: HomeGatewayAskChoice[];
   recommended?: string;
+  default?: HomeGatewayAskDefault;
+}
+
+// The choice the agent goes with when no answer has come by due_at.
+model HomeGatewayAskDefault {
+  choice: string;
+  due_at: utcDateTime;
 }
 
 // An ask reads as its parts in order: markdown, or one question. Images in the

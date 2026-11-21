@@ -179,7 +179,7 @@ func (d *Daemon) seedMailResumes(a who.Address, profileID string) (bool, tenderR
 }
 
 func watchOrReminder(item inbox.Item) bool {
-	return item.Kind == inbox.Notice && (item.Source == seedReminderSource || item.Hint == pullRequestWatchHint)
+	return item.Kind == inbox.Notice && (item.Hint == reminderHint || item.Hint == pullRequestWatchHint)
 }
 
 func (d *Daemon) resumeStandbyTenderLocked(a who.Address, seedID string, state *inboxDeliveryState, now time.Time) (inbox.Receipt, error) {
@@ -327,7 +327,7 @@ func (d *Daemon) seedMailCause(a who.Address) string {
 func describeInboxItem(item store.InboxItem) string {
 	what := strings.TrimSpace(item.Hint)
 	switch {
-	case item.Source == seedReminderSource:
+	case item.Kind == inbox.Notice && item.Hint == reminderHint:
 		what = "a reminder"
 	case item.Kind == inbox.PeerMessage:
 		what = "a message"

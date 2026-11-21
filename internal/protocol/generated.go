@@ -627,6 +627,14 @@ type AskCloseResult struct {
 	ID string `json:"id"`
 }
 
+type AskDefault struct {
+	// Choice corresponds to the JSON schema field "choice".
+	Choice string `json:"choice"`
+
+	// DueAt corresponds to the JSON schema field "due_at".
+	DueAt string `json:"due_at"`
+}
+
 type AskImage struct {
 	// DataBase64 corresponds to the JSON schema field "data_base64".
 	DataBase64 string `json:"data_base64"`
@@ -717,6 +725,9 @@ type AskQuestion struct {
 
 	// Context corresponds to the JSON schema field "context".
 	Context *string `json:"context,omitempty,omitzero"`
+
+	// Default corresponds to the JSON schema field "default".
+	Default *AskDefault `json:"default,omitempty,omitzero"`
 
 	// Key corresponds to the JSON schema field "key".
 	Key string `json:"key"`

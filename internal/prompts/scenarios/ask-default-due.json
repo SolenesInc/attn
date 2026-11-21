@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "ask-default-due",
+  "description": "An ask's default falls due with no answer.",
+  "recipient": "ask",
+  "event": "default-due",
+  "values": {
+    "subject": "\"Scrollback cap\"",
+    "ask_id": "a-7k3f9m",
+    "prompt": "Where should the host cap scrollback?",
+    "choice": "50,000 lines"
+  }
+}

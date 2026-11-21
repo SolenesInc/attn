@@ -184,11 +184,33 @@ const repliedAnswer = <Message>(
   return h.p([h.Class(`replied${shown ? '' : ' none'}`)], [shown || 'Not answered'])
 }
 
+const clockTime = (at: number, now: number): string => {
+  const due = new Date(at)
+  const sameDay = due.toDateString() === new Date(now).toDateString()
+  return due.toLocaleString([], {
+    ...(sameDay ? {} : { weekday: 'short' }),
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+const defaultDue = <Message>(question: Question, from: string, now: number, h: HtmlBuilder<Message>): Html =>
+  question.default
+    ? h.p(
+        [h.Class('muted default-due'), h.DataAttribute('testid', 'ask-default-due')],
+        [
+          `No answer by ${clockTime(question.default.dueAt, now)}, and ${from} goes with ${question.default.choice}`,
+        ],
+      )
+    : h.empty
+
 const questionCard = <Message>(
   ask: PhoneAsk,
+  from: string,
   question: Question,
   index: number,
   open: OpenAsk,
+  now: number,
   actions: AskActions<Message>,
   h: HtmlBuilder<Message>,
 ): Html => {
@@ -202,6 +224,7 @@ const questionCard = <Message>(
         [h.span([h.Class('index')], [String(index)]), ...mentionText(question.prompt, actions, h)],
       ),
       question.context ? renderMarkdown(question.context, actions, h) : h.empty,
+      ask.reply ? h.empty : defaultDue(question, from, now, h),
       ask.reply
         ? repliedAnswer(question, replied, h)
         : question.kind === 'text'
@@ -251,7 +274,7 @@ export const askScreen = <Message>(
       ]
     : ask.parts.map((part) =>
         part.question
-          ? questionCard(ask, part.question, ++index, open, mentionActions, h)
+          ? questionCard(ask, row.from, part.question, ++index, open, now, mentionActions, h)
           : renderMarkdown(part.markdown ?? '', mentionActions, h),
       )
   const sendable = !ask.reply && !ask.tooLarge && draftSendable(ask, open.draft) && !open.sending && row.live

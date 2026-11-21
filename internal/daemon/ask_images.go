@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/ask"
 	"github.com/victorarias/attn/internal/config"
@@ -137,7 +138,7 @@ func (d *Daemon) copyImagesOfAsksOpenedBeforeImagesTravelled() {
 		return
 	}
 	for _, stored := range asks {
-		parts, err := ask.Parse(stored.Markdown)
+		parts, err := ask.Parse(stored.Markdown, time.Time{})
 		if err != nil {
 			continue
 		}

@@ -21,6 +21,7 @@ const (
 	seedReminderTick        = time.Minute
 	seedReminderTickTimeout = 2 * time.Minute
 	seedReminderSource      = "seed-reminder"
+	reminderHint            = "reminder"
 )
 
 func (d *Daemon) registerSeedReminderCron(runner *jobs.Runner) {
@@ -217,6 +218,6 @@ func seedReminderItem(seed garden.Seed, reminder garden.Reminder, setBy string) 
 	text += ":\n" + reminder.Message
 	return inbox.Item{
 		ID: id, To: who.ToTenderOf(seed.ID), Kind: inbox.Notice,
-		Source: seedReminderSource, Hint: "reminder", Text: text,
+		Source: seedReminderSource, Hint: reminderHint, Text: text,
 	}
 }

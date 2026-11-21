@@ -39,7 +39,7 @@ func (d *Daemon) runAsk(_ context.Context, c command.Caller, a command.AskArgs) 
 	if err != nil {
 		return nil, err
 	}
-	parts, err := ask.Parse(a.Markdown)
+	parts, err := ask.Parse(a.Markdown, d.clock.Now())
 	if err != nil {
 		return nil, err
 	}

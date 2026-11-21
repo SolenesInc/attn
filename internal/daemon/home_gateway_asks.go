@@ -128,6 +128,9 @@ func homeGatewayAskQuestion(question *protocol.AskQuestion) *homegateway.HomeGat
 		Choices:     make([]homegateway.HomeGatewayAskChoice, 0, len(question.Choices)),
 		Recommended: question.Recommended,
 	}
+	if question.Default != nil {
+		out.Default = &homegateway.HomeGatewayAskDefault{Choice: question.Default.Choice, DueAt: parseAskTime(question.Default.DueAt)}
+	}
 	for _, choice := range question.Choices {
 		out.Choices = append(out.Choices, homegateway.HomeGatewayAskChoice{Label: choice.Label, Description: choice.Description})
 	}
