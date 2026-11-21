@@ -612,6 +612,29 @@ fn a_press_on_a_cap_opens_the_menu_of_the_chips_it_holds_and_a_second_press_clos
 }
 
 #[test]
+fn a_press_on_a_chip_in_an_open_caps_menu_brings_its_tile_beside_the_active_one() {
+    let ids = many_ids();
+    let mut world = start(TWO_FIT, None, vec![many("p00", &ids)]);
+    world.gesture(|app| app.click(Target::key("shelf.cap.after")));
+    world.settle();
+    world.gesture(|app| app.click(Target::key("shelf.chip.p23")));
+    assert_eq!(moves(&world), [moved("p23", "p00", "right", true)]);
+    rest(&mut world);
+}
+
+#[test]
+fn a_chip_dragged_out_of_an_open_caps_menu_onto_a_tiles_bottom_edge_stacks_there() {
+    let ids = many_ids();
+    let mut world = start(TWO_FIT, None, vec![many("p00", &ids)]);
+    world.gesture(|app| app.click(Target::key("shelf.cap.after")));
+    world.settle();
+    let to = in_tile(&world, "p00", 0.5, 0.97);
+    drag(&mut world, "shelf.chip.p22", to);
+    assert_eq!(moves(&world), [moved("p22", "p00", "bottom", true)]);
+    rest(&mut world);
+}
+
+#[test]
 fn a_tile_dropped_on_the_trailing_cap_moves_past_the_rows_last_column_and_shows_beside_it() {
     let ids = many_ids();
     let mut world = start(TWO_FIT, None, vec![many("p00", &ids)]);

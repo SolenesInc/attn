@@ -258,7 +258,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
         .child(keys_hint(["1–9"], "switch", t))
         .child(keys_hint(["esc"], "close", t));
     Dialog::new("overview", "Desktop overview")
-        .surface_keys(DIALOG, "overview.scrim")
+        .surface_keys("overview", DIALOG, "overview.scrim")
         .lead(format!(
             "{profile} · {count} {}",
             if count == 1 { "desktop" } else { "desktops" }

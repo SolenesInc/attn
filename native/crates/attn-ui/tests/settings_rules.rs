@@ -1254,6 +1254,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::tile_header::SettlingChip::keys(keys)", true),
     ("blocks::tile_header::SettlingChip::widths(said)", false),
     ("blocks::tile_header::SettlingChip::widths(keys)", false),
+    ("blocks::dialog::Dialog::surface_keys(layer)", false),
     ("blocks::dialog::Dialog::surface_keys(surface)", false),
     ("blocks::dialog::Dialog::surface_keys(scrim)", false),
     ("blocks::header_piece::HeaderPiece::words(said)", true),

@@ -652,6 +652,7 @@ pub(crate) fn cap_menu(state: &State, t: &Tokens) -> Option<El> {
         format!("shelf.menu.{name}"),
         format!("{} more this way", held.len()),
     )
+    .takes_no_focus()
     .rows(
         held.iter()
             .map(|c| chip_button(c, &shelf.desktop, peeked.as_deref(), None, Width::Full, t)),

@@ -3155,6 +3155,27 @@ fn the_overview_moves_between_desktops_by_arrow_and_switches_or_sends_the_active
 }
 
 #[test]
+fn the_overview_keeps_the_keys_scripts_find_it_by_while_open_and_drops_them_when_closed() {
+    let mut world = start(two_desktops());
+    let keys = ["overview", "overview.dialog", "overview.scrim"];
+
+    press(&mut world, Action::DesktopOverview);
+    for k in keys {
+        assert!(
+            world.runtime().presented(k).is_some(),
+            "the open overview draws {k}"
+        );
+    }
+    key(&mut world, rune::Key::Escape, false);
+    for k in keys {
+        assert!(
+            world.runtime().presented(k).is_none(),
+            "the closed overview draws no {k}"
+        );
+    }
+}
+
+#[test]
 fn the_overviews_cards_share_one_grid_whatever_each_card_holds() {
     let mut world = start(two_desktops());
 

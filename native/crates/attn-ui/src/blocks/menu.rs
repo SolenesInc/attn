@@ -45,9 +45,10 @@ impl Menu {
         self
     }
 
-    /// The keyboard stays in the field that opened it, which names the row it is on, so the
-    /// menu takes no focus of its own, even when an assistive client asks it to.
-    pub fn driven_by_field(mut self) -> Self {
+    /// The keyboard stays in what opened it, such as a field that names the row it is on, so the
+    /// menu takes no focus of its own, even when an assistive client asks it to, and a press on
+    /// a row reaches the gestures of the layer under it.
+    pub fn takes_no_focus(mut self) -> Self {
         self.focusable = false;
         self
     }

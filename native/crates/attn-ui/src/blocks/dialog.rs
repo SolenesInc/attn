@@ -77,6 +77,13 @@ type Wrap = Box<dyn FnOnce(El) -> El>;
 /// modal: focus, dismissal and the inert window behind are Rune's modal stack, and whether it
 /// is open is the view's. A dialog with actions closes with its Cancel, Escape or a click
 /// outside; one without, or one whose actions do not close it, draws a × that closes it.
+#[derive(Clone)]
+struct Keys {
+    layer: String,
+    surface: String,
+    scrim: String,
+}
+
 pub struct Dialog {
     key: String,
     title: Said,
@@ -88,7 +95,7 @@ pub struct Dialog {
     top: Option<El>,
     actions: Option<Actions>,
     size: DialogSize,
-    named: Option<(String, String)>,
+    named: Option<Keys>,
     outside: bool,
     close: Option<(Wrap, Wrap)>,
     keys: Option<Wrap>,
@@ -196,10 +203,19 @@ impl Dialog {
         self
     }
 
-    /// Keys the surface `surface` and the backdrop `scrim` in place of `{key}-dialog` and
-    /// `{key}-scrim`, for a dialog whose keys tests and scripts found before it was a Dialog.
-    pub fn surface_keys(mut self, surface: impl Into<String>, scrim: impl Into<String>) -> Self {
-        self.named = Some((surface.into(), scrim.into()));
+    /// Keys the layer, the surface and the backdrop in place of `{key}-layer`, `{key}-dialog`
+    /// and `{key}-scrim`, for a dialog whose keys tests and scripts found before it was a Dialog.
+    pub fn surface_keys(
+        mut self,
+        layer: impl Into<String>,
+        surface: impl Into<String>,
+        scrim: impl Into<String>,
+    ) -> Self {
+        self.named = Some(Keys {
+            layer: layer.into(),
+            surface: surface.into(),
+            scrim: scrim.into(),
+        });
         self
     }
 
@@ -247,11 +263,14 @@ impl Dialog {
     }
 
     pub fn build(self, t: &Tokens, layer: &mut Vec<El>) {
-        let (surface_key, scrim_key) = self.named.clone().unwrap_or_else(|| {
-            (
-                format!("{}-dialog", self.key),
-                format!("{}-scrim", self.key),
-            )
+        let Keys {
+            layer: layer_key,
+            surface: surface_key,
+            scrim: scrim_key,
+        } = self.named.clone().unwrap_or_else(|| Keys {
+            layer: format!("{}-layer", self.key),
+            surface: format!("{}-dialog", self.key),
+            scrim: format!("{}-scrim", self.key),
         });
         let Some((press, modal)) = self.close else {
             return;
@@ -384,7 +403,7 @@ impl Dialog {
         );
         layer.push(
             layer_box
-                .key(format!("{}-layer", self.key))
+                .key(layer_key)
                 .absolute(0.0, 0.0)
                 .w_full()
                 .h_full()

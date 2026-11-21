@@ -156,9 +156,9 @@ try {
 
   await runner.step('the_overview_switches_desktops', async () => {
     await driver.pressKey(keys.overview);
-    await driver.waitFor({ key: 'overview.dialog' });
+    await driver.waitFor({ key: 'overview' });
     await driver.click({ key: `overview.card.${desktopA.id}` });
-    await driver.waitFor({ key: 'overview.dialog' }, { gone: true });
+    await driver.waitFor({ key: 'overview' }, { gone: true });
     await shows(desktopA.id, first.pane);
     const rows = await screen(first, tokens.first);
     runner.assert(!rows.join('').includes(marker), 'the shell left behind received no input meant for desktop B', rows);
