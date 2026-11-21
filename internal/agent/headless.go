@@ -110,6 +110,40 @@ func tailString(s string, limit int) string {
 	return "…(truncated) " + s[len(s)-limit:]
 }
 
+func writeHeadlessFile(workDir, pattern string, content []byte) (string, func(), error) {
+	file, err := os.CreateTemp(headlessTempDir(workDir), pattern)
+	if err != nil {
+		return "", func() {}, err
+	}
+	path, err := filepath.Abs(file.Name())
+	if err != nil {
+		path = file.Name()
+	}
+	remove := func() { _ = os.Remove(path) }
+	if _, err := file.Write(content); err != nil {
+		file.Close()
+		remove()
+		return "", func() {}, err
+	}
+	if err := file.Close(); err != nil {
+		remove()
+		return "", func() {}, err
+	}
+	return path, remove, nil
+}
+
+func writeHeadlessSystemPrompt(request HeadlessTaskRequest) (string, func(), error) {
+	system := strings.TrimSpace(request.SystemPrompt)
+	if system == "" {
+		return "", func() {}, nil
+	}
+	path, remove, err := writeHeadlessFile(request.WorkDir, "attn-instructions-*.md", []byte(system))
+	if err != nil {
+		return "", func() {}, fmt.Errorf("write the call's instructions: %w", err)
+	}
+	return path, remove, nil
+}
+
 func headlessTempDir(workDir string) string {
 	if dir := strings.TrimSpace(workDir); dir != "" {
 		if info, err := os.Stat(dir); err == nil && info.IsDir() {

@@ -168,7 +168,12 @@ func (c *Claude) BuildEnv(opts SpawnOpts) []string {
 var claudeNativeDefaultTools = []string{"Read", "Write", "Edit", "Grep", "Glob"}
 
 func (c *Claude) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest) (HeadlessTaskResult, error) {
-	args := claudeHeadlessArgs(request)
+	instructionsPath, removeInstructions, err := writeHeadlessSystemPrompt(request)
+	if err != nil {
+		return HeadlessTaskResult{}, err
+	}
+	defer removeInstructions()
+	args := claudeHeadlessArgs(request, instructionsPath)
 
 	result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, request.Prompt, request.WorkDir, "claude", claudeReportedFailure)
 	if err != nil {
@@ -257,7 +262,7 @@ func parseClaudeResultMeta(stdout []byte) claudeResultMeta {
 	return claudeResultMeta{}
 }
 
-func claudeHeadlessArgs(request HeadlessTaskRequest) []string {
+func claudeHeadlessArgs(request HeadlessTaskRequest, instructionsPath string) []string {
 	tools := request.AllowedTools
 	if len(tools) == 0 && !request.DisableTools {
 		tools = claudeNativeDefaultTools
@@ -280,8 +285,8 @@ func claudeHeadlessArgs(request HeadlessTaskRequest) []string {
 	if len(request.OutputSchema) > 0 {
 		args = append(args, "--json-schema", string(request.OutputSchema))
 	}
-	if prompt := strings.TrimSpace(request.SystemPrompt); prompt != "" {
-		args = append(args, "--system-prompt", prompt)
+	if instructionsPath != "" {
+		args = append(args, "--system-prompt-file", instructionsPath)
 	}
 	args = append(args,
 		"--no-session-persistence",

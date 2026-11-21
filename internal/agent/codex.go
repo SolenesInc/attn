@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -135,9 +134,14 @@ func (c *Codex) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest
 		return HeadlessTaskResult{}, err
 	}
 	defer removeSchema()
-	args := codexHeadlessArgs(request, window)
+	instructionsPath, removeInstructions, err := writeHeadlessSystemPrompt(request)
+	if err != nil {
+		return HeadlessTaskResult{}, err
+	}
+	defer removeInstructions()
+	args := codexHeadlessArgs(request, window, instructionsPath)
 	if request.DisableTools {
-		args = codexToolFreeHeadlessArgs(request, window)
+		args = codexToolFreeHeadlessArgs(request, window, instructionsPath)
 	}
 	if schemaPath != "" {
 		args = append(args, "--output-schema", schemaPath)
@@ -155,20 +159,9 @@ func writeCodexOutputSchema(request HeadlessTaskRequest) (string, func(), error)
 	if len(request.OutputSchema) == 0 {
 		return "", func() {}, nil
 	}
-	file, err := os.CreateTemp(headlessTempDir(request.WorkDir), "codex-output-schema-*.json")
+	path, remove, err := writeHeadlessFile(request.WorkDir, "codex-output-schema-*.json", request.OutputSchema)
 	if err != nil {
-		return "", func() {}, fmt.Errorf("create Codex output schema: %w", err)
-	}
-	path := file.Name()
-	remove := func() { _ = os.Remove(path) }
-	if _, err := file.Write(request.OutputSchema); err != nil {
-		file.Close()
-		remove()
 		return "", func() {}, fmt.Errorf("write Codex output schema: %w", err)
-	}
-	if err := file.Close(); err != nil {
-		remove()
-		return "", func() {}, fmt.Errorf("close Codex output schema: %w", err)
 	}
 	return path, remove, nil
 }
@@ -250,7 +243,7 @@ func codexReportedFailure(stdout []byte) string {
 	return strings.Join(messages, "\n")
 }
 
-func codexHeadlessArgs(request HeadlessTaskRequest, window int) []string {
+func codexHeadlessArgs(request HeadlessTaskRequest, window int, instructionsPath string) []string {
 	args := []string{
 		"exec",
 		"--json",
@@ -275,15 +268,14 @@ func codexHeadlessArgs(request HeadlessTaskRequest, window int) []string {
 	}
 	args = append(args, codexFeatureLocks()...)
 	args = append(args, codexContextWindowCapArgs(window)...)
-	return append(args, codexInstructionsArgs(request)...)
+	return append(args, codexInstructionsArgs(instructionsPath)...)
 }
 
-func codexInstructionsArgs(request HeadlessTaskRequest) []string {
-	system := strings.TrimSpace(request.SystemPrompt)
-	if system == "" {
+func codexInstructionsArgs(instructionsPath string) []string {
+	if instructionsPath == "" {
 		return nil
 	}
-	return []string{"-c", "instructions=" + tomlString(system)}
+	return []string{"-c", "model_instructions_file=" + tomlString(instructionsPath)}
 }
 
 func tomlString(value string) string {
@@ -291,7 +283,7 @@ func tomlString(value string) string {
 	return string(quoted)
 }
 
-func codexToolFreeHeadlessArgs(request HeadlessTaskRequest, window int) []string {
+func codexToolFreeHeadlessArgs(request HeadlessTaskRequest, window int, instructionsPath string) []string {
 	args := []string{
 		"exec",
 		"--json",
@@ -321,7 +313,7 @@ func codexToolFreeHeadlessArgs(request HeadlessTaskRequest, window int) []string
 	}
 	args = append(args, codexFeatureLocks()...)
 	args = append(args, codexContextWindowCapArgs(window)...)
-	return append(args, codexInstructionsArgs(request)...)
+	return append(args, codexInstructionsArgs(instructionsPath)...)
 }
 
 func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {

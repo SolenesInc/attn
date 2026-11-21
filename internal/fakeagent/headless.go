@@ -170,6 +170,14 @@ func headlessPrompt(positionals []string) string {
 	return string(prompt)
 }
 
+func readInstructionsFile(path string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+	raw, err := os.ReadFile(path)
+	return string(raw), err
+}
+
 func joinSystemPrompt(system, prompt string) string {
 	if system = strings.TrimSpace(system); system == "" {
 		return prompt

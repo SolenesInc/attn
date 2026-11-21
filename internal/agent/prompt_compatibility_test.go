@@ -38,9 +38,9 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 			}
 		}
 	}
-	for _, system := range []string{"", " System λ {{literal}} "} {
+	for system, instructionsPath := range map[string]string{"": "", " System λ {{literal}} ": "/tmp/run/attn-instructions.md"} {
 		request := HeadlessTaskRequest{Prompt: "User message {{literal}}", SystemPrompt: system, WorkDir: "/tmp/run", Model: "model", DisableTools: true}
-		for name, args := range map[string][]string{"claude": claudeHeadlessArgs(request), "codex": codexToolFreeHeadlessArgs(request, 0)} {
+		for name, args := range map[string][]string{"claude": claudeHeadlessArgs(request, instructionsPath), "codex": codexToolFreeHeadlessArgs(request, 0, instructionsPath)} {
 			raw, err := json.Marshal(args)
 			if err != nil {
 				t.Fatal(err)

@@ -357,7 +357,10 @@ which carries nothing of the call.
 A cold call, which no spare answers, runs `claude --print` with no prompt
 argument, and Claude reads the prompt from stdin. On 2.1.329 a 1,048,576-byte
 input reached the model request whole as the user message, with and without
-`--bare` (seed `s-63n4ng`).
+`--bare` (seed `s-63n4ng`). The instructions go in a file named by
+`--system-prompt-file`, which on 2.1.330 sent the same request as
+`--system-prompt` with the text, and carried 1,048,576-byte instructions whole
+as the last `system` block (seed `s-d7drbj`).
 
 ## Auto memory
 

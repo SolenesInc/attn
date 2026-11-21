@@ -191,6 +191,12 @@ signed-in `CODEX_HOME` passed as `model_catalog_json`, 2026-11-20 (seed
 - `-c instructions="..."` replaces Codex's base instructions. The request
   carries them as its first developer message; the top-level `instructions`
   field stays empty, as it does for Codex's own prompt.
+- `-c model_instructions_file="<path>"` carries the same instructions from a
+  file, so they stay out of `ps` and past Linux's 128 KiB limit on one
+  argument. attn uses it. On 0.171.0 the two forms sent the same request,
+  with attn's arguments and alone, and 1,048,576-byte instructions arrived
+  whole (seed `s-d7drbj`). With attn's tool-free arguments, 0.171.0 sends the
+  instructions twice, as two identical developer messages, under either form.
 - Tools travel in an `additional_tools` input item, not the top-level `tools`
   array, which stays empty. Without the settings that follow, a tool-free run on
   gpt-5.6-terra declared `exec`, `wait`, `request_user_input` and six

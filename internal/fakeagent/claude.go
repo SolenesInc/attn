@@ -51,7 +51,7 @@ type claude struct {
 var claudePrintFlags = flagSpec{
 	values: map[string]bool{
 		"--model": true, "--effort": true, "--max-turns": true, "--max-budget-usd": true,
-		"--json-schema": true, "--system-prompt": true, "--setting-sources": true, "--mcp-config": true,
+		"--json-schema": true, "--system-prompt-file": true, "--setting-sources": true, "--mcp-config": true,
 		"--tools": true, "--allowedTools": true, "--disallowedTools": true,
 		"--permission-mode": true, "--output-format": true,
 	},
@@ -78,7 +78,11 @@ func runClaude(cfg config) int {
 
 func claudePrint(args parsedArgs) headlessRun {
 	run := headlessRun{harness: Claude, model: args.value("--model"), effort: args.value("--effort")}
-	run.prompt = joinSystemPrompt(args.value("--system-prompt"), headlessPrompt(args.positionals))
+	system, err := readInstructionsFile(args.value("--system-prompt-file"))
+	if err != nil {
+		run.refusal = "claude --print with an unreadable --system-prompt-file: " + err.Error()
+	}
+	run.prompt = joinSystemPrompt(system, headlessPrompt(args.positionals))
 	if args.has("--mcp-config") {
 		run.refusal = "claude --print with MCP tool servers"
 	}

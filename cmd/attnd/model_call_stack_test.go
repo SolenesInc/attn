@@ -203,27 +203,30 @@ func TestAModelCallIsRefusedOrEndsAsItsCallerSays(t *testing.T) {
 	}
 }
 
-func TestAColdModelCallTakesAMebibyteInputOnStdin(t *testing.T) {
+func TestAColdModelCallTakesMebibyteInstructionsAndInputOutsideItsArguments(t *testing.T) {
 	s, token := modelCallStack(t)
 	s.Spare()
 	requireStdout(t, s.Attn("settings", "set", "model_calls.agent", "codex"), "codex")
+	system := strings.Repeat("An instruction for the call, past the kernel's argument limit.\n", 1<<20/63+1)[:1<<20]
 	input := strings.Repeat("A line of a long changelog, past the kernel's argument limit.\n", 1<<20/62+1)[:1<<20]
 
 	for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-		call := callModel(s, token, map[string]any{"harness": string(harness), "input": input})
+		call := callModel(s, token, map[string]any{"harness": string(harness), "system": system, "input": input})
 		task := s.HeadlessTask()
 		if task.Harness != harness || slices.Contains(task.Argv, "--input-format") {
 			t.Fatalf("a call naming %s reached %+v, want a cold %s", harness, task.Argv, harness)
 		}
-		if task.Prompt != "Summarize in one line.\n\n"+input {
-			t.Fatalf("cold %s got a prompt of %d bytes, want the instructions and the %d-byte input", harness, len(task.Prompt), len(input))
+		if task.Prompt != strings.TrimSpace(system)+"\n\n"+input {
+			t.Fatalf("cold %s got a prompt of %d bytes, want the %d-byte instructions and the %d-byte input", harness, len(task.Prompt), len(system), len(input))
 		}
-		if slices.ContainsFunc(task.Argv, func(arg string) bool { return strings.Contains(arg, "A line of a long changelog") }) {
-			t.Fatalf("the input is in cold %s's arguments; it belongs on stdin", harness)
+		if slices.ContainsFunc(task.Argv, func(arg string) bool {
+			return strings.Contains(arg, "A line of a long changelog") || strings.Contains(arg, "An instruction for the call")
+		}) {
+			t.Fatalf("the instructions or the input are in cold %s's arguments", harness)
 		}
 		task.Answer("summarized")
 		if result := call.Wait(); result.Code != 0 || protocol.Deref(answered(t, result).Text) != "summarized" {
-			t.Fatalf("a cold %s call with a %d-byte input = %+v", harness, len(input), result)
+			t.Fatalf("a cold %s call with %d-byte instructions and a %d-byte input = %+v", harness, len(system), len(input), result)
 		}
 	}
 }

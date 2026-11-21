@@ -113,9 +113,15 @@ func codexExec(args parsedArgs) headlessRun {
 		if effort, ok := strings.CutPrefix(override, "model_reasoning_effort="); ok {
 			run.effort = strings.Trim(effort, `"`)
 		}
-		if quoted, ok := strings.CutPrefix(override, "instructions="); ok {
-			if err := json.Unmarshal([]byte(quoted), &instructions); err != nil {
-				run.refusal = "codex exec with instructions that are not a TOML string: " + quoted
+		if quoted, ok := strings.CutPrefix(override, "model_instructions_file="); ok {
+			var path string
+			if err := json.Unmarshal([]byte(quoted), &path); err != nil {
+				run.refusal = "codex exec with a model_instructions_file that is not a TOML string: " + quoted
+				continue
+			}
+			var err error
+			if instructions, err = readInstructionsFile(path); err != nil {
+				run.refusal = "codex exec with an unreadable model_instructions_file: " + err.Error()
 			}
 		}
 	}
