@@ -211,11 +211,10 @@ func TestFinishDeletesEmptiedExtrasAndCreatesDesktopsForUsedFreeSlots(t *testing
 
 func TestAFreeSlotTakenDuringTheDraftReceivesTheGroupsMovedThere(t *testing.T) {
 	w := newWorld(8)
-	live := w.live()
 	plan := draft(InitialPlan(w.manifest), map[string]*Node{"desktop-8": nil, "slot-9": {Group: "group-8"}})
 
 	w.desktops = append(w.desktops, profiles.Desktop{ID: "desktop-new", ProfileID: "profile", ShortcutSlot: 9, Tree: layouttree.DefaultLayout("pane-launched"), ActivePaneID: "pane-launched", Panes: []profiles.Pane{agentPane("pane-launched")}})
-	live = w.live()
+	live := w.live()
 	outcome, err := Materialize(plan.Reconcile(w.desktops).Retire(live), live, w.desktops, nil, counter())
 	if err != nil {
 		t.Fatal(err)

@@ -48,6 +48,7 @@ go ./internal/daemon TestASharedCodexReloadedAfterADaemonRestartSkipsTheTrustQue
 go ./internal/daemon TestASubscriberThatHangsUpReleasesItsLiveQuery
 go ./internal/daemon TestTheDiagnosticsServerIsOptInAndLoopbackOnly
 go ./internal/daemon TestADelegationThatFailsAfterItsToolCallReturnedReachesTheCallersInbox
+go ./internal/daemon TestAnAgentDrivesTheBrowserTileWithTheBrowserTools
 go ./cmd/attnd TestSeedNotesNarrowsToABookmarkAndAKind
 go ./cmd/attnd TestATerminalOpenedWhileAnotherBuildIsOnDiskKeepsItsWorkerUntilTheDaemonRestarts
 go ./cmd/attnd TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning

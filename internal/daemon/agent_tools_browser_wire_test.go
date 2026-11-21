@@ -24,7 +24,7 @@ func TestAnAgentDrivesTheBrowserTileWithTheBrowserTools(t *testing.T) {
 	if _, offered := tools["browser_wait"]; offered {
 		t.Error("browser_wait is offered as a tool, but it holds the call past a harness's limit")
 	}
-	host := browserHostPeer(w, "tauri://localhost", browserHostToken)
+	host := browserHostPeer(w, "", browserHostToken)
 
 	if opened := narrowed[protocol.BrowserOpenResult](t, shapes.call("browser_open", map[string]any{"url": "http://localhost:3000"}).StructuredContent); opened.URL != "http://localhost:3000" {
 		t.Errorf("browser_open = %+v, want the URL it opened", opened)
