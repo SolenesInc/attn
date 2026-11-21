@@ -1,13 +1,11 @@
-use attn_ui::GlyphButton;
 use attn_ui::Tokens;
-use attn_ui::blocks::{Block, Card, FloatingPanel, Inline, Stack, Status, rail};
+use attn_ui::blocks::{Block, Card, FloatingPanel, Inline, Stack, Status, Toolbar, rail};
 use attn_ui::system::{
-    Button as SystemButton, FieldState, IconSize, Look, Size, Type, area_box, glyph, icon_button,
-    words,
+    Button as SystemButton, FieldState, IconButton, IconSize, ListRow, Look, Size, Type, area_box,
+    glyph, icon_button, words,
 };
-use attn_ui::type_;
-use rune::{Drag, El, Key, KeyEvent, Tx, col, el, row, text};
-use rune_kit::{Button, ButtonVariant, ScrollBar, TextArea};
+use rune::{Drag, El, Key, KeyEvent, Tx, col, el};
+use rune_kit::{ScrollBar, TextArea};
 
 use crate::State;
 use crate::annotations::{self, QuickLabel, draft};
@@ -16,8 +14,6 @@ use crate::terminal::{Annotation, Marking, Notice, Outcome, Popup};
 /// How far a popup or notice keeps from the terminal's edges, and from the point it opens at.
 const MARGIN: f32 = 8.0;
 const GAP: f32 = 10.0;
-/// A label button's side.
-const CHIP: f32 = 28.0;
 /// The comment box's width.
 const COMPOSE_W: f32 = 320.0;
 /// The tallest the cards stand before they scroll.
@@ -209,116 +205,109 @@ fn popup(
             .flatten()
             .any(|p| p.id == l.id)
     });
-    let mut chips: Vec<El> = annotations::promoted_labels()
+    let mut labels: Vec<El> = annotations::promoted_labels()
         .into_iter()
         .map(|label| {
-            let on = mark.label == label.id;
-            let picking = label.id;
-            let pressed = id.to_owned();
+            let (pressed, picking) = (id.to_owned(), label.id);
             chip(
                 id,
                 &format!("label.{}", label.id),
                 label.emoji,
                 label.text,
                 t,
-                move |state, tx| draft::pick_label(state, &pressed, picking, tx),
+                |chip| {
+                    chip.selected(mark.label == label.id).on_press_tx(
+                        move |state: &mut State, tx: &mut Tx| {
+                            draft::pick_label(state, &pressed, picking, tx)
+                        },
+                    )
+                },
             )
-            .fill(if on {
-                t.accent
-            } else {
-                rune::Color::TRANSPARENT
-            })
         })
         .collect();
     let toggled = id.to_owned();
-    chips.push(
-        chip(
-            id,
-            "more",
-            in_picker.map_or("⚡", |l| l.emoji),
-            "More labels",
-            t,
-            move |state, _| draft::toggle_picker(state, &toggled),
-        )
-        .fill(if in_picker.is_some() {
-            t.accent
-        } else {
-            rune::Color::TRANSPARENT
-        }),
-    );
-    chips.push(el().w(1.0).h(18.0).mx(4.0).fill(t.border));
+    labels.push(chip(
+        id,
+        "more",
+        in_picker.map_or("⚡", |l| l.emoji),
+        "More labels",
+        t,
+        |chip| {
+            chip.expanded(popup.picking)
+                .selected(in_picker.is_some() || popup.picking)
+                .on_press_tx(move |state: &mut State, _: &mut Tx| {
+                    draft::toggle_picker(state, &toggled)
+                })
+        },
+    ));
     let written = id.to_owned();
-    chips.push(chip(
+    let write = chip(
         id,
         "write",
         attn_ui::glyph::COMMENT,
         "Write a comment",
         t,
-        move |state, tx| draft::write(state, &written, tx),
-    ));
+        |chip| {
+            chip.on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                draft::write(state, &written, tx)
+            })
+        },
+    );
     let (removed, gone) = (id.to_owned(), mark.id.clone());
-    chips.push(
-        chip(
-            id,
-            "remove",
-            &attn_ui::icon::TRASH,
-            "Remove this annotation",
-            t,
-            move |state, tx| draft::remove(state, &removed, &gone, tx),
-        )
-        .ml(2.0)
-        .fill(t.error.alpha(0.16))
-        .border(1.0, t.error.alpha(0.4)),
+    let remove = chip(
+        id,
+        "remove",
+        &attn_ui::icon::TRASH,
+        "Remove this annotation",
+        t,
+        |chip| {
+            chip.ink(t.error)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    draft::remove(state, &removed, &gone, tx)
+                })
+        },
     );
     let hint = popup
         .hint
         .clone()
         .or_else(|| picked.map(|l| l.text.to_owned()))
         .unwrap_or_else(|| "Pick a label, or write a comment".to_owned());
-    let mut parts = vec![
-        row()
-            .key(format!("terminal.{id}.annotation.labels"))
-            .items_center()
-            .gap(2.0)
-            .children(chips),
-        text(hint)
-            .key(format!("terminal.{id}.annotation.hint"))
-            .font(type_::LABEL)
-            .color(t.text_secondary)
-            .single_line()
-            .truncate()
-            .mt(4.0)
-            .min_h(15.0),
-    ];
-    if popup.picking {
-        parts.push(picker(id, t));
-    }
-    if popup.writing {
-        parts.push(compose(id, popup, mark, t));
-    }
-    if popup.writing {
+    let under = Stack::tight()
+        .w_full()
+        .child(
+            words(hint, Type::Small, t.text_secondary)
+                .key(format!("terminal.{id}.annotation.hint"))
+                .single_line()
+                .truncate(),
+        )
+        .children(popup.picking.then(|| picker(id, t)))
+        .children(popup.writing.then(|| compose(id, popup, mark, t)));
+    let handle = popup.writing.then(|| {
         let (dragged, keyed) = (id.to_owned(), id.to_owned());
-        parts.insert(
-            0,
-            text(attn_ui::glyph::GRABBER)
-                .key(format!("terminal.{id}.annotation.handle"))
-                .role("button")
-                .label("Move comment editor with arrow keys")
-                .font(type_::LABEL)
-                .color(t.text_tertiary)
-                .align(rune::Align::Center)
-                .w_full()
-                .h(18.0)
-                .focusable(true)
-                .cursor(rune::Cursor::Grab)
-                .on_drag(move |state: &mut State, d: &mut Drag, tx: &mut Tx| {
-                    drag_box(state, &dragged, Moves::Popup, d, tx);
-                })
-                .on_key(move |state: &mut State, ev: &KeyEvent, _: &mut Tx| {
-                    nudge_popup(state, &keyed, ev)
-                }),
-        );
-    }
+        words(attn_ui::glyph::GRABBER, Type::Small, t.text_tertiary)
+            .key(format!("terminal.{id}.annotation.handle"))
+            .role("button")
+            .label("Move comment editor with arrow keys")
+            .align(rune::Align::Center)
+            .w_full()
+            .focusable(true)
+            .cursor(rune::Cursor::Grab)
+            .on_drag(move |state: &mut State, d: &mut Drag, tx: &mut Tx| {
+                drag_box(state, &dragged, Moves::Popup, d, tx);
+            })
+            .on_key(move |state: &mut State, ev: &KeyEvent, _: &mut Tx| {
+                nudge_popup(state, &keyed, ev)
+            })
+    });
+    let toolbar = Toolbar::new(
+        format!("terminal.{id}.annotation.labels"),
+        "Label this annotation",
+    )
+    .head(handle)
+    .group(labels)
+    .group([write, remove])
+    .under(Some(under))
+    .build(t);
     let (left, top) = match popup.size {
         Some(size) => popup_at(popup, size, slot),
         None => (popup.at.0, popup.at.1 - GAP),
@@ -328,41 +317,37 @@ fn popup(
         .key(format!("terminal.{id}.annotation.popup"))
         .role("dialog")
         .label("Edit terminal annotation")
-        .padding(6.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .on_press(|_: &mut State| {})
         .on_layout_tx(move |state: &mut State, [_, _, w, h], tx: &mut Tx| {
             if !draft::measured(state, &measured, (w, h)) {
                 tx.live_only();
             }
         })
-        .children(parts)
+        .child(toolbar)
         .absolute(left, top)
 }
 
+/// One of the popup's buttons, keyed `terminal.{id}.annotation.{part}`, which says what it does
+/// in the popup's hint while the pointer rests on it.
 fn chip(
     id: &str,
     part: &str,
     glyph: impl Into<attn_ui::Glyph>,
     label: &str,
     t: &Tokens,
-    press: impl Fn(&mut State, &mut Tx) + 'static,
+    then: impl FnOnce(IconButton) -> IconButton,
 ) -> El {
     let (hinted, hint) = (id.to_owned(), label.to_owned());
-    GlyphButton::new(glyph, label)
-        .variant(ButtonVariant::Ghost)
-        .font(type_::BODY)
-        .side(CHIP)
-        .on_press_tx(press)
-        .build(attn_ui::kit(t))
-        .key(format!("terminal.{id}.annotation.{part}"))
-        .w(CHIP)
-        .radius(7.0)
-        .on_hover_change(move |state: &mut State, inside, _: &mut Tx| {
-            draft::hint(state, &hinted, inside.then_some(hint.as_str()));
-        })
+    let button = icon_button(
+        format!("terminal.{id}.annotation.{part}"),
+        label,
+        glyph,
+        IconSize::Regular,
+    )
+    .size(Size::Regular);
+    El::from(then(button).build(t)).on_hover_change(move |state: &mut State, inside, _: &mut Tx| {
+        draft::hint(state, &hinted, inside.then_some(hint.as_str()));
+    })
 }
 
 /// The list of every label the popup does not show, numbered for the digit keys.
@@ -388,21 +373,18 @@ pub(crate) fn label_list(
     let groups: Vec<El> = annotations::picker_groups()
         .into_iter()
         .map(|group| {
-            col().gap(1.0).children(group.into_iter().map(|label| {
+            ListRow::column().children(group.into_iter().map(|label| {
                 index += 1;
                 pick(key, &label, index, on_pick.clone(), t)
             }))
         })
         .collect();
-    col()
-        .key(format!("{key}.picker"))
-        .mt(4.0)
-        .padding(4.0)
-        .gap(4.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .children(groups)
+    attn_ui::Frame::menu(t).draw(
+        Stack::tight()
+            .key(format!("{key}.picker"))
+            .w_full()
+            .children(groups),
+    )
 }
 
 fn pick(
@@ -413,35 +395,19 @@ fn pick(
     t: &Tokens,
 ) -> El {
     let picked = label.id;
-    let digit = if index == 10 {
-        "0".to_owned()
-    } else {
-        index.to_string()
-    };
-    let (emoji, words, ink, hint) = (label.emoji, label.text, t.text_primary, t.text_tertiary);
-    Button::new(label.text)
-        .variant(ButtonVariant::Ghost)
+    let digit = (index <= 10).then(|| {
+        if index == 10 {
+            "0".to_owned()
+        } else {
+            index.to_string()
+        }
+    });
+    ListRow::new(format!("{key}.pick.{}", label.id), label.text)
+        .lead(glyph(label.emoji, IconSize::Regular, t.text_primary))
+        .title(label.text)
+        .keys(digit, t)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| on_pick(state, picked, tx))
-        .label_with(move |_, _| {
-            row()
-                .w_full()
-                .items_center()
-                .gap(8.0)
-                .child(text(emoji.to_owned()).font(type_::BODY))
-                .child(
-                    text(words.to_owned())
-                        .font(type_::LABEL)
-                        .color(ink)
-                        .grow(1.0),
-                )
-                .children((index <= 10).then(|| text(digit).font(type_::LABEL).color(hint)))
-        })
-        .build(attn_ui::kit(t))
-        .key(format!("{key}.pick.{}", label.id))
-        .w_full()
-        .h(type_::BODY.line_px() + 6.0)
-        .px(6.0)
-        .radius(5.0)
+        .build(t)
 }
 
 fn compose(id: &str, popup: &Popup, mark: &crate::terminal::Annotation, t: &Tokens) -> El {

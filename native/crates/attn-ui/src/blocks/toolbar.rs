@@ -5,11 +5,12 @@ use crate::Tokens;
 use crate::system::{Size, Space, door};
 
 /// A strip of icon buttons raised over what it acts on, such as the one a selection opens: its
-/// groups of buttons with a rule between each two, and what one of them opens under the strip,
-/// such as a list to pick from.
+/// groups of buttons with a rule between each two, what stands above the strip, such as the grip
+/// that moves it, and what one of them opens under the strip, such as a list to pick from.
 pub struct Toolbar {
     key: String,
     label: String,
+    head: Option<El>,
     groups: Vec<Vec<El>>,
     under: Option<El>,
 }
@@ -20,6 +21,7 @@ impl Toolbar {
         Toolbar {
             key: key.into(),
             label: label.into(),
+            head: None,
             groups: Vec::new(),
             under: None,
         }
@@ -29,6 +31,12 @@ impl Toolbar {
     pub fn group(mut self, buttons: impl IntoIterator<Item = impl Into<El>>) -> Self {
         self.groups
             .push(buttons.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// What stands above the strip, on the same ground, such as the grip that moves it.
+    pub fn head(mut self, part: Option<El>) -> Self {
+        self.head = part;
         self
     }
 
@@ -51,6 +59,7 @@ impl Toolbar {
                 .key(self.key)
                 .role("toolbar")
                 .label(self.label)
+                .children(self.head)
                 .child(strip)
                 .children(self.under),
             Space::S4,
