@@ -23,7 +23,8 @@ func (d *Daemon) runSessionTranscript(ctx context.Context, c command.Caller, a c
 
 	answer, err := Call[protocol.MonitorTranscriptPageResult](ctx, d.router(), protocol.MonitorTranscriptPageMessage{Cmd: protocol.CmdMonitorTranscriptPage, SessionID: session.ID, Cursor: protocol.Ptr(strings.TrimSpace(a.After))})
 	if err != nil {
-		return nil, err
+		d.logf("session transcript %s: %v", session.ID, err)
+		return nil, sessionTranscriptRefusal("transcript_unavailable")
 	}
 	if answer.ErrorKind != nil {
 		return nil, sessionTranscriptRefusal(string(*answer.ErrorKind))

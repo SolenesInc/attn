@@ -14,6 +14,7 @@ use attn_protocol::{
 };
 use serde_json::Value as Json;
 use std::fmt::Write as _;
+use std::io::Write as _;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -70,7 +71,18 @@ impl Family for Session {
     ) -> Result<(), Stop> {
         let result = command::result(reply);
         if parsed.json {
-            return command::print_result(run, self, cmd, &result);
+            command::print_result(run, self, cmd, &result)?;
+            if matches!(cmd.name, "snooze" | "unsnooze") {
+                let outcomes: SessionSnoozeResult = command::decode(run, self, cmd, &result)?;
+                if outcomes
+                    .outcomes
+                    .iter()
+                    .any(|outcome| outcome.error.is_some())
+                {
+                    return Err(Stop(1));
+                }
+            }
+            return Ok(());
         }
         let out = match cmd.name {
             "list" => list(parsed, &command::decode(run, self, cmd, &result)?),
@@ -136,7 +148,16 @@ fn transcript(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed) -> Result<(), S
             ask.args
                 .insert("after".to_string(), Json::from(cursor.clone()));
         }
-        match command::ask(run, &Session, cmd, &ask)? {
+        let answer = match command::ask(run, &Session, cmd, &ask) {
+            Ok(answer) => answer,
+            Err(stop) => {
+                if !cursor.is_empty() {
+                    eprintln!("cursor: {cursor}");
+                }
+                return Err(stop);
+            }
+        };
+        match answer {
             Answer::Refused(_, refusal) if follow && refusal.code == "transcript_unavailable" => {
                 if !wait_for_poll() {
                     return done(&cursor);
@@ -170,8 +191,14 @@ fn transcript(run: &mut Run<'_>, cmd: &Command, parsed: &Parsed) -> Result<(), S
                         transcript_event(&mut out, event);
                     }
                 }
-                print_stdout(&out);
+                let written = std::io::stdout()
+                    .lock()
+                    .write_all(out.as_bytes())
+                    .and_then(|()| std::io::stdout().lock().flush());
                 cursor = page.next_cursor;
+                if written.is_err() {
+                    return done(&cursor);
+                }
                 if !page.at_end {
                     continue;
                 }
