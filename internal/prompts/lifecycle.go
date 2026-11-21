@@ -18,6 +18,13 @@ func lifecycleRecipients() []Recipient {
 						TextField("message", "Message"))),
 			}},
 
+		{ID: "terminal",
+			Description: "A terminal an agent opened with a command.",
+			Events: []Event{On("command-not-typed", "inbox_content", "terminal_open called as a tool answered before its command was typed, and typing it failed; a notice to the session that opened the terminal.",
+				template("terminal.command-not-typed", "content/terminal/command-not-typed.md",
+					TextField("terminal", "The opened terminal's id."),
+					TextField("failure", "Why the command was not typed.")))}},
+
 		{ID: "session-title",
 			Description: "Session title",
 			Events: []Event{On("instructions", "system_prompt", "Title generation instructions.", Use("session-title.instructions", "content/session-title/instructions.md")), On("generate", "user_message", "internal/daemon/session_title.go: execSessionTitleHeadless",

@@ -170,6 +170,9 @@ Notices are attn's own messages to an agent:
 - a delegation that failed after attn accepted it, addressed to the session
   that started it, so an agent whose `delegate` tool call returned at
   acceptance learns of the failure
+- a command that `terminal_open` called as a tool did not type, because the
+  shell showed no first prompt in time or the terminal ended first, addressed
+  to the session that opened the terminal
 
 ## Coalescing
 

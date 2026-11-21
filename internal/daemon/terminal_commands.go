@@ -15,8 +15,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/store"
@@ -322,9 +324,10 @@ func (d *Daemon) runTerminalOpen(ctx context.Context, c command.Caller, a comman
 	}
 	terminal := d.primaryTerminal(id)
 	if line != "" && !a.WaitForShell {
+		opener := caller.ID
 		d.life.Go("type the command of an opened terminal", func() {
 			if err := d.typeFirstCommand(d.life.Context(), terminal, id, line); err != nil {
-				d.logf("terminal open: %v", err)
+				d.noticeCommandNotTyped(opener, terminal, err)
 			}
 		})
 	}
@@ -334,6 +337,17 @@ func (d *Daemon) runTerminalOpen(ctx context.Context, c command.Caller, a comman
 		}
 	}
 	return protocol.TerminalOpenResult{TerminalID: terminal, SessionID: id, DesktopID: placed.desktopID, PaneID: placed.paneID}, nil
+}
+
+func (d *Daemon) noticeCommandNotTyped(opener protocol.SessionID, terminal protocol.TerminalID, failure error) {
+	if d.stopping() {
+		d.logf("terminal open: command for %s not typed across daemon stop: %v", terminal, failure)
+		return
+	}
+	text := prompts.RenderText("terminal", "command-not-typed", prompts.Values{"terminal": string(terminal), "failure": failure.Error()})
+	if _, err := d.sendToInbox(inbox.Item{ID: "terminal-command-not-typed/" + string(terminal), To: who.ToSession(opener), Kind: inbox.Notice, Source: "terminal", Text: text}); err != nil {
+		d.logf("terminal open: command for %s not typed (%v); telling %s: %v", terminal, failure, opener, err)
+	}
 }
 
 func (d *Daemon) typeFirstCommand(ctx context.Context, terminal protocol.TerminalID, id protocol.SessionID, line string) error {

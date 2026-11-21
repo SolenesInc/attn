@@ -1,0 +1,1 @@
+The command you opened terminal {{terminal}} with was not typed: {{failure}}. The terminal stays open. Read it with `terminal_read`, then run the command with `terminal_run`, or close the terminal with `terminal_close`.

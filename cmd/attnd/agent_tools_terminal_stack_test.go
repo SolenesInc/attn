@@ -115,7 +115,8 @@ func TestTerminalToolsAnswerWithoutWaitingOnTheShell(t *testing.T) {
 		return m.Settings["agent_tools_enabled"] == "true"
 	})
 	session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
-	tools := claudeToolEndpoint(t, s.LaunchedCarrying(app.Terminal(session)))
+	claude := s.LaunchedCarrying(app.Terminal(session))
+	tools := claudeToolEndpoint(t, claude)
 
 	var opened protocol.TerminalOpenResult
 	tools.structured(t, "terminal_open", map[string]any{"command": []string{"printf tool-ready"}}, &opened)
@@ -137,4 +138,17 @@ func TestTerminalToolsAnswerWithoutWaitingOnTheShell(t *testing.T) {
 		t.Fatalf("terminal_run while the shell runs the tool's earlier command = %+v, want a prompt rule refusal at once", busy)
 	}
 	tools.structured(t, "terminal_send", map[string]any{"terminal": shell, "keys": []string{"C-c"}}, &protocol.TerminalInputResult{})
+
+	var closing protocol.TerminalOpenResult
+	tools.structured(t, "terminal_open", map[string]any{"command": []string{"printf never-typed"}}, &closing)
+	waiting.Await()
+	tools.structured(t, "terminal_close", map[string]any{"terminal": string(closing.TerminalID)}, &protocol.TerminalCloseResult{})
+	waiting.Release()
+	if ring := claude.Prompted(); !strings.Contains(ring, "attn agent inbox") {
+		t.Fatalf("the opener was rung with %q, want its inbox named", ring)
+	}
+	inbox := s.Run(testworld.Invocation{Session: session, Args: []string{"agent", "inbox"}})
+	if inbox.Code != 0 || !strings.Contains(inbox.Stdout, "The command you opened terminal "+string(closing.TerminalID)+" with was not typed") {
+		t.Fatalf("the opener's inbox after its terminal closed before the first prompt = %+v, want the not-typed notice", inbox)
+	}
 }

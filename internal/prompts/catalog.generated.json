@@ -4262,6 +4262,46 @@
       ]
     },
     {
+      "id": "terminal",
+      "description": "A terminal an agent opened with a command.",
+      "events": [
+        {
+          "id": "command-not-typed",
+          "delivery": "inbox_content",
+          "description": "terminal_open called as a tool answered before its command was typed, and typing it failed; a notice to the session that opened the terminal.",
+          "body": {
+            "kind": "text",
+            "id": "terminal.command-not-typed",
+            "source": "content/terminal/command-not-typed.md",
+            "bindings": [
+              {
+                "name": "terminal",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "terminal",
+                    "kind": "text",
+                    "description": "The opened terminal's id."
+                  }
+                }
+              },
+              {
+                "name": "failure",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "failure",
+                    "kind": "text",
+                    "description": "Why the command was not typed."
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "delegation-preferences",
       "description": "On-demand configured roles and selected execution guidance.",
       "events": [
@@ -7522,5 +7562,5 @@
       ]
     }
   ],
-  "definitions_hash": "0f0ee15627ea1af243cebc660d13237b6368f68b43e7d7bb0f72bfba2ae2371e"
+  "definitions_hash": "811f8ea72429e20a17706f10910b4bb33fa96cff063ab10a1cc2ca76d3c54ffb"
 }
