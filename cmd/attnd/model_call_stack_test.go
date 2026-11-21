@@ -383,7 +383,7 @@ func TestACodexModelCallRunsOnTheSharedAppServerWhileItRuns(t *testing.T) {
 	answered(t, cold.Wait())
 
 	app := s.App()
-	s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+	s.Launched(s.Spawn(app, fakeagent.Codex, s.Path("shop")))
 	s.CodexServer()
 	call := callModel(s, token, map[string]any{"harness": "codex", "tier": "light"})
 	task = s.HeadlessTask()
