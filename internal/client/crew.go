@@ -96,18 +96,11 @@ func (c *Client) CrewPrime(sessionID protocol.SessionID) (*protocol.CrewPrimeRes
 }
 
 func (c *Client) CrewHandoff(sessionID protocol.SessionID, note string, retry bool) (*protocol.CrewHandoffResult, error) {
-	msg := protocol.CrewHandoffMessage{Cmd: protocol.CmdCrewHandoff, SessionID: sessionID, Note: note}
-	if retry {
-		msg.Retry = protocol.Ptr(true)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
+	var result protocol.CrewHandoffResult
+	if err := c.RunCommand("handoff", sessionID, map[string]any{"letter": note, "retry": retry}, &result); err != nil {
 		return nil, err
 	}
-	if resp.CrewHandoffResult == nil {
-		return nil, fmt.Errorf("the daemon answered without saying where the letter landed")
-	}
-	return resp.CrewHandoffResult, nil
+	return &result, nil
 }
 
 func (c *Client) CrewMoveHome(member string) (*protocol.CrewMoveHomeResult, error) {

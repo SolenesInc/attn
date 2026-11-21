@@ -31,6 +31,7 @@ const (
 	CodeInvalidCursor               = "invalid_cursor"
 	CodeInvalidEvidence             = "invalid_evidence"
 	CodeInvalidResponse             = "invalid_response"
+	CodeLetterAndRetry              = "letter_and_retry"
 	CodeListAndReference            = "list_and_reference"
 	CodeMessageNotFound             = "message_not_found"
 	CodeMessageNotNotified          = "message_not_notified"
@@ -110,6 +111,7 @@ var specs = map[string]spec{
 	"delegate roles apply":    {readOnly: false, anyone: true, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_a_table": "Pass the table delegate_roles_show returns, with only its fields.", "conflict": "Export the table again with delegate_roles_show, change it, and apply that."}},
 	"delegate roles rollback": {readOnly: false, anyone: true, sessionFlag: true, runsWithoutDaemon: false},
 	"guide":                   {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: true, fixes: map[string]string{"no_such_topic": "Use one of the topics `guide` without `topic` lists."}},
+	"handoff":                 {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"letter_and_retry": "Pass {letter} or {retry}, not both."}},
 	"list":                    {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false},
 	"nav status":              {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
 	"nav check":               {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
@@ -366,6 +368,11 @@ type DelegateRolesRollbackArgs struct {
 
 type GuideArgs struct {
 	Topic string `json:"topic,omitempty"`
+}
+
+type HandoffArgs struct {
+	Letter string `json:"letter,omitempty"`
+	Retry  bool   `json:"retry,omitempty"`
 }
 
 type ListArgs struct {

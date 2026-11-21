@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "9391b91a05ff";
+pub const PROTOCOL_VERSION: &str = "73d2441767d6";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -2609,24 +2609,6 @@ impl CrewHandoffGetResultMessage {
     pub fn new() -> Self {
         Self {
             event: "crew_handoff_get_result".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CrewHandoffMessage {
-    pub cmd: String,
-    pub note: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub retry: Option<bool>,
-    pub session_id: SessionID,
-}
-
-impl CrewHandoffMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "crew_handoff".to_string(),
             ..Self::default()
         }
     }
@@ -8929,8 +8911,6 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crew_handoff_get_result: Option<CrewHandoffGetResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub crew_handoff_result: Option<CrewHandoffResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crew_handoffs_get_result: Option<CrewHandoffsGetResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crew_list_result: Option<CrewListResult>,
@@ -14224,9 +14204,6 @@ impl ResponseField for CrewCreateResult {
 }
 impl ResponseField for CrewHandoffGetResult {
     const FIELD: &'static str = "crew_handoff_get_result";
-}
-impl ResponseField for CrewHandoffResult {
-    const FIELD: &'static str = "crew_handoff_result";
 }
 impl ResponseField for CrewHandoffsGetResult {
     const FIELD: &'static str = "crew_handoffs_get_result";

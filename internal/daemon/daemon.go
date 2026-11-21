@@ -3145,8 +3145,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleCrewSet(conn, msg.(*protocol.CrewSetMessage))
 	case protocol.CmdCrewPrime:
 		d.handleCrewPrime(conn, msg.(*protocol.CrewPrimeMessage))
-	case protocol.CmdCrewHandoff:
-		d.handleCrewHandoff(conn, msg.(*protocol.CrewHandoffMessage))
 	case protocol.CmdStop:
 		d.handleStop(conn, msg.(*protocol.StopMessage))
 	case protocol.CmdFilesEdited:

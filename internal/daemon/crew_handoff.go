@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/launchcontract"
@@ -309,11 +309,17 @@ func (d *Daemon) closeCrewDay(sessionID protocol.SessionID, teardown *sessionTea
 	return nil
 }
 
-func (d *Daemon) handleCrewHandoff(conn net.Conn, msg *protocol.CrewHandoffMessage) {
-	result, err := d.crewHandoff(protocol.TrimID(msg.SessionID), msg.Note, protocol.Deref(msg.Retry))
-	if err != nil {
-		d.sendCrewError(conn, "handoff", err)
-		return
+func (d *Daemon) handoffCommands() map[string]command.Handler {
+	return map[string]command.Handler{
+		"handoff": command.Typed(func(_ context.Context, c command.Caller, a command.HandoffArgs) (any, error) {
+			if a.Retry && strings.TrimSpace(a.Letter) != "" {
+				return nil, command.Refuse(command.CodeLetterAndRetry, "{retry} finishes the handoff with the letter you already filed, so it takes no {letter}; drop one of the two")
+			}
+			result, err := d.crewHandoff(c.Session, a.Letter, a.Retry)
+			if err != nil {
+				return nil, fmt.Errorf("crew handoff: %w", err)
+			}
+			return result, nil
+		}),
 	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewHandoffResult: result})
 }

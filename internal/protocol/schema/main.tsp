@@ -7366,7 +7366,6 @@ model Response {
   crew_restore_result?: CrewRestoreResult;
   crew_move_home_result?: CrewMoveHomeResult;
   crew_prime_result?: CrewPrimeResult;
-  crew_handoff_result?: CrewHandoffResult;
   seed_authorization_result?: SeedAuthorizationResult;
   seed_artifact_transfer_result?: SeedArtifactTransferResult;
   seed_transition_result?: SeedTransitionResult;
@@ -7979,22 +7978,6 @@ model CrewPrimeResult {
   awareness_dirs: string[];
   priming_bytes: int32;
   v2_enabled?: boolean;
-}
-
-// File the calling session's member letter and end its day. The note is the
-// member's own prose — attn names the file and never edits what is in it — and
-// the line is append-only, so a name already taken is refused rather than
-// overwritten. Home-only, and refused for a session that holds no binding: a
-// crew handoff is a member's day-line, and a session that is nobody has none.
-@extension("x-on", #{ home: true })
-model CrewHandoffMessage {
-  cmd: "crew_handoff";
-  session_id: SessionID;
-  note: string;
-  // Turn the day over with the letter this day already filed, instead of
-  // writing one. The way out of a turnover that failed behind a filed letter:
-  // the line is append-only, so the letter cannot be written a second time.
-  retry?: boolean;
 }
 
 // Whether a filed letter started the next session or ended the member's day.

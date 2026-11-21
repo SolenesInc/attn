@@ -2939,20 +2939,6 @@ type CrewHandoffGetResultMessage struct {
 	Success bool `json:"success"`
 }
 
-type CrewHandoffMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Note corresponds to the JSON schema field "note".
-	Note string `json:"note"`
-
-	// Retry corresponds to the JSON schema field "retry".
-	Retry *bool `json:"retry,omitempty,omitzero"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
-}
-
 type CrewHandoffResult struct {
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
@@ -9576,9 +9562,6 @@ type Response struct {
 	// CrewHandoffGetResult corresponds to the JSON schema field
 	// "crew_handoff_get_result".
 	CrewHandoffGetResult *CrewHandoffGetResult `json:"crew_handoff_get_result,omitempty,omitzero"`
-
-	// CrewHandoffResult corresponds to the JSON schema field "crew_handoff_result".
-	CrewHandoffResult *CrewHandoffResult `json:"crew_handoff_result,omitempty,omitzero"`
 
 	// CrewHandoffsGetResult corresponds to the JSON schema field
 	// "crew_handoffs_get_result".

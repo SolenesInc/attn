@@ -1,2 +1,30 @@
+# The handoff family: a crew member's letter that closes its session.
 groups:
-  - {name: handoff, usage: "-m \"<letter>\"", summary: "file this crew member's letter; its session ends"}
+  - name: handoff
+    usage: "-m \"<letter>\""
+    summary: "file this crew member's letter; its session ends"
+    map:
+      rows:
+        - {need: "File a crew member's letter", tools: [handoff]}
+    flags:
+      - {name: session, placeholder: "<id>", doc: "the member's session to close (defaults to the current session)"}
+
+commands:
+  - name: handoff
+    summary: file the letter closing this crew member's session
+    runs: home
+    grant: full
+    doc: |
+      Files the letter closing this crew member's session. You write it; attn files it into handoffs/ in the member's home, with a UTC-stamped name, and never edits the prose. A correction is a new letter.
+
+      Filing ends the session, and the member is between sessions until its next session starts, whether or not the user is at the machine. When `crew_apply` asked this session for its letter because the member's harness changed, filing instead starts the next session on the new harness from the letter. The letter also records this session so attn can keep its transcript.
+
+      If the session cannot end or the next one cannot start, the letter stays filed and this session keeps running. `retry` tries again with that letter.
+
+      Only the member's own session can file one. The note for whoever tends a piece of work next is the other axis: a seed note marked as a handoff, with `seed_note`.
+    args:
+      - {name: letter, type: markdown, required: true, unless: retry, cli: "-m", stdin: true, placeholder: '"<your letter>"', doc: "the letter"}
+      - {name: retry, type: bool, cli: "--retry", doc: "finish the handoff with the letter already filed; takes no letter"}
+    result: CrewHandoffResult
+    errors:
+      - {code: letter_and_retry, usage: true, fix: "Pass {letter} or {retry}, not both."}

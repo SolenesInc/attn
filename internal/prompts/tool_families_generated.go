@@ -26,7 +26,7 @@ var catalogFamilies = map[string]bool{
 	"doc":              false,
 	"enrollment":       false,
 	"guide":            true,
-	"handoff":          false,
+	"handoff":          true,
 	"help":             false,
 	"instance":         false,
 	"instance-env":     false,
