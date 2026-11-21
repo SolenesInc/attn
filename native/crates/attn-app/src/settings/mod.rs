@@ -393,6 +393,7 @@ pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     hygiene::poll(state);
     phones::poll(state, tx);
     route::follow_layer(state, tx);
+    route::follow_move(state, tx);
     let mut shown = false;
     if is_open(state) && std::mem::take(&mut state.window.settings.stale) {
         shown |= refresh(state, tx);

@@ -1725,3 +1725,17 @@ fn in_the_smallest_window_three_models_and_the_effort_show_without_scrolling() {
     }
     rest(&mut world);
 }
+
+#[test]
+fn a_picker_that_moves_over_the_window_keeps_the_keyboard_in_its_filter() {
+    let mut world = smallest_picker();
+    world.settle();
+    let focused = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find(|e| e.focused)
+        .and_then(|e| e.key);
+    assert_eq!(focused.as_deref(), Some("settings.route-picker.filter"));
+    rest(&mut world);
+}

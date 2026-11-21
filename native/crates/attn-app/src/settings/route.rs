@@ -526,6 +526,9 @@ pub(crate) struct Picker {
     /// The picker fits on neither side of its chip, so it stands over the window for the rest
     /// of this open.
     over_chip: bool,
+    /// The picker has just moved over the window, a new surface whose filter takes the
+    /// keyboard back before the next frame.
+    moved: bool,
 }
 
 const PICKER: &str = "settings.route-picker";
@@ -834,6 +837,7 @@ fn toggle(state: &mut State, target: Target, tx: &mut Tx) {
         provider: TextEdit::default(),
         effort: None,
         over_chip: false,
+        moved: false,
     });
     tx.focus(FILTER.to_owned(), true);
     super::invalidate(state);
@@ -1081,8 +1085,19 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
 fn stand_over_chip_unless_whole(state: &mut State, whole: bool) {
     if let Some(p) = state.window.settings.route_picker.as_mut()
         && !whole
+        && !p.over_chip
     {
         p.over_chip = true;
+        p.moved = true;
+    }
+}
+
+/// Puts the keyboard back in the filter of a picker that has just moved over the window.
+pub(super) fn follow_move(state: &mut State, tx: &mut Tx) {
+    if let Some(p) = state.window.settings.route_picker.as_mut()
+        && std::mem::take(&mut p.moved)
+    {
+        tx.focus(FILTER.to_owned(), true);
     }
 }
 
