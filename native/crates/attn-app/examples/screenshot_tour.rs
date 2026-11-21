@@ -3541,40 +3541,7 @@ fn delegation_scene(
         settings,
         |_| {},
         move |daemon| {
-            daemon.on("delegation_preferences_get", move |r: &Request| {
-                let harness = |id: &str, name: &str| Harness {
-                    id: id.into(),
-                    name: name.into(),
-                    available: true,
-                    model_pin: true,
-                    effort_pin: true,
-                    discovery: true,
-                };
-                let roles = delegation_roles();
-                message(DelegationPreferencesResultMessage {
-                    request_id: r["request_id"].as_str().unwrap_or_default().into(),
-                    success: failure.is_none(),
-                    error: failure.map(String::from),
-                    preferences: failure.is_none().then(|| DelegationPreferences {
-                        enabled,
-                        revision: 3,
-                        workflow_skill_enabled: true,
-                        roles: roles.clone(),
-                        fallback: DelegationFallback {
-                            instructions: String::new(),
-                            selection: route("claude", "sonnet", "medium"),
-                        },
-                    }),
-                    harnesses: Some(vec![
-                        harness("claude", "Claude Code"),
-                        harness("codex", "Codex"),
-                    ]),
-                    templates: Some(vec![roles[0].clone()]),
-                    expanded_roles: Some(roles),
-                    workflow_skill_paths: Some(Vec::new()),
-                    ..DelegationPreferencesResultMessage::new()
-                })
-            });
+            delegation_preferences(daemon, enabled, failure);
             daemon.on("harness_models", |r: &Request| {
                 let model = |id: &str, name: &str, tier: &str| HarnessModel {
                     harness: "claude".into(),
@@ -3602,6 +3569,48 @@ fn delegation_scene(
     );
     then(&mut world);
     snap(&mut world, name, dark);
+}
+
+fn delegation_preferences(daemon: &Daemon, enabled: bool, failure: Option<&'static str>) {
+    daemon.on("delegation_preferences_get", move |r: &Request| {
+        let harness = |id: &str, name: &str| Harness {
+            id: id.into(),
+            name: name.into(),
+            available: true,
+            model_pin: true,
+            effort_pin: true,
+            discovery: true,
+        };
+        let roles = delegation_roles();
+        message(DelegationPreferencesResultMessage {
+            request_id: r["request_id"].as_str().unwrap_or_default().into(),
+            success: failure.is_none(),
+            error: failure.map(String::from),
+            preferences: failure.is_none().then(|| DelegationPreferences {
+                enabled,
+                revision: 3,
+                workflow_skill_enabled: true,
+                roles: roles.clone(),
+                fallback: DelegationFallback {
+                    instructions: String::new(),
+                    selection: route("claude", "sonnet", "medium"),
+                },
+            }),
+            harnesses: Some(vec![
+                harness("claude", "Claude Code"),
+                harness("codex", "Codex"),
+            ]),
+            templates: Some(vec![roles[0].clone()]),
+            expanded_roles: Some(roles),
+            workflow_skill_paths: Some(Vec::new()),
+            ..DelegationPreferencesResultMessage::new()
+        })
+    });
+}
+
+fn delegation_answers(daemon: &Daemon) {
+    delegation_preferences(daemon, true, None);
+    picker_models(daemon);
 }
 
 fn open_builder(world: &mut World) {
@@ -3991,6 +4000,163 @@ fn settings_route_picker(dark: bool) {
         }
         snap(&mut world, name, dark);
     }
+}
+
+/// Every route chip's model picker, as Victor compares it with the Tauri app's: closed, open,
+/// a query that matches some, an exact model id, and one that matches nothing.
+fn route_picker_callers(dark: bool) {
+    let settings = |section: &'static str, search: &'static str| {
+        move || settings_world(dark, section, search, &[], |_| {}, delegation_answers)
+    };
+    picker_states(
+        dark,
+        "agents",
+        "settings.route.default-claude",
+        Some("settings.body"),
+        settings("agents", "agents"),
+    );
+    picker_states(
+        dark,
+        "delegation-role",
+        "settings.route.delegation.builder/default",
+        Some("settings.body"),
+        move || {
+            let mut world = settings_world(
+                dark,
+                "delegation",
+                "delegation",
+                &[],
+                |_| {},
+                delegation_answers,
+            );
+            open_builder(&mut world);
+            world
+        },
+    );
+    picker_states(
+        dark,
+        "delegation-alternative",
+        "settings.route.delegation.builder/fast",
+        Some("settings.body"),
+        move || {
+            let mut world = settings_world(
+                dark,
+                "delegation",
+                "delegation",
+                &[],
+                |_| {},
+                delegation_answers,
+            );
+            open_builder(&mut world);
+            world.gesture(|app| {
+                app.click(Target::key("settings.delegation.alternative.builder/fast"))
+            });
+            world
+        },
+    );
+    picker_states(
+        dark,
+        "activity",
+        "settings.route.activity",
+        Some("settings.body"),
+        settings("backgroundAgents", "background agents"),
+    );
+    picker_states(
+        dark,
+        "garden-advisor",
+        "settings.route.garden-advisor",
+        Some("settings.body"),
+        settings("backgroundAgents", "background agents"),
+    );
+    picker_states(
+        dark,
+        "automation",
+        "settings.route.automation",
+        None,
+        move || automation_form(dark),
+    );
+    picker_states(
+        dark,
+        "crew-launch",
+        "settings.route.crew.chief",
+        None,
+        move || {
+            let mut world = crew_page(dark);
+            click(&mut world, Target::key("crew.roster.chief"));
+            click(&mut world, Target::key("crew.tab.launch"));
+            world
+        },
+    );
+}
+
+const PICKER_LONG_MODEL: &str =
+    "anthropic.claude-opus-5-5-20261101-v1:0-with-extended-thinking-eu-north-1";
+
+fn picker_states(
+    dark: bool,
+    caller: &str,
+    chip: &'static str,
+    body: Option<&'static str>,
+    world: impl Fn() -> World,
+) {
+    let states: [(&str, bool, Option<&str>); 5] = [
+        ("closed", false, None),
+        ("open", true, None),
+        ("typed", true, Some("son")),
+        ("exact", true, Some(PICKER_LONG_MODEL)),
+        ("no-match", true, Some("zz-no-such-model")),
+    ];
+    for (state, open, typed) in states {
+        let name = format!("picker-{caller}-{state}");
+        if !drawing(&name) {
+            continue;
+        }
+        let mut world = world();
+        picker_models(&world.daemon);
+        if let Some(body) = body {
+            world.gesture(move |app| {
+                app.update(move |_, tx| tx.scroll_center_in_instant(body, chip))
+            });
+        }
+        world.gesture(move |app| app.update(move |_, tx| tx.focus(chip.to_owned(), true)));
+        if open {
+            tap(&mut world, Key::Text(" ".into()));
+        }
+        if let Some(typed) = typed {
+            world.gesture(|app| {
+                app.update(|_, tx| tx.focus("settings.route-picker.filter".to_owned(), true))
+            });
+            world.gesture(|app| app.type_text(typed));
+        }
+        snap(&mut world, &name, dark);
+    }
+}
+
+fn picker_models(daemon: &Daemon) {
+    daemon.on("harness_models", |r: &Request| {
+        let model = |id: &str, name: &str, tier: &str| HarnessModel {
+            harness: "claude".into(),
+            id: id.into(),
+            name: name.into(),
+            access: "unknown".into(),
+            effort_support: "supported".into(),
+            effort_levels: ["low", "medium", "high"].map(String::from).to_vec(),
+            tier: Some(tier.into()),
+            shipped_tier: Some(tier.into()),
+            tier_source: "shipped".into(),
+            ..HarnessModel::default()
+        };
+        message(HarnessModelsResultMessage {
+            request_id: r["request_id"].as_str().unwrap_or_default().into(),
+            success: true,
+            models: vec![
+                model("opus", "Opus 5.5", "deep"),
+                model("sonnet", "Sonnet 5.5", "standard"),
+                model(PICKER_LONG_MODEL, PICKER_LONG_MODEL, "deep"),
+            ],
+            ..HarnessModelsResultMessage::new()
+        })
+    });
 }
 
 /// The structural states of the Settings pages that have them: a refused field, a list with
@@ -7233,6 +7399,14 @@ fn home_pull_requests(dark: bool) {
     });
     click(&mut world, Target::key("home.prs.refresh"));
     snap(&mut world, "home-pull-requests", dark);
+    let [x, y, w, h] = world.rect("home.pr.r1");
+    world.gesture(|app| app.move_to(((x + w / 2.0) as f32, (y + h / 2.0) as f32)));
+    world.advance(std::time::Duration::from_secs(2));
+    snap(&mut world, "home-pull-requests-hover", dark);
+    world.gesture(|app| app.move_to((1.0, 1.0)));
+    world.gesture(|app| app.update(|_, tx| tx.focus("home.pr.r1.open".to_owned(), true)));
+    world.advance(std::time::Duration::from_secs(2));
+    snap(&mut world, "home-pull-requests-selected", dark);
 }
 
 /// Restarting shared Codex while two agents hold it, from the update band.
@@ -8214,6 +8388,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("settings_missing_states", || settings_missing_states(dark));
         scene("settings_pricing", || settings_pricing(dark));
         scene("settings_route_picker", || settings_route_picker(dark));
+        scene("route_picker_callers", || route_picker_callers(dark));
         scene("settings_refused_rows", || settings_refused_rows(dark));
         scene("settings_smallest_pages", || settings_smallest_pages(dark));
         scene("settings_plugin_priority_refused", || {
