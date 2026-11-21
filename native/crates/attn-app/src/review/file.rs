@@ -250,8 +250,8 @@ pub(super) fn view(
         &[("⌃o", "back"), ("esc", "close")]
     };
     let fit = Hints::in_room(room, (&file.target.path, Type::Mono), choices);
-    let back = key_hint("⌃o", "back", fit.hints, t).map(|back| {
-        let back = back
+    let back = {
+        let back = key_hint("⌃o", "back", fit.hints, t)
             .role("button")
             .label(if can_go_back {
                 "← back ⌃o"
@@ -260,7 +260,7 @@ pub(super) fn view(
             })
             .key(format!("{prefix}.view.back"));
         super::file_view_press(back, tile, stage, false)
-    });
+    };
     let lines = file
         .rows
         .as_ref()
@@ -281,18 +281,16 @@ pub(super) fn view(
                 .filter(|_| !fit.cut)
                 .map(|l| words(l, Type::Small, t.text_muted).truncate()),
         );
-    let close = key_hint("esc", "close", fit.hints, t)
-        .filter(|_| !stage)
-        .map(|close| {
-            let close = close
-                .role("button")
-                .label("close esc")
-                .key(format!("{prefix}.view.close"));
-            super::file_view_press(close, tile, stage, true)
-        });
+    let close = (!stage).then(|| {
+        let close = key_hint("esc", "close", fit.hints, t)
+            .role("button")
+            .label("close esc")
+            .key(format!("{prefix}.view.close"));
+        super::file_view_press(close, tile, stage, true)
+    });
     let header = Bar::new(format!("{prefix}.view.head"))
         .slim()
-        .start_all(back)
+        .start_all([back])
         .lead(place)
         .push_all(close)
         .build(t);

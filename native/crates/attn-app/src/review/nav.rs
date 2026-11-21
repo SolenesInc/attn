@@ -5,7 +5,7 @@ use attn_protocol::{CodeNavLocation, CodeNavMessage, CodeNavResultMessage};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Block, Inline, Popover, raised_place};
 use attn_ui::system::{Type, keys_hint, words};
-use rune::{El, Key, KeyEvent, Tx, col};
+use rune::{El, Key, KeyEvent, Tx, col, row};
 use rune_kit::ScrollBar;
 
 use crate::State;
@@ -475,18 +475,27 @@ pub fn places_built() -> usize {
 fn place_row(tile: &str, l: &CodeNavLocation, i: usize, picked: bool, t: &Tokens) -> El {
     PLACES_BUILT.with(|n| n.set(n.get() + 1));
     let outside = if l.outside { " outside" } else { "" };
+    let (folder, name) = match l.path.rsplit_once('/') {
+        Some((folder, name)) => (Some(format!("{folder}/")), name),
+        None => (None, l.path.as_str()),
+    };
     let line = Inline::joined()
         .w_full()
         .child(
-            words(
-                format!("{}:{}", l.path, l.line),
-                Type::Mono,
-                t.text_secondary,
-            )
-            .single_line()
-            .truncate()
-            .shrink()
-            .a11y_hidden(),
+            row()
+                .shrink()
+                .children(folder.map(|folder| {
+                    words(folder, Type::Mono, t.text_secondary)
+                        .single_line()
+                        .truncate()
+                        .shrink()
+                        .a11y_hidden()
+                }))
+                .child(
+                    words(format!("{name}:{}", l.line), Type::Mono, t.text_secondary)
+                        .single_line()
+                        .a11y_hidden(),
+                ),
         )
         .children(l.outside.then(|| {
             words("outside", Type::Small, t.warning)
@@ -498,6 +507,7 @@ fn place_row(tile: &str, l: &CodeNavLocation, i: usize, picked: bool, t: &Tokens
                 .single_line()
                 .truncate()
                 .shrink()
+                .shrink_first()
                 .a11y_hidden(),
         );
     raised_place(line, picked, t)
@@ -567,7 +577,7 @@ pub(crate) fn panel_view(tile: &str, answer: &Answer, t: &Tokens) -> El {
                 .role("listbox")
                 .label(title.clone())
                 .w_full()
-                .max_h(list_height(tile))
+                .max_h(shown_height(tile))
                 .scroll(rune::ScrollSpec {
                     stick_bottom: false,
                 })
@@ -588,14 +598,31 @@ pub(crate) fn panel_view(tile: &str, answer: &Answer, t: &Tokens) -> El {
 
 const PANEL: &str = "review.nav.panel";
 
+thread_local! {
+    static PAGES: std::cell::RefCell<std::collections::HashMap<String, usize>> =
+        std::cell::RefCell::default();
+}
+
+/// How many places a page key moves in tile `tile`: as many as its list last showed whole.
+/// Keys arrive outside a view build, where no layout can be read, so the view that draws the
+/// list keeps the count.
+fn page(tile: &str) -> usize {
+    PAGES
+        .with(|pages| pages.borrow().get(tile).copied())
+        .unwrap_or(PLACES_SHOWN)
+}
+
+/// The height the list of places in tile `tile` stands at, kept as its page.
+fn shown_height(tile: &str) -> f32 {
+    let height = list_height(tile);
+    let whole = ((height / PLACE_HEIGHT) as usize).max(1);
+    PAGES.with(|pages| pages.borrow_mut().insert(tile.to_owned(), whole));
+    height
+}
+
 /// As tall as the list of places in tile `tile` may stand: [`LIST_HEIGHT`], or less where the
 /// panel, bounded above the key line, leaves less room under the list's top and over the room
 /// the panel keeps under its body.
-/// How many places a page key moves: as many as the list shows whole.
-fn page(tile: &str) -> usize {
-    ((list_height(tile) / PLACE_HEIGHT) as usize).max(1)
-}
-
 fn list_height(tile: &str) -> f32 {
     let bottom = |key: &str| rune::memo::layout_with(key, |[_, y, _, h]| y + h);
     let foot = bottom(PANEL)

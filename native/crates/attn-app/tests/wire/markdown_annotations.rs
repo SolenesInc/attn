@@ -1535,10 +1535,13 @@ fn the_comment_box_stands_whole_inside_its_document_in_the_smallest_window() {
     );
     select_in_paragraph(&mut world, 0.2, 0.5);
     click(&mut world, "toolbar.comment");
+    world.settle();
+    quote_shows_whole(&world, "on opening");
     let long =
         "Name the blocks it skips, and say why each one is left out of the count. ".repeat(6);
     world.gesture(|app| app.type_text(&long));
     world.settle();
+    quote_shows_whole(&world, "after typing");
     let screen = world.screen();
     let [vx, vy, vw, vh] = screen
         .bounds(Target::key("tile.m.document"))
@@ -1554,6 +1557,21 @@ fn the_comment_box_stands_whole_inside_its_document_in_the_smallest_window() {
             [vx, vy, vw, vh]
         );
     }
+}
+
+/// The comment box's quote of its passage shows whole, `when` being when that is checked.
+fn quote_shows_whole(world: &World, when: &str) {
+    let elements = world.runtime().elements();
+    let quote = elements
+        .iter()
+        .find(|e| e.key.as_deref() == Some("tile.m.document.composer.quote"))
+        .unwrap_or_else(|| panic!("{when}: the comment box quotes nothing"));
+    assert!(
+        (quote.visible[3] - quote.rect[3]).abs() < 0.5 && quote.visible[3] > 0.0,
+        "{when}: the quote shows {} of its {}",
+        quote.visible[3],
+        quote.rect[3]
+    );
 }
 
 #[test]
@@ -1751,7 +1769,7 @@ fn the_send_menu_and_the_notes_count_stay_whole_beside_a_long_named_session_in_t
 }
 
 #[test]
-fn tab_from_the_notes_close_reaches_overall_note_and_clear_all_before_forty_cards() {
+fn tab_from_the_notes_close_reaches_overall_note_clear_all_then_each_notes_remove() {
     let marks = (0..40)
         .map(|n| held(&format!("n{n}"), "comment", "tile layout", Some("why")))
         .collect();
@@ -1781,6 +1799,10 @@ fn tab_from_the_notes_close_reaches_overall_note_and_clear_all_before_forty_card
     );
     assert_eq!(tab(&mut world, false), "tile.m.document.notes.overall");
     assert_eq!(tab(&mut world, false), "tile.m.document.notes.clear");
+    assert_eq!(tab(&mut world, false), "tile.m.document.notes.remove.n0");
+    assert_eq!(tab(&mut world, false), "tile.m.document.notes.remove.n1");
+    assert_eq!(tab(&mut world, true), "tile.m.document.notes.remove.n0");
+    assert_eq!(tab(&mut world, true), "tile.m.document.notes.clear");
     assert_eq!(tab(&mut world, true), "tile.m.document.notes.overall");
     assert_eq!(tab(&mut world, true), "tile.m.document.notes.close");
 }

@@ -883,6 +883,7 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
         None => card,
     };
     card.checked(selected)
+        .tab_index(-1)
         .hover_group()
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             if let Some(r) = state.readings.tiles.get_mut(&opened) {

@@ -746,24 +746,28 @@ fn composer_box(
             words(heading, Type::Small, t.text_muted).truncate(),
         )
     });
-    let popover = Popover::new(
-        key(tile, "composer"),
-        if overall { "Overall Note" } else { "Comment" },
-    )
-    .aside(close)
-    .push_all(quote)
-    .push(Block::custom(key(tile, "composer.input"), field))
-    .actions(
-        Actions::new(key(tile, "composer.keys"))
-            .push(words(
-                format!("{save_key} to save"),
-                Type::Small,
-                t.text_muted,
-            ))
-            .then_end()
-            .push(save),
-    )
-    .build(t);
+    let popover = quote
+        .into_iter()
+        .fold(
+            Popover::new(
+                key(tile, "composer"),
+                if overall { "Overall Note" } else { "Comment" },
+            )
+            .aside(close),
+            Popover::about,
+        )
+        .push(Block::custom(key(tile, "composer.input"), field))
+        .actions(
+            Actions::new(key(tile, "composer.keys"))
+                .push(words(
+                    format!("{save_key} to save"),
+                    Type::Small,
+                    t.text_muted,
+                ))
+                .then_end()
+                .push(save),
+        )
+        .build(t);
     popover
         .w(width)
         .max_h(room.max(0.0))

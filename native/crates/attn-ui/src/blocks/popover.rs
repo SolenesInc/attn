@@ -13,6 +13,7 @@ pub struct Popover {
     key: String,
     title: Said,
     aside: Vec<El>,
+    about: Option<Block>,
     body: Vec<Block>,
     actions: Option<Actions>,
     focusable: bool,
@@ -31,6 +32,7 @@ impl Popover {
             key: key.into(),
             title: title.into(),
             aside: Vec::new(),
+            about: None,
             body: Vec::new(),
             actions: None,
             focusable: true,
@@ -41,6 +43,13 @@ impl Popover {
     /// A control beside the title, such as the one that closes the popover.
     pub fn aside(mut self, control: impl Into<El>) -> Self {
         self.aside.push(control.into());
+        self
+    }
+
+    /// What the popover is about, such as the passage a comment is on: under the title, it
+    /// stays in view while the body scrolls to the field being written in.
+    pub fn about(mut self, block: Block) -> Self {
+        self.about = Some(block);
         self
     }
 
@@ -93,6 +102,9 @@ impl Popover {
         let head = door::gap(row().w_full().items_start(), Space::S12)
             .child(col().grow(1.0).min_w(0.0).child(title))
             .child(beside);
+        let head = door::gap(col().w_full(), Space::S4)
+            .child(head)
+            .children(self.about.map(|about| spaced(vec![about], gap, None)));
         let head = door::inset(head, INSET, Space::S0);
         let actions = self.actions.map(|actions| {
             door::inset(

@@ -29,17 +29,17 @@ fn choice_box(choice: El) -> El {
     door::corner(door::inset(choice, Space::S8, Space::S2), Radius::Tag)
 }
 
-/// How much of its key choices a bar shows beside what it keeps whole, such as a file's path:
-/// their keys and names, then their keys alone, then none, their keys still working.
+/// How much of its key choices a bar shows beside what it keeps, such as a file's path: their
+/// keys and names, or their keys alone. The choices always show, so each stays a press and a
+/// name; what the bar keeps gives way after their names.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Hints {
     Words,
     Keys,
-    Gone,
 }
 
 /// How a bar lays out in the room it has: how much of its key choices it shows, how wide what it
-/// keeps stands, and whether even alone it is cut short.
+/// keeps stands, and whether it is cut short.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct HintFit {
     pub hints: Hints,
@@ -49,8 +49,8 @@ pub struct HintFit {
 
 impl Hints {
     /// The fit of a [`Bar`](super::Bar) `room` points wide that keeps `kept` set as its type
-    /// whole beside its key `choices`, each keys and a name: the most of the choices that leaves
-    /// room for it.
+    /// beside its key `choices`, each keys and a name: their names while `kept` stands whole
+    /// beside them, else their keys alone, with `kept` in the room those leave.
     pub fn in_room(room: f32, kept: (&str, Type), choices: &[(&str, &str)]) -> HintFit {
         let inside = room - 2.0 * Space::S16.pt();
         let whole = door::width(kept.0, kept.1);
@@ -60,35 +60,33 @@ impl Hints {
                 .map(|(keys, name)| Space::S8.pt() + width(keys, name))
                 .sum::<f32>()
         };
-        let hints = [
+        let (hints, beside) = [
             (Hints::Words, beside(&key_choice_width)),
             (Hints::Keys, beside(&|keys, _| keys_choice_width(keys))),
         ]
         .into_iter()
         .find(|(_, beside)| whole + beside <= inside)
-        .map_or(Hints::Gone, |(hints, _)| hints);
+        .unwrap_or((Hints::Keys, beside(&|keys, _| keys_choice_width(keys))));
+        let left = (inside - beside).max(0.0);
         HintFit {
             hints,
-            kept: whole.min(inside).max(0.0),
-            cut: whole > inside,
+            kept: whole.min(left),
+            cut: whole > left,
         }
     }
 }
 
-/// [`key_choice`] as much as `hints` shows of it: its keys and name, its keys alone, or nothing.
-pub fn key_hint(keys: &str, name: &str, hints: Hints, t: &Tokens) -> Option<El> {
+/// [`key_choice`] as much as `hints` shows of it: its keys and name, or its keys alone.
+pub fn key_hint(keys: &str, name: &str, hints: Hints, t: &Tokens) -> El {
     match hints {
-        Hints::Words => Some(key_choice(keys, name, false, t)),
-        Hints::Keys => Some(
-            choice_box(
-                row()
-                    .items_center()
-                    .label(format!("{keys} {name}"))
-                    .child(keycaps(keys.split(' '), t).a11y_hidden()),
-            )
-            .border(1.0, Color::TRANSPARENT),
-        ),
-        Hints::Gone => None,
+        Hints::Words => key_choice(keys, name, false, t),
+        Hints::Keys => choice_box(
+            row()
+                .items_center()
+                .label(format!("{keys} {name}"))
+                .child(keycaps(keys.split(' '), t).a11y_hidden()),
+        )
+        .border(1.0, Color::TRANSPARENT),
     }
 }
 

@@ -5378,7 +5378,28 @@ fn keeps_the_picked_place_in_view_as_the_keys_move_it_down_a_long_list_of_uses()
 
 #[test]
 fn the_page_keys_move_through_a_long_list_of_uses_without_skipping_a_place() {
-    let (mut world, _) = open_served(DOCUMENT, bundle());
+    let (world, _) = open_served(DOCUMENT, bundle());
+    pages_through_every_use(world);
+}
+
+#[test]
+fn the_page_keys_see_every_use_in_the_smallest_window_at_large_text() {
+    let mut world = review_in(
+        row(vec![document_tile("m", DOC, None)]),
+        (800.0, 600.0),
+        Some("1.5"),
+    );
+    let [x, y, w, _] = world
+        .screen()
+        .bounds(Target::key("tile.m.review.keys"))
+        .unwrap();
+    world.gesture(|app| app.click_at((x + w - 12.0, y + 12.0)));
+    pages_through_every_use(world);
+}
+
+/// Asks for 60 uses, then pages down to the last and back up to the first: each way, every
+/// use shows whole at some step.
+fn pages_through_every_use(mut world: World) {
     world.daemon.on("code_nav", |r| {
         if r["kind"] == "definition" {
             nav_answer(vec![place("calc.go", 3, 5, "func Add(a, b int) int {")])
@@ -5399,15 +5420,80 @@ fn the_page_keys_move_through_a_long_list_of_uses_without_skipping_a_place() {
             .filter(|i| shows_inside(world, list, &format!("review.nav.place.{i}")))
             .collect()
     };
-    let mut seen = shown(&world);
-    for _ in 0..10 {
-        press(&mut world, Key::PageDown);
-        world.settle();
-        seen.extend(shown(&world));
+    for key in [Key::PageDown, Key::PageUp] {
+        let mut seen = shown(&world);
+        for _ in 0..60 {
+            press(&mut world, key.clone());
+            world.settle();
+            seen.extend(shown(&world));
+        }
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(seen, (0..60).collect::<Vec<_>>(), "paging with {key:?}");
     }
-    seen.sort_unstable();
-    seen.dedup();
-    assert_eq!(seen, (0..60).collect::<Vec<_>>());
+}
+
+#[test]
+fn uses_with_the_same_code_keep_their_file_names_readable_in_the_smallest_window() {
+    let wide = place_where_widths((1600.0, 900.0), None);
+    let small = place_where_widths((800.0, 600.0), Some("1.5"));
+    assert!(small.len() >= 5, "rows shown: {small:?}");
+    for (text, width) in &small {
+        let whole = wide
+            .iter()
+            .find(|(t, _)| t == text)
+            .map(|(_, w)| *w)
+            .unwrap_or_else(|| panic!("{text} not shown in a wide window"));
+        assert!(
+            *width >= whole - 0.5,
+            "{text} stands {width} of its {whole}"
+        );
+    }
+}
+
+/// For each use shown whole, the text that names its file and line and the width it stands at
+/// in a window of `size` at text `scale`; the uses differ only by file.
+fn place_where_widths(size: (f32, f32), scale: Option<&str>) -> Vec<(String, f32)> {
+    let mut world = review_in(row(vec![document_tile("m", DOC, None)]), size, scale);
+    let [x, y, w, _] = world
+        .screen()
+        .bounds(Target::key("tile.m.review.keys"))
+        .unwrap();
+    world.gesture(|app| app.click_at((x + w - 12.0, y + 12.0)));
+    world.daemon.on("code_nav", |r| {
+        if r["kind"] == "definition" {
+            nav_answer(vec![place("calc.go", 3, 5, "func Add(a, b int) int {")])
+        } else {
+            nav_answer(
+                (0..12)
+                    .map(|i| {
+                        place(
+                            &format!("tests/render/case_{i:02}.rs"),
+                            i + 1,
+                            2,
+                            "let total = sum_to(limit) + offset_for_the_case_under_test;",
+                        )
+                    })
+                    .collect(),
+            )
+        }
+    });
+    press(&mut world, Key::Right);
+    type_key(&mut world, "f");
+    type_key(&mut world, "s");
+    world.settle();
+    let list = "tile.m.review.nav.list";
+    let elements = world.runtime().elements();
+    (0..12)
+        .filter(|i| shows_inside(&world, list, &format!("review.nav.place.{i}")))
+        .filter_map(|i| {
+            let name = format!("case_{i:02}.rs:{}", i + 1);
+            elements
+                .iter()
+                .find(|e| e.text.as_deref().is_some_and(|t| t.ends_with(&name)))
+                .map(|e| (name, e.rect[2]))
+        })
+        .collect()
 }
 
 #[test]
@@ -7526,10 +7612,9 @@ fn a_narrow_reviews_key_line_keeps_its_language_servers_and_their_setup_in_reach
 
 const LONG_PATH: &str = "native/crates/attn-app/src/review/reading-surfaces/smallest/calc.go";
 
-/// The file view's head and the path in it, opened on [`LONG_PATH`] at 150% text in its tile
-/// alone in a window `size` across, or in a tile window of its own that size when `popped`: its
-/// path's bounds, its head's, and whether its back and close show.
-fn long_path_head(size: (f32, f32), popped: bool) -> ([f32; 4], [f32; 4], bool, bool) {
+/// The file view opened on [`LONG_PATH`] at 150% text in its tile alone in a window `size`
+/// across, or in a tile window of its own that size when `popped`, and that window's key.
+fn long_path_head(size: (f32, f32), popped: bool) -> (World, Option<String>) {
     let mut tile = document_tile("m", DOC, None);
     if popped {
         tile["window"] = json!({"x": 60.0, "y": 60.0, "width": size.0, "height": size.1});
@@ -7574,43 +7659,80 @@ fn long_path_head(size: (f32, f32), popped: bool) -> ([f32; 4], [f32; 4], bool, 
         }
         None => click(&mut world, file),
     }
-    let screen = screen(&world);
-    let path = screen
-        .bounds(Target::role("label").name(LONG_PATH))
-        .expect("the head shows the path");
-    let head = screen
-        .bounds(Target::key("tile.m.review.view.head"))
-        .expect("the file view has its head");
-    let shows = |key: &str| screen.find(Target::key(key)).is_some();
-    (
-        path,
-        head,
-        shows("tile.m.review.view.back"),
-        shows("tile.m.review.view.close"),
-    )
+    (world, window)
+}
+
+/// The bounds of the file view's path and head, and of its back and close where they show.
+struct HeadParts {
+    path: [f32; 4],
+    head: [f32; 4],
+    back: Option<[f32; 4]>,
+    close: Option<[f32; 4]>,
+}
+
+fn head_parts(world: &World, window: &Option<String>) -> HeadParts {
+    let screen = match window {
+        Some(window) => world.tile_screen(window),
+        None => world.screen(),
+    };
+    HeadParts {
+        path: screen
+            .bounds(Target::role("label").name(LONG_PATH))
+            .expect("the head shows the path"),
+        head: screen
+            .bounds(Target::key("tile.m.review.view.head"))
+            .expect("the file view has its head"),
+        back: screen.bounds(Target::key("tile.m.review.view.back")),
+        close: screen.bounds(Target::key("tile.m.review.view.close")),
+    }
 }
 
 #[test]
-fn the_file_views_head_keeps_its_path_on_one_line_and_its_key_hints_give_way_first() {
-    let (whole, ..) = long_path_head((1600.0, 900.0), false);
+fn the_file_views_head_keeps_back_close_and_its_path_on_one_line_where_the_path_is_long() {
+    let (world, window) = long_path_head((1600.0, 900.0), false);
+    let whole = head_parts(&world, &window).path;
     for (size, popped) in [((800.0, 600.0), false), ((320.0, 200.0), true)] {
-        let (path, head, back, close) = long_path_head(size, popped);
-        let room = head[2] - 32.0;
-        assert!(
-            path[2] + 0.5 >= whole[2].min(room),
-            "{size:?}: the path stands {} wide of {} whole in {room} of room",
-            path[2],
-            whole[2]
-        );
-        assert!(
-            head[3] <= whole[3] + 11.5,
-            "{size:?}: the head {head:?} is taller than one line of its path {whole:?}"
-        );
-        assert_eq!(back, close, "{size:?}: back and close give way together");
-        assert!(
-            path[0] + path[2] <= head[0] + head[2] + 0.5,
-            "{size:?}: the path {path:?} runs past its head {head:?}"
-        );
+        for pressed in ["tile.m.review.view.back", "tile.m.review.view.close"] {
+            let (mut world, window) = long_path_head(size, popped);
+            let HeadParts {
+                path,
+                head,
+                back,
+                close,
+            } = head_parts(&world, &window);
+            let back = back.unwrap_or_else(|| panic!("{size:?}: the head lost back"));
+            let close = close.unwrap_or_else(|| panic!("{size:?}: the head lost close"));
+            let inside = |part: [f32; 4]| {
+                part[0] >= head[0] - 0.5 && part[0] + part[2] <= head[0] + head[2] + 0.5
+            };
+            assert!(
+                inside(back) && inside(path) && inside(close),
+                "{size:?}: back {back:?}, the path {path:?} and close {close:?} stand inside the head {head:?}"
+            );
+            assert!(
+                back[0] + back[2] <= path[0] + 0.5 && path[0] + path[2] <= close[0] + 0.5,
+                "{size:?}: the path {path:?} runs under back {back:?} or close {close:?}"
+            );
+            assert!(
+                head[3] <= whole[3] + 11.5,
+                "{size:?}: the head {head:?} is taller than one line of its path {whole:?}"
+            );
+            match &window {
+                Some(window) => world.tile_gesture(window, |d| d.click(Target::key(pressed))),
+                None => click(&mut world, Target::key(pressed)),
+            }
+            let open = match &window {
+                Some(window) => world
+                    .tile_screen(window)
+                    .find(Target::key("tile.m.review.view"))
+                    .is_some(),
+                None => file_view(&world).is_some(),
+            };
+            assert!(
+                !open,
+                "{size:?}: a click on {pressed} leaves the file view open"
+            );
+        }
     }
 }
 

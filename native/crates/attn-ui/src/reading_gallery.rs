@@ -513,14 +513,14 @@ fn tray_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
         .child(
             Bar::new("tray.head")
                 .slim()
-                .start_all(key_hint("⌃o", "back", fit.hints, &t).map(|b| b.key("tray.back")))
+                .start_all([key_hint("⌃o", "back", fit.hints, &t).key("tray.back")])
                 .lead(
                     words(path, Type::Mono, t.text_primary)
                         .truncate_middle()
                         .min_w(fit.kept)
                         .key("tray.path"),
                 )
-                .push_all(key_hint("esc", "close", fit.hints, &t).map(|c| c.key("tray.close")))
+                .push_all([key_hint("esc", "close", fit.hints, &t).key("tray.close")])
                 .build(&t),
         )
         .child(el().w_full().h(120.0))
