@@ -212,15 +212,10 @@ directly and follows the server's status. The plugin prepares terminal views.
 An open conversation can keep receiving input after its last view moves on.
 
 The declaration needs SDK 0.3.0 and a daemon supporting `server_binding`.
-An older daemon refuses that capability. No published SDK version is required
-when you pack the SDK from the checkout:
+An older daemon refuses that capability. To make your own from the sample:
 
 ```bash
-mkdir -p /tmp/attn-plugin-pack
-(cd sdk/plugin && bun pm pack --destination /tmp/attn-plugin-pack)
 cp -R examples/plugins/sample-server /tmp/my-server-plugin
-# In /tmp/my-server-plugin/package.json, replace "0.3.0" with
-# "file:/tmp/attn-plugin-pack/victorarias-attn-plugin-0.3.0.tgz".
 # In src/index.ts, change harnessId to your own ID and adapt view() to your CLI.
 attn plugin install --path /tmp/my-server-plugin
 ```

@@ -68,7 +68,7 @@ func installedSampleServer(t *testing.T, id, tarball string) string {
 		text := string(data)
 		switch file {
 		case "package.json":
-			text = strings.Replace(text, `"0.3.0"`, `"file:`+tarball+`"`, 1)
+			text = strings.Replace(text, `"0.6.0"`, `"file:`+tarball+`"`, 1)
 		case "src/index.ts":
 			text = strings.Replace(text, `const harnessId = "sample-server"`, `const harnessId = "`+id+`"`, 1)
 		}
