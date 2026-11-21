@@ -357,7 +357,7 @@ fn read_stdin(what: &str) -> Result<Vec<u8>, String> {
 fn parse(family: &dyn Family, cmd: &Command, argv: &[String]) -> Result<Parsed, ParseStop> {
     let definitions = flags_of(family.flags(), cmd);
     let mut fs = FlagSet::new("", &definitions);
-    let (argv, taken) = take_word_args(cmd, argv)?;
+    let (argv, taken) = take_word_args(cmd, &definitions, argv)?;
     let positional_slots = cmd
         .args
         .iter()
@@ -383,17 +383,47 @@ fn parse(family: &dyn Family, cmd: &Command, argv: &[String]) -> Result<Parsed, 
     })
 }
 
+fn takes_value(definitions: &[Flag<'_>], word: &str) -> bool {
+    let name = word.trim_start_matches('-');
+    word.starts_with('-')
+        && !name.contains('=')
+        && definitions
+            .iter()
+            .any(|flag| flag.name == name && !matches!(flag.default, FlagDefault::Bool(_)))
+}
+
+fn flag_values_at(definitions: &[Flag<'_>], argv: &[String]) -> Vec<bool> {
+    let mut value = vec![false; argv.len()];
+    let mut index = 0;
+    while index < argv.len() {
+        if argv[index] == "--" {
+            break;
+        }
+        if takes_value(definitions, &argv[index]) && index + 1 < argv.len() {
+            value[index + 1] = true;
+            index += 1;
+        }
+        index += 1;
+    }
+    value
+}
+
 fn take_word_args(
     cmd: &Command,
+    definitions: &[Flag<'_>],
     argv: &[String],
 ) -> Result<(Vec<String>, Map<String, Json>), ParseStop> {
     let mut taken = Map::new();
     let mut argv = argv.to_vec();
+    let is_value = flag_values_at(definitions, &argv);
     if let Some(arg) = cmd
         .args
         .iter()
         .find(|arg| matches!(arg.cli, Cli::AfterDashes))
-        && let Some(at) = argv.iter().position(|word| word == "--")
+        && let Some(at) = argv
+            .iter()
+            .enumerate()
+            .position(|(index, word)| word == "--" && !is_value[index])
     {
         let words: Vec<Json> = argv.split_off(at)[1..]
             .iter()
@@ -406,16 +436,17 @@ fn take_word_args(
             continue;
         };
         let spelled = format!("--{flag}");
+        let is_value = flag_values_at(definitions, &argv);
         let mut words = Vec::new();
         let mut kept = Vec::new();
-        let mut rest = argv.into_iter().peekable();
-        while let Some(word) = rest.next() {
-            if word != spelled {
+        let mut rest = argv.into_iter().enumerate().peekable();
+        while let Some((index, word)) = rest.next() {
+            if word != spelled || is_value[index] {
                 kept.push(word);
                 continue;
             }
             let before = words.len();
-            while let Some(next) = rest.next_if(|next| !next.starts_with("--")) {
+            while let Some((_, next)) = rest.next_if(|(_, next)| !next.starts_with("--")) {
                 words.push(Json::from(next));
             }
             if words.len() == before {

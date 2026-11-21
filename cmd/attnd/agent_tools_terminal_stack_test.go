@@ -42,3 +42,26 @@ func TestAToolCallOpensABashShellRunsACommandWithoutWaitingAndReadsTheLastBlock(
 		t.Fatalf("terminal_read last = %s, want the finished block of the CLI's run", encoded)
 	}
 }
+
+func TestTerminalSendTypesAFlagShapedTextLiterally(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Vars = append(s.Vars, "SHELL=/bin/bash")
+	s.Start()
+	app := s.App()
+	session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+	s.Launched(session)
+	run := func(args ...string) testworld.Result {
+		return s.Run(testworld.Invocation{Session: session, Args: append([]string{"terminal"}, args...)})
+	}
+	var opened protocol.TerminalOpenResult
+	run("open", "--json").JSON(t, &opened)
+	for _, text := range []string{"--keys", "--", "--keys Enter --"} {
+		if got := run("send", string(opened.TerminalID), "--text", text); got.Code != 0 {
+			t.Fatalf("terminal send --text %q = %+v, want the text typed as it is", text, got)
+		}
+		app.AwaitScreen(string(opened.SessionID), text)
+		if got := run("send", string(opened.TerminalID), "--keys", "C-u"); got.Code != 0 {
+			t.Fatalf("clearing the line after %q: %+v", text, got)
+		}
+	}
+}
