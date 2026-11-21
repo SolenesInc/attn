@@ -240,6 +240,7 @@ func ScopeTestEnvironment(dataDir string) {
 	os.Unsetenv("ATTN_CONFIG_PATH")
 	os.Unsetenv("ATTN_PLUGIN_DIR")
 	os.Unsetenv("ATTN_CLIENT_TOKEN")
+	os.Unsetenv("ATTN_PPROF")
 	os.Unsetenv(AnalyticsIngestURLEnv)
 	unsetInheritedCaller()
 	unsetInheritedGitConfig()
