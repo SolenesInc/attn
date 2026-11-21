@@ -37,6 +37,8 @@ func (d *Daemon) commandLayer() *command.Layer {
 			d.askCommands(),
 			d.browserCommands(),
 			d.terminalCommands(),
+			d.journalCommands(),
+			d.crewCommands(),
 		} {
 			maps.Copy(handlers, family)
 		}

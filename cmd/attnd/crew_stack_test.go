@@ -59,15 +59,14 @@ func TestCrewMembersStartCloseAndKeepTheirLaunchSettings(t *testing.T) {
 	requireRefusals(t, s, []argvRefusal{
 		{args: []string{"crew", "list", "extra"}, want: "takes no arguments"},
 		{args: []string{"crew", "list", "--nope"}, want: "not defined: -nope"},
-		{args: []string{"crew", "start"}, want: "takes one member name"},
-		{args: []string{"crew", "start", "one", "two"}, want: `takes one member name, not "two"`},
+		{args: []string{"crew", "start"}, want: "takes 1 argument (member), got none"},
+		{args: []string{"crew", "start", "one", "two"}, want: `takes 1 argument (member), got 2: "one" "two"`},
 		{args: []string{"crew", "start", "--nope", "keel"}, want: "not defined: -nope"},
-		{args: []string{"crew", "close"}, want: "takes one member name"},
-		{args: []string{"crew", "close", "one", "two"}, want: `takes one member name, not "two"`},
+		{args: []string{"crew", "close"}, want: "takes 1 argument (member), got none"},
+		{args: []string{"crew", "close", "one", "two"}, want: `takes 1 argument (member), got 2: "one" "two"`},
 		{args: []string{"crew", "close", "keel", "--request-id", "retry-1"}, want: "not defined: -request-id"},
 		{args: []string{"crew", "wake", "keel", "--agent", "codex"}, want: "`wake` is now `start`: attn crew start keel --agent codex"},
 		{args: []string{"crew", "sleep", "keel"}, want: "`sleep` is now `close`: attn crew close keel"},
-		{args: []string{"crew", "set", "keel"}, want: "nothing to set"},
 	})
 
 	s.Start()
@@ -80,6 +79,9 @@ func TestCrewMembersStartCloseAndKeepTheirLaunchSettings(t *testing.T) {
 	}
 	s.Start()
 	app := s.App()
+	if nothing := s.Attn("crew", "set", "keel"); nothing.Code != 2 || !strings.Contains(nothing.Stderr, "nothing to set") {
+		t.Fatalf("crew set with no setting: %+v, want a usage refusal naming nothing to set", nothing)
+	}
 
 	notes, specs := s.Path("notes"), s.Path("specs")
 	for _, dir := range []string{notes, specs} {
@@ -193,10 +195,10 @@ func TestCrewCreateRetireAndRestoreCommands(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	requireRefusals(t, s, []argvRefusal{
-		{args: []string{"crew", "create"}, want: "takes one member name"},
-		{args: []string{"crew", "create", "Keel", "extra"}, want: "takes one member name"},
-		{args: []string{"crew", "retire"}, want: "takes one member name"},
-		{args: []string{"crew", "restore", "Keel", "extra"}, want: "takes one member name"},
+		{args: []string{"crew", "create"}, want: "takes 1 argument (name), got none"},
+		{args: []string{"crew", "create", "Keel", "extra"}, want: `takes 1 argument (name), got 2: "Keel" "extra"`},
+		{args: []string{"crew", "retire"}, want: "takes 1 argument (member), got none"},
+		{args: []string{"crew", "restore", "Keel", "extra"}, want: `takes 1 argument (member), got 2: "Keel" "extra"`},
 	})
 	s.Start()
 	requireStdout(t, s.Attn("crew", "create", "Keel"), "Keel joined profile", "with key member:keel.", "home: "+filepath.Join(s.Dir, "notebook", "crew", "keel"), "attn crew start Keel")
@@ -247,7 +249,7 @@ func TestCrewMoveHomeAndRenameReportWhereTheHomeIs(t *testing.T) {
 		t.Fatalf("moved charter: %q %v", raw, err)
 	}
 	requireStdout(t, s.Attn("crew", "move-home", "Trellis"), "Trellis's home is now "+filepath.Join(s.Dir, "notebook", "crew", "trellis")+" (it was "+filepath.Join(s.Dir, "crew", "trellis")+").")
-	if parse := s.Attn("crew", "move-home"); parse.Code != 2 || !strings.Contains(parse.Stderr, "takes one member name") || !strings.Contains(parse.Stderr, "move-home <member>") {
+	if parse := s.Attn("crew", "move-home"); parse.Code != 2 || !strings.Contains(parse.Stderr, "takes 1 argument (member), got none") || !strings.Contains(parse.Stderr, "move-home <member>") {
 		t.Fatalf("move-home without a member: %+v", parse)
 	}
 	requireStdout(t, s.Attn("crew", "rename", "Keel", "Anchor"), "Keel is now Anchor, and its home moved to "+filepath.Join(s.Dir, "notebook", "crew", "anchor")+"; its key member:keel, letters and mail stay.")

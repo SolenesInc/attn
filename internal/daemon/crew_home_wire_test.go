@@ -348,7 +348,7 @@ func closeAfterASession(t *testing.T, w *world, member string) *fakeagent.Run {
 	return run
 }
 
-func repointCrewHome(cli *client.Client, member, home string) (*protocol.CrewSetResult, error) {
+func repointCrewHome(cli *client.Client, member, home string) (*protocol.CrewMember, error) {
 	return cli.CrewSetMessage(protocol.CrewSetMessage{Member: member, Home: protocol.Ptr(home)})
 }
 
@@ -394,7 +394,7 @@ func TestAHomeMovedAwayIsRepointedAndStartsThere(t *testing.T) {
 	}
 	named := filepath.Join(tidied, "keel")
 	movedNotes := filepath.Join(named, "notes")
-	if got := repointed.Member; got.HomeDir != named || protocol.Deref(got.Cwd) != movedNotes || len(got.AwarenessDirs) != 1 || got.AwarenessDirs[0] != movedNotes {
+	if got := repointed; got.HomeDir != named || protocol.Deref(got.Cwd) != movedNotes || len(got.AwarenessDirs) != 1 || got.AwarenessDirs[0] != movedNotes {
 		t.Fatalf("repointed member: %+v", got)
 	}
 	if _, err := os.Stat(aside); !os.IsNotExist(err) {
@@ -439,7 +439,7 @@ func TestARepointBringsAHomeBackIntoTheDataFolder(t *testing.T) {
 	if err := os.Rename(notebook, dataHome); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := repointCrewHome(cli, "Keel", dataHome); err != nil || got.Member.HomeDir != dataHome {
+	if got, err := repointCrewHome(cli, "Keel", dataHome); err != nil || got.HomeDir != dataHome {
 		t.Fatalf("repoint into the data folder: %+v %v", got, err)
 	}
 	w.restart()

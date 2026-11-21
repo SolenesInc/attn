@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/victorarias/attn/internal/crew"
@@ -106,41 +105,4 @@ func (d *Daemon) releaseRetiredClaims(member crew.Member) ([]string, error) {
 		released = append(released, seed.ID)
 	}
 	return released, nil
-}
-
-func (d *Daemon) handleCrewRetire(conn net.Conn, msg *protocol.CrewRetireMessage) {
-	member, err := d.crewAskedMember(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
-	if err != nil {
-		d.sendCrewError(conn, "retire", err)
-		return
-	}
-	result, err := d.retireCrewMember(member)
-	if err != nil {
-		d.sendCrewError(conn, "retire", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewRetireResult: result})
-}
-
-func (d *Daemon) handleCrewRestore(conn net.Conn, msg *protocol.CrewRestoreMessage) {
-	member, err := d.crewAskedMember(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
-	if err != nil {
-		d.sendCrewError(conn, "restore", err)
-		return
-	}
-	d.crewStartMu.Lock()
-	restored, err := d.store.RestoreCrewMember(member.ID)
-	d.crewStartMu.Unlock()
-	if err != nil {
-		d.sendCrewError(conn, "restore", err)
-		return
-	}
-	d.publishFact(FactCrewUpdated, member.ID, nil)
-	d.kickInbox(who.Member(member.Key).Address())
-	member, doc, err := d.crewMember(member.ID)
-	if err != nil {
-		d.sendCrewError(conn, "restore", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewRestoreResult: &protocol.CrewRestoreResult{Member: d.crewMemberWire(member, doc.Rev), AlreadyActive: !restored}})
 }

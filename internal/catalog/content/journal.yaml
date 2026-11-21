@@ -1,2 +1,31 @@
+# The journal family. Docs follow seed.yaml's rules: name an arg by its tool
+# name in backticks, and the CLI's help prints it as the flag.
 groups:
-  - {name: journal, usage: "<command>", summary: "read or add to the Notebook"}
+  - name: journal
+    usage: "<command>"
+    summary: "read or add to the Notebook"
+    map:
+      rows:
+        - {need: "Add to the user's Notebook journal", tools: [journal_append]}
+    doc: |
+      The journal is the Notebook's daily log, one file per day at journal/<date>.md, in the Notebook of the calling session's profile. `attn skill --reference notebook` says how to read and add to the Notebook.
+    flags:
+      - {name: session, placeholder: "<id>", doc: "the session asking (defaults to the current session)"}
+    sections:
+      - title: Commands
+        commands: [journal append]
+
+commands:
+  - name: journal append
+    summary: append an entry to the Notebook's daily journal
+    runs: home
+    grant: full
+    doc: |
+      Appends `entry` to the day's journal file, journal/<date>.md, through the daemon. It is the contention-safe way an agent writes the journal, instead of editing the file with its own file tools, which races other agents writing the same file. `date` defaults to today. The result names the file and its hash after the append.
+    args:
+      - {name: entry, type: markdown, required: true, cli: "--entry", one_of: entry, doc: "the entry; leading and trailing space is trimmed"}
+      - {name: entry_file, type: path, cli: "--entry-file", one_of: entry, cli_only: true, doc: "a file holding the entry"}
+      - {name: date, type: date, cli: "--date", doc: "the journal day; today by default"}
+    result: JournalAppendResult
+    examples:
+      - {entry: "Shipped the parser fix; integration checks remain."}

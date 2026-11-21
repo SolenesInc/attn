@@ -1,2 +1,150 @@
+# The crew family. Docs follow seed.yaml's rules: name an arg by its tool name
+# in backticks, and the CLI's help prints it as the flag.
 groups:
-  - {name: crew, usage: "<command>", summary: "work with permanent agents that keep a charter and letters"}
+  - name: crew
+    usage: "<command>"
+    summary: "work with permanent agents that keep a charter and letters"
+    map:
+      rows:
+        - {need: "Work with permanent crew agents", tools: [crew_list, crew_start]}
+    doc: |
+      Manage the Crew. Each member has a home folder with its charter and letters, which persist across sessions: in attn's data folder, or in its profile's Notebook at crew/<name>/. Every member belongs to a profile and has sessions only there.
+
+      A <member> is a name in your profile, or member:<key> for the permanent key that never changes. Every profile has a Chief member, and chief reaches it whatever its name; its sessions close but it is never retired. Inside attn, your session's profile applies; outside, pass --profile <name|id> when several profiles exist. `attn skill --reference charter` says how a member keeps its charter and letters, and `attn guide crew` explains the Crew to the user.
+    flags:
+      - {name: profile, placeholder: "<name|id>", doc: "the profile whose crew this is; required outside attn when several profiles exist"}
+    sections:
+      - title: Commands
+        commands: [crew list, crew create, crew start, crew close, crew prime, crew apply, crew set, crew rename, crew move-home, crew retire, crew restore]
+
+commands:
+  - name: crew list
+    summary: show your profile's members and their active sessions
+    runs: home
+    grant: full
+    read_only: true
+    doc: |
+      Shows your profile's members and their active sessions, if any. `all` includes retired members.
+    args:
+      - {name: all, type: bool, cli: "--all", doc: "include retired members"}
+    result: CrewListResult
+
+  - name: crew create
+    summary: add a member to your profile
+    runs: home
+    grant: full
+    doc: |
+      Adds a member to your profile. Its home is crew/<name>/ in the profile's Notebook (crew/<name>-2/ when that folder is taken) and starts with an empty CHARTER.md, which the member writes with you in its first session.
+    args:
+      - {name: name, type: name, required: true, cli: pos, doc: "the new member's name, unique in its profile"}
+    result: CrewMember
+    examples:
+      - {name: scout}
+
+  - name: crew start
+    summary: start a session for a member with its saved launch settings
+    runs: home
+    grant: full
+    doc: |
+      Starts a session using the member's saved launch settings, on its chosen desktop in the member's profile, without moving your focus. Asked from an agent of another profile, it refuses. The session's opening includes its charter location, latest handoff, home instructions, held seeds with handoff notes, and ready counts for their plots. `agent` overrides the harness for this session. If the member is in session, it returns that session.
+    args:
+      - {name: member, type: member, required: true, cli: pos}
+      - {name: agent, type: name, cli: "--agent", doc: "the harness for this session only"}
+    result: CrewStartResult
+
+  - name: crew close
+    summary: ask a member to write a handoff and close
+    runs: home
+    grant: full
+    doc: |
+      Asks the member to write a handoff and close with `attn handoff`. The member closes its own session. Does nothing if it is between sessions.
+    args:
+      - {name: member, type: member, required: true, cli: pos}
+    result: CrewCloseResult
+
+  - name: crew prime
+    summary: print the orientation your crew session started with
+    runs: home
+    grant: full
+    read_only: true
+    doc: |
+      Prints the orientation your crew session started with, read fresh: identity, charter, latest letter and held seeds. Run it when your conversation starts empty, as after /clear or /new. A session that is not a crew member's gets no member and no guidance.
+    result: CrewPrimeResult
+
+  - name: crew apply
+    summary: apply a member's saved settings and charter to its running session
+    runs: home
+    grant: full
+    doc: |
+      Applies the member's saved launch settings and charter to its running session. On the same harness the session reloads in place and keeps its conversation. On a different harness the member is asked to file its letter with `attn handoff`, which ends the session and starts the next one on the saved harness. The member itself, an agent above it in the delegation chain, and the profile's chief may apply. Does nothing if the member is between sessions; its next session uses the saved settings.
+    args:
+      - {name: member, type: member, required: true, cli: pos}
+    result: CrewApplyResult
+
+  - name: crew set
+    summary: save a member's launch settings
+    runs: home
+    grant: full
+    doc: |
+      Saves launch settings without changing the member's markdown files. Pass at least one setting.
+
+      `launch_desktop` selects own, a desktop digit (an empty slot gets a new desktop), name or id; `desktop_name` names the new desktop of own or an empty slot. `agent` accepts claude, codex, sigma while it is on, or an installed plugin driver; empty restores the crew default. `model` empty restores default_model_<harness>, else fable on Claude; default runs on the harness's own default. `effort` empty restores the harness default; the harness reports its levels in Settings. `awareness_dirs` replaces the saved context folders, and an empty list clears them.
+
+      `home` records where the member's home is after you moved or renamed its folder: a folder holding its CHARTER.md. Pass it without other settings; the member must be between sessions. Outside attn's data folder the folder is renamed after the member. A working or awareness directory inside the old home follows, and so do saved sessions. To undo `crew_move_home`, move the folder to crew/<key>/ in attn's data folder and point `home` there.
+    args:
+      - {name: member, type: member, required: true, cli: pos}
+      - {name: cwd, type: clearable, cli: "--cwd", placeholder: "<dir>", doc: "the working directory; empty returns the member to its home"}
+      - {name: agent, type: clearable, cli: "--agent", placeholder: "<name>", doc: "the harness; empty restores the crew default"}
+      - {name: model, type: clearable, cli: "--model", placeholder: "<name>", doc: "the model; empty restores the default"}
+      - {name: effort, type: clearable, cli: "--effort", placeholder: "<level>", doc: "the effort; empty restores the harness default"}
+      - {name: launch_desktop, type: desktop, cli: "--launch-desktop"}
+      - {name: desktop_name, type: name, cli: "--desktop-name", doc: "the name of the new desktop of own or an empty slot"}
+      - {name: awareness_dirs, type: clearable, list: true, cli: "--awareness-dir", placeholder: "<dir>", doc: "a context folder; repeat to replace the saved list, and pass one empty value to clear it"}
+      - {name: home, type: path, cli: "--home", local: path, placeholder: "<dir>", doc: "the folder that now holds the member's CHARTER.md"}
+    errors:
+      - {code: nothing_to_set, usage: true, fix: "Pass at least one setting."}
+      - {code: desktop_name_needs_desktop, usage: true, fix: "Pass {launch_desktop} own or an empty slot with {desktop_name}."}
+    result: CrewMember
+    examples:
+      - {member: scout, model: opus, effort: high}
+
+  - name: crew rename
+    summary: give a member a new name
+    runs: home
+    grant: full
+    doc: |
+      Gives the member a new name, unique in its profile. Its key, letters, mail and seeds stay. A home in the Notebook moves to a folder named after the new name: at once when the member is between sessions, otherwise when its next session starts.
+    args:
+      - {name: member, type: member, required: true, cli: pos}
+      - {name: name, type: name, required: true, cli: pos, doc: "the new name"}
+    result: CrewRenameResult
+
+  - name: crew move-home
+    summary: move a member's home into its profile's current Notebook
+    runs: home
+    grant: full
+    doc: |
+      Moves the member's home into its profile's current Notebook, at crew/<name>/ (crew/<name>-2/ when that folder is taken), from wherever it is: attn's data folder, an earlier Notebook or any other folder. Its charter, letters and other files move; a working or awareness directory inside the home follows. The member must be between sessions. Changing the Notebook folder moves no home by itself; run this for each member.
+    args:
+      - {name: member, type: member, required: true, cli: pos}
+    result: CrewMoveHomeResult
+
+  - name: crew retire
+    summary: stop a member's work
+    runs: home
+    grant: full
+    doc: |
+      Stops the member's work: its claimed seeds are replanted with a note, its seed and pull request watches and open asks are removed, and new mail is refused. Unread mail, its home and its name stay. A member in session is asked to close.
+    args:
+      - {name: member, type: member, required: true, cli: pos}
+    result: CrewRetireResult
+
+  - name: crew restore
+    summary: bring a retired member back
+    runs: home
+    grant: full
+    doc: |
+      Brings a retired member back. Mail kept while retired is delivered, which can start a session for it.
+    args:
+      - {name: member, type: member, required: true, cli: pos}
+    result: CrewRestoreResult

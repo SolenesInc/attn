@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-var errChiefHasNoHarness = errors.New("the Chief has no harness yet; pick one with `attn crew set chief --agent <harness> --model <model>`")
+var errChiefHasNoHarness = protocol.Refuse(protocol.RefusalInvalidInput, "the Chief has no harness yet; pick one with {attn crew set chief --agent <harness> --model <model>}")
 
 func (d *Daemon) ensureChiefs() {
 	if d.store == nil || !d.enrollmentStatus().IsHome() {
@@ -169,7 +168,7 @@ func chiefRefusesRetire(member crew.Member) error {
 	if !member.Chief {
 		return nil
 	}
-	return fmt.Errorf("%s is this profile's Chief and can't be retired; its session can close: attn crew close chief", member.Name)
+	return protocol.Refuse(protocol.RefusalConflict, "%s is this profile's Chief and can't be retired; its session can close: {attn crew close chief}", member.Name)
 }
 
 func (d *Daemon) chiefStartRefusal(member crew.Member) error {
@@ -182,7 +181,7 @@ func (d *Daemon) chiefStartRefusal(member crew.Member) error {
 func (d *Daemon) profileDeleteRefusal(profileID string) error {
 	chief, ok := d.chiefMember(profileID)
 	if ok && d.crewBindingLive(chief) {
-		return fmt.Errorf("%s is in session; close the chief's session first: attn crew close chief", chief.Name)
+		return protocol.Refuse(protocol.RefusalConflict, "%s is in session; close the chief's session first: {attn crew close chief}", chief.Name)
 	}
 	return nil
 }

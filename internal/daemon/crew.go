@@ -154,7 +154,7 @@ func (d *Daemon) crewMember(key string) (crew.Member, docstore.Document, error) 
 	}
 	member, ok := crew.Keyed(key, members)
 	if !ok {
-		return crew.Member{}, docstore.Document{}, fmt.Errorf("no crew member has the key %q; `attn crew list` names the roster", key)
+		return crew.Member{}, docstore.Document{}, protocol.Refuse(protocol.RefusalNotFound, "no crew member has the key %q; {attn crew list} names the roster", key)
 	}
 	return member, docs[member.ID], nil
 }
@@ -190,7 +190,7 @@ func (d *Daemon) crewMemberNamed(profileID, ref string) (crew.Member, error) {
 	if err != nil {
 		return crew.Member{}, err
 	}
-	return crew.Member{}, fmt.Errorf("no crew member named %q in profile %q; `attn crew list` names the roster", strings.TrimSpace(ref), profile.Name)
+	return crew.Member{}, protocol.Refuse(protocol.RefusalNotFound, "no crew member named %q in profile %q; {attn crew list} names the roster", strings.TrimSpace(ref), profile.Name)
 }
 
 type crewAsker struct {
@@ -321,7 +321,7 @@ func (d *Daemon) claimCrewBinding(key string, sessionID protocol.SessionID) (str
 		}
 		member, ok := crew.Keyed(key, members)
 		if !ok {
-			return "", fmt.Errorf("no crew member has the key %q; `attn crew list` names the roster", key)
+			return "", protocol.Refuse(protocol.RefusalNotFound, "no crew member has the key %q; {attn crew list} names the roster", key)
 		}
 		if member.BindingSession == sessionID {
 
@@ -603,30 +603,6 @@ func (d *Daemon) projectCrewRoster() {
 			Event:   protocol.EventCrewUpdated,
 			Members: members,
 		})
-	})
-}
-
-func (d *Daemon) handleCrewList(conn net.Conn, msg *protocol.CrewListMessage) {
-	profileID, err := d.crewAskerProfile(askerOf(msg.SourceSessionID, msg.ProfileID))
-	if err != nil {
-		d.sendCrewError(conn, "list", err)
-		return
-	}
-	members, docs, err := d.readCrewMembers()
-	if err != nil {
-		d.sendCrewError(conn, "list", err)
-		return
-	}
-	out := make([]protocol.CrewMember, 0, len(members))
-	for _, member := range members {
-		if member.ProfileID != profileID || (member.Retired && !protocol.Deref(msg.IncludeRetired)) {
-			continue
-		}
-		out = append(out, d.crewMemberWire(member, docs[member.ID].Rev))
-	}
-	d.sendGardenResponse(conn, protocol.Response{
-		Ok:             true,
-		CrewListResult: &protocol.CrewListResult{Members: out},
 	})
 }
 

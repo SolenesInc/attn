@@ -304,7 +304,7 @@ func TestLedgerResumesAnOutpostSessionInItsOwnFolderAfterALocalCrewHomeAtThatPat
 	if err != nil {
 		t.Fatal(err)
 	}
-	folder := filepath.Join(created.Member.HomeDir, "notes")
+	folder := filepath.Join(created.HomeDir, "notes")
 	if err := os.MkdirAll(folder, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -325,8 +325,8 @@ func TestLedgerResumesAnOutpostSessionInItsOwnFolderAfterALocalCrewHomeAtThatPat
 	if err != nil {
 		t.Fatal(err)
 	}
-	if moved := protocol.Deref(renamed.HomeDir); moved == "" || moved == created.Member.HomeDir {
-		t.Fatalf("the rename left Keel's home at %s: %+v", created.Member.HomeDir, renamed)
+	if moved := protocol.Deref(renamed.HomeDir); moved == "" || moved == created.HomeDir {
+		t.Fatalf("the rename left Keel's home at %s: %+v", created.HomeDir, renamed)
 	}
 	if err := os.MkdirAll(folder, 0o755); err != nil {
 		t.Fatal(err)

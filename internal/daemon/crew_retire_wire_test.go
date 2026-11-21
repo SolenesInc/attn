@@ -19,7 +19,7 @@ func createCrew(t *testing.T, cli *client.Client, name string) protocol.CrewMemb
 	if err != nil {
 		t.Fatalf("crew create %s: %v", name, err)
 	}
-	return created.Member
+	return *created
 }
 
 func retireCrew(t *testing.T, cli *client.Client, member string) *protocol.CrewRetireResult {

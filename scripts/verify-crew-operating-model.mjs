@@ -77,11 +77,11 @@ async function prime(sessionID) {
       if (body.includes('\n')) resolve(JSON.parse(body));
     });
   });
-  socket.write(`${JSON.stringify({ cmd: 'crew_prime', session_id: sessionID })}\n`);
+  socket.write(`${JSON.stringify({ cmd: 'run_command', command: 'crew prime', session_id: sessionID, args: {} })}\n`);
   const reply = await response;
   socket.end();
   assert(reply.ok, JSON.stringify(reply));
-  return reply.crew_prime_result.guidance;
+  return reply.command_result.guidance;
 }
 try {
   const log = fs.openSync(path.join(receipts, 'daemon-stderr.log'), 'a');

@@ -1416,14 +1416,6 @@ model NotebookBacklinksMessage {
   request_id?: string; // set by the WS frontend for result correlation
 }
 
-@extension("x-on", #{ home: true })
-model JournalAppendMessage {
-  cmd: "journal_append";
-  source_session_id?: SessionID;
-  entry: string;
-  date?: string; // YYYY-MM-DD; defaults to today in the daemon's local timezone
-}
-
 // JournalAppendResult echoes where the entry landed: rel_path is the
 // notebook-relative path (journal/<date>.md) and hash is the file's content hash
 // after the append.
@@ -7021,7 +7013,6 @@ model Response {
   prs?: PR[];
   repos?: RepoState[];
   authors?: AuthorState[];
-  journal_append_result?: JournalAppendResult;
   // open_markdown on a review document: the problems `attn review check` reports.
   review_problems?: ReviewProblem[];
   kept_conversation_list_result?: KeptConversationListResult;
@@ -7044,22 +7035,11 @@ model Response {
   sender_sessions?: SenderSession[];
   sender_model_call_result?: SenderModelCallResult;
   model_calls?: ModelCall[];
-  crew_list_result?: CrewListResult;
   crew_charter_get_result?: CrewCharterGetResult;
   crew_charter_set_result?: CrewCharterSetResult;
   crew_handoffs_get_result?: CrewHandoffsGetResult;
   crew_handoff_get_result?: CrewHandoffGetResult;
-  crew_start_result?: CrewStartResult;
-  crew_close_result?: CrewCloseResult;
-  crew_apply_result?: CrewApplyResult;
-  crew_set_result?: CrewSetResult;
   onboarding_result?: OnboardingResult;
-  crew_rename_result?: CrewRenameResult;
-  crew_create_result?: CrewCreateResult;
-  crew_retire_result?: CrewRetireResult;
-  crew_restore_result?: CrewRestoreResult;
-  crew_move_home_result?: CrewMoveHomeResult;
-  crew_prime_result?: CrewPrimeResult;
   seed_authorization_result?: SeedAuthorizationResult;
   seed_artifact_transfer_result?: SeedArtifactTransferResult;
   seed_transition_result?: SeedTransitionResult;
@@ -7161,20 +7141,6 @@ model AgentPeekResult {
 // Crew
 // ============================================================================
 
-// Read the crew roster: every registered member, in session or between sessions. The registry
-// serves the read; the member's home stays plain markdown on disk and is never
-// copied onto the wire.
-@extension("x-on", #{ home: true })
-model CrewListMessage {
-  cmd: "crew_list";
-  // Retired members are left out unless this is true.
-  include_retired?: boolean;
-  // The profile the request is asked from: the calling session's profile,
-  // else this profile, else the connection's selected profile over WebSocket.
-  // Member names resolve only inside it.
-  profile_id?: string;
-  source_session_id?: SessionID;
-}
 
 // One registered crew member. Paths point at the canonical files.
 model CrewMember {
@@ -7427,15 +7393,6 @@ model CrewRenameResult {
   home_moves_at_start?: boolean;
 }
 
-// Move a member's home from attn's data folder into its profile's Notebook,
-// at crew/<name>/. The member must be between sessions.
-@extension("x-on", #{ home: true })
-model CrewMoveHomeMessage {
-  cmd: "crew_move_home";
-  member: string;
-  profile_id?: string;
-  source_session_id?: SessionID;
-}
 
 model CrewMoveHomeResult {
   member: CrewMember;
@@ -7450,32 +7407,8 @@ model CrewRenameResultMessage {
   result?: CrewRenameResult;
 }
 
-// Add a crew member to the requester's profile. Its key comes from the name;
-// its home starts with an empty charter, which the member writes on its first
-// day. A name held by a retired member is refused with how to restore it.
-@extension("x-on", #{ home: true })
-model CrewCreateMessage {
-  cmd: "crew_create";
-  name: string;
-  profile_id?: string;
-  source_session_id?: SessionID;
-}
 
-model CrewCreateResult {
-  member: CrewMember;
-}
 
-// Retire a crew member: it releases its claims (replanting each seed with a
-// note), drops its seed and pull request watches, closes its open asks, refuses
-// new mail and keeps its name taken. A member in session is asked to close. Retiring
-// again releases anything left and reports already_retired.
-@extension("x-on", #{ home: true })
-model CrewRetireMessage {
-  cmd: "crew_retire";
-  member: string;
-  profile_id?: string;
-  source_session_id?: SessionID;
-}
 
 model CrewRetireResult {
   member: CrewMember;
@@ -7489,14 +7422,6 @@ model CrewRetireResult {
   close?: CrewCloseResult;
 }
 
-// Restore a retired member. Its kept mail is delivered, which may start a session for it.
-@extension("x-on", #{ home: true })
-model CrewRestoreMessage {
-  cmd: "crew_restore";
-  member: string;
-  profile_id?: string;
-  source_session_id?: SessionID;
-}
 
 model CrewRestoreResult {
   member: CrewMember;
@@ -7643,9 +7568,6 @@ model CrewSetMessage {
   launch_desktop_setting?: LaunchDesktopSetting;
 }
 
-model CrewSetResult {
-  member: CrewMember;
-}
 
 model CrewSetResultMessage {
   event: "crew_set_result";
@@ -7656,14 +7578,6 @@ model CrewSetResultMessage {
   member?: CrewMember;
 }
 
-// What a launching session needs to be its member: the composed priming block
-// and the directories to open. Asked by the attn wrapper for every launch, so
-// the answer is empty for the sessions — most of them — that are nobody.
-@extension("x-on", #{ home: true })
-model CrewPrimeMessage {
-  cmd: "crew_prime";
-  session_id: SessionID;
-}
 
 model CrewPrimeResult {
   // Absent when this session holds no binding.

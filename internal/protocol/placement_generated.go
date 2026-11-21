@@ -62,15 +62,9 @@ var Placements = map[string][]Placement{
 	"crew_charter_get":                 {Placement{LocatorHome, ""}},
 	"crew_charter_set":                 {Placement{LocatorHome, ""}},
 	"crew_close":                       {Placement{LocatorHome, ""}},
-	"crew_create":                      {Placement{LocatorHome, ""}},
 	"crew_handoff_get":                 {Placement{LocatorHome, ""}},
 	"crew_handoffs_get":                {Placement{LocatorHome, ""}},
-	"crew_list":                        {Placement{LocatorHome, ""}},
-	"crew_move_home":                   {Placement{LocatorHome, ""}},
-	"crew_prime":                       {Placement{LocatorHome, ""}},
 	"crew_rename":                      {Placement{LocatorHome, ""}},
-	"crew_restore":                     {Placement{LocatorHome, ""}},
-	"crew_retire":                      {Placement{LocatorHome, ""}},
 	"crew_set":                         {Placement{LocatorHome, ""}},
 	"crew_start":                       {Placement{LocatorHome, ""}},
 	"decline_update":                   {Placement{LocatorHere, ""}},
@@ -102,7 +96,6 @@ var Placements = map[string][]Placement{
 	"inject_test_pr":                   {Placement{LocatorHere, ""}},
 	"inject_test_session":              {Placement{LocatorHere, ""}},
 	"inspect_path":                     {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
-	"journal_append":                   {Placement{LocatorHome, ""}},
 	"kept_conversation_forget":         {Placement{LocatorHome, ""}},
 	"kept_conversation_keep":           {Placement{LocatorHome, ""}},
 	"kept_conversation_list":           {Placement{LocatorHome, ""}},
@@ -671,18 +664,6 @@ func (m CrewCloseMessage) Locate() string {
 	return ""
 }
 
-func (CrewCreateMessage) CommandName() string {
-	return "crew_create"
-}
-
-func (m CrewCreateMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CrewCreateMessage) Locate() string {
-	return ""
-}
-
 func (CrewHandoffGetMessage) CommandName() string {
 	return "crew_handoff_get"
 }
@@ -707,42 +688,6 @@ func (m CrewHandoffsGetMessage) Locate() string {
 	return ""
 }
 
-func (CrewListMessage) CommandName() string {
-	return "crew_list"
-}
-
-func (m CrewListMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CrewListMessage) Locate() string {
-	return ""
-}
-
-func (CrewMoveHomeMessage) CommandName() string {
-	return "crew_move_home"
-}
-
-func (m CrewMoveHomeMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CrewMoveHomeMessage) Locate() string {
-	return ""
-}
-
-func (CrewPrimeMessage) CommandName() string {
-	return "crew_prime"
-}
-
-func (m CrewPrimeMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CrewPrimeMessage) Locate() string {
-	return ""
-}
-
 func (CrewRenameMessage) CommandName() string {
 	return "crew_rename"
 }
@@ -752,30 +697,6 @@ func (m CrewRenameMessage) Placement() Placement {
 }
 
 func (m CrewRenameMessage) Locate() string {
-	return ""
-}
-
-func (CrewRestoreMessage) CommandName() string {
-	return "crew_restore"
-}
-
-func (m CrewRestoreMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CrewRestoreMessage) Locate() string {
-	return ""
-}
-
-func (CrewRetireMessage) CommandName() string {
-	return "crew_retire"
-}
-
-func (m CrewRetireMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CrewRetireMessage) Locate() string {
 	return ""
 }
 
@@ -1166,18 +1087,6 @@ func (m InspectPathMessage) Locate() string {
 	if m.Host != nil {
 		return string(*m.Host)
 	}
-	return ""
-}
-
-func (JournalAppendMessage) CommandName() string {
-	return "journal_append"
-}
-
-func (m JournalAppendMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m JournalAppendMessage) Locate() string {
 	return ""
 }
 

@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"fmt"
-	"net"
 	"path/filepath"
 	"strings"
 	"time"
@@ -82,15 +81,6 @@ func (d *Daemon) renameCrewMember(key, name string) (crewRenaming, error) {
 		return crewRenaming{}, err
 	}
 	return crewRenaming{previous: previous, movedHome: &moved.Home}, nil
-}
-
-func (d *Daemon) handleCrewRename(conn net.Conn, msg *protocol.CrewRenameMessage) {
-	result, err := d.crewRename(msg)
-	if err != nil {
-		d.sendCrewError(conn, "rename", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewRenameResult: result})
 }
 
 func (d *Daemon) handleCrewRenameWS(client *wsClient, msg *protocol.CrewRenameMessage) {

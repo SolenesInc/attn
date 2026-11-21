@@ -88,7 +88,7 @@ func (w *callerSide) problem(format string, values ...any) {
 }
 
 func (w *callerSide) path(name, value string, kind catalog.Local) (string, bool) {
-	if filepath.IsAbs(value) {
+	if filepath.IsAbs(value) || value == "~" || strings.HasPrefix(value, "~/") {
 		return value, true
 	}
 	if w.dir == "" {

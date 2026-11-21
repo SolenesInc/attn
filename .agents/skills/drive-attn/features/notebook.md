@@ -36,7 +36,7 @@ writers never collide. The chief treats the notebook as its home.
 
 ### Agents
 
-- `attn journal append (--entry <text> | --entry-file <path>) [--date YYYY-MM-DD] [--session <id>] [--json]` (`cmd/attnd/main.go`). There is no notebook CLI: agents read and edit notes with their own file tools.
+- `attn journal append (--entry <text> | --entry-file <path>) [--date YYYY-MM-DD] [--session <id>] [--json]` (`cli/attn/src/commands/journal/`, `internal/catalog/content/journal.yaml`), and the tool `journal_append` when `agent_tools_enabled` is on. There is no notebook CLI: agents read and edit notes with their own file tools.
 - `attn settings get notebook.root.effective [--profile <name|id>]` gives the folder the caller's profile uses (on an outpost, the copy of that folder, inside a session only). `attn settings set notebook.root <path> [--profile <name|id>]` sets a profile's folder. Inside a session, both commands use the session's profile.
 - Prompts: the Chief's guidance names the notebook (`internal/prompts/content/crew/v2/chief.md`), and `attn skill --reference notebook` covers the two layers, frontmatter, links and the journal command (`internal/prompts/content/skills/attn/references/notebook.md`).
 
@@ -114,7 +114,7 @@ Preconditions:
 
 ## Tests
 
-- Wire: `native/crates/attn-app/tests/wire/notebook.rs`, `native/crates/attn-app/tests/wire/notebook/`, `internal/daemon/notebook_wire_test.go`, `internal/daemon/notebook_profiles_wire_test.go`, `internal/daemon/notebook_containment_wire_test.go`, `internal/daemon/journal_wire_test.go`, `internal/daemon/fs_watch_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/notebook.rs`, `native/crates/attn-app/tests/wire/notebook/`, `internal/daemon/notebook_wire_test.go`, `internal/daemon/agent_tools_notebook_crew_wire_test.go` (the `journal_append` tool), `internal/daemon/notebook_profiles_wire_test.go`, `internal/daemon/notebook_containment_wire_test.go`, `internal/daemon/journal_wire_test.go`, `internal/daemon/fs_watch_wire_test.go`.
 - Stack: `cmd/attnd/notebook_sync_stack_test.go`, `cmd/attnd/agent_commands_stack_test.go`.
 - Scenario: `native-notebook-editor-undo`, `native-notebook-link-nav`, `native-notebook-tile-close` and `native-notebook-sync`.
 - Kernel: `internal/notebook/*_test.go`.

@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"fmt"
-	"net"
 	"strings"
 
 	"github.com/google/uuid"
@@ -12,15 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/who"
 )
-
-func (d *Daemon) handleCrewApply(conn net.Conn, msg *protocol.CrewApplyMessage) {
-	result, err := d.crewApply(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
-	if err != nil {
-		d.sendCrewError(conn, "apply", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewApplyResult: result})
-}
 
 func (d *Daemon) handleCrewApplyWS(client *wsClient, msg *protocol.CrewApplyMessage) {
 	result, err := d.crewApply(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)

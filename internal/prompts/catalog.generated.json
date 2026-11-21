@@ -363,16 +363,48 @@
                         ]
                       },
                       {
-                        "kind": "text",
-                        "id": "session.attn-map.journal",
-                        "source": "content/session/attn-map/journal.md",
-                        "keep_final_newline": true
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.journal",
+                            "source": "content/session/attn-map/journal.md",
+                            "keep_final_newline": true
+                          }
+                        ]
                       },
                       {
-                        "kind": "text",
-                        "id": "session.attn-map.crew",
-                        "source": "content/session/attn-map/crew.md",
-                        "keep_final_newline": true
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.crew",
+                            "source": "content/session/attn-map/crew.md",
+                            "keep_final_newline": true
+                          }
+                        ]
                       },
                       {
                         "kind": "text",
@@ -7393,5 +7425,5 @@
       ]
     }
   ],
-  "definitions_hash": "ab19aa9446bb499bd09db3f071c6c47db6ded785f597a2b5253751dc1059bde9"
+  "definitions_hash": "9005f7910abd3fcbed0bff4aaaeff71c052dcb0cb4ed8fce683845fda423855d"
 }

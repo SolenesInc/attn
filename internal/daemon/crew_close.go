@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"fmt"
-	"net"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crew"
@@ -11,15 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/who"
 )
-
-func (d *Daemon) handleCrewClose(conn net.Conn, msg *protocol.CrewCloseMessage) {
-	result, err := d.crewClose(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
-	if err != nil {
-		d.sendCrewError(conn, "close", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewCloseResult: result})
-}
 
 func (d *Daemon) handleCrewCloseWS(client *wsClient, msg *protocol.CrewCloseMessage) {
 	result, err := d.crewClose(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)

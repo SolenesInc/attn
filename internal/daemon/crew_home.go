@@ -3,7 +3,6 @@ package daemon
 import (
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -77,7 +76,7 @@ type crewHomeCommit func(store.CrewHomeMove) ([]store.DocumentWriteResult, error
 
 func (d *Daemon) relocateCrewHome(member crew.Member, revision int64, parent, name string, commit crewHomeCommit) (crew.Member, int64, error) {
 	if d.crewBindingLive(member) {
-		return member, revision, fmt.Errorf("%s is in session and works from its home; close its session first: attn crew close %s", member.Name, member.Name)
+		return member, revision, protocol.Refuse(protocol.RefusalConflict, "%s is in session and works from its home; close its session first: {attn crew close %s}", member.Name, member.Name)
 	}
 	if err := d.requireCrewFiles(member); err != nil {
 		return member, revision, err
@@ -125,7 +124,7 @@ func (d *Daemon) repointCrewHome(member crew.Member, revision int64, dir string)
 	d.crewStartMu.Lock()
 	defer d.crewStartMu.Unlock()
 	if d.crewBindingLive(member) {
-		return member, revision, fmt.Errorf("%s is in session and works from its home; close its session first: attn crew close %s", member.Name, member.Name)
+		return member, revision, protocol.Refuse(protocol.RefusalConflict, "%s is in session and works from its home; close its session first: {attn crew close %s}", member.Name, member.Name)
 	}
 	home, err := d.crewHomeAt(member, dir)
 	if err != nil || home == member.HomeDir(d.dataRoot) {
@@ -304,8 +303,8 @@ func rebaseCrewPath(previous, home, path string) string {
 	return filepath.Join(home, rel)
 }
 
-func (d *Daemon) crewMoveHome(msg *protocol.CrewMoveHomeMessage) (*protocol.CrewMoveHomeResult, error) {
-	asked, err := d.crewAskedMember(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
+func (d *Daemon) crewMoveHome(asker crewAsker, ref string) (*protocol.CrewMoveHomeResult, error) {
+	asked, err := d.crewAskedMember(asker, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -330,15 +329,6 @@ func (d *Daemon) crewMoveHome(msg *protocol.CrewMoveHomeMessage) (*protocol.Crew
 		return nil, err
 	}
 	return &protocol.CrewMoveHomeResult{Member: d.crewMemberWire(moved, revision), PreviousHome: previous}, nil
-}
-
-func (d *Daemon) handleCrewMoveHome(conn net.Conn, msg *protocol.CrewMoveHomeMessage) {
-	result, err := d.crewMoveHome(msg)
-	if err != nil {
-		d.sendCrewError(conn, "move-home", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewMoveHomeResult: result})
 }
 
 func (d *Daemon) crewMembersWithHomes(profileID string) (int, error) {

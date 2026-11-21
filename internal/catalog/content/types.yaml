@@ -30,6 +30,18 @@ types:
     json: {type: string, format: date-time}
     doc: "An RFC3339 time, such as 2026-11-05T09:00:00+01:00."
     placeholder: "<time>"
+  date:
+    json: {type: string, pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}
+    doc: "A day, as YYYY-MM-DD."
+    placeholder: "YYYY-MM-DD"
+  member:
+    json: {type: string, minLength: 1}
+    doc: "A crew member: a name in your profile, member:<key> for its permanent key, or chief for the profile's Chief."
+    placeholder: "<member>"
+  desktop:
+    json: {type: string, minLength: 1}
+    doc: "own, a desktop digit (an empty slot gets a new desktop), a desktop name or id."
+    placeholder: "<own|desktop>"
   bookmark:
     json: {type: integer, minimum: 0}
     doc: "The bookmark an earlier read printed."

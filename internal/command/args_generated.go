@@ -27,6 +27,7 @@ const (
 	CodeCrewMemberAsleep            = "crew_member_asleep"
 	CodeCursorMismatch              = "cursor_mismatch"
 	CodeCursorPastEnd               = "cursor_past_end"
+	CodeDesktopNameNeedsDesktop     = "desktop_name_needs_desktop"
 	CodeDetachNeedsTo               = "detach_needs_to"
 	CodeEmptyWords                  = "empty_words"
 	CodeFallbackWithTarget          = "fallback_with_target"
@@ -62,6 +63,7 @@ const (
 	CodeNotInReview                 = "not_in_review"
 	CodeNotOnScreen                 = "not_on_screen"
 	CodeNotStamped                  = "not_stamped"
+	CodeNothingToSet                = "nothing_to_set"
 	CodeOtherSeed                   = "other_seed"
 	CodePlotAndStale                = "plot_and_stale"
 	CodePRWithoutWhenMerged         = "pr_without_when_merged"
@@ -123,6 +125,17 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"browser pdf":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"bad_capture": "Take the capture again; the host answered with data that is not base64.", "write_failed": "Pass a path in a folder you can write to."}},
 		"callout anchors":         {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}."}},
 		"callout show":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}.", "step_needs_text": "Give every step its text.", "unknown_anchor": "Use an anchor that callout_anchors lists.", "too_many_steps": "Show at most 20 steps.", "step_too_long": "Keep each step's text to 160 characters.", "not_on_screen": "Point at an anchor the message lists as on screen.", "app_not_showing_profile": "Ask the user to open the attn app on your profile."}},
+		"crew list":               {readOnly: true, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"crew create":             {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"crew start":              {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"crew close":              {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"crew prime":              {readOnly: true, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"crew apply":              {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"crew set":                {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"nothing_to_set": "Pass at least one setting.", "desktop_name_needs_desktop": "Pass {launch_desktop} own or an empty slot with {desktop_name}."}},
+		"crew rename":             {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"crew move-home":          {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"crew retire":             {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+		"crew restore":            {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
 		"delegate":                {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"delegate status":         {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"delegate roles":          {readOnly: true, anyone: true, sessionFlag: true, runsWithoutDaemon: false},
@@ -139,6 +152,7 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"delegate roles rollback": {readOnly: false, anyone: true, sessionFlag: true, runsWithoutDaemon: false},
 		"guide":                   {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: true, fixes: map[string]string{"no_such_topic": "Use one of the topics `guide` without `topic` lists."}},
 		"handoff":                 {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"letter_and_retry": "Pass {letter} or {retry}, not both."}},
+		"journal append":          {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"list":                    {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false},
 		"nav status":              {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
 		"nav check":               {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"nav_off": "Ask the user to turn on the experimental setting code_review_enabled."}},
@@ -363,6 +377,59 @@ type CalloutShowArgs struct {
 	Steps json.RawMessage `json:"steps,omitempty"`
 }
 
+type CrewListArgs struct {
+	All bool `json:"all,omitempty"`
+}
+
+type CrewCreateArgs struct {
+	Name string `json:"name,omitempty"`
+}
+
+type CrewStartArgs struct {
+	Member string `json:"member,omitempty"`
+	Agent  string `json:"agent,omitempty"`
+}
+
+type CrewCloseArgs struct {
+	Member string `json:"member,omitempty"`
+}
+
+type CrewPrimeArgs struct {
+}
+
+type CrewApplyArgs struct {
+	Member string `json:"member,omitempty"`
+}
+
+type CrewSetArgs struct {
+	Member        string   `json:"member,omitempty"`
+	Cwd           *string  `json:"cwd,omitempty"`
+	Agent         *string  `json:"agent,omitempty"`
+	Model         *string  `json:"model,omitempty"`
+	Effort        *string  `json:"effort,omitempty"`
+	LaunchDesktop string   `json:"launch_desktop,omitempty"`
+	DesktopName   string   `json:"desktop_name,omitempty"`
+	AwarenessDirs []string `json:"awareness_dirs,omitempty"`
+	Home          string   `json:"home,omitempty"`
+}
+
+type CrewRenameArgs struct {
+	Member string `json:"member,omitempty"`
+	Name   string `json:"name,omitempty"`
+}
+
+type CrewMoveHomeArgs struct {
+	Member string `json:"member,omitempty"`
+}
+
+type CrewRetireArgs struct {
+	Member string `json:"member,omitempty"`
+}
+
+type CrewRestoreArgs struct {
+	Member string `json:"member,omitempty"`
+}
+
 type DelegateArgs struct {
 	CwdBase            string  `json:"cwd_base,omitempty"`
 	Brief              string  `json:"brief,omitempty"`
@@ -497,6 +564,12 @@ type GuideArgs struct {
 type HandoffArgs struct {
 	Letter string `json:"letter,omitempty"`
 	Retry  bool   `json:"retry,omitempty"`
+}
+
+type JournalAppendArgs struct {
+	Entry     string `json:"entry,omitempty"`
+	EntryFile string `json:"entry_file,omitempty"`
+	Date      string `json:"date,omitempty"`
 }
 
 type ListArgs struct {

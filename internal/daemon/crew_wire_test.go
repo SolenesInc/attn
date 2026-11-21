@@ -104,7 +104,7 @@ func setCrew(t *testing.T, cli *client.Client, member string, change protocol.Cr
 	if err != nil {
 		t.Fatalf("crew set %s: %v", member, err)
 	}
-	return set.Member
+	return *set
 }
 
 func crewSessionCount(t *testing.T, cli *client.Client) int {
@@ -362,6 +362,9 @@ func TestCrewSetRecordsAndClearsEachFieldIndependently(t *testing.T) {
 	}
 	if got := crewRosterMember(t, cli, "keel"); got.Agent != nil || protocol.Deref(got.Cwd) != workDir {
 		t.Fatalf("roster keel = agent %v cwd %q, want unset and %q", got.Agent, protocol.Deref(got.Cwd), workDir)
+	}
+	if home := setCrew(t, cli, "keel", protocol.CrewSetMessage{Cwd: protocol.Ptr("")}); protocol.Deref(home.Cwd) != "" {
+		t.Fatalf("an empty cwd left keel in %q, want it back in its home", protocol.Deref(home.Cwd))
 	}
 }
 

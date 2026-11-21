@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"strings"
 
@@ -26,7 +25,7 @@ func (d *Daemon) createCrewMember(profileID, name string) (crew.Member, error) {
 			continue
 		}
 		if held.Retired {
-			return crew.Member{}, fmt.Errorf("%s is retired: restore them with `attn crew restore %s`, or pick another name", held.Name, held.Name)
+			return crew.Member{}, protocol.Refuse(protocol.RefusalConflict, "%s is retired: restore them with {attn crew restore %s}, or pick another name", held.Name, held.Name)
 		}
 		profile, err := d.store.GetProfile(profileID)
 		if err != nil {
@@ -67,23 +66,4 @@ func (d *Daemon) createCrewMember(profileID, name string) (crew.Member, error) {
 	d.publishArrangementChanged(profileID)
 	d.logf("crew: created %s (key %s) in profile %s at %s", name, key, profileID, member.HomeDir(d.dataRoot))
 	return member, nil
-}
-
-func (d *Daemon) handleCrewCreate(conn net.Conn, msg *protocol.CrewCreateMessage) {
-	profileID, err := d.crewAskerProfile(askerOf(msg.SourceSessionID, msg.ProfileID))
-	if err != nil {
-		d.sendCrewError(conn, "create", err)
-		return
-	}
-	created, err := d.createCrewMember(profileID, msg.Name)
-	if err != nil {
-		d.sendCrewError(conn, "create", err)
-		return
-	}
-	member, doc, err := d.crewMember(created.ID)
-	if err != nil {
-		d.sendCrewError(conn, "create", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewCreateResult: &protocol.CrewCreateResult{Member: d.crewMemberWire(member, doc.Rev)}})
 }

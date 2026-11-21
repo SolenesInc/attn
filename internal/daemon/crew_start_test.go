@@ -1,14 +1,15 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
@@ -211,13 +212,11 @@ func newCrewDaemon(t *testing.T) *Daemon {
 
 func crewList(t *testing.T, d *Daemon) []protocol.CrewMember {
 	t.Helper()
-	resp := gardenCall(t, func(c net.Conn) {
-		d.handleCrewList(c, &protocol.CrewListMessage{Cmd: protocol.CmdCrewList})
-	})
-	if !resp.Ok {
-		t.Fatalf("crew list: %v", protocol.Deref(resp.Error))
+	listed, err := d.runCrewList(context.Background(), command.Caller{}, command.CrewListArgs{})
+	if err != nil {
+		t.Fatalf("crew list: %v", err)
 	}
-	return resp.CrewListResult.Members
+	return listed.(protocol.CrewListResult).Members
 }
 
 func TestCrewStart_RefusesAMemberOfAnotherProfile(t *testing.T) {

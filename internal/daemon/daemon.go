@@ -3005,8 +3005,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdAskOpen:
 		d.handleAskOpen(conn, msg.(*protocol.AskOpenMessage))
 
-	case protocol.CmdJournalAppend:
-		d.handleJournalAppend(conn, msg.(*protocol.JournalAppendMessage))
 	case protocol.CmdUnregister:
 		d.handleUnregister(conn, msg.(*protocol.UnregisterMessage), by.Actor())
 	case protocol.CmdState:
@@ -3093,8 +3091,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleSeedReviewRetry(conn, msg.(*protocol.SeedReviewRetryMessage))
 	case protocol.CmdSeedReviewKeep:
 		d.handleSeedReviewKeep(conn, msg.(*protocol.SeedReviewKeepMessage))
-	case protocol.CmdCrewList:
-		d.handleCrewList(conn, msg.(*protocol.CrewListMessage))
 	case protocol.CmdCrewCharterGet:
 		d.handleCrewCharterGet(conn, msg.(*protocol.CrewCharterGetMessage))
 	case protocol.CmdCrewCharterSet:
@@ -3103,26 +3099,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleCrewHandoffsGet(conn, msg.(*protocol.CrewHandoffsGetMessage))
 	case protocol.CmdCrewHandoffGet:
 		d.handleCrewHandoffGet(conn, msg.(*protocol.CrewHandoffGetMessage))
-	case protocol.CmdCrewStart:
-		d.handleCrewStart(conn, msg.(*protocol.CrewStartMessage))
-	case protocol.CmdCrewClose:
-		d.handleCrewClose(conn, msg.(*protocol.CrewCloseMessage))
-	case protocol.CmdCrewApply:
-		d.handleCrewApply(conn, msg.(*protocol.CrewApplyMessage))
-	case protocol.CmdCrewRename:
-		d.handleCrewRename(conn, msg.(*protocol.CrewRenameMessage))
-	case protocol.CmdCrewCreate:
-		d.handleCrewCreate(conn, msg.(*protocol.CrewCreateMessage))
-	case protocol.CmdCrewRetire:
-		d.handleCrewRetire(conn, msg.(*protocol.CrewRetireMessage))
-	case protocol.CmdCrewRestore:
-		d.handleCrewRestore(conn, msg.(*protocol.CrewRestoreMessage))
-	case protocol.CmdCrewMoveHome:
-		d.handleCrewMoveHome(conn, msg.(*protocol.CrewMoveHomeMessage))
-	case protocol.CmdCrewSet:
-		d.handleCrewSet(conn, msg.(*protocol.CrewSetMessage))
-	case protocol.CmdCrewPrime:
-		d.handleCrewPrime(conn, msg.(*protocol.CrewPrimeMessage))
 	case protocol.CmdStop:
 		d.handleStop(conn, msg.(*protocol.StopMessage))
 	case protocol.CmdFilesEdited:

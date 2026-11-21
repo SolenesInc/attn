@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
@@ -899,21 +900,7 @@ func (c *Client) AskClose(sessionID protocol.SessionID, askID, reason string) er
 }
 
 func (c *Client) AppendJournal(sourceSessionID protocol.SessionID, date string, entry string) (*protocol.JournalAppendResult, error) {
-	msg := protocol.JournalAppendMessage{Cmd: protocol.CmdJournalAppend, Entry: entry}
-	if sourceSessionID != "" {
-		msg.SourceSessionID = protocol.Ptr(sourceSessionID)
-	}
-	if date != "" {
-		msg.Date = protocol.Ptr(date)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.JournalAppendResult == nil {
-		return nil, errors.New("daemon returned no journal append result")
-	}
-	return resp.JournalAppendResult, nil
+	return commandResult[protocol.JournalAppendResult](c, "journal append", sourceSessionID, command.JournalAppendArgs{Entry: entry, Date: date})
 }
 
 func (c *Client) ActivityStatus() (*protocol.ActivityStatusResult, error) {

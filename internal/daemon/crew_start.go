@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -82,10 +81,10 @@ func (d *Daemon) crewLaunchDir(member crew.Member) (string, error) {
 	}
 	info, err := os.Stat(dir)
 	if err != nil {
-		return "", fmt.Errorf("%s launches in %s, which is not there (%v); `attn crew set %s --cwd <dir>` moves it", member.Name, dir, err, member.Name)
+		return "", protocol.Refuse(protocol.RefusalInvalidInput, "%s launches in %s, which is not there (%v); {attn crew set %s --cwd <dir>} moves it", member.Name, dir, err, member.Name)
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("%s launches in %s, which is not a directory; `attn crew set %s --cwd <dir>` moves it", member.Name, dir, member.Name)
+		return "", protocol.Refuse(protocol.RefusalInvalidInput, "%s launches in %s, which is not a directory; {attn crew set %s --cwd <dir>} moves it", member.Name, dir, member.Name)
 	}
 	resolved, err := d.resolveCrewWorkDir(dir)
 	if err != nil {
@@ -199,15 +198,6 @@ func (d *Daemon) crewStartAsked(msg *protocol.CrewStartMessage, request crewStar
 	d.crewStartMu.Lock()
 	defer d.crewStartMu.Unlock()
 	return d.crewStartSessionLocked(member.ID, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))), false, nil, request)
-}
-
-func (d *Daemon) handleCrewStart(conn net.Conn, msg *protocol.CrewStartMessage) {
-	result, err := d.crewStartAsked(msg, crewStartRequest{RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew start")})
-	if err != nil {
-		d.sendCrewError(conn, "start", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewStartResult: result})
 }
 
 func (d *Daemon) handleCrewStartWS(client *wsClient, msg *protocol.CrewStartMessage) {
@@ -385,24 +375,6 @@ func (d *Daemon) crewSessionActuallyLive(sessionID protocol.SessionID) (bool, er
 	return false, err
 }
 
-func (d *Daemon) handleCrewPrime(conn net.Conn, msg *protocol.CrewPrimeMessage) {
-	sessionID := protocol.TrimID(msg.SessionID)
-	result := &protocol.CrewPrimeResult{AwarenessDirs: []string{}}
-	member, block, bound, err := d.crewPrimeForSession(sessionID)
-	if err != nil {
-		d.sendCrewError(conn, "prime", err)
-		return
-	}
-	if bound {
-		result.Member = protocol.Ptr(member.ID)
-		result.Guidance = protocol.Ptr(block)
-		result.AwarenessDirs = append(result.AwarenessDirs, member.AwarenessDirs...)
-		result.PrimingBytes = len(block)
-		result.V2Enabled = protocol.Ptr(true)
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewPrimeResult: result})
-}
-
 func (d *Daemon) crewPrimeForSession(sessionID protocol.SessionID) (crew.Member, string, bool, error) {
 	if sessionID == "" || d.store == nil {
 		return crew.Member{}, "", false, nil
@@ -434,19 +406,6 @@ func (d *Daemon) crewPrimeForSession(sessionID protocol.SessionID) (crew.Member,
 		return member, block, true, nil
 	}
 	return crew.Member{}, "", false, nil
-}
-
-func (d *Daemon) handleCrewSet(conn net.Conn, msg *protocol.CrewSetMessage) {
-	member, conflict, err := d.crewSet(msg)
-	if err != nil {
-		d.sendCrewError(conn, "set", err)
-		return
-	}
-	if conflict {
-		d.sendCrewError(conn, "set", errors.New("the member changed after it was read; reconcile the returned revision and retry"))
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewSetResult: &protocol.CrewSetResult{Member: *member}})
 }
 
 func (d *Daemon) handleCrewSetWS(client *wsClient, msg *protocol.CrewSetMessage) {
@@ -560,7 +519,7 @@ func (d *Daemon) applyCrewSettings(member *crew.Member, msg *protocol.CrewSetMes
 	agentChanged := false
 	if msg.Agent != nil {
 		if member.Chief && strings.TrimSpace(*msg.Agent) == "" {
-			return fmt.Errorf("the Chief needs a harness; pick one with `attn crew set %s --agent <harness>`", crew.ChiefAlias)
+			return protocol.Refuse(protocol.RefusalInvalidInput, "the Chief needs a harness; pick one with {attn crew set %s --agent <harness>}", crew.ChiefAlias)
 		}
 		before := member.LaunchAgent()
 		member.Agent = strings.TrimSpace(strings.ToLower(*msg.Agent))
