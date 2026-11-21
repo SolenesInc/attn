@@ -1278,26 +1278,29 @@ fn shelf_world(dark: bool) -> World {
     world
 }
 
-/// The shelf of [`shelf`] with the pointer resting on the builder's chip, whose peek opens; in a
-/// window too narrow for the chip, on the chip in its cap's menu.
+/// The shelf of [`shelf`] with the pointer resting on a chip, whose peek opens: the builder's,
+/// or in a window too narrow for the chips, the first chip of the cap's menu; with no shelf,
+/// the title bar that left it no room.
 fn shelf_peek(dark: bool) {
     let mut world = shelf_world(dark);
-    world.resize((900.0, 600.0));
-    if world.screen().find(Target::key("shelf.chip.w")).is_none() {
-        let cap = ["shelf.cap.after", "shelf.cap.before"]
-            .into_iter()
-            .find(|key| world.screen().find(Target::key(*key)).is_some())
-            .expect("a chip the shelf has no room for is in a cap");
+    world.resize((window().0.min(900.0), 600.0));
+    let cap = ["shelf.cap.after", "shelf.cap.before"]
+        .into_iter()
+        .find(|key| world.screen().find(Target::key(*key)).is_some());
+    if let Some(cap) = cap {
         world.gesture(|app| app.click(Target::key(cap)));
         world.settle();
     }
-    world.gesture(|app| {
-        let chip = app
-            .runtime
-            .find("shelf.chip.w")
-            .expect("the builder's chip is laid out");
-        app.move_to(chip);
-    });
+    let chip = ["w", "i", "sh", "r", "m"]
+        .iter()
+        .map(|leaf| format!("shelf.chip.{leaf}"))
+        .find(|key| world.runtime().presented(key).is_some());
+    if let Some(chip) = chip {
+        world.gesture(|app| {
+            let at = app.runtime.find(&chip).expect("the chip is laid out");
+            app.move_to(at);
+        });
+    }
     world.advance(std::time::Duration::from_millis(400));
     snap(&mut world, "shelf-peek", dark);
 }
@@ -6785,9 +6788,39 @@ fn session_seed_context(dark: bool) {
         },
     );
     press(&mut world, Action::UiCommandPalette);
-    world.gesture(|app| app.type_text("Show working agent's seeds"));
+    world.gesture(|app| app.type_text("Show working agent"));
     world.gesture(|app| app.press("enter"));
     snap(&mut world, "session-seed-context", dark);
+}
+
+/// A seed id the garden knows in agent a's terminal, the pointer resting on it, so its card
+/// opens over the terminal.
+fn terminal_seed_card(dark: bool) {
+    let known = Seed {
+        body: "Every view reads its colors from **one module** in attn-ui, so a theme \
+               changes them all at once."
+            .into(),
+        tender: Some(PartyView {
+            name: "Builder".into(),
+            r#ref: "session:s1".into(),
+            session_id: Some("s1".into()),
+        }),
+        claimed: true,
+        ..seed("s-7k3f9m", "Colors in one place", "growing", None)
+    };
+    let mut world = popover_world(
+        dark,
+        |state| {
+            state.seeds_total = Some(1);
+            state.seeds = Some(vec![known]);
+        },
+        |_| {},
+    );
+    write(&mut world, "$ attn seed show s-7k3f9m\r\n");
+    let at = cell(&world, 20, 0);
+    world.gesture(|app| app.runtime.pointer_move(at.0, at.1));
+    world.advance(std::time::Duration::from_millis(400));
+    snap(&mut world, "terminal-seed-card", dark);
 }
 
 /// A critical failure with its evidence and actions, a warning and a read notice; then the
@@ -7910,6 +7943,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("session_pr_details", || session_pr_details(dark));
         scene("session_usage", || session_usage(dark));
         scene("session_seed_context", || session_seed_context(dark));
+        scene("terminal_seed_card", || terminal_seed_card(dark));
         scene("notifications_empty", || notifications_empty(dark));
         scene("notifications_listed", || notifications_listed(dark));
         scene("notifications_failed", || notifications_failed(dark));

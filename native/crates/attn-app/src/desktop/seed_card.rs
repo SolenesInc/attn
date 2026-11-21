@@ -85,11 +85,17 @@ pub(super) fn card(
         .build(t)
         .key(format!("{surface}.open"))
         .into();
-    let meta = |label: &str, value: String| {
+    let meta = |part: &str, label: &str, value: String| {
         (!value.is_empty()).then(|| {
             Inline::joined()
                 .child(words(label.to_owned(), Type::Label, t.text_tertiary))
-                .child(words(value, Type::Small, t.text_secondary))
+                .child(
+                    words(value, Type::Small, t.text_secondary)
+                        .key(format!("{surface}.{part}"))
+                        .truncate()
+                        .shrink()
+                        .min_w(0.0),
+                )
         })
     };
     let state = words(
@@ -111,8 +117,8 @@ pub(super) fn card(
         .push(state)
         .push(title)
         .push_all(excerpt)
-        .push_all(meta("Tender", tender))
-        .push_all(meta("Updated", updated))
+        .push_all(meta("tender", "Tender", tender))
+        .push_all(meta("updated", "Updated", updated))
         .push(actions)
         .build(t);
     let body = Frame::panel(t)

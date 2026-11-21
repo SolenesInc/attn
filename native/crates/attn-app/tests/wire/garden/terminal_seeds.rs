@@ -333,6 +333,29 @@ fn previews_a_marked_seed_on_hover_and_opens_it_for_the_session() {
 }
 
 #[test]
+fn a_tender_with_a_long_name_stays_inside_the_card() {
+    let long = with(navigable(), |s| {
+        s.tender.as_mut().unwrap().name =
+            "Trellis-build-and-release-platform-本番の権限を移行する作業ツリー-tokyo".into();
+    });
+    let mut world = start(vec![long], vec![], vec![]);
+    write(&mut world, 1, &format!("known {KNOWN}"));
+    rest_on(&mut world, 8, 0);
+    let [x, _, w, _] = world.runtime().presented(CARD).expect("the card is open").0;
+    let [lx, _, lw, _] = world
+        .runtime()
+        .presented(&format!("{CARD}.tender"))
+        .expect("the tender line is drawn")
+        .0;
+    assert!(
+        lx + lw <= x + w,
+        "the tender line ends at {} past the card's {}",
+        lx + lw,
+        x + w
+    );
+}
+
+#[test]
 fn the_card_closes_once_the_pointer_leaves_the_id_and_the_card() {
     let mut world = start(vec![navigable()], vec![], vec![]);
     write(&mut world, 1, &format!("known {KNOWN}"));
