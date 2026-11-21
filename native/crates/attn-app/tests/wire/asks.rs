@@ -2197,7 +2197,7 @@ fn number_keys_pick_in_the_active_question_and_tab_moves_it_to_the_written_field
     assert_eq!(
         focused(&world).as_deref(),
         Some("asks.q.q2.condition"),
-        "Shift+Tab enters a question at its last control"
+        "going back enters a question at its last control"
     );
 
     send_key(&mut world);
