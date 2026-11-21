@@ -372,6 +372,37 @@ func (c *Codex) Classify(text string, timeout time.Duration) (string, error) {
 	return c.ClassifyWithExecutable(context.Background(), text, "", "", classifier.CodexClassifierModel(), timeout)
 }
 
-func (c *Codex) ClassifyWithExecutable(ctx context.Context, text, executable, workDir, model string, timeout time.Duration) (string, error) {
-	return classifier.ClassifyWithCodexModelInDir(ctx, text, executable, workDir, model, timeout)
+func (c *Codex) ClassifyWithExecutable(parent context.Context, text, executable, workDir, model string, timeout time.Duration) (string, error) {
+	if strings.TrimSpace(text) == "" {
+		classifier.DefaultLogger("classifier: empty text, returning idle")
+		return "idle", nil
+	}
+	classifier.DefaultLogger("classifier: input text (%d chars): %q", len(text), text)
+	resolved := c.ResolveExecutable(executable)
+	effort := classifier.CodexClassifierReasoningEffort()
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
+	classifier.DefaultLogger(
+		"classifier: calling codex CLI executable=%s model=%s reasoning_effort=%s timeout=%d seconds work_dir=%q",
+		resolved, model, effort, int(timeout.Seconds()), strings.TrimSpace(workDir),
+	)
+	result, err := c.RunHeadlessTask(ctx, HeadlessTaskRequest{
+		Executable:      resolved,
+		Model:           model,
+		ReasoningEffort: effort,
+		Prompt:          classifier.BuildPrompt(text),
+		WorkDir:         workDir,
+		DisableTools:    true,
+	})
+	if err != nil {
+		classifier.DefaultLogger("classifier: codex CLI failed model=%s err=%v output=%s",
+			model, err, classifier.TruncateForLog(result.FailureOutput))
+		return "unknown", fmt.Errorf("codex cli: %w", err)
+	}
+	classifier.DefaultLogger("classifier: codex CLI answered (%d chars): %s", len(result.Text), classifier.TruncateForLog(result.Text))
+	if state, ok := classifier.ParseVerdictText(result.Text); ok {
+		return state, nil
+	}
+	classifier.DefaultLogger("classifier: codex response missing explicit WAITING/DONE verdict, returning unknown")
+	return "unknown", nil
 }

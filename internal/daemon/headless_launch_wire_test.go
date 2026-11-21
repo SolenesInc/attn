@@ -220,6 +220,10 @@ func TestEachHarnessJudgesATurnWithABoundedToolFreeVerdictRun(t *testing.T) {
 				t.Errorf("the verdict run lacks %s: %q", flag, verdict.Argv)
 			}
 		}
+		if !strings.Contains(verdict.Prompt, "Staging is deployed.") ||
+			slices.ContainsFunc(verdict.Argv, func(arg string) bool { return strings.Contains(arg, "Staging is deployed.") }) {
+			t.Errorf("the verdict run judged %q with arguments %q, want the turn's last message on stdin and out of the arguments", verdict.Prompt, verdict.Argv)
+		}
 		if dir, _ := filepath.EvalSymlinks(verdict.Dir); dir != cwd {
 			t.Errorf("the verdict run ran in %q, want the session's directory %q", verdict.Dir, cwd)
 		}

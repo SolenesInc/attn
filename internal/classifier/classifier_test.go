@@ -2,7 +2,6 @@ package classifier
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 )
 
@@ -149,70 +148,5 @@ func TestParseVerdict_NoStructuredVerdict(t *testing.T) {
 		if result, ok := ParseVerdict(raw); ok {
 			t.Fatalf("ParseVerdict(%s) = %q, want no verdict", raw, result)
 		}
-	}
-}
-
-func TestParseVerdictFromCodexJSONL(t *testing.T) {
-	jsonl := strings.Join([]string{
-		`{"type":"thread.started","thread_id":"abc"}`,
-		`{"type":"turn.started"}`,
-		`{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"{\"verdict\":\"DONE\"}"}}`,
-		`{"type":"turn.completed","usage":{"input_tokens":1}}`,
-	}, "\n")
-
-	got, ok := parseVerdictFromCodexJSONL([]byte(jsonl))
-	if !ok {
-		t.Fatal("expected parseVerdictFromCodexJSONL to parse verdict")
-	}
-	if got != "idle" {
-		t.Fatalf("parseVerdictFromCodexJSONL() = %q, want idle", got)
-	}
-}
-
-func TestParseCodexErrorFromJSONL(t *testing.T) {
-	jsonl := strings.Join([]string{
-		`{"type":"thread.started","thread_id":"abc"}`,
-		`{"type":"error","message":"model_not_found"}`,
-	}, "\n")
-	got := parseCodexErrorFromJSONL([]byte(jsonl))
-	if got != "model_not_found" {
-		t.Fatalf("parseCodexErrorFromJSONL() = %q, want model_not_found", got)
-	}
-}
-
-func TestParseCodexErrorFromJSONL_LargeLine(t *testing.T) {
-	line, err := json.Marshal(map[string]any{
-		"type":    "error",
-		"message": strings.Repeat("x", 70*1024) + "model_not_found",
-	})
-	if err != nil {
-		t.Fatalf("marshal line: %v", err)
-	}
-
-	got := parseCodexErrorFromJSONL(append(line, '\n'))
-	if !strings.HasSuffix(got, "model_not_found") {
-		t.Fatalf("parseCodexErrorFromJSONL() suffix mismatch: %q", got)
-	}
-}
-
-func TestParseVerdictFromCodexJSONL_LargeLine(t *testing.T) {
-	line, err := json.Marshal(map[string]any{
-		"type": "item.completed",
-		"item": map[string]any{
-			"id":   "item_0",
-			"type": "agent_message",
-			"text": strings.Repeat("x", 70*1024) + `{"verdict":"DONE"}`,
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal line: %v", err)
-	}
-
-	got, ok := parseVerdictFromCodexJSONL(append(line, '\n'))
-	if !ok {
-		t.Fatal("expected parseVerdictFromCodexJSONL to parse verdict from large line")
-	}
-	if got != "idle" {
-		t.Fatalf("parseVerdictFromCodexJSONL() = %q, want idle", got)
 	}
 }

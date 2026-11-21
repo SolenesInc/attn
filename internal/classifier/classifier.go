@@ -1,20 +1,13 @@
 package classifier
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/prompts"
 )
 
@@ -41,25 +34,9 @@ var verdictLineRegex = sync.OnceValue(func() *regexp.Regexp {
 const classifierLogSnippetMaxChars = 600
 
 const (
-	defaultCodexClassifierModel   = "gpt-5.6-luna"
-	defaultCodexReasoningEffort   = "low"
-	defaultCodexClassifierTimeout = 30 * time.Second
-	defaultCodexExecutable        = "codex"
-	codexConfigReasoningEffortKey = "model_reasoning_effort"
-	codexConfigDisableShellToolKV = "features.shell_tool=false"
+	defaultCodexClassifierModel = "gpt-5.6-luna"
+	defaultCodexReasoningEffort = "low"
 )
-
-type codexEvent struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
-	Item    struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
-	} `json:"item"`
-	Error struct {
-		Message string `json:"message"`
-	} `json:"error"`
-}
 
 func BuildPrompt(text string) string {
 	return prompts.RenderText("turn-classifier", "classify", prompts.Values{"message": text})
@@ -209,118 +186,12 @@ func ParseVerdict(structuredOutput json.RawMessage) (string, bool) {
 	return result, ok
 }
 
+func ParseVerdictText(text string) (string, bool) {
+	return parseVerdictFromResponse(text)
+}
+
 func TruncateForLog(value string) string {
 	return truncateForLog(value, classifierLogSnippetMaxChars)
-}
-
-func resolveCodexExecutable(configuredExecutable string) string {
-	if configuredExecutable := strings.TrimSpace(configuredExecutable); configuredExecutable != "" {
-		return configuredExecutable
-	}
-	if envExecutable := strings.TrimSpace(os.Getenv("ATTN_CODEX_EXECUTABLE")); envExecutable != "" {
-		return envExecutable
-	}
-	return defaultCodexExecutable
-}
-
-func parseCodexErrorFromJSONL(output []byte) string {
-	for _, rawLine := range bytes.Split(output, []byte{'\n'}) {
-		line := strings.TrimSpace(string(rawLine))
-		if line == "" {
-			continue
-		}
-		var evt codexEvent
-		if err := json.Unmarshal([]byte(line), &evt); err != nil {
-			continue
-		}
-		switch evt.Type {
-		case "error":
-			return strings.TrimSpace(evt.Message)
-		case "turn.failed":
-			return strings.TrimSpace(evt.Error.Message)
-		}
-	}
-	return ""
-}
-
-func parseVerdictFromCodexJSONL(output []byte) (string, bool) {
-	for _, rawLine := range bytes.Split(output, []byte{'\n'}) {
-		line := strings.TrimSpace(string(rawLine))
-		if line == "" {
-			continue
-		}
-
-		var evt codexEvent
-		if err := json.Unmarshal([]byte(line), &evt); err == nil {
-			if evt.Item.Text != "" {
-				if result, ok := parseVerdictFromResponse(evt.Item.Text); ok {
-					return result, true
-				}
-			}
-			if evt.Message != "" {
-				if result, ok := parseVerdictFromResponse(evt.Message); ok {
-					return result, true
-				}
-			}
-		}
-
-		if result, ok := parseVerdictFromResponse(line); ok {
-			return result, true
-		}
-	}
-	return "", false
-}
-
-func runCodexClassifierAttempt(ctx context.Context, executable, model, reasoningEffort, prompt, workDir string) (string, string, error) {
-	if !headless.Enabled() {
-		return "", "", headless.Refusal("codex classifier")
-	}
-	tempDir, err := os.MkdirTemp("", "attn-codex-classifier-*")
-	if err != nil {
-		return "", "", err
-	}
-	defer os.RemoveAll(tempDir)
-
-	lastMessagePath := filepath.Join(tempDir, "last-message.txt")
-	args := []string{
-		"exec",
-		"--json",
-		"--ephemeral",
-		"--output-last-message", lastMessagePath,
-		"--skip-git-repo-check",
-		"--ignore-user-config",
-		"-m", model,
-		"-c", fmt.Sprintf("%s=%q", codexConfigReasoningEffortKey, reasoningEffort),
-		"-c", codexConfigDisableShellToolKV,
-		prompt,
-	}
-
-	cmd := exec.CommandContext(ctx, executable, args...)
-	if wd := strings.TrimSpace(workDir); wd != "" {
-		cmd.Dir = wd
-	}
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err = cmd.Run()
-
-	lastMessageBytes, readErr := os.ReadFile(lastMessagePath)
-	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
-		return "", stdout.String(), readErr
-	}
-	lastMessage := strings.TrimSpace(string(lastMessageBytes))
-	if err == nil {
-		return lastMessage, stdout.String(), nil
-	}
-
-	if parsedErr := parseCodexErrorFromJSONL(stdout.Bytes()); parsedErr != "" {
-		return lastMessage, stdout.String(), fmt.Errorf("%w: %s", err, parsedErr)
-	}
-	stderrText := strings.TrimSpace(stderr.String())
-	if stderrText != "" {
-		return lastMessage, stdout.String(), fmt.Errorf("%w: %s", err, stderrText)
-	}
-	return lastMessage, stdout.String(), err
 }
 
 type LogFunc func(format string, args ...interface{})
@@ -343,52 +214,4 @@ func CodexClassifierReasoningEffort() string {
 		return effort
 	}
 	return defaultCodexReasoningEffort
-}
-
-func ClassifyWithCodexModelInDir(parent context.Context, text, configuredExecutable, workDir, model string, timeout time.Duration) (string, error) {
-	if text == "" {
-		DefaultLogger("classifier: empty text, returning idle")
-		return "idle", nil
-	}
-	DefaultLogger("classifier: input text (%d chars): %q", len(text), text)
-
-	if timeout <= 0 {
-		timeout = defaultCodexClassifierTimeout
-	}
-	ctx, cancel := context.WithTimeout(parent, timeout)
-	defer cancel()
-
-	executable := resolveCodexExecutable(configuredExecutable)
-	reasoningEffort := CodexClassifierReasoningEffort()
-
-	prompt := BuildPrompt(text)
-	DefaultLogger(
-		"classifier: calling codex CLI executable=%s model=%s reasoning_effort=%s timeout=%d seconds work_dir=%q",
-		executable,
-		model,
-		reasoningEffort,
-		int(timeout.Seconds()),
-		strings.TrimSpace(workDir),
-	)
-
-	lastMessage, rawJSONL, err := runCodexClassifierAttempt(ctx, executable, model, reasoningEffort, prompt, workDir)
-	if err != nil {
-		DefaultLogger("classifier: codex CLI failed model=%s err=%v", model, err)
-		return "unknown", fmt.Errorf("codex cli: %w", err)
-	}
-
-	if lastMessage != "" {
-		DefaultLogger("classifier: codex CLI last message (%d chars): %q", len(lastMessage), lastMessage)
-		if result, ok := parseVerdictFromResponse(lastMessage); ok {
-			DefaultLogger("classifier: parsed result: %s", result)
-			return result, nil
-		}
-	}
-
-	if result, ok := parseVerdictFromCodexJSONL([]byte(rawJSONL)); ok {
-		DefaultLogger("classifier: parsed result from codex json stream: %s", result)
-		return result, nil
-	}
-	DefaultLogger("classifier: codex response missing explicit WAITING/DONE verdict, returning unknown")
-	return "unknown", nil
 }

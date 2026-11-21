@@ -178,7 +178,7 @@ Read in the source at openai/codex rust-v0.163.0 and probed on 0.162.1 and
 
 ## Headless runs
 
-attn runs `codex exec` for headless tasks and cold model calls
+attn runs `codex exec` for headless tasks, turn verdicts and cold model calls
 (`internal/agent/codex.go`). Probed on 0.167.0 with attn's arguments, a
 loopback Responses API set as `openai_base_url`, and the model catalog of a
 signed-in `CODEX_HOME` passed as `model_catalog_json`, 2026-11-20 (seed
