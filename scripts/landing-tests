@@ -21,6 +21,7 @@
 # in seconds.
 
 group go \.go$|^go\.(mod|sum)$
+go ./internal/daemon TestEnabledSkillsRefreshWhenTheirSettingsAreSavedAndTheDaemonRestarts
 go ./internal/daemon TestARestartBringsBackEveryAgentItLostAndLeavesShellsToBeOpened
 go ./internal/daemon TestOpeningAnAgentJustAsTheDaemonRevivesItAttachesToTheRevivedAgent
 go ./internal/daemon TestAResumedSharedConversationsRunSurvivesItsOutcome

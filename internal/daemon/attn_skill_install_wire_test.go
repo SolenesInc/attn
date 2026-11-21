@@ -48,12 +48,12 @@ func TestEnabledSkillsRefreshWhenTheirSettingsAreSavedAndTheDaemonRestarts(t *te
 			{"CLI preference commit", func(t *testing.T) {
 				cfg := savedPreferences(app)
 				cfg.Enabled = true
-				if err := cli.RunCommand("delegate roles apply", "", map[string]any{"table": cfg, "message": "enable roles"}, nil); err != nil {
+				if err := cli.RunCommand("delegate roles apply", "", map[string]any{"table": cfg, "message": "enable roles"}, &protocol.DelegateRolesChangeResult{}); err != nil {
 					t.Fatal(err)
 				}
 			}},
 			{"CLI preference rollback", func(t *testing.T) {
-				if err := cli.RunCommand("delegate roles rollback", "", map[string]any{"revision": 1, "message": "restore roles"}, nil); err != nil {
+				if err := cli.RunCommand("delegate roles rollback", "", map[string]any{"revision": 1, "message": "restore roles"}, &protocol.DelegateRolesChangeResult{}); err != nil {
 					t.Fatal(err)
 				}
 			}},
