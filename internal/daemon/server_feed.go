@@ -161,7 +161,7 @@ func (f *serverFeed) apply(ctx context.Context, item serverViewItem, live bool) 
 		f.catchUp(ctx, before, live)
 	}
 	for _, entry := range appended {
-		f.observe(entry, live)
+		f.observe(ctx, entry, live)
 	}
 	if !f.baselined {
 		f.baselined = true
@@ -279,7 +279,7 @@ func (f *serverFeed) applyDocOp(kind string, path []any, args []json.RawMessage)
 func (f *serverFeed) catchUp(ctx context.Context, through int64, live bool) {
 	params := map[string]any{"conversation": f.conversation, "from": f.seen + 1, "to": through, "order": "ascending", "limit": sessionTranscriptPageSize}
 	err := pageEntries(ctx, f.c, params, func(entry transcript.ServerEntry) bool {
-		f.observe(entry, live)
+		f.observe(ctx, entry, live)
 		return true
 	})
 	if err != nil {
@@ -287,7 +287,7 @@ func (f *serverFeed) catchUp(ctx context.Context, through int64, live bool) {
 	}
 }
 
-func (f *serverFeed) observe(entry transcript.ServerEntry, live bool) {
+func (f *serverFeed) observe(ctx context.Context, entry transcript.ServerEntry, live bool) {
 	if entry.ID <= f.seen {
 		return
 	}
@@ -327,7 +327,13 @@ func (f *serverFeed) observe(entry transcript.ServerEntry, live bool) {
 		for _, result := range entry.ToolResults() {
 			call, known := f.calls[result.ToolCallID]
 			delete(f.calls, result.ToolCallID)
-			if !known || result.Failed {
+			if result.Failed {
+				continue
+			}
+			if !known {
+				call, known = f.requestBefore(ctx, entry.ID, result.ToolCallID)
+			}
+			if !known {
 				continue
 			}
 			f.p.d.serverToolFinished(f.session, call.name, call.input, result.Content)
@@ -336,6 +342,28 @@ func (f *serverFeed) observe(entry transcript.ServerEntry, live bool) {
 }
 
 const serverPrompt = "sigma.user"
+
+func (f *serverFeed) requestBefore(ctx context.Context, result int64, id string) (serverToolCall, bool) {
+	var request serverToolCall
+	found := false
+	params := map[string]any{"conversation": f.conversation, "to": result - 1, "order": "descending", "limit": serverEntriesPerCall}
+	err := pageEntries(ctx, f.c, params, func(entry transcript.ServerEntry) bool {
+		if entry.Kind != "pi.assistant" {
+			return true
+		}
+		for _, call := range entry.ToolCalls() {
+			if call.ID == id {
+				request, found = serverToolCall{name: call.Name, input: call.Arguments}, true
+				return false
+			}
+		}
+		return true
+	})
+	if err != nil {
+		f.l.logf("conversation feed of %s: reading the request of tool call %s: %v", f.conversation, id, err)
+	}
+	return request, found
+}
 
 func (f *serverFeed) usageTotals() map[string]serverModelUsage {
 	var usage struct {

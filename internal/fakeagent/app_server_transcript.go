@@ -10,6 +10,8 @@ import (
 
 const (
 	methodToolCall         = "tool_call"
+	methodToolRequested    = "tool_requested"
+	methodToolReturned     = "tool_returned"
 	methodSetUsage         = "set_usage"
 	methodServerCompacting = "server_compacting"
 	methodServerCompacted  = "server_compacted"
@@ -264,6 +266,10 @@ func (s *appServer) handleTranscriptKit(method string, raw json.RawMessage) (any
 	switch method {
 	case methodToolCall:
 		s.toolCallLocked(p.ThreadID, *p.Call)
+	case methodToolRequested:
+		return s.toolRequestedLocked(p.ThreadID, *p.Call), nil, true
+	case methodToolReturned:
+		s.toolReturnedLocked(p.ThreadID, p.Key, *p.Call)
 	case methodAppendMany:
 		for range p.Count {
 			s.toolCallLocked(p.ThreadID, *p.Call)
@@ -302,12 +308,31 @@ func (s *appServer) handleTranscriptKit(method string, raw json.RawMessage) (any
 }
 
 func (s *appServer) toolCallLocked(conversation string, call ServerToolCall) {
+	id := s.nextCallID()
+	s.appendLocked(conversation, toolRequestEntry(id, call), toolResultEntry(id, call))
+}
+
+func (s *appServer) toolRequestedLocked(conversation string, call ServerToolCall) string {
+	id := s.nextCallID()
+	s.appendLocked(conversation, toolRequestEntry(id, call))
+	return id
+}
+
+func (s *appServer) toolReturnedLocked(conversation, id string, call ServerToolCall) {
+	s.appendLocked(conversation, toolResultEntry(id, call))
+}
+
+func (s *appServer) nextCallID() string {
 	s.nextCall++
-	id := "call-" + itoa(s.nextCall)
-	s.appendLocked(conversation,
-		serverEntry{Kind: "pi.assistant", Model: []json.RawMessage{message("assistant", map[string]any{"content": []any{map[string]any{"type": "toolCall", "id": id, "name": call.Name, "arguments": call.Input}}})}},
-		serverEntry{Kind: "pi.tool-result", Model: []json.RawMessage{message("toolResult", map[string]any{"toolCallId": id, "toolName": call.Name, "content": []any{map[string]any{"type": "text", "text": call.Output}}, "isError": false})}},
-	)
+	return "call-" + itoa(s.nextCall)
+}
+
+func toolRequestEntry(id string, call ServerToolCall) serverEntry {
+	return serverEntry{Kind: "pi.assistant", Model: []json.RawMessage{message("assistant", map[string]any{"content": []any{map[string]any{"type": "toolCall", "id": id, "name": call.Name, "arguments": call.Input}}})}}
+}
+
+func toolResultEntry(id string, call ServerToolCall) serverEntry {
+	return serverEntry{Kind: "pi.tool-result", Model: []json.RawMessage{message("toolResult", map[string]any{"toolCallId": id, "toolName": call.Name, "content": []any{map[string]any{"type": "text", "text": call.Output}}, "isError": false})}}
 }
 
 func itoa(n int) string {
@@ -318,6 +343,18 @@ func itoa(n int) string {
 func (s *AppServer) ToolCall(conversation string, call ServerToolCall) {
 	s.t.Helper()
 	s.call(methodToolCall, serverKitParams{ThreadID: conversation, Call: &call}, nil)
+}
+
+func (s *AppServer) ToolRequested(conversation string, call ServerToolCall) string {
+	s.t.Helper()
+	var id string
+	s.call(methodToolRequested, serverKitParams{ThreadID: conversation, Call: &call}, &id)
+	return id
+}
+
+func (s *AppServer) ToolReturned(conversation, id string, call ServerToolCall) {
+	s.t.Helper()
+	s.call(methodToolReturned, serverKitParams{ThreadID: conversation, Key: id, Call: &call}, nil)
 }
 
 func (s *AppServer) ToolCalls(conversation string, count int, call ServerToolCall) {

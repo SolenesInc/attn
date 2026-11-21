@@ -504,6 +504,38 @@ func TestAnAppServerFeedRecordsEachEntryOnceAcrossDaemonAndServerRestarts(t *tes
 	})
 }
 
+func TestAToolThatFinishesAfterADaemonRestartStillRecordsItsFileAndPullRequest(t *testing.T) {
+	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
+		w := newWorld(t, h)
+		app := w.App()
+		session, view, server := appServerSession(t, w, app, h)
+		conversation, plan := view.ConversationID, markdownFile(t, w, "plan.md")
+		promptUntilWorking(app, session, view, server, "write the plan and open its pull request")
+		write := writeMarkdownCall(plan)
+		pull := fakeagent.ServerToolCall{Name: "bash", Input: map[string]any{"command": "gh pr create --fill"}, Output: shopPull(7) + "\n"}
+		writing := server.ToolRequested(conversation, write)
+		pulling := server.ToolRequested(conversation, pull)
+		awaitServerFeed(app, session, conversation, server, 100)
+
+		launched := w.AppServers(h)
+		w.restart()
+		app = w.App()
+		rejoinAppServer(t, w, h)
+		server = w.AppServerAfter(h, launched)
+		w.Launched(session)
+		server.ToolReturned(conversation, writing, write)
+		server.ToolReturned(conversation, pulling, pull)
+		server.ToolCall(conversation, fakeagent.ServerToolCall{Name: "bash", Input: map[string]any{"command": "gh pr create --fill"}, Output: shopPull(8) + "\n"})
+		now := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return slices.Contains(pullNumbers(s), 8) })
+		if got := pullNumbers(now); !slices.Contains(got, 7) {
+			t.Errorf("pull requests %v, want 7, opened by a tool that finished after the restart, beside 8", got)
+		}
+		if got := recentCount(app, plan); got != 1 {
+			t.Fatalf("plan.md, written by a tool that finished after the restart, counts %d, want 1", got)
+		}
+	})
+}
+
 func TestAPluginServerThatDoesNotDeclareConversationWatchGetsNoFeed(t *testing.T) {
 	w := newWorld(t, fakeagent.SampleServer)
 	app := w.App()
