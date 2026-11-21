@@ -414,7 +414,7 @@ func (d *Daemon) inputTerminal(ctx context.Context, caller *protocol.Session, in
 		if ctx.Err() != nil {
 			return nil, nil, ctx.Err()
 		}
-		state, err = Call[protocol.TerminalText](context.Background(), d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: protocol.TerminalReadModeScreen})
+		state, err = Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: protocol.TerminalReadModeScreen})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -434,7 +434,10 @@ func (d *Daemon) inputTerminal(ctx context.Context, caller *protocol.Session, in
 		}
 		result.LastBlockID = protocol.Ptr(state.LastBlockID)
 	}
-	if err := d.typeInput(context.Background(), target.terminal, state, in.data); err != nil {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	if err := d.typeInput(ctx, target.terminal, state, in.data); err != nil {
 		return nil, nil, err
 	}
 	return result, target, nil

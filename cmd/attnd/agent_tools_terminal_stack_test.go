@@ -65,3 +65,36 @@ func TestTerminalSendTypesAFlagShapedTextLiterally(t *testing.T) {
 		}
 	}
 }
+
+func TestATerminalRunWhoseTimeoutPassesBeforeItTypesNeverTypes(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Vars = append(s.Vars, "SHELL=/bin/bash")
+	s.Start()
+	app := s.App()
+	session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+	s.Launched(session)
+	run := func(args ...string) testworld.Result {
+		return s.Run(testworld.Invocation{Session: session, Args: append([]string{"terminal"}, args...)})
+	}
+	var opened protocol.TerminalOpenResult
+	run("open", "--json", "--", "printf shell-ready").JSON(t, &opened)
+	app.AwaitScreen(string(opened.SessionID), "shell-ready")
+	terminal := string(opened.TerminalID)
+	if got := run("run", terminal, "printf 'busy\\n'; sleep 30"); got.Code != 0 {
+		t.Fatalf("start a long command: %+v", got)
+	}
+	app.AwaitScreen(string(opened.SessionID), "busy\r\n")
+	if got := run("run", terminal, "printf 'late-%s\\n' typed", "--timeout", "0.5"); got.Code != 124 {
+		t.Fatalf("run while the shell is busy with --timeout 0.5 = %+v, want exit 124", got)
+	}
+	if got := run("send", terminal, "--keys", "C-c"); got.Code != 0 {
+		t.Fatalf("interrupt: %+v", got)
+	}
+	done := run("run", terminal, "printf 'after-%s\\n' interrupt", "--wait")
+	if done.Code != 0 || strings.TrimSpace(done.Stdout) != "after-interrupt" {
+		t.Fatalf("run --wait after the interrupt = %+v", done)
+	}
+	if screen := run("read", terminal, "--scrollback"); strings.Contains(screen.Stdout, "late-") {
+		t.Fatalf("the command whose timeout passed was typed after all:\n%s", screen.Stdout)
+	}
+}
