@@ -271,10 +271,7 @@ func (d *Daemon) saveUploadedAttachment(a store.StoredAttachment) error {
 	if err := d.removeAttachmentFiles(a); err != nil {
 		d.logf("attachments: removing the bytes of the refused upload %s: %v", a.Attachment.ID, err)
 	}
-	if a.Owner.Kind == protocol.AttachmentOwnerKindAsk {
-		return errAskGone
-	}
-	return fmt.Errorf("attachment %s was discarded; upload with a new identity", a.Attachment.ID)
+	return errAskGone
 }
 
 func (d *Daemon) attachmentDownload(profileID string, msg *protocol.AttachmentGetMessage, chunkBytes int) (*protocol.AttachmentGetResult, error) {
