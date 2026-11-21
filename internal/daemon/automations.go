@@ -16,7 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func (d *Daemon) automationRun(ctx context.Context, definitionID int, requestID, input string) (*store.AutomationRun, error) {
+func (d *Daemon) automationRun(ctx context.Context, definitionID int, requestID, input string, wait bool) (*store.AutomationRun, error) {
 	if strings.TrimSpace(requestID) == "" {
 		return nil, fmt.Errorf("request_id is required")
 	}
@@ -74,9 +74,27 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID int, requestID,
 		return nil, err
 	}
 	pausepoint.At(pausepoint.AutomationRunReserved)
+	if wait {
+		return d.deliverClaimedAutomationRun(ctx, definitionID, run.ID, created)
+	}
+	if created && run.State == store.AutomationRunStateFailed {
+		return nil, errors.New(run.LastError)
+	}
+	claimed := run.ID
+	if !d.life.Go("automationRunDelivery", func() {
+		if _, err := d.deliverClaimedAutomationRun(d.life.Context(), definitionID, claimed, created); err != nil {
+			d.logf("automation run %s of %d: %v", claimed, definitionID, err)
+		}
+	}) {
+		return nil, errDaemonStopping
+	}
+	return run, nil
+}
+
+func (d *Daemon) deliverClaimedAutomationRun(ctx context.Context, definitionID int, runID string, created bool) (*store.AutomationRun, error) {
 	d.automationMu.Lock()
 	defer d.automationMu.Unlock()
-	run, err = d.store.GetAutomationRun(run.ID)
+	run, err := d.store.GetAutomationRun(runID)
 	if err != nil {
 		return nil, err
 	}

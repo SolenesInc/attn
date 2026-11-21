@@ -372,6 +372,7 @@ type AutomationRunArgs struct {
 	Input     json.RawMessage `json:"input,omitempty"`
 	PRURL     string          `json:"pr_url,omitempty"`
 	RequestID string          `json:"request_id,omitempty"`
+	Wait      bool            `json:"wait,omitempty"`
 }
 
 type AutomationRunsArgs struct {

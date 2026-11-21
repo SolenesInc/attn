@@ -16,7 +16,7 @@ import (
 
 const automationReviewWithdrawnMessage = "GitHub review request withdrawn before delivery"
 
-func (d *Daemon) automationRunPullRequest(ctx context.Context, definitionID int, requestID, rawURL string) (*store.AutomationRun, error) {
+func (d *Daemon) automationRunPullRequest(ctx context.Context, definitionID int, requestID, rawURL string, wait bool) (*store.AutomationRun, error) {
 	if strings.TrimSpace(requestID) == "" {
 		return nil, errors.New("request_id is required")
 	}
@@ -27,7 +27,7 @@ func (d *Daemon) automationRunPullRequest(ctx context.Context, definitionID int,
 		if err != nil || occurrence == nil {
 			return nil, errors.Join(errors.New("existing automation occurrence missing"), err)
 		}
-		return d.automationRun(ctx, definitionID, requestID, occurrence.PayloadJSON)
+		return d.automationRun(ctx, definitionID, requestID, occurrence.PayloadJSON, wait)
 	}
 	def, err := d.store.GetAutomationDefinition(definitionID)
 	if err != nil || def == nil {
@@ -72,7 +72,7 @@ func (d *Daemon) automationRunPullRequest(ctx context.Context, definitionID int,
 	if _, err := automation.ParsePullRequestInput(canonical); err != nil {
 		return nil, err
 	}
-	return d.automationRun(ctx, definitionID, requestID, string(canonical))
+	return d.automationRun(ctx, definitionID, requestID, string(canonical), wait)
 }
 func pullRequestAutomationInput(host, owner, repository string, snapshot *github.PullRequestSnapshot) automation.PullRequestInput {
 	return automation.PullRequestInput{

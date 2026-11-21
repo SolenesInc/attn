@@ -54,7 +54,7 @@ func (c *Client) AutomationDefinition(id int) (*protocol.AutomationShowResult, e
 }
 
 func (c *Client) AutomationRun(id int, requestID, input string) (*protocol.AutomationRunSummary, error) {
-	args := command.AutomationRunArgs{ID: automationID(id), RequestID: requestID}
+	args := command.AutomationRunArgs{ID: automationID(id), RequestID: requestID, Wait: true}
 	if input != "" {
 		args.Input = json.RawMessage(input)
 	}
@@ -62,7 +62,7 @@ func (c *Client) AutomationRun(id int, requestID, input string) (*protocol.Autom
 }
 
 func (c *Client) AutomationRunPullRequest(id int, requestID, prURL string) (*protocol.AutomationRunSummary, error) {
-	return commandResult[protocol.AutomationRunSummary](c, "automation run", "", command.AutomationRunArgs{ID: automationID(id), RequestID: requestID, PRURL: prURL})
+	return commandResult[protocol.AutomationRunSummary](c, "automation run", "", command.AutomationRunArgs{ID: automationID(id), RequestID: requestID, PRURL: prURL, Wait: true})
 }
 
 func (c *Client) AutomationRuns(id int) (*protocol.AutomationRunsResult, error) {

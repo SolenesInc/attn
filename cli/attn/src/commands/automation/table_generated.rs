@@ -84,6 +84,7 @@ pub const COMMANDS: &[Command] = &[
             Arg { name: "input", cli: Cli::Flag("input-file"), value: Value::Json, source: Source::File, required: false, list: false },
             Arg { name: "pr_url", cli: Cli::Flag("pr-url"), value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "request_id", cli: Cli::Flag("request-id"), value: Value::Text, source: Source::Given, required: false, list: false },
+            Arg { name: "wait", cli: Cli::Internal, value: Value::Bool, source: Source::Given, required: false, list: false },
         ],
     },
     Command {

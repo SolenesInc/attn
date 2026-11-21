@@ -102,12 +102,13 @@ commands:
     runs: home
     grant: full
     doc: |
-      Starts a run of the automation now and prints it, without waiting for its session. `input` is the occurrence's structured input; `pr_url` resolves one GitHub pull request into it instead, for a repository_worktree automation. A retry with the same `request_id` returns the run the first request started.
+      Starts a run of the automation now and prints it. The CLI prints the run once its session is launched. A tool call answers once the run is recorded, pending, while preparing its location, which for a repository_worktree automation can mean a first clone, and launching its session go on; `automation runs` shows how it went. A run whose preparation fails in a way that can be retried, such as a failed clone or a GitHub host that is not signed in, stays pending: the same `request_id` delivers it again, and the CLI prints the reason. `input` is the occurrence's structured input; `pr_url` resolves one GitHub pull request into it instead, for a repository_worktree automation. A retry with the same `request_id` returns the run the first request started.
     args:
       - {name: id, type: automation_id, required: true, cli: pos}
       - {name: input, type: occurrence_input, cli: "--input-file", file: true, one_of: input, placeholder: "<file>", doc: "the occurrence's structured input, a JSON object; empty by default"}
       - {name: pr_url, type: url, cli: "--pr-url", one_of: input, doc: "a GitHub pull request to resolve into the occurrence's input"}
       - {name: request_id, type: text, cli: "--request-id", placeholder: "<id>", doc: "a key for retrying an uncertain request; a fresh one by default"}
+      - {name: wait, type: bool, cli: internal, doc: "answer once the run's session is launched; the CLI always waits"}
     result: AutomationRunSummary
 
   - name: automation runs

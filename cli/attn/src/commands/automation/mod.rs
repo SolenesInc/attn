@@ -42,6 +42,13 @@ impl Family for Automation {
         help_generated::usage(verb)
     }
 
+    fn before_send(&self, cmd: &Command, parsed: &mut Parsed) -> Result<(), Stop> {
+        if cmd.name == "run" {
+            parsed.args.insert("wait".to_string(), Json::Bool(true));
+        }
+        Ok(())
+    }
+
     fn decode_file(&self, _cmd: &Command, arg: &Arg, bytes: &[u8]) -> Result<Json, String> {
         if arg.name == "input" {
             return serde_json::from_slice(bytes)

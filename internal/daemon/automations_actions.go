@@ -276,9 +276,9 @@ func (d *Daemon) actionAutomationRun(ctx context.Context, msg *protocol.Automati
 	var run *store.AutomationRun
 	var err error
 	if prURL != "" {
-		run, err = d.automationRunPullRequest(ctx, msg.DefinitionID, msg.RequestID, prURL)
+		run, err = d.automationRunPullRequest(ctx, msg.DefinitionID, msg.RequestID, prURL, true)
 	} else {
-		run, err = d.automationRun(ctx, msg.DefinitionID, msg.RequestID, protocol.Deref(msg.InputJson))
+		run, err = d.automationRun(ctx, msg.DefinitionID, msg.RequestID, protocol.Deref(msg.InputJson), true)
 	}
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())

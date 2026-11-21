@@ -1,13 +1,16 @@
 package daemon_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestEveryAutomationToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) {
@@ -136,5 +139,63 @@ func TestAnAutomationCallerReadsAndChangesNothingOfAnotherProfile(t *testing.T) 
 	}
 	if runs, err := home.AutomationRuns(theirs.ID); err != nil || len(runs.Runs) != 0 {
 		t.Errorf("Side's run reached Default's automation: %+v, %v", runs, err)
+	}
+}
+
+func TestTheAutomationRunToolAnswersOnceTheRunIsRecordedAndTheRunIsDeliveredAfter(t *testing.T) {
+	r := newAutomationReviewWorld(t)
+	setSetting(t, r.app, "agent_tools_enabled", "true")
+	applyAutomation(t, r.cli, automationReviewSpec("manual-review", "manual", automationReviewOverride(r.clone)))
+	agent := agentToolsCaller{w: r.w, bearer: terminalCredential(t, r.w, r.app.Terminal(r.w.Spawn(r.app, fakeagent.Claude, r.clone)))}
+	input := automationReviewInput(42, r.head)
+	started := r.w.PauseAt(pausepoint.AutomationAgentStarted)
+
+	answered := agent.mustCall(t, "automation_run", map[string]any{"id": 2, "input": json.RawMessage(input), "request_id": "from-a-tool"})
+	if answered.IsError {
+		t.Fatalf("automation_run answered %q, want the recorded run", resultText(answered))
+	}
+	if run, _ := answered.StructuredContent.(map[string]any); run["state"] != "pending" {
+		t.Errorf("automation_run answered %v, want the run pending while its delivery goes on", run)
+	}
+	started.Await()
+	started.Release()
+
+	run, err := r.cli.AutomationRun(2, "from-a-tool", input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewer := testworld.AwaitSession(r.app, string(protocol.Deref(run.SessionID)), func(s protocol.Session) bool { return s.Directory != "" })
+	if got := strings.TrimSpace(runGit(t, reviewer.Directory, "rev-parse", "HEAD")); got != r.head {
+		t.Errorf("the run the tool started checked out %s, want %s", got, r.head)
+	}
+	r.w.Launched(string(reviewer.ID))
+}
+
+func TestEveryAutomationCommandRefusesAnIDBelowOne(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("check"))
+	for _, attempt := range []struct {
+		command string
+		args    map[string]any
+	}{
+		{"automation show", map[string]any{"id": 0}},
+		{"automation set", map[string]any{"id": 0, "launch_desktop": "own"}},
+		{"automation enable", map[string]any{"id": 0}},
+		{"automation disable", map[string]any{"id": -1}},
+		{"automation run", map[string]any{"id": 0, "request_id": "zero"}},
+		{"automation runs", map[string]any{"id": 0}},
+		{"automation cleanup", map[string]any{"id": 0}},
+		{"automation delete", map[string]any{"id": 0}},
+		{"automation show", map[string]any{}},
+	} {
+		var answer map[string]any
+		err := w.Client().RunCommand(attempt.command, protocol.SessionID(session), attempt.args, &answer)
+		if err == nil || !strings.Contains(err.Error(), "must be a positive number") {
+			t.Errorf("%s %v answered %v, %v; want a refusal that the id must be a positive number", attempt.command, attempt.args, answer, err)
+		}
 	}
 }
