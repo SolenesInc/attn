@@ -34,7 +34,7 @@ impl Reading {
         self.metrics().0
     }
 
-    fn metrics(self) -> (f32, f32, f32) {
+    const fn metrics(self) -> (f32, f32, f32) {
         match self {
             Reading::Text => (15.0, 400.0, 24.0),
             Reading::Title => (20.0, 700.0, 26.0),
@@ -48,35 +48,31 @@ impl Reading {
     }
 
     /// The role as a text style, to measure text set in it.
-    pub fn style(self, t: &Tokens) -> TextStyle {
-        let kit = crate::kit(t);
+    pub const fn style(self) -> TextStyle {
         let (size, weight, line) = self.metrics();
-        let face = match self {
-            Reading::Code | Reading::InlineCode => kit.ty.mono,
-            _ => kit.ty.body,
-        };
-        let tracking = match self {
-            Reading::Title => -0.5,
-            _ => face.tracking,
-        };
-        TextStyle {
-            size,
-            weight,
-            line_height: line,
-            tracking,
-            ..face
+        let face = door::reading_face(size, weight, line);
+        match self {
+            Reading::Code | Reading::InlineCode => face.mono(),
+            Reading::Title => face.tracking(-0.5),
+            _ => face,
         }
+    }
+
+    /// The role as a person writes in it: each character drawn as typed, `-->` as its three
+    /// characters rather than an arrow.
+    pub const fn written(self) -> TextStyle {
+        self.style().features("'liga' 0, 'calt' 0")
     }
 }
 
 /// `e`, words set apart from a document's own, such as what stands in for an image that did
 /// not load: `role` in italic.
-pub fn read_aside(e: rune::El, role: Reading, t: &Tokens) -> rune::El {
+pub fn read_aside(e: rune::El, role: Reading) -> rune::El {
     door::styled(
         e,
         TextStyle {
             italic: true,
-            ..role.style(t)
+            ..role.style()
         },
     )
 }
@@ -88,8 +84,27 @@ pub fn passage_mark(fill: Color) -> rune_kit::Highlight {
 }
 
 /// `e`, text of a document, set in `role`.
-pub fn read_as(e: rune::El, role: Reading, t: &Tokens) -> rune::El {
-    door::styled(e, role.style(t))
+pub fn read_as(e: rune::El, role: Reading) -> rune::El {
+    door::styled(e, role.style())
+}
+
+/// `e`, text a person writes in a document, set in `role` as they typed it.
+pub fn written_as(e: rune::El, role: Reading) -> rune::El {
+    door::styled(e, role.written())
+}
+
+/// A cell of a table a person writes: its words in `Item`, a head's in its weight, set in
+/// from the cell's edges as a document's table sets them.
+pub fn written_cell(e: rune::El, head: bool) -> rune::El {
+    let style = Reading::Item.written();
+    let style = match head {
+        true => TextStyle {
+            weight: HEAD_WEIGHT,
+            ..style
+        },
+        false => style,
+    };
+    door::inset(door::styled(e, style), Space::S12, Space::S8)
 }
 
 /// How a document reads: its type by [`Reading`] role, its blocks spaced on the scale, list
@@ -108,11 +123,11 @@ fn family(t: &Tokens) -> MarkdownStyle {
     let pt = |s: Space| s.pt();
     MarkdownStyle::from_kit(kit)
         .text(text)
-        .body_font(Reading::Text.style(t))
-        .heading_font(1, Reading::Title.style(t))
-        .heading_font(2, Reading::Heading.style(t))
-        .heading_font(3, Reading::Subheading.style(t))
-        .heading_font(4, Reading::Subheading.style(t))
+        .body_font(Reading::Text.style())
+        .heading_font(1, Reading::Title.style())
+        .heading_font(2, Reading::Heading.style())
+        .heading_font(3, Reading::Subheading.style())
+        .heading_font(4, Reading::Subheading.style())
         .heading_text(1, t.text_primary)
         .heading_text(2, text)
         .heading_text(3, t.text_primary.alpha(0.8))
@@ -123,7 +138,7 @@ fn family(t: &Tokens) -> MarkdownStyle {
         .heading_margin(3, pt(Space::S24), pt(Space::S8))
         .heading_margin(4, pt(Space::S16), pt(Space::S8))
         .heading_margins_collapse(true)
-        .list_font(Reading::Item.style(t))
+        .list_font(Reading::Item.style())
         .list_marker(t.accent.alpha(0.6))
         .list(pt(Space::S24), pt(Space::S6))
         .list_margin(pt(Space::S6), pt(Space::S6))
@@ -131,12 +146,12 @@ fn family(t: &Tokens) -> MarkdownStyle {
         .list_marker_gap(pt(Space::S8))
         .list_tabular_figures(true)
         .link_underline(Color::TRANSPARENT)
-        .inline_code_size(Reading::InlineCode.style(t).size)
+        .inline_code_size(Reading::InlineCode.style().size)
         .inline_code_font(1.0, 400.0)
         .inline_code_pad(pt(Space::S6))
         .inline_code_pad_y(pt(Space::S2))
         .inline_code_bg(t.bg_elevated)
-        .code_block_font(Reading::Code.style(t))
+        .code_block_font(Reading::Code.style())
         .code_block(t.bg_elevated.alpha(0.5), t.border.alpha(0.3))
         .code_block_padding(pt(Space::S16), pt(Space::S12))
         .code_margin(pt(Space::S16), pt(Space::S16))
@@ -148,20 +163,20 @@ fn family(t: &Tokens) -> MarkdownStyle {
         .rule(t.border.alpha(0.3))
         .rule_margin(pt(Space::S32), pt(Space::S32))
         .lines(1.0)
-        .table_font(Reading::Item.style(t))
+        .table_font(Reading::Item.style())
         .table_outline(None)
         .table_header_rule(t.border)
         .table_rules(t.border.alpha(0.5))
         .table_header_fill(t.bg_elevated.alpha(0.3))
         .table_header_text(text)
         .table_text(t.text_primary.alpha(0.8))
-        .table_header_weight(600.0)
+        .table_header_weight(HEAD_WEIGHT)
         .table_cell_padding(pt(Space::S12), pt(Space::S8))
         .table_margin(pt(Space::S16), pt(Space::S16))
         .table_full_width(true)
         .table_scroll_bar(t.border, t.text_tertiary)
         .code_scroll_bar(crate::code_scroll_bar(t))
-        .diagram_font(Reading::Diagram.style(t))
+        .diagram_font(Reading::Diagram.style())
         .task_checkbox(
             CHECKBOX,
             pt(Space::S8),
@@ -197,6 +212,8 @@ pub fn note_style(ink: Color, t: &Tokens) -> MarkdownStyle {
         .deep_heading(ink)
 }
 
+/// A table head's words.
+const HEAD_WEIGHT: f32 = 600.0;
 /// A quote's rail and a checkbox's ring.
 const RAIL: f32 = 2.0;
 /// A task's checkbox, as tall as a line of list text is high less its leading.

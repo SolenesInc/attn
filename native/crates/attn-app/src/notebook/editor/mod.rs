@@ -9,7 +9,7 @@ pub(crate) mod markdown;
 mod table;
 mod view;
 
-use rune::TextStyle;
+use attn_ui::system::Reading;
 use rune::parley::editing::{Cursor, Selection};
 use rune::parley::layout::Affinity;
 use rune::text::Span;
@@ -20,23 +20,11 @@ pub(crate) use view::view;
 
 use markdown::{LineKind, Shown};
 
-/// The note's body type, and the size and weight of each heading level, as the Tauri editor
-/// sets them: a serif, drawing `-->` as written rather than as an arrow. The Tauri app's
-/// `ui-serif, Georgia, 'Times New Roman', serif`, with Linux's usual serifs for `serif`.
-pub(crate) const BODY: TextStyle = TextStyle::new(14.0, 400.0)
-    .lh(23.0)
-    .family(rune::Family::Named(
-        "New York, Georgia, Times New Roman, Noto Serif, DejaVu Serif, Liberation Serif",
-    ))
-    .features("'liga' 0, 'calt' 0");
 /// The height in which `lines` of the note's body always show whole, wherever it is scrolled:
 /// a line cut at one edge leaves its rest at the other.
 pub(crate) fn room_for_whole_lines(lines: f32) -> f32 {
-    (lines + 1.0) * BODY.line_px()
+    (lines + 1.0) * Reading::Text.written().line_px()
 }
-
-const HEADING_SCALE: [f32; 6] = [1.7, 1.4, 1.2, 1.08, 1.0, 1.0];
-const HEADING_WEIGHT: [f32; 6] = [650.0, 630.0, 600.0, 600.0, 600.0, 600.0];
 
 #[derive(Clone, Debug)]
 pub(crate) struct Editor {
@@ -129,20 +117,13 @@ impl Editor {
         shown
     }
 
-    /// The type a markdown line draws in: a heading's size and weight, or the body's.
-    fn style(shown: &Shown) -> TextStyle {
+    /// The role a markdown line is written in: its heading's, or the text's.
+    fn role(shown: &Shown) -> Reading {
         match shown.heading {
-            Some(level) => {
-                let at = (level as usize).clamp(1, 6) - 1;
-                let size = BODY.size * HEADING_SCALE[at];
-                TextStyle {
-                    size,
-                    weight: HEADING_WEIGHT[at],
-                    line_height: size * if at < 2 { 1.3 } else { 1.65 },
-                    ..BODY
-                }
-            }
-            None => BODY,
+            Some(1) => Reading::Title,
+            Some(2) => Reading::Heading,
+            Some(_) => Reading::Subheading,
+            None => Reading::Text,
         }
     }
 
@@ -152,7 +133,7 @@ impl Editor {
         &self,
         i: usize,
         t: Option<&attn_ui::Tokens>,
-    ) -> (Shown, Vec<Span>, TextStyle) {
+    ) -> (Shown, Vec<Span>, Reading) {
         self.text_as(i, self.active(i), t)
     }
 
@@ -161,24 +142,24 @@ impl Editor {
         i: usize,
         active: bool,
         t: Option<&attn_ui::Tokens>,
-    ) -> (Shown, Vec<Span>, TextStyle) {
+    ) -> (Shown, Vec<Span>, Reading) {
         match self.kinds()[i] {
             LineKind::Fence | LineKind::Code | LineKind::FrontMatter { .. } => {
                 let line = self.doc.line(i);
                 (
                     Shown::raw(line),
                     vec![Span::new(0, line.len()).mono()],
-                    BODY,
+                    Reading::Code,
                 )
             }
             _ => {
                 let shown = self.shown(i, active);
-                let style = Editor::style(&shown);
+                let role = Editor::role(&shown);
                 let spans = match t {
                     Some(t) => view::with_theme(&shown, t),
                     None => view::spans(&shown, None),
                 };
-                (shown, spans, style)
+                (shown, spans, role)
             }
         }
     }
@@ -189,9 +170,9 @@ impl Editor {
         line: usize,
         active: bool,
     ) -> (std::rc::Rc<rune::parley::Layout<rune::text::Ink>>, Shown) {
-        let (shown, spans, style) = self.text_as(line, active, None);
+        let (shown, spans, role) = self.text_as(line, active, None);
         (
-            rune::text::layout(&shown.text, &spans, style, Some(self.width)),
+            rune::text::layout(&shown.text, &spans, role.written(), Some(self.width)),
             shown,
         )
     }

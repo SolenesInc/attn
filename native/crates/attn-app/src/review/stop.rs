@@ -286,7 +286,6 @@ pub(super) fn code_row(
             .child(row().w((NUMBER_EM - 0.5) * em).justify_end().child(read_as(
                 text(n.map(|n| n.to_string()).unwrap_or_default()).color(t.text_muted),
                 Reading::Code,
-                t,
             )))
             .a11y_hidden()
     };
@@ -294,7 +293,7 @@ pub(super) fn code_row(
         .w(SIGN_EM * em)
         .h_full()
         .center()
-        .child(read_as(text(sign).color(t.text_muted), Reading::Code, t))
+        .child(read_as(text(sign).color(t.text_muted), Reading::Code))
         .a11y_hidden();
     let sign = match marker {
         Some((width, color)) => sign.border_sides([0.0, 0.0, 0.0, width], color),
@@ -311,7 +310,7 @@ pub(super) fn code_row(
         .child(number(r.now))
         .child(sign)
         .child({
-            let code = read_as(rich(shown, spans), Reading::Code, t)
+            let code = read_as(rich(shown, spans), Reading::Code)
                 .color(t.text_primary)
                 .selectable(true)
                 .a11y_hidden();
@@ -331,7 +330,7 @@ pub(super) fn code_row(
     if asked {
         el = el
             .description("asked, waiting for the answer")
-            .child(read_as(text("…").color(t.accent), Reading::Code, t).a11y_hidden());
+            .child(read_as(text("…").color(t.accent), Reading::Code).a11y_hidden());
     }
     el
 }

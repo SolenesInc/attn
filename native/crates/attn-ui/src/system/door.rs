@@ -21,6 +21,11 @@ pub(crate) const fn style(kind: Type) -> TextStyle {
     }
 }
 
+/// Text `size` high in `weight` on a `line` points tall, the face a document is read in.
+pub(crate) const fn reading_face(size: f32, weight: f32, line: f32) -> TextStyle {
+    TextStyle::new(size, weight).lh(line)
+}
+
 pub(crate) fn icon(glyph: &'static Icon, size: IconSize) -> El {
     rune::icon(glyph, size.pt())
 }

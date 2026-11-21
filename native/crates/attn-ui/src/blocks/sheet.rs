@@ -1,6 +1,6 @@
 use rune::{El, col, row};
 
-use super::block::{Block, Opens, inner_gap, page_gap, scrolling, spaced};
+use super::block::{Block, Opens, Room, bounded, inner_gap, page_gap, scrolling, spaced};
 use super::notice::Notice;
 use crate::Tokens;
 use crate::system::{Radius, Said, Space, Type, door, words};
@@ -282,11 +282,6 @@ impl Sheet {
             .key(format!("{key}.actions"))
             .border_sides([1.0, 0.0, 0.0, 0.0], t.border_subtle)
         });
-        let sheet = col().key(key).label(label).w_full().min_h(0.0);
-        let sheet = match self.fits {
-            Some(tallest) => sheet.max_h(tallest).shrink(),
-            None => sheet.h_full(),
-        };
         let room = col()
             .key(room_key)
             .w_full()
@@ -296,7 +291,17 @@ impl Sheet {
             .children(notices)
             .children(top)
             .child(body);
-        let sheet = sheet.child(header).child(room).children(footer);
+        let fits = match self.fits {
+            Some(_) => Room::Fit,
+            None => Room::Fill,
+        };
+        let sheet = bounded(header, Some(room), footer, fits)
+            .key(key)
+            .label(label);
+        let sheet = match self.fits {
+            Some(tallest) => sheet.max_h(tallest),
+            None => sheet.h_full(),
+        };
         if self.framed {
             door::clip_corner(
                 door::corner(sheet, Radius::Panel)

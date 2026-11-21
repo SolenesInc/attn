@@ -5,7 +5,8 @@
 use std::borrow::Cow;
 
 use attn_ui::Tokens;
-use attn_ui::type_;
+use attn_ui::blocks::{Card, Surface};
+use attn_ui::system::{Reading, Tone, Type, read_aside, tag, words, written_as, written_cell};
 use rune::text::{Span, TextHighlight};
 use rune::tok::space;
 use rune::{Color, El, GrowthSpec, Phase, Tx, col, el, rich, row, text};
@@ -14,8 +15,11 @@ use super::markdown::{LineKind, Shown, Style};
 use super::{Editor, Pos};
 use crate::State;
 
-/// Rows not built yet are this tall until they are: one line of body text.
-const ESTIMATED_ROW: f32 = 23.0;
+/// Rows not built yet are this tall until they are: one line of the note's text.
+fn estimated_row() -> f32 {
+    Reading::Text.written().line_px()
+}
+
 /// An image not read yet holds this much room, as the Tauri editor estimates it.
 const IMAGE_ESTIMATE: f32 = 220.0;
 
@@ -42,7 +46,7 @@ pub(crate) fn view(
         .growth(GrowthSpec::default())
         .virtual_rows(
             editor.doc.len(),
-            ESTIMATED_ROW,
+            estimated_row(),
             move |_: &State, i| -> Cow<'_, str> {
                 Cow::Owned(format!(
                     "{row_key}.line.{}",
@@ -132,7 +136,7 @@ fn line_row(
     match &editor.kinds()[i] {
         LineKind::FrontMatter { card: true, first } if !editor.editing_front_matter() => {
             if *first {
-                front_matter_card(editor, key, access, t).key(row_key)
+                front_matter_card(editor, (key, row_key), access, t)
             } else {
                 el().key(row_key).h(0.0)
             }
@@ -140,7 +144,7 @@ fn line_row(
         LineKind::Rule if !editor.active(i) => col()
             .key(row_key)
             .w_full()
-            .h(ESTIMATED_ROW)
+            .h(estimated_row())
             .justify_center()
             .child(el().w_full().h(1.0).fill(t.border))
             .with_press(key, i, access),
@@ -157,23 +161,23 @@ fn line_row(
                 .with_press(key, i, access)
         }
         LineKind::Fence | LineKind::Code | LineKind::FrontMatter { .. } => {
-            let (shown, spans, style) = editor.row_text(i, Some(t));
+            let (shown, spans, role) = editor.row_text(i, Some(t));
             let color = if matches!(editor.kinds()[i], LineKind::Fence) {
                 t.text_tertiary
             } else {
                 t.text_primary
             };
-            text_row(editor, key, i, &shown, spans, style, color, access, t).key(row_key)
+            text_row(editor, key, i, &shown, spans, role, color, access, t).key(row_key)
         }
         _ => {
-            let (shown, spans, style) = editor.row_text(i, Some(t));
+            let (shown, spans, role) = editor.row_text(i, Some(t));
             text_row(
                 editor,
                 key,
                 i,
                 &shown,
                 spans,
-                style,
+                role,
                 t.text_primary,
                 access,
                 t,
@@ -187,7 +191,7 @@ fn line_row(
             .children(shown.quote.then(|| {
                 el().absolute(-space::S2, 0.0)
                     .w(2.0)
-                    .h(ESTIMATED_ROW)
+                    .h(estimated_row())
                     .fill(t.border)
             }))
         }
@@ -205,9 +209,9 @@ pub(crate) fn spans(shown: &Shown, t: Option<&Tokens>) -> Vec<Span> {
             Style::Code => match t {
                 Some(t) => span
                     .mono()
-                    .size(super::BODY.size * 0.92)
+                    .size(Reading::InlineCode.style().size)
                     .bg(t.bg_elevated, 2.0),
-                None => span.mono().size(super::BODY.size * 0.92),
+                None => span.mono().size(Reading::InlineCode.style().size),
             },
             Style::Strike => span,
             Style::Link => match t {
@@ -250,7 +254,7 @@ fn text_row(
     i: usize,
     shown: &Shown,
     spans: Vec<Span>,
-    style: rune::TextStyle,
+    role: Reading,
     color: Color,
     access: Access,
     t: &Tokens,
@@ -300,8 +304,8 @@ fn text_row(
         }
         _ => (shown.text.clone(), spans),
     };
-    let body = rich(display, spans)
-        .font(style)
+    let style = role.written();
+    let body = written_as(rich(display, spans), role)
         .color(color)
         .wrap()
         .w_full()
@@ -401,20 +405,20 @@ fn table_grid(editor: &Editor, key: &str, start: usize, access: Access, t: &Toke
             .equal_columns(columns)
             .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
             .children(cells.iter().take(columns).enumerate().map(|(c, cell)| {
-                text(cell.clone())
-                    .font(if header { type_::TITLE } else { type_::BODY })
-                    .color(t.text_primary)
-                    .align(align(
-                        table
-                            .align
-                            .get(c)
-                            .copied()
-                            .unwrap_or(super::table::Align::None),
-                    ))
-                    .wrap()
-                    .px(space::S2)
-                    .py(space::S1)
-                    .grid_cell(c)
+                written_cell(
+                    text(cell.clone())
+                        .color(t.text_primary)
+                        .align(align(
+                            table
+                                .align
+                                .get(c)
+                                .copied()
+                                .unwrap_or(super::table::Align::None),
+                        ))
+                        .wrap(),
+                    header,
+                )
+                .grid_cell(c)
             }))
             .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                 if let Some(editor) = access(state, &key) {
@@ -425,13 +429,8 @@ fn table_grid(editor: &Editor, key: &str, start: usize, access: Access, t: &Toke
                 crate::notebook::edited_editor(state, &key, tx);
             })
     };
-    col()
-        .role("table")
-        .label("Table")
+    let grid = col()
         .w_full()
-        .my(space::S1)
-        .radius(4.0)
-        .border(1.0, t.border_subtle)
         .child(row_of(&table.header, start, true))
         .children(
             table
@@ -439,7 +438,11 @@ fn table_grid(editor: &Editor, key: &str, start: usize, access: Access, t: &Toke
                 .iter()
                 .enumerate()
                 .map(|(r, cells)| row_of(cells, start + 2 + r, false)),
-        )
+        );
+    Surface::ground(grid, Color::TRANSPARENT, t.border_subtle)
+        .role("table")
+        .label("Table")
+        .w_full()
 }
 
 /// An image alone on its line: the picture, fitted to the note's width, or what it is and that
@@ -465,32 +468,31 @@ fn image_row(
                 .size(width, h * width / w)
                 .pixels(image.pixels())
         }
-        Some(None) => col()
+        Some(None) => read_aside(text(format!("[missing image: {name}]")), Reading::Text)
+            .color(t.text_tertiary)
+            .wrap()
             .role("image")
-            .label(format!("{name} (not found)"))
-            .padding(space::S2)
-            .radius(4.0)
-            .border(1.0, t.border_subtle)
-            .child(text(name).font(type_::LABEL).color(t.text_secondary))
-            .child(
-                text("image not found")
-                    .font(type_::LABEL)
-                    .color(t.text_tertiary),
-            ),
-        None => col()
-            .role("image")
-            .label(format!("{name} (loading)"))
-            .w_full()
-            .h(IMAGE_ESTIMATE)
-            .radius(4.0)
-            .fill(t.bg_elevated),
+            .label(format!("{name} (not found)")),
+        None => Surface::ground(
+            el().w_full().h(IMAGE_ESTIMATE),
+            t.bg_elevated,
+            t.bg_elevated,
+        )
+        .role("image")
+        .label(format!("{name} (loading)"))
+        .w_full(),
     };
-    row().w_full().py(space::S1).child(body)
+    row().w_full().child(body)
 }
 
 /// The front matter as a card of its properties: pressing it, or Return or Space on it, opens
 /// the YAML for editing.
-fn front_matter_card(editor: &Editor, key: &str, access: Access, t: &Tokens) -> El {
+fn front_matter_card(
+    editor: &Editor,
+    (key, row_key): (&str, String),
+    access: Access,
+    t: &Tokens,
+) -> El {
     let close = editor
         .kinds()
         .iter()
@@ -536,41 +538,22 @@ fn front_matter_card(editor: &Editor, key: &str, access: Access, t: &Tokens) -> 
         crate::notebook::edited_editor(state, &key, tx);
     };
     let keyed = open.clone();
-    col()
-        .role("button")
-        .label("Edit note properties")
-        .focusable(true)
-        .w_full()
-        .gap(space::S1)
-        .padding(space::S3)
-        .radius(6.0)
-        .border(1.0, t.border_subtle)
-        .fill(t.bg_elevated)
-        .child(text(kind).font(type_::LABEL).color(t.accent))
-        .children(
-            (!dates.is_empty()).then(|| text(dates).font(type_::LABEL).color(t.text_tertiary)),
-        )
-        .children(
-            field("summary").map(|s| text(s).font(type_::BODY).color(t.text_secondary).wrap()),
-        )
-        .children((!tags.is_empty()).then(|| {
-            row().gap(space::S1).children(tags.into_iter().map(|tag| {
-                text(tag)
-                    .font(type_::LABEL)
-                    .color(t.text_secondary)
-                    .px(space::S1)
-                    .radius(4.0)
-                    .fill(t.bg_button)
-            }))
-        }))
-        .children(
-            field("sources").map(|s| text(s).font(type_::LABEL).color(t.text_tertiary).wrap()),
-        )
-        .child(
-            text("click to edit")
-                .font(type_::LABEL)
-                .color(t.text_dimmed),
-        )
+    let quiet = |said: String, kind: Type| words(said, kind, t.text_tertiary).wrap();
+    let tags =
+        (!tags.is_empty()).then(|| {
+            attn_ui::blocks::Inline::tight().children(tags.into_iter().enumerate().map(
+                |(i, said)| El::from(tag(format!("{row_key}.tag.{i}"), said, Tone::Neutral, t)),
+            ))
+        });
+    Card::new(row_key.clone())
+        .control("button", "Edit note properties")
+        .push(words(kind, Type::Label, t.accent))
+        .push_all((!dates.is_empty()).then(|| quiet(dates, Type::Small)))
+        .push_all(field("summary").map(|s| words(s, Type::Body, t.text_secondary).wrap()))
+        .push_all(tags)
+        .push_all(field("sources").map(|s| quiet(s, Type::Small)))
+        .push(words("click to edit", Type::Small, t.text_dimmed))
+        .build(t)
         .on_press_tx(open)
         .on_key(move |state: &mut State, ev, tx: &mut Tx| {
             let opens = matches!(ev.key, rune::Key::Enter)

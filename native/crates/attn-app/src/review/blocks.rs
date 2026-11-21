@@ -464,7 +464,7 @@ fn worded(ops: &[(Op, Word)], key: String, document: &Document, t: &Tokens) -> E
         .strikes(strikes)
         .span_radius(3.0)
         .wrap();
-    read_as(worded, Reading::Text, t)
+    read_as(worded, Reading::Text)
 }
 
 /// The file a stop is on, which its blocks' links and images resolve from, and the pictures

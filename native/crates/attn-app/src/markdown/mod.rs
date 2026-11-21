@@ -440,7 +440,7 @@ fn missing(image: &MissingImage<'_>, failed: Option<bool>, t: &Tokens) -> El {
             format!("[blocked image: {named}]")
         }
     };
-    read_aside(text(words), Reading::Text, t)
+    read_aside(text(words), Reading::Text)
         .color(t.text_tertiary)
         .wrap()
 }
@@ -597,13 +597,13 @@ fn leaves_out(card: El, frame: &rune_kit::DiagramFrame<'_>, t: &Tokens) -> El {
 /// start: the Tauri tile's italic quiet note, or its error in a softened red.
 fn message(t: &Tokens, message: &str, error: bool) -> El {
     let said = if error {
-        set_in(text(message), Reading::Text, t).color(attn_ui::colors::mix_srgb(
+        set_in(text(message), Reading::Text).color(attn_ui::colors::mix_srgb(
             t.error,
             Color::WHITE,
             0.24,
         ))
     } else {
-        read_aside(text(message), Reading::Text, t).color(t.text_tertiary)
+        read_aside(text(message), Reading::Text).color(t.text_tertiary)
     };
     Surface::gutter(col().w_full().h_full().child(said.wrap()))
 }

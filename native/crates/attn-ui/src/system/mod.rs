@@ -69,7 +69,10 @@ pub use mark::{dot_on_line, marked, meter, with_command};
 pub use pager::pager;
 pub use press_area::{pick_area, press_area};
 pub use radius::Radius;
-pub use reading::{Reading, document_style, note_style, passage_mark, read_as, read_aside};
+pub use reading::{
+    Reading, document_style, note_style, passage_mark, read_as, read_aside, written_as,
+    written_cell,
+};
 pub use said::{Part, Said};
 pub use search_field::search_field;
 pub use segmented::{Segment, Segmented};

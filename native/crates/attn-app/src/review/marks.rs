@@ -439,7 +439,7 @@ pub(crate) fn sheet(
         .wrap()
     });
     let alone = marks.is_empty().then(|| {
-        read_as(text("No notes: the verdict goes alone."), Reading::Text, t)
+        read_as(text("No notes: the verdict goes alone."), Reading::Text)
             .color(t.text_primary.alpha(0.9))
     });
     let problem = unsent(sent).map(|why| {

@@ -922,7 +922,7 @@ fn bounds(world: &World, key: &str) -> [f32; 4] {
 }
 
 /// In the smallest window, the long paragraph scrolled so its first lines are above the view,
-/// the caret placed on its line at the view's top, and a letter typed there, its save held.
+/// the caret placed on its first line the view shows whole, and a letter typed there, its save held.
 fn typed_at_the_top_inside_a_wrapped_paragraph(
     world_of: impl FnOnce(&Disk) -> World,
     document: &str,
@@ -939,9 +939,10 @@ fn typed_at_the_top_inside_a_wrapped_paragraph(
         world.gesture(|d| d.runtime.wheel(x + w / 2.0, y + h / 2.0, -60.0));
     }
     world.daemon.answer_in_turn("fs_write", [Answer::Hold]);
+    let first_whole_line = y + 1.5 * attn_ui::system::Reading::Text.written().line_px();
     world.gesture(|d| {
-        d.runtime.pointer_down(x + w / 2.0, y + 12.0);
-        d.runtime.pointer_up(x + w / 2.0, y + 12.0);
+        d.runtime.pointer_down(x + w / 2.0, first_whole_line);
+        d.runtime.pointer_up(x + w / 2.0, first_whole_line);
         d.type_text("x");
     });
     world.advance(Duration::from_millis(700));

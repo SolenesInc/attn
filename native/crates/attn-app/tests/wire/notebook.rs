@@ -2465,6 +2465,33 @@ fn a_link_to_a_missing_note_is_marked_and_each_note_is_asked_about_once_in_one_r
 }
 
 #[test]
+fn each_line_of_a_note_stands_as_tall_as_the_line_of_the_reading_role_it_is_written_in() {
+    use attn_ui::system::Reading;
+    let disk = Disk::with(&[(
+        "knowledge/index.md",
+        "# Pictures\n\nOne short line.\n\n## Part\n\n### Deeper\n\n```\ncode\n```\n",
+    )]);
+    let mut world = start(&disk);
+    open_fullscreen(&mut world);
+    let roles = [
+        (0, Reading::Title),
+        (2, Reading::Text),
+        (4, Reading::Heading),
+        (6, Reading::Subheading),
+        (8, Reading::Code),
+        (9, Reading::Code),
+    ];
+    for (line, role) in roles {
+        let tall = world.rect(&format!("notebook.editor.line.{line}"))[3];
+        assert_eq!(
+            tall as f32,
+            role.written().line_px(),
+            "line {line}, written in {role:?}"
+        );
+    }
+}
+
+#[test]
 fn an_image_on_its_own_line_shows_the_picture_and_one_that_cannot_be_read_says_so() {
     use base64::Engine;
     let disk = Disk::with(&[(
@@ -2495,7 +2522,7 @@ fn an_image_on_its_own_line_shows_the_picture_and_one_that_cannot_be_read_says_s
     assert!(
         world
             .screen()
-            .find(Target::role("label").name("image not found"))
+            .find(Target::role("image").name("gone (not found)"))
             .is_some()
     );
     let badge = world
@@ -2750,7 +2777,7 @@ fn an_image_written_after_the_note_opened_shows_once_its_folder_changes() {
     assert!(
         world
             .screen()
-            .find(Target::role("label").name("image not found"))
+            .find(Target::role("image").name("chart (not found)"))
             .is_some()
     );
 
@@ -2766,7 +2793,7 @@ fn an_image_written_after_the_note_opened_shows_once_its_folder_changes() {
     assert!(
         world
             .screen()
-            .find(Target::role("label").name("image not found"))
+            .find(Target::role("image").name("chart (not found)"))
             .is_none()
     );
     assert_eq!(world.daemon.sent_of("fs_read_asset").len(), 2);

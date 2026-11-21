@@ -3,9 +3,9 @@
 //! panel does in the Tauri editor.
 
 use attn_ui::Tokens;
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, Key, KeyEvent, TextEdit, Tx, row, text};
+use attn_ui::blocks::Bar;
+use attn_ui::system::{Type, search_field, words};
+use rune::{El, Key, KeyEvent, TextEdit, Tx};
 use rune_kit::{Button, ButtonVariant, ControlSize, TextInput};
 
 use super::{Editor, Pos};
@@ -128,10 +128,6 @@ pub(crate) fn bar(
     );
     let field = TextInput::new(&find.query)
         .key(field_key(key))
-        .plain()
-        .text_style(type_::BODY)
-        .height(type_::BODY.line_px())
-        .width(Some(220.0))
         .label("Find")
         .placeholder("Find")
         .on_edit(move |state: &mut State| {
@@ -146,8 +142,7 @@ pub(crate) fn bar(
         })
         .on_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
             on_key(state, &field_keys, access, ev, tx)
-        })
-        .build(attn_ui::kit(t));
+        });
     let button = |words: &'static str, key: String, back: Option<bool>| {
         Button::new(words)
             .variant(ButtonVariant::GhostMuted)
@@ -158,31 +153,21 @@ pub(crate) fn bar(
                 None => close(state, &key, access, tx),
             })
     };
+    let found = match count {
+        1 => "1 match".to_owned(),
+        n => format!("{n} matches"),
+    };
     Some(
-        row()
-            .key(format!("{key}.findbar"))
+        Bar::new(format!("{key}.findbar"))
+            .slim()
+            .field(search_field(field, t).into())
+            .push(words(found, Type::Label, t.text_tertiary).key(format!("{key}.findcount")))
+            .push(button("Previous", prev_key, Some(true)))
+            .push(button("Next", next_key, Some(false)))
+            .push(button("Close", close_key, None))
+            .build(t)
             .role("search")
-            .label("Find in note")
-            .w_full()
-            .items_center()
-            .gap(space::S2)
-            .px(space::S2)
-            .py(space::S1)
-            .border_sides([0.0, 0.0, 1.0, 0.0], t.border_subtle)
-            .child(field)
-            .child(
-                text(if count == 1 {
-                    "1 match".to_owned()
-                } else {
-                    format!("{count} matches")
-                })
-                .key(format!("{key}.findcount"))
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
-            )
-            .child(button("Previous", prev_key, Some(true)))
-            .child(button("Next", next_key, Some(false)))
-            .child(button("Close", close_key, None)),
+            .label("Find in note"),
     )
 }
 
