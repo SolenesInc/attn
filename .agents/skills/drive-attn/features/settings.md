@@ -39,7 +39,7 @@ Appearance.
 
 ### Agents
 
-- `attn settings` (`cli/attn/src/commands/settings.rs`): `list` (with `--all` and `--json`), `get <key>` (with `--json`) and `set <key> <value>`. `set` to `""` restores the default of a key that has one, such as `theme` or `projects_directory`, or where the key's description allows it. A key family such as `default_model_<harness>` is set through a concrete key, such as `default_model_claude`.
+- `attn settings` (`cli/attn/src/commands/settings/`, `internal/catalog/content/settings.yaml`): `list` (with `--all`, `--features` and `--json`), `get <key>` and `set <key> <value>` (each with `--json`). When `agent_tools_enabled` is on, each is also the tool `settings_list`, `settings_get` or `settings_set`; a shell that shows no session may call them too. `set` to `""` restores the default of a key that has one, such as `theme` or `projects_directory`, or where the key's description allows it. A key family such as `default_model_<harness>` is set through a concrete key, such as `default_model_claude`.
 - Prompts: the attn map tells agents to read and change daemon settings with `attn settings list`, `get` and `set`, (`internal/prompts/content/session/attn-map.md`).
 
 ## Driving it
@@ -62,7 +62,7 @@ Preconditions:
 
 - **List from the shell.** Run `./attn settings list`. The command prints one row per key: the key's scope, its value or `-`, and its description, such as `theme` with `App color theme: dark, light or system.`. The scope reads `home` or `this machine`, except for the profile settings `notebook.root` and `pull_requests.own_comments`, which read `profile <name>`. The command leaves out read-only keys. `./attn settings list --all` adds them, such as `pty_backend_mode` with `this machine, read-only`.
 - **Set and get.** Run `./attn settings set theme light`: it prints `theme = light`. `./attn settings get theme` prints `light`, and `./attn settings get theme --json` prints the entry with `"key": "theme"` and `"value": "light"`.
-- **Refusals.** Each of these commands exits 1 with `settings: ` and the reason: `./attn settings set theme purple` (`invalid theme: purple (must be dark, light, or system)`), `./attn settings set pty_backend_mode worker` (`setting pty_backend_mode is read-only`), `./attn settings set unknown.key value` (`unknown setting: unknown.key`) and `./attn settings set "default_model_<harness>" x` (`requires a concrete key; replace its placeholders`). `./attn settings set theme` exits 2 with the usage.
+- **Refusals.** Each of these commands exits 1 with `settings set: daemon error: ` and the reason: `./attn settings set theme purple` (`invalid theme: purple (must be dark, light, or system)`), `./attn settings set pty_backend_mode worker` (`setting pty_backend_mode is read-only`), `./attn settings set unknown.key value` (`unknown setting: unknown.key`) and `./attn settings set "default_model_<harness>" x` (`requires a concrete key; replace its placeholders`). `./attn settings set theme` exits 2 with the usage.
 - **Open and close with the shortcut.** Run `bridge key '{"chord":"mod+,"}'`: `bridge wait '{"target":{"key":"settings-dialog"}}'` answers, `bridge state '{"of":"settings"}'` shows `open: true`, and on the first open `settings.heading` reads "GitHub hosts" with `activeSection: "connectivity"`. Focus is on `settings-dialog` itself, with no caret in `settings.search.field`. `Tab` puts it in the search. Press the chord again: `bridge wait '{"target":{"key":"settings-dialog"},"gone":true}'` answers.
 - **Open from the palette.** Press `mod+shift+k`, run `bridge type '{"text":"Settings"}'`, wait for `palette.row.command:settings` and press `Enter`: the dialog opens. Press `Escape`: it goes.
 - **Open from the home screen.** Press `mod+shift+h` (`session.goToDashboard`), then `bridge press '{"target":{"key":"home.settings"}}'`, the gear: the dialog opens.
@@ -96,8 +96,8 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/settings_ack_wire_test.go`, `internal/daemon/settings_validation_wire_test.go`, `native/crates/attn-app/tests/wire/settings.rs` and `native/crates/attn-app/tests/wire/settings/*.rs` (the dialog and each section, including the scheme list and Reset), `native/crates/attn-app/tests/wire/colors.rs` (the window and terminals repaint on a scheme or override, and a saved scheme attn no longer has draws attn), `native/crates/attn-app/tests/wire/update_run.rs` (the update band and Update attn).
-- Stack: `cmd/attnd/update_run_stack_test.go`, `cmd/attnd/update_release_stack_test.go`, `cmd/attnd/settings_stack_test.go`, `cmd/attnd/settings_outpost_stack_test.go`.
+- Wire: `internal/daemon/agent_tools_settings_wire_test.go` (each `settings_<verb>` tool, and a second profile's caller), `internal/daemon/settings_ack_wire_test.go`, `internal/daemon/settings_validation_wire_test.go`, `native/crates/attn-app/tests/wire/settings.rs` and `native/crates/attn-app/tests/wire/settings/*.rs` (the dialog and each section, including the scheme list and Reset), `native/crates/attn-app/tests/wire/colors.rs` (the window and terminals repaint on a scheme or override, and a saved scheme attn no longer has draws attn), `native/crates/attn-app/tests/wire/update_run.rs` (the update band and Update attn).
+- Stack: `cmd/attnd/update_run_stack_test.go`, `cmd/attnd/update_release_stack_test.go`, `cmd/attnd/settings_stack_test.go`, `cmd/attnd/settings_outpost_stack_test.go`, `cmd/attnd/agent_tools_outpost_stack_test.go` (the settings tool from an outpost).
 - Scenario: `native-settings`, `native-agent-settings`, `native-self-update`.
 
 ## Gotchas

@@ -464,7 +464,7 @@ func ParsePullRequestURL(raw string) (host, owner, repository string, number int
 
 func refuseCodexExecutable(launch LaunchSpec) error {
 	if strings.EqualFold(launch.Driver, "codex") && launch.Executable != "" {
-		return errors.New("launch.executable cannot be set for codex: every Codex session runs on its profile's shared app server; set codex_executable with attn settings set instead")
+		return protocol.Refuse(protocol.RefusalInvalidInput, "launch.executable cannot be set for codex: every Codex session runs on its profile's shared app server; set codex_executable with {attn settings set codex_executable <path>} instead")
 	}
 	return nil
 }

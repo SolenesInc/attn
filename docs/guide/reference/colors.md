@@ -71,7 +71,7 @@ Attn refuses a value it can't use, and the error says what to fix:
 
 ```console
 $ attn settings set color_overrides '{"dark":{"ui":{"bg_ap":"#24273a"}}}'
-settings: daemon error: color_overrides: dark.ui.bg_ap is not a color name; ui names: accent, annotation, bg_app, …
+settings set: daemon error: color_overrides: dark.ui.bg_ap is not a color name; ui names: accent, annotation, bg_app, …
 ```
 
 While overrides are set, Settings → Appearance shows "Custom colors" under the

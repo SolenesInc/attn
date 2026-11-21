@@ -2920,21 +2920,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 			d.sendError(conn, fmt.Sprintf("%s declares no placement", cmd))
 			return
 		}
-		homeSetting := false
-		if place.Locator == protocol.LocatorSetting {
-			set, ok := msg.(*protocol.SetSettingMessage)
-			if !ok {
-				d.sendError(conn, "setting locator requires a setting key")
-				return
-			}
-			spec, err := d.writableSettingHere(set.Key)
-			if err != nil {
-				d.sendError(conn, err.Error())
-				return
-			}
-			homeSetting = spec.Class == setting.Home
-		}
-		if place.Locator == protocol.LocatorHome || homeSetting {
+		if place.Locator == protocol.LocatorHome {
 			status := d.enrollmentStatus()
 			if !status.IsHome() {
 				if _, asksStatus := msg.(*protocol.UpdateStatusMessage); asksStatus && d.answerUpdateStatusFromNotice(conn) {
