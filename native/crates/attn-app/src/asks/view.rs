@@ -258,6 +258,7 @@ impl<'a> Prose<'a> {
         let path = self.document.clone();
         let pictures = self.pictures.clone();
         Markdown::new(source)
+            .selectable(true)
             .text_links(mentions::seed_links(self.names))
             .style(crate::markdown::look(self.t))
             .on_link_tx(move |state: &mut State, href: &str, tx: &mut Tx| {
@@ -349,7 +350,9 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
         "asks.subject.block",
         prose.text(
             words(ask.subject.clone(), Type::Heading, t.text_primary)
+                .key("asks.subject")
                 .role("heading")
+                .selectable(true)
                 .wrap(),
             &ask.subject,
         ),
@@ -497,6 +500,7 @@ fn question_section(
         .child(
             prose.text(
                 words(question.prompt.clone(), Type::Name, t.text_primary)
+                    .selectable(true)
                     .wrap()
                     .grow(1.0)
                     .min_w(0.0),
@@ -592,7 +596,8 @@ fn choice_list(
         let mut shown = Choice::new(choice_key(&question.key, i), choice.label.clone())
             .many(many)
             .chosen(answer.picked(&choice.label))
-            .disabled(replied);
+            .disabled(replied)
+            .selectable(true);
         if let Some(note) = choice.description.clone().filter(|d| !d.is_empty()) {
             shown = shown.note(note);
         }
@@ -663,6 +668,7 @@ fn replied_text(key: String, label: &str, value: &str, t: &Tokens) -> El {
                     t.text_secondary
                 },
             )
+            .selectable(true)
             .wrap(),
         )
 }
@@ -716,6 +722,7 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
     if snoozable.is_some() {
         hints.push((&["s"], if snoozed { "wake" } else { "snooze" }));
     }
+    hints.push((&["c"], "copy"));
     hints.push((&["r"], "replied"));
     hints.push((&["esc"], "close"));
     let sending = state.window.asks.sending.is_some();
@@ -828,6 +835,7 @@ fn drawer_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         "j" if ask.is_some() => super::step(state, 1, tx),
         "k" if ask.is_some() => super::step(state, -1, tx),
         "r" => toggle_replied(state, tx),
+        "c" if ask.is_some() => super::copy(state, tx),
         "a" => match &ask {
             Some(ask) if ask.reply.is_none() && super::recommended(ask).len() > 1 => {
                 super::accept_recommended(state, &ask.id)

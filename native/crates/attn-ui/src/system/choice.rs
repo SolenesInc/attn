@@ -21,6 +21,7 @@ pub struct Choice {
     many: bool,
     chosen: bool,
     disabled: bool,
+    selectable: bool,
     size: Size,
 }
 
@@ -35,6 +36,7 @@ impl Choice {
             many: false,
             chosen: false,
             disabled: false,
+            selectable: false,
             size: Size::Regular,
         }
     }
@@ -79,6 +81,13 @@ impl Choice {
         self
     }
 
+    /// Its name and note select and copy as text, a press off a drag still choosing it, and
+    /// they stay selectable once it is unavailable.
+    pub fn selectable(mut self, selectable: bool) -> Self {
+        self.selectable = selectable;
+        self
+    }
+
     /// Its row, the `i`th of `n`, chosen with `press`.
     pub fn build<S: 'static>(
         self,
@@ -117,6 +126,8 @@ impl Choice {
         .key(format!("{}.mark", self.key))
         .a11y_hidden();
         let name = words(self.name.clone(), Type::Name, ink)
+            .key(format!("{}.name", self.key))
+            .selectable(self.selectable)
             .wrap()
             .a11y_hidden();
         let name = match self.tag {
@@ -130,6 +141,7 @@ impl Choice {
             .child(name)
             .children(self.note.map(|note| {
                 words(note, Type::Small, t.text_tertiary)
+                    .selectable(self.selectable)
                     .wrap()
                     .a11y_hidden()
             }));
@@ -169,6 +181,9 @@ impl Choice {
         };
         let row = door::inset(door::gap(row, Space::S12), Space::S12, rows);
         let row = door::corner(row, Radius::Card);
+        if self.disabled && self.selectable {
+            return Control::new(disabled::readable(row), self.size);
+        }
         if self.disabled {
             return Control::new(disabled::dim(row), self.size);
         }

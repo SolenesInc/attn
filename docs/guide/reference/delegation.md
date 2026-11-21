@@ -140,6 +140,10 @@ unanswered. The phone app has the same button.
 queue's snooze choices, and **Wake** (or `s`) on a snoozed agent's ask wakes it.
 [The queue page](queue.md) says what a snooze does to the agent's asks.
 
+You can select any text of an ask, such as its subject, a paragraph, a question
+or a choice, and copy it with Cmd+C (Ctrl+C on Linux). `c` copies the whole ask
+as the markdown the agent wrote, with its id and the agent that asked.
+
 ## Roles
 
 When making a delegation, the agent picks:

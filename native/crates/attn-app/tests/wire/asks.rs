@@ -204,6 +204,8 @@ fn rows(world: &World) -> Vec<String> {
         .collect()
 }
 
+const NOTE: &str = "asks.note.field";
+
 fn focused(world: &World) -> Option<String> {
     world.screen().focused().and_then(|n| n.key)
 }
@@ -371,6 +373,134 @@ fn the_drawers_letter_keys_work_after_a_click_on_the_ask_itself() {
     letter(&mut world, "k");
 
     assert_eq!(shown(&world).as_deref(), Some("Release day"));
+}
+
+/// Drags across the first line of the text keyed `key`, from its start to past its end.
+fn drag_across(world: &mut World, key: &str) {
+    let [x, y, w, h] = world.rect(key);
+    let line = (y + h.min(16.0) / 2.0) as f32;
+    let (from, to) = ((x as f32 + 1.0, line), ((x + w) as f32 + 4.0, line));
+    world.gesture(|app| {
+        app.drag_from(from, to);
+        app.release(to);
+    });
+    world.settle();
+}
+
+fn copied(world: &mut World) -> Option<String> {
+    world.clipboard.set_text("");
+    world.gesture(|app| app.press("mod+c"));
+    world.clipboard.text().map(|t| t.to_string())
+}
+
+#[test]
+fn a_drag_selects_the_subject_a_part_and_a_choice_and_the_copy_key_copies_it() {
+    let mut world = start(vec![cache_store()], vec![api_working()]);
+    open_drawer(&mut world);
+
+    drag_across(&mut world, "asks.subject");
+    assert_eq!(copied(&mut world).as_deref(), Some("Cache store"));
+
+    drag_across(&mut world, "asks.part.0");
+    assert_eq!(
+        copied(&mut world).as_deref(),
+        Some("Deploys empty the cache.")
+    );
+
+    drag_across(&mut world, "asks.q.q1.choice.1.name");
+    assert_eq!(copied(&mut world).as_deref(), Some("Redis"));
+    assert!(
+        !checked(&world, "asks.q.q1.choice.1"),
+        "a drag picks nothing"
+    );
+}
+
+#[test]
+fn the_copy_key_copies_the_selection_though_a_field_held_the_keyboard() {
+    let mut world = start(vec![cache_store()], vec![api_working()]);
+    open_drawer(&mut world);
+    type_into(&mut world, NOTE, "draft");
+    assert_eq!(focused(&world).as_deref(), Some(NOTE));
+
+    scroll_to(&mut world, "asks.q.q1.choice.0.name");
+    drag_across(&mut world, "asks.q.q1.choice.0.name");
+
+    assert_eq!(copied(&mut world).as_deref(), Some("Postgres"));
+}
+
+#[test]
+fn a_click_on_a_choices_name_still_picks_it() {
+    let mut world = start(vec![cache_store()], vec![api_working()]);
+    open_drawer(&mut world);
+
+    let [x, y, _, h] = world.rect("asks.q.q1.choice.1.name");
+    let at = ((x + 4.0) as f32, (y + h / 2.0) as f32);
+    world.gesture(|app| app.click_at(at));
+
+    assert!(checked(&world, "asks.q.q1.choice.1"));
+}
+
+#[test]
+fn a_replied_answer_selects_and_copies() {
+    let answered = replied(
+        cache_store(),
+        vec![picked("q1", &["Redis"]), written("q2", "Back at noon")],
+        None,
+    );
+    let mut world = start(vec![answered], vec![api_working()]);
+    open_drawer(&mut world);
+    letter(&mut world, "r");
+
+    drag_across(&mut world, "asks.q.q1.choice.1.name");
+    assert_eq!(copied(&mut world).as_deref(), Some("Redis"));
+
+    scroll_to(&mut world, "asks.q.q2.text");
+    drag_across(&mut world, "asks.q.q2.text");
+    assert_eq!(copied(&mut world).as_deref(), Some("Back at noon"));
+}
+
+#[test]
+fn the_drawers_letter_keys_work_after_a_drag_across_the_ask_text() {
+    let mut world = start(
+        vec![cache_store(), release_day()],
+        vec![api_working(), web_waiting()],
+    );
+    open_drawer(&mut world);
+    click(&mut world, "asks.row.a-cache1");
+    type_into(&mut world, NOTE, "draft");
+    drag_across(&mut world, "asks.subject");
+
+    letter(&mut world, "k");
+
+    assert_eq!(shown(&world).as_deref(), Some("Release day"));
+}
+
+#[test]
+fn c_copies_the_ask_as_the_markdown_the_agent_wrote_with_its_id_and_asker() {
+    let mut world = start(vec![cache_store()], vec![api_working()]);
+    open_drawer(&mut world);
+    click(&mut world, "asks.subject");
+    world.clipboard.set_text("");
+
+    letter(&mut world, "c");
+
+    assert_eq!(
+        world.clipboard.text().map(|t| t.to_string()).as_deref(),
+        Some(
+            "# Cache store\n\n\
+             Deploys empty the cache.\n\n\
+             :::question\n\
+             Which store should keep the cache?\n\
+             - [ ] Postgres — already deployed\n\
+             - [ ] Redis\n\
+             Recommended: Postgres\n\
+             :::\n\n\
+             :::question-text\n\
+             What should the banner say?\n\
+             :::\n\n\
+             Ask a-cache1 from api\n"
+        )
+    );
 }
 
 /// At rest but for the next minute an age in the open drawer reads differently.

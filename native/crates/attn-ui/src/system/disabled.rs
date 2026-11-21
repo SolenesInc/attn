@@ -11,6 +11,12 @@ pub(crate) fn dim(e: El) -> El {
     unavailable(e).layer_opacity(STRENGTH)
 }
 
+/// [`dim`] for a control whose words stay selectable: it takes no focus or press, and the
+/// pointer still selects its text.
+pub(crate) fn readable(e: El) -> El {
+    e.disabled(true).layer_opacity(STRENGTH)
+}
+
 /// An unavailable control that draws its own strength, such as the surface's Primary action,
 /// whose fill stands at [`STRENGTH`] and whose words keep reading on it.
 pub(crate) fn unavailable(e: El) -> El {

@@ -645,3 +645,52 @@ pub(crate) fn toggle_snooze(state: &mut State, tx: &mut Tx) {
     let name = from(ask, Some(&holder), None);
     crate::sidebar::snooze::open(state, &holder.id, name, Some(view::SNOOZE.into()), tx);
 }
+
+/// Puts the shown ask on the clipboard as the markdown its agent wrote, its subject first and
+/// its id and asker last.
+pub(crate) fn copy(state: &mut State, tx: &mut Tx) {
+    let Some((id, _)) = state.shown_ask() else {
+        return;
+    };
+    let items = state.asks_items();
+    let Some(item) = items.iter().find(|i| i.ask.id == id) else {
+        return;
+    };
+    tx.copy(markdown(item.ask, &item.from));
+}
+
+fn markdown(ask: &Ask, from: &str) -> String {
+    let mut blocks = vec![format!("# {}", ask.subject)];
+    for part in &ask.parts {
+        match (&part.question, &part.markdown) {
+            (Some(question), _) => blocks.push(question_block(question)),
+            (None, Some(prose)) => blocks.push(prose.clone()),
+            (None, None) => {}
+        }
+    }
+    blocks.push(format!("Ask {} from {from}", ask.id));
+    blocks.join("\n\n") + "\n"
+}
+
+fn question_block(question: &AskQuestion) -> String {
+    let opener = match Kind::of(question) {
+        Kind::One => ":::question",
+        Kind::Any => ":::question-multi",
+        Kind::Text => ":::question-text",
+    };
+    let mut lines = vec![opener.to_owned(), question.prompt.clone()];
+    lines.extend(question.context.clone().filter(|c| !c.is_empty()));
+    lines.extend(question.choices.iter().map(|c| match &c.description {
+        Some(d) if !d.is_empty() => format!("- [ ] {} — {d}", c.label),
+        _ => format!("- [ ] {}", c.label),
+    }));
+    lines.extend(
+        question
+            .recommended
+            .as_ref()
+            .filter(|r| !r.is_empty())
+            .map(|r| format!("Recommended: {r}")),
+    );
+    lines.push(":::".to_owned());
+    lines.join("\n")
+}
