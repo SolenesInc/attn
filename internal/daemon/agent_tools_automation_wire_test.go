@@ -83,7 +83,7 @@ func TestAnAutomationRunToolGivesTheAgentItsInputsIntegersExactly(t *testing.T) 
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
 	var applied protocol.AutomationDefinitionSummary
 	structuredAs(t, agent.mustCall(t, "automation_apply", map[string]any{"definition": manualAutomation(w, "Check the record.")}), &applied)
-	ran := agent.mustCall(t, "automation_run", map[string]any{"id": applied.ID, "input": json.RawMessage(input)})
+	ran := agent.mustCall(t, "automation_run", map[string]any{"id": json.RawMessage(fmt.Sprintf("%de0", applied.ID)), "input": json.RawMessage(input)})
 	if ran.IsError {
 		t.Fatalf("automation_run refused: %s", resultText(ran))
 	}
@@ -99,6 +99,40 @@ func TestAnAutomationRunToolGivesTheAgentItsInputsIntegersExactly(t *testing.T) 
 	}
 	if !reflect.DeepEqual(jsonKeepingNumbers(t, stored), jsonKeepingNumbers(t, []byte(input))) {
 		t.Errorf("the agent's occurrence file holds %s, want %s", stored, input)
+	}
+}
+
+func TestAToolTakesAWholeNumberInAnyJSONSpellingForAnIntegerArgument(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
+	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	app := w.App()
+	setSetting(t, app, "agent_tools_enabled", "true")
+	session := w.Spawn(app, fakeagent.Claude, w.Path("check"))
+	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
+	var applied protocol.AutomationDefinitionSummary
+	structuredAs(t, agent.mustCall(t, "automation_apply", map[string]any{"definition": manualAutomation(w, "Check the shop.")}), &applied)
+
+	for _, spelling := range []string{"%d", "%d.0", "%de0", "%d.00E+0"} {
+		id := fmt.Sprintf(spelling, applied.ID)
+		shown := agent.mustCall(t, "automation_show", map[string]any{"id": json.RawMessage(id)})
+		if text := resultText(shown); shown.IsError || !strings.Contains(fmt.Sprint(shown.StructuredContent), "Check the shop.") {
+			t.Errorf("automation_show with id %s answered %s, want the automation", id, text)
+		}
+	}
+	if refused := agent.mustCall(t, "automation_show", map[string]any{"id": json.RawMessage(fmt.Sprintf("%d.5", applied.ID))}); !refused.IsError {
+		t.Errorf("automation_show took id %d.5: %s", applied.ID, resultText(refused))
+	}
+
+	if installed := agent.mustCall(t, "delegate_roles_install", map[string]any{"message": "Set up the roles"}); installed.IsError {
+		t.Fatalf("delegate_roles_install refused: %s", resultText(installed))
+	}
+	var table map[string]any
+	structuredAs(t, agent.mustCall(t, "delegate_roles_show", map[string]any{}), &table)
+	table["revision"] = json.RawMessage(fmt.Sprintf("%v.0", table["revision"]))
+	if applied := agent.mustCall(t, "delegate_roles_apply", map[string]any{"table": table, "message": "revision written as a decimal"}); applied.IsError {
+		t.Errorf("delegate_roles_apply with the table's revision %s refused: %s", table["revision"], resultText(applied))
 	}
 }
 

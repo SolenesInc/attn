@@ -244,6 +244,7 @@ func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, tool agentT
 	}
 	if refusal == nil {
 		args, refusal = def.arguments(arguments, tool.input)
+		arguments = tool.input.IntegerLiterals(arguments)
 	}
 	var caller *callerSide
 	if refusal == nil {
