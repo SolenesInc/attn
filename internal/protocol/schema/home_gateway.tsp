@@ -189,12 +189,13 @@ model HomeGatewayAskPart {
 }
 
 // picked holds choice labels; other is your own choice on a one or any
-// question; text answers a text question.
+// question; text answers a text question; condition qualifies a pick.
 model HomeGatewayAskAnswer {
   key: string;
   picked: string[];
   other?: string;
   text?: string;
+  condition?: string;
 }
 
 // attachment_names are the names of the files the answer carried.

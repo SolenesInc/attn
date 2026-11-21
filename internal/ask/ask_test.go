@@ -151,7 +151,11 @@ func TestReplyRendersEachAnswerForTheAgent(t *testing.T) {
 	}{
 		"the recommended choice, in any case": {protocol.AskAnswer{Key: "q1", Picked: []string{"postgres"}}, 1, "1. Which store?\n\nAnswer: Postgres (the recommended choice)"},
 		"another choice":                      {protocol.AskAnswer{Key: "q1", Picked: []string{"Redis"}}, 1, "1. Which store?\n\nAnswer: Redis"},
-		"their own answer":                    {protocol.AskAnswer{Key: "q1", Picked: []string{}, Other: protocol.Ptr("SQLite")}, 1, "1. Which store?\n\nTheir own answer: SQLite"},
+		"a pick with a condition": {
+			protocol.AskAnswer{Key: "q1", Picked: []string{"Postgres"}, Condition: protocol.Ptr(" skip the Windows VM step ")}, 1,
+			"1. Which store?\n\nAnswer: Postgres (the recommended choice)\n\nTheir condition: skip the Windows VM step",
+		},
+		"their own answer": {protocol.AskAnswer{Key: "q1", Picked: []string{}, Other: protocol.Ptr("SQLite")}, 1, "1. Which store?\n\nTheir own answer: SQLite"},
 		"several choices and their own": {
 			protocol.AskAnswer{Key: "q2", Picked: []string{"Linux, glibc only", "macOS"}, Other: protocol.Ptr("FreeBSD")}, 2,
 			"2. Which platforms?\n\nAnswer: \"Linux, glibc only\", \"macOS\"\n\nTheir own answer: FreeBSD",
@@ -221,12 +225,14 @@ func TestReplyRefusesAnswersTheAskCannotHold(t *testing.T) {
 		note    string
 		want    string
 	}{
-		"nothing":        {nil, " ", "answer at least one question, write a note or attach a file"},
-		"unknown key":    {[]protocol.AskAnswer{{Key: "q9", Picked: []string{}}}, "", `the ask has no question "q9"`},
-		"unknown choice": {[]protocol.AskAnswer{{Key: "q1", Picked: []string{"C"}}}, "", `question q1 has no choice "C"`},
-		"two for one":    {[]protocol.AskAnswer{{Key: "q1", Picked: []string{"A"}, Other: protocol.Ptr("C")}}, "", "question q1 takes one choice"},
-		"pick for text":  {[]protocol.AskAnswer{{Key: "q2", Picked: []string{"A"}}}, "", `question q2 has no choice "A"`},
-		"text for one":   {[]protocol.AskAnswer{{Key: "q1", Picked: []string{}, Text: protocol.Ptr("x")}}, "", "question q1 takes a choice"},
+		"nothing":                  {nil, " ", "answer at least one question, write a note or attach a file"},
+		"unknown key":              {[]protocol.AskAnswer{{Key: "q9", Picked: []string{}}}, "", `the ask has no question "q9"`},
+		"unknown choice":           {[]protocol.AskAnswer{{Key: "q1", Picked: []string{"C"}}}, "", `question q1 has no choice "C"`},
+		"two for one":              {[]protocol.AskAnswer{{Key: "q1", Picked: []string{"A"}, Other: protocol.Ptr("C")}}, "", "question q1 takes one choice"},
+		"pick for text":            {[]protocol.AskAnswer{{Key: "q2", Picked: []string{"A"}}}, "", `question q2 has no choice "A"`},
+		"condition without a pick": {[]protocol.AskAnswer{{Key: "q1", Picked: []string{}, Other: protocol.Ptr("C"), Condition: protocol.Ptr("only today")}}, "", "question q1 takes a condition only on a pick"},
+		"condition on text":        {[]protocol.AskAnswer{{Key: "q2", Picked: []string{}, Text: protocol.Ptr("x"), Condition: protocol.Ptr("only today")}}, "", "question q2 takes a condition only on a pick"},
+		"text for one":             {[]protocol.AskAnswer{{Key: "q1", Picked: []string{}, Text: protocol.Ptr("x")}}, "", "question q1 takes a choice"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := ask.Reply(a, tc.answers, tc.note, nil)

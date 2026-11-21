@@ -149,7 +149,7 @@ func homeGatewayAskQuestion(question *protocol.AskQuestion) *homegateway.HomeGat
 func homeGatewayAskAnswers(answers []protocol.AskAnswer) []homegateway.HomeGatewayAskAnswer {
 	out := make([]homegateway.HomeGatewayAskAnswer, 0, len(answers))
 	for _, answer := range answers {
-		out = append(out, homegateway.HomeGatewayAskAnswer{Key: answer.Key, Picked: answer.Picked, Other: answer.Other, Text: answer.Text})
+		out = append(out, homegateway.HomeGatewayAskAnswer{Key: answer.Key, Picked: answer.Picked, Other: answer.Other, Text: answer.Text, Condition: answer.Condition})
 	}
 	return out
 }
@@ -157,7 +157,7 @@ func homeGatewayAskAnswers(answers []protocol.AskAnswer) []homegateway.HomeGatew
 func (d *Daemon) homeGatewayAnswerAsk(conn *homeGatewayConn, command homegateway.HomeGatewayAskAnswerCommand) error {
 	answers := make([]protocol.AskAnswer, 0, len(command.Answers))
 	for _, answer := range command.Answers {
-		answers = append(answers, protocol.AskAnswer{Key: answer.Key, Picked: answer.Picked, Other: answer.Other, Text: answer.Text})
+		answers = append(answers, protocol.AskAnswer{Key: answer.Key, Picked: answer.Picked, Other: answer.Other, Text: answer.Text, Condition: answer.Condition})
 	}
 	result := homegateway.HomeGatewayAskAnswerResult{Event: "ask_answer_result", RequestID: command.RequestID, AskID: command.AskID}
 	err := d.answerAsk(&protocol.AskAnswerMessage{AskID: command.AskID, Answers: answers, Note: command.Note}, conn.phone.ProfileID)

@@ -60,6 +60,9 @@
   },
   "HomeGatewayAskAnswer": {
     "properties": {
+      "condition": {
+        "type": "string"
+      },
       "key": {
         "type": "string"
       },

@@ -590,6 +590,9 @@ type AskAmendMessage struct {
 }
 
 type AskAnswer struct {
+	// Condition corresponds to the JSON schema field "condition".
+	Condition *string `json:"condition,omitempty,omitzero"`
+
 	// Key corresponds to the JSON schema field "key".
 	Key string `json:"key"`
 

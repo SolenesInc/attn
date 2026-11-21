@@ -5775,6 +5775,37 @@
                           "kind": "when",
                           "condition": {
                             "field": {
+                              "name": "condition",
+                              "kind": "text",
+                              "description": "The user's condition on their pick."
+                            },
+                            "test": "present"
+                          },
+                          "children": [
+                            {
+                              "kind": "text",
+                              "id": "ask.entry-condition",
+                              "source": "content/ask/entry-condition.md",
+                              "bindings": [
+                                {
+                                  "name": "condition",
+                                  "node": {
+                                    "kind": "input",
+                                    "field": {
+                                      "name": "condition",
+                                      "kind": "text",
+                                      "description": "The user's condition on their pick."
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "when",
+                          "condition": {
+                            "field": {
                               "name": "other",
                               "kind": "text",
                               "description": "The user's own answer to a choice question."
@@ -7613,5 +7644,5 @@
       ]
     }
   ],
-  "definitions_hash": "77fe8c6378018c44c869b1f767814c2431c0c81de0e772951a9973e01152aadd"
+  "definitions_hash": "97e3ae9d12f2c0745286ad1275ecce671b69156d6edabd36383d878dc4ef2bf1"
 }

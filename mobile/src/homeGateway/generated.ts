@@ -137,18 +137,20 @@ export interface Reply {
 }
 
 export interface AnswerElement {
-    key:    string;
-    other?: string;
-    picked: string[];
-    text?:  string;
+    condition?: string;
+    key:        string;
+    other?:     string;
+    picked:     string[];
+    text?:      string;
     [property: string]: any;
 }
 
 export interface HomeGatewayAskAnswer {
-    key:    string;
-    other?: string;
-    picked: string[];
-    text?:  string;
+    condition?: string;
+    key:        string;
+    other?:     string;
+    picked:     string[];
+    text?:      string;
     [property: string]: any;
 }
 
@@ -1540,12 +1542,14 @@ const typeMap: any = {
         { json: "note", js: "note", typ: u(undefined, "") },
     ], "any"),
     "AnswerElement": o([
+        { json: "condition", js: "condition", typ: u(undefined, "") },
         { json: "key", js: "key", typ: "" },
         { json: "other", js: "other", typ: u(undefined, "") },
         { json: "picked", js: "picked", typ: a("") },
         { json: "text", js: "text", typ: u(undefined, "") },
     ], "any"),
     "HomeGatewayAskAnswer": o([
+        { json: "condition", js: "condition", typ: u(undefined, "") },
         { json: "key", js: "key", typ: "" },
         { json: "other", js: "other", typ: u(undefined, "") },
         { json: "picked", js: "picked", typ: a("") },

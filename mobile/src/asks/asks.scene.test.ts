@@ -552,4 +552,29 @@ describe('asks on the phone', () => {
       Scene.expect(Scene.text('hit-rate.txt')).toExist(),
     )
   })
+
+  it('shows the condition the user put on a pick from the desktop', () => {
+    const plain = ask('a-cond', 1, [{ markdown: null, question: choiceQuestion }])
+    Scene.scene(
+      { update, view },
+      Scene.given(online(personal)),
+      arrive(personal, [plain]),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      arrive(personal, [
+        {
+          ...plain,
+          reply: {
+            answers: [
+              { key: 'q1', picked: ['Postgres'], other: '', text: '', condition: 'skip the Windows VM step' },
+            ],
+            note: '',
+            files: [],
+            answeredAt: now,
+          },
+        },
+      ]),
+      Scene.expect(Scene.text('Postgres')).toExist(),
+      Scene.expect(Scene.text('Condition: skip the Windows VM step')).toExist(),
+    )
+  })
 })

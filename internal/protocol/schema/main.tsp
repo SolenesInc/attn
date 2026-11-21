@@ -4434,12 +4434,14 @@ model AskCloseResult {
 }
 
 // picked holds choice labels; other is the user's own choice on a one/any
-// question; text is the answer to a text question.
+// question; text is the answer to a text question. condition qualifies a pick
+// on a one/any question, and needs one.
 model AskAnswer {
   key: string;
   picked: string[];
   other?: string;
   text?: string;
+  condition?: string;
 }
 
 // attachments name ready files uploaded with attachment_put, owned by this ask.

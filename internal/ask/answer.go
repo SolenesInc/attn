@@ -98,6 +98,10 @@ func normalizeAnswer(question protocol.AskQuestion, answer protocol.AskAnswer) (
 	answer.Picked = picked
 	other := strings.TrimSpace(protocol.Deref(answer.Other))
 	text := strings.TrimSpace(protocol.Deref(answer.Text))
+	condition := strings.TrimSpace(protocol.Deref(answer.Condition))
+	if condition != "" && len(picked) == 0 {
+		return answer, fmt.Errorf("question %s takes a condition only on a pick", question.Key)
+	}
 	switch question.Kind {
 	case protocol.AskQuestionKindText:
 		if len(picked) > 0 || other != "" {
@@ -117,6 +121,7 @@ func normalizeAnswer(question protocol.AskQuestion, answer protocol.AskAnswer) (
 	}
 	answer.Other = optional(other)
 	answer.Text = optional(text)
+	answer.Condition = optional(condition)
 	return answer, nil
 }
 
@@ -126,6 +131,7 @@ func renderEntry(index int, question protocol.AskQuestion, answer protocol.AskAn
 		"prompt":      question.Prompt,
 		"picked":      pickedLabels(question, answer.Picked),
 		"recommended": strconv.FormatBool(recommendedPick(question, answer)),
+		"condition":   protocol.Deref(answer.Condition),
 		"other":       protocol.Deref(answer.Other),
 		"text":        blockquote(protocol.Deref(answer.Text)),
 		"unanswered":  strconv.FormatBool(!answered(answer)),

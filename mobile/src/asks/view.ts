@@ -9,6 +9,7 @@ import {
   type Answer,
   type Draft,
   type PhoneAsk,
+  type RepliedAnswer,
   type Question,
 } from './ask'
 import { mentionText, renderMarkdown, type MarkdownContext } from './markdown'
@@ -175,13 +176,16 @@ const writtenAnswer = <Message>(
 
 const repliedAnswer = <Message>(
   question: Question,
-  answer: Answer | undefined,
+  answer: RepliedAnswer | undefined,
   h: HtmlBuilder<Message>,
 ): Html => {
   const shown = [...(answer?.picked ?? []), answer?.other ?? '', answer?.text ?? '']
     .filter(Boolean)
     .join(' · ')
-  return h.p([h.Class(`replied${shown ? '' : ' none'}`)], [shown || 'Not answered'])
+  const replied = h.p([h.Class(`replied${shown ? '' : ' none'}`)], [shown || 'Not answered'])
+  return answer?.condition
+    ? h.div([], [replied, h.p([h.Class('replied-condition')], [`Condition: ${answer.condition}`])])
+    : replied
 }
 
 const clockTime = (at: number, now: number): string => {

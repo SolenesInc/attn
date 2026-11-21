@@ -29,6 +29,9 @@ export const Answer = Schema.Struct({
 })
 export type Answer = typeof Answer.Type
 
+export const RepliedAnswer = Schema.Struct({ ...Answer.fields, condition: Schema.String })
+export type RepliedAnswer = typeof RepliedAnswer.Type
+
 export const PhoneAsk = Schema.Struct({
   id: Schema.String,
   sessionId: Schema.String,
@@ -49,7 +52,7 @@ export const PhoneAsk = Schema.Struct({
   ),
   reply: Schema.NullOr(
     Schema.Struct({
-      answers: Schema.Array(Answer),
+      answers: Schema.Array(RepliedAnswer),
       note: Schema.String,
       files: Schema.Array(Schema.String),
       answeredAt: Schema.Finite,
@@ -59,11 +62,12 @@ export const PhoneAsk = Schema.Struct({
 })
 export type PhoneAsk = typeof PhoneAsk.Type
 
-const fromHomeGatewayAnswer = (answer: HomeGatewayAskAnswer): Answer => ({
+const fromHomeGatewayAnswer = (answer: HomeGatewayAskAnswer): RepliedAnswer => ({
   key: answer.key,
   picked: answer.picked,
   other: answer.other ?? '',
   text: answer.text ?? '',
+  condition: answer.condition ?? '',
 })
 
 export const fromHomeGatewayAsk = (ask: HomeGatewayAsk): PhoneAsk => ({

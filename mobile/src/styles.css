@@ -653,6 +653,12 @@ textarea.note:focus {
   color: var(--muted);
 }
 
+.replied-condition {
+  margin: 8px 0 0;
+  padding: 0 14px;
+  overflow-wrap: anywhere;
+}
+
 .replied-file {
   margin: 8px 0 0;
   color: var(--muted);
