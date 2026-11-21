@@ -12,28 +12,48 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestTheSampleHarnessCallsAttnsToolsAsItsSession(t *testing.T) {
-	t.Parallel()
+func startSampleHarnessSession(t *testing.T) (s *testworld.Stack, app *testworld.Peer, session string, seed protocol.Seed) {
+	t.Helper()
 	harnessID := "author_" + strings.ReplaceAll(uuid.NewString()[:8], "-", "")
 	plugin := authorsPlugin(t, harnessID, packSDK(t))
-	s := testworld.NewStack(t)
+	s = testworld.NewStack(t)
 	s.Start()
-	app := s.App()
+	app = s.App()
 	requireStdout(t, s.Attn("settings", "set", "agent_tools_enabled", "true"), "true")
 	if installed := s.Attn("plugin", "install", "--path", plugin); installed.Code != 0 {
 		t.Fatalf("attn plugin install: %s%s", installed.Stdout, installed.Stderr)
 	}
 	agent := fakeagent.Harness(harnessID)
 	awaitAgentAvailable(app, agent)
-	seed := plant(t, s, "Round the checkout total")
-	session := s.Spawn(app, agent, s.Path("shop"))
+	seed = plant(t, s, "Round the checkout total")
+	session = s.Spawn(app, agent, s.Path("shop"))
 	app.AwaitScreen(session, "sample harness started conversation")
+	return s, app, session, seed
+}
+
+func TestTheSampleHarnessCallsAttnsToolsAsItsSession(t *testing.T) {
+	t.Parallel()
+	s, app, session, seed := startSampleHarnessSession(t)
 
 	app.TypeLine(session, `/tool seed_note {"seed":"`+seed.ID+`","text":"Rounded half up."}`)
 	app.AwaitScreen(session, "tool seed_note:")
 	shown := showSeed(t, s, "", seed.ID)
 	if len(shown.Notes) == 0 || shown.Notes[0].Body != "Rounded half up." || stackAuthorSession(shown.Notes[0]) != protocol.SessionID(session) {
 		t.Fatalf("the sample harness's tool call did not note as its session %s: %+v", session, shown.Notes)
+	}
+}
+
+func TestTheSampleHarnessTakesTheNextToolCallAfterATypoInTheArguments(t *testing.T) {
+	t.Parallel()
+	s, app, session, seed := startSampleHarnessSession(t)
+
+	app.TypeLine(session, `/tool seed_note {"seed":`)
+	app.AwaitScreen(session, "tool: ")
+	app.TypeLine(session, `/tool seed_note {"seed":"`+seed.ID+`","text":"Typed again."}`)
+	app.AwaitScreen(session, "tool seed_note:")
+	shown := showSeed(t, s, "", seed.ID)
+	if len(shown.Notes) == 0 || shown.Notes[0].Body != "Typed again." {
+		t.Fatalf("the session did not take the tool call typed after the typo: %+v", shown.Notes)
 	}
 }
 

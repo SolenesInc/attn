@@ -47,7 +47,7 @@ createServer((socket) => {
 });
 
 createInterface({ input: process.stdin }).on("line", (line) => {
-  if (line.startsWith("/tool ")) void callTool(line.slice("/tool ".length));
+  if (line.startsWith("/tool ")) callTool(line.slice("/tool ".length)).catch((error: Error) => console.log(`tool: ${error.message}`));
   else accept("you", line);
 });
 
