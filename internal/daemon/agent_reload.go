@@ -1,29 +1,33 @@
 package daemon
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"net"
 	"slices"
+	"strings"
 
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) handleAgentReload(conn net.Conn, msg *protocol.AgentReloadMessage) {
-	caller, code := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID))
+func (d *Daemon) runAgentReload(ctx context.Context, c command.Caller, a command.AgentReloadArgs) (any, error) {
+	if a.All == (len(a.Targets) > 0) {
+		return nil, command.Usage("name one or more sessions or crew members, or use {all}")
+	}
+	if slices.ContainsFunc(a.Targets, func(target string) bool { return strings.TrimSpace(target) == "" }) {
+		return nil, command.Usage("target cannot be empty")
+	}
+	if c.Session == "" {
+		return nil, command.Refuse(command.CodeNoSender, "no caller; run inside a session or pass --source-session <id>")
+	}
+	caller, code := d.resolveSessionByIDOrPrefix(string(c.Session))
 	if caller == nil {
-		d.replyAgentMsgError(conn, "sender_"+code, "reload requires a live caller session")
-		return
+		return nil, senderRefusal(code, string(c.Session), "caller")
 	}
-	if msg.All == (len(msg.Targets) > 0) {
-		d.sendError(conn, "name one or more sessions or crew members, or use --all")
-		return
-	}
-	targets := slices.Clone(msg.Targets)
-	if msg.All {
+	targets := slices.Clone(a.Targets)
+	if a.All {
 		if d.chiefOfProfile(caller.ProfileID) != caller.ID {
-			d.sendError(conn, "only the profile's chief may reload --all")
-			return
+			return nil, command.Refuse("not_chief", "only the profile's chief may reload {all}")
 		}
 		for _, session := range d.store.List("") {
 			if session.ProfileID == caller.ProfileID && session.Agent != "shell" {
@@ -65,7 +69,7 @@ func (d *Daemon) handleAgentReload(conn net.Conn, msg *protocol.AgentReloadMessa
 		}
 		result.Outcomes = append(result.Outcomes, outcome)
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentReloadResult: result})
+	return result, nil
 }
 
 func (d *Daemon) resolveAgentReloadTarget(ref, profileID string) (*protocol.Session, error) {

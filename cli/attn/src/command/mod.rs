@@ -337,7 +337,12 @@ fn read_stdin(what: &str) -> Result<Vec<u8>, String> {
 fn parse(family: &dyn Family, cmd: &Command, argv: &[String]) -> Result<Parsed, ParseStop> {
     let definitions = flags_of(family.flags(), cmd);
     let mut fs = FlagSet::new("", &definitions);
-    let positionals = split_positionals(&mut fs, argv)?;
+    let positional_slots = cmd
+        .args
+        .iter()
+        .filter(|arg| matches!(arg.cli, Cli::Pos))
+        .count();
+    let positionals = split_positionals(&mut fs, argv, positional_slots)?;
     let mut values = positional_values(cmd, &positionals)?;
     flag_values(family, cmd, &fs, &mut values)?;
     read_inputs(family, cmd, &mut values)?;
@@ -346,7 +351,13 @@ fn parse(family: &dyn Family, cmd: &Command, argv: &[String]) -> Result<Parsed, 
         args: values,
         json: cmd.result && fs.bool("json"),
         profile: group_flag(family, &fs, "profile"),
-        session: group_flag(family, &fs, "session"),
+        session: [
+            group_flag(family, &fs, "session"),
+            group_flag(family, &fs, "source-session"),
+        ]
+        .into_iter()
+        .find(|session| !session.is_empty())
+        .unwrap_or_default(),
     })
 }
 
@@ -358,7 +369,11 @@ fn group_flag(family: &dyn Family, fs: &FlagSet<'_>, name: &str) -> String {
     }
 }
 
-fn split_positionals(fs: &mut FlagSet<'_>, argv: &[String]) -> Result<Vec<String>, ParseStop> {
+fn split_positionals(
+    fs: &mut FlagSet<'_>,
+    argv: &[String],
+    slots: usize,
+) -> Result<Vec<String>, ParseStop> {
     let mut positionals = Vec::new();
     let mut rest = argv.to_vec();
     loop {
@@ -367,7 +382,14 @@ fn split_positionals(fs: &mut FlagSet<'_>, argv: &[String]) -> Result<Vec<String
             Err(FlagError::Help) => return Err(ParseStop::Help),
             Err(FlagError::Invalid(message)) => return Err(ParseStop::Flag(message)),
         }
+        let parsed = rest.len() - fs.args().len();
+        let terminated = parsed > 0 && rest[parsed - 1] == "--";
         rest = fs.args().to_vec();
+        if terminated {
+            let taken = slots.saturating_sub(positionals.len()).min(rest.len());
+            positionals.extend(rest.drain(..taken));
+            continue;
+        }
         if rest.is_empty() {
             return Ok(positionals);
         }
@@ -732,4 +754,11 @@ pub fn print_result(
         .map_err(|error| run.fail_send(&family.label(cmd.name), &error))?;
     crate::commands::print_json(raw.as_bytes());
     Ok(())
+}
+
+pub fn outlive_close_of_own_session() {
+    unsafe {
+        libc::signal(libc::SIGTERM, libc::SIG_IGN);
+        libc::signal(libc::SIGHUP, libc::SIG_IGN);
+    }
 }

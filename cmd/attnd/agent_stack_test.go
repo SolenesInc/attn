@@ -53,9 +53,8 @@ func TestAgentPeekShowsASessionWithoutInterruptingIt(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	requireRefusals(t, s, []argvRefusal{
-		{args: []string{"agent", "peek"}, want: "exactly one target"},
-		{args: []string{"agent", "peek", "--json", "abc"}, want: "exactly one target"},
-		{args: []string{"agent", "peek", "abc", "def"}, want: "exactly one target"},
+		{args: []string{"agent", "peek"}, want: "takes 1 argument (target), got none"},
+		{args: []string{"agent", "peek", "abc", "def"}, want: "takes 1 argument (target), got 2"},
 		{args: []string{"agent", "peek", "abc", "--nope"}, want: "not defined: -nope"},
 	})
 	requireFailure(t, s.Attn("agent", "peek", "abc"), "agent peek: ", "connect to daemon at")
@@ -119,35 +118,36 @@ func TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict(t *testing.T) {
 		bystander = "bys-5555-6666"
 	)
 	atLimit := strings.Repeat("x", protocol.AgentMessageMaxChars)
-	requireRefusals(t, s, []argvRefusal{
-		{args: []string{"agent", "msg", "desk", "hello"}, want: "--source-session"},
-		{args: []string{"agent", "msg", "desk", "the", "rebase", "is", "done"}, session: reviewer, want: "quote it"},
-		{args: []string{"agent", "msg", "desk"}, session: reviewer, want: "usage:"},
-		{args: []string{"agent", "msg", "desk", "   "}, session: reviewer, want: "empty"},
-		{args: []string{"agent", "msg", "desk", "-hello"}, session: reviewer, want: "attn agent msg -- <id>"},
-		{args: []string{"agent", "msg", "desk", atLimit + "x"}, session: reviewer, want: "is 32769 bytes and the limit is 32768"},
-		{args: []string{"agent", "msg-status"}, session: reviewer, want: "usage:"},
-		{args: []string{"agent", "msg-status", "--json", "message-id"}, session: reviewer, want: "usage:"},
-		{args: []string{"agent", "msg-status", "message-id"}, want: "--session"},
-		{args: []string{"agent", "msg-status", "message-id", "other"}, session: reviewer, want: "usage:"},
-		{args: []string{"agent", "inbox"}, want: "--session"},
-		{args: []string{"agent", "inbox", "--limit", "0"}, session: desk, want: "between 1 and 50"},
-		{args: []string{"agent", "inbox", "--limit", "51"}, session: desk, want: "between 1 and 50"},
-		{args: []string{"agent", "inbox", "message-id", "--limit", "1"}, session: desk, want: "cannot be used"},
-		{args: []string{"agent", "inbox", ""}, session: desk, want: "usage:"},
-		{args: []string{"agent", "inbox", "one", "two"}, session: desk, want: "usage:"},
-		{args: []string{"agent", "close", "desk"}, session: reviewer, want: "a close needs a reason"},
-		{args: []string{"agent", "close", "desk", "-m", "   "}, session: reviewer, want: "a close needs a reason"},
-		{args: []string{"agent", "close", "desk", "-m", "the", "PR", "merged"}, session: reviewer, want: "quote the reason"},
-		{args: []string{"agent", "close", "-m", "done"}, session: reviewer, want: "usage:"},
-		{args: []string{"agent", "close", "desk", "-m", "done"}, want: "--source-session"},
-	})
 
 	s.Start()
 	app := s.App()
 	register(t, s, reviewer, "reviewer")
 	register(t, s, desk, "desk")
 	register(t, s, bystander, "bystander")
+	requireRefusals(t, s, []argvRefusal{
+		{args: []string{"agent", "msg", "desk", "hello"}, want: "--source-session"},
+		{args: []string{"agent", "msg", "desk", "the", "rebase", "is", "done"}, session: reviewer, want: "takes 2 arguments (target, text), got 5"},
+		{args: []string{"agent", "msg", "desk"}, session: reviewer, want: "usage:"},
+		{args: []string{"agent", "msg", "desk", "-hello"}, session: reviewer, want: "flag provided but not defined: -hello"},
+		{args: []string{"agent", "msg-status"}, session: reviewer, want: "usage:"},
+		{args: []string{"agent", "msg-status", "message-id"}, want: "--session"},
+		{args: []string{"agent", "msg-status", "message-id", "other"}, session: reviewer, want: "usage:"},
+		{args: []string{"agent", "inbox"}, want: "--session"},
+		{args: []string{"agent", "inbox", "--limit", "0"}, session: desk, want: "between 1 and 50"},
+		{args: []string{"agent", "inbox", "--limit", "51"}, session: desk, want: "between 1 and 50"},
+		{args: []string{"agent", "inbox", "message-id", "--limit", "1"}, session: desk, want: "cannot be used"},
+		{args: []string{"agent", "inbox", "one", "two"}, session: desk, want: "usage:"},
+		{args: []string{"agent", "close", "desk"}, session: reviewer, want: "a close needs a reason"},
+		{args: []string{"agent", "close", "desk", "-m", "   "}, session: reviewer, want: "a close needs a reason"},
+		{args: []string{"agent", "close", "desk", "-m", "the", "PR", "merged"}, session: reviewer, want: "takes at most 1 argument"},
+		{args: []string{"agent", "close", "-m", "done"}, session: reviewer, want: "usage:"},
+		{args: []string{"agent", "close", "desk", "-m", "done"}, want: "--source-session"},
+	})
+	for content, want := range map[string]string{"   ": "refused: the message is empty", atLimit + "x": "refused: message is 32769 bytes and the limit is 32768"} {
+		if got := s.Run(testworld.Invocation{Args: []string{"agent", "msg", "desk", content}, Session: reviewer}); got.Code != 1 || !strings.HasPrefix(got.Stdout, want) {
+			t.Errorf("attn agent msg desk %.20q exited %d with stdout %q, want %q", content, got.Code, got.Stdout, want)
+		}
+	}
 	recipient := s.Spawn(app, fakeagent.Claude, s.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr("wait for the reviewer") })
 	claude := s.Launched(recipient)
 	claude.Prompted()

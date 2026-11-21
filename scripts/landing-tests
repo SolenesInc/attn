@@ -125,7 +125,7 @@ go ./internal/ptybackend TestSharedHost_ReapingAHostDuringASpawnStopsTheHostAndI
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility
-go ./cmd/attnd TestLegacyPromptCompatibility
+go ./internal/daemon TestLegacyAgentInboxPromptCompatibility
 go ./internal/crew TestPrimingPromptCompatibility
 go ./internal/transcript TestLegacyPromptCompatibility
 go ./internal/activity TestLegacyPromptCompatibility

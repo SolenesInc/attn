@@ -15,7 +15,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/selfupdate"
@@ -260,7 +259,7 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 			return nil, err
 		}
 		cmd, _ := fields["cmd"].(string)
-		if strings.HasPrefix(cmd, "seed_") || cmd == protocol.CmdOpenSeed || cmd == protocol.CmdDelegateStatus || cmd == protocol.CmdDelegate || strings.HasPrefix(cmd, "crew_") || cmd == protocol.CmdOnboarding || cmd == protocol.CmdAgentPeek || cmd == protocol.CmdQuickCaptureAttachmentGet {
+		if strings.HasPrefix(cmd, "seed_") || cmd == protocol.CmdOpenSeed || cmd == protocol.CmdDelegateStatus || cmd == protocol.CmdDelegate || strings.HasPrefix(cmd, "crew_") || cmd == protocol.CmdOnboarding || cmd == protocol.CmdQuickCaptureAttachmentGet {
 			if fields["profile_id"] == nil || fields["profile_id"] == "" {
 				fields["profile_id"] = c.gardenProfile
 			}
@@ -596,51 +595,34 @@ func (c *Client) StateExplain(targetSessionID string) (*protocol.StateExplainRes
 }
 
 func (c *Client) AgentPeek(targetSessionID string) (*protocol.AgentPeekResult, error) {
-	resp, err := c.send(protocol.AgentPeekMessage{
-		Cmd:             protocol.CmdAgentPeek,
-		TargetSessionID: targetSessionID,
-	})
-	if err != nil {
+	var result protocol.AgentPeekResult
+	if err := c.RunCommand("agent peek", "", map[string]any{"target": targetSessionID}, &result); err != nil {
 		return nil, err
 	}
-	if resp.AgentPeekResult == nil {
-		return nil, errors.New("daemon returned no agent peek result")
-	}
-	return resp.AgentPeekResult, nil
+	return &result, nil
 }
 
 func (c *Client) AgentMsg(target string, sourceSessionID protocol.SessionID, content string) (*protocol.AgentMsgResult, error) {
-	msg := protocol.AgentMsgMessage{
-		Cmd:             protocol.CmdAgentMsg,
-		TargetSessionID: target,
-		SourceSessionID: sourceSessionID,
-		Content:         content,
-	}
-	if garden.ValidateID(target) == nil {
-		msg.TargetSessionID = ""
-		msg.TargetSeedID = protocol.Ptr(target)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
+	var result protocol.AgentMsgResult
+	if err := c.RunCommand("agent msg", sourceSessionID, map[string]any{"target": target, "text": content}, &result); err != nil {
 		return nil, err
 	}
-	if resp.AgentMsgResult == nil {
-		return nil, errors.New("daemon returned no agent msg result")
-	}
-	return resp.AgentMsgResult, nil
+	return &result, nil
 }
 
 func (c *Client) AgentReload(targets []string, sourceSessionID protocol.SessionID, all bool) (*protocol.AgentReloadResult, error) {
-	resp, err := c.send(protocol.AgentReloadMessage{
-		Cmd: protocol.CmdAgentReload, Targets: targets, SourceSessionID: sourceSessionID, All: all,
-	})
-	if err != nil {
+	args := map[string]any{}
+	if len(targets) > 0 {
+		args["targets"] = targets
+	}
+	if all {
+		args["all"] = true
+	}
+	var result protocol.AgentReloadResult
+	if err := c.RunCommand("agent reload", sourceSessionID, args, &result); err != nil {
 		return nil, err
 	}
-	if resp.AgentReloadResult == nil {
-		return nil, fmt.Errorf("daemon did not return an agent reload result")
-	}
-	return resp.AgentReloadResult, nil
+	return &result, nil
 }
 
 func (c *Client) AgentClose(target string, sourceSessionID protocol.SessionID, reason string) (*protocol.AgentCloseResult, error) {
@@ -652,69 +634,45 @@ func (c *Client) AgentCloseCompacting(sessionID protocol.SessionID, reason strin
 }
 
 func (c *Client) agentClose(target string, sourceSessionID protocol.SessionID, reason string, compact bool) (*protocol.AgentCloseResult, error) {
-	msg := protocol.AgentCloseMessage{
-		Cmd:             protocol.CmdAgentClose,
-		TargetSessionID: target,
-		SourceSessionID: sourceSessionID,
-		Reason:          reason,
-	}
+	args := map[string]any{"reason": reason}
 	if compact {
-		msg.Compact = protocol.Ptr(true)
+		args["self"], args["compact"] = true, true
+	} else {
+		args["target"] = target
 	}
-	if garden.ValidateID(target) == nil {
-		msg.TargetSessionID = ""
-		msg.TargetSeedID = protocol.Ptr(target)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
+	var result protocol.AgentCloseResult
+	if err := c.RunCommand("agent close", sourceSessionID, args, &result); err != nil {
 		return nil, err
 	}
-	if resp.AgentCloseResult == nil {
-		return nil, errors.New("daemon returned no agent close result")
-	}
-	return resp.AgentCloseResult, nil
+	return &result, nil
 }
 
 func (c *Client) AgentInbox(messageID string, recipientSessionID protocol.SessionID) (*protocol.AgentPeerMessage, error) {
-	resp, err := c.send(protocol.AgentInboxMessage{
-		Cmd: protocol.CmdAgentInbox, MessageID: protocol.Ptr(messageID),
-		RecipientSessionID: recipientSessionID,
-	})
-	if err != nil {
-		return nil, err
+	message, _, err := c.AgentInboxEntry(messageID, recipientSessionID)
+	if err == nil && message == nil {
+		err = errors.New("daemon returned no peer message")
 	}
-	if resp.AgentInboxResult == nil {
-		return nil, errors.New("daemon returned no agent inbox result")
-	}
-	return resp.AgentInboxResult, nil
+	return message, err
 }
 
 func (c *Client) AgentInboxBatch(recipientSessionID protocol.SessionID, limit int) (*protocol.AgentInboxBatchResult, error) {
-	resp, err := c.send(protocol.AgentInboxMessage{
-		Cmd: protocol.CmdAgentInbox, RecipientSessionID: recipientSessionID,
-		Limit: protocol.Ptr(limit),
-	})
-	if err != nil {
+	args := map[string]any{}
+	if limit != 0 {
+		args["limit"] = limit
+	}
+	var result protocol.AgentInboxBatchResult
+	if err := c.RunCommand("agent inbox", recipientSessionID, args, &result); err != nil {
 		return nil, err
 	}
-	if resp.AgentInboxBatchResult == nil {
-		return nil, errors.New("daemon returned no agent inbox batch result")
-	}
-	return resp.AgentInboxBatchResult, nil
+	return &result, nil
 }
 
 func (c *Client) AgentMsgStatus(messageID string, senderSessionID protocol.SessionID) (*protocol.AgentPeerMessage, error) {
-	resp, err := c.send(protocol.AgentMsgStatusMessage{
-		Cmd: protocol.CmdAgentMsgStatus, MessageID: messageID,
-		SenderSessionID: senderSessionID,
-	})
-	if err != nil {
+	var result protocol.AgentPeerMessage
+	if err := c.RunCommand("agent msg-status", senderSessionID, map[string]any{"message": messageID}, &result); err != nil {
 		return nil, err
 	}
-	if resp.AgentMsgStatusResult == nil {
-		return nil, errors.New("daemon returned no agent msg status result")
-	}
-	return resp.AgentMsgStatusResult, nil
+	return &result, nil
 }
 
 type StopFacts struct {

@@ -6,6 +6,13 @@ package protocol
 var CommandRuns = map[string]Locator{
 	"activity":                LocatorHome,
 	"activity clear":          LocatorHome,
+	"agent list":              LocatorHome,
+	"agent peek":              LocatorHome,
+	"agent msg":               LocatorHome,
+	"agent close":             LocatorHome,
+	"agent reload":            LocatorHome,
+	"agent inbox":             LocatorHome,
+	"agent msg-status":        LocatorHome,
 	"callout anchors":         LocatorHome,
 	"callout show":            LocatorHome,
 	"delegate":                LocatorHome,

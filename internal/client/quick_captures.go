@@ -18,12 +18,12 @@ func (c *Client) QuickCapture(msg any) (*protocol.QuickCaptureResult, error) {
 }
 
 func (c *Client) AgentInboxEntry(id string, sessionID protocol.SessionID) (*protocol.AgentPeerMessage, *protocol.AgentInboxItem, error) {
-	response, err := c.send(protocol.AgentInboxMessage{Cmd: protocol.CmdAgentInbox, MessageID: protocol.Ptr(id), RecipientSessionID: sessionID})
-	if err != nil {
+	var result protocol.AgentInboxBatchResult
+	if err := c.RunCommand("agent inbox", sessionID, map[string]any{"message": id}, &result); err != nil {
 		return nil, nil, err
 	}
-	if response.AgentInboxResult == nil && response.AgentInboxItemResult == nil {
+	if result.Message == nil && result.Item == nil {
 		return nil, nil, fmt.Errorf("daemon returned no inbox item")
 	}
-	return response.AgentInboxResult, response.AgentInboxItemResult, nil
+	return result.Message, result.Item, nil
 }

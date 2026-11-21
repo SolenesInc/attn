@@ -2,12 +2,11 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
@@ -19,19 +18,46 @@ const agentCloseReasonMaxChars = garden.MaxReasonChars
 
 const agentCloseTendedSeedLimit = 100
 
-func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage) {
+func (d *Daemon) runAgentClose(ctx context.Context, c command.Caller, a command.AgentCloseArgs) (any, error) {
+	target := strings.TrimSpace(a.Target)
+	switch {
+	case a.Self && target != "":
+		return nil, command.Usage("{self} closes the caller and cannot take a target")
+	case a.Compact && !a.Self:
+		return nil, command.Usage("{compact} compacts your own conversation, so it only goes with {self}")
+	case !a.Self && target == "":
+		return nil, command.Usage("name the session or seed to close, or pass {self}")
+	case strings.TrimSpace(a.Reason) == "":
+		return nil, command.Refuse("close_reason_required", `a close needs a reason: {reason} "why this session is done". The session row stays in the ledger and the reason is what the next reader gets`)
+	case c.Session == "":
+		return nil, command.Refuse(command.CodeNoSender, "no caller: this shell is not an attn session, so pass --source-session <id> (`attn agent list` names the sessions)")
+	}
+	if a.Self {
+		target = string(c.Session)
+	}
+	msg := &agentCloseRequest{SourceSessionID: c.Session, Reason: a.Reason}
+	if a.Compact {
+		msg.Compact = protocol.Ptr(true)
+	}
+	if garden.ValidateID(target) == nil {
+		msg.TargetSeedID = protocol.Ptr(target)
+	} else {
+		msg.TargetSessionID = target
+	}
 	result, closing, refusal := d.beginAgentClose(msg)
 	if refusal != nil {
-		d.replyAgentMsgError(conn, refusal.code, refusal.message)
-		return
+		if refusal.code == "session_not_found" {
+			return nil, command.Refuse(refusal.code, "no session matches %q; `attn agent list` names sessions; to close yourself, use `attn agent close --self -m \"reason\"`", target)
+		}
+		return nil, command.Refuse(refusal.code, "%s", refusal.message)
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentCloseResult: result})
-	if !protocol.Deref(result.PendingCompact) {
-		d.finishSessionClose(result.TargetSessionID, closing)
+	if protocol.Deref(result.PendingCompact) {
+		return result, nil
 	}
+	return command.Then{Result: result, After: func() { d.finishSessionClose(result.TargetSessionID, closing) }}, nil
 }
 
-func (d *Daemon) beginAgentClose(msg *protocol.AgentCloseMessage) (*protocol.AgentCloseResult, sessionCloseInFlight, *agentCloseRefusal) {
+func (d *Daemon) beginAgentClose(msg *agentCloseRequest) (*protocol.AgentCloseResult, sessionCloseInFlight, *agentCloseRefusal) {
 	caller, errCode := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID))
 	if caller == nil {
 		return nil, sessionCloseInFlight{}, &agentCloseRefusal{"sender_" + errCode, fmt.Sprintf(
@@ -122,12 +148,20 @@ func (d *Daemon) beginAgentClose(msg *protocol.AgentCloseMessage) (*protocol.Age
 	}, closing, nil
 }
 
+type agentCloseRequest struct {
+	TargetSessionID string
+	TargetSeedID    *string
+	SourceSessionID protocol.SessionID
+	Reason          string
+	Compact         *bool
+}
+
 type agentCloseRefusal struct {
 	code    string
 	message string
 }
 
-func (d *Daemon) resolveAgentCloseTarget(msg *protocol.AgentCloseMessage, caller *protocol.Session) (*protocol.Session, *agentCloseRefusal) {
+func (d *Daemon) resolveAgentCloseTarget(msg *agentCloseRequest, caller *protocol.Session) (*protocol.Session, *agentCloseRefusal) {
 	reference := protocol.SessionID(strings.TrimSpace(msg.TargetSessionID))
 	if seedID := strings.TrimSpace(protocol.Deref(msg.TargetSeedID)); seedID != "" {
 		seed, _, err := d.readSeed(seedID)

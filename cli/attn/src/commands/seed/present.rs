@@ -38,13 +38,6 @@ fn checks_json(checks: &[Check]) -> Json {
     )
 }
 
-fn outlive_close_of_own_session() {
-    unsafe {
-        libc::signal(libc::SIGTERM, libc::SIG_IGN);
-        libc::signal(libc::SIGHUP, libc::SIG_IGN);
-    }
-}
-
 fn resolve(parsed: &mut Parsed, name: &str, label: &str) -> Result<(), String> {
     let value = parsed.text(name).to_string();
     let resolved = absolute(&value)
@@ -116,7 +109,7 @@ impl Family for Seed {
             }
             "standby" => {
                 if !parsed.on("clear") && !parsed.on("stay") {
-                    outlive_close_of_own_session();
+                    command::outlive_close_of_own_session();
                 }
                 Ok(())
             }

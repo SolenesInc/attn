@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "cbc25c94e4f4";
+pub const PROTOCOL_VERSION: &str = "4e8a570b499f";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -107,27 +107,6 @@ impl AgentCatalogResultMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct AgentCloseMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub compact: Option<bool>,
-    pub reason: String,
-    pub source_session_id: SessionID,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub target_seed_id: Option<String>,
-    pub target_session_id: String,
-}
-
-impl AgentCloseMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "agent_close".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentCloseResult {
     pub label: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -141,13 +120,19 @@ pub struct AgentCloseResult {
 pub type AgentCloseRule = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentInboxBatchResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item: Option<AgentInboxItem>,
     #[serde(deserialize_with = "null_as_default")]
     pub items: Vec<AgentInboxItem>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<AgentPeerMessage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phone_stays_silent: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quiet_notifications: Option<bool>,
     pub remaining: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentInboxItem {
@@ -168,25 +153,6 @@ pub struct AgentInboxItem {
     pub sender: Option<PartyView>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_id: Option<String>,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct AgentInboxMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limit: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message_id: Option<String>,
-    pub recipient_session_id: SessionID,
-}
-
-impl AgentInboxMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "agent_inbox".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentLaunchCloseMessage {
@@ -223,26 +189,25 @@ pub struct AgentLaunchCloseResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view: Option<String>,
 }
-pub type AgentMessageState = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct AgentMsgMessage {
-    pub cmd: String,
-    pub content: String,
-    pub source_session_id: SessionID,
+pub struct AgentListResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub agents: Vec<AgentListRow>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AgentListRow {
+    pub agent: String,
+    pub directory: String,
+    pub id: String,
+    pub label: String,
+    pub member: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub target_seed_id: Option<String>,
-    pub target_session_id: String,
+    pub member_key: Option<String>,
+    pub profile: String,
+    pub state: String,
+    pub turn_owed: bool,
 }
-
-impl AgentMsgMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "agent_msg".to_string(),
-            ..Self::default()
-        }
-    }
-}
+pub type AgentMessageState = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentMsgResult {
     pub detail: String,
@@ -252,46 +217,11 @@ pub struct AgentMsgResult {
 }
 pub type AgentMsgStatus = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct AgentMsgStatusMessage {
-    pub cmd: String,
-    pub message_id: String,
-    pub sender_session_id: SessionID,
-}
-
-impl AgentMsgStatusMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "agent_msg_status".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentPeekExit {
     pub at: String,
     pub code: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signal: Option<String>,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct AgentPeekMessage {
-    pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-    pub target_session_id: String,
-}
-
-impl AgentPeekMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "agent_peek".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentPeekResult {
@@ -339,24 +269,6 @@ pub struct AgentPeerMessage {
     pub sender: PartyView,
     pub state: AgentMessageState,
     pub target_session_id: String,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct AgentReloadMessage {
-    pub all: bool,
-    pub cmd: String,
-    pub source_session_id: SessionID,
-    #[serde(deserialize_with = "null_as_default")]
-    pub targets: Vec<String>,
-}
-
-impl AgentReloadMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "agent_reload".to_string(),
-            ..Self::default()
-        }
-    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentReloadOutcome {
@@ -9041,22 +8953,6 @@ impl ReposUpdatedMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_close_result: Option<AgentCloseResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_inbox_batch_result: Option<AgentInboxBatchResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_inbox_item_result: Option<AgentInboxItem>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_inbox_result: Option<AgentPeerMessage>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_msg_result: Option<AgentMsgResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_msg_status_result: Option<AgentPeerMessage>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_peek_result: Option<AgentPeekResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_reload_result: Option<AgentReloadResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_turn_result: Option<AgentTurnResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ask_list_result: Option<AskListResult>,
@@ -14366,24 +14262,6 @@ impl WorktreesUpdatedMessage {
             ..Self::default()
         }
     }
-}
-impl ResponseField for AgentCloseResult {
-    const FIELD: &'static str = "agent_close_result";
-}
-impl ResponseField for AgentInboxBatchResult {
-    const FIELD: &'static str = "agent_inbox_batch_result";
-}
-impl ResponseField for AgentInboxItem {
-    const FIELD: &'static str = "agent_inbox_item_result";
-}
-impl ResponseField for AgentMsgResult {
-    const FIELD: &'static str = "agent_msg_result";
-}
-impl ResponseField for AgentPeekResult {
-    const FIELD: &'static str = "agent_peek_result";
-}
-impl ResponseField for AgentReloadResult {
-    const FIELD: &'static str = "agent_reload_result";
 }
 impl ResponseField for AgentTurnResult {
     const FIELD: &'static str = "agent_turn_result";

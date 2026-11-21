@@ -7,77 +7,91 @@ import "encoding/json"
 var _ json.RawMessage
 
 const (
-	CodeAppNotShowingProfile     = "app_not_showing_profile"
-	CodeBadBookmark              = "bad_bookmark"
-	CodeBadUntil                 = "bad_until"
-	CodeBadWindow                = "bad_window"
-	CodeClearWithPR              = "clear_with_pr"
-	CodeClearWithReason          = "clear_with_reason"
-	CodeClearWithReminder        = "clear_with_reminder"
-	CodeClearWithStandby         = "clear_with_standby"
-	CodeClearWithoutWhenMerged   = "clear_without_when_merged"
-	CodeConflict                 = "conflict"
-	CodeConversationTooLarge     = "conversation_too_large"
-	CodeCursorMismatch           = "cursor_mismatch"
-	CodeCursorPastEnd            = "cursor_past_end"
-	CodeDetachNeedsTo            = "detach_needs_to"
-	CodeEmptyWords               = "empty_words"
-	CodeFallbackWithTarget       = "fallback_with_target"
-	CodeInAndAt                  = "in_and_at"
-	CodeInvalidBody              = "invalid_body"
-	CodeInvalidCursor            = "invalid_cursor"
-	CodeInvalidEvidence          = "invalid_evidence"
-	CodeInvalidResponse          = "invalid_response"
-	CodeListAndReference         = "list_and_reference"
-	CodeModelUnavailable         = "model_unavailable"
-	CodeNavOff                   = "nav_off"
-	CodeNeedsMessage             = "needs_message"
-	CodeNeedsNext                = "needs_next"
-	CodeNeedsStatement           = "needs_statement"
-	CodeNeedsTime                = "needs_time"
-	CodeNoAlternative            = "no_alternative"
-	CodeNoDocument               = "no_document"
-	CodeNoQuestion               = "no_question"
-	CodeNoRole                   = "no_role"
-	CodeNoSession                = "no_session"
-	CodeNoSuchReference          = "no_such_reference"
-	CodeNoSuchTopic              = "no_such_topic"
-	CodeNoTarget                 = "no_target"
-	CodeNotACheckID              = "not_a_check_id"
-	CodeNotAPlot                 = "not_a_plot"
-	CodeNotAPRURL                = "not_a_pr_url"
-	CodeNotATable                = "not_a_table"
-	CodeNotExported              = "not_exported"
-	CodeNotInReview              = "not_in_review"
-	CodeNotOnScreen              = "not_on_screen"
-	CodeNotStamped               = "not_stamped"
-	CodeOtherSeed                = "other_seed"
-	CodePlotAndStale             = "plot_and_stale"
-	CodePRWithoutWhenMerged      = "pr_without_when_merged"
-	CodeReferenceNeedsPath       = "reference_needs_path"
-	CodeReviewOff                = "review_off"
-	CodeSessionNotFound          = "session_not_found"
-	CodeSinceAndSection          = "since_and_section"
-	CodeStandbyWithScope         = "standby_with_scope"
-	CodeStepNeedsText            = "step_needs_text"
-	CodeStepTooLong              = "step_too_long"
-	CodeTooManySteps             = "too_many_steps"
-	CodeTranscriptUnavailable    = "transcript_unavailable"
-	CodeTransferNeedsLocalPath   = "transfer_needs_local_path"
-	CodeTransferNeedsManagedPath = "transfer_needs_managed_path"
-	CodeTransferNeedsMode        = "transfer_needs_mode"
-	CodeTransferWithNote         = "transfer_with_note"
-	CodeTwoDocuments             = "two_documents"
-	CodeUnknownAction            = "unknown_action"
-	CodeUnknownAnchor            = "unknown_anchor"
-	CodeUnknownSession           = "unknown_session"
-	CodeWindowWithoutStale       = "window_without_stale"
-	CodeWordsAndClear            = "words_and_clear"
+	CodeAmbiguousSession            = "ambiguous_session"
+	CodeAppNotShowingProfile        = "app_not_showing_profile"
+	CodeBadBookmark                 = "bad_bookmark"
+	CodeBadUntil                    = "bad_until"
+	CodeBadWindow                   = "bad_window"
+	CodeClearWithPR                 = "clear_with_pr"
+	CodeClearWithReason             = "clear_with_reason"
+	CodeClearWithReminder           = "clear_with_reminder"
+	CodeClearWithStandby            = "clear_with_standby"
+	CodeClearWithoutWhenMerged      = "clear_without_when_merged"
+	CodeCloseReasonRequired         = "close_reason_required"
+	CodeConflict                    = "conflict"
+	CodeConversationTooLarge        = "conversation_too_large"
+	CodeCrewMemberAsleep            = "crew_member_asleep"
+	CodeCursorMismatch              = "cursor_mismatch"
+	CodeCursorPastEnd               = "cursor_past_end"
+	CodeDetachNeedsTo               = "detach_needs_to"
+	CodeEmptyWords                  = "empty_words"
+	CodeFallbackWithTarget          = "fallback_with_target"
+	CodeInAndAt                     = "in_and_at"
+	CodeInvalidBody                 = "invalid_body"
+	CodeInvalidCursor               = "invalid_cursor"
+	CodeInvalidEvidence             = "invalid_evidence"
+	CodeInvalidResponse             = "invalid_response"
+	CodeListAndReference            = "list_and_reference"
+	CodeMessageNotFound             = "message_not_found"
+	CodeMessageNotNotified          = "message_not_notified"
+	CodeModelUnavailable            = "model_unavailable"
+	CodeNavOff                      = "nav_off"
+	CodeNeedsMessage                = "needs_message"
+	CodeNeedsNext                   = "needs_next"
+	CodeNeedsStatement              = "needs_statement"
+	CodeNeedsTime                   = "needs_time"
+	CodeNoAlternative               = "no_alternative"
+	CodeNoDocument                  = "no_document"
+	CodeNoQuestion                  = "no_question"
+	CodeNoRole                      = "no_role"
+	CodeNoSender                    = "no_sender"
+	CodeNoSession                   = "no_session"
+	CodeNoSuchReference             = "no_such_reference"
+	CodeNoSuchTopic                 = "no_such_topic"
+	CodeNoTarget                    = "no_target"
+	CodeNotACheckID                 = "not_a_check_id"
+	CodeNotAPlot                    = "not_a_plot"
+	CodeNotAPRURL                   = "not_a_pr_url"
+	CodeNotATable                   = "not_a_table"
+	CodeNotExported                 = "not_exported"
+	CodeNotInReview                 = "not_in_review"
+	CodeNotOnScreen                 = "not_on_screen"
+	CodeNotStamped                  = "not_stamped"
+	CodeOtherSeed                   = "other_seed"
+	CodePlotAndStale                = "plot_and_stale"
+	CodePRWithoutWhenMerged         = "pr_without_when_merged"
+	CodeReferenceNeedsPath          = "reference_needs_path"
+	CodeReviewOff                   = "review_off"
+	CodeSessionNotFound             = "session_not_found"
+	CodeSessionOrCrewMemberNotFound = "session_or_crew_member_not_found"
+	CodeSinceAndSection             = "since_and_section"
+	CodeStandbyWithScope            = "standby_with_scope"
+	CodeStepNeedsText               = "step_needs_text"
+	CodeStepTooLong                 = "step_too_long"
+	CodeTooManySteps                = "too_many_steps"
+	CodeTranscriptUnavailable       = "transcript_unavailable"
+	CodeTransferNeedsLocalPath      = "transfer_needs_local_path"
+	CodeTransferNeedsManagedPath    = "transfer_needs_managed_path"
+	CodeTransferNeedsMode           = "transfer_needs_mode"
+	CodeTransferWithNote            = "transfer_with_note"
+	CodeTwoDocuments                = "two_documents"
+	CodeUnknownAction               = "unknown_action"
+	CodeUnknownAnchor               = "unknown_anchor"
+	CodeUnknownSession              = "unknown_session"
+	CodeWindowWithoutStale          = "window_without_stale"
+	CodeWordsAndClear               = "words_and_clear"
 )
 
 var specs = map[string]spec{
 	"activity":                {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false},
 	"activity clear":          {readOnly: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
+	"agent list":              {readOnly: true, anyone: true, sessionFlag: true, runsWithoutDaemon: false},
+	"agent peek":              {readOnly: true, anyone: true, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass a session id agent_list names, or the name of a crew member in session.", "ambiguous_session": "Give more of the id; agent_list carries full ids.", "crew_member_asleep": "Start the member with crew_start first, or message it with agent_msg, which starts it."}},
+	"agent msg":               {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_sender": "Pass {session}, or run it inside an attn session.", "session_or_crew_member_not_found": "Pass a session id agent_list names, a crew member's name, or a seed id.", "ambiguous_session": "Give more of the id; agent_list carries full ids."}},
+	"agent close":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_sender": "Pass {session}, or run it inside an attn session.", "close_reason_required": "Pass {reason}: why this session is done.", "session_not_found": "Pass a session id agent_list names, or {self} to close yourself."}},
+	"agent reload":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_sender": "Pass {session}, or run it inside an attn session."}},
+	"agent inbox":             {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Pass {session}, or run it inside an attn session.", "message_not_found": "Pass the id of a message your inbox notified you about.", "message_not_notified": "Read it after its notification lands."}},
+	"agent msg-status":        {readOnly: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Pass {session}, or run it inside an attn session.", "message_not_found": "Pass the id agent_msg answered for a message you sent."}},
 	"callout anchors":         {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}."}},
 	"callout show":            {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_session": "Run inside an attn session, or pass {session} <id>.", "unknown_session": "Pass the id of a live session in {session}.", "step_needs_text": "Give every step its text.", "unknown_anchor": "Use an anchor that callout_anchors lists.", "too_many_steps": "Show at most 20 steps.", "step_too_long": "Keep each step's text to 160 characters.", "not_on_screen": "Point at an anchor the message lists as on screen.", "app_not_showing_profile": "Ask the user to open the attn app on your profile."}},
 	"delegate":                {readOnly: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
@@ -166,6 +180,40 @@ type ActivityArgs struct {
 
 type ActivityClearArgs struct {
 	ID string `json:"id,omitempty"`
+}
+
+type AgentListArgs struct {
+}
+
+type AgentPeekArgs struct {
+	Target string `json:"target,omitempty"`
+}
+
+type AgentMsgArgs struct {
+	Target string `json:"target,omitempty"`
+	Text   string `json:"text,omitempty"`
+}
+
+type AgentCloseArgs struct {
+	Target  string `json:"target,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+	Self    bool   `json:"self,omitempty"`
+	Compact bool   `json:"compact,omitempty"`
+}
+
+type AgentReloadArgs struct {
+	Targets []string `json:"targets,omitempty"`
+	All     bool     `json:"all,omitempty"`
+}
+
+type AgentInboxArgs struct {
+	Message string `json:"message,omitempty"`
+	Limit   *int64 `json:"limit,omitempty"`
+	Render  bool   `json:"render,omitempty"`
+}
+
+type AgentMsgStatusArgs struct {
+	Message string `json:"message,omitempty"`
 }
 
 type CalloutAnchorsArgs struct {

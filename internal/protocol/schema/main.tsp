@@ -878,51 +878,6 @@ model SessionReopenMessage {
 
 }
 
-// One agent observes another without interrupting it: state, the last
-// assistant message, and the rendered screen, all served from what the daemon
-// already holds. Passive by construction — nothing here touches the target's
-// PTY or generates input, so watching costs the observed agent nothing.
-@extension("x-on", #{ home: true })
-model AgentPeekMessage {
-  cmd: "agent_peek";
-  target_session_id: string;    // crew name, full session id, or unique session prefix
-  // The caller; crew names resolve only inside its profile.
-  source_session_id?: SessionID;
-  profile_id?: string;
-}
-
-// One agent sends another a message. The daemon persists the body and types a
-// content-free doorbell into the target's conversation. The recipient reads
-// the body explicitly with AgentInboxMessage.
-// Exactly one destination: a session (or crew member) by id, or a seed, whose
-// tender the daemon resolves. The caller decides which field it fills — a seed
-// id has a shape the CLI recognizes — so the daemon is handed authority instead
-// of a string to sniff.
-@extension("x-on", #{ home: true })
-model AgentMsgMessage {
-  cmd: "agent_msg";
-  target_session_id: string;    // full id or unique prefix; empty when addressing a seed
-  target_seed_id?: string;      // deliver to this seed's tender
-  source_session_id: SessionID;    // who is speaking; the daemon composes from this
-  content: string;
-}
-
-// One agent closes a session. A session may close itself, a session it dispatched
-// (the Garden dispatch document names it as the dispatcher), and the chief of
-// staff may close any. The reason is required: the ledger keeps the row, and the
-// reason is what the next reader has to go on.
-// Exactly one destination, the same shape as AgentMsgMessage: a session by id or
-// unique prefix, or a seed whose tender the daemon resolves.
-@extension("x-on", #{ home: true })
-model AgentCloseMessage {
-  cmd: "agent_close";
-  target_session_id: string;    // full id or unique prefix; empty when addressing a seed
-  target_seed_id?: string;      // close whoever tends this seed
-  source_session_id: SessionID;    // who is closing
-  reason: string;
-  compact?: boolean;            // compact the conversation after this turn, then close; self only
-}
-
 // The rule that authorized a close. A refusal names the rules in its message
 // instead, so the caller learns which one it needed.
 enum AgentCloseRule {
@@ -938,14 +893,6 @@ model AgentCloseResult {
   rule: AgentCloseRule;
   seed_ids: string[];           // the seeds the closed session tended, each of which got the note
   pending_compact?: boolean;    // the session closes after this turn, once its conversation is compacted
-}
-
-@extension("x-on", #{ home: true })
-model AgentReloadMessage {
-  cmd: "agent_reload";
-  source_session_id: SessionID;
-  targets: string[];
-  all: boolean;
 }
 
 model AgentReloadOutcome {
@@ -1088,22 +1035,6 @@ model QuickCaptureUnreadMessage {
   profile_id: string;
   event: "quick_capture_unread";
   capture_id: string;
-}
-
-@extension("x-on", #{ home: true })
-model AgentInboxMessage {
-  cmd: "agent_inbox";
-  message_id?: string;
-  recipient_session_id: SessionID;
-  limit?: int32;
-}
-
-// The sender inspects the durable lifecycle of one peer message.
-@extension("x-on", #{ home: true })
-model AgentMsgStatusMessage {
-  cmd: "agent_msg_status";
-  message_id: string;
-  sender_session_id: SessionID;
 }
 
 // A Stop is not always terminal: the turn may yield with background work still
@@ -7430,10 +7361,6 @@ model Response {
   terminal_read_result?: TerminalReadResult;
   terminal_wait_result?: TerminalWaitResult;
   terminal_move_result?: TerminalMoveResult;
-  agent_peek_result?: AgentPeekResult;
-  agent_msg_result?: AgentMsgResult;
-  agent_close_result?: AgentCloseResult;
-  agent_reload_result?: AgentReloadResult;
   quick_capture_result?: QuickCaptureResult;
   sender_pairing?: SenderPairingRequest;
   paired_sender_token?: PairedSenderToken;
@@ -7441,11 +7368,7 @@ model Response {
   sender_sessions?: SenderSession[];
   sender_model_call_result?: SenderModelCallResult;
   model_calls?: ModelCall[];
-  agent_inbox_result?: AgentPeerMessage;
-  agent_inbox_item_result?: AgentInboxItem;
-  agent_inbox_batch_result?: AgentInboxBatchResult;
   agent_turn_result?: AgentTurnResult;
-  agent_msg_status_result?: AgentPeerMessage;
   crew_list_result?: CrewListResult;
   crew_charter_get_result?: CrewCharterGetResult;
   crew_charter_set_result?: CrewCharterSetResult;
@@ -8198,7 +8121,30 @@ model AgentInboxBatchResult {
   // opens a turn, and phone access is on: that stop does not notify the phone
   // unless the agent opens its turn.
   phone_stays_silent?: boolean;
+  // agent inbox <id>: the item or peer message that id names, in place of items.
+  item?: AgentInboxItem;
+  message?: AgentPeerMessage;
+  // The text the CLI prints, when it asks for it.
+  text?: string;
 }
+
+// agent list: every session on this daemon, as the CLI's --json prints them.
+model AgentListResult {
+  agents: AgentListRow[];
+}
+
+model AgentListRow {
+  id: string;
+  label: string;
+  agent: string;
+  profile: string;
+  directory: string;
+  state: string;
+  turn_owed: boolean;
+  member: string;
+  member_key?: string;
+}
+
 
 model EvidenceExcerpt {
   turn_id: string;

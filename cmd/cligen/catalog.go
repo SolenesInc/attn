@@ -12,6 +12,7 @@ import (
 
 	"github.com/victorarias/attn/internal/catalog"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/inbox"
 )
 
 const (
@@ -28,6 +29,7 @@ var catalogValues = map[string]string{
 	"entry_kinds":             strings.Join(garden.EntryKinds, ", "),
 	"max_check_summary_chars": fmt.Sprint(garden.MaxCheckSummaryChars),
 	"max_note_kib":            fmt.Sprint(garden.MaxNoteBytes >> 10),
+	"max_inbox":               fmt.Sprint(inbox.MaxInboxLimit),
 }
 
 var (

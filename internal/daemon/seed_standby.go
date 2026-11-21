@@ -12,7 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-func (d *Daemon) seedStandbyRequest(msg *seedStandbyRequest, setter who.Actor) (*protocol.SeedStandbyResult, *protocol.AgentCloseMessage, error) {
+func (d *Daemon) seedStandbyRequest(msg *seedStandbyRequest, setter who.Actor) (*protocol.SeedStandbyResult, *agentCloseRequest, error) {
 	seedID := strings.TrimSpace(msg.SeedID)
 	callerID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	note := strings.TrimSpace(protocol.Deref(msg.Note))
@@ -62,8 +62,7 @@ func (d *Daemon) seedStandbyRequest(msg *seedStandbyRequest, setter who.Actor) (
 	if err != nil || !closeSelf {
 		return result, nil, err
 	}
-	return result, &protocol.AgentCloseMessage{
-		Cmd:             protocol.CmdAgentClose,
+	return result, &agentCloseRequest{
 		SourceSessionID: caller.ID,
 		TargetSessionID: string(caller.ID),
 		Reason:          garden.TrimReason(fmt.Sprintf("On standby for %s: %s", seed.ID, note)),

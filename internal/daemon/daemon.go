@@ -3082,15 +3082,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleWakeTurnConn(conn, msg.(*protocol.WakeTurnMessage))
 	case protocol.CmdRenameSession:
 		d.handleRenameSessionConn(conn, msg.(*protocol.RenameSessionMessage))
-	case protocol.CmdAgentPeek:
-		d.handleAgentPeek(conn, msg.(*protocol.AgentPeekMessage))
 
-	case protocol.CmdAgentMsg:
-		d.handleAgentMsg(conn, msg.(*protocol.AgentMsgMessage))
-	case protocol.CmdAgentClose:
-		d.handleAgentClose(conn, msg.(*protocol.AgentCloseMessage))
-	case protocol.CmdAgentReload:
-		d.handleAgentReload(conn, msg.(*protocol.AgentReloadMessage))
 	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureAttachmentPut, protocol.CmdQuickCaptureAttachmentGet, protocol.CmdQuickCaptureAttachmentDiscard:
 		d.handleQuickCapture(conn, msg)
 	case protocol.CmdSenderPair:
@@ -3107,10 +3099,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleSenderModelCall(conn, msg.(*protocol.SenderModelCallMessage))
 	case protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList:
 		d.sendError(conn, "quick capture history is app-only; use the authenticated app WebSocket channel")
-	case protocol.CmdAgentInbox:
-		d.handleAgentInbox(conn, msg.(*protocol.AgentInboxMessage))
-	case protocol.CmdAgentMsgStatus:
-		d.handleAgentMsgStatus(conn, msg.(*protocol.AgentMsgStatusMessage))
 	case protocol.CmdSeedArtifactTransfer:
 		d.handleSeedArtifactTransfer(ctx, conn, msg.(*protocol.SeedArtifactTransferMessage), by.Actor())
 	case protocol.CmdSeedAuthorization:

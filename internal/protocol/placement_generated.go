@@ -29,13 +29,7 @@ type Placed interface {
 
 var Placements = map[string][]Placement{
 	"agent_catalog":                    {Placement{LocatorMachine, "host"}},
-	"agent_close":                      {Placement{LocatorHome, ""}},
-	"agent_inbox":                      {Placement{LocatorHome, ""}},
 	"agent_launch_close":               {Placement{LocatorSession, "session_id"}},
-	"agent_msg":                        {Placement{LocatorHome, ""}},
-	"agent_msg_status":                 {Placement{LocatorHome, ""}},
-	"agent_peek":                       {Placement{LocatorHome, ""}},
-	"agent_reload":                     {Placement{LocatorHome, ""}},
 	"agent_turn":                       {Placement{LocatorHome, ""}},
 	"apply_monitor_view":               {Placement{LocatorHome, ""}},
 	"ask_close":                        {Placement{LocatorHome, ""}},
@@ -275,30 +269,6 @@ func (m AgentCatalogMessage) Locate() string {
 	return string(m.Host)
 }
 
-func (AgentCloseMessage) CommandName() string {
-	return "agent_close"
-}
-
-func (m AgentCloseMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AgentCloseMessage) Locate() string {
-	return ""
-}
-
-func (AgentInboxMessage) CommandName() string {
-	return "agent_inbox"
-}
-
-func (m AgentInboxMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AgentInboxMessage) Locate() string {
-	return ""
-}
-
 func (AgentLaunchCloseMessage) CommandName() string {
 	return "agent_launch_close"
 }
@@ -309,54 +279,6 @@ func (m AgentLaunchCloseMessage) Placement() Placement {
 
 func (m AgentLaunchCloseMessage) Locate() string {
 	return string(m.SessionID)
-}
-
-func (AgentMsgMessage) CommandName() string {
-	return "agent_msg"
-}
-
-func (m AgentMsgMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AgentMsgMessage) Locate() string {
-	return ""
-}
-
-func (AgentMsgStatusMessage) CommandName() string {
-	return "agent_msg_status"
-}
-
-func (m AgentMsgStatusMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AgentMsgStatusMessage) Locate() string {
-	return ""
-}
-
-func (AgentPeekMessage) CommandName() string {
-	return "agent_peek"
-}
-
-func (m AgentPeekMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AgentPeekMessage) Locate() string {
-	return ""
-}
-
-func (AgentReloadMessage) CommandName() string {
-	return "agent_reload"
-}
-
-func (m AgentReloadMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AgentReloadMessage) Locate() string {
-	return ""
 }
 
 func (AgentTurnMessage) CommandName() string {

@@ -1,14 +1,15 @@
 package daemon
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
-	"net"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -17,81 +18,122 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage) {
-	recipient, errCode := d.resolveSessionByIDOrPrefix(string(msg.RecipientSessionID))
-	if recipient == nil {
-		d.sendError(conn, "recipient_"+errCode)
-		return
+func (d *Daemon) runAgentInbox(ctx context.Context, c command.Caller, a command.AgentInboxArgs) (any, error) {
+	messageID := strings.TrimSpace(a.Message)
+	limit := inbox.DefaultInboxLimit
+	if a.Limit != nil {
+		if messageID != "" {
+			return nil, command.Usage("{limit} cannot be used with a message id")
+		}
+		limit = int(*a.Limit)
 	}
-	if strings.TrimSpace(protocol.Deref(msg.MessageID)) == "" {
-		d.handleAgentInboxBatch(conn, recipient.ID, protocol.Deref(msg.Limit))
-		return
+	if limit < 1 || limit > inbox.MaxInboxLimit {
+		return nil, command.Usage("{limit} must be between 1 and %d", inbox.MaxInboxLimit)
 	}
+	recipient, err := d.mailboxSession(c)
+	if err != nil {
+		return nil, err
+	}
+	var result *protocol.AgentInboxBatchResult
+	var after func()
+	if messageID == "" {
+		result, after, err = d.agentInboxBatch(recipient.ID, limit)
+	} else {
+		result, after, err = d.agentInboxEntry(recipient, messageID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if a.Render {
+		result.Text = protocol.Ptr(agentInboxText(result))
+	}
+	return command.Then{Result: result, After: after}, nil
+}
+
+func (d *Daemon) mailboxSession(c command.Caller) (*protocol.Session, error) {
+	if c.Session == "" {
+		return nil, command.Refuse(command.CodeNoSession, "no session identity: run this inside an attn session or pass {session} <id>")
+	}
+	session, code := d.resolveSessionByIDOrPrefix(string(c.Session))
+	if session == nil {
+		if code == "ambiguous_session" {
+			return nil, command.Refuse("ambiguous_session", "the session %q matches more than one session; give more of the id", c.Session)
+		}
+		return nil, command.Refuse(command.CodeSessionNotFound, "the session %q is not on this daemon", c.Session)
+	}
+	return session, nil
+}
+
+func peerMessageRefusal(d *Daemon, messageID string, err error) error {
+	switch {
+	case errors.Is(err, store.ErrPeerMessageNotFound):
+		return command.Refuse("message_not_found", "message %q was not found for this session", messageID)
+	case errors.Is(err, store.ErrPeerMessageNotNotified):
+		return command.Refuse("message_not_notified", "message %q is still queued; read it after its notification lands", messageID)
+	default:
+		d.logf("agent inbox: %v", err)
+		return errors.New("the peer message could not be read")
+	}
+}
+
+func (d *Daemon) agentInboxEntry(recipient *protocol.Session, messageID string) (*protocol.AgentInboxBatchResult, func(), error) {
 	addresses, err := d.inboxAddressesOf(recipient.ID)
 	if err != nil {
-		d.replyPeerMessageError(conn, err)
-		return
+		return nil, nil, peerMessageRefusal(d, messageID, err)
 	}
-	messageID := strings.TrimSpace(protocol.Deref(msg.MessageID))
+	asked := messageID
 	storedItem, found, err := d.store.InboxItem(store.QuickCaptureInboxID(recipient.ProfileID, messageID))
 	if found {
 		messageID = storedItem.ID
 	}
 	if err != nil {
-		d.replyPeerMessageError(conn, err)
-		return
+		return nil, nil, peerMessageRefusal(d, asked, err)
 	}
+	result := &protocol.AgentInboxBatchResult{Items: []protocol.AgentInboxItem{}}
 	if found && storedItem.Kind == inbox.QuickCapture {
 		item, readNow, err := d.store.ReadInboxItem(messageID, string(recipient.ID), addresses, time.Now())
 		if err != nil {
-			d.replyAgentMsgError(conn, "message_not_found", err.Error())
-			return
+			return nil, nil, command.Refuse("message_not_found", "message %q was not found for this session", asked)
 		}
 		quickCapture, err := d.store.QuickCapture(recipient.ProfileID, item.Source)
 		if err != nil {
-			d.replyPeerMessageError(conn, err)
-			return
+			return nil, nil, peerMessageRefusal(d, asked, err)
 		}
-		result := &protocol.AgentInboxItem{Address: item.To.String(), ItemID: item.Source, Kind: string(item.Kind), SourceID: protocol.Ptr(item.Source), Content: item.Text, CreatedAt: item.CreatedAt, NotifiedAt: item.NotifiedAt, ReadAt: item.ReadAt, Attachments: quickCapture.Attachments}
-		_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentInboxItemResult: result})
-		if readNow {
-			d.publishQuickCaptureRead(recipient.ProfileID, quickCapture.ID, item.ReadAt)
-			d.kickInboxAfterCommit(item.To)
-		}
-		return
+		result.Item = &protocol.AgentInboxItem{Address: item.To.String(), ItemID: item.Source, Kind: string(item.Kind), SourceID: protocol.Ptr(item.Source), Content: item.Text, CreatedAt: item.CreatedAt, NotifiedAt: item.NotifiedAt, ReadAt: item.ReadAt, Attachments: quickCapture.Attachments}
+		return result, func() {
+			if readNow {
+				d.publishQuickCaptureRead(recipient.ProfileID, quickCapture.ID, item.ReadAt)
+				d.kickInboxAfterCommit(item.To)
+			}
+		}, nil
 	}
 	stored, err := d.store.PeerMessageRecord(messageID)
 	if err != nil {
-		d.replyPeerMessageError(conn, err)
-		return
+		return nil, nil, peerMessageRefusal(d, asked, err)
 	}
 	if _, seed := stored.To.TenderOf(); seed {
 		holder, _, err := d.inboxRecipient(stored.To)
 		if err != nil {
-			d.replyPeerMessageError(conn, err)
-			return
+			return nil, nil, peerMessageRefusal(d, asked, err)
 		}
 		if holder != nil && holder.ID == recipient.ID {
 			addresses = append(addresses, stored.To)
 		}
 	}
-	record, readNow, err := d.store.ReadPeerMessage(
-		messageID, recipient.ID, addresses, time.Now(),
-	)
+	record, readNow, err := d.store.ReadPeerMessage(messageID, recipient.ID, addresses, time.Now())
 	if err != nil {
-		d.replyPeerMessageError(conn, err)
-		return
+		return nil, nil, peerMessageRefusal(d, asked, err)
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{
-		Ok: true, AgentInboxResult: d.peerMessageResult(record),
-	})
-	if readNow {
-		d.endStandbyOnceMailRead(record.To)
-		d.kickInboxAfterCommit(record.To)
-	}
+	result.Message = d.peerMessageResult(record)
+	return result, func() {
+		if readNow {
+			d.endStandbyOnceMailRead(record.To)
+			d.kickInboxAfterCommit(record.To)
+		}
+	}, nil
 }
 
-func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protocol.SessionID, limit int) {
+func (d *Daemon) agentInboxBatch(recipientSessionID protocol.SessionID, limit int) (*protocol.AgentInboxBatchResult, func(), error) {
 	d.lockGardenRoles()
 	addresses, err := d.inboxAddressesOf(recipientSessionID)
 	for _, address := range addresses {
@@ -107,8 +149,7 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 	d.unlockGardenRoles()
 	if err != nil {
 		d.logf("agent inbox batch: session=%s err=%v", recipientSessionID, err)
-		d.replyAgentMsgError(conn, "internal_error", "the agent inbox could not be read")
-		return
+		return nil, nil, errors.New("the agent inbox could not be read")
 	}
 	items := make([]protocol.AgentInboxItem, 0, len(deliveries))
 	parties := d.partiesNow()
@@ -134,8 +175,10 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 		}
 		items = append(items, item)
 	}
-	d.endStandbyOnceMailRead(read...)
-	d.kickInboxAfterCommit(addresses...)
+	after := func() {
+		d.endStandbyOnceMailRead(read...)
+		d.kickInboxAfterCommit(addresses...)
+	}
 	result := &protocol.AgentInboxBatchResult{Items: items, Remaining: remaining}
 	if len(items) > 0 && d.inNotificationRun(recipientSessionID) {
 		switch {
@@ -145,7 +188,7 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 			result.PhoneStaysSilent = protocol.Ptr(true)
 		}
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentInboxBatchResult: result})
+	return result, after, nil
 }
 
 func mailboxItemContent(delivery store.InboxDelivery) string {
@@ -173,35 +216,20 @@ func mailboxItemContent(delivery store.InboxDelivery) string {
 	return delivery.Item.Hint
 }
 
-func (d *Daemon) handleAgentMsgStatus(conn net.Conn, msg *protocol.AgentMsgStatusMessage) {
-	sender, errCode := d.resolveSessionByIDOrPrefix(string(msg.SenderSessionID))
-	if sender == nil {
-		d.sendError(conn, "sender_"+errCode)
-		return
+func (d *Daemon) runAgentMsgStatus(ctx context.Context, c command.Caller, a command.AgentMsgStatusArgs) (any, error) {
+	sender, err := d.mailboxSession(c)
+	if err != nil {
+		return nil, err
 	}
-	record, err := d.store.PeerMessageRecord(strings.TrimSpace(msg.MessageID))
+	messageID := strings.TrimSpace(a.Message)
+	record, err := d.store.PeerMessageRecord(messageID)
 	if err != nil || record.Message.Sender != d.partyOfSession(sender.ID) {
 		if err != nil && !errors.Is(err, store.ErrPeerMessageNotFound) {
-			d.logf("agent msg status: id=%s err=%v", msg.MessageID, err)
+			d.logf("agent msg status: id=%s err=%v", messageID, err)
 		}
-		d.replyAgentMsgError(conn, "message_not_found", "no peer message with that id belongs to this sender")
-		return
+		return nil, command.Refuse("message_not_found", "message %q was not found for this session", messageID)
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{
-		Ok: true, AgentMsgStatusResult: d.peerMessageResult(record),
-	})
-}
-
-func (d *Daemon) replyPeerMessageError(conn net.Conn, err error) {
-	switch {
-	case errors.Is(err, store.ErrPeerMessageNotFound):
-		d.replyAgentMsgError(conn, "message_not_found", "no notified peer message with that id belongs to this recipient")
-	case errors.Is(err, store.ErrPeerMessageNotNotified):
-		d.replyAgentMsgError(conn, "message_not_notified", "that message is still queued and cannot be read before its notification lands")
-	default:
-		d.logf("agent inbox: %v", err)
-		d.replyAgentMsgError(conn, "internal_error", "the peer message could not be read")
-	}
+	return d.peerMessageResult(record), nil
 }
 
 func (d *Daemon) peerMessageResult(record inbox.PeerRecord) *protocol.AgentPeerMessage {
@@ -225,4 +253,54 @@ func (d *Daemon) peerMessageResult(record inbox.PeerRecord) *protocol.AgentPeerM
 		result.ReadAt = protocol.Ptr(record.ReadAt)
 	}
 	return result
+}
+
+func agentInboxText(result *protocol.AgentInboxBatchResult) string {
+	switch {
+	case result.Message != nil:
+		return agentPeerMessageText(result.Message.Sender, result.Message.ReplyTo, result.Message.Content)
+	case result.Item != nil:
+		return agentInboxText(&protocol.AgentInboxBatchResult{Items: []protocol.AgentInboxItem{*result.Item}})
+	}
+	if len(result.Items) == 0 {
+		return prompts.RenderText("session", "inbox-empty", nil)
+	}
+	var lines []string
+	for _, item := range result.Items {
+		content := strings.TrimSpace(item.Content)
+		if content == "" {
+			content = item.Kind
+			if sourceID := strings.TrimSpace(protocol.Deref(item.SourceID)); sourceID != "" {
+				content += " " + sourceID
+			}
+		}
+		switch item.Kind {
+		case string(inbox.QuickCapture):
+			lines = append(lines, inbox.QuickCaptureText(item.Content, protocol.Deref(item.SourceID), item.Attachments))
+		case string(inbox.Notice):
+			lines = append(lines, content)
+		case string(inbox.PeerMessage):
+			lines = append(lines, agentPeerMessageText(protocol.Deref(item.Sender), protocol.Deref(item.ReplyTo), content))
+		default:
+			lines = append(lines, prompts.RenderText("session", "inbox-item", prompts.Values{"content": content}))
+		}
+	}
+	if result.Remaining > 0 {
+		lines = append(lines, prompts.RenderText("session", "inbox-more", prompts.Values{"remaining": strconv.Itoa(result.Remaining)}))
+	}
+	if protocol.Deref(result.QuietNotifications) {
+		lines = append(lines, prompts.RenderText("session", "inbox-quiet", nil))
+	}
+	if protocol.Deref(result.PhoneStaysSilent) {
+		lines = append(lines, prompts.RenderText("session", "inbox-phone-silent", nil))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func agentPeerMessageText(sender protocol.PartyView, replyTo, content string) string {
+	origin := replyTo
+	if name := strings.TrimSpace(sender.Name); name != "" && name != origin {
+		origin = fmt.Sprintf("%s (%s)", origin, name)
+	}
+	return prompts.RenderText("session", "peer-message", prompts.Values{"origin": origin, "message": content, "reply_to": replyTo})
 }

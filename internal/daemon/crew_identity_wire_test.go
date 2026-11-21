@@ -45,7 +45,9 @@ func TestACrewNameResolvesOnlyInItsProfile(t *testing.T) {
 		_, err = scoped.CrewRename(name, "Alfred")
 		crewErrorContains(t, err, "no crew member named", `profile "Side"`)
 		_, err = scoped.AgentPeek(name)
-		crewErrorContains(t, err, "session_not_found")
+		if client.ErrorCode(err) != "session_not_found" {
+			t.Errorf("peek of %s from another profile = %v, want session_not_found", name, err)
+		}
 		_, err = scoped.AgentMsg(name, protocol.SessionID(plain), "Hello")
 		crewErrorContains(t, err, "no session or crew member matches")
 		reloaded, err := scoped.AgentReload([]string{name}, protocol.SessionID(plain), false)

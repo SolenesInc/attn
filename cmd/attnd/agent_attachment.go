@@ -58,7 +58,7 @@ func retrieveAgentAttachment(cli *client.Client, quickCapture, id, path string) 
 }
 func runAgentAttachment(args []string) {
 	if hasHelpFlag(args) {
-		writeAgentHelp(os.Stdout)
+		fmt.Fprintln(os.Stdout, "usage: attn agent attachment <capture-id> <attachment-id> --out <path> [--profile <name|id>]\n      Download a saved user file from this session's profile, then inspect it.\n      Outside a session, choose --profile when more than one profile exists.")
 		return
 	}
 	if len(args) < 2 {

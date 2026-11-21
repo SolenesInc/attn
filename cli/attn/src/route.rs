@@ -1,6 +1,6 @@
 use crate::commands::{
-    Run, Stop, activity, automation, browser, callout, codex, conversation, crew, delegate, doc,
-    enrollment, guide, instance_env, instance_resolve, journal, list, model, nav, open, pr,
+    Run, Stop, activity, agent, automation, browser, callout, codex, conversation, crew, delegate,
+    doc, enrollment, guide, instance_env, instance_resolve, journal, list, model, nav, open, pr,
     print_stdout, review, seed, send, session, settings, skill, state, terminal, ticket, top_level,
     worktree,
 };
@@ -68,12 +68,13 @@ fn native_command(name: &str, verb: Option<&str>, argv: &[OsString]) -> Option<N
         ("state", _) => native(state::run, true),
         ("list", _) => native(list::run, true),
         ("activity", _) => native(activity::run, true),
+        ("agent", Some("attachment")) | ("doc", Some("watch")) => return None,
+        ("agent", _) => native(agent::run, true),
         ("session", _) => native(session::run, true),
         ("skill", _) => native(skill::run, false),
         ("guide", _) => native(guide::run, false),
         ("ticket", _) => native(ticket::run, true),
         ("delegate", _) => native(delegate::run, true),
-        ("doc", Some("watch")) => return None,
         ("doc", _) => native(doc::run, true),
         ("pr", Some("wait-ready")) if !pr::asks_for_help(&argv[2..]) => return None,
         ("pr", _) => native(pr::run, false),

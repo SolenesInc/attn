@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -61,7 +62,7 @@ func TestAgentPeekResolvesItsAddress(t *testing.T) {
 	}
 	peekRefuses := func(address, want string) {
 		t.Helper()
-		if peek, err := cli.AgentPeek(address); err == nil || !strings.Contains(err.Error(), want) {
+		if peek, err := cli.AgentPeek(address); client.ErrorCode(err) != want {
 			t.Errorf("peek %q = %+v, %v; want a refusal naming %s", address, peek, err, want)
 		}
 	}

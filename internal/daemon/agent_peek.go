@@ -3,13 +3,13 @@ package daemon
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
-	"net"
+	"errors"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -24,20 +24,29 @@ var claudeSuggestionCells = sync.OnceValue(func() *regexp.Regexp {
 	return regexp.MustCompile(`❯[ \x{a0}](?:` + sgr + `)*\x1b\[(?:[0-9;]*;)?7m[^\x1b](?:` + sgr + `)*\x1b\[(?:[0-9;]*;)?2m`)
 })
 
-func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) {
-	session, errCode := d.resolveAgentPeekTarget(askerOf(msg.SourceSessionID, msg.ProfileID), msg.TargetSessionID)
-	if session == nil {
-		d.sendError(conn, errCode)
-		return
+func (d *Daemon) runAgentPeek(ctx context.Context, c command.Caller, a command.AgentPeekArgs) (any, error) {
+	session, errCode := d.resolveAgentPeekTarget(crewAsker{session: c.Session, profileID: c.Profile}, a.Target)
+	if session != nil {
+		if scope := d.callerScope(c); scope != "" && session.ProfileID != scope {
+			session, errCode = nil, "session_not_found"
+		}
+	}
+	target := strings.TrimSpace(a.Target)
+	switch {
+	case session != nil:
+	case errCode == "session_not_found":
+		return nil, command.Refuse(errCode, "no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", target)
+	case errCode == "ambiguous_session":
+		return nil, command.Refuse(errCode, "%q matches more than one session; give more of the id (`attn agent list --json` carries full ids)", target)
+	case errCode == "crew_member_asleep":
+		return nil, command.Refuse(errCode, "%s is between sessions; `attn agent peek` never starts a session for a crew member. `attn crew start %s` starts one", target, target)
+	default:
+		return nil, errors.New(errCode)
 	}
 	if err := d.requireSessionHost(session.ID); err != nil {
-		d.sendError(conn, err.Error())
-		return
+		return nil, err
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{
-		Ok:              true,
-		AgentPeekResult: d.agentPeekResult(session),
-	})
+	return d.agentPeekResult(session), nil
 }
 
 func (d *Daemon) resolveAgentPeekTarget(asker crewAsker, target string) (*protocol.Session, string) {

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/command"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
@@ -40,14 +43,17 @@ func agentMessageGuardVerdict(counts inbox.PeerGuardCounts) string {
 	return ""
 }
 
-func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
-	sender, errCode := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID))
-	if sender == nil {
-		d.sendError(conn, "sender_"+errCode)
-		return
+func (d *Daemon) runAgentMsg(ctx context.Context, c command.Caller, a command.AgentMsgArgs) (any, error) {
+	if c.Session == "" {
+		return nil, command.Refuse(command.CodeNoSender, "no sender: this shell is not an attn session, so pass --source-session <id> (`attn agent list` names the sessions)")
 	}
+	sender, errCode := d.resolveSessionByIDOrPrefix(string(c.Session))
+	if sender == nil {
+		return nil, senderRefusal(errCode, string(c.Session), "sender")
+	}
+	msg := agentMsgTarget(a.Target)
 
-	content := strings.TrimSpace(msg.Content)
+	content := strings.TrimSpace(a.Text)
 	result := &protocol.AgentMsgResult{Status: protocol.AgentMsgStatusRefused}
 	switch {
 	case content == "":
@@ -58,31 +64,24 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 			len(content), protocol.AgentMessageMaxChars)
 	}
 	if result.Detail != "" {
-		d.replyAgentMsg(conn, result)
-		return
+		return result, nil
 	}
 
 	targetRef := protocol.SessionID(msg.TargetSessionID)
 	var address who.Address
 	if seedID := strings.TrimSpace(protocol.Deref(msg.TargetSeedID)); seedID != "" {
 		if err := d.requireSeedInProfile(seedID, sender.ProfileID, false); err != nil {
-			d.replyAgentMsgError(conn, "cross_profile", err.Error())
-			return
-		}
-		if protocol.TrimID(targetRef) != "" {
-			d.replyAgentMsgError(conn, "ambiguous_target", "a message goes to one place; name a session or a seed, not both")
-			return
+			return nil, command.Refuse("cross_profile", "%s", err.Error())
 		}
 		seed, _, err := d.readSeed(seedID)
 		if err != nil {
-			d.replyAgentMsgError(conn, "seed_not_found", err.Error())
-			return
+			return nil, command.Refuse("seed_not_found", "%s", err.Error())
 		}
 		address = who.ToTenderOf(seed.ID)
 	} else {
 		// A target in another profile is answered exactly like an unknown one.
-		notFound := func() {
-			d.replyAgentMsgError(conn, "session_or_crew_member_not_found", fmt.Sprintf("no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", protocol.TrimID(targetRef)))
+		notFound := func() error {
+			return command.Refuse("session_or_crew_member_not_found", "no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", protocol.TrimID(targetRef))
 		}
 		member, found, memberErr := d.crewMemberIn(sender.ProfileID, string(targetRef))
 		if found {
@@ -91,19 +90,15 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 			target, code := d.resolveSessionByIDOrPrefix(string(targetRef))
 			if target == nil {
 				if memberErr != nil {
-					d.sendError(conn, memberErr.Error())
-					return
+					return nil, memberErr
 				}
 				if code == "session_not_found" {
-					notFound()
-				} else {
-					d.sendError(conn, code)
+					return nil, notFound()
 				}
-				return
+				return nil, command.Refuse(code, "%q matches more than one session; give more of the id (`attn agent list --json` carries full ids)", protocol.TrimID(targetRef))
 			}
 			if target.ProfileID != sender.ProfileID {
-				notFound()
-				return
+				return nil, notFound()
 			}
 			address = d.inboxAddressOf(target.ID)
 		}
@@ -111,8 +106,7 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 	if key, _ := address.Member(); !key.IsZero() {
 		if retired, ok := d.retiredCrewMember(key.String()); ok {
 			result.Detail = retired.Name + " is retired"
-			d.replyAgentMsg(conn, result)
-			return
+			return result, nil
 		}
 	}
 	target := d.inboxHolder(address)
@@ -120,8 +114,7 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		result.TargetSessionID = target.ID
 		if sender.ID == target.ID {
 			result.Detail = "that is this session; a message to yourself is not a conversation"
-			d.replyAgentMsg(conn, result)
-			return
+			return result, nil
 		}
 	}
 	now := time.Now()
@@ -129,18 +122,15 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 	counts, err := d.store.PeerMessageGuardCounts(senderParty, address, content, now.Add(-agentMessageDedupeWindow), now.Add(-agentMessageRateWindow))
 	if err != nil {
 		d.logf("agent msg guard counts: %v", err)
-		d.sendError(conn, "internal_error")
-		return
+		return nil, err
 	}
 	if verdict := agentMessageGuardVerdict(counts); verdict != "" {
 		result.Detail = verdict
-		d.replyAgentMsg(conn, result)
-		return
+		return result, nil
 	}
 	message := inbox.Message{ID: uuid.NewString(), Sender: senderParty, Body: content, CreatedAt: now.UTC().Format(time.RFC3339Nano)}
 	if err := d.store.PutPeerMessage(message, address); err != nil {
-		d.sendError(conn, "internal_error")
-		return
+		return nil, err
 	}
 	receipt := d.deliverSavedInbox(address, message.ID, now)
 	result.MessageID = receipt.ItemID
@@ -156,11 +146,27 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		result.Detail = "notified " + d.crewMemberName(key.String())
 	}
 
-	d.replyAgentMsg(conn, result)
+	return result, nil
 }
 
-func (d *Daemon) replyAgentMsg(conn net.Conn, result *protocol.AgentMsgResult) {
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentMsgResult: result})
+type agentMsgTargets struct {
+	TargetSessionID string
+	TargetSeedID    *string
+}
+
+func agentMsgTarget(target string) agentMsgTargets {
+	target = strings.TrimSpace(target)
+	if garden.ValidateID(target) == nil {
+		return agentMsgTargets{TargetSeedID: protocol.Ptr(target)}
+	}
+	return agentMsgTargets{TargetSessionID: target}
+}
+
+func senderRefusal(code, sender, role string) *command.Refusal {
+	if code == "ambiguous_session" {
+		return command.Refuse(role+"_ambiguous_session", "the %s %q matches more than one session; give more of the id", role, sender)
+	}
+	return command.Refuse(role+"_session_not_found", "the %s %q is not a session on this daemon", role, sender)
 }
 
 func (d *Daemon) replyAgentMsgError(conn net.Conn, code, message string) {

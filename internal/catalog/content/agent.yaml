@@ -1,2 +1,119 @@
+# The agent family. A command acts as its caller: the session the terminal
+# shows, or the session --source-session (or --session) names from a shell.
+# `anyone` lets a terminal that shows no session run a read that acts as nobody.
 groups:
-  - {name: agent, usage: "<command>", summary: "see what other agents are doing, message one, close or reload one"}
+  - name: agent
+    usage: "<command>"
+    summary: "see what other agents are doing, message one, close or reload one"
+    doc: |
+      See what other agents are doing, message one, read your inbox, close or reload one.
+    flags:
+      - {name: source-session, placeholder: "<id>", doc: "the session acting (defaults to the current session)"}
+      - {name: session, placeholder: "<id>", doc: "the same as --source-session"}
+      - {name: profile, placeholder: "<name|id>", doc: "the profile whose crew to address outside a session"}
+
+commands:
+  - name: agent list
+    summary: the address book of every session on this daemon
+    runs: home
+    grant: full
+    read_only: true
+    anyone: true
+    doc: |
+      The address book: every session on this daemon with its short id, name, profile, state, and whether a turn is owed. Inside attn it lists your session's profile. Read-only.
+    result: AgentListResult
+
+  - name: agent peek
+    summary: observe a session without interrupting it
+    runs: home
+    grant: own
+    read_only: true
+    anyone: true
+    doc: |
+      Observes a session without interrupting it: state, last assistant message, and the rendered screen. On a Claude session, says when the composer holds Claude's suggestion and not typed text. Passive: the observed agent never notices. `target` is a crew name, a full session id, or a unique session id prefix. A crew member between sessions stays between sessions.
+    args:
+      - {name: target, type: text, required: true, cli: pos, placeholder: "<session-or-member>", doc: "a crew name, full session id, or unique id prefix"}
+    result: AgentPeekResult
+    errors:
+      - {code: session_not_found, fix: "Pass a session id agent_list names, or the name of a crew member in session."}
+      - {code: ambiguous_session, fix: "Give more of the id; agent_list carries full ids."}
+      - {code: crew_member_asleep, fix: "Start the member with crew_start first, or message it with agent_msg, which starts it."}
+
+  - name: agent msg
+    summary: send a session, crew member or seed a message
+    core: true
+    runs: home
+    grant: own
+    doc: |
+      Sends a session, crew member or seed a message. The body stays in the inbox; the recipient gets a generic inbox notification. A target that cannot take input safely keeps it queued. The result says queued, notified, or refused. attn starts a session for a member between sessions before the notification is placed. A seed id reaches its current or next tender, waiting when none is reachable. In the CLI, a message that starts with - goes after --, as: attn agent msg -- <target> "-text".
+    args:
+      - {name: target, type: text, required: true, cli: pos, placeholder: "<session-or-member-or-seed>", doc: "a session id or unique prefix, a crew member's name, or a seed id"}
+      - {name: text, type: text, required: true, cli: pos, placeholder: '"<text>"', doc: "the message"}
+    result: AgentMsgResult
+    errors:
+      - {code: no_sender, usage: true, fix: "Pass {session}, or run it inside an attn session."}
+      - {code: session_or_crew_member_not_found, fix: "Pass a session id agent_list names, a crew member's name, or a seed id."}
+      - {code: ambiguous_session, fix: "Give more of the id; agent_list carries full ids."}
+
+  - name: agent close
+    summary: close a session for good, with a reason
+    runs: home
+    grant: own
+    doc: |
+      Closes a session for good. A session may close itself and agents below it in its delegation chain, including delegates of delegates; the profile's Chief may close any agent of that profile. The reason is required: the session row stays in the ledger, and the reason is what the next reader gets. Without `compact` it is immediate, so say what you have to say first. A seed id closes whoever tends it, and the seed keeps its tender with a note about the close. `self` closes the caller without its id and takes no target.
+
+      `compact` goes only with `self`: attn waits for your turn to end, compacts your conversation through the harness, then closes the session. End your turn right after: you get no turn after the compact. When the compact fails, the session still closes, and the reason says the compact did not run. Only a Claude session with the Claude mod and a Codex session on the shared Codex app server compact, on the home machine or an outpost, and a Sigma session on the home machine; attn refuses any other session and says why. Compact only a session that will resume as itself, as a seed's tender does when its standby resumes it. A crew member's next session starts fresh.
+    args:
+      - {name: target, type: text, cli: pos, placeholder: "<session-or-seed>", unless: self, doc: "the session id or unique prefix, or the seed whose tender to close"}
+      - {name: reason, type: text, required: true, cli: "-m", placeholder: '"<reason>"', doc: "why this session is done"}
+      - {name: self, type: bool, cli: "--self", doc: "close the calling session"}
+      - {name: compact, type: bool, cli: "--compact", doc: "compact the conversation after this turn, then close (with self)"}
+    result: AgentCloseResult
+    errors:
+      - {code: no_sender, usage: true, fix: "Pass {session}, or run it inside an attn session."}
+      - {code: close_reason_required, usage: true, fix: "Pass {reason}: why this session is done."}
+      - {code: session_not_found, fix: "Pass a session id agent_list names, or {self} to close yourself."}
+
+  - name: agent reload
+    summary: interrupt and reload agents in place
+    runs: home
+    grant: full
+    doc: |
+      Interrupts and reloads agents in place, as "Reload this agent" does. Running work is interrupted and non-persistent state may be lost. Full ids, unique prefixes and names of crew members in session work; a member between sessions stays between sessions. A member whose saved harness matches its session reloads with its saved model and effort. A session may reload itself and descendants; the profile's chief may reload any agent in that profile. `all` is chief-only, includes the chief and crew, and excludes shells. Chief and crew close protections do not prevent reload. Each target reports an outcome; failures leave successful reloads in place. Repeated targets reload once. Exited agents use 80x24. The caller reloads last if selected; a self reload may interrupt the command before its result arrives.
+    args:
+      - {name: targets, type: text, list: true, cli: rest, placeholder: "<session-or-member>", unless: all, doc: "the sessions or crew members to reload"}
+      - {name: all, type: bool, cli: "--all", doc: "every agent in the caller's profile (chief only)"}
+    result: AgentReloadResult
+    errors:
+      - {code: no_sender, usage: true, fix: "Pass {session}, or run it inside an attn session."}
+
+  - name: agent inbox
+    summary: read your unread notifications, or one message by id
+    core: true
+    runs: home
+    grant: own
+    doc: |
+      Reads up to 20 unread notifications in FIFO order, or one notified user or peer message by `message`. Each returned item gets its durable read receipt. `limit` can be 1 through {max_inbox}.
+    args:
+      - {name: message, type: text, cli: pos, placeholder: "<message-id>", doc: "one notified message to read"}
+      - {name: limit, type: count, cli: "--limit", doc: "how many unread items to read (default 20)"}
+      - {name: render, type: bool, cli: internal, doc: "answer the text the CLI prints too"}
+    result: AgentInboxBatchResult
+    errors:
+      - {code: no_session, usage: true, fix: "Pass {session}, or run it inside an attn session."}
+      - {code: message_not_found, fix: "Pass the id of a message your inbox notified you about."}
+      - {code: message_not_notified, fix: "Read it after its notification lands."}
+
+  - name: agent msg-status
+    summary: whether a message you sent is queued, notified or read
+    runs: home
+    grant: own
+    read_only: true
+    doc: |
+      Inspects a message you sent as queued, notified, or read.
+    args:
+      - {name: message, type: text, required: true, cli: pos, placeholder: "<message-id>", doc: "the id agent_msg answered"}
+    result: AgentPeerMessage
+    errors:
+      - {code: no_session, usage: true, fix: "Pass {session}, or run it inside an attn session."}
+      - {code: message_not_found, fix: "Pass the id agent_msg answered for a message you sent."}

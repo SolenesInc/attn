@@ -101,26 +101,6 @@ type AgentCatalogResultMessage struct {
 	Success bool `json:"success"`
 }
 
-type AgentCloseMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Compact corresponds to the JSON schema field "compact".
-	Compact *bool `json:"compact,omitempty,omitzero"`
-
-	// Reason corresponds to the JSON schema field "reason".
-	Reason string `json:"reason"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID SessionID `json:"source_session_id"`
-
-	// TargetSeedID corresponds to the JSON schema field "target_seed_id".
-	TargetSeedID *string `json:"target_seed_id,omitempty,omitzero"`
-
-	// TargetSessionID corresponds to the JSON schema field "target_session_id".
-	TargetSessionID string `json:"target_session_id"`
-}
-
 type AgentCloseResult struct {
 	// Label corresponds to the JSON schema field "label".
 	Label string `json:"label"`
@@ -148,8 +128,14 @@ const AgentCloseRuleDispatcher AgentCloseRule = "dispatcher"
 const AgentCloseRuleSelf AgentCloseRule = "self"
 
 type AgentInboxBatchResult struct {
+	// Item corresponds to the JSON schema field "item".
+	Item *AgentInboxItem `json:"item,omitempty,omitzero"`
+
 	// Items corresponds to the JSON schema field "items".
 	Items []AgentInboxItem `json:"items"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message *AgentPeerMessage `json:"message,omitempty,omitzero"`
 
 	// PhoneStaysSilent corresponds to the JSON schema field "phone_stays_silent".
 	PhoneStaysSilent *bool `json:"phone_stays_silent,omitempty,omitzero"`
@@ -159,6 +145,9 @@ type AgentInboxBatchResult struct {
 
 	// Remaining corresponds to the JSON schema field "remaining".
 	Remaining int `json:"remaining"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text *string `json:"text,omitempty,omitzero"`
 }
 
 type AgentInboxItem struct {
@@ -199,20 +188,6 @@ type AgentInboxItem struct {
 	SourceID *string `json:"source_id,omitempty,omitzero"`
 }
 
-type AgentInboxMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Limit corresponds to the JSON schema field "limit".
-	Limit *int `json:"limit,omitempty,omitzero"`
-
-	// MessageID corresponds to the JSON schema field "message_id".
-	MessageID *string `json:"message_id,omitempty,omitzero"`
-
-	// RecipientSessionID corresponds to the JSON schema field "recipient_session_id".
-	RecipientSessionID SessionID `json:"recipient_session_id"`
-}
-
 type AgentLaunchCloseMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -250,28 +225,45 @@ type AgentLaunchCloseResult struct {
 	View *string `json:"view,omitempty,omitzero"`
 }
 
+type AgentListResult struct {
+	// Agents corresponds to the JSON schema field "agents".
+	Agents []AgentListRow `json:"agents"`
+}
+
+type AgentListRow struct {
+	// Agent corresponds to the JSON schema field "agent".
+	Agent string `json:"agent"`
+
+	// Directory corresponds to the JSON schema field "directory".
+	Directory string `json:"directory"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// MemberKey corresponds to the JSON schema field "member_key".
+	MemberKey *string `json:"member_key,omitempty,omitzero"`
+
+	// Profile corresponds to the JSON schema field "profile".
+	Profile string `json:"profile"`
+
+	// State corresponds to the JSON schema field "state".
+	State string `json:"state"`
+
+	// TurnOwed corresponds to the JSON schema field "turn_owed".
+	TurnOwed bool `json:"turn_owed"`
+}
+
 type AgentMessageState string
 
 const AgentMessageStateNotified AgentMessageState = "notified"
 const AgentMessageStateQueued AgentMessageState = "queued"
 const AgentMessageStateRead AgentMessageState = "read"
-
-type AgentMsgMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Content corresponds to the JSON schema field "content".
-	Content string `json:"content"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID SessionID `json:"source_session_id"`
-
-	// TargetSeedID corresponds to the JSON schema field "target_seed_id".
-	TargetSeedID *string `json:"target_seed_id,omitempty,omitzero"`
-
-	// TargetSessionID corresponds to the JSON schema field "target_session_id".
-	TargetSessionID string `json:"target_session_id"`
-}
 
 type AgentMsgResult struct {
 	// Detail corresponds to the JSON schema field "detail".
@@ -289,17 +281,6 @@ type AgentMsgResult struct {
 
 type AgentMsgStatus string
 
-type AgentMsgStatusMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// MessageID corresponds to the JSON schema field "message_id".
-	MessageID string `json:"message_id"`
-
-	// SenderSessionID corresponds to the JSON schema field "sender_session_id".
-	SenderSessionID SessionID `json:"sender_session_id"`
-}
-
 const AgentMsgStatusNotified AgentMsgStatus = "notified"
 const AgentMsgStatusQueued AgentMsgStatus = "queued"
 const AgentMsgStatusRefused AgentMsgStatus = "refused"
@@ -313,20 +294,6 @@ type AgentPeekExit struct {
 
 	// Signal corresponds to the JSON schema field "signal".
 	Signal *string `json:"signal,omitempty,omitzero"`
-}
-
-type AgentPeekMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ProfileID corresponds to the JSON schema field "profile_id".
-	ProfileID *string `json:"profile_id,omitempty,omitzero"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
-
-	// TargetSessionID corresponds to the JSON schema field "target_session_id".
-	TargetSessionID string `json:"target_session_id"`
 }
 
 type AgentPeekResult struct {
@@ -415,20 +382,6 @@ type AgentPeerMessage struct {
 
 	// TargetSessionID corresponds to the JSON schema field "target_session_id".
 	TargetSessionID string `json:"target_session_id"`
-}
-
-type AgentReloadMessage struct {
-	// All corresponds to the JSON schema field "all".
-	All bool `json:"all"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SourceSessionID corresponds to the JSON schema field "source_session_id".
-	SourceSessionID SessionID `json:"source_session_id"`
-
-	// Targets corresponds to the JSON schema field "targets".
-	Targets []string `json:"targets"`
 }
 
 type AgentReloadOutcome struct {
@@ -9618,33 +9571,6 @@ type ReposUpdatedMessage struct {
 }
 
 type Response struct {
-	// AgentCloseResult corresponds to the JSON schema field "agent_close_result".
-	AgentCloseResult *AgentCloseResult `json:"agent_close_result,omitempty,omitzero"`
-
-	// AgentInboxBatchResult corresponds to the JSON schema field
-	// "agent_inbox_batch_result".
-	AgentInboxBatchResult *AgentInboxBatchResult `json:"agent_inbox_batch_result,omitempty,omitzero"`
-
-	// AgentInboxItemResult corresponds to the JSON schema field
-	// "agent_inbox_item_result".
-	AgentInboxItemResult *AgentInboxItem `json:"agent_inbox_item_result,omitempty,omitzero"`
-
-	// AgentInboxResult corresponds to the JSON schema field "agent_inbox_result".
-	AgentInboxResult *AgentPeerMessage `json:"agent_inbox_result,omitempty,omitzero"`
-
-	// AgentMsgResult corresponds to the JSON schema field "agent_msg_result".
-	AgentMsgResult *AgentMsgResult `json:"agent_msg_result,omitempty,omitzero"`
-
-	// AgentMsgStatusResult corresponds to the JSON schema field
-	// "agent_msg_status_result".
-	AgentMsgStatusResult *AgentPeerMessage `json:"agent_msg_status_result,omitempty,omitzero"`
-
-	// AgentPeekResult corresponds to the JSON schema field "agent_peek_result".
-	AgentPeekResult *AgentPeekResult `json:"agent_peek_result,omitempty,omitzero"`
-
-	// AgentReloadResult corresponds to the JSON schema field "agent_reload_result".
-	AgentReloadResult *AgentReloadResult `json:"agent_reload_result,omitempty,omitzero"`
-
 	// AgentTurnResult corresponds to the JSON schema field "agent_turn_result".
 	AgentTurnResult *AgentTurnResult `json:"agent_turn_result,omitempty,omitzero"`
 
