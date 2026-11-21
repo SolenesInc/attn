@@ -7590,6 +7590,7 @@ fn outpost(id: &str, build: &str, phase: Option<&str>, outcome: Option<&str>) ->
         update: phase.map(|phase| OutpostUpdate {
             phase: phase.into(),
             outcome: outcome.map(Into::into),
+            cause: None,
         }),
         ..OutpostInfo::default()
     }
