@@ -8,13 +8,13 @@ use attn_protocol::{Ask, AskAnswer, AskAnswerMessage, AskQuestion, Session, Stan
 use rune::{TextEdit, Tx};
 
 use crate::State;
-use crate::shell::Drawer;
+use crate::shell::Layer;
 use crate::sidebar::queue;
 
-pub(crate) use view::{ChipLevel, chip, chip_widths, drawer, marker, preview, title_button};
+pub(crate) use view::{ChipLevel, chip, chip_widths, marker, preview, sheet, title_button};
 
 pub(crate) const SETTING: &str = "asks_enabled";
-pub(crate) const DRAWER: &str = "asks.drawer";
+pub(crate) const SHEET: &str = "asks.sheet";
 const CREW_DAEMON_ID: &str = "attn";
 const TENDER_RESUME: &str = "garden.tender_resume";
 
@@ -24,11 +24,12 @@ pub(crate) struct Standby<'a> {
     pub answer: String,
 }
 
-/// The drawer's own state: which ask it shows, what the person has written in each, and the
+/// The sheet's own state: which ask it shows, what the person has written in each, and the
 /// send in flight.
 #[derive(Default)]
 pub struct Asks {
-    /// The ask the drawer shows; the first of its list while none is picked.
+    /// The ask the sheet shows, kept while it is closed; the first of its list while none is
+    /// picked or the one picked is gone.
     pub(crate) selected: Option<String>,
     pub(crate) show_replied: bool,
     pub(crate) drafts: HashMap<String, Draft>,
@@ -37,7 +38,7 @@ pub struct Asks {
     pub(crate) error: Option<(String, String)>,
     /// The ask, and whether it was replied, that the keyboard last moved into.
     focused_on: Option<(String, bool)>,
-    /// The keyboard moves into the drawer at the next follow, whatever it shows.
+    /// The keyboard moves into the sheet at the next follow, whatever it shows.
     take_keyboard: bool,
     mentions: Option<mentions::Mentions>,
 }
@@ -79,8 +80,8 @@ impl Kind {
     }
 }
 
-/// One row of the drawer's list: the ask, the agent that holds it or the closed agent on
-/// standby that its answer resumes, and how the drawer names that agent.
+/// One row of the sheet's list: the ask, the agent that holds it or the closed agent on
+/// standby that its answer resumes, and how the sheet names that agent.
 pub(crate) struct Item<'a> {
     pub ask: &'a Ask,
     pub holder: Option<&'a Session>,
@@ -157,7 +158,7 @@ impl<'a> Lists<'a> {
         }
     }
 
-    /// What the drawer lists: the open asks, then the replied ones when they show.
+    /// What the sheet lists: the open asks, then the replied ones when they show.
     pub(crate) fn shown(self, replied: bool) -> Vec<Item<'a>> {
         let mut items = self.live;
         items.extend(self.snoozed);
@@ -168,9 +169,10 @@ impl<'a> Lists<'a> {
     }
 }
 
-/// Opens an ask's seed in the garden beside the drawer, or in a tile when the garden's window
-/// of seeds does not hold it.
+/// Closes the sheet and opens an ask's seed in the garden, or in a tile when the garden's
+/// window of seeds does not hold it.
 pub(crate) fn open_seed(state: &mut State, id: &str, tx: &mut Tx) {
+    close(state, tx);
     if crate::garden::seeds(state).iter().any(|s| s.id == id) {
         crate::garden::open_seed(state, id, tx);
         return;
@@ -283,7 +285,7 @@ pub(crate) fn available(facts: &Facts) -> bool {
     !facts.asks.is_empty() || crate::setting::on(&facts.settings, SETTING)
 }
 
-/// The open asks the drawer counts: every one but a snoozed agent's.
+/// The open asks the sheet counts: every one but a snoozed agent's.
 pub(crate) fn open_count(facts: &Facts, now_ms: i64) -> usize {
     Lists::of(facts, now_ms).live.len()
 }
@@ -356,7 +358,7 @@ pub(crate) fn recommended(ask: &Ask) -> Vec<(String, Kind, String)> {
 }
 
 /// When what the asks show by the clock next changes: a snoozed asker waking, which returns its
-/// asks to the counts, and, while the drawer shows them, the ages its rows and its replied
+/// asks to the counts, and, while the sheet shows them, the ages its rows and its replied
 /// footer read.
 pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {
     let lists = Lists::of(&state.facts, now_ms);
@@ -365,7 +367,7 @@ pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {
         .iter()
         .filter_map(|item| item.snoozed_until.and_then(queue::epoch_ms))
         .collect();
-    let ages: Vec<i64> = if state.window.shows(Drawer::Asks) {
+    let ages: Vec<i64> = if is_open(state) {
         lists
             .shown(state.window.asks.show_replied)
             .iter()
@@ -389,7 +391,7 @@ impl State {
         Lists::of(&self.facts, self.window.now_ms).shown(self.window.asks.show_replied)
     }
 
-    /// The ask the drawer shows: the one picked, or the first it lists.
+    /// The ask the sheet shows: the one picked, or the first it lists.
     pub(crate) fn shown_ask(&self) -> Option<(String, bool)> {
         let items = self.asks_items();
         let picked = self.window.asks.selected.as_deref();
@@ -416,36 +418,59 @@ impl State {
     }
 }
 
-/// Opens or closes the drawer. Opening it shows the ask it last showed, or the first, and
-/// takes the keyboard there; closing it hands the keyboard back to the agent.
+pub(crate) fn is_open(state: &State) -> bool {
+    state.window.layer == Some(Layer::Asks)
+}
+
+/// Opens or closes the sheet. Opening it shows the ask of the agent on screen when that agent
+/// holds one, else the ask it last showed, else the first, and takes the keyboard there;
+/// closing it hands the keyboard back to the agent.
 pub(crate) fn toggle(state: &mut State, tx: &mut Tx) {
-    if state.window.shows(Drawer::Asks) {
+    if is_open(state) {
         close(state, tx);
     } else {
         show(state, None, tx);
     }
 }
 
-/// Opens the drawer on `ask`, or where it was, and takes the keyboard into it even when it
+/// The open ask of the agent on screen: the one the sheet last showed when it is that agent's,
+/// else the agent's oldest.
+fn on_screen_ask(state: &State) -> Option<String> {
+    let on_screen = state.window.on_screen(&state.facts)?;
+    let session = state.facts.sessions.iter().find(|s| s.id == on_screen)?;
+    let asks = of_session(&state.facts, session);
+    let selected = state.window.asks.selected.as_deref();
+    asks.iter()
+        .find(|a| Some(a.id.as_str()) == selected)
+        .or(asks.first())
+        .map(|a| a.id.clone())
+}
+
+/// Opens the sheet on `ask`, or on the ask of the agent on screen when that agent holds one,
+/// or where it was, over whatever layer is open, and takes the keyboard into it even when it
 /// already shows that ask.
 pub(crate) fn show(state: &mut State, ask: Option<&str>, tx: &mut Tx) {
-    state.window.open_drawer(Drawer::Asks);
+    let ask = ask.map(str::to_owned).or_else(|| on_screen_ask(state));
+    state.window.layer = Some(Layer::Asks);
     state.tick(tx);
     if let Some(ask) = ask {
-        state.window.asks.selected = Some(ask.to_owned());
+        state.window.asks.selected = Some(ask);
     }
     state.window.asks.take_keyboard = true;
     follow(state, tx);
 }
 
+/// Closes the sheet, keeping the ask it shows for when it opens again.
 pub(crate) fn close(state: &mut State, tx: &mut Tx) {
-    state.window.close_drawer(Drawer::Asks);
-    state.window.asks.selected = None;
+    if is_open(state) {
+        state.window.layer = None;
+    }
     state.window.asks.focused_on = None;
     tx.blur();
+    crate::picker::refocus_inline(state, tx);
 }
 
-/// Keeps the drawer on the ask it shows as the lists change, forgets what was written for
+/// Keeps the sheet on the ask it shows as the lists change, forgets what was written for
 /// asks that closed, and moves the keyboard into an ask newly shown.
 pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
     let open: Vec<String> = state
@@ -456,7 +481,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
         .map(|a| a.id.clone())
         .collect();
     state.window.asks.drafts.retain(|id, _| open.contains(id));
-    if !state.window.shows(Drawer::Asks) {
+    if !is_open(state) {
         return;
     }
     let shown = state.shown_ask();
@@ -475,7 +500,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
     let ring = tx.by_keys() || tx.focus_visible();
     match shown.and_then(|(id, _)| first_input(state, &id)) {
         Some(input) => tx.focus(input, ring),
-        None => tx.focus(DRAWER, ring),
+        None => tx.focus(SHEET, ring),
     }
 }
 
@@ -493,7 +518,7 @@ fn first_input(state: &State, ask: &str) -> Option<String> {
     })
 }
 
-/// Moves to the next or previous ask the drawer lists.
+/// Moves to the next or previous ask the sheet lists.
 pub(crate) fn step(state: &mut State, by: isize, tx: &mut Tx) {
     let items = state.asks_items();
     let Some((shown, _)) = state.shown_ask() else {
@@ -562,7 +587,7 @@ pub(crate) fn accept_recommended(state: &mut State, ask: &str) {
     }
 }
 
-/// Sends the answers and note written for the ask shown. Once the daemon takes them the drawer
+/// Sends the answers and note written for the ask shown. Once the daemon takes them the sheet
 /// moves to the ask after it in its section, or before it, or stays to show the reply; a
 /// refusal keeps what was written and says why.
 pub(crate) fn send(state: &mut State, tx: &mut Tx) {
@@ -618,7 +643,7 @@ pub(crate) fn send(state: &mut State, tx: &mut Tx) {
     );
 }
 
-/// Opens the agent that holds the ask shown, and closes the drawer.
+/// Closes the sheet and opens the agent that holds the ask shown.
 pub(crate) fn open_agent(state: &mut State, session: &str, tx: &mut Tx) {
     close(state, tx);
     crate::sidebar::open_agent(state, session, tx);

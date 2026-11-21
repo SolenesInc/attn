@@ -1,4 +1,4 @@
-//! The seeds an ask names by id or slug, which the drawer turns into links that open them.
+//! The seeds an ask names by id or slug, which the sheet turns into links that open them.
 
 use std::ops::Range;
 use std::sync::Arc;
@@ -21,7 +21,7 @@ pub(crate) struct Mentions {
     names: Vec<AskSeedMention>,
 }
 
-/// Asks the daemon which seeds `shown` names when the drawer moves to it or the garden changes,
+/// Asks the daemon which seeds `shown` names when the sheet moves to it or the garden changes,
 /// keeping the links it shows until the answer arrives.
 pub(crate) fn follow(state: &mut State, shown: Option<&str>, tx: &mut Tx) {
     let Some(ask) = shown else {
@@ -82,7 +82,7 @@ fn asked_under(mentions: &Mentions, garden: &Arc<Garden>) -> bool {
         .is_some_and(|g| Arc::ptr_eq(g, garden))
 }
 
-/// The seeds the drawer links in `ask`.
+/// The seeds the sheet links in `ask`.
 pub(crate) fn of<'a>(state: &'a State, ask: &str) -> &'a [AskSeedMention] {
     state
         .window

@@ -109,7 +109,7 @@ const SECTIONS: &[Section] = &[
             ),
             line("All agents", &[Of(Action::SidebarAgentList)]),
             line("Settle turn", &[Of(Action::SessionSettle)]),
-            line("Asks drawer", &[Of(Action::DockAsks)]),
+            line("Asks", &[Of(Action::DockAsks)]),
             line("Toggle session priority", &[Of(Action::SessionPriority)]),
             line("Snooze this agent", &[Of(Action::SessionSnooze)]),
             line(

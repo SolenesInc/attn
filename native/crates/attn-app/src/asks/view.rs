@@ -8,7 +8,7 @@ use attn_ui::system::{
     Type, answers, area_box, ask_mark, checks, count_badge, dot, icon_button, keycaps, keys_hint,
     line_box, tag, words,
 };
-use attn_ui::{Tokens, glyph};
+use attn_ui::{Backdrop, Frame, Tokens, glyph};
 use rune::{El, Image, Key, KeyEvent, Side, Tx, col, row};
 use rune_kit::{ImageFrame, Markdown, TextArea, TextInput};
 
@@ -22,8 +22,26 @@ pub(super) const SNOOZE: &str = "asks.snooze";
 const OPEN_SEED: &str = "asks.open-seed";
 const LIST: &str = "asks.list";
 
-/// How many asks the list shows before it scrolls: three, and half of the next, so it reads as
-/// a list that goes on and leaves the drawer to the ask it shows.
+/// The sheet's greatest width and height, its list rail's width and its reading column's
+/// measure, as the plan's D1 agreed them from the prototype.
+const SHEET_W: f32 = 1020.0;
+const SHEET_H: f32 = 880.0;
+const RAIL_W: f32 = 264.0;
+const MEASURE: f32 = 700.0;
+/// Under its greatest size the sheet stays 96 points narrower than the window and 120 points
+/// shorter, centred under the title bar. Past the least size below, its margins give way to
+/// it, down to the tightest.
+const SHEET_SIDE: f32 = 48.0;
+const SHEET_ABOVE: f32 = 44.0;
+const SHEET_TIGHTEST: f32 = 16.0;
+/// The narrowest sheet that sets its list beside the ask: the rail and 420 points of ask, the
+/// least the drawer it replaced read an ask in. A narrower sheet lists the asks over the ask.
+const BESIDE_LEAST: f32 = RAIL_W + 420.0;
+/// The height the sheet keeps before its margins above and below give way: at 480 the ask
+/// shows 360 points of itself beside the list, measured in a 1000 by 600 window.
+const TALL_LEAST: f32 = 480.0;
+/// How many asks the list over the ask shows before it scrolls: three, and half of the next, so
+/// it reads as a list that goes on and leaves the sheet to the ask it shows.
 const SHOWN_ASKS: f32 = 3.5;
 
 pub(super) fn choice_key(question: &str, i: usize) -> String {
@@ -48,8 +66,9 @@ fn send_chord() -> &'static str {
     }
 }
 
-/// The drawer: the asks it lists, and the one it shows, with the questions to answer.
-pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
+/// The sheet over the window: the rail of the asks it lists beside the one it shows, with the
+/// questions to answer.
+pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
     let lists = Lists::of(&state.facts, state.window.now_ms);
     let live = lists.live.len();
     let replied = lists.replied.len();
@@ -59,40 +78,92 @@ pub(crate) fn drawer(state: &State, t: &Tokens) -> El {
     let close = icon_button("asks.close", "Close asks", glyph::TIMES, IconSize::Large)
         .on_press_tx(super::close)
         .build(t);
-    let mut sheet = Sheet::new("asks.sheet", "Asks");
+    let mut rail = Sheet::new("asks.rail", "Asks");
     if live > 0 {
-        sheet = sheet.badge(
+        rail = rail.badge(
             count_badge(live, t.accent, attn_ui::ink_on(t.accent, t))
                 .key("asks.count")
                 .role("status")
                 .label(format!("{live} open")),
         );
     }
-    let sheet = sheet
+    let rail = rail
         .aside(replied_toggle(replied, asks.show_replied, t))
         .close(close);
-    let sheet = match shown.and_then(|id| items.iter().position(|i| i.ask.id == id)) {
-        None => sheet.push(empty(replied, t)),
-        Some(at) => {
-            let item = &items[at];
-            sheet
-                .top(list(&items, &item.ask.id, state.window.now_ms, t))
-                .keeps_room(ListRow::two_line_height() * SHOWN_ASKS)
-                .article("asks.ask", item.ask.subject.clone())
-                .push_all(article(state, item, t))
-                .footer(footer(state, item, items.len() > 1, t))
-        }
-    };
-    col()
-        .key(super::DRAWER)
-        .role("region")
+    let [window_w, window_h] = state.pictures.window;
+    let under_title_bar = window_h - crate::shell::TITLE_BAR_HEIGHT;
+    let side = ((window_w - BESIDE_LEAST) / 2.0).clamp(SHEET_TIGHTEST, SHEET_SIDE);
+    let above = ((under_title_bar - TALL_LEAST) / 2.0).clamp(SHEET_TIGHTEST, SHEET_ABOVE);
+    let beside = window_w - 2.0 * side >= BESIDE_LEAST;
+    let panel = col()
+        .key(super::SHEET)
+        .role("dialog")
         .label("Asks")
         .focusable(true)
         .no_focus_ring()
-        .on_key(drawer_key)
+        .on_key(sheet_key)
+        .modal_tx(true, super::close)
+        .w_full()
+        .max_w(SHEET_W);
+    let now_ms = state.window.now_ms;
+    let panel = match shown.and_then(|id| items.iter().position(|i| i.ask.id == id)) {
+        None => panel.child(rail.push(empty(replied, t)).fits(SHEET_H).build(t)),
+        Some(at) if beside => {
+            let item = &items[at];
+            let rail = rail
+                .fill(col().child(list(&items, &item.ask.id, now_ms, t).scrolling(t)))
+                .build(t)
+                .grow(0.0)
+                .w(RAIL_W)
+                .min_w(RAIL_W)
+                .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle);
+            let reading = Sheet::new("asks.reading", item.ask.subject.clone())
+                .head(header(state, item, t))
+                .article("asks.ask", item.ask.subject.clone())
+                .measure(MEASURE)
+                .push_all(article(state, item, t))
+                .footer(footer(state, item, items.len() > 1, t))
+                .build(t)
+                .grow_from(1.0, 0.0);
+            panel
+                .h_full()
+                .max_h(SHEET_H)
+                .child(row().w_full().h_full().child(rail).child(reading))
+        }
+        Some(at) => {
+            let item = &items[at];
+            let rows = ListRow::two_line_height() * SHOWN_ASKS;
+            let list = list(&items, &item.ask.id, now_ms, t)
+                .scrolling_up_to(rows, t)
+                .shrink()
+                .min_h(ListRow::two_line_height());
+            let stacked = rail
+                .top(list)
+                .keeps_room(rows)
+                .article("asks.ask", item.ask.subject.clone())
+                .push(Block::custom("asks.header.block", header(state, item, t)))
+                .push_all(article(state, item, t))
+                .footer(footer(state, item, items.len() > 1, t))
+                .build(t);
+            panel.h_full().max_h(SHEET_H).child(stacked)
+        }
+    };
+    let placed = col()
+        .pin(
+            Some(side),
+            Some(crate::shell::TITLE_BAR_HEIGHT + above),
+            Some(side),
+            Some(above),
+        )
+        .center()
+        .child(Frame::dialog(t).draw_clipped(panel));
+    rune::el()
+        .key("asks.layer")
+        .absolute(0.0, 0.0)
+        .w_full()
         .h_full()
-        .min_h(0.0)
-        .child(sheet.build(t))
+        .child(Backdrop::finder(t).draw("asks.scrim"))
+        .child(placed)
 }
 
 /// Shows or hides the asks replied to in the last day, reading as pressed while they show.
@@ -142,7 +213,7 @@ fn empty(replied: usize, t: &Tokens) -> Block {
     )
 }
 
-fn list(items: &[Item<'_>], shown: &str, now_ms: i64, t: &Tokens) -> El {
+fn list(items: &[Item<'_>], shown: &str, now_ms: i64, t: &Tokens) -> List {
     let replied = items.iter().any(|i| i.ask.reply.is_some());
     let mut rows = Vec::new();
     for (at, item) in items.iter().enumerate() {
@@ -160,12 +231,7 @@ fn list(items: &[Item<'_>], shown: &str, now_ms: i64, t: &Tokens) -> El {
     } else {
         "Open asks"
     };
-    List::new(LIST, label)
-        .listbox()
-        .rows(rows)
-        .scrolling_up_to(ListRow::two_line_height() * SHOWN_ASKS, t)
-        .shrink()
-        .min_h(ListRow::two_line_height())
+    List::new(LIST, label).listbox().rows(rows)
 }
 
 fn divider(key: &str, said: &'static str, t: &Tokens) -> El {
@@ -281,9 +347,10 @@ impl<'a> Prose<'a> {
     }
 }
 
-fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
+/// The ask's header, which stays while the ask scrolls: who asked and what it is doing, with
+/// what to do about the ask besides answering it, and the seed it is about.
+fn header(state: &State, item: &Item<'_>, t: &Tokens) -> El {
     let ask = item.ask;
-    let prose = Prose::of(state, ask, t);
     let snoozable = item
         .holder
         .filter(|s| !crate::outpost::offline(s, &state.facts.outposts));
@@ -302,48 +369,92 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
         .child(
             words(item.from.clone(), Type::Name, t.text_primary)
                 .key("asks.from")
+                .min_w(0.0)
+                .shrink()
+                .truncate(),
+        )
+        .children(asker_state(state, item).map(|said| {
+            words(said, Type::Small, t.text_tertiary)
+                .key("asks.asker-state")
+                .min_w(0.0)
+                .shrink()
+                .truncate()
+        }))
+        .child(rune::el().grow(1.0))
+        .child(ask_button(
+            "asks.copy",
+            "Copy ask",
+            "Copy the ask as markdown (c)",
+            t,
+            super::copy,
+        ))
+        .children(item.holder.map(|s| open_agent(s, &item.from, t)))
+        .children(snoozable.map(|_| snooze_button(snoozed, &item.from, t)));
+    let seed = ask.seed_id.as_ref().map(|seed| {
+        let id = seed.clone();
+        Inline::loose()
+            .key("asks.seed")
+            .w_full()
+            .child(words(
+                ask.seed_slug.clone().unwrap_or_else(|| seed.clone()),
+                Type::Mono,
+                t.text_tertiary,
+            ))
+            .child(
+                words(
+                    ask.seed_title.clone().unwrap_or_default(),
+                    Type::Small,
+                    t.text_secondary,
+                )
                 .grow(1.0)
                 .min_w(0.0)
                 .truncate(),
-        )
-        .children(item.holder.map(|s| open_agent(s, &item.from, t)))
-        .children(snoozable.map(|_| snooze_button(snoozed, &item.from, t)));
-    let mut blocks = vec![Block::custom("asks.from.block", from)];
+            )
+            .child(ask_button(
+                OPEN_SEED,
+                "Open in Garden",
+                "Open the seed in the garden (g)",
+                t,
+                move |state: &mut State, tx: &mut Tx| super::open_seed(state, &id, tx),
+            ))
+    });
+    Stack::tight()
+        .key("asks.header")
+        .w_full()
+        .child(from)
+        .children(seed)
+}
+
+/// What the asker is doing, as the ask's header says it beside its name.
+fn asker_state(state: &State, item: &Item<'_>) -> Option<String> {
+    let holder = item.holder?;
+    if crate::outpost::offline(holder, &state.facts.outposts) {
+        return Some("offline".into());
+    }
+    if let Some(until) = item.snoozed_until {
+        return Some(format!(
+            "snoozed until {}",
+            queue::wake_time_short(Some(until), state.window.now_ms)
+        ));
+    }
+    if holder.turn_owed == Some(true) {
+        return Some("waiting on you".into());
+    }
+    Some(
+        crate::sidebar::model::AgentState::parse(&holder.state)
+            .spoken()
+            .to_owned(),
+    )
+}
+
+fn article(state: &State, item: &Item<'_>, t: &Tokens) -> Vec<Block> {
+    let ask = item.ask;
+    let prose = Prose::of(state, ask, t);
+    let mut blocks = Vec::new();
     if let Some(standby) = item.standby.as_ref().filter(|_| ask.reply.is_none()) {
         blocks.push(Block::custom(
             "asks.resumes.block",
             words(standby.answer.clone(), Type::Small, t.text_secondary).key("asks.resumes"),
-        ));
-    }
-    if let Some(seed) = &ask.seed_id {
-        let id = seed.clone();
-        blocks.push(Block::custom(
-            "asks.seed.block",
-            Inline::loose()
-                .key("asks.seed")
-                .w_full()
-                .child(words(
-                    ask.seed_slug.clone().unwrap_or_else(|| seed.clone()),
-                    Type::Mono,
-                    t.text_tertiary,
-                ))
-                .child(
-                    words(
-                        ask.seed_title.clone().unwrap_or_default(),
-                        Type::Small,
-                        t.text_secondary,
-                    )
-                    .grow(1.0)
-                    .min_w(0.0)
-                    .truncate(),
-                )
-                .child(ask_button(
-                    OPEN_SEED,
-                    "Open in Garden",
-                    "Open the seed in the garden (g)",
-                    t,
-                    move |state: &mut State, tx: &mut Tx| super::open_seed(state, &id, tx),
-                )),
         ));
     }
     blocks.push(Block::custom(
@@ -450,7 +561,7 @@ fn snooze_button(snoozed: bool, from: &str, t: &Tokens) -> El {
     ask_button(SNOOZE, said, &help, t, super::toggle_snooze)
 }
 
-/// Open agent, Snooze and Open in Garden: what to do with the ask besides answering it.
+/// Copy ask, Open agent, Snooze and Open in Garden: what to do with the ask besides answering it.
 fn ask_button(
     key: &str,
     said: &'static str,
@@ -693,13 +804,11 @@ fn written_field(
     area_box(area, FieldState::Ready, t).into()
 }
 
-/// A drawer field's keys it does not take as text: ⌘↩ sends and Escape closes.
+/// A field's keys it does not take as text: ⌘↩ sends and Escape closes the sheet.
 fn field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     match ev.key {
         Key::Enter if ev.mods.cmd || ev.mods.ctrl => super::send(state, tx),
-        Key::Escape => {
-            crate::shell::escape_drawers(state, tx);
-        }
+        Key::Escape => super::close(state, tx),
         _ => return false,
     }
     true
@@ -804,16 +913,16 @@ fn toggle_replied(state: &mut State, tx: &mut Tx) {
     super::follow(state, tx);
 }
 
-/// The drawer's keys while it or a control in it holds focus: ⌘↩ sends from anywhere in it;
+/// The sheet's keys while it or a control in it holds focus: ⌘↩ sends from anywhere in it;
 /// the letters act only outside a text field.
-fn drawer_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+fn sheet_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let m = ev.mods;
     if ev.key == Key::Enter && (m.cmd || m.ctrl) {
         super::send(state, tx);
         return true;
     }
     if ev.key == Key::Escape {
-        crate::shell::escape_drawers(state, tx);
+        super::close(state, tx);
         return true;
     }
     if tx.in_text_field() || m.cmd || m.ctrl || m.alt {
@@ -872,7 +981,7 @@ pub(crate) fn marker(row_key: &str, count: usize, t: &Tokens) -> Option<El> {
 
 /// The agent's open-ask chip in its tile header: the oldest ask's subject and how many more, at
 /// the level the tile's width leaves it. Resting the pointer on it previews the asks; a press
-/// opens the drawer on the oldest.
+/// opens the sheet on the oldest.
 pub(crate) fn chip(leaf: &str, session: &str, chip: &Chip, level: ChipLevel, t: &Tokens) -> El {
     let id = chip.ask.clone();
     let el = ask_chip(chip, level)
@@ -926,7 +1035,7 @@ pub(crate) enum ChipLevel {
 pub(crate) const CHIP_SHORT: f32 = 120.0;
 
 /// The preview of an agent's open asks under its chip: each ask's questions and choices, and
-/// Answer, which opens the drawer on it.
+/// Answer, which opens the sheet on it.
 pub(crate) fn preview(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     let session = state.facts.sessions.iter().find(|s| s.id == pop.session)?;
     let asks = super::of_session(&state.facts, session);
@@ -1009,7 +1118,7 @@ fn previewed(ask: &Ask, key: &str, t: &Tokens) -> El {
 }
 
 /// The title bar's asks button, while asks are on or any exists: it counts the open asks, but a
-/// snoozed agent's, and opens or closes the drawer.
+/// snoozed agent's, and opens or closes the sheet.
 pub(crate) fn title_button(state: &State, t: &Tokens) -> Option<El> {
     if !super::available(&state.facts) {
         return None;
@@ -1025,7 +1134,7 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> Option<El> {
         1 => format!("1 open ask{keys}"),
         n => format!("{n} open asks{keys}"),
     };
-    let open = state.window.shows(crate::shell::Drawer::Asks);
+    let open = super::is_open(state);
     let button = El::from(
         icon_button(
             "titlebar.asks",

@@ -67,7 +67,7 @@ macro_rules! actions {
             SetDesktopOrder { profile: String, desktops: Vec<String> },
             /// Close a desktop, asking first when it holds tiles.
             CloseDesktop { desktop: String },
-            /// Open the asks drawer on an ask, or on the first one.
+            /// Open the asks sheet on an ask, or on the ask it shows.
             ShowAsks { ask: Option<String> },
             /// Open the ledger on its Worktrees list.
             OpenWorktrees,
@@ -265,7 +265,7 @@ actions! {
     DesktopSendStay7 = "desktop.sendStay7", Sessions, "Move this to desktop 7";
     DesktopSendStay8 = "desktop.sendStay8", Sessions, "Move this to desktop 8";
     DesktopSendStay9 = "desktop.sendStay9", Sessions, "Move this to desktop 9";
-    DockAsks = "dock.asks", Sessions, "Asks drawer";
+    DockAsks = "dock.asks", Sessions, "Asks";
 
     TerminalOpen = "terminal.open", Panes, "Focus utility terminal";
     TerminalSplitVertical = "terminal.splitVertical", Panes, "New shell beside";

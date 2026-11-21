@@ -13,11 +13,11 @@ guide:
 
 An agent often needs one decision from you and can do the rest of its work without it. With an ask, the agent doesn't stop to wait. It sends you the question with `attn ask` and carries on with whatever doesn't depend on the answer.
 
-Every agent's asks reach one drawer, so you answer them without opening the agents' terminals.
+Every agent's asks reach one sheet in the middle of the window, so you answer them without opening the agents' terminals.
 
 ## How you use it
 
-Cmd+Shift+R (Ctrl+Alt+R on Linux) opens the Asks drawer. An ask can offer one choice, any number of choices, or a space for a written answer, and the agent can mark the choice it recommends. You can always answer in your own words instead.
+Cmd+Shift+R (Ctrl+Alt+R on Linux) opens Asks. An ask can offer one choice, any number of choices, or a space for a written answer, and the agent can mark the choice it recommends. You can always answer in your own words instead.
 
 Attn types your answer into the agent's conversation as your message. When the ask is about a seed, the answer goes to whoever tends that seed when you answer, and Attn adds the answer to the seed as a note.
 

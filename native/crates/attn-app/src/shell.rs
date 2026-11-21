@@ -113,7 +113,6 @@ pub enum View {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Drawer {
     Automations,
-    Asks,
     Garden,
 }
 
@@ -122,7 +121,6 @@ impl Drawer {
     /// clamped between its least and greatest width.
     pub(crate) fn width(self, window: f32) -> f32 {
         let (min, share, max) = match self {
-            Drawer::Asks => (420.0, 0.46, 720.0),
             Drawer::Automations => (420.0, 0.42, 640.0),
             Drawer::Garden => (380.0, 0.34, 560.0),
         };
@@ -158,6 +156,8 @@ pub enum Layer {
     Notebook,
     /// Manage crew; `Window::crew` holds it.
     Crew,
+    /// The asks sheet; `Window::asks` holds it.
+    Asks,
     /// The confirm before restarting the shared Codex now or reloading its old tiles;
     /// `Window::shared_codex` holds it.
     SharedCodex,
@@ -254,6 +254,7 @@ impl Layer {
                 | Layer::WhatsNew
                 | Layer::Notebook
                 | Layer::Crew
+                | Layer::Asks
         );
         let own = matches!(
             (self, action),
@@ -268,6 +269,7 @@ impl Layer {
                 Action::FileOpen
             ) | (Layer::Overview, Action::DesktopOverview)
                 | (Layer::ProfileSwitcher, Action::ProfileSwitch)
+                | (Layer::Asks, Action::DockAsks)
         );
         captures_navigation && action.yields_to_overlays() && !own
     }
@@ -321,7 +323,6 @@ pub(crate) fn escape_drawers(state: &mut State, tx: &mut Tx) -> bool {
     }
     match state.window.newest_drawer() {
         Some(Drawer::Garden) => crate::garden::close(state),
-        Some(Drawer::Asks) => crate::asks::close(state, tx),
         Some(Drawer::Automations) => crate::automations::close(state, tx),
         None => return false,
     }
@@ -575,8 +576,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
                 .flatten(),
         )
         .child(body.min_h(WORK_AREA_FLOOR));
-    crate::markdown::with_image_preview(root, state, cx.is_reduced_motion(), &t)
-        .children(layers(state, &t))
+    crate::markdown::with_image_preview(root, layers(state, &t), state, cx.is_reduced_motion(), &t)
         .children(crate::markdown::annotating::layers(state, cx, &t))
         .children(crate::markdown::sending::layers(state, cx, &t))
         .children(crate::callouts::layers(state, cx, &t))
@@ -756,16 +756,11 @@ fn main_area(state: &State, t: &Tokens, scale: f32) -> Vec<El> {
 /// The open drawers over the content, below the title bar, nothing behind them moving: the
 /// oldest against the window's right edge and each newer one to its left.
 fn dock(state: &State, t: &Tokens) -> Vec<El> {
-    let window = &state.window;
     let mut right = 0.0;
     docked(state)
         .map(|(drawer, width)| {
             let content = match drawer {
-                Drawer::Garden if window.shows(Drawer::Asks) => {
-                    crate::garden::panel(state, t).focus_return(crate::asks::DRAWER)
-                }
                 Drawer::Garden => crate::garden::panel(state, t),
-                Drawer::Asks => crate::asks::drawer(state, t),
                 Drawer::Automations => crate::automations::drawer(state, t),
             };
             let at = right;
@@ -853,7 +848,7 @@ pub(crate) fn covers_tiles(state: &State) -> bool {
 
 fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
     let window = &state.window;
-    let mut layers = Vec::new();
+    let mut layers: Vec<El> = crate::garden::frame_layer(state, t).into_iter().collect();
     match window.layer {
         Some(Layer::Palette(Palette::Search)) => layers.push(crate::palette::view(state, t)),
         Some(Layer::Palette(Palette::Files)) => layers.push(crate::opener::view(state, t)),
@@ -874,13 +869,13 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::Notebook) => layers.push(crate::notebook::fullscreen(state, t)),
         Some(Layer::Crew) => crate::crew::overlays(state, t, &mut layers),
         Some(Layer::SharedCodex) => crate::shared_codex::confirm(state, t, &mut layers),
+        Some(Layer::Asks) => layers.push(crate::asks::sheet(state, t)),
         Some(Layer::BannerDetails(band, shown)) => {
             banner_details(state, band, shown, t, &mut layers)
         }
         None => {}
     }
     layers.extend(crate::home::pull_requests::merge_confirmation(state, t));
-    layers.extend(crate::garden::frame_layer(state, t));
     crate::notebook::root_picker_overlay(state, t, &mut layers);
     crate::automations::form::overlay(state, t, &mut layers);
     layers.extend(crate::desktop::cap_menu(state, t));

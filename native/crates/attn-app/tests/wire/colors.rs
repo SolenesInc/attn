@@ -220,12 +220,12 @@ fn a_count_or_mark_on_a_status_fill_reads_at_4_5_to_1_in_every_scheme_dark_and_l
         vec![super::asks::api_working(), super::asks::web_waiting()],
     );
     asks.open_desktop();
-    super::asks::open_drawer(&mut asks);
+    super::asks::open_sheet(&mut asks);
     unread.extend(unread_in_every_scheme(
         &mut asks,
         &[],
         &[
-            ("the asks drawer's count", "asks.count", |t| t.accent),
+            ("the asks sheet's count", "asks.count", |t| t.accent),
             ("an asking agent's mark", "sidebar.session.web.ask", |t| {
                 t.accent
             }),

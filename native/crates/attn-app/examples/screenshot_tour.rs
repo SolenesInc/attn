@@ -5090,7 +5090,7 @@ fn chief_setup(dark: bool) {
     snap(&mut world, "chief-setup", dark);
 }
 
-/// The asks drawer showing one ask from the waiting agent, with its footer's keys and Send.
+/// The asks sheet showing one ask from the waiting agent, with its footer's keys and Send.
 fn asks(dark: bool) {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     state.asks = Some(vec![Ask {
@@ -5121,7 +5121,7 @@ fn asks(dark: bool) {
     snap(&mut world, "asks", dark);
 }
 
-/// The asks drawer reopened on a written draft after the window shrank to the smallest at the
+/// The asks sheet reopened on a written draft after the window shrank to the smallest at the
 /// largest text: the answer that takes the keyboard shows with its ring.
 fn asks_reopened(dark: bool) {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
@@ -5164,7 +5164,7 @@ fn asks_reopened(dark: bool) {
     snap(&mut world, "asks-reopened", dark);
 }
 
-/// The asks drawer with nothing open, under the asks setting.
+/// The asks sheet with nothing open, under the asks setting.
 fn asks_empty(dark: bool) {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     state
@@ -5176,7 +5176,7 @@ fn asks_empty(dark: bool) {
     snap(&mut world, "asks-empty", dark);
 }
 
-/// The asks drawer on an ask with a question of choices: its context, a recommended choice
+/// The asks sheet on an ask with a question of choices: its context, a recommended choice
 /// with a description, Other and the note.
 fn asks_choices(dark: bool) {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);

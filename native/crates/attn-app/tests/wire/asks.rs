@@ -184,7 +184,7 @@ fn start_on(mut state: InitialStateMessage, asks: Vec<Ask>, settings: &[(&str, &
     World::start(daemon)
 }
 
-pub(super) fn open_drawer(world: &mut World) {
+pub(super) fn open_sheet(world: &mut World) {
     world.gesture(|app| app.key(chord(Action::DockAsks)));
 }
 
@@ -326,13 +326,13 @@ fn sent_answers(world: &World) -> Vec<serde_json::Value> {
 }
 
 #[test]
-fn the_drawer_opens_on_the_ask_of_the_agent_waiting_on_you_first_with_the_keyboard_in_its_first_answer()
+fn the_sheet_opens_on_the_ask_of_the_agent_waiting_on_you_first_with_the_keyboard_in_its_first_answer()
  {
     let mut world = start(
         vec![cache_store(), release_day()],
         vec![api_working(), web_waiting()],
     );
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     assert_eq!(rows(&world), ["a-release", "a-cache1"]);
     assert_eq!(shown(&world).as_deref(), Some("Release day"));
@@ -346,12 +346,12 @@ fn the_drawer_opens_on_the_ask_of_the_agent_waiting_on_you_first_with_the_keyboa
 }
 
 #[test]
-fn the_drawer_keeps_the_shown_ask_and_focus_when_another_agent_starts_waiting() {
+fn the_sheet_keeps_the_shown_ask_and_focus_when_another_agent_starts_waiting() {
     let mut world = start(
         vec![cache_store(), release_day()],
         vec![api_working(), session("web", "working")],
     );
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     assert_eq!(shown(&world).as_deref(), Some("Cache store"));
 
     changes(&mut world, web_waiting());
@@ -362,12 +362,12 @@ fn the_drawer_keeps_the_shown_ask_and_focus_when_another_agent_starts_waiting() 
 }
 
 #[test]
-fn the_drawers_letter_keys_work_after_a_click_on_the_ask_itself() {
+fn the_sheets_letter_keys_work_after_a_click_on_the_ask_itself() {
     let mut world = start(
         vec![cache_store(), release_day()],
         vec![api_working(), web_waiting()],
     );
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     click(&mut world, "asks.row.a-cache1");
     click(&mut world, "asks.part.0");
 
@@ -397,7 +397,7 @@ fn copied(world: &mut World) -> Option<String> {
 #[test]
 fn a_drag_selects_the_subject_a_part_and_a_choice_and_the_copy_key_copies_it() {
     let mut world = start(vec![cache_store()], vec![api_working()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     drag_across(&mut world, "asks.subject");
     assert_eq!(copied(&mut world).as_deref(), Some("Cache store"));
@@ -419,7 +419,7 @@ fn a_drag_selects_the_subject_a_part_and_a_choice_and_the_copy_key_copies_it() {
 #[test]
 fn the_copy_key_copies_the_selection_though_a_field_held_the_keyboard() {
     let mut world = start(vec![cache_store()], vec![api_working()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     type_into(&mut world, NOTE, "draft");
     assert_eq!(focused(&world).as_deref(), Some(NOTE));
 
@@ -432,7 +432,7 @@ fn the_copy_key_copies_the_selection_though_a_field_held_the_keyboard() {
 #[test]
 fn a_click_on_a_choices_name_still_picks_it() {
     let mut world = start(vec![cache_store()], vec![api_working()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     let [x, y, _, h] = world.rect("asks.q.q1.choice.1.name");
     let at = ((x + 4.0) as f32, (y + h / 2.0) as f32);
@@ -449,7 +449,7 @@ fn a_replied_answer_selects_and_copies() {
         None,
     );
     let mut world = start(vec![answered], vec![api_working()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     letter(&mut world, "r");
 
     drag_across(&mut world, "asks.q.q1.choice.1.name");
@@ -461,12 +461,12 @@ fn a_replied_answer_selects_and_copies() {
 }
 
 #[test]
-fn the_drawers_letter_keys_work_after_a_drag_across_the_ask_text() {
+fn the_sheets_letter_keys_work_after_a_drag_across_the_ask_text() {
     let mut world = start(
         vec![cache_store(), release_day()],
         vec![api_working(), web_waiting()],
     );
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     click(&mut world, "asks.row.a-cache1");
     type_into(&mut world, NOTE, "draft");
     drag_across(&mut world, "asks.subject");
@@ -479,7 +479,7 @@ fn the_drawers_letter_keys_work_after_a_drag_across_the_ask_text() {
 #[test]
 fn c_copies_the_ask_as_the_markdown_the_agent_wrote_with_its_id_and_asker() {
     let mut world = start(vec![cache_store()], vec![api_working()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     click(&mut world, "asks.subject");
     world.clipboard.set_text("");
 
@@ -504,7 +504,7 @@ fn c_copies_the_ask_as_the_markdown_the_agent_wrote_with_its_id_and_asker() {
     );
 }
 
-/// At rest but for the next minute an age in the open drawer reads differently.
+/// At rest but for the next minute an age in the open sheet reads differently.
 fn rest_but_for_ages(world: &mut World) {
     world.advance(Duration::from_secs(1));
     let now = world.now().as_secs_f64();
@@ -522,7 +522,7 @@ fn typed_into(world: &World) -> Vec<String> {
 }
 
 #[test]
-fn escape_closes_the_drawer_and_gives_the_keyboard_back_to_the_agent() {
+fn escape_closes_the_sheet_and_gives_the_keyboard_back_to_the_agent() {
     let mut state = one_desktop(vec![api_working(), web_waiting()]);
     let desktops = state.desktops.as_mut().expect("one desktop");
     for pane in desktops.iter_mut().flat_map(|d| &mut d.panes) {
@@ -534,11 +534,11 @@ fn escape_closes_the_drawer_and_gives_the_keyboard_back_to_the_agent() {
     world.gesture(|app| app.type_text("x"));
     assert_eq!(typed_into(&world), ["r-api"]);
 
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     plain(&mut world, Key::Escape);
     world.gesture(|app| app.type_text("x"));
 
-    assert!(!has(&world, "asks.drawer"));
+    assert!(!has(&world, "asks.sheet"));
     assert_eq!(typed_into(&world), ["r-api", "r-api"]);
 }
 
@@ -548,7 +548,7 @@ fn sending_sends_the_picked_answers_and_the_note_then_brings_the_next_ask() {
         vec![cache_store(), release_day()],
         vec![api_working(), web_waiting()],
     );
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     click(&mut world, "asks.row.a-cache1");
 
     click(&mut world, "asks.q.q1.choice.0");
@@ -594,7 +594,7 @@ fn a_refused_answer_keeps_what_was_written_and_says_why() {
             ..AskAnswerResultMessage::new()
         })
     });
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     click(&mut world, "asks.q.q1.choice.1");
     type_into(&mut world, "asks.q.q1.other.field", "FreeBSD");
@@ -615,7 +615,7 @@ fn a_refused_answer_keeps_what_was_written_and_says_why() {
 #[test]
 fn accept_all_recommended_picks_each_recommendation_and_leaves_the_rest_unanswered() {
     let mut world = start(vec![rollout()], vec![api_working()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     click(&mut world, "asks.accept");
     assert!(checked(&world, "asks.q.q1.choice.0"));
@@ -636,7 +636,7 @@ fn accept_all_recommended_picks_each_recommendation_and_leaves_the_rest_unanswer
 #[test]
 fn the_a_key_accepts_every_recommendation_outside_a_text_field() {
     let mut world = start(vec![rollout()], vec![api_working()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     letter(&mut world, "a");
 
@@ -647,7 +647,7 @@ fn the_a_key_accepts_every_recommendation_outside_a_text_field() {
 #[test]
 fn accept_all_recommended_shows_only_when_several_questions_recommend_one() {
     let mut world = start(vec![cache_store()], vec![api_working()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     assert!(!has(&world, "asks.accept"));
 }
@@ -655,7 +655,7 @@ fn accept_all_recommended_shows_only_when_several_questions_recommend_one() {
 #[test]
 fn nothing_is_sent_until_a_question_is_answered_or_a_note_written() {
     let mut world = start(vec![release_day()], vec![web_waiting()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     assert!(disabled(&world, "asks.send"));
     click(&mut world, "asks.note.field");
@@ -665,7 +665,7 @@ fn nothing_is_sent_until_a_question_is_answered_or_a_note_written() {
 }
 
 #[test]
-fn the_asking_agents_rows_are_marked_and_open_agent_shows_the_agent_and_closes_the_drawer() {
+fn the_asking_agents_rows_are_marked_and_open_agent_closes_the_sheet_and_shows_the_agent() {
     let mut world = start(
         vec![cache_store(), release_day()],
         vec![api_working(), web_waiting()],
@@ -674,12 +674,13 @@ fn the_asking_agents_rows_are_marked_and_open_agent_shows_the_agent_and_closes_t
 
     assert!(has(&world, "sidebar.session.api.ask"));
     assert!(has(&world, "sidebar.session.web.ask"));
-    open_drawer(&mut world);
+    open_sheet(&mut world);
+    click(&mut world, "asks.row.a-release");
     click(&mut world, "asks.open-agent");
 
     let shows = world.daemon.sent_of("desktop_show_session");
     assert_eq!(shows.last().unwrap()["session_id"], "web");
-    assert!(!has(&world, "asks.drawer"));
+    assert!(!has(&world, "asks.sheet"));
 }
 
 fn landing() -> Ask {
@@ -752,7 +753,7 @@ fn an_ask_about_a_seed_waits_on_the_agent_whose_stake_it_is_and_names_the_seed()
     world.open_desktop();
 
     assert!(has(&world, "sidebar.session.successor.ask"));
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     letter(&mut world, "j");
     assert_eq!(shown(&world).as_deref(), Some("Landing week"));
     assert_eq!(name(&world, "asks.from"), "successor");
@@ -768,9 +769,10 @@ fn an_ask_about_a_seed_waits_on_the_agent_whose_stake_it_is_and_names_the_seed()
 #[test]
 fn a_seed_the_garden_does_not_hold_opens_in_a_tile_from_the_button_and_g() {
     let mut world = start(vec![landing()], vec![api_working()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     click(&mut world, "asks.open-seed");
+    assert!(!has(&world, "asks.sheet"));
     assert_eq!(garden_heading(&world), None);
     let opened = world.daemon.sent_of("open_seed");
     assert_eq!(opened.len(), 1);
@@ -785,9 +787,11 @@ fn a_seed_the_garden_does_not_hold_opens_in_a_tile_from_the_button_and_g() {
         }),
     );
     world.settle();
+    open_sheet(&mut world);
     click(&mut world, "asks.from");
     letter(&mut world, "g");
     assert_eq!(world.daemon.sent_of("open_seed").len(), 2);
+    assert!(!has(&world, "asks.sheet"));
 }
 
 #[test]
@@ -805,7 +809,7 @@ fn an_ask_about_a_seed_waits_on_whoever_the_garden_says_tends_it() {
 
     assert!(has(&world, "sidebar.session.successor.ask"));
     assert!(!has(&world, "sidebar.session.delegate.ask"));
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     assert_eq!(name(&world, "asks.from"), "successor");
 }
 
@@ -819,7 +823,7 @@ fn an_ask_about_a_seed_nobody_live_tends_waits_for_its_next_tender() {
     world.open_desktop();
 
     assert!(!has(&world, "sidebar.session.api.ask"));
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     assert_eq!(
         name(&world, "asks.from"),
         "waiting for the next tender of Cache store migration"
@@ -868,7 +872,7 @@ fn an_ask_whose_tender_is_on_standby_names_it_and_says_whether_an_answer_resumes
             .into_iter()
             .collect();
         let mut world = start_on(state, vec![landing()], &settings);
-        open_drawer(&mut world);
+        open_sheet(&mut world);
 
         assert_eq!(name(&world, "asks.from"), "Migrate the cache · on standby");
         assert_eq!(name(&world, "asks.resumes"), says, "{resume:?} {blocked:?}");
@@ -878,29 +882,30 @@ fn an_ask_whose_tender_is_on_standby_names_it_and_says_whether_an_answer_resumes
 }
 
 #[test]
-fn open_in_garden_shows_the_seed_beside_the_drawer_and_escape_returns_to_the_ask() {
+fn open_in_garden_closes_the_sheet_for_the_seed_and_the_sheet_reopens_on_the_ask() {
     let mut world = start_with_seeds(
         vec![landing()],
         vec![session("successor", "working")],
         vec![migration(Some("successor"))],
     );
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     click(&mut world, "asks.open-seed");
+    assert!(!has(&world, "asks.sheet"));
     assert_eq!(
         garden_heading(&world).as_deref(),
         Some("Cache store migration")
     );
     let read = world.daemon.sent_of("seed_document_get");
     assert_eq!(read.last().unwrap()["seed_id"], "s-cache1");
-    assert_eq!(shown(&world).as_deref(), Some("Landing week"));
 
     plain(&mut world, Key::Escape);
     assert_eq!(garden_heading(&world), None);
+    open_sheet(&mut world);
     assert_eq!(shown(&world).as_deref(), Some("Landing week"));
-    assert_eq!(focused(&world).as_deref(), Some("asks.drawer"));
-
+    click(&mut world, "asks.from");
     letter(&mut world, "g");
+    assert!(!has(&world, "asks.sheet"));
     assert_eq!(
         garden_heading(&world).as_deref(),
         Some("Cache store migration")
@@ -908,31 +913,26 @@ fn open_in_garden_shows_the_seed_beside_the_drawer_and_escape_returns_to_the_ask
 }
 
 #[test]
-fn escape_closes_the_newest_drawer_whatever_holds_the_keyboard() {
+fn the_sheet_opens_over_the_garden_and_escape_closes_the_sheet_before_the_garden() {
     let mut world = start_with_seeds(
         vec![landing()],
         vec![session("successor", "working")],
         vec![migration(Some("successor"))],
     );
     world.gesture(|app| app.key(chord(Action::BoardOpen)));
-    open_drawer(&mut world);
+    world.gesture(|app| app.key(chord(Action::BoardOpen)));
+    assert!(has(&world, "garden.frame"));
+    open_sheet(&mut world);
     click(&mut world, "asks.from");
-    letter(&mut world, "g");
-    assert_eq!(
-        garden_heading(&world).as_deref(),
-        Some("Cache store migration")
-    );
-    assert!(focused(&world).is_some_and(|k| k.starts_with("garden.")));
+    letter(&mut world, "k");
+    assert_eq!(shown(&world).as_deref(), Some("Landing week"));
 
     plain(&mut world, Key::Escape);
-    assert!(!has(&world, "asks.drawer"));
-    assert_eq!(
-        garden_heading(&world).as_deref(),
-        Some("Cache store migration")
-    );
+    assert!(!has(&world, "asks.sheet"));
+    assert!(has(&world, "garden.frame"));
 
     plain(&mut world, Key::Escape);
-    assert_eq!(garden_heading(&world), None);
+    assert!(!has(&world, "garden.frame"));
 }
 
 fn garden_heading(world: &World) -> Option<String> {
@@ -954,7 +954,7 @@ fn a_snoozed_agents_ask_waits_under_snoozed_out_of_the_counts_until_the_agent_wa
     );
     assert!(name(&world, "titlebar.asks").starts_with("1 open ask ("));
 
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     assert_eq!(name(&world, "asks.count"), "1 open");
     assert_eq!(rows(&world), ["a-release", "a-cache1"]);
     assert!(
@@ -967,9 +967,10 @@ fn a_snoozed_agents_ask_waits_under_snoozed_out_of_the_counts_until_the_agent_wa
     assert!(name(&world, "asks.row.a-cache1").contains("until "));
 
     changes(&mut world, api_working());
-    assert!(name(&world, "titlebar.asks").starts_with("2 open asks ("));
     assert_eq!(name(&world, "asks.count"), "2 open");
     assert!(!name(&world, "asks.row.a-cache1").contains("until "));
+    plain(&mut world, Key::Escape);
+    assert!(name(&world, "titlebar.asks").starts_with("2 open asks ("));
 }
 
 #[test]
@@ -985,7 +986,7 @@ fn a_hidden_agent_holds_its_ask_so_its_snooze_takes_the_ask_out_of_the_counts() 
     let mut world = World::start(Daemon::scripted().state(state));
     assert!(name(&world, "titlebar.asks").starts_with("1 open ask ("));
 
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     assert_eq!(rows(&world), ["a-release", "a-cache1"]);
     assert!(name(&world, "asks.row.a-cache1").starts_with("api"));
     click(&mut world, "asks.row.a-cache1");
@@ -993,9 +994,9 @@ fn a_hidden_agent_holds_its_ask_so_its_snooze_takes_the_ask_out_of_the_counts() 
 }
 
 #[test]
-fn the_drawer_snoozes_the_asking_agent_and_wakes_it_again() {
+fn the_sheet_snoozes_the_asking_agent_and_wakes_it_again() {
     let mut world = start(vec![cache_store()], vec![api_working()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     letter(&mut world, "s");
     assert_eq!(
@@ -1040,7 +1041,7 @@ fn rest_on(world: &mut World, key: &str) {
 }
 
 #[test]
-fn an_agents_open_ask_shows_in_its_tile_header_previews_on_rest_and_opens_in_the_drawer() {
+fn an_agents_open_ask_shows_in_its_tile_header_previews_on_rest_and_opens_in_the_sheet() {
     let mut world = start(
         vec![cache_store(), release_day()],
         vec![api_working(), web_waiting()],
@@ -1218,21 +1219,24 @@ fn the_preview_stays_closed_when_the_agent_asks_again_after_its_last_ask_closed_
 }
 
 #[test]
-fn a_press_on_the_ask_chip_takes_the_keyboard_even_when_the_drawer_shows_that_ask() {
+fn a_press_on_the_ask_chip_opens_the_sheet_on_its_ask_and_a_click_outside_closes_it() {
     let beside = |id: &str| session(id, "working");
     let mut world = start(
-        vec![cache_store()],
-        vec![api_working(), beside("b"), beside("c")],
+        vec![cache_store(), release_day()],
+        vec![api_working(), beside("b"), web_waiting()],
     );
     world.resize((1600.0, 900.0));
     world.open_desktop();
     click(&mut world, "tile.p0.ask");
+    assert_eq!(shown(&world).as_deref(), Some("Cache store"));
     assert_eq!(focused(&world).as_deref(), Some("asks.q.q1.choice.0"));
 
-    world.gesture(|app| app.click(Target::key("tile.p0")));
-    assert_ne!(focused(&world).as_deref(), Some("asks.q.q1.choice.0"));
-    click(&mut world, "tile.p0.ask");
+    let [x, y, _, _] = world.rect("asks.sheet");
+    world.gesture(|app| app.click_at((x as f32 / 2.0, y as f32 + 40.0)));
+    assert!(!has(&world, "asks.sheet"));
+    assert!(has(&world, "tile.p0"));
 
+    click(&mut world, "tile.p0.ask");
     assert_eq!(shown(&world).as_deref(), Some("Cache store"));
     assert_eq!(focused(&world).as_deref(), Some("asks.q.q1.choice.0"));
 }
@@ -1250,7 +1254,7 @@ fn replied_asks_stay_out_of_the_way_until_asked_for_and_show_their_answers() {
     );
     world.open_desktop();
     assert!(!has(&world, "sidebar.session.api.ask"));
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     assert_eq!(rows(&world), ["a-release"]);
     assert!(!checked(&world, "asks.replied"));
 
@@ -1294,7 +1298,7 @@ fn replied_asks_stay_out_of_the_way_until_asked_for_and_show_their_answers() {
 #[test]
 fn the_answer_just_sent_shows_when_it_was_the_last_open_ask_and_replied_asks_show() {
     let mut world = start(vec![release_day()], vec![web_waiting()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     letter(&mut world, "r");
 
     click(&mut world, "asks.q.q1.choice.1");
@@ -1307,7 +1311,7 @@ fn the_answer_just_sent_shows_when_it_was_the_last_open_ask_and_replied_asks_sho
     assert_eq!(shown(&world).as_deref(), Some("Release day"));
     assert!(checked(&world, "asks.q.q1.choice.1"));
     assert!(disabled(&world, "asks.q.q1.choice.1"));
-    assert_eq!(focused(&world).as_deref(), Some("asks.drawer"));
+    assert_eq!(focused(&world).as_deref(), Some("asks.sheet"));
 
     letter(&mut world, "r");
     assert!(has(&world, "asks.empty"));
@@ -1322,12 +1326,12 @@ fn the_answer_just_sent_shows_when_it_was_the_last_open_ask_and_replied_asks_sho
 }
 
 #[test]
-fn the_drawer_takes_the_keyboard_with_no_open_asks_so_r_shows_the_replies_instead_of_reaching_the_agent()
+fn the_sheet_takes_the_keyboard_with_no_open_asks_so_r_shows_the_replies_instead_of_reaching_the_agent()
  {
     let answered = replied(cache_store(), vec![picked("q1", &["Postgres"])], None);
     let mut world = start(vec![answered], vec![api_working()]);
     world.open_desktop();
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     assert!(has(&world, "asks.empty"));
 
     letter(&mut world, "r");
@@ -1357,8 +1361,8 @@ fn the_asks_follow_the_selected_profile_and_close_when_the_daemon_closes_them() 
 fn the_asks_button_and_its_shortcut_exist_only_while_asks_are_on_or_some_ask_exists() {
     let mut world = start_with(vec![], vec![api_working()], &[("asks_enabled", "false")]);
     assert!(!has(&world, "titlebar.asks"));
-    open_drawer(&mut world);
-    assert!(!has(&world, "asks.drawer"));
+    open_sheet(&mut world);
+    assert!(!has(&world, "asks.sheet"));
 
     update_asks(&mut world, vec![cache_store()]);
     assert!(has(&world, "titlebar.asks"));
@@ -1421,7 +1425,7 @@ fn run_open_asks(world: &mut World) {
 }
 
 #[test]
-fn the_palettes_open_asks_opens_the_drawer_and_leaves_an_open_drawer_open() {
+fn the_palettes_open_asks_opens_the_sheet_and_leaves_an_open_sheet_open() {
     let mut world = start(
         vec![cache_store(), release_day()],
         vec![api_working(), web_waiting()],
@@ -1437,7 +1441,7 @@ fn the_palettes_open_asks_opens_the_drawer_and_leaves_an_open_drawer_open() {
 #[test]
 fn space_picks_the_focused_choice_and_the_send_key_sends_it() {
     let mut world = start(vec![release_day()], vec![web_waiting()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     assert_eq!(focused(&world).as_deref(), Some("asks.q.q1.choice.0"));
 
     letter(&mut world, " ");
@@ -1456,7 +1460,7 @@ fn space_picks_the_focused_choice_and_the_send_key_sends_it() {
 #[test]
 fn a_one_choice_questions_other_answer_replaces_its_pick_from_the_first_character() {
     let mut world = start(vec![cache_store()], vec![api_working()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     click(&mut world, "asks.q.q1.choice.0");
 
     type_into(&mut world, "asks.q.q1.other.field", "S");
@@ -1479,7 +1483,7 @@ fn a_one_choice_questions_other_answer_replaces_its_pick_from_the_first_characte
 }
 
 #[test]
-fn the_clock_alone_returns_a_woken_askers_ask_to_the_counts_and_moves_the_drawers_ages_on() {
+fn the_clock_alone_returns_a_woken_askers_ask_to_the_counts_and_moves_the_sheets_ages_on() {
     let api_snoozed = Session {
         turn_snoozed_until: Some(ago(-10)),
         ..api_working()
@@ -1488,21 +1492,21 @@ fn the_clock_alone_returns_a_woken_askers_ask_to_the_counts_and_moves_the_drawer
         vec![cache_store(), release_day()],
         vec![api_snoozed, web_waiting()],
     );
-    open_drawer(&mut world);
-    assert!(name(&world, "titlebar.asks").starts_with("1 open ask ("));
+    open_sheet(&mut world);
+    assert_eq!(name(&world, "asks.count"), "1 open");
     let release_before = name(&world, "asks.row.a-release");
 
     world.advance(Duration::from_secs(11 * 60));
 
-    assert!(name(&world, "titlebar.asks").starts_with("2 open asks ("));
+    assert_eq!(name(&world, "asks.count"), "2 open");
     assert!(!name(&world, "asks.row.a-cache1").contains("until "));
     assert_ne!(name(&world, "asks.row.a-release"), release_before);
 }
 
 #[test]
-fn tab_reaches_every_button_of_the_asks_drawer() {
+fn tab_reaches_every_button_of_the_asks_sheet() {
     let mut world = start(vec![cache_store()], vec![api_working()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     assert_eq!(
         super::reach::unreached_by_tab(&mut world),
@@ -1556,7 +1560,7 @@ fn the_seeds_an_ask_names_by_id_or_slug_open_from_its_words_and_code_and_unknown
         &world,
         &[("s-cache1", "s-cache1"), ("cache-migration", "s-cache1")],
     );
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     assert_eq!(
         world.daemon.sent_of("ask_seed_mentions")[0]["ask_id"],
@@ -1606,7 +1610,7 @@ fn a_mentioned_seed_the_garden_does_not_hold_opens_in_a_tile_and_unresolved_name
         &world,
         &[("s-cache1", "s-cache1"), ("old-work", "s-cache1")],
     );
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     let links = seed_links(&world);
     let names: Vec<&str> = links.iter().map(|(name, _)| name.as_str()).collect();
@@ -1631,7 +1635,7 @@ fn a_seed_planted_after_the_ask_is_linked_once_the_garden_has_it() {
     );
     let mut world = start(vec![read], vec![api_working()]);
     mentions_answered(&world, &[]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     assert!(seed_links(&world).is_empty());
 
     mentions_answered(&world, &[("cache-migration", "s-cache1")]);
@@ -1689,7 +1693,7 @@ fn an_asks_images_show_from_the_copy_the_home_keeps() {
             "error": (!found).then(|| format!("ask a-cache1 holds no copy of {}", r["path"])),
         })
     });
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     world.settle();
 
     let mut asked: Vec<String> = world
@@ -1798,7 +1802,7 @@ fn an_ask_from_a_member_between_sessions_names_the_member_and_leaves_attn_lowerc
             ..cache_store()
         };
         let mut world = start(vec![from_member], vec![session("s1", "working")]);
-        open_drawer(&mut world);
+        open_sheet(&mut world);
         assert_eq!(
             name(&world, "asks.from"),
             format!("{from} (between sessions)")
@@ -1809,7 +1813,7 @@ fn an_ask_from_a_member_between_sessions_names_the_member_and_leaves_attn_lowerc
 #[test]
 fn the_note_starts_lines_high_and_its_grip_drags_it_taller_but_never_shorter() {
     let mut world = start(vec![release_day()], vec![api_working(), web_waiting()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     scroll_to(&mut world, "asks.note.field-grip");
     let height = |world: &mut World| world.rect("asks.note.field-resizable")[3];
     let three_lines = height(&mut world);
@@ -1849,7 +1853,7 @@ fn a_prompt_wider_than_its_question_wraps_inside_it() {
         vec![question("q1", "one", long, &["eu", "us"])],
     );
     let mut world = start(vec![ask], vec![api_working(), web_waiting()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     let [card_x, _, card_w, _] = world.rect("asks.q.q1");
     let [x, _, w, h] = world.rect("asks.q.q1.prompt");
@@ -1880,7 +1884,7 @@ fn a_url_that_holds_a_seeds_name_stays_one_link_that_opens_the_whole_url() {
         &world,
         &[("s-cache1", "s-cache1"), ("cache-migration", "s-cache1")],
     );
-    open_drawer(&mut world);
+    open_sheet(&mut world);
 
     assert_eq!(
         seed_links(&world),
@@ -1898,14 +1902,14 @@ fn a_url_that_holds_a_seeds_name_stays_one_link_that_opens_the_whole_url() {
 }
 
 #[test]
-fn tab_walks_the_drawer_as_on_main_and_never_stops_on_the_list_of_asks() {
+fn tab_walks_the_sheet_and_stays_in_it_and_never_stops_on_the_list_of_asks() {
     let mut world = start(
         vec![cache_store(), release_day()],
         vec![api_working(), web_waiting()],
     );
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     let mut walk = vec![focused(&world).unwrap_or_default()];
-    for _ in 0..4 {
+    for _ in 0..7 {
         plain(&mut world, Key::Tab);
         walk.push(focused(&world).unwrap_or_default());
     }
@@ -1916,27 +1920,31 @@ fn tab_walks_the_drawer_as_on_main_and_never_stops_on_the_list_of_asks() {
             "asks.q.q1.choice.1",
             "asks.q.q1.other.field",
             "asks.note.field",
-            "titlebar.new",
+            "asks.sheet",
+            "asks.replied",
+            "asks.close",
+            "asks.copy",
         ]
     );
 
     let mut back = Vec::new();
-    for _ in 0..9 {
+    for _ in 0..10 {
         world.gesture(|d| d.press("shift+tab"));
         back.push(focused(&world).unwrap_or_default());
     }
     assert_eq!(
         back,
         [
+            "asks.close",
+            "asks.replied",
+            "asks.sheet",
             "asks.note.field",
             "asks.q.q1.other.field",
             "asks.q.q1.choice.1",
             "asks.q.q1.choice.0",
             "asks.snooze",
             "asks.open-agent",
-            "asks.close",
-            "asks.replied",
-            "asks.drawer",
+            "asks.copy",
         ]
     );
 }
@@ -1947,8 +1955,8 @@ fn the_open_count_follows_the_title_and_comes_before_the_replied_toggle() {
         vec![cache_store(), release_day()],
         vec![api_working(), web_waiting()],
     );
-    open_drawer(&mut world);
-    let header = world.rect("asks.sheet.header");
+    open_sheet(&mut world);
+    let header = world.rect("asks.rail.header");
     let count = world.rect("asks.count");
     let replied = world.rect("asks.replied");
     let title_room = count[0] - header[0];
@@ -1964,12 +1972,13 @@ fn the_open_count_follows_the_title_and_comes_before_the_replied_toggle() {
 }
 
 #[test]
-fn the_list_of_asks_sets_its_words_on_the_line_of_the_ask_under_it() {
+fn in_a_narrow_window_the_list_of_asks_sets_its_words_on_the_line_of_the_ask_under_it() {
     let mut world = start(
         vec![cache_store(), release_day()],
         vec![api_working(), web_waiting()],
     );
-    open_drawer(&mut world);
+    world.resize((700.0, 800.0));
+    open_sheet(&mut world);
     let id = rows(&world).into_iter().next().expect("an ask is listed");
     let title = world.rect(&format!("asks.row.{id}.title"));
     let subject = world.rect("asks.subject.block");
@@ -1987,7 +1996,7 @@ fn the_replied_toggle_reads_unchecked_until_it_shows_the_replied_asks() {
         vec![cache_store(), release_day()],
         vec![api_working(), web_waiting()],
     );
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     let replied = |world: &World| world.screen().get(Target::key("asks.replied"));
     assert!(
         replied(&world).is("unchecked"),
@@ -2003,25 +2012,23 @@ fn the_replied_toggle_reads_unchecked_until_it_shows_the_replied_asks() {
 }
 
 #[test]
-fn the_title_bar_s_asks_button_reads_checked_while_its_drawer_is_open_as_the_other_drawers_do() {
+fn a_click_on_the_title_bar_s_asks_button_closes_the_open_sheet_as_a_click_outside() {
     let mut world = start(
         vec![cache_store(), release_day()],
         vec![api_working(), web_waiting()],
     );
-    let button = |world: &World| world.screen().get(Target::key("titlebar.asks"));
-    assert!(
-        button(&world).is("unchecked"),
-        "{:?}",
-        button(&world).states
-    );
-    open_drawer(&mut world);
-    assert!(button(&world).is("checked"), "{:?}", button(&world).states);
+    let button = middle(&world, "titlebar.asks");
+    world.gesture(|app| app.click_at(button));
+    assert!(has(&world, "asks.sheet"));
+
+    world.gesture(|app| app.click_at(button));
+    assert!(!has(&world, "asks.sheet"));
 }
 
 #[test]
 fn tab_reaches_every_answer_of_a_question_as_on_main_even_after_one_is_chosen() {
     let mut world = start(vec![rollout()], vec![api_working()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     assert_eq!(focused(&world).as_deref(), Some("asks.q.q1.choice.0"));
     world.gesture(|d| d.press("a"));
     assert!(
@@ -2038,7 +2045,7 @@ fn tab_reaches_every_answer_of_a_question_as_on_main_even_after_one_is_chosen() 
 #[test]
 fn a_choice_s_line_under_its_name_is_its_description() {
     let mut world = start(vec![cache_store()], vec![api_working()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     let postgres = world.screen().get(Target::key("asks.q.q1.choice.0"));
     assert_eq!(postgres.description.as_deref(), Some("already deployed"));
 }
@@ -2051,7 +2058,7 @@ fn in_the_smallest_window_the_list_gives_way_so_the_ask_has_room_to_read_and_its
         vec![api_working(), web_waiting()],
     );
     world.resize((533.0, 400.0));
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     const MAIN_S_ROOM: f64 = 85.0;
     let ask = world.rect("asks.ask");
     assert!(
@@ -2079,7 +2086,7 @@ fn an_assistive_scroll_moves_the_list_of_asks_when_it_overflows_as_on_main() {
         .collect();
     let mut world = start(asks, vec![api_working()]);
     world.resize((533.0, 400.0));
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     world.gesture(|d| {
         assert!(
             d.runtime
@@ -2092,7 +2099,7 @@ fn an_assistive_scroll_moves_the_list_of_asks_when_it_overflows_as_on_main() {
 #[test]
 fn the_other_answer_sits_in_its_question_s_group_of_answers_as_on_main() {
     let mut world = start(vec![cache_store()], vec![api_working()]);
-    open_drawer(&mut world);
+    open_sheet(&mut world);
     let answers = world.screen().descendants(Target::key("asks.q.q1.choices"));
     assert!(
         answers
@@ -2156,13 +2163,13 @@ const SMALLEST: (f32, f32) = (800.0, 600.0);
 fn reopened_on_a_draft_after_the_window_shrank_the_focused_answer_shows_whole() {
     for theme in ["dark", "light"] {
         let mut world = start_large_text((1050.0, 780.0), theme);
-        open_drawer(&mut world);
+        open_sheet(&mut world);
         assert_eq!(focused(&world).as_deref(), Some("asks.q.q1.text.field"));
         world.gesture(|app| app.type_text("Response text."));
         plain(&mut world, Key::Escape);
-        assert!(world.screen().find(Target::key("asks.drawer")).is_none());
+        assert!(world.screen().find(Target::key("asks.sheet")).is_none());
         world.resize(SMALLEST);
-        open_drawer(&mut world);
+        open_sheet(&mut world);
         assert_eq!(
             world
                 .screen()
@@ -2179,7 +2186,108 @@ fn reopened_on_a_draft_after_the_window_shrank_the_focused_answer_shows_whole() 
 fn opened_in_the_smallest_window_at_large_text_the_focused_answer_shows_whole() {
     for theme in ["dark", "light"] {
         let mut world = start_large_text(SMALLEST, theme);
-        open_drawer(&mut world);
+        open_sheet(&mut world);
         assert_focused_answer_in_view(&world, &format!("opened, {theme}"));
+    }
+}
+
+#[test]
+fn the_sheet_keeps_its_ask_when_it_closes_and_its_key_and_escape_both_close_it() {
+    let mut world = start(
+        vec![cache_store(), release_day()],
+        vec![api_working(), web_waiting()],
+    );
+    open_sheet(&mut world);
+    letter(&mut world, "j");
+    assert_eq!(shown(&world).as_deref(), Some("Cache store"));
+
+    plain(&mut world, Key::Escape);
+    assert!(!has(&world, "asks.sheet"));
+    open_sheet(&mut world);
+    assert_eq!(shown(&world).as_deref(), Some("Cache store"));
+
+    open_sheet(&mut world);
+    assert!(!has(&world, "asks.sheet"));
+    open_sheet(&mut world);
+    assert_eq!(shown(&world).as_deref(), Some("Cache store"));
+}
+
+#[test]
+fn the_sheet_key_and_open_asks_open_on_the_agent_on_screens_ask_the_shown_one_when_it_is_that_agents_else_its_oldest()
+ {
+    let mut world = start(
+        vec![cache_store(), rollout(), release_day()],
+        vec![api_working(), web_waiting()],
+    );
+    world.open_desktop();
+    open_sheet(&mut world);
+    assert_eq!(rows(&world), ["a-release", "a-cache1", "a-rollout"]);
+    assert_eq!(shown(&world).as_deref(), Some("Cache store"));
+
+    click(&mut world, "asks.row.a-rollout");
+    plain(&mut world, Key::Escape);
+    open_sheet(&mut world);
+    assert_eq!(shown(&world).as_deref(), Some("Rollout"));
+
+    click(&mut world, "asks.row.a-release");
+    plain(&mut world, Key::Escape);
+    open_sheet(&mut world);
+    assert_eq!(shown(&world).as_deref(), Some("Cache store"));
+
+    click(&mut world, "asks.row.a-release");
+    plain(&mut world, Key::Escape);
+    run_open_asks(&mut world);
+    assert_eq!(shown(&world).as_deref(), Some("Cache store"));
+}
+
+#[test]
+fn with_no_agent_on_screen_the_sheet_key_opens_on_the_ask_shown_last_or_the_first_once_it_is_gone()
+{
+    let mut world = start(
+        vec![cache_store(), rollout(), release_day()],
+        vec![api_working(), web_waiting()],
+    );
+    open_sheet(&mut world);
+    assert_eq!(shown(&world).as_deref(), Some("Release day"));
+
+    click(&mut world, "asks.row.a-rollout");
+    plain(&mut world, Key::Escape);
+    open_sheet(&mut world);
+    assert_eq!(shown(&world).as_deref(), Some("Rollout"));
+
+    plain(&mut world, Key::Escape);
+    update_asks(&mut world, vec![cache_store(), release_day()]);
+    open_sheet(&mut world);
+    assert_eq!(shown(&world).as_deref(), Some("Release day"));
+}
+
+#[test]
+fn the_sheet_is_centred_under_the_title_bar_at_its_sizes_with_its_list_beside_the_ask() {
+    for (window, sheet) in [
+        ((1512.0, 945.0), [246.0, 76.0, 1020.0, 825.0]),
+        ((3440.0, 1400.0), [1210.0, 276.0, 1020.0, 880.0]),
+        ((800.0, 600.0), [48.0, 76.0, 704.0, 480.0]),
+    ] {
+        let mut world = start(
+            vec![rollout(), cache_store(), release_day()],
+            vec![api_working(), web_waiting()],
+        );
+        world.resize(window);
+        open_sheet(&mut world);
+        assert_eq!(world.rect("asks.sheet"), sheet, "in a {window:?} window");
+        let rail = world.rect("asks.rail");
+        let reading = world.rect("asks.reading");
+        assert_eq!(rail[2], 264.0, "the rail in a {window:?} window");
+        assert_eq!(reading[0], rail[0] + rail[2], "the ask beside the rail");
+        assert_eq!(
+            reading[0] + reading[2],
+            sheet[0] + sheet[2],
+            "the ask to the edge"
+        );
+        let subject = world.rect("asks.subject.block");
+        assert!(
+            subject[2] <= 700.0,
+            "the ask reads at most 700 wide: {subject:?}"
+        );
     }
 }

@@ -71,7 +71,7 @@ changes what you agreed. You may need to adjust your project's autonomy
 settings, and your local skills, so the Orchestrator can move on its own.
 
 When the Orchestrator has questions, it sends you an ask and keeps working on
-everything else. Cmd+Shift+R (Ctrl+Alt+R on Linux) opens the Asks drawer to
+everything else. Cmd+Shift+R (Ctrl+Alt+R on Linux) opens Asks to
 answer the ask. If you turned Asks off in **Settings → Agents and models**, it
 waits for you like any agent instead. You can still open any Builder and talk to it at any
 time. The chain button on an agent's sidebar row shows everyone in the chain.

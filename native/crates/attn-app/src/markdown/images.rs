@@ -79,8 +79,8 @@ pub struct Pictures {
     shown: Option<Shown>,
     logo: Option<Image>,
     zoom: ImageZoom,
-    /// The window's size in points, which the open image fits in.
-    window: [f32; 2],
+    /// The window's size in points, which the open image and the asks sheet fit in.
+    pub(crate) window: [f32; 2],
 }
 
 /// What is open larger over the window.
@@ -230,9 +230,7 @@ fn images_in(document: &str, source: &str) -> Vec<String> {
 /// forgets the pictures no document shows any more. Returns whether a picture became ready.
 pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let contents = state.facts.tile_contents.clone();
-    let shown_ask = state
-        .window
-        .shows(crate::shell::Drawer::Asks)
+    let shown_ask = crate::asks::is_open(state)
         .then(|| state.window.asks.selected.clone())
         .flatten();
     let notebook = crate::notebook::images(state);
@@ -588,16 +586,29 @@ pub(crate) fn show_diagram(state: &mut State, source: &str, size: [f32; 2], tx: 
     tx.focus(image_zoom::KEY, false);
 }
 
-/// The window's `root` with the open image over it, which it measures for the preview.
-pub(crate) fn over(root: El, state: &State, reduced_motion: bool, t: &attn_ui::Tokens) -> El {
-    root.on_layout_tx(|state: &mut State, [_, _, w, h], tx: &mut Tx| {
+/// The window's `root` with its `layers` and the open image, which it measures for the
+/// preview. The image lies under the layers, so one opened after it, such as the file opener,
+/// lies over it; while the asks sheet is open, the image opened from it and lies over it.
+pub(crate) fn over(
+    root: El,
+    layers: Vec<El>,
+    state: &State,
+    reduced_motion: bool,
+    t: &attn_ui::Tokens,
+) -> El {
+    let root = root.on_layout_tx(|state: &mut State, [_, _, w, h], tx: &mut Tx| {
         if state.pictures.window == [w, h] {
             tx.live_only();
             return;
         }
         state.pictures.window = [w, h];
-    })
-    .children(preview(state, reduced_motion, t))
+    });
+    let preview = preview(state, reduced_motion, t);
+    if crate::asks::is_open(state) {
+        root.children(layers).children(preview)
+    } else {
+        root.children(preview).children(layers)
+    }
 }
 
 fn preview(state: &State, reduced_motion: bool, t: &attn_ui::Tokens) -> Option<El> {

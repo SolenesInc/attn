@@ -11,7 +11,7 @@ use crate::shell::{Layer, Palette};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Outcome {
     Ran,
-    /// The native app runs it, but not now: no asks drawer without asks.
+    /// The native app runs it, but not now: no asks sheet without asks.
     Unavailable,
     /// The native app does not run it yet.
     Pending,

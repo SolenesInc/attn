@@ -6,7 +6,7 @@ export const recordings = {
   launcher: { caption: 'Pick a project and a worktree, and start an agent from one dialog', seed: 's-779vg6' },
   outposts: { caption: 'An agent on another computer runs in a tile beside your local ones', seed: 's-779vg6' },
   'quick-capture': { caption: 'Send a message to the Chief from another app, and go back to what you were doing', seed: 's-779vg6' },
-  asks: { caption: 'An agent sends a question, and you answer it from the Asks drawer', seed: 's-779vg6' },
+  asks: { caption: 'An agent sends a question, and you answer it from Asks', seed: 's-779vg6' },
 } satisfies Record<string, { caption: string; seed: string }>;
 
 export type RecordingId = keyof typeof recordings;

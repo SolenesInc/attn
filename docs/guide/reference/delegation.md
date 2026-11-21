@@ -115,9 +115,14 @@ Agents send you questions with `attn ask` instead of stopping to wait for you.
 Asks are on by default. Turn them off in **Settings → Agents and models → Asks**
 (`asks_enabled`); agents keep the setting they launched with.
 
-Cmd+Shift+R (Ctrl+Alt+R on Linux) opens the Asks drawer, where you answer them
-without opening the agent's terminal. Attn types your answer into the
-agent's conversation as your message. When the ask is about a seed, the answer
+Cmd+Shift+R (Ctrl+Alt+R on Linux) opens Asks, a sheet in the middle of the
+window, where you answer them without opening the agent's terminal. It opens on
+the ask of the agent on screen, or else on the ask it showed last, and the list
+beside the ask holds the others. Escape, the same keys or a click outside the
+sheet close it. **Open agent** (`o`) and **Open in Garden** (`g`) close the
+sheet and show the agent that asked, or the ask's seed.
+
+Attn types your answer into the agent's conversation as your message. When the ask is about a seed, the answer
 goes to whoever tends that seed when you answer, and Attn adds the answer to the
 seed as a note. The seed stays open until you answer, because Attn refuses an
 agent's harvest while the seed's ask waits for you. When you harvest the seed
@@ -136,7 +141,7 @@ recommended** (or `a`) selects every one of them in the draft, so you can review
 and change them before you send. Questions with no recommendation stay
 unanswered. The phone app has the same button.
 
-**Snooze** (or `s`) in the drawer snoozes the agent that holds the ask, with the
+**Snooze** (or `s`) in Asks snoozes the agent that holds the ask, with the
 queue's snooze choices, and **Wake** (or `s`) on a snoozed agent's ask wakes it.
 [The queue page](queue.md) says what a snooze does to the agent's asks.
 
