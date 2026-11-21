@@ -293,10 +293,10 @@ impl Dialog {
                 t.border_subtle,
             )),
             None => bodied.then(|| {
-                scrolling(
+                let scrolled = scrolling(
                     door::frame(
                         spaced(self.body, page_gap, Some(t.border_subtle)),
-                        Space::S16,
+                        Space::S0,
                         Space::S24,
                         if footed { Space::S0 } else { Space::S24 },
                     )
@@ -308,6 +308,9 @@ impl Dialog {
                     Opens::AtStart,
                     t,
                 )
+                .shrink();
+                door::frame(col().w_full().min_h(0.0), Space::S16, Space::S0, Space::S0)
+                    .child(scrolled)
             }),
         };
         let foot = self.actions.map(|actions| {

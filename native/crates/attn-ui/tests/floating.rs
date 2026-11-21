@@ -338,6 +338,34 @@ fn a_dialogs_actions_stay_whole_in_the_window_and_its_body_scrolls_however_long(
     }
 }
 
+#[test]
+fn a_dialogs_scrolled_rows_stop_a_step_under_its_head() {
+    use attn_ui::blocks::DialogSize;
+    for size in [
+        DialogSize::Prompt,
+        DialogSize::Form,
+        DialogSize::Sheet,
+        DialogSize::Tour,
+    ] {
+        let rt = asked(Asking { size, lines: 120 });
+        let all = rt.elements();
+        let find = |key: &str| {
+            all.iter()
+                .find(|e| e.key.as_deref() == Some(key))
+                .unwrap_or_else(|| panic!("no {key}"))
+                .clone()
+        };
+        let header = find("header");
+        let body = find("rule.body");
+        assert!(
+            body.visible[1] + 0.5 >= bottom(&header) + 16.0,
+            "{size:?}: rows scroll up to {} under a head that ends at {}",
+            body.visible[1],
+            bottom(&header)
+        );
+    }
+}
+
 thread_local! {
     static OFFERED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
