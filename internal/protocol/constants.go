@@ -289,8 +289,6 @@ const (
 	CmdInstallCodexUpdate            = "install_codex_update"
 	CmdCodexStatus                   = "codex_status"
 	CmdSetClientPresence             = "set_client_presence"
-	CmdActivityStatus                = "activity_status"
-	CmdClearSessionActivity          = "clear_session_activity"
 	CmdSetTerminalTheme              = "set_terminal_theme"
 	CmdOpenMarkdown                  = "open_markdown"
 	CmdOpenSeed                      = "open_seed"

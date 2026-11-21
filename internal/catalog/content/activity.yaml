@@ -1,2 +1,31 @@
+# The activity family. `anyone` lets a terminal that shows no session, such as
+# a shell in attn, run the command: it acts as nobody.
 groups:
-  - {name: activity, usage: "[clear <id>]", summary: "what each agent is doing right now"}
+  - name: activity
+    usage: "[--json] | clear <id>"
+    summary: "what each agent is doing right now"
+    doc: |
+      What each agent is doing right now: the one-line activity a background model writes for each session, and why nothing is generated when it is not.
+
+commands:
+  - name: activity
+    summary: what each agent is doing, and why nothing is generated
+    runs: home
+    grant: full
+    read_only: true
+    anyone: true
+    doc: |
+      Shows whether activity lines are generated and why not when they are not: the presence tier (nothing is generated while nobody can see it), the setting, and whether an agent is chosen to write them. Then each session that generates a line, with its line, its age and why its last run failed.
+    result: ActivityStatusResult
+
+  - name: activity clear
+    summary: forget one session's line and its read position
+    runs: home
+    grant: full
+    anyone: true
+    doc: |
+      Forgets one session's activity line and its read position, so the next line is written from what happens next.
+    args:
+      - {name: id, type: text, required: true, cli: pos, placeholder: "<id>", doc: "the full id of the session"}
+    errors:
+      - {code: session_not_found, fix: "Pass the full id of a session this daemon holds."}

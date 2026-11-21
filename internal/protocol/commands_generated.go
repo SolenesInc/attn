@@ -4,6 +4,8 @@ package protocol
 
 // CommandRuns is where each catalog command runs, for run_command's placement.
 var CommandRuns = map[string]Locator{
+	"activity":           LocatorHome,
+	"activity clear":     LocatorHome,
 	"list":               LocatorHome,
 	"seed search":        LocatorHome,
 	"seed plant":         LocatorHome,

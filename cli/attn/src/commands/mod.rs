@@ -1,3 +1,4 @@
+pub mod activity;
 pub mod automation;
 pub mod browser;
 pub mod callout;

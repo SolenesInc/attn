@@ -16,8 +16,10 @@ func TestEveryAgentSessionAndStateToolAnswersWithTheShapeItsOutputSchemaDescribe
 
 	shapes.call("state_explain", map[string]any{"id": session})
 	shapes.call("list", map[string]any{})
+	shapes.call("activity", map[string]any{})
+	shapes.call("activity_clear", map[string]any{"id": session})
 
-	shapes.finish("state_", "list")
+	shapes.finish("state_", "list", "activity")
 
 	unknown := agent.mustCall(t, "state_explain", map[string]any{"id": "no-such-session"})
 	if text := resultText(unknown); !unknown.IsError || text != `session_not_found: no session "no-such-session"; pass a full session id`+"\nFix: Pass the full id of a session this daemon holds." {

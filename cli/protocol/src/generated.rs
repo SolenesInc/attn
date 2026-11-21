@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "b0f06ee074d6";
+pub const PROTOCOL_VERSION: &str = "c526226a3254";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -15,20 +15,6 @@ fn null_as_default<'de, D: Deserializer<'de>, T: Default + Deserialize<'de>>(des
     Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ActivityStatusMessage {
-    pub cmd: String,
-}
-
-impl ActivityStatusMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "activity_status".to_string(),
-            ..Self::default()
-        }
-    }
-}
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ActivityStatusResult {
     pub enabled: bool,
@@ -1957,21 +1943,6 @@ impl ClearAnalyticsRecordsResultMessage {
     pub fn new() -> Self {
         Self {
             event: "clear_analytics_records_result".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ClearSessionActivityMessage {
-    pub cmd: String,
-    pub id: SessionID,
-}
-
-impl ClearSessionActivityMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "clear_session_activity".to_string(),
             ..Self::default()
         }
     }
@@ -9263,8 +9234,6 @@ impl ReposUpdatedMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub activity_status_result: Option<ActivityStatusResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_close_result: Option<AgentCloseResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_inbox_batch_result: Option<AgentInboxBatchResult>,
@@ -14692,9 +14661,6 @@ impl WorktreesUpdatedMessage {
             ..Self::default()
         }
     }
-}
-impl ResponseField for ActivityStatusResult {
-    const FIELD: &'static str = "activity_status_result";
 }
 impl ResponseField for AgentCloseResult {
     const FIELD: &'static str = "agent_close_result";

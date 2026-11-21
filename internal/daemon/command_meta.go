@@ -135,8 +135,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdSetSetting:                    commandMetadata(true, true),
 	protocol.CmdSetTerminalTheme:              commandMetadata(false, true),
 	protocol.CmdSetClientPresence:             commandMetadata(false, false),
-	protocol.CmdActivityStatus:                commandMetadata(false, true),
-	protocol.CmdClearSessionActivity:          commandMetadata(false, true),
 	protocol.CmdListPlugins:                   commandMetadata(false, true),
 	protocol.CmdInstallPlugin:                 commandMetadata(false, true),
 	protocol.CmdUninstallPlugin:               commandMetadata(false, true),

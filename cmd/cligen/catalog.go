@@ -386,10 +386,12 @@ func (g *generator) verbHelp(group *catalog.Group, cmd *catalog.Command) string 
 	for _, values := range cmd.Examples {
 		out.WriteString(helpDocIndent + "Example: " + g.example(cmd, values) + "\n")
 	}
-	out.WriteString("\nflags:\n")
-	for _, line := range g.flagLines(cmd, group) {
-		out.WriteString(line)
-		out.WriteByte('\n')
+	if lines := g.flagLines(cmd, group); len(lines) > 0 {
+		out.WriteString("\nflags:\n")
+		for _, line := range lines {
+			out.WriteString(line)
+			out.WriteByte('\n')
+		}
 	}
 	return out.String()
 }

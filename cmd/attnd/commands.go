@@ -46,8 +46,6 @@ func topLevelCommands() []topLevelCommand {
 		{names: []string{"onboarding"}, run: runOnboarding, banner: true},
 		{names: []string{"skill"}, run: runSkill},
 		{names: []string{"guide"}, run: runGuide},
-		{names: []string{"activity"}, run: runActivity, banner: true,
-			help: func(w io.Writer) { fmt.Fprint(w, activityUsage) }},
 		{names: []string{"preflight"}, run: runPreflight, banner: true},
 		{names: []string{"update"}, run: runUpdate, banner: true,
 			help: func(w io.Writer) { fmt.Fprintln(w, updateUsage) }},

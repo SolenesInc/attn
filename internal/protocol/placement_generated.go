@@ -28,7 +28,6 @@ type Placed interface {
 }
 
 var Placements = map[string][]Placement{
-	"activity_status":                  {Placement{LocatorHome, ""}},
 	"agent_catalog":                    {Placement{LocatorMachine, "host"}},
 	"agent_close":                      {Placement{LocatorHome, ""}},
 	"agent_inbox":                      {Placement{LocatorHome, ""}},
@@ -61,7 +60,6 @@ var Placements = map[string][]Placement{
 	"checkout_inspect":                 {Placement{LocatorMachine, "host"}},
 	"claude_mod_reach":                 {Placement{LocatorSession, "session_id"}},
 	"claude_mod_reach_report":          {Placement{LocatorHome, ""}},
-	"clear_session_activity":           {Placement{LocatorHome, ""}},
 	"code_nav":                         {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"code_nav_check":                   {Placement{LocatorHere, ""}},
 	"code_nav_define":                  {Placement{LocatorHere, ""}},
@@ -281,18 +279,6 @@ func SocketPlacement(command string, frame []byte) (Placement, bool) {
 		}
 	}
 	return places[len(places)-1], true
-}
-
-func (ActivityStatusMessage) CommandName() string {
-	return "activity_status"
-}
-
-func (m ActivityStatusMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m ActivityStatusMessage) Locate() string {
-	return ""
 }
 
 func (AgentCatalogMessage) CommandName() string {
@@ -682,18 +668,6 @@ func (m ClaudeModReachReportMessage) Placement() Placement {
 }
 
 func (m ClaudeModReachReportMessage) Locate() string {
-	return ""
-}
-
-func (ClearSessionActivityMessage) CommandName() string {
-	return "clear_session_activity"
-}
-
-func (m ClearSessionActivityMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m ClearSessionActivityMessage) Locate() string {
 	return ""
 }
 

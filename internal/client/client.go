@@ -986,22 +986,16 @@ func (c *Client) AppendJournal(sourceSessionID protocol.SessionID, date string, 
 }
 
 func (c *Client) ActivityStatus() (*protocol.ActivityStatusResult, error) {
-	resp, err := c.send(protocol.ActivityStatusMessage{Cmd: protocol.CmdActivityStatus})
-	if err != nil {
+	var result protocol.ActivityStatusResult
+	if err := c.RunCommand("activity", "", map[string]string{}, &result); err != nil {
 		return nil, err
 	}
-	if resp.ActivityStatusResult == nil {
-		return nil, errors.New("daemon returned no activity status")
-	}
-	return resp.ActivityStatusResult, nil
+	return &result, nil
 }
 
 func (c *Client) ClearSessionActivity(sessionID protocol.SessionID) error {
-	_, err := c.send(protocol.ClearSessionActivityMessage{
-		Cmd: protocol.CmdClearSessionActivity,
-		ID:  sessionID,
-	})
-	return err
+	var cleared string
+	return c.RunCommand("activity clear", "", map[string]string{"id": string(sessionID)}, &cleared)
 }
 
 func (c *Client) queryResponse(filter string) (*protocol.Response, error) {

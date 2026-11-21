@@ -2674,16 +2674,6 @@ model SetClientPresenceMessage {
   idle_seconds?: float64; // Seconds since the last keyboard or pointer input anywhere in this client. Absent means "no input observed yet this connection".
 }
 
-// ActivityStatusMessage asks what attn believes about session activity right
-// now: the presence tier it has reduced its clients to, and every session's
-// current line with the time it was generated. It is the CLI's way to see a
-// feature whose whole output otherwise lives on the dashboard — including why
-// nothing is being generated, which is almost always the tier.
-@extension("x-on", #{ home: true })
-model ActivityStatusMessage {
-  cmd: "activity_status";
-}
-
 model ActivityStatusResult {
   presence_tier: string; // "watching" | "present" | "away"
   enabled: boolean;
@@ -2701,18 +2691,6 @@ model ActivityStatusSession {
   // user paid to switch on goes quiet and looks identical to one with nothing to
   // say.
   error?: string;
-}
-
-// ClearSessionActivityMessage forgets one session's line. The way out for a line
-// that is wrong on a session that will never write again — a session that is
-// still moving replaces its own line on the next refresh, but a finished one
-// would keep the wrong line forever. Clearing also drops the read cursor, so the
-// next line is generated from what happens next rather than from a window that
-// was already summarized.
-@extension("x-on", #{ home: true })
-model ClearSessionActivityMessage {
-  cmd: "clear_session_activity";
-  id: SessionID;
 }
 
 // Pushes the app's resolved terminal theme colors to the daemon. Fire-and-forget:
@@ -7546,7 +7524,6 @@ model Response {
   code_nav_define_result?: CodeNavDefineResult;
   // open_markdown on a review document: the problems `attn review check` reports.
   review_problems?: ReviewProblem[];
-  activity_status_result?: ActivityStatusResult;
   kept_conversation_list_result?: KeptConversationListResult;
   kept_conversation_forget_result?: KeptConversationForgetResult;
   worktree_list_result?: WorktreeListResult;

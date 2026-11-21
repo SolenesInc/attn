@@ -4,11 +4,6 @@ package protocol
 
 import "time"
 
-type ActivityStatusMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-}
-
 type ActivityStatusResult struct {
 	// Enabled corresponds to the JSON schema field "enabled".
 	Enabled bool `json:"enabled"`
@@ -2136,14 +2131,6 @@ type ClearAnalyticsRecordsResultMessage struct {
 
 	// Vents corresponds to the JSON schema field "vents".
 	Vents int `json:"vents"`
-}
-
-type ClearSessionActivityMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID SessionID `json:"id"`
 }
 
 type ClearWarningsMessage struct {
@@ -9715,10 +9702,6 @@ type ReposUpdatedMessage struct {
 }
 
 type Response struct {
-	// ActivityStatusResult corresponds to the JSON schema field
-	// "activity_status_result".
-	ActivityStatusResult *ActivityStatusResult `json:"activity_status_result,omitempty,omitzero"`
-
 	// AgentCloseResult corresponds to the JSON schema field "agent_close_result".
 	AgentCloseResult *AgentCloseResult `json:"agent_close_result,omitempty,omitzero"`
 

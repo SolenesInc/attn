@@ -46,6 +46,8 @@ const (
 )
 
 var specs = map[string]spec{
+	"activity":           {readOnly: true, anyone: true, sessionFlag: false},
+	"activity clear":     {readOnly: false, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
 	"list":               {readOnly: true, anyone: true, sessionFlag: false},
 	"seed search":        {readOnly: true, anyone: false, sessionFlag: true},
 	"seed plant":         {readOnly: false, anyone: false, sessionFlag: true},
@@ -90,6 +92,13 @@ var specs = map[string]spec{
 	"seed review retry":  {readOnly: false, anyone: false, sessionFlag: true},
 	"seed review keep":   {readOnly: false, anyone: false, sessionFlag: true, fixes: map[string]string{"not_in_review": "Pass a seed the review lists; seed review show lists them."}},
 	"state explain":      {readOnly: true, anyone: true, sessionFlag: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
+}
+
+type ActivityArgs struct {
+}
+
+type ActivityClearArgs struct {
+	ID string `json:"id,omitempty"`
 }
 
 type ListArgs struct {

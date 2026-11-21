@@ -265,8 +265,6 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdInstallCodexUpdate:            decodeInto[InstallCodexUpdateMessage],
 	CmdCodexStatus:                   decodeInto[CodexStatusMessage],
 	CmdSetClientPresence:             decodeInto[SetClientPresenceMessage],
-	CmdActivityStatus:                decodeInto[ActivityStatusMessage],
-	CmdClearSessionActivity:          decodeInto[ClearSessionActivityMessage],
 	CmdSetTerminalTheme:              decodeInto[SetTerminalThemeMessage],
 	CmdOpenMarkdown:                  decodeInto[OpenMarkdownMessage],
 	CmdOpenSeed:                      decodeInto[OpenSeedMessage],

@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/activity"
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
@@ -357,7 +357,7 @@ func (d *Daemon) clearAllSessionActivity() {
 	}
 }
 
-func (d *Daemon) handleActivityStatus(conn net.Conn, _ *protocol.ActivityStatusMessage) {
+func (d *Daemon) runActivity(ctx context.Context, c command.Caller, a command.ActivityArgs) (any, error) {
 	result := protocol.ActivityStatusResult{
 		PresenceTier: d.PresenceTier().String(),
 		Enabled:      d.activityEnabled(),
@@ -382,19 +382,14 @@ func (d *Daemon) handleActivityStatus(conn net.Conn, _ *protocol.ActivityStatusM
 		}
 		result.Sessions = append(result.Sessions, entry)
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, ActivityStatusResult: &result})
+	return result, nil
 }
 
-func (d *Daemon) handleClearSessionActivity(conn net.Conn, msg *protocol.ClearSessionActivityMessage) {
-	sessionID := protocol.TrimID(msg.ID)
-	if sessionID == "" {
-		d.sendError(conn, "clear session activity: id is required")
-		return
-	}
+func (d *Daemon) runActivityClear(ctx context.Context, c command.Caller, a command.ActivityClearArgs) (any, error) {
+	sessionID := protocol.SessionID(strings.TrimSpace(a.ID))
 	if !d.store.UpdateSessionActivity(sessionID, "", time.Time{}, "") {
-		d.sendError(conn, string("clear session activity: session not found: "+sessionID))
-		return
+		return nil, command.Refuse(command.CodeSessionNotFound, "no session %q; pass a full session id", a.ID)
 	}
 	d.publishFact(FactSessionActivityChanged, string(sessionID), nil)
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true})
+	return fmt.Sprintf("cleared the activity line for %s", sessionID), nil
 }

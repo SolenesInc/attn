@@ -18,6 +18,7 @@ func (d *Daemon) commandLayer() *command.Layer {
 		for _, family := range []map[string]command.Handler{
 			{"state explain": command.Typed(d.runStateExplain)},
 			{"list": command.Typed(d.runList)},
+			{"activity": command.Typed(d.runActivity), "activity clear": command.Typed(d.runActivityClear)},
 		} {
 			maps.Copy(handlers, family)
 		}

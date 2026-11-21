@@ -2996,11 +2996,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdDelegateStatus:
 		d.handleDelegateStatus(conn, msg.(*protocol.DelegateStatusMessage))
 
-	case protocol.CmdActivityStatus:
-		d.handleActivityStatus(conn, msg.(*protocol.ActivityStatusMessage))
-	case protocol.CmdClearSessionActivity:
-		d.handleClearSessionActivity(conn, msg.(*protocol.ClearSessionActivityMessage))
-
 	case protocol.CmdDocDefine:
 		d.handleDocDefine(conn, msg.(*protocol.DocDefineMessage))
 	case protocol.CmdDocUndefine:
