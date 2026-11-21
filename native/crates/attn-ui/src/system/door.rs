@@ -26,6 +26,14 @@ pub(crate) const fn reading_face(size: f32, weight: f32, line: f32) -> TextStyle
     TextStyle::new(size, weight).lh(line)
 }
 
+/// `style` in the serif a person's own notes are set in: the Tauri editor's `ui-serif, Georgia,
+/// 'Times New Roman', serif`, with Linux's usual serifs for `serif`.
+pub(crate) const fn serif(style: TextStyle) -> TextStyle {
+    style.family(rune::Family::Named(
+        "New York, Georgia, Times New Roman, Noto Serif, DejaVu Serif, Liberation Serif",
+    ))
+}
+
 pub(crate) fn icon(glyph: &'static Icon, size: IconSize) -> El {
     rune::icon(glyph, size.pt())
 }

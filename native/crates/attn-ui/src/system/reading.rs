@@ -58,10 +58,14 @@ impl Reading {
         }
     }
 
-    /// The role as a person writes in it: each character drawn as typed, `-->` as its three
-    /// characters rather than an arrow.
+    /// The role as a person writes their own notes in it: in a serif, code in mono, each
+    /// character drawn as typed, `-->` as its three characters rather than an arrow.
     pub const fn written(self) -> TextStyle {
-        self.style().features("'liga' 0, 'calt' 0")
+        let typed = self.style().features("'liga' 0, 'calt' 0");
+        match self {
+            Reading::Code | Reading::InlineCode => typed,
+            _ => door::serif(typed),
+        }
     }
 }
 

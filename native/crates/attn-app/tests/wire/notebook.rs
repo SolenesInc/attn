@@ -2492,6 +2492,32 @@ fn each_line_of_a_note_stands_as_tall_as_the_line_of_the_reading_role_it_is_writ
 }
 
 #[test]
+fn a_note_is_written_in_a_serif_apart_from_the_sans_a_document_is_read_in() {
+    use attn_ui::system::Reading;
+    let said = "Written by hand";
+    let disk = Disk::with(&[("knowledge/index.md", &format!("{said}\n"))]);
+    let mut world = start(&disk);
+    open_fullscreen(&mut world);
+    world.gesture(|d| {
+        d.click(Target::key("notebook.editor.line.0"));
+        d.press("end");
+    });
+    let line = world.rect("notebook.editor.line.0");
+    let caret = world.rect("notebook.editor.caret");
+    let written = rune::text::advance(said, Reading::Text.written());
+    let read = rune::text::advance(said, Reading::Text.style());
+    assert!(
+        ((caret[0] - line[0]) as f32 - written).abs() < 0.5,
+        "the caret ends the line at {}, the note's measure is {written}",
+        caret[0] - line[0]
+    );
+    assert!(
+        (written - read).abs() > 2.0,
+        "the note measures {written}, as the document's sans does ({read})"
+    );
+}
+
+#[test]
 fn an_image_on_its_own_line_shows_the_picture_and_one_that_cannot_be_read_says_so() {
     use base64::Engine;
     let disk = Disk::with(&[(
