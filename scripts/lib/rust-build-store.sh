@@ -172,15 +172,27 @@ within() {
   [[ "$path" == "$prefix" || "$path" == "$prefix"/* ]]
 }
 
+build_script_stdout() {
+  local run_dir="$1"
+  if [[ -f "$run_dir/output" ]]; then
+    cat "$run_dir/output"
+  elif [[ -f "$run_dir/run/stdout" ]]; then
+    cat "$run_dir/run/stdout"
+  else
+    die "no build script output beside $run_dir/out, so $recipe's build script variables cannot be read"
+  fi
+}
+
 check_inputs() {
-  local messages="$1" built_dir="$2" deps_dir path paths root allowed outside=() name undeclared=() declared_names=" " line
-  deps_dir="$(grep -o '"filenames":\[[^]]*\]' "$messages" | grep -o "\"[^\"]*/${built_dir##*"$target_dir"/}/deps/[^\"]*\"" | head -n1 | tr -d '"')" || true
-  [[ -n "$deps_dir" ]] || die "cargo reported no artifact under a deps directory, so $recipe's rustc dep-info cannot be read"
-  deps_dir="$(dirname "$deps_dir")"
+  local messages="$1" built_dir="$2" profile_rel build_dir path paths root allowed outside=() name undeclared=() declared_names=" " line
+  profile_rel="${built_dir##*"$target_dir"/}"
+  build_dir="$(grep -o '"filenames":\[[^]]*\]' "$messages" | grep -oE "\"[^\"]*/${profile_rel}/(deps|build)/" | head -n1 | tr -d '"')" || true
+  [[ -n "$build_dir" ]] || die "cargo reported no artifact under $profile_rel/deps or $profile_rel/build, so $recipe's rustc dep-info cannot be read"
+  build_dir="${build_dir%/*/}"
   [[ -f "$built_dir/$binary.d" ]] || die "cargo wrote no dep-info at $built_dir/$binary.d, so $recipe's inputs cannot be checked"
   local repo_real build_outputs
   repo_real="$(cd "$repo" && pwd -P)"
-  build_outputs="$(dirname "$deps_dir" | normalize_paths)"
+  build_outputs="$(printf '%s\n' "$build_dir" | normalize_paths)"
   paths="$(dep_info_paths "$built_dir/$binary.d" | normalize_paths | LC_ALL=C sort -u)"
   [[ -n "$paths" ]] || die "no inputs read from $built_dir/$binary.d, so $recipe's inputs cannot be checked"
   while IFS= read -r path; do
@@ -206,7 +218,10 @@ check_inputs() {
     exit 1
   fi
 
-  local entry
+  local entry run_dir script_vars=""
+  while IFS= read -r run_dir; do
+    script_vars+="$(build_script_stdout "$run_dir" | sed -n 's/^cargo::*rerun-if-env-changed=//p')"$'\n'
+  done < <(grep -o '"out_dir":"[^"]*"' "$messages" | sed 's/^"out_dir":"\(.*\)\/out"$/\1/')
   for entry in ${declared[@]+"${declared[@]}"}; do declared_names+="${entry%%=*} "; done
   while IFS= read -r line; do declared_names+="${line%%=*} "; done < <(link_env)
   while IFS= read -r name; do
@@ -216,12 +231,11 @@ check_inputs() {
     undeclared+=("$name")
   done < <(
     {
-      grep -l -F -e "$repo/" -e "$repo_real/" "$deps_dir"/*.d 2>/dev/null | while IFS= read -r file; do
+      find "$build_dir" -path "$build_dir/incremental" -prune -o -name '*.d' -type f -print0 |
+        xargs -0 grep -l -F -e "$repo/" -e "$repo_real/" 2>/dev/null | while IFS= read -r file; do
         sed -n 's/^# env-dep:\([^=]*\).*/\1/p' "$file"
       done
-      grep -o '"out_dir":"[^"]*"' "$messages" | sed 's/^"out_dir":"\(.*\)\/out"$/\1\/output/' | while IFS= read -r output; do
-        [[ ! -f "$output" ]] || sed -n 's/^cargo::*rerun-if-env-changed=//p' "$output"
-      done
+      printf '%s' "$script_vars"
     } | LC_ALL=C sort -u
   )
   if [[ ${#undeclared[@]} -gt 0 ]]; then
