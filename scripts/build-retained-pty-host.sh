@@ -8,10 +8,7 @@ output="${1:?usage: build-retained-pty-host.sh OUTPUT_PATH}"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-retained-host.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
-if ! git cat-file -e "$last_revision_before_host_incarnations^{commit}" 2>/dev/null; then
-  git fetch --quiet --depth=1 origin "$last_revision_before_host_incarnations"
-fi
-git archive "$last_revision_before_host_incarnations" | tar -x -C "$work"
+bash scripts/source-at-commit.sh "$last_revision_before_host_incarnations" "$work"
 platform="$(go env GOOS)_$(go env GOARCH)"
 if [ -d "third_party/ghostty-vt/$platform" ] && cmp -s ghostty-vt.pin "$work/ghostty-vt.pin" && cmp -s ghostty-vt-native.lock "$work/ghostty-vt-native.lock"; then
   mkdir -p "$work/third_party/ghostty-vt"

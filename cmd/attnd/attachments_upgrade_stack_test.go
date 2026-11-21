@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -20,6 +21,8 @@ const (
 	oldHomeDraft      = "c3d4e5f6-0718-4293-a4b5-c6d7e8f90a1b"
 	oldHomeUploading  = "e1f2a3b4-c5d6-4e7f-8091-a2b3c4d5e6f7"
 	oldHomeUploadedTo = 1900
+
+	buildBeforeAttachmentOwners = "c03b41866edb21dc8bce0254f031242752667db3"
 )
 
 func oldHomeCommittedBytes() []byte {
@@ -76,8 +79,8 @@ func TestAHomeWrittenBeforeAttachmentOwnersKeepsItsFilesAndResumesItsUpload(t *t
 	moveCommittedFileAsAnInterruptedStartWould(t, s.Dir)
 	s.Start()
 
-	if _, err := os.Stat(filepath.Join(s.Dir, "quick-captures")); !os.IsNotExist(err) {
-		t.Fatalf("the old file folder outlived the move: %v", err)
+	if _, err := os.Stat(filepath.Join(s.Dir, "quick-captures", oldHomeProfile, oldHomeCapture, oldHomeCommitted)); err != nil {
+		t.Fatalf("the file the interrupted start moved is not back where the build before attachment owners reads it: %v", err)
 	}
 	app := s.TrustedApp()
 	if app.SelectedProfile() != oldHomeProfile {
@@ -117,4 +120,56 @@ func TestAHomeWrittenBeforeAttachmentOwnersKeepsItsFilesAndResumesItsUpload(t *t
 			t.Fatalf("attn agent attachment %v saved %d bytes, want the original %d: %v", c.args, len(saved), len(c.want), err)
 		}
 	}
+}
+
+func TestTheBuildBeforeAttachmentOwnersReadsQuickCaptureFilesAfterADatabaseRestore(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	restoreHomeBeforeAttachmentOwners(t, s.Dir)
+	previous, current := testworld.AttnBinaryFromCommit(t, buildBeforeAttachmentOwners), testworld.AttnBinary(t)
+	savedBytes := func(label string, args ...string) {
+		t.Helper()
+		out := filepath.Join(t.TempDir(), "saved")
+		got := s.Attn(append(append([]string{"agent", "attachment"}, args...), "--out", out)...)
+		saved, err := os.ReadFile(out)
+		if got.Code != 0 || err != nil || !bytes.Equal(saved, oldHomeCommittedBytes()) {
+			t.Fatalf("%s: attn agent attachment %v saved %d bytes, want the original %d: %+v %v", label, args, len(saved), len(oldHomeCommittedBytes()), got, err)
+		}
+	}
+	premigrationBackups := func() []string {
+		t.Helper()
+		found, err := filepath.Glob(filepath.Join(s.Dir, "backups", "attn-premigration-*.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return found
+	}
+
+	s.RunFrom(previous)
+	s.StartRelease()
+	savedBytes("the previous build", oldHomeCapture, oldHomeCommitted)
+	s.Stop()
+	before := premigrationBackups()
+
+	s.RunFrom(current)
+	s.Start()
+	savedBytes("the upgrade", oldHomeCommitted)
+	s.Stop()
+
+	upgrade := slices.DeleteFunc(premigrationBackups(), func(path string) bool { return slices.Contains(before, path) })
+	if len(upgrade) != 1 {
+		t.Fatalf("the upgrade wrote pre-migration backups %v, want one", upgrade)
+	}
+	if restored := s.Attn("db", "restore", upgrade[0]); restored.Code != 0 {
+		t.Fatalf("attn db restore %s: %+v", upgrade[0], restored)
+	}
+	s.RunFrom(previous)
+	s.StartRelease()
+	savedBytes("the previous build on the restored database", oldHomeCapture, oldHomeCommitted)
+	s.Stop()
+
+	s.RunFrom(current)
+	s.Start()
+	savedBytes("the second upgrade", oldHomeCommitted)
+	savedBytes("the second upgrade", oldHomeCapture, oldHomeCommitted)
 }

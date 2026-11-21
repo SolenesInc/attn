@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -39,6 +40,44 @@ func buildAttnAt(version, channel, releaseSource, snapshotFormat string) (string
 		ldflags += " -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=" + snapshotFormat
 	}
 	return buildPair(dir, ldflags)
+}
+
+func AttnBinaryFromCommit(t testing.TB, commit string) string {
+	t.Helper()
+	once, _ := versionedBinaries.LoadOrStore("commit-"+commit, sync.OnceValues(func() (string, error) { return buildAttnFromCommit(commit) }))
+	binary, err := once.(func() (string, error))()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return binary
+}
+
+func buildAttnFromCommit(commit string) (string, error) {
+	if processDir == "" {
+		return "", fmt.Errorf("testworld.AttnBinaryFromCommit builds into the process directory that testworld.Main creates; call it from TestMain")
+	}
+	root, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}").Output()
+	if err != nil {
+		return "", fmt.Errorf("find the repository to build %s from: %w", commit, err)
+	}
+	source := filepath.Join(processDir, "source-"+commit)
+	checkout := exec.Command("bash", filepath.Join(strings.TrimSpace(string(root)), "scripts", "source-at-commit.sh"), commit, source)
+	if output, err := checkout.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("check out %s: %w\n%s", commit, err, output)
+	}
+	bin := filepath.Join(source, "bin")
+	for _, step := range [][]string{
+		{"bash", "scripts/build-libghostty-vt.sh"},
+		{"go", "build", "-ldflags", "-w", "-o", filepath.Join(bin, "attnd"), "./cmd/attnd"},
+		{"bash", "scripts/rust-cli.sh", "build", "--out", filepath.Join(bin, "attn")},
+	} {
+		build := exec.Command(step[0], step[1:]...)
+		build.Dir = source
+		if output, err := build.CombinedOutput(); err != nil {
+			return "", fmt.Errorf("build %s at %s: %w\n%s", step[len(step)-1], commit, err, output)
+		}
+	}
+	return filepath.Join(bin, "attn"), nil
 }
 
 func (s *Stack) InstallsOnOutposts(attn, host string) {

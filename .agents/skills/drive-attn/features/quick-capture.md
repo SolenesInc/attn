@@ -42,7 +42,7 @@ macOS only. A paired program sends with `attn send` without the panel.
 
 ### Agents
 
-- `attn agent attachment <attachment-id> --out <path>` saves a file the user attached (`internal/daemon/commands_agent.go`; it runs on the machine the session runs on and reads the file from the home in chunks, and is the tool `agent_attachment` when `agent_tools_enabled` is on). The older form, `<capture-id> <attachment-id>`, which earlier messages and seed notes quote, still works. The daemon keeps every attachment in one store keyed by its id, under `attachments/<profile>/` in the data directory, and names its owner, a quick capture (`internal/daemon/attachments.go`). Agents never send a quick capture. They receive one.
+- `attn agent attachment <attachment-id> --out <path>` saves a file the user attached (`internal/daemon/commands_agent.go`; it runs on the machine the session runs on and reads the file from the home in chunks, and is the tool `agent_attachment` when `agent_tools_enabled` is on). The older form, `<capture-id> <attachment-id>`, which earlier messages and seed notes quote, still works. The daemon keeps every attachment in one store keyed by its id, naming its owner, a quick capture or an ask (`internal/daemon/attachments.go`). A quick capture's files stay under `quick-captures/<profile>/<capture>/` in the data directory, where the builds before that store read them after `attn db restore`; an ask's files live under `attachments/<profile>/`. Agents never send a quick capture. They receive one.
 - Prompts: the quick capture guidance in the session instructions of the chief and crew members, and of no other agent (`internal/prompts/content/session/quick-capture.md`). The typed message and its file lines are in `session/quick-capture-item.md`, `quick-capture-file.md`, and `quick-capture-file-saved.md`.
 
 ### Triggers
@@ -106,7 +106,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/quick_captures_wire_test.go`, `native/crates/attn-app/tests/wire/quick_capture.rs` (the panel, its keys, its automation and the shortcut editor's capture section), `native/crates/attn-app/tests/wire/sender_pairing.rs` (the approval dialog, its keys and both answers), `native/crates/attn-app/tests/wire/settings/senders.rs`.
-- Stack: `cmd/attnd/quick_captures_stack_test.go`, `cmd/attnd/attachments_upgrade_stack_test.go` (a home the earlier store wrote, with a move cut short), `cmd/attnd/send_stack_test.go` (pairing, sending to a local and an outpost session, unpair), `TestTheNativeAppAllowsAndDeniesAProgramThatAsksToPair` in `cmd/attnd/native_app_stack_test.go` (`attn send pair` answered in the headless app).
+- Stack: `cmd/attnd/quick_captures_stack_test.go`, `cmd/attnd/attachments_upgrade_stack_test.go` (a home the earlier store wrote, with a file an earlier start moved to `attachments/`, and the build before the store reading its files again after `attn db restore`), `cmd/attnd/send_stack_test.go` (pairing, sending to a local and an outpost session, unpair), `TestTheNativeAppAllowsAndDeniesAProgramThatAsksToPair` in `cmd/attnd/native_app_stack_test.go` (`attn send pair` answered in the headless app).
 - Scenario: `native-quick-capture` (macOS only; it reports what it found broken in the panel together at its end).
 
 ## Gotchas

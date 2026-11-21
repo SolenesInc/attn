@@ -185,7 +185,7 @@ func TestDamagedQuickCaptureDraftDoesNotBlockDaemonRestart(t *testing.T) {
 		t.Fatal("crashed upload returned success")
 	}
 	s.AwaitCrash()
-	if err := os.Truncate(filepath.Join(s.Dir, "attachments", crashApp.SelectedProfile(), id), int64(len(data)-1)); err != nil {
+	if err := os.Truncate(filepath.Join(s.Dir, "quick-captures", crashApp.SelectedProfile(), quickCapture, id), int64(len(data)-1)); err != nil {
 		t.Fatal(err)
 	}
 	s.Start()

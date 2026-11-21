@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crashpoint"
@@ -26,7 +25,15 @@ func requireCanonicalUUID(id string) error {
 	return nil
 }
 
-func (d *Daemon) attachmentPaths(profileID, id string) (string, string) {
+func (d *Daemon) attachmentPaths(a store.StoredAttachment) (string, string) {
+	if a.Owner.Kind == protocol.AttachmentOwnerKindQuickCapture {
+		root := filepath.Join(d.dataRoot, "quick-captures", a.ProfileID)
+		return filepath.Join(root, ".staging", a.Owner.ID, a.Attachment.ID+".part"), filepath.Join(root, a.Owner.ID, a.Attachment.ID)
+	}
+	return d.attachmentStorePaths(a.ProfileID, a.Attachment.ID)
+}
+
+func (d *Daemon) attachmentStorePaths(profileID, id string) (string, string) {
 	root := filepath.Join(d.dataRoot, "attachments", profileID)
 	return filepath.Join(root, ".staging", id+".part"), filepath.Join(root, id)
 }
@@ -144,7 +151,7 @@ func (d *Daemon) attachmentPut(profileID string, msg *protocol.AttachmentPutMess
 	if a.State == store.AttachmentDiscarded {
 		return nil, fmt.Errorf("attachment %s was discarded; upload with a new identity", msg.AttachmentID)
 	}
-	stage, final := d.attachmentPaths(profileID, msg.AttachmentID)
+	stage, final := d.attachmentPaths(*a)
 	if a.State == store.AttachmentStaged {
 		if _, err := os.Stat(final); err == nil {
 			media, size, err := attachmentFile(final, a.Attachment.Name)
@@ -231,6 +238,9 @@ func (d *Daemon) attachmentPut(profileID string, msg *protocol.AttachmentPutMess
 	if err != nil {
 		return nil, err
 	}
+	if err := os.MkdirAll(filepath.Dir(final), 0700); err != nil {
+		return nil, err
+	}
 	if err := os.Rename(stage, final); err != nil {
 		return nil, err
 	}
@@ -266,7 +276,7 @@ func (d *Daemon) attachmentDownload(profileID string, msg *protocol.AttachmentGe
 	if msg.Offset < 0 || msg.Offset > a.Attachment.Bytes {
 		return nil, fmt.Errorf("attachment bytes=%d, asked for offset %d", a.Attachment.Bytes, msg.Offset)
 	}
-	_, path := d.attachmentPaths(profileID, msg.AttachmentID)
+	_, path := d.attachmentPaths(*a)
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -305,7 +315,7 @@ func (d *Daemon) attachmentDiscard(profileID string, msg *protocol.AttachmentDis
 }
 
 func (d *Daemon) removeAttachmentFiles(a store.StoredAttachment) error {
-	stage, final := d.attachmentPaths(a.ProfileID, a.Attachment.ID)
+	stage, final := d.attachmentPaths(a)
 	for _, path := range []string{stage, final} {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return err
@@ -317,7 +327,7 @@ func (d *Daemon) removeAttachmentFiles(a store.StoredAttachment) error {
 func (d *Daemon) recoverAttachments() error {
 	d.attachmentMu.Lock()
 	defer d.attachmentMu.Unlock()
-	if err := d.moveQuickCaptureFiles(); err != nil {
+	if err := d.returnQuickCaptureFilesToTheirCaptures(); err != nil {
 		return err
 	}
 	discarded, err := d.store.AttachmentsIn(store.AttachmentDiscarded)
@@ -342,7 +352,7 @@ func (d *Daemon) recoverAttachments() error {
 }
 
 func (d *Daemon) recoverStagedAttachment(a store.StoredAttachment) error {
-	stage, final := d.attachmentPaths(a.ProfileID, a.Attachment.ID)
+	stage, final := d.attachmentPaths(a)
 	media, size, err := attachmentFile(final, a.Attachment.Name)
 	if os.IsNotExist(err) {
 		a.Attachment.Bytes = 0
@@ -369,79 +379,41 @@ func (d *Daemon) recoverStagedAttachment(a store.StoredAttachment) error {
 	return d.store.SaveAttachment(a)
 }
 
-func (d *Daemon) moveQuickCaptureFiles() error {
-	old := filepath.Join(d.dataRoot, "quick-captures")
-	profiles, err := os.ReadDir(old)
-	if os.IsNotExist(err) {
-		return nil
-	}
+func (d *Daemon) returnQuickCaptureFilesToTheirCaptures() error {
+	all, err := d.store.AttachmentsIn(store.AttachmentStaged, store.AttachmentReady, store.AttachmentCommitted, store.AttachmentDiscarded)
 	if err != nil {
 		return err
 	}
-	for _, profile := range profiles {
-		if !profile.IsDir() {
+	for _, a := range all {
+		if a.Owner.Kind != protocol.AttachmentOwnerKindQuickCapture {
 			continue
 		}
-		from := filepath.Join(old, profile.Name())
-		staging := filepath.Join(from, ".staging")
-		committed := func(id string) string { _, final := d.attachmentPaths(profile.Name(), id); return final }
-		staged := func(part string) string {
-			stage, _ := d.attachmentPaths(profile.Name(), strings.TrimSuffix(part, ".part"))
-			return stage
-		}
-		if err := moveCaptureFolders(staging, staged); err != nil {
+		movedStage, movedFinal := d.attachmentStorePaths(a.ProfileID, a.Attachment.ID)
+		stage, final := d.attachmentPaths(a)
+		if err := returnFile(movedStage, stage); err != nil {
 			return err
 		}
-		if err := moveCaptureFolders(from, committed); err != nil {
-			return err
-		}
-		for _, dir := range []string{filepath.Join(d.dataRoot, "attachments", profile.Name(), ".staging"), filepath.Join(d.dataRoot, "attachments", profile.Name())} {
-			if err := syncDir(dir); err != nil && !os.IsNotExist(err) {
-				return err
-			}
-		}
-		d.removeEmptyDir(staging)
-		d.removeEmptyDir(from)
-	}
-	d.removeEmptyDir(old)
-	return nil
-}
-
-func moveCaptureFolders(root string, destination func(name string) string) error {
-	captures, err := os.ReadDir(root)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	for _, capture := range captures {
-		if !capture.IsDir() || capture.Name() == ".staging" {
-			continue
-		}
-		folder := filepath.Join(root, capture.Name())
-		files, err := os.ReadDir(folder)
-		if err != nil {
-			return err
-		}
-		for _, file := range files {
-			to := destination(file.Name())
-			if err := os.MkdirAll(filepath.Dir(to), 0700); err != nil {
-				return err
-			}
-			if err := os.Rename(filepath.Join(folder, file.Name()), to); err != nil {
-				return err
-			}
-		}
-		if err := os.Remove(folder); err != nil {
+		if err := returnFile(movedFinal, final); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (d *Daemon) removeEmptyDir(path string) {
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		d.logf("attachment move left %s: %v", path, err)
+func returnFile(from, to string) error {
+	if _, err := os.Lstat(from); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
 	}
+	if err := os.MkdirAll(filepath.Dir(to), 0700); err != nil {
+		return err
+	}
+	if err := os.Rename(from, to); err != nil {
+		return err
+	}
+	if err := syncDir(filepath.Dir(to)); err != nil {
+		return err
+	}
+	return syncDir(filepath.Dir(from))
 }
