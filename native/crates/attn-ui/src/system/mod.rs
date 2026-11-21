@@ -109,3 +109,14 @@ pub fn row_menu(key: impl Into<String>) -> rune_kit::Menu {
 pub fn raised(e: rune::El, radius: Radius, t: &Tokens) -> rune::El {
     door::raised(e, radius, t)
 }
+
+/// `e` centred over the window with the scale's `S8` round it, no larger than the window leaves
+/// it, its scrolling part shrinking: a popover that fits beside its anchor on neither side.
+pub fn over_window(e: rune::El) -> rune::El {
+    door::inset(rune::col(), Space::S8, Space::S8)
+        .absolute(0.0, 0.0)
+        .w_full()
+        .h_full()
+        .center()
+        .child(e.shrink().min_h(0.0).max_w_frac(1.0))
+}

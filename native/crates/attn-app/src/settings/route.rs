@@ -523,6 +523,9 @@ pub(crate) struct Picker {
     provider: TextEdit,
     /// The typed effort, while the effort field has it.
     effort: Option<TextEdit>,
+    /// The picker fits on neither side of its chip, so it stands over the window for the rest
+    /// of this open.
+    over_chip: bool,
 }
 
 const PICKER: &str = "settings.route-picker";
@@ -830,6 +833,7 @@ fn toggle(state: &mut State, target: Target, tx: &mut Tx) {
         query: TextEdit::default(),
         provider: TextEdit::default(),
         effort: None,
+        over_chip: false,
     });
     tx.focus(FILTER.to_owned(), true);
     super::invalidate(state);
@@ -1044,6 +1048,7 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
             .scroll(rune::ScrollSpec {
                 stick_bottom: false,
             })
+            .on_at_bottom(stand_over_chip_unless_whole)
             .scroll_bar_styled(attn_ui::page_scroll_bar(t)),
     );
     let surface = Frame::menu(t).draw_holding(
@@ -1058,13 +1063,27 @@ pub(crate) fn overlay(state: &State, t: &Tokens, layers: &mut Vec<El>) {
             .modal_press_through(true)
             .focus_return(p.target.chip_key()),
     );
-    layers.push(anchored(
-        attn_ui::kit(t),
-        surface,
-        &p.target.chip_key(),
-        Placement::BottomStart,
-        4.0,
-    ));
+    layers.push(if p.over_chip {
+        system::over_window(surface)
+    } else {
+        anchored(
+            attn_ui::kit(t),
+            surface,
+            &p.target.chip_key(),
+            Placement::BottomStart,
+            4.0,
+        )
+    });
+}
+
+/// A picker that does not show its end as it stands beside its chip moves over the window,
+/// where it has the window's whole height.
+fn stand_over_chip_unless_whole(state: &mut State, whole: bool) {
+    if let Some(p) = state.window.settings.route_picker.as_mut()
+        && !whole
+    {
+        p.over_chip = true;
+    }
 }
 
 fn kicker(label: &str, t: &Tokens) -> El {

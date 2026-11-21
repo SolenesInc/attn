@@ -1704,3 +1704,24 @@ fn in_the_smallest_window_the_effort_field_shows_its_placeholder_whole() {
     );
     rest(&mut world);
 }
+
+#[test]
+fn in_the_smallest_window_three_models_and_the_effort_show_without_scrolling() {
+    let mut world = smallest_picker();
+    let window = world.rect("window");
+    let main = world.rect("settings.route-picker.main");
+    let keys: Vec<String> = option_keys(&world).into_iter().take(3).collect();
+    assert_eq!(keys.len(), 3, "the picker lists three models");
+    for key in keys
+        .iter()
+        .map(String::as_str)
+        .chain(["settings.route-picker.effort-control"])
+    {
+        let at = world.rect(key);
+        assert!(
+            inside(at, main) && inside(at, window),
+            "{key} at {at:?} is not whole in the picker's view {main:?} and the window {window:?} as it opens"
+        );
+    }
+    rest(&mut world);
+}
