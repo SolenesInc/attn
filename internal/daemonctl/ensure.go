@@ -22,6 +22,7 @@ import (
 	"github.com/victorarias/attn/internal/launchenv"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
 const (
@@ -36,6 +37,9 @@ const (
 var errDaemonAlreadyRunning = errors.New("daemon already running")
 var errDaemonLockReleased = errors.New("daemon lock released without a live daemon")
 var errDaemonStartupTimeout = errors.New("daemon startup tripwire expired")
+var errHealthUnanswered = fmt.Errorf("no health answer within %s", healthTimeout)
+
+const HealthTimer stepclock.Name = "daemonctl-health"
 
 type StartupSignal struct {
 	writer *os.File
@@ -519,13 +523,19 @@ func fetchHealth(ctx context.Context) (healthResponse, error) {
 	if host == "" || host == "0.0.0.0" {
 		host = "127.0.0.1"
 	}
-	client := &http.Client{Timeout: healthTimeout}
+	ctx, cancel := context.WithCancelCause(ctx)
+	deadline := stepclock.AfterFunc(HealthTimer, healthTimeout, func() { cancel(errHealthUnanswered) })
+	defer deadline.Stop()
+	defer cancel(context.Canceled)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+net.JoinHostPort(host, config.WSPort())+"/health", nil)
 	if err != nil {
 		return healthResponse{}, err
 	}
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		if cause := context.Cause(ctx); errors.Is(cause, errHealthUnanswered) {
+			return healthResponse{}, cause
+		}
 		return healthResponse{}, err
 	}
 	defer resp.Body.Close()

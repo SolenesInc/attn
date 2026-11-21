@@ -153,24 +153,34 @@ func (h *Hub) Advance(ctx context.Context, d time.Duration) error {
 	h.mu.Lock()
 	h.pending.mark()
 	h.mu.Unlock()
-	return h.command(ctx, fmt.Sprintf("advance %s", d), "advanced")
+	return h.command(ctx, fmt.Sprintf("advance %s", d), "advanced", func(*peer) bool { return true })
 }
 
-// Fire fires every timer named name in every connected process now, without moving the clocks, and returns once each
-// has run their callbacks or exited. It is for a timer whose moment is no promise, such as a poll for changes the test
-// has just made. It neither waits for nor moves the AwaitTimer mark, so it runs beside a pending AwaitTimer.
+// Fire fires every timer named name in each connected process that has one armed now, without moving the clocks, and
+// returns once each has run their callbacks or exited. It is for a timer whose moment is no promise, such as a poll for
+// changes the test has just made. It neither waits for nor moves the AwaitTimer mark, so it runs beside a pending
+// AwaitTimer.
 func (h *Hub) Fire(ctx context.Context, name Name) error {
 	h.firing.Lock()
 	defer h.firing.Unlock()
-	return h.command(ctx, fmt.Sprintf("fire %s", name), "fired")
+	return h.command(ctx, fmt.Sprintf("fire %s", name), "fired", func(p *peer) bool { return h.armsLocked(p, name) })
 }
 
-func (h *Hub) command(ctx context.Context, command, answer string) error {
+func (h *Hub) armsLocked(p *peer, name Name) bool {
+	for key, t := range h.pending.timers {
+		if key.peer == p && t.name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Hub) command(ctx context.Context, command, answer string, asked func(*peer) bool) error {
 	h.mu.Lock()
 	peers := make([]*peer, 0, len(h.peers))
 	answers := make(map[*peer]chan struct{}, len(h.peers))
 	for p := range h.peers {
-		if p.ready {
+		if p.ready && asked(p) {
 			peers = append(peers, p)
 			answers[p] = make(chan struct{})
 			p.unanswered[answer] = append(p.unanswered[answer], answers[p])

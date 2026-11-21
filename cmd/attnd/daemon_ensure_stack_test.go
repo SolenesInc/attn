@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/daemonctl"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
@@ -34,7 +35,10 @@ func TestDaemonEnsureLeavesAPausedDaemonAndItsShellRunning(t *testing.T) {
 	s.Signal(syscall.SIGSTOP)
 	t.Cleanup(func() { s.Signal(syscall.SIGCONT) })
 	for _, args := range [][]string{{"daemon", "ensure"}, {"_bridge"}} {
-		got := s.Attn(args...)
+		asking := s.Launch(testworld.Invocation{Args: args})
+		s.AwaitTimer(daemonctl.HealthTimer)
+		s.FirePending(daemonctl.HealthTimer)
+		got := asking.Wait()
 		limit := regexp.MustCompile(`health_timeout=([0-9.]+[a-z]+)`).FindStringSubmatch(got.Stderr)
 		if got.Code != 1 || !strings.Contains(got.Stderr, "pid "+strings.TrimSpace(string(pid))) || len(limit) != 2 ||
 			!strings.Contains(got.Stderr, "ATTN_INSTANCE=ensure-paused attn daemon stop") || !strings.Contains(got.Stderr, "attn daemon ensure") {
