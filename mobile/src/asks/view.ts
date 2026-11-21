@@ -239,6 +239,24 @@ const questionCard = <Message>(
   )
 }
 
+const followsLine = <Message>(
+  re: NonNullable<PhoneAsk['re']>,
+  now: number,
+  age: (since: number, now: number) => string,
+  mentionActions: MarkdownContext<Message>,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const answered = re.answeredAt === null ? 'not answered' : `you answered ${age(re.answeredAt, now)} ago`
+  const line = re.subject === null ? `Follows ${re.askId}` : `Follows ${re.subject} · ${answered}`
+  return h.details(
+    [h.Class('follows'), h.DataAttribute('testid', 'ask-follows')],
+    [
+      h.summary([h.Class('muted')], [line]),
+      re.answer === null ? h.empty : renderMarkdown(re.answer, mentionActions, h),
+    ],
+  )
+}
+
 export const askScreen = <Message>(
   open: OpenAsk,
   now: number,
@@ -289,6 +307,7 @@ export const askScreen = <Message>(
   return h.article(
     [h.Class('ask-screen'), h.DataAttribute('testid', 'ask-screen')],
     [
+      ask.re ? followsLine(ask.re, now, age, mentionActions, h) : h.empty,
       h.h2([h.Class('subject')], mentionText(ask.subject, mentionActions, h)),
       h.p([h.Class('ask-from')], [`${row.from} · ${where(row.pairing)} · ${age(ask.createdAt, now)}`]),
       ...body,

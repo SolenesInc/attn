@@ -17,6 +17,7 @@ pub const COMMANDS: &[Command] = &[
             Arg { name: "markdown", cli: Cli::Flag("file"), value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "subject", cli: Cli::Flag("subject"), value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "seed", cli: Cli::Flag("seed"), value: Value::Text, source: Source::Given, required: false, list: false },
+            Arg { name: "re", cli: Cli::Flag("re"), value: Value::Text, source: Source::Given, required: false, list: false },
             Arg { name: "base_dir", cli: Cli::Internal, value: Value::Text, source: Source::Given, required: false, list: false },
         ],
     },

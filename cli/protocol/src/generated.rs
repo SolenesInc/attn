@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "e7069526ef92";
+pub const PROTOCOL_VERSION: &str = "2b5d25a47257";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -397,6 +397,8 @@ pub struct Ask {
     #[serde(deserialize_with = "null_as_default")]
     pub parts: Vec<AskPart>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub re: Option<AskThread>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reply: Option<AskReply>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_id: Option<String>,
@@ -553,6 +555,8 @@ pub struct AskOpenMessage {
     pub images: Option<Vec<AskImage>>,
     pub markdown: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub re: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_id: Option<String>,
     pub session_id: SessionID,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -649,6 +653,16 @@ pub struct AskShowResult {
     pub from: ActorView,
     pub held: bool,
     pub markdown: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AskThread {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answered_at: Option<String>,
+    pub ask_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AsksUpdatedMessage {

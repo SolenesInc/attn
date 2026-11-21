@@ -35,11 +35,12 @@ commands:
 
       Images (![alt](path)) resolve against the folder the session started in; from the CLI, against the working directory, or beside the file the ask is read from. Name an image elsewhere by its absolute path. attn copies them when the ask opens, at most 5 MiB in all, so the user sees them as they were. An image that cannot be read refuses the ask.
 
-      Carry on with work that does not depend on the answer; when none is left, end your turn, and do not wait or poll. While any of your asks is open, attn refuses a standby that would close your session. Withdraw an ask that no longer matters with `ask_close`. When the user answers, attn types the answer into the conversation as their message, approvals included. By then they have likely moved on and will not read what you write back there. If their answer asks you something, reply with a new ask. If you still need them, ask again.
+      Carry on with work that does not depend on the answer; when none is left, end your turn, and do not wait or poll. While any of your asks is open, attn refuses a standby that would close your session. Withdraw an ask that no longer matters with `ask_close`. When the user answers, attn types the answer into the conversation as their message, approvals included. By then they have likely moved on and will not read what you write back there. If their answer asks you something, reply with a new ask that names theirs in `re`, so the user sees the question and the answer it follows. If you still need them, ask again.
     args:
       - {name: markdown, type: markdown, required: true, piped: true, cli: "--file", placeholder: "<path>", doc: "the ask's markdown, required; the CLI reads it from this file, or from stdin without one"}
       - {name: subject, type: text, cli: "--subject", doc: "the ask's subject (defaults to its first question)"}
       - {name: seed, type: seed, cli: "--seed", doc: "a seed you tend that the ask is about (defaults to the seed your delegation assigned you)"}
+      - {name: re, type: text, cli: "--re", placeholder: "<id>", doc: "the earlier ask this one follows up; the user sees its question and their answer above this one"}
       - {name: base_dir, type: path, cli: internal, doc: "the folder the markdown's image paths resolve against: the working directory, or beside the file"}
     result: Ask
 

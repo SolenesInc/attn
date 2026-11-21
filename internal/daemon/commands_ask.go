@@ -52,6 +52,9 @@ func (d *Daemon) runAsk(_ context.Context, c command.Caller, a command.AskArgs) 
 	if seed := strings.TrimSpace(a.Seed); seed != "" {
 		msg.SeedID = protocol.Ptr(seed)
 	}
+	if re := strings.TrimSpace(a.Re); re != "" {
+		msg.Re = protocol.Ptr(re)
+	}
 	if subject := strings.TrimSpace(a.Subject); subject != "" {
 		msg.Subject = protocol.Ptr(subject)
 	}

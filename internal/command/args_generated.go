@@ -311,6 +311,7 @@ type AskArgs struct {
 	Markdown string `json:"markdown,omitempty"`
 	Subject  string `json:"subject,omitempty"`
 	Seed     string `json:"seed,omitempty"`
+	Re       string `json:"re,omitempty"`
 	BaseDir  string `json:"base_dir,omitempty"`
 }
 

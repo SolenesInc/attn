@@ -4301,7 +4301,21 @@ model Ask {
   parts: AskPart[];
   base_dir: string;
   created_at: string;
+  re?: AskThread;
   reply?: AskReply;
+}
+
+// The earlier ask a follow-up ask follows, copied when the follow-up opens,
+// because a replied ask is forgotten a day after its reply. subject, answer
+// and answered_at are absent when the earlier ask was already gone, and answer
+// and answered_at while it was unanswered. answer is markdown: each question
+// with the user's answer, their note and the names of the files they attached.
+// answered_at is an ISO timestamp.
+model AskThread {
+  ask_id: string;
+  subject?: string;
+  answer?: string;
+  answered_at?: string;
 }
 
 // What the user sent when they answered an ask; answered_at is an ISO timestamp.
@@ -4316,12 +4330,13 @@ model AskReply {
 // The home's half of `attn ask`: the daemon on the asker's machine read the
 // images the markdown shows and sends the ask with them. seed_id names a seed
 // the session tends; without it the ask is about the session's stake, when it
-// has one.
+// has one. re names the earlier ask this one follows.
 @extension("x-on", #{ home: true })
 model AskOpenMessage {
   cmd: "ask_open";
   session_id: SessionID;
   seed_id?: string;
+  re?: string;
   markdown: string;
   subject?: string;
   base_dir: string;

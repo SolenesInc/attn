@@ -39,6 +39,14 @@ export const PhoneAsk = Schema.Struct({
   seedTitle: Schema.NullOr(Schema.String),
   crewMember: Schema.NullOr(Schema.String),
   chief: Schema.Boolean,
+  re: Schema.NullOr(
+    Schema.Struct({
+      askId: Schema.String,
+      subject: Schema.NullOr(Schema.String),
+      answer: Schema.NullOr(Schema.String),
+      answeredAt: Schema.NullOr(Schema.Finite),
+    }),
+  ),
   reply: Schema.NullOr(
     Schema.Struct({
       answers: Schema.Array(Answer),
@@ -87,6 +95,14 @@ export const fromHomeGatewayAsk = (ask: HomeGatewayAsk): PhoneAsk => ({
   seedTitle: ask.seed_title ?? null,
   crewMember: ask.crew_member ?? null,
   chief: ask.chief ?? false,
+  re: ask.re
+    ? {
+        askId: ask.re.ask_id,
+        subject: ask.re.subject ?? null,
+        answer: ask.re.answer ?? null,
+        answeredAt: ask.re.answered_at?.getTime() ?? null,
+      }
+    : null,
   reply: ask.reply
     ? {
         answers: ask.reply.answers.map(fromHomeGatewayAnswer),

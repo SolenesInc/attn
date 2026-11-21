@@ -205,6 +205,16 @@ model HomeGatewayAskReply {
   answered_at: utcDateTime;
 }
 
+// The earlier ask this one follows. subject, answer and answered_at are
+// absent when the earlier ask was already gone when this one opened; answer
+// is markdown.
+model HomeGatewayAskThread {
+  ask_id: string;
+  subject?: string;
+  answer?: string;
+  answered_at?: utcDateTime;
+}
+
 // too_large_bytes is set, and parts left empty, when the ask does not fit one
 // frame of max_frame_bytes; answer it on the computer.
 model HomeGatewayAsk {
@@ -217,6 +227,7 @@ model HomeGatewayAsk {
   seed_title?: string;
   crew_member?: string;
   chief?: boolean;
+  re?: HomeGatewayAskThread;
   reply?: HomeGatewayAskReply;
   too_large_bytes?: int32;
   max_frame_bytes?: int32;

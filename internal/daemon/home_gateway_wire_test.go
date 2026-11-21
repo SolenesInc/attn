@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/cloudlink"
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -685,5 +686,33 @@ func TestHomeGatewayShowsAnAmendmentAsAPartWithItsTime(t *testing.T) {
 	}
 	if asks[0].Parts[1].Question == nil || asks[0].Parts[1].Question.Key != "q1" {
 		t.Fatalf("the phone shows the question %+v, want it still q1", asks[0].Parts[1].Question)
+	}
+}
+
+func TestHomeGatewayShowsTheAskAFollowUpFollows(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "phone_access_enabled", "true")
+	setSetting(t, app, "asks_enabled", "true")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(asker)
+	phone := connectPhone(t, w, "phone", app.SelectedProfile())
+	phone.welcomed()
+	earlier, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "Cache store", w.Path("shop"))
+	if err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	answerCacheAsk(t, app, earlier.ID)
+	var followUp protocol.Ask
+	if err := cli.RunCommand("ask", protocol.SessionID(asker), command.AskArgs{Markdown: cacheAsk, Re: earlier.ID, BaseDir: w.Path("shop")}, &followUp); err != nil {
+		t.Fatalf("follow-up ask: %v", err)
+	}
+	asks := phone.showsAsks(func(asks []homegateway.HomeGatewayAsk) bool {
+		return slices.ContainsFunc(asks, func(a homegateway.HomeGatewayAsk) bool { return a.ID == followUp.ID })
+	})
+	shown := asks[slices.IndexFunc(asks, func(a homegateway.HomeGatewayAsk) bool { return a.ID == followUp.ID })]
+	if re := shown.Re; re == nil || re.AskID != earlier.ID || protocol.Deref(re.Subject) != "Cache store" ||
+		!strings.Contains(protocol.Deref(re.Answer), "Answer: Postgres") || re.AnsweredAt == nil || re.AnsweredAt.IsZero() {
+		t.Fatalf("the phone shows the follow-up following %+v, want %s with its subject, answer and answer time", shown.Re, earlier.ID)
 	}
 }

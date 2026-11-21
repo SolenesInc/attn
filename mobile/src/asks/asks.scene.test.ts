@@ -104,6 +104,7 @@ const ask = (
   seedTitle: 'Cache store',
   crewMember: null,
   chief: false,
+  re: null,
   reply: null,
   tooLarge: null,
 })
@@ -483,6 +484,37 @@ describe('asks on the phone', () => {
       arrive(personal, [amended]),
       Scene.expect(Scene.testId('ask-amendment')).toContainText('Updated 2m ago'),
       Scene.expect(Scene.testId('ask-amendment')).toContainText('Redis is already running in staging.'),
+    )
+  })
+
+  it('shows the question and answer a follow-up follows, folded above its subject', () => {
+    const followUp = {
+      ...ask('a-follow', 3, [{ markdown: null, question: choiceQuestion }], 'Which Postgres version?'),
+      re: {
+        askId: 'a-earlier',
+        subject: 'Cache store',
+        answer: '## 1. Which store should keep the cache?\n\nAnswer: Postgres (the recommended choice)',
+        answeredAt: now - 10 * 60_000,
+      },
+    }
+    const afterGone = {
+      ...ask('a-after-gone', 1, [{ markdown: null, question: choiceQuestion }], 'And the pool size?'),
+      re: { askId: 'a-earlier', subject: null, answer: null, answeredAt: null },
+    }
+    Scene.scene(
+      { update, view },
+      Scene.given(online(personal)),
+      arrive(personal, [followUp, afterGone]),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      Scene.expect(Scene.testId('ask-follows')).toContainText('Follows Cache store · you answered 10m ago'),
+      Scene.expect(Scene.testId('ask-follows')).toContainText('Answer: Postgres (the recommended choice)'),
+    )
+    Scene.scene(
+      { update, view },
+      Scene.given(online(personal)),
+      arrive(personal, [afterGone]),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      Scene.expect(Scene.testId('ask-follows')).toHaveText('Follows a-earlier'),
     )
   })
 

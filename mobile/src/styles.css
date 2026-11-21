@@ -961,3 +961,11 @@ ul.log {
 .log-entry .markdown p:last-child {
   margin-bottom: 0;
 }
+
+.follows {
+  margin: 4px 0 8px;
+}
+
+.follows summary {
+  cursor: pointer;
+}

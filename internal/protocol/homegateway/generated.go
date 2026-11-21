@@ -23,6 +23,9 @@ type HomeGatewayAsk struct {
 	// Parts corresponds to the JSON schema field "parts".
 	Parts []HomeGatewayAskPart `json:"parts"`
 
+	// Re corresponds to the JSON schema field "re".
+	Re *HomeGatewayAskThread `json:"re,omitempty,omitzero"`
+
 	// Reply corresponds to the JSON schema field "reply".
 	Reply *HomeGatewayAskReply `json:"reply,omitempty,omitzero"`
 
@@ -237,6 +240,20 @@ type HomeGatewayAskSeedMentionsResult struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
+}
+
+type HomeGatewayAskThread struct {
+	// Answer corresponds to the JSON schema field "answer".
+	Answer *string `json:"answer,omitempty,omitzero"`
+
+	// AnsweredAt corresponds to the JSON schema field "answered_at".
+	AnsweredAt *time.Time `json:"answered_at,omitempty,omitzero"`
+
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Subject corresponds to the JSON schema field "subject".
+	Subject *string `json:"subject,omitempty,omitzero"`
 }
 
 type HomeGatewayAsks struct {

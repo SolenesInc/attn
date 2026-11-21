@@ -63,11 +63,16 @@ func (d *Daemon) askOpen(msg *protocol.AskOpenMessage) (protocol.Ask, error) {
 			return protocol.Ask{}, protocol.Refuse(protocol.RefusalWrongState, "you are retired, so the user takes no new asks from you; file your letter with `{attn handoff}`")
 		}
 	}
+	re, err := d.askThread(session.ID, strings.TrimSpace(protocol.Deref(msg.Re)))
+	if err != nil {
+		return protocol.Ask{}, err
+	}
 	id, err := ask.NewID()
 	if err != nil {
 		return protocol.Ask{}, err
 	}
 	stored := store.Ask{
+		Re:        re,
 		ID:        id,
 		SessionID: session.ID,
 		To:        to,
@@ -98,6 +103,35 @@ func (d *Daemon) askOpen(msg *protocol.AskOpenMessage) (protocol.Ask, error) {
 	}
 	d.publishFact(FactAskOpened, id, nil)
 	return opened.wire, nil
+}
+
+func (d *Daemon) askThread(sessionID protocol.SessionID, earlierID string) (*protocol.AskThread, error) {
+	if earlierID == "" {
+		return nil, nil
+	}
+	stored, err := d.store.GetAsk(earlierID)
+	if errors.Is(err, store.ErrAskGone) {
+		return &protocol.AskThread{AskID: earlierID}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	earlier, err := d.readAsk(stored)
+	if err != nil {
+		return nil, err
+	}
+	if d.askReach(sessionID, d.askAddressHeldBy(sessionID), earlier) == askOutOfReach {
+		return nil, protocol.Refuse(protocol.RefusalInvalidInput, "%s is not an ask of this session or of an agent it oversees, so a new ask cannot follow it; ask without --re", earlierID)
+	}
+	thread := &protocol.AskThread{AskID: earlier.stored.ID, Subject: protocol.Ptr(earlier.stored.Subject)}
+	if reply := earlier.wire.Reply; reply != nil {
+		answer, err := ask.Answered(earlier.wire)
+		if err != nil {
+			return nil, err
+		}
+		thread.Answer, thread.AnsweredAt = protocol.Ptr(answer), protocol.Ptr(reply.AnsweredAt)
+	}
+	return thread, nil
 }
 
 func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
@@ -631,6 +665,7 @@ func (d *Daemon) describeAsk(a store.Ask, parts []protocol.AskPart) (shownAsk, e
 		Parts:     parts,
 		BaseDir:   a.BaseDir,
 		CreatedAt: a.CreatedAt,
+		Re:        a.Re,
 		Reply:     a.Reply,
 	}}
 	for _, amendment := range a.Amendments {

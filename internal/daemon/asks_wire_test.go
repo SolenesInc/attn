@@ -13,6 +13,7 @@ import (
 
 	"github.com/victorarias/attn/internal/ask"
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
@@ -894,4 +895,61 @@ func TestAnAgentAmendsItsOpenAskAndTheUserSeesTheUpdateUnderTheSameQuestions(t *
 	if _, err := cli.AskAmend(protocol.SessionID(asker), asked.ID, "Too late.", w.Path("shop")); err == nil {
 		t.Fatal("an amendment to an ask the user already answered was taken")
 	}
+}
+
+func TestAFollowUpAskKeepsTheQuestionAndAnswerItFollowsAfterTheEarlierAskIsForgotten(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		setSetting(t, app, "asks_enabled", "true")
+		asker, other := w.bubbleClaude(t, app, "shop"), w.bubbleClaude(t, app, "other")
+		openAsk := func(agent *bubbleClaude, re string) (*protocol.Ask, error) {
+			var opened protocol.Ask
+			err := agent.cli.RunCommand("ask", protocol.SessionID(agent.id), command.AskArgs{Markdown: cacheAsk, Re: re, BaseDir: w.Path("shop")}, &opened)
+			return &opened, err
+		}
+		earlier, err := asker.cli.AskOpen(protocol.SessionID(asker.id), "", cacheAsk, "Cache store", w.Path("shop"))
+		if err != nil {
+			t.Fatalf("ask: %v", err)
+		}
+		requestID := uuid.NewString()
+		answered := testworld.Request(app, protocol.AskAnswerMessage{
+			Cmd: protocol.CmdAskAnswer, RequestID: requestID, AskID: earlier.ID,
+			Answers: []protocol.AskAnswer{{Key: "q1", Picked: []string{"Postgres"}}},
+			Note:    protocol.Ptr("Keep it boring."),
+		}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == requestID })
+		if !answered.Success {
+			t.Fatalf("answering failed: %s", protocol.Deref(answered.Error))
+		}
+
+		if _, err := openAsk(other, earlier.ID); err == nil || !strings.Contains(err.Error(), "not an ask of this session") {
+			t.Fatalf("another agent following %s answered %v, want a refusal", earlier.ID, err)
+		}
+		followUp, err := openAsk(asker, earlier.ID)
+		if err != nil {
+			t.Fatalf("follow-up ask: %v", err)
+		}
+		re := followUp.Re
+		if re == nil || re.AskID != earlier.ID || protocol.Deref(re.Subject) != "Cache store" || protocol.Deref(re.AnsweredAt) == "" {
+			t.Fatalf("the follow-up follows %+v, want %s, its subject and when it was answered", re, earlier.ID)
+		}
+		for _, want := range []string{"Which store should keep the cache?", "Answer: Postgres (the recommended choice)", "> Keep it boring."} {
+			if !strings.Contains(protocol.Deref(re.Answer), want) {
+				t.Errorf("the follow-up carries the answer %q, missing %q", protocol.Deref(re.Answer), want)
+			}
+		}
+
+		w.advance(25 * time.Hour)
+		forgotten := testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 && m.Asks[0].ID == followUp.ID })
+		if shown := forgotten.Asks[0]; shown.ID != followUp.ID || shown.Re == nil || protocol.Deref(shown.Re.Answer) != protocol.Deref(re.Answer) || protocol.Deref(shown.Re.Subject) != "Cache store" {
+			t.Fatalf("after %s was forgotten the app shows %+v, want the follow-up still carrying its question and answer", earlier.ID, shown)
+		}
+
+		afterGone, err := openAsk(asker, earlier.ID)
+		if err != nil {
+			t.Fatalf("an ask following the forgotten %s: %v", earlier.ID, err)
+		}
+		if gone := afterGone.Re; gone == nil || gone.AskID != earlier.ID || gone.Subject != nil || gone.Answer != nil || gone.AnsweredAt != nil {
+			t.Fatalf("an ask following the forgotten %s follows %+v, want its id alone", earlier.ID, gone)
+		}
+	})
 }

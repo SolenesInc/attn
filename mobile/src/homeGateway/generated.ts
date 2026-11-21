@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, HomeGatewayAsk, HomeGatewayAskAnswer, HomeGatewayAskAnswerCommand, HomeGatewayAskAnswerResult, HomeGatewayAskChoice, HomeGatewayAskDefault, HomeGatewayAskEvent, HomeGatewayAskImage, HomeGatewayAskImageChunk, HomeGatewayAskImageError, HomeGatewayAskPart, HomeGatewayAskQuestion, HomeGatewayAskQuestionKind, HomeGatewayAskReply, HomeGatewayAskSeedMentions, HomeGatewayAskSeedMentionsResult, HomeGatewayAsks, HomeGatewayCheckState, HomeGatewayCheckTally, HomeGatewayCrewMemberBetweenSessions, HomeGatewayCrewStart, HomeGatewayCrewStartResult, HomeGatewayGarden, HomeGatewayGardenSeeds, HomeGatewayHello, HomeGatewayPing, HomeGatewayPlotProgress, HomeGatewayPong, HomeGatewayProfile, HomeGatewayRefused, HomeGatewaySeed, HomeGatewaySeedChanged, HomeGatewaySeedCheck, HomeGatewaySeedDetail, HomeGatewaySeedError, HomeGatewaySeedGet, HomeGatewaySeedLogEntry, HomeGatewaySeedMention, HomeGatewaySeedMove, HomeGatewaySeedNoteCommand, HomeGatewaySeedResult, HomeGatewaySeedStatus, HomeGatewaySeedVerb, HomeGatewaySession, HomeGatewaySessionState, HomeGatewaySessions, HomeGatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./generated";
+//   import { Convert, HomeGatewayAsk, HomeGatewayAskAnswer, HomeGatewayAskAnswerCommand, HomeGatewayAskAnswerResult, HomeGatewayAskChoice, HomeGatewayAskDefault, HomeGatewayAskEvent, HomeGatewayAskImage, HomeGatewayAskImageChunk, HomeGatewayAskImageError, HomeGatewayAskPart, HomeGatewayAskQuestion, HomeGatewayAskQuestionKind, HomeGatewayAskReply, HomeGatewayAskSeedMentions, HomeGatewayAskSeedMentionsResult, HomeGatewayAskThread, HomeGatewayAsks, HomeGatewayCheckState, HomeGatewayCheckTally, HomeGatewayCrewMemberBetweenSessions, HomeGatewayCrewStart, HomeGatewayCrewStartResult, HomeGatewayGarden, HomeGatewayGardenSeeds, HomeGatewayHello, HomeGatewayPing, HomeGatewayPlotProgress, HomeGatewayPong, HomeGatewayProfile, HomeGatewayRefused, HomeGatewaySeed, HomeGatewaySeedChanged, HomeGatewaySeedCheck, HomeGatewaySeedDetail, HomeGatewaySeedError, HomeGatewaySeedGet, HomeGatewaySeedLogEntry, HomeGatewaySeedMention, HomeGatewaySeedMove, HomeGatewaySeedNoteCommand, HomeGatewaySeedResult, HomeGatewaySeedStatus, HomeGatewaySeedVerb, HomeGatewaySession, HomeGatewaySessionState, HomeGatewaySessions, HomeGatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./generated";
 //
 //   const homeGatewayAsk = Convert.toHomeGatewayAsk(json);
 //   const homeGatewayAskAnswer = Convert.toHomeGatewayAskAnswer(json);
@@ -18,6 +18,7 @@
 //   const homeGatewayAskReply = Convert.toHomeGatewayAskReply(json);
 //   const homeGatewayAskSeedMentions = Convert.toHomeGatewayAskSeedMentions(json);
 //   const homeGatewayAskSeedMentionsResult = Convert.toHomeGatewayAskSeedMentionsResult(json);
+//   const homeGatewayAskThread = Convert.toHomeGatewayAskThread(json);
 //   const homeGatewayAsks = Convert.toHomeGatewayAsks(json);
 //   const homeGatewayCheckState = Convert.toHomeGatewayCheckState(json);
 //   const homeGatewayCheckTally = Convert.toHomeGatewayCheckTally(json);
@@ -72,6 +73,7 @@ export interface HomeGatewayAsk {
     id:               string;
     max_frame_bytes?: number;
     parts:            PartElement[];
+    re?:              Re;
     reply?:           Reply;
     seed_slug?:       string;
     seed_title?:      string;
@@ -116,6 +118,14 @@ export enum HomeGatewayAskQuestionKind {
     One = "one",
     Text = "text",
     Unknown = "unknown",
+}
+
+export interface Re {
+    answer?:      string;
+    answered_at?: Date;
+    ask_id:       string;
+    subject?:     string;
+    [property: string]: any;
 }
 
 export interface Reply {
@@ -192,6 +202,7 @@ export interface Ask {
     id:               string;
     max_frame_bytes?: number;
     parts:            PartElement[];
+    re?:              Re;
     reply?:           Reply;
     seed_slug?:       string;
     seed_title?:      string;
@@ -295,6 +306,14 @@ export enum HomeGatewayAskSeedMentionsResultEvent {
 export interface MentionElement {
     seed_id: string;
     text:    string;
+    [property: string]: any;
+}
+
+export interface HomeGatewayAskThread {
+    answer?:      string;
+    answered_at?: Date;
+    ask_id:       string;
+    subject?:     string;
     [property: string]: any;
 }
 
@@ -969,6 +988,14 @@ export class Convert {
         return JSON.stringify(uncast(value, r("HomeGatewayAskSeedMentionsResult")), null, 2);
     }
 
+    public static toHomeGatewayAskThread(json: string): HomeGatewayAskThread {
+        return cast(JSON.parse(json), r("HomeGatewayAskThread"));
+    }
+
+    public static homeGatewayAskThreadToJson(value: HomeGatewayAskThread): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskThread")), null, 2);
+    }
+
     public static toHomeGatewayAsks(json: string): HomeGatewayAsks {
         return cast(JSON.parse(json), r("HomeGatewayAsks"));
     }
@@ -1470,6 +1497,7 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
         { json: "max_frame_bytes", js: "max_frame_bytes", typ: u(undefined, 0) },
         { json: "parts", js: "parts", typ: a(r("PartElement")) },
+        { json: "re", js: "re", typ: u(undefined, r("Re")) },
         { json: "reply", js: "reply", typ: u(undefined, r("Reply")) },
         { json: "seed_slug", js: "seed_slug", typ: u(undefined, "") },
         { json: "seed_title", js: "seed_title", typ: u(undefined, "") },
@@ -1498,6 +1526,12 @@ const typeMap: any = {
     "Default": o([
         { json: "choice", js: "choice", typ: "" },
         { json: "due_at", js: "due_at", typ: Date },
+    ], "any"),
+    "Re": o([
+        { json: "answer", js: "answer", typ: u(undefined, "") },
+        { json: "answered_at", js: "answered_at", typ: u(undefined, Date) },
+        { json: "ask_id", js: "ask_id", typ: "" },
+        { json: "subject", js: "subject", typ: u(undefined, "") },
     ], "any"),
     "Reply": o([
         { json: "answered_at", js: "answered_at", typ: Date },
@@ -1549,6 +1583,7 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
         { json: "max_frame_bytes", js: "max_frame_bytes", typ: u(undefined, 0) },
         { json: "parts", js: "parts", typ: a(r("PartElement")) },
+        { json: "re", js: "re", typ: u(undefined, r("Re")) },
         { json: "reply", js: "reply", typ: u(undefined, r("Reply")) },
         { json: "seed_slug", js: "seed_slug", typ: u(undefined, "") },
         { json: "seed_title", js: "seed_title", typ: u(undefined, "") },
@@ -1610,6 +1645,12 @@ const typeMap: any = {
     "MentionElement": o([
         { json: "seed_id", js: "seed_id", typ: "" },
         { json: "text", js: "text", typ: "" },
+    ], "any"),
+    "HomeGatewayAskThread": o([
+        { json: "answer", js: "answer", typ: u(undefined, "") },
+        { json: "answered_at", js: "answered_at", typ: u(undefined, Date) },
+        { json: "ask_id", js: "ask_id", typ: "" },
+        { json: "subject", js: "subject", typ: u(undefined, "") },
     ], "any"),
     "HomeGatewayAsks": o([
         { json: "event", js: "event", typ: r("HomeGatewayAsksEvent") },

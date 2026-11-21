@@ -25,6 +25,9 @@
         },
         "type": "array"
       },
+      "re": {
+        "$ref": "HomeGatewayAskThread.json"
+      },
       "reply": {
         "$ref": "HomeGatewayAskReply.json"
       },
@@ -394,6 +397,27 @@
       "event",
       "request_id",
       "mentions"
+    ],
+    "type": "object"
+  },
+  "HomeGatewayAskThread": {
+    "properties": {
+      "answer": {
+        "type": "string"
+      },
+      "answered_at": {
+        "format": "date-time",
+        "type": "string"
+      },
+      "ask_id": {
+        "type": "string"
+      },
+      "subject": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "ask_id"
     ],
     "type": "object"
   },

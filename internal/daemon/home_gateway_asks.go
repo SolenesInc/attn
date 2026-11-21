@@ -98,6 +98,12 @@ func homeGatewayAsk(wire protocol.Ask) homegateway.HomeGatewayAsk {
 		SeedTitle:  wire.SeedTitle,
 		CrewMember: wire.CrewMember,
 	}
+	if wire.Re != nil {
+		out.Re = &homegateway.HomeGatewayAskThread{AskID: wire.Re.AskID, Subject: wire.Re.Subject, Answer: wire.Re.Answer}
+		if wire.Re.AnsweredAt != nil {
+			out.Re.AnsweredAt = protocol.Ptr(parseAskTime(*wire.Re.AnsweredAt))
+		}
+	}
 	for _, part := range wire.Parts {
 		out.Parts = append(out.Parts, homegateway.HomeGatewayAskPart{Markdown: part.Markdown, Question: homeGatewayAskQuestion(part.Question), AmendedAt: part.AmendedAt})
 	}

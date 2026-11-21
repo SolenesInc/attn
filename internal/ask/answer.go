@@ -39,6 +39,32 @@ func Reply(ask protocol.Ask, answers []protocol.AskAnswer, note string, files []
 	return text, nil
 }
 
+func Answered(ask protocol.Ask) (string, error) {
+	if ask.Reply == nil {
+		return "", nil
+	}
+	questions := Questions(ask.Parts)
+	byKey, err := answersByKey(questions, ask.Reply.Answers)
+	if err != nil {
+		return "", err
+	}
+	sections := make([]string, 0, len(questions)+2)
+	for i, question := range questions {
+		sections = append(sections, renderEntry(i+1, question, byKey[question.Key]))
+	}
+	if note := strings.TrimSpace(protocol.Deref(ask.Reply.Note)); note != "" {
+		sections = append(sections, blockquote(note))
+	}
+	if len(ask.Reply.Attachments) > 0 {
+		names := make([]string, len(ask.Reply.Attachments))
+		for i, file := range ask.Reply.Attachments {
+			names[i] = file.Name
+		}
+		sections = append(sections, "Attached: "+strings.Join(names, ", "))
+	}
+	return strings.Join(sections, "\n\n"), nil
+}
+
 func answersByKey(questions []protocol.AskQuestion, answers []protocol.AskAnswer) (map[string]protocol.AskAnswer, error) {
 	byKey := make(map[string]protocol.AskAnswer, len(answers))
 	for _, answer := range answers {

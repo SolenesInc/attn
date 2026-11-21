@@ -547,6 +547,9 @@ type Ask struct {
 	// Parts corresponds to the JSON schema field "parts".
 	Parts []AskPart `json:"parts"`
 
+	// Re corresponds to the JSON schema field "re".
+	Re *AskThread `json:"re,omitempty,omitzero"`
+
 	// Reply corresponds to the JSON schema field "reply".
 	Reply *AskReply `json:"reply,omitempty,omitzero"`
 
@@ -724,6 +727,9 @@ type AskOpenMessage struct {
 	// Markdown corresponds to the JSON schema field "markdown".
 	Markdown string `json:"markdown"`
 
+	// Re corresponds to the JSON schema field "re".
+	Re *string `json:"re,omitempty,omitzero"`
+
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID *string `json:"seed_id,omitempty,omitzero"`
 
@@ -836,6 +842,20 @@ type AskShowResult struct {
 
 	// Markdown corresponds to the JSON schema field "markdown".
 	Markdown string `json:"markdown"`
+}
+
+type AskThread struct {
+	// Answer corresponds to the JSON schema field "answer".
+	Answer *string `json:"answer,omitempty,omitzero"`
+
+	// AnsweredAt corresponds to the JSON schema field "answered_at".
+	AnsweredAt *string `json:"answered_at,omitempty,omitzero"`
+
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Subject corresponds to the JSON schema field "subject".
+	Subject *string `json:"subject,omitempty,omitzero"`
 }
 
 type AsksUpdatedMessage struct {

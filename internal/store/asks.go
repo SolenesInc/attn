@@ -28,6 +28,7 @@ type Ask struct {
 	Markdown   string
 	BaseDir    string
 	CreatedAt  string
+	Re         *protocol.AskThread
 	Amendments []AskAmendment
 	Reply      *protocol.AskReply
 }
@@ -38,7 +39,7 @@ type AskAmendment struct {
 }
 
 const (
-	askedColumns = "id, session_id, address, subject, markdown, base_dir, created_at"
+	askedColumns = "id, session_id, address, subject, markdown, base_dir, created_at, re_ask_id, re_subject, re_answer, re_answered_at"
 	askColumns   = askedColumns + ", answered_at, answers, note"
 )
 
@@ -54,8 +55,13 @@ func (s *Store) AddAsk(a Ask, defaultDueAt time.Time) error {
 	if !defaultDueAt.IsZero() {
 		dueAt = defaultDueAt.UTC().Format(sortableTimeFormat)
 	}
-	query := "INSERT INTO asks (" + askedColumns + ", default_due_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ? AND closed_at = '')"
-	args := []any{a.ID, a.SessionID, a.To.String(), a.Subject, a.Markdown, a.BaseDir, a.CreatedAt, dueAt, a.SessionID}
+	var re protocol.AskThread
+	if a.Re != nil {
+		re = *a.Re
+	}
+	query := "INSERT INTO asks (" + askedColumns + ", default_due_at) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ? AND closed_at = '')"
+	args := []any{a.ID, a.SessionID, a.To.String(), a.Subject, a.Markdown, a.BaseDir, a.CreatedAt,
+		re.AskID, protocol.Deref(re.Subject), protocol.Deref(re.Answer), protocol.Deref(re.AnsweredAt), dueAt, a.SessionID}
 	if seedID, ok := a.To.TenderOf(); ok {
 		_, seeds, found, err := readCollection(s.db, garden.Namespace, garden.CollectionSeeds)
 		if err != nil {
@@ -329,9 +335,13 @@ func deleteAsks(db rowsQuerier, query string, args ...any) ([]string, error) {
 
 func scanAsk(row interface{ Scan(...any) error }) (Ask, error) {
 	var a Ask
-	var address, answeredAt, answers, note string
-	if err := row.Scan(&a.ID, &a.SessionID, &address, &a.Subject, &a.Markdown, &a.BaseDir, &a.CreatedAt, &answeredAt, &answers, &note); err != nil {
+	var address, reAskID, reSubject, reAnswer, reAnsweredAt, answeredAt, answers, note string
+	if err := row.Scan(&a.ID, &a.SessionID, &address, &a.Subject, &a.Markdown, &a.BaseDir, &a.CreatedAt,
+		&reAskID, &reSubject, &reAnswer, &reAnsweredAt, &answeredAt, &answers, &note); err != nil {
 		return Ask{}, err
+	}
+	if reAskID != "" {
+		a.Re = &protocol.AskThread{AskID: reAskID, Subject: nonEmptyPtr(reSubject), Answer: nonEmptyPtr(reAnswer), AnsweredAt: nonEmptyPtr(reAnsweredAt)}
 	}
 	to, err := who.ParseAddress(address)
 	if err != nil {
