@@ -231,6 +231,7 @@ provide_test_binaries() {
       return 0
     fi
   done
+  bash "$root/scripts/lib/rust-build-store.sh" ensure-toolchain attn
   start_attn_binaries_build
   start_test_binary_build ATTN_FAKEAGENT_BIN fakeagent ./scripts/fakeagent
   start_pty_host_build

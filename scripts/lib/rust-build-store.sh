@@ -7,6 +7,7 @@ readonly usage="usage: rust-build-store.sh provide <recipe> [--target TRIPLE]
        rust-build-store.sh provide-variants <list-file>
        rust-build-store.sh key <recipe> [--target TRIPLE]
        rust-build-store.sh entry <recipe> [--target TRIPLE]
+       rust-build-store.sh ensure-toolchain <recipe>
 recipes: attn attn-pty-host attn-app"
 readonly idle_minutes=$((7 * 24 * 60))
 readonly repo="$vt_repo_dir"
@@ -95,6 +96,16 @@ recipe_key() {
     fi
     find -L "${roots[@]}" -path "$workspace/target" -prune -o -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256
   ) | shasum -a 256 | cut -d' ' -f1
+}
+
+ensure_toolchain() {
+  local channel installed
+  command -v rustup >/dev/null || return 0
+  channel="$(sed -n 's/^channel = "\(.*\)"$/\1/p' "$repo/$toolchain")"
+  [[ -n "$channel" ]] || die "$toolchain names no channel"
+  installed="$(rustup toolchain list)"
+  [[ $'\n'"$installed" == *$'\n'"$channel"-* ]] && return 0
+  (cd "$repo/$workspace" && env -u RUSTUP_TOOLCHAIN rustup toolchain install) >&2
 }
 
 entry_for() {
@@ -343,13 +354,14 @@ case "$command" in
     [[ -z "$target" ]] || die "provide-variants builds for the host only"
     provide_variants "$name"
     ;;
-  provide | key | entry)
+  provide | key | entry | ensure-toolchain)
     [[ "$name" != attn-pty-host-variant ]] || die "variants come from a list: provide-variants <list-file>"
     load_recipe "$name"
     case "$command" in
       provide) provide; printf '%s\n' "$provided" ;;
       key) recipe_key ;;
       entry) entry_for "$(recipe_key)"; echo ;;
+      ensure-toolchain) ensure_toolchain ;;
     esac
     ;;
   *) die "$usage" ;;
