@@ -1,19 +1,21 @@
 use attn_client::Refusal;
 use attn_ui::Tokens;
+use attn_ui::blocks::{Banner, BannerTone, Stack};
 use attn_ui::system::{Part, Said, Type, words};
-use attn_ui::type_;
-use rune::tok::space;
-use rune::{El, col, text};
+use rune::{Cx, El};
 
 pub(crate) fn connecting(t: &Tokens) -> El {
-    text("Connecting to the daemon")
+    words("Connecting to the daemon", Type::Body, t.text_secondary)
         .key("connection.connecting")
         .role("status")
-        .font(type_::BODY)
-        .color(t.text_secondary)
 }
 
-pub(crate) fn reconnecting(t: &Tokens, start_failed: Option<&str>) -> El {
+pub(crate) fn reconnecting<S>(t: &Tokens, cx: &Cx<S>, start_failed: Option<&str>) -> El {
+    let tone = if start_failed.is_some() {
+        BannerTone::Bad
+    } else {
+        BannerTone::Warn
+    };
     let status = match start_failed {
         None => Said::from("The daemon is not answering. Reconnecting."),
         Some(reason) => {
@@ -28,28 +30,20 @@ pub(crate) fn reconnecting(t: &Tokens, start_failed: Option<&str>) -> El {
             }
         }
     };
-    words(status, Type::Body, t.text_secondary)
-        .key("connection.reconnecting")
-        .role("status")
-        .wrap()
-        .padding(space::S2)
+    Banner::new("connection", "Daemon connection", tone)
+        .announces("connection.reconnecting", status)
+        .build(t, cx)
 }
 
 pub(crate) fn refused(t: &Tokens, refusal: &Refusal) -> El {
     let (title, detail) = explain(refusal);
-    col()
+    Stack::tight()
         .key("connection.refused")
         .role("alert")
         .label(format!("{title}. {detail}"))
         .max_w(520.0)
-        .gap(space::S2)
-        .child(text(title).font(type_::TITLE).color(t.text_primary))
-        .child(
-            text(detail)
-                .wrap()
-                .font(type_::BODY)
-                .color(t.text_secondary),
-        )
+        .child(words(title, Type::Heading, t.text_primary))
+        .child(words(detail, Type::Body, t.text_secondary).wrap())
 }
 
 fn explain(refusal: &Refusal) -> (&'static str, String) {

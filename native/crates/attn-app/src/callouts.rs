@@ -6,10 +6,10 @@ use attn_client::Reply;
 use attn_protocol::{
     CalloutAnchorsRequestMessage, CalloutResultMessage, CalloutShowRequestMessage, CalloutStep,
 };
-use attn_ui::type_;
-use attn_ui::{GlyphButton, Tokens, glyph};
-use rune::tok::space;
-use rune::{Align, Cx, El, ElementInfo, Key, KeyEvent, Mods, Side, Tx, col, el, row, text};
+use attn_ui::blocks::{Inline, Stack, pointing_ring};
+use attn_ui::system::{Type, words};
+use attn_ui::{Frame, GlyphButton, Tokens, glyph};
+use rune::{Align, Cx, El, ElementInfo, Key, KeyEvent, Mods, Side, Tx, col, el};
 use rune_kit::{Button, ButtonVariant, ControlSize};
 
 use crate::State;
@@ -18,7 +18,6 @@ use crate::action::Action;
 const CARD: &str = "callout";
 const CARD_WIDTH: f32 = 300.0;
 const GAP: f32 = 14.0;
-const RING_OUTSET: f32 = 3.0;
 
 const FIXED: [&str; 9] = [
     "sidebar",
@@ -355,17 +354,10 @@ pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
     } else {
         Side::Right
     };
-    vec![ring(rect, t), card.anchored(key, side, Align::Start, GAP)]
-}
-
-fn ring(rect: [f32; 4], t: &Tokens) -> El {
-    el().key("callout.ring")
-        .absolute(rect[0] - RING_OUTSET, rect[1] - RING_OUTSET)
-        .size(rect[2] + RING_OUTSET * 2.0, rect[3] + RING_OUTSET * 2.0)
-        .border(2.0, t.accent)
-        .radius(9.0)
-        .a11y_hidden()
-        .inert()
+    vec![
+        pointing_ring("callout.ring", rect, t),
+        card.anchored(key, side, Align::Start, GAP),
+    ]
 }
 
 fn centered(card: El) -> El {
@@ -394,11 +386,9 @@ fn card(callout: &Callout, unanchored: bool, t: &Tokens) -> El {
         (true, true) => "Go there",
         (true, false) => "Done",
     };
-    let small = |s: String, color| text(s).font(type_::LABEL).color(color);
-    let heading = row()
+    let small = |s: String, color| words(s, Type::Small, color);
+    let heading = Inline::joined()
         .w_full()
-        .items_center()
-        .gap(space::S2)
         .child(
             small(callout.from.clone(), t.text_secondary)
                 .key("callout.from")
@@ -422,10 +412,8 @@ fn card(callout: &Callout, unanchored: bool, t: &Tokens) -> El {
         let label = step.label.clone().unwrap_or_else(|| step.anchor.clone());
         small(format!("{label} isn't on screen"), t.text_secondary).key("callout.unanchored")
     });
-    let actions = row()
+    let actions = Inline::joined()
         .w_full()
-        .items_center()
-        .gap(space::S3)
         .child(
             Button::new(format!("↵ {action}"))
                 .variant(ButtonVariant::Ghost)
@@ -436,7 +424,7 @@ fn card(callout: &Callout, unanchored: bool, t: &Tokens) -> El {
         )
         .child(el().grow(1.0))
         .child(small("esc end".into(), t.text_secondary).a11y_hidden());
-    let body = col()
+    let body = Stack::tight()
         .key(CARD)
         .role("dialog")
         .label(format!("Callout from {}", callout.from))
@@ -445,18 +433,17 @@ fn card(callout: &Callout, unanchored: bool, t: &Tokens) -> El {
         .on_key(on_key)
         .on_press_tx(take_keys)
         .on_press_outside(pressed_outside)
-        .w(CARD_WIDTH)
-        .padding(space::S3)
-        .gap(space::S2)
+        .w_full()
         .child(heading)
         .children(missing)
         .child(
-            text(step.text.clone())
+            words(step.text.clone(), Type::Body, t.text_primary)
                 .key("callout.text")
-                .font(type_::BODY)
-                .color(t.text_primary)
                 .wrap_anywhere(),
         )
         .child(actions);
-    rune_kit::popover::raised(k, body, 10.0).border(1.0, t.accent)
+    Frame::panel(t)
+        .draw_holding(body)
+        .w(CARD_WIDTH)
+        .border(1.0, t.accent)
 }

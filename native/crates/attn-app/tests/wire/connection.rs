@@ -111,7 +111,10 @@ fn reconnecting(world: &World) -> Option<String> {
     world
         .screen()
         .find(Target::key("connection.reconnecting"))
-        .map(|status| status.name.unwrap_or_default())
+        .map(|status| {
+            assert_eq!(status.role, "status", "the line is announced as it appears");
+            status.name.unwrap_or_default()
+        })
 }
 
 #[test]

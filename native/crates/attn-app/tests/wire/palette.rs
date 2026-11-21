@@ -969,8 +969,8 @@ fn a_refusal_shows_as_a_card_at_the_window_s_bottom_right() {
     let [wx, wy, ww, wh] = rect(&mut world, "notice");
     let [cx, cy, cw, ch] = rect(&mut world, "notice.card");
     assert_eq!(cw, 360.0);
-    assert!(((wx + ww) - (cx + cw) - 18.0).abs() <= 1.0, "right inset");
-    assert!(((wy + wh) - (cy + ch) - 18.0).abs() <= 1.0, "bottom inset");
+    assert!(((wx + ww) - (cx + cw) - 16.0).abs() <= 1.0, "right inset");
+    assert!(((wy + wh) - (cy + ch) - 16.0).abs() <= 1.0, "bottom inset");
     rest(&mut world);
 }
 

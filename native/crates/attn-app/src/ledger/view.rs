@@ -17,8 +17,6 @@ use crate::desktop::usage;
 use crate::sidebar::model::AgentState;
 use attn_ui::system::DotSize;
 
-const INSET: f32 = 10.0;
-
 /// The open row's verb menu, beside its More button, for the shell's layers.
 pub(crate) fn row_menu(state: &State, t: &Tokens) -> Vec<El> {
     match state.window.ledger.tab {
@@ -158,7 +156,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             super::close(state, tx)
         })
         .on_key(panel_key);
-    crate::shell::under_title_bar("ledger", INSET, panel, t)
+    crate::shell::under_title_bar("ledger", panel, t)
 }
 
 fn tabs(state: &State, t: &Tokens) -> El {

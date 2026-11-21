@@ -1283,12 +1283,12 @@ fn the_title_bar_opens_the_ledger_and_its_close_button_closes_it() {
     assert_eq!(
         world.rect("ledger.panel"),
         [
-            bx + 10.0,
-            by + bh + 10.0,
-            bw - 20.0,
-            height - (by + bh) - 20.0
+            bx + 12.0,
+            by + bh + 12.0,
+            bw - 24.0,
+            height - (by + bh) - 24.0
         ],
-        "the ledger holds the window under the title bar, 10 points in"
+        "the ledger holds the window under the title bar, 12 points in"
     );
 
     click(&mut world, "ledger.close");

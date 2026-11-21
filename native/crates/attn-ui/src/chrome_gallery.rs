@@ -188,6 +188,38 @@ pub fn stories<S: 'static>(playground: Playground<S>) -> Playground<S> {
                 }),
         )
         .story(Story::new("Chrome/Chip", Chrome::default, chips).variant("Rest", |_| {}))
+        .story(
+            Story::new("Chrome/Window", Chrome::default, window)
+                .variant("Rest", |_| {})
+                .variant("Lights", |s| s.lit = true),
+        )
+}
+
+/// The title bar with its tools, a ring pointing at one of them, and a word at the window's
+/// foot: past the window's own controls when it shows them.
+fn window(s: &Chrome, cx: &mut Cx<Chrome>) -> El {
+    let t = tokens(cx);
+    let lights = s.lit.then_some(78.0);
+    let tool = icon_button("window.tool", "Rename", &icon::PENCIL, IconSize::Regular).build(&t);
+    let bar = crate::blocks::WindowBar::across(lights, 32.0, &t)
+        .key("window.bar")
+        .child(tool.into());
+    let said = crate::system::words("Ctrl+B then…", crate::system::Type::Body, t.text_primary);
+    el().key("window")
+        .w(640.0)
+        .h(240.0)
+        .fill(t.bg_app)
+        .child(col().w_full().child(bar))
+        .child(crate::blocks::pointing_ring(
+            "window.ring",
+            [lights.unwrap_or(8.0), 2.0, 28.0, 28.0],
+            &t,
+        ))
+        .child(crate::blocks::at_foot(
+            "window.foot",
+            crate::Frame::panel(&t).draw_holding(said),
+            crate::blocks::Foot::Centre,
+        ))
 }
 
 fn tokens(cx: &Cx<Chrome>) -> Tokens {

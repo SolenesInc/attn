@@ -34,6 +34,7 @@ type OnPress<S> = Box<dyn Fn(&mut S, &mut Tx)>;
 struct Sentence {
     key: String,
     said: Said,
+    announced: bool,
 }
 
 enum Note {
@@ -122,6 +123,18 @@ impl Banner {
         self.sentence = Some(Sentence {
             key: key.into(),
             said: sentence.into(),
+            announced: false,
+        });
+        self
+    }
+
+    /// What the banner says, read out as it appears and each time it changes, for a state the
+    /// person did not cause, such as the daemon no longer answering.
+    pub fn announces(mut self, key: impl Into<String>, sentence: impl Into<Said>) -> Self {
+        self.sentence = Some(Sentence {
+            key: key.into(),
+            said: sentence.into(),
+            announced: true,
         });
         self
     }
@@ -279,6 +292,11 @@ impl Banner {
             let said = words(sentence.said, Type::Name, paint.ink)
                 .key(sentence.key)
                 .max_lines(LINES);
+            let said = if sentence.announced {
+                said.role("status")
+            } else {
+                said
+            };
             door::first_line_in(
                 col().grow(1.0).min_w(least).max_w(natural).child(said),
                 Type::Name,

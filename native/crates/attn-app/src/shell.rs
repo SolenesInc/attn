@@ -1,12 +1,9 @@
 use attn_client::Desktop;
 use attn_client::{Connection, Facts, Refusal};
-use attn_ui::blocks::{Columns, DialogSize};
-use attn_ui::system::Size;
-use attn_ui::type_;
-use attn_ui::{Dialog, Tokens};
-use rune::tok::space;
-use rune::{Chord, Cx, El, Tx, col, el, row, text};
-use rune_kit::popover::raised;
+use attn_ui::blocks::{Columns, DialogSize, Foot, Inline, at_foot};
+use attn_ui::system::{Size, Type, words};
+use attn_ui::{Dialog, Frame, Tokens};
+use rune::{Chord, Cx, El, Tx, col, row};
 use rune_kit::{Button, ButtonVariant};
 
 use crate::action::Action;
@@ -26,9 +23,6 @@ pub(crate) const TRAFFIC_LIGHTS: (f32, f32) = (9.0, 9.0);
 /// The window points `TitleBar.tsx` leaves between the traffic lights' 69 point edge and the
 /// title bar's first control, which it starts at 78 at every text size.
 const TITLE_BAR_GAP_PAST_LIGHTS: f32 = 9.0;
-/// Where the title bar's first control starts when the window shows no traffic lights (full
-/// screen, Linux), and where its last control ends, as `TitleBar.tsx` pads it.
-const TITLE_BAR_START_WITHOUT_LIGHTS: f32 = 8.0;
 
 /// What one window shows and where its keyboard is. Desktops, the active tile and the current
 /// desktop are the daemon's; this is the window's own.
@@ -552,7 +546,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
     };
     let banner = match connection {
         Connection::Reconnecting { start_failed } => {
-            Some(connection::reconnecting(&t, start_failed.as_deref()))
+            Some(connection::reconnecting(&t, cx, start_failed.as_deref()))
         }
         _ => None,
     };
@@ -606,17 +600,16 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         Connection::Connected | Connection::Reconnecting { .. }
     );
     let lights_end = cx.chrome_insets().leading;
-    let lights = if lights_end > 0.0 {
+    let lights = (lights_end > 0.0).then(|| {
         lights_end + TITLE_BAR_GAP_PAST_LIGHTS / crate::settings::text_scale(&state.facts.settings)
-    } else {
-        TITLE_BAR_START_WITHOUT_LIGHTS
-    };
+    });
+    let start = lights.unwrap_or(attn_ui::blocks::WindowBar::inset());
     let beside_sidebar =
         !state.window.sidebar_hidden && !crate::desktop::shows_an_agent_alone(state);
     let left = attn_ui::blocks::Inline::joined()
         .key(TITLE_BAR_LEFT)
         .min_w(if beside_sidebar {
-            (crate::sidebar::width::of(state) - lights).max(0.0)
+            (crate::sidebar::width::of(state) - start).max(0.0)
         } else {
             0.0
         })
@@ -651,17 +644,10 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         .children(connected.then(|| crate::profile_switcher::pill(state, t)));
     let parts = [left, middle, right];
     let covered = title_bar_covered(state);
-    attn_ui::blocks::Inline::joined()
+    attn_ui::blocks::WindowBar::across(lights, TITLE_BAR_HEIGHT, t)
         .key("titlebar")
         .role("banner")
         .label("Title bar")
-        .w_full()
-        .h(TITLE_BAR_HEIGHT)
-        .pl(lights)
-        .pr(TITLE_BAR_START_WITHOUT_LIGHTS)
-        .fill(t.bg_panel)
-        .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
-        .items_center()
         .window_drag()
         .on_measure(crate::sidebar::crowding::bar_laid_out)
         .on_layout_tx(|state: &mut State, [_, _, w, _], tx: &mut Tx| {
@@ -721,14 +707,14 @@ pub(crate) fn title_bar_slot(key: &str, control: El) -> El {
 
 /// A surface that holds the window under the title bar, as the Tauri app's `.ledger-shell`,
 /// `.notebook-browser-shell` and `.garden-frame-backdrop` do: the app background over
-/// everything below the title bar, and `panel` `inset` points inside it.
-pub(crate) fn under_title_bar(key: &str, inset: f32, panel: El, t: &Tokens) -> El {
-    col()
-        .key(key)
-        .pin(Some(0.0), Some(TITLE_BAR_HEIGHT), Some(0.0), Some(0.0))
-        .fill(t.bg_app)
-        .padding(inset)
-        .child(panel)
+/// everything below the title bar, and `panel` set in from its edges.
+pub(crate) fn under_title_bar(key: &str, panel: El, t: &Tokens) -> El {
+    attn_ui::blocks::Surface::under_bar(panel, t).key(key).pin(
+        Some(0.0),
+        Some(TITLE_BAR_HEIGHT),
+        Some(0.0),
+        Some(0.0),
+    )
 }
 
 fn centered(t: &Tokens, content: El) -> El {
@@ -951,16 +937,19 @@ fn shortcuts(state: &State, t: &Tokens, layers: &mut Vec<El>) {
 
 /// A notice that only tells: a card at the window's bottom right, as the Tauri app's toast.
 fn told(notice: &Notice, t: &Tokens) -> El {
-    let said = text(notice.text.clone())
+    let said = words(notice.text.clone(), Type::Body, t.text_primary)
         .key("notice.text")
         .role("status")
         .label(notice.text.clone())
-        .font(type_::BODY)
-        .color(t.text_primary)
         .wrap()
         .grow(1.0)
         .min_w(0.0);
-    docked_bottom_right(toast_card(toast_glyph("!", t.error, t), said, t)).inert()
+    at_foot(
+        "notice",
+        toast_card(toast_glyph("!", t.error, t), said, t),
+        Foot::End,
+    )
+    .inert()
 }
 
 /// A notice with its offer: one button, as the Tauri app's toast row is, that runs the offer
@@ -977,66 +966,37 @@ fn offering(notice: &Notice, offer: &Offer, t: &Tokens) -> El {
         .disabled(offer.done)
         .on_press_tx(|state: &mut State, tx: &mut Tx| take_offer(state, tx))
         .label_with(move |_, _| {
-            row()
+            Inline::joined()
                 .w_full()
-                .items_center()
-                .gap(space::S3)
-                .child(text(face).font(type_::BODY).color(ink).grow(1.0).min_w(0.0))
-                .child(text(said).font(type_::LABEL).color(said_ink))
+                .child(words(face, Type::Body, ink).grow(1.0).min_w(0.0))
+                .child(words(said, Type::Small, said_ink))
         })
         .build(attn_ui::kit(t))
         .key("notice.offer")
         .grow(1.0)
         .min_w(0.0);
-    docked_bottom_right(
+    at_foot(
+        "notice",
         toast_card(toast_glyph("✓", t.text_secondary, t), button, t).on_hover_change(
             |state: &mut State, inside, tx: &mut Tx| hold_notice(state, inside, tx),
         ),
+        Foot::End,
     )
 }
 
 fn toast_glyph(glyph: &str, ink: rune::Color, t: &Tokens) -> El {
-    el().w(22.0)
-        .h(22.0)
-        .radius(5.0)
-        .border(1.0, t.border)
-        .center()
-        .a11y_hidden()
-        .child(text(glyph.to_owned()).font(type_::MONO_CAPTION).color(ink))
+    attn_ui::system::chip_edge(words(glyph.to_owned(), Type::Tag, ink), t).a11y_hidden()
 }
 
-/// The toast card, 360 points wide.
+/// The toast card, as wide as the Tauri app's toast.
 fn toast_card(glyph: El, body: El, t: &Tokens) -> El {
-    raised(
-        attn_ui::kit(t),
-        row()
-            .key("notice.card")
-            .w(360.0)
-            .gap(10.0)
-            .items_center()
-            .px(12.0)
-            .py(10.0)
-            .child(glyph)
-            .child(body),
-        10.0,
-    )
+    Frame::panel(t)
+        .draw_holding(Inline::joined().w_full().child(glyph).child(body))
+        .key("notice.card")
+        .w(TOAST_W)
 }
 
-fn docked_bottom_right(card: El) -> El {
-    el().key("notice")
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .child(
-            col()
-                .w_full()
-                .h_full()
-                .items_end()
-                .justify_end()
-                .padding(18.0)
-                .child(card),
-        )
-}
+const TOAST_W: f32 = 360.0;
 
 fn hold_notice(state: &mut State, inside: bool, tx: &mut Tx) {
     let Some(notice) = &mut state.window.notice else {
@@ -1062,24 +1022,9 @@ fn take_offer(state: &mut State, tx: &mut Tx) {
 }
 
 fn floating_status(key: &str, message: String, t: &Tokens) -> El {
-    let status = text(message.clone())
+    let status = words(message.clone(), Type::Body, t.text_primary)
         .key(format!("{key}.text"))
         .role("status")
-        .label(message)
-        .font(type_::BODY)
-        .color(t.text_primary)
-        .padding(space::S2);
-    floating(key, raised(attn_ui::kit(t), status, 6.0)).inert()
-}
-
-fn floating(key: &str, surface: El) -> El {
-    el().key(key).absolute(0.0, 0.0).w_full().h_full().child(
-        col()
-            .w_full()
-            .h_full()
-            .items_center()
-            .justify_end()
-            .padding(space::S6)
-            .child(surface),
-    )
+        .label(message);
+    at_foot(key, Frame::panel(t).draw_holding(status), Foot::Centre).inert()
 }

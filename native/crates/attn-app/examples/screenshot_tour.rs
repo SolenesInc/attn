@@ -17,16 +17,16 @@ use attn_protocol::{
     AutomationDefinitionsResultMessage, AutomationProvenance, AutomationRunSummary,
     AutomationRunsResultMessage, AutomationSchedulePreviewResultMessage,
     BrowseDirectoryResultMessage, BusConsumerStatus, BusStatusResultMessage,
-    CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetResultMessage,
-    CrewHandoffsGetResultMessage, CrewMember, DelegationChoice, DelegationFallback,
-    DelegationPreferences, DelegationPreferencesResultMessage, DelegationRole, DelegationSelection,
-    Desktop, DesktopPane, DesktopTileContentMessage, DirectoryEntry, FileActivity,
-    FsIndexResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe,
-    GardenReviewRun, GetCommandUsageResultMessage, GetRepoInfoResultMessage, Harness, HarnessModel,
-    HarnessModelsResultMessage, InitialStateMessage, InspectPathResultMessage,
-    InstallCodexUpdateResultMessage, LaunchDesktopResultMessage, LaunchDesktopSetting,
-    Notification, NotificationListResultMessage, OutpostInfo, OutpostUpdate, PR, PartyView,
-    PathInspection, PhoneLink, PhonesUpdatedMessage, Profile, RateLimitedMessage,
+    CalloutShowRequestMessage, CalloutStep, CreateWorktreeResultMessage, CrewCharterDocument,
+    CrewCharterGetResultMessage, CrewHandoffsGetResultMessage, CrewMember, DelegationChoice,
+    DelegationFallback, DelegationPreferences, DelegationPreferencesResultMessage, DelegationRole,
+    DelegationSelection, Desktop, DesktopPane, DesktopTileContentMessage, DirectoryEntry,
+    FileActivity, FsIndexResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem,
+    GardenReviewRecipe, GardenReviewRun, GetCommandUsageResultMessage, GetRepoInfoResultMessage,
+    Harness, HarnessModel, HarnessModelsResultMessage, InitialStateMessage,
+    InspectPathResultMessage, InstallCodexUpdateResultMessage, LaunchDesktopResultMessage,
+    LaunchDesktopSetting, Notification, NotificationListResultMessage, OutpostInfo, OutpostUpdate,
+    PR, PartyView, PathInspection, PhoneLink, PhonesUpdatedMessage, Profile, RateLimitedMessage,
     RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage,
     RecordCommandUsageResultMessage, RefreshPRsResultMessage, RepoInfo, ReviewBundle, ReviewFile,
     ReviewFlow, ReviewFlowGroup, ReviewFlowMessage, ReviewFlowParticipant, ReviewNotShown,
@@ -2010,6 +2010,129 @@ fn tile_notices(dark: bool) {
         |_| {},
     );
     snap(&mut world, "tile-notices", dark);
+}
+
+/// The window with the document tile beside terminal `a`, connected.
+fn document_world(dark: bool, daemon: impl FnOnce(&Daemon)) -> World {
+    let scripted = scripted().state(initial(
+        dark,
+        document_tile("m", "/repo/plan.md"),
+        Vec::new(),
+    ));
+    daemon(&scripted);
+    start(scripted)
+}
+
+/// The daemon stopped answering: the band under the title bar over the last facts, while the
+/// window retries.
+fn daemon_reconnecting(dark: bool) {
+    let mut world = document_world(dark, |_| {});
+    world.daemon.refuse_connections(true);
+    world.daemon.disconnect();
+    world.settle();
+    snap(&mut world, "daemon-reconnecting", dark);
+}
+
+/// The daemon stopped, and starting it again failed: the band says why.
+fn daemon_start_failed(dark: bool) {
+    let mut world = document_world(dark, |_| {});
+    world.daemon.fail_starts(Some(
+        "no attnd beside /Applications/attn.app/Contents/MacOS/attn-app",
+    ));
+    world.daemon.stop();
+    world.settle();
+    world.advance(std::time::Duration::from_millis(1000));
+    snap(&mut world, "daemon-start-failed", dark);
+}
+
+/// A daemon on another protocol: the window says so and stops.
+fn daemon_refused(dark: bool) {
+    let state = InitialStateMessage {
+        protocol_version: Some("0ld".into()),
+        ..initial(dark, document_tile("m", "/repo/plan.md"), Vec::new())
+    };
+    let mut world = World::start_sized(scripted().state(state), window());
+    snap(&mut world, "daemon-refused", dark);
+}
+
+/// A command that failed: the notice at the window's foot, at its end.
+fn notice_failed(dark: bool) {
+    let mut world = with_document_and(dark, |daemon| {
+        daemon.on("desktop_create", |r: &Request| {
+            json!({
+                "event": "profile_action_result",
+                "request_id": r["request_id"],
+                "action": "desktop_create",
+                "success": false,
+                "error": "no room",
+            })
+        });
+    });
+    press(&mut world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("new desktop"));
+    world.settle();
+    tap(&mut world, Key::Enter);
+    world.settle();
+    snap(&mut world, "notice-failed", dark);
+}
+
+/// The first key of a sequence pressed: the keys it waits for at the window's foot.
+fn leader(dark: bool) {
+    let palette = match Keymap::from_setting(None, KeyPlatform::current())
+        .binding(&Action::UiCommandPalette)
+    {
+        Some(Binding::Chord(chord)) => key_event(&chord),
+        other => panic!("the palette has no single chord: {other:?}"),
+    };
+    let key = match &palette.key {
+        Key::Command(c) => c.to_string(),
+        Key::Text(t) => t.clone(),
+        other => panic!("no stored key for {other:?}"),
+    };
+    let leads = json!({
+        "key": key,
+        "meta": true,
+        "alt": palette.mods.alt,
+        "shift": palette.mods.shift,
+    });
+    let config = json!({
+        "version": 1,
+        "overrides": {"ui.showShortcuts": {"leader": leads, "then": {"key": "j"}}},
+        "dock": {"collapsed": false, "items": []},
+    });
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), Vec::new());
+    state
+        .settings
+        .get_or_insert_with(BTreeMap::new)
+        .insert("keybindings_config".into(), config.to_string());
+    let mut world = start(scripted().state(state));
+    world.gesture(|app| app.key(palette.clone()));
+    snap(&mut world, "leader", dark);
+}
+
+/// An agent's callout pointing at the sidebar: the ring around it and the card beside it.
+fn callout(dark: bool) {
+    let mut world = document_world(dark, |_| {});
+    world.daemon.emit(CalloutShowRequestMessage {
+        request_id: "c1".into(),
+        profile_id: PROFILE.into(),
+        from: "Fern".into(),
+        steps: vec![
+            CalloutStep {
+                anchor: "sidebar".into(),
+                text: "Your agents wait here, the ones that need you first.".into(),
+                ..CalloutStep::default()
+            },
+            CalloutStep {
+                anchor: "garden".into(),
+                text: "The garden holds the work they tend.".into(),
+                ..CalloutStep::default()
+            },
+        ],
+        ..CalloutShowRequestMessage::new()
+    });
+    world.settle();
+    snap(&mut world, "callout", dark);
 }
 
 /// Terminal `a`'s filter over a block's output, typed into, listing the lines that match.
@@ -7874,6 +7997,12 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("terminal_overlays", || terminal_overlays(dark));
         scene("terminal_filter", || terminal_filter(dark));
         scene("tile_notices", || tile_notices(dark));
+        scene("daemon_reconnecting", || daemon_reconnecting(dark));
+        scene("daemon_start_failed", || daemon_start_failed(dark));
+        scene("daemon_refused", || daemon_refused(dark));
+        scene("notice_failed", || notice_failed(dark));
+        scene("leader", || leader(dark));
+        scene("callout", || callout(dark));
         scene("tile_window", || tile_window(dark));
         scene("launcher_dialog", || launcher_dialog(dark));
         scene("launcher_dialog_last", || launcher_dialog_last(dark));

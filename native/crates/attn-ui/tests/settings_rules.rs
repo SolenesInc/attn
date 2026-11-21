@@ -1027,6 +1027,7 @@ fn public_text_inputs() -> Vec<(String, bool)> {
 const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::banner::Banner::new(label)", false),
     ("blocks::banner::Banner::value(value)", false),
+    ("blocks::banner::Banner::announces(sentence)", true),
     ("blocks::banner::Banner::says(sentence)", true),
     ("blocks::banner::Banner::note(said)", true),
     ("blocks::banner::Banner::link(shown)", true),

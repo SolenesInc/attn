@@ -23,7 +23,6 @@ const TREE_WIDTH: f32 = 280.0;
 /// the note keeps its room.
 const TREE_FOLDS_BELOW: f32 = 620.0;
 const RAIL_FOLDS_BELOW: f32 = 900.0;
-const SHELL_INSET: f32 = 12.0;
 
 /// The file tree's and the rail's ground: the app's background at 58% over what is behind.
 fn pane_fill(t: &Tokens) -> Color {
@@ -118,7 +117,7 @@ pub(crate) fn fullscreen(state: &State, t: &Tokens) -> El {
             [(0.0, t.brand.alpha(0.08)), (1.0, t.brand.alpha(0.0))],
         );
     }
-    crate::shell::under_title_bar("notebook", SHELL_INSET, panel, t)
+    crate::shell::under_title_bar("notebook", panel, t)
 }
 
 /// Whether the selected profile's chief is working; `None` when the profile has none.

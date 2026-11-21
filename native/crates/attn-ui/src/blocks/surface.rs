@@ -55,6 +55,17 @@ impl Surface {
         door::corner(content.fill(fill).border(1.0, edge), Radius::Card)
     }
 
+    /// The app's ground under a panel that holds the window below its title bar, such as the
+    /// garden's, the panel set in from the ground's edges.
+    pub fn under_bar(panel: El, t: &Tokens) -> El {
+        door::inset(col().fill(t.bg_app).child(panel), UNDER_BAR, UNDER_BAR)
+    }
+
+    /// How far [`Surface::under_bar`] sets its panel in from each edge.
+    pub fn under_bar_inset() -> f32 {
+        UNDER_BAR.pt()
+    }
+
     /// A short list raised over the page it opens on, such as a card's menu: the elevated
     /// surface with an edge, clipped at its corners so its rows' tints follow them.
     pub fn raised(content: El, t: &Tokens) -> El {
@@ -67,3 +78,5 @@ impl Surface {
         )
     }
 }
+
+const UNDER_BAR: Space = Space::S12;

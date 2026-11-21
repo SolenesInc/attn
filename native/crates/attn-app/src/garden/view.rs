@@ -29,7 +29,6 @@ pub(super) const ROW_PREFIX: &str = "garden.row.";
 pub(super) const RESULTS: &str = "garden.results";
 const COLUMNS_MIN: f32 = 1160.0;
 const THIRD_COLUMN_MIN: f32 = 1460.0;
-const FULL_INSET: f32 = 12.0;
 /// A list column's width.
 const COLUMN_WIDTH: f32 = 300.0;
 /// How wide the reader beside the columns lets a seed's page grow.
@@ -61,7 +60,9 @@ impl Lookups for Look<'_> {
 
 fn frame_width(state: &State) -> f32 {
     match super::mode(state) {
-        Mode::Full => (state.window.width.window - FULL_INSET * 2.0).max(0.0),
+        Mode::Full => {
+            (state.window.width.window - attn_ui::blocks::Surface::under_bar_inset() * 2.0).max(0.0)
+        }
         _ => crate::shell::Drawer::Garden.width(state.window.width.window),
     }
 }
@@ -294,7 +295,7 @@ pub(super) fn full_frame(_state: &State, t: &Tokens, content: El) -> El {
         .w_full()
         .h_full()
         .child(content);
-    crate::shell::under_title_bar("garden.full", FULL_INSET, Surface::panel(dialog, t), t)
+    crate::shell::under_title_bar("garden.full", Surface::panel(dialog, t), t)
 }
 
 fn body(state: &State, t: &Tokens) -> El {
