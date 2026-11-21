@@ -168,7 +168,8 @@ pub(crate) fn body(
             read_source(&content.content[part.clone()], Some(part.start), marking)
         };
         let card = crate::review::card_key(tile);
-        let marking = annotating::in_document(readings, tile, &card, padding, t);
+        let seen = format!("tile.{tile}.document");
+        let marking = annotating::in_document(readings, tile, (&card, &seen), padding, t);
         return crate::review::body(
             (tile, &view, title, padding, held),
             (&content.content, bundle, *revision),
@@ -201,7 +202,8 @@ pub(crate) fn body(
             },
         )
     });
-    let marking = annotating::in_document(readings, tile, &root, padding, t);
+    let seen = format!("tile.{tile}.document");
+    let marking = annotating::in_document(readings, tile, (&root, &seen), padding, t);
     scroll(card(reading).children(marking))
 }
 
@@ -257,7 +259,11 @@ pub(crate) fn seed_reader(
             }))
         },
     );
-    let marking = annotating::in_document(readings, tile, &annotating::root_key(tile), 0.0, t);
+    let (root, seen) = (
+        annotating::root_key(tile),
+        format!("seed-tile.{tile}.viewport"),
+    );
+    let marking = annotating::in_document(readings, tile, (&root, &seen), 0.0, t);
     (reading, marking)
 }
 

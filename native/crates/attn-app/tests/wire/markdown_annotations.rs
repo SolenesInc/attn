@@ -1784,3 +1784,57 @@ fn tab_from_the_notes_close_reaches_overall_note_and_clear_all_before_forty_card
     assert_eq!(tab(&mut world, true), "tile.m.document.notes.overall");
     assert_eq!(tab(&mut world, true), "tile.m.document.notes.close");
 }
+
+#[test]
+fn the_quick_label_list_stays_inside_the_document_and_its_last_label_takes_a_click() {
+    for seed in [None, Some(None)] {
+        let (mut world, kept) = start_with(
+            DOC,
+            Kept {
+                smallest: true,
+                seed,
+                ..Kept::default()
+            },
+        );
+        pause(&mut world);
+        select(&mut world, "b1", 10..21);
+        click(&mut world, "toolbar.zap");
+        let [_, top, _, height] = world
+            .runtime()
+            .presented("tile.m.document")
+            .or_else(|| world.runtime().presented("tile.m"))
+            .map(|(r, ..)| r)
+            .expect("the document is drawn")
+            .map(f64::from);
+        let toolbar = world.rect("tile.m.document.toolbar");
+        let tile = if seed.is_some() { "seed" } else { "markdown" };
+        assert!(
+            toolbar[1] >= top && toolbar[1] + toolbar[3] <= top + height,
+            "{tile}: the toolbar stands from {} to {} in a document from {top} to {}",
+            toolbar[1],
+            toolbar[1] + toolbar[3],
+            top + height
+        );
+        let over = (
+            (toolbar[0] + toolbar[2] / 2.0) as f32,
+            (toolbar[1] + toolbar[3] - 20.0) as f32,
+        );
+        world.gesture(|app| app.move_to(over));
+        world.gesture(|app| {
+            app.runtime
+                .wheel_event(rune::WheelEvent::new(0.0, -1200.0).at(over.0, over.1));
+        });
+        let last = world.rect("tile.m.document.toolbar.pick.ask-me-first");
+        let at = (
+            (last[0] + last[2] / 2.0) as f32,
+            (last[1] + last[3] / 2.0) as f32,
+        );
+        world.gesture(|app| app.click_at(at));
+        pause(&mut world);
+        let labels: Vec<Value> = marks(&kept)
+            .into_iter()
+            .map(|m| m["quick_label_id"].clone())
+            .collect();
+        assert_eq!(labels, [json!("ask-me-first")], "{tile}");
+    }
+}

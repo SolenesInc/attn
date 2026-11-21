@@ -1463,3 +1463,78 @@ fn the_label_list_stays_inside_a_short_terminal() {
         top + height
     );
 }
+
+#[test]
+fn under_an_open_find_or_filter_bar_the_last_label_stays_inside_the_terminal_and_takes_a_click() {
+    for bar in ["find", "filter"] {
+        let mut state = showing(vec![agent_pane()], "daemon-1");
+        state.settings = Some(std::collections::BTreeMap::from([(
+            "uiScale".into(),
+            "1.5".into(),
+        )]));
+        let daemon = Daemon::scripted().state(state);
+        daemon
+            .on("session_messages_get", |_| {
+                message(messages_result(&[("m1", MESSAGE)], "ready"))
+            })
+            .on("session_annotations_get", |_| draft_result(Vec::new(), 0))
+            .on("session_annotations_save", |_| saved());
+        let mut world = World::start_sized(daemon, (800.0, 600.0));
+        world.open_desktop();
+        let row = if bar == "filter" {
+            let lines = "filtered line\r\n".repeat(12);
+            let block = super::terminal_blocks::ran("show lines", &format!("{MESSAGE}\r\n{lines}"));
+            output(&world, 1, &block);
+            1
+        } else {
+            output(&world, 1, format!("{MESSAGE}\r\n").as_bytes());
+            0
+        };
+        world.settle();
+        if bar == "find" {
+            world.gesture(|app| app.press(if mac() { "mod+f" } else { "mod+shift+f" }));
+            world.gesture(|app| app.type_text("cache"));
+        } else {
+            super::terminal_blocks::right_click(&mut world, 1, 1);
+            super::terminal_blocks::pick(&mut world, "filter-block");
+            world.gesture(|app| app.type_text("filtered"));
+        }
+        drag_with(&mut world, alt(), (4, row), (20, row));
+        click(&mut world, "terminal.r1.annotation.more");
+        let [_, top, _, height] = world.rect("terminal.r1");
+        let popup = world.rect("terminal.r1.annotation.popup");
+        assert!(
+            popup[1] >= top && popup[1] + popup[3] <= top + height,
+            "{bar}: the popup stands from {} to {} in a terminal from {top} to {}",
+            popup[1],
+            popup[1] + popup[3],
+            top + height
+        );
+        let over = (
+            (popup[0] + popup[2] / 2.0) as f32,
+            (popup[1] + popup[3] - 20.0) as f32,
+        );
+        world.gesture(|app| app.move_to(over));
+        world.gesture(|app| {
+            app.runtime
+                .wheel_event(rune::WheelEvent::new(0.0, -1200.0).at(over.0, over.1));
+        });
+        let last = world.rect("terminal.r1.annotation.pick.ask-me-first");
+        assert!(
+            last[1] + last[3] <= top + height,
+            "{bar}: Ask me first ends at {} past the terminal's end at {}",
+            last[1] + last[3],
+            top + height
+        );
+        let at = (
+            (last[0] + last[2] / 2.0) as f32,
+            (last[1] + last[3] / 2.0) as f32,
+        );
+        world.gesture(|app| app.click_at(at));
+        assert_eq!(
+            annotations(&mut world)["marks"][0]["label"],
+            "ask-me-first",
+            "{bar}"
+        );
+    }
+}

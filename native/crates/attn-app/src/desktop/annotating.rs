@@ -338,7 +338,7 @@ fn popup(
     .group(labels)
     .group([write, remove])
     .under(Some(under))
-    .max_height(slot.1 - 2.0 * MARGIN)
+    .max_height(slot.1 - room.top() - MARGIN)
     .build(t);
     let (left, top) = match popup.size {
         Some(size) => popup_at(popup, size, slot, room),

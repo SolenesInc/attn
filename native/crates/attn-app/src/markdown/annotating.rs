@@ -509,11 +509,12 @@ pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
 }
 
 /// The toolbar, or the comment box on a passage, of tile `tile`, placed beside their passage in
-/// the card that holds the element keyed `frame` `inset` points in, so they scroll with it.
+/// the card that holds the element keyed `frame` `inset` points in, so they scroll with it, and
+/// kept inside the part of the tile the element keyed `seen` shows.
 pub(crate) fn in_document(
     readings: &Readings,
     tile: &str,
-    frame: &str,
+    (frame, seen): (&str, &str),
     inset: f32,
     t: &Tokens,
 ) -> Vec<El> {
@@ -535,12 +536,13 @@ pub(crate) fn in_document(
         passage[3],
     ];
     let frame = [0.0, 0.0, reader[2] + 2.0 * inset, reader[3] + 2.0 * inset];
+    let scrolled =
+        rune::memo::window_layout(&key(tile, "pending")).map_or(0.0, |shown| shown[1] - passage[1]);
+    let seen = rune::memo::layout(seen).map_or([0.0, frame[3]], |view| {
+        let top = view[1] - reader[1] - scrolled + inset;
+        [top, top + view[3]]
+    });
     if let Some(composer) = &reading.composer {
-        let seen =
-            rune::memo::layout(&format!("tile.{tile}.document")).map_or([0.0, frame[3]], |view| {
-                let top = view[1] - reader[1] + inset;
-                [top, top + view[3]]
-            });
         return vec![composer_box(tile, composer, Some(around), frame, seen, t)];
     }
     let size = rune::memo::layout(&key(tile, "toolbar")).unwrap_or([0.0, 0.0, 260.0, 36.0]);
@@ -552,10 +554,13 @@ pub(crate) fn in_document(
     } else {
         around[1] + around[3] + TOOLBAR_ABOVE - size[3]
     };
-    vec![toolbar(tile, reading.picking, t).absolute(left, top)]
+    let top = top.min(seen[1] - size[3]).max(seen[0]);
+    vec![toolbar(tile, reading.picking, seen[1] - top, t).absolute(left, top)]
 }
 
-fn toolbar(tile: &str, picking: bool, t: &Tokens) -> El {
+/// The toolbar over a selection in `tile`, standing at most `room` tall: the label list under
+/// its strip scrolls past that.
+fn toolbar(tile: &str, picking: bool, room: f32, t: &Tokens) -> El {
     let on = |f: fn(&mut State, &str, &mut Tx)| {
         let tile = tile.to_owned();
         move |state: &mut State, tx: &mut Tx| f(state, &tile, tx)
@@ -630,6 +635,7 @@ fn toolbar(tile: &str, picking: bool, t: &Tokens) -> El {
         .group(marking)
         .group([cancel])
         .under(list)
+        .max_height(room)
         .build(t)
         .keeps_text_selection()
         .on_press(|_: &mut State| {})
