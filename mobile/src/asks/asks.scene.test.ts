@@ -493,7 +493,7 @@ describe('asks on the phone', () => {
       re: {
         askId: 'a-earlier',
         subject: 'Cache store',
-        answer: '## 1. Which store should keep the cache?\n\nAnswer: Postgres (the recommended choice)',
+        answer: '**1. Which store should keep the cache?**\n\nAnswer: Postgres (the recommended choice)',
         answeredAt: now - 10 * 60_000,
       },
     }

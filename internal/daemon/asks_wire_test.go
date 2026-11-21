@@ -932,7 +932,7 @@ func TestAFollowUpAskKeepsTheQuestionAndAnswerItFollowsAfterTheEarlierAskIsForgo
 		if re == nil || re.AskID != earlier.ID || protocol.Deref(re.Subject) != "Cache store" || protocol.Deref(re.AnsweredAt) == "" {
 			t.Fatalf("the follow-up follows %+v, want %s, its subject and when it was answered", re, earlier.ID)
 		}
-		for _, want := range []string{"Which store should keep the cache?", "Answer: Postgres (the recommended choice)", "> Keep it boring."} {
+		for _, want := range []string{"**1. Which store should keep the cache?**", "Answer: Postgres (the recommended choice)", "> Keep it boring."} {
 			if !strings.Contains(protocol.Deref(re.Answer), want) {
 				t.Errorf("the follow-up carries the answer %q, missing %q", protocol.Deref(re.Answer), want)
 			}

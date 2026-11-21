@@ -40,6 +40,7 @@ func askRecipient() Recipient {
 		On("guidance", "message_fragment", "Launch guidance for a session that launched with asks.", askGuidance),
 		On("answer", "inbox_content", "The user's answer, typed into the conversation of the ask's addressee: the seed's tender, or the asking agent when the ask is about no seed. A seed also keeps it as a note. The adapter validates answers against the ask.", reply),
 		On("entry", "message_fragment", "One question and the user's answer to it.", entry),
+		On("entry-answer", "message_fragment", "The user's answer to one question, without the question: what a follow-up ask shows the user under the earlier question.", answer),
 		On("default-due", "inbox_content", "A notice to the ask's addressee once its default falls due with no answer: the agent goes with the default, and the ask stays open.", defaultDue),
 	}}
 }

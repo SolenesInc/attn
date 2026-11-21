@@ -50,7 +50,8 @@ func Answered(ask protocol.Ask) (string, error) {
 	}
 	sections := make([]string, 0, len(questions)+2)
 	for i, question := range questions {
-		sections = append(sections, renderEntry(i+1, question, byKey[question.Key]))
+		answer := prompts.RenderText("ask", "entry-answer", answerValues(question, byKey[question.Key]))
+		sections = append(sections, fmt.Sprintf("**%d. %s**\n\n%s", i+1, question.Prompt, answer))
 	}
 	if note := strings.TrimSpace(protocol.Deref(ask.Reply.Note)); note != "" {
 		sections = append(sections, blockquote(note))
@@ -126,9 +127,18 @@ func normalizeAnswer(question protocol.AskQuestion, answer protocol.AskAnswer) (
 }
 
 func renderEntry(index int, question protocol.AskQuestion, answer protocol.AskAnswer) string {
-	values := prompts.Values{
-		"index":       strconv.Itoa(index),
-		"prompt":      question.Prompt,
+	return prompts.RenderText("ask", "entry", entryValues(index, question, answer))
+}
+
+func entryValues(index int, question protocol.AskQuestion, answer protocol.AskAnswer) prompts.Values {
+	values := answerValues(question, answer)
+	values["index"] = strconv.Itoa(index)
+	values["prompt"] = question.Prompt
+	return values
+}
+
+func answerValues(question protocol.AskQuestion, answer protocol.AskAnswer) prompts.Values {
+	return prompts.Values{
 		"picked":      pickedLabels(question, answer.Picked),
 		"recommended": strconv.FormatBool(recommendedPick(question, answer)),
 		"condition":   protocol.Deref(answer.Condition),
@@ -136,7 +146,6 @@ func renderEntry(index int, question protocol.AskQuestion, answer protocol.AskAn
 		"text":        blockquote(protocol.Deref(answer.Text)),
 		"unanswered":  strconv.FormatBool(!answered(answer)),
 	}
-	return prompts.RenderText("ask", "entry", values)
 }
 
 func pickedLabels(question protocol.AskQuestion, picked []string) string {

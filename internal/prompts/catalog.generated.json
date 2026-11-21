@@ -5863,6 +5863,179 @@
           }
         },
         {
+          "id": "entry-answer",
+          "delivery": "message_fragment",
+          "description": "The user's answer to one question, without the question: what a follow-up ask shows the user under the earlier question.",
+          "body": {
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "unanswered",
+                "kind": "flag",
+                "description": "The user left this question unanswered."
+              },
+              "test": "enabled"
+            },
+            "children": [
+              {
+                "kind": "text",
+                "id": "ask.entry-unanswered",
+                "source": "content/ask/entry-unanswered.md"
+              },
+              {
+                "kind": "compose",
+                "children": [
+                  {
+                    "kind": "when",
+                    "condition": {
+                      "field": {
+                        "name": "picked",
+                        "kind": "text",
+                        "description": "The labels the user picked; for a :::question-multi each is quoted, comma separated."
+                      },
+                      "test": "present"
+                    },
+                    "children": [
+                      {
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "recommended",
+                            "kind": "flag",
+                            "description": "The user picked the agent's recommendation alone."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "ask.entry-recommended",
+                            "source": "content/ask/entry-recommended.md",
+                            "bindings": [
+                              {
+                                "name": "picked",
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "picked",
+                                    "kind": "text",
+                                    "description": "The labels the user picked; for a :::question-multi each is quoted, comma separated."
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "text",
+                            "id": "ask.entry-picked",
+                            "source": "content/ask/entry-picked.md",
+                            "bindings": [
+                              {
+                                "name": "picked",
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "picked",
+                                    "kind": "text",
+                                    "description": "The labels the user picked; for a :::question-multi each is quoted, comma separated."
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "when",
+                    "condition": {
+                      "field": {
+                        "name": "condition",
+                        "kind": "text",
+                        "description": "The user's condition on their pick."
+                      },
+                      "test": "present"
+                    },
+                    "children": [
+                      {
+                        "kind": "text",
+                        "id": "ask.entry-condition",
+                        "source": "content/ask/entry-condition.md",
+                        "bindings": [
+                          {
+                            "name": "condition",
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "condition",
+                                "kind": "text",
+                                "description": "The user's condition on their pick."
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "when",
+                    "condition": {
+                      "field": {
+                        "name": "other",
+                        "kind": "text",
+                        "description": "The user's own answer to a choice question."
+                      },
+                      "test": "present"
+                    },
+                    "children": [
+                      {
+                        "kind": "text",
+                        "id": "ask.entry-other",
+                        "source": "content/ask/entry-other.md",
+                        "bindings": [
+                          {
+                            "name": "other",
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "other",
+                                "kind": "text",
+                                "description": "The user's own answer to a choice question."
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "when",
+                    "condition": {
+                      "field": {
+                        "name": "text",
+                        "kind": "text",
+                        "description": "The user's written answer, quoted by the adapter."
+                      },
+                      "test": "present"
+                    },
+                    "children": [
+                      {
+                        "kind": "input",
+                        "field": {
+                          "name": "text",
+                          "kind": "text",
+                          "description": "The user's written answer, quoted by the adapter."
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
           "id": "default-due",
           "delivery": "inbox_content",
           "description": "A notice to the ask's addressee once its default falls due with no answer: the agent goes with the default, and the ask stays open.",
@@ -7644,5 +7817,5 @@
       ]
     }
   ],
-  "definitions_hash": "97e3ae9d12f2c0745286ad1275ecce671b69156d6edabd36383d878dc4ef2bf1"
+  "definitions_hash": "24434160ca832501f487f84a1e9c899e1bfe2cc54fbdcbf91fd35c6f75eb59e9"
 }
