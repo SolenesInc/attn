@@ -434,3 +434,23 @@ fn a_failed_migration_shows_its_screen_and_not_the_tour() {
     );
     assert!(!open(&world));
 }
+
+#[test]
+fn homes_banner_is_announced_politely_with_its_whole_sentence() {
+    let dir = tempfile::tempdir().unwrap();
+    let world = launch(&banner_unseen(dir.path()), &[]);
+    let banner = world.screen().get(Target::key("home.intro-banner"));
+    assert_eq!(banner.role, "status", "{banner:?}");
+    let said: String = world
+        .screen()
+        .descendants(Target::key("home.intro-banner"))
+        .into_iter()
+        .chain([banner.clone()])
+        .filter_map(|n| n.name)
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        said.contains("New in attn: a new look, and how to switch back."),
+        "{said}"
+    );
+}

@@ -1069,6 +1069,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::notice::Notice::error(said)", true),
     ("blocks::notice::Notice::warn(said)", true),
     ("blocks::notice::Notice::info(said)", true),
+    ("blocks::notice::Notice::accent(said)", true),
     ("blocks::notice::Status::new(said)", true),
     ("blocks::notice::Status::aside(aside)", true),
     ("blocks::notice::Refusal::new(reason)", true),

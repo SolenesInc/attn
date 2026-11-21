@@ -687,6 +687,12 @@ fn notices(s: &Blocks, cx: &mut Cx<Blocks>) -> El {
         .build(&t),
         Notice::warn("notice.warn", said("Two roles need a model.")).build(&t),
         Notice::info("notice.info", said("Delegation is off.")).build(&t),
+        Notice::accent(
+            "notice.accent",
+            said("New in attn: a new look, and how to switch back."),
+        )
+        .action(plain("Show me", "notice.accent.show"))
+        .build(&t),
         Status::new("status", said("3 roles, 2 on"), true)
             .aside("Saved")
             .build(&t),

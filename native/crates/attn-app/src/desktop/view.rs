@@ -1302,13 +1302,14 @@ fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) 
         None => header,
     };
     let header = match &leaf.kind {
-        LeafKind::Tile { kind, params, .. } if kind == crate::browser::KIND => header
-            .title_control(crate::browser::address_field(
+        LeafKind::Tile { kind, params, .. } if kind == crate::browser::KIND => header.title_field(
+            crate::browser::address_input(
                 cx.browsers,
                 &browser_page(cx.desktop, leaf),
                 params.as_deref().unwrap_or(""),
-                t,
-            )),
+            ),
+            t,
+        ),
         _ => header.title(title.to_owned(), look.title(t)),
     };
     let header = match pane {
@@ -1383,7 +1384,7 @@ fn header(leaf: &Leaf, title: &str, look: &super::tile_look::Look, cx: &TileCx) 
                 (is_document && !focused && !popped)
                     .then(|| focus_document_button(&key, &cx.desktop.id, &leaf.id, cx)),
                 matches!(&leaf.kind, LeafKind::Tile { kind, .. } if kind == crate::browser::KIND)
-                    .then(|| crate::browser::reload_button(&browser_page(cx.desktop, leaf), cx.t)),
+                    .then(|| reload_button(&key, browser_page(cx.desktop, leaf), cx.t)),
                 is_tile.then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, Place::Tile, cx)),
                 is_tile.then(|| close_tile_button(&key, &cx.desktop.id, &leaf.id, cx.t)),
             ]
@@ -1589,6 +1590,18 @@ fn header_button(
         .on_press_tx(press)
         .build(t)
         .into()
+}
+
+/// The header's button that loads a browser tile's page again.
+fn reload_button(key: &str, page: attn_client::TileKey, t: &Tokens) -> El {
+    header_button(
+        format!("{key}.reload"),
+        "Reload browser".into(),
+        attn_ui::glyph::RELOAD,
+        Place::Tile,
+        t,
+        move |_, _| crate::browser::reload(&page),
+    )
 }
 
 /// The header's button that pops the tile out into its own window, or brings it back.

@@ -38,6 +38,12 @@ impl Notice {
         Notice::new(key, said, Tone::Neutral)
     }
 
+    /// News the app brings itself, such as what a release changed: in the brand's tone, and
+    /// announced politely.
+    pub fn accent(key: impl Into<String>, said: impl Into<Said>) -> Notice {
+        Notice::new(key, said, Tone::Accent)
+    }
+
     fn new(key: impl Into<String>, said: impl Into<Said>, tone: Tone) -> Notice {
         Notice {
             key: key.into(),

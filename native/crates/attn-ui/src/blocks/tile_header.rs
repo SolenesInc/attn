@@ -1,4 +1,5 @@
 use rune::{Color, El, col, row};
+use rune_kit::TextInput;
 
 use crate::Tokens;
 use crate::system::{
@@ -114,6 +115,32 @@ impl TileHeader {
     pub fn title_control(mut self, control: impl Into<El>) -> Self {
         self.title = Some(control.into().grow(1.0).min_w(0.0));
         self
+    }
+
+    /// A field in the title's place that the title is edited in, such as a browser's address:
+    /// compact, its value in `Mono`, taking the title's room.
+    pub fn title_field(self, input: TextInput, t: &Tokens) -> Self {
+        let size = Size::Compact;
+        let field = door::line(input.plain(), Type::Mono)
+            .width(None)
+            .height(door::line_height(Type::Mono))
+            .build(crate::system::kit(t))
+            .grow(1.0);
+        let frame = row()
+            .w_full()
+            .h(size.height())
+            .items_center()
+            .fill(t.bg_input)
+            .border(1.0, t.border)
+            .child(field);
+        let frame = door::corner(
+            door::sides(frame, size.inset(), size.inset()),
+            Radius::Control,
+        );
+        self.title_control(focus::ring_within(
+            frame.hover(crate::system::layers::hover_layer(t.bg_input, t)),
+            t,
+        ))
     }
 
     /// Controls shown over the title's end while the pointer is on the header, on `ground` so

@@ -52,7 +52,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         settings(t),
     );
     if let Some(banner) = crate::whats_new::banner(state, t) {
-        board = board.top(Block::custom("home.intro-banner.slot", banner));
+        board = board.top(banner);
     }
     if let Some(running) = &home.all_settled {
         board = board.top(Block::custom(

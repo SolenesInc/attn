@@ -513,6 +513,32 @@ fn header_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
             .into(),
         ])
         .build();
+    let address = rune::TextEdit::new(if s.long {
+        "https://github.com/SolenesInc/attn/pull/4127/files#diff-native-crates-attn-app-src-desktop-view"
+    } else {
+        "localhost:4317"
+    });
+    let browser = TileHeader::tile("story.browser")
+        .title_field(
+            rune_kit::TextInput::new(&address)
+                .key("story.browser.address")
+                .label("Browser address"),
+            &t,
+        )
+        .actions(vec![
+            icon_button(
+                "story.browser.reload",
+                "Reload browser",
+                crate::glyph::RELOAD,
+                IconSize::Regular,
+            )
+            .size(Size::Compact)
+            .ink(t.text_muted)
+            .on_press_tx(pressed)
+            .build(&t)
+            .into(),
+        ])
+        .build();
     let tile = |key: &str, header: El| {
         col()
             .key(key)
@@ -526,7 +552,8 @@ fn header_story(s: &Tiles, cx: &mut Cx<Tiles>) -> El {
         &t,
         door::gap(col(), Space::S24)
             .child(tile("story.agent", agent))
-            .child(tile("story.doc", doc)),
+            .child(tile("story.doc", doc))
+            .child(tile("story.browser", browser)),
     )
 }
 

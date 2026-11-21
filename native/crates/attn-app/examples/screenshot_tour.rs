@@ -1164,6 +1164,20 @@ fn tile_headers(dark: bool, hovered: bool) {
     snap(&mut world, name, dark);
 }
 
+/// Terminal `a` beside a browser tile: its address in the header's title, Reload, and the page
+/// area, which says where no engine runs pages.
+fn browser_tile(dark: bool) {
+    let tile = json!({
+        "type": "tile",
+        "tile_id": "w",
+        "tile_kind": "browser",
+        "tile_params": "https://docs.example.com/attn/guide/desktops-and-tiles",
+    });
+    let mut world = start(scripted().state(initial(dark, tile, Vec::new())));
+    write(&mut world, BOXES);
+    snap(&mut world, "browser-tile", dark);
+}
+
 /// Agent `a` active beside a document tile, marked in each tile focus style.
 fn tile_focus(dark: bool) {
     for style in FocusStyle::ALL {
@@ -7720,6 +7734,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
     for dark in [true, false] {
         scene("sidebar_and_terminal", || sidebar_and_terminal(dark));
         scene("tile_headers", || tile_headers(dark, false));
+        scene("browser_tile", || browser_tile(dark));
         scene("tile_headers", || tile_headers(dark, true));
         scene("tile_focus", || tile_focus(dark));
         scene("shelf", || shelf(dark, false));

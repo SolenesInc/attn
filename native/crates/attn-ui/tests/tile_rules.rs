@@ -267,12 +267,18 @@ fn a_headlines_parts_centre_on_one_line_and_never_overlap_down_to_the_narrowest_
 }
 
 #[test]
-fn a_documents_header_buttons_stand_whole_with_room_for_their_focus_ring() {
+fn a_document_or_browser_headers_controls_stand_whole_with_room_for_their_focus_ring() {
     let reach = attn_ui::system::RING_REACH;
     for variant in HEADERS {
         let rt = story("Tiles/Header", variant);
-        let header = element(&rt, "story.doc.header");
-        for key in ["story.doc.focus", "story.doc.popout", "story.doc.close"] {
+        for (header, key) in [
+            ("story.doc.header", "story.doc.focus"),
+            ("story.doc.header", "story.doc.popout"),
+            ("story.doc.header", "story.doc.close"),
+            ("story.browser.header", "story.browser.address"),
+            ("story.browser.header", "story.browser.reload"),
+        ] {
+            let header = element(&rt, header);
             let button = element(&rt, key);
             assert!(
                 top(&button) - reach >= top(&header) - 0.5

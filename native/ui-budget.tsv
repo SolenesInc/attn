@@ -5,7 +5,7 @@ budget	attn-ui/src	0
 budget	attn-app/src/annotations	0
 budget	attn-app/src/asks	0
 budget	attn-app/src/automations	0
-budget	attn-app/src/browser	7
+budget	attn-app/src/browser	0
 budget	attn-app/src/chief	0
 budget	attn-app/src/crew	0
 budget	attn-app/src/desktop	0
@@ -25,7 +25,7 @@ budget	attn-app/src/review	0
 budget	attn-app/src/settings	0
 budget	attn-app/src/sidebar	0
 budget	attn-app/src/terminal	0
-budget	attn-app/src/whats_new	7
+budget	attn-app/src/whats_new	0
 allow	native/crates/attn-ui/src/colors/mod.rs
 allow	native/crates/attn-ui/src/system/door.rs
 allow	native/crates/attn-app/src/terminal/input_trace.rs
