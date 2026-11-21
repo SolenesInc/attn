@@ -125,7 +125,11 @@ func (n *serverView) begin(*terminal) error {
 		}
 	}
 	if name := n.args.value("--mcp-server"); name != "" {
-		start["mcpServers"] = []ServerMCPServer{{Name: name, Description: n.args.value("--mcp-description")}}
+		description := n.args.value("--mcp-description")
+		if n.flavor.sigmaWire {
+			name, description, _ = strings.Cut(name, "=")
+		}
+		start["mcpServers"] = []ServerMCPServer{{Name: name, Description: description}}
 	}
 	return n.call("conversation/start", start)
 }

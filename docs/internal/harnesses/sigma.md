@@ -3,10 +3,12 @@
 How Sigma behaves where attn meets it. The rules for adding a claim are in
 [Harness behavior](../harnesses.md).
 
-Sigma was named Nisse until 2026-11-14. Read in the source at SolenesInc/sigma
-6fb87ec, the entries on authors, instructions and skills at 72006f8, and the
-entries on steering, compaction, watching, entries, tools, forks and tasks at
-a903aa0, where a probe on 2026-11-20 checked forks, tasks and an idle watch.
+Sigma was named Nisse until 2026-11-14. Entries were read in the source at
+SolenesInc/sigma 6fb87ec, except the entries on authors, instructions and
+skills (72006f8); on steering, compaction, watching, entries, tools, forks and
+tasks (a903aa0, where a probe on 2026-11-20 checked forks, tasks and an idle
+watch); and on MCP servers (69daaf7). An entry that names its own commit or
+measurement uses that one.
 
 - One server per Sigma home holds every conversation. Clients reach the server
   over `SIGMA_HOME/sigma.sock`, and the home defaults to `~/.sigma`.
@@ -39,11 +41,26 @@ a903aa0, where a probe on 2026-11-20 checked forks, tasks and an idle watch.
   the run's next step or its end.
 - Every `bash` call, and Claude Code's process, runs with
   `SIGMA_ROOT_CONVERSATION` set to the id of the conversation people started.
+  Every MCP request carries the registered headers and
+  `Sigma-Root-Conversation` with the same root: the id the client chose, or
+  Sigma's internal number for a conversation started without one, such as by
+  `sigma exec` or `/fork` (measured on 69daaf7: a bare `sigma exec` sent `149`,
+  a fork `173`).
 - `conversation/start` takes `instructions`, kept with the conversation and
   not given to its subagents: OpenAI is told them after the `AGENTS.md` files,
   and Claude Code appends them to its own system prompt. They are fixed once the
   conversation starts, and `conversation/start` with an existing id changes
   nothing (413f38d).
+- A server's `instructions` reach the model by provider. On the Claude path
+  Sigma hands Claude Code each server as an in-process MCP server with the
+  instructions the server gave in `initialize` (`packages/claude/src/process.ts`),
+  and Claude Code puts them under `# MCP Server Instructions` in the messages.
+  On Sigma's own loop, the one OpenAI models take, they are only in
+  `describeNamespace()` (`packages/sigma/src/tools/mcp.ts`). attn appends its
+  intent map to the conversation's `instructions` (D22 of `s-ct56cj`), so on
+  the Claude path the model reads it twice: measured 2026-11-21 on 69daaf7
+  with claude-haiku-5-5, 1,337 bytes in the system prompt and again in the
+  messages.
 - Skills: an OpenAI model finds them in `.agents/skills` and `.claude/skills`
   of the project folders and in `skills` of the Sigma home
   (`packages/sigma/src/workspace.ts`). Claude Code finds its own in its
@@ -104,3 +121,26 @@ a903aa0, where a probe on 2026-11-20 checked forks, tasks and an idle watch.
 - `tasks/watch` shows only `claude.run` tasks, from pending to running to gone
   at the run's end. Sigma sleeps only for a retry's backoff or a deferred poll
   inside a run, so no task outlives a run (probe, `packages/harness/src/live.ts`).
+- MCP servers (D19 of `s-ct56cj`): a connected client registers a server with
+  `mcp/register {name, url, headers}`, a stream the server holds in memory for
+  as long as the client stays connected. `sigma --mcp-server <name>=<description>`
+  and `conversation/start`'s `mcpServers` name the servers a new conversation
+  uses (`packages/sigma/src/main.ts`). Sigma lists each server's tools when the
+  conversation starts and stores the listing in the conversation's `pi.agent`
+  document; subagents and forks inherit it and never list again. A server that
+  does not list then gives that conversation no tools for its whole life, with
+  a `sigma.mcp_unlisted` entry naming the reason (`packages/sigma/src/mcp.ts`).
+  The registered header values stay in memory: after attn's registration and
+  tool calls, no file in the Sigma home held attn's credential or `Bearer`
+  (measured on 69daaf7).
+- An HTTP 401 from an MCP server, or a session the server no longer knows,
+  reaches the conversation as pi-mcp's text, such as
+  `MCP server requires authentication`, followed since f6be0c3 by the first 500
+  characters of what the server answered, in the `sigma.mcp_unlisted` reason or
+  the call's error. For attn's refusal it reads `…: invalid token: no session
+  of sigma holds conversation <id>` (measured on f6be0c3; 69daaf7 dropped the
+  answer).
+- `SIGMA_MODEL_SCRIPT` names a JSON list of steps for the `script` provider,
+  read when the server starts; the model `script/script-code-mode` takes only
+  code mode, as ChatGPT's code-mode models do (`packages/models/src/script.ts`).
+  It drives Sigma's own loop, the path OpenAI models take, without an account.

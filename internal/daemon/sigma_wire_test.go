@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -282,5 +283,54 @@ func TestTheSettingsSayWhatSigmaTakesBesideTheOtherBuiltInHarnesses(t *testing.T
 		protocol.EventSessionContextWindowCapResult, func(r protocol.SessionContextWindowCapResultMessage) bool { return string(r.SessionID) == session })
 	if capped.Success {
 		t.Errorf("a Sigma session accepted a context window cap Sigma cannot apply: %+v", capped)
+	}
+}
+
+func TestASigmaSessionStartsWithAttnsToolsWhileAgentToolsAreOn(t *testing.T) {
+	for _, direct := range []bool{false, true} {
+		t.Run("direct="+strconv.FormatBool(direct), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Sigma)
+			app := w.App()
+			setSetting(t, app, "sigma_enabled", "true")
+			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
+			seed := plantForTools(t, w)
+
+			off := w.Launched(w.Spawn(app, fakeagent.Sigma, w.Path("shop")))
+			server := w.AppServer(fakeagent.Sigma)
+			todays := server.Started(off.ConversationID)
+			if slices.Contains(off.Argv, "--mcp-server") || len(todays.MCPServers) != 0 {
+				t.Fatalf("with agent_tools_enabled off Sigma ran %q and started with MCP servers %+v, want none", off.Argv, todays.MCPServers)
+			}
+
+			setSetting(t, app, "agent_tools_enabled", "true")
+			server.AwaitMCPRegistration("attn", true)
+			session := w.Spawn(app, fakeagent.Sigma, w.Path("shop"))
+			on := w.Launched(session)
+			started := server.Started(on.ConversationID)
+			if len(started.MCPServers) != 1 || started.MCPServers[0].Name != "attn" || started.MCPServers[0].Description == "" {
+				t.Fatalf("Sigma started the conversation with MCP servers %+v, want attn with its description", started.MCPServers)
+			}
+			initialized, err := agentToolsCaller{w: w, bearer: agentCredential(t, w, "s.sigma"), headers: map[string]string{"Sigma-Root-Conversation": on.ConversationID}}.connect(t, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			intentMap := initialized.InitializeResult().Instructions
+			if want := todays.Instructions + "\n\n" + strings.TrimSpace(intentMap); intentMap == "" || started.Instructions != want {
+				t.Errorf("Sigma started the conversation with instructions %q, want today's launch guidance followed by attn's intent map %q", started.Instructions, intentMap)
+			}
+			for _, entry := range append(slices.Clone(on.Argv), on.Env...) {
+				if strings.Contains(entry, "s.sigma.") || strings.Contains(entry, "ATTN_AGENT_CREDENTIAL") {
+					t.Errorf("Sigma's client was launched with a credential in %q", entry)
+				}
+			}
+
+			called := server.CallTool(on.ConversationID, "seed_note", map[string]any{"seed": seed, "text": "From the Sigma session."})
+			if called.Refused != "" || called.IsError {
+				t.Fatalf("the Sigma conversation calling seed_note: refused %q, %s", called.Refused, called.Text())
+			}
+			if author, _ := newestNoteAuthor(t, w, seed); author != session {
+				t.Errorf("the Sigma conversation's note is by %s, want its session %s", author, session)
+			}
+		})
 	}
 }

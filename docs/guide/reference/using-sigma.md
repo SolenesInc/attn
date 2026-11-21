@@ -156,3 +156,21 @@ Every command that a Sigma agent runs, including in a subagent, has
 `SIGMA_ROOT_CONVERSATION` set. Attn finds the session that holds that
 conversation and runs the `attn` command as that session, as it does for other
 harnesses.
+
+With **Agent tools** on in **Settings → Experimental** (`agent_tools_enabled`),
+a Sigma agent also gets Attn's tools, such as `seed_note`, as the MCP server
+`attn`. Attn registers the server with the Sigma server each time it connects.
+It starts each new conversation with `--mcp-server attn=<description>` and
+appends the intent map, the text that says when to reach for each tool, to the
+conversation's instructions. Sigma sends the root conversation's id with every
+tool call, so a call acts as the session that holds the conversation, and a
+subagent's call as its root's. Attn gives the credential to the Sigma server
+alone: the `sigma` client, its arguments and Sigma's database never hold it.
+
+Sigma lists a conversation's tools when the conversation starts and keeps the
+list. A conversation started with the setting off therefore has no Attn tools
+for its whole life, and turning the setting on affects new conversations only.
+Turning it off ends the registration, so the calls of a conversation that has
+the tools fail until you turn it on again.
+Attn refuses the calls of a conversation no Attn session holds, such as one you
+start with your own `sigma --mcp-server attn=…`.

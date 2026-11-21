@@ -148,10 +148,10 @@ func (l *serverLink) agentTools() *agentdriver.AgentTools {
 	return &agentdriver.AgentTools{URL: d.agentToolsURL(), Credential: d.agentKey.sign(agentCredential{kind: credentialServer, name: l.b.agent})}
 }
 
-func (l *serverLink) clientAgentTools() *pluginAgentTools {
+func (l *serverLink) clientAgentTools() *agentdriver.SharedAgentTools {
 	if p, err := l.connection(); err != nil || l.agentTools() == nil || !p.agentToolsRegistered() {
 		return nil
 	}
 	catalog := agentToolsCatalog()
-	return &pluginAgentTools{Name: catalog.Name, Description: catalog.Description}
+	return &agentdriver.SharedAgentTools{Name: catalog.Name, Description: catalog.Description, Instructions: catalog.Instructions}
 }

@@ -17,6 +17,10 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		return fmt.Errorf("unknown agent %q", opts.Agent)
 	}
 	launch, awareness, initialPrompt := intent.Context, intent.AwarenessDirs, intent.InitialPrompt
+	tools, shared := d.agentTools(terminal), (*agentdriver.SharedAgentTools)(nil)
+	if l, server := d.linkNamed(intent.Link).(*serverLink); server {
+		tools, shared = nil, l.clientAgentTools()
+	}
 	claudeMod := d.claudeModForLaunch(terminal, driver.Name())
 	if !intent.Direct {
 		prepareLauncherLaunch(driver, opts, initialPrompt)
@@ -26,7 +30,8 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		if launch.Crew != "" {
 			opts.AgentEnv = append(opts.AgentEnv, "ATTN_CREW_MEMBER=1")
 		}
-		opts.AgentEnv = append(opts.AgentEnv, d.agentTools(terminal).LauncherEnv()...)
+		opts.AgentEnv = append(opts.AgentEnv, tools.LauncherEnv()...)
+		opts.AgentEnv = append(opts.AgentEnv, shared.LauncherEnv()...)
 		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_VENT_ENABLED=%t", launch.Vent), fmt.Sprintf("ATTN_TOOL_VENTS_ENABLED=%t", launch.ToolVents), fmt.Sprintf("ATTN_CODE_REVIEW_ENABLED=%t", launch.CodeReview))
 		return nil
 	}
@@ -49,7 +54,8 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		SelfReportPullRequests: launch.SelfReportPullRequests,
 		CodexRemote:            opts.CodexRemote,
 		ClaudeMod:              claudeMod,
-		AgentTools:             d.agentTools(terminal),
+		AgentTools:             tools,
+		SharedAgentTools:       shared,
 	}
 	if unattended := opts.UnattendedLaunch; !unattended.IsZero() {
 		spawn.AutoApprove = true

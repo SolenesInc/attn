@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/client"
@@ -133,22 +134,23 @@ func runAgentDirectly(requestedAgent string) {
 
 	crewMember := consumeOneShotBoolEnv("ATTN_CREW_MEMBER")
 	opts := agentdriver.SpawnOpts{
-		TerminalID:      terminalID,
-		CWD:             cwd,
-		Label:           parsed.label,
-		InitialPrompt:   initialPrompt,
-		ResumeSessionID: parsed.resumeID,
-		ResumePicker:    parsed.resumePicker,
-		YoloMode:        parsed.yoloMode,
-		Executable:      driver.ResolveExecutable(""),
-		SocketPath:      config.SocketPath(),
-		WrapperPath:     resolveWrapperPath(),
-		CodexRemote:     consumeOneShotEnv("ATTN_CODEX_REMOTE"),
-		Vent:            consumeOneShotEnv("ATTN_VENT_ENABLED") == "true",
-		ToolVents:       consumeOneShotEnv("ATTN_TOOL_VENTS_ENABLED") == "true",
-		CodeReview:      consumeOneShotEnv("ATTN_CODE_REVIEW_ENABLED") == "true",
-		ClaudeMod:       agentdriver.ClaudeMod{Dir: consumeOneShotEnv(agentdriver.ClaudeModDirEnv), Socket: consumeOneShotEnv(agentdriver.ClaudeModSocketEnv)},
-		AgentTools:      consumeAgentTools(),
+		TerminalID:       terminalID,
+		CWD:              cwd,
+		Label:            parsed.label,
+		InitialPrompt:    initialPrompt,
+		ResumeSessionID:  parsed.resumeID,
+		ResumePicker:     parsed.resumePicker,
+		YoloMode:         parsed.yoloMode,
+		Executable:       driver.ResolveExecutable(""),
+		SocketPath:       config.SocketPath(),
+		WrapperPath:      resolveWrapperPath(),
+		CodexRemote:      consumeOneShotEnv("ATTN_CODEX_REMOTE"),
+		Vent:             consumeOneShotEnv("ATTN_VENT_ENABLED") == "true",
+		ToolVents:        consumeOneShotEnv("ATTN_TOOL_VENTS_ENABLED") == "true",
+		CodeReview:       consumeOneShotEnv("ATTN_CODE_REVIEW_ENABLED") == "true",
+		ClaudeMod:        agentdriver.ClaudeMod{Dir: consumeOneShotEnv(agentdriver.ClaudeModDirEnv), Socket: consumeOneShotEnv(agentdriver.ClaudeModSocketEnv)},
+		AgentTools:       consumeAgentTools(),
+		SharedAgentTools: consumeSharedAgentTools(),
 	}
 
 	if preparer, ok := driver.(agentdriver.LaunchPreparer); ok {
@@ -238,6 +240,19 @@ func consumeAgentTools() *agentdriver.AgentTools {
 		return nil
 	}
 	return &agentdriver.AgentTools{URL: url, Credential: credential}
+}
+
+func consumeSharedAgentTools() *agentdriver.SharedAgentTools {
+	raw := consumeOneShotEnv(agentdriver.SharedAgentToolsEnv)
+	if raw == "" {
+		return nil
+	}
+	var tools agentdriver.SharedAgentTools
+	if err := json.Unmarshal([]byte(raw), &tools); err != nil {
+		fmt.Fprintf(os.Stderr, "attn: %s: %v\n", agentdriver.SharedAgentToolsEnv, err)
+		exit(1)
+	}
+	return &tools
 }
 
 func consumeOneShotBoolEnv(key string) bool {

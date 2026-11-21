@@ -112,7 +112,9 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 				return nil, err
 			}
 			if reg.Capabilities["agent_tools"] {
-				p.Params.AgentTools = l.clientAgentTools()
+				if tools := l.clientAgentTools(); tools != nil {
+					p.Params.AgentTools = &pluginAgentTools{Name: tools.Name, Description: tools.Description}
+				}
 			}
 		} else {
 			if reg.Capabilities["agent_tools"] {

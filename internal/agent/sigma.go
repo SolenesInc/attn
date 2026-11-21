@@ -77,7 +77,12 @@ func (s *Sigma) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	if effort := strings.TrimSpace(opts.Effort); effort != "" {
 		args = append(args, "--effort", effort)
 	}
-	if guidance := opts.launchGuidance(); guidance != "" {
+	guidance := opts.launchGuidance()
+	if tools := opts.SharedAgentTools; tools != nil {
+		args = append(args, "--mcp-server", tools.Name+"="+tools.Description)
+		guidance = strings.TrimSpace(guidance + "\n\n" + tools.Instructions)
+	}
+	if guidance != "" {
 		args = append(args, "--instructions", guidance)
 	}
 	if strings.TrimSpace(opts.InitialPrompt) != "" {

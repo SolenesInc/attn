@@ -18,7 +18,8 @@ harness.
   headless runs.
 - [Codex app-server and `--remote`](harnesses/codex-app-server.md): the shared
   app-server that shared Codex runs on, and attn tools over MCP there.
-- [Sigma](harnesses/sigma.md): the Sigma server, named Nisse until 2026-11-14.
+- [Sigma](harnesses/sigma.md): the Sigma server, named Nisse until 2026-11-14,
+  and attn tools over MCP there.
 
 This file keeps the facts that hold across harnesses.
 
@@ -35,7 +36,8 @@ conversation instead: a hook by the `session_id` on its stdin, a command by
 its shell tools and gives it its terminal's credential for the tools, so its
 commands and tool calls act as the session of the terminal that shows it, and
 its hooks resolve to no session. Sigma runs commands in its server, and names
-the conversation people started by `SIGMA_ROOT_CONVERSATION`. Native harness
+the conversation people started by `SIGMA_ROOT_CONVERSATION`, and an attn tool
+call by the `Sigma-Root-Conversation` header. Native harness
 conversation ids remain separate text values.
 
 A session is attn's record of one conversation in one profile. A terminal

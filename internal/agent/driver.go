@@ -215,6 +215,8 @@ type SpawnOpts struct {
 	ClaudeMod ClaudeMod
 
 	AgentTools *AgentTools
+
+	SharedAgentTools *SharedAgentTools
 }
 
 type AgentTools struct {
@@ -222,9 +224,16 @@ type AgentTools struct {
 	Credential string
 }
 
+type SharedAgentTools struct {
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	Instructions string `json:"instructions"`
+}
+
 const (
-	AgentToolsURLEnv   = "ATTN_AGENT_TOOLS_URL"
-	AgentCredentialEnv = "ATTN_AGENT_CREDENTIAL"
+	AgentToolsURLEnv    = "ATTN_AGENT_TOOLS_URL"
+	AgentCredentialEnv  = "ATTN_AGENT_CREDENTIAL"
+	SharedAgentToolsEnv = "ATTN_SHARED_AGENT_TOOLS"
 )
 
 func (t *AgentTools) LauncherEnv() []string {
@@ -232,6 +241,17 @@ func (t *AgentTools) LauncherEnv() []string {
 		return nil
 	}
 	return []string{AgentToolsURLEnv + "=" + t.URL, AgentCredentialEnv + "=" + t.Credential}
+}
+
+func (t *SharedAgentTools) LauncherEnv() []string {
+	if t == nil {
+		return nil
+	}
+	raw, err := json.Marshal(t)
+	if err != nil {
+		panic(err)
+	}
+	return []string{SharedAgentToolsEnv + "=" + string(raw)}
 }
 
 const (
