@@ -172,8 +172,13 @@ One question of an ask is active, marked by a bar beside it, and only its
 choices show their numbers. The keys 1–9 pick the choice with that number, and
 the number after the last choice puts the cursor in **Other**. When you pick
 the answer of a one-choice question, the next question with no pick becomes
-active. Tab and Shift+Tab move the active question through the questions and
-your note, from inside an answer field too; past the note, Tab goes on through
+active. The Up and Down arrows move through the active question's controls in
+the order they show: its choices, **Add a condition** or its field, and
+**Other**. In a file question and in the note they move through each file's
+remove button and **Attach file**. Space picks the choice you are on. In a text field the arrows
+move the cursor. Tab and Shift+Tab move the active question through the
+questions and your note, from inside an answer field too; from an open
+condition field, Tab visits **Other** first. Past the note, Tab goes on through
 the sheet's buttons. A click in a question makes it active. To quote part of an
 ask in your note, select the text and press `q`, or click **Quote** above the
 selection. The note gets the passage as `> ` lines.

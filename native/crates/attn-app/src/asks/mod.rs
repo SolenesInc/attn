@@ -169,28 +169,9 @@ fn chosen(draft: Option<&Draft>, question: &AskQuestion) -> bool {
 
 /// The stop whose control is keyed `focused`.
 fn stop_of(state: &State, ask: &Ask, focused: &str) -> Option<Stop> {
-    if focused == view::NOTE {
-        return Some(Stop::Note);
-    }
-    let draft = state.window.asks.drafts.get(&ask.id);
-    if let Some(file) = draft
+    stops(ask)
         .into_iter()
-        .flat_map(|d| &d.files)
-        .find(|f| focused == view::remove_file_key(&f.id))
-    {
-        return Some(file.stop.clone());
-    }
-    questions(ask)
-        .find(|q| {
-            focused == view::text_key(&q.key)
-                || focused == view::drop_key(&q.key)
-                || focused == view::suggestion_key(&q.key)
-                || focused == view::condition_key(&q.key)
-                || focused == view::add_condition_key(&q.key)
-                || focused == view::other_key(&q.key)
-                || (0..q.choices.len()).any(|i| focused == view::choice_key(&q.key, i))
-        })
-        .map(|q| Stop::Question(q.key.clone()))
+        .find(|stop| controls(state, ask, stop).iter().any(|c| c == focused))
 }
 
 /// The control a stop puts the keyboard in: a written question's field, a choice question's
@@ -226,49 +207,71 @@ fn input_of(state: &State, ask: &Ask, stop: &Stop) -> String {
     }
 }
 
-/// The controls ⇥ visits in a stop, in order: its input, then a choice question's condition
-/// once it has a pick, or a written question's Use the suggestion while its field is empty.
+/// Every control of a stop, in the order the sheet shows them, which ↓ and ↑ walk: a choice
+/// question's choices, its condition once it has a pick, and Other; a written question's field
+/// and Use the suggestion while the field is empty; a file question's files' Remove and Attach
+/// file; the note, its files' Remove and Attach file.
 fn controls(state: &State, ask: &Ask, stop: &Stop) -> Vec<String> {
-    let mut controls = vec![input_of(state, ask, stop)];
     let draft = state.window.asks.drafts.get(&ask.id);
     let removes = draft
         .into_iter()
         .flat_map(|d| d.files_on(stop))
         .map(|f| view::remove_file_key(&f.id));
     let Stop::Question(key) = stop else {
-        controls.extend(removes);
-        controls.push(view::ATTACH.to_owned());
-        return controls;
+        return std::iter::once(view::NOTE.to_owned())
+            .chain(removes)
+            .chain([view::ATTACH.to_owned()])
+            .collect();
     };
-    controls.extend(removes);
-    let answer = state
-        .window
-        .asks
-        .drafts
-        .get(&ask.id)
-        .and_then(|d| d.answers.get(key));
-    if answer.is_some_and(|a| !a.picked.is_empty()) {
-        controls.push(match answer.and_then(|a| a.condition.as_ref()) {
+    let Some(question) = questions(ask).find(|q| &q.key == key) else {
+        return vec![view::NOTE.to_owned()];
+    };
+    let answer = draft.and_then(|d| d.answers.get(key));
+    match Kind::of(question) {
+        Kind::Text => {
+            let suggested = question.recommended.as_ref().is_some_and(|r| !r.is_empty());
+            let written = answer.is_some_and(|a| !a.text.text.trim().is_empty());
+            return std::iter::once(view::text_key(key))
+                .chain((suggested && !written).then(|| view::suggestion_key(key)))
+                .collect();
+        }
+        Kind::File => return removes.chain([view::drop_key(key)]).collect(),
+        Kind::Unknown => return vec![input_of(state, ask, stop)],
+        Kind::One | Kind::Any => {}
+    }
+    let condition = answer
+        .filter(|a| !a.picked.is_empty())
+        .map(|a| match a.condition {
             Some(_) => view::condition_key(key),
             None => view::add_condition_key(key),
         });
-    }
-    let suggested = questions(ask).any(|q| {
-        &q.key == key
-            && Kind::of(q) == Kind::Text
-            && q.recommended.as_ref().is_some_and(|r| !r.is_empty())
-    });
-    let written = state
-        .window
-        .asks
-        .drafts
-        .get(&ask.id)
-        .and_then(|d| d.answers.get(key))
-        .is_some_and(|a| !a.text.text.trim().is_empty());
-    if suggested && !written {
-        controls.push(view::suggestion_key(key));
-    }
-    controls
+    (0..question.choices.len())
+        .map(|i| view::choice_key(key, i))
+        .chain(condition)
+        .chain([view::other_key(key)])
+        .collect()
+}
+
+/// The controls ⇥ visits in a stop: its input, then the controls after a choice question's
+/// choices. Other is left to ↓ and the number keys, but for while the condition's field stands
+/// before it, where ↓ stays in the field.
+fn tab_controls(state: &State, ask: &Ask, stop: &Stop) -> Vec<String> {
+    let input = input_of(state, ask, stop);
+    let all = controls(state, ask, stop);
+    let Stop::Question(key) = stop else {
+        return all;
+    };
+    let other = view::other_key(key);
+    let past_condition_field = all.contains(&view::condition_key(key));
+    let choices = questions(ask)
+        .find(|q| &q.key == key)
+        .map_or(0, |q| q.choices.len());
+    let after_choices = all
+        .into_iter()
+        .skip(choices)
+        .filter(|c| *c != input && (*c != other || past_condition_field))
+        .collect::<Vec<_>>();
+    std::iter::once(input).chain(after_choices).collect()
 }
 
 /// Makes `stop` of the ask shown active and puts the keyboard in its control.
@@ -310,7 +313,7 @@ pub(crate) fn tab(state: &mut State, by: isize, tx: &mut Tx) -> bool {
         },
         None => active(state, &ask),
     };
-    let inside = controls(state, &ask, &here);
+    let inside = tab_controls(state, &ask, &here);
     let within = focused
         .and_then(|f| inside.iter().position(|c| *c == f))
         .and_then(|at| step_in(&inside, at, by));
@@ -323,7 +326,7 @@ pub(crate) fn tab(state: &mut State, by: isize, tx: &mut Tx) -> bool {
     let Some(next) = step_in(&stops, at as usize, by) else {
         return false;
     };
-    let mut entered = controls(state, &ask, &next);
+    let mut entered = tab_controls(state, &ask, &next);
     let control = if by > 0 {
         entered.swap_remove(0)
     } else {
@@ -342,6 +345,26 @@ fn step_in<T: Clone>(items: &[T], at: usize, by: isize) -> Option<T> {
         .ok()
         .and_then(|to| items.get(to))
         .cloned()
+}
+
+/// ↓ and ↑: moves the keyboard `by` one through the controls of the stop it is in, stopping at
+/// either end. A pick takes Space, as in a group of radio buttons or checkboxes.
+pub(crate) fn arrow(state: &mut State, by: isize, tx: &mut Tx) -> bool {
+    let Some(ask) = shown_open(state) else {
+        return false;
+    };
+    let Some(focused) = tx.focused().map(str::to_owned) else {
+        return false;
+    };
+    let Some(stop) = stop_of(state, &ask, &focused) else {
+        return false;
+    };
+    let inside = controls(state, &ask, &stop);
+    let at = inside.iter().position(|c| *c == focused).unwrap_or(0);
+    if let Some(control) = step_in(&inside, at, by) {
+        focus_in(state, &ask, stop, control, tx);
+    }
+    true
 }
 
 /// A number key `n`: picks choice `n` of the active question; the number after its last choice

@@ -1337,6 +1337,7 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
     let picks_said: Vec<&str> = picks.iter().flatten().map(String::as_str).collect();
     if !picks_said.is_empty() {
         hints.push((&picks_said, "pick"));
+        hints.push((&["↑", "↓", "space"], "move · pick"));
     }
     if ask.reply.is_none() && super::questions(ask).count() > 1 {
         hints.push((&["⇥"], "next question"));
@@ -1526,7 +1527,7 @@ fn toggle_replied(state: &mut State, tx: &mut Tx) {
 }
 
 /// The sheet's keys while it or a control in it holds focus: ⌘↩ sends from anywhere in it;
-/// the letters act only outside a text field.
+/// the arrows and the letters act only outside a text field.
 fn sheet_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let m = ev.mods;
     if ev.key == Key::Enter && (m.cmd || m.ctrl) {
@@ -1542,6 +1543,11 @@ fn sheet_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
     if tx.in_text_field() || m.cmd || m.ctrl || m.alt {
         return false;
+    }
+    match ev.key {
+        Key::Down if !m.shift => return super::arrow(state, 1, tx),
+        Key::Up if !m.shift => return super::arrow(state, -1, tx),
+        _ => {}
     }
     let Key::Text(typed) = &ev.key else {
         return false;

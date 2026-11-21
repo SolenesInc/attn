@@ -377,6 +377,66 @@ fn a_file_question_takes_what_is_pasted_or_dropped_while_it_is_active_and_sends_
 }
 
 #[test]
+fn the_arrows_walk_a_file_questions_files_and_its_attach_file() {
+    for full_keyboard_access in [false, true] {
+        let screenshot = ask(
+            "a-shot",
+            "web",
+            "Banner",
+            10,
+            vec![
+                question("q1", "one", "Ship the banner?", &["Yes", "No"]),
+                question("q2", "file", "If it looks wrong, attach a screenshot", &[]),
+            ],
+        );
+        let mut world = start(vec![screenshot], vec![api_working(), web_waiting()]);
+        world.gesture(|app| app.runtime.set_full_keyboard_access(full_keyboard_access));
+        let held = Held::default();
+        let h = held.clone();
+        world.daemon.on("attachment_put", move |r| hold(&h, r));
+        let files: Vec<_> = ["console.txt", "notes.txt"]
+            .iter()
+            .map(|name| {
+                let path = world.data_dir().with_file_name(name);
+                std::fs::write(&path, b"looked wrong\n").unwrap();
+                path
+            })
+            .collect();
+        open_sheet(&mut world);
+        world.gesture(|app| app.click(Target::key("asks.q.q1.choice.0")));
+        world.gesture(|app| app.press("tab"));
+        let zone = middle_of(&mut world, "asks.q.q2.files");
+        world.gesture(|app| app.runtime.drop_files(files.clone(), Some(zone)));
+        world.settle();
+        let removes: Vec<String> = tray_in(&world, "asks.q.q2.files")
+            .into_iter()
+            .map(|(id, _, _)| format!("asks.file.{id}.remove"))
+            .collect();
+        assert_eq!(removes.len(), 2);
+        let focused = |world: &World| world.screen().focused().and_then(|n| n.key);
+        assert_eq!(focused(&world).as_deref(), Some("asks.q.q2.drop"));
+
+        let mut walk = Vec::new();
+        for key in ["up", "up", "up", "down", "down", "down"] {
+            world.gesture(|app| app.press(key));
+            walk.push(focused(&world).unwrap_or_default());
+        }
+        assert_eq!(
+            walk,
+            [
+                removes[1].as_str(),
+                removes[0].as_str(),
+                removes[0].as_str(),
+                removes[1].as_str(),
+                "asks.q.q2.drop",
+                "asks.q.q2.drop",
+            ],
+            "case: full keyboard access {full_keyboard_access}"
+        );
+    }
+}
+
+#[test]
 fn a_question_of_a_kind_the_app_does_not_know_is_not_shown_as_a_choice_question() {
     let ranked = ask(
         "a-rank",
