@@ -402,12 +402,20 @@ func (d *Daemon) typeInput(ctx context.Context, terminal protocol.TerminalID, st
 	return nil
 }
 
-func (d *Daemon) awaitTypedCommandFinish(ctx context.Context, terminal protocol.TerminalID) error {
+func (d *Daemon) typedCommandOf(terminal protocol.TerminalID, shell protocol.TerminalText) (typedCommand, bool) {
 	stored, ok := d.typedCommands.Load(terminal)
 	if !ok {
-		return nil
+		return typedCommand{}, false
 	}
 	typed := stored.(typedCommand)
+	if !shell.IntegrationSeen {
+		d.typedCommands.CompareAndDelete(terminal, typed)
+		return typedCommand{}, false
+	}
+	return typed, true
+}
+
+func (d *Daemon) awaitTypedCommandFinish(ctx context.Context, terminal protocol.TerminalID, typed typedCommand) error {
 	finishBy := typed.typedAt.Add(typedCommandFinishTripwire)
 	finishing, cancel := context.WithDeadline(ctx, finishBy)
 	defer cancel()
@@ -423,11 +431,10 @@ func (d *Daemon) awaitTypedCommandFinish(ctx context.Context, terminal protocol.
 }
 
 func (d *Daemon) typedCommandUnfinished(terminal protocol.TerminalID, state protocol.TerminalText) bool {
-	stored, ok := d.typedCommands.Load(terminal)
+	typed, ok := d.typedCommandOf(terminal, state)
 	if !ok {
 		return false
 	}
-	typed := stored.(typedCommand)
 	if state.LastBlockID != typed.afterBlockID || time.Since(typed.typedAt) > typedCommandFinishTripwire {
 		d.typedCommands.CompareAndDelete(terminal, typed)
 		return false
@@ -454,17 +461,27 @@ func (d *Daemon) inputTerminal(ctx context.Context, caller *protocol.Session, in
 		if target.Agent != protocol.AgentShellValue {
 			return nil, nil, errors.New("run rule: run requires a shell; use send to type into an agent")
 		}
-		if in.waitForShell {
-			if err := d.awaitTypedCommandFinish(ctx, target.terminal); err != nil {
-				return nil, nil, err
-			}
+		readScreen := func(ctx context.Context) (protocol.TerminalText, error) {
+			return Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: protocol.TerminalReadModeScreen})
 		}
 		if ctx.Err() != nil {
 			return nil, nil, ctx.Err()
 		}
-		state, err = Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: protocol.TerminalReadModeScreen})
+		state, err = readScreen(ctx)
 		if err != nil {
 			return nil, nil, err
+		}
+		if typed, ok := d.typedCommandOf(target.terminal, state); ok && in.waitForShell {
+			if err := d.awaitTypedCommandFinish(ctx, target.terminal, typed); err != nil {
+				return nil, nil, err
+			}
+			if ctx.Err() != nil {
+				return nil, nil, ctx.Err()
+			}
+			state, err = readScreen(ctx)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 		if !state.IntegrationSeen && in.wait {
 			prompt, cancel := context.WithTimeout(ctx, terminalFirstPromptTripwire)
@@ -472,7 +489,7 @@ func (d *Daemon) inputTerminal(ctx context.Context, caller *protocol.Session, in
 			if err := d.waitForTerminalFirstPrompt(prompt, target.terminal); err != nil {
 				return nil, nil, err
 			}
-			state, err = Call[protocol.TerminalText](prompt, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: protocol.TerminalReadModeScreen})
+			state, err = readScreen(prompt)
 			if err != nil {
 				return nil, nil, err
 			}
