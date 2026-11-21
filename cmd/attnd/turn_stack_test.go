@@ -31,10 +31,10 @@ func TestAnAgentOpensAndSettlesItsOwnTurnFromItsSession(t *testing.T) {
 			t.Errorf("attn turn %s exited %d and printed %q, stderr %q; want %q", step.action, got.Code, got.Stdout, got.Stderr, step.want)
 		}
 	}
-	if got := s.Run(testworld.Invocation{Args: []string{"turn"}, Session: session}); got.Code != 2 || !strings.Contains(got.Stderr, "usage: attn turn open") {
+	if got := s.Run(testworld.Invocation{Args: []string{"turn"}, Session: session}); got.Code != 2 || !strings.Contains(got.Stderr, "usage: attn turn <command>") {
 		t.Errorf("attn turn without a command exited %d with stderr %q, want the usage", got.Code, got.Stderr)
 	}
-	if help := s.Attn("turn", "--help"); help.Code != 0 || !strings.Contains(help.Stdout, "attn turn settle") {
+	if help := s.Attn("turn", "--help"); help.Code != 0 || !strings.Contains(help.Stdout, "\n  settle [--json]\n") {
 		t.Errorf("attn turn --help exited %d and printed %q", help.Code, help.Stdout)
 	}
 }

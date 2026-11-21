@@ -53,7 +53,7 @@ var catalogFamilies = map[string]bool{
 	"state":            true,
 	"terminal":         false,
 	"ticket":           false,
-	"turn":             false,
+	"turn":             true,
 	"update":           false,
 	"vent":             false,
 	"version":          false,

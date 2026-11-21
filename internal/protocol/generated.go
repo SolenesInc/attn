@@ -408,17 +408,6 @@ type AgentTurnAction string
 const AgentTurnActionOpen AgentTurnAction = "open"
 const AgentTurnActionSettle AgentTurnAction = "settle"
 
-type AgentTurnMessage struct {
-	// Action corresponds to the JSON schema field "action".
-	Action AgentTurnAction `json:"action"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
-}
-
 type AgentTurnOutcome string
 
 const AgentTurnOutcomeNotOpen AgentTurnOutcome = "not_open"
@@ -9571,9 +9560,6 @@ type ReposUpdatedMessage struct {
 }
 
 type Response struct {
-	// AgentTurnResult corresponds to the JSON schema field "agent_turn_result".
-	AgentTurnResult *AgentTurnResult `json:"agent_turn_result,omitempty,omitzero"`
-
 	// AskListResult corresponds to the JSON schema field "ask_list_result".
 	AskListResult *AskListResult `json:"ask_list_result,omitempty,omitzero"`
 

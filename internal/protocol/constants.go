@@ -184,7 +184,6 @@ const (
 	CmdCallerSession                 = "caller_session"
 	CmdSetSessionPriority            = "set_session_priority"
 	CmdSettleTurn                    = "settle_turn"
-	CmdAgentTurn                     = "agent_turn"
 	CmdSnoozeTurn                    = "snooze_turn"
 	CmdWakeTurn                      = "wake_turn"
 	CmdStandbySession                = "standby_session"

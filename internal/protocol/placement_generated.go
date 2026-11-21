@@ -30,7 +30,6 @@ type Placed interface {
 var Placements = map[string][]Placement{
 	"agent_catalog":                    {Placement{LocatorMachine, "host"}},
 	"agent_launch_close":               {Placement{LocatorSession, "session_id"}},
-	"agent_turn":                       {Placement{LocatorHome, ""}},
 	"apply_monitor_view":               {Placement{LocatorHome, ""}},
 	"ask_close":                        {Placement{LocatorHome, ""}},
 	"ask_list":                         {Placement{LocatorHome, ""}},
@@ -279,18 +278,6 @@ func (m AgentLaunchCloseMessage) Placement() Placement {
 
 func (m AgentLaunchCloseMessage) Locate() string {
 	return string(m.SessionID)
-}
-
-func (AgentTurnMessage) CommandName() string {
-	return "agent_turn"
-}
-
-func (m AgentTurnMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AgentTurnMessage) Locate() string {
-	return ""
 }
 
 func (ApplyMonitorViewMessage) CommandName() string {

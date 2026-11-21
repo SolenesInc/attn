@@ -1,2 +1,33 @@
+# The turn family: an agent putting itself in the user's queue and taking itself
+# out. Both act on the calling session.
 groups:
-  - {name: turn, usage: "open|settle", summary: "put yourself in the user's queue, or take yourself out"}
+  - name: turn
+    usage: "open|settle"
+    summary: "put yourself in the user's queue, or take yourself out"
+    map:
+      rows:
+        - {need: "Bring the user to you after a notification run", tools: [turn_open]}
+    doc: |
+      Ask for the user when you cannot continue without them, or when they should read what you finished, and take it back again. Your turn shows in the user's queue and notifies their phone, if they use them. When a notification from attn woke you (a message, a seed update, a pull request update, an ask's answer), your stop does not notify their phone and may not put you in the queue, so the user may not read what you write. Open your turn when you need them or have finished work for them to read.
+
+      Both act on the session running the command. Use `ask` instead when you can keep working while the user decides.
+    sections:
+      - title: Opening and settling your turn
+        commands: [turn open, turn settle]
+
+commands:
+  - name: turn open
+    summary: ask for the user; the turn opens when you stop
+    runs: home
+    grant: own
+    doc: |
+      Asks for the user. When a notification from attn started your run, your stop may not put you in the user's queue, so open your turn before you stop to bring them something you need or finished. Run while you work, it opens your turn when you stop, so the user is not sent to you while you are still busy. A later notification does not settle a turn you opened; the user does, or `turn_settle`. Use `ask` instead when you can keep working while the user decides.
+    result: AgentTurnResult
+
+  - name: turn settle
+    summary: settle a turn you opened, or cancel one that was going to open
+    runs: home
+    grant: own
+    doc: |
+      Settles a turn you opened, or cancels one that was going to open when you stop. A turn that opened when you stopped on your own is the user's to settle.
+    result: AgentTurnResult

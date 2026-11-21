@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "4e8a570b499f";
+pub const PROTOCOL_VERSION: &str = "622a608c4e0e";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -285,22 +285,6 @@ pub struct AgentReloadResult {
     pub outcomes: Vec<AgentReloadOutcome>,
 }
 pub type AgentTurnAction = String;
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct AgentTurnMessage {
-    pub action: AgentTurnAction,
-    pub cmd: String,
-    pub session_id: SessionID,
-}
-
-impl AgentTurnMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "agent_turn".to_string(),
-            ..Self::default()
-        }
-    }
-}
 pub type AgentTurnOutcome = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentTurnResult {
@@ -8953,8 +8937,6 @@ impl ReposUpdatedMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_turn_result: Option<AgentTurnResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ask_list_result: Option<AskListResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ask_open_result: Option<Ask>,
@@ -14262,9 +14244,6 @@ impl WorktreesUpdatedMessage {
             ..Self::default()
         }
     }
-}
-impl ResponseField for AgentTurnResult {
-    const FIELD: &'static str = "agent_turn_result";
 }
 impl ResponseField for AskListResult {
     const FIELD: &'static str = "ask_list_result";

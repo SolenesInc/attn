@@ -30,6 +30,7 @@ pub mod terminal;
 pub mod ticket;
 pub mod top_level;
 mod top_level_generated;
+pub mod turn;
 pub mod worktree;
 
 use crate::client::{Reply, SendError};

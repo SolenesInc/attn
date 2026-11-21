@@ -866,14 +866,11 @@ func (c *Client) AskList(sessionID protocol.SessionID) (*protocol.AskListResult,
 }
 
 func (c *Client) AgentTurn(sessionID protocol.SessionID, action protocol.AgentTurnAction) (*protocol.AgentTurnResult, error) {
-	resp, err := c.send(protocol.AgentTurnMessage{Cmd: protocol.CmdAgentTurn, SessionID: sessionID, Action: action})
-	if err != nil {
+	var result protocol.AgentTurnResult
+	if err := c.RunCommand("turn "+string(action), sessionID, struct{}{}, &result); err != nil {
 		return nil, err
 	}
-	if resp.AgentTurnResult == nil {
-		return nil, errors.New("daemon returned no agent turn result")
-	}
-	return resp.AgentTurnResult, nil
+	return &result, nil
 }
 
 func (c *Client) RecordVent(sessionID protocol.SessionID, kind protocol.VentKind, text string) (*protocol.Vent, error) {

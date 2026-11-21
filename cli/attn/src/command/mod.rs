@@ -53,6 +53,13 @@ pub struct Command {
 }
 
 pub const CODE_USAGE: &str = "usage";
+const CODE_NO_SESSION: &str = "no_session";
+
+pub fn unresolved_session(message: &str) -> Stop {
+    let shown = message.split(';').next().unwrap_or(message);
+    eprintln!("attn: resolve current session: {shown}");
+    Stop(1)
+}
 
 pub trait Family {
     fn group(&self) -> &'static str;
@@ -81,6 +88,12 @@ pub trait Family {
     fn fail(&self, verb: &str, message: &str) -> Stop {
         eprintln!("{}: {message}", self.label(verb));
         Stop(1)
+    }
+    fn refused_line(&self, verb: &str, message: &str) -> String {
+        format!("{}: daemon error: {message}", self.label(verb))
+    }
+    fn no_session(&self, verb: &str, message: &str) -> Stop {
+        self.fail(verb, message)
     }
     fn answered_here(&self, _cmd: &Command) -> Option<&'static str> {
         None
@@ -695,14 +708,7 @@ pub fn call(
 ) -> Result<Reply, Stop> {
     match ask(run, family, cmd, parsed)? {
         Answer::Result(reply) => Ok(reply),
-        Answer::Refused(reply, refusal) => Err(refuse(
-            run,
-            family,
-            cmd,
-            &family.label(cmd.name),
-            &reply,
-            &refusal,
-        )),
+        Answer::Refused(reply, refusal) => Err(refuse(run, family, cmd, &reply, &refusal)),
     }
 }
 
@@ -723,20 +729,24 @@ fn refuse(
     run: &mut Run<'_>,
     family: &dyn Family,
     cmd: &Command,
-    label: &str,
     reply: &Reply,
     refusal: &CommandRefusal,
 ) -> Stop {
     let message = render_mentions(cmd, &refusal.message);
+    if refusal.code == CODE_NO_SESSION {
+        return family.no_session(cmd.name, &message);
+    }
     if refusal.code == CODE_USAGE || cmd.usage.contains(&refusal.code.as_str()) {
         return family.usage_error(cmd.name, &message);
     }
     if reply.present("error") {
         let error = SendError::refused(
-            format!("daemon error: {}", reply.optional_string("error")),
+            family.refused_line(cmd.name, &reply.optional_string("error")),
             reply.optional_string("refusal"),
         );
-        return run.fail_send(label, &error);
+        run.refusal.clone_from(&error.refusal);
+        eprintln!("{error}");
+        return Stop(1);
     }
     family.fail(cmd.name, &message)
 }

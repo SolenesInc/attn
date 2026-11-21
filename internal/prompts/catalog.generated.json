@@ -496,9 +496,25 @@
                 ]
               },
               {
-                "kind": "text",
-                "id": "session.queue",
-                "source": "content/session/queue.md"
+                "kind": "choose",
+                "condition": {
+                  "field": {
+                    "name": "agent_tools",
+                    "kind": "flag",
+                    "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "compose"
+                  },
+                  {
+                    "kind": "text",
+                    "id": "session.queue",
+                    "source": "content/session/queue.md"
+                  }
+                ]
               },
               {
                 "kind": "when",
@@ -7313,5 +7329,5 @@
       ]
     }
   ],
-  "definitions_hash": "5f12f5320e0798dc7541c27d474f3bdae99a905de6173583935ea635505a38db"
+  "definitions_hash": "5ee8d4ffb53874e62acaa87f1301002bb5450289160c0bac42c0ec27c5e29b4b"
 }

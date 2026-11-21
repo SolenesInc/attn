@@ -174,6 +174,8 @@ var specs = map[string]spec{
 	"session reopen":          {readOnly: false, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"unknown_action": "Pass one of the actions session_show lists for the session."}},
 	"skill":                   {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: true, fixes: map[string]string{"no_such_reference": "Use one of the names `skill` with `list` prints.", "list_and_reference": "Pass {reference} or {list}, not both."}},
 	"state explain":           {readOnly: true, anyone: true, sessionFlag: false, runsWithoutDaemon: false, fixes: map[string]string{"session_not_found": "Pass the full id of a session this daemon holds."}},
+	"turn open":               {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
+	"turn settle":             {readOnly: false, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
 }
 
 type ActivityArgs struct {
@@ -738,4 +740,10 @@ type SkillArgs struct {
 
 type StateExplainArgs struct {
 	ID string `json:"id,omitempty"`
+}
+
+type TurnOpenArgs struct {
+}
+
+type TurnSettleArgs struct {
 }

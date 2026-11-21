@@ -95,4 +95,6 @@ var CommandRuns = map[string]Locator{
 	"session reopen":          LocatorHome,
 	"skill":                   LocatorHere,
 	"state explain":           LocatorHome,
+	"turn open":               LocatorHome,
+	"turn settle":             LocatorHome,
 }

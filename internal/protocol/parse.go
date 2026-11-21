@@ -168,7 +168,6 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdQuery:                         decodeInto[QueryMessage],
 	CmdCallerSession:                 decodeInto[CallerSessionMessage],
 	CmdSetSessionPriority:            decodeInto[SetSessionPriorityMessage],
-	CmdAgentTurn:                     decodeInto[AgentTurnMessage],
 	CmdSettleTurn:                    decodeInto[SettleTurnMessage],
 	CmdSnoozeTurn:                    decodeInto[SnoozeTurnMessage],
 	CmdWakeTurn:                      decodeInto[WakeTurnMessage],

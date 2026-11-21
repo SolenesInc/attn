@@ -36,7 +36,6 @@ func topLevelCommands() []topLevelCommand {
 		{names: []string{"presence"}, run: runPresence,
 			help: func(w io.Writer) { fmt.Fprintln(w, "usage: attn presence [--session-id | --seed-ids]") }},
 		{names: []string{"ask"}, run: runAsk, banner: true},
-		{names: []string{"turn"}, run: runTurn, banner: true},
 		{names: []string{"vent"}, run: runVent, banner: true},
 		{names: []string{"handoff"}, run: func() { runHandoff(os.Args[2:]) }, banner: true,
 			help: writeHandoffHelp},

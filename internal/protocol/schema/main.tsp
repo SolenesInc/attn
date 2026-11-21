@@ -1701,17 +1701,10 @@ model SettleTurnMessage {
   session_id: SessionID;
 }
 
-// AgentTurnMessage is an agent opening or settling its own turn (`attn turn`).
-// Open asks for the user: called while the agent works, the turn opens when that
-// run stops; called while it is stopped, the turn opens now. Settle closes only a
-// turn the agent opened itself. With the queue flow off both do nothing.
-@extension("x-on", #{ home: true })
-model AgentTurnMessage {
-  cmd: "agent_turn";
-  session_id: SessionID;
-  action: AgentTurnAction;
-}
-
+// An agent opening or settling its own turn (`attn turn`). Open asks for the
+// user: called while the agent works, the turn opens when that run stops; called
+// while it is stopped, the turn opens now. Settle closes only a turn the agent
+// opened itself. With the queue flow off both do nothing.
 enum AgentTurnAction {
   open,
   settle,
@@ -7368,7 +7361,6 @@ model Response {
   sender_sessions?: SenderSession[];
   sender_model_call_result?: SenderModelCallResult;
   model_calls?: ModelCall[];
-  agent_turn_result?: AgentTurnResult;
   crew_list_result?: CrewListResult;
   crew_charter_get_result?: CrewCharterGetResult;
   crew_charter_set_result?: CrewCharterSetResult;
