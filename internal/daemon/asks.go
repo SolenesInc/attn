@@ -669,7 +669,7 @@ func (d *Daemon) readAsk(a store.Ask) (shownAsk, error) {
 	if err != nil {
 		return shownAsk{}, fmt.Errorf("ask %s opened at %q: %w", a.ID, a.CreatedAt, err)
 	}
-	parts, err := ask.Parse(a.Markdown, openedAt)
+	parts, err := ask.Read(a.Markdown, openedAt)
 	if err != nil {
 		return shownAsk{}, err
 	}

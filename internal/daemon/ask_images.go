@@ -178,7 +178,7 @@ func (d *Daemon) copyImagesOfAsksOpenedBeforeImagesTravelled() {
 		return
 	}
 	for _, stored := range asks {
-		parts, err := ask.Parse(stored.Markdown, time.Time{})
+		parts, err := ask.Read(stored.Markdown, time.Time{})
 		if err != nil {
 			continue
 		}

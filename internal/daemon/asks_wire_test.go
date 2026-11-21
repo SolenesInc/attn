@@ -288,6 +288,53 @@ func TestAnAnswerTypedIntoAWorkingAgentAfterARestartLeavesItsResultToTheUser(t *
 	})
 }
 
+func TestAnAskStoredBeforeDefaultsReadsItsDefaultLineAsContext(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "asks_enabled", "true")
+		asker := w.bubbleClaude(t, app, "shop")
+		const storedBeforeDefaults = ":::question\nWhich store should keep the cache?\nDefault: Postgres\n- [ ] Postgres\n- [ ] Redis\n:::\n"
+		var asked []string
+		for range 2 {
+			opened, err := cli.AskOpen(protocol.SessionID(asker.id), "", cacheAsk, "", w.Path("shop"))
+			if err != nil {
+				t.Fatalf("ask: %v", err)
+			}
+			asked = append(asked, opened.ID)
+		}
+		asker.reply("Asked about the store. <!-- attn:state=idle -->")
+
+		w.stop()
+		execOnWorldDB(t, w.Dir, `UPDATE asks SET markdown = ?`, storedBeforeDefaults)
+		w.start()
+		app, cli = w.App(), w.Client()
+		asker.cli = cli
+
+		listed, err := cli.AskList(protocol.SessionID(asker.id))
+		if err != nil || len(listed.Asks) != 2 {
+			t.Fatalf("the agent lists %+v (%v); want both asks stored before defaults", listed, err)
+		}
+		shown, err := cli.AskShow(protocol.SessionID(asker.id), asked[0])
+		if err != nil {
+			t.Fatalf("show %s: %v", asked[0], err)
+		}
+		if q := shown.Ask.Parts[0].Question; q == nil || q.Default != nil || protocol.Deref(q.Context) != "Default: Postgres" {
+			t.Fatalf("the stored ask's question reads %+v; want its Default: line as context and no default", shown.Ask.Parts[0].Question)
+		}
+		answerCacheAsk(t, app, asked[0])
+		synctest.Wait()
+		if got := asker.promptsContaining("Answer: Postgres"); got != 1 {
+			t.Fatalf("the answer was typed %d times: %q; want once", got, asker.prompts())
+		}
+		if err := cli.AskClose(protocol.SessionID(asker.id), asked[1], ""); err != nil {
+			t.Fatalf("withdraw %s: %v", asked[1], err)
+		}
+		if listed, err := cli.AskList(protocol.SessionID(asker.id)); err != nil || len(listed.Asks) != 0 {
+			t.Fatalf("after the answer and the withdrawal the agent lists %+v (%v); want no open ask", listed, err)
+		}
+	})
+}
+
 func answerCacheAsk(t *testing.T, app *testworld.Peer, askID string) {
 	t.Helper()
 	requestID := uuid.NewString()

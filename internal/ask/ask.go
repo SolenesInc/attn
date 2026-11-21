@@ -2,6 +2,7 @@ package ask
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,6 +37,14 @@ type LineError struct {
 func (e *LineError) Error() string { return fmt.Sprintf("line %d: %s", e.Line, e.Message) }
 
 func Parse(markdown string, openedAt time.Time) ([]protocol.AskPart, error) {
+	return parse(markdown, openedAt, true)
+}
+
+func Read(markdown string, openedAt time.Time) ([]protocol.AskPart, error) {
+	return parse(markdown, openedAt, false)
+}
+
+func parse(markdown string, openedAt time.Time, strict bool) ([]protocol.AskPart, error) {
 	if len(markdown) > MaxMarkdownBytes {
 		return nil, fmt.Errorf("an ask holds at most %d KiB of markdown", MaxMarkdownBytes>>10)
 	}
@@ -74,14 +83,11 @@ func Parse(markdown string, openedAt time.Time) ([]protocol.AskPart, error) {
 		if questions > MaxQuestions {
 			return nil, &LineError{Line: i + 1, Message: fmt.Sprintf("an ask holds at most %d questions", MaxQuestions)}
 		}
-		question, after, err := parseQuestion(kind, lines[i+1:end], i+2)
+		question, after, err := parseQuestion(kind, lines[i+1:end], i+2, defaultLine, strict)
 		if err != nil {
 			return nil, err
 		}
 		if question.Default != nil {
-			if defaultLine != 0 {
-				return nil, &LineError{Line: i + 1, Message: fmt.Sprintf("an ask takes one Default:, and the question on line %d already has one", defaultLine)}
-			}
 			defaultLine = i + 1
 			question.Default.DueAt = openedAt.Add(after).UTC().Format(time.RFC3339)
 		}
@@ -158,11 +164,11 @@ func strayDirective(directive string, line int) *LineError {
 	return &LineError{Line: line, Message: fmt.Sprintf("%q opens no question block; use :::question, :::question-multi or :::question-text", directive)}
 }
 
-func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber int) (protocol.AskQuestion, time.Duration, error) {
+func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber, earlierDefaultLine int, strict bool) (protocol.AskQuestion, time.Duration, error) {
 	question := protocol.AskQuestion{Kind: kind, Choices: []protocol.AskChoice{}}
 	var context []string
 	recommended := ""
-	fallback, fallbackLine := "", 0
+	fallback, fallbackLine, fallbackAt := "", 0, 0
 	var fence codeFence
 	for offset, line := range body {
 		trimmed := strings.TrimSpace(line)
@@ -178,7 +184,7 @@ func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber
 		recommendation, isRecommendation := strings.CutPrefix(trimmed, recommendedPrefix)
 		defaulted, isDefault := strings.CutPrefix(trimmed, defaultPrefix)
 		if question.Prompt == "" {
-			if isChoice || isRecommendation || isDefault {
+			if isChoice || isRecommendation || (strict && isDefault) {
 				break
 			}
 			if trimmed != "" {
@@ -205,11 +211,11 @@ func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber
 			recommended = strings.TrimSpace(recommendation)
 			continue
 		}
-		if isDefault {
-			if fallbackLine != 0 {
-				return question, 0, &LineError{Line: firstLineNumber + offset, Message: "a question takes one Default: line"}
-			}
-			fallback, fallbackLine = strings.TrimSpace(defaulted), firstLineNumber+offset
+		if isDefault && fallbackLine != 0 && strict {
+			return question, 0, &LineError{Line: firstLineNumber + offset, Message: "a question takes one Default: line"}
+		}
+		if isDefault && fallbackLine == 0 {
+			fallback, fallbackLine, fallbackAt = strings.TrimSpace(defaulted), firstLineNumber+offset, len(context)
 			continue
 		}
 		fence.track(line)
@@ -239,9 +245,17 @@ func parseQuestion(kind protocol.AskQuestionKind, body []string, firstLineNumber
 	}
 	var after time.Duration
 	if fallbackLine != 0 {
-		var err error
-		if question.Default, after, err = parseDefault(question, fallback, fallbackLine); err != nil {
+		fallen, waits, err := parseDefault(question, fallback, fallbackLine)
+		if err == nil && earlierDefaultLine != 0 {
+			err = &LineError{Line: firstLineNumber - 1, Message: fmt.Sprintf("an ask takes one Default:, and the question on line %d already has one", earlierDefaultLine)}
+		}
+		switch {
+		case err == nil:
+			question.Default, after = fallen, waits
+		case strict:
 			return question, 0, err
+		default:
+			context = slices.Insert(context, fallbackAt, body[fallbackLine-firstLineNumber])
 		}
 	}
 	if text := strings.Trim(strings.Join(context, "\n"), "\n"); strings.TrimSpace(text) != "" {
