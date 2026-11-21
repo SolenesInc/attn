@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -59,5 +60,16 @@ func TestAnAgentCannotWithdrawAVentOfAnotherProfile(t *testing.T) {
 	}
 	if refused := p.mine.mustCall(t, "vent_withdraw", map[string]any{"vent": vented.ID}); !refused.IsError {
 		t.Errorf("vent_withdraw of the side profile's vent through /mcp answered %s, want a refusal", resultText(refused))
+	}
+}
+
+func TestASecondVentInTheSameTurnNamesTheWithdrawToolToAToolCaller(t *testing.T) {
+	s := newSessionTools(t, "analytics.enabled")
+	var first protocol.Vent
+	structuredAs(t, s.shapes.call("vent", map[string]any{"about": "attn", "text": "attn seed show printed no bookmark."}), &first)
+	refused := s.agent.mustCall(t, "vent", map[string]any{"about": "attn", "text": "attn seed note printed nothing."})
+	want := "Withdraw it (`vent_withdraw` with {\"vent\": \"" + first.ID + "\"}) and send one vent that covers both"
+	if text := resultText(refused); !refused.IsError || !strings.Contains(text, want) {
+		t.Errorf("a second vent in the turn answered %q, want a refusal containing %q", text, want)
 	}
 }

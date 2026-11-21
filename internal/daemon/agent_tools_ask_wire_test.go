@@ -2,9 +2,12 @@ package daemon_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -87,5 +90,31 @@ func TestAnAgentCannotSeeOrCloseAnAskOfAnotherProfile(t *testing.T) {
 	}
 	if shown, err := cli.AskShow(protocol.SessionID(p.there), asked.ID); err != nil || shown.Ask.ID != asked.ID {
 		t.Errorf("the side profile's ask after the other profile's calls: %+v, %v; want it still open", shown, err)
+	}
+}
+
+func TestTheAskToolRequiresItsMarkdownAndRefusesAnEmptyOneInToolWords(t *testing.T) {
+	s := newSessionTools(t, "asks_enabled")
+	session, err := s.agent.connect(t, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range listed.Tools {
+		if tool.Name != "ask" {
+			continue
+		}
+		schema, _ := tool.InputSchema.(map[string]any)
+		if required, _ := schema["required"].([]any); !slices.Contains(required, any("markdown")) {
+			t.Errorf("the ask tool's input schema requires %v, want markdown among them", required)
+		}
+	}
+	refused := s.agent.mustCall(t, "ask", map[string]any{"markdown": "  \n"})
+	text := resultText(refused)
+	if !refused.IsError || !strings.Contains(text, "the ask has no markdown; write it in markdown") || strings.Contains(text, "stdin") || strings.Contains(text, "--file") {
+		t.Errorf("an empty ask answered %q, want a refusal that names the markdown argument and no stdin or --file", text)
 	}
 }

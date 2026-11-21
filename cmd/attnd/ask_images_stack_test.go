@@ -67,6 +67,10 @@ func TestAnAskWithAnImageFromAnOutpostAgentsToolShowsAtTheHome(t *testing.T) {
 	if want := filepath.Join(shop, "shots", "gone.png"); !missing.IsError || !strings.Contains(missing.Text, want) {
 		t.Errorf("an ask showing a missing image answered error=%v %q, want a refusal naming %s", missing.IsError, missing.Text, want)
 	}
+	untended := tools.call(t, "ask", map[string]any{"markdown": "About the work." + question, "seed": o.seed})
+	if want := "tend it first (`seed_tend` with {\"seed\": \"" + o.seed + "\"})"; !untended.IsError || !strings.Contains(untended.Text, want) {
+		t.Errorf("an ask about a seed nobody tends, refused by the home, answered error=%v %q, want it to name the tool: %s", untended.IsError, untended.Text, want)
+	}
 }
 
 func TestAnAsksImagesStayWithItAndOnesOverTheLimitAreRefused(t *testing.T) {

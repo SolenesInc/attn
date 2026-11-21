@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/ask"
+	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/jobs"
@@ -58,7 +59,7 @@ func (d *Daemon) askOpen(msg *protocol.AskOpenMessage) (protocol.Ask, error) {
 	}
 	if key, _ := to.Member(); !key.IsZero() {
 		if _, retired := d.retiredCrewMember(key.String()); retired {
-			return protocol.Ask{}, errors.New("you are retired, so the user takes no new asks from you; file your letter with `attn handoff`")
+			return protocol.Ask{}, protocol.Refuse(protocol.RefusalWrongState, "you are retired, so the user takes no new asks from you; file your letter with `{attn handoff}`")
 		}
 	}
 	id, err := ask.NewID()
@@ -101,7 +102,7 @@ func (d *Daemon) askOpen(msg *protocol.AskOpenMessage) (protocol.Ask, error) {
 func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 	opened, err := d.askOpen(msg)
 	if err != nil {
-		d.sendError(conn, err.Error())
+		_ = json.NewEncoder(conn).Encode(command.Response(nil, command.AsRefusal(err)))
 		return
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AskOpenResult: &opened})
@@ -136,7 +137,7 @@ func (d *Daemon) askAddressOf(session *protocol.Session, ref string) (who.Addres
 	if !seed.Tender.IsZero() {
 		return who.Address{}, fmt.Errorf("%s is being tended by %s, and an ask is about a seed you tend; ask without --seed", seed.ID, d.partyName(seed.Tender))
 	}
-	return who.Address{}, fmt.Errorf("nobody is tending %s, and an ask is about a seed you tend; tend it first (attn seed tend %s), or ask without --seed", seed.ID, seed.ID)
+	return who.Address{}, protocol.Refuse(protocol.RefusalWrongState, "nobody is tending %s, and an ask is about a seed you tend; tend it first ({attn seed tend %s}), or ask without --seed", seed.ID, seed.ID)
 }
 
 func (d *Daemon) openStake(sessionID protocol.SessionID) string {
@@ -173,7 +174,7 @@ func (d *Daemon) askingSession(sessionID protocol.SessionID) (*protocol.Session,
 		return nil, errSessionNotLive(sessionID)
 	}
 	if !d.launchedWithAsks(sessionID) {
-		return nil, errors.New("asks are off for this session because it launched without them; ask in the conversation instead, and run `attn turn open` if a notification started your run")
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "asks are off for this session because it launched without them; ask in the conversation instead, and run `{attn turn open}` if a notification started your run")
 	}
 	return session, nil
 }
@@ -267,7 +268,7 @@ func (d *Daemon) askClose(sessionID protocol.SessionID, askID, reason string) (*
 	}
 	reason = strings.TrimSpace(reason)
 	if reach == askOverseen && reason == "" {
-		return nil, fmt.Errorf("%s is not your ask. Say why you withdraw it, and attn tells its asker: attn ask close %s -m \"<why>\"",
+		return nil, protocol.Refuse(protocol.RefusalInvalidInput, "%s is not your ask. Say why you withdraw it, and attn tells its asker: {attn ask close %s -m \"<why>\"}",
 			shown.stored.ID, shown.stored.ID)
 	}
 	if err := d.store.CloseAsk(shown.stored.ID); err != nil {

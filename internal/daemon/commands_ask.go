@@ -33,7 +33,7 @@ func (d *Daemon) askCommands() map[string]command.Handler {
 
 func (d *Daemon) runAsk(_ context.Context, c command.Caller, a command.AskArgs) (any, error) {
 	if strings.TrimSpace(a.Markdown) == "" {
-		return nil, errors.New("pipe the ask's markdown on stdin, or pass --file")
+		return nil, command.Usage("the ask has no markdown; write it in {markdown}")
 	}
 	baseDir, err := d.askBaseDir(c, a.BaseDir)
 	if err != nil {
@@ -114,6 +114,9 @@ func (d *Daemon) askOpenOnHome(msg protocol.AskOpenMessage) (protocol.Ask, error
 		if err := json.Unmarshal(scanner.Bytes(), &reply); err != nil {
 			return protocol.Ask{}, fmt.Errorf("the home's reply to the ask: %w", err)
 		}
+	}
+	if refusal := reply.CommandRefusal; refusal != nil && !reply.Ok {
+		return protocol.Ask{}, &command.Refusal{Code: refusal.Code, Message: refusal.Message, Fix: protocol.Deref(refusal.Fix)}
 	}
 	if !reply.Ok || reply.AskOpenResult == nil {
 		return protocol.Ask{}, errors.New(protocol.Deref(reply.Error))

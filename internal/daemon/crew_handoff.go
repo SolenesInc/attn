@@ -77,7 +77,7 @@ func (d *Daemon) crewHandoff(sessionID protocol.SessionID, note string, retry bo
 	}
 	member, bound := d.crewMemberForSession(sessionID)
 	if !bound {
-		return nil, fmt.Errorf("this session is not a crew member's session, so it has no letter to file. A crew handoff is a member's own letter to its successor; the note you write for whoever tends a piece of work next is `attn seed note <id> -m \"…\" --handoff`")
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "this session is not a crew member's session, so it has no letter to file. A crew handoff is a member's own letter to its successor; the note you write for whoever tends a piece of work next is `{attn seed note <id> -m \"…\" --handoff}`")
 	}
 	path, err := d.crewLetterForHandoff(member, sessionID, note, retry)
 	if err != nil {
@@ -126,13 +126,13 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.Ses
 	filed := filepath.Join(member.HomeDir(d.dataRoot), crew.HandoffsDirName, filedName)
 	if retry {
 		if !hasFiled {
-			return "", fmt.Errorf("%s's session has filed no letter yet, so there is no turnover to retry — write one with `attn handoff -m \"<your letter>\"`", member.Name)
+			return "", protocol.Refuse(protocol.RefusalWrongState, "%s's session has filed no letter yet, so there is no turnover to retry — write one with `{attn handoff -m \"<your letter>\"}`", member.Name)
 		}
 		if err := d.validateCrewLetterPath(member, filed); err != nil {
 			return "", err
 		}
 		if _, err := os.Stat(filed); err != nil {
-			return "", fmt.Errorf("%s's filed letter is recorded at %s but is not readable there (%v); file this session's letter again with `attn handoff -m \"<your letter>\"`", member.Name, filed, err)
+			return "", protocol.Refuse(protocol.RefusalWrongState, "%s's filed letter is recorded at %s but is not readable there (%v); file this session's letter again with `{attn handoff -m \"<your letter>\"}`", member.Name, filed, err)
 		}
 		d.logf("crew: %s is retrying its turnover with the letter already filed at %s", member.Name, filed)
 		return filed, nil

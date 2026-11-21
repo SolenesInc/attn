@@ -37,7 +37,7 @@ commands:
 
       Carry on with work that does not depend on the answer; when none is left, end your turn, and do not wait or poll. While any of your asks is open, attn refuses a standby that would close your session. Withdraw an ask that no longer matters with `ask_close`. When the user answers, attn types the answer into the conversation as their message, approvals included. By then they have likely moved on and will not read what you write back there. If their answer asks you something, reply with a new ask. If you still need them, ask again.
     args:
-      - {name: markdown, type: markdown, cli: "--file", placeholder: "<path>", doc: "the ask's markdown, required; the CLI reads it from this file, or from stdin without one"}
+      - {name: markdown, type: markdown, required: true, cli: "--file", placeholder: "<path>", doc: "the ask's markdown; the CLI reads it from this file, or from stdin without one"}
       - {name: subject, type: text, cli: "--subject", doc: "the ask's subject (defaults to its first question)"}
       - {name: seed, type: seed, cli: "--seed", doc: "a seed you tend that the ask is about (defaults to the seed your delegation assigned you)"}
       - {name: base_dir, type: path, cli: internal, doc: "the folder the markdown's image paths resolve against: the working directory, or beside the file"}

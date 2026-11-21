@@ -162,7 +162,7 @@ func (d *Daemon) setVentKind(id string, kind protocol.VentKind, profileID string
 	d.analyticsUpload.run.Unlock()
 	switch {
 	case errors.Is(err, store.ErrVentSent):
-		return fmt.Errorf("vent %s was already sent to attn's maintainers, so it stays an attn vent", id)
+		return protocol.Refuse(protocol.RefusalWrongState, "vent %s was already sent to attn's maintainers, so its kind stays attn", id)
 	case err != nil || !changed:
 		return err
 	}
@@ -222,7 +222,7 @@ func (d *Daemon) recordVent(sessionID protocol.SessionID, kind protocol.VentKind
 	var taken *store.VentTurnTakenError
 	switch err := d.store.AddVent(vent.Vent); {
 	case errors.As(err, &taken):
-		return storedVent{}, fmt.Errorf("the limit is 1 vent per turn, and this turn already has %s. Withdraw it (attn vent withdraw %s) and send one vent that covers both", taken.VentID, taken.VentID)
+		return storedVent{}, protocol.Refuse(protocol.RefusalLimit, "the limit is 1 vent per turn, and this turn already has %s. Withdraw it ({attn vent withdraw %s}) and send one vent that covers both", taken.VentID, taken.VentID)
 	case err != nil:
 		return storedVent{}, err
 	}

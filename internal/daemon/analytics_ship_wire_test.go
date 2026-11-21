@@ -73,7 +73,7 @@ func TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall(t *tes
 		if kept := setVentSend(app, vent.ID, false); kept.Success || !strings.Contains(protocol.Deref(kept.Error), "already sent") {
 			t.Fatalf("keeping a sent vent = success %v, error %q; want refused as already sent", kept.Success, protocol.Deref(kept.Error))
 		}
-		if refiled := setVentKind(app, vent.ID, protocol.VentKindTools); refiled.Success || !strings.Contains(protocol.Deref(refiled.Error), "already sent to attn's maintainers, so it stays an attn vent") {
+		if refiled := setVentKind(app, vent.ID, protocol.VentKindTools); refiled.Success || !strings.Contains(protocol.Deref(refiled.Error), "already sent to attn's maintainers, so its kind stays attn") {
 			t.Fatalf("filing a sent vent under tools = success %v, error %q; want refused", refiled.Success, protocol.Deref(refiled.Error))
 		}
 
