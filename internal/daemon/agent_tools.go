@@ -251,7 +251,7 @@ func (d *Daemon) callAgentTool(ctx context.Context, call *agentCall, tool agentT
 	}
 	var result any
 	if refusal == nil {
-		result, refusal = d.runAgentCommand(ctx, call, def.Command, def.commandArguments(arguments, args))
+		result, refusal = d.runAgentCommand(ctx, call, def.Command, arguments, caller)
 		refusal = caller.explainRefusal(refusal)
 	}
 	if refusal != nil {
@@ -278,29 +278,6 @@ func (def agentToolDefinition) arguments(raw json.RawMessage, schema *mcpserver.
 	return args, nil
 }
 
-func (def agentToolDefinition) commandArguments(sent json.RawMessage, resolved map[string]any) json.RawMessage {
-	fields := map[string]json.RawMessage{}
-	if len(bytes.TrimSpace(sent)) > 0 && string(sent) != "null" {
-		if err := json.Unmarshal(sent, &fields); err != nil {
-			panic(fmt.Sprintf("%s: arguments decoded once but not twice: %v", def.Name, err))
-		}
-	}
-	for _, local := range def.Local {
-		if value, given := resolved[local.Arg]; given {
-			encoded, err := json.Marshal(value)
-			if err != nil {
-				panic(fmt.Sprintf("%s: encode the resolved %s: %v", def.Name, local.Arg, err))
-			}
-			fields[local.Arg] = encoded
-		}
-	}
-	encoded, err := json.Marshal(fields)
-	if err != nil {
-		panic(fmt.Sprintf("%s: encode the arguments: %v", def.Name, err))
-	}
-	return encoded
-}
-
 func (def agentToolDefinition) usage(message string) *command.Refusal {
 	return &command.Refusal{Code: command.CodeUsage, Message: message, Fix: "Call " + def.Name + " with only the arguments its input schema lists, and every one it requires.", Arguments: true}
 }
@@ -321,7 +298,11 @@ func (def agentToolDefinition) refusalText(r *command.Refusal) string {
 	return text
 }
 
-func (d *Daemon) runAgentCommand(ctx context.Context, call *agentCall, name string, args json.RawMessage) (any, *command.Refusal) {
+func (d *Daemon) runAgentCommand(ctx context.Context, call *agentCall, name string, sent json.RawMessage, caller *callerSide) (any, *command.Refusal) {
+	args, err := caller.commandArguments(sent)
+	if err != nil {
+		return nil, command.AsRefusal(err)
+	}
 	if protocol.CommandRuns[name] == protocol.LocatorHome && !d.enrollmentStatus().IsHome() {
 		return d.forwardCommand(call.caller, name, args)
 	}

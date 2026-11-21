@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,10 +25,11 @@ type callerSide struct {
 	dir         string
 	problems    []string
 	absentPaths []string
+	resolved    map[string]any
 }
 
 func (d *Daemon) doCallerSideWork(ctx context.Context, def agentToolDefinition, args map[string]any, c command.Caller) (*callerSide, *command.Refusal) {
-	w := &callerSide{d: d, ctx: ctx}
+	w := &callerSide{d: d, ctx: ctx, resolved: map[string]any{}}
 	if len(def.Local) == 0 {
 		return w, nil
 	}
@@ -42,17 +44,35 @@ func (d *Daemon) doCallerSideWork(ctx context.Context, def agentToolDefinition, 
 		switch local.Kind {
 		case catalog.LocalPath, catalog.LocalDestination:
 			if resolved, ok := w.path(local.Arg, value.(string), local.Kind); ok {
-				args[local.Arg] = resolved
+				w.resolved[local.Arg] = resolved
 			}
 		case catalog.LocalEvidence:
-			args[local.Arg] = w.evidence(local.Arg, value.([]any))
+			w.resolved[local.Arg] = w.evidence(local.Arg, value.([]any))
 		case catalog.LocalCommit:
 			if full, ok := w.commit(local.Arg, strings.TrimSpace(value.(string))); ok {
-				args[local.Arg] = full
+				w.resolved[local.Arg] = full
 			}
 		}
 	}
 	return w, w.refuseProblems(w.problems)
+}
+
+func (w *callerSide) commandArguments(sent json.RawMessage) (json.RawMessage, error) {
+	if len(w.resolved) == 0 {
+		return sent, nil
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(sent, &fields); err != nil {
+		return nil, err
+	}
+	for arg, value := range w.resolved {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return nil, err
+		}
+		fields[arg] = encoded
+	}
+	return json.Marshal(fields)
 }
 
 func (w *callerSide) explainRefusal(refusal *command.Refusal) *command.Refusal {
