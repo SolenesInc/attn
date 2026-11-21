@@ -3,6 +3,9 @@
 groups:
   - name: open
     summary: "show the user a markdown document"
+    map:
+      rows:
+        - {need: "Show the user a markdown document or a seed in a tile", tools: [open]}
     flags:
       - {name: session, placeholder: "<id>", doc: "open the tile next to this session (defaults to the current session)"}
       - {name: profile, placeholder: "<name|id>", doc: "the garden a seed id belongs to; required outside attn when several profiles exist"}

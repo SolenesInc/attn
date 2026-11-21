@@ -65,16 +65,48 @@
                         "keep_final_newline": true
                       },
                       {
-                        "kind": "text",
-                        "id": "session.attn-map.skill",
-                        "source": "content/session/attn-map/skill.md",
-                        "keep_final_newline": true
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.skill",
+                            "source": "content/session/attn-map/skill.md",
+                            "keep_final_newline": true
+                          }
+                        ]
                       },
                       {
-                        "kind": "text",
-                        "id": "session.attn-map.guide",
-                        "source": "content/session/attn-map/guide.md",
-                        "keep_final_newline": true
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.guide",
+                            "source": "content/session/attn-map/guide.md",
+                            "keep_final_newline": true
+                          }
+                        ]
                       },
                       {
                         "kind": "text",
@@ -105,10 +137,26 @@
                         ]
                       },
                       {
-                        "kind": "text",
-                        "id": "session.attn-map.delegate",
-                        "source": "content/session/attn-map/delegate.md",
-                        "keep_final_newline": true
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.delegate",
+                            "source": "content/session/attn-map/delegate.md",
+                            "keep_final_newline": true
+                          }
+                        ]
                       },
                       {
                         "kind": "choose",
@@ -145,10 +193,26 @@
                         "keep_final_newline": true
                       },
                       {
-                        "kind": "text",
-                        "id": "session.attn-map.session",
-                        "source": "content/session/attn-map/session.md",
-                        "keep_final_newline": true
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.session",
+                            "source": "content/session/attn-map/session.md",
+                            "keep_final_newline": true
+                          }
+                        ]
                       },
                       {
                         "kind": "choose",
@@ -179,16 +243,48 @@
                         "keep_final_newline": true
                       },
                       {
-                        "kind": "text",
-                        "id": "session.attn-map.open",
-                        "source": "content/session/attn-map/open.md",
-                        "keep_final_newline": true
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.open",
+                            "source": "content/session/attn-map/open.md",
+                            "keep_final_newline": true
+                          }
+                        ]
                       },
                       {
-                        "kind": "text",
-                        "id": "session.attn-map.showing",
-                        "source": "content/session/attn-map/showing.md",
-                        "keep_final_newline": true
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.showing",
+                            "source": "content/session/attn-map/showing.md",
+                            "keep_final_newline": true
+                          }
+                        ]
                       },
                       {
                         "kind": "text",
@@ -197,10 +293,26 @@
                         "keep_final_newline": true
                       },
                       {
-                        "kind": "text",
-                        "id": "session.attn-map.callout",
-                        "source": "content/session/attn-map/callout.md",
-                        "keep_final_newline": true
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "agent_tools",
+                            "kind": "flag",
+                            "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "compose"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map.callout",
+                            "source": "content/session/attn-map/callout.md",
+                            "keep_final_newline": true
+                          }
+                        ]
                       },
                       {
                         "kind": "text",
@@ -241,16 +353,48 @@
                             "kind": "join",
                             "children": [
                               {
-                                "kind": "text",
-                                "id": "session.attn-map.review",
-                                "source": "content/session/attn-map/review.md",
-                                "keep_final_newline": true
+                                "kind": "choose",
+                                "condition": {
+                                  "field": {
+                                    "name": "agent_tools",
+                                    "kind": "flag",
+                                    "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                                  },
+                                  "test": "enabled"
+                                },
+                                "children": [
+                                  {
+                                    "kind": "compose"
+                                  },
+                                  {
+                                    "kind": "text",
+                                    "id": "session.attn-map.review",
+                                    "source": "content/session/attn-map/review.md",
+                                    "keep_final_newline": true
+                                  }
+                                ]
                               },
                               {
-                                "kind": "text",
-                                "id": "session.attn-map.nav",
-                                "source": "content/session/attn-map/nav.md",
-                                "keep_final_newline": true
+                                "kind": "choose",
+                                "condition": {
+                                  "field": {
+                                    "name": "agent_tools",
+                                    "kind": "flag",
+                                    "description": "The session's harness received attn's tools, so the launch leaves out the CLI teaching of every family the tools offer."
+                                  },
+                                  "test": "enabled"
+                                },
+                                "children": [
+                                  {
+                                    "kind": "compose"
+                                  },
+                                  {
+                                    "kind": "text",
+                                    "id": "session.attn-map.nav",
+                                    "source": "content/session/attn-map/nav.md",
+                                    "keep_final_newline": true
+                                  }
+                                ]
                               }
                             ]
                           }
@@ -7137,5 +7281,5 @@
       ]
     }
   ],
-  "definitions_hash": "e8d48d7a2ed137ea3d64880fdc4e87c529a219d65b7af00b37a97c6793231aeb"
+  "definitions_hash": "444f3b5eeee7c916732ede80a568eff1d12e3f141c2c23d8380c45608db5c5e0"
 }
