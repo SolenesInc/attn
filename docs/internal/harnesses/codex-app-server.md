@@ -456,8 +456,7 @@ isolated `CODEX_HOME` (seed `s-z7cfmc`):
   description (`codex-mcp/src/rmcp_client.rs`, read on 0.171.0). Codex sends
   the whole description with the namespace of tools it loads, but lists a
   deferred namespace by its description's first line, cut at 250 characters
-  (`core/src/context/world_state/tools.rs`). attn therefore gives `attn-core`
-  the intent map and `attn` the one-line description.
+  (`core/src/context/world_state/tools.rs`).
 - With `features.code_mode = true` and `workspace-write` without network, one
   `exec` script called `tools.mcp__attn_core__seed_show({seed})`, read
   `structuredContent.seed.title` from the `CallToolResult`, and passed it to

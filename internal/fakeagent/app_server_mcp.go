@@ -15,6 +15,7 @@ const (
 	methodCallTool      = "call_tool"
 	methodFork          = "fork"
 	methodAwaitMCP      = "await_mcp"
+	methodRefuseMCP     = "refuse_mcp"
 )
 
 // ServerMCPServer is one MCP server a conversation uses, by the name a client registered it with.
@@ -62,6 +63,10 @@ func (s *appServer) register(c *appServerConn, id uint64, raw json.RawMessage) (
 		return nil, "InvalidMcpServer"
 	}
 	s.mu.Lock()
+	if s.refuseMCP != "" {
+		defer s.mu.Unlock()
+		return nil, s.refuseMCP
+	}
 	s.mcp[p.Name] = mcpRegistration{URL: p.URL, Headers: p.Headers, conn: c, request: id}
 	s.mcpChangedLocked()
 	s.mu.Unlock()
@@ -251,6 +256,12 @@ func (s *appServer) fork(raw json.RawMessage) (any, error) {
 	}
 	s.convs[p.ID] = &ServerConversation{ID: p.ID, Cwd: from.Cwd, Target: from.Target, Instructions: from.Instructions, MCPServers: from.MCPServers, Status: "idle", requests: map[string]int{}}
 	return struct{}{}, nil
+}
+
+// RefuseMCPRegistration makes the server refuse every later mcp/register with code, as a server that cannot reach the MCP server does.
+func (s *AppServer) RefuseMCPRegistration(code string) {
+	s.t.Helper()
+	s.call(methodRefuseMCP, map[string]string{"code": code}, nil)
 }
 
 // Fork starts conversation id on the server as a fork of conversation, as an agent's /fork does: it keeps the MCP servers it uses, and no attn session holds it yet.

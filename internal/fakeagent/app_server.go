@@ -283,6 +283,7 @@ type appServer struct {
 	nextEntry   int64
 	nextCall    int
 	watchers    []*serverWatcher
+	refuseMCP   string
 }
 
 func runAppServer(cfg config, flavor appServerFlavor) int {
@@ -731,6 +732,15 @@ func (s *appServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (a
 		return s.fork(raw)
 	case methodAwaitMCP:
 		return s.awaitMCP(raw)
+	case methodRefuseMCP:
+		var refusal struct{ Code string }
+		if err := json.Unmarshal(raw, &refusal); err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		s.refuseMCP = refusal.Code
+		s.mu.Unlock()
+		return struct{}{}, nil
 	case methodAwaitInterrupt:
 		select {
 		case <-s.interruptsOf(p.ThreadID):

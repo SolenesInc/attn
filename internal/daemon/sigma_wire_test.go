@@ -315,8 +315,11 @@ func TestASigmaSessionStartsWithAttnsToolsWhileAgentToolsAreOn(t *testing.T) {
 				t.Fatal(err)
 			}
 			intentMap := initialized.InitializeResult().Instructions
-			if want := todays.Instructions + "\n\n" + strings.TrimSpace(intentMap); intentMap == "" || started.Instructions != want {
-				t.Errorf("Sigma started the conversation with instructions %q, want today's launch guidance followed by attn's intent map %q", started.Instructions, intentMap)
+			if intentMap == "" || !strings.HasSuffix(started.Instructions, "\n\n"+strings.TrimSpace(intentMap)) {
+				t.Errorf("Sigma started the conversation with instructions %q, want them to end with attn's intent map %q", started.Instructions, intentMap)
+			}
+			if taught := strings.Contains(todays.Instructions, seedCLITeaching); !taught || strings.Contains(started.Instructions, seedCLITeaching) {
+				t.Errorf("the garden's CLI teaching was in Sigma's launch without the tools %t and with them %t, want only without", taught, strings.Contains(started.Instructions, seedCLITeaching))
 			}
 			for _, entry := range append(slices.Clone(on.Argv), on.Env...) {
 				if strings.Contains(entry, "s.sigma.") || strings.Contains(entry, "ATTN_AGENT_CREDENTIAL") {

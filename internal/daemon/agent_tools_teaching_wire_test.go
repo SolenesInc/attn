@@ -15,8 +15,8 @@ func TestALaunchThatCarriesTheToolsLeavesTheirFamiliesCLITeachingToTheServer(t *
 	app := w.App()
 	both := map[string]bool{"launch_instructions": true, "agent_tools": true, "resume": true}
 	withTools := connectDriver(t, w, "snipe-plugin", "snipe", both)
-	withoutTools := connectDriver(t, w, "plain-plugin", "plain", map[string]bool{"launch_instructions": true, "resume": true})
 	awaitDriverAvailable(app, "snipe")
+	withoutTools := connectDriver(t, w, "plain-plugin", "plain", map[string]bool{"launch_instructions": true, "resume": true})
 	awaitDriverAvailable(app, "plain")
 
 	guidance := func() map[string]string {
@@ -47,5 +47,31 @@ func TestALaunchThatCarriesTheToolsLeavesTheirFamiliesCLITeachingToTheServer(t *
 				t.Errorf("%s launched without %q, which no tool teaches yet", launch, kept)
 			}
 		}
+	}
+}
+
+func TestASharedServerViewTakesTheServersTeachingOnlyWhileTheServerHoldsTheTools(t *testing.T) {
+	w := newWorld(t, fakeagent.SampleServer)
+	app := w.App()
+	driver := registerToolsServerDriver(t, w, "launch_instructions")
+	awaitDriverAvailable(app, serverPluginAgent)
+	spawnToolsServerView(w, app, driver)
+	server := w.AppServer(fakeagent.SampleServer)
+	setSetting(t, app, "agent_tools_enabled", "true")
+	server.AwaitMCPRegistration("attn", true)
+
+	taught := func(view toolsServerView) bool {
+		return strings.Contains(view.instructions, hooks.GardenGuidance()) && strings.Contains(view.instructions, seedCLITeaching)
+	}
+	if held := spawnToolsServerView(w, app, driver); held.tools == nil || taught(held) {
+		t.Errorf("a view of a server holding attn's MCP server launched with agent_tools %+v and the garden's CLI teaching %t, want the tools and no teaching", held.tools, taught(held))
+	}
+
+	setSetting(t, app, "agent_tools_enabled", "false")
+	server.AwaitMCPRegistration("attn", false)
+	server.RefuseMCPRegistration("McpServerUnreachable")
+	setSetting(t, app, "agent_tools_enabled", "true")
+	if refused := spawnToolsServerView(w, app, driver); refused.tools != nil || !taught(refused) {
+		t.Errorf("a view of a server that refused attn's MCP server launched with agent_tools %+v and the garden's CLI teaching %t, want no tools and the teaching:\n%s", refused.tools, taught(refused), refused.instructions)
 	}
 }

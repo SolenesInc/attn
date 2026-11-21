@@ -741,15 +741,14 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 		if metadata := strings.TrimSpace(d.store.GetAgentMetadata(msg.ID)); metadata != "" && json.Valid([]byte(metadata)) {
 			params.Metadata = json.RawMessage(metadata)
 		}
+		launch.Plugin = &AgentPluginLaunch{Plugin: req.pluginDriver.PluginName, Params: params, Resume: req.pluginDriver.Capabilities["resume"] && (req.existingSession != nil || params.ResumeSessionID != "")}
 		if req.pluginDriver.Capabilities["launch_instructions"] {
-			instructions, err := d.preparePluginLaunchInstructions(msg.ID, req.profile.ID,
-				!req.pluginDriver.Capabilities["pull_request_reporting"], d.pluginReceivesAgentTools(req.pluginDriver))
+			intent, err := d.preparePluginLaunchIntent(msg.ID, req.profile.ID, !req.pluginDriver.Capabilities["pull_request_reporting"])
 			if err != nil {
 				return nil, err
 			}
-			params.Instructions = instructions
+			launch.Plugin.Instructions = intent
 		}
-		launch.Plugin = &AgentPluginLaunch{Plugin: req.pluginDriver.PluginName, Params: params, Resume: req.pluginDriver.Capabilities["resume"] && (req.existingSession != nil || params.ResumeSessionID != "")}
 	}
 	return launch, nil
 }

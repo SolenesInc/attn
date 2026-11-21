@@ -146,25 +146,10 @@ func (d *Daemon) pluginAgentTools(t harness.TerminalID) *pluginAgentTools {
 
 func (l *serverLink) agentTools() *agentdriver.AgentTools {
 	d := l.d
-	if !l.offersAgentTools() {
+	if l.callerConversationHeader() == "" || !d.agentToolsServed() {
 		return nil
 	}
 	return &agentdriver.AgentTools{URL: d.agentToolsURL(), Credential: d.agentKey.sign(agentCredential{kind: credentialServer, name: l.b.agent})}
-}
-
-func (l *serverLink) offersAgentTools() bool {
-	return l.callerConversationHeader() != "" && l.d.agentToolsServed()
-}
-
-func (d *Daemon) pluginReceivesAgentTools(reg pluginDriverRegistration) bool {
-	if !reg.Capabilities["agent_tools"] {
-		return false
-	}
-	if reg.Capabilities["server_binding"] {
-		l := d.serverLinkFor(reg.Agent)
-		return l != nil && l.offersAgentTools()
-	}
-	return d.agentToolsServed()
 }
 
 func (l *serverLink) clientAgentTools() *agentdriver.SharedAgentTools {

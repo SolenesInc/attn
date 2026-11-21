@@ -994,12 +994,12 @@ func (r *codexShared) grantApprovals(params map[string]any, sessionID protocol.S
 }
 
 func (r *codexShared) instructions(sessionID protocol.SessionID, profile string) string {
-	launch, err := r.d.preparePluginLaunchInstructions(sessionID, profile, false, r.d.sharedCodexAgentTools(profile) != nil)
+	intent, err := r.d.preparePluginLaunchIntent(sessionID, profile, false)
 	if err != nil {
 		r.d.logf("shared Codex: no attn instructions for session %s: %v", sessionID, err)
 		return ""
 	}
-	return launch.Content
+	return intent.carrying(r.d.sharedCodexAgentTools(profile) != nil).Content
 }
 
 func (r *codexShared) materialize(connection context.Context, terminal protocol.TerminalID, profile, conversation string) error {

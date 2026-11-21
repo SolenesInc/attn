@@ -71,14 +71,18 @@ func toolsServerDeclaration(w *world) map[string]any {
 	return declaration
 }
 
-func registerToolsServerDriver(t *testing.T, w *world) *driverPeer {
+func registerToolsServerDriver(t *testing.T, w *world, extra ...string) *driverPeer {
 	t.Helper()
 	d := dialDriver(t, w, "tools-server")
 	d.agent = serverPluginAgent
 	d.mu.Lock()
 	d.holdLaunch = true
 	d.mu.Unlock()
-	if err := d.call("driver.register", map[string]any{"agent": serverPluginAgent, "capabilities": map[string]bool{"server_binding": true, "resume": true, "agent_tools": true}, "server": toolsServerDeclaration(w)}, &d.registered); err != nil {
+	capabilities := map[string]bool{"server_binding": true, "resume": true, "agent_tools": true}
+	for _, capability := range extra {
+		capabilities[capability] = true
+	}
+	if err := d.call("driver.register", map[string]any{"agent": serverPluginAgent, "capabilities": capabilities, "server": toolsServerDeclaration(w)}, &d.registered); err != nil {
 		t.Fatal(err)
 	}
 	return d
@@ -88,6 +92,7 @@ type toolsServerView struct {
 	session      string
 	conversation string
 	tools        *pluginAgentTools
+	instructions string
 }
 
 func spawnToolsServerView(w *world, app *testworld.Peer, driver *driverPeer, edit ...func(*protocol.SpawnSessionMessage)) toolsServerView {
@@ -104,6 +109,9 @@ func spawnToolsServerView(w *world, app *testworld.Peer, driver *driverPeer, edi
 	var params struct {
 		Conversation string            `json:"conversation_id"`
 		AgentTools   *pluginAgentTools `json:"agent_tools"`
+		Instructions *struct {
+			Content string `json:"content"`
+		} `json:"instructions"`
 	}
 	method := "driver.spawn"
 	if msg.ResumeSessionID != nil {
@@ -120,7 +128,11 @@ func spawnToolsServerView(w *world, app *testworld.Peer, driver *driverPeer, edi
 		w.T.Fatalf("server view refused: %s", protocol.Deref(result.Error))
 	}
 	w.Launched(id)
-	return toolsServerView{session: id, conversation: params.Conversation, tools: params.AgentTools}
+	view := toolsServerView{session: id, conversation: params.Conversation, tools: params.AgentTools}
+	if params.Instructions != nil {
+		view.instructions = params.Instructions.Content
+	}
+	return view
 }
 
 func TestASharedServerPluginGetsTheToolsAndEachConversationActsAsItsOwnSession(t *testing.T) {
