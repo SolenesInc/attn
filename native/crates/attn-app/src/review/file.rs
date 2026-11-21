@@ -269,7 +269,7 @@ pub(super) fn view(
         .target
         .outside
         .then(|| words("outside the repository · read-only", Type::Small, t.warning).truncate());
-    let place = Inline::line()
+    let place = Inline::joined()
         .child(
             words(file.target.path.clone(), Type::Mono, t.text_primary)
                 .truncate_middle()

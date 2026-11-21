@@ -738,7 +738,7 @@ fn split_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
         .build(&t)
         .key("split.sent")
         .into();
-    let line = |key: &str, parts: Vec<El>| Inline::line().key(key.to_owned()).children(parts);
+    let line = |key: &str, parts: Vec<El>| Inline::joined().key(key.to_owned()).children(parts);
     let content = Stack::tight()
         .key("split")
         .child(line(

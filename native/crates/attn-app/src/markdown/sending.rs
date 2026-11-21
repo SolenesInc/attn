@@ -304,7 +304,7 @@ pub(crate) fn controls(
             None => button,
         });
     }
-    Inline::line().key(key(tile, "controls")).children(parts)
+    Inline::joined().key(key(tile, "controls")).children(parts)
 }
 
 /// Words of a header control in `ink`, as long as they run.
@@ -846,7 +846,7 @@ fn card(tile: &str, mark: &MarkdownAnnotation, orphan: bool, selected: bool, t: 
     })
     .build(t)
     .into();
-    let head = Inline::line()
+    let head = Inline::joined()
         .child(El::from(tag(
             key(tile, &format!("notes.kind.{}", mark.id)),
             badge.clone(),
