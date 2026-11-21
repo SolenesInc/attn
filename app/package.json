@@ -9,6 +9,7 @@
     "real-app:parallel-matrix": "go tool test-history capture native -- node scripts/real-app-harness/run-parallel-matrix.mjs",
     "real-app:soak": "node scripts/real-app-harness/run-soak.mjs",
     "real-app:linux": "node scripts/real-app-harness/linux-runner.mjs",
+    "real-app:bridge-cli": "node scripts/real-app-harness/ui-automation-cli.mjs",
     "real-app:mock-github": "node scripts/real-app-harness/mock-github-cli.mjs",
     "real-app:scenario-perf-baseline": "node scripts/real-app-harness/scenario-perf-baseline.mjs",
     "real-app:scenario-perf-cold-warm": "node scripts/real-app-harness/scenario-perf-cold-warm.mjs",
