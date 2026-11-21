@@ -251,13 +251,18 @@ func TestQuickCaptureHistoryRefusesTheAgentSocket(t *testing.T) {
 	}
 }
 
-func askAsPeer(peer *testworld.Peer, msg any) error {
+type quickCaptureAuthor interface {
+	QuickCapture(any) (*protocol.QuickCaptureResult, error)
+	Attachment(any) (*protocol.AttachmentResult, error)
+}
+
+func author(by quickCaptureAuthor, msg any) error {
 	var err error
 	switch msg.(type) {
 	case protocol.AttachmentPutMessage, protocol.AttachmentDiscardMessage:
-		_, err = peer.Attachment(msg)
+		_, err = by.Attachment(msg)
 	default:
-		_, err = peer.QuickCapture(msg)
+		_, err = by.QuickCapture(msg)
 	}
 	return err
 }
@@ -292,7 +297,7 @@ func TestQuickCaptureAuthoringRequiresTheTrustedAppIdentity(t *testing.T) {
 			protocol.AttachmentPutMessage{Cmd: protocol.CmdAttachmentPut, Owner: ownedBy(quickCapture), AttachmentID: asset},
 			protocol.AttachmentDiscardMessage{Cmd: protocol.CmdAttachmentDiscard, AttachmentID: asset},
 		} {
-			if err := askAsPeer(peer, msg); client.ErrorCode(err) != protocol.ErrorCodeUnauthorizedClient || !strings.Contains(err.Error(), "authenticated attn app") {
+			if err := author(peer, msg); client.ErrorCode(err) != protocol.ErrorCodeUnauthorizedClient || !strings.Contains(err.Error(), "authenticated attn app") {
 				t.Fatalf("untrusted authoring %T: %v", msg, err)
 			}
 		}

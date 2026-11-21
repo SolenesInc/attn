@@ -126,8 +126,8 @@ commands:
     runs: here
     grant: own
     doc: |
-      Downloads a saved user file from this session's profile to `out`, then you can inspect it. Outside a session, choose the profile when more than one profile exists.
+      Downloads a saved user file from this session's profile to `out`, then you can inspect it. Older messages quote a quick capture id before the attachment id; that form still works, and the second id is the attachment. Outside a session, choose the profile when more than one profile exists.
     args:
       - {name: attachment, type: text, required: true, cli: pos, placeholder: "<attachment-id>", doc: "the attachment to download"}
-      - {name: quoted_attachment, type: text, cli: pos, cli_only: true, placeholder: "<attachment-id>", doc: "older messages quote a quick capture id, then the attachment id; given both, the second is the attachment"}
+      - {name: quoted_attachment, type: text, cli: pos, cli_only: true, placeholder: "<attachment-id>", doc: "the attachment, when a quick capture id comes first"}
       - {name: out, type: path, required: true, cli: "--out", local: destination, placeholder: "<path>", doc: "where to write the file; it must not exist yet"}

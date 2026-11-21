@@ -51,17 +51,6 @@ func authoringAs(token *string, profileID string) []any {
 	}
 }
 
-func author(cli *client.Client, msg any) error {
-	var err error
-	switch msg.(type) {
-	case protocol.AttachmentPutMessage, protocol.AttachmentDiscardMessage:
-		_, err = cli.Attachment(msg)
-	default:
-		_, err = cli.QuickCapture(msg)
-	}
-	return err
-}
-
 func TestOnlyAPairedSenderAuthorsQuickCapturesOnTheCommandSocket(t *testing.T) {
 	w := newWorld(t)
 	cli, app := w.Client(), w.TrustedApp()
