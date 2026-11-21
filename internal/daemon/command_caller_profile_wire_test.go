@@ -43,7 +43,7 @@ func TestAnotherProfilesSessionDoesNotExistForACommandsCaller(t *testing.T) {
 		sideThread := cli.WithCaller(protocol.TerminalID(harness.CodexThreadTerminal(side.ID, "side-thread")))
 		var listed protocol.PullRequestListResult
 		for _, named := range []string{"planter", "plant"} {
-			if err := sideThread.RunCommand("pr ls", protocol.SessionID(named), command.PRLsArgs{}, &listed); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("the caller %q is not a session on this daemon", named)) {
+			if err := sideThread.RunCommand("pr ls", protocol.SessionID(named), command.PRLsArgs{}, &listed); err == nil || !strings.Contains(err.Error(), "unknown session "+named) {
 				t.Errorf("a shared Codex conversation in another profile lists the pull requests of --session %s = %v, want a refusal saying %s is not a session here", named, err, named)
 			}
 		}

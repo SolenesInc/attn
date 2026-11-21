@@ -118,6 +118,9 @@ func writeCommandTables(c *catalog.Catalog, cliRoot, goRoot string) error {
 		if cmd.Caller != "" {
 			caller = fmt.Sprintf(", caller: %q", cmd.Caller)
 		}
+		if g.sessionFlagNamesTarget(cmd) {
+			caller += ", sessionTarget: true"
+		}
 		fmt.Fprintf(&args, "\t\t%q: {readOnly: %v, anyone: %v, sessionFlag: %v, runsWithoutDaemon: %v%s%s},\n", cmd.Name, cmd.ReadOnly, cmd.Anyone, g.takesSessionFlag(cmd), cmd.RunsWithoutDaemon, caller, fixes)
 	}
 	args.WriteString("\t}\n})\n")
@@ -154,6 +157,11 @@ func writeCommandTables(c *catalog.Catalog, cliRoot, goRoot string) error {
 func (g *generator) takesSessionFlag(cmd catalog.Command) bool {
 	family, _, _ := strings.Cut(cmd.Name, " ")
 	return slices.ContainsFunc(g.family(family).Flags, func(f catalog.Flag) bool { return f.Name == "session" })
+}
+
+func (g *generator) sessionFlagNamesTarget(cmd catalog.Command) bool {
+	family, _, _ := strings.Cut(cmd.Name, " ")
+	return slices.ContainsFunc(g.family(family).Flags, func(f catalog.Flag) bool { return f.Name == "session" && f.Target })
 }
 
 func (g *generator) family(name string) *catalog.Group {

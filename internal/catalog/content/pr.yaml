@@ -1,5 +1,5 @@
-# The pr family. Each command acts for the calling session, or for `--session`
-# on the CLI. A doc names an arg by its tool name in backticks (`url`) and
+# The pr family. Each command acts for the calling session, or for the session
+# `--session` names on the CLI, which must be one of the caller's profile. A doc names an arg by its tool name in backticks (`url`) and
 # another command by its tool name (`pr_watch`).
 groups:
   - name: pr
@@ -13,7 +13,7 @@ groups:
 
       `--seed <id>` addresses a watch to a seed instead of the session. Updates go to whoever tends the seed when they arrive, so a handover moves the watch with no new watch. Harvesting or withering the seed stops its watches and clears their unread updates.
     flags:
-      - {name: session, placeholder: "<id>", doc: "the session to act for (defaults to the current session)"}
+      - {name: session, placeholder: "<id>", target: true, doc: "the session, open or closed, whose pull requests to act on (defaults to the current session)"}
     sections:
       - title: Recording
         commands: [pr record, pr ls, pr forget]

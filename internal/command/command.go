@@ -63,6 +63,7 @@ type spec struct {
 	sessionFlag       bool
 	runsWithoutDaemon bool
 	caller            string
+	sessionTarget     bool
 	fixes             map[string]string
 }
 
@@ -71,6 +72,10 @@ func CallerRole(name string) string {
 		return role
 	}
 	return "caller"
+}
+
+func SessionFlagNamesTarget(name string) bool {
+	return specs()[name].sessionTarget
 }
 
 type Layer struct {

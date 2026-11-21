@@ -94,7 +94,7 @@ func (d *Daemon) callerFromFrame(ctx context.Context, msg *protocol.RunCommandMe
 		}
 	}
 	if named := protocol.TrimID(protocol.Deref(msg.SessionID)); named != "" {
-		session, profile, err := d.resolveFramedSession(role, named, asking.Profile)
+		session, profile, err := d.resolveFramedSession(msg.Command, named, asking.Profile)
 		if err != nil {
 			return command.Caller{}, err
 		}
@@ -122,18 +122,23 @@ func (d *Daemon) sessionCallerFor(session protocol.SessionID, profile, requested
 	return command.Caller{Session: session, Profile: profile}, nil
 }
 
-func (d *Daemon) resolveFramedSession(role string, named protocol.SessionID, scope string) (protocol.SessionID, string, error) {
+func (d *Daemon) resolveFramedSession(cmd string, named protocol.SessionID, scope string) (protocol.SessionID, string, error) {
 	if profile, known := d.knownSessionProfile(named); known && (scope == "" || profile == scope) {
 		return named, profile, nil
 	}
 	session, code := d.resolveSessionReference(string(named), scope)
+	target := command.SessionFlagNamesTarget(cmd)
 	switch {
 	case session != nil:
 		return session.ID, session.ProfileID, nil
+	case code == "ambiguous_session" && target:
+		return "", "", command.Refuse("ambiguous_session", "session %s matches more than one session; give more of the id", named)
 	case code == "ambiguous_session":
-		return "", "", command.Refuse("ambiguous_session", "the %s %q matches more than one session; give more of the id", role, named)
+		return "", "", command.Refuse("ambiguous_session", "the %s %q matches more than one session; give more of the id", command.CallerRole(cmd), named)
+	case target:
+		return "", "", command.Refuse(command.CodeSessionNotFound, "unknown session %s", named)
 	default:
-		return "", "", unknownFramedSession(role, named)
+		return "", "", unknownFramedSession(command.CallerRole(cmd), named)
 	}
 }
 

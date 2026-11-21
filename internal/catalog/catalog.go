@@ -86,6 +86,7 @@ type Flag struct {
 	Name        string `yaml:"name"`
 	Placeholder string `yaml:"placeholder"`
 	Doc         string `yaml:"doc"`
+	Target      bool   `yaml:"target"`
 }
 
 type Section struct {
