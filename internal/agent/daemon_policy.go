@@ -118,11 +118,3 @@ func ExtractLastAssistantForClassification(
 type ConversationKeeper interface {
 	ConversationFiles(resumeIDs []string) map[string][]string
 }
-
-func ConversationFiles(d Driver, resumeIDs []string) (map[string][]string, bool) {
-	keeper, ok := d.(ConversationKeeper)
-	if !ok {
-		return nil, false
-	}
-	return keeper.ConversationFiles(resumeIDs), true
-}

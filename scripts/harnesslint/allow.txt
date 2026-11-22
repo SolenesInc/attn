@@ -5,6 +5,7 @@
 
 internal/daemon/harnesses.go As[Channel] leak 1: the Claude mod's reach; a resumed tender's mail waits for a channel the harness has instead of being typed
 internal/daemon/harnesses.go As[Runs] leak 1: a plugin driver's runs; generic code tells the harness a run ended and asks a run's route
+internal/daemon/conversation_keep.go As[Keeper] leak 1: attn keeps copies of Claude Code's conversations and the files that travel with them, then restores and forgets them
 internal/daemon/model_call_spare.go As[SpareStarter] leak 1: a Claude Code process started ahead of a model call; the spare that keeps one ready for the default model-call harness
 internal/daemon/harness_targets.go As[Targets] leak 1: a plugin server's execution targets; listing them, checking a spawn's target and the execution_target setting
 

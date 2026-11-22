@@ -105,6 +105,23 @@ type Fix struct {
 
 func (e *FixableError) Error() string { return e.Message }
 
+// Keeper is the optional part of a harness whose conversations attn keeps copies of.
+type Keeper interface {
+	// ConversationFiles maps each conversation to its transcript first, then the files that travel with it.
+	ConversationFiles(ids []string) map[string][]string
+	// ClassifyFile says what a file, named relative to the harness home, is to a conversation's copy.
+	ClassifyFile(id, name string) KeptFile
+}
+
+// KeptFile is what a file is to a kept conversation.
+type KeptFile uint8
+
+const (
+	KeptFileNone KeptFile = iota
+	KeptFileMain
+	KeptFileAuxiliary
+)
+
 // Trust is the optional part of a harness that can trust a folder ahead of a launch there.
 type Trust interface {
 	TrustFolder(dir string) error

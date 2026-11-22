@@ -81,7 +81,7 @@ func (d *Daemon) resolveKeptConversation(id string) (conversationKey, string, er
 		return conversationKey{}, "", fmt.Errorf("ambiguous identifier %q: %s; use session:<id> or conversation:<id> to choose", id, strings.Join(names, ", "))
 	}
 	for key, session := range matches {
-		if _, keeper := agentdriver.Get(key.agent).(agentdriver.ConversationKeeper); !keeper {
+		if _, keeps := d.keeperOf(key.agent); !keeps {
 			return conversationKey{}, "", fmt.Errorf("%s keeps its own conversations; attn has nothing to keep", key.agent)
 		}
 		return key, session, nil
@@ -146,7 +146,7 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 		references[key] = true
 	}
 	for key := range references {
-		if _, keeper := agentdriver.Get(key.agent).(agentdriver.ConversationKeeper); !keeper {
+		if _, keeps := d.keeperOf(key.agent); !keeps {
 			continue
 		}
 		row := rowsByKey[key]

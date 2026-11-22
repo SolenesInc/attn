@@ -94,7 +94,15 @@ func conversationArchive(agent, resumeID string) string {
 	return filepath.Join(config.ConversationsDir(), agent, resumeID+".tar.zst")
 }
 
-func readKeptConversationArchive(agent, resumeID string) (store.KeptConversation, error) {
+func (d *Daemon) keeperOf(agent string) (harness.Keeper, bool) {
+	return harness.As[harness.Keeper](d.harnessOf(harness.ID(agent)))
+}
+
+func (d *Daemon) readKeptConversationArchive(agent, resumeID string) (store.KeptConversation, error) {
+	keeper, keeps := d.keeperOf(agent)
+	if !keeps {
+		return store.KeptConversation{}, fs.ErrNotExist
+	}
 	path := conversationArchive(agent, resumeID)
 	src, err := os.Open(path)
 	if err != nil {
@@ -127,7 +135,7 @@ func readKeptConversationArchive(agent, resumeID string) (store.KeptConversation
 		if err != nil {
 			return store.KeptConversation{}, err
 		}
-		if header.Typeflag == tar.TypeReg && conversationMainFile(agent, resumeID, header.Name) && (kept.SourcePath == "" || header.Size > kept.Bytes) {
+		if header.Typeflag == tar.TypeReg && keeper.ClassifyFile(resumeID, header.Name) == harness.KeptFileMain && (kept.SourcePath == "" || header.Size > kept.Bytes) {
 			kept.SourcePath, kept.Bytes = filepath.Join(home, filepath.FromSlash(header.Name)), header.Size
 		}
 	}
@@ -281,15 +289,15 @@ func (d *Daemon) keepConversations(now time.Time) {
 	}
 	filesByAgent := make(map[string]map[string][]string)
 	for agent, ids := range idsByAgent {
-		if files, keeper := agentdriver.ConversationFiles(agentdriver.Get(agent), ids); keeper {
-			filesByAgent[agent] = files
+		if keeper, keeps := d.keeperOf(agent); keeps {
+			filesByAgent[agent] = keeper.ConversationFiles(ids)
 		}
 	}
 	changed := make(map[conversationKey]bool)
 	for key := range referenced {
 		kept, exists := d.store.KeptConversation(key.agent, key.resumeID)
 		if !exists {
-			archived, err := readKeptConversationArchive(key.agent, key.resumeID)
+			archived, err := d.readKeptConversationArchive(key.agent, key.resumeID)
 			if err == nil {
 				if err := d.store.PutKeptConversation(archived); err != nil {
 					d.logf("conversation keep: register %s/%s archive: %v", key.agent, key.resumeID, err)
@@ -322,7 +330,7 @@ func (d *Daemon) keepConversations(now time.Time) {
 				continue
 			}
 		}
-		archived, err := readKeptConversationArchive(key.agent, key.resumeID)
+		archived, err := d.readKeptConversationArchive(key.agent, key.resumeID)
 		if err == nil {
 			if bestInfo.Size() <= archived.Bytes {
 				if err := d.store.PutKeptConversation(archived); err != nil {
@@ -445,6 +453,10 @@ func (d *Daemon) retireConversations(all []store.KeptConversation, changed map[c
 }
 
 func (d *Daemon) copyConversation(agent string, conversation store.SessionConversation, files []string, bytes int64, now time.Time) error {
+	keeper, keeps := d.keeperOf(agent)
+	if !keeps {
+		return fmt.Errorf("%s keeps no conversations", agent)
+	}
 	home, err := toolhome.Dir()
 	if err != nil {
 		return err
@@ -471,7 +483,7 @@ func (d *Daemon) copyConversation(agent string, conversation store.SessionConver
 	defer inputs.Close()
 	for _, path := range files {
 		relative, relErr := filepath.Rel(home, path)
-		if relErr != nil || !conversationFileAllowed(agent, conversation.NativeID, filepath.ToSlash(relative)) {
+		if relErr != nil || keeper.ClassifyFile(conversation.NativeID, filepath.ToSlash(relative)) == harness.KeptFileNone {
 			err = fmt.Errorf("invalid %s conversation file: %s", agent, path)
 			break
 		}
@@ -482,7 +494,7 @@ func (d *Daemon) copyConversation(agent string, conversation store.SessionConver
 			if walkErr != nil {
 				return walkErr
 			}
-			if !conversationFileAllowed(agent, conversation.NativeID, name) {
+			if keeper.ClassifyFile(conversation.NativeID, name) == harness.KeptFileNone {
 				return fmt.Errorf("invalid conversation file: %s", name)
 			}
 			src, err := inputs.Open(name)
@@ -517,7 +529,7 @@ func (d *Daemon) copyConversation(agent string, conversation store.SessionConver
 		}
 	}
 	if err == nil {
-		err = appendMissingConversationEntries(archive, conversationArchive(agent, conversation.NativeID), agent, conversation.NativeID, writtenNames)
+		err = appendMissingConversationEntries(archive, conversationArchive(agent, conversation.NativeID), keeper, agent, conversation.NativeID, writtenNames)
 	}
 	err = errors.Join(err, archive.Close(), encoder.Close())
 	if err != nil {
@@ -609,14 +621,14 @@ func (d *Daemon) conversationReady(driver agentdriver.Driver, resumeID string) b
 	if !ok || !kept.DeletedAt.IsZero() || kept.Agent != driver.Name() {
 		return agentdriver.ResumeAvailable(driver, resumeID)
 	}
-	if err := restoreConversationArchive(conversationArchive(kept.Agent, kept.ResumeID), kept.Agent, kept.ResumeID, time.Now()); err != nil {
+	if err := d.restoreConversationArchive(conversationArchive(kept.Agent, kept.ResumeID), kept.Agent, kept.ResumeID, time.Now()); err != nil {
 		d.logf("conversation keep: restore %s/%s: %v", kept.Agent, kept.ResumeID, err)
 		return false
 	}
 	return agentdriver.ResumeAvailable(driver, resumeID)
 }
 
-func appendMissingConversationEntries(dst *tar.Writer, path, agent, resumeID string, writtenNames map[string]bool) error {
+func appendMissingConversationEntries(dst *tar.Writer, path string, keeper harness.Keeper, agent, resumeID string, writtenNames map[string]bool) error {
 	src, err := os.Open(path)
 	if os.IsNotExist(err) {
 		return nil
@@ -642,10 +654,10 @@ func appendMissingConversationEntries(dst *tar.Writer, path, agent, resumeID str
 		if writtenNames[header.Name] {
 			continue
 		}
-		if !conversationFileAllowed(agent, resumeID, header.Name) {
+		if keeper.ClassifyFile(resumeID, header.Name) == harness.KeptFileNone {
 			return fmt.Errorf("invalid %s archive path: %s", agent, header.Name)
 		}
-		if conversationMainFile(agent, resumeID, header.Name) {
+		if keeper.ClassifyFile(resumeID, header.Name) == harness.KeptFileMain {
 			continue
 		}
 		if err := dst.WriteHeader(header); err != nil {
@@ -658,7 +670,11 @@ func appendMissingConversationEntries(dst *tar.Writer, path, agent, resumeID str
 	}
 }
 
-func restoreConversationArchive(path, agent, resumeID string, now time.Time) error {
+func (d *Daemon) restoreConversationArchive(path, agent, resumeID string, now time.Time) error {
+	keeper, keeps := d.keeperOf(agent)
+	if !keeps {
+		return fmt.Errorf("%s keeps no conversations", agent)
+	}
 	home, err := toolhome.Dir()
 	if err != nil {
 		return err
@@ -688,7 +704,7 @@ func restoreConversationArchive(path, agent, resumeID string, now time.Time) err
 		if err != nil {
 			return err
 		}
-		if !conversationFileAllowed(agent, resumeID, header.Name) {
+		if keeper.ClassifyFile(resumeID, header.Name) == harness.KeptFileNone {
 			return fmt.Errorf("invalid %s archive path: %s", agent, header.Name)
 		}
 		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeDir {
