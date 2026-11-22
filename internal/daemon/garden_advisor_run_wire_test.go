@@ -87,6 +87,7 @@ func TestTheGardenAdvisorAdvisesAndDraftsWithTheReviewsFrozenRecipeFromBoundedEv
 func TestEachReviewItemKeepsOnlyAdviceItCouldActOnForTheEvidenceItWasGiven(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
+	setSetting(t, app, "garden.advisor", `{"agent":"codex"}`)
 	answers := map[string]string{
 		"keep":      `{"recommendation":"keep_growing","explanation":"The maintainer is still deciding.","evidence":["The seed log asks for a later decision."]}`,
 		"prose":     "Harvest it, the work is done.",

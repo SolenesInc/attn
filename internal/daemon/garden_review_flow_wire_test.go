@@ -98,6 +98,7 @@ func TestAReviewOfAGardenWithNothingToReviewListsNoCandidates(t *testing.T) {
 func TestReviewActionsResolveTheirItems(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
+	setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
 	harvested := gardenReviewAbandonedSeed(t, w, app, cli, "first", "harvest me")
 	kept := gardenReviewAbandonedSeed(t, w, app, cli, "second", "keep me")
 	changed := gardenReviewAbandonedSeed(t, w, app, cli, "third", "changed under the review")
@@ -306,6 +307,7 @@ func gardenReviewAwaitFailedFirstAdvice(app *testworld.Peer, reviewID string) {
 func TestAFailedReviewItemRetriesWithFreshEvidenceOrSettles(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
+		setSetting(t, w.App(), "garden.advisor", `{"agent":"claude"}`)
 		edited := gardenReviewRegisteredAbandonedSeed(t, w, cli, "first", "retry me")
 		harvested := gardenReviewRegisteredAbandonedSeed(t, w, cli, "second", "finished elsewhere")
 		review := gardenReviewStart(t, cli)

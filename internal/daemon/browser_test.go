@@ -15,7 +15,7 @@ func TestOpenBrowserDocksBesideTheAgentThatOpensIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	injectTestSession(t, d, protocol.Session{ID: "session-2", Label: "other", Directory: t.TempDir()})
+	injectTestSession(t, d, protocol.Session{ID: "session-2", Label: "other", Agent: "claude", Directory: t.TempDir()})
 	if _, err := d.store.RemoveSessionPlacement("session-2"); err != nil {
 		t.Fatal(err)
 	}

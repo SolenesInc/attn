@@ -254,6 +254,7 @@ func TestMailStartsResumeAfterTheMailStartWindow(t *testing.T) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		app, cli := w.App(), w.Client()
+		giveImportedMemberAHarness(t, cli, "trellis")
 		setSetting(t, app, "crew.mail_start_limit", "1")
 		setSetting(t, app, "crew.mail_start_window_seconds", "3600")
 		registerSessions(t, w, cli, "sender")

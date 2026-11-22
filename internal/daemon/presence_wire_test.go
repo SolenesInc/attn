@@ -110,6 +110,9 @@ func TestAwayTimeStartsAtTheLastPresentReportRegardlessOfPresenceReads(t *testin
 				}
 				w.restart()
 				app, cli := w.App(), w.Client()
+				for _, member := range []string{"trellis", "alder"} {
+					giveImportedMemberAHarness(t, cli, member)
+				}
 				for key, value := range map[string]string{"crew.away_seconds": "60", "crew.mail_start_limit": "0", "crew.heartbeat_enabled": "false", "crew.away_close_enabled": "false"} {
 					setSetting(t, app, key, value)
 				}

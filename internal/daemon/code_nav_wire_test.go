@@ -509,12 +509,12 @@ func TestTheSetupKeyStartsAnAgentWithTheBriefAndAPassingNavCheckMakesTheShownRev
 	}
 
 	w.ExitAtNextBoot(1, "Error: not logged in")
-	refused := requestCodeNavSetup(app, protocol.CodeNavSetupMessage{DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail})
+	refused := requestCodeNavSetup(app, protocol.CodeNavSetupMessage{Agent: protocol.Ptr("claude"), DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail})
 	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "not logged in") {
 		t.Errorf("a setup whose agent exits at launch answered %+v (error %s), want the launch failure with the agent's screen", refused, protocol.Deref(refused.Error))
 	}
 
-	setup := requestCodeNavSetup(app, protocol.CodeNavSetupMessage{DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail})
+	setup := requestCodeNavSetup(app, protocol.CodeNavSetupMessage{Agent: protocol.Ptr("claude"), DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail})
 	if !setup.Success || protocol.Deref(setup.SessionID) == "" {
 		t.Fatalf("setup answered %+v (error %s), want the session it started", setup, protocol.Deref(setup.Error))
 	}
@@ -576,7 +576,7 @@ func TestASetupRefusesASecondAgentWhileItLaunchesAndKeepsItsAgentWhenTheAppThatA
 	}
 	shown := awaitNavigation(app, document, "go", "missing")
 	missing := navigation(shown.Review, "go")
-	setup := protocol.CodeNavSetupMessage{DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail}
+	setup := protocol.CodeNavSetupMessage{Agent: protocol.Ptr("claude"), DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail}
 
 	asking := w.App()
 	first := setup
@@ -610,7 +610,7 @@ func TestTheSetupKeyAgainAfterItsAgentWentIdleStartsAnotherAgentInTheSameCheckou
 	}
 	shown := awaitNavigation(app, document, "go", "missing")
 	missing := navigation(shown.Review, "go")
-	setup := protocol.CodeNavSetupMessage{DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail}
+	setup := protocol.CodeNavSetupMessage{Agent: protocol.Ptr("claude"), DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail}
 
 	first := requestCodeNavSetup(app, setup)
 	if !first.Success {
@@ -697,7 +697,7 @@ func TestAReviewKeepsItsSetupAgentAcrossADaemonRestart(t *testing.T) {
 	}
 	shown := awaitNavigation(app, document, "go", "missing")
 	missing := navigation(shown.Review, "go")
-	setup := requestCodeNavSetup(app, protocol.CodeNavSetupMessage{DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail})
+	setup := requestCodeNavSetup(app, protocol.CodeNavSetupMessage{Agent: protocol.Ptr("claude"), DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail})
 	if !setup.Success || protocol.Deref(setup.SessionID) == "" {
 		t.Fatalf("setup answered %+v (error %s), want the session it started", setup, protocol.Deref(setup.Error))
 	}

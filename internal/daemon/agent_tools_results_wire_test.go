@@ -116,6 +116,7 @@ func TestEverySeedToolAnswersWithTheShapeItsOutputSchemaDescribes(t *testing.T) 
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "agent_tools_enabled", "true")
+	setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
 	tools := listOfferedTools(t, agent)
