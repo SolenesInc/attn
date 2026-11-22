@@ -30,11 +30,6 @@ var builtinHarnessIDs = []string{"claude", "codex", "sigma"}
 var adapterFilePatterns = []string{
 	"internal/daemon/codex_*.go",
 	"internal/daemon/claude_*.go",
-	"internal/daemon/plugin_driver*.go",
-	"internal/daemon/plugin_link*.go",
-	"internal/daemon/plugin_server*.go",
-	"internal/daemon/plugin_launch_instructions*.go",
-	"internal/daemon/plugin_skill_dirs*.go",
 	"internal/daemon/link_runtime*.go",
 	"internal/agent/claude.go",
 	"internal/agent/claude_models.go",

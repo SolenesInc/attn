@@ -204,6 +204,14 @@ func (l *compactionLedger) bindPlugin(session protocol.SessionID, input string, 
 	return true
 }
 
+func (l *compactionLedger) unbindPlugin(session protocol.SessionID, input string, target pluginCompactTarget) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if p := l.pending[session]; p != nil && p.compact().ID.String() == input && p.pluginTarget == target {
+		p.pluginTarget = pluginCompactTarget{}
+	}
+}
+
 func (l *compactionLedger) pluginMatches(session protocol.SessionID, input string, target pluginCompactTarget) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()

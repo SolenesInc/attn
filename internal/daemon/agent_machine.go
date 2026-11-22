@@ -27,7 +27,6 @@ type AgentLaunch struct {
 	Lifetime             harness.Lifetime
 	PreviousLifetime     harness.Lifetime
 	Profile              string
-	Plugin               *AgentPluginLaunch
 	Monitor              sessionmonitor.Launch
 	InstallWorkflowSkill bool
 	RequireWorkflowSkill bool
@@ -35,20 +34,6 @@ type AgentLaunch struct {
 	FreshCost            bool
 	StartedAt            time.Time
 	RepositoryTrust      *harness.RepositoryTrust
-}
-
-type AgentPluginLaunch struct {
-	Plugin             string
-	Resume             bool
-	Params             pluginDriverSpawnParams
-	LaunchInstructions bool
-}
-
-func (launch *AgentLaunch) driverRunID() string {
-	if launch == nil || launch.Plugin == nil || launch.Lifetime == harness.InServer {
-		return ""
-	}
-	return launch.Plugin.Params.RunID
 }
 
 func encodeAgentLaunch(launch *AgentLaunch) (*string, error) {
@@ -87,10 +72,7 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 			return err
 		}
 	}
-	req, err := launchRequestOf(sessionID, *opts, launch, reload)
-	if err != nil {
-		return err
-	}
+	req := launchRequestOf(sessionID, *opts, launch, reload)
 	command, err := d.harnessOf(opts.Agent).Launch(d.life.Context(), req)
 	if err != nil {
 		d.abortLaunch(sessionID)
@@ -107,7 +89,7 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 	return nil
 }
 
-func launchRequestOf(sessionID protocol.SessionID, opts ptybackend.SpawnOptions, launch *AgentLaunch, reload bool) (harness.LaunchRequest, error) {
+func launchRequestOf(sessionID protocol.SessionID, opts ptybackend.SpawnOptions, launch *AgentLaunch, reload bool) harness.LaunchRequest {
 	req := harness.LaunchRequest{
 		Reason: harness.Start, Session: sessionID, Terminal: opts.ID, Lifetime: launch.Lifetime,
 		Profile: launch.Profile, Dir: opts.CWD, Label: opts.Label, Cols: opts.Cols, Rows: opts.Rows,
@@ -118,18 +100,18 @@ func launchRequestOf(sessionID protocol.SessionID, opts ptybackend.SpawnOptions,
 		},
 		Executable: opts.Executable, Unattended: opts.UnattendedLaunch,
 		Guidance: launch.Context, AwarenessDirs: launch.AwarenessDirs, Trust: launch.RepositoryTrust, Direct: launch.Direct,
+		Lifecycle: opts.LifecycleID,
 	}
-	if reload {
+	switch {
+	case reload:
 		req.Reason = harness.Reload
+	case !launch.FreshCost:
+		req.Reason = harness.Resume
 	}
-	if launch.Plugin != nil {
-		note, err := json.Marshal(launch.Plugin)
-		if err != nil {
-			return harness.LaunchRequest{}, fmt.Errorf("encode the launch's note: %w", err)
-		}
-		req.Note = note
+	if note := strings.TrimSpace(launch.Monitor.RunRecord.Note); note != "" && json.Valid([]byte(note)) {
+		req.Note = json.RawMessage(note)
 	}
-	return req, nil
+	return req
 }
 
 func (d *Daemon) seedAgentMonitor(session *protocol.Session, opts ptybackend.SpawnOptions, launch *AgentLaunch) {
@@ -221,6 +203,13 @@ func (d *Daemon) abortMachineAgent(sessionID protocol.SessionID, terminal harnes
 	d.sessionMonitor(sessionID).ForgetInitialPrompt()
 	d.abortLaunch(sessionID)
 	d.terminalEvent(terminal, harness.Dropped{})
+}
+
+func (launch *AgentLaunch) runOf(opts ptybackend.SpawnOptions) string {
+	if launch == nil || launch.Lifetime == harness.InServer {
+		return ""
+	}
+	return opts.LifecycleID
 }
 
 func (d *Daemon) launchCommitted(terminal harness.TerminalID, committed bool, profileID, runID string) {

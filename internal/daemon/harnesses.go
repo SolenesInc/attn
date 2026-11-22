@@ -14,6 +14,10 @@ import (
 var harnessSources []func(*Daemon) []harness.Harness
 
 func (d *Daemon) harnesses() []harness.Harness {
+	return append(d.builtinHarnesses(), d.pluginHarnesses.Harnesses()...)
+}
+
+func (d *Daemon) builtinHarnesses() []harness.Harness {
 	all := slices.Clone(d.builtins)
 	for _, source := range harnessSources {
 		all = append(all, source(d)...)
@@ -30,8 +34,6 @@ func (d *Daemon) harness(id string) (harness.Harness, error) {
 	}
 	return nil, fmt.Errorf("agent %q is not available", id)
 }
-
-var unconnectedHarness func(d *Daemon, id harness.ID) harness.Harness
 
 func (d *Daemon) conversation(sessionID protocol.SessionID) harness.Conversation {
 	return d.conversationFor(d.sessionFacts(sessionID))
@@ -68,7 +70,7 @@ func (d *Daemon) harnessOf(id harness.ID) harness.Harness {
 	if h, err := d.harness(id); err == nil {
 		return h
 	}
-	return unconnectedHarness(d, id)
+	return d.pluginHarnesses.Unconnected(id)
 }
 
 func (d *Daemon) agentOf(sessionID protocol.SessionID) harness.ID {

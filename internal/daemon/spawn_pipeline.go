@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -44,7 +43,7 @@ type spawnRequest struct {
 	msg             *protocol.SpawnSessionMessage
 	policy          internalSpawnPolicy
 	agent           string
-	pluginDriver    pluginDriverRegistration
+	pluginDriver    harness.PluginDriver
 	hasPluginDriver bool
 	isShell         bool
 	initialPrompt   string
@@ -94,7 +93,7 @@ type spawnOutcome struct {
 
 func (plan *spawnPlan) rollback(d *Daemon, sessionID protocol.SessionID) {
 	if plan.agent != nil {
-		d.launchCommitted(plan.spawnOpts.ID, false, plan.agent.Profile, plan.agent.driverRunID())
+		d.launchCommitted(plan.spawnOpts.ID, false, plan.agent.Profile, plan.agent.runOf(plan.spawnOpts))
 	}
 	if d.store.Get(sessionID) == nil {
 		d.forgetMonitor(sessionID)
@@ -384,7 +383,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	terminal := req.terminal
 	plan.spawnOpts.ID = terminal
-	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.profile.ID, req.existingSession, req.policy.startsLaunching, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"] && !req.pluginDriver.Capabilities["server_binding"], req.parentSessionID, nil)
+	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.profile.ID, req.existingSession, req.policy.startsLaunching, req.isShell, !req.isShell && d.factsOrNone(req.agent).Signals.LaunchesWorking, req.parentSessionID, nil)
 	session := plan.launchSession
 	session.Host = msg.Host
 	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
@@ -672,7 +671,9 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 	}
 	req.placed.session = msg.ID
 	if plan.agent != nil {
-		req.placed.launch = func() { d.launchCommitted(plan.spawnOpts.ID, true, plan.agent.Profile, plan.agent.driverRunID()) }
+		req.placed.launch = func() {
+			d.launchCommitted(plan.spawnOpts.ID, true, plan.agent.Profile, plan.agent.runOf(plan.spawnOpts))
+		}
 	}
 	return req.placed, nil
 }
@@ -690,7 +691,7 @@ func (d *Daemon) showHolderProtected(protection foregroundCleanupProtection, hol
 }
 
 func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*AgentLaunch, error) {
-	opts, msg, terminal := plan.spawnOpts, req.msg, plan.spawnOpts.ID
+	msg := req.msg
 	launch, err := d.agentLaunchContext(msg.ID, req.agent)
 	if err != nil {
 		return nil, err
@@ -703,29 +704,7 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 	if req.policy.recordsRepositoryTrust {
 		launch.RepositoryTrust = &harness.RepositoryTrust{KnownOrigins: d.store.StartedRepositoryOrigins(req.profile.ID)}
 	}
-	if req.hasPluginDriver {
-		runID := uuid.NewString()
-		plan.spawnOpts.LifecycleID = runID
-		params := pluginDriverSpawnParams{
-			Executable:      opts.Executable,
-			Agent:           req.agent,
-			TerminalID:      terminal,
-			RunID:           runID,
-			CWD:             req.cwd,
-			Label:           req.label,
-			Yolo:            protocol.Deref(msg.YoloMode),
-			Model:           opts.Model,
-			Effort:          opts.Effort,
-			ExecutionTarget: opts.ExecutionTarget,
-			ConversationID:  d.serverConversation(msg.ID),
-			InitialPrompt:   req.initialPrompt,
-			ResumeSessionID: strings.TrimSpace(req.resumeSessionID),
-		}
-		if metadata := strings.TrimSpace(d.store.GetAgentMetadata(msg.ID)); metadata != "" && json.Valid([]byte(metadata)) {
-			params.Metadata = json.RawMessage(metadata)
-		}
-		launch.Plugin = &AgentPluginLaunch{Plugin: req.pluginDriver.PluginName, Params: params, Resume: req.pluginDriver.Capabilities["resume"] && (req.existingSession != nil || params.ResumeSessionID != ""), LaunchInstructions: req.pluginDriver.Capabilities["launch_instructions"]}
-	}
+	plan.spawnOpts = withLifecycleID(plan.spawnOpts)
 	return launch, nil
 }
 

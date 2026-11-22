@@ -41,6 +41,7 @@ import (
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/harness/appserver"
+	"github.com/victorarias/attn/internal/harness/builtin"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/layouttree"
@@ -223,6 +224,7 @@ type Daemon struct {
 	codexSharedState         *codexShared
 	appServer                *appserver.Client
 	builtins                 []harness.Harness
+	pluginHarnesses          builtin.PluginHarnesses
 	attachmentMu             sync.Mutex
 	inboxMu                  sync.Mutex
 	inboxStates              map[who.Address]*inboxDeliveryState

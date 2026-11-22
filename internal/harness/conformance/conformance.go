@@ -59,6 +59,7 @@ func Run(t *testing.T, registered []harness.Harness, table []Row) {
 				t.Errorf("the adapter %q anchors a server session's monitor on %q, want %q", facts.ID, anchor, row.ServerTerminal)
 			}
 			facts.ServerTerminal = nil
+			facts.ReservesServer = nil
 			if !reflect.DeepEqual(facts, row.Facts) {
 				t.Errorf("the adapter %q states\n  %+v\nwant\n  %+v", facts.ID, facts, row.Facts)
 			}

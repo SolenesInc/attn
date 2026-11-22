@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,19 +17,6 @@ import (
 )
 
 const pluginDriverCallTimeout = 30 * time.Second
-const pluginDeliverMessageTimeout = 15 * time.Second
-
-// Full header scans: 91 real files <=125ms; 10,000 synthetic files across two directories <=7.3s.
-const pluginResumeAvailabilityTimeout = 10 * time.Second
-
-type pluginDriverRegistration struct {
-	PluginName   string
-	Agent        string
-	DisplayName  string
-	Logo         harness.Logo
-	Capabilities map[string]bool
-	SkillDirs    []pluginSkillDir
-}
 
 type pluginDriverRegisterParams struct {
 	Agent        string                 `json:"agent"`
@@ -71,56 +57,6 @@ func (d *Daemon) activePluginRuns(pluginName string) []activePluginRun {
 	return runs
 }
 
-type pluginDriverSpawnParams struct {
-	Executable      string                    `json:"executable,omitempty"`
-	Agent           string                    `json:"agent"`
-	TerminalID      protocol.TerminalID       `json:"session_id"`
-	RunID           string                    `json:"run_id"`
-	CWD             string                    `json:"cwd"`
-	Label           string                    `json:"label,omitempty"`
-	Yolo            bool                      `json:"yolo,omitempty"`
-	Model           string                    `json:"model,omitempty"`
-	Effort          string                    `json:"effort,omitempty"`
-	ExecutionTarget string                    `json:"execution_target,omitempty"`
-	ConversationID  string                    `json:"conversation_id,omitempty"`
-	InitialPrompt   string                    `json:"initial_prompt,omitempty"`
-	Metadata        json.RawMessage           `json:"metadata,omitempty"`
-	ResumeSessionID string                    `json:"resume_session_id,omitempty"`
-	Instructions    *pluginLaunchInstructions `json:"instructions,omitempty"`
-	AgentTools      *pluginAgentTools         `json:"agent_tools,omitempty"`
-}
-
-type pluginAgentTools struct {
-	URL         string `json:"url,omitempty"`
-	Credential  string `json:"credential,omitempty"`
-	Name        string `json:"name,omitempty"`
-	Description string `json:"description"`
-}
-
-type pluginDriverSpawnResult struct {
-	Argv []string          `json:"argv"`
-	Env  map[string]string `json:"env,omitempty"`
-	CWD  string            `json:"cwd,omitempty"`
-}
-
-type pluginResumeConversation struct {
-	Agent           string `json:"agent"`
-	CWD             string `json:"cwd"`
-	ResumeSessionID string `json:"resume_session_id"`
-}
-
-type pluginResumeAvailableParams struct {
-	Conversations []pluginResumeConversation `json:"conversations"`
-}
-
-type pluginResumeAvailableResult struct {
-	Availability []struct {
-		pluginResumeConversation
-		Available bool   `json:"available"`
-		Reason    string `json:"reason,omitempty"`
-	} `json:"availability"`
-}
-
 type pluginReportStateParams struct {
 	TerminalID    protocol.TerminalID `json:"session_id"`
 	SessionID     protocol.SessionID  `json:"-"`
@@ -145,33 +81,6 @@ type pluginReportMetadataParams struct {
 	Seq             uint64              `json:"seq"`
 	Metadata        json.RawMessage     `json:"metadata"`
 	ResumeSessionID string              `json:"resume_session_id,omitempty"`
-}
-
-type pluginDriverSessionClosedParams struct {
-	TerminalID protocol.TerminalID `json:"session_id"`
-	RunID      string              `json:"run_id"`
-	Reason     string              `json:"reason"`
-	ExitCode   *int                `json:"exit_code,omitempty"`
-	Signal     string              `json:"signal,omitempty"`
-}
-
-type pluginDriverSessionClosedResult struct {
-	OK bool `json:"ok"`
-}
-
-type pluginDeliverMessageParams struct {
-	TerminalID     protocol.TerminalID `json:"session_id"`
-	RunID          string              `json:"run_id"`
-	InputID        string              `json:"input_id"`
-	Text           string              `json:"text"`
-	Voice          string              `json:"voice,omitempty"`
-	ConversationID string              `json:"conversation_id,omitempty"`
-}
-
-type pluginDeliverMessageResult struct {
-	OK     bool   `json:"ok"`
-	Status string `json:"status,omitempty"`
-	Reason string `json:"reason,omitempty"`
 }
 
 type pluginReportPullRequestParams struct {
@@ -238,58 +147,47 @@ func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginD
 	if r.plugins[plugin.name] != plugin {
 		return fmt.Errorf("plugin %q is not connected", plugin.name)
 	}
-	if existing, exists := r.drivers[agent]; exists && existing.PluginName != plugin.name {
-		return fmt.Errorf("agent %q is already registered by plugin %q", agent, existing.PluginName)
+	if existing, exists := r.drivers[agent]; exists && existing.Plugin != plugin.name {
+		return fmt.Errorf("agent %q is already registered by plugin %q", agent, existing.Plugin)
 	}
 	if err := bindServer(); err != nil {
 		return err
 	}
-	r.drivers[agent] = pluginDriverRegistration{
-		PluginName:   plugin.name,
+	skillDirs := params.SkillDirs
+	r.drivers[agent] = harness.PluginDriver{
+		Plugin:       plugin.name,
 		Agent:        agent,
 		Capabilities: capabilities,
 		DisplayName:  strings.TrimSpace(params.DisplayName),
 		Logo:         logo,
-		SkillDirs:    params.SkillDirs,
+		SkillDirs: func(lookupEnv func(string) string, homeDir string) ([]string, error) {
+			return resolvePluginSkillsDirs(skillDirs, lookupEnv, homeDir), nil
+		},
 	}
 	close(r.driverRegistered)
 	r.driverRegistered = make(chan struct{})
 	return nil
 }
 
-func (r pluginDriverRegistration) displayName() string {
-	if r.DisplayName != "" {
-		return r.DisplayName
-	}
-	return r.Agent
-}
-
-func pluginDriverRoute(reg pluginDriverRegistration) string {
-	if reg.Capabilities["message_delivery"] || reg.Capabilities["server_binding"] {
-		return "direct"
-	}
-	return "terminal"
-}
-
-func (r *pluginRegistry) driverConnection(agent, owner string) (pluginDriverRegistration, *pluginConnection) {
+func (r *pluginRegistry) driverConnection(agent, owner string) (harness.PluginDriver, *pluginConnection) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	reg, ok := r.drivers[agent]
-	if !ok || reg.PluginName != owner {
-		return pluginDriverRegistration{}, nil
+	if !ok || reg.Plugin != owner {
+		return harness.PluginDriver{}, nil
 	}
 	return reg, r.plugins[owner]
 }
 
 func (d *Daemon) resolvePluginDriverRoutes(plugin, agent string) {
-	reg, conn := d.ensurePluginRegistry().driverConnection(agent, plugin)
-	if conn == nil {
+	route, ok := d.runRoute(harness.SessionFacts{Harness: agent, RunOwner: plugin})
+	if !ok {
 		return
 	}
 	for _, run := range d.store.ListAgentDriverRuns(plugin) {
 		session := d.store.Get(run.SessionID)
 		if session != nil && session.Agent == agent {
-			d.sessionMonitor(run.SessionID).ResolveRoute(plugin, run.RunID, pluginDriverRoute(reg))
+			d.sessionMonitor(run.SessionID).ResolveRoute(plugin, run.RunID, route)
 			d.kickSessionInboxAddresses(run.SessionID)
 			d.kickCompactingClose(run.SessionID)
 		}
@@ -303,17 +201,17 @@ func (r *pluginRegistry) driverOrRegistration(agent string) (registered bool, ne
 	return registered, r.driverRegistered
 }
 
-func (r *pluginRegistry) driver(agent string) (pluginDriverRegistration, bool) {
+func (r *pluginRegistry) driver(agent string) (harness.PluginDriver, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	driver, ok := r.drivers[strings.TrimSpace(strings.ToLower(agent))]
 	return driver, ok
 }
 
-func (r *pluginRegistry) registeredDrivers() []pluginDriverRegistration {
+func (r *pluginRegistry) registeredDrivers() []harness.PluginDriver {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	drivers := make([]pluginDriverRegistration, 0, len(r.drivers))
+	drivers := make([]harness.PluginDriver, 0, len(r.drivers))
 	for _, driver := range r.drivers {
 		drivers = append(drivers, driver)
 	}
@@ -694,108 +592,4 @@ func (r pendingPluginReport) runID() string {
 	default:
 		return ""
 	}
-}
-
-// notifyPluginDriverSessionClosed addresses the run by the terminal the driver launched it in.
-func (d *Daemon) notifyPluginDriverSessionClosed(pluginName string, terminal harness.TerminalID, runID, reason string, exitCode *int, signal string) {
-	sessionID := terminal
-	plugin := d.ensurePluginRegistry().get(pluginName)
-	if plugin == nil {
-		d.logf("plugin session close notification dropped: plugin=%s session=%s run=%s owner disconnected", pluginName, sessionID, runID)
-		return
-	}
-	params := pluginDriverSessionClosedParams{
-		TerminalID: sessionID,
-		RunID:      runID,
-		Reason:     strings.TrimSpace(reason),
-		ExitCode:   exitCode,
-		Signal:     strings.TrimSpace(signal),
-	}
-	d.life.Go("notifyPluginSessionClosed", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), pluginDriverCallTimeout)
-		defer cancel()
-		var result pluginDriverSessionClosedResult
-		if err := plugin.request(ctx, "driver.session_closed", params, &result); err != nil {
-			d.logf("plugin session close notification failed: plugin=%s session=%s run=%s err=%v", pluginName, sessionID, runID, err)
-			return
-		}
-		d.logf("plugin session close notified: plugin=%s session=%s run=%s reason=%s", pluginName, sessionID, runID, params.Reason)
-	})
-}
-
-func (d *Daemon) pluginConversationsResumable(plugin string, refs []harness.ConversationRef) map[harness.ConversationRef]harness.Availability {
-	conversations := make([]pluginResumeConversation, len(refs))
-	for i, ref := range refs {
-		conversations[i] = pluginResumeConversation{Agent: string(ref.Harness), CWD: ref.Dir, ResumeSessionID: ref.ID}
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), pluginResumeAvailabilityTimeout)
-	defer cancel()
-	var result pluginResumeAvailableResult
-	err := d.callPlugin(ctx, plugin, "driver.resume_available", pluginResumeAvailableParams{Conversations: conversations}, &result)
-	reported := make(map[pluginResumeConversation]harness.Availability, len(result.Availability))
-	for _, answer := range result.Availability {
-		reported[answer.pluginResumeConversation] = harness.Availability{Resumable: answer.Available, Reason: answer.Reason}
-	}
-	availability := make(map[harness.ConversationRef]harness.Availability, len(refs))
-	for i, ref := range refs {
-		conversation := conversations[i]
-		answer, found := reported[conversation]
-		switch {
-		case errors.Is(err, context.DeadlineExceeded):
-			answer = harness.Availability{CheckFailed: true, Reason: fmt.Sprintf("cannot check conversation %s in %s's storage: resume_availability_timeout=%s exceeded; the driver did not answer", conversation.ResumeSessionID, conversation.Agent, pluginResumeAvailabilityTimeout)}
-		case err != nil:
-			answer = harness.Availability{CheckFailed: true, Reason: fmt.Sprintf("cannot check conversation %s in %s's storage: %v", conversation.ResumeSessionID, conversation.Agent, err)}
-		case !found:
-			answer = harness.Availability{Reason: fmt.Sprintf("driver %s omitted resume availability for conversation %s in %s", conversation.Agent, conversation.ResumeSessionID, conversation.CWD)}
-		case !answer.Resumable && strings.TrimSpace(answer.Reason) == "":
-			answer.Reason = fmt.Sprintf("conversation %s is no longer in %s's storage", conversation.ResumeSessionID, conversation.Agent)
-		}
-		availability[ref] = answer
-	}
-	return availability
-}
-
-func (d *Daemon) resolvePluginDriverLaunch(reg pluginDriverRegistration, params pluginDriverSpawnParams, resume bool) (pluginDriverSpawnResult, error) {
-	if err := (pluginHarness{d: d, reg: reg}).Facts().Accept(harness.Request{Yolo: params.Yolo, Model: params.Model != "", Effort: params.Effort != ""}); err != nil {
-		return pluginDriverSpawnResult{}, err
-	}
-	if resume && !reg.Capabilities["resume"] {
-		return pluginDriverSpawnResult{}, fmt.Errorf("agent %q does not support resume", reg.Agent)
-	}
-	if params.ResumeSessionID != "" && !reg.Capabilities["resume"] {
-		return pluginDriverSpawnResult{}, fmt.Errorf("agent %q cannot pick up conversation %s: its driver does not support resume", reg.Agent, params.ResumeSessionID)
-	}
-	method := "driver.spawn"
-	if resume {
-		method = "driver.resume"
-		params.ResumeSessionID = strings.TrimSpace(params.ResumeSessionID)
-	} else {
-		params.ResumeSessionID = ""
-	}
-	var result pluginDriverSpawnResult
-	ctx, cancel := context.WithTimeout(context.Background(), pluginDriverCallTimeout)
-	defer cancel()
-	if err := d.callPlugin(ctx, reg.PluginName, method, params, &result); err != nil {
-		return pluginDriverSpawnResult{}, err
-	}
-	if len(result.Argv) == 0 || strings.TrimSpace(result.Argv[0]) == "" {
-		return pluginDriverSpawnResult{}, fmt.Errorf("plugin %q returned an empty argv", reg.PluginName)
-	}
-	return result, nil
-}
-
-func pluginCommandEnv(values map[string]string) ([]string, error) {
-	keys := make([]string, 0, len(values))
-	for key, value := range values {
-		if strings.TrimSpace(key) == "" || strings.ContainsAny(key, "=\x00") || strings.ContainsRune(value, '\x00') {
-			return nil, fmt.Errorf("plugin driver returned invalid environment key %q", key)
-		}
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	env := make([]string, 0, len(keys))
-	for _, key := range keys {
-		env = append(env, key+"="+values[key])
-	}
-	return env, nil
 }

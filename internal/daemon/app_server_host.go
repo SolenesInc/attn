@@ -28,6 +28,7 @@ func (h adapterHost) Events() harness.Events            { return h.d.events() }
 func (h adapterHost) Setting(s *setting.Setting) string { return h.d.setting(s) }
 func (h adapterHost) LoginEnv() []string                { return h.d.latestLoginEnv() }
 func (h adapterHost) Sessions() harness.HostSessions    { return hostSessions(h) }
+func (h adapterHost) Files() harness.FileConversations  { return fileConversations{h.d} }
 func (h adapterHost) Terminals() harness.HostTerminals  { return hostTerminals(h) }
 func (h adapterHost) Records() harness.ServerRecords    { return hostRecords(h) }
 
@@ -54,6 +55,10 @@ func (h adapterHost) ExecutableHealth(facts harness.Facts, offered bool) harness
 }
 
 type hostSessions adapterHost
+
+func (h hostSessions) BeginLaunch(id harness.SessionID, owner, run, route string) {
+	h.d.sessionMonitor(id).BeginLaunch(owner, run, route)
+}
 
 func (h hostSessions) Get(id harness.SessionID) *protocol.Session { return h.d.store.Get(id) }
 func (h hostSessions) List() []*protocol.Session                  { return h.d.store.List("") }

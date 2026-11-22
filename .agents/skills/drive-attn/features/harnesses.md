@@ -37,7 +37,7 @@ harness's logo.
 
 - `attn plugin install --path <dir>`, `link --path <dir>`, `list`, `uninstall <name>` and `remove <name>` (`cmd/attnd/plugin.go`), each printing JSON.
 - `attn settings get|set` for `new_session_agent`, `claude_executable`, `codex_executable`, `sigma_executable`, `sigma_enabled` and `sidebar_harness_logos_enabled` ([settings.md](settings.md)).
-- Prompts: a plugin driver that asks for launch instructions gets the same agent or chief guidance as the other harnesses (`internal/daemon/plugin_launch_instructions.go`). See [agent-guidance.md](agent-guidance.md) for what attn tells every harness.
+- Prompts: a plugin driver that asks for launch instructions gets the same agent or chief guidance as the other harnesses (`internal/harness/internal/plugin/plugin.go`). See [agent-guidance.md](agent-guidance.md) for what attn tells every harness.
 
 ### Triggers
 

@@ -135,11 +135,3 @@ func (d *Daemon) agentToolsFor(c agentCredential) *agentdriver.AgentTools {
 	}
 	return &agentdriver.AgentTools{URL: d.agentToolsURL(), Credential: d.agentKey.sign(c)}
 }
-
-func (d *Daemon) pluginAgentTools(t harness.TerminalID) *pluginAgentTools {
-	tools := d.agentTools(t)
-	if tools == nil {
-		return nil
-	}
-	return &pluginAgentTools{URL: tools.URL, Credential: tools.Credential, Description: agentToolsCatalog().Description}
-}

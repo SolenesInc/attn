@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/harness"
 	"io"
 	"net"
 	"sort"
@@ -68,7 +69,7 @@ type pluginRegistry struct {
 	mu         sync.RWMutex
 	plugins    map[string]*pluginConnection
 	surfaces   map[string][]pluginSurfaceHandler
-	drivers    map[string]pluginDriverRegistration
+	drivers    map[string]harness.PluginDriver
 	priorities map[string]int
 
 	driverRegistered chan struct{}
@@ -81,7 +82,7 @@ func newPluginRegistry() *pluginRegistry {
 	return &pluginRegistry{
 		plugins:    make(map[string]*pluginConnection),
 		surfaces:   make(map[string][]pluginSurfaceHandler),
-		drivers:    make(map[string]pluginDriverRegistration),
+		drivers:    make(map[string]harness.PluginDriver),
 		priorities: make(map[string]int),
 
 		driverRegistered: make(chan struct{}),
@@ -221,7 +222,7 @@ func (r *pluginRegistry) unregisterSurfacesLocked(pluginName string) {
 
 func (r *pluginRegistry) unregisterDriversLocked(pluginName string) {
 	for agent, driver := range r.drivers {
-		if driver.PluginName == pluginName {
+		if driver.Plugin == pluginName {
 			delete(r.drivers, agent)
 		}
 	}

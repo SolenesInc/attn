@@ -6,6 +6,7 @@ import (
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
+	"github.com/victorarias/attn/internal/transcript"
 )
 
 // Host is what attn gives an adapter that runs its own processes: a lifetime, the session reads and writes it needs, and terminals of its own.
@@ -23,6 +24,8 @@ type Host interface {
 	// ExecutableHealth reports whether the harness's executable is installed on this machine, without waiting for the login environment.
 	ExecutableHealth(facts Facts, offered bool) Health
 	Sessions() HostSessions
+	// Files reads the conversations a harness writes as transcript files.
+	Files() FileConversations
 	Terminals() HostTerminals
 	Records() ServerRecords
 }
@@ -52,6 +55,8 @@ type HostSessions interface {
 	Evidence(id SessionID) (SessionEvidence, bool)
 	// TraceClaim records the status a server claimed for a session; quiet claims come from the server's silence, not a report.
 	TraceClaim(id SessionID, quiet bool, status string, at time.Time)
+	// BeginLaunch holds the reports of run until its launch is committed, so a report that arrives while the harness starts is applied after it.
+	BeginLaunch(id SessionID, owner, run, route string)
 }
 
 type SessionEvidence struct {
@@ -103,4 +108,12 @@ type FeedRecord struct {
 	Entry         int64
 	UsageBaseline string
 	Completion    int64
+}
+
+// FileConversations reads conversations from the transcript files attn located for their sessions.
+type FileConversations interface {
+	Page(ctx context.Context, ref ConversationRef, cursor string, limit int) (transcript.EventPage, error)
+	LastReply(ctx context.Context, ref ConversationRef, max int) (string, error)
+	Window(ctx context.Context, ref ConversationRef) (AssistantWindow, bool)
+	Activity(ctx context.Context, ref ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error)
 }

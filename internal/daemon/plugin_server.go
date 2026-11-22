@@ -2,10 +2,11 @@ package daemon
 
 import (
 	"fmt"
-	"strings"
+	"slices"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/harness/appserver"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func (d *Daemon) restorePluginServerOwners() error {
@@ -14,7 +15,7 @@ func (d *Daemon) restorePluginServerOwners() error {
 		return err
 	}
 	for agent, owner := range owners {
-		if reservedPluginAgent(agent) {
+		if d.reservedPluginAgent(agent) {
 			d.logf("skip plugin server ownership: plugin %q claims reserved agent %q", owner, agent)
 			continue
 		}
@@ -41,7 +42,7 @@ func (d *Daemon) registerPluginDriver(plugin *pluginConnection, params pluginDri
 	} else if params.Capabilities["server_binding"] {
 		return fmt.Errorf("server_binding requires a server declaration")
 	}
-	if reservedPluginAgent(agent) {
+	if d.reservedPluginAgent(agent) {
 		return fmt.Errorf("agent %q is invalid or reserved by attn", agent)
 	}
 	if _, err := validatePluginDriverCapabilities(params.Capabilities); err != nil {
@@ -82,7 +83,12 @@ func (d *Daemon) pluginServerBinding(agent, plugin string, declaration *appserve
 	}
 }
 
-func reservedPluginAgent(agent string) bool {
-	kind := agent + "-server"
-	return agent == "" || agent == "shell" || agentdriver.Get(agent) != nil || kind == codexLinkKind || strings.HasPrefix(kind, codexServerTerminalPrefix)
+func (d *Daemon) reservedPluginAgent(agent string) bool {
+	if agent == "" || agent == protocol.AgentShellValue {
+		return true
+	}
+	return slices.ContainsFunc(d.builtinHarnesses(), func(h harness.Harness) bool {
+		facts := h.Facts()
+		return facts.ID == agent || facts.ReservesServer != nil && facts.ReservesServer(agent+"-server")
+	})
 }

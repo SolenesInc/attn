@@ -23,6 +23,19 @@ func TestACodexSessionWithoutHooksStopsLookingForAnUnboundTranscript(t *testing.
 	}
 }
 
+func TestACodexSessionWithoutHooksStartsLaunching(t *testing.T) {
+	t.Setenv("ATTN_AGENT_CODEX_HOOKS", "0")
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+
+	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	testworld.AwaitSession(app, session, func(protocol.Session) bool { return true })
+	if shown := statesShown(app, session); len(shown) == 0 || shown[0] != protocol.SessionStateLaunching {
+		t.Fatalf("a Codex session without hooks showed %v first, want launching", shown)
+	}
+	w.Launched(session)
+}
+
 func messageWindow(app *testworld.Peer, session string) protocol.SessionMessagesGetResultMessage {
 	app.T.Helper()
 	testworld.Await(app, protocol.EventSessionMessagesChanged, func(e protocol.SessionMessagesChangedMessage) bool { return string(e.SessionID) == session })

@@ -23,7 +23,7 @@ var descriptorHealth = map[harness.Installation]string{
 func (d *Daemon) agentCatalog() []harness.Descriptor {
 	providers := map[string]string{}
 	for _, driver := range d.ensurePluginRegistry().registeredDrivers() {
-		providers[driver.Agent] = driver.PluginName
+		providers[driver.Agent] = driver.Plugin
 	}
 	all := d.harnesses()
 	agents := make([]harness.Descriptor, 0, len(all))

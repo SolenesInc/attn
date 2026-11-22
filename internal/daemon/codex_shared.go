@@ -1000,7 +1000,8 @@ func (r *codexShared) instructions(sessionID protocol.SessionID, profile string)
 		r.d.logf("shared Codex: no attn instructions for session %s: %v", sessionID, err)
 		return ""
 	}
-	return renderPluginLaunchInstructions(launch, profile, r.d.sharedCodexAgentTools(profile) != nil).Content
+	launch.AgentTools = r.d.sharedCodexAgentTools(profile) != nil
+	return launch.Instructions()
 }
 
 func (r *codexShared) materialize(connection context.Context, terminal protocol.TerminalID, profile, conversation string) error {

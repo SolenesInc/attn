@@ -59,13 +59,17 @@ type LaunchRequest struct {
 	Trust         *RepositoryTrust
 	Note          json.RawMessage
 	Direct        bool
+	// Lifecycle names this run of the terminal, minted before the launch.
+	Lifecycle string
 }
 
 // Reason is why a terminal launches the harness.
 type Reason string
 
 const (
-	Start  Reason = "start"
+	Start Reason = "start"
+	// Resume brings back a session that ran before, or picks up a conversation.
+	Resume Reason = "resume"
 	Reload Reason = "reload"
 )
 
@@ -238,6 +242,8 @@ type Facts struct {
 	ConversationIsSession bool
 	// ServerTerminal is the terminal a session's monitor is anchored on while its conversation runs in the harness's server. Nil for a harness with no server.
 	ServerTerminal func(profile string) TerminalID
+	// ReservesServer is whether a plugin agent whose server would be named kind collides with this harness's own servers. Nil reserves none.
+	ReservesServer func(kind string) bool
 }
 
 // Lifetime is where a session's conversation runs: in its terminal's process, or in a server that outlives the terminal.
@@ -276,6 +282,8 @@ type Signals struct {
 	StopsClassified bool
 	// ForgetsRecoveredClaim: after a daemon restart, the terminal's last waiting or approval claim says nothing.
 	ForgetsRecoveredClaim bool
+	// LaunchesWorking: the harness reports no state, so a launching session counts as working at once.
+	LaunchesWorking bool
 }
 
 // TitleKind names one of attn's terminal-title parsers; TitlesNone reads no titles.

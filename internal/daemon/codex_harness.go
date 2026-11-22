@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"path/filepath"
+	"strings"
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
@@ -31,6 +32,9 @@ func (h codexHarness) Facts() harness.Facts {
 		return []string{filepath.Join(homeDir, ".agents", "skills")}, nil
 	}
 	facts.CacheTTL = 30 * time.Minute
+	facts.ReservesServer = func(kind string) bool {
+		return kind == codexLinkKind || strings.HasPrefix(kind, codexServerTerminalPrefix)
+	}
 	facts.Tiers = map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "gpt-6-luna", Effort: "low"}, modeltiers.Standard: {Model: "gpt-5.6-terra"}, modeltiers.Deep: {Model: "gpt-6.1-sol"}}
 	facts.Advisor = harness.ModelChoice{Model: "gpt-5.6-luna", Effort: "xhigh"}
 	facts.Signals.Heartbeat, facts.Signals.ReviewerDwell = 500*time.Millisecond, time.Minute

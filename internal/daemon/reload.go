@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
@@ -179,21 +178,12 @@ func (d *Daemon) sessionHasLiveWorker(sessionID protocol.SessionID) bool {
 }
 
 func (d *Daemon) agentSupportsChiefGuidance(agent string) bool {
-	if driver := agentdriver.Get(strings.TrimSpace(strings.ToLower(agent))); driver != nil {
-		return agentdriver.EffectiveCapabilities(driver).HasLaunchInstructions
-	}
-	driver, ok := d.ensurePluginRegistry().driver(agent)
-	return ok && driver.Capabilities["launch_instructions"]
+	return d.factsOrNone(agent).Options.LaunchInstructions
 }
 
 func (d *Daemon) agentSupportsChiefReload(agent string) bool {
-	if !d.agentSupportsChiefGuidance(agent) {
-		return false
-	}
-	if driver, ok := d.ensurePluginRegistry().driver(agent); ok {
-		return driver.Capabilities["resume"]
-	}
-	return true
+	options := d.factsOrNone(agent).Options
+	return options.LaunchInstructions && options.Resume
 }
 
 func (d *Daemon) reloadSessionAgent(sessionID protocol.SessionID) {
@@ -329,11 +319,12 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	var planned harness.Planned
 	if opts.Agent != protocol.AgentShellValue {
 		var err error
-		planned, err = d.harnessOf(opts.Agent).Plan(harness.LaunchRequest{Session: sessionID, Terminal: opts.ID, Lifetime: d.lifetime(sessionID), Conversation: opts.ResumeSessionID, Picker: opts.ResumePicker})
+		planned, err = d.harnessOf(opts.Agent).Plan(harness.LaunchRequest{Reason: harness.Reload, Session: sessionID, Terminal: opts.ID, Lifetime: d.lifetime(sessionID), Conversation: opts.ResumeSessionID, Picker: opts.ResumePicker})
 		if err != nil {
 			return nil, err
 		}
-		agent, err = d.buildAgentReloadLaunch(d.store.Get(sessionID), &opts, planned)
+		opts = withLifecycleID(opts)
+		agent, err = d.buildAgentReloadLaunch(d.store.Get(sessionID), opts)
 		if err != nil {
 			return nil, err
 		}
@@ -362,7 +353,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	d.recordReload(sessionID, opts)
 	d.announceReload(sessionID, opts)
 	if agent != nil {
-		return func() { d.launchCommitted(opts.ID, true, agent.Profile, agent.driverRunID()) }, nil
+		return func() { d.launchCommitted(opts.ID, true, agent.Profile, agent.runOf(opts)) }, nil
 	}
 	return nil, nil
 }
@@ -445,13 +436,12 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 	}
 
 	agent := normalizeSpawnAgent(session.Agent)
-	pluginDriver, isPlugin := d.ensurePluginRegistry().driver(session.Agent)
-	if isPlugin {
-		agent = pluginDriver.Agent
-	}
-	driver := agentdriver.Get(agent)
-	if driver == nil && !isPlugin && agent != protocol.AgentShellValue {
-		return ptybackend.SpawnOptions{}, fmt.Errorf("agent %q is not available", session.Agent)
+	if agent != protocol.AgentShellValue {
+		h, err := d.harness(session.Agent)
+		if err != nil {
+			return ptybackend.SpawnOptions{}, fmt.Errorf("agent %q is not available", session.Agent)
+		}
+		agent = h.Facts().ID
 	}
 	resumeSessionID := d.resumeTarget(agent, sessionID, "")
 	if resumeSessionID != "" {
@@ -526,55 +516,12 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 	return opts, nil
 }
 
-func pluginReloadCapabilityError(reg pluginDriverRegistration) error {
-	if !reg.Capabilities["resume"] {
-		return fmt.Errorf("agent %q requires the resume capability to reload", reg.Agent)
-	}
-	return nil
-}
-
-func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptybackend.SpawnOptions, planned harness.Planned) (*AgentLaunch, error) {
+func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts ptybackend.SpawnOptions) (*AgentLaunch, error) {
 	launch, err := d.agentLaunchContext(session.ID, opts.Agent)
 	if err != nil {
 		return nil, err
 	}
 	launch.Profile, launch.Lifetime, launch.Monitor = session.ProfileID, d.lifetime(session.ID), d.monitorLaunch(session.ID)
 	launch.InitialPrompt = d.sessionMonitor(session.ID).OwedInitialPrompt()
-	reg, ok := d.ensurePluginRegistry().driver(session.Agent)
-	if !ok {
-		return launch, nil
-	}
-	if err := pluginReloadCapabilityError(reg); err != nil {
-		return nil, err
-	}
-	runID := uuid.NewString()
-	opts.LifecycleID = runID
-	params := pluginDriverSpawnParams{
-		Executable:      opts.Executable,
-		Agent:           reg.Agent,
-		TerminalID:      opts.ID,
-		RunID:           runID,
-		CWD:             session.Directory,
-		Label:           session.Label,
-		Yolo:            opts.YoloMode,
-		Model:           opts.Model,
-		Effort:          opts.Effort,
-		ConversationID:  d.reloadedServerConversation(session.ID, planned),
-		ResumeSessionID: opts.ResumeSessionID,
-		ExecutionTarget: opts.ExecutionTarget,
-
-		InitialPrompt: launch.InitialPrompt,
-	}
-	if metadata := strings.TrimSpace(d.store.GetAgentMetadata(session.ID)); metadata != "" && json.Valid([]byte(metadata)) {
-		params.Metadata = json.RawMessage(metadata)
-	}
-	launch.Plugin = &AgentPluginLaunch{Plugin: reg.PluginName, Resume: true, Params: params, LaunchInstructions: reg.Capabilities["launch_instructions"]}
 	return launch, nil
-}
-
-func (d *Daemon) reloadedServerConversation(session protocol.SessionID, planned harness.Planned) string {
-	if conversation, records := planned.Conversation.Recorded(); records && d.lifetime(session) == harness.InServer {
-		return conversation
-	}
-	return d.serverConversation(session)
 }

@@ -348,7 +348,30 @@ func (h monitorHost) PlaceInput(ctx context.Context, terminal harness.TerminalID
 }
 
 func (h monitorHost) Conversation(facts harness.SessionFacts) harness.Conversation {
-	return h.daemon.conversationFor(facts)
+	conversation := h.daemon.conversationFor(facts)
+	if facts.Lifetime == harness.InServer || facts.RunOwner == "" || facts.Run == "" || facts.Route != "direct" || facts.Conversation == "" {
+		return conversation
+	}
+	return pluginCompaction{Conversation: conversation, ledger: &h.daemon.compactions, session: facts.Session,
+		target: pluginCompactTarget{Plugin: facts.RunOwner, Run: facts.Run, Conversation: facts.Conversation}}
+}
+
+type pluginCompaction struct {
+	harness.Conversation
+	ledger  *compactionLedger
+	session protocol.SessionID
+	target  pluginCompactTarget
+}
+
+func (c pluginCompaction) Compact(ctx context.Context, in harness.Input) harness.Custody {
+	if !c.ledger.bindPlugin(c.session, in.ID, c.target) {
+		return harness.Custody{Reason: "the compact request is no longer pending"}
+	}
+	custody := c.Conversation.Compact(ctx, in)
+	if custody.Outcome != harness.Taken && (custody.Outcome != harness.Deferred || !custody.Uncertain) {
+		c.ledger.unbindPlugin(c.session, in.ID, c.target)
+	}
+	return custody
 }
 
 func (h monitorHost) Harness(id harness.ID) harness.Harness { return h.daemon.harnessOf(id) }
