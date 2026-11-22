@@ -174,8 +174,9 @@ func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 			}
 			if run.lastError != nil {
 				detail := run.lastError.Error()
+				var refusal *bridge.Refusal
 				var sshError *outpostssh.Error
-				if errors.As(run.lastError, &sshError) {
+				if !errors.As(run.lastError, &refusal) && errors.As(run.lastError, &sshError) {
 					detail = sshError.Stderr
 				}
 				info.LastError = protocol.Ptr(detail)
