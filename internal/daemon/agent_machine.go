@@ -225,8 +225,8 @@ func (d *Daemon) agentStarted(sessionID protocol.SessionID, launch *AgentLaunch)
 	if pending, ok := d.consumeQueuedAgentConversation(sessionID); ok {
 		d.observeAgentConversation(pending)
 	}
-	if l := d.linkNamed(launch.Link); l != nil && strings.TrimSpace(launch.InitialPrompt) == "" {
-		l.launchStarted(sessionID)
+	if launch.Link != "" {
+		d.terminalEvent(d.primaryTerminal(sessionID), harness.Started{Session: sessionID, Prompted: strings.TrimSpace(launch.InitialPrompt) != ""})
 	}
 }
 
@@ -236,7 +236,7 @@ func (d *Daemon) commitAgentLaunch(_ context.Context, msg protocol.LaunchCommitt
 		if ok {
 			d.abortMachineAgent(sessionID, msg.TerminalID)
 		} else {
-			d.linkTerminalDropped(msg.TerminalID)
+			d.terminalEvent(msg.TerminalID, harness.Dropped{})
 		}
 		d.life.Go("releaseLinksAfterLaunchAbort", func() {
 			for _, link := range d.links() {
@@ -267,7 +267,7 @@ func (complete launchCompletion) finish() {
 func (d *Daemon) abortMachineAgent(sessionID protocol.SessionID, terminal harness.TerminalID) {
 	d.sessionMonitor(sessionID).ForgetInitialPrompt()
 	d.abortLaunch(sessionID)
-	d.linkTerminalDropped(terminal)
+	d.terminalEvent(terminal, harness.Dropped{})
 }
 
 func (d *Daemon) launchCommitted(terminal harness.TerminalID, committed bool, profileID, runID string) {

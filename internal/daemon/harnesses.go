@@ -34,6 +34,21 @@ func (d *Daemon) harness(id string) (harness.Harness, error) {
 var unconnectedHarness func(d *Daemon, id harness.ID) harness.Harness
 
 func (d *Daemon) conversation(sessionID protocol.SessionID) harness.Conversation {
+	return d.conversationFor(d.sessionFacts(sessionID))
+}
+
+func (d *Daemon) hasChannel(agent harness.ID) bool {
+	_, ok := harness.As[harness.Channel](d.harnessOf(agent))
+	return ok
+}
+
+func (d *Daemon) channelUp(sessionID protocol.SessionID) bool {
+	facts := d.sessionFacts(sessionID)
+	channel, ok := harness.As[harness.Channel](d.harnessOf(facts.Harness))
+	return ok && channel.Reach(d.life.Context(), facts).Up
+}
+
+func (d *Daemon) sessionFacts(sessionID protocol.SessionID) harness.SessionFacts {
 	facts := harness.SessionFacts{Session: sessionID, Link: d.store.SessionLink(sessionID), Terminal: d.primaryTerminal(sessionID)}
 	if session := d.store.Get(sessionID); session != nil {
 		facts.Harness, facts.Profile = session.Agent, session.ProfileID
@@ -42,7 +57,7 @@ func (d *Daemon) conversation(sessionID protocol.SessionID) harness.Conversation
 	facts.Conversation, facts.Path = conversation.NativeID, conversation.TranscriptPath
 	run := d.store.GetAgentDriverRun(sessionID)
 	facts.Run, facts.RunOwner, facts.Route = run.RunID, run.PluginName, run.Route
-	return d.conversationFor(facts)
+	return facts
 }
 
 func (d *Daemon) conversationFor(facts harness.SessionFacts) harness.Conversation {
@@ -61,6 +76,40 @@ func (d *Daemon) agentOf(sessionID protocol.SessionID) harness.ID {
 		return session.Agent
 	}
 	return ""
+}
+
+func (d *Daemon) terminalEvent(t harness.TerminalID, e harness.TerminalEvent) {
+	for _, h := range d.harnesses() {
+		h.Terminal(t, e)
+	}
+}
+
+func (d *Daemon) callerResolvers() []harness.CallerResolver {
+	var resolvers []harness.CallerResolver
+	for _, h := range d.harnesses() {
+		if r, ok := harness.As[harness.CallerResolver](h); ok {
+			resolvers = append(resolvers, r)
+		}
+	}
+	return resolvers
+}
+
+func (d *Daemon) resolveCaller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, profile string, ours bool) {
+	for _, r := range d.callerResolvers() {
+		if session, view, profile, ours = r.ResolveCaller(string(t)); ours {
+			return session, view, profile, true
+		}
+	}
+	return "", "", "", false
+}
+
+func (d *Daemon) credentialOwner(subject string) harness.CallerResolver {
+	for _, r := range d.callerResolvers() {
+		if r.OwnsCredential(subject) {
+			return r
+		}
+	}
+	return nil
 }
 
 func (d *Daemon) runEnded(agent harness.ID, e harness.RunEnd) {

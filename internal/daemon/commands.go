@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/command"
-	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/reading"
 )
@@ -93,7 +92,7 @@ func (d *Daemon) framedCaller(ctx context.Context, msg *protocol.RunCommandMessa
 			}
 			asking = command.Caller{Session: session, Profile: profile}
 		} else if _, remote := OriginOf(ctx); !remote {
-			asking.Profile, _, _ = harness.ParseCodexThreadTerminal(terminal)
+			_, _, asking.Profile, _ = d.resolveCaller(terminal)
 		}
 	}
 	if named := protocol.TrimID(protocol.Deref(msg.SessionID)); named != "" {
@@ -110,8 +109,8 @@ func (d *Daemon) framedCaller(ctx context.Context, msg *protocol.RunCommandMessa
 	if err != nil {
 		return command.Caller{}, err
 	}
-	if threadProfile, _, ok := harness.ParseCodexThreadTerminal(terminal); ok && profile == "" {
-		profile = threadProfile
+	if _, _, callerProfile, _ := d.resolveCaller(terminal); profile == "" && callerProfile != "" {
+		profile = callerProfile
 	}
 	return command.Caller{Profile: profile, Terminal: terminal}, nil
 }

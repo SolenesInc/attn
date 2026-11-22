@@ -31,6 +31,12 @@ func (h claudeHarness) Facts() harness.Facts {
 	return facts
 }
 
+func (h claudeHarness) Reach(_ context.Context, s harness.SessionFacts) harness.Reach {
+	return harness.Reach{Up: h.d.claudeModReaches(s.Session)}
+}
+
+func (claudeHarness) Terminal(harness.TerminalID, harness.TerminalEvent) {}
+
 func (claudeHarness) End(context.Context, harness.Ending) {}
 
 func (h claudeHarness) Health(context.Context) harness.Health {

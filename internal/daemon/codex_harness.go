@@ -31,6 +31,22 @@ func (h codexHarness) Facts() harness.Facts {
 	return facts
 }
 
+func (h codexHarness) Terminal(t harness.TerminalID, e harness.TerminalEvent) {
+	r := h.d.codexShared()
+	switch e := e.(type) {
+	case harness.Exited:
+		r.terminalExited(t)
+	case harness.Dropped:
+		r.terminalDropped(t)
+	case harness.Handed:
+		r.terminalMoved(t, e.Profile)
+	case harness.Working:
+		r.checkWorkingSoon(e.Session)
+	case harness.Restarting:
+		r.retireConnections(t)
+	}
+}
+
 func (h codexHarness) End(_ context.Context, e harness.Ending) {
 	h.d.codexShared().sessionClosed(e.Session, e.Profile, e.Released)
 }

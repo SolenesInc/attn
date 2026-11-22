@@ -1080,8 +1080,6 @@ func (r *codexShared) terminalShowing(profile, conversation string) (harness.Ter
 	return found.terminal, true
 }
 
-func (r *codexShared) launchStarted(protocol.SessionID) {}
-
 func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) error {
 	dropRetiredAutomationExecutable(opts)
 	installed, err := r.binary(configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))

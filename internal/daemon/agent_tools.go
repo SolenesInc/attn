@@ -14,7 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/catalog"
 	"github.com/victorarias/attn/internal/command"
-	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/mcpserver"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
@@ -99,68 +98,50 @@ func (d *Daemon) agentCaller(token string, header http.Header) (*agentCall, erro
 	if err != nil {
 		return nil, err
 	}
-	if profile, ok := strings.CutPrefix(credential.name, sharedCodexServerPrefix); ok && credential.kind == credentialServer {
-		return &agentCall{who: "shared Codex of profile " + profile, named: func(meta json.RawMessage) (command.Caller, string, *command.Refusal) {
-			return d.sharedCodexCaller(profile, meta)
-		}}, nil
-	}
-	caller, who, err := d.credentialCaller(credential, header)
+	caller, who, named, err := d.credentialCaller(credential, header)
 	if err != nil {
 		return nil, err
+	}
+	if named != nil {
+		return &agentCall{who: who, named: named}, nil
 	}
 	return &agentCall{caller: caller, who: who}, nil
 }
 
-func (d *Daemon) sharedCodexCaller(profile string, meta json.RawMessage) (command.Caller, string, *command.Refusal) {
-	var named struct {
-		ThreadID string `json:"threadId"`
-	}
-	_ = json.Unmarshal(meta, &named)
-	conversation := strings.TrimSpace(named.ThreadID)
-	if conversation == "" {
-		return command.Caller{}, "shared Codex of profile " + profile, &command.Refusal{Code: "no_conversation", Message: "the call's _meta names no Codex conversation in threadId", Fix: "Call the tool from a Codex conversation; Codex names it in _meta.threadId."}
-	}
-	who := "shared Codex conversation " + conversation
-	session, _, _ := d.codexShared().resolveCaller(harness.CodexThreadTerminal(profile, conversation))
-	if session == "" {
-		return command.Caller{}, who, &command.Refusal{Code: "no_session", Message: fmt.Sprintf("no session of profile %s holds Codex conversation %s", profile, conversation), Fix: "Call the tool from a conversation that an attn session shows."}
-	}
-	return d.sessionCaller(session), who, nil
-}
+type namedCaller func(meta json.RawMessage) (command.Caller, string, *command.Refusal)
 
-func (d *Daemon) credentialCaller(credential agentCredential, header http.Header) (command.Caller, string, error) {
-	switch credential.kind {
-	case credentialTerminal:
+func (d *Daemon) credentialCaller(credential agentCredential, header http.Header) (command.Caller, string, namedCaller, error) {
+	if credential.kind == credentialTerminal {
 		terminal := protocol.TerminalID(credential.name)
-		_, _, linked := d.linkCaller(terminal)
-		if !linked && !d.terminalLive(terminal) {
-			return command.Caller{}, "", fmt.Errorf("terminal %s has ended", terminal)
+		_, _, _, resolved := d.resolveCaller(terminal)
+		if !resolved && !d.terminalLive(terminal) {
+			return command.Caller{}, "", nil, fmt.Errorf("terminal %s has ended", terminal)
 		}
 		who := "terminal " + string(terminal)
 		session := d.sessionInTerminal(terminal)
 		if session == "" {
-			return command.Caller{Terminal: terminal}, who, nil
+			return command.Caller{Terminal: terminal}, who, nil, nil
 		}
-		return d.sessionCaller(session), who, nil
-	default:
-		p := d.serverConnectionAt(credential.name)
-		if p == nil {
-			return command.Caller{}, "", fmt.Errorf("attn holds no server at %s", credential.name)
-		}
-		name := p.callerConversationHeader()
-		if name == "" {
-			return command.Caller{}, "", fmt.Errorf("no harness of the server at %s names its conversations", credential.name)
-		}
-		conversation := strings.TrimSpace(header.Get(name))
-		if conversation == "" {
-			return command.Caller{}, "", fmt.Errorf("the request from the server at %s has no %s header", credential.name, name)
-		}
-		session := p.toolsCaller(conversation)
-		if session == "" {
-			return command.Caller{}, "", fmt.Errorf("no session of %s holds conversation %s", p.harnesses(), conversation)
-		}
-		return d.sessionCaller(session), p.harnesses() + " conversation " + conversation, nil
+		return d.sessionCaller(session), who, nil, nil
 	}
+	resolver := d.credentialOwner(credential.name)
+	if resolver == nil {
+		return command.Caller{}, "", nil, fmt.Errorf("attn holds no server at %s", credential.name)
+	}
+	session, who, perCall, err := resolver.Authenticate(credential.name, header)
+	if err != nil {
+		return command.Caller{}, "", nil, err
+	}
+	if perCall {
+		return command.Caller{}, who, func(meta json.RawMessage) (command.Caller, string, *command.Refusal) {
+			session, who, refusal := resolver.IdentifyCall(credential.name, meta)
+			if refusal != nil {
+				return command.Caller{}, who, &command.Refusal{Code: refusal.Code, Message: refusal.Message, Fix: refusal.Fix}
+			}
+			return d.sessionCaller(session), who, nil
+		}, nil
+	}
+	return d.sessionCaller(session), who, nil, nil
 }
 
 func (d *Daemon) sessionCaller(session protocol.SessionID) command.Caller {

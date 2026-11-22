@@ -60,7 +60,7 @@ func (d *Daemon) dropTerminal(t harness.TerminalID) {
 	owner, _ := d.shownIn(t)
 	d.forgetTerminalTitle(t)
 	d.typedCommands.Delete(t)
-	d.linkTerminalDropped(t)
+	d.terminalEvent(t, harness.Dropped{})
 	var removed []harness.TerminalID
 	if err := d.removePTYSession(t); err != nil {
 		d.logf("removing the runtime of terminal %s: %v", t, err)

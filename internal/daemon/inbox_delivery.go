@@ -233,7 +233,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		state.startedSession, state.tenderResume = "", nil
 	}
 	tenderResume := state.tenderResume
-	if finishingStart && tenderResume != nil && tenderResume.claude && !d.claudeModReaches(holder.ID) {
+	if finishingStart && tenderResume != nil && tenderResume.channel && !d.channelUp(holder.ID) {
 		receipt.Detail = fmt.Sprintf("queued: %s is reopening, and its mail waits for the Claude Code mod's first poll", sessionDisplayName(holder))
 		return receipt, nil
 	}

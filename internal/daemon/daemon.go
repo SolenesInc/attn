@@ -1713,7 +1713,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
 		return false
 	}
-	d.linkTerminalExited(info.ID)
+	d.terminalEvent(info.ID, harness.Exited{Code: info.ExitCode, Signal: info.Signal, Lifecycle: info.LifecycleID})
 	if d.linkProcess(info.ID) {
 		d.forgetTerminalTitle(info.ID)
 		return false
@@ -2339,7 +2339,7 @@ func (d *Daemon) handlePTYState(terminal harness.TerminalID, obs pty.Observation
 	monitor := d.monitorInTerminal(terminal, sessionID)
 	evidenceChanged := monitor.RecordPTY(obs)
 	if obs.Source == pty.SourceProgramStatus && obs.Claim == pty.ProgramWorking {
-		d.codexShared().checkWorkingSoon(sessionID)
+		d.terminalEvent(terminal, harness.Working{Session: sessionID})
 	}
 	if !obs.Source.ClaimsProtocolState() {
 		if evidenceChanged {

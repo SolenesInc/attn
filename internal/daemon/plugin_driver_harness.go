@@ -58,6 +58,8 @@ func (h pluginHarness) Route(facts harness.SessionFacts) (string, bool) {
 	return pluginDriverRoute(reg), true
 }
 
+func (pluginHarness) Terminal(harness.TerminalID, harness.TerminalEvent) {}
+
 func (h pluginHarness) End(_ context.Context, e harness.Ending) {
 	if l := h.d.serverLinkFor(h.reg.Agent); l != nil {
 		l.sessionClosed(e.Session, e.Profile, e.Released)

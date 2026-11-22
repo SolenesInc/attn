@@ -228,7 +228,7 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 	if removeErr := d.ptyBackend.Remove(ctx, terminal); removeErr != nil {
 		d.logf("reload: remove returned error for %s (continuing): %v", sessionID, removeErr)
 	}
-	d.codexShared().retireConnections(terminal)
+	d.terminalEvent(terminal, harness.Restarting{})
 	d.monitors().registry.DropPendingConversations(terminal)
 	d.syncMonitorConversation(sessionID)
 	opts.DaemonEnv = d.runEnv(opts.LifecycleID)

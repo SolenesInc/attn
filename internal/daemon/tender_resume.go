@@ -132,11 +132,11 @@ type tenderResumeDelivery struct {
 	seedID  string
 	title   string
 	note    string
-	claude  bool
+	channel bool
 }
 
-func newTenderResume(session protocol.SessionID, seed garden.Seed, standby *garden.Standby, claude bool) *tenderResumeDelivery {
-	return &tenderResumeDelivery{session: session, seedID: seed.ID, title: seed.Title, note: standby.Note, claude: claude}
+func newTenderResume(session protocol.SessionID, seed garden.Seed, standby *garden.Standby, channel bool) *tenderResumeDelivery {
+	return &tenderResumeDelivery{session: session, seedID: seed.ID, title: seed.Title, note: standby.Note, channel: channel}
 }
 
 func (d *Daemon) memberTenderResume(seedID string, session protocol.SessionID) (*tenderResumeDelivery, error) {
@@ -212,9 +212,9 @@ func (d *Daemon) resumeStandbyTenderLocked(a who.Address, seedID string, state *
 	if d.unreachableSessionHost(sessionID) != "" {
 		return waitForOutpost()
 	}
-	claude := false
-	if entry := d.store.SessionLedgerEntry(sessionID); entry != nil && entry.Agent == string(protocol.SessionAgentClaude) {
-		claude = true
+	channel := false
+	if entry := d.store.SessionLedgerEntry(sessionID); entry != nil {
+		channel = d.hasChannel(entry.Agent)
 	}
 	if reopensAt, tripped := d.tenderResumes.reopensAt(seed.ID, d.clock.Now()); tripped {
 		receipt.Detail = d.blockTenderResume(a, seed, tenderResumeTripwire{reopensAt: reopensAt}.Error())
@@ -276,7 +276,7 @@ func (d *Daemon) resumeStandbyTenderLocked(a who.Address, seedID string, state *
 		return receipt, nil
 	}
 	state.startedSession = outcome.SessionID
-	state.tenderResume = newTenderResume(outcome.SessionID, seed, standby, claude)
+	state.tenderResume = newTenderResume(outcome.SessionID, seed, standby, channel)
 	d.kickInbox(a)
 	receipt.Detail = fmt.Sprintf("reopened session %s, the tender of %s on standby; the mail is delivered once it reads input", shortSessionID(outcome.SessionID), seed.ID)
 	return receipt, nil
@@ -401,7 +401,7 @@ func (d *Daemon) blockClaudeResumeWithoutMod(a who.Address, session protocol.Ses
 	state := d.lockInboxState(a)
 	defer state.unlock()
 	delivery := state.tenderResume
-	if delivery == nil || !delivery.claude || delivery.session != session || state.startedSession != session {
+	if delivery == nil || !delivery.channel || delivery.session != session || state.startedSession != session {
 		return
 	}
 	seed, _, err := d.readSeed(delivery.seedID)

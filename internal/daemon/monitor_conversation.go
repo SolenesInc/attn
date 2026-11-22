@@ -126,7 +126,7 @@ func (d *Daemon) monitorInTerminal(terminal harness.TerminalID, session protocol
 		if monitor := r.Conversation(profile, native); monitor != nil {
 			return monitor
 		}
-		if _, view, _ := d.linkCaller(terminal); view != "" {
+		if _, view, _, _ := d.resolveCaller(terminal); view != "" {
 			terminal = view
 		}
 	}

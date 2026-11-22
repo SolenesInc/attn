@@ -18,6 +18,7 @@ type Harness interface {
 	Conversation(s SessionFacts) Conversation
 	// End runs once after a close commits, for a session whose conversation lives in the harness's server.
 	End(ctx context.Context, e Ending)
+	Terminal(t TerminalID, e TerminalEvent)
 }
 
 // Facts are what a harness is, constant for a built-in and fixed by the registration for a plugin.

@@ -3,6 +3,7 @@
 # files of each approved leak's optional part belong here. A part's line names it as As[<part>] in place of the
 # function, and admits nothing else. A real violation goes on violations.txt, and only by shrinking.
 
+internal/daemon/harnesses.go As[Channel] leak 1: the Claude mod's reach; a resumed tender's mail waits for a channel the harness has instead of being typed
 internal/daemon/harnesses.go As[Runs] leak 1: a plugin driver's runs; generic code tells the harness a run ended and asks a run's route
 
 internal/fakeagent/ * fake harness binaries for tests: naming the harness each one fakes is its job

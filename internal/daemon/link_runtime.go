@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/layouttree"
@@ -21,16 +20,12 @@ type linkRuntime interface {
 	admit(profile, conversation string) error
 	prepareLaunch(opts *ptybackend.SpawnOptions, profile string) error
 	relaunch(opts *ptybackend.SpawnOptions) error
-	launchStarted(sessionID protocol.SessionID)
 
-	resolveCaller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, ours bool)
 	runsLink(t harness.TerminalID) bool
 	serverTerminal(profile string) harness.TerminalID
 
 	profileReleased(profile string)
 
-	terminalDropped(t harness.TerminalID)
-	terminalExited(t harness.TerminalID)
 	recoverProcesses(ctx context.Context)
 	recoverViews(ctx context.Context)
 }
@@ -150,28 +145,6 @@ func (d *Daemon) keepsWhenLeft(sessionID protocol.SessionID) bool {
 	return d.linkConversation(sessionID) != ""
 }
 
-func (d *Daemon) linkCaller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, ours bool) {
-	if raw, neutral := strings.CutPrefix(string(t), "server-env:"); neutral {
-		variable, conversation, _ := strings.Cut(raw, ":")
-		var owner protocol.SessionID
-		for _, id := range d.store.OpenSessionsHolding(conversation) {
-			if l, ok := d.linkOf(id).(*serverLink); ok && l.callerConversationEnv() == variable {
-				if owner != "" {
-					return "", "", true
-				}
-				owner = id
-			}
-		}
-		return owner, d.primaryTerminal(owner), true
-	}
-	for _, l := range d.links() {
-		if session, view, ours = l.resolveCaller(t); ours {
-			return session, view, true
-		}
-	}
-	return "", "", false
-}
-
 func (d *Daemon) linkRenamed(sessionID protocol.SessionID, label string) {
 	if _, err := Call[struct{}](context.Background(), d.router(), protocol.LinkRenameMessage{Cmd: protocol.CmdLinkRename, SessionID: sessionID, Label: label}); err != nil {
 		d.logf("link rename: session=%s: %v", sessionID, err)
@@ -181,24 +154,6 @@ func (d *Daemon) linkRenamed(sessionID protocol.SessionID, label string) {
 func (d *Daemon) mirrorLabel(sessionID protocol.SessionID) {
 	if session := d.store.Get(sessionID); session != nil && !store.SessionLabelIsPlaceholder(session.Label, session.Directory, session.ID) {
 		d.linkRenamed(session.ID, session.Label)
-	}
-}
-
-func (d *Daemon) linkTerminalDropped(t harness.TerminalID) {
-	for _, l := range d.links() {
-		l.terminalDropped(t)
-	}
-}
-
-func (d *Daemon) linkTerminalExited(t harness.TerminalID) {
-	if _, server := d.appServerProcess(d.life.Context(), t); server {
-		if err := d.removePTYSession(t); err != nil {
-			d.logf("remove app-server terminal %s: %v", t, err)
-		}
-		return
-	}
-	for _, l := range d.links() {
-		l.terminalExited(t)
 	}
 }
 
