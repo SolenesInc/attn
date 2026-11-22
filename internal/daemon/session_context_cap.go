@@ -39,7 +39,7 @@ func (d *Daemon) setSessionContextWindowCap(sessionID protocol.SessionID, cap in
 			return fmt.Errorf("context window cap must be 0 (no cap) or between %d and %d tokens; got %d", contextWindowCapMin, contextWindowCapMax, cap)
 		}
 	}
-	if err := d.factsOrNone(normalizeSpawnAgent(session.Agent)).Accept(harness.Request{ContextCap: true}); err != nil {
+	if err := d.factsOrNone(harnessID(session.Agent)).Accept(harness.Request{ContextCap: true}); err != nil {
 		return err
 	}
 	if protocol.Deref(session.ContextWindowCap) == cap {

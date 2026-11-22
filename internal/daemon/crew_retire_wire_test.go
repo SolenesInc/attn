@@ -15,7 +15,7 @@ import (
 
 func createCrew(t *testing.T, cli *client.Client, name string) protocol.CrewMember {
 	t.Helper()
-	created, err := cli.CrewCreate(name)
+	created, err := cli.CrewCreate(name, "claude")
 	if err != nil {
 		t.Fatalf("crew create %s: %v", name, err)
 	}
@@ -44,9 +44,9 @@ func TestCreatingAMemberGivesItAHomeWithAnEmptyCharter(t *testing.T) {
 	if got := crewRosterMember(t, cli, "keel"); got.HomeDir != keel.HomeDir {
 		t.Fatalf("roster = %+v", got)
 	}
-	_, err := cli.CrewCreate("keel")
+	_, err := cli.CrewCreate("keel", "claude")
 	crewErrorContains(t, err, "Keel already exists")
-	_, err = cli.CrewCreate("chief")
+	_, err = cli.CrewCreate("chief", "claude")
 	crewErrorContains(t, err, `"chief" is reserved`)
 
 	wake := startCrew(t, cli, "Keel", "")
@@ -62,7 +62,7 @@ func TestCreatingAMemberGivesItAHomeWithAnEmptyCharter(t *testing.T) {
 	if err := os.RemoveAll(keel.HomeDir); err != nil {
 		t.Fatal(err)
 	}
-	_, err = cli.CrewCreate("Keel")
+	_, err = cli.CrewCreate("Keel", "claude")
 	crewErrorContains(t, err, "Keel is retired", "attn crew restore Keel")
 }
 
@@ -144,7 +144,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 		t.Fatal(err)
 	}
 	awaitClosed(app, string(wake.SessionID))
-	_, err = cli.CrewStart("Keel", "", "")
+	_, err = crewStartFrom(t, cli, "Keel", "")
 	crewErrorContains(t, err, "Keel is retired", "attn crew restore Keel")
 
 	w.restart()

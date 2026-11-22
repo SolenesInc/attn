@@ -17,7 +17,7 @@ func TestARetiredMembersCloseRequestReachesItsConversationDuringBinding(t *testi
 	binding := s.PauseAt(pausepoint.ConversationCandidateStart)
 	s.Start()
 	app, cli := s.App(), s.Client()
-	if _, err := cli.CrewCreate("Keel"); err != nil {
+	if _, err := cli.CrewCreate("Keel", "claude"); err != nil {
 		t.Fatal(err)
 	}
 	wake := startCrew(t, cli, "Keel", "")

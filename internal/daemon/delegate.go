@@ -102,18 +102,20 @@ func truncateDelegationName(name string) string {
 }
 
 func delegationAgentName(sourceAgent string, requested *string) string {
-	agent := strings.TrimSpace(strings.ToLower(protocol.Deref(requested)))
-	if agent == "" {
-		agent = strings.TrimSpace(strings.ToLower(sourceAgent))
+	if agent := harnessID(protocol.Deref(requested)); agent != "" {
+		return agent
 	}
-	if agent == "" || agent == protocol.AgentShellValue {
-		return string(protocol.SessionAgentCodex)
+	if agent := harnessID(sourceAgent); agent != protocol.AgentShellValue {
+		return agent
 	}
-	return agent
+	return ""
 }
 
 func (d *Daemon) resolveDelegationAgent(sourceAgent string, requested *string) (string, error) {
 	agent := delegationAgentName(sourceAgent, requested)
+	if agent == "" {
+		return "", fmt.Errorf("a delegation from a shell names its harness: pass --agent, %s", d.harnessChoices())
+	}
 	h, err := d.harness(agent)
 	if err != nil {
 		return "", err
@@ -324,7 +326,9 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	} else if existingSession != nil {
 		sourceAgent = existingSession.Agent
 	}
-	d.awaitHarness(delegationAgentName(sourceAgent, msg.Agent))
+	if named := delegationAgentName(sourceAgent, msg.Agent); named != "" {
+		d.awaitHarness(named)
+	}
 	agent, err := d.resolveDelegationAgent(sourceAgent, msg.Agent)
 	if err != nil {
 		return nil, err

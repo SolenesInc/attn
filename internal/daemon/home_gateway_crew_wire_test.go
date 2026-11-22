@@ -121,6 +121,7 @@ func TestAPhoneStartsAMemberBetweenSessionsOnceAndHearsARefusalWithTheHomesReaso
 		t.Fatalf("crew between sessions = %v, want Keel", got)
 	}
 
+	giveImportedMemberAHarness(t, cli, "keel")
 	phone.startCrew("first", "keel")
 	phone.startCrew("while-starting", "keel")
 	started := phone.sessionsFrameUntil(func(frame homegateway.HomeGatewaySessions) bool {

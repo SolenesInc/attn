@@ -118,6 +118,7 @@ pub(crate) fn field_key(field: Field) -> String {
         Field::Prompt => format!("{KEY}.prompt"),
         Field::DirectoryPath => format!("{KEY}.directory"),
         Field::CatchUp => format!("{KEY}.catchup-latest"),
+        Field::Agent => format!("{KEY}.runs-as"),
         Field::Include(_) => format!("{KEY}.repositories-include"),
         Field::Exclude(_) => format!("{KEY}.repositories-exclude"),
         Field::OverrideRepository(i) => format!("{KEY}.override-repository.{i}"),

@@ -210,7 +210,7 @@ func TestAnUnavailableNotebookHomeStopsOnlyItsMember(t *testing.T) {
 	if read.Success || !strings.Contains(protocol.Deref(read.Error), member.HomeDir) {
 		t.Fatalf("charter of a member whose home is unavailable: %+v", read)
 	}
-	_, err := cli.CrewStart("Keel", "", "")
+	_, err := crewStartFrom(t, cli, "Keel", "")
 	crewErrorContains(t, err, member.HomeDir, "unavailable")
 	w.Launched(string(startCrew(t, cli, "Trellis", "").SessionID))
 	if _, err := os.Stat(member.HomeDir); !os.IsNotExist(err) {
@@ -371,7 +371,7 @@ func TestAHomeMovedAwayIsRepointedAndStartsThere(t *testing.T) {
 	if err := os.Rename(home, aside); err != nil {
 		t.Fatal(err)
 	}
-	_, err := cli.CrewStart("Keel", "", "")
+	_, err := crewStartFrom(t, cli, "Keel", "")
 	crewErrorContains(t, err, home, "unavailable")
 
 	empty := w.Path("empty")

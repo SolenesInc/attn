@@ -551,21 +551,12 @@ func (m *Manager) getSession(id string) (*Session, error) {
 	return session, nil
 }
 
-func normalizeAgent(agent string, external bool) string {
+func launchAgent(agent string, external bool) (string, error) {
 	a := strings.TrimSpace(strings.ToLower(agent))
-	if a == "" {
-		return "codex"
+	if a == "shell" || external || agentdriver.Get(a) != nil {
+		return a, nil
 	}
-	if a == "shell" {
-		return "shell"
-	}
-	if agentdriver.Get(a) != nil {
-		return a
-	}
-	if external {
-		return a
-	}
-	return "codex"
+	return "", fmt.Errorf("a launch of agent %q has no command to run", agent)
 }
 
 func buildSpawnCommand(opts SpawnOptions, shellPath string, env []string) *exec.Cmd {

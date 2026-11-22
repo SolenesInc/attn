@@ -253,7 +253,7 @@ try {
     await closeSeedTile(plot);
   });
 
-  await runner.step('the_member_menu_opens_details_and_saves_then_clears_launch_settings', async () => {
+  await runner.step('the_member_menu_opens_details_and_saves_launch_settings', async () => {
     if (await driver.find({ key: 'crew.heading' })) await closeCrew();
     await memberDetails(resting);
     await named('crew.presence', 'Between sessions');
@@ -264,10 +264,6 @@ try {
     await driver.click({ key: 'settings.route-picker.model.0' });
     await claude;
     if (await driver.find({ key: 'settings.route-picker' })) await driver.pressKey('Escape');
-    const cleared = crewChange(resting, (m) => !m.agent, 'the crew default restored');
-    await driver.click({ key: `settings.route.crew.${resting}` });
-    await driver.click({ key: 'settings.route-picker.harness.none' });
-    await cleared;
     await named('crew.launch.status', 'Saved');
     await shot('03-resting-defaults.png');
     await closeCrew();

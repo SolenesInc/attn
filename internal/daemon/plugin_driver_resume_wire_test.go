@@ -238,6 +238,7 @@ func TestAGardenReviewJoinsResumeInspectionWhenItsAdvisorReturnsDuringShutdown(t
 	closePane(app, sessionPane{session: string(delegated.SessionID)})
 	now.Store(time.Now().Add(garden.DefaultStaleWindow).UnixNano())
 	t.Setenv("ATTN_HEADLESS_TASKS", "on")
+	setSetting(t, app, "garden.advisor", `{"agent":"codex"}`)
 	reviews := make(chan protocol.GardenReview, 1)
 	go func() { reviews <- gardenReviewStart(t, cli) }()
 	answerInspection := func() {
@@ -336,6 +337,7 @@ func TestAGardenReviewInspectsSharedPluginStorageOncePerCapture(t *testing.T) {
 			default:
 			}
 		}
+		setSetting(t, w.App(), "garden.advisor", `{"agent":"claude"}`)
 		now.Store(time.Now().Add(garden.DefaultStaleWindow).UnixNano())
 		reviews := make(chan protocol.GardenReview, 1)
 		go func() { reviews <- gardenReviewStart(t, cli) }()

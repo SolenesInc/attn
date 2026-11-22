@@ -419,6 +419,7 @@ fn write_route(state: &mut State, _: &str, route: Route, _: &mut Tx) {
         f.model = route.stored_model();
         f.agent = route.harness;
         f.effort = route.effort;
+        f.edited(|field| *field == Field::Agent);
     }
 }
 
@@ -456,6 +457,7 @@ fn launch(state: &State, f: &Form, t: &Tokens) -> Vec<Block> {
                 "Automation model",
             ))
             .hint(hint)
+            .error(field_error(f, Field::Agent))
             .build(t),
     ]
 }

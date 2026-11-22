@@ -66,6 +66,7 @@ func TestAStartDuringARevivedDaysLaunchFindsThatDay(t *testing.T) {
 	starting.Await()
 	woke := make(chan *protocol.CrewStartResult, 1)
 	failed := make(chan error, 1)
+	giveImportedMemberAHarness(t, cli, "alder")
 	go func() {
 		woken, err := cli.CrewStart("alder", "", "")
 		if err != nil {

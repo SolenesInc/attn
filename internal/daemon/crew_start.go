@@ -21,7 +21,7 @@ import (
 )
 
 func (d *Daemon) crewStartModel(member crew.Member, agent string) *string {
-	ownHarness := strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent())
+	ownHarness := strings.EqualFold(strings.TrimSpace(agent), member.Harness())
 	chosen := strings.TrimSpace(member.Model)
 	if ownHarness && chosen != "" && chosen != crew.HarnessDefaultModel {
 		return protocol.Ptr(chosen)
@@ -36,7 +36,7 @@ func (d *Daemon) crewStartModel(member crew.Member, agent string) *string {
 }
 
 func (d *Daemon) crewStartEffort(member crew.Member, agent string) *string {
-	if strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent()) {
+	if strings.EqualFold(strings.TrimSpace(agent), member.Harness()) {
 		if effort := strings.TrimSpace(member.Effort); effort != "" {
 			return protocol.Ptr(effort)
 		}
@@ -262,11 +262,11 @@ func (d *Daemon) crewStartSessionLocked(name, agent string, autonomous bool, bef
 	if member.Retired {
 		return nil, retiredMemberError(member)
 	}
-	if err := d.chiefStartRefusal(member); err != nil {
+	if err := crewStartRefusal(member, agent); err != nil {
 		return nil, err
 	}
 	if agent == "" {
-		agent = member.LaunchAgent()
+		agent = member.Harness()
 	}
 	d.awaitHarness(agent)
 	if beforeStart != nil {
@@ -514,12 +514,12 @@ func (d *Daemon) applyCrewSettings(member *crew.Member, msg *protocol.CrewSetMes
 	}
 	agentChanged := false
 	if msg.Agent != nil {
-		if member.Chief && strings.TrimSpace(*msg.Agent) == "" {
-			return protocol.Refuse(protocol.RefusalInvalidInput, "the Chief needs a harness; pick one with {attn crew set %s --agent <harness>}", crew.ChiefAlias)
+		if strings.TrimSpace(*msg.Agent) == "" {
+			return protocol.Refuse(protocol.RefusalInvalidInput, "%s needs a harness; pick one with {attn crew set %s --agent <harness>}", member.Name, crewAlias(*member))
 		}
-		before := member.LaunchAgent()
+		before := member.Harness()
 		member.Agent = strings.TrimSpace(strings.ToLower(*msg.Agent))
-		agentChanged = !strings.EqualFold(before, member.LaunchAgent())
+		agentChanged = !strings.EqualFold(before, member.Harness())
 		if agentChanged && msg.Model == nil {
 			member.Model = ""
 		}
@@ -561,7 +561,7 @@ func (d *Daemon) applyCrewSettings(member *crew.Member, msg *protocol.CrewSetMes
 }
 
 func (d *Daemon) validateCrewLaunchSelection(member crew.Member, requireAvailable bool) error {
-	agent := member.LaunchAgent()
+	agent := member.Harness()
 	var harness *protocol.Harness
 	for _, candidate := range d.delegationHarnesses() {
 		if candidate.ID == agent {

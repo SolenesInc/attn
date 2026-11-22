@@ -137,10 +137,13 @@ func (d *Daemon) launchCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSe
 		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr(brief)},
 		Cwd:        msg.Repository,
 	}
-	if d.delegationFallbackReady() {
+	switch agent := harnessID(protocol.Deref(msg.Agent)); {
+	case agent != "":
+		delegate.Agent = protocol.Ptr(agent)
+	case d.delegationFallbackReady():
 		delegate.Fallback = protocol.Ptr(true)
-	} else {
-		delegate.Agent = protocol.Ptr(d.newSessionAgent())
+	default:
+		return "", fmt.Errorf("setting up code navigation names its harness: %s", d.harnessChoices())
 	}
 	if host != "" {
 		delegate.Host = protocol.Ptr(host)
@@ -184,14 +187,6 @@ func validateCodeNavSetupOffer(value string) error {
 func (d *Daemon) delegationFallbackReady() bool {
 	cfg, err := d.store.GetDelegationPreferences()
 	return err == nil && delegationprefs.Active(prompts.ExpandDelegationPreferences(cfg)).Fallback != nil
-}
-
-// newSessionAgent is the harness the user picked for new sessions.
-func (d *Daemon) newSessionAgent() string {
-	if agent := strings.TrimSpace(d.setting(setting.NewSessionAgent)); agent != "" {
-		return agent
-	}
-	return string(protocol.SessionAgentClaude)
 }
 
 // reviewsOfRepositoryChanged sends the shown reviews of a repository again.

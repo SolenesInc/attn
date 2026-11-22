@@ -29,7 +29,10 @@ func PrepareLaunch(opts SpawnOptions, logf LogFunc) (PreparedLaunch, error) {
 	if logf == nil {
 		logf = func(string, ...interface{}) {}
 	}
-	agent := normalizeAgent(opts.Agent, len(opts.AgentArgv) > 0)
+	agent, err := launchAgent(opts.Agent, len(opts.AgentArgv) > 0)
+	if err != nil {
+		return PreparedLaunch{}, err
+	}
 	if agent != "shell" && len(opts.AgentArgv) == 0 {
 		return PreparedLaunch{}, errors.New("missing prepared agent command")
 	}

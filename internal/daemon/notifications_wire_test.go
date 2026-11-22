@@ -112,6 +112,7 @@ func markNotificationRead(app *testworld.Peer, id *string) protocol.Notification
 func TestATaskThatFailsForGoodLeavesOneWarningWhoseRetryRequeuesIt(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
+		setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
 		gardenReviewRegisteredAbandonedSeed(t, w, cli, "gardener", "Old checkout work")
 		gardenReviewStart(t, cli)
 		w.advance(0)
@@ -147,6 +148,7 @@ func TestATaskThatFailsForGoodLeavesOneWarningWhoseRetryRequeuesIt(t *testing.T)
 func TestAGardenReviewFailureWarnsOnlyTheProfileUnderReview(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		defaultApp := w.App()
+		setSetting(t, defaultApp, "garden.advisor", `{"agent":"claude"}`)
 		side := createProfile(defaultApp, "Side")
 		scoped := w.Client().WithGardenProfile(side.ID, "")
 		if err := w.InjectSession("side-gardener", "side-gardener", w.Path("side-gardener"), protocol.SessionAgentClaude, side.ID); err != nil {

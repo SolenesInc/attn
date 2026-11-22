@@ -103,7 +103,7 @@ func TestAChiefWithoutAHarnessKeepsItsMailUntilItIsConfigured(t *testing.T) {
 	if err != nil || mail.Status == protocol.AgentMsgStatusRefused || !strings.Contains(mail.Detail, "no harness") {
 		t.Fatalf("mail to an unconfigured Chief = %+v, %v; want it kept and the reason named", mail, err)
 	}
-	_, err = cli.CrewStart("chief", "", "")
+	_, err = crewStartFrom(t, cli, "chief", "")
 	crewErrorContains(t, err, "no harness", "attn crew set chief --agent")
 	_, err = cli.CrewSet("chief", nil, protocol.Ptr(""), nil, nil, nil)
 	crewErrorContains(t, err, "needs a harness")
@@ -175,7 +175,7 @@ func TestChiefMailReachesItAfterCloseAndRename(t *testing.T) {
 		t.Fatalf("renaming the Chief back to Chief = %+v, %v", renamed, err)
 	}
 	registerSessions(t, w, cli, "pretender")
-	_, err = cli.CrewCreate("chief")
+	_, err = cli.CrewCreate("chief", "claude")
 	crewErrorContains(t, err, "reserved")
 }
 

@@ -4089,6 +4089,7 @@ model CodeNavSetupMessage {
   file: string;                  // relative to the repository
   state: string;                 // missing | failed
   detail?: string;               // why there is no working server
+  agent?: string;                // the harness that sets it up; absent uses the delegation fallback
 }
 
 model CodeNavSetupResultMessage {
@@ -7787,8 +7788,8 @@ model CrewSetMessage {
   source_session_id?: SessionID;
   member: string;
   cwd?: string;
-  // The harness the member's days run on. An empty string clears it back to
-  // the crew default — the way out, said the way `cwd` says it.
+  // The harness the member's days run on. A member always has one, so an
+  // empty string is refused.
   agent?: string;
   // The model the member's days run on. An empty string clears it back to the
   // configured harness default, then the crew fallback.

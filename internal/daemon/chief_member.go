@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,26 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-var errChiefHasNoHarness = protocol.Refuse(protocol.RefusalInvalidInput, "the Chief has no harness yet; pick one with {attn crew set chief --agent <harness> --model <model>}")
+type errMemberHasNoHarness struct{ name, alias string }
+
+func (e errMemberHasNoHarness) Error() string { return protocol.CLIText(e.Mentioned()) }
+
+func (e errMemberHasNoHarness) Mentioned() string {
+	return fmt.Sprintf("%s has no harness yet; pick one with {attn crew set %s --agent <harness> --model <model>}", e.name, e.alias)
+}
+
+func (e errMemberHasNoHarness) Refusal() protocol.Refusal { return protocol.RefusalInvalidInput }
+
+func memberHasNoHarness(member crew.Member) error {
+	return errMemberHasNoHarness{name: member.Name, alias: crewAlias(member)}
+}
+
+func crewAlias(member crew.Member) string {
+	if member.Chief {
+		return crew.ChiefAlias
+	}
+	return member.Name
+}
 
 func (d *Daemon) ensureChiefs() {
 	if d.store == nil || !d.enrollmentStatus().IsHome() {
@@ -82,7 +102,7 @@ func (d *Daemon) prefillChiefFromLegacySession(member *crew.Member) {
 	if intent, ok := d.store.LaunchIntent(previous); ok {
 		member.Model, member.Effort = strings.TrimSpace(intent.Model), intent.Effort
 	}
-	if member.Model == "" && member.LaunchAgent() == crew.DefaultAgent {
+	if member.Model == "" && d.factsOrNone(member.Harness()).CrewModel != "" {
 		member.Model = crew.HarnessDefaultModel
 	}
 	if info, err := os.Stat(session.Directory); err == nil && info.IsDir() {
@@ -171,9 +191,9 @@ func chiefRefusesRetire(member crew.Member) error {
 	return protocol.Refuse(protocol.RefusalConflict, "%s is this profile's Chief and can't be retired; its session can close: {attn crew close chief}", member.Name)
 }
 
-func (d *Daemon) chiefStartRefusal(member crew.Member) error {
-	if member.Chief && strings.TrimSpace(member.Agent) == "" {
-		return errChiefHasNoHarness
+func crewStartRefusal(member crew.Member, agent string) error {
+	if agent == "" && member.Harness() == "" {
+		return memberHasNoHarness(member)
 	}
 	return nil
 }

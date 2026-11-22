@@ -35,6 +35,7 @@ fn member(id: &str, revision: i64) -> CrewMember {
         name,
         profile_id: PROFILE.into(),
         revision,
+        agent: Some("claude".into()),
         resolved_agent: "claude".into(),
         home_dir: format!("/crew/{id}"),
         charter_path: format!("/crew/{id}/CHARTER.md"),
@@ -316,7 +317,7 @@ fn manage_crew_is_a_page_beside_the_sidebar_that_holds_the_pointer_until_closed(
 }
 
 #[test]
-fn a_member_without_pins_shows_what_the_crew_defaults_resolve_to() {
+fn a_member_without_model_pins_shows_what_its_harness_resolves_to() {
     let alder = with(member("alder", 1), |m| {
         m.resolved_model = Some("opus".into());
         m.resolved_effort = Some("high".into());
@@ -326,7 +327,7 @@ fn a_member_without_pins_shows_what_the_crew_defaults_resolve_to() {
     world.settle();
     let route = route_shows(&world, "alder");
     assert!(
-        route.starts_with("Crew default → Claude Code · Launch default → Opus 5.5"),
+        route.starts_with("Claude Code · Launch default → Opus 5.5"),
         "{route}"
     );
     assert!(route.ends_with("high"), "{route}");
@@ -428,7 +429,7 @@ fn a_launch_change_writes_one_selection_against_the_acknowledged_revision_and_st
     close_picker(&mut world);
     assert_eq!(
         sets(&world),
-        [json!({"expected_revision": 4, "agent": "", "model": "opus", "effort": ""})]
+        [json!({"expected_revision": 4, "agent": "claude", "model": "opus", "effort": ""})]
     );
     assert_eq!(
         named(&world, "crew.launch.status").as_deref(),
@@ -531,8 +532,7 @@ fn the_harness_list_marks_an_unavailable_harness_and_follows_availability_withou
     });
     world.settle();
     assert_eq!(claude(&world), Some(true));
-    preview_harness(&mut world, "Crew default");
-    assert!(world.daemon.sent_of("crew_set").len() <= 1);
+    assert!(world.daemon.sent_of("crew_set").is_empty());
     assert_eq!(world.daemon.sent_of("delegation_preferences_get").len(), 1);
 }
 
@@ -2111,8 +2111,9 @@ const CHANGED_ELSEWHERE: &str =
 
 fn routed(m: CrewMember, agent: &str, model: &str, effort: &str) -> CrewMember {
     with(m, |m| {
-        m.agent = (!agent.is_empty()).then(|| agent.into());
-        m.resolved_agent = if agent.is_empty() { "codex" } else { agent }.into();
+        let agent = if agent.is_empty() { "codex" } else { agent };
+        m.agent = Some(agent.into());
+        m.resolved_agent = agent.into();
         m.model = (!model.is_empty()).then(|| model.into());
         m.resolved_model = (!model.is_empty()).then(|| model.into());
         m.effort = (!effort.is_empty()).then(|| effort.into());
@@ -2156,13 +2157,9 @@ fn a_lost_launch_write_stays_not_saved_though_the_roster_shows_its_values() {
 }
 
 #[test]
-fn an_unavailable_stored_route_stays_visible_and_crew_default_clears_every_pin() {
+fn an_unavailable_stored_route_stays_visible() {
     let current = routed(member("trellis", 1), "codex", "gpt-6-astra", "high");
     let d = daemon(vec![current], vec![session("s1", "claude")], Vec::new());
-    d.answer_in_turn(
-        "crew_set",
-        [saved(routed(member("trellis", 2), "", "", ""))],
-    );
     let mut world = World::start(d);
     world.daemon.emit(SettingsUpdatedMessage {
         settings: Some([("codex_available".to_owned(), "false".to_owned())].into()),
@@ -2186,11 +2183,7 @@ fn an_unavailable_stored_route_stays_visible_and_crew_default_clears_every_pin()
         codex.is_some_and(|(_, _, enabled)| !enabled),
         "{harnesses:?}"
     );
-    super::settings::harness_catalogs::preview_harness(&mut world, "Crew default");
-    assert_eq!(
-        sets(&world),
-        [json!({"expected_revision": 1, "agent": "", "model": "", "effort": ""})]
-    );
+    assert!(sets(&world).is_empty());
 }
 
 #[test]
@@ -2249,7 +2242,7 @@ fn the_launch_settings_follow_what_the_daemon_derives_at_one_revision_and_drop_a
     world.settle();
     assert_eq!(
         sets(&world)[1],
-        json!({"expected_revision": 6, "agent": "", "model": "external", "effort": "high"})
+        json!({"expected_revision": 6, "agent": "codex", "model": "external", "effort": "high"})
     );
     assert_eq!(launch_status(&world).as_deref(), Some("Saved"));
     assert!(
@@ -2336,7 +2329,7 @@ fn serve_models(world: &World, models: Vec<attn_protocol::HarnessModel>) {
 }
 
 #[test]
-fn crew_default_writes_one_cleared_selection_and_close_stays_available_while_it_saves() {
+fn a_harness_pick_writes_one_selection_and_close_stays_available_while_it_saves() {
     let d = daemon(
         vec![in_session(
             routed(member("alder", 7), "codex", "gpt-6-astra", "high"),
@@ -2349,10 +2342,12 @@ fn crew_default_writes_one_cleared_selection_and_close_stays_available_while_it_
     let mut world = World::start(d);
     open(&mut world);
     open_route(&mut world, "Crew launch model");
-    preview_harness(&mut world, "Crew default");
+    preview_harness(&mut world, "Claude Code");
+    pick_model(&mut world, "Opus");
+    close_picker(&mut world);
     assert_eq!(
         sets(&world),
-        [json!({"expected_revision": 7, "agent": "", "model": "", "effort": ""})]
+        [json!({"expected_revision": 7, "agent": "claude", "model": "opus", "effort": ""})]
     );
     assert!(enabled(&world, "crew.close"));
     let write = world.daemon.sent_of("crew_set").remove(0);
@@ -2370,7 +2365,7 @@ fn crew_default_writes_one_cleared_selection_and_close_stays_available_while_it_
     }
     assert!(enabled(&world, "crew.close"));
     assert!(
-        route_shows(&world, "alder").contains("Crew default"),
+        route_shows(&world, "alder").contains("Claude Code"),
         "{}",
         route_shows(&world, "alder")
     );
@@ -2443,22 +2438,17 @@ fn the_roster_stays_navigable_while_the_harness_list_is_read() {
 }
 
 #[test]
-fn a_model_and_an_effort_pin_while_the_harness_follows_the_crew_default() {
+fn a_model_and_an_effort_pin_on_the_member_s_own_harness() {
     let d = daemon(
-        vec![with(member("keel", 5), |m| {
-            m.resolved_agent = "codex".into()
-        })],
+        vec![routed(member("keel", 5), "codex", "", "")],
         vec![session("s1", "claude")],
         Vec::new(),
     );
     d.answer_in_turn(
         "crew_set",
         [
-            saved(with(
-                routed(member("keel", 6), "", "gpt-6-astra", ""),
-                |m| m.agent = None,
-            )),
-            saved(routed(member("keel", 7), "", "gpt-6-astra", "high")),
+            saved(routed(member("keel", 6), "codex", "gpt-6-astra", "")),
+            saved(routed(member("keel", 7), "codex", "gpt-6-astra", "high")),
         ],
     );
     let mut world = World::start_sized(d, (1200.0, 1000.0));
@@ -2476,8 +2466,8 @@ fn a_model_and_an_effort_pin_while_the_harness_follows_the_crew_default() {
     assert_eq!(
         sets(&world),
         [
-            json!({"expected_revision": 5, "agent": "", "model": "gpt-6-astra", "effort": ""}),
-            json!({"expected_revision": 6, "agent": "", "model": "gpt-6-astra", "effort": "high"}),
+            json!({"expected_revision": 5, "agent": "codex", "model": "gpt-6-astra", "effort": ""}),
+            json!({"expected_revision": 6, "agent": "codex", "model": "gpt-6-astra", "effort": "high"}),
         ]
     );
     assert!(route_shows(&world, "keel").contains("gpt-6-astra"));
@@ -2492,7 +2482,7 @@ fn a_typed_model_id_goes_on_return_as_one_write_and_the_draft_outlasts_roster_pu
     );
     d.answer_in_turn(
         "crew_set",
-        [saved(routed(member("keel", 8), "", "gpt-7", ""))],
+        [saved(routed(member("keel", 8), "claude", "gpt-7", ""))],
     );
     let mut world = World::start(d);
     open(&mut world);
@@ -2512,45 +2502,8 @@ fn a_typed_model_id_goes_on_return_as_one_write_and_the_draft_outlasts_roster_pu
     press(&mut world, Key::Enter);
     assert_eq!(
         sets(&world),
-        [json!({"expected_revision": 7, "agent": "", "model": "gpt-7", "effort": ""})]
+        [json!({"expected_revision": 7, "agent": "claude", "model": "gpt-7", "effort": ""})]
     );
-}
-
-#[test]
-fn the_model_list_waits_while_an_explicit_harness_pin_clears() {
-    let d = daemon(
-        vec![routed(member("keel", 5), "codex", "gpt-6-astra", "")],
-        vec![session("s1", "claude")],
-        Vec::new(),
-    );
-    d.answer_in_turn("crew_set", [Answer::Hold]);
-    let mut world = World::start(d);
-    open(&mut world);
-    open_route(&mut world, "Crew launch model");
-    preview_harness(&mut world, "Crew default");
-    if !picker_open(&world) {
-        open_route(&mut world, "Crew launch model");
-    }
-    let model_list = |world: &World| {
-        world
-            .screen()
-            .find(Target::key("settings.route-picker.models"))
-            .is_some()
-    };
-    assert!(!model_list(&world));
-    let write = world.daemon.sent_of("crew_set").remove(0);
-    world.daemon.reply_to(
-        &write,
-        CrewSetResultMessage {
-            success: true,
-            member: Some(with(member("keel", 6), |m| {
-                m.resolved_agent = "claude".into()
-            })),
-            ..CrewSetResultMessage::new()
-        },
-    );
-    world.settle();
-    assert!(model_list(&world));
 }
 
 #[test]

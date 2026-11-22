@@ -813,6 +813,7 @@ func TestSeedMailResumesACrewMemberTenderOnStandbyWithItsNote(t *testing.T) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		app, cli := w.App(), w.Client()
+		giveImportedMemberAHarness(t, cli, "trellis")
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
 		setSetting(t, app, "crew.away_close_enabled", "false")
 		registerSessions(t, w, cli, "sender")

@@ -198,7 +198,7 @@ func TestSetupFromAnOutpostsReviewRunsItsAgentOnTheOutpostAndAPassingNavCheckThe
 	shown := awaitOutpostNavigation(pair.App, pair.Host, document, "go", inState("missing"))
 	missing := reviewNavigation(shown.Review, "go")
 	id := uuid.NewString()
-	setup := testworld.Request(pair.App, protocol.CodeNavSetupMessage{Cmd: protocol.CmdCodeNavSetup, RequestID: protocol.Ptr(id), DesktopID: shown.DesktopID, Host: protocol.Ptr(pair.Host), Document: document, Repository: repo, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail},
+	setup := testworld.Request(pair.App, protocol.CodeNavSetupMessage{Agent: protocol.Ptr("claude"), Cmd: protocol.CmdCodeNavSetup, RequestID: protocol.Ptr(id), DesktopID: shown.DesktopID, Host: protocol.Ptr(pair.Host), Document: document, Repository: repo, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail},
 		protocol.EventCodeNavSetupResult, func(r protocol.CodeNavSetupResultMessage) bool { return protocol.Deref(r.RequestID) == id })
 	if !setup.Success {
 		t.Fatalf("setup of an outpost's review answered %+v (error %s), want the session it started", setup, protocol.Deref(setup.Error))

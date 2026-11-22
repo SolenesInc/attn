@@ -1,14 +1,6 @@
-cmd/attnd/agent_launch.go	runAgentDirectly	names "codex"
-cmd/attnd/main.go	runWrapper	names "codex"
-cmd/attnd/preflight.go	parsePreflightArgs	names "codex"
 internal/automation/automation.go	Effective	names "codex"
-internal/automation/automation.go	StarterDefinition	names "codex"
 internal/automation/automation.go	refuseCodexExecutable	names "codex"
-internal/crew/crew.go	(Member).LaunchAgent	names "claude"
-internal/crew/crew.go	DefaultAgent	names "claude"
 internal/daemon/bus.go	buildWireProjections	reaches Daemon.projectSharedCodex (internal/daemon/codex_versions.go)
-internal/daemon/chief_member.go	(*Daemon).prefillChiefFromLegacySession	names "claude"
-internal/daemon/code_nav_setup.go	(*Daemon).newSessionAgent	names "claude"
 internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches codexConfigPath (internal/daemon/codex_trust.go)
 internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches codexTrustConfig (internal/daemon/codex_trust.go)
 internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches codexTrustConfig.addTrusted (internal/daemon/codex_trust.go)
@@ -17,9 +9,6 @@ internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches readCode
 internal/daemon/daemon.go	(*Daemon).handleConnectionContext	reaches Daemon.handleCodexStatus (internal/daemon/codex_update.go)
 internal/daemon/daemon.go	(*Daemon).handleConnectionContext	reaches Daemon.handleRestartSharedCodexCLI (internal/daemon/codex_update.go)
 internal/daemon/daemon.go	Daemon	reaches codexShared (internal/daemon/codex_shared.go)
-internal/daemon/delegate.go	delegationAgentName	names "codex"
-internal/daemon/garden_advisor_config.go	(*Daemon).parseGardenAdvisorConfig	names "codex"
-internal/daemon/garden_advisor_config.go	gardenAdvisorDefaultAgent	names "codex"
 internal/daemon/markdown_annotation_payload.go	formatQuestionPayload	reaches shellQuote (internal/daemon/codex_update.go)
 internal/daemon/markdown_annotation_payload.go	formatReviewPayload	reaches shellQuote (internal/daemon/codex_update.go)
 internal/daemon/monitor_home_calls.go	(*Daemon).classifierHarness	names "claude"
@@ -38,17 +27,13 @@ internal/daemon/websocket.go	(*Daemon).sendInitialState	reaches codexShared (int
 internal/daemon/websocket.go	(*Daemon).sendInitialState	reaches codexShared.wireState (internal/daemon/codex_versions.go)
 internal/daemon/ws_pty.go	legacyExecutableFromSpawnMessage	names "claude"
 internal/daemon/ws_pty.go	legacyExecutableFromSpawnMessage	names "codex"
-internal/daemon/ws_pty.go	normalizeSpawnAgent	names "codex"
 internal/hooks/codex.go	GenerateCodexServerConfigOverrides	names "codex"
-internal/preflight/preflight.go	resolveLaunch	names "codex"
 internal/protocol/constants.go	SessionAgentClaude	names "claude"
 internal/protocol/constants.go	SessionAgentCodex	names "codex"
 internal/protocol/constants.go	SessionAgentSigma	names "sigma"
-internal/pty/manager.go	normalizeAgent	names "codex"
 internal/ptyworker/debug_capture.go	shouldEnableDebugCapture	names "claude"
 internal/ptyworker/debug_capture.go	shouldEnableDebugCapture	names "codex"
 internal/sessioninstructions/service.go	(Service).Ask	names "codex"
-internal/store/store.go	(*Store).addCheckedLocked	names "codex"
 internal/transcript/events.go	parseEventLine	names "claude"
 internal/transcript/events.go	parseEventLine	names "codex"
 internal/transcript/usage.go	(*UsageExtractor).Observe	names "claude"
@@ -56,7 +41,6 @@ internal/transcript/usage.go	(*UsageExtractor).Observe	names "codex"
 internal/transcript/usage.go	(*UsageExtractor).seedCodexUsageBefore	names "codex"
 internal/transcript/usage.go	SupportsUsage	names "claude"
 internal/transcript/usage.go	SupportsUsage	names "codex"
-native/crates/attn-app/src/automations/form/model.rs		names "codex"
 native/crates/attn-app/src/automations/form/model.rs		names "codex"
 native/crates/attn-app/src/automations/form/view.rs		names "codex"
 native/crates/attn-app/src/automations/form/view.rs		names "codex"
@@ -77,8 +61,6 @@ native/crates/attn-app/src/picker/pull_request.rs		names "claude"
 native/crates/attn-app/src/settings/agents.rs		names "sigma"
 native/crates/attn-app/src/settings/background.rs		names "claude"
 native/crates/attn-app/src/settings/background.rs		names "claude"
-native/crates/attn-app/src/settings/background.rs		names "codex"
-native/crates/attn-app/src/settings/background.rs		names "codex"
 native/crates/attn-app/src/settings/background.rs		names "codex"
 native/crates/attn-app/src/settings/harnesses.rs		names "claude"
 native/crates/attn-app/src/settings/harnesses.rs		names "claude"

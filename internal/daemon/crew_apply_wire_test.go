@@ -75,6 +75,22 @@ func TestApplyingAModelChangeReloadsTheMemberInPlaceWithItsConversation(t *testi
 	})
 }
 
+func TestApplyingAMemberWithNoHarnessIsRefusedAndAsksItForNothing(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
+	cli := w.Client()
+	day, err := cli.CrewStart("trellis", "codex", "")
+	if err != nil {
+		t.Fatalf("a one-day start on codex of a member with no harness: %v", err)
+	}
+	w.Launched(string(day.SessionID))
+	if _, err := cli.CrewApply("trellis"); err == nil || !strings.Contains(err.Error(), "has no harness yet") {
+		t.Fatalf("crew apply = %v, want the refusal that names how to pick a harness", err)
+	}
+	if items := readInbox(t, cli, string(day.SessionID), 0).Items; len(items) != 0 {
+		t.Fatalf("trellis's inbox = %+v, want no request to file its letter", items)
+	}
+}
+
 func TestApplyingAHarnessChangeTurnsTheLetterIntoASessionOnTheNewHarness(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	cli := w.Client()

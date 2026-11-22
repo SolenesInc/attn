@@ -13,6 +13,9 @@ import (
 
 func startMember(t *testing.T, s *testworld.Stack, name string) string {
 	t.Helper()
+	if protocol.Deref(crewRoster(t, s)[strings.ToLower(name)].Agent) == "" {
+		giveMemberClaude(t, s, name)
+	}
 	var woken protocol.CrewStartResult
 	s.Attn("crew", "start", name, "--json").JSON(t, &woken)
 	s.Launched(string(woken.SessionID)).Prompted()
@@ -111,6 +114,7 @@ func TestCrewApplyReloadsAModelChangeInPlace(t *testing.T) {
 	writeCharter(t, s, "keel")
 	s.Start()
 	requireStdout(t, s.Attn("crew", "apply", "keel"), "Keel is between sessions; its next session uses the saved settings.")
+	giveMemberClaude(t, s, "keel")
 	var woken protocol.CrewStartResult
 	s.Attn("crew", "start", "keel", "--json").JSON(t, &woken)
 	keel := string(woken.SessionID)

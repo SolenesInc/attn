@@ -529,7 +529,7 @@ func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.Cre
 		Revision:      int(revision),
 		CharterPath:   member.CharterPath(d.dataRoot),
 		HomeDir:       member.HomeDir(d.dataRoot),
-		ResolvedAgent: member.LaunchAgent(),
+		ResolvedAgent: member.Harness(),
 	}
 	if item, err := d.store.LaunchDesktopItem("crew", member.ID); err == nil {
 		setting := protocolLaunchItem(item).Setting
@@ -553,10 +553,10 @@ func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.Cre
 	if member.Effort != "" {
 		wire.Effort = protocol.Ptr(member.Effort)
 	}
-	if model := d.crewStartModel(member, member.LaunchAgent()); model != nil {
+	if model := d.crewStartModel(member, member.Harness()); model != nil {
 		wire.ResolvedModel = model
 	}
-	if effort := d.crewStartEffort(member, member.LaunchAgent()); effort != nil {
+	if effort := d.crewStartEffort(member, member.Harness()); effort != nil {
 		wire.ResolvedEffort = effort
 	}
 	wire.AwarenessDirs = append([]string{}, member.AwarenessDirs...)

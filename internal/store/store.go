@@ -302,7 +302,7 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 
 	normalizedAgent := strings.TrimSpace(strings.ToLower(session.Agent))
 	if normalizedAgent == "" {
-		normalizedAgent = string(protocol.SessionAgentCodex)
+		return fmt.Errorf("add session %s: it names no agent", session.ID)
 	}
 	session.Agent = protocol.SessionAgent(normalizedAgent)
 	labels := initialSessionLabels(session)

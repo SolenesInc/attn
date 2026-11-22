@@ -37,9 +37,10 @@ commands:
       Adds a member to your profile. Its home is crew/<name>/ in the profile's Notebook (crew/<name>-2/ when that folder is taken) and starts with an empty CHARTER.md, which the member writes with you in its first session.
     args:
       - {name: name, type: name, required: true, cli: pos, doc: "the new member's name, unique in its profile"}
+      - {name: agent, type: name, required: true, cli: "--agent", doc: "the harness the member's days run on"}
     result: CrewMember
     examples:
-      - {name: scout}
+      - {name: scout, agent: claude}
 
   - name: crew start
     summary: start a session for a member with its saved launch settings
@@ -88,13 +89,13 @@ commands:
     doc: |
       Saves launch settings without changing the member's markdown files. Pass at least one setting.
 
-      `launch_desktop` selects own, a desktop digit (an empty slot gets a new desktop), name or id; `desktop_name` names the new desktop of own or an empty slot. `agent` accepts claude, codex, sigma while it is on, or an installed plugin driver; empty restores the crew default. `model` empty restores default_model_<harness>, else fable on Claude; default runs on the harness's own default. `effort` empty restores the harness default; the harness reports its levels in Settings. `awareness_dirs` replaces the saved context folders, and an empty list clears them.
+      `launch_desktop` selects own, a desktop digit (an empty slot gets a new desktop), name or id; `desktop_name` names the new desktop of own or an empty slot. `agent` accepts claude, codex, sigma while it is on, or an installed plugin driver; a member always has one. `model` empty restores default_model_<harness>, else fable on Claude; default runs on the harness's own default. `effort` empty restores the harness default; the harness reports its levels in Settings. `awareness_dirs` replaces the saved context folders, and an empty list clears them.
 
       `home` records where the member's home is after you moved or renamed its folder: a folder holding its CHARTER.md. Pass it without other settings; the member must be between sessions. Outside attn's data folder the folder is renamed after the member. A working or awareness directory inside the old home follows, and so do saved sessions. To undo `crew_move_home`, move the folder to crew/<key>/ in attn's data folder and point `home` there.
     args:
       - {name: member, type: member, required: true, cli: pos}
       - {name: cwd, type: clearable, cli: "--cwd", placeholder: "<dir>", doc: "the working directory; empty returns the member to its home"}
-      - {name: agent, type: clearable, cli: "--agent", placeholder: "<name>", doc: "the harness; empty restores the crew default"}
+      - {name: agent, type: clearable, cli: "--agent", placeholder: "<name>", doc: "the harness the member's days run on; a member always has one, so empty is refused"}
       - {name: model, type: clearable, cli: "--model", placeholder: "<name>", doc: "the model; empty restores the default"}
       - {name: effort, type: clearable, cli: "--effort", placeholder: "<level>", doc: "the effort; empty restores the harness default"}
       - {name: launch_desktop, type: desktop, cli: "--launch-desktop"}

@@ -240,11 +240,8 @@ func (d *Daemon) releasePtySizes(client terminalClient) {
 	pausepoint.At(pausepoint.PtySizesReleased)
 }
 
-func normalizeSpawnAgent(raw string) string {
-	if agent := strings.TrimSpace(strings.ToLower(raw)); agent != "" {
-		return agent
-	}
-	return string(protocol.SessionAgentCodex)
+func harnessID(raw string) string {
+	return strings.TrimSpace(strings.ToLower(raw))
 }
 
 func legacyExecutableFromSpawnMessage(msg *protocol.SpawnSessionMessage, agent string) string {

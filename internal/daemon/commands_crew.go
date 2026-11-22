@@ -74,7 +74,7 @@ func (d *Daemon) runCrewCreate(_ context.Context, c command.Caller, a command.Cr
 	if err != nil {
 		return nil, crewFailed("create", err)
 	}
-	created, err := d.createCrewMember(profileID, a.Name)
+	created, err := d.createCrewMember(profileID, a.Name, a.Agent)
 	if err != nil {
 		return nil, crewFailed("create", err)
 	}

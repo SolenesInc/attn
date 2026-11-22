@@ -148,6 +148,7 @@ func TestCrewStartRecreatesItsClosedLaunchDesktop(t *testing.T) {
 			w.restart()
 			app = w.App()
 			readLaunchSetting(app, "crew", "alder")
+			giveImportedMemberAHarness(t, w.Client(), "alder")
 			member := crewRosterMember(t, w.Client(), "alder")
 			request := uuid.NewString()
 			saved := testworld.Request(app, protocol.CrewSetMessage{
@@ -218,6 +219,7 @@ func TestAutomationRunRecreatesItsClosedLaunchDesktop(t *testing.T) {
 	if _, exists := viewProfile(t, w, profile).desktops[old]; exists {
 		t.Fatal("settings save recreated the closed launch desktop")
 	}
+	giveImportedMemberAHarness(t, cli, "alder")
 	crewBefore := crewRosterMember(t, cli, "alder")
 	result, err := cli.AutomationRun(definition.ID, "after-close", "")
 	if err != nil {

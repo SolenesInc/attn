@@ -21,6 +21,17 @@ func (d *Daemon) builtinHarnesses() []harness.Harness {
 	return slices.Clone(d.builtins)
 }
 
+// harnessChoices names the harnesses a caller may start work on, for a refusal.
+func (d *Daemon) harnessChoices() string {
+	var offered []string
+	for _, h := range d.harnesses() {
+		if h.Health(d.life.Context()).Offered {
+			offered = append(offered, h.Facts().ID)
+		}
+	}
+	return "one of " + strings.Join(offered, ", ")
+}
+
 func (d *Daemon) harness(id string) (harness.Harness, error) {
 	id = strings.TrimSpace(strings.ToLower(id))
 	for _, h := range d.harnesses() {

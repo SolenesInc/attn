@@ -70,7 +70,7 @@ try {
       name: 'Crew header verification', minimumWorkingMs: 0, turns: [],
       defaultActions: [{ type: 'reply', text: 'Ready to verify the seed header.', state: 'idle' }],
     });
-    attn('crew', 'create', name, '--profile', observer.profileId);
+    attn('crew', 'create', name, '--agent', 'claude', '--profile', observer.profileId);
     runner.registerCleanup('retire_member', () => attn('crew', 'retire', name, '--profile', observer.profileId));
     attn('crew', 'set', name, '--cwd', runner.sessionDir, '--agent', 'claude', '--model', MOCK_AGENT_MODEL, '--profile', observer.profileId);
     runner.registerCleanup('end_sessions', async () => {

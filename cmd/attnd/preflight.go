@@ -43,7 +43,7 @@ func runPreflight() {
 func parsePreflightArgs(args []string, getenv func(string) string) (preflight.Options, bool, bool, error) {
 	fs := flag.NewFlagSet("preflight", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	agentDefault, agentSource := environmentDefault(getenv, "ATTN_AGENT", "codex")
+	agentDefault, agentSource := environmentDefault(getenv, "ATTN_AGENT", "")
 	modelDefault, modelSource := environmentDefault(getenv, "ATTN_MODEL", "")
 	effortDefault, effortSource := environmentDefault(getenv, "ATTN_EFFORT", "")
 	agent := fs.String("agent", agentDefault, "agent launch to check")
@@ -61,6 +61,9 @@ func parsePreflightArgs(args []string, getenv func(string) string) (preflight.Op
 	}
 	if flagWasSet(fs, "agent") {
 		agentSource = "explicit"
+	}
+	if strings.TrimSpace(*agent) == "" {
+		return preflight.Options{}, false, *help, fmt.Errorf("name the harness to check with --agent or ATTN_AGENT: one of %s", builtinHarnesses())
 	}
 	if flagWasSet(fs, "model") {
 		modelSource = "explicit"
@@ -132,7 +135,7 @@ Diagnose the active instance without changing it. The command exits non-zero
 when a required tool, writable path, route, daemon, or protocol check fails.
 
 options:
-  --agent <name>   agent launch to check (ATTN_AGENT, then codex)
+  --agent <name>   agent launch to check (ATTN_AGENT when unset; one of them is required)
   --model <name>   model pin to check (ATTN_MODEL, then agent default)
   --effort <level> effort pin to check (ATTN_EFFORT, then harness default)
                   the harness reports its levels in Settings

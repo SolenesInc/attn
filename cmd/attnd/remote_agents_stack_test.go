@@ -771,6 +771,9 @@ func TestEnrollmentLeavesHomeJobsIdleUntilTheMachineLeaves(t *testing.T) {
 	home.Start()
 	outpost.Start()
 	requireStdout(t, outpost.Attn("settings", "set", "headless_tasks.enabled", "false"), "false")
+	if advisor := outpost.Attn("settings", "set", "garden.advisor", `{"agent":"claude"}`); advisor.Code != 0 {
+		t.Fatal(advisor)
+	}
 	app := outpost.App()
 	id := outpost.Spawn(app, fakeagent.Claude, outpost.Path("abandoned"))
 	outpost.Launched(id)

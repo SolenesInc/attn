@@ -248,6 +248,7 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 		t.Fatalf("messaging an awake member left %d sessions, want the sender and its one day", got)
 	}
 
+	giveImportedMemberAHarness(t, cli, "trellis")
 	first := sendAgentMessage(t, cli, sender, "trellis", "please inspect the broken build")
 	if first.Status != protocol.AgentMsgStatusQueued || !strings.Contains(first.Detail, "started Trellis") || first.TargetSessionID == "" {
 		t.Fatalf("a message to the sleeping Trellis = %+v, want it queued on a day it woke", first)

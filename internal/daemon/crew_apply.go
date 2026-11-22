@@ -31,7 +31,10 @@ func (d *Daemon) crewApply(asker crewAsker, name string) (*protocol.CrewApplyRes
 	if err != nil || result != nil {
 		return result, err
 	}
-	if strings.EqualFold(strings.TrimSpace(session.Agent), member.LaunchAgent()) {
+	if member.Harness() == "" {
+		return nil, memberHasNoHarness(member)
+	}
+	if strings.EqualFold(strings.TrimSpace(session.Agent), member.Harness()) {
 		return d.crewApplyInPlace(member, session.ID)
 	}
 	return d.crewRequestHarnessSwitch(member, session.ID)
@@ -77,7 +80,7 @@ func (d *Daemon) crewApplyInPlace(member crew.Member, sessionID protocol.Session
 		Name:      member.Name,
 		Outcome:   protocol.CrewApplyOutcomeReloaded,
 		SessionID: protocol.Ptr(sessionID),
-		Detail:    fmt.Sprintf("Reloaded %s's session %s in place on %s with its saved settings; its conversation continues", member.Name, shortSessionID(sessionID), member.LaunchAgent()),
+		Detail:    fmt.Sprintf("Reloaded %s's session %s in place on %s with its saved settings; its conversation continues", member.Name, shortSessionID(sessionID), member.Harness()),
 	}, nil
 }
 
@@ -85,16 +88,16 @@ func (d *Daemon) crewRequestHarnessSwitch(member crew.Member, sessionID protocol
 	if err := d.markCrewSwitching(member, sessionID); err != nil {
 		return nil, err
 	}
-	prompt := prompts.RenderText("crew", "switch-requested", prompts.Values{"agent": member.LaunchAgent()})
+	prompt := prompts.RenderText("crew", "switch-requested", prompts.Values{"agent": member.Harness()})
 	receipt, err := d.sendToInbox(inbox.Item{ID: uuid.NewString(), To: who.ToSession(sessionID), Kind: inbox.Notice, Text: prompt})
 	if err != nil {
 		return nil, fmt.Errorf("ask %s to file its letter: %w", member.Name, err)
 	}
 	status := protocol.AgentMsgStatusNotified
-	detail := fmt.Sprintf("Asked %s in session %s to file its letter; its next session starts on %s from it", member.Name, shortSessionID(sessionID), member.LaunchAgent())
+	detail := fmt.Sprintf("Asked %s in session %s to file its letter; its next session starts on %s from it", member.Name, shortSessionID(sessionID), member.Harness())
 	if !receipt.Rang {
 		status = protocol.AgentMsgStatusQueued
-		detail = fmt.Sprintf("%s's session %s is busy; it will be asked to file its letter when it can take input, and its next session starts on %s from it", member.Name, shortSessionID(sessionID), member.LaunchAgent())
+		detail = fmt.Sprintf("%s's session %s is busy; it will be asked to file its letter when it can take input, and its next session starts on %s from it", member.Name, shortSessionID(sessionID), member.Harness())
 	}
 	return &protocol.CrewApplyResult{
 		Member:         member.ID,

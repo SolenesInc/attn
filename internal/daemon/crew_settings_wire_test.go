@@ -10,7 +10,7 @@ import (
 func TestChangingAMembersHarnessClearsItsModelAndEffortPins(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	cli := w.Client()
-	setCrew(t, cli, "keel", protocol.CrewSetMessage{Model: protocol.Ptr("claude-sonnet-fake"), Effort: protocol.Ptr("high")})
+	setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("claude"), Model: protocol.Ptr("claude-sonnet-fake"), Effort: protocol.Ptr("high")})
 
 	switched := setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("codex")})
 	if protocol.Deref(switched.Agent) != "codex" || switched.Model != nil || switched.Effort != nil {
@@ -23,7 +23,7 @@ func TestAMembersCustomModelSurvivesDiscoveryAndAnEffortTheModelLacksIsRefused(t
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 
-	custom := setCrew(t, cli, "alder", protocol.CrewSetMessage{Model: protocol.Ptr("private-model"), Effort: protocol.Ptr("high")})
+	custom := setCrew(t, cli, "alder", protocol.CrewSetMessage{Agent: protocol.Ptr("claude"), Model: protocol.Ptr("private-model"), Effort: protocol.Ptr("high")})
 	if protocol.Deref(custom.Model) != "private-model" || protocol.Deref(custom.Effort) != "high" {
 		t.Fatalf("a model discovery does not list = model %q effort %q, want it kept as set", protocol.Deref(custom.Model), protocol.Deref(custom.Effort))
 	}

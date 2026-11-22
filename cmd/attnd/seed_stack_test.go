@@ -612,6 +612,9 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		if err := s.Client().Unregister("drifter"); err != nil {
 			t.Fatal(err)
 		}
+		if advisor := s.Attn("settings", "set", "garden.advisor", `{"agent":"claude"}`); advisor.Code != 0 {
+			t.Fatal(advisor)
+		}
 		var started protocol.SeedReviewResult
 		s.Attn("seed", "review", "start", "--json").JSON(t, &started)
 		if started.Review == nil {

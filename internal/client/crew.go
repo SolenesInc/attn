@@ -67,8 +67,8 @@ func (c *Client) CrewRename(member, name string) (*protocol.CrewRenameResult, er
 	return commandResult[protocol.CrewRenameResult](c, "crew rename", "", command.CrewRenameArgs{Member: member, Name: name})
 }
 
-func (c *Client) CrewCreate(name string) (*protocol.CrewMember, error) {
-	return commandResult[protocol.CrewMember](c, "crew create", "", command.CrewCreateArgs{Name: name})
+func (c *Client) CrewCreate(name, agent string) (*protocol.CrewMember, error) {
+	return commandResult[protocol.CrewMember](c, "crew create", "", command.CrewCreateArgs{Name: name, Agent: agent})
 }
 
 func (c *Client) CrewRetire(member string) (*protocol.CrewRetireResult, error) {

@@ -300,7 +300,7 @@ func TestLedgerResumesAnOutpostSessionInItsOwnFolderAfterALocalCrewHomeAtThatPat
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	pair.Start()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
-	created, err := home.Client().CrewCreate("Keel")
+	created, err := home.Client().CrewCreate("Keel", "claude")
 	if err != nil {
 		t.Fatal(err)
 	}
