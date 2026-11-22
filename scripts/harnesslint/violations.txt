@@ -170,8 +170,6 @@ internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches codexTru
 internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches readCodexTrust (internal/daemon/codex_trust.go)
 internal/daemon/crew_folder_trust.go	(*Daemon).trustCrewHome	names "claude"
 internal/daemon/crew_folder_trust.go	(*Daemon).trustCrewHome	names "codex"
-internal/daemon/crew_start.go	(*Daemon).crewStartModel	names "claude"
-internal/daemon/crew_start.go	crewStartAgent	names "claude"
 internal/daemon/daemon.go	(*Daemon).Start	reaches Daemon.claudeMod (internal/daemon/claude_mod.go)
 internal/daemon/daemon.go	(*Daemon).Start	reaches Daemon.linkBuiltInServers (internal/daemon/server_binding.go)
 internal/daemon/daemon.go	(*Daemon).Start	reaches Daemon.restorePluginServerOwners (internal/daemon/plugin_server.go)
@@ -301,8 +299,6 @@ internal/daemon/model_call_codex.go	codexUserMCPServers	reaches codexConfigPath 
 internal/daemon/model_calls.go	(*Daemon).answerModelCall	names "codex"
 internal/daemon/model_calls.go	(*Daemon).answerModelCall	reaches Daemon.codexShared (internal/daemon/codex_shared.go)
 internal/daemon/model_calls.go	(*Daemon).answerModelCall	reaches codexShared (internal/daemon/codex_shared.go)
-internal/daemon/model_calls.go	modelCallTierFallbacks	names "claude"
-internal/daemon/model_calls.go	modelCallTierFallbacks	names "codex"
 internal/daemon/monitor_apply.go	(*monitorHome).apply	reaches Daemon.claudeMod (internal/daemon/claude_mod.go)
 internal/daemon/monitor_apply.go	(*monitorHome).apply	reaches claudeMod (internal/daemon/claude_mod.go)
 internal/daemon/monitor_apply.go	(*monitorHome).apply	reaches claudeMod.placeReturned (internal/daemon/claude_mod_link.go)

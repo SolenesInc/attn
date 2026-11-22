@@ -38,11 +38,6 @@ const (
 // s-jhntry, D6).
 const modelCallsRunningTripwire = 8
 
-var modelCallTierFallbacks = map[string]map[modeltiers.Tier]string{
-	"claude": {modeltiers.Light: "haiku", modeltiers.Standard: "sonnet", modeltiers.Deep: "opus"},
-	"codex":  {modeltiers.Light: "gpt-6-luna", modeltiers.Standard: "gpt-5.6-terra", modeltiers.Deep: "gpt-6.1-sol"},
-}
-
 type modelCallTarget struct {
 	harness    string
 	provider   agentdriver.HeadlessTaskProvider
@@ -150,7 +145,7 @@ func (d *Daemon) modelCallTarget(ctx context.Context, msg *protocol.SenderModelC
 	}
 	model := choice.model
 	if model == "" {
-		model = d.resolveTierModel(ctx, driver.Name(), executable, choice.tier, "", modelCallTierFallbacks[driver.Name()][choice.tier])
+		model = d.resolveTierModel(ctx, driver.Name(), executable, choice.tier, "", d.factsOrNone(driver.Name()).Tiers[choice.tier])
 	}
 	return modelCallTarget{harness: driver.Name(), provider: provider, driver: driver, executable: executable, model: model}, nil
 }

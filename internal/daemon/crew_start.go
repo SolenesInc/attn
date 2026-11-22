@@ -20,10 +20,6 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-const crewStartAgent = crew.DefaultAgent
-
-const crewStartFallbackModel = "fable"
-
 func (d *Daemon) crewStartModel(member crew.Member, agent string) *string {
 	ownHarness := strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent())
 	chosen := strings.TrimSpace(member.Model)
@@ -33,8 +29,8 @@ func (d *Daemon) crewStartModel(member crew.Member, agent string) *string {
 	if model := d.defaultLaunchModel(agent); model != "" {
 		return protocol.Ptr(model)
 	}
-	if strings.TrimSpace(strings.ToLower(agent)) == crewStartAgent && !(ownHarness && chosen == crew.HarnessDefaultModel) {
-		return protocol.Ptr(crewStartFallbackModel)
+	if fallback := d.factsOrNone(agent).CrewModel; fallback != "" && !(ownHarness && chosen == crew.HarnessDefaultModel) {
+		return protocol.Ptr(fallback)
 	}
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/modeltiers"
 )
 
 type claudeHarness struct{ d *Daemon }
@@ -23,6 +24,8 @@ func (h claudeHarness) Facts() harness.Facts {
 		return []string{filepath.Join(homeDir, ".claude", "skills")}, nil
 	}
 	facts.CacheTTL = time.Hour
+	facts.Tiers = map[modeltiers.Tier]string{modeltiers.Light: "haiku", modeltiers.Standard: "sonnet", modeltiers.Deep: "opus"}
+	facts.CrewModel = "fable"
 	return facts
 }
 

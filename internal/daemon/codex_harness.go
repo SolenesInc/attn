@@ -7,6 +7,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/modeltiers"
 )
 
 type codexHarness struct{ d *Daemon }
@@ -23,6 +24,7 @@ func (h codexHarness) Facts() harness.Facts {
 		return []string{filepath.Join(homeDir, ".agents", "skills")}, nil
 	}
 	facts.CacheTTL = 30 * time.Minute
+	facts.Tiers = map[modeltiers.Tier]string{modeltiers.Light: "gpt-6-luna", modeltiers.Standard: "gpt-5.6-terra", modeltiers.Deep: "gpt-6.1-sol"}
 	return facts
 }
 
