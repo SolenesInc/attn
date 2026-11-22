@@ -7,6 +7,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionstate"
 )
@@ -192,6 +193,24 @@ func (c typedConversation) CanCompact() error { return c.refusal }
 
 func noCompaction(agent string) error {
 	return fmt.Errorf("attn has no way to compact a %s session; close without --compact", agent)
+}
+
+func (d *Daemon) oneShot(id harness.ID) (harness.OneShot, error) {
+	h, err := d.harness(id)
+	if err != nil {
+		return nil, err
+	}
+	if oneShot, ok := harness.As[harness.OneShot](h); ok {
+		return oneShot, nil
+	}
+	return nil, fmt.Errorf("agent %s does not support headless tasks", id)
+}
+
+func (d *Daemon) lightFallback(id harness.ID, named string) string {
+	if named != "" {
+		return named
+	}
+	return d.factsOrNone(id).Tiers[modeltiers.Light].Model
 }
 
 func (d *Daemon) knowsHarness(id string) bool {

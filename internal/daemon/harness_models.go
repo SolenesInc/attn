@@ -3,11 +3,9 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/delegationprefs"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
@@ -27,17 +25,14 @@ type harnessDiscovery struct {
 	Err     error
 }
 
-func (d *Daemon) loadHarnessModels(ctx context.Context, harness, executable string, refresh bool) (harnessModelCatalog, error) {
+func (d *Daemon) loadHarnessModels(ctx context.Context, harness string, refresh bool) (harnessModelCatalog, error) {
 	if err := ctx.Err(); err != nil {
 		return harnessModelCatalog{}, err
 	}
 	if err := delegationprefs.ValidateSelection(delegationprefs.Selection{Harness: harness}, true); err != nil {
 		return harnessModelCatalog{}, err
 	}
-	if executable == "" {
-		executable = d.setting(executableSetting(harness))
-	}
-	key := harness + "\x00" + executable
+	key := harness + "\x00" + d.setting(executableSetting(harness))
 	if refresh {
 		d.harnessModelCatalogs.Delete(key)
 	}
@@ -52,7 +47,7 @@ func (d *Daemon) loadHarnessModels(ctx context.Context, harness, executable stri
 				entry = cached.(harnessDiscovery)
 				return
 			}
-			entry.Catalog, entry.Err = d.queryHarnessModels(harness, executable)
+			entry.Catalog, entry.Err = d.queryHarnessModels(harness)
 			d.harnessModelCatalogs.Store(key, entry)
 		}) {
 			return nil, errDaemonStopping
@@ -71,59 +66,27 @@ func (d *Daemon) loadHarnessModels(ctx context.Context, harness, executable stri
 	}
 }
 
-func (d *Daemon) queryHarnessModels(harness, executable string) (harnessModelCatalog, error) {
+func (d *Daemon) queryHarnessModels(id string) (harnessModelCatalog, error) {
 	ctx, cancel := context.WithTimeout(d.life.Context(), harnessModelDiscoveryTimeout)
 	defer cancel()
-	result := harnessModelCatalog{Models: []protocol.HarnessModel{}}
-	if server := d.serverLinkFor(harness); server != nil {
-		models, err := server.models(ctx)
-		if err != nil {
-			return harnessModelCatalog{}, err
-		}
-		result.Models = models
-		result.Detail = "Models of the providers the " + server.b.name + " server has."
-	} else if plugin, ok := d.ensurePluginRegistry().driver(harness); ok {
-		if !plugin.Capabilities["model_discovery"] {
-			result.Detail = "This harness does not expose model discovery. Add an exact model or use its default."
-			return result, nil
-		}
-		if err := d.callPlugin(ctx, plugin.PluginName, "driver.models", map[string]string{"agent": harness}, &result); err != nil {
-			return harnessModelCatalog{}, err
-		}
-	} else {
-		driver := agentdriver.Get(harness)
-		if driver == nil {
-			return harnessModelCatalog{}, fmt.Errorf("harness %q is not available", harness)
-		}
-		discoverer, ok := driver.(agentdriver.ModelDiscoverer)
-		if !ok {
-			result.Detail = "This harness does not expose model discovery. Add an exact model or use its default."
-			return result, nil
-		}
-		executable, err := d.machineAgentExecutable(driver.Name(), executable)
-		if err != nil {
-			return harnessModelCatalog{}, err
-		}
-		cwd, err := os.MkdirTemp("", "attn-model-discovery-")
-		if err != nil {
-			return harnessModelCatalog{}, err
-		}
-		defer os.RemoveAll(cwd)
-		result.Models, err = discoverer.DiscoverHarnessModels(ctx, executable, cwd)
-		if err != nil {
-			return harnessModelCatalog{}, err
-		}
-		result.Detail = "Models reported by this harness. Catalog membership does not confirm account access."
+	h, err := d.harness(id)
+	if err != nil {
+		return harnessModelCatalog{}, fmt.Errorf("harness %q is not available", id)
 	}
+	models, err := h.Models(ctx)
+	if err != nil {
+		return harnessModelCatalog{}, err
+	}
+	result := harnessModelCatalog{Models: models.List, Detail: models.Detail}
 	if result.Models == nil {
 		result.Models = []protocol.HarnessModel{}
 	}
 	for i := range result.Models {
 		m := &result.Models[i]
-		if m.Harness != harness || strings.TrimSpace(m.ID) == "" {
+		if m.Harness != id || strings.TrimSpace(m.ID) == "" {
 			return harnessModelCatalog{}, fmt.Errorf("model discovery returned an invalid identity")
 		}
-		if err := delegationprefs.ValidateSelection(delegationprefs.Selection{Harness: harness, Provider: m.Provider, Model: m.ID}, true); err != nil {
+		if err := delegationprefs.ValidateSelection(delegationprefs.Selection{Harness: id, Provider: m.Provider, Model: m.ID}, true); err != nil {
 			return harnessModelCatalog{}, err
 		}
 		if m.EffortSupport != "supported" && m.EffortSupport != "unsupported" {
@@ -149,11 +112,11 @@ func (d *Daemon) invalidateHarnessModels(harness string) {
 }
 
 func (d *Daemon) discoverHarnessModels(ctx context.Context, harness string) (harnessModelCatalog, error) {
-	return d.harnessModels(ctx, harness, "", false)
+	return d.harnessModels(ctx, harness, false)
 }
 
-func (d *Daemon) harnessModels(ctx context.Context, harness, executable string, refresh bool) (harnessModelCatalog, error) {
-	catalog, err := d.loadHarnessModels(ctx, harness, executable, refresh)
+func (d *Daemon) harnessModels(ctx context.Context, harness string, refresh bool) (harnessModelCatalog, error) {
+	catalog, err := d.loadHarnessModels(ctx, harness, refresh)
 	if err != nil {
 		return harnessModelCatalog{}, err
 	}
@@ -187,11 +150,11 @@ func (d *Daemon) harnessModels(ctx context.Context, harness, executable string, 
 	return catalog, nil
 }
 
-func (d *Daemon) resolveTierModel(ctx context.Context, harness, executable string, tier modeltiers.Tier, explicit, fallback string) string {
+func (d *Daemon) resolveTierModel(ctx context.Context, harness string, tier modeltiers.Tier, explicit, fallback string) string {
 	if explicit = strings.TrimSpace(explicit); explicit != "" {
 		return explicit
 	}
-	catalog, err := d.harnessModels(ctx, harness, executable, false)
+	catalog, err := d.harnessModels(ctx, harness, false)
 	if err != nil {
 		d.logf("%s %s model discovery failed: %v; using fallback %q", harness, tier, err, fallback)
 		return fallback
@@ -212,7 +175,7 @@ func (d *Daemon) handleHarnessModels(client *wsClient, msg *protocol.HarnessMode
 		d.sendToClient(client, result)
 		return
 	}
-	catalog, err := d.harnessModels(context.Background(), strings.TrimSpace(msg.Harness), "", protocol.Deref(msg.Refresh))
+	catalog, err := d.harnessModels(context.Background(), strings.TrimSpace(msg.Harness), protocol.Deref(msg.Refresh))
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error() + ". Refresh models after fixing the harness.")
 	} else {

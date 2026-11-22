@@ -7,13 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"os"
 	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/prompts"
 )
@@ -147,51 +146,38 @@ func (d *Daemon) runGardenAdvisorWithConfig(
 	input gardenAdvisorInput,
 	config gardenAdvisorConfig,
 ) ([]byte, error) {
-	provider, executable, err := d.resolveGardenAdvisor(config)
+	oneShot, err := d.oneShot(config.Agent)
 	if err != nil {
 		return nil, err
 	}
-	return executeGardenAdvisor(ctx, provider, executable, config, task, input, gardenAdvisorTimeout)
+	return executeGardenAdvisor(ctx, oneShot, config, task, input, gardenAdvisorTimeout)
 }
 
 func executeGardenAdvisor(
 	ctx context.Context,
-	provider agentdriver.HeadlessTaskProvider,
-	executable string,
+	oneShot harness.OneShot,
 	config gardenAdvisorConfig,
 	task gardenAdvisorTask,
 	input gardenAdvisorInput,
 	timeout time.Duration,
 ) ([]byte, error) {
-	workDir, err := os.MkdirTemp("", "attn-garden-advisor-*")
-	if err != nil {
-		return nil, fmt.Errorf("create Garden advisor scratch directory: %w", err)
-	}
-	defer os.RemoveAll(workDir)
-
 	bounded := boundGardenAdvisorInput(input)
 	payload, err := json.MarshalIndent(bounded, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encode Garden advisor input: %w", err)
 	}
-	request := agentdriver.HeadlessTaskRequest{
-		Executable:      executable,
-		Model:           config.Model,
-		ReasoningEffort: config.Effort,
-		Prompt:          task.prompt(string(payload)),
-		SystemPrompt:    gardenAdvisorSystemPrompt(),
-		WorkDir:         workDir,
-		DisableTools:    true,
-		OutputSchema:    task.outputSchema(),
-	}
-	if config.Agent == "claude" {
-		request.MaxTurns = 4
-		request.MaxBudgetUSD = "0.25"
+	request := harness.OneShotRequest{
+		Model:  config.Model,
+		Effort: config.Effort,
+		Input:  task.prompt(string(payload)),
+		System: gardenAdvisorSystemPrompt(),
+		Schema: task.outputSchema(),
+		Bound:  harness.Bound{MaxTurns: 4, MaxCostUSD: "0.25"},
 	}
 
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	result, err := provider.RunHeadlessTask(runCtx, request)
+	result, err := oneShot.Run(runCtx, request)
 	if err != nil {
 		if runCtx.Err() != nil {
 			return nil, fmt.Errorf("garden advisor %s canceled: %w", task.name, runCtx.Err())
@@ -202,8 +188,8 @@ func executeGardenAdvisor(
 	if runCtx.Err() != nil {
 		return nil, fmt.Errorf("garden advisor %s canceled: %w", task.name, runCtx.Err())
 	}
-	if len(result.StructuredOutput) > 0 {
-		return result.StructuredOutput, nil
+	if len(result.Structured) > 0 {
+		return result.Structured, nil
 	}
 	if text := strings.TrimSpace(result.Text); text != "" {
 		return []byte(text), nil

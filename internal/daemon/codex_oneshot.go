@@ -13,6 +13,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/codexshared"
+	"github.com/victorarias/attn/internal/harness"
 )
 
 func (r *codexShared) runningSocket(profile string) string {
@@ -47,10 +48,38 @@ func codexUserMCPServers() ([]string, error) {
 	return names, nil
 }
 
-func answerModelCallOnSharedCodex(ctx context.Context, socket string, request agentdriver.ModelCallRequest) (agentdriver.ModelCallResult, error) {
+func (h codexHarness) Run(ctx context.Context, req harness.OneShotRequest) (harness.OneShotResult, error) {
+	if socket := h.d.codexShared().runningSocket(req.Profile); socket != "" {
+		return runOneShotOnSharedCodex(ctx, socket, req)
+	}
+	executable, err := h.d.machineAgentExecutable(h.Facts().ID, "")
+	if err != nil {
+		return harness.OneShotResult{}, fmt.Errorf("resolve codex executable: %w", err)
+	}
+	return agentdriver.RunOneShot(ctx, h.driver().(*agentdriver.Codex), executable, req)
+}
+
+func (h codexHarness) Models(ctx context.Context) (harness.Models, error) {
+	executable, err := h.d.machineAgentExecutable(h.Facts().ID, "")
+	if err != nil {
+		return harness.Models{}, err
+	}
+	return agentdriver.DiscoverModels(ctx, h.driver().(*agentdriver.Codex), executable)
+}
+
+func runOneShotOnSharedCodex(ctx context.Context, socket string, req harness.OneShotRequest) (harness.OneShotResult, error) {
 	servers, err := codexUserMCPServers()
 	if err != nil {
-		return agentdriver.ModelCallResult{}, err
+		return harness.OneShotResult{}, err
+	}
+	dir := req.Dir
+	if dir == "" {
+		scratch, err := os.MkdirTemp("", "attn-one-shot-*")
+		if err != nil {
+			return harness.OneShotResult{}, fmt.Errorf("create the call's scratch directory: %w", err)
+		}
+		defer os.RemoveAll(scratch)
+		dir = scratch
 	}
 	finished := make(chan struct{})
 	defer close(finished)
@@ -65,15 +94,15 @@ func answerModelCallOnSharedCodex(ctx context.Context, socket string, request ag
 		}
 	})
 	if err != nil {
-		return agentdriver.ModelCallResult{}, err
+		return harness.OneShotResult{}, err
 	}
 	defer client.Close()
 
 	start := map[string]any{
-		"model": request.Model, "ephemeral": true, "sandbox": "read-only", "approvalPolicy": "never",
-		"cwd": request.WorkDir, "config": agentdriver.CodexToolFreeConfig(servers),
+		"model": req.Model, "ephemeral": true, "sandbox": "read-only", "approvalPolicy": "never",
+		"cwd": dir, "config": agentdriver.CodexToolFreeConfig(servers),
 	}
-	if system := strings.TrimSpace(request.SystemPrompt); system != "" {
+	if system := strings.TrimSpace(req.System); system != "" {
 		start["baseInstructions"] = system
 	}
 	var thread struct {
@@ -82,10 +111,10 @@ func answerModelCallOnSharedCodex(ctx context.Context, socket string, request ag
 		} `json:"thread"`
 	}
 	if err := sharedCodexCall(ctx, client, "thread/start", start, &thread); err != nil {
-		return agentdriver.ModelCallResult{}, err
+		return harness.OneShotResult{}, err
 	}
-	turn := map[string]any{"threadId": thread.Thread.ID, "input": []map[string]string{{"type": "text", "text": request.Input}}}
-	if effort := strings.TrimSpace(request.ReasoningEffort); effort != "" {
+	turn := map[string]any{"threadId": thread.Thread.ID, "input": []map[string]string{{"type": "text", "text": req.Input}}}
+	if effort := strings.TrimSpace(req.Effort); effort != "" {
 		turn["effort"] = effort
 	}
 	var started struct {
@@ -95,9 +124,9 @@ func answerModelCallOnSharedCodex(ctx context.Context, socket string, request ag
 	}
 	if err := sharedCodexCall(ctx, client, "turn/start", turn, &started); err != nil {
 		if ctx.Err() != nil {
-			return agentdriver.ModelCallResult{}, err
+			return harness.OneShotResult{}, err
 		}
-		return agentdriver.ModelCallResult{}, errors.New(agentdriver.ClassifyHeadlessFailure(err.Error()))
+		return harness.OneShotResult{}, errors.New(agentdriver.ClassifyHeadlessFailure(err.Error()))
 	}
 	return awaitSharedCodexTurn(ctx, client, events, thread.Thread.ID, started.Turn.ID)
 }
@@ -110,8 +139,8 @@ func sharedCodexCall(ctx context.Context, client *codexshared.Client, method str
 	return json.Unmarshal(raw, out)
 }
 
-func awaitSharedCodexTurn(ctx context.Context, client *codexshared.Client, events <-chan codexshared.Message, thread, turn string) (agentdriver.ModelCallResult, error) {
-	var result agentdriver.ModelCallResult
+func awaitSharedCodexTurn(ctx context.Context, client *codexshared.Client, events <-chan codexshared.Message, thread, turn string) (harness.OneShotResult, error) {
+	var result harness.OneShotResult
 	var text, failure string
 	for {
 		select {
@@ -119,9 +148,9 @@ func awaitSharedCodexTurn(ctx context.Context, client *codexshared.Client, event
 			interrupt, cancel := context.WithTimeout(context.Background(), codexServerCallLimit)
 			_, _ = client.Call(interrupt, "turn/interrupt", map[string]string{"threadId": thread, "turnId": turn})
 			cancel()
-			return agentdriver.ModelCallResult{}, ctx.Err()
+			return harness.OneShotResult{}, ctx.Err()
 		case <-client.Done():
-			return agentdriver.ModelCallResult{}, errors.New("the shared Codex app-server closed the call's connection")
+			return harness.OneShotResult{}, errors.New("the shared Codex app-server closed the call's connection")
 		case m := <-events:
 			var params struct {
 				ThreadID string `json:"threadId"`
@@ -155,7 +184,7 @@ func awaitSharedCodexTurn(ctx context.Context, client *codexshared.Client, event
 					text = params.Item.Text
 				}
 			case "thread/tokenUsage/updated":
-				result.InputTokens, result.OutputTokens = params.TokenUsage.Last.InputTokens, params.TokenUsage.Last.OutputTokens
+				result.Usage.In, result.Usage.Out = params.TokenUsage.Last.InputTokens, params.TokenUsage.Last.OutputTokens
 			case "error":
 				if !params.WillRetry {
 					failure = params.Error.Message
@@ -165,10 +194,10 @@ func awaitSharedCodexTurn(ctx context.Context, client *codexshared.Client, event
 					if params.Turn.Error != nil && params.Turn.Error.Message != "" {
 						failure = params.Turn.Error.Message
 					}
-					return agentdriver.ModelCallResult{}, fmt.Errorf("the turn ended %s: %s", params.Turn.Status, agentdriver.ClassifyHeadlessFailure(failure))
+					return harness.OneShotResult{}, fmt.Errorf("the turn ended %s: %s", params.Turn.Status, agentdriver.ClassifyHeadlessFailure(failure))
 				}
 				if result.Text = strings.TrimSpace(text); result.Text == "" {
-					return agentdriver.ModelCallResult{}, errors.New("the model returned no text")
+					return harness.OneShotResult{}, errors.New("the model returned no text")
 				}
 				return result, nil
 			}

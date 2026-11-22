@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/victorarias/attn/internal/harness"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -16,7 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/victorarias/attn/internal/classifier"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/toolhome"
@@ -29,15 +28,12 @@ var _ Driver = (*Claude)(nil)
 var _ HookProvider = (*Claude)(nil)
 var _ TranscriptFinder = (*Claude)(nil)
 var _ TranscriptWatcherBehaviorProvider = (*Claude)(nil)
-var _ ClassifierProvider = (*Claude)(nil)
-var _ ExecutableClassifierProvider = (*Claude)(nil)
 var _ LaunchPreparer = (*Claude)(nil)
 var _ RecoveredStatePolicyProvider = (*Claude)(nil)
 var _ ResumePolicyProvider = (*Claude)(nil)
 var _ ResumeAvailabilityProvider = (*Claude)(nil)
 var _ TranscriptClassificationExtractor = (*Claude)(nil)
 var _ HeadlessTaskProvider = (*Claude)(nil)
-var _ HeadlessTaskAvailabilityProvider = (*Claude)(nil)
 var _ FolderTrustQuestionReader = (*Claude)(nil)
 
 const (
@@ -379,10 +375,6 @@ func claudeAssistantText(raw json.RawMessage) string {
 	return strings.TrimSpace(strings.Join(parts, ""))
 }
 
-func (c *Claude) HeadlessTaskAvailability() (bool, string) {
-	return true, ""
-}
-
 func claudeHeadlessIsolationArgs() []string {
 	if claudeHasBareModeAuthentication() {
 		return []string{"--bare"}
@@ -545,69 +537,6 @@ func (c *Claude) extractLastAssistantForClassification(
 		}
 		time.Sleep(retryInterval)
 	}
-}
-
-func (c *Claude) Classify(text string, timeout time.Duration) (string, error) {
-	return c.ClassifyWithExecutable(context.Background(), text, "", "", classifier.ClaudeClassifierModel(), timeout)
-}
-
-func (c *Claude) ClassifyWithExecutable(parent context.Context, text, executable, workDir, model string, timeout time.Duration) (string, error) {
-	if strings.TrimSpace(text) == "" {
-		classifier.DefaultLogger("classifier: empty text, returning idle")
-		return "idle", nil
-	}
-	classifier.DefaultLogger("classifier: input text (%d chars): %q", len(text), text)
-
-	resolved, err := exec.LookPath(c.ResolveExecutable(executable))
-	if err != nil {
-		classifier.DefaultLogger("classifier: claude executable unresolved: %v", err)
-		return "unknown", fmt.Errorf("resolve claude executable: %w", err)
-	}
-
-	scratchDir, err := os.MkdirTemp("", "attn-claude-classifier-*")
-	if err != nil {
-		return "unknown", fmt.Errorf("create classifier scratch dir: %w", err)
-	}
-	defer os.RemoveAll(scratchDir)
-
-	ctx, cancel := context.WithTimeout(parent, timeout)
-	defer cancel()
-
-	classifier.DefaultLogger(
-		"classifier: calling claude CLI executable=%s model=%s timeout=%d seconds",
-		resolved,
-		model,
-		int(timeout.Seconds()),
-	)
-
-	result, err := c.RunHeadlessTask(ctx, HeadlessTaskRequest{
-		Executable:   resolved,
-		Model:        model,
-		Prompt:       classifier.BuildPrompt(text),
-		WorkDir:      scratchDir,
-		DisableTools: true,
-		MaxTurns:     classifier.ClaudeMaxTurns,
-		OutputSchema: json.RawMessage(classifier.ClaudeVerdictSchema),
-	})
-	if err != nil {
-		classifier.DefaultLogger("classifier: claude CLI failed model=%s err=%v output=%s",
-			model, err, classifier.TruncateForLog(result.FailureOutput))
-		return "unknown", fmt.Errorf("claude cli: %w", err)
-	}
-
-	classifier.DefaultLogger(
-		"classifier: claude CLI run num_turns=%d cost_usd=%.4f structured_output=%s text=%s",
-		result.NumTurns,
-		result.TotalCostUSD,
-		classifier.TruncateForLog(string(result.StructuredOutput)),
-		classifier.TruncateForLog(result.Text),
-	)
-
-	if state, ok := classifier.ParseVerdict(result.StructuredOutput); ok {
-		return state, nil
-	}
-	classifier.DefaultLogger("classifier: claude response missing explicit WAITING/DONE verdict, returning unknown")
-	return "unknown", nil
 }
 
 func copyTranscriptForResume(resumeSessionID, cwd string) error {

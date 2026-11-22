@@ -5,14 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/victorarias/attn/internal/harness"
 	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/victorarias/attn/internal/classifier"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
@@ -22,9 +20,7 @@ type Codex struct{}
 
 var _ Driver = (*Codex)(nil)
 var _ TranscriptFinder = (*Codex)(nil)
-var _ ClassifierProvider = (*Codex)(nil)
 var _ RecoveredStatePolicyProvider = (*Codex)(nil)
-var _ ExecutableClassifierProvider = (*Codex)(nil)
 var _ ConfigOverrideProvider = (*Codex)(nil)
 var _ ResumePolicyProvider = (*Codex)(nil)
 var _ HeadlessTaskProvider = (*Codex)(nil)
@@ -160,7 +156,7 @@ func writeCodexOutputSchema(request HeadlessTaskRequest) (string, func(), error)
 	if len(request.OutputSchema) == 0 {
 		return "", func() {}, nil
 	}
-	path, remove, err := writeHeadlessFile(request.WorkDir, "codex-output-schema-*.json", request.OutputSchema)
+	path, remove, err := writeHeadlessFile("codex-output-schema-*.json", request.OutputSchema)
 	if err != nil {
 		return "", func() {}, fmt.Errorf("write Codex output schema: %w", err)
 	}
@@ -395,43 +391,4 @@ func (c *Codex) SpawnResumeSessionID(sessionID, resolvedResumeID string, resumeP
 
 func (c *Codex) ResumeSessionIDFromTranscriptPath(transcriptPath string) string {
 	return ""
-}
-
-func (c *Codex) Classify(text string, timeout time.Duration) (string, error) {
-	return c.ClassifyWithExecutable(context.Background(), text, "", "", classifier.CodexClassifierModel(), timeout)
-}
-
-func (c *Codex) ClassifyWithExecutable(parent context.Context, text, executable, workDir, model string, timeout time.Duration) (string, error) {
-	if strings.TrimSpace(text) == "" {
-		classifier.DefaultLogger("classifier: empty text, returning idle")
-		return "idle", nil
-	}
-	classifier.DefaultLogger("classifier: input text (%d chars): %q", len(text), text)
-	resolved := c.ResolveExecutable(executable)
-	effort := classifier.CodexClassifierReasoningEffort()
-	ctx, cancel := context.WithTimeout(parent, timeout)
-	defer cancel()
-	classifier.DefaultLogger(
-		"classifier: calling codex CLI executable=%s model=%s reasoning_effort=%s timeout=%d seconds work_dir=%q",
-		resolved, model, effort, int(timeout.Seconds()), strings.TrimSpace(workDir),
-	)
-	result, err := c.RunHeadlessTask(ctx, HeadlessTaskRequest{
-		Executable:      resolved,
-		Model:           model,
-		ReasoningEffort: effort,
-		Prompt:          classifier.BuildPrompt(text),
-		WorkDir:         workDir,
-		DisableTools:    true,
-	})
-	if err != nil {
-		classifier.DefaultLogger("classifier: codex CLI failed model=%s err=%v output=%s",
-			model, err, classifier.TruncateForLog(result.FailureOutput))
-		return "unknown", fmt.Errorf("codex cli: %w", err)
-	}
-	classifier.DefaultLogger("classifier: codex CLI answered (%d chars): %s", len(result.Text), classifier.TruncateForLog(result.Text))
-	if state, ok := classifier.ParseVerdictText(result.Text); ok {
-		return state, nil
-	}
-	classifier.DefaultLogger("classifier: codex response missing explicit WAITING/DONE verdict, returning unknown")
-	return "unknown", nil
 }

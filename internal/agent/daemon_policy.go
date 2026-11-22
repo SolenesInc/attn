@@ -1,12 +1,10 @@
 package agent
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"time"
 
-	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -34,10 +32,6 @@ type TranscriptClassificationExtractor interface {
 		classificationStart time.Time,
 		lastClassifiedTurnID string,
 	) (content string, turnID string, err error)
-}
-
-type ExecutableClassifierProvider interface {
-	ClassifyWithExecutable(ctx context.Context, text, executable, workDir, model string, timeout time.Duration) (string, error)
 }
 
 func RecoveredRunningSessionState(d Driver, ptyState string) (protocol.SessionState, bool) {
@@ -117,22 +111,6 @@ func ExtractLastAssistantForClassification(
 	}
 	content, err = transcript.ExtractLastAssistantMessage(transcriptPath, maxChars)
 	return content, "", err
-}
-
-func ClassifyWithDriver(ctx context.Context, d Driver, text, executable, workDir, model string, timeout time.Duration) (state string, err error, ok bool) {
-	cp, hasClassifier := GetClassifier(d)
-	if !hasClassifier {
-		return "", nil, false
-	}
-	if !headless.Enabled() {
-		return "unknown", headless.Refusal("classifier"), true
-	}
-	if ecp, supportsExecutable := cp.(ExecutableClassifierProvider); supportsExecutable {
-		state, err = ecp.ClassifyWithExecutable(ctx, text, strings.TrimSpace(executable), strings.TrimSpace(workDir), strings.TrimSpace(model), timeout)
-		return state, err, true
-	}
-	state, err = cp.Classify(text, timeout)
-	return state, err, true
 }
 
 // ConversationKeeper is implemented by harnesses that prune their own conversations.

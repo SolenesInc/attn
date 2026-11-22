@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/classifier"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 )
@@ -63,12 +63,8 @@ func (d *Daemon) judgeQuietStop(m *sessionmonitor.Monitor, run sessionmonitor.Ru
 }
 
 func (d *Daemon) askQuietStopVerdict(agent protocol.SessionAgent, message string) (string, error) {
-	driver, _ := classifierDriver(agent)
-	provider, ok := driver.(agentdriver.HeadlessTaskProvider)
-	if !ok {
-		return "", errors.New(driver.Name() + " runs no headless tasks")
-	}
-	executable, err := d.machineAgentExecutable(driver.Name(), "")
+	id, _ := d.classifierHarness(agent)
+	oneShot, err := d.oneShot(id)
 	if err != nil {
 		return "", err
 	}
@@ -78,22 +74,18 @@ func (d *Daemon) askQuietStopVerdict(agent protocol.SessionAgent, message string
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), quietStopVerdictTimeout)
 	defer cancel()
-	request := agentdriver.HeadlessTaskRequest{
-		Executable:   executable,
-		Model:        d.classifierModel(ctx, driver.Name()),
-		Prompt:       classifier.BuildQuietStopPrompt(message),
-		WorkDir:      workDir,
-		DisableTools: true,
-		MaxTurns:     classifier.ClaudeMaxTurns,
-		OutputSchema: json.RawMessage(classifier.QuietStopVerdictSchema),
-	}
-	if driver.Name() == "codex" {
-		request.ReasoningEffort = classifier.CodexClassifierReasoningEffort()
-	}
-	result, err := provider.RunHeadlessTask(ctx, request)
+	choice := d.classifierChoice(ctx, id)
+	result, err := oneShot.Run(ctx, harness.OneShotRequest{
+		Model:  choice.Model,
+		Effort: choice.Effort,
+		Input:  classifier.BuildQuietStopPrompt(message),
+		Dir:    workDir,
+		Bound:  harness.Bound{MaxTurns: classifier.MaxTurns},
+		Schema: json.RawMessage(classifier.QuietStopVerdictSchema),
+	})
 	if err != nil {
 		return "", err
 	}
-	verdict, _ := classifier.ParseQuietStopVerdict(result.StructuredOutput, result.Text)
+	verdict, _ := classifier.ParseQuietStopVerdict(result.Structured, result.Text)
 	return verdict, nil
 }

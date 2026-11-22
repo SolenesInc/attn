@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/prompts"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
@@ -101,14 +101,14 @@ func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, e
 }
 
 func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
-	providerAgent := titleProviderAgent(session.Agent)
+	providerAgent := d.titleProviderAgent(session.Agent)
 	if providerAgent == "" {
 		return "", fmt.Errorf("no title provider available for agent %q", session.Agent)
 	}
 	return d.execSessionTitleHeadless(ctx, providerAgent, d.sessionTitleModel(ctx, providerAgent), conversation)
 }
 
-func titleProviderAgent(sessionAgent string) string {
+func (d *Daemon) titleProviderAgent(sessionAgent string) string {
 	candidates := []string{sessionAgent, "claude", "codex"}
 	seen := make(map[string]struct{}, len(candidates))
 	for _, name := range candidates {
@@ -119,54 +119,27 @@ func titleProviderAgent(sessionAgent string) string {
 			continue
 		}
 		seen[name] = struct{}{}
-		driver := agentdriver.Get(name)
-		if _, ok := driver.(agentdriver.HeadlessTaskProvider); !ok {
-			continue
+		if _, err := d.oneShot(name); err == nil {
+			return name
 		}
-		if available, _ := agentdriver.HeadlessTaskAvailability(driver); !available {
-			continue
-		}
-		return name
 	}
 	return ""
 }
 
 func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent, model, conversation string) (string, error) {
-	driver := agentdriver.Get(agent)
-	if driver == nil {
-		return "", fmt.Errorf("%s driver unavailable", agent)
-	}
-	provider, ok := driver.(agentdriver.HeadlessTaskProvider)
-	if !ok {
-		return "", fmt.Errorf("%s driver does not support headless tasks", agent)
-	}
-	executable, err := d.machineAgentExecutable(driver.Name(), "")
+	oneShot, err := d.oneShot(agent)
 	if err != nil {
-		return "", fmt.Errorf("resolve %s executable: %w", agent, err)
+		return "", err
 	}
-	workDir, err := os.MkdirTemp("", "attn-session-title-*")
-	if err != nil {
-		return "", fmt.Errorf("create title scratch dir: %w", err)
-	}
-	defer os.RemoveAll(workDir)
-
-	request := agentdriver.HeadlessTaskRequest{
-		Executable:   executable,
-		Model:        model,
-		SystemPrompt: sessionTitleInstructions(),
-		Prompt:       prompts.RenderText("session-title", "generate", prompts.Values{"conversation": conversation}),
-		WorkDir:      workDir,
-		DisableTools: true,
-	}
-	switch agent {
-	case "claude":
-		request.MaxTurns = 2
-		request.MaxBudgetUSD = "0.05"
-	case "codex":
-		request.ReasoningEffort = "low"
+	request := harness.OneShotRequest{
+		Model:  model,
+		System: sessionTitleInstructions(),
+		Input:  prompts.RenderText("session-title", "generate", prompts.Values{"conversation": conversation}),
+		Effort: d.factsOrNone(agent).Tiers[modeltiers.Light].Effort,
+		Bound:  harness.Bound{MaxTurns: 2, MaxCostUSD: "0.05"},
 	}
 
-	result, err := provider.RunHeadlessTask(ctx, request)
+	result, err := oneShot.Run(ctx, request)
 	if err != nil {
 		return "", jobs.WithDiagnostic(fmt.Errorf("%s title run failed: %w", agent, err), result.FailureOutput)
 	}
@@ -223,7 +196,7 @@ func sessionAutoTitleEnabled() bool {
 
 func (d *Daemon) sessionTitleModel(ctx context.Context, agent string) string {
 	explicit := os.Getenv("ATTN_" + strings.ToUpper(agent) + "_TITLE_MODEL")
-	return d.resolveTierModel(ctx, agent, "", modeltiers.Light, explicit, fallbackSessionTitleModel(agent))
+	return d.resolveTierModel(ctx, agent, modeltiers.Light, explicit, d.lightFallback(agent, fallbackSessionTitleModel(agent)))
 }
 
 func fallbackSessionTitleModel(agent string) string {

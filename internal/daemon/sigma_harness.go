@@ -85,6 +85,13 @@ func (h sigmaHarness) End(_ context.Context, e harness.Ending) {
 	}
 }
 
+func (h sigmaHarness) Models(ctx context.Context) (harness.Models, error) {
+	if server := h.d.serverLinkFor(h.Facts().ID); server != nil {
+		return server.harnessModels(ctx)
+	}
+	return noModelDiscovery, nil
+}
+
 func (h sigmaHarness) Health(context.Context) harness.Health {
 	return h.d.executableHealth(h.Facts(), h.d.on(setting.SigmaEnabled))
 }

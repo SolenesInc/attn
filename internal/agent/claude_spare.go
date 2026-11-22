@@ -6,18 +6,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
 )
 
-const claudeSpareReadyRequest = "attn-ready"
+func spareUnusable(format string, args ...any) error {
+	return fmt.Errorf("%w: %s", harness.ErrSpareUnusable, fmt.Sprintf(format, args...))
+}
 
-var _ SpareStarter = (*Claude)(nil)
+const claudeSpareReadyRequest = "attn-ready"
 
 func claudeSpareArgs() []string {
 	args := []string{"--print"}
@@ -39,10 +43,22 @@ func claudeSpareArgs() []string {
 // stdin until Answer gives it all three (F2, F4 of seed s-jhntry). Claude
 // answers an mcp_status request once its session has started, with or without
 // --bare; the spare is then stopped until Answer.
-func (c *Claude) StartSpare(ctx context.Context, executable, workDir string) (Spare, error) {
+func (c *Claude) StartSpare(ctx context.Context, executable string) (harness.Spare, error) {
 	if !headless.Enabled() {
 		return nil, headless.Refusal("claude spare")
 	}
+	workDir, err := os.MkdirTemp("", "attn-model-call-spare-*")
+	if err != nil {
+		return nil, fmt.Errorf("create the spare's scratch directory: %w", err)
+	}
+	spare, err := startClaudeSpare(ctx, executable, workDir)
+	if err != nil {
+		_ = os.RemoveAll(workDir)
+	}
+	return spare, err
+}
+
+func startClaudeSpare(ctx context.Context, executable, workDir string) (harness.Spare, error) {
 	cmd := exec.Command(executable, claudeSpareArgs()...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Dir = workDir
@@ -60,7 +76,7 @@ func (c *Claude) StartSpare(ctx context.Context, executable, workDir string) (Sp
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start claude spare: %w", err)
 	}
-	spare := &claudeSpare{cmd: cmd, stdin: stdin, stdout: bufio.NewReader(stdout), stderr: &stderr, exited: make(chan struct{}), started: make(chan struct{})}
+	spare := &claudeSpare{workDir: workDir, cmd: cmd, stdin: stdin, stdout: bufio.NewReader(stdout), stderr: &stderr, exited: make(chan struct{}), started: make(chan struct{})}
 	go func() {
 		_ = cmd.Wait()
 		close(spare.exited)
@@ -81,6 +97,7 @@ func (c *Claude) StartSpare(ctx context.Context, executable, workDir string) (Sp
 }
 
 type claudeSpare struct {
+	workDir string
 	cmd     *exec.Cmd
 	stdin   io.WriteCloser
 	stdout  *bufio.Reader
@@ -139,11 +156,12 @@ func (s *claudeSpare) Close() {
 	case <-s.exited:
 	case <-time.After(headlessPipeDrainLimit):
 	}
+	_ = os.RemoveAll(s.workDir)
 }
 
-func (s *claudeSpare) Answer(ctx context.Context, request ModelCallRequest) (ModelCallResult, error) {
+func (s *claudeSpare) Answer(ctx context.Context, request harness.OneShotRequest) (harness.OneShotResult, error) {
 	answered := false
-	var result ModelCallResult
+	var result harness.OneShotResult
 	err := spareUnusable("the spare already answered a call")
 	s.used.Do(func() {
 		answered = true
@@ -156,39 +174,39 @@ func (s *claudeSpare) Answer(ctx context.Context, request ModelCallRequest) (Mod
 	return result, err
 }
 
-func (s *claudeSpare) answer(ctx context.Context, request ModelCallRequest) (ModelCallResult, error) {
+func (s *claudeSpare) answer(ctx context.Context, request harness.OneShotRequest) (harness.OneShotResult, error) {
 	stop := context.AfterFunc(ctx, func() { _ = syscall.Kill(-s.cmd.Process.Pid, syscall.SIGKILL) })
 	defer stop()
 	<-s.started
 	controls := []claudeControlRequest{
-		{ID: "attn-instructions", Request: map[string]any{"subtype": "initialize", "systemPrompt": request.SystemPrompt}},
+		{ID: "attn-instructions", Request: map[string]any{"subtype": "initialize", "systemPrompt": request.System}},
 	}
 	if model := strings.TrimSpace(request.Model); model != "" {
 		controls = append(controls, claudeControlRequest{ID: "attn-model", Request: map[string]any{"subtype": "set_model", "model": model}})
 	}
 	for _, control := range controls {
 		if err := s.write(map[string]any{"type": "control_request", "request_id": control.ID, "request": control.Request}); err != nil {
-			return ModelCallResult{}, spareUnusable("write %s: %v%s", control.Request["subtype"], err, s.diagnostics())
+			return harness.OneShotResult{}, spareUnusable("write %s: %v%s", control.Request["subtype"], err, s.diagnostics())
 		}
 	}
 	for range controls {
 		if err := s.awaitControlSuccess(ctx); err != nil {
-			return ModelCallResult{}, err
+			return harness.OneShotResult{}, err
 		}
 	}
 	message := map[string]any{"type": "user", "message": map[string]any{
 		"role": "user", "content": []map[string]string{{"type": "text", "text": request.Input}},
 	}}
 	if err := s.write(message); err != nil {
-		return ModelCallResult{}, fmt.Errorf("claude: write the input: %v%s", err, s.diagnostics())
+		return harness.OneShotResult{}, fmt.Errorf("claude: write the input: %v%s", err, s.diagnostics())
 	}
 	for {
 		line, err := s.stdout.ReadBytes('\n')
 		if err != nil {
 			if ctx.Err() != nil {
-				return ModelCallResult{}, ctx.Err()
+				return harness.OneShotResult{}, ctx.Err()
 			}
-			return ModelCallResult{}, fmt.Errorf("claude ended before it answered%s", s.diagnostics())
+			return harness.OneShotResult{}, fmt.Errorf("claude ended before it answered%s", s.diagnostics())
 		}
 		var event struct {
 			Type    string          `json:"type"`
@@ -201,14 +219,14 @@ func (s *claudeSpare) answer(ctx context.Context, request ModelCallRequest) (Mod
 		}
 		text := claudeResultString(event.Result)
 		if event.IsError {
-			return ModelCallResult{}, fmt.Errorf("claude: %s", ClassifyHeadlessFailure(text))
+			return harness.OneShotResult{}, fmt.Errorf("claude: %s", ClassifyHeadlessFailure(text))
 		}
-		return modelCallAnswer(text, ModelCallResult{
-			ModelTime:    time.Duration(event.DurationAPIMs) * time.Millisecond,
-			InputTokens:  event.Usage.allInputTokens(),
-			OutputTokens: event.Usage.OutputTokens,
-			CostUSD:      event.TotalCostUSD,
-		})
+		return harness.OneShotResult{Text: text, Usage: harness.OneShotUsage{
+			ModelTime: time.Duration(event.DurationAPIMs) * time.Millisecond,
+			In:        event.Usage.allInputTokens(),
+			Out:       event.Usage.OutputTokens,
+			CostUSD:   event.TotalCostUSD,
+		}}, nil
 	}
 }
 

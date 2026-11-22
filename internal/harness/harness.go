@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/prompts"
+	"github.com/victorarias/attn/internal/protocol"
 	"time"
 
 	"github.com/victorarias/attn/internal/modeltiers"
@@ -18,6 +19,7 @@ type ID = string
 type Harness interface {
 	Facts() Facts
 	Health(ctx context.Context) Health
+	Models(ctx context.Context) (Models, error)
 	// Plan decides, at the home and before anything starts, where the launch's conversation runs.
 	Plan(req LaunchRequest) (Planned, error)
 	Launch(ctx context.Context, req LaunchRequest) (Command, error)
@@ -147,7 +149,7 @@ type Facts struct {
 	Executable  Executable
 	SkillDirs   func(lookupEnv func(string) string, homeDir string) ([]string, error)
 	CacheTTL    time.Duration
-	Tiers       map[modeltiers.Tier]string
+	Tiers       map[modeltiers.Tier]ModelChoice
 	Advisor     ModelChoice
 	CrewModel   string
 	Signals     Signals
@@ -267,6 +269,12 @@ func (f Facts) Accept(r Request) error {
 		}
 	}
 	return nil
+}
+
+// Models are the models a harness offers now, with a sentence on where the list comes from.
+type Models struct {
+	List   []protocol.HarnessModel
+	Detail string
 }
 
 // Installation says whether the harness can run on this machine now.

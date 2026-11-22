@@ -1,15 +1,6 @@
 cmd/attnd/agent_launch.go	runAgentDirectly	names "codex"
 cmd/attnd/main.go	runWrapper	names "codex"
 cmd/attnd/preflight.go	parsePreflightArgs	names "codex"
-internal/agent/harness_models.go	(*Claude).DiscoverHarnessModels	names "claude"
-internal/agent/harness_models.go	(*Claude).DiscoverHarnessModels	reaches Claude (internal/agent/claude.go)
-internal/agent/harness_models.go	(*Claude).DiscoverHarnessModels	reaches Claude.DiscoverModels (internal/agent/claude_models.go)
-internal/agent/harness_models.go	(*Claude).DiscoverHarnessModels	reaches ClaudeModelInfo (internal/agent/claude_models.go)
-internal/agent/harness_models.go	(*Claude).DiscoverHarnessModels	reaches field Description (internal/agent/claude_models.go)
-internal/agent/harness_models.go	(*Claude).DiscoverHarnessModels	reaches field DisplayName (internal/agent/claude_models.go)
-internal/agent/harness_models.go	(*Claude).DiscoverHarnessModels	reaches field SupportedEffortLevels (internal/agent/claude_models.go)
-internal/agent/harness_models.go	(*Claude).DiscoverHarnessModels	reaches field SupportsEffort (internal/agent/claude_models.go)
-internal/agent/harness_models.go	(*Claude).DiscoverHarnessModels	reaches field Value (internal/agent/claude_models.go)
 internal/agent/headless.go	headlessEnvironment	names "claude"
 internal/agent/headless.go	headlessEnvironment	names "codex"
 internal/automation/automation.go	Effective	names "codex"
@@ -17,12 +8,11 @@ internal/automation/automation.go	StarterDefinition	names "codex"
 internal/automation/automation.go	refuseCodexExecutable	names "codex"
 internal/crew/crew.go	(Member).LaunchAgent	names "claude"
 internal/crew/crew.go	DefaultAgent	names "claude"
-internal/daemon/activity.go	(*Daemon).sessionActivityHandler	names "codex"
 internal/daemon/activity.go	(*Daemon).sessionGeneratesActivity	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
 internal/daemon/activity.go	(*Daemon).sessionGeneratesActivity	reaches serverLink (internal/daemon/server_link.go)
 internal/daemon/activity.go	(*Daemon).sessionGeneratesActivity	reaches serverLink.watchesConversations (internal/daemon/server_feed.go)
-internal/daemon/activity_config.go	parseActivityConfig	names "claude"
-internal/daemon/activity_config.go	parseActivityConfig	names "codex"
+internal/daemon/activity_config.go	activityFallbackModel	names "claude"
+internal/daemon/activity_config.go	activityFallbackModel	names "codex"
 internal/daemon/agent_catalog.go	(*Daemon).agentCatalog	reaches field Agent (internal/daemon/plugin_driver.go)
 internal/daemon/agent_catalog.go	(*Daemon).agentCatalog	reaches field PluginName (internal/daemon/plugin_driver.go)
 internal/daemon/agent_catalog.go	(*Daemon).agentCatalog	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
@@ -52,7 +42,6 @@ internal/daemon/agent_machine.go	(*Daemon).readConversationReadiness	reaches ser
 internal/daemon/agent_machine.go	AgentPluginLaunch	reaches pluginDriverSpawnParams (internal/daemon/plugin_driver.go)
 internal/daemon/agent_peek.go	(*Daemon).agentPeekScreen	names "claude"
 internal/daemon/agent_skills.go	(*Daemon).ensureEnabledWorkflowSkillsFor	reaches Daemon.workflowSkillsDirs (internal/daemon/plugin_skill_dirs.go)
-internal/daemon/analytics_quiet_stops.go	(*Daemon).askQuietStopVerdict	names "codex"
 internal/daemon/automations_deliver.go	(*Daemon).confirmsFirstTurn	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
 internal/daemon/automations_deliver.go	(*Daemon).confirmsFirstTurn	reaches serverLink (internal/daemon/server_link.go)
 internal/daemon/automations_deliver.go	(*Daemon).confirmsFirstTurn	reaches serverLink.runsLaunch (internal/daemon/server_link.go)
@@ -89,11 +78,8 @@ internal/daemon/delegation_preferences.go	(*Daemon).delegationHarnesses	reaches 
 internal/daemon/delegation_preferences.go	(*Daemon).delegationHarnesses	reaches serverLink (internal/daemon/server_link.go)
 internal/daemon/delegation_preferences.go	(*Daemon).ensureDelegationWorkflowSkill	reaches Daemon.workflowSkillsDirs (internal/daemon/plugin_skill_dirs.go)
 internal/daemon/delegation_preferences.go	(*Daemon).installAttnRoles	reaches Daemon.workflowSkillsDirs (internal/daemon/plugin_skill_dirs.go)
-internal/daemon/garden_advisor.go	executeGardenAdvisor	names "claude"
-internal/daemon/garden_advisor_config.go	defaultGardenAdvisorConfig	names "claude"
-internal/daemon/garden_advisor_config.go	defaultGardenAdvisorConfig	names "codex"
+internal/daemon/garden_advisor_config.go	(*Daemon).parseGardenAdvisorConfig	names "codex"
 internal/daemon/garden_advisor_config.go	gardenAdvisorDefaultAgent	names "codex"
-internal/daemon/garden_advisor_config.go	parseGardenAdvisorConfig	names "codex"
 internal/daemon/garden_continuation.go	(*Daemon).continuationForSeedWithResumeCheck	reaches conversationAvailability (internal/daemon/plugin_driver.go)
 internal/daemon/garden_continuation.go	(*Daemon).continuationIgnoringReach	reaches conversationAvailability (internal/daemon/plugin_driver.go)
 internal/daemon/garden_continuation.go	(*Daemon).continuationOnItsMachine	reaches bridgeAnswered (internal/daemon/claude_mod.go)
@@ -121,37 +107,15 @@ internal/daemon/garden_review.go	(*Daemon).probeGardenReviewContinuations	reache
 internal/daemon/garden_review.go	(*Daemon).probeGardenReviewContinuations	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
 internal/daemon/garden_review.go	(*Daemon).probeGardenReviewContinuations	reaches pluginRegistry.driver (internal/daemon/plugin_driver.go)
 internal/daemon/garden_review.go	(*Daemon).probeGardenReviewContinuations	reaches pluginResumeConversation (internal/daemon/plugin_driver.go)
-internal/daemon/harness_models.go	(*Daemon).queryHarnessModels	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
-internal/daemon/harness_models.go	(*Daemon).queryHarnessModels	reaches field Capabilities (internal/daemon/plugin_driver.go)
-internal/daemon/harness_models.go	(*Daemon).queryHarnessModels	reaches field PluginName (internal/daemon/plugin_driver.go)
-internal/daemon/harness_models.go	(*Daemon).queryHarnessModels	reaches field b (internal/daemon/server_link.go)
-internal/daemon/harness_models.go	(*Daemon).queryHarnessModels	reaches field name (internal/daemon/server_binding.go)
-internal/daemon/harness_models.go	(*Daemon).queryHarnessModels	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
-internal/daemon/harness_models.go	(*Daemon).queryHarnessModels	reaches pluginRegistry.driver (internal/daemon/plugin_driver.go)
-internal/daemon/harness_models.go	(*Daemon).queryHarnessModels	reaches serverBinding (internal/daemon/server_binding.go)
-internal/daemon/harness_models.go	(*Daemon).queryHarnessModels	reaches serverLink (internal/daemon/server_link.go)
-internal/daemon/harness_models.go	(*Daemon).queryHarnessModels	reaches serverLink.models (internal/daemon/server_link.go)
 internal/daemon/login_env.go	(*Daemon).awaitHarness	reaches pluginRegistry.driverOrRegistration (internal/daemon/plugin_driver.go)
 internal/daemon/markdown_annotation_payload.go	formatQuestionPayload	reaches shellQuote (internal/daemon/codex_update.go)
 internal/daemon/markdown_annotation_payload.go	formatReviewPayload	reaches shellQuote (internal/daemon/codex_update.go)
-internal/daemon/model_call_codex.go	(*codexShared).runningSocket	reaches codexServer (internal/daemon/codex_shared.go)
-internal/daemon/model_call_codex.go	(*codexShared).runningSocket	reaches codexServer.client (internal/daemon/codex_shared.go)
-internal/daemon/model_call_codex.go	(*codexShared).runningSocket	reaches codexShared (internal/daemon/codex_shared.go)
-internal/daemon/model_call_codex.go	(*codexShared).runningSocket	reaches field mu (internal/daemon/codex_shared.go)
-internal/daemon/model_call_codex.go	(*codexShared).runningSocket	reaches field servers (internal/daemon/codex_shared.go)
-internal/daemon/model_call_codex.go	(*codexShared).runningSocket	reaches field socket (internal/daemon/codex_shared.go)
-internal/daemon/model_call_codex.go	answerModelCallOnSharedCodex	reaches CodexToolFreeConfig (internal/agent/codex.go)
-internal/daemon/model_call_codex.go	awaitSharedCodexTurn	reaches codexServerCallLimit (internal/daemon/codex_shared.go)
-internal/daemon/model_call_codex.go	codexUserMCPServers	reaches codexConfigPath (internal/daemon/codex_trust.go)
-internal/daemon/model_calls.go	(*Daemon).answerModelCall	names "codex"
-internal/daemon/model_calls.go	(*Daemon).answerModelCall	reaches Daemon.codexShared (internal/daemon/codex_shared.go)
-internal/daemon/model_calls.go	(*Daemon).answerModelCall	reaches codexShared (internal/daemon/codex_shared.go)
 internal/daemon/monitor_apply.go	(*monitorHome).apply	reaches Daemon.claudeMod (internal/daemon/claude_mod.go)
 internal/daemon/monitor_apply.go	(*monitorHome).apply	reaches claudeMod (internal/daemon/claude_mod.go)
 internal/daemon/monitor_apply.go	(*monitorHome).apply	reaches claudeMod.placeReturned (internal/daemon/claude_mod_link.go)
-internal/daemon/monitor_home_calls.go	(*Daemon).classifierModel	names "claude"
-internal/daemon/monitor_home_calls.go	(*Daemon).classifierModel	names "codex"
-internal/daemon/monitor_home_calls.go	classifierDriver	names "claude"
+internal/daemon/monitor_home_calls.go	(*Daemon).classifierHarness	names "claude"
+internal/daemon/monitor_home_calls.go	classifierFallbackModel	names "claude"
+internal/daemon/monitor_home_calls.go	classifierFallbackModel	names "codex"
 internal/daemon/monitor_leaves.go	(*Daemon).assistantWindow	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
 internal/daemon/monitor_leaves.go	(*Daemon).assistantWindow	reaches serverLink (internal/daemon/server_link.go)
 internal/daemon/monitor_leaves.go	(*Daemon).assistantWindow	reaches serverLink.assistantWindow (internal/daemon/server_transcript.go)
@@ -240,12 +204,10 @@ internal/daemon/session_reopen.go	(*Daemon).reopenConversation	reaches field Cap
 internal/daemon/session_reopen.go	(*Daemon).reopenConversation	reaches field Reason (internal/daemon/plugin_driver.go)
 internal/daemon/session_reopen.go	(*Daemon).reopenConversation	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
 internal/daemon/session_reopen.go	(*Daemon).reopenConversation	reaches pluginRegistry.driver (internal/daemon/plugin_driver.go)
-internal/daemon/session_title.go	(*Daemon).execSessionTitleHeadless	names "claude"
-internal/daemon/session_title.go	(*Daemon).execSessionTitleHeadless	names "codex"
+internal/daemon/session_title.go	(*Daemon).titleProviderAgent	names "claude"
+internal/daemon/session_title.go	(*Daemon).titleProviderAgent	names "codex"
 internal/daemon/session_title.go	fallbackSessionTitleModel	names "claude"
 internal/daemon/session_title.go	fallbackSessionTitleModel	names "codex"
-internal/daemon/session_title.go	titleProviderAgent	names "claude"
-internal/daemon/session_title.go	titleProviderAgent	names "codex"
 internal/daemon/spawn_pipeline.go	(*Daemon).buildAgentSpawnLaunch	reaches field Agent (internal/daemon/plugin_driver.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).buildAgentSpawnLaunch	reaches field CWD (internal/daemon/plugin_driver.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).buildAgentSpawnLaunch	reaches field Capabilities (internal/daemon/plugin_driver.go)

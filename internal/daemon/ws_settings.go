@@ -275,7 +275,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 		settings[capabilitySettingKey(name, "initial_prompt")] = strconv.FormatBool(caps.HasInitialPrompt)
 		settings[capabilitySettingKey(name, "resume")] = strconv.FormatBool(caps.HasResume)
 		settings[capabilitySettingKey(name, "yolo")] = strconv.FormatBool(caps.HasYolo)
-		hasHeadlessTask, _ := agentdriver.HeadlessTaskAvailability(driver)
+		_, hasHeadlessTask := harness.As[harness.OneShot](h)
 		settings[capabilitySettingKey(name, "headless_task")] = strconv.FormatBool(hasHeadlessTask)
 		settings[capabilitySettingKey(name, "launch_instructions")] = strconv.FormatBool(d.agentSupportsChiefGuidance(name))
 		settings[capabilitySettingKey(name, "executable_setting")] = "true"
@@ -337,7 +337,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 			settings[setting.ActivityIntervals.Key] = string(encoded)
 		}
 	}
-	if advisor, err := parseGardenAdvisorConfig(stored[setting.GardenAdvisor.Key]); err == nil {
+	if advisor, err := d.parseGardenAdvisorConfig(stored[setting.GardenAdvisor.Key]); err == nil {
 		if encoded, err := json.Marshal(advisor); err == nil {
 			settings[setting.GardenAdvisor.Key] = string(encoded)
 		}

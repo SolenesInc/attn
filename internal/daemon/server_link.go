@@ -155,6 +155,16 @@ type serverProviderModels struct {
 	} `json:"models"`
 }
 
+var noModelDiscovery = harness.Models{Detail: "This harness does not expose model discovery. Add an exact model or use its default."}
+
+func (l *serverLink) harnessModels(ctx context.Context) (harness.Models, error) {
+	models, err := l.models(ctx)
+	if err != nil {
+		return harness.Models{}, err
+	}
+	return harness.Models{List: models, Detail: "Models of the providers the " + l.b.name + " server has."}, nil
+}
+
 func (l *serverLink) models(ctx context.Context) ([]protocol.HarnessModel, error) {
 	p, err := l.connection()
 	if err != nil {

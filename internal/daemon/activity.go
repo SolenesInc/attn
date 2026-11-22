@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/activity"
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/command"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
@@ -242,11 +243,7 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	if err != nil {
 		return nil, err
 	}
-	fallback := activityClaudeDefaultModel
-	if config.Agent == "codex" {
-		fallback = activityCodexDefaultModel
-	}
-	config.Model = d.resolveTierModel(ctx, config.Agent, "", modeltiers.Light, config.Model, fallback)
+	config.Model = d.resolveTierModel(ctx, config.Agent, modeltiers.Light, config.Model, config.fallback)
 
 	prompt := activity.Render(activity.Input{
 		State:       string(session.State),
@@ -255,7 +252,7 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 		Previous:    stored.Line,
 	})
 
-	provider, executablePath, err := d.resolveActivityExecutable(config)
+	oneShot, err := d.oneShot(config.Agent)
 	if err != nil {
 		return nil, err
 	}
@@ -267,16 +264,13 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	d.noteSessionActivityRun(sessionID, func(record *sessionActivityRun) {
 		record.SpentAt = time.Now()
 	})
-	result, err := provider.RunHeadlessTask(ctx, agentdriver.HeadlessTaskRequest{
-		Executable:      executablePath,
-		Model:           config.Model,
-		ReasoningEffort: config.Effort,
-		Prompt:          prompt.User,
-		SystemPrompt:    prompt.System,
-		WorkDir:         workDir,
-		DisableTools:    true,
-		MaxTurns:        activityMaxTurns,
-		MaxBudgetUSD:    sessionActivityBudgetUSD,
+	result, err := oneShot.Run(ctx, harness.OneShotRequest{
+		Model:  config.Model,
+		Effort: config.Effort,
+		Input:  prompt.User,
+		System: prompt.System,
+		Dir:    workDir,
+		Bound:  harness.Bound{MaxTurns: activityMaxTurns, MaxCostUSD: sessionActivityBudgetUSD},
 	})
 	if err != nil {
 		d.noteSessionActivityRun(sessionID, func(record *sessionActivityRun) {

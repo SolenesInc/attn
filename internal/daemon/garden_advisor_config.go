@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/setting"
@@ -21,25 +20,10 @@ type gardenAdvisorConfig struct {
 	Effort string `json:"effort,omitempty"`
 }
 
-func defaultGardenAdvisorConfig(agent string) (gardenAdvisorConfig, error) {
-	switch strings.TrimSpace(strings.ToLower(agent)) {
-	case "codex":
-		return gardenAdvisorConfig{
-			Agent: "codex",
-		}, nil
-	case "claude":
-		return gardenAdvisorConfig{
-			Agent: "claude",
-		}, nil
-	default:
-		return gardenAdvisorConfig{}, fmt.Errorf("garden advisor agent is not supported: %s", agent)
-	}
-}
-
-func parseGardenAdvisorConfig(raw string) (gardenAdvisorConfig, error) {
+func (d *Daemon) parseGardenAdvisorConfig(raw string) (gardenAdvisorConfig, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return defaultGardenAdvisorConfig(gardenAdvisorDefaultAgent)
+		return gardenAdvisorConfig{Agent: gardenAdvisorDefaultAgent}, nil
 	}
 
 	var config gardenAdvisorConfig
@@ -59,25 +43,14 @@ func parseGardenAdvisorConfig(raw string) (gardenAdvisorConfig, error) {
 		return gardenAdvisorConfig{}, errors.New("garden advisor requires an agent")
 	}
 
-	_, err := defaultGardenAdvisorConfig(config.Agent)
-	if err != nil {
-		return gardenAdvisorConfig{}, err
-	}
-	driver := agentdriver.Get(config.Agent)
-	if driver == nil {
-		return gardenAdvisorConfig{}, fmt.Errorf("garden advisor agent is not installed: %s", config.Agent)
-	}
-	if _, ok := driver.(agentdriver.HeadlessTaskProvider); !ok {
-		return gardenAdvisorConfig{}, fmt.Errorf("agent %s does not support headless tasks", config.Agent)
-	}
-	if available, reason := agentdriver.HeadlessTaskAvailability(driver); !available {
-		return gardenAdvisorConfig{}, fmt.Errorf("agent %s cannot run headless tasks: %s", config.Agent, reason)
+	if _, err := d.oneShot(config.Agent); err != nil {
+		return gardenAdvisorConfig{}, fmt.Errorf("garden advisor agent is not supported: %s", config.Agent)
 	}
 	return config, nil
 }
 
 func (d *Daemon) validateGardenAdvisorSetting(raw string) error {
-	config, err := parseGardenAdvisorConfig(raw)
+	config, err := d.parseGardenAdvisorConfig(raw)
 	if err != nil {
 		return err
 	}
@@ -91,7 +64,7 @@ func (d *Daemon) gardenAdvisorConfig(ctx context.Context) (gardenAdvisorConfig, 
 	if d.store == nil {
 		return gardenAdvisorConfig{}, errors.New("garden advisor settings unavailable")
 	}
-	config, err := parseGardenAdvisorConfig(d.setting(setting.GardenAdvisor))
+	config, err := d.parseGardenAdvisorConfig(d.setting(setting.GardenAdvisor))
 	if err != nil {
 		return gardenAdvisorConfig{}, err
 	}
@@ -106,24 +79,6 @@ func (d *Daemon) gardenAdvisorConfig(ctx context.Context) (gardenAdvisorConfig, 
 		}
 		return config, nil
 	}
-	config.Model = d.resolveTierModel(ctx, config.Agent, "", modeltiers.Light, config.Model, fallback)
+	config.Model = d.resolveTierModel(ctx, config.Agent, modeltiers.Light, config.Model, fallback)
 	return config, nil
-}
-
-func (d *Daemon) resolveGardenAdvisor(
-	config gardenAdvisorConfig,
-) (agentdriver.HeadlessTaskProvider, string, error) {
-	driver := agentdriver.Get(config.Agent)
-	if driver == nil {
-		return nil, "", fmt.Errorf("garden advisor agent not found: %s", config.Agent)
-	}
-	provider, ok := driver.(agentdriver.HeadlessTaskProvider)
-	if !ok {
-		return nil, "", fmt.Errorf("agent %s does not support headless tasks", config.Agent)
-	}
-	executable, err := d.machineAgentExecutable(driver.Name(), "")
-	if err != nil {
-		return nil, "", fmt.Errorf("resolve %s executable: %w", config.Agent, err)
-	}
-	return provider, executable, nil
 }

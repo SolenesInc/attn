@@ -2,13 +2,14 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/setting"
@@ -154,48 +155,77 @@ func (d *Daemon) monitorViewFor(session protocol.SessionID) (sessionmonitor.View
 }
 
 func (d *Daemon) runClassifier(ctx context.Context, agent protocol.SessionAgent, directory, text string, timeout time.Duration) (string, error) {
-	driver, own := classifierDriver(agent)
+	id, own := d.classifierHarness(agent)
 	if !own {
 		directory = ""
 	}
-	executable, err := d.machineAgentExecutable(driver.Name(), "")
+	oneShot, err := d.oneShot(id)
 	if err != nil {
 		return protocol.StateUnknown, err
 	}
-	if state, err, ok := agentdriver.ClassifyWithDriver(
-		ctx,
-		driver,
-		text,
-		executable,
-		directory,
-		d.classifierModel(ctx, driver.Name()),
-		timeout,
-	); ok {
-		return state, err
+	if !headless.Enabled() {
+		return protocol.StateUnknown, headless.Refusal("classifier")
 	}
-	return protocol.StateUnknown, errors.New("no classifier backend available")
+	if strings.TrimSpace(text) == "" {
+		classifier.DefaultLogger("classifier: empty text, returning idle")
+		return protocol.StateIdle, nil
+	}
+	classifier.DefaultLogger("classifier: input text (%d chars): %q", len(text), text)
+	choice := d.classifierChoice(ctx, id)
+	classifier.DefaultLogger("classifier: calling %s model=%s effort=%s timeout=%d seconds work_dir=%q",
+		id, choice.Model, choice.Effort, int(timeout.Seconds()), directory)
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	result, err := oneShot.Run(runCtx, harness.OneShotRequest{
+		Model:  choice.Model,
+		Effort: choice.Effort,
+		Input:  classifier.BuildPrompt(text),
+		Schema: json.RawMessage(classifier.VerdictSchema),
+		Dir:    directory,
+		Bound:  harness.Bound{MaxTurns: classifier.MaxTurns},
+	})
+	if err != nil {
+		classifier.DefaultLogger("classifier: %s failed model=%s err=%v output=%s", id, choice.Model, err, classifier.TruncateForLog(result.FailureOutput))
+		return protocol.StateUnknown, fmt.Errorf("%s classifier: %w", id, err)
+	}
+	classifier.DefaultLogger("classifier: %s answered num_turns=%d cost_usd=%.4f structured_output=%s text=%s", id, result.Usage.Turns, result.Usage.CostUSD,
+		classifier.TruncateForLog(string(result.Structured)), classifier.TruncateForLog(result.Text))
+	state, ok := classifier.ParseVerdictText(result.Text)
+	if len(result.Structured) > 0 {
+		state, ok = classifier.ParseVerdict(result.Structured)
+	}
+	if ok {
+		return state, nil
+	}
+	classifier.DefaultLogger("classifier: %s response missing explicit WAITING/DONE verdict, returning unknown", id)
+	return protocol.StateUnknown, nil
 }
 
-func classifierDriver(agent protocol.SessionAgent) (driver agentdriver.Driver, own bool) {
-	driver = agentdriver.Get(string(agent))
-	if _, ok := agentdriver.GetClassifier(driver); ok {
-		return driver, true
+func (d *Daemon) classifierHarness(agent protocol.SessionAgent) (id harness.ID, own bool) {
+	if _, err := d.oneShot(string(agent)); err == nil {
+		return string(agent), true
 	}
-	return agentdriver.Get("claude"), false
+	return "claude", false
 }
 
-func (d *Daemon) classifierModel(ctx context.Context, harness string) string {
-	fallback := ""
-	switch harness {
+func (d *Daemon) classifierChoice(ctx context.Context, id harness.ID) harness.ModelChoice {
+	env := "ATTN_" + strings.ToUpper(id) + "_CLASSIFIER_"
+	choice := harness.ModelChoice{Effort: d.factsOrNone(id).Tiers[modeltiers.Light].Effort}
+	if effort := strings.TrimSpace(strings.ToLower(os.Getenv(env + "REASONING_EFFORT"))); effort != "" {
+		choice.Effort = effort
+	}
+	choice.Model = d.resolveTierModel(ctx, id, modeltiers.Light, os.Getenv(env+"MODEL"), d.lightFallback(id, classifierFallbackModel(id)))
+	return choice
+}
+
+func classifierFallbackModel(id harness.ID) string {
+	switch id {
 	case "claude":
-		fallback = classifier.ClaudeClassifierModel()
+		return classifier.DefaultClaudeClassifierModel
 	case "codex":
-		fallback = classifier.CodexClassifierModel()
-	default:
-		return ""
+		return classifier.DefaultCodexClassifierModel
 	}
-	explicit := os.Getenv("ATTN_" + strings.ToUpper(harness) + "_CLASSIFIER_MODEL")
-	return d.resolveTierModel(ctx, harness, "", modeltiers.Light, explicit, fallback)
+	return ""
 }
 
 func (d *Daemon) updateEvidence(sessionID protocol.SessionID, unchanged func(*sessionmonitor.Evidence) bool, mutate func(*sessionmonitor.Evidence)) bool {

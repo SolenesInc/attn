@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/command"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioninstructions"
@@ -52,31 +51,16 @@ func (m daemonSessionInstructionsModel) Run(ctx context.Context, request session
 	if m.daemon.headlessTaskRefused("session_instructions") {
 		return sessioninstructions.ModelAnswer{}, headless.Refusal("session_instructions")
 	}
-	driver := agentdriver.Get("codex")
-	provider, ok := driver.(agentdriver.HeadlessTaskProvider)
-	if !ok {
-		m.daemon.logf("session instructions model failed: Codex headless provider unavailable")
-		return sessioninstructions.ModelAnswer{}, errors.New("codex headless provider unavailable")
-	}
-	executable, err := m.daemon.machineAgentExecutable(driver.Name(), "")
+	oneShot, err := m.daemon.oneShot("codex")
 	if err != nil {
-		m.daemon.logf("session instructions model failed: Codex executable unavailable")
-		return sessioninstructions.ModelAnswer{}, fmt.Errorf("resolve luna executable: %w", err)
-	}
-	workDir, err := os.MkdirTemp("", "attn-session-instructions-*")
-	if err != nil {
-		m.daemon.logf("session instructions model failed: scratch directory unavailable")
+		m.daemon.logf("session instructions model failed: %v", err)
 		return sessioninstructions.ModelAnswer{}, err
 	}
-	defer os.RemoveAll(workDir)
-	result, err := provider.RunHeadlessTask(ctx, agentdriver.HeadlessTaskRequest{
-		Executable:      executable,
-		Model:           sessioninstructions.ModelName,
-		ReasoningEffort: request.Effort,
-		Prompt:          sessioninstructions.Prompt(request),
-		WorkDir:         workDir,
-		DisableTools:    true,
-		OutputSchema:    json.RawMessage(sessioninstructions.AnswerSchema),
+	result, err := oneShot.Run(ctx, harness.OneShotRequest{
+		Model:  sessioninstructions.ModelName,
+		Effort: request.Effort,
+		Input:  sessioninstructions.Prompt(request),
+		Schema: json.RawMessage(sessioninstructions.AnswerSchema),
 	})
 	if err != nil {
 		diagnostic := strings.TrimSpace(result.Diagnostics)

@@ -7,14 +7,13 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/modeltiers"
@@ -39,11 +38,9 @@ const (
 const modelCallsRunningTripwire = 8
 
 type modelCallTarget struct {
-	harness    string
-	provider   agentdriver.HeadlessTaskProvider
-	driver     agentdriver.Driver
-	executable string
-	model      string
+	harness string
+	oneShot harness.OneShot
+	model   string
 }
 
 type modelChoice struct {
@@ -70,23 +67,23 @@ func parseModelCallTier(raw string) (modeltiers.Tier, error) {
 	return "", fmt.Errorf("tier must be light, standard or deep, not %q", raw)
 }
 
-func modelCallHarnesses() []string {
+func (d *Daemon) modelCallHarnesses() []string {
 	var names []string
-	for _, name := range agentdriver.List() {
-		if ok, _ := agentdriver.HeadlessTaskAvailability(agentdriver.Get(name)); ok {
-			names = append(names, name)
+	for _, h := range d.harnesses() {
+		if _, ok := harness.As[harness.OneShot](h); ok {
+			names = append(names, h.Facts().ID)
 		}
 	}
 	slices.Sort(names)
 	return names
 }
 
-func validateModelCallsAgent(value string) error {
+func (d *Daemon) validateModelCallsAgent(value string) error {
 	name := strings.ToLower(strings.TrimSpace(value))
-	if name == "" || slices.Contains(modelCallHarnesses(), name) {
+	if name == "" || slices.Contains(d.modelCallHarnesses(), name) {
 		return nil
 	}
-	return fmt.Errorf("model calls are answered by %s, not %q", strings.Join(modelCallHarnesses(), " or "), value)
+	return fmt.Errorf("model calls are answered by %s, not %q", strings.Join(d.modelCallHarnesses(), " or "), value)
 }
 
 func (d *Daemon) modelCallDefaultHarness() string {
@@ -96,24 +93,20 @@ func (d *Daemon) modelCallDefaultHarness() string {
 	return d.newSessionAgent()
 }
 
-func (d *Daemon) modelCallHarness(named string) (agentdriver.Driver, agentdriver.HeadlessTaskProvider, error) {
+func (d *Daemon) modelCallHarness(named string) (string, harness.OneShot, error) {
 	name := strings.ToLower(strings.TrimSpace(named))
 	if name == "" {
 		name = d.modelCallDefaultHarness()
 	}
-	installed := modelCallHarnesses()
-	if !slices.Contains(installed, name) {
-		return nil, nil, d.modelCallHarnessRefusal(named, name, installed)
+	oneShot, err := d.oneShot(name)
+	if err != nil {
+		return "", nil, d.modelCallHarnessRefusal(named, name, d.modelCallHarnesses())
 	}
-	driver := agentdriver.Get(name)
-	return driver, driver.(agentdriver.HeadlessTaskProvider), nil
+	return name, oneShot, nil
 }
 
-func (d *Daemon) modelCallHarnessRefusal(named, name string, installed []string) error {
-	answering := strings.Join(installed, " or ")
-	if _, headless := agentdriver.Get(name).(agentdriver.HeadlessTaskProvider); headless {
-		return fmt.Errorf("%s is not installed; model calls are answered by %s", name, answering)
-	}
+func (d *Daemon) modelCallHarnessRefusal(named, name string, answers []string) error {
+	answering := strings.Join(answers, " or ")
 	if strings.TrimSpace(named) == "" && strings.TrimSpace(d.setting(setting.ModelCallsAgent)) == "" {
 		return fmt.Errorf("model calls default to the new-session agent %q, which does not answer model calls; set model_calls.agent to %s", name, answering)
 	}
@@ -135,19 +128,18 @@ func (d *Daemon) modelCallTarget(ctx context.Context, msg *protocol.SenderModelC
 	case strings.TrimSpace(protocol.Deref(msg.Model)) != "":
 		choice = modelChoice{model: strings.TrimSpace(*msg.Model)}
 	}
-	driver, provider, err := d.modelCallHarness(protocol.Deref(msg.Harness))
+	name, oneShot, err := d.modelCallHarness(protocol.Deref(msg.Harness))
 	if err != nil {
 		return modelCallTarget{}, err
 	}
-	executable, err := d.machineAgentExecutable(driver.Name(), "")
-	if err != nil {
-		return modelCallTarget{}, fmt.Errorf("%s executable was not found: %w", driver.Name(), err)
+	if _, err := d.machineAgentExecutable(name, ""); err != nil {
+		return modelCallTarget{}, fmt.Errorf("%s executable was not found: %w", name, err)
 	}
 	model := choice.model
 	if model == "" {
-		model = d.resolveTierModel(ctx, driver.Name(), executable, choice.tier, "", d.factsOrNone(driver.Name()).Tiers[choice.tier])
+		model = d.resolveTierModel(ctx, name, choice.tier, "", d.factsOrNone(name).Tiers[choice.tier].Model)
 	}
-	return modelCallTarget{harness: driver.Name(), provider: provider, driver: driver, executable: executable, model: model}, nil
+	return modelCallTarget{harness: name, oneShot: oneShot, model: model}, nil
 }
 
 type modelCallsRunning struct {
@@ -174,7 +166,7 @@ func (r *modelCallsRunning) done() {
 type modelCallOutcome struct {
 	target  modelCallTarget
 	refused error
-	result  agentdriver.ModelCallResult
+	result  harness.OneShotResult
 	err     error
 }
 
@@ -245,8 +237,8 @@ func (d *Daemon) handleSenderModelCall(conn net.Conn, msg *protocol.SenderModelC
 	case outcome.err == nil:
 		ended = protocol.ModelCallOutcomeAnswered
 		response.Text = protocol.Ptr(outcome.result.Text)
-		if outcome.result.ModelTime > 0 {
-			response.ModelMs = protocol.Ptr(int(outcome.result.ModelTime.Milliseconds()))
+		if outcome.result.Usage.ModelTime > 0 {
+			response.ModelMs = protocol.Ptr(int(outcome.result.Usage.ModelTime.Milliseconds()))
 		}
 	case passedLimit:
 		ended = protocol.ModelCallOutcomeLimit
@@ -271,37 +263,35 @@ func (d *Daemon) answerModelCall(ctx context.Context, profile string, msg *proto
 		return modelCallOutcome{refused: err}
 	}
 	resolved.Store(&target)
-	request := agentdriver.ModelCallRequest{
-		Executable:   target.executable,
-		Model:        target.model,
-		SystemPrompt: msg.System,
-		Input:        msg.Input,
-	}
+	request := harness.OneShotRequest{Profile: profile, Model: target.model, System: msg.System, Input: msg.Input}
 	if spare := d.modelCallSpare.take(d, target.harness); spare != nil {
 		bySpare.Store(true)
 		result, err := spare.Answer(ctx, request)
-		if !errors.Is(err, agentdriver.ErrSpareUnusable) {
+		if !errors.Is(err, harness.ErrSpareUnusable) {
+			result, err = modelCallAnswer(result, err)
 			return modelCallOutcome{target: target, result: result, err: err}
 		}
 		bySpare.Store(false)
 		d.logf("model call: the %s spare could not answer, so the call runs cold: %v", target.harness, err)
 	}
-	workDir, err := os.MkdirTemp("", "attn-model-call-*")
-	if err != nil {
-		return modelCallOutcome{err: fmt.Errorf("create the call's scratch directory: %w", err)}
-	}
-	defer os.RemoveAll(workDir)
-	request.WorkDir = workDir
-	var result agentdriver.ModelCallResult
-	if socket := d.codexShared().runningSocket(profile); target.harness == "codex" && socket != "" {
-		result, err = answerModelCallOnSharedCodex(ctx, socket, request)
-	} else {
-		result, err = agentdriver.AnswerModelCall(ctx, target.provider, request)
-	}
+	result, err := modelCallAnswer(target.oneShot.Run(ctx, request))
 	if err != nil {
 		err = fmt.Errorf("%s: %w", target.harness, err)
 	}
 	return modelCallOutcome{target: target, result: result, err: err}
+}
+
+func modelCallAnswer(result harness.OneShotResult, err error) (harness.OneShotResult, error) {
+	if err != nil {
+		if result.Diagnostics != "" {
+			return harness.OneShotResult{}, errors.New(result.Diagnostics)
+		}
+		return harness.OneShotResult{}, err
+	}
+	if result.Text = strings.TrimSpace(result.Text); result.Text == "" {
+		return harness.OneShotResult{}, errors.New("the model returned no text")
+	}
+	return result, nil
 }
 
 func (d *Daemon) logModelCall(sender, purpose string, target modelCallTarget, bySpare bool, took time.Duration, outcome modelCallOutcome) {
@@ -310,8 +300,8 @@ func (d *Daemon) logModelCall(sender, purpose string, target modelCallTarget, by
 		result = "failed: " + outcome.err.Error()
 	}
 	d.logf("model call: sender=%q purpose=%q harness=%s model=%s spare=%t took=%s model_ms=%d tokens_in=%d tokens_out=%d cost_usd=%.4f outcome=%s",
-		sender, purpose, target.harness, target.model, bySpare, took.Round(time.Millisecond), outcome.result.ModelTime.Milliseconds(),
-		outcome.result.InputTokens, outcome.result.OutputTokens, outcome.result.CostUSD, result)
+		sender, purpose, target.harness, target.model, bySpare, took.Round(time.Millisecond), outcome.result.Usage.ModelTime.Milliseconds(),
+		outcome.result.Usage.In, outcome.result.Usage.Out, outcome.result.Usage.CostUSD, result)
 }
 
 func (d *Daemon) recordModelCall(sender *store.PairedSender, purpose string, outcome modelCallOutcome, arrived time.Time, took time.Duration, ended protocol.ModelCallOutcome) {
@@ -322,13 +312,13 @@ func (d *Daemon) recordModelCall(sender *store.PairedSender, purpose string, out
 		Harness:   outcome.target.harness,
 		Model:     outcome.target.model,
 		TookMs:    int(took.Milliseconds()),
-		TokensIn:  outcome.result.InputTokens,
-		TokensOut: outcome.result.OutputTokens,
-		CostUsd:   outcome.result.CostUSD,
+		TokensIn:  outcome.result.Usage.In,
+		TokensOut: outcome.result.Usage.Out,
+		CostUsd:   outcome.result.Usage.CostUSD,
 		Outcome:   ended,
 	}
-	if outcome.result.ModelTime > 0 {
-		call.ModelMs = protocol.Ptr(int(outcome.result.ModelTime.Milliseconds()))
+	if outcome.result.Usage.ModelTime > 0 {
+		call.ModelMs = protocol.Ptr(int(outcome.result.Usage.ModelTime.Milliseconds()))
 	}
 	if err := d.store.AddModelCall(sender.ProfileID, call); err != nil {
 		d.logf("model call: record the call in the model call log: %v", err)

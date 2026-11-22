@@ -227,6 +227,9 @@ func TestEachHarnessJudgesATurnWithABoundedToolFreeVerdictRun(t *testing.T) {
 		if dir, _ := filepath.EvalSymlinks(verdict.Dir); dir != cwd {
 			t.Errorf("the verdict run ran in %q, want the session's directory %q", verdict.Dir, cwd)
 		}
+		if schema, ok := flagValue(verdict.Argv, "--output-schema"); !ok || strings.HasPrefix(schema, verdict.Dir) || strings.HasPrefix(schema, cwd) {
+			t.Errorf("the verdict run's schema file is %q (present %t), want one outside the session's directory %q", schema, ok, cwd)
+		}
 		verdict.Answer(`{"verdict":"DONE"}`)
 		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	})

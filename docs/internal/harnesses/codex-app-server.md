@@ -467,7 +467,7 @@ isolated `CODEX_HOME` (seed `s-z7cfmc`):
 ## Model calls on the shared app-server
 
 A Codex model call runs as one ephemeral conversation on the profile's shared
-app-server while it runs (`internal/daemon/model_call_codex.go`), on its own
+app-server while it runs (`internal/daemon/codex_oneshot.go`), on its own
 connection. Probed on 0.171.0 with attn's shared-server settings, a stand-in
 Responses API set as `openai_base_url`, and a user config with an MCP server,
 and read in the source at rust-v0.171.0, 2026-11-21 (seed `s-2apqpm`):

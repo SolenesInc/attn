@@ -180,6 +180,23 @@ func pluginSignals(declared map[string]bool) harness.Signals {
 	return signals
 }
 
+func (h pluginHarness) Models(ctx context.Context) (harness.Models, error) {
+	if server := h.d.serverLinkFor(h.reg.Agent); server != nil {
+		return server.harnessModels(ctx)
+	}
+	if !h.reg.Capabilities["model_discovery"] {
+		return noModelDiscovery, nil
+	}
+	var reported struct {
+		Models []protocol.HarnessModel `json:"models"`
+		Detail string                  `json:"detail"`
+	}
+	if err := h.d.callPlugin(ctx, h.reg.PluginName, "driver.models", map[string]string{"agent": h.reg.Agent}, &reported); err != nil {
+		return harness.Models{}, err
+	}
+	return harness.Models{List: reported.Models, Detail: reported.Detail}, nil
+}
+
 func (h pluginHarness) Health(context.Context) harness.Health {
 	plugin := h.d.ensurePluginRegistry().get(h.reg.PluginName)
 	if plugin == nil {

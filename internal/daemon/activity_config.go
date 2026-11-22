@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/setting"
 )
 
@@ -16,7 +16,6 @@ const sessionActivityKind = "session_activity"
 const (
 	activityClaudeDefaultModel = "claude-haiku-4-5"
 	activityCodexDefaultModel  = "gpt-5.6-luna"
-	activityCodexDefaultEffort = "low"
 )
 
 const (
@@ -33,14 +32,15 @@ const (
 )
 
 type activityConfig struct {
-	Agent  string `json:"agent"`
-	Model  string `json:"model"`
-	Effort string `json:"effort,omitempty"`
+	Agent    string `json:"agent"`
+	Model    string `json:"model"`
+	Effort   string `json:"effort,omitempty"`
+	fallback string
 }
 
 var errActivityAgentUnset = errors.New("session activity has no agent selected: choose claude or codex")
 
-func parseActivityConfig(raw string) (activityConfig, error) {
+func (d *Daemon) parseActivityConfig(raw string) (activityConfig, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return activityConfig{}, errActivityAgentUnset
@@ -63,31 +63,38 @@ func parseActivityConfig(raw string) (activityConfig, error) {
 		return activityConfig{}, errActivityAgentUnset
 	}
 
-	if config.Model == "" && config.Agent != "claude" && config.Agent != "codex" {
+	config.fallback = d.lightFallback(config.Agent, activityFallbackModel(config.Agent))
+	if config.Model == "" && config.fallback == "" {
 		return activityConfig{}, fmt.Errorf("session activity requires a model for agent %s", config.Agent)
 	}
-	if config.Effort == "" && config.Agent == "codex" {
-		config.Effort = activityCodexDefaultEffort
+	if config.Effort == "" {
+		config.Effort = d.factsOrNone(config.Agent).Tiers[modeltiers.Light].Effort
 	}
 
-	driver := agentdriver.Get(config.Agent)
-	if driver == nil {
+	if !d.knowsHarness(config.Agent) {
 		return activityConfig{}, fmt.Errorf("session activity agent is not installed: %s", config.Agent)
 	}
-	if _, ok := driver.(agentdriver.HeadlessTaskProvider); !ok {
-		return activityConfig{}, fmt.Errorf("agent %s does not support headless tasks", config.Agent)
-	}
-	if available, reason := agentdriver.HeadlessTaskAvailability(driver); !available {
-		return activityConfig{}, fmt.Errorf("agent %s cannot run headless tasks: %s", config.Agent, reason)
+	if _, err := d.oneShot(config.Agent); err != nil {
+		return activityConfig{}, err
 	}
 	return config, nil
+}
+
+func activityFallbackModel(agent string) string {
+	switch agent {
+	case "claude":
+		return activityClaudeDefaultModel
+	case "codex":
+		return activityCodexDefaultModel
+	}
+	return ""
 }
 
 func (d *Daemon) validateActivitySetting(raw string) error {
 	if strings.TrimSpace(raw) == "" {
 		return nil
 	}
-	config, err := parseActivityConfig(raw)
+	config, err := d.parseActivityConfig(raw)
 	if err != nil {
 		return err
 	}
@@ -147,7 +154,7 @@ func (d *Daemon) activityConfigured() (activityConfig, error) {
 	if d.store == nil {
 		return activityConfig{}, errors.New("session activity settings unavailable")
 	}
-	return parseActivityConfig(d.setting(setting.ActivityConfig))
+	return d.parseActivityConfig(d.setting(setting.ActivityConfig))
 }
 
 func (d *Daemon) activityInterval(tier PresenceTier) time.Duration {
@@ -183,20 +190,4 @@ func (d *Daemon) presenceIdleLimit() time.Duration {
 		)
 	}
 	return time.Duration(seconds) * time.Second
-}
-
-func (d *Daemon) resolveActivityExecutable(config activityConfig) (agentdriver.HeadlessTaskProvider, string, error) {
-	driver := agentdriver.Get(config.Agent)
-	if driver == nil {
-		return nil, "", fmt.Errorf("session activity agent not found: %s", config.Agent)
-	}
-	provider, ok := driver.(agentdriver.HeadlessTaskProvider)
-	if !ok {
-		return nil, "", fmt.Errorf("agent %s does not support headless tasks", config.Agent)
-	}
-	executablePath, err := d.machineAgentExecutable(driver.Name(), "")
-	if err != nil {
-		return nil, "", fmt.Errorf("resolve %s executable: %w", config.Agent, err)
-	}
-	return provider, executablePath, nil
 }

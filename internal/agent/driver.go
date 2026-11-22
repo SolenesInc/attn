@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"github.com/victorarias/attn/internal/harness"
 	"os"
 	"os/exec"
 	"regexp"
@@ -12,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 
 	"github.com/victorarias/attn/internal/hooks"
@@ -326,23 +326,6 @@ type HeadlessTaskProvider interface {
 	RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest) (HeadlessTaskResult, error)
 }
 
-type HeadlessTaskAvailabilityProvider interface {
-	HeadlessTaskAvailability() (bool, string)
-}
-
-func HeadlessTaskAvailability(driver Driver) (bool, string) {
-	if driver == nil {
-		return false, "agent is not installed"
-	}
-	if _, ok := driver.(HeadlessTaskProvider); !ok {
-		return false, "agent does not support headless tasks"
-	}
-	if provider, ok := driver.(HeadlessTaskAvailabilityProvider); ok {
-		return provider.HeadlessTaskAvailability()
-	}
-	return true, ""
-}
-
 type TranscriptFinder interface {
 	FindTranscriptForResume(resumeID string) string
 
@@ -351,10 +334,6 @@ type TranscriptFinder interface {
 
 type TranscriptUsageSourceProvider interface {
 	NewTranscriptUsageSourceResolver(rootPath string) transcript.UsageSourceResolver
-}
-
-type ClassifierProvider interface {
-	Classify(text string, timeout time.Duration) (string, error)
 }
 
 type LaunchPreparer interface {
@@ -430,14 +409,6 @@ func GetTranscriptUsageSourceProvider(d Driver) (TranscriptUsageSourceProvider, 
 	}
 	provider, ok := d.(TranscriptUsageSourceProvider)
 	return provider, ok
-}
-
-func GetClassifier(d Driver) (ClassifierProvider, bool) {
-	if d == nil || !EffectiveCapabilities(d).HasClassifier {
-		return nil, false
-	}
-	cp, ok := d.(ClassifierProvider)
-	return cp, ok
 }
 
 func GetTranscriptWatcherBehavior(d Driver) (TranscriptWatcherBehavior, bool) {

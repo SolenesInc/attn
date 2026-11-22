@@ -25,7 +25,7 @@ func (h claudeHarness) Facts() harness.Facts {
 		return []string{filepath.Join(homeDir, ".claude", "skills")}, nil
 	}
 	facts.CacheTTL = time.Hour
-	facts.Tiers = map[modeltiers.Tier]string{modeltiers.Light: "haiku", modeltiers.Standard: "sonnet", modeltiers.Deep: "opus"}
+	facts.Tiers = map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "haiku"}, modeltiers.Standard: {Model: "sonnet"}, modeltiers.Deep: {Model: "opus"}}
 	facts.Advisor = harness.ModelChoice{Model: "sonnet", Effort: "medium"}
 	facts.CrewModel = "fable"
 	facts.Signals.Heartbeat = 1500 * time.Millisecond

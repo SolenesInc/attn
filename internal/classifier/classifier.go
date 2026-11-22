@@ -3,7 +3,6 @@ package classifier
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -13,7 +12,7 @@ import (
 
 const VerdictParked = "parked"
 
-const ClaudeVerdictSchema = `{"type":"object","properties":{"verdict":{"type":"string","enum":["WAITING","DONE","PARKED"]}},"required":["verdict"],"additionalProperties":false}`
+const VerdictSchema = `{"type":"object","properties":{"verdict":{"type":"string","enum":["WAITING","DONE","PARKED"]}},"required":["verdict"],"additionalProperties":false}`
 
 func ComposeYieldInput(lastMessage string, runningBackgroundTasks []string) string {
 	return fmt.Sprintf(
@@ -23,7 +22,7 @@ func ComposeYieldInput(lastMessage string, runningBackgroundTasks []string) stri
 	)
 }
 
-const ClaudeMaxTurns = 2
+const MaxTurns = 2
 
 const DefaultClaudeClassifierModel = "haiku"
 
@@ -33,10 +32,7 @@ var verdictLineRegex = sync.OnceValue(func() *regexp.Regexp {
 
 const classifierLogSnippetMaxChars = 600
 
-const (
-	defaultCodexClassifierModel = "gpt-5.6-luna"
-	defaultCodexReasoningEffort = "low"
-)
+const DefaultCodexClassifierModel = "gpt-5.6-luna"
 
 func BuildPrompt(text string) string {
 	return prompts.RenderText("turn-classifier", "classify", prompts.Values{"message": text})
@@ -168,13 +164,6 @@ func truncateForLog(value string, maxChars int) string {
 	return value[:maxChars] + "...(truncated)"
 }
 
-func ClaudeClassifierModel() string {
-	if model := strings.TrimSpace(os.Getenv("ATTN_CLAUDE_CLASSIFIER_MODEL")); model != "" {
-		return model
-	}
-	return DefaultClaudeClassifierModel
-}
-
 func ParseVerdict(structuredOutput json.RawMessage) (string, bool) {
 	if len(structuredOutput) == 0 {
 		return "", false
@@ -200,18 +189,4 @@ var DefaultLogger LogFunc = func(format string, args ...interface{}) {}
 
 func SetLogger(fn LogFunc) {
 	DefaultLogger = fn
-}
-
-func CodexClassifierModel() string {
-	if model := strings.TrimSpace(os.Getenv("ATTN_CODEX_CLASSIFIER_MODEL")); model != "" {
-		return model
-	}
-	return defaultCodexClassifierModel
-}
-
-func CodexClassifierReasoningEffort() string {
-	if effort := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_CODEX_CLASSIFIER_REASONING_EFFORT"))); effort != "" {
-		return effort
-	}
-	return defaultCodexReasoningEffort
 }

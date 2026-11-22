@@ -22,6 +22,7 @@ type Row struct {
 	SkillDirs      []string
 	ServerTerminal harness.TerminalID
 	Offered        bool
+	OneShot        bool
 }
 
 // Run checks that the registered adapters and the table name the same harnesses, and that each adapter answers its row.
@@ -67,6 +68,9 @@ func Run(t *testing.T, registered []harness.Harness, table []Row) {
 			}
 			if health.Offered != row.Offered {
 				t.Errorf("the adapter %q reports offered %v, want %v", facts.ID, health.Offered, row.Offered)
+			}
+			if _, answers := harness.As[harness.OneShot](h); answers != row.OneShot {
+				t.Errorf("the adapter %q answers one-shot calls: %v, want %v", facts.ID, answers, row.OneShot)
 			}
 			unreached := h.Conversation(harness.SessionFacts{Harness: facts.ID})
 			if custody := unreached.Deliver(context.Background(), harness.Input{ID: "conformance"}); custody.Outcome != harness.NotMine {
