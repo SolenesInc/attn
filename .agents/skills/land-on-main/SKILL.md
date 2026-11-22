@@ -108,13 +108,17 @@ reviewer:
 
 ### Settle the findings
 
-When every reviewer has reported, merge duplicate findings. Give each finding
-to its own verifier, in parallel, with the finding, the finding's `file:line`,
-the direction and finding.md. The verifier tries to refute the finding against
-the code and against the bar in finding.md.
+When every reviewer has reported, merge duplicate findings. Check each finding
+yourself against the code or text. Judge an adversarial reader's finding
+against [finding.md](../review-main/finding.md), and judge a `verify-*`
+finding against that skill's rules.
+
+If you are still uncertain about an adversarial finding, run a verifier as an
+independent reader, using a subagent or a fresh pass as above. Give the
+verifier the finding, its `file:line`, `HEAD`, the direction, and `finding.md`.
 
 Fix the confirmed findings, check the fixes as in [Check](#check), and commit.
-Settle uncertain findings yourself against the code, or ask the user.
+If a finding stays uncertain, ask the user.
 
 ## Land
 

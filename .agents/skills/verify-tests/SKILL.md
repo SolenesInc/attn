@@ -27,20 +27,26 @@ does not repeat them.
 
 ## Run
 
-Go tests need the native VT library. Build the library once per checkout with
-`make "third_party/ghostty-vt/$(go env GOOS)_$(go env GOARCH)/lib/libghostty-vt.a"`.
+Run each new or changed Go test once with
+`./scripts/test-go.sh --packages -v -race -count=1 -run <pattern> <pkg>`.
+Do not run bare `go test`, because `scripts/test-go.sh` prepares the native VT
+library and the test binaries that Go tests need. Compare each test's time with
+the budgets in `docs/internal/testing.md`, allowing for `-race` overhead.
+Repeat a test with `-count=10` only when the test exercises concurrency or
+timing outside `synctest`, or when you reproduce a flake.
 
-Run each new or changed Go test once with `go test -v -run`, and compare the
-time with the budgets in `docs/internal/testing.md`. Then run the test with
-`go test -race -count=10 -run`. A failure in any of those runs is a flake. Run
-each changed native wire test from `native/` with
+Run each new or changed native wire test from `native/` with
 `cargo test -p <crate> --test wire <test name>`, and compare its time with the
-same budgets.
+same budgets. When a pattern matches more than one test, use the
+`--report-time` command in `docs/internal/native-wire-tests.md` to print each
+test's time.
 
-When you doubt that a test can fail, break the behavior that the test guards,
-and run the test. Do that in a scratch worktree (`git worktree add --detach`,
-then build the native library there), never in this checkout. Remove the
-worktree when you are done.
+When a test's assertions look weak or indirect, break the behavior that the
+test guards and run the test to confirm that the test fails. Do that in a
+throwaway worktree, never in this checkout. Create the worktree with
+`git worktree add --detach <path>`, and apply any uncommitted changes there
+first. When you are done, remove the worktree with
+`git worktree remove --force <path>`.
 
 ## Judge each test
 

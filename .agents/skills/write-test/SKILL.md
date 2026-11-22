@@ -121,6 +121,6 @@ Each is a habit that works elsewhere and breaks a promise-only test here.
 
 ## Finish
 
-Before the change lands, run the verify-tests skill on the change. The skill
-has you run each test repeatedly under the race detector, check the budgets,
-and break the behavior to see the test fail.
+Before landing or opening a pull request, run the `verify-tests` skill on the
+change. When landing on `main`, `land-on-main` runs `verify-tests` as an
+independent review.
