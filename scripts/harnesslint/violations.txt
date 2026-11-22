@@ -2,8 +2,6 @@ cli/attn/src/route.rs		names "codex"
 cmd/attnd/agent_launch.go	runAgentDirectly	names "codex"
 cmd/attnd/main.go	runWrapper	names "codex"
 cmd/attnd/preflight.go	parsePreflightArgs	names "codex"
-internal/agent/attn_skill.go	HarnessSkillsDir	names "claude"
-internal/agent/attn_skill.go	HarnessSkillsDir	names "codex"
 internal/agent/driver.go	HarnessSignalsClaude	names "claude"
 internal/agent/driver.go	HarnessSignalsCodex	names "codex"
 internal/agent/harness_models.go	(*Claude).DiscoverHarnessModels	names "claude"
@@ -172,8 +170,6 @@ internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches codexTru
 internal/daemon/crew_folder_trust.go	(*Daemon).trustCodexFolder	reaches readCodexTrust (internal/daemon/codex_trust.go)
 internal/daemon/crew_folder_trust.go	(*Daemon).trustCrewHome	names "claude"
 internal/daemon/crew_folder_trust.go	(*Daemon).trustCrewHome	names "codex"
-internal/daemon/crew_lifecycle.go	(*Daemon).crewCacheTTL	names "claude"
-internal/daemon/crew_lifecycle.go	(*Daemon).crewCacheTTL	names "codex"
 internal/daemon/crew_start.go	(*Daemon).crewStartModel	names "claude"
 internal/daemon/crew_start.go	crewStartAgent	names "claude"
 internal/daemon/daemon.go	(*Daemon).Start	reaches Daemon.claudeMod (internal/daemon/claude_mod.go)

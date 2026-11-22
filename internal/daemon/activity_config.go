@@ -91,8 +91,7 @@ func (d *Daemon) validateActivitySetting(raw string) error {
 	if err != nil {
 		return err
 	}
-	driver := agentdriver.Get(config.Agent)
-	if _, err := d.machineAgentExecutable(driver, ""); err != nil {
+	if _, err := d.machineAgentExecutable(config.Agent, ""); err != nil {
 		return fmt.Errorf("session activity executable for %s was not found: %w", config.Agent, err)
 	}
 	return nil
@@ -195,7 +194,7 @@ func (d *Daemon) resolveActivityExecutable(config activityConfig) (agentdriver.H
 	if !ok {
 		return nil, "", fmt.Errorf("agent %s does not support headless tasks", config.Agent)
 	}
-	executablePath, err := d.machineAgentExecutable(driver, "")
+	executablePath, err := d.machineAgentExecutable(driver.Name(), "")
 	if err != nil {
 		return nil, "", fmt.Errorf("resolve %s executable: %w", config.Agent, err)
 	}

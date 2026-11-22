@@ -13,7 +13,6 @@ import (
 
 	"golang.org/x/mod/semver"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/codexshared"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/jobs"
@@ -30,8 +29,7 @@ const (
 )
 
 func (r *codexShared) binary(configured string) (string, error) {
-	codex := agentdriver.MustGet(string(protocol.SessionAgentCodex))
-	return r.d.machineAgentExecutable(codex, configured)
+	return r.d.machineAgentExecutable(string(protocol.SessionAgentCodex), configured)
 }
 
 func (d *Daemon) runAgentBinary(ctx context.Context, binary string, args ...string) ([]byte, error) {

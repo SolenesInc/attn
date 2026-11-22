@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
@@ -37,6 +38,10 @@ func (h pluginHarness) Facts() harness.Facts {
 			EffortPin:          declared["effort_pin"],
 			Provider:           true,
 		},
+		SkillDirs: func(lookupEnv func(string) string, homeDir string) ([]string, error) {
+			return resolvePluginSkillsDirs(h.reg.SkillDirs, lookupEnv, homeDir), nil
+		},
+		CacheTTL: crewCacheTTLDefault * time.Second,
 	}
 }
 

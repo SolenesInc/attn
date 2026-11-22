@@ -9,10 +9,14 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 )
 
-// Row is what one adapter states while its fake is installed.
+// Home is the home folder the suite resolves each adapter's skill folders in, with no environment variables set.
+const Home = "/home/conformance"
+
+// Row is what one adapter states while its fake is installed. SkillDirs is what its Facts.SkillDirs answers for Home.
 type Row struct {
-	Facts   harness.Facts
-	Offered bool
+	Facts     harness.Facts
+	SkillDirs []string
+	Offered   bool
 }
 
 // Run checks that the registered adapters and the table name the same harnesses, and that each adapter answers its row.
@@ -33,6 +37,14 @@ func Run(t *testing.T, registered []harness.Harness, table []Row) {
 			if facts.DisplayName == "" {
 				t.Errorf("the adapter %q states no display name", facts.ID)
 			}
+			if facts.SkillDirs == nil {
+				t.Errorf("the adapter %q states no skill folders", facts.ID)
+			} else if dirs, err := facts.SkillDirs(func(string) string { return "" }, Home); err != nil {
+				t.Errorf("the adapter %q refuses its skill folders: %v", facts.ID, err)
+			} else if !reflect.DeepEqual(dirs, row.SkillDirs) {
+				t.Errorf("the adapter %q puts skills in %q, want %q", facts.ID, dirs, row.SkillDirs)
+			}
+			facts.SkillDirs = nil
 			if !reflect.DeepEqual(facts, row.Facts) {
 				t.Errorf("the adapter %q states\n  %+v\nwant\n  %+v", facts.ID, facts, row.Facts)
 			}

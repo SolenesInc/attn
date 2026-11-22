@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
@@ -16,8 +17,13 @@ func init() {
 
 func (sigmaHarness) driver() agentdriver.Driver { return agentdriver.MustGet("sigma") }
 
-func (h sigmaHarness) Facts() harness.Facts { return builtinFacts(h.driver()) }
+func (h sigmaHarness) Facts() harness.Facts {
+	facts := builtinFacts(h.driver())
+	facts.SkillDirs = h.driver().(*agentdriver.Sigma).SkillDirs
+	facts.CacheTTL = time.Hour
+	return facts
+}
 
 func (h sigmaHarness) Health(context.Context) harness.Health {
-	return h.d.executableHealth(h.driver(), h.d.on(setting.SigmaEnabled))
+	return h.d.executableHealth(h.Facts(), h.d.on(setting.SigmaEnabled))
 }

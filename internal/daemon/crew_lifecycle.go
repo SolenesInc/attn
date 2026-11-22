@@ -26,8 +26,6 @@ const (
 )
 
 const (
-	crewCacheTTLClaude  = 3600
-	crewCacheTTLCodex   = 1800
 	crewCacheTTLDefault = 3600
 )
 
@@ -127,11 +125,10 @@ func (d *Daemon) crewSeconds(name *setting.Setting, fallback, min, max int) time
 func (d *Daemon) crewCacheTTL(agent string) time.Duration {
 	agent = strings.ToLower(strings.TrimSpace(agent))
 	fallback := crewCacheTTLDefault
-	switch agent {
-	case "claude":
-		fallback = crewCacheTTLClaude
-	case "codex":
-		fallback = crewCacheTTLCodex
+	if agent != "" {
+		if ttl := d.factsOrNone(agent).CacheTTL; ttl > 0 {
+			fallback = int(ttl / time.Second)
+		}
 	}
 	if agent != "" && d.store != nil {
 		if raw := strings.TrimSpace(d.setting(setting.CrewCacheTTLFor.For(agent))); raw != "" {

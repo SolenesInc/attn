@@ -16,7 +16,6 @@ type Sigma struct{}
 var _ Driver = (*Sigma)(nil)
 var _ ServerDeclarer = (*Sigma)(nil)
 var _ ResumePolicyProvider = (*Sigma)(nil)
-var _ SkillDirsResolver = (*Sigma)(nil)
 
 func init() {
 	Register(&Sigma{})

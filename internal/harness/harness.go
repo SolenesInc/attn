@@ -3,6 +3,7 @@ package harness
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 // ID names a harness: a built-in's name, or the agent a plugin registered.
@@ -19,6 +20,15 @@ type Facts struct {
 	ID          ID
 	DisplayName string
 	Options     Options
+	Executable  Executable
+	SkillDirs   func(lookupEnv func(string) string, homeDir string) ([]string, error)
+	CacheTTL    time.Duration
+}
+
+// Executable is how attn finds a harness's program when no setting names one: an env variable, then a default name. Empty for a harness that resolves its own.
+type Executable struct {
+	Default string
+	Env     string
 }
 
 // Options are the launch options a harness takes.

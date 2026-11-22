@@ -97,7 +97,7 @@ func (d *Daemon) checkModelCallSpare() {
 	if starter == nil || s.ready != nil {
 		return
 	}
-	executable, err := d.machineAgentExecutable(agentdriver.Get(harness), "")
+	executable, err := d.machineAgentExecutable(harness, "")
 	if err != nil {
 		d.logf("model call spare: %s executable was not found, so calls run cold: %v", harness, err)
 		return

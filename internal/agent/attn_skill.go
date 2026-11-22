@@ -235,20 +235,6 @@ func replaceSkillWithPointerIfAttnInstalledAllOfIt(skillDir string, pointer []by
 	return true, nil
 }
 
-func HarnessSkillsDir(harness, homeDir string) string {
-	switch strings.TrimSpace(harness) {
-	case "claude":
-		return filepath.Join(homeDir, ".claude", "skills")
-	case "codex":
-		return filepath.Join(homeDir, ".agents", "skills")
-	}
-	return ""
-}
-
-type SkillDirsResolver interface {
-	SkillDirs(lookupEnv func(string) string, homeDir string) ([]string, error)
-}
-
 func EnsureWorkflowSkillsInstalled(skillsDirs func(homeDir string) ([]string, error)) ([]string, bool, error) {
 	if !userGlobalSkillSyncEnabled() {
 		return nil, false, nil

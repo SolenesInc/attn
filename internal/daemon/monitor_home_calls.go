@@ -158,7 +158,7 @@ func (d *Daemon) runClassifier(ctx context.Context, agent protocol.SessionAgent,
 	if !own {
 		directory = ""
 	}
-	executable, err := d.machineAgentExecutable(driver, "")
+	executable, err := d.machineAgentExecutable(driver.Name(), "")
 	if err != nil {
 		return protocol.StateUnknown, err
 	}

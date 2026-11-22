@@ -63,15 +63,16 @@ func builtinFacts(driver agentdriver.Driver) harness.Facts {
 			Picker:             true,
 			Provider:           declaresServer,
 		},
+		Executable: harness.Executable{Default: driver.DefaultExecutable(), Env: driver.ExecutableEnvVar()},
 	}
 }
 
-func (d *Daemon) executableHealth(driver agentdriver.Driver, offered bool) harness.Health {
-	checking := harness.Health{Installation: harness.Unknown, Offered: offered, Executable: driver.DefaultExecutable(), Reason: "checking the login environment for " + driver.DisplayName()}
+func (d *Daemon) executableHealth(facts harness.Facts, offered bool) harness.Health {
+	checking := harness.Health{Installation: harness.Unknown, Offered: offered, Executable: facts.Executable.Default, Reason: "checking the login environment for " + facts.DisplayName}
 	if d.capturingLoginEnv() {
 		return checking
 	}
-	executable, err := d.machineAgentExecutable(driver, "")
+	executable, err := d.machineExecutableOf(facts, "")
 	if err != nil {
 		if d.loginEnvFailed() {
 			return checking

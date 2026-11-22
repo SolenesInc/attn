@@ -140,7 +140,7 @@ func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent, model, con
 	if !ok {
 		return "", fmt.Errorf("%s driver does not support headless tasks", agent)
 	}
-	executable, err := d.machineAgentExecutable(driver, "")
+	executable, err := d.machineAgentExecutable(driver.Name(), "")
 	if err != nil {
 		return "", fmt.Errorf("resolve %s executable: %w", agent, err)
 	}

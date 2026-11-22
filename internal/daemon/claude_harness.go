@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"context"
+	"path/filepath"
+	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
@@ -15,8 +17,15 @@ func init() {
 
 func (claudeHarness) driver() agentdriver.Driver { return agentdriver.MustGet("claude") }
 
-func (h claudeHarness) Facts() harness.Facts { return builtinFacts(h.driver()) }
+func (h claudeHarness) Facts() harness.Facts {
+	facts := builtinFacts(h.driver())
+	facts.SkillDirs = func(_ func(string) string, homeDir string) ([]string, error) {
+		return []string{filepath.Join(homeDir, ".claude", "skills")}, nil
+	}
+	facts.CacheTTL = time.Hour
+	return facts
+}
 
 func (h claudeHarness) Health(context.Context) harness.Health {
-	return h.d.executableHealth(h.driver(), true)
+	return h.d.executableHealth(h.Facts(), true)
 }

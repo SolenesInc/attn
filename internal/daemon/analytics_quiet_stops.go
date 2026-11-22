@@ -68,7 +68,7 @@ func (d *Daemon) askQuietStopVerdict(agent protocol.SessionAgent, message string
 	if !ok {
 		return "", errors.New(driver.Name() + " runs no headless tasks")
 	}
-	executable, err := d.machineAgentExecutable(driver, "")
+	executable, err := d.machineAgentExecutable(driver.Name(), "")
 	if err != nil {
 		return "", err
 	}

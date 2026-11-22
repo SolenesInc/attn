@@ -144,7 +144,7 @@ func (d *Daemon) modelCallTarget(ctx context.Context, msg *protocol.SenderModelC
 	if err != nil {
 		return modelCallTarget{}, err
 	}
-	executable, err := d.machineAgentExecutable(driver, "")
+	executable, err := d.machineAgentExecutable(driver.Name(), "")
 	if err != nil {
 		return modelCallTarget{}, fmt.Errorf("%s executable was not found: %w", driver.Name(), err)
 	}

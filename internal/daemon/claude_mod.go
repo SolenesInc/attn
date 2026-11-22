@@ -180,7 +180,7 @@ func (m *claudeMod) firstPollMissed(terminal harness.TerminalID, timer *stepcloc
 }
 
 func (m *claudeMod) claudeVersionLabel() string {
-	binary, err := m.d.machineAgentExecutable(agentdriver.MustGet(string(protocol.SessionAgentClaude)), "")
+	binary, err := m.d.machineAgentExecutable(string(protocol.SessionAgentClaude), "")
 	if err != nil {
 		return claudeVersionUnknown
 	}

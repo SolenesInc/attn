@@ -26,14 +26,14 @@ func (s pluginSkillDir) validate() error {
 	return nil
 }
 
-func (s pluginSkillDir) resolve(env []string, homeDir string) string {
+func (s pluginSkillDir) resolve(lookupEnv func(string) string, homeDir string) string {
 	home := s.DefaultHome
 	if !filepath.IsAbs(home) {
 		home = filepath.Join(homeDir, home)
 	}
 	if s.HomeEnv != "" {
-		if value, _ := pty.LookupEnv(env, s.HomeEnv); strings.TrimSpace(value) != "" {
-			home = strings.TrimSpace(value)
+		if value := strings.TrimSpace(lookupEnv(s.HomeEnv)); value != "" {
+			home = value
 		}
 	}
 	return filepath.Join(home, "skills")
@@ -41,28 +41,19 @@ func (s pluginSkillDir) resolve(env []string, homeDir string) string {
 
 func (d *Daemon) workflowSkillsDirs(harnesses []string) func(homeDir string) ([]string, error) {
 	return func(homeDir string) ([]string, error) {
-		env := pty.MergeEnvironment(os.Environ(), d.latestLoginEnv())
-		lookup := func(key string) string {
-			value, _ := pty.LookupEnv(env, key)
-			return value
-		}
+		lookupEnv := d.loginEnvLookup()
 		var dirs []string
 		var refusals []error
-		for _, harness := range harnesses {
-			if dir := agentdriver.HarnessSkillsDir(harness, homeDir); dir != "" {
-				dirs = append(dirs, dir)
+		for _, id := range harnesses {
+			skillDirs := d.factsOrNone(id).SkillDirs
+			if skillDirs == nil {
 				continue
 			}
-			if resolver, ok := agentdriver.Get(harness).(agentdriver.SkillDirsResolver); ok {
-				resolved, err := resolver.SkillDirs(lookup, homeDir)
-				if err != nil {
-					refusals = append(refusals, err)
-				}
-				dirs = append(dirs, resolved...)
-				continue
+			resolved, err := skillDirs(lookupEnv, homeDir)
+			if err != nil {
+				refusals = append(refusals, err)
 			}
-			driver, _ := d.ensurePluginRegistry().driver(harness)
-			dirs = append(dirs, resolvePluginSkillsDirs(driver.SkillDirs, env, homeDir)...)
+			dirs = append(dirs, resolved...)
 		}
 		return dirs, errors.Join(refusals...)
 	}
@@ -70,14 +61,22 @@ func (d *Daemon) workflowSkillsDirs(harnesses []string) func(homeDir string) ([]
 
 func (d *Daemon) pluginSkillsDirs(skillDirs []pluginSkillDir) func(homeDir string) ([]string, error) {
 	return func(homeDir string) ([]string, error) {
-		return resolvePluginSkillsDirs(skillDirs, pty.MergeEnvironment(os.Environ(), d.latestLoginEnv()), homeDir), nil
+		return resolvePluginSkillsDirs(skillDirs, d.loginEnvLookup(), homeDir), nil
 	}
 }
 
-func resolvePluginSkillsDirs(skillDirs []pluginSkillDir, env []string, homeDir string) []string {
+func (d *Daemon) loginEnvLookup() func(string) string {
+	env := pty.MergeEnvironment(os.Environ(), d.latestLoginEnv())
+	return func(key string) string {
+		value, _ := pty.LookupEnv(env, key)
+		return value
+	}
+}
+
+func resolvePluginSkillsDirs(skillDirs []pluginSkillDir, lookupEnv func(string) string, homeDir string) []string {
 	dirs := make([]string, 0, len(skillDirs))
 	for _, dir := range skillDirs {
-		dirs = append(dirs, dir.resolve(env, homeDir))
+		dirs = append(dirs, dir.resolve(lookupEnv, homeDir))
 	}
 	return dirs
 }

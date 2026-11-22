@@ -87,8 +87,7 @@ func (d *Daemon) validateGardenAdvisorSetting(raw string) error {
 	if err != nil {
 		return err
 	}
-	driver := agentdriver.Get(config.Agent)
-	if _, err := d.machineAgentExecutable(driver, ""); err != nil {
+	if _, err := d.machineAgentExecutable(config.Agent, ""); err != nil {
 		return fmt.Errorf("garden advisor executable for %s was not found: %w", config.Agent, err)
 	}
 	return nil
@@ -133,7 +132,7 @@ func (d *Daemon) resolveGardenAdvisor(
 	if !ok {
 		return nil, "", fmt.Errorf("agent %s does not support headless tasks", config.Agent)
 	}
-	executable, err := d.machineAgentExecutable(driver, "")
+	executable, err := d.machineAgentExecutable(driver.Name(), "")
 	if err != nil {
 		return nil, "", fmt.Errorf("resolve %s executable: %w", config.Agent, err)
 	}

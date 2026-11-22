@@ -6,22 +6,26 @@ import (
 	"path/filepath"
 	"strings"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
 )
 
-func (d *Daemon) machineAgentExecutable(driver agentdriver.Driver, configured string) (string, error) {
+func (d *Daemon) machineAgentExecutable(id harness.ID, configured string) (string, error) {
+	return d.machineExecutableOf(d.factsOrNone(id), configured)
+}
+
+func (d *Daemon) machineExecutableOf(facts harness.Facts, configured string) (string, error) {
 	name := strings.TrimSpace(configured)
 	if name == "" && d.store != nil {
-		name = strings.TrimSpace(d.setting(executableSetting(driver.Name())))
+		name = strings.TrimSpace(d.setting(executableSetting(facts.ID)))
 	}
-	if name == "" {
+	if name == "" && facts.Executable.Env != "" {
 		env := pty.MergeEnvironment(os.Environ(), d.latestLoginEnv())
-		name, _ = pty.LookupEnv(env, driver.ExecutableEnvVar())
+		name, _ = pty.LookupEnv(env, facts.Executable.Env)
 		name = strings.TrimSpace(name)
 	}
 	if name == "" {
-		name = driver.DefaultExecutable()
+		name = facts.Executable.Default
 	}
 	return d.machineExecutable(name)
 }

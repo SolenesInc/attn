@@ -58,7 +58,7 @@ func (m daemonSessionInstructionsModel) Run(ctx context.Context, request session
 		m.daemon.logf("session instructions model failed: Codex headless provider unavailable")
 		return sessioninstructions.ModelAnswer{}, errors.New("codex headless provider unavailable")
 	}
-	executable, err := m.daemon.machineAgentExecutable(driver, "")
+	executable, err := m.daemon.machineAgentExecutable(driver.Name(), "")
 	if err != nil {
 		m.daemon.logf("session instructions model failed: Codex executable unavailable")
 		return sessioninstructions.ModelAnswer{}, fmt.Errorf("resolve luna executable: %w", err)
