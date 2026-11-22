@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/jobs"
@@ -166,7 +167,7 @@ func (d *Daemon) startJobQueue(home bool) error {
 		d.registerCrewLifecycleCron(runner)
 		d.registerSessionPullRequestRefreshCron(runner)
 		d.registerConversationKeepCron(runner)
-		d.registerCodexUpdateCheckCron(runner)
+		d.registerHomeCrons(runner)
 		d.registerSeedReminderCron(runner)
 		d.registerAskDefaultCron(runner)
 		if err := runner.RegisterCron(
@@ -200,10 +201,40 @@ func (d *Daemon) startJobQueue(home bool) error {
 	if _, err := runner.Enqueue(conversationKeepKind+"_tick", jobs.EnqueueOptions{UniqueKey: jobs.CronKey, RunNow: true}); err != nil {
 		d.logf("conversation keep: enqueue startup: %v", err)
 	}
-	d.queueCodexUpdateCheck()
+	d.enqueueHomeCronsOnStart(runner)
 	d.resumeGardenReviews()
 	d.settleHarvestConditions()
 	return nil
+}
+
+type homeCron struct {
+	kind       string
+	interval   time.Duration
+	handler    jobs.HandlerFunc
+	runOnStart bool
+}
+
+func (d *Daemon) registerHomeCron(c homeCron) {
+	d.homeCrons = append(d.homeCrons, c)
+}
+
+func (d *Daemon) registerHomeCrons(runner *jobs.Runner) {
+	for _, c := range d.homeCrons {
+		if err := runner.RegisterCron(c.kind, c.interval, c.handler, jobs.HandlerConfig{}); err != nil {
+			d.logf("background jobs: register %s: %v", c.kind, err)
+		}
+	}
+}
+
+func (d *Daemon) enqueueHomeCronsOnStart(runner *jobs.Runner) {
+	for _, c := range d.homeCrons {
+		if !c.runOnStart {
+			continue
+		}
+		if _, err := runner.Enqueue(c.kind, jobs.EnqueueOptions{UniqueKey: jobs.CronKey, RunNow: true}); err != nil {
+			d.logf("background jobs: queue %s at start: %v", c.kind, err)
+		}
+	}
 }
 
 func ensureJSONEOF(decoder *json.Decoder) error {

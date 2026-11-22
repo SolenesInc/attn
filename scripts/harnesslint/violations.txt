@@ -175,8 +175,6 @@ internal/daemon/harness_models.go	(*Daemon).queryHarnessModels	reaches pluginReg
 internal/daemon/harness_models.go	(*Daemon).queryHarnessModels	reaches serverBinding (internal/daemon/server_binding.go)
 internal/daemon/harness_models.go	(*Daemon).queryHarnessModels	reaches serverLink (internal/daemon/server_link.go)
 internal/daemon/harness_models.go	(*Daemon).queryHarnessModels	reaches serverLink.models (internal/daemon/server_link.go)
-internal/daemon/job_queue.go	(*Daemon).startJobQueue	reaches Daemon.queueCodexUpdateCheck (internal/daemon/codex_versions.go)
-internal/daemon/job_queue.go	(*Daemon).startJobQueue	reaches Daemon.registerCodexUpdateCheckCron (internal/daemon/codex_versions.go)
 internal/daemon/login_env.go	(*Daemon).awaitHarness	reaches pluginRegistry.driverOrRegistration (internal/daemon/plugin_driver.go)
 internal/daemon/markdown_annotation_payload.go	formatQuestionPayload	reaches shellQuote (internal/daemon/codex_update.go)
 internal/daemon/markdown_annotation_payload.go	formatReviewPayload	reaches shellQuote (internal/daemon/codex_update.go)

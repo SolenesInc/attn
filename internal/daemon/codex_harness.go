@@ -52,7 +52,10 @@ func (h codexHarness) Plan(req harness.LaunchRequest) (harness.Planned, error) {
 	return planOn(h.d.codexShared(), req), nil
 }
 
-func (codexHarness) Start(context.Context) error { return nil }
+func (h codexHarness) Start(context.Context) error {
+	h.d.registerHomeCron(homeCron{kind: codexUpdateCheckKind, interval: codexUpdateCheckInterval, handler: h.d.codexUpdateCheckHandler, runOnStart: true})
+	return nil
+}
 
 func (h codexHarness) Recover(ctx context.Context, point harness.RecoverPoint) {
 	switch point {

@@ -187,12 +187,6 @@ func (r *codexShared) learn(installed, latest *string) {
 	}
 }
 
-func (d *Daemon) registerCodexUpdateCheckCron(runner *jobs.Runner) {
-	if err := runner.RegisterCron(codexUpdateCheckKind, codexUpdateCheckInterval, d.codexUpdateCheckHandler, jobs.HandlerConfig{}); err != nil {
-		d.logf("shared Codex: register the daily update check: %v", err)
-	}
-}
-
 func (d *Daemon) queueCodexUpdateCheck() {
 	queue := d.jobQueueRef()
 	if queue == nil {

@@ -335,6 +335,7 @@ type Daemon struct {
 	jobQueueMu           sync.RWMutex
 	jobQueue             *jobs.Runner
 	jobQueueRoleChanged  chan struct{}
+	homeCrons            []homeCron
 	taskFailureRenderers map[string]taskFailureRenderer
 
 	sessionActivityRunsMu sync.Mutex
@@ -808,6 +809,7 @@ func (d *Daemon) Start() error {
 
 	d.life.Go("monitorBranches", d.monitorBranches)
 
+	d.startHarnesses(d.life.Context())
 	queueStarted := make(chan error, 1)
 	if !d.life.Go("jobQueue", func() {
 		home := d.enrollmentStatus().IsHome()
@@ -837,7 +839,6 @@ func (d *Daemon) Start() error {
 	if err := <-queueStarted; err != nil {
 		return err
 	}
-	d.startHarnesses(d.life.Context())
 
 	d.watchRecoveredLaunches()
 	d.life.Go("startupRecovery", func() {
