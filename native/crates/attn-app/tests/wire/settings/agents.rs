@@ -13,7 +13,12 @@ use super::{
     write, writes,
 };
 
-const BOTH: &[(&str, &str)] = &[("claude_available", "true"), ("codex_available", "true")];
+const LAST_PICK: (&str, &str) = ("new_session_agent", "claude");
+const BOTH: &[(&str, &str)] = &[
+    ("claude_available", "true"),
+    ("codex_available", "true"),
+    LAST_PICK,
+];
 
 fn on_agents_with(daemon: Daemon, stored: &Settings) -> World {
     serve(&daemon, stored, harnesses());
@@ -999,6 +1004,7 @@ fn the_preferred_agent_comes_first_with_what_each_agent_supports() {
 #[test]
 fn only_codex_and_claude_offer_the_executable_attn_launches() {
     let mut world = on_agents(&[
+        LAST_PICK,
         ("codex_executable", "/usr/local/bin/codex"),
         ("snipe_executable", "/opt/snipe"),
     ]);

@@ -122,10 +122,7 @@ fn form(state: &State, draft: &Draft, busy: bool) -> Form {
     let read = crate::settings::harness_read(state);
     let harnesses = chief_harnesses(state);
     let preferred = state.facts.settings.get("new_session_agent");
-    let default = harnesses
-        .iter()
-        .find(|h| Some(&h.id) == preferred)
-        .or(harnesses.first());
+    let default = harnesses.iter().find(|h| Some(&h.id) == preferred);
     let harness = harnesses
         .iter()
         .find(|h| h.id == draft.route.harness)
@@ -220,7 +217,7 @@ fn form(state: &State, draft: &Draft, busy: bool) -> Form {
     } else {
         Vec::new()
     };
-    let harness_choices = if harnesses.len() > 1 {
+    let harness_choices = if harnesses.len() > 1 || harness.is_none() {
         harnesses
             .iter()
             .map(|h| Choice {

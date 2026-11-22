@@ -180,6 +180,8 @@ pub(crate) struct Choice {
     /// The agent the user picked, or the saved one; [`Choice::agent`] is what launches.
     wanted: String,
     pub(crate) yolo: bool,
+    /// A start found no harness chosen, so the toggle asks for one.
+    pub(crate) asked: bool,
 }
 
 impl Choice {
@@ -189,15 +191,15 @@ impl Choice {
     ) -> Choice {
         let preferred = agent
             .or(settings.get(SAVED_AGENT).map(String::as_str))
-            .unwrap_or("claude");
+            .unwrap_or_default();
         Choice {
             wanted: preferred.to_owned(),
             yolo: agents::saved_yolo(settings),
+            asked: false,
         }
     }
 
-    /// The agent a launch starts: the wanted one while this machine has it, else the first
-    /// that is there.
+    /// The agent a launch starts: the wanted one while this machine has it, else none.
     pub(crate) fn agent(&self, state: &State) -> String {
         self.agent_among(&Agents::from_settings(&state.facts.settings))
     }
@@ -503,6 +505,24 @@ pub(crate) fn new_session(
         }
         return;
     }
+    open_dialog(state, direction, agent, tx);
+}
+
+/// Opens the new-session dialog with `path` in its field, for the user to choose the harness.
+pub(crate) fn new_session_at(state: &mut State, path: &str, tx: &mut Tx) {
+    open_dialog(state, Direction::Vertical, None, tx);
+    if state.window.launching.launcher(Which::Dialog).is_some() {
+        crate::launcher::set_query(state, Which::Dialog, path.to_owned(), tx);
+    } else {
+        let input = state.window.launching.input_mut(Which::Dialog);
+        *input = TextEdit::new(path.to_owned());
+        input.anchor = input.text.len();
+        input.focus = input.text.len();
+        edited(state, Which::Dialog, tx);
+    }
+}
+
+fn open_dialog(state: &mut State, direction: Direction, agent: Option<&str>, tx: &mut Tx) {
     let picker = Opened::open(Which::Dialog, None, None, direction, agent, state);
     let key = picker.focus_key();
     state.window.launching.openings = picker.opening();
@@ -981,6 +1001,7 @@ pub(crate) fn choose_agent(state: &mut State, which: Which, agent: &str) {
         return;
     };
     picker.choice_mut().wanted = agent.to_owned();
+    picker.choice_mut().asked = false;
     if agent != TERMINAL {
         set_setting(state, SAVED_AGENT, agent);
     }
@@ -1174,6 +1195,10 @@ pub(crate) fn launch(state: &mut State, which: Which, path: &str, tx: &mut Tx) {
         return;
     };
     let agent = picker.agent(state);
+    if agent.is_empty() {
+        ask_for_harness(state, which, tx);
+        return;
+    }
     let yolo = yolo_on(state, picker) && agent != TERMINAL;
     let (desktop, anchor, direction) = (
         picker.desktop.clone(),
@@ -1413,6 +1438,10 @@ pub(crate) fn create_worktree(
         return;
     };
     let agent = picker.agent(state);
+    if agent.is_empty() {
+        ask_for_harness(state, which, tx);
+        return;
+    }
     let yolo = yolo_on(state, picker) && agent != TERMINAL;
     let (desktop, anchor, direction) = (
         picker.desktop.clone(),
@@ -1471,4 +1500,12 @@ pub(crate) fn create_worktree(
         },
         tx,
     );
+}
+
+/// A start with no harness chosen: the toggle asks for one, and a screen reader hears it.
+pub(crate) fn ask_for_harness(state: &mut State, which: Which, tx: &mut Tx) {
+    if let Some(picker) = state.window.launching.slot_mut(which) {
+        picker.choice_mut().asked = true;
+    }
+    tx.announce(agents::choose_one(), LiveRegion::Polite);
 }

@@ -41,7 +41,7 @@ plugin that still owns a running session.
 
 Open the picker with Cmd+N. Your ID is a choice in the "Session agent" group.
 `attn delegate --agent my-agent` starts it from a shell, and
-`attn settings set new_session_agent my-agent` makes it the picker's default.
+`attn settings set new_session_agent my-agent` makes it the harness the picker starts with.
 Attn runs the argv your `spawn` handler returned, in the terminal, in the
 folder you picked.
 

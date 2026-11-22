@@ -40,7 +40,18 @@ fn desktop(id: &str, name: &str, panes: Vec<DesktopPane>) -> Desktop {
     }
 }
 
+/// The harness the user picked in an earlier picker, which every world starts with unless the
+/// test names another or starts from [`never_picked`].
+const LAST_PICK: (&str, &str) = ("new_session_agent", "claude");
+
 fn initial(desktops: Vec<Desktop>, settings: &[(&str, &str)]) -> InitialStateMessage {
+    let picked: Vec<_> = std::iter::once(LAST_PICK)
+        .chain(settings.iter().copied())
+        .collect();
+    never_picked(desktops, &picked)
+}
+
+fn never_picked(desktops: Vec<Desktop>, settings: &[(&str, &str)]) -> InitialStateMessage {
     InitialStateMessage {
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![Profile {
@@ -178,27 +189,41 @@ fn busy_desktop(recent: &'static [&'static str]) -> World {
 }
 
 fn busy_desktop_with(recent: &'static [&'static str], settings: &[(&str, &str)]) -> World {
-    let mut world = World::start(daemon(
-        initial(
-            vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
-            settings,
-        ),
-        recent,
-    ));
+    on_busy_desktop(initial(busy(), settings), recent)
+}
+
+fn busy() -> Vec<Desktop> {
+    vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])]
+}
+
+fn on_busy_desktop(state: InitialStateMessage, recent: &'static [&'static str]) -> World {
+    let mut world = World::start(daemon(state, recent));
     world.open_desktop();
     world
+}
+
+/// What the harness toggle says once a start found no harness chosen.
+fn asks_for_harness(world: &World, which: &str) -> Option<String> {
+    world
+        .screen()
+        .find(Target::key(format!("{which}.agents.needed")))
+        .and_then(|n| n.name)
+}
+
+fn choose_one() -> String {
+    let keys = rune::Chord::parse("alt+1")
+        .unwrap()
+        .label_on(attn_testkit::platform());
+    let last = rune::Chord::parse("alt+9")
+        .unwrap()
+        .label_on(attn_testkit::platform());
+    format!("Choose a harness ({keys}–{last})")
 }
 
 /// [`busy_desktop`] in the smallest window at the largest text, where the list scrolls.
 fn small_desktop(recent: &'static [&'static str]) -> World {
     let mut world = World::start_sized(
-        daemon(
-            initial(
-                vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
-                &[("uiScale", "1.5")],
-            ),
-            recent,
-        ),
+        daemon(initial(busy(), &[("uiScale", "1.5")]), recent),
         (800.0, 600.0),
     );
     world.open_desktop();
@@ -695,8 +720,8 @@ fn an_inspection_answered_after_the_user_typed_another_path_is_dropped() {
 }
 
 #[test]
-fn offers_the_built_in_agents_when_the_daemon_says_nothing_and_starts_on_claude() {
-    let mut world = busy_desktop(&[]);
+fn with_no_harness_ever_picked_none_is_chosen_and_enter_starts_nothing_until_one_is() {
+    let mut world = on_busy_desktop(never_picked(busy(), &[]), &[]);
     world.daemon.on("delegation_preferences_get", |_| {
         catalog(&["claude", "codex", "plug"])
     });
@@ -706,16 +731,29 @@ fn offers_the_built_in_agents_when_the_daemon_says_nothing_and_starts_on_claude(
         agents(&world),
         [
             ("Terminal".into(), false, false),
-            ("Claude".into(), true, false),
+            ("Claude".into(), false, false),
             ("Codex".into(), false, false),
             ("Plug".into(), false, true),
         ]
     );
+    type_path(&mut world, "/srv/app");
+    press(&mut world, Key::Enter);
+    assert!(spawns(&world).is_empty());
+    assert_eq!(asks_for_harness(&world, "new-session"), Some(choose_one()));
+
+    world.gesture(|app| app.press("alt+1"));
+    assert_eq!(chosen(&world), "Claude");
+    assert_eq!(asks_for_harness(&world, "new-session"), None);
+    press(&mut world, Key::Enter);
+    let spawned = spawns(&world);
+    assert_eq!(spawned.len(), 1);
+    assert_eq!(spawned[0]["agent"], "claude");
+    assert_eq!(spawned[0]["cwd"], "/srv/app");
     rest(&mut world);
 }
 
 #[test]
-fn offers_the_agents_the_daemon_advertises_and_falls_back_from_a_missing_one() {
+fn offers_the_agents_the_daemon_advertises_and_chooses_none_when_the_last_pick_is_missing() {
     let mut world = busy_desktop_with(
         &[],
         &[
@@ -734,7 +772,7 @@ fn offers_the_agents_the_daemon_advertises_and_falls_back_from_a_missing_one() {
         [
             ("Terminal".into(), false, false),
             ("Claude".into(), false, true),
-            ("Codex".into(), true, false),
+            ("Codex".into(), false, false),
             ("Gemini Cli".into(), false, false),
             ("Plug".into(), false, false),
         ]
@@ -835,7 +873,7 @@ fn a_plugin_display_name_is_shown_on_its_stored_harness_control() {
 }
 
 #[test]
-fn a_saved_agent_that_is_missing_gives_way_to_the_first_one_there_or_terminal_when_none_is() {
+fn a_last_pick_that_is_missing_chooses_neither_another_harness_nor_terminal() {
     let mut world = busy_desktop_with(
         &[],
         &[
@@ -846,15 +884,22 @@ fn a_saved_agent_that_is_missing_gives_way_to_the_first_one_there_or_terminal_wh
         ],
     );
     open_dialog(&mut world);
-    assert_eq!(chosen(&world), "Plug");
+    assert_eq!(chosen(&world), "");
+    type_path(&mut world, "/srv/app");
+    press(&mut world, Key::Enter);
+    assert!(spawns(&world).is_empty());
+    assert_eq!(asks_for_harness(&world, "new-session"), Some(choose_one()));
     rest(&mut world);
 
-    let mut world = busy_desktop_with(
+    let mut world = on_busy_desktop(
+        never_picked(
+            busy(),
+            &[("claude_available", "false"), ("codex_available", "false")],
+        ),
         &[],
-        &[("claude_available", "false"), ("codex_available", "false")],
     );
     open_dialog(&mut world);
-    assert_eq!(chosen(&world), "Terminal");
+    assert_eq!(chosen(&world), "");
     rest(&mut world);
 }
 
@@ -892,7 +937,13 @@ fn remembers_the_agent_the_user_picks_for_the_next_picker() {
 
 #[test]
 fn alt_and_a_digit_switch_agents_but_never_to_one_that_is_not_there() {
-    let mut world = busy_desktop_with(&[], &[("claude_available", "false")]);
+    let mut world = busy_desktop_with(
+        &[],
+        &[
+            ("claude_available", "false"),
+            ("new_session_agent", "codex"),
+        ],
+    );
     open_dialog(&mut world);
     assert_eq!(chosen(&world), "Codex");
 
@@ -1050,7 +1101,7 @@ fn a_catalog_error_keeps_agents_selectable_without_numbers_until_retry_loads_it(
 }
 
 #[test]
-fn a_harness_being_checked_stays_selectable_then_gives_way_once_it_turns_out_missing() {
+fn a_harness_being_checked_stays_selectable_then_leaves_nothing_chosen_once_it_turns_out_missing() {
     let mut world = busy_desktop_with(&[], &[("claude_available", "checking")]);
     open_dialog(&mut world);
     let claude = world.screen().get(Target::key("new-session.agent.claude"));
@@ -1079,7 +1130,7 @@ fn a_harness_being_checked_stays_selectable_then_gives_way_once_it_turns_out_mis
         claude.description.as_deref(),
         Some("Claude is not available on this machine")
     );
-    assert_eq!(chosen(&world), "Codex");
+    assert_eq!(chosen(&world), "");
 
     let [x, y, w, h] = world
         .screen()
@@ -1097,7 +1148,7 @@ fn a_harness_being_checked_stays_selectable_then_gives_way_once_it_turns_out_mis
     );
     world.gesture(|app| app.click(Target::key("new-session.agent.claude")));
     world.settle();
-    assert_eq!(chosen(&world), "Codex", "a press picks the missing harness");
+    assert_eq!(chosen(&world), "", "a press picks the missing harness");
     rest(&mut world);
 }
 

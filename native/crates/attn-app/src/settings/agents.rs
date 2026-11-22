@@ -85,13 +85,13 @@ fn executable_key(agent: &str) -> String {
 }
 
 const DEFAULT_AGENT_CODEC: Codec = Codec {
-    actual: |settings, _| harnesses::resolved_default(settings),
+    actual: |settings, _| harnesses::picked_default(settings),
     serialize: |_, draft| Ok(draft.to_owned()),
 };
 
 fn ordered(settings: &BTreeMap<String, String>) -> Vec<String> {
     let availability = harnesses::availability(settings);
-    let preferred = harnesses::resolved_default(settings);
+    let preferred = harnesses::picked_default(settings);
     harnesses::ordered(&availability, Some(&preferred))
 }
 
@@ -585,7 +585,7 @@ fn agent_group(state: &State, agent: &str, t: &Tokens) -> Block {
             .shown
             .get(agent)
             .copied()
-            .unwrap_or_else(|| harnesses::resolved_default(settings) == agent);
+            .unwrap_or_else(|| harnesses::picked_default(settings) == agent);
     let toggled = agent.to_owned();
     let mut group = Disclosure::new(
         format!("settings.agent.{agent}.toggle"),
@@ -599,7 +599,7 @@ fn agent_group(state: &State, agent: &str, t: &Tokens) -> Block {
                 .shown
                 .get(&toggled)
                 .copied()
-                .unwrap_or_else(|| harnesses::resolved_default(&state.facts.settings) == toggled);
+                .unwrap_or_else(|| harnesses::picked_default(&state.facts.settings) == toggled);
             state
                 .window
                 .settings

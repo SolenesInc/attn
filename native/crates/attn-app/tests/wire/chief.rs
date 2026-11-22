@@ -458,6 +458,26 @@ fn a_refused_save_says_why_and_keeps_the_route_and_folder() {
 }
 
 #[test]
+fn with_no_harness_picked_yet_the_first_setup_chooses_none_and_starts_once_one_is() {
+    let mut first = initial(true, chief(false), Vec::new());
+    let mut unpicked = settings(true);
+    unpicked.remove("new_session_agent");
+    first.settings = Some(unpicked);
+    let mut world = start(first);
+    assert_eq!(radios(&world, "harness"), ["Claude", "Codex"]);
+    assert!(checked(&world, "harness").is_empty());
+    assert_eq!(value(&world, PRIMARY).as_deref(), Some("unavailable"));
+    click(&mut world, PRIMARY);
+    assert!(sent(&world, "crew_set").is_empty());
+
+    click(&mut world, "chief-setup.harness.codex");
+    assert_eq!(checked(&world, "model"), ["gpt-6.1-sol · recommended"]);
+    world.daemon.on("crew_set", |_| ());
+    click(&mut world, PRIMARY);
+    assert_eq!(sent(&world, "crew_set")[0]["agent"], "codex");
+}
+
+#[test]
 fn settings_from_the_chief_setup_open_on_agents_and_record_only_that_section() {
     let mut first = initial(true, chief(false), Vec::new());
     let mut none = settings(true);
@@ -479,7 +499,7 @@ fn settings_from_the_chief_setup_open_on_agents_and_record_only_that_section() {
 }
 
 #[test]
-fn with_no_harness_for_the_chief_check_again_reads_them_and_one_harness_hides_the_choice() {
+fn with_no_harness_for_the_chief_check_again_reads_them_and_the_one_last_picked_hides_the_choice() {
     let mut first = initial(true, chief(false), Vec::new());
     let mut none = settings(true);
     none.insert("claude_available".into(), "false".into());
@@ -498,6 +518,7 @@ fn with_no_harness_for_the_chief_check_again_reads_them_and_one_harness_hides_th
     assert!(!shows(&world, PRIMARY));
     let mut codex_only = settings(true);
     codex_only.insert("claude_available".into(), "false".into());
+    codex_only.insert("new_session_agent".into(), "codex".into());
     world.daemon.on("get_settings", move |_| {
         message(SettingsUpdatedMessage {
             settings: Some(codex_only.clone()),
@@ -516,13 +537,15 @@ fn with_no_harness_for_the_chief_check_again_reads_them_and_one_harness_hides_th
 }
 
 #[test]
-fn with_sigma_the_only_harness_here_that_takes_launch_instructions_the_chief_starts_on_sigma() {
+fn with_sigma_last_picked_and_the_only_harness_here_that_takes_launch_instructions_the_chief_starts_on_sigma()
+ {
     let mut first = initial(true, chief(false), Vec::new());
     let mut sigma = settings(true);
     sigma.insert("claude_available".into(), "false".into());
     sigma.insert("codex_available".into(), "false".into());
     sigma.insert("sigma_available".into(), "true".into());
     sigma.insert("sigma_cap_launch_instructions".into(), "true".into());
+    sigma.insert("new_session_agent".into(), "sigma".into());
     first.settings = Some(sigma);
     let daemon = daemon(first);
     daemon.on("delegation_preferences_get", |_| {

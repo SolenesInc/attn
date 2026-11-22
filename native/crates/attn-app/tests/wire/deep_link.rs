@@ -5,10 +5,12 @@ use attn_protocol::{
     Desktop, DesktopPane, InitialStateMessage, Profile, ProfileArrangementChangedMessage, Session,
     SessionsUpdatedMessage, SpawnResultMessage,
 };
-use attn_testkit::{Daemon, Request, World, message};
+use attn_testkit::{Daemon, Request, Target, World, message};
 use serde_json::Value;
 
 const PLAN: &str = "attn://spawn?cwd=%2Frepo%2Fplan&label=plan";
+/// The harness the user picked in an earlier new-session picker.
+const LAST_PICK: (&str, &str) = ("new_session_agent", "claude");
 
 fn profile(current: &str) -> Profile {
     Profile {
@@ -49,14 +51,25 @@ fn session(id: &str, directory: &str, profile: &str) -> Session {
 }
 
 fn world_with(current: &str, sessions: Vec<Session>) -> World {
-    World::start(Daemon::scripted().state(InitialStateMessage {
-        selected_profile_id: Some("work".into()),
-        profiles: Some(vec![profile(current)]),
-        desktops: Some(vec![desktop()]),
-        sessions: Some(sessions),
-        settings: Some(BTreeMap::new()),
-        ..InitialStateMessage::new()
-    }))
+    world_picked(current, sessions, &[LAST_PICK])
+}
+
+fn world_picked(current: &str, sessions: Vec<Session>, settings: &[(&str, &str)]) -> World {
+    World::start(
+        Daemon::scripted().state(InitialStateMessage {
+            selected_profile_id: Some("work".into()),
+            profiles: Some(vec![profile(current)]),
+            desktops: Some(vec![desktop()]),
+            sessions: Some(sessions),
+            settings: Some(
+                settings
+                    .iter()
+                    .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+                    .collect::<BTreeMap<_, _>>(),
+            ),
+            ..InitialStateMessage::new()
+        }),
+    )
 }
 
 fn started(request: &Request, success: bool) -> Value {
@@ -89,8 +102,8 @@ fn rest(world: &mut World) {
 }
 
 #[test]
-fn a_spawn_link_waits_for_the_current_desktop_then_starts_its_agent_there_once() {
-    let mut world = world_with("", vec![]);
+fn a_spawn_link_waits_for_the_current_desktop_then_starts_the_harness_last_picked_there_once() {
+    let mut world = world_picked("", vec![], &[("new_session_agent", "codex")]);
     open(&mut world, PLAN);
     assert!(world.daemon.sent_of("spawn_session").is_empty());
 
@@ -105,10 +118,21 @@ fn a_spawn_link_waits_for_the_current_desktop_then_starts_its_agent_there_once()
     assert_eq!(spawns.len(), 1);
     assert_eq!(spawns[0]["cwd"], "/repo/plan");
     assert_eq!(spawns[0]["label"], "plan");
-    assert_eq!(spawns[0]["agent"], "claude");
+    assert_eq!(spawns[0]["agent"], "codex");
     assert!(spawns[0].get("yolo_mode").is_none_or(Value::is_null));
     assert_eq!(spawns[0]["placement"]["desktop_id"], "d1");
     assert_eq!(spawns[0]["placement"]["direction"], "vertical");
+    rest(&mut world);
+}
+
+#[test]
+fn with_no_harness_picked_yet_a_spawn_link_opens_the_new_session_picker_at_its_folder() {
+    let mut world = world_picked("d1", vec![], &[]);
+    open(&mut world, PLAN);
+
+    assert!(world.daemon.sent_of("spawn_session").is_empty());
+    let field = world.screen().get(Target::key("new-session.path.field"));
+    assert_eq!(field.value.as_deref(), Some("/repo/plan"));
     rest(&mut world);
 }
 
