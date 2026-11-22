@@ -2,18 +2,19 @@ package pty
 
 import (
 	"os"
-	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
 
 func openedFilePath(file *os.File) (string, error) {
-	path := make([]byte, unix.PathMax)
-	_, err := unix.FcntlInt(file.Fd(), unix.F_GETPATH, int(uintptr(unsafe.Pointer(&path[0]))))
-	runtime.KeepAlive(path)
-	if err != nil {
+	var path [unix.PathMax]byte
+	if err := fcntlPointer(file.Fd(), unix.F_GETPATH, unsafe.Pointer(&path[0])); err != nil {
 		return "", err
 	}
-	return unix.ByteSliceToString(path), nil
+	return unix.ByteSliceToString(path[:]), nil
+}
+
+func fcntlPointer(fd uintptr, cmd int, arg unsafe.Pointer) error {
+	return unix.FcntlFstore(fd, cmd, (*unix.Fstore_t)(arg))
 }
