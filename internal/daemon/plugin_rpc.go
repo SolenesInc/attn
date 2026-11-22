@@ -13,8 +13,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
 const pluginAPIVersion = 7
@@ -75,6 +73,9 @@ type pluginRegistry struct {
 
 	driverRegistered chan struct{}
 }
+
+// conversationWait is a plugin method's answer that waits until a reported conversation is recorded.
+type conversationWait = func(context.Context) error
 
 func newPluginRegistry() *pluginRegistry {
 	return &pluginRegistry{
@@ -584,9 +585,9 @@ func (d *Daemon) handlePluginMethod(plugin *pluginConnection, msg jsonRPCMessage
 
 	result, handled, err := d.handlePluginDriverMethod(plugin, msg)
 	if handled {
-		if receipt, pending := result.(*sessionmonitor.ConversationReceipt); pending && err == nil {
+		if wait, pending := result.(conversationWait); pending && err == nil {
 			if !d.life.Go("acknowledgePluginConversation", func() {
-				d.replyPluginMethod(plugin, msg, struct{}{}, receipt.Wait(d.life.Context()))
+				d.replyPluginMethod(plugin, msg, struct{}{}, wait(d.life.Context()))
 			}) {
 				d.replyPluginMethod(plugin, msg, nil, errDaemonStopping)
 			}

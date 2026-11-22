@@ -1,12 +1,16 @@
 package daemon
 
 import (
+	"context"
+	"errors"
 	"time"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
+	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/store"
 )
 
 // harnessEvents is the one sink of what harnesses report. A report that is not inferred is the harness's first
@@ -117,4 +121,74 @@ func (e harnessEvents) fencedTurn(sessionID protocol.SessionID, at time.Time, ev
 	}) {
 		d.logf("link turn discarded: session=%s run=%s seq=%d state=%s", sessionID, event.Epoch, event.Seq, state)
 	}
+}
+
+func (e harnessEvents) Prompt(r harness.Reporter, at time.Time, p harness.Prompt) {
+	session, monitor := e.resolve(r)
+	typed := false
+	if p.Live {
+		e.reported(session, false)
+		typed = monitor.ObservePromptSubmitted(at)
+	}
+	if p.Titles {
+		text, user := p.Text, typed || p.History
+		e.daemon.life.Go("maybeGenerateSessionTitleFromPrompt", func() { monitor.TitleFromPrompt(text, user) })
+	}
+}
+
+func (e harnessEvents) Tool(session protocol.SessionID, use harness.ToolUse) error {
+	e.reported(session, false)
+	d := e.daemon
+	var failed []error
+	if len(use.EditedFiles) > 0 && !d.recordEditedFiles(session, use.EditedFiles) {
+		failed = append(failed, errors.New("edited file monitor view was not applied"))
+	}
+	for _, url := range use.PullRequests {
+		rec, err := d.sessionPullRequestIdentity(session, session, url)
+		if err == nil {
+			err = d.recordSessionPullRequest(rec)
+		}
+		if err != nil {
+			failed = append(failed, err)
+		}
+	}
+	return errors.Join(failed...)
+}
+
+func (d *Daemon) recordEditedFiles(sessionID protocol.SessionID, paths []string) bool {
+	now := time.Now()
+	if monitor := d.sessionMonitor(sessionID); monitor != nil {
+		return monitor.ReportEditedFiles(paths, now, d.awayFromHome(sessionID))
+	}
+	for _, path := range paths {
+		d.store.RecordFileActivity(store.FileActivity{Path: path, Source: store.FileActivitySourceEdited, SessionID: sessionID, At: now})
+	}
+	return true
+}
+
+func (e harnessEvents) Usage(session protocol.SessionID, source string, observations []sessioncost.Observation) {
+	e.daemon.sessionMonitor(session).ReportServerUsage(source, observations)
+}
+
+func (e harnessEvents) Replied(session protocol.SessionID) {
+	e.reported(session, false)
+	e.daemon.publishFact(FactSessionAssistantWindowChanged, string(session), nil)
+}
+
+func (e harnessEvents) Named(session protocol.SessionID, title string) {
+	e.daemon.sessionMonitor(session).ReportHarnessTitle(title)
+}
+
+func (e harnessEvents) Moved(r harness.Reporter, m harness.Move) func(context.Context) error {
+	if terminal := r.Terminal(); terminal != "" {
+		return e.daemon.conversationMoved(terminal, m)
+	}
+	receipt, err := e.daemon.persistResumeSessionID(r.Session(), m.Conversation)
+	if err != nil {
+		return refused(err)
+	}
+	if receipt == nil {
+		return nil
+	}
+	return receipt.Wait
 }

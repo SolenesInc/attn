@@ -36,25 +36,39 @@ func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Co
 		d.sendError(conn, "missing resume_session_id")
 		return
 	}
+	if wait := d.events().Moved(harness.FromTerminal(terminal), harness.Move{Conversation: observation.NativeID, Path: observation.TranscriptPath, Run: observation.Run}); wait != nil {
+		ctx, cancel := d.connectionContext(ctx, conn)
+		defer cancel()
+		if err := wait(ctx); err != nil {
+			d.sendError(conn, err.Error())
+			return
+		}
+	}
+	d.sendOK(conn)
+}
+
+func refused(err error) func(context.Context) error {
+	return func(context.Context) error { return err }
+}
+
+func (d *Daemon) conversationMoved(terminal protocol.TerminalID, m harness.Move) func(context.Context) error {
+	observation := agentConversationObservation{NativeID: m.Conversation, TranscriptPath: m.Path, Run: m.Run}
 	if _, view, ours := d.linkCaller(terminal); ours {
 		if view == "" {
 			d.logf("agent conversation: no terminal shows the conversation of %s", terminal)
-			d.sendOK(conn)
-			return
+			return nil
 		}
 		terminal = view
 	}
 	_, linkedServer := d.linkOf(d.sessionInTerminal(terminal)).(*serverLink)
 	if observation.TranscriptPath == "" && !linkedServer {
 		d.logf("agent conversation: ignored pathless observation terminal=%s native=%s", terminal, observation.NativeID)
-		d.sendOK(conn)
-		return
+		return nil
 	}
 	if session := d.store.Get(d.sessionInTerminal(terminal)); session != nil {
 		if l, server := d.linkOf(session.ID).(*serverLink); server {
 			if err := l.admit(session.ProfileID, observation.NativeID); err != nil {
-				d.sendError(conn, err.Error())
-				return
+				return refused(err)
 			}
 		}
 	}
@@ -63,18 +77,12 @@ func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Co
 	}
 	receipt, accepted := d.conversationIn(terminal, observation)
 	if !accepted {
-		d.sendError(conn, "conversation observation could not be saved")
-		return
+		return refused(errors.New("conversation observation could not be saved"))
 	}
-	if receipt.MustWait() {
-		ctx, cancel := d.connectionContext(ctx, conn)
-		defer cancel()
-		if err := receipt.Wait(ctx); err != nil {
-			d.sendError(conn, err.Error())
-			return
-		}
+	if !receipt.MustWait() {
+		return nil
 	}
-	d.sendOK(conn)
+	return receipt.Wait
 }
 
 // conversationIn routes a conversation the harness in terminal t reports from SessionStart or

@@ -303,28 +303,22 @@ func (f *serverFeed) observe(ctx context.Context, entry transcript.ServerEntry, 
 		f.sawHistory = true
 		if entry.Kind == serverPrompt && !f.titledFromHistory {
 			f.titledFromHistory = true
-			prompt := entry.Text()
-			f.p.d.life.Go("titleResumedServerSession", func() { monitor.TitleFromPrompt(prompt, true) })
+			f.p.d.events().Prompt(harness.FromSession(f.session), time.Now(), harness.Prompt{Text: entry.Text(), History: true, Titles: true})
 		}
 		return
 	}
 	switch entry.Kind {
 	case serverPrompt:
-		prompt := entry.Text()
-		typed := false
+		f.p.d.events().Prompt(harness.FromSession(f.session), time.Now(), harness.Prompt{Text: entry.Text(), Live: live, Titles: !f.titledFromHistory})
 		if live {
-			typed = monitor.ObservePromptSubmitted(time.Now())
 			f.p.d.touchSession(f.session)
-		}
-		if !f.titledFromHistory {
-			f.p.d.life.Go("maybeGenerateSessionTitleFromPrompt", func() { monitor.TitleFromPrompt(prompt, typed) })
 		}
 	case "pi.assistant":
 		for _, call := range entry.ToolCalls() {
 			f.calls[call.ID] = serverToolCall{name: call.Name, input: call.Arguments}
 		}
 		if strings.TrimSpace(entry.Text()) != "" {
-			f.p.d.publishFact(FactSessionAssistantWindowChanged, string(f.session), nil)
+			f.p.d.events().Replied(f.session)
 		}
 	case "pi.tool-result":
 		for _, result := range entry.ToolResults() {
@@ -396,7 +390,7 @@ func (f *serverFeed) reportUsage() {
 		})
 	}
 	if len(observations) > 0 {
-		f.p.d.sessionMonitor(f.session).ReportServerUsage(f.l.b.agent, observations)
+		f.p.d.events().Usage(f.session, f.l.b.agent, observations)
 	}
 }
 

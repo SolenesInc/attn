@@ -14,7 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
 const pluginDriverCallTimeout = 30 * time.Second
@@ -462,9 +461,8 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
 				return nil, true, err
 			}
-			receipt, err := d.applyPluginReportedMetadata(params)
-			if receipt != nil || err != nil {
-				return receipt, true, err
+			if wait := d.applyPluginReportedMetadata(params); wait != nil {
+				return wait, true, nil
 			}
 		}
 		return struct{}{}, true, nil
@@ -478,11 +476,7 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			return nil, true, err
 		}
 		d.notePluginDriverReport(params.SessionID)
-		rec, err := d.sessionPullRequestIdentity(params.SessionID, params.SessionID, params.URL)
-		if err != nil {
-			return nil, true, err
-		}
-		if err := d.recordSessionPullRequest(rec); err != nil {
+		if err := d.events().Tool(params.SessionID, harness.ToolUse{PullRequests: []string{params.URL}}); err != nil {
 			return nil, true, err
 		}
 		return struct{}{}, true, nil
@@ -609,16 +603,16 @@ func (d *Daemon) applyPluginReportedStop(params pluginReportStopParams) {
 	})
 }
 
-func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) (*sessionmonitor.ConversationReceipt, error) {
+func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) conversationWait {
 	d.notePluginDriverReport(params.SessionID)
 	if !d.sessionMonitor(params.SessionID).ReportDriverMetadata(params.RunID, params.Seq, string(params.Metadata)) {
 		d.logf("plugin metadata report discarded: session=%s run=%s seq=%d", params.SessionID, params.RunID, params.Seq)
-		return nil, nil
+		return nil
 	}
 	if resumeID := strings.TrimSpace(params.ResumeSessionID); resumeID != "" {
-		return d.persistResumeSessionID(params.SessionID, resumeID)
+		return d.events().Moved(harness.FromSession(params.SessionID), harness.Move{Conversation: resumeID})
 	}
-	return nil, nil
+	return nil
 }
 
 func (d *Daemon) applyPluginReportedTranscriptPath(params pluginReportTranscriptPathParams) {
@@ -649,9 +643,9 @@ func (d *Daemon) replayPluginReport(report pendingPluginReport) {
 	case report.Stop != nil:
 		d.applyPluginReportedStop(*report.Stop)
 	case report.Metadata != nil:
-		receipt, err := d.applyPluginReportedMetadata(*report.Metadata)
-		if err == nil {
-			err = receipt.Wait(d.life.Context())
+		var err error
+		if wait := d.applyPluginReportedMetadata(*report.Metadata); wait != nil {
+			err = wait(d.life.Context())
 		}
 		if err != nil {
 			d.logf("plugin metadata replay: session=%s: %v", report.Metadata.SessionID, err)

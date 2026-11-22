@@ -3175,16 +3175,13 @@ var hookTurns = map[string]harness.Turn{
 
 func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 	sessionID := d.sessionInTerminal(msg.ID)
-	monitor := d.monitorInTerminal(msg.ID, sessionID)
 	d.logf("hook evidence: id=%s state=%s", sessionID, msg.State)
 	d.tracePermissionMode(sessionID, protocol.Deref(msg.PermissionMode))
 	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHook}, msg.State)
 	d.events().Turn(harness.FromTerminal(msg.ID), time.Now(), harness.TurnEvent{Turn: hookTurns[msg.State]})
 	if strings.EqualFold(strings.TrimSpace(protocol.Deref(msg.HookEvent)), "user_prompt_submit") &&
 		strings.TrimSpace(protocol.Deref(msg.Prompt)) != "" {
-		typed := monitor.ObservePromptSubmitted(time.Now())
-		prompt := protocol.Deref(msg.Prompt)
-		d.life.Go("maybeGenerateSessionTitleFromPrompt", func() { monitor.TitleFromPrompt(prompt, typed) })
+		d.events().Prompt(harness.FromTerminal(msg.ID), time.Now(), harness.Prompt{Text: protocol.Deref(msg.Prompt), Live: true, Titles: true})
 	}
 	d.touchSession(sessionID)
 	d.sendOK(conn)
@@ -3484,8 +3481,8 @@ func (d *Daemon) handleFilesEdited(conn net.Conn, msg *protocol.FilesEditedMessa
 		d.sendOK(conn)
 		return
 	}
-	if !d.recordEditedFiles(sessionID, paths) {
-		d.sendError(conn, "edited file monitor view was not applied")
+	if err := d.events().Tool(sessionID, harness.ToolUse{EditedFiles: paths}); err != nil {
+		d.sendError(conn, err.Error())
 		return
 	}
 	d.sendOK(conn)

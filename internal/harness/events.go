@@ -1,6 +1,11 @@
 package harness
 
-import "time"
+import (
+	"context"
+	"time"
+
+	"github.com/victorarias/attn/internal/sessioncost"
+)
 
 // Turn is where a session's turn stands after a report.
 type Turn uint8
@@ -77,8 +82,39 @@ func (r Reporter) Session() SessionID { return r.session }
 
 func (r Reporter) Terminal() TerminalID { return r.terminal }
 
+// Prompt is a prompt the harness shows in its conversation.
+type Prompt struct {
+	Text string
+	// Live: the prompt reached the harness now, so it counts as the user's submission.
+	Live bool
+	// History: the prompt is from before this launch, so it can only title the session.
+	History bool
+	// Titles: attn may title the session from this prompt.
+	Titles bool
+}
+
+// ToolUse is what the harness's tools did: the markdown files they edited and the pull requests they opened.
+type ToolUse struct {
+	EditedFiles  []string
+	PullRequests []string
+}
+
+// Move is a conversation the harness now runs for its reporter.
+type Move struct {
+	Conversation string
+	Path         string
+	Run          string
+}
+
 // Events is core's side of a harness: everything the harness tells attn arrives here.
 type Events interface {
 	Turn(r Reporter, at time.Time, e TurnEvent)
 	Compacting(r Reporter, active bool, trigger string)
+	Prompt(r Reporter, at time.Time, p Prompt)
+	Tool(session SessionID, use ToolUse) error
+	Usage(session SessionID, source string, observations []sessioncost.Observation)
+	Replied(session SessionID)
+	Named(session SessionID, title string)
+	// Moved returns what to wait on until the move is recorded, or nil when nothing is to wait on.
+	Moved(r Reporter, m Move) (wait func(context.Context) error)
 }

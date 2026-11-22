@@ -395,9 +395,7 @@ func (r *codexShared) observeName(s *codexServer, m codexshared.Message) {
 		if session == nil || name == "" {
 			return
 		}
-		if monitor := r.d.sessionMonitor(sessionID); monitor != nil {
-			monitor.ReportHarnessTitle(name)
-		}
+		r.d.events().Named(sessionID, name)
 	})
 }
 
