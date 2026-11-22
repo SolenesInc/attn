@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/delegationprefs"
+	harnessapi "github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
@@ -32,6 +33,7 @@ func (d *Daemon) loadHarnessModels(ctx context.Context, harness string, refresh 
 	if err := delegationprefs.ValidateSelection(delegationprefs.Selection{Harness: harness}, true); err != nil {
 		return harnessModelCatalog{}, err
 	}
+	h := d.harnessOf(harness)
 	key := harness + "\x00" + d.setting(executableSetting(harness))
 	if refresh {
 		d.harnessModelCatalogs.Delete(key)
@@ -47,8 +49,11 @@ func (d *Daemon) loadHarnessModels(ctx context.Context, harness string, refresh 
 				entry = cached.(harnessDiscovery)
 				return
 			}
-			entry.Catalog, entry.Err = d.queryHarnessModels(harness)
-			d.harnessModelCatalogs.Store(key, entry)
+			reachable := h.Health(d.life.Context()).Installation != harnessapi.Missing
+			entry.Catalog, entry.Err = d.queryHarnessModels(harness, h)
+			if reachable {
+				d.harnessModelCatalogs.Store(key, entry)
+			}
 		}) {
 			return nil, errDaemonStopping
 		}
@@ -66,13 +71,9 @@ func (d *Daemon) loadHarnessModels(ctx context.Context, harness string, refresh 
 	}
 }
 
-func (d *Daemon) queryHarnessModels(id string) (harnessModelCatalog, error) {
+func (d *Daemon) queryHarnessModels(id string, h harnessapi.Harness) (harnessModelCatalog, error) {
 	ctx, cancel := context.WithTimeout(d.life.Context(), harnessModelDiscoveryTimeout)
 	defer cancel()
-	h, err := d.harness(id)
-	if err != nil {
-		return harnessModelCatalog{}, fmt.Errorf("harness %q is not available", id)
-	}
 	models, err := h.Models(ctx)
 	if err != nil {
 		return harnessModelCatalog{}, err

@@ -108,10 +108,20 @@ func TestAPluginServerBindingUsesTheSharedServerForInputModelsAndTargets(t *test
 		t.Fatalf("targets: %+v", targets)
 	}
 	driver.leave(w)
+	requireModels := func(id string, refresh bool) {
+		t.Helper()
+		r := testworld.Request(app, protocol.HarnessModelsMessage{Cmd: protocol.CmdHarnessModels, Harness: serverPluginAgent, RequestID: id, Refresh: protocol.Ptr(refresh)}, protocol.EventHarnessModelsResult, func(r protocol.HarnessModelsResultMessage) bool { return r.RequestID == id })
+		if !r.Success || len(r.Models) == 0 {
+			t.Fatalf("%s: %+v", id, r)
+		}
+	}
+	requireModels("refresh while the driver is away", true)
 	if r := submitSessionAnnotationFeedbackAs(app, session, uuid.NewString(), "after plugin disconnect"); !r.Success {
 		t.Fatalf("disconnected delivery: %+v", r)
 	}
 	server.Prompted(view.ConversationID)
+	registerServerDriver(t, w, "server-example", serverDriverDeclaration(w))
+	requireModels("read after the driver returns", false)
 	if n := w.AppServers(fakeagent.SampleServer); n != 1 {
 		t.Fatalf("started %d servers", n)
 	}

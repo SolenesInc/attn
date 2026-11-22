@@ -227,6 +227,9 @@ func (h pluginHarness) Models(ctx context.Context) (harness.Models, error) {
 	if server := h.d.serverLinkFor(h.reg.Agent); server != nil {
 		return server.harnessModels(ctx)
 	}
+	if h.reg.PluginName == "" {
+		return harness.Models{}, fmt.Errorf("harness %q is not available", h.reg.Agent)
+	}
 	if !h.reg.Capabilities["model_discovery"] {
 		return noModelDiscovery, nil
 	}

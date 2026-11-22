@@ -1,11 +1,13 @@
 package daemon_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -73,11 +75,8 @@ func TestModelTiersAndDefaultsFollowReportedOrderAndOverridesWithoutRediscovery(
 	if err := os.Rename(executable+"-saved", executable); err != nil {
 		t.Fatal(err)
 	}
-	if failed := harnessCatalog(app, "claude", false); failed.Success || failed.Error == nil {
-		t.Errorf("cached failure after repair = %+v, want the failure until Refresh", failed)
-	}
-	if recovered := harnessCatalog(app, "claude", true); !recovered.Success {
-		t.Errorf("Refresh after repair = %+v, want recovered discovery", recovered)
+	if recovered := harnessCatalog(app, "claude", false); !recovered.Success {
+		t.Errorf("read after repair = %+v, want recovered discovery", recovered)
 	}
 }
 
@@ -121,5 +120,91 @@ func TestUnsetAdvisorModelAndEffortStayUnsetInEditableSettings(t *testing.T) {
 	setSetting(t, app, "garden.advisor", `{"agent":"claude","model":"","effort":""}`)
 	if got := gardenAdvisorRecipe(t, w.App().Initial.Settings); got.Model != "" || got.Effort != "" {
 		t.Errorf("editable advisor setting = %+v, want both pins unset", got)
+	}
+}
+
+func TestATierCallUsesTheSavedOverrideOnceAMissingExecutableReturns(t *testing.T) {
+	for name, configured := range map[string]bool{"found on PATH": false, "configured as a path": true} {
+		t.Run(name, func(t *testing.T) { tierCallAfterTheExecutableReturns(t, configured) })
+	}
+}
+
+func tierCallAfterTheExecutableReturns(t *testing.T, configured bool) {
+	w := &world{World: prepareWorld(t, fakeagent.Claude)}
+	bin := filepath.Join(w.Dir, "bin")
+	executable := ""
+	if configured {
+		executable = filepath.Join(bin, "claude")
+	}
+	t.Setenv("ATTN_CLAUDE_EXECUTABLE", executable)
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	t.Setenv("ATTN_HEADLESS_TASKS", "on")
+	w.start()
+	app := w.TrustedApp()
+	token := pairSenderInApp(t, w.Client(), app, "Tier recovery")
+	setSetting(t, app, "model_tier_overrides", `[{"harness":"claude","provider":"","model":"claude-sonnet-fake","tier":"light"}]`)
+	const chosen = "claude-sonnet-fake"
+	checkCatalog := func() {
+		t.Helper()
+		catalog := harnessCatalog(app, "claude", true)
+		if !catalog.Success || protocol.Deref(catalog.TierDefaults.Light) != chosen {
+			t.Fatalf("Settings refresh = %+v, want saved tier %q", catalog, chosen)
+		}
+	}
+	call := func() string {
+		t.Helper()
+		conn, err := w.DialUnix()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		if err := conn.SetDeadline(time.Now().Add(fakeagent.HangGuard)); err != nil {
+			t.Fatal(err)
+		}
+		msg := protocol.SenderModelCallMessage{
+			Cmd: protocol.CmdSenderModelCall, Harness: protocol.Ptr("claude"),
+			Input: "hello", LimitMs: int(fakeagent.HangGuard.Milliseconds()), Purpose: "test",
+			SenderToken: token.Token, System: "Answer briefly.", Tier: protocol.Ptr(protocol.ModelTierLight),
+		}
+		if err := json.NewEncoder(conn).Encode(msg); err != nil {
+			t.Fatal(err)
+		}
+		task := w.HeadlessTask()
+		task.Answer("answered")
+		var response protocol.Response
+		if err := json.NewDecoder(conn).Decode(&response); err != nil {
+			t.Fatal(err)
+		}
+		answer := response.SenderModelCallResult
+		if !response.Ok || answer == nil || answer.Error != nil || protocol.Deref(answer.Text) != "answered" {
+			t.Fatalf("paired call failed: %+v", response)
+		}
+		if task.Model != answer.Model {
+			t.Fatalf("model selection in harness = %q, wire = %q", task.Model, answer.Model)
+		}
+		return answer.Model
+	}
+	checkCatalog()
+	if model := call(); model != chosen {
+		t.Fatalf("before failure, model = %q, want %q", model, chosen)
+	}
+	claude := filepath.Join(bin, "claude")
+	if err := os.Rename(claude, claude+"-saved"); err != nil {
+		t.Fatal(err)
+	}
+	if failed := harnessCatalog(app, "claude", true); failed.Success || failed.Error == nil {
+		t.Fatalf("Settings refresh while Claude is absent = %+v, want failure", failed)
+	}
+	if err := os.Rename(claude+"-saved", claude); err != nil {
+		t.Fatal(err)
+	}
+	for attempt := range 2 {
+		if model := call(); model != chosen {
+			t.Errorf("after executable recovery, call %d uses %q, want saved light override %q", attempt+1, model, chosen)
+		}
+	}
+	checkCatalog()
+	if model := call(); model != chosen {
+		t.Errorf("after another Settings refresh, model = %q, want %q", model, chosen)
 	}
 }

@@ -100,6 +100,20 @@ func TestAServerQuestionTheUserHandledStaysHandledThroughReconnectsAndRestarts(t
 	stillHandled("after a daemon restart")
 }
 
+func TestAModelReadBeforeAPluginReregistersAfterARestartDoesNotOutliveTheRegistration(t *testing.T) {
+	w := newWorld(t, fakeagent.SampleServer)
+	registerSampleServerDriver(t, w, w.App())
+	w.restart()
+	app := w.App()
+	if early := harnessCatalog(app, "sample-server", false); early.Success {
+		t.Fatalf("models before the plugin registered = %+v, want the server binding unavailable", early)
+	}
+	registerSampleServerDriver(t, w, app)
+	if models := harnessCatalog(app, "sample-server", false); !models.Success || len(models.Models) == 0 {
+		t.Fatalf("models after the plugin registered = %+v, want the server's models without a Refresh", models)
+	}
+}
+
 func TestClosingAServerSessionLeavesItsRunGoingForAReopen(t *testing.T) {
 	closes := map[string]func(app *testworld.Peer, session string, view *fakeagent.Run){
 		"the view exits":     func(_ *testworld.Peer, _ string, view *fakeagent.Run) { view.Exit(0) },
