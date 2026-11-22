@@ -24,15 +24,11 @@ func ComposeYieldInput(lastMessage string, runningBackgroundTasks []string) stri
 
 const MaxTurns = 2
 
-const DefaultClaudeClassifierModel = "haiku"
-
 var verdictLineRegex = sync.OnceValue(func() *regexp.Regexp {
 	return regexp.MustCompile(`(?i)^\s*(?:VERDICT\s*[:=]\s*)?(WAITING_INPUT|WAITING|DONE|IDLE|PARKED)(?:\s*(?:[-:]\s+.*|\([^)]*\)|[.!?]))?\s*$`)
 })
 
 const classifierLogSnippetMaxChars = 600
-
-const DefaultCodexClassifierModel = "gpt-5.6-luna"
 
 func BuildPrompt(text string) string {
 	return prompts.RenderText("turn-classifier", "classify", prompts.Values{"message": text})

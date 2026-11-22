@@ -214,18 +214,8 @@ func (d *Daemon) classifierChoice(ctx context.Context, id harness.ID) harness.Mo
 	if effort := strings.TrimSpace(strings.ToLower(os.Getenv(env + "REASONING_EFFORT"))); effort != "" {
 		choice.Effort = effort
 	}
-	choice.Model = d.resolveTierModel(ctx, id, modeltiers.Light, os.Getenv(env+"MODEL"), d.lightFallback(id, classifierFallbackModel(id)))
+	choice.Model = d.resolveTierModel(ctx, id, modeltiers.Light, os.Getenv(env+"MODEL"), d.factsOrNone(id).Tiers[modeltiers.Light].Model)
 	return choice
-}
-
-func classifierFallbackModel(id harness.ID) string {
-	switch id {
-	case "claude":
-		return classifier.DefaultClaudeClassifierModel
-	case "codex":
-		return classifier.DefaultCodexClassifierModel
-	}
-	return ""
 }
 
 func (d *Daemon) updateEvidence(sessionID protocol.SessionID, unchanged func(*sessionmonitor.Evidence) bool, mutate func(*sessionmonitor.Evidence)) bool {

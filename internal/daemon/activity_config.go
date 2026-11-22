@@ -15,11 +15,6 @@ import (
 const sessionActivityKind = "session_activity"
 
 const (
-	activityClaudeDefaultModel = "claude-haiku-4-5"
-	activityCodexDefaultModel  = "gpt-5.6-luna"
-)
-
-const (
 	defaultActivityWatchingSeconds = 120
 	defaultActivityPresentSeconds  = 300
 	activityIntervalMinSeconds     = 30
@@ -33,10 +28,9 @@ const (
 )
 
 type activityConfig struct {
-	Agent    string `json:"agent"`
-	Model    string `json:"model"`
-	Effort   string `json:"effort,omitempty"`
-	fallback string
+	Agent  string `json:"agent"`
+	Model  string `json:"model"`
+	Effort string `json:"effort,omitempty"`
 }
 
 func (d *Daemon) parseActivityConfig(raw string) (activityConfig, error) {
@@ -62,8 +56,7 @@ func (d *Daemon) parseActivityConfig(raw string) (activityConfig, error) {
 		return activityConfig{}, d.activityAgentUnset()
 	}
 
-	config.fallback = d.lightFallback(config.Agent, activityFallbackModel(config.Agent))
-	if config.Model == "" && config.fallback == "" {
+	if config.Model == "" && d.factsOrNone(config.Agent).Tiers[modeltiers.Light].Model == "" {
 		return activityConfig{}, fmt.Errorf("session activity requires a model for agent %s", config.Agent)
 	}
 	if config.Effort == "" {
@@ -81,16 +74,6 @@ func (d *Daemon) parseActivityConfig(raw string) (activityConfig, error) {
 
 func (d *Daemon) activityAgentUnset() error {
 	return fmt.Errorf("session activity has no agent selected: choose %s", strings.Join(d.modelCallHarnesses(), " or "))
-}
-
-func activityFallbackModel(agent string) string {
-	switch agent {
-	case "claude":
-		return activityClaudeDefaultModel
-	case "codex":
-		return activityCodexDefaultModel
-	}
-	return ""
 }
 
 func (d *Daemon) validateActivitySetting(raw string) error {

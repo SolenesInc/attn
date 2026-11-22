@@ -234,7 +234,7 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	if err != nil {
 		return nil, err
 	}
-	config.Model = d.resolveTierModel(ctx, config.Agent, modeltiers.Light, config.Model, config.fallback)
+	config.Model = d.resolveTierModel(ctx, config.Agent, modeltiers.Light, config.Model, d.factsOrNone(config.Agent).Tiers[modeltiers.Light].Model)
 
 	prompt := activity.Render(activity.Input{
 		State:       string(session.State),

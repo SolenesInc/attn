@@ -196,18 +196,7 @@ func sessionAutoTitleEnabled() bool {
 
 func (d *Daemon) sessionTitleModel(ctx context.Context, agent string) string {
 	explicit := os.Getenv("ATTN_" + strings.ToUpper(agent) + "_TITLE_MODEL")
-	return d.resolveTierModel(ctx, agent, modeltiers.Light, explicit, d.lightFallback(agent, fallbackSessionTitleModel(agent)))
-}
-
-func fallbackSessionTitleModel(agent string) string {
-	switch agent {
-	case "claude":
-		return "haiku"
-	case "codex":
-		return "gpt-5.6-luna"
-	default:
-		return ""
-	}
+	return d.resolveTierModel(ctx, agent, modeltiers.Light, explicit, d.factsOrNone(agent).Tiers[modeltiers.Light].Model)
 }
 
 func (d *Daemon) bindMonitorTitle(monitor *sessionmonitor.Monitor) {

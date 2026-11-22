@@ -6,8 +6,6 @@ internal/automation/automation.go	StarterDefinition	names "codex"
 internal/automation/automation.go	refuseCodexExecutable	names "codex"
 internal/crew/crew.go	(Member).LaunchAgent	names "claude"
 internal/crew/crew.go	DefaultAgent	names "claude"
-internal/daemon/activity_config.go	activityFallbackModel	names "claude"
-internal/daemon/activity_config.go	activityFallbackModel	names "codex"
 internal/daemon/agent_catalog.go	(*Daemon).agentCatalog	reaches field Agent (internal/daemon/plugin_driver.go)
 internal/daemon/agent_catalog.go	(*Daemon).agentCatalog	reaches field PluginName (internal/daemon/plugin_driver.go)
 internal/daemon/agent_catalog.go	(*Daemon).agentCatalog	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
@@ -72,8 +70,6 @@ internal/daemon/monitor_apply.go	(*monitorHome).apply	reaches Daemon.claudeMod (
 internal/daemon/monitor_apply.go	(*monitorHome).apply	reaches claudeMod (internal/daemon/claude_mod.go)
 internal/daemon/monitor_apply.go	(*monitorHome).apply	reaches claudeMod.placeReturned (internal/daemon/claude_mod_link.go)
 internal/daemon/monitor_home_calls.go	(*Daemon).classifierHarness	names "claude"
-internal/daemon/monitor_home_calls.go	classifierFallbackModel	names "claude"
-internal/daemon/monitor_home_calls.go	classifierFallbackModel	names "codex"
 internal/daemon/monitor_leaves.go	(*Daemon).registerMonitorParts	reaches Daemon.readClaudeModReach (internal/daemon/claude_mod.go)
 internal/daemon/monitor_leaves.go	(*Daemon).registerMonitorParts	reaches Daemon.receiveClaudeModReachReport (internal/daemon/claude_mod.go)
 internal/daemon/monitor_leaves.go	(*Daemon).renameLink	reaches Daemon.renameLinkedConversation (internal/daemon/link_runtime.go)
@@ -129,8 +125,6 @@ internal/daemon/session_instructions.go	(*Daemon).runSessionInstructions	names "
 internal/daemon/session_instructions.go	(daemonSessionInstructionsModel).Run	names "codex"
 internal/daemon/session_title.go	(*Daemon).titleProviderAgent	names "claude"
 internal/daemon/session_title.go	(*Daemon).titleProviderAgent	names "codex"
-internal/daemon/session_title.go	fallbackSessionTitleModel	names "claude"
-internal/daemon/session_title.go	fallbackSessionTitleModel	names "codex"
 internal/daemon/spawn_pipeline.go	(*Daemon).buildAgentSpawnLaunch	reaches field Agent (internal/daemon/plugin_driver.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).buildAgentSpawnLaunch	reaches field CWD (internal/daemon/plugin_driver.go)
 internal/daemon/spawn_pipeline.go	(*Daemon).buildAgentSpawnLaunch	reaches field Capabilities (internal/daemon/plugin_driver.go)

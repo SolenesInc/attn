@@ -96,7 +96,7 @@ func TestInvalidTierOverridesAreRefusedAndKeepTheSavedMapping(t *testing.T) {
 	}
 }
 
-func TestActivityUsesItsFallbackWhenModelDiscoveryFails(t *testing.T) {
+func TestActivityUsesTheLightTierWhenModelDiscoveryFails(t *testing.T) {
 	w, app, _, session, agent := watchedActivityWorld(t)
 	t.Setenv("ATTN_CLAUDE_EXECUTABLE", "")
 	executable := filepath.Join(t.TempDir(), "failing-discovery")
@@ -107,8 +107,8 @@ func TestActivityUsesItsFallbackWhenModelDiscoveryFails(t *testing.T) {
 	setSetting(t, app, "claude_executable", executable)
 	activityTurn(t, w, app, agent, session, "continue the tests", "The tests are running.")
 	task := w.HeadlessTask()
-	if task.Model != "claude-haiku-4-5" {
-		t.Errorf("activity with failed discovery used %q, want the existing fallback", task.Model)
+	if task.Model != "haiku" {
+		t.Errorf("activity with failed discovery used %q, want Claude Code's light tier", task.Model)
 	}
 	task.Answer("Running tests")
 	awaitActivity(app, session, "Running tests")
