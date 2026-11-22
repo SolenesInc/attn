@@ -171,6 +171,26 @@ func TestAPluginServerDeclarationRejectsUnknownProtocolsCapabilitiesAndOwners(t 
 	}
 }
 
+func TestARefusedServerRegistrationLeavesTheHarnessToTheDriverAttnAccepts(t *testing.T) {
+	w := newWorld(t, fakeagent.SampleServer)
+	rival := dialDriver(t, w, "rival")
+	refused := rival.call("driver.register", map[string]any{"agent": serverPluginAgent, "capabilities": map[string]bool{"server_binding": true}, "server": serverDriverDeclaration(w), "logo": map[string]any{"view": 0, "body": "<path/>"}}, nil)
+	if !errorSays(refused, "view") {
+		t.Fatalf("a server registration with a flat logo = %v, want it refused naming the view", refused)
+	}
+	registerTerminalDriver := func(when string) {
+		t.Helper()
+		owner := dialDriver(t, w, "owner")
+		if err := owner.call("driver.register", map[string]any{"agent": serverPluginAgent, "capabilities": map[string]bool{"initial_prompt": true}}, &owner.registered); err != nil {
+			t.Fatalf("%s, a terminal driver for the harness the refused plugin named = %v, want it accepted", when, err)
+		}
+		awaitDriverAvailable(w.App(), serverPluginAgent)
+	}
+	registerTerminalDriver("after the refusal")
+	w.restart()
+	registerTerminalDriver("after a daemon restart")
+}
+
 func TestAPluginServerHandshakeMismatchFailsBeforeLaunchingAView(t *testing.T) {
 	w := newWorld(t, fakeagent.SampleServer)
 	app := w.App()

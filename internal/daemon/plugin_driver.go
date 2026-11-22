@@ -215,7 +215,7 @@ type pendingPluginReport struct {
 	Transcript *pluginReportTranscriptPathParams
 }
 
-func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginDriverRegisterParams) error {
+func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginDriverRegisterParams, bindServer func() error) error {
 	agent := normalizePluginAgent(params.Agent)
 	if agent == "" {
 		return errors.New("driver.register params.agent must contain lowercase letters, numbers, hyphens, or underscores")
@@ -240,6 +240,9 @@ func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginD
 	}
 	if existing, exists := r.drivers[agent]; exists && existing.PluginName != plugin.name {
 		return fmt.Errorf("agent %q is already registered by plugin %q", agent, existing.PluginName)
+	}
+	if err := bindServer(); err != nil {
+		return err
 	}
 	r.drivers[agent] = pluginDriverRegistration{
 		PluginName:   plugin.name,

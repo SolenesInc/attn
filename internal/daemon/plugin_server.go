@@ -59,9 +59,6 @@ func (d *Daemon) registerPluginDriver(plugin *pluginConnection, params pluginDri
 	if len(params.SkillDirs) > 0 {
 		d.ensureEnabledWorkflowSkillsIn(d.pluginSkillsDirs(params.SkillDirs))
 	}
-	if existing, exists := registry.driver(agent); exists && existing.PluginName != plugin.name {
-		return fmt.Errorf("agent %q is already registered by plugin %q", agent, existing.PluginName)
-	}
 	claim := func() error {
 		for _, run := range d.store.ListActiveAgentDriverRuns() {
 			if session := d.store.Get(run.SessionID); session != nil && session.Agent == agent && run.PluginName != plugin.name {
@@ -70,10 +67,8 @@ func (d *Daemon) registerPluginDriver(plugin *pluginConnection, params pluginDri
 		}
 		return d.store.ClaimPluginServer(agent, plugin.name)
 	}
-	if err := d.appServer.Bind(d.pluginServerBinding(agent, plugin.name, params.Server), claim); err != nil {
-		return err
-	}
-	return registry.registerDriver(plugin, params)
+	bind := func() error { return d.appServer.Bind(d.pluginServerBinding(agent, plugin.name, params.Server), claim) }
+	return registry.registerDriver(plugin, params, bind)
 }
 
 func (d *Daemon) pluginServerBinding(agent, plugin string, declaration *appserver.Declaration) appserver.Binding {
