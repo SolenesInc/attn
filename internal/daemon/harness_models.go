@@ -27,32 +27,33 @@ type harnessDiscovery struct {
 	Err     error
 }
 
-func (d *Daemon) loadHarnessModels(ctx context.Context, harness string, refresh bool) (harnessModelCatalog, error) {
+func (d *Daemon) loadHarnessModels(ctx context.Context, harness string, refresh bool) (catalog harnessModelCatalog, cached bool, err error) {
 	if err := ctx.Err(); err != nil {
-		return harnessModelCatalog{}, err
+		return harnessModelCatalog{}, false, err
 	}
 	if err := delegationprefs.ValidateSelection(delegationprefs.Selection{Harness: harness}, true); err != nil {
-		return harnessModelCatalog{}, err
+		return harnessModelCatalog{}, false, err
 	}
 	h := d.harnessOf(harness)
 	key := harness + "\x00" + d.setting(executableSetting(harness))
 	if refresh {
 		d.harnessModelCatalogs.Delete(key)
+		d.harnessModelQueries.Forget(key)
 	}
-	if cached, ok := d.harnessModelCatalogs.Load(key); ok {
-		entry := cached.(harnessDiscovery)
-		return entry.Catalog, entry.Err
+	if stored, ok := d.harnessModelCatalogs.Load(key); ok {
+		entry := stored.(harnessDiscovery)
+		return entry.Catalog, true, entry.Err
 	}
 	flight := d.harnessModelQueries.DoChan(key, func() (any, error) {
 		var entry harnessDiscovery
 		if !d.life.Do("harness model discovery", func() {
-			if cached, ok := d.harnessModelCatalogs.Load(key); ok {
-				entry = cached.(harnessDiscovery)
+			if stored, ok := d.harnessModelCatalogs.Load(key); ok {
+				entry = stored.(harnessDiscovery)
 				return
 			}
 			reachable := h.Health(d.life.Context()).Installation != harnessapi.Missing
 			entry.Catalog, entry.Err = d.queryHarnessModels(harness, h)
-			if reachable && !awaitsSignIn(entry.Catalog) {
+			if reachable {
 				d.harnessModelCatalogs.Store(key, entry)
 			}
 		}) {
@@ -62,13 +63,13 @@ func (d *Daemon) loadHarnessModels(ctx context.Context, harness string, refresh 
 	})
 	select {
 	case <-ctx.Done():
-		return harnessModelCatalog{}, ctx.Err()
+		return harnessModelCatalog{}, false, ctx.Err()
 	case result := <-flight:
 		if result.Err != nil {
-			return harnessModelCatalog{}, result.Err
+			return harnessModelCatalog{}, false, result.Err
 		}
 		entry := result.Val.(harnessDiscovery)
-		return entry.Catalog, entry.Err
+		return entry.Catalog, false, entry.Err
 	}
 }
 
@@ -116,12 +117,8 @@ func (d *Daemon) invalidateHarnessModels(harness string) {
 	})
 }
 
-func (d *Daemon) discoverHarnessModels(ctx context.Context, harness string) (harnessModelCatalog, error) {
-	return d.harnessModels(ctx, harness, false)
-}
-
 func (d *Daemon) harnessModels(ctx context.Context, harness string, refresh bool) (harnessModelCatalog, error) {
-	catalog, err := d.loadHarnessModels(ctx, harness, refresh)
+	catalog, _, err := d.loadHarnessModels(ctx, harness, refresh)
 	if err != nil {
 		return harnessModelCatalog{}, err
 	}
@@ -173,12 +170,6 @@ func (d *Daemon) resolveTierModel(ctx context.Context, harness string, tier mode
 	return fallback
 }
 
-func awaitsSignIn(catalog harnessModelCatalog) bool {
-	return slices.ContainsFunc(catalog.Models, func(m protocol.HarnessModel) bool {
-		return m.Access == protocol.ModelCapabilitySupportUnsupported
-	})
-}
-
 func oneShotModels(models []protocol.HarnessModel) []protocol.HarnessModel {
 	return slices.DeleteFunc(slices.Clone(models), func(m protocol.HarnessModel) bool {
 		return m.OneShot == protocol.ModelCapabilitySupportUnsupported
@@ -189,20 +180,50 @@ func (d *Daemon) oneShotModelRefused(ctx context.Context, agent, model string) e
 	if model == "" {
 		return nil
 	}
-	catalog, err := d.harnessModels(ctx, agent, false)
-	if err != nil {
+	m, listed, err := d.harnessModel(ctx, agent, model, func(m protocol.HarnessModel) bool {
+		return m.OneShot != protocol.ModelCapabilitySupportUnsupported && signedOut(m)
+	})
+	if err != nil || !listed {
 		return nil
 	}
-	provider, id, qualified := strings.Cut(model, "/")
-	if !qualified {
-		provider, id = "", model
-	}
-	for _, m := range catalog.Models {
-		if m.ID == id && m.Provider == provider && (m.OneShot == protocol.ModelCapabilitySupportUnsupported || m.Access == protocol.ModelCapabilitySupportUnsupported) {
-			return fmt.Errorf("%s cannot answer a background call; choose a model of another provider", model)
-		}
+	if m.OneShot == protocol.ModelCapabilitySupportUnsupported || m.Access == protocol.ModelCapabilitySupportUnsupported {
+		return fmt.Errorf("%s cannot answer a background call; choose a model of another provider", model)
 	}
 	return nil
+}
+
+func (d *Daemon) harnessModel(ctx context.Context, agent, qualified string, recheck func(protocol.HarnessModel) bool) (protocol.HarnessModel, bool, error) {
+	return listedRechecked(func(refresh bool) (protocol.HarnessModel, bool, bool, error) {
+		catalog, cached, err := d.loadHarnessModels(ctx, agent, refresh)
+		if err != nil {
+			return protocol.HarnessModel{}, false, false, err
+		}
+		i := slices.IndexFunc(catalog.Models, func(m protocol.HarnessModel) bool { return qualifiedModel(m.Provider, m.ID) == qualified })
+		if i < 0 {
+			return protocol.HarnessModel{}, false, cached, nil
+		}
+		return catalog.Models[i], true, cached, nil
+	}, recheck)
+}
+
+func listedRechecked(read func(refresh bool) (model protocol.HarnessModel, listed, cached bool, err error), recheck func(protocol.HarnessModel) bool) (protocol.HarnessModel, bool, error) {
+	model, listed, cached, err := read(false)
+	if err != nil || !listed || !cached || !recheck(model) {
+		return model, listed, err
+	}
+	model, listed, _, err = read(true)
+	return model, listed, err
+}
+
+func signedOut(m protocol.HarnessModel) bool {
+	return m.Access == protocol.ModelCapabilitySupportUnsupported
+}
+
+func qualifiedModel(provider, model string) string {
+	if provider == "" {
+		return model
+	}
+	return provider + "/" + model
 }
 
 func (d *Daemon) handleHarnessModels(client *wsClient, msg *protocol.HarnessModelsMessage) {

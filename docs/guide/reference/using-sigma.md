@@ -51,7 +51,9 @@ refuses its registration, because Attn has the harness of that name.
   with `~/`.
 - The model pickers list the models of every provider the Sigma server has, as
   `provider/model`. The models of a provider you are not signed in to show
-  disabled. To list the models, Attn starts the server if none runs.
+  disabled. After you sign in, in Sigma or elsewhere such as Claude Code, press
+  **Refresh** in the picker or on Sigma's card in **Settings → Models** to list
+  them. To list the models, Attn starts the server if none runs.
   Attn stops using the server when no Sigma session is open.
 - Attn starts the Sigma server with `sigma serve` in a terminal of its own the
   first time a session needs the server, so the server keeps running through

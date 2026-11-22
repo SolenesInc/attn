@@ -273,7 +273,7 @@ func (d *Daemon) readAgentCatalog(ctx context.Context, msg protocol.AgentCatalog
 	}
 	result := protocol.AgentCatalogResult{Machine: name, Harnesses: d.delegationHarnesses()}
 	if agent := protocol.Deref(msg.ModelsFor); agent != "" {
-		catalog, err := d.discoverHarnessModels(ctx, agent)
+		catalog, err := d.harnessModels(ctx, agent, protocol.Deref(msg.RefreshModels))
 		if err != nil {
 			return result, err
 		}

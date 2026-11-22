@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "d989c0458c0d";
+pub const PROTOCOL_VERSION: &str = "ddc3fa97e357";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -63,6 +63,8 @@ pub struct AgentCatalogMessage {
     pub host: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub models_for: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refresh_models: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
 }

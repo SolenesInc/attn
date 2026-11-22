@@ -67,6 +67,9 @@ type AgentCatalogMessage struct {
 	// ModelsFor corresponds to the JSON schema field "models_for".
 	ModelsFor *string `json:"models_for,omitempty,omitzero"`
 
+	// RefreshModels corresponds to the JSON schema field "refresh_models".
+	RefreshModels *bool `json:"refresh_models,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 }

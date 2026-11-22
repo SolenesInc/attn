@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -174,6 +175,36 @@ func TestAProviderSignedInAfterSigmaListedItsModelsAnswersBackgroundCalls(t *tes
 		if m.Provider == "openai-work" && m.Access == protocol.ModelCapabilitySupportUnsupported {
 			t.Fatalf("after signing in, Sigma's catalog still refuses %s/%s", m.Provider, m.ID)
 		}
+	}
+}
+
+func TestRefreshOffersTheModelsOfAProviderSignedInWhileSigmaRuns(t *testing.T) {
+	w := newTitlingWorld(t, fakeagent.Sigma)
+	w.ServeProvidersAtNextBoot(
+		fakeagent.ServerProvider{ID: "claude", Status: "signed_out", Models: sigmaClaudeModels, Ephemeral: sigmaAnswers},
+		fakeagent.ServerProvider{ID: "openai-work", Status: "ready", Models: sigmaChatGPTModels, Ephemeral: sigmaAnswers},
+	)
+	app := w.TrustedApp()
+	setSetting(t, app, "sigma_enabled", "true")
+	claudeAccess := func(refresh bool) []protocol.ModelCapabilitySupport {
+		var access []protocol.ModelCapabilitySupport
+		for _, m := range harnessCatalog(app, "sigma", refresh).Models {
+			if m.Provider == "claude" {
+				access = append(access, m.Access)
+			}
+		}
+		return access
+	}
+	if access := claudeAccess(false); !slices.Contains(access, protocol.ModelCapabilitySupportUnsupported) {
+		t.Fatalf("before signing in, Sigma's Claude models have access %v, want them refused", access)
+	}
+
+	w.AppServer(fakeagent.Sigma).SignIn("claude")
+	if access := claudeAccess(true); len(access) == 0 || slices.Contains(access, protocol.ModelCapabilitySupportUnsupported) {
+		t.Fatalf("after signing in and pressing Refresh, Sigma's Claude models have access %v, want them offered", access)
+	}
+	for _, key := range []string{"activity.config", "garden.advisor"} {
+		setSetting(t, app, key, `{"agent":"sigma","model":"claude/haiku"}`)
 	}
 }
 

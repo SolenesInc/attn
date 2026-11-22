@@ -94,6 +94,16 @@ measurement uses that one.
   2026-11-22 on 30eaeca with a scratch home: the bundled `openai` with no
   sign-in was `signed_out`, an `openai-work` signed in to a fake ChatGPT was
   `ready`, and `claude` and `agy` with missing executables were `unavailable`.
+- `providers/list` and `models/list` take `refresh`. A Claude provider's
+  health and models come from one Claude Code start, kept until a call with
+  `refresh: true` or a sign-in through Sigma, so a sign-in through Claude Code
+  stays `signed_out` until then. ChatGPT reads its stored sign-in on every
+  call, and `models/list` with `refresh` fetches its catalog again
+  (`packages/claude/src/account.ts`, `packages/models/src/chatgpt/index.ts`,
+  read at 9fbd582). Measured 2026-11-22 on 9fbd582 with a scratch home, a
+  signed-out bundled Claude Code and a signed-out `openai`: the first
+  `providers/list` took 1.1 s, a repeat 1 ms, and each `refresh: true` call to
+  either method 0.8 to 1.0 s.
 - `status/watch` opens with the busy conversation trees and then sends one
   status per change of a tree (working, waiting on an approval, idle), with
   how its root's run ended. Subagents are part of their root's tree.

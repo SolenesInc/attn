@@ -124,12 +124,12 @@ func (h sigmaHarness) Models(ctx context.Context) (harness.Models, error) {
 	if server == nil {
 		return noModelDiscovery, nil
 	}
-	models, err := server.harnessModels(ctx)
+	models, err := server.harnessModels(ctx, true)
 	if err != nil {
 		return harness.Models{}, err
 	}
 	var providers []sigmaProvider
-	if err := server.call(ctx, "providers/list", map[string]any{}, &providers); err != nil {
+	if err := server.call(ctx, "providers/list", refreshParams(true), &providers); err != nil {
 		return harness.Models{}, err
 	}
 	byID := map[string]sigmaProvider{}

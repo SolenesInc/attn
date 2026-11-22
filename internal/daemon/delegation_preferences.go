@@ -207,21 +207,25 @@ func (d *Daemon) resolveDelegationPreferences(msg *protocol.DelegateMessage, hos
 		return nil, err
 	}
 	if s.Model != "" {
-		catalog, err := Call[protocol.AgentCatalogResult](context.Background(), d.router(), protocol.AgentCatalogMessage{Cmd: protocol.CmdAgentCatalog, Host: host, ModelsFor: &s.Harness})
+		m, listed, err := listedRechecked(func(refresh bool) (protocol.HarnessModel, bool, bool, error) {
+			catalog, err := Call[protocol.AgentCatalogResult](context.Background(), d.router(), protocol.AgentCatalogMessage{Cmd: protocol.CmdAgentCatalog, Host: host, ModelsFor: &s.Harness, RefreshModels: protocol.Ptr(refresh)})
+			if err != nil {
+				return protocol.HarnessModel{}, false, false, fmt.Errorf("validate selected model: %w", err)
+			}
+			i := slices.IndexFunc(catalog.Models, func(m protocol.HarnessModel) bool { return m.ID == s.Model && m.Provider == s.Provider })
+			if i < 0 {
+				return protocol.HarnessModel{}, false, true, nil
+			}
+			return catalog.Models[i], true, true, nil
+		}, signedOut)
 		if err != nil {
-			return nil, fmt.Errorf("validate selected model: %w", err)
+			return nil, err
 		}
-		for _, m := range catalog.Models {
-			if m.ID != s.Model || m.Provider != s.Provider {
-				continue
-			}
-			if m.Access == protocol.ModelCapabilitySupportUnsupported {
-				return nil, fmt.Errorf("model %q is unavailable: %s", s.Model, m.Detail)
-			}
-			if s.Effort != "" && (m.EffortSupport == protocol.ModelCapabilitySupportUnsupported || (len(m.EffortLevels) > 0 && !slices.Contains(m.EffortLevels, s.Effort))) {
-				return nil, fmt.Errorf("model %q does not support effort %q", s.Model, s.Effort)
-			}
-			break
+		if listed && signedOut(m) {
+			return nil, fmt.Errorf("model %q is unavailable: %s", s.Model, m.Detail)
+		}
+		if listed && s.Effort != "" && (m.EffortSupport == protocol.ModelCapabilitySupportUnsupported || (len(m.EffortLevels) > 0 && !slices.Contains(m.EffortLevels, s.Effort))) {
+			return nil, fmt.Errorf("model %q does not support effort %q", s.Model, s.Effort)
 		}
 	}
 	latest, err := d.store.GetDelegationPreferences()

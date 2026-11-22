@@ -3376,6 +3376,7 @@ model AgentCatalogMessage {
   cmd: "agent_catalog";
   host: string;
   models_for?: string;
+  refresh_models?: boolean;
   request_id?: string;
 }
 model AgentCatalogResult {

@@ -232,7 +232,7 @@ func pluginSignals(declared map[string]bool) harness.Signals {
 
 func (h pluginHarness) Models(ctx context.Context) (harness.Models, error) {
 	if server := h.d.serverLinkFor(h.reg.Agent); server != nil {
-		return server.harnessModels(ctx)
+		return server.harnessModels(ctx, false)
 	}
 	if h.reg.PluginName == "" {
 		return harness.Models{}, fmt.Errorf("harness %q is not available", h.reg.Agent)

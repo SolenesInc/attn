@@ -150,12 +150,19 @@ type serverProviderModels struct {
 
 var noModelDiscovery = harness.Models{Detail: "This harness does not expose model discovery. Add an exact model or use its default."}
 
-func (l *serverLink) harnessModels(ctx context.Context) (harness.Models, error) {
-	models, err := l.models(ctx)
+func (l *serverLink) harnessModels(ctx context.Context, refresh bool) (harness.Models, error) {
+	models, err := l.models(ctx, refresh)
 	if err != nil {
 		return harness.Models{}, err
 	}
 	return harness.Models{List: models, Detail: "Models of the providers the " + l.b.name + " server has."}, nil
+}
+
+func refreshParams(refresh bool) map[string]any {
+	if refresh {
+		return map[string]any{"refresh": true}
+	}
+	return map[string]any{}
 }
 
 func (l *serverLink) call(ctx context.Context, method string, params, answer any) error {
@@ -171,9 +178,9 @@ func (l *serverLink) call(ctx context.Context, method string, params, answer any
 	return c.Call(ctx, method, params, answer)
 }
 
-func (l *serverLink) models(ctx context.Context) ([]protocol.HarnessModel, error) {
+func (l *serverLink) models(ctx context.Context, refresh bool) ([]protocol.HarnessModel, error) {
 	var providers []serverProviderModels
-	if err := l.call(ctx, "models/list", map[string]any{}, &providers); err != nil {
+	if err := l.call(ctx, "models/list", refreshParams(refresh), &providers); err != nil {
 		return nil, err
 	}
 	var models []protocol.HarnessModel

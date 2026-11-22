@@ -582,25 +582,18 @@ func (d *Daemon) validateCrewLaunchSelection(member crew.Member, requireAvailabl
 	if member.Model == "" || !harness.Discovery || !harness.Available() {
 		return nil
 	}
-	catalog, err := d.discoverHarnessModels(context.Background(), agent)
+	model, listed, err := d.harnessModel(context.Background(), agent, member.Model, signedOut)
 	if err != nil {
 		return fmt.Errorf("validate model %q: %w", member.Model, err)
 	}
-	for _, model := range catalog.Models {
-		modelID := model.ID
-		if model.Provider != "" {
-			modelID = model.Provider + "/" + model.ID
-		}
-		if modelID != member.Model {
-			continue
-		}
-		if model.Access == protocol.ModelCapabilitySupportUnsupported {
-			return fmt.Errorf("model %q is unavailable: %s", member.Model, model.Detail)
-		}
-		if member.Effort != "" && (model.EffortSupport == protocol.ModelCapabilitySupportUnsupported || (len(model.EffortLevels) > 0 && !slices.Contains(model.EffortLevels, member.Effort))) {
-			return fmt.Errorf("model %q does not support effort %q", member.Model, member.Effort)
-		}
-		break
+	if !listed {
+		return nil
+	}
+	if signedOut(model) {
+		return fmt.Errorf("model %q is unavailable: %s", member.Model, model.Detail)
+	}
+	if member.Effort != "" && (model.EffortSupport == protocol.ModelCapabilitySupportUnsupported || (len(model.EffortLevels) > 0 && !slices.Contains(model.EffortLevels, member.Effort))) {
+		return fmt.Errorf("model %q does not support effort %q", member.Model, member.Effort)
 	}
 	return nil
 }

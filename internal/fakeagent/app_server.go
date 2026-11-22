@@ -290,6 +290,7 @@ type appServer struct {
 	refuseMCP   string
 	answers     int
 	providers   []ServerProvider
+	healthRead  map[string]string
 	ephemeral   map[ephemeralKey]*rpcPeer
 }
 
@@ -453,6 +454,7 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		Client       string           `json:"client"`
 		After        map[string]int64 `json:"after"`
 		Steer        *bool            `json:"steer"`
+		Refresh      bool             `json:"refresh"`
 	}
 	_ = json.Unmarshal(raw, &p)
 	if p.Steer != nil && !s.flavor.steers {
@@ -488,9 +490,17 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		}
 		return models, ""
 	case "providers/list":
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.healthRead == nil || p.Refresh {
+			s.healthRead = map[string]string{}
+			for _, provider := range s.providers {
+				s.healthRead[provider.ID] = provider.Status
+			}
+		}
 		snapshots := []map[string]any{}
 		for _, p := range s.providers {
-			snapshot := map[string]any{"id": p.ID, "driver": p.ID, "signIn": []string{}, "health": map[string]any{"status": p.Status, "checkedAt": 0}}
+			snapshot := map[string]any{"id": p.ID, "driver": p.ID, "signIn": []string{}, "health": map[string]any{"status": s.healthRead[p.ID], "checkedAt": 0}}
 			if p.Ephemeral != nil {
 				snapshot["ephemeral"] = *p.Ephemeral
 			}
