@@ -44,6 +44,16 @@ func (d *Daemon) consumeTerminalExitIntent(id harness.TerminalID, intent termina
 	return true
 }
 
+func recordedLegacyExecutable(agent string, params ptybackend.SessionLaunchParams) string {
+	switch agent {
+	case string(protocol.SessionAgentClaude):
+		return params.ClaudeExecutable
+	case string(protocol.SessionAgentCodex):
+		return params.CodexExecutable
+	}
+	return ""
+}
+
 func withLifecycleID(opts ptybackend.SpawnOptions) ptybackend.SpawnOptions {
 	if opts.LifecycleID == "" {
 		opts.LifecycleID = uuid.NewString()
@@ -476,8 +486,9 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 	executionTarget := ""
 	if intent, ok := d.store.LaunchIntent(sessionID); ok {
 		params.Executable = intent.Executable
-		params.ClaudeExecutable, params.CodexExecutable = "", ""
 		executionTarget = intent.ExecutionTarget
+	} else if params.Executable == "" {
+		params.Executable = recordedLegacyExecutable(agent, params)
 	}
 	opts := ptybackend.SpawnOptions{
 		ID:               terminal,
@@ -491,8 +502,6 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		YoloMode:         params.YoloMode,
 		ApprovalRoute:    params.ApprovalRoute,
 		Executable:       params.Executable,
-		ClaudeExecutable: params.ClaudeExecutable,
-		CodexExecutable:  params.CodexExecutable,
 		Model:            params.Model,
 		Effort:           params.Effort,
 		ExecutionTarget:  executionTarget,
@@ -554,6 +563,7 @@ func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptyback
 		return nil, err
 	}
 	runID := uuid.NewString()
+	opts.LifecycleID = runID
 	params := pluginDriverSpawnParams{
 		Executable:      opts.Executable,
 		Agent:           reg.Agent,

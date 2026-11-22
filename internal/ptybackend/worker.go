@@ -502,12 +502,6 @@ func (b *WorkerBackend) spawnArgs(opts SpawnOptions, session *workerSession) ([]
 	if opts.Label != "" {
 		args = append(args, "--label", opts.Label)
 	}
-	if opts.ResumeSessionID != "" {
-		args = append(args, "--resume-session-id", opts.ResumeSessionID)
-	}
-	if opts.ResumePicker {
-		args = append(args, "--resume-picker")
-	}
 	if opts.YoloMode {
 		args = append(args, "--yolo-mode")
 	}

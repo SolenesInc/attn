@@ -197,7 +197,7 @@ func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile strin
 	if err != nil {
 		return err
 	}
-	installed, err := r.binary(configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
+	installed, err := r.binary(configuredLaunchExecutable(opts))
 	if err != nil {
 		return err
 	}
@@ -1082,7 +1082,7 @@ func (r *codexShared) terminalShowing(profile, conversation string) (harness.Ter
 
 func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) error {
 	dropRetiredAutomationExecutable(opts)
-	installed, err := r.binary(configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
+	installed, err := r.binary(configuredLaunchExecutable(opts))
 	if err != nil {
 		return err
 	}

@@ -60,6 +60,26 @@ func (d *Daemon) serverTerminalOf(agent string) func(string) harness.TerminalID 
 	return l.serverTerminal
 }
 
+func (d *Daemon) launchOnServerOrTerminal(req harness.LaunchRequest, agent harness.ID) (harness.Command, error) {
+	opts := d.launchSpawnOptions(req, agent)
+	l := d.linkFor(opts.Agent, req.Lifetime)
+	if l != nil {
+		if err := d.launchInLink(l, &opts, req); err != nil {
+			return harness.Command{}, err
+		}
+	}
+	server, onServer := l.(*serverLink)
+	var shared *agentdriver.SharedAgentTools
+	if onServer {
+		shared = server.clientAgentTools()
+	}
+	command, err := d.launchWithDriver(req, &opts, onServer, shared)
+	if err == nil && onServer {
+		command.Env = append(command.Env, server.homeEnv())
+	}
+	return command, err
+}
+
 func (d *Daemon) planOnServer(agent, plugin string, req harness.LaunchRequest) harness.Planned {
 	l := d.serverLinkFor(agent)
 	if l == nil || plugin != "" && l.b.plugin != plugin {
@@ -138,7 +158,7 @@ func (l *serverLink) homeEnv() string {
 func (l *serverLink) executable(opts *ptybackend.SpawnOptions) string {
 	if p := l.b.declaration.Load(); p != nil {
 		if opts != nil {
-			if configured := configuredLaunchExecutable(nil, opts); configured != "" {
+			if configured := configuredLaunchExecutable(opts); configured != "" {
 				return configured
 			}
 		}

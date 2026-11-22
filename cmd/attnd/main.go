@@ -95,8 +95,6 @@ func runPTYWorker() {
 	fs.StringVar(&cfg.Model, "model", "", "recorded agent model")
 	fs.StringVar(&cfg.Effort, "effort", "", "recorded reasoning effort")
 	fs.StringVar(&cfg.Label, "label", "", "session label")
-	fs.StringVar(&cfg.ResumeSessionID, "resume-session-id", "", "resume session id")
-	fs.BoolVar(&cfg.ResumePicker, "resume-picker", false, "resume picker")
 	fs.BoolVar(&cfg.YoloMode, "yolo-mode", false, "launch agent in yolo mode")
 	fs.StringVar(&approvalRoute, "approval-route", "", "effective approval route recorded for daemon recovery")
 	fs.StringVar(&cfg.ThemeForeground, "theme-foreground", "", "terminal foreground color seeded for OSC 10/11/12 queries")

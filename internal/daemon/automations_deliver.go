@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/harness"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -56,9 +57,9 @@ func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliver
 		persistErr = errors.Join(persistErr, err)
 	}
 	var fix *store.AutomationRunFix
-	var fixable *fixableAutomationDeliveryError
+	var fixable *harness.FixableError
 	if errors.As(deliveryErr, &fixable) {
-		fix = &fixable.fix
+		fix = &store.AutomationRunFix{Agent: string(fixable.Fix.Harness), Directory: fixable.Fix.Dir}
 	}
 	if err := d.store.MarkAutomationRunFailed(run.ID, deliveryErr.Error(), fix, diskFull, time.Now()); err != nil {
 		persistErr = errors.Join(persistErr, fmt.Errorf("mark run failed: %w", err))
@@ -90,13 +91,6 @@ func (d *Daemon) persistAutomationLaunchOutcomes() error {
 	return persistErr
 }
 func (d *Daemon) stopping() bool { return d.life.Ended() }
-
-type fixableAutomationDeliveryError struct {
-	message string
-	fix     store.AutomationRunFix
-}
-
-func (e *fixableAutomationDeliveryError) Error() string { return e.message }
 
 func automationFailureComment(run *store.AutomationRun, message string) string {
 	comment := "Automation delivery failed: " + message

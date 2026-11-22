@@ -40,6 +40,16 @@ func (claudeHarness) Terminal(harness.TerminalID, harness.TerminalEvent) {}
 
 func (claudeHarness) End(context.Context, harness.Ending) {}
 
+func (h claudeHarness) Launch(_ context.Context, req harness.LaunchRequest) (harness.Command, error) {
+	opts := h.d.launchSpawnOptions(req, h.Facts().ID)
+	if err := h.d.settleClaudeFolderTrust(&opts, req.Trust); err != nil {
+		return harness.Command{}, err
+	}
+	return h.d.launchWithDriver(req, &opts, false, nil)
+}
+
+func (claudeHarness) TrustFolder(dir string) error { return trustClaudeFolder(claudeConfigPath(), dir) }
+
 func (claudeHarness) Plan(harness.LaunchRequest) (harness.Planned, error) {
 	return harness.Planned{Lifetime: harness.InTerminal}, nil
 }

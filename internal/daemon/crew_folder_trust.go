@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/harness"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/crew"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/toolhome"
 )
 
@@ -21,14 +21,11 @@ func (d *Daemon) trustCrewHome(member crew.Member, agent, home string) {
 	if strings.TrimSpace(member.CWD) != "" {
 		return
 	}
-	var err error
-	switch agent {
-	case string(protocol.SessionAgentClaude):
-		err = trustClaudeFolder(claudeConfigPath(), home)
-	case string(protocol.SessionAgentCodex):
-		err = d.trustCodexFolder(home)
+	trust, ok := harness.As[harness.Trust](d.harnessOf(agent))
+	if !ok {
+		return
 	}
-	if err != nil {
+	if err := trust.TrustFolder(home); err != nil {
 		d.logf("crew: %s's harness will ask whether to trust its home %s: %v", member.Name, home, err)
 	}
 }

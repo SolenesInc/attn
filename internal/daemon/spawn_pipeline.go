@@ -309,7 +309,7 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 	}
 	plan := &spawnPlan{}
 	autoApprove := facts.Options.AutoApprove && d.on(setting.AutoApproveEnabled)
-	plan.spawnOpts = ptybackend.SpawnOptions{CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), ClaudeExecutable: protocol.Deref(msg.ClaudeExecutable), CodexExecutable: protocol.Deref(msg.CodexExecutable), AutoApprove: autoApprove, Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort))}
+	plan.spawnOpts = ptybackend.SpawnOptions{CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), AutoApprove: autoApprove, Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort))}
 	if req.policy.command != nil {
 		plan.spawnOpts.AgentArgv = append([]string(nil), req.policy.command.Argv...)
 	}
@@ -729,10 +729,11 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 	launch.AddedTerminal = req.addsTerminal
 	launch.FreshCost = req.existingSession == nil && req.resumeSessionID == ""
 	if req.policy.recordsRepositoryTrust {
-		launch.RepositoryTrust = &RepositoryTrust{KnownOrigins: d.store.StartedRepositoryOrigins(req.profile.ID)}
+		launch.RepositoryTrust = &harness.RepositoryTrust{KnownOrigins: d.store.StartedRepositoryOrigins(req.profile.ID)}
 	}
 	if req.hasPluginDriver {
 		runID := uuid.NewString()
+		plan.spawnOpts.LifecycleID = runID
 		params := pluginDriverSpawnParams{
 			Executable:      opts.Executable,
 			Agent:           req.agent,

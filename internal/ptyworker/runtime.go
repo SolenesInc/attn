@@ -93,10 +93,8 @@ type Config struct {
 	Effort           string
 	Label            string
 
-	ResumeSessionID string
-	ResumePicker    bool
-	YoloMode        bool
-	ApprovalRoute   launchcontract.ApprovalRoute
+	YoloMode      bool
+	ApprovalRoute launchcontract.ApprovalRoute
 
 	ThemeForeground  string
 	ThemeBackground  string

@@ -2,6 +2,9 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
@@ -68,6 +71,63 @@ func (h pluginHarness) recovery() harness.Recovery {
 		return harness.ByServer
 	}
 	return harness.ByTerminal
+}
+
+func (h pluginHarness) Launch(_ context.Context, req harness.LaunchRequest) (harness.Command, error) {
+	if len(req.Note) == 0 {
+		return h.d.launchOnServerOrTerminal(req, h.reg.Agent)
+	}
+	var p AgentPluginLaunch
+	if err := json.Unmarshal(req.Note, &p); err != nil {
+		return harness.Command{}, fmt.Errorf("read the plugin launch: %w", err)
+	}
+	return h.d.launchPluginDriver(req, h.reg.Agent, p)
+}
+
+func (d *Daemon) launchPluginDriver(req harness.LaunchRequest, agent harness.ID, p AgentPluginLaunch) (harness.Command, error) {
+	opts := d.launchSpawnOptions(req, agent)
+	reg, ok := d.ensurePluginRegistry().driver(opts.Agent)
+	if !ok || reg.PluginName != p.Plugin {
+		return harness.Command{}, fmt.Errorf("agent %q is not available on this machine", opts.Agent)
+	}
+	p.Params.Executable = configuredLaunchExecutable(&opts)
+	serverBound := reg.Capabilities["server_binding"]
+	p.Params.AgentTools = nil
+	var server *serverLink
+	if serverBound {
+		server = d.serverLinkFor(opts.Agent)
+		p.Params.Executable = server.executable(&opts)
+		if l := d.linkFor(opts.Agent, req.Lifetime); l != nil {
+			if err := d.launchInLink(l, &opts, req); err != nil {
+				return harness.Command{}, err
+			}
+		}
+		if reg.Capabilities["agent_tools"] {
+			if tools := server.clientAgentTools(); tools != nil {
+				p.Params.AgentTools = &pluginAgentTools{Name: tools.Name, Description: tools.Description}
+			}
+		}
+	} else {
+		if reg.Capabilities["agent_tools"] {
+			p.Params.AgentTools = d.pluginAgentTools(opts.ID)
+		}
+		d.sessionMonitor(req.Session).BeginLaunch(p.Plugin, p.Params.RunID, pluginDriverRoute(reg))
+	}
+	if p.LaunchInstructions {
+		p.Params.Instructions = renderPluginLaunchInstructions(req.Guidance, req.Profile, p.Params.AgentTools != nil)
+	}
+	result, err := d.resolvePluginDriverLaunch(reg, p.Params, p.Resume)
+	if err != nil {
+		return harness.Command{}, err
+	}
+	env, err := pluginCommandEnv(result.Env)
+	if err != nil {
+		return harness.Command{}, err
+	}
+	if serverBound {
+		env = append(env, server.homeEnv())
+	}
+	return harness.Command{Argv: append([]string(nil), result.Argv...), Env: env, Dir: strings.TrimSpace(result.CWD)}, nil
 }
 
 func (h pluginHarness) Plan(req harness.LaunchRequest) (harness.Planned, error) {

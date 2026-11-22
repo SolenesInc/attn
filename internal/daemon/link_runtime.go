@@ -102,6 +102,21 @@ func planOn(l linkRuntime, req harness.LaunchRequest) harness.Planned {
 	return harness.Planned{Lifetime: harness.InTerminal}
 }
 
+func (d *Daemon) launchInLink(l linkRuntime, opts *ptybackend.SpawnOptions, req harness.LaunchRequest) error {
+	if err := l.admit(req.Profile, opts.ResumeSessionID); err != nil {
+		return err
+	}
+	if opts.ResumeSessionID != "" {
+		if err := d.restoreConversationIn(l, req.Profile, opts.ResumeSessionID); err != nil {
+			return err
+		}
+	}
+	if req.Reason == harness.Reload {
+		return l.relaunch(opts)
+	}
+	return l.prepareLaunch(opts, req.Profile)
+}
+
 func (d *Daemon) linkProcess(t harness.TerminalID) bool {
 	for _, l := range d.links() {
 		if l.runsLink(t) {

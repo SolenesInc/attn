@@ -2,8 +2,10 @@ package harness
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/victorarias/attn/internal/launchcontract"
+	"github.com/victorarias/attn/internal/prompts"
 	"time"
 
 	"github.com/victorarias/attn/internal/modeltiers"
@@ -18,6 +20,7 @@ type Harness interface {
 	Health(ctx context.Context) Health
 	// Plan decides, at the home and before anything starts, where the launch's conversation runs.
 	Plan(req LaunchRequest) (Planned, error)
+	Launch(ctx context.Context, req LaunchRequest) (Command, error)
 	Conversation(s SessionFacts) Conversation
 	// End runs once after a close commits, for a session whose conversation lives in the harness's server.
 	End(ctx context.Context, e Ending)
@@ -33,10 +36,75 @@ type Harness interface {
 
 // LaunchRequest is one launch of a session's harness.
 type LaunchRequest struct {
-	Session SessionID
-	// Lifetime is the one stored for an open session the launch brings back, or "" for a session that starts.
-	Lifetime   Lifetime
-	Unattended launchcontract.UnattendedLaunchSpec
+	Reason   Reason
+	Session  SessionID
+	Terminal TerminalID
+	// Lifetime, for Plan, is the one stored for an open session the launch brings back, or "" for a session that starts. For Launch it is what Plan decided.
+	Lifetime      Lifetime
+	Profile       string
+	Dir           string
+	Label         string
+	Cols, Rows    uint16
+	Conversation  string
+	Picker        bool
+	InitialPrompt string
+	Options       LaunchOptions
+	Executable    string
+	Unattended    launchcontract.UnattendedLaunchSpec
+	Guidance      prompts.Launch
+	AwarenessDirs []string
+	Trust         *RepositoryTrust
+	Note          json.RawMessage
+	Direct        bool
+}
+
+// Reason is why a terminal launches the harness.
+type Reason string
+
+const (
+	Start  Reason = "start"
+	Reload Reason = "reload"
+)
+
+// LaunchOptions are the options a launch asks of the harness.
+type LaunchOptions struct {
+	Yolo        bool
+	AutoApprove bool
+	Model       string
+	Effort      string
+	Target      string
+	ContextCap  int
+}
+
+// RepositoryTrust names the repositories whose folders an automation may trust for the harness.
+type RepositoryTrust struct {
+	KnownOrigins []string
+}
+
+// Command is what the terminal runs. Dir is the folder the harness asks for, or "" for the session's.
+type Command struct {
+	Argv, Env  []string
+	Dir        string
+	LoginShell bool
+	Executable string
+}
+
+// FixableError is a launch refusal the user can fix in the named folder, as an automation shows it.
+type FixableError struct {
+	Message string
+	Fix     Fix
+}
+
+type Fix struct {
+	Harness ID
+	Dir     string
+}
+
+func (e *FixableError) Error() string { return e.Message }
+
+// Trust is the optional part of a harness that can trust a folder ahead of a launch there.
+type Trust interface {
+	TrustFolder(dir string) error
 }
 
 // Planned is what Plan decided for a launch.

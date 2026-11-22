@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"github.com/victorarias/attn/internal/harness"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,7 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/store"
 )
 
 type claudeProject struct {
@@ -23,7 +23,7 @@ type claudeCheckout struct {
 	repository string
 }
 
-func (d *Daemon) settleClaudeFolderTrust(opts *ptybackend.SpawnOptions, trust *RepositoryTrust) error {
+func (d *Daemon) settleClaudeFolderTrust(opts *ptybackend.SpawnOptions, trust *harness.RepositoryTrust) error {
 	if opts.Agent != string(protocol.SessionAgentClaude) || trust == nil {
 		return nil
 	}
@@ -48,9 +48,9 @@ func (d *Daemon) settleClaudeFolderTrust(opts *ptybackend.SpawnOptions, trust *R
 	}
 	if origin == "" || !slices.Contains(trust.KnownOrigins, origin) {
 		if unattended {
-			return &fixableAutomationDeliveryError{
-				message: fmt.Sprintf("no agent has started a conversation in the repository of %s in this profile, on any machine, and Claude does not trust it, so an automation will not trust it for you; open Claude there once and choose to trust it", opts.CWD),
-				fix:     store.AutomationRunFix{Agent: string(protocol.SessionAgentClaude), Directory: cmp.Or(checkout.repository, cwd)},
+			return &harness.FixableError{
+				Message: fmt.Sprintf("no agent has started a conversation in the repository of %s in this profile, on any machine, and Claude does not trust it, so an automation will not trust it for you; open Claude there once and choose to trust it", opts.CWD),
+				Fix:     harness.Fix{Harness: string(protocol.SessionAgentClaude), Dir: cmp.Or(checkout.repository, cwd)},
 			}
 		}
 		return nil

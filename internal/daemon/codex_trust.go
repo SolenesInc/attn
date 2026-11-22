@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/harness"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -16,7 +17,6 @@ import (
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/toolhome"
 )
 
@@ -131,9 +131,9 @@ func checkUnattendedCodexFolder(path string, config *codexTrustConfig, workedDir
 	case trust.saved != "":
 		return fmt.Errorf("the Codex config saves %s as %s, so an automation does not run Codex there; trust the folder in Codex to let it run", trust.path, trust.saved)
 	case !trust.worked && !workedInRepository(trust.repository, workedDirectories, originOf):
-		return &fixableAutomationDeliveryError{
-			message: fmt.Sprintf("no agent has worked in %s, its repository or another checkout of that repository in attn, and Codex does not trust it, so an automation will not trust it for you; open Codex there once and choose to trust it, or work there with any agent first", trust.path),
-			fix:     store.AutomationRunFix{Agent: string(protocol.SessionAgentCodex), Directory: trust.repository},
+		return &harness.FixableError{
+			Message: fmt.Sprintf("no agent has worked in %s, its repository or another checkout of that repository in attn, and Codex does not trust it, so an automation will not trust it for you; open Codex there once and choose to trust it, or work there with any agent first", trust.path),
+			Fix:     harness.Fix{Harness: string(protocol.SessionAgentCodex), Dir: trust.repository},
 		}
 	}
 	return nil

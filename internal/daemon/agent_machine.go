@@ -35,11 +35,7 @@ type AgentLaunch struct {
 	AddedTerminal        bool
 	FreshCost            bool
 	StartedAt            time.Time
-	RepositoryTrust      *RepositoryTrust
-}
-
-type RepositoryTrust struct {
-	KnownOrigins []string
+	RepositoryTrust      *harness.RepositoryTrust
 }
 
 type AgentPluginLaunch struct {
@@ -92,86 +88,49 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 			return err
 		}
 	}
-	if launch.Plugin != nil {
-		p := launch.Plugin
-		reg, ok := d.ensurePluginRegistry().driver(opts.Agent)
-		if !ok || reg.PluginName != p.Plugin {
-			return fmt.Errorf("agent %q is not available on this machine", opts.Agent)
-		}
-		p.Params.Executable = configuredLaunchExecutable(nil, opts)
-		if p.Params.Executable == "" {
-			p.Params.Executable = strings.TrimSpace(d.setting(executableSetting(opts.Agent)))
-		}
-		serverBound := reg.Capabilities["server_binding"]
-		p.Params.AgentTools = nil
-		if serverBound {
-			l := d.serverLinkFor(opts.Agent)
-			p.Params.Executable = l.executable(opts)
-			if err := d.prepareLinkedLaunch(opts, launch, reload); err != nil {
-				return err
-			}
-			if reg.Capabilities["agent_tools"] {
-				if tools := l.clientAgentTools(); tools != nil {
-					p.Params.AgentTools = &pluginAgentTools{Name: tools.Name, Description: tools.Description}
-				}
-			}
-		} else {
-			if reg.Capabilities["agent_tools"] {
-				p.Params.AgentTools = d.pluginAgentTools(opts.ID)
-			}
-			d.sessionMonitor(sessionID).BeginLaunch(p.Plugin, p.Params.RunID, pluginDriverRoute(reg))
-		}
-		if p.LaunchInstructions {
-			p.Params.Instructions = renderPluginLaunchInstructions(launch.Context, launch.Profile, p.Params.AgentTools != nil)
-		}
-		result, err := d.resolvePluginDriverLaunch(reg, p.Params, p.Resume)
-		if err != nil {
+	req, err := launchRequestOf(sessionID, *opts, launch, reload)
+	if err != nil {
+		return err
+	}
+	command, err := d.harnessOf(opts.Agent).Launch(d.life.Context(), req)
+	if err != nil {
+		d.abortLaunch(sessionID)
+		return err
+	}
+	if command.Dir != "" {
+		if command.Dir, err = d.validateCrewBoundLaunchDir(sessionID, command.Dir); err != nil {
 			d.abortLaunch(sessionID)
 			return err
 		}
-		env, err := pluginCommandEnv(result.Env)
-		if err != nil {
-			d.abortLaunch(sessionID)
-			return err
-		}
-		externalCWD := strings.TrimSpace(result.CWD)
-		if externalCWD != "" {
-			externalCWD, err = d.validateCrewBoundLaunchDir(sessionID, externalCWD)
-			if err != nil {
-				d.abortLaunch(sessionID)
-				return err
-			}
-		}
-		if serverBound {
-			l := d.serverLinkFor(opts.Agent)
-			env = append(env, l.homeEnv())
-		}
-		opts.LifecycleID, opts.AgentArgv, opts.AgentEnv, opts.ExternalCWD = p.Params.RunID, append([]string(nil), result.Argv...), env, externalCWD
-		return nil
 	}
-	driver := agentdriver.Get(opts.Agent)
-	if driver == nil {
-		return fmt.Errorf("unknown agent %q", opts.Agent)
-	}
-	if opts.LaunchExecutable == "" && configuredLaunchExecutable(driver, opts) == "" {
-		opts.LaunchExecutable = strings.TrimSpace(d.setting(executableSetting(opts.Agent)))
-	}
-	if err := d.refuseUnknownCodexFolder(opts, launch.Profile); err != nil {
-		return err
-	}
-	if err := d.settleClaudeFolderTrust(opts, launch.RepositoryTrust); err != nil {
-		return err
-	}
-	if err := d.prepareLinkedLaunch(opts, launch, reload); err != nil {
-		return err
-	}
-	if err := d.prepareAgentLaunch(opts, launch); err != nil {
-		return fmt.Errorf("prepare %s launch: %w", opts.Agent, err)
-	}
-	if l, server := d.linkFor(opts.Agent, launch.Lifetime).(*serverLink); server {
-		opts.AgentEnv = append(opts.AgentEnv, l.homeEnv())
-	}
+	opts.AgentArgv, opts.AgentEnv, opts.ExternalCWD = command.Argv, command.Env, command.Dir
+	opts.AgentLoginShell, opts.LaunchExecutable = command.LoginShell, command.Executable
 	return nil
+}
+
+func launchRequestOf(sessionID protocol.SessionID, opts ptybackend.SpawnOptions, launch *AgentLaunch, reload bool) (harness.LaunchRequest, error) {
+	req := harness.LaunchRequest{
+		Reason: harness.Start, Session: sessionID, Terminal: opts.ID, Lifetime: launch.Lifetime,
+		Profile: launch.Profile, Dir: opts.CWD, Label: opts.Label, Cols: opts.Cols, Rows: opts.Rows,
+		Conversation: opts.ResumeSessionID, Picker: opts.ResumePicker, InitialPrompt: launch.InitialPrompt,
+		Options: harness.LaunchOptions{
+			Yolo: opts.YoloMode, AutoApprove: opts.AutoApprove, Model: opts.Model, Effort: opts.Effort,
+			Target: opts.ExecutionTarget, ContextCap: opts.ContextWindowCap,
+		},
+		Executable: opts.Executable, Unattended: opts.UnattendedLaunch,
+		Guidance: launch.Context, AwarenessDirs: launch.AwarenessDirs, Trust: launch.RepositoryTrust, Direct: launch.Direct,
+	}
+	if reload {
+		req.Reason = harness.Reload
+	}
+	if launch.Plugin != nil {
+		note, err := json.Marshal(launch.Plugin)
+		if err != nil {
+			return harness.LaunchRequest{}, fmt.Errorf("encode the launch's note: %w", err)
+		}
+		req.Note = note
+	}
+	return req, nil
 }
 
 func (d *Daemon) seedAgentMonitor(session *protocol.Session, opts ptybackend.SpawnOptions, launch *AgentLaunch) {
@@ -342,26 +301,4 @@ func (d *Daemon) requireCatalogAgent(host, agent, explicit string, startsSession
 		return nil
 	}
 	return fmt.Errorf("agent %q is not available on %s", agent, catalog.Machine)
-}
-
-func (d *Daemon) prepareLinkedLaunch(opts *ptybackend.SpawnOptions, launch *AgentLaunch, reload bool) error {
-	l := d.linkFor(opts.Agent, launch.Lifetime)
-	if l != nil {
-		if err := l.admit(launch.Profile, opts.ResumeSessionID); err != nil {
-			return err
-		}
-		if opts.ResumeSessionID != "" {
-			if err := d.restoreConversationIn(l, launch.Profile, opts.ResumeSessionID); err != nil {
-				return err
-			}
-		}
-		if reload {
-			if err := l.relaunch(opts); err != nil {
-				return err
-			}
-		} else if err := l.prepareLaunch(opts, launch.Profile); err != nil {
-			return err
-		}
-	}
-	return nil
 }

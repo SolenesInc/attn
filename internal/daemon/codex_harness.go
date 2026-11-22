@@ -48,6 +48,21 @@ func (h codexHarness) Terminal(t harness.TerminalID, e harness.TerminalEvent) {
 	}
 }
 
+func (h codexHarness) Launch(_ context.Context, req harness.LaunchRequest) (harness.Command, error) {
+	opts := h.d.launchSpawnOptions(req, h.Facts().ID)
+	if err := h.d.refuseUnknownCodexFolder(&opts, req.Profile); err != nil {
+		return harness.Command{}, err
+	}
+	if l := h.d.linkFor(opts.Agent, req.Lifetime); l != nil {
+		if err := h.d.launchInLink(l, &opts, req); err != nil {
+			return harness.Command{}, err
+		}
+	}
+	return h.d.launchWithDriver(req, &opts, false, nil)
+}
+
+func (h codexHarness) TrustFolder(dir string) error { return h.d.trustCodexFolder(dir) }
+
 func (h codexHarness) Plan(req harness.LaunchRequest) (harness.Planned, error) {
 	return planOn(h.d.codexShared(), req), nil
 }

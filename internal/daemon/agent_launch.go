@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"github.com/victorarias/attn/internal/harness"
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
@@ -10,19 +11,40 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *AgentLaunch) error {
+func (d *Daemon) launchSpawnOptions(req harness.LaunchRequest, agent harness.ID) ptybackend.SpawnOptions {
+	opts := ptybackend.SpawnOptions{
+		ID: req.Terminal, CWD: req.Dir, Agent: string(agent), Label: req.Label, Cols: req.Cols, Rows: req.Rows,
+		ResumeSessionID: req.Conversation, ResumePicker: req.Picker,
+		YoloMode: req.Options.Yolo, AutoApprove: req.Options.AutoApprove, Model: req.Options.Model, Effort: req.Options.Effort,
+		ExecutionTarget: req.Options.Target, ContextWindowCap: req.Options.ContextCap,
+		Executable: req.Executable, UnattendedLaunch: req.Unattended,
+	}
+	if configuredLaunchExecutable(&opts) == "" {
+		opts.LaunchExecutable = strings.TrimSpace(d.setting(executableSetting(opts.Agent)))
+	}
+	return opts
+}
+
+func (d *Daemon) launchWithDriver(req harness.LaunchRequest, opts *ptybackend.SpawnOptions, server bool, shared *agentdriver.SharedAgentTools) (harness.Command, error) {
+	tools := d.agentTools(opts.ID)
+	if server {
+		tools = nil
+	}
+	if err := d.prepareAgentLaunch(opts, req, tools, shared); err != nil {
+		return harness.Command{}, fmt.Errorf("prepare %s launch: %w", opts.Agent, err)
+	}
+	return harness.Command{Argv: opts.AgentArgv, Env: opts.AgentEnv, LoginShell: opts.AgentLoginShell, Executable: opts.LaunchExecutable}, nil
+}
+
+func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, req harness.LaunchRequest, tools *agentdriver.AgentTools, shared *agentdriver.SharedAgentTools) error {
 	terminal := opts.ID
 	driver := agentdriver.Get(opts.Agent)
 	if driver == nil {
 		return fmt.Errorf("unknown agent %q", opts.Agent)
 	}
-	launch, awareness, initialPrompt := intent.Context, intent.AwarenessDirs, intent.InitialPrompt
-	tools, shared := d.agentTools(terminal), (*agentdriver.SharedAgentTools)(nil)
-	if l, server := d.linkFor(opts.Agent, intent.Lifetime).(*serverLink); server {
-		tools, shared = nil, l.clientAgentTools()
-	}
+	launch, awareness, initialPrompt := req.Guidance, req.AwarenessDirs, req.InitialPrompt
 	claudeMod := d.claudeModForLaunch(terminal, driver.Name())
-	if !intent.Direct {
+	if !req.Direct {
 		prepareLauncherLaunch(driver, opts, initialPrompt)
 		if claudeMod != (agentdriver.ClaudeMod{}) {
 			opts.AgentEnv = append(opts.AgentEnv, agentdriver.ClaudeModDirEnv+"="+claudeMod.Dir, agentdriver.ClaudeModSocketEnv+"="+claudeMod.Socket)
@@ -36,7 +58,7 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		return nil
 	}
 	caps := agentdriver.EffectiveCapabilities(driver)
-	executable := configuredLaunchExecutable(driver, opts)
+	executable := configuredLaunchExecutable(opts)
 	explicitExecutable := executable
 	if executable == "" {
 		executable = driver.DefaultExecutable()
@@ -86,26 +108,14 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 	return nil
 }
 
-func configuredLaunchExecutable(driver agentdriver.Driver, opts *ptybackend.SpawnOptions) string {
+func configuredLaunchExecutable(opts *ptybackend.SpawnOptions) string {
 	if opts.LaunchExecutable != "" {
 		return opts.LaunchExecutable
 	}
 	if !opts.UnattendedLaunch.IsZero() {
 		return opts.UnattendedLaunch.Executable
 	}
-	if opts.Executable != "" {
-		return opts.Executable
-	}
-	if driver == nil {
-		return ""
-	}
-	switch driver.Name() {
-	case "claude":
-		return opts.ClaudeExecutable
-	case "codex":
-		return opts.CodexExecutable
-	}
-	return ""
+	return opts.Executable
 }
 
 func prepareLauncherLaunch(driver agentdriver.Driver, opts *ptybackend.SpawnOptions, initialPrompt string) {
@@ -121,7 +131,7 @@ func prepareLauncherLaunch(driver agentdriver.Driver, opts *ptybackend.SpawnOpti
 	if initialPrompt != "" {
 		opts.AgentArgv = append(opts.AgentArgv, "--initial-prompt", initialPrompt)
 	}
-	executable := configuredLaunchExecutable(driver, opts)
+	executable := configuredLaunchExecutable(opts)
 	autoApprove, model, effort := opts.AutoApprove, opts.Model, opts.Effort
 	if launch := opts.UnattendedLaunch; !launch.IsZero() {
 		autoApprove, model, effort = true, launch.Model, launch.Effort
