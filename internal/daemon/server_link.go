@@ -59,9 +59,7 @@ func (l *serverLink) holds(sessionID protocol.SessionID) bool {
 	return lifetime == harness.InServer && l.serves(agent)
 }
 
-func (l *serverLink) canRun(req *spawnRequest) bool {
-	return req.agent == l.b.agent && (!req.hasPluginDriver || l.b.plugin == req.pluginDriver.PluginName) && !req.isShell && l.runsLaunch(req.policy.unattendedLaunch)
-}
+func (l *serverLink) canRun(req harness.LaunchRequest) bool { return l.runsLaunch(req.Unattended) }
 
 func (l *serverLink) runsLaunch(launch launchcontract.UnattendedLaunchSpec) bool {
 	return launch.Executable == ""

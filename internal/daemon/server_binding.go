@@ -60,6 +60,14 @@ func (d *Daemon) serverTerminalOf(agent string) func(string) harness.TerminalID 
 	return l.serverTerminal
 }
 
+func (d *Daemon) planOnServer(agent, plugin string, req harness.LaunchRequest) harness.Planned {
+	l := d.serverLinkFor(agent)
+	if l == nil || plugin != "" && l.b.plugin != plugin {
+		return harness.Planned{Lifetime: harness.InTerminal}
+	}
+	return planOn(l, req)
+}
+
 func (d *Daemon) recoverServer(ctx context.Context, agent string, point harness.RecoverPoint) {
 	l := d.serverLinkFor(agent)
 	if l == nil {

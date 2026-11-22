@@ -176,9 +176,7 @@ func (r *codexShared) kind() string { return codexLinkKind }
 
 func (r *codexShared) serves(agent string) bool { return agent == string(protocol.SessionAgentCodex) }
 
-func (r *codexShared) canRun(req *spawnRequest) bool {
-	return req.agent == string(protocol.SessionAgentCodex) && !req.hasPluginDriver && !req.isShell
-}
+func (r *codexShared) canRun(harness.LaunchRequest) bool { return true }
 
 func (r *codexShared) enabledForNewLaunches() bool { return !r.d.noAgentSockets }
 

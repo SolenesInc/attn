@@ -59,7 +59,7 @@ type spawnRequest struct {
 	driver          agentdriver.Driver
 	resumeSessionID string
 	parentSessionID protocol.SessionID
-	link            linkRuntime
+	lifetime        harness.Lifetime
 	addsTerminal    bool
 }
 
@@ -364,7 +364,12 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 		plan.spawnOpts.ApprovalRoute = launchcontract.ResolveApprovalRoute(plan.spawnOpts.YoloMode, plan.spawnOpts.AutoApprove, plan.spawnOpts.UnattendedLaunch)
 	}
 	plan.spawnOpts.ContextWindowCap = d.launchContextWindowCap(msg.ID, req.agent)
-	req.link = d.launchLink(req)
+	planned, err := d.planLaunch(req)
+	if err != nil {
+		plan.rollback(d, msg.ID)
+		return nil, &spawnRejection{err: err}
+	}
+	req.lifetime = planned.Lifetime
 
 	return plan, nil
 }
@@ -401,7 +406,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
 	pausepoint.At(pausepoint.SessionLinkSetting)
 	previousLifetime := d.lifetime(session.ID)
-	if err := d.store.SetSessionLifetime(session.ID, lifetimeOf(req.link)); err != nil {
+	if err := d.store.SetSessionLifetime(session.ID, req.lifetime); err != nil {
 		d.logf("spawn: %v", err)
 	}
 	d.persistLaunchedConversation(req, plan)
@@ -718,7 +723,7 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 	if err != nil {
 		return nil, err
 	}
-	launch.InitialPrompt, launch.Lifetime, launch.Profile = req.initialPrompt, lifetimeOf(req.link), req.profile.ID
+	launch.InitialPrompt, launch.Lifetime, launch.Profile = req.initialPrompt, req.lifetime, req.profile.ID
 	launch.Monitor, launch.StartedAt = d.monitorLaunch(msg.ID), req.spawnStartedAt
 	launch.InstallWorkflowSkill, launch.RequireWorkflowSkill = req.policy.installWorkflowSkill, req.policy.requireWorkflowSkill
 	launch.AddedTerminal = req.addsTerminal

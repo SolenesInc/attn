@@ -70,6 +70,10 @@ func (h pluginHarness) recovery() harness.Recovery {
 	return harness.ByTerminal
 }
 
+func (h pluginHarness) Plan(req harness.LaunchRequest) (harness.Planned, error) {
+	return h.d.planOnServer(h.reg.Agent, h.reg.PluginName, req), nil
+}
+
 func (pluginHarness) Start(context.Context) error { return nil }
 
 func (h pluginHarness) Recover(ctx context.Context, point harness.RecoverPoint) {

@@ -40,6 +40,10 @@ func (claudeHarness) Terminal(harness.TerminalID, harness.TerminalEvent) {}
 
 func (claudeHarness) End(context.Context, harness.Ending) {}
 
+func (claudeHarness) Plan(harness.LaunchRequest) (harness.Planned, error) {
+	return harness.Planned{Lifetime: harness.InTerminal}, nil
+}
+
 func (h claudeHarness) Start(context.Context) error {
 	if h.d.noAgentSockets {
 		return nil

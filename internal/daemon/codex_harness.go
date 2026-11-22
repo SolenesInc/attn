@@ -48,6 +48,10 @@ func (h codexHarness) Terminal(t harness.TerminalID, e harness.TerminalEvent) {
 	}
 }
 
+func (h codexHarness) Plan(req harness.LaunchRequest) (harness.Planned, error) {
+	return planOn(h.d.codexShared(), req), nil
+}
+
 func (codexHarness) Start(context.Context) error { return nil }
 
 func (h codexHarness) Recover(ctx context.Context, point harness.RecoverPoint) {

@@ -12,7 +12,7 @@ type linkRuntime interface {
 	kind() string
 	serves(agent string) bool
 
-	canRun(req *spawnRequest) bool
+	canRun(req harness.LaunchRequest) bool
 	enabledForNewLaunches() bool
 	admit(profile, conversation string) error
 	prepareLaunch(opts *ptybackend.SpawnOptions, profile string) error
@@ -92,26 +92,14 @@ func (d *Daemon) linkServing(agent string) linkRuntime {
 	return nil
 }
 
-func lifetimeOf(l linkRuntime) harness.Lifetime {
-	if l == nil {
-		return harness.InTerminal
+func planOn(l linkRuntime, req harness.LaunchRequest) harness.Planned {
+	if l == nil || !l.canRun(req) {
+		return harness.Planned{Lifetime: harness.InTerminal}
 	}
-	return harness.InServer
-}
-
-func (d *Daemon) launchLink(req *spawnRequest) linkRuntime {
-	if req.existingSession != nil && !req.policy.fromLedger {
-		if l := d.linkOf(req.msg.ID); l != nil && l.canRun(req) {
-			return l
-		}
-		return nil
+	if req.Lifetime == harness.InServer || req.Lifetime == "" && l.enabledForNewLaunches() {
+		return harness.Planned{Lifetime: harness.InServer}
 	}
-	for _, l := range d.links() {
-		if l.canRun(req) && l.enabledForNewLaunches() {
-			return l
-		}
-	}
-	return nil
+	return harness.Planned{Lifetime: harness.InTerminal}
 }
 
 func (d *Daemon) linkProcess(t harness.TerminalID) bool {

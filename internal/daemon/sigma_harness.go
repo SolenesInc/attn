@@ -49,6 +49,10 @@ func (h sigmaHarness) Terminal(t harness.TerminalID, e harness.TerminalEvent) {
 	h.d.appServer().terminal(t, e)
 }
 
+func (h sigmaHarness) Plan(req harness.LaunchRequest) (harness.Planned, error) {
+	return h.d.planOnServer(h.Facts().ID, "", req), nil
+}
+
 func (sigmaHarness) Start(context.Context) error { return nil }
 
 func (h sigmaHarness) Recover(ctx context.Context, point harness.RecoverPoint) {

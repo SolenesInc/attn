@@ -3,6 +3,7 @@ package harness
 import (
 	"context"
 	"fmt"
+	"github.com/victorarias/attn/internal/launchcontract"
 	"time"
 
 	"github.com/victorarias/attn/internal/modeltiers"
@@ -15,6 +16,8 @@ type ID = string
 type Harness interface {
 	Facts() Facts
 	Health(ctx context.Context) Health
+	// Plan decides, at the home and before anything starts, where the launch's conversation runs.
+	Plan(req LaunchRequest) (Planned, error)
 	Conversation(s SessionFacts) Conversation
 	// End runs once after a close commits, for a session whose conversation lives in the harness's server.
 	End(ctx context.Context, e Ending)
@@ -26,6 +29,19 @@ type Harness interface {
 	Released(profile string)
 	Stop()
 	Conversations() ConversationStore
+}
+
+// LaunchRequest is one launch of a session's harness.
+type LaunchRequest struct {
+	Session SessionID
+	// Lifetime is the one stored for an open session the launch brings back, or "" for a session that starts.
+	Lifetime   Lifetime
+	Unattended launchcontract.UnattendedLaunchSpec
+}
+
+// Planned is what Plan decided for a launch.
+type Planned struct {
+	Lifetime Lifetime
 }
 
 // RecoverPoint is a step of the daemon's start at which a harness brings back what it ran before.
