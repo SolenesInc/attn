@@ -121,8 +121,6 @@ func (l *serverLink) resolveCaller(t protocol.TerminalID) (protocol.SessionID, h
 	return session, l.d.primaryTerminal(session), true
 }
 
-func (l *serverLink) runsLink(t harness.TerminalID) bool { return t == l.b.terminal }
-
 func (l *serverLink) serverTerminal(string) harness.TerminalID { return l.b.terminal }
 
 func (l *serverLink) terminalDropped(t harness.TerminalID) {
@@ -261,7 +259,7 @@ func (l *serverLink) startServer(ctx context.Context, opts *ptybackend.SpawnOpti
 		LoginShellEnv: loginEnv,
 		DaemonEnv:     l.d.spawnRoutingEnv(),
 	}
-	if err := l.d.ptyBackend.Spawn(ctx, withLifecycleID(spawn)); err != nil {
+	if err := l.d.startAdapterTerminal(ctx, appServerTerminalOwner, spawn); err != nil {
 		return fmt.Errorf("start the %s server: %w", l.b.name, err)
 	}
 	l.logf("started %s for %s in terminal %s", strings.Join(argv, " "), home, terminal)

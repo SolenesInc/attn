@@ -9,7 +9,7 @@ func (c appServer) terminal(t harness.TerminalID, e harness.TerminalEvent) {
 			l.launchStarted(e.Session)
 		}
 	case harness.Exited:
-		if _, server := c.d.appServerProcess(c.d.life.Context(), t); server {
+		if owner, _ := c.d.adapterTerminalOwner(t); owner == appServerTerminalOwner {
 			if err := c.d.removePTYSession(t); err != nil {
 				c.d.logf("remove app-server terminal %s: %v", t, err)
 			}

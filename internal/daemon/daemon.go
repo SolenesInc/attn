@@ -1030,6 +1030,9 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[protocol.Sess
 				fmt.Sprintf("PTY recovery skipped %d workers due to transient unavailability.", recoveryReport.Missing),
 			)
 		}
+		if recoveryReport.Missing == 0 && recoveryReport.Failed == 0 {
+			d.sweepAdapterTerminals(context.Background())
+		}
 	}
 
 	d.recoverHarnesses(context.Background(), harness.RecoverProcesses)
@@ -1060,7 +1063,7 @@ func (d *Daemon) pruneRuntimesWithoutSession(ctx context.Context) {
 		return
 	}
 	for terminal := range d.liveTerminals(ctx) {
-		if _, shown := d.shownIn(terminal); shown || d.linkProcess(terminal) {
+		if _, shown := d.shownIn(terminal); shown || d.adapterTerminal(terminal) {
 			continue
 		}
 		pending := false
@@ -1238,7 +1241,7 @@ func (d *Daemon) placedLiveTerminals(ctx context.Context) map[protocol.SessionID
 			d.logf("worker reconciliation left runtime %s to the orphan prune: no pane places it", terminalID)
 			continue
 		}
-		placed[sessionID] = liveTerminal{terminal: terminalID, link: d.linkProcess(terminalID)}
+		placed[sessionID] = liveTerminal{terminal: terminalID, link: d.adapterTerminal(terminalID)}
 	}
 	return placed
 }
@@ -1716,8 +1719,9 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
 		return false
 	}
+	adapterOwned := d.adapterTerminal(info.ID)
 	d.terminalEvent(info.ID, harness.Exited{Code: info.ExitCode, Signal: info.Signal, Lifecycle: info.LifecycleID})
-	if d.linkProcess(info.ID) {
+	if adapterOwned {
 		d.forgetTerminalTitle(info.ID)
 		return false
 	}
@@ -1919,6 +1923,7 @@ func (d *Daemon) removePTYSession(terminal harness.TerminalID) error {
 	if d.ptyBackend == nil {
 		return nil
 	}
+	d.forgetAdapterTerminal(terminal)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	err := d.removeTerminalRuntime(ctx, terminal)

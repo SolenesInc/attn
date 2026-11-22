@@ -49,6 +49,7 @@ CREATE INDEX launch_desktops_desktop ON launch_desktops(desktop_id);
 CREATE INDEX model_calls_profile_at ON model_calls(profile_id, at);
 CREATE INDEX outpost_outbox_host ON outpost_outbox (host, id);
 CREATE INDEX quick_captures_recent ON quick_captures(profile_id,created_at DESC,id DESC);
+CREATE TABLE adapter_terminals ( terminal_id TEXT PRIMARY KEY, owner TEXT NOT NULL );
 CREATE TABLE analytics_builds ( id INTEGER PRIMARY KEY, build TEXT NOT NULL UNIQUE );
 CREATE TABLE analytics_outbox ( id INTEGER PRIMARY KEY, stream TEXT NOT NULL, seq INTEGER NOT NULL, at TEXT NOT NULL, record TEXT NOT NULL, sent_at TEXT, build_id INTEGER REFERENCES analytics_builds(id), UNIQUE (stream, seq) );
 CREATE TABLE analytics_sequences ( stream TEXT PRIMARY KEY, seq INTEGER NOT NULL );

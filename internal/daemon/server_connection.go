@@ -159,6 +159,9 @@ func (p *serverConnection) ensureLocked(ctx context.Context, l *serverLink, opts
 		c, info, err := l.connect(attempt, p.socket, "attn", buildinfo.Version)
 		cancel()
 		if err == nil {
+			if !started {
+				l.d.adoptAdapterTerminal(ctx, appServerTerminalOwner, l.b.terminal)
+			}
 			p.hold(c, info)
 			p.registerAgentToolsLocked(c)
 			return c, nil
@@ -513,16 +516,4 @@ func (p *serverConnection) reconcile(l *serverLink, ids []protocol.SessionID, la
 		}
 		p.openFeeds(c, conversations, launching)
 	})
-}
-
-func (d *Daemon) appServerProcess(ctx context.Context, terminal harness.TerminalID) (ptybackend.SessionInfo, bool) {
-	if !strings.HasSuffix(string(terminal), "-server") {
-		return ptybackend.SessionInfo{}, false
-	}
-	provider, ok := d.ptyBackend.(ptybackend.SessionInfoProvider)
-	if !ok {
-		return ptybackend.SessionInfo{}, false
-	}
-	info, err := provider.SessionInfo(ctx, terminal)
-	return info, err == nil && info.Agent == string(terminal)
 }

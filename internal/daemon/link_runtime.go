@@ -20,7 +20,6 @@ type linkRuntime interface {
 	prepareLaunch(opts *ptybackend.SpawnOptions, profile string) error
 	relaunch(opts *ptybackend.SpawnOptions) error
 
-	runsLink(t harness.TerminalID) bool
 	serverTerminal(profile string) harness.TerminalID
 
 	profileReleased(profile string)
@@ -113,16 +112,6 @@ func (d *Daemon) launchInLink(l linkRuntime, opts *ptybackend.SpawnOptions, req 
 		return l.relaunch(opts)
 	}
 	return l.prepareLaunch(opts, req.Profile)
-}
-
-func (d *Daemon) linkProcess(t harness.TerminalID) bool {
-	for _, l := range d.links() {
-		if l.runsLink(t) {
-			return true
-		}
-	}
-	_, server := d.appServerProcess(d.life.Context(), t)
-	return server
 }
 
 func (d *Daemon) locateTranscript(driver agentdriver.Driver, ref harness.ConversationRef) string {

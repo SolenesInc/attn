@@ -232,6 +232,7 @@ func (r *codexShared) ensureServer(ctx context.Context, profile, executable stri
 		return s, nil
 	}
 	if r.serverRunning(ctx, s.terminal) {
+		r.d.adoptAdapterTerminal(ctx, codexSharedTerminalOwner, s.terminal)
 		r.recallBinary(ctx, s)
 	} else {
 		if err := s.cooledDown(); err != nil {
@@ -292,7 +293,7 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 		LoginShellEnv: loginEnv,
 		DaemonEnv:     r.d.spawnRoutingEnv(),
 	}
-	if err := r.d.ptyBackend.Spawn(ctx, withLifecycleID(opts)); err != nil {
+	if err := r.d.startAdapterTerminal(ctx, codexSharedTerminalOwner, opts); err != nil {
 		return fmt.Errorf("start the shared Codex app-server: %w", err)
 	}
 	s.mu.Lock()
@@ -1180,8 +1181,13 @@ func (r *codexShared) recoverProcesses(ctx context.Context) {
 		}
 		cancel()
 	}
+	adapters, err := r.d.store.AdapterTerminals()
+	if err != nil {
+		r.d.logf("shared Codex: %v", err)
+		return
+	}
 	for terminal := range r.d.localLiveTerminals(ctx) {
-		if r.runsLink(terminal) && !owned[terminal] {
+		if adapters[string(terminal)] == codexSharedTerminalOwner && !owned[terminal] {
 			if err := r.d.removePTYSession(terminal); err != nil {
 				r.d.logf("shared Codex: remove app-server %s without an owning profile: %v", terminal, err)
 			}
