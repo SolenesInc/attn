@@ -42,9 +42,5 @@ func TestEachAgentStartsOnItsInitialPromptAndShowsItsReply(t *testing.T) {
 
 func awaitAgentAvailable(p *testworld.Peer, agent string) {
 	p.T.Helper()
-	key := agent + "_available"
-	if p.Initial.Settings[key] == "true" {
-		return
-	}
-	testworld.Await(p, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings[key] == "true" })
+	awaitHarnessOffered(p, agent)
 }

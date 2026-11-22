@@ -34,8 +34,13 @@ func TestAPluginInboxRetryKeepsTheExactInputAcrossLostRepliesAndRestart(t *testi
 				app = s.TrustedApp()
 			} else {
 				observer := s.App()
+				awaitHarnessOffered(observer, "independent")
+				mark := observer.EventCount()
 				driver.hangUp()
-				testworld.Await(observer, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["independent_available"] != "true" })
+				testworld.AwaitSince(observer, mark, protocol.EventHarnessCatalog, func(m protocol.HarnessCatalogMessage) bool {
+					_, ok := testworld.FindHarness(m.Harnesses, "independent")
+					return !ok
+				})
 			}
 			second := sendQuickCapture(t, app, mailbox, "second user input")
 			driver = dialDriverAt(t, s.DialUnix, "independent-plugin")

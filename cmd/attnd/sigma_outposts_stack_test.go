@@ -166,9 +166,10 @@ func TestAHarnessIsRefusedOnAnOutpostOnlyWhenTheOutpostsCatalogLacksIt(t *testin
 	pair.Start()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	requireStdout(t, home.Attn("settings", "set", "sigma_enabled", "true"), "true")
-	if outpostApp := outpost.App(); outpostApp.Initial.Settings["sigma_available"] != "false" {
-		testworld.Await(outpostApp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["sigma_available"] == "false" })
-	}
+	testworld.Await(outpost.App(), protocol.EventHarnessCatalog, func(m protocol.HarnessCatalogMessage) bool {
+		h, ok := testworld.FindHarness(m.Harnesses, "sigma")
+		return ok && h.Offered && h.Installation == protocol.HarnessInstallationMissing
+	})
 	withHost := func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) }
 	denied, _, _ := home.RequestSpawn(pair.App, fakeagent.Sigma, outpost.Path("agent"), withHost)
 	if want := `agent "sigma" is not available on`; denied.Success || !strings.Contains(protocol.Deref(denied.Error), want) {

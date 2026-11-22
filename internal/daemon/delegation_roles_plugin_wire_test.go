@@ -45,7 +45,7 @@ func houseWithAttnRoles(t *testing.T) (*world, protocol.DelegationRole, string) 
 	t.Helper()
 	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	pluginDriverSettings(app, "house")
+	awaitHarnessOffered(app, "house")
 	onHouse := protocol.DelegationSelection{Harness: "house"}
 	attnRole := loadDelegationPreferences(app).Templates[0]
 	attnRole.Enabled = true
@@ -116,7 +116,7 @@ func TestAnAttnRoleOnAPluginHarnessGetsTheWorkflowSkillWhereThePluginSaysItsHarn
 	removeSkills()
 	revived := w.NextLaunch()
 	w.restart()
-	pluginDriverSettings(w.App(), "house")
+	awaitHarnessOffered(w.App(), "house")
 	expectSkills("after the daemon restarted and the plugin registered again")
 	revived()
 }

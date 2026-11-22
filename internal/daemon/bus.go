@@ -354,9 +354,8 @@ func buildWireProjections() []projection {
 			apply: func(d *Daemon, _ bus.Event) { d.projectPluginsUpdated() },
 		},
 		{
-			filter: bus.Filter{FactPluginDisconnected, FactPluginDriverRegistered,
-				FactBackupWritten},
-			apply: func(d *Daemon, _ bus.Event) { d.projectSettingsUpdated("") },
+			filter: bus.Filter{FactBackupWritten},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectSettingsUpdated("") },
 		},
 		{
 			filter: bus.Filter{FactSettingChanged, FactPluginDriverRegistered, FactPluginDisconnected, FactPluginHealthChanged},

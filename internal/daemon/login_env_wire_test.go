@@ -109,8 +109,9 @@ func TestTheDaemonAnswersWhileTheLoginShellRuns(t *testing.T) {
 	w.restart()
 	app := w.App()
 
-	if got := app.Initial.Settings["claude_available"]; got != "checking" {
-		t.Fatalf("initial_state carries claude_available=%v during the capture, want checking", got)
+	initialCatalog := testworld.Await(app, protocol.EventHarnessCatalog, func(protocol.HarnessCatalogMessage) bool { return true })
+	if got, ok := testworld.FindHarness(initialCatalog.Harnesses, "claude"); !ok || got.Installation != protocol.HarnessInstallationChecking {
+		t.Fatalf("initial harness_catalog carries claude=%+v during the capture, want checking", got)
 	}
 
 	requestID := "prefs"
@@ -134,11 +135,12 @@ func TestTheDaemonAnswersWhileTheLoginShellRuns(t *testing.T) {
 	mark := app.EventCount()
 	shell.release()
 
-	settled := testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-		return m.Settings["claude_available"] == "true"
+	settled := testworld.AwaitSince(app, mark, protocol.EventHarnessCatalog, func(m protocol.HarnessCatalogMessage) bool {
+		h, ok := testworld.FindHarness(m.Harnesses, "claude")
+		return ok && h.Installation == protocol.HarnessInstallationInstalled
 	})
-	if got := settled.Settings["codex_available"]; got != "false" {
-		t.Fatalf("settings_updated after the capture carries codex_available=%v, want false", got)
+	if got, ok := testworld.FindHarness(settled.Harnesses, "codex"); !ok || got.Installation != protocol.HarnessInstallationMissing {
+		t.Fatalf("harness_catalog after the capture carries codex=%+v, want missing", got)
 	}
 
 	if result := <-spawned; !result.Success {
@@ -169,17 +171,21 @@ func TestAClientWhoseInitialStateRacesTheCaptureEndsUpWithTheAnswer(t *testing.T
 	w.start()
 	app := w.ConnectApp()
 	built.Await()
-	settled := func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["claude_available"] == "true" }
+	settled := func(m protocol.HarnessCatalogMessage) bool {
+		h, ok := testworld.FindHarness(m.Harnesses, "claude")
+		return ok && h.Installation == protocol.HarnessInstallationInstalled
+	}
 	shell.release()
-	testworld.Await(app, protocol.EventSettingsUpdated, settled)
+	testworld.Await(app, protocol.EventHarnessCatalog, settled)
 	mark := app.EventCount()
 	built.Release()
 
-	initial := testworld.AwaitSince[protocol.InitialStateMessage](app, mark, protocol.EventInitialState, nil)
-	if got := initial.Settings["claude_available"]; got != "checking" {
-		t.Fatalf("the paused initial_state carries claude_available=%v, want the checking it was built with", got)
+	testworld.AwaitSince[protocol.InitialStateMessage](app, mark, protocol.EventInitialState, nil)
+	initial := testworld.AwaitSince[protocol.HarnessCatalogMessage](app, mark, protocol.EventHarnessCatalog, nil)
+	if got, ok := testworld.FindHarness(initial.Harnesses, "claude"); !ok || got.Installation != protocol.HarnessInstallationChecking {
+		t.Fatalf("the paused harness_catalog carries claude=%+v, want the checking it was built with", got)
 	}
-	testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, settled)
+	testworld.AwaitSince(app, mark, protocol.EventHarnessCatalog, settled)
 }
 
 func TestAnAppServerSessionDoesNotHoldTheFirstScreenForTheCapture(t *testing.T) {
@@ -198,8 +204,9 @@ func TestAnAppServerSessionDoesNotHoldTheFirstScreenForTheCapture(t *testing.T) 
 	w.restart()
 	registerSampleServerDriver(t, w, w.App())
 	app = w.App()
-	if got := app.Initial.Settings["claude_available"]; got != "checking" {
-		t.Fatalf("initial_state carries claude_available=%v during the capture, want checking", got)
+	initialCatalog := testworld.Await(app, protocol.EventHarnessCatalog, func(protocol.HarnessCatalogMessage) bool { return true })
+	if got, ok := testworld.FindHarness(initialCatalog.Harnesses, "claude"); !ok || got.Installation != protocol.HarnessInstallationChecking {
+		t.Fatalf("initial harness_catalog carries claude=%+v during the capture, want checking", got)
 	}
 	shell.release()
 
@@ -343,7 +350,7 @@ func plugWorldBehindALoginShell(t *testing.T) (*world, *blockedLoginShell) {
 	writeCrewHomes(t, w)
 	shell := installBlockedLoginShell(t, w)
 	w.start()
-	pluginDriverSettings(w.App(), "plug")
+	awaitHarnessOffered(w.App(), "plug")
 	return w, shell
 }
 
@@ -746,8 +753,9 @@ func TestAHarnessOnlyTheLoginPathHasStaysSelectableAfterAFailedCapture(t *testin
 	mark := app.EventCount()
 	shell.release()
 	testworld.AwaitSince(app, mark, protocol.EventNotificationsUpdated, func(m protocol.NotificationsUpdatedMessage) bool { return m.UnreadCount == 1 })
-	if got := w.AppOn("").Initial.Settings["claude_available"]; got != "checking" {
-		t.Fatalf("after a failed capture a harness outside the bare PATH reads claude_available=%v, want checking, so the app still offers the launch that tries again", got)
+	afterFail := testworld.Await(w.AppOn(""), protocol.EventHarnessCatalog, func(protocol.HarnessCatalogMessage) bool { return true })
+	if got, ok := testworld.FindHarness(afterFail.Harnesses, "claude"); !ok || got.Installation != protocol.HarnessInstallationChecking {
+		t.Fatalf("after a failed capture a harness outside the bare PATH reads claude=%+v, want checking, so the app still offers the launch that tries again", got)
 	}
 
 	mark = app.EventCount()
@@ -755,7 +763,10 @@ func TestAHarnessOnlyTheLoginPathHasStaysSelectableAfterAFailedCapture(t *testin
 	if got, _ := envEntry(run.Env, "ATTN_TEST_LOGIN_ONLY"); got != "present" {
 		t.Fatalf("the launch of a harness only the login PATH has got ATTN_TEST_LOGIN_ONLY=%q, want the login environment", got)
 	}
-	testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["claude_available"] == "true" })
+	testworld.AwaitSince(app, mark, protocol.EventHarnessCatalog, func(m protocol.HarnessCatalogMessage) bool {
+		h, ok := testworld.FindHarness(m.Harnesses, "claude")
+		return ok && h.Installation == protocol.HarnessInstallationInstalled
+	})
 	if got := shell.captureCount(); got != 2 {
 		t.Fatalf("the login shell ran %d captures, want the failed one and the one the launch waited for", got)
 	}

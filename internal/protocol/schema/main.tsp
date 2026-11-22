@@ -1207,9 +1207,6 @@ model Harness {
   options: HarnessOptions;
   activity_effort?: string;            // the harness's default effort for light-tier background tasks, when it sets one
   advisor_effort?: string;             // the harness's default effort for the Garden advisor, when it sets one
-  model_pin: boolean;
-  effort_pin: boolean;
-  discovery: boolean;
 }
 
 // What a harness can do, as its adapter states it.

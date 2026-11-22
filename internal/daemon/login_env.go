@@ -171,7 +171,7 @@ func (d *Daemon) followLoginEnv() {
 		}
 		shownFailure = d.showLoginEnvFailure(d.loginEnv.answered(), shownFailure)
 		d.ensureAvailableAgentSkills()
-		d.publishHarnessAvailability()
+		d.projectHarnessCatalog()
 		if !pluginsStarted {
 			pluginsStarted = true
 			d.life.Go("startPluginsAfterLoginEnvCapture", d.startPluginsAfterLoginEnvCapture)
@@ -291,12 +291,4 @@ func (d *Daemon) awaitHarness(agent string) {
 			return
 		}
 	}
-}
-
-func (d *Daemon) publishHarnessAvailability() {
-	d.coalesceSnapshots(func() {
-		for _, h := range d.builtinHarnesses() {
-			d.publishFact(FactSettingChanged, availabilitySettingKey(h.Facts().ID), nil)
-		}
-	})
 }

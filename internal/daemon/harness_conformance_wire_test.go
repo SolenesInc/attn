@@ -21,9 +21,10 @@ func TestEveryHarnessAnswersTheContractWithItsFake(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Sigma, fakeagent.Plug)
 	app := w.App()
 	setSetting(t, app, "sigma_enabled", "true")
-	testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+	testworld.Await(app, protocol.EventHarnessCatalog, func(m protocol.HarnessCatalogMessage) bool {
 		for _, id := range []string{"claude", "codex", "sigma", "house"} {
-			if m.Settings[id+"_available"] != "true" {
+			h, ok := testworld.FindHarness(m.Harnesses, id)
+			if !ok || !h.Offered || h.Installation != protocol.HarnessInstallationInstalled {
 				return false
 			}
 		}

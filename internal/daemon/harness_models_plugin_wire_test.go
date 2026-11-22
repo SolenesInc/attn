@@ -33,7 +33,7 @@ func TestAPluginDriverOffersTheModelsItDiscoversOnlyWhenItSaysItCan(t *testing.T
 			housePlugin(t, row.capabilities)
 			w := newWorld(t, fakeagent.Plug)
 			app := w.App()
-			pluginDriverSettings(app, "house")
+			awaitHarnessOffered(app, "house")
 			found := testworld.Request(app, protocol.HarnessModelsMessage{Cmd: protocol.CmdHarnessModels, Harness: "house", RequestID: "house-models"},
 				protocol.EventHarnessModelsResult, func(r protocol.HarnessModelsResultMessage) bool { return r.RequestID == "house-models" })
 			if !found.Success || len(found.Models) != row.want {
@@ -50,7 +50,7 @@ func TestACrewMembersModelIsCheckedAgainstItsProvidersEntryInThePluginCatalog(t 
 	housePlugin(t, "initial_prompt,model_pin,effort_pin,model_discovery")
 	w := newCrewWorld(t, fakeagent.Plug)
 	cli := w.Client()
-	pluginDriverSettings(w.App(), "house")
+	awaitHarnessOffered(w.App(), "house")
 
 	setCrew(t, cli, "trellis", protocol.CrewSetMessage{Agent: protocol.Ptr("house"), Model: protocol.Ptr("first/shared"), Effort: protocol.Ptr("low")})
 	_, err := cli.CrewSet("trellis", nil, nil, protocol.Ptr("second/shared"), protocol.Ptr(""), nil)

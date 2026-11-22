@@ -16,7 +16,7 @@ func TestAFailedReopenKeepsItsAttemptAndRestoredWorktree(t *testing.T) {
 	t.Setenv(fakeagent.PlugCapabilitiesEnv, "state_reporting=false")
 	w := newWorld(t, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "plug")
+	awaitHarnessOffered(app, "plug")
 	repo := reopenRepoWithOrigin(t)
 
 	closedPlug := func(dir, reason string) protocol.SessionLedgerEntry {

@@ -8,15 +8,16 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestTheAppIsToldWhichAgentsAreAvailable(t *testing.T) {
 	inPreparedBubble(t, prepareWorld(t, fakeagent.Claude, fakeagent.Codex), func(t *testing.T, w *world) {
 		w.advance(0)
-		settings := w.App().Initial.Settings
-		for _, key := range []string{"claude_available", "codex_available"} {
-			if got := settings[key]; got != "true" {
-				t.Errorf("the app is told %s = %v, want true", key, got)
+		catalog := testworld.Await(w.App(), protocol.EventHarnessCatalog, func(protocol.HarnessCatalogMessage) bool { return true })
+		for _, id := range []string{"claude", "codex"} {
+			if got, ok := testworld.FindHarness(catalog.Harnesses, id); !ok || got.Installation != protocol.HarnessInstallationInstalled {
+				t.Errorf("the app is told %s = %+v, want installed", id, got)
 			}
 		}
 	})
@@ -92,8 +93,9 @@ func TestSkillsUseTheMachineExecutableSettingAtStartup(t *testing.T) {
 	inPreparedBubble(t, w.World, func(t *testing.T, w *world) {
 		w.advance(0)
 		app := w.App()
-		if got := app.Initial.Settings["claude_available"]; got != "false" {
-			t.Fatalf("unavailable environment executable is offered: %v", got)
+		catalog := testworld.Await(app, protocol.EventHarnessCatalog, func(protocol.HarnessCatalogMessage) bool { return true })
+		if got, ok := testworld.FindHarness(catalog.Harnesses, "claude"); !ok || got.Installation != protocol.HarnessInstallationMissing {
+			t.Fatalf("unavailable environment executable is offered: %+v", got)
 		}
 		preferences := *loadDelegationPreferences(app).Preferences
 		preferences.WorkflowSkillEnabled = true

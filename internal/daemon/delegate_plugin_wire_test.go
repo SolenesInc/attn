@@ -18,7 +18,7 @@ func TestAPluginDelegateGivenOnlyAModelRunsAtTheDefaultEffortItsDriverCanPin(t *
 		t.Run(row.capabilities, func(t *testing.T) {
 			t.Setenv(fakeagent.PlugCapabilitiesEnv, row.capabilities)
 			w := newWorld(t, fakeagent.Plug)
-			pluginDriverSettings(w.App(), "plug")
+			awaitHarnessOffered(w.App(), "plug")
 			cwd := w.Path("glm")
 			if err := os.MkdirAll(cwd, 0o755); err != nil {
 				t.Fatal(err)

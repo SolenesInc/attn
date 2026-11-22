@@ -480,6 +480,15 @@ func Await[T any](p *Peer, event string, match func(T) bool) T {
 	return AwaitSince(p, 0, event, match)
 }
 
+func FindHarness(harnesses []protocol.Harness, id string) (protocol.Harness, bool) {
+	for _, h := range harnesses {
+		if h.ID == id {
+			return h, true
+		}
+	}
+	return protocol.Harness{}, false
+}
+
 // AwaitSince is Await over the frames from mark on, a len(p.Log()) taken earlier.
 func AwaitSince[T any](p *Peer, mark int, event string, match func(T) bool) T {
 	p.T.Helper()

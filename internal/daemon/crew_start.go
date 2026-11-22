@@ -579,7 +579,7 @@ func (d *Daemon) validateCrewLaunchSelection(member crew.Member, requireAvailabl
 	if err := d.validateHarnessModelEffort(agent, member.Model, member.Effort); err != nil {
 		return err
 	}
-	if member.Model == "" || !harness.Discovery || !harness.Available() {
+	if member.Model == "" || !harness.Options.Discovery || !harness.Available() {
 		return nil
 	}
 	model, listed, err := d.harnessModel(context.Background(), agent, member.Model, signedOut)

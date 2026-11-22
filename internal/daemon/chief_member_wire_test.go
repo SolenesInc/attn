@@ -423,8 +423,8 @@ func TestChiefSetupPicksTheProfilesNotebookFolderAndMovesTheChiefsHomeThere(t *t
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	chief := profileChief(t, w)
-	if got := app.Initial.Settings["claude_cap_launch_instructions"]; got != "true" {
-		t.Fatalf("claude_cap_launch_instructions = %v, want true so setup offers Claude Code", got)
+	if !awaitHarnessOffered(app, "claude").Options.LaunchInstructions {
+		t.Fatal("claude launch_instructions = false, want true so setup offers Claude Code")
 	}
 	root := w.Path("work-notebook")
 	set := chiefSetupFromApp(app, "setup", protocol.CrewSetMessage{Agent: protocol.Ptr("claude"), Model: protocol.Ptr("sonnet"), ExpectedRevision: protocol.Ptr(chief.Revision), NotebookRoot: protocol.Ptr(root)})

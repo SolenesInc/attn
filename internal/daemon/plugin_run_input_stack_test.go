@@ -27,8 +27,13 @@ func TestADirectDriverRunSurvivesADaemonRestartWithoutPTYFallback(t *testing.T) 
 				return feedbackResult(app, request.RequestID)
 			}
 			observer := s.App()
+			awaitHarnessOffered(observer, "independent")
+			mark := observer.EventCount()
 			driver.hangUp()
-			testworld.Await(observer, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["independent_available"] != "true" })
+			testworld.AwaitSince(observer, mark, protocol.EventHarnessCatalog, func(m protocol.HarnessCatalogMessage) bool {
+				_, ok := testworld.FindHarness(m.Harnesses, "independent")
+				return !ok
+			})
 			if got := submit(); got.Success {
 				t.Fatalf("disconnected direct run accepted input: %+v", got)
 			}

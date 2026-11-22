@@ -17,8 +17,9 @@ import (
 func TestSigmaIsOfferedOnlyWhileSigmaEnabledIsOn(t *testing.T) {
 	w := newWorld(t, fakeagent.Sigma)
 	app := w.App()
-	if got, offered := app.Initial.Settings["sigma_available"]; offered {
-		t.Fatalf("with sigma_enabled off the settings offer sigma_available=%q, want no sigma", got)
+	initial := testworld.Await(app, protocol.EventHarnessCatalog, func(protocol.HarnessCatalogMessage) bool { return true })
+	if got, ok := testworld.FindHarness(initial.Harnesses, "sigma"); !ok || got.Offered {
+		t.Fatalf("with sigma_enabled off the catalog has sigma=%+v, want offered=false", got)
 	}
 	refused, _, _ := w.RequestSpawn(app, fakeagent.Sigma, w.Path("shop"))
 	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "not available") {
@@ -26,9 +27,9 @@ func TestSigmaIsOfferedOnlyWhileSigmaEnabledIsOn(t *testing.T) {
 	}
 
 	setSetting(t, app, "sigma_enabled", "true")
-	settings := pluginDriverSettings(app, "sigma")
-	if settings["sigma_cap_model_discovery"] != "true" || settings["sigma_cap_launch_instructions"] != "true" {
-		t.Errorf("Sigma's capabilities = model discovery %q, launch instructions %q, want both offered", settings["sigma_cap_model_discovery"], settings["sigma_cap_launch_instructions"])
+	sigma := awaitHarnessOffered(app, "sigma")
+	if !sigma.Options.Discovery || !sigma.Options.LaunchInstructions {
+		t.Errorf("Sigma's options = %+v, want discovery and launch_instructions offered", sigma.Options)
 	}
 	session := w.Spawn(app, fakeagent.Sigma, w.Path("shop"))
 	view := w.Launched(session)
@@ -105,11 +106,12 @@ func TestSigmaIsUnavailableWhenItsExecutableIsMissing(t *testing.T) {
 		w.advance(0)
 		app := w.App()
 		setSetting(t, app, "sigma_enabled", "true")
-		updated := testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-			return m.Settings["sigma_available"] != ""
+		updated := testworld.Await(app, protocol.EventHarnessCatalog, func(m protocol.HarnessCatalogMessage) bool {
+			h, ok := testworld.FindHarness(m.Harnesses, "sigma")
+			return ok && h.Offered
 		})
-		if got := updated.Settings["sigma_available"]; got != "false" {
-			t.Fatalf("sigma_available = %q with no sigma executable, want false", got)
+		if got, _ := testworld.FindHarness(updated.Harnesses, "sigma"); got.Installation != protocol.HarnessInstallationMissing {
+			t.Fatalf("sigma installation = %q with no sigma executable, want missing", got.Installation)
 		}
 	})
 }
@@ -259,21 +261,28 @@ location: {type: directory, path: %q}
 	}
 }
 
-func TestTheSettingsSayWhatSigmaTakesBesideTheOtherBuiltInHarnesses(t *testing.T) {
+func TestTheCatalogSaysWhatSigmaTakesBesideTheOtherBuiltInHarnesses(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Sigma)
 	app := w.App()
 	setSetting(t, app, "sigma_enabled", "true")
-	settings := pluginDriverSettings(app, "sigma")
-	want := map[string]map[string]string{
-		"claude": {"executable_setting": "true", "model_pin": "true", "effort_pin": "true", "launch_instructions": "true", "context_window_cap": "true", "automation": "true"},
-		"codex":  {"executable_setting": "true", "model_pin": "true", "effort_pin": "true", "launch_instructions": "true", "context_window_cap": "true", "automation": "true"},
-		"sigma":  {"executable_setting": "true", "model_pin": "true", "effort_pin": "true", "launch_instructions": "true", "context_window_cap": "false", "automation": "true"},
-	}
-	for agent, capabilities := range want {
-		for capability, value := range capabilities {
-			if got := settings[agent+"_cap_"+capability]; got != value {
-				t.Errorf("%s_cap_%s = %q, want %q", agent, capability, got, value)
-			}
+	catalog := testworld.Await(app, protocol.EventHarnessCatalog, func(m protocol.HarnessCatalogMessage) bool {
+		h, ok := testworld.FindHarness(m.Harnesses, "sigma")
+		return ok && h.Offered && h.Installation == protocol.HarnessInstallationInstalled
+	})
+	for _, tc := range []struct {
+		id         string
+		contextCap bool
+	}{
+		{"claude", true},
+		{"codex", true},
+		{"sigma", false},
+	} {
+		h, ok := testworld.FindHarness(catalog.Harnesses, tc.id)
+		if !ok {
+			t.Fatalf("catalog missing %s", tc.id)
+		}
+		if !h.Options.ExecutableSetting || !h.Options.ModelPin || !h.Options.EffortPin || !h.Options.LaunchInstructions || h.Options.ContextCap != tc.contextCap || !h.Options.AutoApprove {
+			t.Errorf("%s options = %+v, want executable_setting, model_pin, effort_pin, launch_instructions, auto_approve true and context_cap %v", tc.id, h.Options, tc.contextCap)
 		}
 	}
 

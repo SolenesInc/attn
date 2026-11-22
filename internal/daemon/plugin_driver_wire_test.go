@@ -9,29 +9,26 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func pluginDriverSettings(app *testworld.Peer, agent string) protocol.RecordString {
+func awaitHarnessOffered(app *testworld.Peer, agent string) protocol.Harness {
 	app.T.Helper()
-	if app.Initial.Settings[agent+"_available"] == "true" {
-		return app.Initial.Settings
-	}
-	return testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-		return m.Settings[agent+"_available"] == "true"
-	}).Settings
+	var found protocol.Harness
+	testworld.Await(app, protocol.EventHarnessCatalog, func(m protocol.HarnessCatalogMessage) bool {
+		h, ok := testworld.FindHarness(m.Harnesses, agent)
+		if ok && h.Offered && h.Installation == protocol.HarnessInstallationInstalled {
+			found = h
+			return true
+		}
+		return false
+	})
+	return found
 }
 
 func TestAPluginDriverPublishesItsCapabilitiesAndIsRefusedLaunchesBeyondThem(t *testing.T) {
 	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	settings := pluginDriverSettings(app, "plug")
-	for key, want := range map[string]string{
-		"plug_cap_initial_prompt":   "true",
-		"plug_cap_state_reporting":  "true",
-		"plug_cap_resume":           "true",
-		"plug_cap_message_delivery": "false",
-	} {
-		if got := settings[key]; got != want {
-			t.Errorf("the app sees %s = %q, want %q from the driver's registration", key, got, want)
-		}
+	plug := awaitHarnessOffered(app, "plug")
+	if !plug.Options.InitialPrompt || !plug.Options.Resume || plug.Options.ModelPin || plug.Options.EffortPin {
+		t.Errorf("the app sees plug options %+v, want initial_prompt and resume without model or effort pins", plug.Options)
 	}
 
 	for _, row := range []struct {
@@ -57,8 +54,8 @@ func TestAPluginDriverWithoutResumeIsRefusedANamedConversation(t *testing.T) {
 	t.Setenv(fakeagent.PlugWithoutResumeEnv, "1")
 	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	if got := pluginDriverSettings(app, "plug")["plug_cap_resume"]; got != "false" {
-		t.Fatalf("the app sees plug_cap_resume = %q, want \"false\" from a driver registered without resume", got)
+	if awaitHarnessOffered(app, "plug").Options.Resume {
+		t.Fatal("the app sees plug resume = true, want false from a driver registered without resume")
 	}
 	refused := refuseSpawnLikeTheApp(w, app, fakeagent.Plug, w.Path("named-conversation"), func(m *protocol.SpawnSessionMessage) {
 		m.ResumeSessionID = protocol.Ptr("conv-1")
@@ -74,7 +71,7 @@ func TestAPluginSessionFollowsItsDriversReportsAndResumesItsConversationAfterItE
 	t.Setenv(fakeagent.PlugCapabilitiesEnv, "resume_availability=false")
 	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	pluginDriverSettings(app, "plug")
+	awaitHarnessOffered(app, "plug")
 	cwd := w.Path("shop")
 	session := w.Spawn(app, fakeagent.Plug, cwd, func(m *protocol.SpawnSessionMessage) {
 		m.InitialPrompt = protocol.Ptr("price the checkout")

@@ -183,8 +183,6 @@ var (
 	SessionCostPrice             = add(&Setting{Key: "session_cost.price.<model>", Class: Home, Kind: Checked, Description: "Custom model token prices as JSON. Empty uses catalog prices."})
 	SessionCostBilledAs          = add(&Setting{Key: "session_cost.billed_as.<model>", Class: Home, Kind: Checked, Description: "Billing model alias. Empty removes the alias."})
 	NotebookRootEffective        = add(&Setting{Key: "notebook.root.effective", Class: Machine, Kind: Computed, Scope: PerProfile, Description: "The Notebook folder this profile uses."})
-	Available                    = add(&Setting{Key: "<harness>_available", Class: Machine, Kind: Computed, Description: "Whether this harness executable is available on PATH: true, false, or checking while the daemon reads the login environment."})
-	Capability                   = add(&Setting{Key: "<harness>_cap_<capability>", Class: Machine, Kind: Computed, Description: "Whether this harness supports the named capability."})
 	PTYBackendMode               = add(&Setting{Key: "pty_backend_mode", Class: Machine, Kind: Computed, Description: "Active terminal backend."})
 	SharedPTYHostActive          = add(&Setting{Key: "pty_shared_host_active", Class: Machine, Kind: Computed, Description: "Whether the shared terminal host is active."})
 	DBLastBackupAt               = add(&Setting{Key: "db.last_backup_at", Class: Machine, Kind: Computed, Description: "Time of the last database backup."})

@@ -15,7 +15,7 @@ import (
 func TestADelegationWhoseAgentCannotStartRemovesItsPaneAndKeepsItsWorktree(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "plug")
+	awaitHarnessOffered(app, "plug")
 	repo := newRepo(t, "shop")
 	root := filepath.Dir(repo)
 	source := w.Spawn(app, fakeagent.Codex, repo)
@@ -66,7 +66,7 @@ func TestADelegationWhoseAgentCannotStartRemovesItsPaneAndKeepsItsWorktree(t *te
 func TestADelegationFailsNamingTheScreenWhenItsAgentExitsBeforeItsFirstTurn(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "plug")
+	awaitHarnessOffered(app, "plug")
 	cwd := w.Path("api")
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)

@@ -231,7 +231,7 @@ func seedHandoverHeldBy(t *testing.T, cli *client.Client, seedID, sessionID stri
 func TestAHandoverWhoseSuccessorCannotStartKeepsTheSeedWithItsSuccessor(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "plug")
+	awaitHarnessOffered(app, "plug")
 	predecessor := seedResumeDelegate(t, w, fakeagent.Codex, "api")
 	w.Launched(string(predecessor.SessionID))
 

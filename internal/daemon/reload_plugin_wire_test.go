@@ -30,7 +30,7 @@ func converse(t *testing.T, app *testworld.Peer, session string, run *fakeagent.
 func TestAReloadedPluginSessionResumesItsConversationOnTheLaunchItHad(t *testing.T) {
 	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	pluginDriverSettings(app, "plug")
+	awaitHarnessOffered(app, "plug")
 	session := w.Spawn(app, fakeagent.Plug, w.Path("shop"))
 	first := w.Launched(session)
 
@@ -68,7 +68,7 @@ func TestAReloadedPluginSessionResumesWithItsPins(t *testing.T) {
 	t.Setenv(fakeagent.PlugCapabilitiesEnv, "launch_instructions,model_pin,effort_pin,yolo")
 	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	pluginDriverSettings(app, "plug")
+	awaitHarnessOffered(app, "plug")
 	session := w.Spawn(app, fakeagent.Plug, w.Path("planner"), func(m *protocol.SpawnSessionMessage) {
 		m.Model = protocol.Ptr("provider/model")
 		m.Effort = protocol.Ptr("high")
@@ -93,7 +93,7 @@ func TestAPluginSessionKeepsRunningWhenItsDriverCannotRelaunchIt(t *testing.T) {
 	t.Setenv(fakeagent.PlugCapabilitiesEnv, "launch_instructions")
 	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	pluginDriverSettings(app, "plug")
+	awaitHarnessOffered(app, "plug")
 	planner := w.Spawn(app, fakeagent.Plug, w.Path("planner"))
 	worker := w.Spawn(app, fakeagent.Plug, w.Path("worker"))
 	runs := map[string]*fakeagent.Run{planner: w.Launched(planner), worker: w.Launched(worker)}

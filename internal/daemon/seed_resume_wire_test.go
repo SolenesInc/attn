@@ -205,7 +205,7 @@ func seedResumeDesktops(w *world) []string {
 func TestAResumeWhoseAgentCannotStartKeepsItsPaneAndReleasesItsClaim(t *testing.T) {
 	w := newWorld(t, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "plug")
+	awaitHarnessOffered(app, "plug")
 	delegated := seedResumeDelegate(t, w, fakeagent.Plug, "api")
 	w.Launched(string(delegated.SessionID))
 	lifeMove(t, cli, string(delegated.SessionID), delegated.SeedID, "park", "", "")
@@ -280,7 +280,7 @@ func TestAReviewedResumeSettlesItsDecisionWhenLaunchFails(t *testing.T) {
 	w := &world{World: prepareWorld(t, fakeagent.Plug, fakeagent.Claude), gardenClock: func() time.Time { return time.Unix(0, now.Load()) }}
 	w.start()
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "plug")
+	awaitHarnessOffered(app, "plug")
 	delegated := seedResumeDelegate(t, w, fakeagent.Plug, "api")
 	w.Launched(string(delegated.SessionID))
 	closePane(app, sessionPane{session: string(delegated.SessionID)})
@@ -308,7 +308,7 @@ func TestAReviewedResumeSettlesItsDecisionWhenLaunchFails(t *testing.T) {
 func TestPluginResumeAndReopenRequireTheSavedConversation(t *testing.T) {
 	w := newWorld(t, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "plug")
+	awaitHarnessOffered(app, "plug")
 	delegated := seedResumeDelegate(t, w, fakeagent.Plug, "api")
 	first := w.Launched(string(delegated.SessionID))
 	close := func() {

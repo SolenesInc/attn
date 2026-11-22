@@ -51,9 +51,6 @@ func harnessRecord(ctx context.Context, h harnessapi.Harness) protocol.Harness {
 			Activity:              facts.Activity,
 			KeepsConversations:    keepsConversations(h),
 		},
-		ModelPin:  facts.Options.ModelPin,
-		EffortPin: facts.Options.EffortPin,
-		Discovery: facts.ModelDiscovery,
 	}
 	if effort := facts.Tiers[modeltiers.Light].Effort; effort != "" {
 		record.ActivityEffort = protocol.Ptr(effort)

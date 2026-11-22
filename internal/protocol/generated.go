@@ -5978,12 +5978,6 @@ type Harness struct {
 	// AdvisorEffort corresponds to the JSON schema field "advisor_effort".
 	AdvisorEffort *string `json:"advisor_effort,omitempty,omitzero"`
 
-	// Discovery corresponds to the JSON schema field "discovery".
-	Discovery bool `json:"discovery"`
-
-	// EffortPin corresponds to the JSON schema field "effort_pin".
-	EffortPin bool `json:"effort_pin"`
-
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
@@ -5992,9 +5986,6 @@ type Harness struct {
 
 	// Logo corresponds to the JSON schema field "logo".
 	Logo *string `json:"logo,omitempty,omitzero"`
-
-	// ModelPin corresponds to the JSON schema field "model_pin".
-	ModelPin bool `json:"model_pin"`
 
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`

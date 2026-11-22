@@ -88,9 +88,10 @@ func TestAgentReloadContinuesAfterARelaunchFailure(t *testing.T) {
 	w := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Plug))
 	w.Start()
 	app, cli := w.App(), w.Client()
-	if app.Initial.Settings["plug_available"] != "true" {
-		testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["plug_available"] == "true" })
-	}
+	testworld.Await(app, protocol.EventHarnessCatalog, func(m protocol.HarnessCatalogMessage) bool {
+		h, ok := testworld.FindHarness(m.Harnesses, "plug")
+		return ok && h.Offered && h.Installation == protocol.HarnessInstallationInstalled
+	})
 	chief := startChief(t, w)
 	plugin := w.Spawn(app, fakeagent.Plug, w.Path("plugin"))
 	first := w.Launched(plugin)

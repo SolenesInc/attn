@@ -45,10 +45,9 @@ names doesn't fit the user, ask whether they've used attn before and switch.
    with `attn crew rename chief <name>` only if the user picks a name. You keep
    working from your member home. Its folder takes the new name at your next
    session.
-3. Set up delegation roles. Read the delegation-roles reference, the
-   `<harness>_available` lines of `attn settings list --all`, and
-   `attn delegate roles show`. If those lines show only one harness, ask whether the
-   user expects another to work too. Explain roles by what they're for: they
+3. Set up delegation roles. Read the delegation-roles reference and
+   `attn delegate roles show`, and ask which harnesses the user has installed
+   or expects to work. Explain roles by what they're for: they
    teach attn's agents how to structure work when they hand it to other agents,
    which harness to use, when, and how. If attn's maintained roles (Pathfinder,
    Builder, Reviewer, Orchestrator, Prototyper) aren't in the table, describe

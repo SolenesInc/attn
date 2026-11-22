@@ -100,8 +100,8 @@ func TestToolFreeHeadlessTasksRunReadOnlyWithOnlyTheirProvidersEnvironment(t *te
 				t.Setenv(name, "")
 			}
 			w := newTitlingWorld(t, tc.harness)
-			if capable := w.App().Initial.Settings[string(tc.harness)+"_cap_headless_task"]; capable != "true" {
-				t.Fatalf("the app is told %s can run headless tasks: %v, want true", tc.harness, capable)
+			if !awaitHarnessOffered(w.App(), string(tc.harness)).Options.OneShot {
+				t.Fatalf("the app is told %s cannot run headless tasks, want one_shot true", tc.harness)
 			}
 			for key, value := range map[string]string{
 				"ANTHROPIC_BASE_URL": "https://anthropic.example", "OPENAI_BASE_URL": "https://openai.example",

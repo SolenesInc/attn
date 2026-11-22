@@ -57,8 +57,9 @@ func startWithCodexUnavailable(t *testing.T, plant func(toolHome string), check 
 	plant(toolHome)
 	inPreparedBubble(t, prepared, func(t *testing.T, w *world) {
 		w.advance(0)
-		if got := w.App().Initial.Settings["codex_available"]; got != "false" {
-			t.Fatalf("codex_available = %q, want false", got)
+		catalog := testworld.Await(w.App(), protocol.EventHarnessCatalog, func(protocol.HarnessCatalogMessage) bool { return true })
+		if got, ok := testworld.FindHarness(catalog.Harnesses, "codex"); !ok || got.Installation != protocol.HarnessInstallationMissing {
+			t.Fatalf("codex in harness_catalog = %+v, want missing", got)
 		}
 		check(t, toolHome)
 	})

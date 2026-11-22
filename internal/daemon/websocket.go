@@ -536,7 +536,6 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Daemon) sendInitialState(client *wsClient) {
-	reportsChecking := d.capturingLoginEnv()
 	state := d.currentStateProjection()
 	event := &protocol.InitialStateMessage{
 		TerminalBindings:       d.terminals().Bindings(),
@@ -562,11 +561,12 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 	for _, snap := range d.profileSnapshots {
 		snap.Initial(client.selectedProfile(), event)
 	}
+	catalog := d.harnessCatalogMessage()
 	pausepoint.At(pausepoint.DaemonInitialStateBuilt)
 	d.sendInitialArrangement(client, event)
-	d.sendToClient(client, d.harnessCatalogMessage())
-	if reportsChecking && !d.capturingLoginEnv() {
-		d.publishHarnessAvailability()
+	d.sendToClient(client, catalog)
+	if current := d.harnessCatalogMessage(); !wireEqual(catalog, current) {
+		d.sendToClient(client, current)
 	}
 	if !slices.Equal(state.GithubHosts, d.gitHubHosts()) {
 		d.sendToClient(client, d.gitHubHostsUpdatedMessage())

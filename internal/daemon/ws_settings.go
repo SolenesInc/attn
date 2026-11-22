@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -224,14 +223,6 @@ func executableSetting(agent string) *setting.Setting {
 	return setting.Executable.For(strings.TrimSpace(strings.ToLower(agent)))
 }
 
-func availabilitySettingKey(agent string) string {
-	return setting.Available.For(strings.TrimSpace(strings.ToLower(agent))).Key
-}
-
-func capabilitySettingKey(agent, capability string) string {
-	return setting.Capability.For(strings.TrimSpace(strings.ToLower(agent))).For(strings.TrimSpace(strings.ToLower(capability))).Key
-}
-
 func isAgentExecutableSettingKey(key string) (agent string, ok bool) {
 	lower := strings.TrimSpace(strings.ToLower(key))
 	if !strings.HasSuffix(lower, "_executable") {
@@ -255,55 +246,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	}
 	delete(settings, setting.AnalyticsSubjectSecret.Key)
 	delete(settings, setting.AnalyticsClearedAt.Key)
-
-	for _, h := range d.builtinHarnesses() {
-		facts := h.Facts()
-		name := facts.ID
-		health := h.Health(d.life.Context())
-		if !health.Offered {
-			continue
-		}
-		settings[availabilitySettingKey(name)] = availabilitySetting[health.Installation]
-
-		hasTranscriptWatcher := false
-		if tr, ok := harness.As[harness.Transcript](h); ok && tr.Watcher() != nil {
-			hasTranscriptWatcher = true
-		}
-		settings[capabilitySettingKey(name, "hooks")] = strconv.FormatBool(facts.Signals.ReportsTools)
-		settings[capabilitySettingKey(name, "transcript")] = strconv.FormatBool(facts.Signals.StopsReadable)
-		settings[capabilitySettingKey(name, "transcript_watcher")] = strconv.FormatBool(hasTranscriptWatcher)
-		settings[capabilitySettingKey(name, "classifier")] = strconv.FormatBool(facts.Signals.StopsClassified)
-		settings[capabilitySettingKey(name, "initial_prompt")] = strconv.FormatBool(facts.Options.InitialPrompt)
-		settings[capabilitySettingKey(name, "resume")] = strconv.FormatBool(facts.Options.Resume)
-		settings[capabilitySettingKey(name, "yolo")] = strconv.FormatBool(facts.Options.Yolo)
-		_, hasHeadlessTask := harness.As[harness.OneShot](h)
-		settings[capabilitySettingKey(name, "headless_task")] = strconv.FormatBool(hasHeadlessTask)
-		settings[capabilitySettingKey(name, "launch_instructions")] = strconv.FormatBool(d.agentSupportsChiefGuidance(name))
-		settings[capabilitySettingKey(name, "executable_setting")] = "true"
-		settings[capabilitySettingKey(name, "model_pin")] = strconv.FormatBool(facts.Options.ModelPin)
-		settings[capabilitySettingKey(name, "effort_pin")] = strconv.FormatBool(facts.Options.EffortPin)
-		settings[capabilitySettingKey(name, "context_window_cap")] = strconv.FormatBool(facts.Options.ContextCap)
-		settings[capabilitySettingKey(name, "automation")] = strconv.FormatBool(facts.Options.AutoApprove)
-		if facts.Recovery == harness.ByServer {
-			_, targets := d.targetsOf(name)
-			settings[capabilitySettingKey(name, "execution_target")] = strconv.FormatBool(targets)
-			settings[capabilitySettingKey(name, "model_discovery")] = "true"
-		}
-	}
-	for _, driver := range d.ensurePluginRegistry().registeredDrivers() {
-		settings[availabilitySettingKey(driver.Agent)] = "true"
-		if driver.DisplayName != "" {
-			settings[driver.Agent+"_display_name"] = driver.DisplayName
-		}
-		if d.harnessOf(driver.Agent).Facts().Recovery == harness.ByServer {
-			_, targets := d.targetsOf(driver.Agent)
-			settings[capabilitySettingKey(driver.Agent, "execution_target")] = strconv.FormatBool(targets)
-			settings[capabilitySettingKey(driver.Agent, "model_discovery")] = "true"
-		}
-		for capability, enabled := range driver.Capabilities {
-			settings[capabilitySettingKey(driver.Agent, capability)] = strconv.FormatBool(enabled)
-		}
-	}
 
 	settings[setting.PTYBackendMode.Key] = d.ptyBackendMode()
 	sharedEnabled, sharedActive := d.sharedPTYHostSettings()
@@ -367,8 +309,6 @@ func (d *Daemon) ptyBackendMode() string {
 	}
 	return "unknown"
 }
-
-var availabilitySetting = map[harness.Installation]string{harness.Installed: "true", harness.Missing: "false", harness.Unknown: "checking"}
 
 func settingShapesCrewLaunch(key string) bool {
 	return setting.DefaultModel.Matches(key) || setting.DefaultEffort.Matches(key)

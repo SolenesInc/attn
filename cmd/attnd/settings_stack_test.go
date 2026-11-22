@@ -75,12 +75,6 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 	s.Attn("settings", "list", "--all", "--json").JSON(t, &listed)
 	var registry strings.Builder
 	for _, entry := range listed.Entries {
-		if !protocol.Deref(entry.Family) && strings.Contains(entry.Key, "_cap_") {
-			continue
-		}
-		if entry.Key == "claude_available" || entry.Key == "codex_available" {
-			continue
-		}
 		fmt.Fprintf(&registry, "%s\t%s\t%t\t%s\n", entry.Key, entry.Scope, protocol.Deref(entry.ReadOnly), entry.Description)
 	}
 	prompttest.Equal(t, "settings-registry", map[string]string{"registry": registry.String()})

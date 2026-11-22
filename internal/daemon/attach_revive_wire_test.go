@@ -109,7 +109,7 @@ func TestAttachingWithReviveRelaunchesARecoverableSession(t *testing.T) {
 			}
 			app = attachReviveMakeRecoverable(t, w, app, session, first, tc.withTask)
 			if tc.agent == fakeagent.Plug {
-				pluginDriverSettings(app, "plug")
+				awaitHarnessOffered(app, "plug")
 			}
 
 			revived := attachRevive(app, session, 101, 37)

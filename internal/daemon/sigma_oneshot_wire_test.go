@@ -246,8 +246,8 @@ func TestOnAHomeWithOnlySigmaTheActivityLineIsWrittenBySigma(t *testing.T) {
 
 func TestSettingsOfferSigmaForBackgroundCallsAndAnAbandonedDictationStopsItsSigmaRun(t *testing.T) {
 	w, app := sigmaOnlyWorld(t)
-	if got := pluginDriverSettings(app, "sigma")["sigma_cap_headless_task"]; got != "true" {
-		t.Fatalf("sigma_cap_headless_task = %q, want Sigma offered for background model calls", got)
+	if !awaitHarnessOffered(app, "sigma").Options.OneShot {
+		t.Fatal("sigma one_shot = false, want Sigma offered for background model calls")
 	}
 	setSetting(t, app, "activity.config", `{"agent":"sigma"}`)
 	setSetting(t, app, "garden.advisor", `{"agent":"sigma"}`)

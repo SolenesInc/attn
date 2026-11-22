@@ -42,8 +42,8 @@ func TestTheAgentCatalogListsBuiltInAgentsAndThoseAConnectedPluginOffers(t *test
 		return false
 	})
 
-	if got := pluginDriverSettings(app, "plug")["plug_display_name"]; got != "Example Agent" {
-		t.Fatalf("settings display name = %q", got)
+	if got := awaitHarnessOffered(app, "plug").Name; got != "Example Agent" {
+		t.Fatalf("harness catalog display name = %q", got)
 	}
 	catalog := agentCatalog(t, w)
 	codex := catalog["codex"]

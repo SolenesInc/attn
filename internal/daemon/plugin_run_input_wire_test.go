@@ -15,7 +15,7 @@ func TestAnArbitraryPlugHarnessTakesDirectInputWithoutTerminalBytes(t *testing.T
 	t.Setenv(fakeagent.PlugCapabilitiesEnv, "message_delivery")
 	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	pluginDriverSettings(app, "independent")
+	awaitHarnessOffered(app, "independent")
 	session := w.Spawn(app, fakeagent.Harness("independent"), w.Path("shop"))
 	run := w.Launched(session)
 	app.TypeLine(session, "hello")

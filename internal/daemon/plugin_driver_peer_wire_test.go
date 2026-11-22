@@ -311,12 +311,12 @@ func (d *driverPeer) hangUp() {
 func (d *driverPeer) leave(w *world) {
 	d.t.Helper()
 	observer := w.App()
-	if observer.Initial.Settings[d.agent+"_available"] != "true" {
-		d.t.Fatalf("plugin %s leaves before the app sees its %s driver", d.name, d.agent)
-	}
+	awaitHarnessOffered(observer, d.agent)
+	mark := observer.EventCount()
 	d.hangUp()
-	testworld.Await(observer, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-		return m.Settings[d.agent+"_available"] != "true"
+	testworld.AwaitSince(observer, mark, protocol.EventHarnessCatalog, func(m protocol.HarnessCatalogMessage) bool {
+		_, ok := testworld.FindHarness(m.Harnesses, d.agent)
+		return !ok
 	})
 }
 
@@ -337,7 +337,7 @@ func spawnDriven(w *world, app *testworld.Peer, driver *driverPeer, cwd string, 
 
 func awaitDriverAvailable(app *testworld.Peer, agent string) {
 	app.T.Helper()
-	pluginDriverSettings(app, agent)
+	awaitHarnessOffered(app, agent)
 }
 
 func errorSays(err error, want string) bool {

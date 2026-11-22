@@ -196,9 +196,8 @@ func TestClosedCrewDaysKeepTheirTranscripts(t *testing.T) {
 
 func awaitAgentAvailable(app *testworld.Peer, agent fakeagent.Harness) {
 	app.T.Helper()
-	key := string(agent) + "_available"
-	if app.Initial.Settings[key] == "true" {
-		return
-	}
-	testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings[key] == "true" })
+	testworld.Await(app, protocol.EventHarnessCatalog, func(m protocol.HarnessCatalogMessage) bool {
+		h, ok := testworld.FindHarness(m.Harnesses, string(agent))
+		return ok && h.Offered && h.Installation == protocol.HarnessInstallationInstalled
+	})
 }

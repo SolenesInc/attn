@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "a59fdf987366";
+pub const PROTOCOL_VERSION: &str = "29385843f81a";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -5377,13 +5377,10 @@ pub struct Harness {
     pub activity_effort: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub advisor_effort: Option<String>,
-    pub discovery: bool,
-    pub effort_pin: bool,
     pub id: String,
     pub installation: HarnessInstallation,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logo: Option<String>,
-    pub model_pin: bool,
     pub name: String,
     pub offered: bool,
     pub options: HarnessOptions,

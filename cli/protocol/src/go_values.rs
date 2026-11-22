@@ -190,8 +190,6 @@ pub const SETTINGS: &[Setting] = &[
     Setting { key: "session_cost.price.<model>", machine: false, default_on: false },
     Setting { key: "session_cost.billed_as.<model>", machine: false, default_on: false },
     Setting { key: "notebook.root.effective", machine: true, default_on: false },
-    Setting { key: "<harness>_available", machine: true, default_on: false },
-    Setting { key: "<harness>_cap_<capability>", machine: true, default_on: false },
     Setting { key: "pty_backend_mode", machine: true, default_on: false },
     Setting { key: "pty_shared_host_active", machine: true, default_on: false },
     Setting { key: "db.last_backup_at", machine: true, default_on: false },

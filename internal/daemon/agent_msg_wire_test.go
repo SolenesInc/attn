@@ -300,7 +300,7 @@ func mailAgentAtWork(w *world, app *testworld.Peer, dir, prompt string) (string,
 func TestMailForAMemberWhoseLaunchFailsWaitsForItsNextDay(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "plug")
+	awaitHarnessOffered(app, "plug")
 	sender := spawnPanes(w, app, w.Path("sender"))[0].session
 	setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("plug")})
 	before := paneSessions(w)

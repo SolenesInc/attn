@@ -13,7 +13,7 @@ import (
 func TestAClosedPluginSessionReopensOnlyWhileItsDriverCanResumeIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "plug")
+	awaitHarnessOffered(app, "plug")
 	session := w.Spawn(app, fakeagent.Plug, w.Path("shop"))
 	w.Launched(session)
 	closeSession(t, cli, session, "done for now")
@@ -43,7 +43,7 @@ func TestAClosedSessionOfADriverThatDoesNotResumeRefusesResume(t *testing.T) {
 	t.Setenv(fakeagent.PlugWithoutResumeEnv, "1")
 	w := newWorld(t, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "plug")
+	awaitHarnessOffered(app, "plug")
 	session := w.Spawn(app, fakeagent.Plug, w.Path("shop"))
 	w.Launched(session)
 	closeSession(t, cli, session, "done for now")

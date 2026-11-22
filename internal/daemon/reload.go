@@ -177,10 +177,6 @@ func (d *Daemon) sessionHasLiveWorker(sessionID protocol.SessionID) bool {
 	return d.sessionLive(context.Background(), sessionID)
 }
 
-func (d *Daemon) agentSupportsChiefGuidance(agent string) bool {
-	return d.factsOrNone(agent).Options.LaunchInstructions
-}
-
 func (d *Daemon) agentSupportsChiefReload(agent string) bool {
 	options := d.factsOrNone(agent).Options
 	return options.LaunchInstructions && options.Resume
