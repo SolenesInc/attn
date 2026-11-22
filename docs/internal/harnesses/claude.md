@@ -479,8 +479,8 @@ local mock API, launched with attn's environment, `--settings` hooks and
 - `$.session.append({ message: { type: "user", content: [text block] } })`
   during a tool call adds the text, bare, to the running turn's next model
   request, after the tool result. The transcript keeps it as an `isMeta` user
-  row with the plugin's origin. The screen does not show it. From 2.1.328 the
-  text is no longer bare: see the 2.1.328 finding below.
+  row with the plugin's origin. The screen does not show it. From 2.1.326 the
+  text is no longer bare: see the 2.1.326 finding below.
 - A permission question replaces the prompt, and the `AbovePrompt` band is not
   drawn until the question closes (2.1.318). Refusing the question, with Esc or
   with "No", leaves `next.signal.aborted` true in that `tool.call` hook and ends
@@ -562,13 +562,15 @@ Measured on 2.1.318 through attn's mod, with the real binary and a mock API:
 - A tool result followed by several appended rows reaches the model as one user
   message, each row a text block. Every block but the last gains a trailing
   newline.
-- From 2.1.328, rows appended after a tool result no longer join the tool
+- From 2.1.326, rows appended after a tool result no longer join the tool
   result's user message. The request carries them after it as one
   `role: "system"` message. Each row becomes a note that opens with "Note from
   the attn plugin, not from the user:", and a blank line separates the notes.
   The row's line breaks survive. Probed through attn's mod against a mock API:
-  one append on 2.1.328, 2.1.329 and 2.1.330, two appends on 2.1.330. 2.1.319
-  to 2.1.327 were not probed.
+  one append on 2.1.328, 2.1.329 and 2.1.330, two appends on 2.1.330. Probed
+  with the real model through a probe mod (seed `s-1phqe5`): 2.1.318 to 2.1.325
+  still join the row to the tool result's user message as a text block, and
+  2.1.326 and 2.1.327 send the note. 2.1.320 was never published.
 - On a fresh config, the first launch asks "Make auto mode your default
   permission mode?". attn reports the session as needing approval until the user
   answers, so a delivery waits. `hasSeenAutoDefaultNotice` alone does not skip it
@@ -615,7 +617,7 @@ holds the runs):
   `queued_command` attachment with `origin: {"kind":"human"}`, in a
   `role: "system"` message with the head and tail that attn's mod copies. The
   mod's appended row differs only by its plugin origin and by the "Note from
-  the attn plugin, not from the user:" line that the 2.1.328 entry above
+  the attn plugin, not from the user:" line that the 2.1.326 entry above
   describes. The note
   goes out next to the other system reminders of the same request, such as MCP
   instruction deltas.
@@ -630,9 +632,17 @@ holds the runs):
   `$.prompt.submit({ text, asUser: true })` (4 of 4), or from the opening
   prompt (1 of 1). A `tool.judge` hook reads each verdict from `next(e)` as
   `{ decision, reason }`. Auto mode settled most in-project edits by mode,
-  with no classifier call.
+  with no classifier call. 2.1.326 and 2.1.327 denied the appended push too
+  (one and two runs). On 2.1.318 to 2.1.325, where the row joins the tool
+  result's user message, the classifier accepted it in every run: one on each
+  published version, two on 2.1.318. 2.1.318 refuses a module that registers
+  `tool.judge`, with `"tool.judge" is not an event`.
+- With `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1` on 2.1.330, the classifier still
+  denied the appended push (2 of 2) and allowed the typed one. Code mode runs
+  tools from code, and `tool.judge` then sees only the code's call, with "Auto
+  mode allowed the code that makes this call", not the push inside it.
 - Asked by an appended row for a harmless edit, the model made it in 4 of 7
-  runs. When it declined, it said the request came "inside the tool output" or
+  runs, against 3 of 3 on 2.1.318. When it declined, it said the request came "inside the tool output" or
   "inside an MCP server's instructions". Three rewrites of attn's head and tail
   did no better.
 - `$.prompt.submit` called inside a `tool.call` hook rejects at once:
