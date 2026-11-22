@@ -178,10 +178,17 @@ func titleSignalsOf(st HandoffState) harness.TitleKind {
 	if st.TitleSignals != nil {
 		return *st.TitleSignals
 	}
-	return titleSignalsOfPre5dHandoff(st.Agent)
+	return titleSignalsOfPre5d(st.Agent)
 }
 
-func titleSignalsOfPre5dHandoff(agent string) harness.TitleKind {
+func titleSignalsOfLaunch(kind harness.TitleKind, agent string) harness.TitleKind {
+	if kind == harness.TitlesNone {
+		return titleSignalsOfPre5d(agent)
+	}
+	return kind
+}
+
+func titleSignalsOfPre5d(agent string) harness.TitleKind {
 	if d := agentdriver.Get(agent); d != nil {
 		return agentdriver.EffectiveCapabilities(d).HarnessSignals
 	}

@@ -270,7 +270,7 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		promptExpected: ShellIntegrationExpected(usedShell, cmd.Env),
 		cwd:            opts.CWD,
 		agent:          prepared.Agent,
-		titleSignals:   opts.TitleSignals,
+		titleSignals:   titleSignalsOfLaunch(opts.TitleSignals, prepared.Agent),
 		cols:           opts.Cols,
 		rows:           opts.Rows,
 		ptmx:           ptmx,

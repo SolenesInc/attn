@@ -95,6 +95,7 @@ func runPTYWorker() {
 	fs.StringVar(&cfg.Model, "model", "", "recorded agent model")
 	fs.StringVar(&cfg.Effort, "effort", "", "recorded reasoning effort")
 	fs.StringVar(&cfg.Label, "label", "", "session label")
+	ignoreResumeFlagsOfPre5dDaemon(fs)
 	fs.BoolVar(&cfg.YoloMode, "yolo-mode", false, "launch agent in yolo mode")
 	fs.StringVar(&approvalRoute, "approval-route", "", "effective approval route recorded for daemon recovery")
 	fs.StringVar(&cfg.ThemeForeground, "theme-foreground", "", "terminal foreground color seeded for OSC 10/11/12 queries")
@@ -194,6 +195,11 @@ func runPTYWorker() {
 		fmt.Fprintf(os.Stderr, "pty-worker error: %v\n", err)
 		exit(1)
 	}
+}
+
+func ignoreResumeFlagsOfPre5dDaemon(fs *flag.FlagSet) {
+	fs.String("resume-session-id", "", "ignored")
+	fs.Bool("resume-picker", false, "ignored")
 }
 
 func runDaemonCommand() {
