@@ -22,6 +22,7 @@ mod editor;
 mod frame;
 pub mod frame_recorder;
 pub mod garden;
+mod harness_menu;
 pub mod headless;
 mod home;
 pub mod instance;

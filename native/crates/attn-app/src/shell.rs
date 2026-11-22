@@ -67,6 +67,7 @@ pub struct Window {
     /// The drain of each running auto-settle countdown whose agent is off screen, by agent.
     pub(crate) countdowns: std::collections::HashMap<String, crate::sidebar::Countdown>,
     pub(crate) snooze: Option<crate::sidebar::snooze::Menu>,
+    pub(crate) harness_menu: Option<crate::harness_menu::Open>,
     pub(crate) bar_peek: crate::sidebar::bar_peek::Hover,
     pub(crate) queue_bar_room: crate::sidebar::crowding::Room,
     pub(crate) launching: crate::picker::Launching,
@@ -884,6 +885,7 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
     layers.extend(crate::desktop::header_popover(state, t));
     layers.extend(crate::sidebar::bar_peek::view(state, t));
     layers.extend(crate::sidebar::snooze::view(state, t));
+    layers.extend(crate::harness_menu::view(state, t));
     layers.extend(crate::sidebar::session_menu::view(state, t));
     layers.extend(crate::sidebar::crew::menu_view(state, t));
     crate::chief::setup::overlay(state, t, &mut layers);

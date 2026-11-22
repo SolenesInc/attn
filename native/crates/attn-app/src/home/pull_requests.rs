@@ -14,7 +14,7 @@ use attn_ui::system::{
     icon_button, tag, words,
 };
 use attn_ui::{Dialog, Tokens, glyph, icon};
-use rune::{El, Tx, memo};
+use rune::{El, Key, KeyEvent, Tx, memo};
 
 use crate::State;
 use crate::requests::Answer;
@@ -384,7 +384,7 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
     };
     let mute_id = pr.id.clone();
     let new_session = {
-        let pr = pr.clone();
+        let (pr, key) = (pr.clone(), key.clone());
         icon_button(
             format!("{key}.new"),
             "New worktree session",
@@ -393,8 +393,32 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
         )
         .help("New worktree session")
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            crate::picker::pull_request::open_in_worktree(state, &pr, tx)
+            new_worktree_session(state, &pr, &key, tx)
         })
+    };
+    let choose_harness = {
+        let (pr, key) = (pr.clone(), key.clone());
+        icon_button(
+            format!("{key}.new.harness"),
+            CHOOSE_HARNESS,
+            glyph::CARET_DOWN,
+            IconSize::Small,
+        )
+        .help(format!("{CHOOSE_HARNESS}  H"))
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            self::choose_harness(state, &pr, &key, tx)
+        })
+    };
+    let typed = {
+        let (pr, key) = (pr.clone(), key.clone());
+        move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
+            let plain = !(ev.mods.cmd || ev.mods.ctrl || ev.mods.alt);
+            let h = matches!(&ev.key, Key::Text(t) if t.eq_ignore_ascii_case("h"));
+            if plain && h {
+                self::choose_harness(state, &pr, &key, tx);
+            }
+            plain && h
+        }
     };
     let mute = icon_button(
         format!("{key}.mute"),
@@ -439,9 +463,15 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
         )
         .title_el(title)
         .hover_controls_beside(
-            [new_session, action(Act::Approve), action(Act::Merge), mute]
-                .into_iter()
-                .chain(mute_author),
+            [
+                new_session,
+                choose_harness,
+                action(Act::Approve),
+                action(Act::Merge),
+                mute,
+            ]
+            .into_iter()
+            .chain(mute_author),
         )
         .select(
             format!("{key}.open"),
@@ -453,6 +483,29 @@ fn pr_row(state: &State, pr: &PR, yours: bool, key: String, heading: Heading, t:
         )
         .help(format!("Open {heading} on GitHub"))
         .build(t)
+        .on_key(typed)
+}
+
+const CHOOSE_HARNESS: &str = "Choose the harness for a new worktree session";
+
+/// Starts the harness the user last picked in a new worktree of `pr`'s branch, or asks which
+/// harness when there is no last pick.
+fn new_worktree_session(state: &mut State, pr: &PR, key: &str, tx: &mut Tx) {
+    match crate::harness_menu::last_pick(&state.facts.settings, &state.facts.harnesses) {
+        Some(agent) => crate::picker::pull_request::open_in_worktree(state, pr, agent, tx),
+        None => choose_harness(state, pr, key, tx),
+    }
+}
+
+/// Asks which harness to start in a new worktree of `pr`'s branch, beside the row's new-session
+/// button.
+fn choose_harness(state: &mut State, pr: &PR, key: &str, tx: &mut Tx) {
+    crate::harness_menu::open(
+        state,
+        crate::harness_menu::Start::Worktree(Box::new(pr.clone())),
+        format!("{key}.new"),
+        tx,
+    );
 }
 
 /// What changed on a pull request at a glance: new commits or comments since the user's last

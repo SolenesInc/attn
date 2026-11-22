@@ -41,7 +41,23 @@ fn start(mut state: InitialStateMessage, prs: Vec<PR>) -> World {
     let daemon = super::palette::daemon(state, vec![]);
     daemon.on("mute_pr", |_| ());
     daemon.on("refresh_prs", |_| ());
-    World::start(daemon)
+    let mut world = World::start(daemon);
+    world.daemon.emit(attn_protocol::HarnessCatalogMessage {
+        harnesses: vec![offered("claude", "Claude Code"), offered("codex", "Codex")],
+        ..attn_protocol::HarnessCatalogMessage::new()
+    });
+    world.settle();
+    world
+}
+
+fn offered(id: &str, name: &str) -> attn_protocol::Harness {
+    attn_protocol::Harness {
+        id: id.into(),
+        name: name.into(),
+        offered: true,
+        installation: "installed".into(),
+        ..attn_protocol::Harness::default()
+    }
 }
 
 fn answering(world: &World, cmd: &'static str, action: &'static str, error: Option<&'static str>) {
@@ -803,21 +819,85 @@ fn a_new_worktree_session_from_home_checks_out_the_prs_branch_and_starts_the_age
     assert!(!has(&world, "worktree-setup"));
 }
 
-#[test]
-fn a_new_worktree_session_with_no_harness_picked_yet_says_to_pick_one_and_starts_nothing() {
-    let mut world = start(
-        with_projects_and(one_desktop(vec![]), &[]),
+/// A pull request whose branch is known, and a daemon that checks it out and starts its agent.
+fn ready_to_check_out(state: InitialStateMessage) -> World {
+    let world = start(
+        state,
         vec![PR {
             head_branch: Some("feature".into()),
             ..pr("r1", 10, "reviewer", "review this")
         }],
     );
+    world
+        .daemon
+        .on("ensure_repo", |r| ensured(r, true))
+        .on("create_worktree_from_branch", |_| {
+            message(CreateWorktreeResultMessage {
+                success: true,
+                path: Some("/home/me/projects/attn--feature".into()),
+                ..CreateWorktreeResultMessage::new()
+            })
+        })
+        .on("spawn_session", |r| {
+            message(SpawnResultMessage {
+                id: r["id"].as_str().unwrap().into(),
+                success: true,
+                ..SpawnResultMessage::new()
+            })
+        });
+    world
+}
+
+fn key(world: &mut World, key: Key) {
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key,
+            mods: Mods::default(),
+        })
+    });
+}
+
+/// The harness menu's choices, each with whether it is the last pick and whether it is focused.
+fn harness_menu(world: &World) -> Vec<(String, bool, bool)> {
+    ["claude", "codex"]
+        .into_iter()
+        .filter_map(|id| {
+            world
+                .screen()
+                .find(Target::key(format!("harness-menu.{id}")))
+        })
+        .map(|n| {
+            (
+                n.name.clone().unwrap_or_default(),
+                n.is("checked"),
+                n.is("focused"),
+            )
+        })
+        .collect()
+}
+
+fn saved_picks(world: &World) -> Vec<serde_json::Value> {
+    world
+        .daemon
+        .sent_of("set_setting")
+        .into_iter()
+        .filter(|s| s["key"] == "new_session_agent")
+        .map(|s| s["value"].clone())
+        .collect()
+}
+
+#[test]
+fn a_new_worktree_session_with_no_harness_picked_yet_asks_which_and_starts_the_one_chosen() {
+    let mut world = ready_to_check_out(with_projects_and(one_desktop(vec![]), &[]));
 
     click(&mut world, "home.pr.r1.new");
 
     assert_eq!(
-        name(&world, "notice.text").as_deref(),
-        Some("Choose a harness in a new session first: this starts the one you last picked.")
+        harness_menu(&world),
+        [
+            ("Claude Code".to_owned(), false, true),
+            ("Codex".to_owned(), false, false)
+        ]
     );
     for cmd in [
         "fetch_pr_details",
@@ -828,6 +908,47 @@ fn a_new_worktree_session_with_no_harness_picked_yet_says_to_pick_one_and_starts
         assert!(world.daemon.sent_of(cmd).is_empty(), "{cmd}");
     }
     assert!(!has(&world, "worktree-setup"));
+
+    key(&mut world, Key::Down);
+    key(&mut world, Key::Enter);
+
+    assert_eq!(saved_picks(&world), [serde_json::json!("codex")]);
+    let spawned = world.daemon.sent_of("spawn_session");
+    assert_eq!(spawned.len(), 1);
+    assert_eq!(spawned[0]["cwd"], "/home/me/projects/attn--feature");
+    assert_eq!(spawned[0]["agent"], "codex");
+    assert!(harness_menu(&world).is_empty());
+}
+
+#[test]
+fn the_caret_or_h_on_a_pr_asks_which_harness_with_the_last_pick_marked_and_starts_the_one_chosen() {
+    let mut world = ready_to_check_out(with_projects(one_desktop(vec![])));
+    assert_eq!(
+        name(&world, "home.pr.r1.new.harness").as_deref(),
+        Some("Choose the harness for a new worktree session")
+    );
+
+    click(&mut world, "home.pr.r1.new.harness");
+    assert_eq!(
+        harness_menu(&world),
+        [
+            ("Claude Code".to_owned(), true, true),
+            ("Codex".to_owned(), false, false)
+        ]
+    );
+    key(&mut world, Key::Escape);
+    assert!(harness_menu(&world).is_empty());
+    assert!(world.daemon.sent_of("spawn_session").is_empty());
+
+    world.gesture(|app| app.update(|_, tx| tx.focus("home.pr.r1.open".to_owned(), true)));
+    world.gesture(|app| app.type_text("h"));
+    assert_eq!(harness_menu(&world).len(), 2);
+    world.gesture(|app| app.type_text("2"));
+
+    assert_eq!(saved_picks(&world), [serde_json::json!("codex")]);
+    let spawned = world.daemon.sent_of("spawn_session");
+    assert_eq!(spawned.len(), 1);
+    assert_eq!(spawned[0]["agent"], "codex");
 }
 
 #[test]
@@ -1280,6 +1401,10 @@ fn every_prs_action_keeps_its_key_name_and_tab_stop() {
             "#12 on github.com: Cache the catalog so the storefront answers before the warehouse wakes up",
         ),
         ("new", "New worktree session"),
+        (
+            "new.harness",
+            "Choose the harness for a new worktree session",
+        ),
         ("approve", "Approve"),
         ("merge", "Merge"),
         ("mute", "Mute this PR"),
@@ -1298,7 +1423,7 @@ fn every_prs_action_keeps_its_key_name_and_tab_stop() {
     );
     world.gesture(|app| app.update(|_, tx| tx.focus("home.pr.r1.open".to_owned(), true)));
     let mut stops = vec![focused(&world)];
-    for _ in 0..6 {
+    for _ in 0..7 {
         world.gesture(|app| {
             app.key(KeyEvent {
                 key: Key::Tab,
@@ -1313,6 +1438,7 @@ fn every_prs_action_keeps_its_key_name_and_tab_stop() {
         [
             r1("open"),
             r1("new"),
+            r1("new.harness"),
             r1("approve"),
             r1("merge"),
             r1("mute"),

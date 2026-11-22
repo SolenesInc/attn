@@ -6038,6 +6038,7 @@ fn sets_up_a_review_on_an_outpost_on_that_outpost_and_stops_offering_it_there_wi
         "code_nav_setup",
         |_| json!({"event": "code_nav_setup_result", "success": true, "session_id": "setup-1"}),
     );
+    harnesses(&mut world, Some("claude"));
     world.daemon.emit(DesktopTileContentMessage {
         desktop_id: DESKTOP.into(),
         tile_id: "m".into(),
@@ -6071,6 +6072,53 @@ fn sets_up_a_review_on_an_outpost_on_that_outpost_and_stops_offering_it_there_wi
             json!("off")
         )
     );
+}
+
+fn offered(id: &str, name: &str) -> attn_protocol::Harness {
+    attn_protocol::Harness {
+        id: id.into(),
+        name: name.into(),
+        offered: true,
+        installation: "installed".into(),
+        ..attn_protocol::Harness::default()
+    }
+}
+
+/// The daemon offers Claude Code and Codex, and the user last picked `pick` when given.
+fn harnesses(world: &mut World, pick: Option<&str>) {
+    world.daemon.emit(attn_protocol::HarnessCatalogMessage {
+        harnesses: vec![offered("claude", "Claude Code"), offered("codex", "Codex")],
+        ..attn_protocol::HarnessCatalogMessage::new()
+    });
+    if let Some(pick) = pick {
+        world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+            settings: Some([("new_session_agent".to_owned(), pick.to_owned())].into()),
+            ..attn_protocol::SettingsUpdatedMessage::new()
+        });
+    }
+    world.settle();
+}
+
+fn saved_picks(world: &World) -> Vec<serde_json::Value> {
+    world
+        .daemon
+        .sent_of("set_setting")
+        .into_iter()
+        .filter(|s| s["key"] == "new_session_agent")
+        .map(|s| s["value"].clone())
+        .collect()
+}
+
+fn harness_menu(world: &World) -> Vec<(String, bool)> {
+    ["claude", "codex"]
+        .into_iter()
+        .filter_map(|id| {
+            world
+                .screen()
+                .find(Target::key(format!("harness-menu.{id}")))
+        })
+        .map(|n| (n.name.clone().unwrap_or_default(), n.is("focused")))
+        .collect()
 }
 
 fn server(language: &str, state: &str) -> attn_protocol::ReviewNavigation {
@@ -6166,6 +6214,7 @@ fn s_starts_an_agent_that_sets_up_a_missing_server_and_says_why_it_could_not() {
     world
         .daemon
         .on("code_nav_setup", move |_| answers.lock().unwrap().remove(0));
+    harnesses(&mut world, Some("claude"));
     deliver(
         &mut world,
         DOCUMENT,
@@ -6190,6 +6239,7 @@ fn s_starts_an_agent_that_sets_up_a_missing_server_and_says_why_it_could_not() {
             asked[0]["file"].clone(),
             asked[0]["state"].clone(),
             asked[0]["detail"].clone(),
+            asked[0]["agent"].clone(),
         ),
         (
             json!(DESKTOP),
@@ -6199,6 +6249,7 @@ fn s_starts_an_agent_that_sets_up_a_missing_server_and_says_why_it_could_not() {
             json!("main.python"),
             json!("missing"),
             json!("pyright not found"),
+            json!("claude"),
         )
     );
     assert_eq!(
@@ -6209,6 +6260,76 @@ fn s_starts_an_agent_that_sets_up_a_missing_server_and_says_why_it_could_not() {
     click(&mut world, Target::key("tile.m.review.setup.start"));
     assert_eq!(world.daemon.sent_of("code_nav_setup").len(), 2);
     assert_eq!(nav_note(&world), None);
+}
+
+#[test]
+fn with_no_harness_picked_s_asks_which_and_sets_up_with_the_one_chosen_as_the_new_pick() {
+    let mut world = start();
+    world.daemon.on(
+        "code_nav_setup",
+        |_| json!({"event": "code_nav_setup_result", "success": true, "session_id": "s-setup"}),
+    );
+    harnesses(&mut world, None);
+    deliver(
+        &mut world,
+        DOCUMENT,
+        Some(with_servers(vec![server("python", "missing")])),
+    );
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+
+    type_key(&mut world, "s");
+    assert_eq!(
+        harness_menu(&world),
+        [
+            ("Claude Code".to_owned(), true),
+            ("Codex".to_owned(), false)
+        ]
+    );
+    assert!(world.daemon.sent_of("code_nav_setup").is_empty());
+
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Enter);
+    assert_eq!(saved_picks(&world), [json!("codex")]);
+    let asked = world.daemon.sent_of("code_nav_setup");
+    assert_eq!(
+        (
+            asked.len(),
+            asked[0]["language"].clone(),
+            asked[0]["agent"].clone()
+        ),
+        (1, json!("python"), json!("codex"))
+    );
+    assert!(harness_menu(&world).is_empty());
+}
+
+#[test]
+fn escape_closes_the_harness_question_and_sets_up_nothing_and_a_digit_chooses_by_place() {
+    let mut world = start();
+    world.daemon.on(
+        "code_nav_setup",
+        |_| json!({"event": "code_nav_setup_result", "success": true, "session_id": "s-setup"}),
+    );
+    harnesses(&mut world, None);
+    deliver(
+        &mut world,
+        DOCUMENT,
+        Some(with_servers(vec![server("python", "missing")])),
+    );
+    world.gesture(|app| app.click(Target::key("tile.m.review.keys")));
+
+    type_key(&mut world, "s");
+    press(&mut world, Key::Escape);
+    assert!(harness_menu(&world).is_empty());
+    assert!(world.daemon.sent_of("code_nav_setup").is_empty());
+    assert!(saved_picks(&world).is_empty());
+
+    type_key(&mut world, "s");
+    type_key(&mut world, "2");
+    assert_eq!(saved_picks(&world), [json!("codex")]);
+    assert_eq!(
+        world.daemon.sent_of("code_nav_setup")[0]["agent"],
+        json!("codex")
+    );
 }
 
 #[test]
@@ -6252,6 +6373,7 @@ fn x_stops_offering_setup_in_the_repository_and_s_still_sets_up() {
         "code_nav_setup",
         |_| json!({"event": "code_nav_setup_result", "success": true}),
     );
+    harnesses(&mut world, Some("claude"));
     deliver(
         &mut world,
         DOCUMENT,
@@ -6270,10 +6392,13 @@ fn x_stops_offering_setup_in_the_repository_and_s_still_sets_up() {
         Some("Setup is no longer offered in this repository; s still sets up.")
     );
     world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
-        settings: Some(std::collections::BTreeMap::from([(
-            "code_review_setup_offer_local_/repo".to_owned(),
-            "off".to_owned(),
-        )])),
+        settings: Some(std::collections::BTreeMap::from([
+            (
+                "code_review_setup_offer_local_/repo".to_owned(),
+                "off".to_owned(),
+            ),
+            ("new_session_agent".to_owned(), "claude".to_owned()),
+        ])),
         ..attn_protocol::SettingsUpdatedMessage::new()
     });
     world.settle();
