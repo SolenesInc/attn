@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"strings"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -57,6 +58,35 @@ func (d *Daemon) forgetAdapterTerminal(t harness.TerminalID) {
 	}
 	if err := d.store.DeleteAdapterTerminal(string(t)); err != nil {
 		d.logf("forget adapter terminal %s: %v", t, err)
+	}
+}
+
+func (d *Daemon) backfillLegacyServerTerminals(ctx context.Context, listingComplete bool) {
+	pending, err := d.store.LegacyServerTerminalBackfillPending()
+	if err != nil {
+		d.logf("backfill legacy app-server terminals: %v", err)
+		return
+	}
+	provider, ok := d.ptyBackend.(ptybackend.SessionInfoProvider)
+	if !pending || !ok {
+		return
+	}
+	for terminal := range d.localLiveTerminals(ctx) {
+		if !strings.HasSuffix(string(terminal), "-server") {
+			continue
+		}
+		if info, err := provider.SessionInfo(ctx, terminal); err == nil && info.Agent == string(terminal) {
+			if err := d.store.SaveAdapterTerminal(string(terminal), appServerTerminalOwner); err != nil {
+				d.logf("backfill legacy app-server terminal %s: %v", terminal, err)
+				return
+			}
+		}
+	}
+	if !listingComplete {
+		return
+	}
+	if err := d.store.FinishLegacyServerTerminalBackfill(); err != nil {
+		d.logf("finish the legacy app-server terminal backfill: %v", err)
 	}
 }
 

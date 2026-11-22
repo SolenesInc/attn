@@ -1030,17 +1030,19 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[protocol.Sess
 				fmt.Sprintf("PTY recovery skipped %d workers due to transient unavailability.", recoveryReport.Missing),
 			)
 		}
-		if recoveryReport.Missing == 0 && recoveryReport.Failed == 0 {
-			d.sweepAdapterTerminals(context.Background())
-		}
+	}
+	d.backfillLegacyServerTerminals(context.Background(), false)
+	if recoverErr == nil && recoveryReport.Missing == 0 && recoveryReport.Failed == 0 {
+		d.sweepAdapterTerminals(context.Background())
 	}
 
 	d.recoverHarnesses(context.Background(), harness.RecoverProcesses)
 	if _, ok := d.ptyBackend.(ptybackend.RecoverableRuntime); ok {
-		d.reconcileStartupWorkerSessions(recoveryReport, recoverErr, previousRunSessions, recoveryStartedAt)
+		listed := d.reconcileStartupWorkerSessions(recoveryReport, recoverErr, previousRunSessions, recoveryStartedAt)
 		d.recoverHarnesses(context.Background(), harness.RecoverViews)
 		d.restoreTranscriptWatchers()
 		d.replayPendingConversations()
+		d.backfillLegacyServerTerminals(context.Background(), listed)
 		d.pruneRuntimesWithoutSession(context.Background())
 		return
 	}
@@ -1054,6 +1056,7 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[protocol.Sess
 		)
 	}
 	d.recoverHarnesses(context.Background(), harness.RecoverViews)
+	d.backfillLegacyServerTerminals(context.Background(), recoverErr == nil && recoveryReport.Failed == 0)
 	d.pruneRuntimesWithoutSession(context.Background())
 	d.restoreTranscriptWatchers()
 }
@@ -1087,15 +1090,17 @@ func (d *Daemon) recoverPTYBackend(timeout time.Duration) (ptybackend.RecoveryRe
 	return d.ptyBackend.Recover(recoveryCtx)
 }
 
-func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.RecoveryReport, recoverErr error, previousRunSessions map[protocol.SessionID]struct{}, recoveryStartedAt time.Time) {
+func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.RecoveryReport, recoverErr error, previousRunSessions map[protocol.SessionID]struct{}, recoveryStartedAt time.Time) bool {
 	allowIdleDemotion := recoverErr == nil && recoveryReport.Missing == 0 && recoveryReport.Failed == 0
+	listed := recoverErr == nil && recoveryReport.Failed == 0
 	if !allowIdleDemotion {
 		for attempt := 1; attempt <= startupRecoveryRetryMax; attempt++ {
 			// A recovery cut short would read as no live PTYs; stop leaves reconciliation to the next daemon.
 			if d.stopping() {
-				return
+				return listed
 			}
 			retryReport, retryErr := d.recoverPTYBackend(5 * time.Second)
+			listed = listed || (retryErr == nil && retryReport.Failed == 0)
 			if retryErr == nil && retryReport.Missing == 0 && retryReport.Failed == 0 {
 				recoveryReport = retryReport
 				recoverErr = nil
@@ -1190,6 +1195,7 @@ func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.Recove
 	if reconcile.SkippedIdle > 0 || reconcile.SkippedRecent > 0 || reconcile.LivenessUnknown > 0 || reconcile.MissingMetadata > 0 {
 		d.scheduleDeferredWorkerReconciliation(previousRunSessions, recoveryStartedAt)
 	}
+	return listed
 }
 
 type recoveryRules struct {

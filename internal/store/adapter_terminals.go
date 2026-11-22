@@ -30,6 +30,21 @@ func (s *Store) AdapterTerminalOwner(terminal string) (string, bool, error) {
 	return owner, err == nil, err
 }
 
+func (s *Store) LegacyServerTerminalBackfillPending() (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var pending bool
+	err := s.db.QueryRow(`SELECT EXISTS (SELECT 1 FROM legacy_server_terminal_backfill)`).Scan(&pending)
+	return pending, err
+}
+
+func (s *Store) FinishLegacyServerTerminalBackfill() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`DELETE FROM legacy_server_terminal_backfill`)
+	return err
+}
+
 func (s *Store) AdapterTerminals() (map[string]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

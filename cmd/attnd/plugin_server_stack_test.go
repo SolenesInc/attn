@@ -342,82 +342,98 @@ func TestAPlainShellCommandDoesNotReadTheHarnessCatalog(t *testing.T) {
 	}
 }
 
+const buildBeforeAdapterTerminals = "5ec741218419642802d1775c8fa0588da0ccf6ab"
+
 func TestAPluginServerSurvivesItsStartingAliasUninstallAndDaemonRestart(t *testing.T) {
 	for _, backend := range testworld.WorkerAndSharedHost {
-		t.Run(string(backend), func(t *testing.T) {
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.SampleServer), testworld.OnPTYBackend(backend))
-			gate := filepath.Join(s.Dir, "aliases.sock")
-			listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: gate, Net: "unix"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { _ = listener.Close() })
-			register := func() {
-				t.Helper()
-				_ = listener.SetDeadline(time.Now().Add(fakeagent.HangGuard))
-				c, err := listener.Accept()
-				if err != nil {
-					t.Fatal(err)
-				}
-				t.Cleanup(func() { _ = c.Close() })
-				_ = c.SetDeadline(time.Now().Add(fakeagent.HangGuard))
-				if _, err := c.Write([]byte("register\n")); err != nil {
-					t.Fatal(err)
-				}
-				if line, err := bufio.NewReader(c).ReadString('\n'); err != nil || line != "registered\n" {
-					t.Fatalf("alias registration: %q %v", line, err)
-				}
-			}
-			s.Vars = append(s.Vars, "ATTN_SAMPLE_SERVER_EXECUTABLE="+filepath.Join(s.Dir, "bin", "sample-server"), "ATTN_TEST_SERVER_CALLER_ENV=SAMPLE_SERVER_ROOT_CONVERSATION", "SAMPLE_SERVER_HOME="+filepath.Join(s.Dir, "sample-home"))
-			s.Start()
-			app := s.App()
-			sdk := packSDK(t)
-			first := authorsServerPlugin(t, "starting_alias", sdk, gate, "SAMPLE_SERVER_ROOT_CONVERSATION")
-			second := authorsServerPlugin(t, "surviving_alias", sdk, gate, "SAMPLE_SERVER_ROOT_CONVERSATION")
-			manifest := filepath.Join(second, "attn-plugin.toml")
-			data, err := os.ReadFile(manifest)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(manifest, []byte(strings.Replace(string(data), `name = "sample-server"`, `name = "server-alias"`, 1)), 0600); err != nil {
-				t.Fatal(err)
-			}
-			for _, plugin := range []struct{ path, id string }{{first, "starting_alias"}, {second, "surviving_alias"}} {
-				if result := s.Attn("plugin", "install", "--path", plugin.path); result.Code != 0 {
-					t.Fatalf("install: %+v", result)
-				}
-				register()
-				awaitAgentAvailable(app, fakeagent.Harness(plugin.id))
-			}
-			a := s.Spawn(app, fakeagent.Harness("starting_alias"), s.Path("first"))
-			s.Launched(a)
-			server := s.AppServer(fakeagent.SampleServer)
-			pid := server.PID()
-			b := s.Spawn(app, fakeagent.Harness("surviving_alias"), s.Path("second"))
-			view := s.Launched(b)
-			testworld.AwaitSession(app, b, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
-			if result := s.Attn("agent", "close", a, "-m", "finished", "--source-session", a); result.Code != 0 {
-				t.Fatalf("close: %+v", result)
-			}
-			if result := s.Attn("plugin", "uninstall", "sample-server"); result.Code != 0 {
-				t.Fatalf("uninstall first alias: %+v", result)
-			}
-			s.Stop()
-			s.Start()
-			register()
-			app = s.App()
-			awaitAgentAvailable(app, fakeagent.Harness("surviving_alias"))
-			if result := serverInput(app, b, uuid.NewString(), "after alias uninstall and restart"); !result.Success || result.Status != "delivered" {
-				t.Fatalf("surviving alias: %+v", result)
-			}
-			got := server.Prompted(view.ConversationID)
-			if got.Text != "after alias uninstall and restart" || s.AppServer(fakeagent.SampleServer).PID() != pid || s.AppServers(fakeagent.SampleServer) != 1 {
-				t.Fatalf("shared server replaced: input=%+v original PID=%d", got, pid)
-			}
-			if initializations, watches := s.AppServer(fakeagent.SampleServer).ControlCounts(); initializations != 2 || watches != 2 {
-				t.Fatalf("aliases/restart initialized %d controls and %d watches, want one per daemon", initializations, watches)
-			}
-			t.Logf("starting alias uninstalled; %s daemon restart preserved server PID %d and session %s conversation %s", backend, pid, b, view.ConversationID)
-		})
+		for _, first := range []struct {
+			name   string
+			binary func(testing.TB) string
+		}{
+			{"restart", testworld.AttnBinary},
+			{"upgrade", func(t testing.TB) string { return testworld.AttnBinaryFromCommit(t, buildBeforeAdapterTerminals) }},
+		} {
+			t.Run(string(backend)+"/"+first.name, func(t *testing.T) {
+				aliasServerSurvivesStartingAliasUninstall(t, backend, first.binary(t))
+			})
+		}
 	}
+}
+
+func aliasServerSurvivesStartingAliasUninstall(t *testing.T, backend testworld.PTYBackend, firstBinary string) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.SampleServer), testworld.OnPTYBackend(backend))
+	gate := filepath.Join(s.Dir, "aliases.sock")
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: gate, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	register := func() {
+		t.Helper()
+		_ = listener.SetDeadline(time.Now().Add(fakeagent.HangGuard))
+		c, err := listener.Accept()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = c.Close() })
+		_ = c.SetDeadline(time.Now().Add(fakeagent.HangGuard))
+		if _, err := c.Write([]byte("register\n")); err != nil {
+			t.Fatal(err)
+		}
+		if line, err := bufio.NewReader(c).ReadString('\n'); err != nil || line != "registered\n" {
+			t.Fatalf("alias registration: %q %v", line, err)
+		}
+	}
+	s.Vars = append(s.Vars, "ATTN_SAMPLE_SERVER_EXECUTABLE="+filepath.Join(s.Dir, "bin", "sample-server"), "ATTN_TEST_SERVER_CALLER_ENV=SAMPLE_SERVER_ROOT_CONVERSATION", "SAMPLE_SERVER_HOME="+filepath.Join(s.Dir, "sample-home"))
+	s.RunFrom(firstBinary)
+	s.Start()
+	app := s.App()
+	sdk := packSDK(t)
+	first := authorsServerPlugin(t, "starting_alias", sdk, gate, "SAMPLE_SERVER_ROOT_CONVERSATION")
+	second := authorsServerPlugin(t, "surviving_alias", sdk, gate, "SAMPLE_SERVER_ROOT_CONVERSATION")
+	manifest := filepath.Join(second, "attn-plugin.toml")
+	data, err := os.ReadFile(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifest, []byte(strings.Replace(string(data), `name = "sample-server"`, `name = "server-alias"`, 1)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, plugin := range []struct{ path, id string }{{first, "starting_alias"}, {second, "surviving_alias"}} {
+		if result := s.Attn("plugin", "install", "--path", plugin.path); result.Code != 0 {
+			t.Fatalf("install: %+v", result)
+		}
+		register()
+		awaitAgentAvailable(app, fakeagent.Harness(plugin.id))
+	}
+	a := s.Spawn(app, fakeagent.Harness("starting_alias"), s.Path("first"))
+	s.Launched(a)
+	server := s.AppServer(fakeagent.SampleServer)
+	pid := server.PID()
+	b := s.Spawn(app, fakeagent.Harness("surviving_alias"), s.Path("second"))
+	view := s.Launched(b)
+	testworld.AwaitSession(app, b, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+	if result := s.Attn("agent", "close", a, "-m", "finished", "--source-session", a); result.Code != 0 {
+		t.Fatalf("close: %+v", result)
+	}
+	if result := s.Attn("plugin", "uninstall", "sample-server"); result.Code != 0 {
+		t.Fatalf("uninstall first alias: %+v", result)
+	}
+	s.Stop()
+	s.RunFrom(testworld.AttnBinary(t))
+	s.Start()
+	register()
+	app = s.App()
+	awaitAgentAvailable(app, fakeagent.Harness("surviving_alias"))
+	if result := serverInput(app, b, uuid.NewString(), "after alias uninstall and restart"); !result.Success || result.Status != "delivered" {
+		t.Fatalf("surviving alias: %+v", result)
+	}
+	got := server.Prompted(view.ConversationID)
+	if got.Text != "after alias uninstall and restart" || s.AppServer(fakeagent.SampleServer).PID() != pid || s.AppServers(fakeagent.SampleServer) != 1 {
+		t.Fatalf("shared server replaced: input=%+v original PID=%d", got, pid)
+	}
+	if initializations, watches := s.AppServer(fakeagent.SampleServer).ControlCounts(); initializations != 2 || watches != 2 {
+		t.Fatalf("aliases/restart initialized %d controls and %d watches, want one per daemon", initializations, watches)
+	}
+	t.Logf("starting alias uninstalled; %s daemon restart preserved server PID %d and session %s conversation %s", backend, pid, b, view.ConversationID)
 }
