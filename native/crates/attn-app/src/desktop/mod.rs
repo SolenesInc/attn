@@ -40,8 +40,8 @@ use rune::Tx;
 use crate::State;
 
 pub(crate) use actions::{
-    activate, activate_started, escape, find as find_in_terminal, give_keyboard, remove_tile,
-    reveal_leaf, run, show_leaf, show_unseen,
+    activate, activate_started, escape, find as find_in_terminal, give_keyboard, move_to_desktop,
+    remove_tile, reveal_leaf, run, show_leaf, show_unseen,
 };
 pub(crate) use close::{Closing, view as close_confirmation};
 pub(crate) use drag::{DesktopMark, overlay as drag_overlay};
@@ -50,8 +50,8 @@ pub(crate) use host::outpost_name;
 pub(crate) use overview::{create as create_desktop, view as overview};
 pub(crate) use peek::view as peek;
 pub(crate) use shelf::{
-    cap_menu, columns as shelf_columns, settle, slot as shelf_slot, width_control_layer,
-    width_label,
+    cap_menu, columns as shelf_columns, settle, slot as shelf_slot, title as leaf_title,
+    width_control_layer, width_label,
 };
 pub use tile_look::FocusStyle;
 pub(crate) use view::{Room, area, session_of_leaf};

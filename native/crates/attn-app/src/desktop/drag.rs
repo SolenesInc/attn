@@ -1,7 +1,7 @@
 //! Dragging a tile by its header, or a shelf column by its chip, onto a tile's edge, into a
 //! tile's place, beside a column on the shelf, or onto a desktop in the sidebar.
 
-use attn_protocol::{DesktopMoveLeafMessage, ProfileActionResultMessage};
+use attn_protocol::DesktopMoveLeafMessage;
 use attn_ui::Tokens;
 use rune::{Drag, El, Phase, Tx};
 
@@ -40,7 +40,7 @@ pub(crate) enum Source {
         leaf: String,
         label: String,
     },
-    /// An agent's row in the sidebar: `leaf` is its pane. It drops only on the sidebar.
+    /// A row in the sidebar: `leaf` is its pane or tile. It drops only on the sidebar.
     Row {
         desktop: String,
         leaf: String,
@@ -98,7 +98,7 @@ pub(crate) enum Owner {
     Shelf,
     /// An open cap's menu: the chips it holds.
     Menu,
-    /// The sidebar: its agent rows.
+    /// The sidebar: its agent and tile rows.
     Sidebar,
 }
 
@@ -114,6 +114,9 @@ impl Owner {
 
     /// What a press at `path` in this owner picks up.
     fn source_at(self, state: &State, path: &str) -> Option<Source> {
+        if self == Owner::Sidebar {
+            return crate::sidebar::row_source_at(state, path);
+        }
         path.split('/').rev().find_map(|segment| match self {
             Owner::Tiles => segment
                 .strip_prefix("tile.")
@@ -122,9 +125,7 @@ impl Owner {
             Owner::Shelf | Owner::Menu => segment
                 .strip_prefix("shelf.chip.")
                 .and_then(|column| Shelf::of(state)?.chip_source(column)),
-            Owner::Sidebar => segment
-                .strip_prefix("sidebar.session.")
-                .and_then(|session| crate::sidebar::row_source(state, session)),
+            Owner::Sidebar => unreachable!(),
         })
     }
 }
@@ -847,7 +848,6 @@ fn to_desktop(
     with_delegates: bool,
     tx: &mut Tx,
 ) {
-    let new = target.is_none();
     let (from, landing, moved) = (source.to_owned(), target.clone(), leaf.to_owned());
     state.ask(
         |id| DesktopMoveLeafMessage {
@@ -861,26 +861,8 @@ fn to_desktop(
             with_delegates: with_delegates.then_some(true),
             ..DesktopMoveLeafMessage::new()
         },
-        move |state: &mut State, answer, tx: &mut Tx| match answer.outcome() {
-            Ok(reply) => match landing {
-                Some(desktop) => actions::give_keyboard(state, &desktop, &moved, tx),
-                None => {
-                    let made = reply
-                        .parse::<ProfileActionResultMessage>()
-                        .and_then(|r| r.desktops?.into_iter().find(|d| d.id != from));
-                    if let Some(desktop) = made {
-                        crate::sidebar::open_desktop(state, &desktop.id, tx);
-                    }
-                }
-            },
-            Err(error) => {
-                let what = if new {
-                    "Could not move that pane to a new desktop"
-                } else {
-                    "Could not move that pane"
-                };
-                state.window.notify(format!("{what}: {error}"), tx);
-            }
+        move |state: &mut State, answer, tx: &mut Tx| {
+            actions::finish_move_to_desktop(state, answer, &from, landing, moved, tx);
         },
         tx,
     );

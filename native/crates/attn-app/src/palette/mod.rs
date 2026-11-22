@@ -14,7 +14,7 @@ use attn_ui::finder::Hint;
 
 use crate::keymap::Binding;
 use crate::shell::{Layer, Palette};
-use crate::sidebar::model::{AgentRow, display_name};
+use crate::sidebar::model::{self, AgentRow, display_name};
 use crate::sidebar::queue::{self, QueueActions};
 use crate::sidebar::snooze::{self, CHOICES, Choice};
 use crate::{Action, State};
@@ -40,8 +40,8 @@ fn face(query: &str) -> Face {
 }
 
 /// The palette's search: its query, the row the keyboard is on, the command history it
-/// ranks commands by, read once each time it opens, and the agent it is choosing a snooze
-/// for.
+/// ranks commands by, read once each time it opens, the agent it is choosing a snooze for,
+/// and the tile it is choosing a destination desktop for.
 #[derive(Default)]
 pub struct Search {
     pub(crate) query: TextEdit,
@@ -50,6 +50,7 @@ pub struct Search {
     opening: u64,
     pointer: Option<(f32, f32)>,
     snoozing: Option<Snoozing>,
+    moving: Option<Moving>,
 }
 
 #[derive(Default)]
@@ -65,6 +66,14 @@ struct Snoozing {
     session: String,
     opened_ms: i64,
     query: TextEdit,
+}
+
+/// The tile the palette is choosing a destination desktop for, and the command query to go back
+/// to on Escape when opened from the command palette.
+struct Moving {
+    desktop: String,
+    leaf: String,
+    from_commands: Option<TextEdit>,
 }
 
 /// A row the palette lists, how it looks, and what picking it does; a row nothing picks
@@ -199,6 +208,7 @@ enum Pick {
     Command { id: String, action: Action },
     Open(Action),
     Snooze(Choice),
+    MoveToDesktop(Option<String>),
 }
 
 /// What the palette shows now.
@@ -206,6 +216,7 @@ pub(crate) enum Mode {
     Agents,
     Commands,
     Snooze { name: String },
+    MoveToDesktop { name: String, from_commands: bool },
 }
 
 /// The palette's rows for what it shows, with its count, and whether the commands' history is
@@ -217,11 +228,8 @@ pub(crate) struct Listing {
     pub(crate) loading: bool,
 }
 
-/// Opens the search palette on `wanted`, or, while it is open, closes it when it already shows
-/// `wanted` and otherwise turns it to `wanted`, keeping what the user typed. Choosing a
-/// snooze, either face's keys leave the choices for that face.
-pub(crate) fn open(state: &mut State, wanted: Face, tx: &mut Tx) {
-    if matches!(
+fn blocked_by_modal(state: &State) -> bool {
+    matches!(
         state.window.layer,
         Some(
             Layer::Settings
@@ -230,10 +238,30 @@ pub(crate) fn open(state: &mut State, wanted: Face, tx: &mut Tx) {
                 | Layer::WhatsNew
                 | Layer::DiagnosticReport
         )
-    ) {
+    )
+}
+
+/// Opens the search palette on `wanted`, or, while it is open, closes it when it already shows
+/// `wanted` and otherwise turns it to `wanted`, keeping what the user typed. Choosing a
+/// snooze or destination desktop, either face's keys leave the choices for that face.
+pub(crate) fn open(state: &mut State, wanted: Face, tx: &mut Tx) {
+    if blocked_by_modal(state) {
         return;
     }
     if is_open(state) {
+        if let Some(moving) = state.window.search.moving.take() {
+            let search = &mut state.window.search;
+            search.query = at_end(match wanted {
+                Face::Commands => ">".to_owned(),
+                Face::Agents => String::new(),
+            });
+            search.highlight = None;
+            if wanted == Face::Commands && moving.from_commands.is_none() {
+                search.opening += 1;
+                ask_history(state, tx);
+            }
+            return;
+        }
         let snoozing = state.window.search.snoozing.is_some();
         leave_snooze(state);
         let search = &mut state.window.search;
@@ -262,8 +290,28 @@ pub(crate) fn open(state: &mut State, wanted: Face, tx: &mut Tx) {
     search.highlight = None;
     search.pointer = None;
     search.snoozing = None;
+    search.moving = None;
     search.opening += 1;
     ask_history(state, tx);
+    tx.focus(FIELD, false);
+}
+
+/// Opens the palette directly on the desktop picker for `leaf` on `desktop`.
+pub(crate) fn open_move_to_desktop(state: &mut State, desktop: String, leaf: String, tx: &mut Tx) {
+    if blocked_by_modal(state) || leaf_label(state, &desktop, &leaf).is_none() {
+        return;
+    }
+    state.window.layer = Some(Layer::Palette(Palette::Search));
+    let search = &mut state.window.search;
+    search.query = TextEdit::default();
+    search.highlight = None;
+    search.pointer = None;
+    search.snoozing = None;
+    search.moving = Some(Moving {
+        desktop,
+        leaf,
+        from_commands: None,
+    });
     tx.focus(FIELD, false);
 }
 
@@ -276,6 +324,7 @@ fn at_end(text: String) -> TextEdit {
 pub(crate) fn close(state: &mut State, tx: &mut Tx) {
     state.window.layer = None;
     state.window.search.snoozing = None;
+    state.window.search.moving = None;
     crate::picker::refocus_inline(state, tx);
 }
 
@@ -335,6 +384,67 @@ fn snoozed_agent(state: &State) -> Option<&Session> {
     session(state, &snoozing.session).filter(|s| allowed(state, s).snooze)
 }
 
+/// The display name of `leaf` on `desktop`, while the desktop still holds it.
+fn leaf_label(state: &State, desktop: &str, leaf: &str) -> Option<String> {
+    let desk = state.facts.desktops.iter().find(|d| d.id == desktop)?;
+    let tree = desk.tree()?;
+    tree.find_leaf(leaf)?;
+    Some(crate::desktop::leaf_title(desk, &state.facts, tree, leaf))
+}
+
+fn move_rows(state: &State, source_desktop: &str, query: &str) -> Vec<Row> {
+    let profile = &state.facts.profiles.selected;
+    let desktops: Vec<_> = state
+        .facts
+        .desktops
+        .iter()
+        .filter(|d| &d.profile_id == profile)
+        .cloned()
+        .collect();
+    let terms: Vec<String> = query
+        .to_lowercase()
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect();
+    let mut rows = Vec::new();
+    for desktop in model::ordered_desktops(&desktops)
+        .into_iter()
+        .filter(|d| d.id != source_desktop)
+    {
+        let title = model::desktop_title(desktop, &desktops);
+        let number = model::desktop_number(desktop, &desktops);
+        let searchable = format!("{} desktop {number}", title.to_lowercase());
+        if !terms.iter().all(|term| searchable.contains(term.as_str())) {
+            continue;
+        }
+        let detail = desktop
+            .shortcut_slot
+            .and_then(Action::desktop_select)
+            .and_then(|a| label_of(state, &a))
+            .unwrap_or_default();
+        rows.push(Row {
+            key: format!("move-desktop:{}", desktop.id),
+            label: title,
+            look: Look::Choice { detail },
+            pick: Some(Pick::MoveToDesktop(Some(desktop.id.clone()))),
+        });
+    }
+    if terms
+        .iter()
+        .all(|term| "new desktop".contains(term.as_str()))
+    {
+        rows.push(Row {
+            key: "move-desktop:new".into(),
+            label: "+ New desktop".into(),
+            look: Look::Choice {
+                detail: String::new(),
+            },
+            pick: Some(Pick::MoveToDesktop(None)),
+        });
+    }
+    rows
+}
+
 /// What the palette lists for its query.
 pub(crate) fn listing(state: &State) -> Listing {
     let search = &state.window.search;
@@ -354,6 +464,20 @@ pub(crate) fn listing(state: &State) -> Listing {
                     pick: Some(Pick::Snooze(choice)),
                 })
                 .collect(),
+            count: None,
+            loading: false,
+        };
+    }
+    if let Some(moving) = &search.moving
+        && let Some(name) = leaf_label(state, &moving.desktop, &moving.leaf)
+    {
+        let rows = move_rows(state, &moving.desktop, &search.query.text);
+        return Listing {
+            mode: Mode::MoveToDesktop {
+                name,
+                from_commands: moving.from_commands.is_some(),
+            },
+            rows,
             count: None,
             loading: false,
         };
@@ -443,9 +567,21 @@ pub(crate) fn queue_action(state: &mut State, action: &Action, tx: &mut Tx) -> b
 pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let listing = listing(state);
     let at = highlighted(&state.window.search, &listing.rows);
-    if matches!(listing.mode, Mode::Snooze { .. }) && ev.key == Key::Escape {
-        leave_snooze(state);
-        return true;
+    if ev.key == Key::Escape {
+        match listing.mode {
+            Mode::Snooze { .. } => {
+                leave_snooze(state);
+                return true;
+            }
+            Mode::MoveToDesktop {
+                from_commands: true,
+                ..
+            } => {
+                leave_move(state);
+                return true;
+            }
+            _ => {}
+        }
     }
     if ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
         return false;
@@ -514,10 +650,32 @@ fn leave_snooze(state: &mut State) {
     }
 }
 
-/// Drops the snooze choices once their agent can no longer be snoozed.
+/// Back to the commands face when Move to desktop was opened from it, or closes the palette.
+fn leave_move(state: &mut State) {
+    let Some(moving) = state.window.search.moving.take() else {
+        return;
+    };
+    if let Some(query) = moving.from_commands {
+        state.window.search.query = query;
+        state.window.search.highlight = Some("command:move-to-desktop".into());
+    } else if is_open(state) {
+        state.window.layer = None;
+    }
+}
+
+/// Drops the snooze or move-to-desktop choices once their target is gone.
 pub(crate) fn follow(state: &mut State) {
     if state.window.search.snoozing.is_some() && snoozed_agent(state).is_none() {
         leave_snooze(state);
+    }
+    let move_gone = state
+        .window
+        .search
+        .moving
+        .as_ref()
+        .is_some_and(|m| leaf_label(state, &m.desktop, &m.leaf).is_none());
+    if move_gone {
+        leave_move(state);
     }
 }
 
@@ -549,6 +707,31 @@ fn pick(state: &mut State, row: Row, tx: &mut Tx) {
                 snooze::snooze_turn(state, &snoozing.session, choice, snoozing.opened_ms);
             }
             leave_snooze(state);
+            return;
+        }
+        Some(Pick::MoveToDesktop(target)) => {
+            let Some(moving) = state.window.search.moving.take() else {
+                return;
+            };
+            close(state, tx);
+            crate::desktop::move_to_desktop(state, &moving.desktop, target, &moving.leaf, tx);
+            return;
+        }
+        Some(Pick::Command {
+            id,
+            action: Action::MoveToDesktop { desktop, leaf },
+        }) => {
+            record(state, id, tx);
+            let search = &mut state.window.search;
+            let from_commands = std::mem::take(&mut search.query);
+            search.moving = Some(Moving {
+                desktop,
+                leaf,
+                from_commands: Some(from_commands),
+            });
+            search.highlight = None;
+            attn_ui::finder::reveal(tx, view::LIST, None);
+            tx.focus(FIELD, false);
             return;
         }
         Some(Pick::Command { id, action }) => {
@@ -657,6 +840,7 @@ pub(crate) fn badge(state: &State, mode: &Mode) -> Option<String> {
     let action = match mode {
         Mode::Commands => Action::UiCommandPalette,
         Mode::Agents | Mode::Snooze { .. } => Action::UiActionMenu,
+        Mode::MoveToDesktop { .. } => return None,
     };
     label_of(state, &action)
 }

@@ -1308,6 +1308,69 @@ fn either_palette_key_leaves_the_snooze_choices_for_its_face() {
 }
 
 #[test]
+fn move_to_desktop_command_picks_a_desktop_and_returns_to_commands_on_escape() {
+    let mut d1 = desktop("d1", "work", 1, vec![agent_pane("s1")]);
+    d1.active_pane_id = "md-1".into();
+    d1.tree_json = r#"{"type":"split","split_id":"s-1","direction":"vertical","children":[{"type":"pane","pane_id":"pane-s1"},{"type":"tile","tile_id":"md-1","tile_kind":"markdown","tile_params":"/tmp/plan.md"}]}"#.into();
+    let mut d2 = desktop("d2", "work", 2, vec![agent_pane("s2")]);
+    d2.name = "Review".into();
+    let d = daemon(
+        initial(vec![d1, d2], vec![session("s1"), session("s2")]),
+        vec![],
+    );
+    d.on("desktop_move_leaf", |r: &Request| {
+        serde_json::json!({
+            "event": "profile_action_result",
+            "request_id": r["request_id"],
+            "action": "desktop_move_leaf",
+            "success": true,
+        })
+    });
+    let mut world = World::start(d);
+    world.open_desktop();
+
+    press_action(&mut world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("move to desktop"));
+    assert_eq!(highlighted(&world).as_deref(), Some("Move to desktop…"));
+    press(&mut world, Key::Enter);
+
+    assert_eq!(
+        palette_named(&world).as_deref(),
+        Some("Move plan.md to desktop")
+    );
+    assert_eq!(query(&world), "");
+    assert_eq!(titles(&world), ["Review", "+ New desktop"]);
+
+    press(&mut world, Key::Escape);
+    assert_eq!(palette_named(&world).as_deref(), Some("Commands"));
+    assert_eq!(query(&world), ">move to desktop");
+    assert_eq!(highlighted(&world).as_deref(), Some("Move to desktop…"));
+
+    press(&mut world, Key::Enter);
+    world.gesture(|app| app.type_text("2"));
+    assert_eq!(titles(&world), ["Review"]);
+    press(&mut world, Key::Enter);
+
+    assert_eq!(palette_named(&world), None);
+    let moved = world.daemon.sent_of("desktop_move_leaf");
+    assert_eq!(moved.len(), 1, "{moved:?}");
+    assert_eq!(moved[0]["source_desktop_id"], "d1");
+    assert_eq!(moved[0]["leaf_id"], "md-1");
+    assert_eq!(moved[0]["target_desktop_id"], "d2");
+    let switched = world.daemon.sent_of("desktop_set_current");
+    assert_eq!(switched.len(), 2, "{switched:?}");
+    assert_eq!(switched[1]["desktop_id"], "d2");
+    assert_eq!(
+        records(&world),
+        vec![
+            ("work".into(), "move-to-desktop".into()),
+            ("work".into(), "move-to-desktop".into()),
+        ]
+    );
+    rest(&mut world);
+}
+
+#[test]
 fn a_settle_bound_to_a_sequence_says_it_has_no_keys_here_and_does_nothing() {
     let settle = chord(Action::SessionSettle);
     let mut state = crew_and_queue();

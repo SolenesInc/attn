@@ -240,23 +240,44 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
     }
     if let Some((current, leaf)) = state.window.acting(facts)
         && state.window.view == crate::shell::View::Desktop
-        && has_delegate_on(facts, current, &leaf)
     {
-        for desktop in model::ordered_desktops(&desktops)
-            .into_iter()
-            .filter(|d| d.id != current.id)
-        {
-            commands.push(Command::new(
-                &format!("move-with-delegates-{}", desktop.id),
-                &format!(
-                    "Move with delegates to {}",
-                    model::desktop_title(desktop, &desktops)
-                ),
-                &["desktop", "move", "send", "delegates"],
-                Action::MoveWithDelegates {
-                    desktop: desktop.id.clone(),
+        commands.push(
+            Command::new(
+                "move-to-desktop",
+                "Move to desktop…",
+                &[
+                    "desktop",
+                    "move",
+                    "send",
+                    "workspace",
+                    "tile",
+                    "window",
+                    "pane",
+                ],
+                Action::MoveToDesktop {
+                    desktop: current.id.clone(),
+                    leaf: leaf.clone(),
                 },
-            ));
+            )
+            .describe("Move the active tile to another desktop"),
+        );
+        if has_delegate_on(facts, current, &leaf) {
+            for desktop in model::ordered_desktops(&desktops)
+                .into_iter()
+                .filter(|d| d.id != current.id)
+            {
+                commands.push(Command::new(
+                    &format!("move-with-delegates-{}", desktop.id),
+                    &format!(
+                        "Move with delegates to {}",
+                        model::desktop_title(desktop, &desktops)
+                    ),
+                    &["desktop", "move", "send", "delegates"],
+                    Action::MoveWithDelegates {
+                        desktop: desktop.id.clone(),
+                    },
+                ));
+            }
         }
     }
     commands.push(
@@ -909,7 +930,9 @@ fn icon_of(id: &str) -> Option<Icon> {
     }
     Some(match id {
         "update-attn" => return None,
-        "close-desktop" | "new-desktop" | "sort-desktops" | "garden-frame" => Icon::Desktops,
+        "close-desktop" | "new-desktop" | "sort-desktops" | "move-to-desktop" | "garden-frame" => {
+            Icon::Desktops
+        }
         "jump-to-waiting"
         | "next-run-needing-you"
         | "settle-active-session"

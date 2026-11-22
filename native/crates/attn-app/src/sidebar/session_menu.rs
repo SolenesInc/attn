@@ -234,7 +234,21 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> Vec<El> {
         )
         .item(
             item("rename", (&attn_ui::icon::PENCIL).into(), "Rename session").on_select_tx(rename),
-        )
+        );
+    if let Some((desktop, leaf)) = super::pane_of(state, &menu.session) {
+        kit_menu = kit_menu.item(
+            item(
+                "move",
+                (&attn_ui::icon::OVERVIEW).into(),
+                "Move to desktop…",
+            )
+            .on_select_tx(move |state: &mut State, tx: &mut Tx| {
+                state.window.session_menu = None;
+                crate::palette::open_move_to_desktop(state, desktop.clone(), leaf.clone(), tx);
+            }),
+        );
+    }
+    kit_menu = kit_menu
         .separator()
         .item(item("reload", attn_ui::glyph::RELOAD.into(), "Reload session").on_select_tx(reload));
     if let Some(slot) = &chief_slot {

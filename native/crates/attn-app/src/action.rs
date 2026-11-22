@@ -38,6 +38,8 @@ macro_rules! actions {
             GoToDesktop { desktop: String },
             /// Move the active tile and its delegates to a desktop.
             MoveWithDelegates { desktop: String },
+            /// Choose a desktop to move a tile to, in the palette.
+            MoveToDesktop { desktop: String, leaf: String },
             SwitchToProfile { profile: String },
             /// Rename an agent, in the rename popover over its tile.
             RenameSession { session: String },
@@ -117,6 +119,7 @@ macro_rules! actions {
                     Action::OpenTile { .. } => "tile.open",
                     Action::GoToDesktop { .. } => "desktop.goTo",
                     Action::MoveWithDelegates { .. } => "desktop.moveWithDelegates",
+                    Action::MoveToDesktop { .. } => "desktop.moveTo",
                     Action::SwitchToProfile { .. } => "profile.switchTo",
                     Action::RenameSession { .. } => "session.rename",
                     Action::ReloadSession { .. } => "session.reload",
@@ -161,6 +164,7 @@ macro_rules! actions {
                     Action::OpenTile { .. } => "Go to a tile",
                     Action::GoToDesktop { .. } => "Go to a desktop",
                     Action::MoveWithDelegates { .. } => "Move with delegates to a desktop",
+                    Action::MoveToDesktop { .. } => "Move to desktop…",
                     Action::SwitchToProfile { .. } => "Switch to a profile",
                     Action::RenameSession { .. } => "Rename an agent",
                     Action::ReloadSession { .. } => "Reload an agent",

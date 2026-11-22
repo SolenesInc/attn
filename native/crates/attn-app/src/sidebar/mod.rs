@@ -816,7 +816,10 @@ pub(crate) fn state_color(state: AgentState, t: &Tokens) -> rune::Color {
 
 fn tile_row(key: String, tile: &TileRow, t: &Tokens) -> El {
     let (desktop, leaf) = (tile.desktop.clone(), tile.id.clone());
-    let reload = (tile.kind == crate::browser::KIND).then(|| reload_tile_button(&key, tile));
+    let controls = [move_tile_button(&key, tile)]
+        .into_iter()
+        .chain((tile.kind == crate::browser::KIND).then(|| reload_tile_button(&key, tile)))
+        .chain([close_tile_button(&key, tile)]);
     ListRow::new(key.clone(), format!("Open {}", tile.title))
         .lead(system::icon(
             tile.icon(),
@@ -830,10 +833,26 @@ fn tile_row(key: String, tile: &TileRow, t: &Tokens) -> El {
             Tone::Neutral,
             t,
         ))
-        .hover_controls(reload.into_iter().chain([close_tile_button(&key, tile)]))
+        .hover_controls(controls)
         .in_view(tile.selected)
         .build(t)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_tile(state, &desktop, &leaf, tx))
+        .on_drag(|state: &mut State, d: &mut rune::Drag, tx: &mut Tx| {
+            crate::desktop::drag::gesture(state, d, tx, crate::desktop::drag::Owner::Sidebar)
+        })
+}
+
+fn move_tile_button(row_key: &str, tile: &TileRow) -> system::IconButton {
+    let (desktop, leaf) = (tile.desktop.clone(), tile.id.clone());
+    queue_view::control(
+        row_key,
+        "move",
+        format!("Move {} to desktop", tile.title),
+        &attn_ui::icon::OVERVIEW,
+        move |state, tx| {
+            crate::palette::open_move_to_desktop(state, desktop.clone(), leaf.clone(), tx)
+        },
+    )
 }
 
 fn close_tile_button(row_key: &str, tile: &TileRow) -> system::IconButton {
@@ -956,18 +975,34 @@ pub(crate) fn show_agent(state: &mut State, session: &str, tx: &mut Tx) {
     );
 }
 
-/// What dragging agent `session`'s row picks up: its pane, on the desktop it shows on.
-pub(crate) fn row_source(state: &State, session: &str) -> Option<crate::desktop::drag::Source> {
-    let (desktop, leaf) = pane_of(state, session)?;
-    let found = state.facts.sessions.iter().find(|s| s.id == session)?;
-    Some(crate::desktop::drag::Source::Row {
-        desktop,
-        leaf,
-        label: model::display_name(found, &state.facts.harnesses),
+/// What dragging a row at element path `path` in the sidebar picks up: its pane or tile, on the
+/// desktop it shows on.
+pub(crate) fn row_source_at(state: &State, path: &str) -> Option<crate::desktop::drag::Source> {
+    let path = format!("/{path}/");
+    lines(state).into_iter().find_map(|line| {
+        if !path.contains(&format!("/{}/", line.key())) {
+            return None;
+        }
+        match line {
+            Line::Agent { row, .. } => {
+                let (desktop, leaf) = pane_of(state, &row.id)?;
+                Some(crate::desktop::drag::Source::Row {
+                    desktop,
+                    leaf,
+                    label: row.name,
+                })
+            }
+            Line::Tile(tile) => Some(crate::desktop::drag::Source::Row {
+                desktop: tile.desktop,
+                leaf: tile.id,
+                label: tile.title,
+            }),
+            Line::Desktop(_) => None,
+        }
     })
 }
 
-fn pane_of(state: &State, session: &str) -> Option<(String, String)> {
+pub(super) fn pane_of(state: &State, session: &str) -> Option<(String, String)> {
     state.facts.desktops.iter().find_map(|d| {
         let pane = d.panes.iter().find(|p| p.session_id == session)?;
         Some((d.id.clone(), pane.pane_id.clone()))

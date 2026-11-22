@@ -3,7 +3,7 @@ use attn_client::Facts;
 use attn_protocol::{
     DesktopCloseTileMessage, DesktopCreateMessage, DesktopMoveLeafMessage,
     DesktopRemoveLeafMessage, DesktopSetCurrentMessage, DesktopSetOrderMessage,
-    DesktopShowLeafMessage, SessionPlacement, SpawnSessionMessage,
+    DesktopShowLeafMessage, ProfileActionResultMessage, SessionPlacement, SpawnSessionMessage,
 };
 use rune::Tx;
 
@@ -324,6 +324,76 @@ fn ordered_desktops(state: &State) -> Vec<&Desktop> {
     let mut desktops: Vec<&Desktop> = state.facts.desktops.iter().collect();
     desktops.sort_by(|a, b| a.order_key.cmp(&b.order_key));
     desktops
+}
+
+/// Moves `leaf` from `source` to `target`, or to a new desktop when `target` is none, and
+/// switches to the destination desktop with the keyboard on the moved tile.
+pub(crate) fn move_to_desktop(
+    state: &mut State,
+    source: &str,
+    target: Option<String>,
+    leaf: &str,
+    tx: &mut Tx,
+) {
+    if target.as_deref() == Some(source) {
+        return;
+    }
+    if let Some(desktop) = &target {
+        crate::sidebar::open_desktop(state, desktop, tx);
+    }
+    let (from, landing, moved) = (source.to_owned(), target.clone(), leaf.to_owned());
+    state.ask(
+        |request_id| DesktopMoveLeafMessage {
+            request_id,
+            source_desktop_id: source.to_owned(),
+            target_desktop_id: target,
+            leaf_id: leaf.to_owned(),
+            ..DesktopMoveLeafMessage::new()
+        },
+        move |state: &mut State, answer, tx: &mut Tx| {
+            finish_move_to_desktop(state, answer, &from, landing, moved, tx);
+        },
+        tx,
+    );
+}
+
+pub(super) fn finish_move_to_desktop(
+    state: &mut State,
+    answer: crate::requests::Answer,
+    from: &str,
+    landing: Option<String>,
+    moved: String,
+    tx: &mut Tx,
+) {
+    let new = landing.is_none();
+    match answer.outcome() {
+        Ok(reply) => {
+            let parsed = reply.parse::<ProfileActionResultMessage>();
+            let final_leaf = parsed
+                .as_ref()
+                .and_then(|r| r.pane_id.clone())
+                .filter(|id| !id.is_empty())
+                .unwrap_or(moved);
+            match landing {
+                Some(desktop) => give_keyboard(state, &desktop, &final_leaf, tx),
+                None => {
+                    let made = parsed.and_then(|r| r.desktops?.into_iter().find(|d| d.id != from));
+                    if let Some(desktop) = made {
+                        crate::sidebar::open_desktop(state, &desktop.id, tx);
+                        give_keyboard(state, &desktop.id, &final_leaf, tx);
+                    }
+                }
+            }
+        }
+        Err(error) => {
+            let what = if new {
+                "Could not move that pane to a new desktop"
+            } else {
+                "Could not move that pane"
+            };
+            state.window.notify(format!("{what}: {error}"), tx);
+        }
+    }
 }
 
 /// Moves the active tile and its delegates to `desktop`, without following them.

@@ -63,6 +63,13 @@ another desktop leaves the main window where it is.
 Cmd+Option+1–9 (Ctrl+Alt+1–9 on Linux) moves the active tile to that desktop and
 takes you with it. Add Shift to send it away and stay where you are.
 
+To pick the desktop from a list, run "Move to desktop…" from the command
+palette, press the "Move to desktop" button that shows when you hover a tile's
+row in the sidebar, or choose "Move to desktop…" in an agent row's actions menu.
+Type to filter the desktops, or choose "New desktop", and attn takes you there
+with the tile. You can also drag any row under a desktop in the sidebar, an
+agent's or a markdown, browser, seed or editor tile's, onto another desktop.
+
 When an agent has delegated work, its delegates can move with it: run "Move with
 delegates to…" from the command palette, or hold Option (Alt on Linux) when you
 drop the agent on a desktop in the sidebar.
@@ -185,7 +192,7 @@ Pressing the digit of the desktop you're on takes you back only while you're loo
 <details>
 <summary>Where does a tile land when I move it to another desktop?</summary>
 
-Cmd+Option+digit (Ctrl+Alt+digit on Linux), with or without Shift, puts the tile to the right of the active tile on that desktop and makes the tile active there. The shortcut creates the desktop when the digit has none. Dropping a tile on a desktop in the sidebar puts its column at the start of that desktop's row. Dropping the tile on the "New desktop" spot that appears below your desktops while you drag makes a new desktop for the tile. In the desktop overview (Cmd+G, Ctrl+Shift+G on Linux), Shift+Enter sends the active tile to the highlighted desktop and keeps you where you are. Delegates come along only with an Option drop (Alt on Linux) or the "Move with delegates to" commands.
+Cmd+Option+digit (Ctrl+Alt+digit on Linux), with or without Shift, puts the tile to the right of the active tile on that desktop and makes the tile active there. The shortcut creates the desktop when the digit has none. "Move to desktop…" places the tile the same way. Dropping a tile on a desktop in the sidebar puts its column at the start of that desktop's row. Dropping the tile on the "New desktop" spot that appears below your desktops while you drag makes a new desktop for the tile. In the desktop overview (Cmd+G, Ctrl+Shift+G on Linux), Shift+Enter sends the active tile to the highlighted desktop and keeps you where you are. Delegates come along only with an Option drop (Alt on Linux) or the "Move with delegates to" commands.
 </details>
 
 <details>

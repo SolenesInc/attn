@@ -112,6 +112,7 @@ fn rows(world: &World) -> Vec<String> {
                     && !k.starts_with("sidebar.dock.")
                     && !k.ends_with(".actions")
                     && !k.ends_with(".close")
+                    && !k.ends_with(".move")
                     && !k.ends_with(".rename")
                     && !k.ends_with(".settle")
             })
@@ -1222,6 +1223,145 @@ fn a_press_on_an_agent_row_that_barely_moves_opens_the_agent() {
     let shown = world.daemon.sent_of("desktop_show_session");
     assert_eq!(shown.len(), 1, "{shown:?}");
     assert_eq!(shown[0]["session_id"], "t1");
+}
+
+fn desktops_with_markdown_tile() -> World {
+    let mut d1 = desktop(
+        "work/desktop_1",
+        "a",
+        "",
+        vec![pane("work/desktop_1", "pane-s1", "s1")],
+    );
+    d1.shortcut_slot = Some(1);
+    d1.tree_json = r#"{"type":"split","split_id":"s-1","direction":"vertical","children":[{"type":"pane","pane_id":"pane-s1"},{"type":"tile","tile_id":"md-1","tile_kind":"markdown","tile_params":"/tmp/notes.md"}]}"#.into();
+    let mut d2 = desktop(
+        "work/desktop_2",
+        "b",
+        "Review",
+        vec![pane("work/desktop_2", "pane-t1", "t1")],
+    );
+    d2.shortcut_slot = Some(2);
+    let world = World::start(Daemon::scripted().state(state(
+        vec![session("s1", "idle"), session("t1", "idle")],
+        vec![d1, d2],
+    )));
+    world
+        .daemon
+        .on("desktop_move_leaf", |r: &attn_testkit::Request| {
+            serde_json::json!({
+                "event": "profile_action_result",
+                "request_id": r["request_id"],
+                "action": "desktop_move_leaf",
+                "success": true,
+            })
+        });
+    world
+}
+
+#[test]
+fn a_tile_row_dragged_onto_another_desktop_moves_there_even_with_slashed_desktop_ids() {
+    let mut world = desktops_with_markdown_tile();
+    let tile_row = "sidebar.tile.work/desktop_1.md-1";
+
+    let own = centre_of(&world, "sidebar.desktop.work/desktop_1");
+    world.gesture(|app| app.drag_over(Target::key(tile_row), own));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("drag.ghost"))
+            .name
+            .as_deref(),
+        Some("notes.md")
+    );
+    world.gesture(|app| app.release(own));
+    assert!(world.daemon.sent_of("desktop_move_leaf").is_empty());
+    assert!(world.screen().find(Target::key("drag.ghost")).is_none());
+
+    let other = centre_of(&world, "sidebar.desktop.work/desktop_2");
+    world.gesture(|app| app.drag(Target::key(tile_row), other));
+    let moved = world.daemon.sent_of("desktop_move_leaf");
+    assert_eq!(moved.len(), 1, "{moved:?}");
+    assert_eq!(moved[0]["source_desktop_id"], "work/desktop_1");
+    assert_eq!(moved[0]["leaf_id"], "md-1");
+    assert_eq!(moved[0]["target_desktop_id"], "work/desktop_2");
+
+    let (x, y) = centre_of(&world, tile_row);
+    world.gesture(|app| app.drag_over(Target::key(tile_row), (x + 12.0, y)));
+    let new_drop = centre_of(&world, "sidebar.new_desktop");
+    world.gesture(|app| app.move_to(new_drop));
+    world.gesture(|app| app.release(new_drop));
+    let moved = world.daemon.sent_of("desktop_move_leaf");
+    assert_eq!(moved.len(), 2, "{moved:?}");
+    assert_eq!(moved[1]["source_desktop_id"], "work/desktop_1");
+    assert_eq!(moved[1]["leaf_id"], "md-1");
+    assert!(moved[1].get("target_desktop_id").is_none());
+
+    let (x, y) = centre_of(&world, tile_row);
+    world.gesture(|app| {
+        app.drag_from((x, y), (x + 1.0, y + 2.0));
+        app.release((x + 1.0, y + 2.0));
+    });
+    assert_eq!(world.daemon.sent_of("desktop_move_leaf").len(), 2);
+    let shown = world.daemon.sent_of("desktop_show_leaf");
+    assert_eq!(shown.len(), 1, "{shown:?}");
+    assert_eq!(shown[0]["desktop_id"], "work/desktop_1");
+    assert_eq!(shown[0]["leaf_id"], "md-1");
+    world.advance(std::time::Duration::from_secs(6));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn moving_a_tile_or_agent_from_the_sidebar_action_picks_a_desktop_and_moves_it() {
+    let mut world = desktops_with_markdown_tile();
+    let tile_row = "sidebar.tile.work/desktop_1.md-1";
+    let move_btn = "sidebar.tile.work/desktop_1.md-1.move";
+
+    let tile_at = centre_of(&world, tile_row);
+    world.gesture(|app| app.move_to(tile_at));
+    world.gesture(|app| app.click(Target::key(move_btn)));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("palette.dialog"))
+            .name
+            .as_deref(),
+        Some("Move notes.md to desktop")
+    );
+    world.gesture(|app| app.type_text("rev"));
+    world.gesture(|app| app.key(rune::Key::Enter.into()));
+    assert!(world.screen().find(Target::key("palette.dialog")).is_none());
+    let moved = world.daemon.sent_of("desktop_move_leaf");
+    assert_eq!(moved.len(), 1, "{moved:?}");
+    assert_eq!(moved[0]["source_desktop_id"], "work/desktop_1");
+    assert_eq!(moved[0]["leaf_id"], "md-1");
+    assert_eq!(moved[0]["target_desktop_id"], "work/desktop_2");
+
+    let tile_at = centre_of(&world, tile_row);
+    world.gesture(|app| app.move_to(tile_at));
+    world.gesture(|app| app.click(Target::key(move_btn)));
+    world.gesture(|app| app.key(rune::Key::Escape.into()));
+    assert!(world.screen().find(Target::key("palette.dialog")).is_none());
+
+    let session_at = centre_of(&world, "sidebar.session.s1");
+    world.gesture(|app| app.move_to(session_at));
+    world.gesture(|app| app.click(Target::key("sidebar.session.s1.actions")));
+    world.gesture(|app| app.click(Target::key("session.menu.move")));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("palette.dialog"))
+            .name
+            .as_deref(),
+        Some("Move s1 to desktop")
+    );
+    world.gesture(|app| app.click(Target::key("palette.row.move-desktop:new")));
+    let moved = world.daemon.sent_of("desktop_move_leaf");
+    assert_eq!(moved.len(), 2, "{moved:?}");
+    assert_eq!(moved[1]["source_desktop_id"], "work/desktop_1");
+    assert_eq!(moved[1]["leaf_id"], "pane-s1");
+    assert!(moved[1].get("target_desktop_id").is_none());
+    world.advance(std::time::Duration::from_secs(6));
+    assert!(world.runtime_is_at_rest());
 }
 
 fn many_desktops(n: usize) -> InitialStateMessage {

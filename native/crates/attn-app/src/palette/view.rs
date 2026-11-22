@@ -27,6 +27,10 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             "Jump to an agent or tile · type > for commands".to_owned(),
         ),
         Mode::Snooze { name } => (format!("Snooze {name}"), format!("Snooze {name}")),
+        Mode::MoveToDesktop { name, .. } => (
+            format!("Move {name} to desktop"),
+            format!("Move {name} to desktop…"),
+        ),
     };
     let field = finder::field(
         TextInput::new(&search.query)
@@ -97,6 +101,20 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             Hint::keys("", "↑↓", " move"),
             Hint::keys("", "↵", " snooze"),
             Hint::keys("", "esc", " back to agents").at_end(),
+        ],
+        Mode::MoveToDesktop { from_commands, .. } => vec![
+            Hint::keys("", "↑↓", " move"),
+            Hint::keys("", "↵", " move here"),
+            Hint::keys(
+                "",
+                "esc",
+                if from_commands {
+                    " back to commands"
+                } else {
+                    " closes"
+                },
+            )
+            .at_end(),
         ],
     };
     let panel = col()

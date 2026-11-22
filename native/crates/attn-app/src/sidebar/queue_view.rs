@@ -971,7 +971,7 @@ pub(super) fn control(
     row_key: &str,
     name: &str,
     label: String,
-    glyph: &'static str,
+    glyph: impl Into<attn_ui::Glyph>,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> system::IconButton {
     system::icon_button(format!("{row_key}.{name}"), label, glyph, IconSize::Small)
