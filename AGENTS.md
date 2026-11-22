@@ -350,7 +350,7 @@ it (`internal/daemon/commands_seed.go`, `internal/reading`). A
 the CLI then runs it in `attnd _run-command` through the same handler. When the
 garden reference changes, copy it into `attn_skill/references/garden.md` in
 `internal/prompttest/testdata/agent-delivery.json`, which
-`TestLegacyPromptCompatibility` in `internal/agent` compares.
+`TestLegacyPromptCompatibility` in `internal/harness/builtin` compares.
 
 ## Event bus
 

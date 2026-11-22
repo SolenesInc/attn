@@ -6,12 +6,11 @@ import (
 
 	"github.com/google/uuid"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 )
 
 func (h claudeHarness) ConversationFiles(ids []string) map[string][]string {
-	return h.driver().(agentdriver.ConversationKeeper).ConversationFiles(ids)
+	return conversationFiles(ids)
 }
 
 func (claudeHarness) ClassifyFile(id, name string) harness.KeptFile {

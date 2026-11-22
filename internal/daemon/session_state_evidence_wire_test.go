@@ -209,7 +209,7 @@ func TestClaudeInAutoModeSurfacesApprovalsWithoutADelay(t *testing.T) {
 
 func sessionStateEvidenceAtWork(t *testing.T, w *world, app *testworld.Peer, cli *client.Client) protocol.Session {
 	t.Helper()
-	if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
+	if err := w.InjectSession("s1", "s1", w.Path("s1"), "claude"); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 	if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking); err != nil {

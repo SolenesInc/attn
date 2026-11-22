@@ -118,7 +118,7 @@ func TestSharedCodexRunsTheConfiguredCodexForItsAppServerAndItsTerminals(t *test
 		return s != nil && protocol.Deref(s.InstalledVersion) == "0.170.0"
 	})
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
-		m.Executable, m.CodexExecutable = protocol.Ptr(configured), protocol.Ptr(configured)
+		m.Executable = protocol.Ptr(configured)
 	})
 	if got := w.Launched(session).Argv[0]; got != configured {
 		t.Errorf("the terminal ran %s, want the configured %s", got, configured)
@@ -138,7 +138,7 @@ func TestNewSharedCodexTerminalsRunTheAppServersCodexWhileItIsStillInstalled(t *
 	setSetting(t, app, "codex_executable", codex)
 	spawn := func(project string) string {
 		return w.Spawn(app, fakeagent.Codex, w.Path(project), func(m *protocol.SpawnSessionMessage) {
-			m.Executable, m.CodexExecutable = protocol.Ptr(codex), protocol.Ptr(codex)
+			m.Executable = protocol.Ptr(codex)
 		})
 	}
 	ran := func(session string) string { return w.Launched(session).Argv[0] }
@@ -179,7 +179,7 @@ func TestNewSharedCodexTerminalsRunTheInstalledCodexWhenTheAppServerRanThroughAS
 	spawn := func(project, codex string) string {
 		setSetting(t, app, "codex_executable", codex)
 		session := w.Spawn(app, fakeagent.Codex, w.Path(project), func(m *protocol.SpawnSessionMessage) {
-			m.Executable, m.CodexExecutable = protocol.Ptr(codex), protocol.Ptr(codex)
+			m.Executable = protocol.Ptr(codex)
 		})
 		return w.Launched(session).Argv[0]
 	}

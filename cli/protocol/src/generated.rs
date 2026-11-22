@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "a889c90a381a";
+pub const PROTOCOL_VERSION: &str = "948201f9f88d";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -11946,11 +11946,7 @@ impl SpawnResultMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SpawnSessionMessage {
     pub agent: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub claude_executable: Option<String>,
     pub cmd: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub codex_executable: Option<String>,
     pub cols: i64,
     pub cwd: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

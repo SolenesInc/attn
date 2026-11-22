@@ -8,17 +8,18 @@ import (
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/harness/builtin"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 func ownTerminalID() protocol.TerminalID {
-	return protocol.TrimID(harness.TerminalFromEnv())
+	return protocol.TrimID(harness.TerminalFromEnv(builtin.CallerEnvs()...))
 }
 
 var errNoCurrentSession = errors.New("not showing a session")
 
 func currentSession(c *client.Client) (protocol.SessionID, error) {
-	terminalID, err := harness.ResolveTerminalFromEnv()
+	terminalID, err := harness.ResolveTerminalFromEnv(builtin.CallerEnvs()...)
 	if err != nil {
 		return "", err
 	}

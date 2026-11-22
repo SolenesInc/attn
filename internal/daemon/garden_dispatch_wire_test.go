@@ -67,7 +67,7 @@ func TestADelegateKeepsItsDispatcherAcrossARestartAfterManySessionsClosed(t *tes
 	delegate := gardenDispatchDelegate(t, w, cli, string(alder), cwd, "Map the checkout")
 	for i := range 100 {
 		earlier := fmt.Sprintf("00000000-0000-0000-0000-%012d", i)
-		if err := w.InjectSession(earlier, earlier, w.Path("earlier"), protocol.SessionAgentClaude); err != nil {
+		if err := w.InjectSession(earlier, earlier, w.Path("earlier"), "claude"); err != nil {
 			t.Fatalf("register earlier session %d: %v", i, err)
 		}
 		if err := cli.Unregister(protocol.SessionID(earlier)); err != nil {

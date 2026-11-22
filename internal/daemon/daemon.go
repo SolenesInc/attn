@@ -25,7 +25,6 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/bus"
@@ -982,21 +981,19 @@ func (d *Daemon) canReviveSession(session *protocol.Session) bool {
 	if d.store.SessionCloseIntentional(session.ID) {
 		return false
 	}
-	intent, ok := d.store.LaunchIntent(session.ID)
-	if !ok {
+	if _, ok := d.store.LaunchIntent(session.ID); !ok {
 		return false
 	}
-	return d.sessionConversationSurvives(session, intent)
+	return d.sessionConversationSurvives(session)
 }
 
-func (d *Daemon) sessionConversationSurvives(session *protocol.Session, intent store.LaunchIntent) bool {
+func (d *Daemon) sessionConversationSurvives(session *protocol.Session) bool {
 	if d.serverOwns(session.ID) && d.serverConversation(session.ID) != "" {
 		return true
 	}
 	if session.Agent == protocol.AgentShellValue {
 		return true
 	}
-	driver := agentdriver.Get(session.Agent)
 	resumeID := d.resumeTarget(session.Agent, session.ID, "")
 	if host := d.sessionHost(session.ID); host != "" {
 		readiness, err := d.placedConversationReadiness(session.ID, host, session.Agent, session.ProfileID, resumeID, false)
@@ -1007,8 +1004,25 @@ func (d *Daemon) sessionConversationSurvives(session *protocol.Session, intent s
 		if readiness.Known {
 			return true
 		}
-	} else if d.conversationKnown(session.Agent, resumableIn(driver), resumeID) {
-		return true
+	} else if resumeID != "" {
+		if !d.knowsHarness(session.Agent) {
+			return true
+		}
+		dir := strings.TrimSpace(session.Directory)
+		dirMissing := false
+		if dir != "" {
+			_, err := os.Stat(dir)
+			dirMissing = err != nil
+		}
+		ref := harness.ConversationRef{
+			Harness:    harness.ID(session.Agent),
+			ID:         resumeID,
+			Dir:        dir,
+			DirMissing: dirMissing,
+		}
+		if avail := d.conversationResumable(ref); avail.Resumable || avail.CheckFailed {
+			return true
+		}
 	}
 	return d.store.GetAgentDriverRun(session.ID).RunID != "" ||
 		strings.TrimSpace(d.store.GetAgentMetadata(session.ID)) != ""

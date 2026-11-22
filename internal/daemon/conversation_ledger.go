@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/crew"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -242,7 +242,7 @@ func (d *Daemon) keepConversation(id string, keep bool) error {
 		return fmt.Errorf("outpost limit: conversations on %s are not kept", d.outpostName(host))
 	}
 	if keep {
-		if !d.conversationKnown(key.agent, resumableIn(agentdriver.Get(key.agent)), key.resumeID) {
+		if key.resumeID == "" || !d.conversationResumable(harness.ConversationRef{Harness: harness.ID(key.agent), ID: key.resumeID}).Resumable {
 			return fmt.Errorf("nothing left to keep: %s no longer has conversation %s and attn has no copy", key.agent, key.resumeID)
 		}
 		err = d.store.PinConversation(key.agent, key.resumeID, protocol.SessionID(session), time.Now())

@@ -6,7 +6,7 @@ env -u ATTN_CODEX_SHARED_PROFILE -u CODEX_THREAD_ID \
   go test -v "$@" ./internal/daemon ./cmd/attnd -run \
   '^(TestTerminalMove.*|TestTerminalOpenCreatesOnlyTheExplicitNumberedDesktop|TestTerminalCommandsAddressEachTileOfASharedConversation|TestUnplacedAgentsKeepTheirTerminalAcrossPlacementAndRestart|TestTerminalCLIDesktopAndProfileReach|TestTerminalCLIUsesTransitiveAuthority|TestACommandCarryingItsTerminalsIDSpeaksAsTheSessionTheTerminalShows|TestReopenReturnsToItsNumberedDesktopEvenAfterItWasRemoved)$'
 make check-prompts
-go test ./internal/agent -run '^TestLegacyPromptCompatibility$'
+go test ./internal/harness/builtin -run '^TestLegacyPromptCompatibility$'
 if rg -n 'desktop_move_session|DesktopMoveSession|MoveSessionToDesktop' \
   internal/protocol internal/client; then
   exit 1

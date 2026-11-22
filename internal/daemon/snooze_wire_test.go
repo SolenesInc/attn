@@ -74,7 +74,7 @@ func TestWakeOpensTheTurnAtTheWakeInstant(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
 		cli := w.Client()
-		if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
+		if err := w.InjectSession("s1", "s1", w.Path("s1"), "claude"); err != nil {
 			t.Fatalf("register: %v", err)
 		}
 		if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWaitingInput); err != nil {

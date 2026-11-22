@@ -142,7 +142,7 @@ func codexServerProfile(argv []string) string {
 		return ""
 	}
 	for _, env := range configured.env {
-		if profile, ok := strings.CutPrefix(env, harness.CodexSharedProfileEnv+"="); ok {
+		if profile, ok := strings.CutPrefix(env, "ATTN_CODEX_SHARED_PROFILE="); ok {
 			return profile
 		}
 	}

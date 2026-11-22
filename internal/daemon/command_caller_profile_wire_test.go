@@ -16,7 +16,7 @@ func TestAnotherProfilesSessionDoesNotExistForACommandsCaller(t *testing.T) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "planter", "neighbour")
 		side := createProfile(w.App(), "Side")
-		if err := w.InjectSession("stranger", "stranger", w.Path("stranger"), protocol.SessionAgentClaude, side.ID); err != nil {
+		if err := w.InjectSession("stranger", "stranger", w.Path("stranger"), "claude", side.ID); err != nil {
 			t.Fatalf("register stranger: %v", err)
 		}
 		planted, err := cli.SeedPlant("planter", "Planter's work", "", "", "")
@@ -40,7 +40,7 @@ func TestAnotherProfilesSessionDoesNotExistForACommandsCaller(t *testing.T) {
 			t.Errorf("a caller with no terminal notes as planter: %v", err)
 		}
 
-		sideThread := cli.WithCaller(protocol.TerminalID(harness.ServerCaller{Variable: harness.CodexThreadEnv, Scope: side.ID, Conversation: "side-thread"}.Terminal()))
+		sideThread := cli.WithCaller(protocol.TerminalID(harness.ServerCaller{Variable: "CODEX_THREAD_ID", Scope: side.ID, Conversation: "side-thread"}.Terminal()))
 		var listed protocol.PullRequestListResult
 		for _, named := range []string{"planter", "plant"} {
 			if err := sideThread.RunCommand("pr ls", protocol.SessionID(named), command.PRLsArgs{}, &listed); err == nil || !strings.Contains(err.Error(), "unknown session "+named) {
@@ -73,7 +73,7 @@ func TestAFramedSessionIsAKnownSessionOfTheAskingProfile(t *testing.T) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "planter", "neighbour", "closer")
 		side := createProfile(w.App(), "Side")
-		if err := w.InjectSession("stranger", "stranger", w.Path("stranger"), protocol.SessionAgentClaude, side.ID); err != nil {
+		if err := w.InjectSession("stranger", "stranger", w.Path("stranger"), "claude", side.ID); err != nil {
 			t.Fatalf("register stranger: %v", err)
 		}
 		if err := cli.Unregister("closer"); err != nil {

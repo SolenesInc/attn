@@ -71,8 +71,11 @@ type Clock interface {
 }
 
 type AgentTools struct {
-	URL, Credential                 string
-	Name, Description, Instructions string
+	URL          string `json:"-"`
+	Credential   string `json:"-"`
+	Name         string `json:"name,omitempty"`
+	Description  string `json:"description,omitempty"`
+	Instructions string `json:"instructions,omitempty"`
 }
 
 type HostSessions interface {

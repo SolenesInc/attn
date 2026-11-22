@@ -1,0 +1,702 @@
+package claude
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/headless"
+	"github.com/victorarias/attn/internal/hooks"
+	"github.com/victorarias/attn/internal/toolhome"
+	"github.com/victorarias/attn/internal/transcript"
+)
+
+const (
+	claudeID                = "claude"
+	claudeDisplayName       = "Claude Code"
+	claudeDefaultExecutable = "claude"
+	claudeExecutableEnvVar  = "ATTN_CLAUDE_EXECUTABLE"
+	claudeModDirEnv         = "ATTN_CLAUDE_MOD_DIR"
+	claudeModSocketEnv      = "ATTN_CLAUDE_MOD_SOCKET"
+)
+
+type claudeModSpec struct {
+	Dir    string
+	Socket string
+}
+
+type claudeCLI struct{}
+
+var _ headless.TaskProvider = claudeCLI{}
+
+const (
+	claudeTranscriptRetryWindow   = 2 * time.Second
+	claudeTranscriptRetryInterval = 100 * time.Millisecond
+	claudeTranscriptFreshnessSkew = 5 * time.Second
+)
+
+var claudePeerTools = []string{"ListAgents"}
+
+func resolveExecutable(configured string) string {
+	return harness.ResolveExecutable(claudeExecutableEnvVar, configured, claudeDefaultExecutable)
+}
+
+const claudeFolderTrustChoice = "Yes, I trust this folder"
+
+func showsFolderTrustQuestion(screen string) bool {
+	return strings.Contains(withoutWhitespace(screen), withoutWhitespace(claudeFolderTrustChoice))
+}
+
+func withoutWhitespace(text string) string {
+	return strings.Join(strings.Fields(text), "")
+}
+
+func claudePeerMessagingEnabled() bool {
+	raw, ok := os.LookupEnv("ATTN_CLAUDE_PEER_MESSAGING")
+	if !ok {
+		return false
+	}
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	parsed, err := strconv.ParseBool(strings.TrimSpace(strings.ToLower(raw)))
+	return err == nil && parsed
+}
+
+func addDirArgs(dirs []string) []string {
+	args := make([]string, 0, len(dirs)*2)
+	for _, dir := range dirs {
+		if dir = strings.TrimSpace(dir); dir != "" {
+			args = append(args, "--add-dir", dir)
+		}
+	}
+	return args
+}
+
+func buildCommand(opts harness.DirectLaunchOpts, hookSettings string, mod claudeModSpec) *exec.Cmd {
+	args := []string{}
+
+	useSessionID := true
+	if opts.ResumeSessionID != "" || opts.ResumePicker {
+		useSessionID = false
+	}
+	if useSessionID {
+		args = append(args, "--session-id", string(opts.TerminalID))
+	}
+
+	if strings.TrimSpace(hookSettings) != "" {
+		args = append(args, "--settings", hookSettings)
+	}
+	if mod.Dir != "" {
+		args = append(args, "--plugin-dir", mod.Dir)
+	}
+	if opts.AgentTools != nil {
+		args = append(args, "--mcp-config", claudeAgentToolsConfig(opts.AgentTools.URL))
+	}
+	if instructions := opts.EffectiveGuidance().Instructions(); instructions != "" {
+		args = append(args, "--append-system-prompt", instructions)
+	}
+
+	if !claudePeerMessagingEnabled() {
+		args = append(args, "--disallowed-tools")
+		args = append(args, claudePeerTools...)
+	}
+
+	args = append(args, addDirArgs(opts.AwarenessDirs)...)
+
+	if model := strings.TrimSpace(opts.Model); model != "" {
+		args = append(args, "--model", model)
+	}
+	if effort := strings.TrimSpace(opts.Effort); effort != "" {
+		args = append(args, "--effort", effort)
+	}
+
+	if opts.ResumeSessionID != "" {
+		args = append(args, "-r", opts.ResumeSessionID)
+	} else if opts.ResumePicker {
+		args = append(args, "-r")
+	}
+	if opts.YoloMode {
+		args = append(args, "--dangerously-skip-permissions")
+	} else if opts.AutoApprove {
+		args = append(args, "--permission-mode", "auto")
+	}
+	if strings.TrimSpace(opts.InitialPrompt) != "" {
+		args = append(args, "--", opts.InitialPrompt)
+	}
+
+	return exec.Command(opts.Executable, args...)
+}
+
+func buildEnv(opts harness.DirectLaunchOpts, mod claudeModSpec) []string {
+	env := []string{"CLAUDE_CODE_DISABLE_AGENT_VIEW=1"}
+	if mod.Socket != "" {
+		env = append(env, claudeModSocketEnv+"="+mod.Socket)
+	}
+	if opts.Guidance.Crew != "" {
+		env = append(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
+	}
+	if opts.AgentTools != nil {
+		env = append(env, harness.AgentCredentialEnv+"="+opts.AgentTools.Credential)
+	}
+	if opts.AutoCompactWindow > 0 {
+		env = append(env, "CLAUDE_CODE_AUTO_COMPACT_WINDOW="+strconv.Itoa(opts.AutoCompactWindow))
+	}
+	if opts.Executable != "" && opts.Executable != claudeDefaultExecutable {
+		env = append(env, claudeExecutableEnvVar+"="+opts.Executable)
+	}
+	return env
+}
+
+func BuildArgsForPromptTest(opts harness.DirectLaunchOpts, hookSettings string) []string {
+	return buildCommand(opts, hookSettings, claudeModSpec{}).Args
+}
+
+func HeadlessArgs(request headless.TaskRequest, instructionsPath string) []string {
+	return claudeHeadlessArgs(request, instructionsPath)
+}
+
+type directLauncher struct{}
+
+func Launcher() harness.DirectLauncher { return directLauncher{} }
+
+func (directLauncher) Facts() harness.Facts { return Facts() }
+
+func (directLauncher) ResolveExecutable(configured string) string {
+	return resolveExecutable(configured)
+}
+
+func (directLauncher) Prepare(opts harness.DirectLaunchOpts) error {
+	return prepareLaunch(opts)
+}
+
+func (directLauncher) Build(opts harness.DirectLaunchOpts) (*exec.Cmd, []string) {
+	mod := claudeModSpec{
+		Dir:    harness.ConsumeOneShotEnv(claudeModDirEnv),
+		Socket: harness.ConsumeOneShotEnv(claudeModSocketEnv),
+	}
+	hookSettings := ""
+	if Facts().Signals.ReportsTools {
+		hookSettings = generateHooksConfig(opts)
+	}
+	return buildCommand(opts, hookSettings, mod), buildEnv(opts, mod)
+}
+
+func (directLauncher) FindTranscript(resumeID string) string {
+	if !Facts().Signals.StopsReadable {
+		return ""
+	}
+	return transcript.FindClaudeTranscript(resumeID)
+}
+
+var claudeNativeDefaultTools = []string{"Read", "Write", "Edit", "Grep", "Glob"}
+
+func (claudeCLI) RunHeadlessTask(ctx context.Context, request headless.TaskRequest) (headless.TaskResult, error) {
+	instructionsPath, removeInstructions, err := headless.WriteSystemPrompt(request)
+	if err != nil {
+		return headless.TaskResult{}, err
+	}
+	defer removeInstructions()
+	args := claudeHeadlessArgs(request, instructionsPath)
+
+	result, stdout, err := headless.RunCommand(ctx, request.Executable, args, request.Prompt, request.WorkDir, "claude", claudeHeadlessEnv, claudeReportedFailure)
+	if err != nil {
+		if text := parseClaudeFinalText(stdout); text != "" {
+			result.FailureOutput = strings.TrimSpace("result: " + text + "\n" + result.FailureOutput)
+		}
+		return result, err
+	}
+	result.Text = parseClaudeFinalText(stdout)
+	meta := parseClaudeResultMeta(stdout)
+	result.StructuredOutput = meta.StructuredOutput
+	result.TotalCostUSD = meta.TotalCostUSD
+	result.NumTurns = meta.NumTurns
+	result.ModelTime = time.Duration(meta.DurationAPIMs) * time.Millisecond
+	result.InputTokens = meta.Usage.allInputTokens()
+	result.OutputTokens = meta.Usage.OutputTokens
+	return result, nil
+}
+
+func claudeReportedFailure(stdout []byte) string {
+	var events []json.RawMessage
+	trimmed := bytes.TrimSpace(stdout)
+	if err := json.Unmarshal(trimmed, &events); err != nil {
+		events = []json.RawMessage{trimmed}
+	}
+	for i := len(events) - 1; i >= 0; i-- {
+		var result struct {
+			Type     string `json:"type"`
+			Result   string `json:"result"`
+			APIError string `json:"api_error"`
+		}
+		if json.Unmarshal(events[i], &result) == nil && result.Type == "result" {
+			return strings.TrimSpace(result.Result + "\n" + result.APIError)
+		}
+	}
+	return ""
+}
+
+type claudeResultMeta struct {
+	StructuredOutput json.RawMessage `json:"structured_output"`
+	TotalCostUSD     float64         `json:"total_cost_usd"`
+	NumTurns         int             `json:"num_turns"`
+	DurationAPIMs    int64           `json:"duration_api_ms"`
+	Usage            claudeUsage     `json:"usage"`
+}
+
+type claudeUsage struct {
+	InputTokens              int `json:"input_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+}
+
+func (u claudeUsage) allInputTokens() int {
+	return u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens
+}
+
+func parseClaudeResultMeta(stdout []byte) claudeResultMeta {
+	trimmed := bytes.TrimSpace(stdout)
+	if len(trimmed) == 0 {
+		return claudeResultMeta{}
+	}
+
+	type resultEvent struct {
+		Type string `json:"type"`
+		claudeResultMeta
+	}
+
+	var single resultEvent
+	if err := json.Unmarshal(trimmed, &single); err == nil && single.Type == "result" {
+		return single.claudeResultMeta
+	}
+
+	var events []json.RawMessage
+	if err := json.Unmarshal(trimmed, &events); err == nil {
+		for i := len(events) - 1; i >= 0; i-- {
+			var ev resultEvent
+			if json.Unmarshal(events[i], &ev) != nil {
+				continue
+			}
+			if ev.Type == "result" {
+				return ev.claudeResultMeta
+			}
+		}
+	}
+	return claudeResultMeta{}
+}
+
+func claudeHeadlessArgs(request headless.TaskRequest, instructionsPath string) []string {
+	tools := request.AllowedTools
+	if len(tools) == 0 && !request.DisableTools {
+		tools = claudeNativeDefaultTools
+	}
+	args := []string{"--print"}
+	args = append(args, claudeHeadlessIsolationArgs()...)
+	args = append(args, "--strict-mcp-config")
+	if model := strings.TrimSpace(request.Model); model != "" {
+		args = append(args, "--model", model)
+	}
+	if effort := strings.TrimSpace(request.ReasoningEffort); effort != "" {
+		args = append(args, "--effort", effort)
+	}
+	if request.MaxTurns > 0 {
+		args = append(args, "--max-turns", strconv.Itoa(request.MaxTurns))
+	}
+	if budget := strings.TrimSpace(request.MaxBudgetUSD); budget != "" {
+		args = append(args, "--max-budget-usd", budget)
+	}
+	if len(request.OutputSchema) > 0 {
+		args = append(args, "--json-schema", string(request.OutputSchema))
+	}
+	if instructionsPath != "" {
+		args = append(args, "--system-prompt-file", instructionsPath)
+	}
+	args = append(args,
+		"--no-session-persistence",
+		"--disable-slash-commands",
+		"--no-chrome",
+	)
+	if request.DisableTools && len(request.OutputSchema) == 0 {
+		args = append(args, "--disallowedTools", "*")
+	} else {
+		args = append(args, "--allowedTools", strings.Join(tools, ","))
+	}
+	args = append(args,
+		"--permission-mode", "dontAsk",
+		"--output-format", "json",
+	)
+	return args
+}
+
+func parseClaudeFinalText(stdout []byte) string {
+	trimmed := bytes.TrimSpace(stdout)
+	if len(trimmed) == 0 {
+		return ""
+	}
+
+	var single struct {
+		Type   string          `json:"type"`
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(trimmed, &single); err == nil {
+		if text := claudeResultString(single.Result); text != "" {
+			return text
+		}
+	}
+
+	var events []json.RawMessage
+	if err := json.Unmarshal(trimmed, &events); err == nil {
+		for i := len(events) - 1; i >= 0; i-- {
+			var ev struct {
+				Type   string          `json:"type"`
+				Result json.RawMessage `json:"result"`
+			}
+			if json.Unmarshal(events[i], &ev) != nil {
+				continue
+			}
+			if ev.Type == "result" {
+				if text := claudeResultString(ev.Result); text != "" {
+					return text
+				}
+			}
+		}
+		for i := len(events) - 1; i >= 0; i-- {
+			if text := claudeAssistantText(events[i]); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func claudeResultString(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(s)
+}
+
+func claudeAssistantText(raw json.RawMessage) string {
+	var ev struct {
+		Type    string `json:"type"`
+		Message struct {
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"message"`
+	}
+	if json.Unmarshal(raw, &ev) != nil || ev.Type != "assistant" {
+		return ""
+	}
+	var parts []string
+	for _, block := range ev.Message.Content {
+		if block.Type == "text" && strings.TrimSpace(block.Text) != "" {
+			parts = append(parts, block.Text)
+		}
+	}
+	return strings.TrimSpace(strings.Join(parts, ""))
+}
+
+func claudeHeadlessIsolationArgs() []string {
+	if claudeHasBareModeAuthentication() {
+		return []string{"--bare"}
+	}
+	return []string{"--setting-sources", ""}
+}
+
+func claudeHasBareModeAuthentication() bool {
+	for _, name := range []string{
+		"ANTHROPIC_API_KEY",
+		"CLAUDE_CODE_USE_BEDROCK",
+		"CLAUDE_CODE_USE_VERTEX",
+		"CLAUDE_CODE_USE_FOUNDRY",
+	} {
+		if strings.TrimSpace(os.Getenv(name)) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func prepareLaunch(opts harness.DirectLaunchOpts) error {
+	if strings.TrimSpace(opts.ResumeSessionID) == "" {
+		return nil
+	}
+	return copyTranscriptForResume(opts.ResumeSessionID, opts.CWD)
+}
+
+func generateHooksConfig(opts harness.DirectLaunchOpts) string {
+	var allow []string
+	if opts.AgentTools != nil {
+		allow = []string{"mcp__" + claudeAgentToolsServer + "__*"}
+	}
+	return hooks.Generate(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, claudeSettingsEnv(opts), allow)
+}
+
+const claudeAgentToolsServer = "attn"
+
+func claudeAgentToolsConfig(url string) string {
+	type server struct {
+		Type    string            `json:"type"`
+		URL     string            `json:"url"`
+		Headers map[string]string `json:"headers"`
+	}
+	config := map[string]map[string]server{"mcpServers": {claudeAgentToolsServer: {
+		Type:    "http",
+		URL:     url,
+		Headers: map[string]string{"Authorization": "Bearer ${" + harness.AgentCredentialEnv + "}"},
+	}}}
+	data, _ := json.Marshal(config)
+	return string(data)
+}
+
+func claudeSettingsEnv(opts harness.DirectLaunchOpts) map[string]string {
+	if opts.AutoCompactWindow <= 0 {
+		return nil
+	}
+	return map[string]string{
+		"CLAUDE_CODE_AUTO_COMPACT_WINDOW": strconv.Itoa(opts.AutoCompactWindow),
+	}
+}
+
+func resumeSessionIDFromTranscriptPath(transcriptPath string) string {
+	clean := strings.TrimSpace(transcriptPath)
+	if clean == "" {
+		return ""
+	}
+	base := filepath.Base(clean)
+	if !strings.HasSuffix(base, ".jsonl") {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimSuffix(base, ".jsonl"))
+}
+
+func extractLastAssistantForClassification(
+	transcriptPath string,
+	maxChars int,
+	classificationStart time.Time,
+	lastClassifiedTurnID string,
+) (content string, turnID string, err error) {
+	return extractLastAssistantWithRetry(
+		transcriptPath,
+		maxChars,
+		classificationStart,
+		lastClassifiedTurnID,
+		claudeTranscriptRetryWindow,
+		claudeTranscriptRetryInterval,
+	)
+}
+
+func extractLastAssistantWithRetry(
+	transcriptPath string,
+	maxChars int,
+	classificationStart time.Time,
+	lastClassifiedTurnID string,
+	retryWindow time.Duration,
+	retryInterval time.Duration,
+) (content string, turnID string, err error) {
+	deadline := time.Now().Add(retryWindow)
+	minAssistantTimestamp := classificationStart.Add(-claudeTranscriptFreshnessSkew)
+	lastClassified := strings.TrimSpace(lastClassifiedTurnID)
+	for {
+		turn, turnErr := transcript.ExtractLastAssistantTurnAfterLastUserSince(
+			transcriptPath,
+			maxChars,
+			minAssistantTimestamp,
+		)
+		if turnErr == nil && strings.TrimSpace(turn.Content) != "" {
+			turnUUID := strings.TrimSpace(turn.UUID)
+			if turnUUID != "" && turnUUID == lastClassified {
+				turnErr = harness.ErrNoNewAssistantTurn
+			} else {
+				return turn.Content, turnUUID, nil
+			}
+		}
+		if !time.Now().Before(deadline) {
+			if turnErr == nil {
+				turnErr = harness.ErrNoNewAssistantTurn
+			}
+			return "", "", turnErr
+		}
+		time.Sleep(retryInterval)
+	}
+}
+
+func copyTranscriptForResume(resumeSessionID, cwd string) error {
+	home, err := toolhome.Dir()
+	if err != nil {
+		return err
+	}
+	files, err := harness.OpenConversationFiles(home)
+	if err != nil {
+		return err
+	}
+	defer files.Close()
+	best, _, err := largestClaudeTranscript(files, resumeSessionID)
+	if err != nil {
+		return err
+	}
+	defer best.Close()
+	dest, err := filepath.Rel(home, filepath.Join(claudeProjectDir(cwd), resumeSessionID+".jsonl"))
+	if err != nil || !filepath.IsLocal(dest) {
+		return fmt.Errorf("invalid Claude project directory: %s", cwd)
+	}
+	dest = filepath.ToSlash(dest)
+	if existing, err := files.Open(dest); err == nil {
+		info, statErr := existing.Stat()
+		existing.Close()
+		if statErr != nil {
+			return statErr
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("conversation destination is not a regular file: %s", dest)
+		}
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	return files.Restore(best, dest, false, time.Now())
+}
+
+func largestClaudeTranscript(files *harness.ConversationFileSystem, resumeSessionID string) (fs.File, string, error) {
+	id, err := uuid.Parse(resumeSessionID)
+	if err != nil || id.String() != resumeSessionID {
+		return nil, "", fmt.Errorf("invalid Claude conversation ID: %s", resumeSessionID)
+	}
+	projects, err := fs.ReadDir(files, ".claude/projects")
+	if err != nil {
+		return nil, "", err
+	}
+	var best fs.File
+	var bestPath string
+	var largest int64
+	for _, project := range projects {
+		if !project.IsDir() {
+			continue
+		}
+		path := ".claude/projects/" + project.Name() + "/" + resumeSessionID + ".jsonl"
+		candidate, err := files.Open(path)
+		if err != nil {
+			continue
+		}
+		info, err := candidate.Stat()
+		if err != nil || !info.Mode().IsRegular() || (best != nil && info.Size() <= largest) {
+			candidate.Close()
+			continue
+		}
+		if best != nil {
+			best.Close()
+		}
+		best, bestPath, largest = candidate, path, info.Size()
+	}
+	if best == nil {
+		return nil, "", fmt.Errorf("resume transcript not found for session %s", resumeSessionID)
+	}
+	return best, bestPath, nil
+}
+
+func claudeProjectDir(cwd string) string {
+	homeDir, err := toolhome.Dir()
+	if err != nil {
+		return ""
+	}
+	escapedPath := strings.ReplaceAll(cwd, "/", "-")
+	escapedPath = strings.ReplaceAll(escapedPath, ".", "-")
+	return filepath.Join(homeDir, ".claude", "projects", escapedPath)
+}
+
+func conversationFiles(resumeIDs []string) map[string][]string {
+	requested := make(map[string]bool)
+	for _, resumeID := range resumeIDs {
+		if id, err := uuid.Parse(resumeID); err == nil && id.String() == resumeID {
+			requested[resumeID] = true
+		}
+	}
+	if len(requested) == 0 {
+		return nil
+	}
+	home, err := toolhome.Dir()
+	if err != nil {
+		return nil
+	}
+	inputs, err := harness.OpenConversationFiles(home)
+	if err != nil {
+		return nil
+	}
+	defer inputs.Close()
+	projects, err := fs.ReadDir(inputs, ".claude/projects")
+	if err != nil {
+		return nil
+	}
+	files := make(map[string][]string)
+	sizes := make(map[string]int64)
+	auxiliary := make(map[string][]string)
+	for _, project := range projects {
+		if !project.IsDir() {
+			continue
+		}
+		projectPath := ".claude/projects/" + project.Name()
+		entries, err := fs.ReadDir(inputs, projectPath)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			relative := projectPath + "/" + entry.Name()
+			if entry.IsDir() && requested[entry.Name()] {
+				auxiliary[entry.Name()] = append(auxiliary[entry.Name()], filepath.Join(home, filepath.FromSlash(relative)))
+				continue
+			}
+			if !strings.HasSuffix(entry.Name(), ".jsonl") {
+				continue
+			}
+			resumeID := strings.TrimSuffix(entry.Name(), ".jsonl")
+			if !requested[resumeID] {
+				continue
+			}
+			main, err := inputs.Open(relative)
+			if err != nil {
+				continue
+			}
+			info, err := main.Stat()
+			main.Close()
+			if err != nil || !info.Mode().IsRegular() || (len(files[resumeID]) != 0 && info.Size() <= sizes[resumeID]) {
+				continue
+			}
+			files[resumeID] = []string{filepath.Join(home, filepath.FromSlash(relative))}
+			sizes[resumeID] = info.Size()
+		}
+	}
+	for resumeID := range files {
+		files[resumeID] = append(files[resumeID], auxiliary[resumeID]...)
+		files[resumeID] = append(files[resumeID], filepath.Join(home, ".claude", "file-history", resumeID))
+	}
+	return files
+}
+
+var claudeHeadlessEnv = headless.Env{
+	Prefixes: []string{"ANTHROPIC_", "CLAUDE_CODE_USE_", "AWS_", "GOOGLE_", "AZURE_"},
+	Extra: func([]string) []string {
+		extra := []string{"CLAUDE_CODE_DISABLE_AUTO_MEMORY=1"}
+		if window := headless.ContextWindowCap(); window > 0 {
+			extra = append(extra, "CLAUDE_CODE_AUTO_COMPACT_WINDOW="+strconv.Itoa(window))
+		}
+		return extra
+	},
+}

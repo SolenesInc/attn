@@ -36,7 +36,7 @@ func addLedgerSession(t *testing.T, s *Store, id, profileID, repository string, 
 	s.Add(&protocol.Session{
 		ID:         protocol.SessionID(id),
 		Label:      id,
-		Agent:      protocol.SessionAgentClaude,
+		Agent:      "claude",
 		Directory:  "/tmp/" + id,
 		ProfileID:  profileID,
 		Repository: protocol.Ptr(repository),

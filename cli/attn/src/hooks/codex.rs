@@ -1,7 +1,9 @@
 use super::detect::Tools;
 use super::input::{HookInput, text};
 use super::{HookHarness, server_caller};
-use attn_protocol::go_values::{CODEX_SHARED_PROFILE_ENV, CODEX_THREAD_ENV};
+
+const CODEX_SHARED_PROFILE_ENV: &str = "ATTN_CODEX_SHARED_PROFILE";
+const CODEX_THREAD_ENV: &str = "CODEX_THREAD_ID";
 
 pub struct Codex;
 

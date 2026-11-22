@@ -15,7 +15,6 @@ import (
 
 	"github.com/victorarias/attn/internal/who"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/garden"
@@ -451,8 +450,7 @@ func (d *Daemon) automationResumeSessionID(req automation.WorkRequest) (string, 
 	if resumeID == "" {
 		return "", errors.New("reviewer continuity cannot resume the stopped session without a recorded transcript")
 	}
-	driver := agentdriver.Get(req.Launch.Agent)
-	if !d.conversationReady(driver, resumeID) {
+	if !d.conversationReady(req.Launch.Agent, resumeID) {
 		return "", errors.New("reviewer continuity transcript is unavailable; refusing an unattended fresh session")
 	}
 	return resumeID, nil

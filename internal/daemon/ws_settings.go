@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
@@ -256,35 +255,35 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	delete(settings, setting.AnalyticsSubjectSecret.Key)
 	delete(settings, setting.AnalyticsClearedAt.Key)
 
-	for _, name := range agentdriver.List() {
-		driver := agentdriver.Get(name)
-		h, err := d.harness(name)
-		if err != nil {
-			continue
-		}
+	for _, h := range d.builtinHarnesses() {
+		facts := h.Facts()
+		name := facts.ID
 		health := h.Health(d.life.Context())
 		if !health.Offered {
 			continue
 		}
 		settings[availabilitySettingKey(name)] = availabilitySetting[health.Installation]
 
-		caps := agentdriver.EffectiveCapabilities(driver)
-		settings[capabilitySettingKey(name, "hooks")] = strconv.FormatBool(caps.HasHooks)
-		settings[capabilitySettingKey(name, "transcript")] = strconv.FormatBool(caps.HasTranscript)
-		settings[capabilitySettingKey(name, "transcript_watcher")] = strconv.FormatBool(caps.HasTranscriptWatcher)
-		settings[capabilitySettingKey(name, "classifier")] = strconv.FormatBool(caps.HasClassifier)
-		settings[capabilitySettingKey(name, "initial_prompt")] = strconv.FormatBool(caps.HasInitialPrompt)
-		settings[capabilitySettingKey(name, "resume")] = strconv.FormatBool(caps.HasResume)
-		settings[capabilitySettingKey(name, "yolo")] = strconv.FormatBool(caps.HasYolo)
+		hasTranscriptWatcher := false
+		if tr, ok := harness.As[harness.Transcript](h); ok && tr.Watcher() != nil {
+			hasTranscriptWatcher = true
+		}
+		settings[capabilitySettingKey(name, "hooks")] = strconv.FormatBool(facts.Signals.ReportsTools)
+		settings[capabilitySettingKey(name, "transcript")] = strconv.FormatBool(facts.Signals.StopsReadable)
+		settings[capabilitySettingKey(name, "transcript_watcher")] = strconv.FormatBool(hasTranscriptWatcher)
+		settings[capabilitySettingKey(name, "classifier")] = strconv.FormatBool(facts.Signals.StopsClassified)
+		settings[capabilitySettingKey(name, "initial_prompt")] = strconv.FormatBool(facts.Options.InitialPrompt)
+		settings[capabilitySettingKey(name, "resume")] = strconv.FormatBool(facts.Options.Resume)
+		settings[capabilitySettingKey(name, "yolo")] = strconv.FormatBool(facts.Options.Yolo)
 		_, hasHeadlessTask := harness.As[harness.OneShot](h)
 		settings[capabilitySettingKey(name, "headless_task")] = strconv.FormatBool(hasHeadlessTask)
 		settings[capabilitySettingKey(name, "launch_instructions")] = strconv.FormatBool(d.agentSupportsChiefGuidance(name))
 		settings[capabilitySettingKey(name, "executable_setting")] = "true"
-		settings[capabilitySettingKey(name, "model_pin")] = strconv.FormatBool(caps.HasModelPin)
-		settings[capabilitySettingKey(name, "effort_pin")] = strconv.FormatBool(caps.HasEffortPin)
-		settings[capabilitySettingKey(name, "context_window_cap")] = strconv.FormatBool(caps.HasContextWindowCap)
-		settings[capabilitySettingKey(name, "automation")] = strconv.FormatBool(caps.HasAutoApprove)
-		if h.Facts().Recovery == harness.ByServer {
+		settings[capabilitySettingKey(name, "model_pin")] = strconv.FormatBool(facts.Options.ModelPin)
+		settings[capabilitySettingKey(name, "effort_pin")] = strconv.FormatBool(facts.Options.EffortPin)
+		settings[capabilitySettingKey(name, "context_window_cap")] = strconv.FormatBool(facts.Options.ContextCap)
+		settings[capabilitySettingKey(name, "automation")] = strconv.FormatBool(facts.Options.AutoApprove)
+		if facts.Recovery == harness.ByServer {
 			_, targets := d.targetsOf(name)
 			settings[capabilitySettingKey(name, "execution_target")] = strconv.FormatBool(targets)
 			settings[capabilitySettingKey(name, "model_discovery")] = "true"

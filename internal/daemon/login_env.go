@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
@@ -296,8 +295,8 @@ func (d *Daemon) awaitHarness(agent string) {
 
 func (d *Daemon) publishHarnessAvailability() {
 	d.coalesceSnapshots(func() {
-		for _, name := range agentdriver.List() {
-			d.publishFact(FactSettingChanged, availabilitySettingKey(name), nil)
+		for _, h := range d.builtinHarnesses() {
+			d.publishFact(FactSettingChanged, availabilitySettingKey(h.Facts().ID), nil)
 		}
 	})
 }

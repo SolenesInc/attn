@@ -244,17 +244,6 @@ func harnessID(raw string) string {
 	return strings.TrimSpace(strings.ToLower(raw))
 }
 
-func legacyExecutableFromSpawnMessage(msg *protocol.SpawnSessionMessage, agent string) string {
-	switch strings.TrimSpace(strings.ToLower(agent)) {
-	case string(protocol.SessionAgentClaude):
-		return strings.TrimSpace(protocol.Deref(msg.ClaudeExecutable))
-	case string(protocol.SessionAgentCodex):
-		return strings.TrimSpace(protocol.Deref(msg.CodexExecutable))
-	default:
-		return ""
-	}
-}
-
 func namesHome(cwd string) bool {
 	trimmed := strings.TrimSpace(cwd)
 	return trimmed == "~" || strings.HasPrefix(trimmed, "~/")

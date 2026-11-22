@@ -241,7 +241,7 @@ func TestASharedCodexTerminalOpenedAfterADaemonRestartRunsTheAppServersCodexWhil
 			setSetting(t, app, "codex_executable", codex)
 			spawn := func(project string) (string, *fakeagent.Run) {
 				session := s.Spawn(app, fakeagent.Codex, s.Path(project), func(m *protocol.SpawnSessionMessage) {
-					m.Executable, m.CodexExecutable = protocol.Ptr(codex), protocol.Ptr(codex)
+					m.Executable = protocol.Ptr(codex)
 				})
 				return session, s.Launched(session)
 			}

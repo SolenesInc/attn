@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/pausepoint"
@@ -282,7 +281,7 @@ func (d *Daemon) releaseUnresumableSingleton(definitionID int, agent string) err
 	default:
 		return nil
 	}
-	if d.automationSessionIsLive(binding.SessionID) || d.conversationReady(agentdriver.Get(agent), strings.TrimSpace(d.store.GetResumeSessionID(binding.SessionID))) {
+	if d.automationSessionIsLive(binding.SessionID) || d.conversationReady(agent, strings.TrimSpace(d.store.GetResumeSessionID(binding.SessionID))) {
 		return nil
 	}
 	return d.store.ReleaseAutomationContinuityBindings(definitionID, store.AutomationBindingReleasedUnresumable, time.Now())

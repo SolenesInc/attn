@@ -28,10 +28,7 @@ const CapabilityKittyImages = "kitty_images"
 type SessionAgent = string
 
 const (
-	SessionAgentClaude SessionAgent = "claude"
-	SessionAgentCodex  SessionAgent = "codex"
-	SessionAgentShell  SessionAgent = "shell"
-	SessionAgentSigma  SessionAgent = "sigma"
+	SessionAgentShell SessionAgent = "shell"
 )
 
 const (

@@ -3,13 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	agentdriver "github.com/victorarias/attn/internal/agent"
-	"github.com/victorarias/attn/internal/client"
-	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/launchenv"
-	"github.com/victorarias/attn/internal/pathutil"
-	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -18,6 +11,15 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/harness/builtin"
+	"github.com/victorarias/attn/internal/launchenv"
+	"github.com/victorarias/attn/internal/pathutil"
+	"github.com/victorarias/attn/internal/prompts"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type directLaunchArgs struct {
@@ -88,7 +90,7 @@ func parseDirectLaunchArgs(args []string) (directLaunchArgs, error) {
 }
 
 func builtinHarnesses() string {
-	names := agentdriver.List()
+	names := builtin.IDs()
 	slices.Sort(names)
 	return strings.Join(names, ", ")
 }
@@ -104,15 +106,15 @@ func runAgentDirectly(requestedAgent string) {
 
 	pathutil.EnsureGUIPath()
 
-	driver := agentdriver.Get(requestedAgent)
-	if driver == nil {
+	launcher := builtin.Launcher(requestedAgent)
+	if launcher == nil {
 		fmt.Fprintf(os.Stderr, "attn: ATTN_AGENT %q is no harness attn runs: set it to one of %s\n", requestedAgent, builtinHarnesses())
 		exit(1)
 	}
-	caps := agentdriver.EffectiveCapabilities(driver)
+	facts := launcher.Facts()
 
-	if !caps.HasResume && (parsed.resumeID != "" || parsed.resumePicker) {
-		fmt.Fprintf(os.Stderr, "warning: %s resume not supported yet (ignoring --resume)\n", driver.Name())
+	if !facts.Options.Resume && (parsed.resumeID != "" || parsed.resumePicker) {
+		fmt.Fprintf(os.Stderr, "warning: %s resume not supported yet (ignoring --resume)\n", facts.ID)
 		parsed.resumeID = ""
 		parsed.resumePicker = false
 	}
@@ -140,76 +142,66 @@ func runAgentDirectly(requestedAgent string) {
 	}
 
 	crewMember := consumeOneShotBoolEnv("ATTN_CREW_MEMBER")
-	opts := agentdriver.SpawnOpts{
-		TerminalID:       terminalID,
-		CWD:              cwd,
-		Label:            parsed.label,
-		InitialPrompt:    initialPrompt,
-		ResumeSessionID:  parsed.resumeID,
-		ResumePicker:     parsed.resumePicker,
-		YoloMode:         parsed.yoloMode,
-		Executable:       driver.ResolveExecutable(""),
-		SocketPath:       config.SocketPath(),
-		WrapperPath:      resolveWrapperPath(),
-		CodexRemote:      consumeOneShotEnv("ATTN_CODEX_REMOTE"),
-		Vent:             consumeOneShotEnv("ATTN_VENT_ENABLED") == "true",
-		ToolVents:        consumeOneShotEnv("ATTN_TOOL_VENTS_ENABLED") == "true",
-		CodeReview:       consumeOneShotEnv("ATTN_CODE_REVIEW_ENABLED") == "true",
-		ClaudeMod:        agentdriver.ClaudeMod{Dir: consumeOneShotEnv(agentdriver.ClaudeModDirEnv), Socket: consumeOneShotEnv(agentdriver.ClaudeModSocketEnv)},
+	opts := harness.DirectLaunchOpts{
+		TerminalID:      terminalID,
+		CWD:             cwd,
+		InitialPrompt:   initialPrompt,
+		ResumeSessionID: parsed.resumeID,
+		ResumePicker:    parsed.resumePicker,
+		YoloMode:        parsed.yoloMode,
+		Executable:      launcher.ResolveExecutable(""),
+		SocketPath:      config.SocketPath(),
+		WrapperPath:     resolveWrapperPath(),
+		Guidance: prompts.Launch{
+			Vent:       harness.ConsumeOneShotEnv("ATTN_VENT_ENABLED") == "true",
+			ToolVents:  harness.ConsumeOneShotEnv("ATTN_TOOL_VENTS_ENABLED") == "true",
+			CodeReview: harness.ConsumeOneShotEnv("ATTN_CODE_REVIEW_ENABLED") == "true",
+		},
 		AgentTools:       consumeAgentTools(),
 		SharedAgentTools: consumeSharedAgentTools(),
 	}
 
-	if preparer, ok := driver.(agentdriver.LaunchPreparer); ok {
-		if err := preparer.PrepareLaunch(opts); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: launch preparation failed for %s: %v\n", driver.Name(), err)
-		}
+	if err := launcher.Prepare(opts); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: launch preparation failed for %s: %v\n", facts.ID, err)
 	}
 
-	hasHooks := false
 	if _, err := c.SeedReady(sessionID, "", false); err == nil {
-		opts.Garden = true
+		opts.Guidance.Garden = true
 	}
 	if asks, err := c.AskList(sessionID); err == nil {
-		opts.Asks = asks.Enabled
+		opts.Guidance.Asks = asks.Enabled
 	}
-	opts.SelfReportPullRequests = !caps.HasHooks
+	hasHooks := facts.Signals.ReportsTools
+	opts.Guidance.SelfReportPullRequests = !hasHooks
 	if prime, err := c.CrewPrime(sessionID); err == nil {
-		opts.CrewPriming = protocol.Deref(prime.Guidance)
+		opts.Guidance.Crew = protocol.Deref(prime.Guidance)
 		opts.AwarenessDirs = prime.AwarenessDirs
 	} else if crewMember {
 		fmt.Fprintf(os.Stderr, "attn: crew priming: %v\n", err)
 		exit(1)
 	}
 	opts.AutoApprove = consumeOneShotBoolEnv("ATTN_AUTO_APPROVE")
-	opts.Model = consumeOneShotEnv("ATTN_MODEL")
-	opts.Effort = consumeOneShotEnv("ATTN_EFFORT")
-	opts.ExecutionTarget = consumeOneShotEnv("ATTN_EXECUTION_TARGET")
-	window := consumeOneShotEnv("ATTN_AUTO_COMPACT_WINDOW")
+	opts.Model = harness.ConsumeOneShotEnv("ATTN_MODEL")
+	opts.Effort = harness.ConsumeOneShotEnv("ATTN_EFFORT")
+	_ = harness.ConsumeOneShotEnv("ATTN_EXECUTION_TARGET")
+	window := harness.ConsumeOneShotEnv("ATTN_AUTO_COMPACT_WINDOW")
 	if window == "" {
-		window = consumeOneShotEnv("ATTN_CHIEF_AUTO_COMPACT_WINDOW")
+		window = harness.ConsumeOneShotEnv("ATTN_CHIEF_AUTO_COMPACT_WINDOW")
 	}
 	if window != "" {
 		if n, err := strconv.Atoi(window); err == nil && n > 0 {
 			opts.AutoCompactWindow = n
 		}
 	}
-	if cp, ok := agentdriver.GetConfigOverrideProvider(driver); ok {
-		opts.ConfigOverrides = cp.GenerateConfigOverrides(opts)
-	}
-	if hp, ok := agentdriver.GetHookProvider(driver); ok {
-		opts.HookSettings = hp.GenerateHooksConfig(opts)
-		hasHooks = true
-	}
-	cmd := driver.BuildCommand(opts)
+	cmd, buildEnv := launcher.Build(opts)
 	cmd.Dir = cwd
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Env = pty.MergeEnvironment(config.WithoutAgentSessionIdentityEnv(os.Environ()), driver.BuildEnv(opts))
+	cmd.Env = launchenv.MergeEnvironment(config.WithoutAgentSessionIdentityEnv(os.Environ()), buildEnv)
 
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "error starting %s: %v\n", driver.Name(), err)
+		fmt.Fprintf(os.Stderr, "error starting %s: %v\n", facts.ID, err)
 		exit(1)
 	}
 
@@ -223,10 +215,10 @@ func runAgentDirectly(requestedAgent string) {
 
 	err = cmd.Wait()
 
-	if _, serverReportsState := agentdriver.DeclaredServer(driver); !hasHooks && !serverReportsState {
+	if !hasHooks && facts.Recovery != harness.ByServer {
 		transcriptPath := ""
-		if tf, ok := agentdriver.GetTranscriptFinder(driver); ok && opts.ResumeSessionID != "" {
-			transcriptPath = tf.FindTranscriptForResume(opts.ResumeSessionID)
+		if opts.ResumeSessionID != "" {
+			transcriptPath = launcher.FindTranscript(opts.ResumeSessionID)
 		}
 		if sendErr := c.SendStop(terminalID, transcriptPath, client.StopFacts{}); sendErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not send stop: %v\n", sendErr)
@@ -241,35 +233,29 @@ func runAgentDirectly(requestedAgent string) {
 	}
 }
 
-func consumeAgentTools() *agentdriver.AgentTools {
-	url, credential := consumeOneShotEnv(agentdriver.AgentToolsURLEnv), consumeOneShotEnv(agentdriver.AgentCredentialEnv)
+func consumeAgentTools() *harness.AgentTools {
+	url, credential := harness.ConsumeOneShotEnv(harness.AgentToolsURLEnv), harness.ConsumeOneShotEnv(harness.AgentCredentialEnv)
 	if url == "" || credential == "" {
 		return nil
 	}
-	return &agentdriver.AgentTools{URL: url, Credential: credential}
+	return &harness.AgentTools{URL: url, Credential: credential}
 }
 
-func consumeSharedAgentTools() *agentdriver.SharedAgentTools {
-	raw := consumeOneShotEnv(agentdriver.SharedAgentToolsEnv)
+func consumeSharedAgentTools() *harness.AgentTools {
+	raw := harness.ConsumeOneShotEnv(harness.SharedAgentToolsEnv)
 	if raw == "" {
 		return nil
 	}
-	var tools agentdriver.SharedAgentTools
+	var tools harness.AgentTools
 	if err := json.Unmarshal([]byte(raw), &tools); err != nil {
-		fmt.Fprintf(os.Stderr, "attn: %s: %v\n", agentdriver.SharedAgentToolsEnv, err)
+		fmt.Fprintf(os.Stderr, "attn: %s: %v\n", harness.SharedAgentToolsEnv, err)
 		exit(1)
 	}
 	return &tools
 }
 
 func consumeOneShotBoolEnv(key string) bool {
-	return consumeOneShotEnv(key) == "1"
-}
-
-func consumeOneShotEnv(key string) string {
-	value := strings.TrimSpace(os.Getenv(key))
-	_ = os.Unsetenv(key)
-	return value
+	return harness.ConsumeOneShotEnv(key) == "1"
 }
 
 func resolveWrapperPath() string {

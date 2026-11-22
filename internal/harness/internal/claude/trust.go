@@ -14,7 +14,6 @@ import (
 
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/toolhome"
 )
 
@@ -57,7 +56,7 @@ func (h claudeHarness) settleFolderTrust(req harness.LaunchRequest) error {
 		if unattended {
 			return &harness.FixableError{
 				Message: fmt.Sprintf("no agent has started a conversation in the repository of %s in this profile, on any machine, and Claude does not trust it, so an automation will not trust it for you; open Claude there once and choose to trust it", req.Dir),
-				Fix:     harness.Fix{Harness: string(protocol.SessionAgentClaude), Dir: cmp.Or(checkout.repository, cwd)},
+				Fix:     harness.Fix{Harness: claudeID, Dir: cmp.Or(checkout.repository, cwd)},
 			}
 		}
 		return nil

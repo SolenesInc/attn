@@ -7,11 +7,18 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/harness/appserver"
+	"github.com/victorarias/attn/internal/harness/builtin"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionstate"
 )
 
-var harnessSources []func(*Daemon, func(string) harness.Host) []harness.Harness
+func (d *Daemon) adapt() {
+	host := d.host(appServerTerminalOwner)
+	d.appServer = appserver.New(host)
+	d.builtins = builtin.All(d.host, d.appServer)
+	d.pluginHarnesses = builtin.Plugins(host, d.appServer, pluginHost{d})
+}
 
 func (d *Daemon) harnesses() []harness.Harness {
 	return append(d.builtinHarnesses(), d.pluginHarnesses.Harnesses()...)

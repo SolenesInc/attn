@@ -256,8 +256,6 @@ func (d *Daemon) crewSuccessorSpawn(member crew.Member, session *protocol.Sessio
 	spawnMsg.Effort = d.crewStartEffort(member, spawnMsg.Agent)
 	if !strings.EqualFold(previousAgent, spawnMsg.Agent) {
 		spawnMsg.Executable = nil
-		spawnMsg.ClaudeExecutable = nil
-		spawnMsg.CodexExecutable = nil
 		policy.unattendedLaunch = launchcontract.UnattendedLaunchSpec{}
 	}
 	if launch := policy.unattendedLaunch; !launch.IsZero() &&

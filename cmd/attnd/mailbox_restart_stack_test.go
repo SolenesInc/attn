@@ -17,7 +17,7 @@ func TestMailQueuedForABusyAgentRingsItOnceAfterADaemonRestart(t *testing.T) {
 	s.Start()
 	app, cli := s.App(), s.Client()
 	recipient, run := claudeAtWork(t, s, app, "shop")
-	if err := s.InjectSession("reviewer", "reviewer", s.Path("reviewer"), protocol.SessionAgentClaude); err != nil {
+	if err := s.InjectSession("reviewer", "reviewer", s.Path("reviewer"), "claude"); err != nil {
 		t.Fatalf("register the sender: %v", err)
 	}
 	sent, err := cli.AgentMsg(recipient, "reviewer", "the discount is applied after tax")
@@ -81,7 +81,7 @@ func TestRestartDuringInboxPrimingKeepsTheDayAndOutstandingDelay(t *testing.T) {
 	s.Start()
 	giveMemberClaude(t, s, "trellis")
 	cli := s.Client()
-	if err := s.InjectSession("reviewer", "reviewer", s.Path("reviewer"), protocol.SessionAgentClaude); err != nil {
+	if err := s.InjectSession("reviewer", "reviewer", s.Path("reviewer"), "claude"); err != nil {
 		t.Fatal(err)
 	}
 	sent, err := cli.AgentMsg("trellis", "reviewer", "keep this through priming and restart")

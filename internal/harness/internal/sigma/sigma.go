@@ -8,9 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/harness/appserver"
@@ -35,8 +33,8 @@ type Harness struct {
 // New binds Sigma's server on servers and returns its harness.
 func New(host harness.Host, servers *appserver.Client) *Harness {
 	h := &Harness{host: host}
-	declaration := driver().Server()
-	binding := appserver.Binding{Agent: id, Declaration: &declaration, DisplayName: func() string { return driver().DisplayName() }, Enabled: h.enabled}
+	declaration := serverDeclaration()
+	binding := appserver.Binding{Agent: id, Declaration: &declaration, DisplayName: func() string { return displayName }, Enabled: h.enabled}
 	if err := servers.Bind(binding, nil); err != nil {
 		host.Logf("link the %s server: %v", id, err)
 	}
@@ -44,19 +42,10 @@ func New(host harness.Host, servers *appserver.Client) *Harness {
 	return h
 }
 
-func driver() *agentdriver.Sigma { return agentdriver.MustGet(id).(*agentdriver.Sigma) }
-
 func (h *Harness) enabled() bool { return setting.ParseBool(h.host.Setting(setting.SigmaEnabled)) }
 
 func (h *Harness) Facts() harness.Facts {
-	facts := agentdriver.Facts(driver())
-	facts.Logo = harness.Logo{View: 24, Body: logo}
-	facts.SkillDirs = skillDirs
-	facts.CacheTTL = time.Hour
-	facts.Signals.Heartbeat = 500 * time.Millisecond
-	facts.Recovery = harness.ByServer
-	facts.ModelDiscovery = true
-	facts.Activity = true
+	facts := Facts()
 	facts.ServerTerminal = h.link.ServerTerminal
 	return facts
 }
@@ -86,14 +75,12 @@ func (h *Harness) Launch(_ context.Context, req harness.LaunchRequest) (harness.
 		configured = strings.TrimSpace(h.host.Setting(setting.Executable.For(id)))
 		executable = configured
 	}
-	var tools *agentdriver.AgentTools
-	var shared *agentdriver.SharedAgentTools
+	var tools *harness.AgentTools
+	var shared *harness.AgentTools
 	if onServer {
-		if served := h.link.SharedTools(); served != nil {
-			shared = &agentdriver.SharedAgentTools{Name: served.Name, Description: served.Description, Instructions: served.Instructions}
-		}
+		shared = h.link.SharedTools()
 	} else if served, ok := h.host.TerminalTools(req.Terminal); ok {
-		tools = &agentdriver.AgentTools{URL: served.URL, Credential: served.Credential}
+		tools = &harness.AgentTools{URL: served.URL, Credential: served.Credential}
 	}
 	var command harness.Command
 	if req.Direct {
@@ -115,14 +102,14 @@ func explicitExecutable(req harness.LaunchRequest) string {
 	return req.Executable
 }
 
-func launcherCommand(req harness.LaunchRequest, executable string, tools *agentdriver.AgentTools, shared *agentdriver.SharedAgentTools) harness.Command {
+func launcherCommand(req harness.LaunchRequest, executable string, tools *harness.AgentTools, shared *harness.AgentTools) harness.Command {
 	guidance := req.Guidance
 	var env []string
 	if guidance.Crew != "" {
 		env = append(env, "ATTN_CREW_MEMBER=1")
 	}
 	env = append(env, tools.LauncherEnv()...)
-	env = append(env, shared.LauncherEnv()...)
+	env = append(env, shared.SharedLauncherEnv()...)
 	env = append(env, fmt.Sprintf("ATTN_VENT_ENABLED=%t", guidance.Vent), fmt.Sprintf("ATTN_TOOL_VENTS_ENABLED=%t", guidance.ToolVents), fmt.Sprintf("ATTN_CODE_REVIEW_ENABLED=%t", guidance.CodeReview))
 	autoApprove, model, effort := req.Options.AutoApprove, req.Options.Model, req.Options.Effort
 	if unattended := req.Unattended; !unattended.IsZero() {
@@ -130,40 +117,35 @@ func launcherCommand(req harness.LaunchRequest, executable string, tools *agentd
 	}
 	return harness.LauncherCommand(harness.LauncherLaunch{
 		Label: req.Label, Conversation: req.Conversation, Picker: req.Picker, Yolo: req.Options.Yolo, InitialPrompt: req.InitialPrompt,
-		ExecutableEnv: driver().ExecutableEnvVar(), Executable: executable,
+		ExecutableEnv: executableEnvVar, Executable: executable,
 		AutoApprove: autoApprove, Model: model, Effort: effort, Target: req.Options.Target, ContextCap: req.Options.ContextCap,
 		Env: env,
 	})
 }
 
-func directCommand(req harness.LaunchRequest, explicit string, tools *agentdriver.AgentTools, shared *agentdriver.SharedAgentTools) harness.Command {
-	sigma := driver()
+func directCommand(req harness.LaunchRequest, explicit string, tools *harness.AgentTools, shared *harness.AgentTools) harness.Command {
 	executable := explicit
 	if executable == "" {
-		executable = sigma.DefaultExecutable()
+		executable = defaultExecutable
 	}
-	guidance := req.Guidance
-	spawn := agentdriver.SpawnOpts{
-		TerminalID: protocol.TerminalID(req.Terminal), CWD: req.Dir, Label: req.Label,
-		Cols: req.Cols, Rows: req.Rows, InitialPrompt: req.InitialPrompt,
+	spawn := harness.DirectLaunchOpts{
+		TerminalID: protocol.TerminalID(req.Terminal), CWD: req.Dir, InitialPrompt: req.InitialPrompt,
 		ResumeSessionID: req.Conversation, ResumePicker: req.Picker,
 		YoloMode: req.Options.Yolo, AutoApprove: req.Options.AutoApprove,
-		Model: req.Options.Model, Effort: req.Options.Effort, ExecutionTarget: req.Options.Target, AutoCompactWindow: req.Options.ContextCap,
+		Model: req.Options.Model, Effort: req.Options.Effort, AutoCompactWindow: req.Options.ContextCap,
 		Executable: executable, WrapperPath: launchenv.ActiveAttnExecutable(),
-		Garden: guidance.Garden, Asks: guidance.Asks, Vent: guidance.Vent, ToolVents: guidance.ToolVents, CodeReview: guidance.CodeReview,
-		CrewPriming: guidance.Crew, AwarenessDirs: req.AwarenessDirs,
-		SelfReportPullRequests: guidance.SelfReportPullRequests,
-		AgentTools:             tools,
-		SharedAgentTools:       shared,
+		Guidance: req.Guidance, AwarenessDirs: req.AwarenessDirs,
+		AgentTools:       tools,
+		SharedAgentTools: shared,
 	}
 	if unattended := req.Unattended; !unattended.IsZero() {
 		spawn.AutoApprove = true
 		spawn.Model, spawn.Effort = unattended.Model, unattended.Effort
 	}
-	if !agentdriver.EffectiveCapabilities(sigma).HasResume {
+	if !Facts().Options.Resume {
 		spawn.ResumeSessionID, spawn.ResumePicker = "", false
 	}
-	return harness.DirectCommand(sigma.ExecutableEnvVar(), explicit, sigma.BuildCommand(spawn).Args, sigma.BuildEnv(spawn))
+	return harness.DirectCommand(executableEnvVar, explicit, buildCommand(spawn).Args, buildEnv(spawn))
 }
 
 func (*Harness) Start(context.Context) error { return nil }
@@ -308,7 +290,7 @@ type ephemeralAnswer struct {
 
 func (h *Harness) Run(ctx context.Context, req harness.OneShotRequest) (harness.OneShotResult, error) {
 	run := ephemeralRun{Prompt: req.Input, System: req.System, Schema: req.Schema, Effort: req.Effort, MaxTurns: req.Bound.MaxTurns}
-	run.Provider, run.Model = agentdriver.SigmaModel(req.Model)
+	run.Provider, run.Model = splitModel(req.Model)
 	var answer ephemeralAnswer
 	if err := h.link.Call(ctx, "ephemeral/run", run, &answer); err != nil {
 		return ephemeralFailure(err)

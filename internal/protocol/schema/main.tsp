@@ -2347,8 +2347,6 @@ model SpawnSessionMessage {
   spawned_from?: SessionID;       // The session this one was split from. Consulted only for agent "shell": the daemon resolves it to the owning agent session and stores that as the satellite's parent.
   initial_prompt?: string;
   executable?: string;         // Generic executable override for selected agent
-  claude_executable?: string;  // Backward compatibility
-  codex_executable?: string;   // Backward compatibility
   `model`?: string;            // Pin the launched agent's model; empty = agent default
   effort?: string;             // Pin the launched agent's reasoning effort; empty = agent default
   execution_target?: string;   // Where a new conversation runs its tools, an id from harness_targets; empty = the harness default. The harness fixes it when it creates the conversation and never runs that conversation's tools elsewhere

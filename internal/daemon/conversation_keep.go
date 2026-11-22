@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
@@ -575,10 +574,6 @@ func (d *Daemon) storedConversation(agent string, resumable func(id string) bool
 	return harness.Availability{Reason: d.goneConversationReason(agent, resumeID)}
 }
 
-func resumableIn(driver agentdriver.Driver) func(id string) bool {
-	return func(id string) bool { return agentdriver.ResumeAvailable(driver, id) }
-}
-
 func (d *Daemon) goneConversationReason(agent, resumeID string) string {
 	reason := fmt.Sprintf("conversation %s is no longer in %s's storage", resumeID, agent)
 	if kept, ok := d.store.KeptConversation(agent, resumeID); ok && !kept.DeletedAt.IsZero() {
@@ -609,8 +604,12 @@ func (d *Daemon) conversationKnown(agent string, resumable func(id string) bool,
 	return err == nil
 }
 
-func (d *Daemon) conversationReady(driver agentdriver.Driver, resumeID string) bool {
-	return d.conversationReadyIn(driver.Name(), resumableIn(driver), resumeID)
+func (d *Daemon) conversationReady(agent, resumeID string) bool {
+	if strings.TrimSpace(resumeID) == "" {
+		return false
+	}
+	ready, err := d.harnessOf(harness.ID(agent)).Conversations().Prepare(d.life.Context(), harness.ConversationRef{Harness: harness.ID(agent), ID: resumeID})
+	return err == nil && ready
 }
 
 func (d *Daemon) conversationReadyIn(agent string, resumable func(id string) bool, resumeID string) bool {

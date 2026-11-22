@@ -24,7 +24,7 @@ func TestSessionStateFromRecoveredInfo(t *testing.T) {
 		},
 		{
 			name:   "waiting input",
-			info:   ptybackend.SessionInfo{Running: true, Agent: string(protocol.SessionAgentClaude), State: protocol.StateWaitingInput},
+			info:   ptybackend.SessionInfo{Running: true, Agent: "claude", State: protocol.StateWaitingInput},
 			want:   protocol.SessionStateWaitingInput,
 			wantOK: true,
 		},
@@ -35,7 +35,7 @@ func TestSessionStateFromRecoveredInfo(t *testing.T) {
 		},
 		{
 			name:   "claude pending approval",
-			info:   ptybackend.SessionInfo{Running: true, Agent: string(protocol.SessionAgentClaude), State: protocol.StatePendingApproval},
+			info:   ptybackend.SessionInfo{Running: true, Agent: "claude", State: protocol.StatePendingApproval},
 			want:   protocol.SessionStatePendingApproval,
 			wantOK: true,
 		},
@@ -45,11 +45,11 @@ func TestSessionStateFromRecoveredInfo(t *testing.T) {
 		},
 		{
 			name: "running with an empty state is no opinion",
-			info: ptybackend.SessionInfo{Running: true, Agent: string(protocol.SessionAgentClaude)},
+			info: ptybackend.SessionInfo{Running: true, Agent: "claude"},
 		},
 		{
 			name: "explicit idle on a running session is no opinion",
-			info: ptybackend.SessionInfo{Running: true, Agent: string(protocol.SessionAgentClaude), State: protocol.StateIdle},
+			info: ptybackend.SessionInfo{Running: true, Agent: "claude", State: protocol.StateIdle},
 		},
 	}
 	for _, tt := range tests {

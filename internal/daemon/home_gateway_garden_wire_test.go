@@ -105,7 +105,7 @@ func TestPhoneResolvesAskMentionsBeyondItsGarden(t *testing.T) {
 	setSetting(t, app, "phone_access_enabled", "true")
 	setSetting(t, app, "asks_enabled", "true")
 	profile := app.SelectedProfile()
-	if err := w.InjectSession("mine", "mine", w.Path("mine"), protocol.SessionAgentClaude, profile); err != nil {
+	if err := w.InjectSession("mine", "mine", w.Path("mine"), "claude", profile); err != nil {
 		t.Fatal(err)
 	}
 	old := plantSeedAs(t, cli, "mine", "Old phone work")
@@ -149,7 +149,7 @@ func TestHomeGatewayShowsThePairedProfilesGardenAndTendsItAsTheDesktopDoes(t *te
 	personal := app.SelectedProfile()
 	work := createProfile(app, "Work")
 	for _, s := range []struct{ id, profile string }{{"mine", personal}, {"theirs", work.ID}} {
-		if err := w.InjectSession(s.id, s.id+" label", w.Path(s.id), protocol.SessionAgentClaude, s.profile); err != nil {
+		if err := w.InjectSession(s.id, s.id+" label", w.Path(s.id), "claude", s.profile); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -270,7 +270,7 @@ func TestHomeGatewaySendsASeedsNewestLogThatFitsAFrameAndSaysWhenItsBodyCannot(t
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
-	if err := w.InjectSession("mine", "mine", w.Path("mine"), protocol.SessionAgentClaude, app.SelectedProfile()); err != nil {
+	if err := w.InjectSession("mine", "mine", w.Path("mine"), "claude", app.SelectedProfile()); err != nil {
 		t.Fatal(err)
 	}
 	busy, err := cli.SeedPlant("mine", "A busy seed", "Short body.", "", "")
@@ -324,7 +324,7 @@ func TestHomeGatewayTellsThePhoneWhenASeedsNotesOrBodyChange(t *testing.T) {
 	personal := app.SelectedProfile()
 	work := createProfile(app, "Work")
 	for _, s := range []struct{ id, profile string }{{"mine", personal}, {"theirs", work.ID}} {
-		if err := w.InjectSession(s.id, s.id+" label", w.Path(s.id), protocol.SessionAgentClaude, s.profile); err != nil {
+		if err := w.InjectSession(s.id, s.id+" label", w.Path(s.id), "claude", s.profile); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -99,7 +99,7 @@ func TestAResumeThatCannotReachItsConversationIsRefusedAndCreatesNothing(t *test
 	if err := os.MkdirAll(outsider, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.InjectSession("outsider", "outsider", outsider, protocol.SessionAgentCodex); err != nil {
+	if err := w.InjectSession("outsider", "outsider", outsider, "codex"); err != nil {
 		t.Fatal(err)
 	}
 	unlaunched := plantSeedAs(t, cli, "", "held by a session attn never launched")

@@ -271,7 +271,7 @@ func upgradedFromTodaysChief(t *testing.T, directory string, intent store.Launch
 		t.Fatalf("profiles before the upgrade = %+v, %v", profiles, err)
 	}
 	old := "todays-chief"
-	if err := before.AddChecked(&protocol.Session{ID: protocol.SessionID(old), Label: "Chief", Agent: protocol.SessionAgentClaude, Directory: directory, ProfileID: profiles[0].ID, State: protocol.SessionStateIdle}); err != nil {
+	if err := before.AddChecked(&protocol.Session{ID: protocol.SessionID(old), Label: "Chief", Agent: "claude", Directory: directory, ProfileID: profiles[0].ID, State: protocol.SessionStateIdle}); err != nil {
 		t.Fatal(err)
 	}
 	if err := before.SetLaunchIntent(protocol.SessionID(old), intent); err != nil {

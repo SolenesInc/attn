@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/harness/builtin"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -262,14 +262,14 @@ func headlessTasksSummary(health daemonHealth, healthErr error) string {
 func checkLaunchAgent(launch Launch, agents []harness.Descriptor, agentsErr error, add func(Check)) *harness.Descriptor {
 	name := launch.Agent.Value
 	if agentsErr != nil {
-		driver := agentdriver.Get(name)
-		if driver == nil {
+		facts, ok := builtin.FactsFor(name)
+		if !ok {
 			add(warn("launch.agent", fmt.Sprintf("daemon could not list its agents (%v), so preflight cannot tell whether a plugin provides agent %q", agentsErr, name), "Start this instance's daemon from this build and rerun preflight."))
 			return nil
 		}
-		caps := agentdriver.EffectiveCapabilities(driver)
 		add(warn("launch.agent", fmt.Sprintf("daemon could not list its agents (%v); %s was checked against this CLI's built-in driver instead", agentsErr, name), "Start this instance's daemon from this build and rerun preflight to check the launch against it."))
-		return &harness.Descriptor{Name: name, Executable: driver.ResolveExecutable(""), ModelPin: caps.HasModelPin, EffortPin: caps.HasEffortPin}
+		executable := harness.ResolveExecutable(facts.Executable.Env, "", facts.Executable.Default)
+		return &harness.Descriptor{Name: name, Executable: executable, ModelPin: facts.Options.ModelPin, EffortPin: facts.Options.EffortPin}
 	}
 	names := make([]string, 0, len(agents))
 	for i := range agents {

@@ -346,7 +346,7 @@ func recordAndAdvance(w *world, app *testworld.Peer, d time.Duration) {
 
 func recordInjectedVent(t *testing.T, w *world, text string) protocol.Vent {
 	t.Helper()
-	if err := w.InjectSession("venting", "venting", w.Path("venting"), protocol.SessionAgentClaude); err != nil {
+	if err := w.InjectSession("venting", "venting", w.Path("venting"), "claude"); err != nil {
 		t.Fatal(err)
 	}
 	vent, err := w.Client().RecordVent("venting", protocol.VentKindAttn, text)

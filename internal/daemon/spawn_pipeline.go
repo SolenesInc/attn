@@ -136,9 +136,6 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 	}
 	if !isShell && (protocol.Deref(msg.Host) != "" || !hasPluginDriver) {
 		explicit := strings.TrimSpace(protocol.Deref(msg.Executable))
-		if explicit == "" {
-			explicit = legacyExecutableFromSpawnMessage(msg, agent)
-		}
 		if err := d.requireCatalogAgent(protocol.Deref(msg.Host), agent, explicit, startsSession); err != nil {
 			return nil, &spawnRejection{err: err}
 		}
@@ -303,9 +300,6 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 		}
 	}
 	configuredExecutable := strings.TrimSpace(protocol.Deref(msg.Executable))
-	if configuredExecutable == "" {
-		configuredExecutable = legacyExecutableFromSpawnMessage(msg, req.agent)
-	}
 	plan := &spawnPlan{}
 	autoApprove := facts.Options.AutoApprove && d.on(setting.AutoApproveEnabled)
 	plan.spawnOpts = ptybackend.SpawnOptions{CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), AutoApprove: autoApprove, Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort))}

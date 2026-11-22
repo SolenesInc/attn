@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchenv"
 	"github.com/victorarias/attn/internal/protocol"
@@ -21,9 +20,9 @@ func (h claudeHarness) Launch(_ context.Context, req harness.LaunchRequest) (har
 	if err := h.settleFolderTrust(req); err != nil {
 		return harness.Command{}, err
 	}
-	var tools *agentdriver.AgentTools
+	var tools *harness.AgentTools
 	if served, ok := h.host.TerminalTools(req.Terminal); ok {
-		tools = &agentdriver.AgentTools{URL: served.URL, Credential: served.Credential}
+		tools = &harness.AgentTools{URL: served.URL, Credential: served.Credential}
 	}
 	mod := h.mod.forLaunch(req.Terminal)
 	var command harness.Command
@@ -47,11 +46,11 @@ func claudeExplicitExecutable(req harness.LaunchRequest) string {
 	return req.Executable
 }
 
-func claudeLauncherCommand(req harness.LaunchRequest, executable string, tools *agentdriver.AgentTools, mod agentdriver.ClaudeMod) harness.Command {
+func claudeLauncherCommand(req harness.LaunchRequest, executable string, tools *harness.AgentTools, mod claudeModSpec) harness.Command {
 	guidance := req.Guidance
 	var env []string
-	if mod != (agentdriver.ClaudeMod{}) {
-		env = append(env, agentdriver.ClaudeModDirEnv+"="+mod.Dir, agentdriver.ClaudeModSocketEnv+"="+mod.Socket)
+	if mod != (claudeModSpec{}) {
+		env = append(env, claudeModDirEnv+"="+mod.Dir, claudeModSocketEnv+"="+mod.Socket)
 	}
 	if guidance.Crew != "" {
 		env = append(env, "ATTN_CREW_MEMBER=1")
@@ -64,50 +63,41 @@ func claudeLauncherCommand(req harness.LaunchRequest, executable string, tools *
 	}
 	return harness.LauncherCommand(harness.LauncherLaunch{
 		Label: req.Label, Conversation: req.Conversation, Picker: req.Picker, Yolo: req.Options.Yolo, InitialPrompt: req.InitialPrompt,
-		ExecutableEnv: claudeDriver().ExecutableEnvVar(), Executable: executable,
+		ExecutableEnv: claudeExecutableEnvVar, Executable: executable,
 		AutoApprove: autoApprove, Model: model, Effort: effort, Target: req.Options.Target, ContextCap: req.Options.ContextCap,
 		Env: env,
 	})
 }
 
-func (h claudeHarness) directCommand(req harness.LaunchRequest, explicit string, tools *agentdriver.AgentTools, mod agentdriver.ClaudeMod) (harness.Command, error) {
-	driver := h.driver()
+func (h claudeHarness) directCommand(req harness.LaunchRequest, explicit string, tools *harness.AgentTools, mod claudeModSpec) (harness.Command, error) {
 	executable := explicit
 	if executable == "" {
-		executable = driver.DefaultExecutable()
+		executable = claudeDefaultExecutable
 	}
-	guidance := req.Guidance
-	spawn := agentdriver.SpawnOpts{
-		TerminalID: protocol.TerminalID(req.Terminal), CWD: req.Dir, Label: req.Label,
-		Cols: req.Cols, Rows: req.Rows, InitialPrompt: req.InitialPrompt,
+	spawn := harness.DirectLaunchOpts{
+		TerminalID: protocol.TerminalID(req.Terminal), CWD: req.Dir, InitialPrompt: req.InitialPrompt,
 		ResumeSessionID: req.Conversation, ResumePicker: req.Picker,
 		YoloMode: req.Options.Yolo, AutoApprove: req.Options.AutoApprove,
-		Model: req.Options.Model, Effort: req.Options.Effort, ExecutionTarget: req.Options.Target, AutoCompactWindow: req.Options.ContextCap,
+		Model: req.Options.Model, Effort: req.Options.Effort, AutoCompactWindow: req.Options.ContextCap,
 		Executable: executable, SocketPath: h.host.DaemonSocket(),
 		WrapperPath: launchenv.ActiveAttnExecutable(),
-		Garden:      guidance.Garden, Asks: guidance.Asks, Vent: guidance.Vent, ToolVents: guidance.ToolVents, CodeReview: guidance.CodeReview,
-		CrewPriming: guidance.Crew, AwarenessDirs: req.AwarenessDirs,
-		SelfReportPullRequests: guidance.SelfReportPullRequests,
-		ClaudeMod:              mod,
-		AgentTools:             tools,
+		Guidance:    req.Guidance, AwarenessDirs: req.AwarenessDirs,
+		AgentTools: tools,
 	}
 	if unattended := req.Unattended; !unattended.IsZero() {
 		spawn.AutoApprove = true
 		spawn.Model, spawn.Effort = unattended.Model, unattended.Effort
 	}
-	if !agentdriver.EffectiveCapabilities(driver).HasResume {
+	facts := h.Facts()
+	if !facts.Options.Resume {
 		spawn.ResumeSessionID, spawn.ResumePicker = "", false
 	}
-	if preparer, ok := driver.(agentdriver.LaunchPreparer); ok {
-		if err := preparer.PrepareLaunch(spawn); err != nil {
-			return harness.Command{}, fmt.Errorf("prepare %s: %w", driver.Name(), err)
-		}
+	if err := prepareLaunch(spawn); err != nil {
+		return harness.Command{}, fmt.Errorf("prepare %s: %w", claudeID, err)
 	}
-	if provider, ok := agentdriver.GetHookProvider(driver); ok {
-		spawn.HookSettings = provider.GenerateHooksConfig(spawn)
+	hookSettings := ""
+	if facts.Signals.ReportsTools {
+		hookSettings = generateHooksConfig(spawn)
 	}
-	if provider, ok := agentdriver.GetConfigOverrideProvider(driver); ok {
-		spawn.ConfigOverrides = provider.GenerateConfigOverrides(spawn)
-	}
-	return harness.DirectCommand(driver.ExecutableEnvVar(), explicit, driver.BuildCommand(spawn).Args, driver.BuildEnv(spawn)), nil
+	return harness.DirectCommand(claudeExecutableEnvVar, explicit, buildCommand(spawn, hookSettings, mod).Args, buildEnv(spawn, mod)), nil
 }

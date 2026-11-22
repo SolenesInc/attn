@@ -133,8 +133,8 @@ go ./internal/crew TestPrimingPromptCompatibility
 go ./internal/transcript TestLegacyPromptCompatibility
 go ./internal/activity TestLegacyPromptCompatibility
 go ./internal/classifier TestLegacyPromptCompatibility
-go ./internal/sessioninstructions TestLegacyPromptCompatibility
-go ./internal/agent TestLegacyPromptCompatibility
+go ./internal/harness/internal/codex TestLegacyPromptCompatibility
+go ./internal/harness/builtin TestLegacyPromptCompatibility
 go ./internal/hooks TestLegacyPromptCompatibility
 go ./cmd/attnd TestAPlotPayloadPlacesItsPlotAndOrdersItsChildren
 go ./cmd/attnd TestHelpListsEveryCommandAndReferenceAndEachCommandExplainsItself

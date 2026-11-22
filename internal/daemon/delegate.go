@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/delegationprefs"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/harness/builtin"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/profiles"
@@ -333,7 +333,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	if err != nil {
 		return nil, err
 	}
-	if agentdriver.Get(agent) != nil {
+	if builtin.Has(agent) {
 		if err := d.requireCatalogAgent(protocol.Deref(msg.Host), agent, "", true); err != nil {
 			return nil, err
 		}

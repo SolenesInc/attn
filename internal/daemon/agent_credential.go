@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
@@ -115,7 +114,7 @@ func (d *Daemon) agentToolsURL() string {
 	return "http://" + net.JoinHostPort("127.0.0.1", config.WSPort()) + "/mcp"
 }
 
-func (d *Daemon) agentTools(t harness.TerminalID) *agentdriver.AgentTools {
+func (d *Daemon) agentTools(t harness.TerminalID) *harness.AgentTools {
 	return d.agentToolsFor(agentCredential{kind: credentialTerminal, name: string(protocol.TrimID(protocol.TerminalID(t)))})
 }
 
@@ -123,9 +122,9 @@ func (d *Daemon) agentToolsServed() bool {
 	return d.on(setting.AgentToolsEnabled) && d.agentKey.err == nil
 }
 
-func (d *Daemon) agentToolsFor(c agentCredential) *agentdriver.AgentTools {
+func (d *Daemon) agentToolsFor(c agentCredential) *harness.AgentTools {
 	if !d.agentToolsServed() {
 		return nil
 	}
-	return &agentdriver.AgentTools{URL: d.agentToolsURL(), Credential: d.agentKey.sign(c)}
+	return &harness.AgentTools{URL: d.agentToolsURL(), Credential: d.agentKey.sign(c)}
 }

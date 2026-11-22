@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
@@ -30,26 +29,45 @@ func newClaudeHarness(host harness.Host) claudeHarness {
 	return claudeHarness{host: host, mod: newClaudeMod(host)}
 }
 
-func claudeDriver() agentdriver.Driver { return agentdriver.MustGet("claude") }
+func (claudeHarness) Facts() harness.Facts { return Facts() }
 
-func (claudeHarness) driver() agentdriver.Driver { return claudeDriver() }
-
-func (claudeHarness) Facts() harness.Facts { return claudeFacts() }
-
-func claudeFacts() harness.Facts {
-	facts := agentdriver.Facts(claudeDriver())
-	facts.Logo = harness.Logo{View: 1200, Body: claudeLogo}
-	facts.SkillDirs = func(_ func(string) string, homeDir string) ([]string, error) {
-		return []string{filepath.Join(homeDir, ".claude", "skills")}, nil
-	}
-	facts.CacheTTL = time.Hour
-	facts.Tiers = map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "haiku"}, modeltiers.Standard: {Model: "sonnet"}, modeltiers.Deep: {Model: "opus"}}
-	facts.Advisor = harness.ModelChoice{Model: "sonnet", Effort: "medium"}
-	facts.CrewModel = "fable"
-	facts.ModelDiscovery = true
-	facts.Activity = true
-	facts.Signals.Heartbeat = 1500 * time.Millisecond
-	return facts
+func Facts() harness.Facts {
+	return harness.ApplyCapabilityEnv(harness.Facts{
+		ID:          claudeID,
+		DisplayName: claudeDisplayName,
+		Logo:        harness.Logo{View: 1200, Body: claudeLogo},
+		Options: harness.Options{
+			Resume:               true,
+			Yolo:                 true,
+			AutoApprove:          true,
+			AutomationExecutable: true,
+			InitialPrompt:        true,
+			LaunchInstructions:   true,
+			ModelPin:             true,
+			EffortPin:            true,
+			ContextCap:           true,
+			Picker:               true,
+		},
+		Executable: harness.Executable{Default: claudeDefaultExecutable, Env: claudeExecutableEnvVar},
+		SkillDirs: func(_ func(string) string, homeDir string) ([]string, error) {
+			return []string{filepath.Join(homeDir, ".claude", "skills")}, nil
+		},
+		CacheTTL:  time.Hour,
+		Tiers:     map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "haiku"}, modeltiers.Standard: {Model: "sonnet"}, modeltiers.Deep: {Model: "opus"}},
+		Advisor:   harness.ModelChoice{Model: "sonnet", Effort: "medium"},
+		CrewModel: "fable",
+		Signals: harness.Signals{
+			TurnStarts:      harness.TurnStartsReported,
+			Heartbeat:       1500 * time.Millisecond,
+			ReportsTools:    true,
+			Titles:          harness.TitlesClaude,
+			StopsReadable:   true,
+			StopsClassified: true,
+		},
+		ModelDiscovery:        true,
+		Activity:              true,
+		ConversationIsSession: true,
+	})
 }
 
 func (h claudeHarness) Reach(_ context.Context, s harness.SessionFacts) harness.Reach {
@@ -96,7 +114,9 @@ func (h claudeHarness) Conversations() harness.ConversationStore { return h }
 
 func (claudeHarness) Admit(harness.ConversationRef) error { return nil }
 
-func (h claudeHarness) resumable(id string) bool { return agentdriver.ResumeAvailable(h.driver(), id) }
+func (h claudeHarness) resumable(id string) bool {
+	return strings.TrimSpace(id) != "" && transcript.FindClaudeTranscript(id) != ""
+}
 
 func (h claudeHarness) Check(_ context.Context, refs []harness.ConversationRef) map[harness.ConversationRef]harness.Availability {
 	return h.host.Files().Check(refs, h.resumable)
@@ -139,13 +159,12 @@ func (h claudeHarness) Locate(ref harness.ConversationRef) string {
 		return ref.Path
 	}
 	id := strings.TrimSpace(ref.ID)
-	finder, ok := agentdriver.GetTranscriptFinder(h.driver())
-	if id == "" || !ok {
+	if id == "" || !h.Facts().Signals.StopsReadable {
 		return ""
 	}
-	return strings.TrimSpace(finder.FindTranscriptForResume(id))
+	return strings.TrimSpace(transcript.FindClaudeTranscript(id))
 }
 
 func (h claudeHarness) IDFromPath(path string) string {
-	return agentdriver.ResumeSessionIDFromTranscriptPath(h.driver(), path)
+	return strings.TrimSpace(resumeSessionIDFromTranscriptPath(path))
 }

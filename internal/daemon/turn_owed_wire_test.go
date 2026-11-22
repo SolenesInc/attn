@@ -13,7 +13,7 @@ import (
 func TestATurnOpensAtAWaitSurvivesTheWorkAndOnlySettleClosesIt(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, watcher, cli := w.App(), w.App(), w.Client()
-		if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
+		if err := w.InjectSession("s1", "s1", w.Path("s1"), "claude"); err != nil {
 			t.Fatalf("register: %v", err)
 		}
 		w.advance(0)

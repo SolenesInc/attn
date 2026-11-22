@@ -131,7 +131,7 @@ func (w *profilesTestDaemon) agent(sessionID, profileID string) {
 		Label:     sessionID,
 		Directory: w.t.TempDir(),
 		State:     protocol.SessionStateIdle,
-		Agent:     protocol.SessionAgentClaude,
+		Agent:     "claude",
 	})
 }
 

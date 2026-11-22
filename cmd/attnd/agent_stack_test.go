@@ -28,7 +28,7 @@ func requireRefusals(t *testing.T, s *testworld.Stack, rows []argvRefusal) {
 
 func register(t *testing.T, s *testworld.Stack, id, label string) {
 	t.Helper()
-	if err := s.InjectSession(id, label, s.Path(label), protocol.SessionAgentClaude); err != nil {
+	if err := s.InjectSession(id, label, s.Path(label), "claude"); err != nil {
 		t.Fatalf("register %s: %v", id, err)
 	}
 }

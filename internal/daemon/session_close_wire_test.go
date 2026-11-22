@@ -31,7 +31,7 @@ func TestAClosedSessionLeavesEveryLiveViewAndKeepsItsFirstClose(t *testing.T) {
 		protocol.Deref(again.ClosedAt) != protocol.Deref(closed.ClosedAt) {
 		t.Errorf("after a second close the row = %+v, want the first close kept", again)
 	}
-	if err := w.InjectSession(gone, "gone", w.Path("gone"), protocol.SessionAgentClaude); err == nil {
+	if err := w.InjectSession(gone, "gone", w.Path("gone"), "claude"); err == nil {
 		t.Error("registering over the closed session was accepted")
 	}
 	if ids := queriedIDs(t, cli, ""); !slices.Equal(ids, []string{live}) {

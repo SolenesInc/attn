@@ -85,7 +85,7 @@ func TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText(t *test
 			if err := json.Unmarshal(props, &got); err != nil {
 				t.Fatalf("%s props %s: %v", tc.name, props, err)
 			}
-			if got.Session == nil || got.Session.Harness != protocol.SessionAgentClaude || got.Session.Launch != tc.launch || got.Session.State == "" {
+			if got.Session == nil || got.Session.Harness != "claude" || got.Session.Launch != tc.launch || got.Session.State == "" {
 				t.Errorf("the %s session's latest %s carries %s, want harness claude, launch %s and a state", tc.name, tc.fact, props, tc.launch)
 			}
 			if (got.Repo == nil) != (tc.repo == nil) || (got.Repo != nil && *got.Repo != *tc.repo) {
@@ -167,7 +167,7 @@ func assertDerivedTraitsAreClosed(t *testing.T, record analytics.Record) {
 		t.Fatalf("%s props %s: %v", record.Name, record.Props, err)
 	}
 	closed := map[string]map[string]bool{
-		"harness":         {protocol.SessionAgentClaude: true},
+		"harness":         {"claude": true},
 		"model":           {"fable": true},
 		"model_requested": {"fable": true},
 		"launch":          {string(analytics.LaunchUser): true, string(analytics.LaunchDelegation): true, string(analytics.LaunchAutomation): true, string(analytics.LaunchCrew): true, string(analytics.LaunchChief): true},

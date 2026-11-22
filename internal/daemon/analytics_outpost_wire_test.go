@@ -10,7 +10,6 @@ import (
 	"testing/synctest"
 
 	"github.com/victorarias/attn/internal/analytics"
-	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestTheHomeReadsNoRepoTraitsFromAnOutpostSessionsFolder(t *testing.T) {
@@ -23,7 +22,7 @@ func TestTheHomeReadsNoRepoTraitsFromAnOutpostSessionsFolder(t *testing.T) {
 			t.Fatal(err)
 		}
 		const onOutpost = "on-outpost"
-		if err := w.InjectSessionOn("far", onOutpost, "far work", folder, protocol.SessionAgentClaude); err != nil {
+		if err := w.InjectSessionOn("far", onOutpost, "far work", folder, "claude"); err != nil {
 			t.Fatal(err)
 		}
 		synctest.Wait()

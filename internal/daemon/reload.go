@@ -45,9 +45,9 @@ func (d *Daemon) consumeTerminalExitIntent(id harness.TerminalID, intent termina
 
 func recordedLegacyExecutable(agent string, params ptybackend.SessionLaunchParams) string {
 	switch agent {
-	case string(protocol.SessionAgentClaude):
+	case "claude":
 		return params.ClaudeExecutable
-	case string(protocol.SessionAgentCodex):
+	case "codex":
 		return params.CodexExecutable
 	}
 	return ""

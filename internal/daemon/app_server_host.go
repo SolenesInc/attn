@@ -15,6 +15,7 @@ import (
 
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/harness/builtin"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
@@ -313,7 +314,11 @@ func (h hostTerminals) Start(ctx context.Context, spec harness.TerminalSpec) err
 	if agent == "" {
 		agent = string(spec.ID)
 	}
-	env := append([]string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT=", "ATTN_CODEX_SHARED_PROFILE=", "CODEX_THREAD_ID="}, spec.Env...)
+	env := []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT="}
+	for _, key := range harness.CallerEnvKeys(builtin.CallerEnvs()...) {
+		env = append(env, key+"=")
+	}
+	env = append(env, spec.Env...)
 	return h.d.startAdapterTerminal(ctx, h.owner, ptybackend.SpawnOptions{
 		ID: spec.ID, Agent: agent, Label: spec.Label, CWD: spec.Dir, Cols: 80, Rows: 24,
 		Executable:    spec.Executable,

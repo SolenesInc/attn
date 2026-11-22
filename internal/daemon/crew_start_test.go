@@ -230,7 +230,7 @@ func crewList(t *testing.T, d *Daemon) []protocol.CrewMember {
 func TestCrewStart_RefusesAMemberOfAnotherProfile(t *testing.T) {
 	d, backend, _ := newStartableDaemon(t)
 	work := createTestProfile(t, d.store, "Work")
-	d.store.Add(&protocol.Session{ID: "work-agent", Label: "Work agent", Agent: protocol.SessionAgentCodex, Directory: t.TempDir(), ProfileID: work.ID})
+	d.store.Add(&protocol.Session{ID: "work-agent", Label: "Work agent", Agent: "codex", Directory: t.TempDir(), ProfileID: work.ID})
 
 	for _, msg := range []*protocol.CrewStartMessage{
 		{Member: "trellis", ProfileID: protocol.Ptr(work.ID)},

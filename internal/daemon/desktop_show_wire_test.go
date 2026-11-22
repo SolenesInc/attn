@@ -78,7 +78,7 @@ func writeNotes(t *testing.T, w *world) string {
 
 func injectAgent(t *testing.T, w *world, id string) {
 	t.Helper()
-	if err := w.InjectSession(id, id, w.Path(id), protocol.SessionAgentClaude); err != nil {
+	if err := w.InjectSession(id, id, w.Path(id), "claude"); err != nil {
 		t.Fatalf("inject %s: %v", id, err)
 	}
 	synctest.Wait()

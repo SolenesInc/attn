@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/harness/appserver"
+	"github.com/victorarias/attn/internal/harness/builtin"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -129,7 +129,7 @@ func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginD
 	if agent == "" {
 		return errors.New("driver.register params.agent must contain lowercase letters, numbers, hyphens, or underscores")
 	}
-	if agent == protocol.AgentShellValue || agentdriver.Get(agent) != nil {
+	if agent == protocol.AgentShellValue || builtin.Has(agent) {
 		return fmt.Errorf("agent %q is reserved by attn", agent)
 	}
 	capabilities, err := validatePluginDriverCapabilities(params.Capabilities)

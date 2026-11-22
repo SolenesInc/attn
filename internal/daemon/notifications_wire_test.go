@@ -151,7 +151,7 @@ func TestAGardenReviewFailureWarnsOnlyTheProfileUnderReview(t *testing.T) {
 		setSetting(t, defaultApp, "garden.advisor", `{"agent":"claude"}`)
 		side := createProfile(defaultApp, "Side")
 		scoped := w.Client().WithGardenProfile(side.ID, "")
-		if err := w.InjectSession("side-gardener", "side-gardener", w.Path("side-gardener"), protocol.SessionAgentClaude, side.ID); err != nil {
+		if err := w.InjectSession("side-gardener", "side-gardener", w.Path("side-gardener"), "claude", side.ID); err != nil {
 			t.Fatal(err)
 		}
 		gardenReviewPlantTended(t, scoped, "side-gardener", "Side checkout work")

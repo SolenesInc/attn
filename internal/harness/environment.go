@@ -7,11 +7,12 @@ import (
 	"strings"
 )
 
-const CodexSharedProfileEnv = "ATTN_CODEX_SHARED_PROFILE"
-
-const CodexThreadEnv = "CODEX_THREAD_ID"
-
 const ServerCallerPrefix = "server-env:"
+
+type CallerEnv struct {
+	Scope        string
+	Conversation string
+}
 
 type ServerCaller struct{ Variable, Scope, Conversation string }
 
@@ -36,22 +37,40 @@ func ParseServerCaller(t TerminalID) (ServerCaller, bool) {
 	return ServerCaller{Variable: variable, Scope: scope, Conversation: conversation}, true
 }
 
-// TerminalFromEnv reads the terminal identity, including the spelling used by older launches.
-func TerminalFromEnv() TerminalID {
-	id, _ := ResolveTerminalFromEnv()
+func CallerEnvKeys(callers ...CallerEnv) []string {
+	var keys []string
+	add := func(k string) {
+		if k != "" && !slices.Contains(keys, k) {
+			keys = append(keys, k)
+		}
+	}
+	for _, c := range callers {
+		add(c.Scope)
+		add(c.Conversation)
+	}
+	return keys
+}
+
+func TerminalFromEnv(callers ...CallerEnv) TerminalID {
+	id, _ := ResolveTerminalFromEnv(callers...)
 	return id
 }
 
-func ResolveTerminalFromEnv() (TerminalID, error) {
+func ResolveTerminalFromEnv(callers ...CallerEnv) (TerminalID, error) {
 	if id := os.Getenv("ATTN_TERMINAL_ID"); id != "" {
 		return TerminalID(id), nil
 	}
-	if profile := os.Getenv(CodexSharedProfileEnv); profile != "" {
-		thread := strings.TrimSpace(os.Getenv(CodexThreadEnv))
-		if thread == "" {
-			return "", nil
+	for _, c := range callers {
+		if c.Scope == "" || c.Conversation == "" {
+			continue
 		}
-		return ServerCaller{Variable: CodexThreadEnv, Scope: profile, Conversation: thread}.Terminal(), nil
+		if scope := os.Getenv(c.Scope); scope != "" {
+			conversation := strings.TrimSpace(os.Getenv(c.Conversation))
+			if conversation == "" {
+				return "", nil
+			}
+			return ServerCaller{Variable: c.Conversation, Scope: scope, Conversation: conversation}.Terminal(), nil
+		}
 	}
 	if id := os.Getenv("ATTN_SESSION_ID"); id != "" {
 		return TerminalID(id), nil

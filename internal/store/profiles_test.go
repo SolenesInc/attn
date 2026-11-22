@@ -42,7 +42,7 @@ func addProfileSession(t *testing.T, s *Store, id, profileID string) {
 	t.Helper()
 	now := string(protocol.TimestampNow())
 	if err := s.AddChecked(&protocol.Session{
-		ID: protocol.SessionID(id), Label: id, Agent: protocol.SessionAgentCodex, Directory: "/tmp/project", ProfileID: profileID,
+		ID: protocol.SessionID(id), Label: id, Agent: "codex", Directory: "/tmp/project", ProfileID: profileID,
 		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	}); err != nil {
 		t.Fatalf("adding session %s: %v", id, err)

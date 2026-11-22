@@ -47,7 +47,7 @@ func TestAnOutpostSessionDownloadsAFileTheUserAttachedOnTheHomeOntoTheOutpost(t 
 	if !side.Success {
 		t.Fatalf("create Side: %+v", side)
 	}
-	if err := home.InjectSession("stranger", "stranger", home.Path("stranger"), protocol.SessionAgentClaude, side.Profile.ID); err != nil {
+	if err := home.InjectSession("stranger", "stranger", home.Path("stranger"), "claude", side.Profile.ID); err != nil {
 		t.Fatalf("register stranger: %v", err)
 	}
 	if selected := testworld.Request(app, protocol.ProfileSelectMessage{Cmd: protocol.CmdProfileSelect, ProfileID: side.Profile.ID, RequestID: "select-side"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "select-side" }); selected.Error != nil {

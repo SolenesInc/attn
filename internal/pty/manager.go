@@ -18,10 +18,10 @@ import (
 	"time"
 
 	creackpty "github.com/creack/pty"
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/ghosttyvt"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/harness/builtin"
 	"github.com/victorarias/attn/internal/launchenv"
 	"github.com/victorarias/attn/internal/pausepoint"
 )
@@ -553,7 +553,7 @@ func (m *Manager) getSession(id string) (*Session, error) {
 
 func launchAgent(agent string, external bool) (string, error) {
 	a := strings.TrimSpace(strings.ToLower(agent))
-	if a == "shell" || external || agentdriver.Get(a) != nil {
+	if a == "shell" || external || builtin.Has(a) {
 		return a, nil
 	}
 	return "", fmt.Errorf("a launch of agent %q has no command to run", agent)

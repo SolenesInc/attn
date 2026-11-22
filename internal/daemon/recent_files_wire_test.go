@@ -238,7 +238,7 @@ func placeSessions(t *testing.T, w *world, app *testworld.Peer, cli *client.Clie
 		t.Fatal(err)
 	}
 	for _, id := range ids {
-		if err := w.InjectSession(id, id, dir, protocol.SessionAgentClaude); err != nil {
+		if err := w.InjectSession(id, id, dir, "claude"); err != nil {
 			t.Fatalf("register %s: %v", id, err)
 		}
 	}

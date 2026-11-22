@@ -32,7 +32,7 @@ var knownPlainErrors = map[string]bool{
 	"internal/daemon/code_nav.go: nothing is linked as %s in %s; `attn nav status` lists what is":                                                                                                                    true,
 	"internal/daemon/code_nav.go: no definition of %s is set for %s; `attn nav status` lists them":                                                                                                                   true,
 	"internal/daemon/delegation_preferences.go: enabling attn-workflow needs the explicit install: attn delegate roles install, or Add Attn roles in Settings > Delegation":                                          true,
-	"internal/daemon/codex_update.go: your shell %s gives attn no command marks, so attn can't run Codex's update and tell when it finishes; run attn codex update in a terminal instead":                            true,
+	"internal/harness/internal/codex/update.go: your shell %s gives attn no command marks, so attn can't run Codex's update and tell when it finishes; run attn codex update in a terminal instead":                  true,
 	"internal/daemon/conversation_ledger.go: %w; unlinked crew letters: %s; letters are unchanged and attn's copy remains; fix the error and retry `attn conversation forget conversation:%s --unlink-crew-letters`": true,
 	"internal/daemon/daemon.go: Port %s is also used by attn instance: %s. ":                                                                                                                                         true,
 	"internal/daemon/daemon.go: Run `attn instance claim-port --instance <name>` for whichever of this instance or those has no ws-port yet, then reinstall its app. ":                                               true,
@@ -100,7 +100,7 @@ func refusalLiterals(t *testing.T, root string) []refusalLiteral {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
-		plainScope := false
+		plainScope := strings.HasPrefix(rel, "internal/harness/internal/")
 		for _, pkg := range plainErrorPackages {
 			plainScope = plainScope || filepath.ToSlash(filepath.Dir(rel)) == pkg
 		}

@@ -194,7 +194,7 @@ func TestApplyingAHarnessChangeTurnsTheLetterIntoASessionOnTheNewHarness(t *test
 func TestOnlyTheMemberItsChainAndTheChiefMayApplyItsSettings(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
-	if err := w.InjectSession("errand", "errand", w.Path("errand"), protocol.SessionAgentClaude); err != nil {
+	if err := w.InjectSession("errand", "errand", w.Path("errand"), "claude"); err != nil {
 		t.Fatal(err)
 	}
 	day := startCrew(t, cli, "trellis", "")

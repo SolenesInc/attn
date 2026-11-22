@@ -7,5 +7,5 @@ env -u ATTN_CODEX_SHARED_PROFILE -u CODEX_THREAD_ID go test "$@" ./cmd/attnd \
   -run '^Test(Delegation.*|AnInterruptedDelegationKeepsItsOutpostAcrossAHomeRestart|ADelegationNamesItsCheckoutIfItDisappearsBeforeTheMachineLaunches|ADelegationWritesItsOutpostFailureNoteOnceAcrossReconnectAndRestarts|DelegateResolvesRelativeCwdFromALinkedWorktree|AfterACrashADelegationNeverAdoptsAWorktreeItCannotProveItCreated|DelegateRetryWithoutPriorityKeepsTheAcceptedRequest)$'
 env -u ATTN_CODEX_SHARED_PROFILE -u CODEX_THREAD_ID go test "$@" ./internal/daemon \
   -run '^Test(ADelegatedWorktreeProviderCanChooseItsOwnDirectory|ADelegationReportsTheProviderWorktreeWhenItsAfterCreateHookFails|ADelegatedWorktreeStartsFromTheExactBaseWhereItWasAsked|ADelegatedCheckoutThatCannotBeHonouredIsRefusedByName|ADelegationRetryReturnsTheAcceptedOperationAfterTheRolesChange)$'
-env -u ATTN_CODEX_SHARED_PROFILE -u CODEX_THREAD_ID go test "$@" ./internal/agent \
+env -u ATTN_CODEX_SHARED_PROFILE -u CODEX_THREAD_ID go test "$@" ./internal/harness/builtin \
   -run '^TestLegacyPromptCompatibility$'

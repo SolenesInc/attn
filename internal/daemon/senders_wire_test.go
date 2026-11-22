@@ -131,7 +131,7 @@ func TestASessionMailboxNamesOneRunningSessionOfTheProfile(t *testing.T) {
 	w := newWorld(t)
 	app := w.TrustedApp()
 	other := createProfile(w.App(), "Other senders").ID
-	if err := w.InjectSession("elsewhere", "elsewhere", w.Path("elsewhere"), protocol.SessionAgentClaude, other); err != nil {
+	if err := w.InjectSession("elsewhere", "elsewhere", w.Path("elsewhere"), "claude", other); err != nil {
 		t.Fatal(err)
 	}
 	registerSessions(t, w, w.Client(), "here")

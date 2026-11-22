@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
@@ -116,16 +115,16 @@ func newClaudeMod(host harness.Host) *claudeMod {
 	}
 }
 
-func (m *claudeMod) forLaunch(terminal harness.TerminalID) agentdriver.ClaudeMod {
+func (m *claudeMod) forLaunch(terminal harness.TerminalID) claudeModSpec {
 	if !m.host.AgentSockets() {
-		return agentdriver.ClaudeMod{}
+		return claudeModSpec{}
 	}
 	m.awaitFirstPoll(terminal)
 	if err := m.serve(); err != nil {
 		m.host.Logf("claude mod: this session is typed into: %v", err)
-		return agentdriver.ClaudeMod{}
+		return claudeModSpec{}
 	}
-	return agentdriver.ClaudeMod{Dir: claudemod.Dir(m.host.DataDir()), Socket: claudemod.SocketPath(m.host.DataDir())}
+	return claudeModSpec{Dir: claudemod.Dir(m.host.DataDir()), Socket: claudemod.SocketPath(m.host.DataDir())}
 }
 
 func (m *claudeMod) serve() error {
@@ -183,7 +182,7 @@ func claudeShortSession(id protocol.SessionID) string {
 }
 
 func (m *claudeMod) claudeVersionLabel() string {
-	binary, err := m.host.Executable(claudeFacts(), "")
+	binary, err := m.host.Executable(Facts(), "")
 	if err != nil {
 		return claudeVersionUnknown
 	}
@@ -356,7 +355,7 @@ func (m *claudeMod) expectModsToReconnect() {
 	sessions := m.host.Sessions()
 	live := m.host.Terminals().Live(context.Background())
 	for _, session := range sessions.List() {
-		if session.Agent != protocol.SessionAgentClaude || sessions.Remote(session.ID) {
+		if session.Agent != claudeID || sessions.Remote(session.ID) {
 			continue
 		}
 		if _, watched := sessions.Evidence(session.ID); !watched {

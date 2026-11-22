@@ -45,7 +45,7 @@ func upgradedWithChiefAsk(t *testing.T, answeredBeforeUpgrade bool) (*testworld.
 		t.Fatalf("profiles before the upgrade = %+v, %v", profiles, err)
 	}
 	old := protocol.SessionID("todays-chief")
-	if err := before.AddChecked(&protocol.Session{ID: old, Label: "Chief", Agent: protocol.SessionAgentClaude, Directory: t.TempDir(), ProfileID: profiles[0].ID, State: protocol.SessionStateWorking}); err != nil {
+	if err := before.AddChecked(&protocol.Session{ID: old, Label: "Chief", Agent: "claude", Directory: t.TempDir(), ProfileID: profiles[0].ID, State: protocol.SessionStateWorking}); err != nil {
 		t.Fatal(err)
 	}
 	if err := before.SetLaunchIntent(old, store.LaunchIntent{Model: "sonnet"}); err != nil {

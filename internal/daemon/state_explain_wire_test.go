@@ -15,10 +15,10 @@ import (
 func TestStateExplainAttributesEachHookClaimToItsSourceAndCollapsesRepeats(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
+		if err := w.InjectSession("s1", "s1", w.Path("s1"), "claude"); err != nil {
 			t.Fatalf("register s1: %v", err)
 		}
-		if err := w.InjectSession("s2", "s2", w.Path("s2"), protocol.SessionAgentCodex); err != nil {
+		if err := w.InjectSession("s2", "s2", w.Path("s2"), "codex"); err != nil {
 			t.Fatalf("register s2: %v", err)
 		}
 

@@ -253,6 +253,8 @@ type Facts struct {
 	ReservesServer func(kind string) bool
 	// Owner is the plugin that registered the agent, or "" for a built-in harness.
 	Owner string
+	// Caller names the environment variables a server-backed harness sets for its tool callers.
+	Caller CallerEnv
 }
 
 // Lifetime is where a session's conversation runs: in its terminal's process, or in a server that outlives the terminal.

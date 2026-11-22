@@ -8,7 +8,7 @@ import (
 
 func registerSessionForPRTest(t *testing.T, d *Daemon, id string) {
 	t.Helper()
-	injectTestSession(t, d, protocol.Session{ID: protocol.SessionID(id), Label: id, Directory: t.TempDir(), Agent: protocol.SessionAgentClaude})
+	injectTestSession(t, d, protocol.Session{ID: protocol.SessionID(id), Label: id, Directory: t.TempDir(), Agent: "claude"})
 }
 
 func newPRDaemonForTest(t *testing.T, sessionID string) *Daemon {

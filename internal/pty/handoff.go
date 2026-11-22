@@ -6,9 +6,9 @@ import (
 	"syscall"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/ghosttyvt"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/harness/builtin"
 )
 
 const quiesceTimeout = 2 * time.Second
@@ -189,8 +189,8 @@ func titleSignalsOfLaunch(kind harness.TitleKind, agent string) harness.TitleKin
 }
 
 func titleSignalsOfPre5d(agent string) harness.TitleKind {
-	if d := agentdriver.Get(agent); d != nil {
-		return agentdriver.EffectiveCapabilities(d).HarnessSignals
+	if facts, ok := builtin.FactsFor(agent); ok {
+		return facts.Signals.Titles
 	}
 	return harness.TitlesNone
 }

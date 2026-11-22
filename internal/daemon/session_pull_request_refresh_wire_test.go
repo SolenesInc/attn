@@ -1049,7 +1049,7 @@ func TestAPullRequestAuthorsOwnCommentsRingItsWatchOnlyWhenTheProfileAsks(t *tes
 		home, work := createProfile(app, "Home"), createProfile(app, "Work")
 		homeApp, workApp := w.AppOn(home.ID), w.AppOn(work.ID)
 		for session, profile := range map[string]string{"s1": home.ID, "s2": work.ID} {
-			if err := w.InjectSession(session, session, w.Path(session), protocol.SessionAgentClaude, profile); err != nil {
+			if err := w.InjectSession(session, session, w.Path(session), "claude", profile); err != nil {
 				t.Fatalf("register %s: %v", session, err)
 			}
 		}
@@ -1202,7 +1202,7 @@ func TestAnotherProfilesSessionsPullRequestsDoNotExistForACaller(t *testing.T) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "closed", "live", "neighbour")
 		side := createProfile(w.App(), "Side")
-		if err := w.InjectSession("stranger", "stranger", w.Path("stranger"), protocol.SessionAgentClaude, side.ID); err != nil {
+		if err := w.InjectSession("stranger", "stranger", w.Path("stranger"), "claude", side.ID); err != nil {
 			t.Fatalf("register stranger: %v", err)
 		}
 		watchPullRequestOn(t, cli, "closed", protocol.PullRequestWatchModeGreen)

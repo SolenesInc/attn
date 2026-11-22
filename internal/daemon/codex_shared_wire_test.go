@@ -48,7 +48,7 @@ func TestASharedCodexLaunchIsOneSessionThatWorksWaitsAndCountsItsUsage(t *testin
 
 			var codexSessions []string
 			for _, s := range w.App().Initial.Sessions {
-				if s.Agent == protocol.SessionAgentCodex {
+				if s.Agent == "codex" {
 					codexSessions = append(codexSessions, string(s.ID))
 				}
 			}

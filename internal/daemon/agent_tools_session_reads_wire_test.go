@@ -79,7 +79,7 @@ func TestAnotherProfilesSessionDoesNotExistForTheSessionCommands(t *testing.T) {
 	setSetting(t, app, "agent_tools_enabled", "true")
 	registerSessions(t, w, cli, "planter", "neighbour")
 	side := createProfile(app, "Side")
-	if err := w.InjectSession("stranger", "stranger", w.Path("stranger"), protocol.SessionAgentClaude, side.ID); err != nil {
+	if err := w.InjectSession("stranger", "stranger", w.Path("stranger"), "claude", side.ID); err != nil {
 		t.Fatalf("register stranger: %v", err)
 	}
 	planter := cli.WithCaller(protocol.TerminalID(w.Terminal("planter")))
@@ -178,7 +178,7 @@ func TestAnotherProfilesSessionDoesNotExistForTheAgentCommands(t *testing.T) {
 	setSetting(t, app, "agent_tools_enabled", "true")
 	registerSessions(t, w, cli, "planter", "neighbour")
 	side := createProfile(app, "Side")
-	if err := w.InjectSession("stranger", "stranger", w.Path("stranger"), protocol.SessionAgentClaude, side.ID); err != nil {
+	if err := w.InjectSession("stranger", "stranger", w.Path("stranger"), "claude", side.ID); err != nil {
 		t.Fatalf("register stranger: %v", err)
 	}
 	planter := cli.WithCaller(protocol.TerminalID(w.Terminal("planter")))

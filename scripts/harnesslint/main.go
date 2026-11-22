@@ -27,17 +27,6 @@ const (
 
 var builtinHarnessIDs = []string{"claude", "codex", "sigma"}
 
-var adapterFilePatterns = []string{
-	"internal/daemon/codex_*.go",
-	"internal/daemon/link_runtime*.go",
-	"internal/agent/claude.go",
-	"internal/agent/claude_models.go",
-	"internal/agent/claude_spare.go",
-	"internal/agent/codex.go",
-	"internal/agent/codex_models.go",
-	"internal/agent/sigma.go",
-}
-
 const adapterPackages = "/internal/harness/internal/"
 
 var adapterImporters = []string{"/internal/harness/builtin", "/internal/harness/conformance"}
@@ -152,7 +141,7 @@ func run(appsOnly, list, update bool) error {
 		}
 		problems = append(problems, "generic code names a built-in harness or reaches an adapter's code:\n"+strings.Join(lines, "\n")+
 			"\nAsk the harness instead: its facts through d.harness(id), a session's conversation through d.conversation(session). "+
-			"Adapter code lives in the files and packages scripts/harnesslint/main.go lists. "+
+			"Adapter code lives under internal/harness/internal/. "+
 			"If this code was already listed and was only moved or renamed, rename its line in "+listFile+" in the same landing, so the count stays the same. "+
 			"A string that only looks like a harness id goes in "+allowFile+" with its reason; ask your reviewer before adding one.")
 	}
@@ -256,15 +245,7 @@ func isAppPath(path string) bool {
 }
 
 func isAdapterFile(path string) bool {
-	if strings.HasPrefix(path, "internal/harness/internal/") {
-		return true
-	}
-	for _, pattern := range adapterFilePatterns {
-		if ok, _ := filepath.Match(pattern, path); ok {
-			return true
-		}
-	}
-	return false
+	return strings.HasPrefix(path, "internal/harness/internal/")
 }
 
 func appFindings() ([]finding, error) {

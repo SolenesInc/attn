@@ -33,7 +33,7 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 			}
 			now := string(protocol.TimestampNow())
 			if err := s.AddChecked(&protocol.Session{
-				ID: protocol.SessionID(sessionIDs[i]), Label: sessionIDs[i], Agent: protocol.SessionAgentCodex, Directory: "/tmp/project", ProfileID: owner,
+				ID: protocol.SessionID(sessionIDs[i]), Label: sessionIDs[i], Agent: "codex", Directory: "/tmp/project", ProfileID: owner,
 				State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 			}); err != nil {
 				t.Fatalf("AddChecked: %v", err)

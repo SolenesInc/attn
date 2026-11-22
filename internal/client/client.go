@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/harness/builtin"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/selfupdate"
 )
@@ -109,7 +110,7 @@ func New(socketPath string) *Client {
 }
 
 func NewWithDial(socketPath string, dial func() (net.Conn, error)) *Client {
-	return &Client{socketPath: socketPath, dial: dial, callerTerminal: protocol.TrimID(harness.TerminalFromEnv())}
+	return &Client{socketPath: socketPath, dial: dial, callerTerminal: protocol.TrimID(harness.TerminalFromEnv(builtin.CallerEnvs()...))}
 }
 
 func (c *Client) writeFrame(conn net.Conn, msg any) error {

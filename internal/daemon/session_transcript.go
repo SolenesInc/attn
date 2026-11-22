@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/activity"
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
@@ -92,8 +91,7 @@ func (d *Daemon) inspectableTranscriptPath(sessionID protocol.SessionID, agent s
 	if path := d.sessionMonitor(sessionID).LiveTranscriptPath(agent); path != "" {
 		return path
 	}
-	driver := agentdriver.Get(agent)
-	if _, keeps := d.keeperOf(agent); keeps && !d.conversationReady(driver, binding.NativeID) {
+	if _, keeps := d.keeperOf(agent); keeps && !d.conversationReady(agent, binding.NativeID) {
 		return ""
 	}
 	path := d.harnessOf(harness.ID(agent)).Conversations().Locate(harness.ConversationRef{Harness: harness.ID(agent), ID: binding.NativeID})

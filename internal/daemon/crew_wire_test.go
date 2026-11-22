@@ -683,7 +683,7 @@ func TestSeedTendersResolveToTheMemberTheyName(t *testing.T) {
 func TestAStartedMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
-	if err := w.InjectSession("planter", "planter", w.Path("planter"), protocol.SessionAgentClaude); err != nil {
+	if err := w.InjectSession("planter", "planter", w.Path("planter"), "claude"); err != nil {
 		t.Fatal(err)
 	}
 	plant := func(title, partOf string) string {

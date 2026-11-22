@@ -31,7 +31,7 @@ func TestGardenReviewOffersResumeOnlyWithUsableContinuation(t *testing.T) {
 	}
 	d.store.Remove("sess-a")
 	d.store.Add(&protocol.Session{
-		ID: "sess-a", Directory: cwd, Agent: protocol.SessionAgentClaude, State: protocol.SessionStateIdle, ProfileID: defaultProfileID(t, d.store),
+		ID: "sess-a", Directory: cwd, Agent: "claude", State: protocol.SessionStateIdle, ProfileID: defaultProfileID(t, d.store),
 	})
 	d.store.SetResumeSessionID("sess-a", "native-1")
 	d.store.SetLaunchIntent("sess-a", store.LaunchIntent{})

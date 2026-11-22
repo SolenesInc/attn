@@ -215,7 +215,7 @@ func TestHomeGatewayServesOnlyThePairedProfilesSessionsAndKeepsThemCurrent(t *te
 	personal := app.SelectedProfile()
 	work := createProfile(app, "Work")
 	for _, s := range []struct{ id, profile string }{{"mine", personal}, {"theirs", work.ID}} {
-		if err := w.InjectSession(s.id, s.id+" label", w.Path(s.id), protocol.SessionAgentClaude, s.profile); err != nil {
+		if err := w.InjectSession(s.id, s.id+" label", w.Path(s.id), "claude", s.profile); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -243,10 +243,10 @@ func TestHomeGatewayServesOnlyThePairedProfilesSessionsAndKeepsThemCurrent(t *te
 		t.Fatalf("sessions after mine asked for approval = %+v, want mine alone, needs_approval, with waiting_since", waiting)
 	}
 
-	if err := w.InjectSession("theirs-too", "theirs too", w.Path("theirs-too"), protocol.SessionAgentClaude, work.ID); err != nil {
+	if err := w.InjectSession("theirs-too", "theirs too", w.Path("theirs-too"), "claude", work.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.InjectSession("mine-too", "mine too", w.Path("mine-too"), protocol.SessionAgentCodex, personal); err != nil {
+	if err := w.InjectSession("mine-too", "mine too", w.Path("mine-too"), "codex", personal); err != nil {
 		t.Fatal(err)
 	}
 	if ids := homeGatewaySessionIDs(phone.sessions()); len(ids) != 2 || ids[0] != "mine" || ids[1] != "mine-too" {
@@ -288,7 +288,7 @@ func TestHomeGatewayAnswersEachPingSoAPhoneKnowsItsHomeIsAwake(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
 	profile := app.SelectedProfile()
-	if err := w.InjectSession("mine", "mine label", w.Path("mine"), protocol.SessionAgentClaude, profile); err != nil {
+	if err := w.InjectSession("mine", "mine label", w.Path("mine"), "claude", profile); err != nil {
 		t.Fatal(err)
 	}
 	phone := connectPhone(t, w, "phone", profile)
