@@ -56,7 +56,7 @@ A cell is a harness, a setting and a place:
 
 `claude-code-mode` restarts the instance's daemon with `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`, so the driver runs those cells last. Claude Code asks for consent the first time code mode starts in a harness home. Answer it once in that home before you run these cells.
 
-`sigma` turns `sigma_enabled` on, and needs `sigma` on `PATH` or `sigma_executable` set. Its model picks its path: an OpenAI model runs Sigma's own loop, a Claude model runs its Claude path.
+`sigma` turns `sigma_enabled` on, and needs `sigma` on `PATH` or `sigma_executable` set. Its model picks its path: an OpenAI model runs Sigma's own loop, a Claude model runs its Claude path. Sigma's TUI drops what is typed before its composer shows, while attn already reports the session idle, so the driver also waits for Sigma's composer on screen before it sets up the task. Remove that wait once `s-rc8kfp` keeps Sigma's typeahead.
 
 For each `--outpost`, the driver turns `outposts_enabled` on, adds the outpost to the new instance and waits for it to connect, so the destination must take ssh without a prompt. Before it cleans the instance, it removes those outposts, which stops the instance's daemon on each outpost and leaves its pairing; with `--keep` they stay, so remove them in the instance's Settings before you clean it. On an outpost, the driver makes each run's folder over SSH and runs Claude Code, Codex and Sigma there. It skips code mode, and refuses `present-change`, whose clone is made on this machine.
 

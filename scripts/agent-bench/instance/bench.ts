@@ -127,8 +127,10 @@ const agents = (): Agent[] => json(attnRaw(["agent", "list", "--json"]))
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const screen = (session: string) => run(attnBinary, ["agent", "peek", session], daemonEnv).stdout
 
-/** Waits for a new session to reach its prompt. A trust screen for the bench's own folder is answered once. */
-async function atPrompt(session: string) {
+/** Waits for a new session to reach its prompt. A trust screen for the bench's own folder is answered once. Sigma's TUI
+ * drops what is typed before its composer shows (s-rc8kfp), so a Sigma session also waits for the composer on screen. */
+const SIGMA_COMPOSER = /❯ type a message/
+async function atPrompt(session: string, agent: Harness["agent"]) {
   const deadline = Date.now() + LAUNCH_DEADLINE_MS
   let trusted = false
   while (Date.now() < deadline) {
@@ -138,10 +140,11 @@ async function atPrompt(session: string) {
       continue
     }
     const me = agents().find((a) => a.id === session)
-    if (me && ["idle", "waiting_input"].includes(me.state)) return
+    if (me && ["idle", "waiting_input"].includes(me.state) && (agent !== "sigma" || SIGMA_COMPOSER.test(screen(session)))) return
     await wait(POLL_MS)
   }
-  throw new Error(`the session never reached its prompt: ${agents().find((a) => a.id === session)?.state ?? "gone"}`)
+  const state = agents().find((a) => a.id === session)?.state ?? "gone"
+  throw new Error(`the session never reached its prompt: ${state}${agent === "sigma" ? ", or Sigma's composer never showed on screen (the bench waits for it until s-rc8kfp keeps Sigma's typeahead)" : ""}`)
 }
 
 const transcript = (session: string): any[] =>
@@ -207,7 +210,7 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
       session = crypto.randomUUID()
       wsctl(["add-session", "--cwd", dir, "--agent", cell.harness.agent, "--profile", profile, "--label", label, "--id", session, ...(remote ? ["--host", cell.place.name] : [])])
     }
-    await atPrompt(session)
+    await atPrompt(session, cell.harness.agent)
     const scoped = (args: string[], who?: string) => [...args, ...(who ? ["--session", who] : ["--profile", profile])]
     const w: World = {
       dir,
