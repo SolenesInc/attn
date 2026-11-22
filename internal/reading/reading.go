@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/docs/guide"
-	"github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/attnskill"
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/prompts"
 )
@@ -23,13 +23,13 @@ func runSkill(_ context.Context, _ command.Caller, args command.SkillArgs) (any,
 	case args.List && reference != "":
 		return nil, command.Refuse(command.CodeListAndReference, "{list} and {reference} are mutually exclusive; pass one")
 	case args.List:
-		return strings.Join(agent.SkillReferenceNames(), "\n") + "\n", nil
+		return strings.Join(attnskill.SkillReferenceNames(), "\n") + "\n", nil
 	case reference == "":
 		return prompts.RenderText("session", "attn-map", prompts.Values{}) + "\n", nil
 	}
-	content, err := agent.SkillFile("references/" + strings.TrimSuffix(reference, ".md") + ".md")
+	content, err := attnskill.SkillFile("references/" + strings.TrimSuffix(reference, ".md") + ".md")
 	if err != nil {
-		return nil, command.Refuse(command.CodeNoSuchReference, "no bundled reference %q; bundled references: %s", reference, strings.Join(agent.SkillReferenceNames(), ", "))
+		return nil, command.Refuse(command.CodeNoSuchReference, "no bundled reference %q; bundled references: %s", reference, strings.Join(attnskill.SkillReferenceNames(), ", "))
 	}
 	return string(content), nil
 }

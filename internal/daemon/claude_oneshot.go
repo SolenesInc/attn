@@ -6,6 +6,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/headless"
 )
 
 func (h claudeHarness) cli() *agentdriver.Claude { return h.driver().(*agentdriver.Claude) }
@@ -15,7 +16,7 @@ func (h claudeHarness) Run(ctx context.Context, req harness.OneShotRequest) (har
 	if err != nil {
 		return harness.OneShotResult{}, fmt.Errorf("resolve claude executable: %w", err)
 	}
-	return agentdriver.RunOneShot(ctx, h.cli(), executable, req)
+	return headless.RunOneShot(ctx, h.cli(), executable, req)
 }
 
 func (h claudeHarness) Models(ctx context.Context) (harness.Models, error) {
@@ -23,7 +24,7 @@ func (h claudeHarness) Models(ctx context.Context) (harness.Models, error) {
 	if err != nil {
 		return harness.Models{}, err
 	}
-	return agentdriver.DiscoverModels(ctx, h.cli(), executable)
+	return harness.DiscoverModels(ctx, h.cli(), executable)
 }
 
 func (h claudeHarness) StartSpare(ctx context.Context) (harness.Spare, error) {

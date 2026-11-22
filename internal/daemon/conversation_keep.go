@@ -476,7 +476,7 @@ func (d *Daemon) copyConversation(agent string, conversation store.SessionConver
 	}
 	archive := tar.NewWriter(encoder)
 	writtenNames := make(map[string]bool)
-	inputs, err := agentdriver.OpenConversationFiles(home)
+	inputs, err := harness.OpenConversationFiles(home)
 	if err != nil {
 		return err
 	}
@@ -679,7 +679,7 @@ func (d *Daemon) restoreConversationArchive(path, agent, resumeID string, now ti
 	if err != nil {
 		return err
 	}
-	outputs, err := agentdriver.OpenConversationFiles(home)
+	outputs, err := harness.OpenConversationFiles(home)
 	if err != nil {
 		return err
 	}

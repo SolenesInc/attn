@@ -1,4 +1,4 @@
-package agent
+package harness
 
 type Descriptor struct {
 	Name        string `json:"name"`

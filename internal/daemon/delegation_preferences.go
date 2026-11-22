@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/attnskill"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/delegationprefs"
 	"github.com/victorarias/attn/internal/harness"
@@ -111,7 +111,7 @@ func (d *Daemon) installAttnRoles(current, next delegationprefs.Config, install 
 			harnesses = append(harnesses, harness.ID)
 		}
 	}
-	paths, attempted, err := agentdriver.EnsureWorkflowSkillsInstalled(d.workflowSkillsDirs(harnesses))
+	paths, attempted, err := attnskill.EnsureWorkflowSkillsInstalled(d.workflowSkillsDirs(harnesses))
 	if err != nil {
 		return paths, err
 	}
@@ -166,7 +166,7 @@ func usesDelegationPreferences(msg *protocol.DelegateMessage) bool {
 }
 
 func (d *Daemon) ensureDelegationWorkflowSkill(harness string, required bool) error {
-	paths, attempted, err := agentdriver.EnsureWorkflowSkillsInstalled(d.workflowSkillsDirs([]string{harness}))
+	paths, attempted, err := attnskill.EnsureWorkflowSkillsInstalled(d.workflowSkillsDirs([]string{harness}))
 	if err != nil {
 		return fmt.Errorf("sync attn-workflow before delegated role launch: %w", err)
 	}

@@ -1,12 +1,12 @@
 package daemon
 
 import (
-	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/attnskill"
 	"github.com/victorarias/attn/internal/config"
 )
 
 func (d *Daemon) ensureAvailableAgentSkills() {
-	if synced, kept, err := agentdriver.ReplaceRetiredAttnSkillWithPointer(); err != nil {
+	if synced, kept, err := attnskill.ReplaceRetiredAttnSkillWithPointer(); err != nil {
 		d.logf("failed to replace the retired attn skill with its pointer: %v", err)
 	} else if !synced {
 		d.logf("skipping the retired attn skill's pointer for instance %q", config.InstanceLabel())
@@ -37,7 +37,7 @@ func (d *Daemon) ensureEnabledWorkflowSkillsIn(skillsDirs func(homeDir string) (
 	if err != nil || !cfg.WorkflowSkillEnabled {
 		return
 	}
-	if _, synced, err := agentdriver.EnsureWorkflowSkillsInstalled(skillsDirs); err != nil {
+	if _, synced, err := attnskill.EnsureWorkflowSkillsInstalled(skillsDirs); err != nil {
 		d.logf("failed to ensure attn-workflow skill: %v", err)
 	} else if !synced {
 		d.logf("skipping user-global attn-workflow skill sync for instance %q", config.InstanceLabel())

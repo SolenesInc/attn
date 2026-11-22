@@ -253,9 +253,9 @@ func (h pluginHarness) Health(context.Context) harness.Health {
 	health, detail, _ := plugin.healthSnapshot()
 	installation := harness.Unknown
 	switch health {
-	case agentdriver.HealthHealthy:
+	case harness.HealthHealthy:
 		installation = harness.Installed
-	case agentdriver.HealthUnhealthy:
+	case harness.HealthUnhealthy:
 		installation = harness.Missing
 	}
 	return harness.Health{Installation: installation, Offered: true, Reason: detail}

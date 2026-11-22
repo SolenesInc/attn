@@ -62,8 +62,8 @@ func startClaudeSpare(ctx context.Context, executable, workDir string) (harness.
 	cmd := exec.Command(executable, claudeSpareArgs()...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Dir = workDir
-	cmd.Env = append(headlessEnvironment("claude"), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1")
-	var stderr boundedHeadlessOutput
+	cmd.Env = append(claudeHeadlessEnv.Environment(), "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1")
+	var stderr headless.BoundedOutput
 	cmd.Stderr = &stderr
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -101,7 +101,7 @@ type claudeSpare struct {
 	cmd     *exec.Cmd
 	stdin   io.WriteCloser
 	stdout  *bufio.Reader
-	stderr  *boundedHeadlessOutput
+	stderr  *headless.BoundedOutput
 	exited  chan struct{}
 	started chan struct{}
 	used    sync.Once
@@ -154,7 +154,7 @@ func (s *claudeSpare) Close() {
 	})
 	select {
 	case <-s.exited:
-	case <-time.After(headlessPipeDrainLimit):
+	case <-time.After(headless.PipeDrainLimit):
 	}
 	_ = os.RemoveAll(s.workDir)
 }
@@ -219,7 +219,7 @@ func (s *claudeSpare) answer(ctx context.Context, request harness.OneShotRequest
 		}
 		text := claudeResultString(event.Result)
 		if event.IsError {
-			return harness.OneShotResult{}, fmt.Errorf("claude: %s", ClassifyHeadlessFailure(text))
+			return harness.OneShotResult{}, fmt.Errorf("claude: %s", headless.ClassifyFailure(text))
 		}
 		return harness.OneShotResult{Text: text, Usage: harness.OneShotUsage{
 			ModelTime: time.Duration(event.DurationAPIMs) * time.Millisecond,
@@ -274,11 +274,11 @@ func (s *claudeSpare) awaitControlSuccess(ctx context.Context) error {
 func (s *claudeSpare) diagnostics() string {
 	select {
 	case <-s.exited:
-	case <-time.After(headlessPipeDrainLimit):
+	case <-time.After(headless.PipeDrainLimit):
 		return ""
 	}
 	if text := strings.TrimSpace(s.stderr.String()); text != "" {
-		return ": " + ClassifyHeadlessFailure(text)
+		return ": " + headless.ClassifyFailure(text)
 	}
 	return ""
 }

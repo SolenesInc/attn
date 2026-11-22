@@ -516,7 +516,7 @@ func (d *Daemon) persistLaunchedConversation(req *spawnRequest, plan *spawnPlan)
 			conversation = string(plan.spawnOpts.ID)
 		}
 	}
-	clearPicker := conversation == "" && !req.hasPluginDriver && (plan.spawnOpts.ResumePicker || conversationDecidesIdentity(req.driver))
+	clearPicker := conversation == "" && !req.hasPluginDriver && (plan.spawnOpts.ResumePicker || d.factsOrNone(req.agent).ConversationIsSession)
 	if conversation == "" && !clearPicker {
 		return
 	}

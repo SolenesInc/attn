@@ -10,10 +10,10 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/codexshared"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/headless"
 )
 
 func (r *codexShared) runningSocket(profile string) string {
@@ -56,7 +56,7 @@ func (h codexHarness) Run(ctx context.Context, req harness.OneShotRequest) (harn
 	if err != nil {
 		return harness.OneShotResult{}, fmt.Errorf("resolve codex executable: %w", err)
 	}
-	return agentdriver.RunOneShot(ctx, h.driver().(*agentdriver.Codex), executable, req)
+	return headless.RunOneShot(ctx, h.driver().(*agentdriver.Codex), executable, req)
 }
 
 func (h codexHarness) Models(ctx context.Context) (harness.Models, error) {
@@ -64,7 +64,7 @@ func (h codexHarness) Models(ctx context.Context) (harness.Models, error) {
 	if err != nil {
 		return harness.Models{}, err
 	}
-	return agentdriver.DiscoverModels(ctx, h.driver().(*agentdriver.Codex), executable)
+	return harness.DiscoverModels(ctx, h.driver().(*agentdriver.Codex), executable)
 }
 
 func runOneShotOnSharedCodex(ctx context.Context, socket string, req harness.OneShotRequest) (harness.OneShotResult, error) {
@@ -126,7 +126,7 @@ func runOneShotOnSharedCodex(ctx context.Context, socket string, req harness.One
 		if ctx.Err() != nil {
 			return harness.OneShotResult{}, err
 		}
-		return harness.OneShotResult{}, errors.New(agentdriver.ClassifyHeadlessFailure(err.Error()))
+		return harness.OneShotResult{}, errors.New(headless.ClassifyFailure(err.Error()))
 	}
 	return awaitSharedCodexTurn(ctx, client, events, thread.Thread.ID, started.Turn.ID)
 }
@@ -194,7 +194,7 @@ func awaitSharedCodexTurn(ctx context.Context, client *codexshared.Client, event
 					if params.Turn.Error != nil && params.Turn.Error.Message != "" {
 						failure = params.Turn.Error.Message
 					}
-					return harness.OneShotResult{}, fmt.Errorf("the turn ended %s: %s", params.Turn.Status, agentdriver.ClassifyHeadlessFailure(failure))
+					return harness.OneShotResult{}, fmt.Errorf("the turn ended %s: %s", params.Turn.Status, headless.ClassifyFailure(failure))
 				}
 				if result.Text = strings.TrimSpace(text); result.Text == "" {
 					return harness.OneShotResult{}, errors.New("the model returned no text")

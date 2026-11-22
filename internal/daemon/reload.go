@@ -303,7 +303,7 @@ func (d *Daemon) reloadLiveOrPlanResume(sessionID protocol.SessionID, cols, rows
 func (d *Daemon) persistReloadedConversation(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) {
 	driver := agentdriver.Get(opts.Agent)
 	conversation := agentdriver.SpawnResumeSessionID(driver, string(opts.ID), opts.ResumeSessionID, opts.ResumePicker)
-	if conversation == d.store.GetResumeSessionID(sessionID) || (conversation == "" && !conversationDecidesIdentity(driver)) {
+	if conversation == d.store.GetResumeSessionID(sessionID) || (conversation == "" && !d.factsOrNone(opts.Agent).ConversationIsSession) {
 		return
 	}
 	if conversation == "" {

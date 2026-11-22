@@ -5,14 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/toolhome"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -23,7 +27,7 @@ var _ TranscriptFinder = (*Codex)(nil)
 var _ RecoveredStatePolicyProvider = (*Codex)(nil)
 var _ ConfigOverrideProvider = (*Codex)(nil)
 var _ ResumePolicyProvider = (*Codex)(nil)
-var _ HeadlessTaskProvider = (*Codex)(nil)
+var _ headless.TaskProvider = (*Codex)(nil)
 
 func init() {
 	Register(&Codex{})
@@ -124,16 +128,16 @@ func (c *Codex) BuildEnv(opts SpawnOpts) []string {
 	return env
 }
 
-func (c *Codex) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest) (HeadlessTaskResult, error) {
-	window := HeadlessContextWindowCap()
+func (c *Codex) RunHeadlessTask(ctx context.Context, request headless.TaskRequest) (headless.TaskResult, error) {
+	window := headless.ContextWindowCap()
 	schemaPath, removeSchema, err := writeCodexOutputSchema(request)
 	if err != nil {
-		return HeadlessTaskResult{}, err
+		return headless.TaskResult{}, err
 	}
 	defer removeSchema()
-	instructionsPath, removeInstructions, err := writeHeadlessSystemPrompt(request)
+	instructionsPath, removeInstructions, err := headless.WriteSystemPrompt(request)
 	if err != nil {
-		return HeadlessTaskResult{}, err
+		return headless.TaskResult{}, err
 	}
 	defer removeInstructions()
 	args := codexHeadlessArgs(request, window, instructionsPath)
@@ -144,7 +148,7 @@ func (c *Codex) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest
 		args = append(args, "--output-schema", schemaPath)
 	}
 	args = append(args, codexPromptFromStdin)
-	result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, request.Prompt, request.WorkDir, "codex", codexReportedFailure)
+	result, stdout, err := headless.RunCommand(ctx, request.Executable, args, request.Prompt, request.WorkDir, "codex", codexHeadlessEnv, codexReportedFailure)
 	if err != nil {
 		return result, err
 	}
@@ -152,11 +156,11 @@ func (c *Codex) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest
 	return result, nil
 }
 
-func writeCodexOutputSchema(request HeadlessTaskRequest) (string, func(), error) {
+func writeCodexOutputSchema(request headless.TaskRequest) (string, func(), error) {
 	if len(request.OutputSchema) == 0 {
 		return "", func() {}, nil
 	}
-	path, remove, err := writeHeadlessFile("codex-output-schema-*.json", request.OutputSchema)
+	path, remove, err := headless.WriteFile("codex-output-schema-*.json", request.OutputSchema)
 	if err != nil {
 		return "", func() {}, fmt.Errorf("write Codex output schema: %w", err)
 	}
@@ -215,7 +219,7 @@ func CodexToolFreeConfig(userMCPServers []string) map[string]any {
 	for _, setting := range slices.Concat(codexNoToolSettings, codexFeatureLockSettings) {
 		config[setting.Key] = setting.Value
 	}
-	if window := HeadlessContextWindowCap(); window > 0 {
+	if window := headless.ContextWindowCap(); window > 0 {
 		config["model_auto_compact_token_limit"] = window
 	}
 	for _, name := range userMCPServers {
@@ -280,7 +284,7 @@ func codexReportedFailure(stdout []byte) string {
 	return strings.Join(messages, "\n")
 }
 
-func codexHeadlessArgs(request HeadlessTaskRequest, window int, instructionsPath string) []string {
+func codexHeadlessArgs(request headless.TaskRequest, window int, instructionsPath string) []string {
 	args := []string{
 		"exec",
 		"--json",
@@ -320,7 +324,7 @@ func tomlString(value string) string {
 	return string(quoted)
 }
 
-func codexToolFreeHeadlessArgs(request HeadlessTaskRequest, window int, instructionsPath string) []string {
+func codexToolFreeHeadlessArgs(request headless.TaskRequest, window int, instructionsPath string) []string {
 	args := []string{
 		"exec",
 		"--json",
@@ -391,4 +395,18 @@ func (c *Codex) SpawnResumeSessionID(sessionID, resolvedResumeID string, resumeP
 
 func (c *Codex) ResumeSessionIDFromTranscriptPath(transcriptPath string) string {
 	return ""
+}
+
+var codexHeadlessEnv = headless.Env{
+	Names:    []string{"CODEX_HOME", "CODEX_ACCESS_TOKEN", "CODEX_API_KEY", "CODEX_CA_CERTIFICATE"},
+	Prefixes: []string{"OPENAI_", "AZURE_OPENAI_", "AWS_", "GOOGLE_"},
+	Extra: func([]string) []string {
+		if strings.TrimSpace(os.Getenv("CODEX_HOME")) != "" {
+			return nil
+		}
+		if homeDir, err := toolhome.Dir(); err == nil && strings.TrimSpace(homeDir) != "" {
+			return []string{"CODEX_HOME=" + filepath.Join(homeDir, ".codex")}
+		}
+		return nil
+	},
 }

@@ -2,11 +2,11 @@ package daemon_test
 
 import (
 	"encoding/json"
+	"github.com/victorarias/attn/internal/harness"
 	"net/http"
 	"os"
 	"testing"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -35,7 +35,7 @@ func TestTheAgentCatalogListsBuiltInAgentsAndThoseAConnectedPluginOffers(t *test
 	}
 	healthy := testworld.Request(app, protocol.ListPluginsMessage{Cmd: protocol.CmdListPlugins}, protocol.EventPluginsUpdated, func(m protocol.PluginsUpdatedMessage) bool {
 		for _, plugin := range m.Plugins {
-			if plugin.Name == "attn-plug" && protocol.Deref(plugin.HealthStatus) == agentdriver.HealthHealthy {
+			if plugin.Name == "attn-plug" && protocol.Deref(plugin.HealthStatus) == harness.HealthHealthy {
 				return true
 			}
 		}
@@ -47,10 +47,10 @@ func TestTheAgentCatalogListsBuiltInAgentsAndThoseAConnectedPluginOffers(t *test
 	}
 	catalog := agentCatalog(t, w)
 	codex := catalog["codex"]
-	if codex.Executable != nightly || codex.Health != agentdriver.HealthHealthy || codex.Plugin != "" || !codex.ModelPin || !codex.EffortPin {
+	if codex.Executable != nightly || codex.Health != harness.HealthHealthy || codex.Plugin != "" || !codex.ModelPin || !codex.EffortPin {
 		t.Errorf("codex = %+v, want the configured executable, healthy, built in, with pins", codex)
 	}
-	if claude := catalog["claude"]; claude.Executable != gone || claude.Health != agentdriver.HealthUnhealthy {
+	if claude := catalog["claude"]; claude.Executable != gone || claude.Health != harness.HealthUnhealthy {
 		t.Errorf("claude = %+v, want the configured executable named while it is missing, unhealthy", claude)
 	}
 	plug, ok := catalog["plug"]
@@ -60,7 +60,7 @@ func TestTheAgentCatalogListsBuiltInAgentsAndThoseAConnectedPluginOffers(t *test
 			plugHealth = protocol.Deref(plugin.HealthMessage)
 		}
 	}
-	if !ok || plug.DisplayName != "Example Agent" || plug.Plugin != "attn-plug" || plug.Health != agentdriver.HealthHealthy || plug.Detail != plugHealth || plug.ModelPin || plug.EffortPin {
+	if !ok || plug.DisplayName != "Example Agent" || plug.Plugin != "attn-plug" || plug.Health != harness.HealthHealthy || plug.Detail != plugHealth || plug.ModelPin || plug.EffortPin {
 		t.Errorf("plug = %+v, want offered by attn-plug, healthy with %q, without the pins the plugin did not declare", plug, plugHealth)
 	}
 
@@ -85,7 +85,7 @@ func TestTheAgentCatalogListsBuiltInAgentsAndThoseAConnectedPluginOffers(t *test
 	}
 }
 
-func agentCatalog(t *testing.T, w *world) map[string]agentdriver.Descriptor {
+func agentCatalog(t *testing.T, w *world) map[string]harness.Descriptor {
 	t.Helper()
 	response, err := http.Get("http://" + w.WSAddr + "/agents")
 	if err != nil {
@@ -93,12 +93,12 @@ func agentCatalog(t *testing.T, w *world) map[string]agentdriver.Descriptor {
 	}
 	defer response.Body.Close()
 	var payload struct {
-		Agents []agentdriver.Descriptor `json:"agents"`
+		Agents []harness.Descriptor `json:"agents"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode /agents: %v", err)
 	}
-	byName := make(map[string]agentdriver.Descriptor, len(payload.Agents))
+	byName := make(map[string]harness.Descriptor, len(payload.Agents))
 	for _, agent := range payload.Agents {
 		byName[agent.Name] = agent
 	}

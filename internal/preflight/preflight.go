@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/victorarias/attn/internal/harness"
 	"net"
 	"net/http"
 	"os"
@@ -92,7 +93,7 @@ type prober struct {
 	goCachePaths  func(context.Context) ([]string, error)
 	appProtocol   func(context.Context, string) (string, error)
 	daemonHealth  func(context.Context, string) (daemonHealth, error)
-	daemonAgents  func(context.Context, string) ([]agentdriver.Descriptor, error)
+	daemonAgents  func(context.Context, string) ([]harness.Descriptor, error)
 	requiredTools []string
 }
 
@@ -258,7 +259,7 @@ func headlessTasksSummary(health daemonHealth, healthErr error) string {
 	return "daemon mode unavailable; this CLI resolves headless tasks " + headless.Describe()
 }
 
-func checkLaunchAgent(launch Launch, agents []agentdriver.Descriptor, agentsErr error, add func(Check)) *agentdriver.Descriptor {
+func checkLaunchAgent(launch Launch, agents []harness.Descriptor, agentsErr error, add func(Check)) *harness.Descriptor {
 	name := launch.Agent.Value
 	if agentsErr != nil {
 		driver := agentdriver.Get(name)
@@ -268,7 +269,7 @@ func checkLaunchAgent(launch Launch, agents []agentdriver.Descriptor, agentsErr 
 		}
 		caps := agentdriver.EffectiveCapabilities(driver)
 		add(warn("launch.agent", fmt.Sprintf("daemon could not list its agents (%v); %s was checked against this CLI's built-in driver instead", agentsErr, name), "Start this instance's daemon from this build and rerun preflight to check the launch against it."))
-		return &agentdriver.Descriptor{Name: name, Executable: driver.ResolveExecutable(""), ModelPin: caps.HasModelPin, EffortPin: caps.HasEffortPin}
+		return &harness.Descriptor{Name: name, Executable: driver.ResolveExecutable(""), ModelPin: caps.HasModelPin, EffortPin: caps.HasEffortPin}
 	}
 	names := make([]string, 0, len(agents))
 	for i := range agents {
@@ -287,15 +288,15 @@ func checkLaunchAgent(launch Launch, agents []agentdriver.Descriptor, agentsErr 
 	return nil
 }
 
-func agentHealthCheck(agent agentdriver.Descriptor) Check {
+func agentHealthCheck(agent harness.Descriptor) Check {
 	name := "tool." + filepath.Base(agent.Executable)
 	if agent.Plugin != "" {
 		name = "plugin." + agent.Plugin
 	}
 	switch agent.Health {
-	case agentdriver.HealthHealthy:
+	case harness.HealthHealthy:
 		return pass(name, agent.Detail)
-	case agentdriver.HealthUnhealthy:
+	case harness.HealthUnhealthy:
 		return fail(name, fmt.Sprintf("daemon cannot launch %s: %s", agent.Name, agent.Detail), fmt.Sprintf("Install %s or configure its executable path, then rerun preflight.", agent.Name))
 	}
 	return warn(name, fmt.Sprintf("daemon has not confirmed %s is launchable yet: %s", agent.Name, agent.Detail), "Wait for the check to finish and rerun preflight.")
@@ -458,9 +459,9 @@ func fetchDaemonHealth(ctx context.Context, port string) (daemonHealth, error) {
 	return health, err
 }
 
-func fetchDaemonAgents(ctx context.Context, port string) ([]agentdriver.Descriptor, error) {
+func fetchDaemonAgents(ctx context.Context, port string) ([]harness.Descriptor, error) {
 	var payload struct {
-		Agents []agentdriver.Descriptor `json:"agents"`
+		Agents []harness.Descriptor `json:"agents"`
 	}
 	err := fetchDaemonJSON(ctx, port, "/agents", &payload)
 	return payload.Agents, err

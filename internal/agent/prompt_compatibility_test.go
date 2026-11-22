@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"testing"
 
+	"github.com/victorarias/attn/internal/headless"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/prompttest"
 )
 
@@ -39,7 +41,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 		}
 	}
 	for system, instructionsPath := range map[string]string{"": "", " System λ {{literal}} ": "/tmp/run/attn-instructions.md"} {
-		request := HeadlessTaskRequest{Prompt: "User message {{literal}}", SystemPrompt: system, WorkDir: "/tmp/run", Model: "model", DisableTools: true}
+		request := headless.TaskRequest{Prompt: "User message {{literal}}", SystemPrompt: system, WorkDir: "/tmp/run", Model: "model", DisableTools: true}
 		for name, args := range map[string][]string{"claude": claudeHeadlessArgs(request, instructionsPath), "codex": codexToolFreeHeadlessArgs(request, 0, instructionsPath)} {
 			raw, err := json.Marshal(args)
 			if err != nil {
@@ -48,14 +50,14 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 			out["headless/"+name+"/"+system] = string(raw)
 		}
 	}
-	err := fs.WalkDir(attnSkillFiles, "attn_skill", func(path string, entry fs.DirEntry, err error) error {
+	err := fs.WalkDir(prompts.AttnSkillFiles(), "attn_skill", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if entry.IsDir() {
 			return nil
 		}
-		raw, err := fs.ReadFile(attnSkillFiles, path)
+		raw, err := fs.ReadFile(prompts.AttnSkillFiles(), path)
 		out[path] = string(raw)
 		return err
 	})

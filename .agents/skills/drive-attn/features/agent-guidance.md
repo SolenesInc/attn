@@ -45,7 +45,7 @@ in [crew.md](crew.md), delegation openings and the attn-workflow skill in
 ### Triggers
 
 - Every launch composes the launch instructions and hands them over the harness's own channel: appended system instructions for Claude Code (`internal/agent/claude.go`), developer instructions for Codex (`internal/hooks/codex.go`), and the driver of a plugin that takes them (`internal/daemon/plugin_launch_instructions.go`).
-- At startup, and when a harness executable setting is saved, the daemon replaces the retired `attn` skill in `~/.claude/skills/attn` and `~/.agents/skills/attn` with its pointer (`internal/prompts/content/skills/attn/SKILL.md`), then syncs the enabled workflow skill (`internal/agent/attn_skill.go`). A named instance other than `dev` skips this unless the shell sets `ATTN_AUTOMATION=1`, `ATTN_HARNESS_SKILL_SYNC=1` and `ATTN_TOOL_HOME`. A scenario sets all three.
+- At startup, and when a harness executable setting is saved, the daemon replaces the retired `attn` skill in `~/.claude/skills/attn` and `~/.agents/skills/attn` with its pointer (`internal/prompts/content/skills/attn/SKILL.md`), then syncs the enabled workflow skill (`internal/attnskill/attnskill.go`). A named instance other than `dev` skips this unless the shell sets `ATTN_AUTOMATION=1`, `ATTN_HARNESS_SKILL_SYNC=1` and `ATTN_TOOL_HOME`. A scenario sets all three.
 
 ## Driving it
 

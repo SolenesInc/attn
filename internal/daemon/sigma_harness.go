@@ -11,6 +11,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
@@ -197,6 +198,6 @@ func sigmaEphemeralFailure(err error) (harness.OneShotResult, error) {
 	if !errors.As(err, &refused) {
 		return harness.OneShotResult{}, err
 	}
-	diagnostics := agentdriver.ClassifyHeadlessFailure(refused.Message)
+	diagnostics := headless.ClassifyFailure(refused.Message)
 	return harness.OneShotResult{Diagnostics: diagnostics, FailureOutput: refused.Message}, fmt.Errorf("%s: %s", diagnostics, refused.Message)
 }

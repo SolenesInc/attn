@@ -1,10 +1,9 @@
-package agent
+package harness
 
 import (
 	"context"
 	"os"
 
-	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -13,15 +12,15 @@ type ModelDiscoverer interface {
 }
 
 // DiscoverModels asks the harness CLI at executable for its models, from a scratch folder.
-func DiscoverModels(ctx context.Context, discoverer ModelDiscoverer, executable string) (harness.Models, error) {
+func DiscoverModels(ctx context.Context, discoverer ModelDiscoverer, executable string) (Models, error) {
 	cwd, err := os.MkdirTemp("", "attn-model-discovery-")
 	if err != nil {
-		return harness.Models{}, err
+		return Models{}, err
 	}
 	defer os.RemoveAll(cwd)
 	models, err := discoverer.DiscoverHarnessModels(ctx, executable, cwd)
 	if err != nil {
-		return harness.Models{}, err
+		return Models{}, err
 	}
-	return harness.Models{List: models, Detail: "Models reported by this harness. Catalog membership does not confirm account access."}, nil
+	return Models{List: models, Detail: "Models reported by this harness. Catalog membership does not confirm account access."}, nil
 }

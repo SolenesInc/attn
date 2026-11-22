@@ -6,7 +6,6 @@ import (
 	"net"
 	"strings"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
@@ -93,7 +92,7 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 func (d *Daemon) acceptMonitorConversation(source *sessionmonitor.Monitor, proposed sessionmonitor.Conversation, observation agentConversationObservation) bool {
 	t := proposed.Terminal
 	cur, placed := d.terminals().Showing(t)
-	if current := d.store.Get(cur); !placed || (current != nil && d.lifetime(current.ID) != harness.InServer && !conversationIsSession(current.Agent)) {
+	if current := d.store.Get(cur); !placed || (current != nil && d.lifetime(current.ID) != harness.InServer && !d.factsOrNone(current.Agent).ConversationIsSession) {
 		observation.SessionID = d.sessionInTerminal(t)
 		defer d.lockSessionLifecycles(observation.SessionID)()
 		if source != nil {
@@ -159,14 +158,6 @@ func (d *Daemon) acceptMonitorConversation(source *sessionmonitor.Monitor, propo
 
 func (d *Daemon) ownerLive(owner protocol.SessionID) bool {
 	return d.sessionHasLiveWorker(owner)
-}
-
-func conversationIsSession(agent protocol.SessionAgent) bool {
-	return conversationDecidesIdentity(agentdriver.Get(string(agent)))
-}
-
-func conversationDecidesIdentity(driver agentdriver.Driver) bool {
-	return agentdriver.EffectiveCapabilities(driver).ConversationIsSession
 }
 
 func (d *Daemon) observeOrQueueAgentConversation(observation agentConversationObservation) bool {

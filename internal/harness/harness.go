@@ -214,6 +214,8 @@ type Facts struct {
 	ModelDiscovery bool
 	// Activity is whether attn can read the harness's conversations to write activity lines.
 	Activity bool
+	// ConversationIsSession: a launch that names no conversation starts one with the session's own id.
+	ConversationIsSession bool
 	// ServerTerminal is the terminal a session's monitor is anchored on while its conversation runs in the harness's server. Nil for a harness with no server.
 	ServerTerminal func(profile string) TerminalID
 }

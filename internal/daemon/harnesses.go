@@ -248,8 +248,9 @@ func builtinFacts(driver agentdriver.Driver) harness.Facts {
 			Picker:             true,
 			Provider:           declaresServer,
 		},
-		Executable: harness.Executable{Default: driver.DefaultExecutable(), Env: driver.ExecutableEnvVar()},
-		Signals:    withTitles(hookSignals(caps.HasHooks), caps.HarnessSignals),
+		Executable:            harness.Executable{Default: driver.DefaultExecutable(), Env: driver.ExecutableEnvVar()},
+		Signals:               withTitles(hookSignals(caps.HasHooks), caps.HarnessSignals),
+		ConversationIsSession: caps.ConversationIsSession,
 	}
 }
 

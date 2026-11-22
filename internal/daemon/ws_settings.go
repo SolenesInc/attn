@@ -413,7 +413,7 @@ func (d *Daemon) applyHeadlessContextWindowCap() {
 	if d.store == nil {
 		return
 	}
-	agentdriver.SetHeadlessContextWindowCap(resolveContextWindowCap(d.setting(setting.HeadlessContextWindowCap)))
+	headless.SetContextWindowCap(resolveContextWindowCap(d.setting(setting.HeadlessContextWindowCap)))
 }
 
 func (d *Daemon) headlessTasksStored() bool {
@@ -502,7 +502,7 @@ func resolveContextWindowCap(stored string) int {
 			return n
 		}
 	}
-	return agentdriver.DefaultContextWindowCap
+	return headless.DefaultContextWindowCap
 }
 
 func validateNotebookRoot(key, value string) error {

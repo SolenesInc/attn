@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -9,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
@@ -288,42 +286,6 @@ type HookProvider interface {
 
 type ConfigOverrideProvider interface {
 	GenerateConfigOverrides(opts SpawnOpts) []string
-}
-
-type HeadlessTaskRequest struct {
-	Executable      string
-	Model           string
-	ReasoningEffort string
-	Prompt          string
-	WorkDir         string
-
-	AllowedTools []string
-
-	DisableTools bool
-
-	ExtraWritableRoots []string
-
-	MaxTurns     int
-	MaxBudgetUSD string
-	OutputSchema json.RawMessage
-
-	SystemPrompt string
-}
-
-type HeadlessTaskResult struct {
-	Diagnostics      string
-	FailureOutput    string
-	Text             string
-	StructuredOutput json.RawMessage
-	TotalCostUSD     float64
-	NumTurns         int
-	ModelTime        time.Duration
-	InputTokens      int
-	OutputTokens     int
-}
-
-type HeadlessTaskProvider interface {
-	RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest) (HeadlessTaskResult, error)
 }
 
 type TranscriptFinder interface {

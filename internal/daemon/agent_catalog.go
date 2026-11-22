@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"sort"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 )
 
@@ -16,25 +15,25 @@ func (d *Daemon) handleAgents(w http.ResponseWriter, r *http.Request) {
 }
 
 var descriptorHealth = map[harness.Installation]string{
-	harness.Installed: agentdriver.HealthHealthy,
-	harness.Missing:   agentdriver.HealthUnhealthy,
-	harness.Unknown:   agentdriver.HealthUnknown,
+	harness.Installed: harness.HealthHealthy,
+	harness.Missing:   harness.HealthUnhealthy,
+	harness.Unknown:   harness.HealthUnknown,
 }
 
-func (d *Daemon) agentCatalog() []agentdriver.Descriptor {
+func (d *Daemon) agentCatalog() []harness.Descriptor {
 	providers := map[string]string{}
 	for _, driver := range d.ensurePluginRegistry().registeredDrivers() {
 		providers[driver.Agent] = driver.PluginName
 	}
 	all := d.harnesses()
-	agents := make([]agentdriver.Descriptor, 0, len(all))
+	agents := make([]harness.Descriptor, 0, len(all))
 	for _, h := range all {
 		health := h.Health(d.life.Context())
 		if !health.Offered {
 			continue
 		}
 		facts := h.Facts()
-		entry := agentdriver.Descriptor{
+		entry := harness.Descriptor{
 			Name:        facts.ID,
 			DisplayName: facts.DisplayName,
 			Plugin:      providers[facts.ID],

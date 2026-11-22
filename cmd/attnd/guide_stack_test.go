@@ -1,13 +1,13 @@
 package main_test
 
 import (
+	"github.com/victorarias/attn/internal/attnskill"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
 	attn "github.com/victorarias/attn/cmd/attnd"
-	"github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/catalog"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/testworld"
@@ -99,7 +99,7 @@ func TestHelpListsEveryCommandAndReferenceAndEachCommandExplainsItself(t *testin
 	}
 
 	launchedWithEveryGatedRow := prompts.Launch{CodeReview: true}.Instructions()
-	for _, reference := range agent.SkillReferenceNames() {
+	for _, reference := range attnskill.SkillReferenceNames() {
 		if reference == "onboarding" || strings.Contains(help, "`"+reference+"`") || strings.Contains(launchedWithEveryGatedRow, "| `"+reference+"` |") {
 			continue
 		}

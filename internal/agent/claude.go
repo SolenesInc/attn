@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/toolhome"
@@ -33,7 +33,7 @@ var _ RecoveredStatePolicyProvider = (*Claude)(nil)
 var _ ResumePolicyProvider = (*Claude)(nil)
 var _ ResumeAvailabilityProvider = (*Claude)(nil)
 var _ TranscriptClassificationExtractor = (*Claude)(nil)
-var _ HeadlessTaskProvider = (*Claude)(nil)
+var _ headless.TaskProvider = (*Claude)(nil)
 var _ FolderTrustQuestionReader = (*Claude)(nil)
 
 const (
@@ -163,15 +163,15 @@ func (c *Claude) BuildEnv(opts SpawnOpts) []string {
 
 var claudeNativeDefaultTools = []string{"Read", "Write", "Edit", "Grep", "Glob"}
 
-func (c *Claude) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest) (HeadlessTaskResult, error) {
-	instructionsPath, removeInstructions, err := writeHeadlessSystemPrompt(request)
+func (c *Claude) RunHeadlessTask(ctx context.Context, request headless.TaskRequest) (headless.TaskResult, error) {
+	instructionsPath, removeInstructions, err := headless.WriteSystemPrompt(request)
 	if err != nil {
-		return HeadlessTaskResult{}, err
+		return headless.TaskResult{}, err
 	}
 	defer removeInstructions()
 	args := claudeHeadlessArgs(request, instructionsPath)
 
-	result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, request.Prompt, request.WorkDir, "claude", claudeReportedFailure)
+	result, stdout, err := headless.RunCommand(ctx, request.Executable, args, request.Prompt, request.WorkDir, "claude", claudeHeadlessEnv, claudeReportedFailure)
 	if err != nil {
 		if text := parseClaudeFinalText(stdout); text != "" {
 			result.FailureOutput = strings.TrimSpace("result: " + text + "\n" + result.FailureOutput)
@@ -258,7 +258,7 @@ func parseClaudeResultMeta(stdout []byte) claudeResultMeta {
 	return claudeResultMeta{}
 }
 
-func claudeHeadlessArgs(request HeadlessTaskRequest, instructionsPath string) []string {
+func claudeHeadlessArgs(request headless.TaskRequest, instructionsPath string) []string {
 	tools := request.AllowedTools
 	if len(tools) == 0 && !request.DisableTools {
 		tools = claudeNativeDefaultTools
@@ -544,7 +544,7 @@ func copyTranscriptForResume(resumeSessionID, cwd string) error {
 	if err != nil {
 		return err
 	}
-	files, err := OpenConversationFiles(home)
+	files, err := harness.OpenConversationFiles(home)
 	if err != nil {
 		return err
 	}
@@ -575,7 +575,7 @@ func copyTranscriptForResume(resumeSessionID, cwd string) error {
 	return files.Restore(best, dest, false, time.Now())
 }
 
-func largestClaudeTranscript(files *ConversationFileSystem, resumeSessionID string) (fs.File, string, error) {
+func largestClaudeTranscript(files *harness.ConversationFileSystem, resumeSessionID string) (fs.File, string, error) {
 	id, err := uuid.Parse(resumeSessionID)
 	if err != nil || id.String() != resumeSessionID {
 		return nil, "", fmt.Errorf("invalid Claude conversation ID: %s", resumeSessionID)
@@ -636,7 +636,7 @@ func (c *Claude) ConversationFiles(resumeIDs []string) map[string][]string {
 	if err != nil {
 		return nil
 	}
-	inputs, err := OpenConversationFiles(home)
+	inputs, err := harness.OpenConversationFiles(home)
 	if err != nil {
 		return nil
 	}
@@ -688,4 +688,15 @@ func (c *Claude) ConversationFiles(resumeIDs []string) map[string][]string {
 		files[resumeID] = append(files[resumeID], filepath.Join(home, ".claude", "file-history", resumeID))
 	}
 	return files
+}
+
+var claudeHeadlessEnv = headless.Env{
+	Prefixes: []string{"ANTHROPIC_", "CLAUDE_CODE_USE_", "AWS_", "GOOGLE_", "AZURE_"},
+	Extra: func([]string) []string {
+		extra := []string{"CLAUDE_CODE_DISABLE_AUTO_MEMORY=1"}
+		if window := headless.ContextWindowCap(); window > 0 {
+			extra = append(extra, "CLAUDE_CODE_AUTO_COMPACT_WINDOW="+strconv.Itoa(window))
+		}
+		return extra
+	},
 }
