@@ -18,6 +18,7 @@ import (
 	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/delegationprefs"
 	"github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/profiles"
@@ -118,8 +119,8 @@ func (d *Daemon) resolveDelegationAgent(sourceAgent string, requested *string) (
 		return "", err
 	}
 	facts := h.Facts()
-	if !facts.Options.InitialPrompt {
-		return "", fmt.Errorf("agent %q does not support initial prompts", agent)
+	if err := facts.Accept(harness.Request{InitialPrompt: true}); err != nil {
+		return "", err
 	}
 	return facts.ID, nil
 }
@@ -128,36 +129,18 @@ func (d *Daemon) validateHarnessModelEffort(agent, model, effort string) error {
 	if model == "" && effort == "" {
 		return nil
 	}
-	if pluginDriver, ok := d.ensurePluginRegistry().driver(agent); ok {
-		if model != "" && !pluginDriver.Capabilities["model_pin"] {
-			return fmt.Errorf("agent %q does not support --model", agent)
-		}
-		if effort != "" && !pluginDriver.Capabilities["effort_pin"] {
-			return fmt.Errorf("agent %q does not support --effort", agent)
-		}
-		return nil
+	h, err := d.harness(agent)
+	if err != nil {
+		return err
 	}
-	caps := agentdriver.EffectiveCapabilities(agentdriver.Get(agent))
-	if model != "" && !caps.HasModelPin {
-		return fmt.Errorf("agent %q does not support --model", agent)
-	}
-	if effort != "" && !caps.HasEffortPin {
-		return fmt.Errorf("agent %q does not support --effort", agent)
-	}
-	return nil
+	return h.Facts().Accept(harness.Request{Model: model != "", Effort: effort != ""})
 }
 
 func (d *Daemon) defaultDelegationEffort(agent, effort string) string {
 	if effort != "" {
 		return effort
 	}
-	if pluginDriver, ok := d.ensurePluginRegistry().driver(agent); ok {
-		if pluginDriver.Capabilities["effort_pin"] {
-			return "medium"
-		}
-		return ""
-	}
-	if agentdriver.EffectiveCapabilities(agentdriver.Get(agent)).HasEffortPin {
+	if h, err := d.harness(agent); err == nil && h.Facts().Options.EffortPin {
 		return "medium"
 	}
 	return ""

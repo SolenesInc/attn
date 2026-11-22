@@ -779,14 +779,8 @@ func (d *Daemon) pluginConversationsResumable(reg pluginDriverRegistration, conv
 }
 
 func (d *Daemon) resolvePluginDriverLaunch(reg pluginDriverRegistration, params pluginDriverSpawnParams, resume bool) (pluginDriverSpawnResult, error) {
-	if params.Yolo && !reg.Capabilities["yolo"] {
-		return pluginDriverSpawnResult{}, fmt.Errorf("agent %q does not support yolo launches", reg.Agent)
-	}
-	if params.Model != "" && !reg.Capabilities["model_pin"] {
-		return pluginDriverSpawnResult{}, fmt.Errorf("agent %q does not support model pins", reg.Agent)
-	}
-	if params.Effort != "" && !reg.Capabilities["effort_pin"] {
-		return pluginDriverSpawnResult{}, fmt.Errorf("agent %q does not support effort pins", reg.Agent)
+	if err := (pluginHarness{d: d, reg: reg}).Facts().Accept(harness.Request{Yolo: params.Yolo, Model: params.Model != "", Effort: params.Effort != ""}); err != nil {
+		return pluginDriverSpawnResult{}, err
 	}
 	if resume && !reg.Capabilities["resume"] {
 		return pluginDriverSpawnResult{}, fmt.Errorf("agent %q does not support resume", reg.Agent)

@@ -89,7 +89,9 @@ await client.connect();
 | `agentTools: true` | `agent_tools` | passes `agent_tools`, attn's MCP server, to `spawn` and `resume`, as [Give the harness attn's tools](#give-the-harness-attns-tools) describes |
 
 `attributedInput`, `safeDuringQuestion` and `compact` need `deliver`. The SDK
-refuses an invalid declaration when you call `client.driver`.
+refuses an invalid declaration when you call `client.driver`. Attn still
+accepts the capabilities `classifier` and `pending_approval` from older
+plugins, and does nothing with them.
 
 `client.handle(...)` for worktree hooks stays separate. A plugin can declare
 both, and a driver adds nothing to the `hello` surfaces.

@@ -69,8 +69,6 @@ type Capabilities struct {
 
 	HasEffortPin bool
 
-	HasExecutionTarget bool
-
 	HasContextWindowCap bool
 
 	ConversationIsSession bool

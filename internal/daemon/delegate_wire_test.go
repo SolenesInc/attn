@@ -120,8 +120,8 @@ func TestADelegatesModelAndEffortReachItsCommandLineOrAreRefusedByFlag(t *testin
 		{name: "claude pinned", agent: "claude", model: "claude-fable-5", effort: "Low", wantModel: "claude-fable-5", wantEffort: "low"},
 		{name: "claude at the default effort", agent: "claude", model: "opus", wantModel: "opus", wantEffort: "medium"},
 		{name: "plug unpinned", agent: "plug"},
-		{name: "plug with a model", agent: "plug", model: "glm-5", refusal: `agent "plug" does not support --model`},
-		{name: "plug with an effort", agent: "plug", effort: "high", refusal: `agent "plug" does not support --effort`},
+		{name: "plug with a model", agent: "plug", model: "glm-5", refusal: `agent "plug" does not support model pins`},
+		{name: "plug with an effort", agent: "plug", effort: "high", refusal: `agent "plug" does not support effort pins`},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			request := brief(cwd, "Tighten the retry loop")

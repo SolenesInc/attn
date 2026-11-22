@@ -147,8 +147,12 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 		return nil, &spawnRejection{err: errors.New("shell sessions do not accept an initial prompt")}
 	}
 	if strings.TrimSpace(initialPrompt) != "" {
-		if h, err := d.harness(agent); err != nil || !h.Facts().Options.InitialPrompt {
-			return nil, &spawnRejection{err: fmt.Errorf("agent %q does not support initial prompts", agent)}
+		h, err := d.harness(agent)
+		if err == nil {
+			err = h.Facts().Accept(harness.Request{InitialPrompt: true})
+		}
+		if err != nil {
+			return nil, &spawnRejection{err: err}
 		}
 	}
 	profile, err := d.liveLaunchProfile(msg.ProfileID)
@@ -258,7 +262,15 @@ func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
 
 func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*spawnPlan, *spawnRejection) {
 	msg := req.msg
-	if !req.hasPluginDriver && protocol.Deref(msg.ResumePicker) && req.resumeSessionID != "" {
+	var facts harness.Facts
+	if !req.isShell {
+		h, err := d.harness(req.agent)
+		if err != nil {
+			return nil, &spawnRejection{err: err}
+		}
+		facts = h.Facts()
+	}
+	if facts.Options.Picker && protocol.Deref(msg.ResumePicker) && req.resumeSessionID != "" {
 		readiness, err := d.placedConversationReadiness(msg.ID, protocol.Deref(msg.Host), req.agent, req.profile.ID, req.resumeSessionID, true)
 		if err != nil {
 			return nil, &spawnRejection{err: err}
@@ -296,7 +308,7 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 		configuredExecutable = legacyExecutableFromSpawnMessage(msg, req.agent)
 	}
 	plan := &spawnPlan{}
-	autoApprove := agentdriver.EffectiveCapabilities(req.driver).HasAutoApprove && d.on(setting.AutoApproveEnabled)
+	autoApprove := facts.Options.AutoApprove && d.on(setting.AutoApproveEnabled)
 	plan.spawnOpts = ptybackend.SpawnOptions{CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), ClaudeExecutable: protocol.Deref(msg.ClaudeExecutable), CodexExecutable: protocol.Deref(msg.CodexExecutable), AutoApprove: autoApprove, Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort))}
 	if req.policy.command != nil {
 		plan.spawnOpts.AgentArgv = append([]string(nil), req.policy.command.Argv...)
@@ -307,8 +319,14 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 		return nil, &spawnRejection{err: fmt.Errorf("resolve launch model: %w", err)}
 	}
 	plan.spawnOpts.Effort = d.resolveLaunchEffort(req.agent, plan.spawnOpts.Effort)
+	if !req.isShell {
+		if err := facts.Accept(harness.Request{Model: plan.spawnOpts.Model != "", Effort: plan.spawnOpts.Effort != "", Yolo: plan.spawnOpts.YoloMode}); err != nil {
+			plan.rollback(d, msg.ID)
+			return nil, &spawnRejection{err: err}
+		}
+	}
 	if target := strings.TrimSpace(protocol.Deref(msg.ExecutionTarget)); target != "" {
-		if !agentdriver.EffectiveCapabilities(req.driver).HasExecutionTarget && !(d.serverLinkFor(req.agent) != nil && d.serverLinkFor(req.agent).hasTargets()) {
+		if l := d.serverLinkFor(req.agent); l == nil || !l.hasTargets() {
 			plan.rollback(d, msg.ID)
 			return nil, &spawnRejection{err: fmt.Errorf("agent %q has no execution targets", req.agent)}
 		}

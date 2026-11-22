@@ -26,13 +26,13 @@ func TestEveryHarnessAnswersTheContractWithItsFake(t *testing.T) {
 		return true
 	})
 
-	everyOption := harness.Options{Resume: true, Yolo: true, AutoApprove: true, InitialPrompt: true, LaunchInstructions: true, ModelPin: true, EffortPin: true, ContextCap: true}
-	sigmaOptions := everyOption
-	sigmaOptions.ContextCap = false
+	terminalOptions := harness.Options{Resume: true, Yolo: true, AutoApprove: true, InitialPrompt: true, LaunchInstructions: true, ModelPin: true, EffortPin: true, ContextCap: true, Picker: true}
+	sigmaOptions := terminalOptions
+	sigmaOptions.ContextCap, sigmaOptions.Provider = false, true
 	conformance.Run(t, w.daemon.Harnesses(), []conformance.Row{
-		{Facts: harness.Facts{ID: "claude", DisplayName: "Claude Code", Options: everyOption}, Offered: true},
-		{Facts: harness.Facts{ID: "codex", DisplayName: "Codex", Options: everyOption}, Offered: true},
+		{Facts: harness.Facts{ID: "claude", DisplayName: "Claude Code", Options: terminalOptions}, Offered: true},
+		{Facts: harness.Facts{ID: "codex", DisplayName: "Codex", Options: terminalOptions}, Offered: true},
 		{Facts: harness.Facts{ID: "sigma", DisplayName: "Sigma", Options: sigmaOptions}, Offered: true},
-		{Facts: harness.Facts{ID: "house", DisplayName: "House", Options: harness.Options{Resume: true, Yolo: true, InitialPrompt: true, LaunchInstructions: true, ModelPin: true, EffortPin: true}}, Offered: true},
+		{Facts: harness.Facts{ID: "house", DisplayName: "House", Options: harness.Options{Resume: true, Yolo: true, InitialPrompt: true, LaunchInstructions: true, ModelPin: true, EffortPin: true, Provider: true}}, Offered: true},
 	})
 }

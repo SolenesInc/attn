@@ -35,6 +35,7 @@ func (h pluginHarness) Facts() harness.Facts {
 			LaunchInstructions: declared["launch_instructions"],
 			ModelPin:           declared["model_pin"],
 			EffortPin:          declared["effort_pin"],
+			Provider:           true,
 		},
 	}
 }

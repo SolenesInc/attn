@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/automation"
 	attngit "github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -42,8 +42,8 @@ func (d *Daemon) validateAutomationSpec(raw string) (automation.DefinitionSpec, 
 	if err := d.validateHarnessModelEffort(spec.Launch.Driver, spec.Launch.Model, spec.Launch.Effort); err != nil {
 		return spec, nil, err
 	}
-	if !agentdriver.EffectiveCapabilities(agentdriver.Get(spec.Launch.Driver)).HasAutoApprove {
-		return spec, nil, fmt.Errorf("agent %q does not support automation automatic approval", spec.Launch.Driver)
+	if err := d.factsOrNone(spec.Launch.Driver).Accept(harness.Request{AutoApprove: true}); err != nil {
+		return spec, nil, err
 	}
 	for identity, source := range spec.Location.RepositorySources.Overrides {
 		if _, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitInteractive}, func(ctx context.Context, client *attngit.Client) (string, error) {

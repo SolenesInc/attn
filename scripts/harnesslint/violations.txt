@@ -231,12 +231,6 @@ internal/daemon/daemon.go	Daemon	reaches claudeMod (internal/daemon/claude_mod.g
 internal/daemon/daemon.go	Daemon	reaches codexShared (internal/daemon/codex_shared.go)
 internal/daemon/daemon.go	Daemon	reaches serverConnection (internal/daemon/server_connection.go)
 internal/daemon/daemon.go	Daemon	reaches serverLink (internal/daemon/server_link.go)
-internal/daemon/delegate.go	(*Daemon).defaultDelegationEffort	reaches field Capabilities (internal/daemon/plugin_driver.go)
-internal/daemon/delegate.go	(*Daemon).defaultDelegationEffort	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
-internal/daemon/delegate.go	(*Daemon).defaultDelegationEffort	reaches pluginRegistry.driver (internal/daemon/plugin_driver.go)
-internal/daemon/delegate.go	(*Daemon).validateHarnessModelEffort	reaches field Capabilities (internal/daemon/plugin_driver.go)
-internal/daemon/delegate.go	(*Daemon).validateHarnessModelEffort	reaches pluginDriverRegistration (internal/daemon/plugin_driver.go)
-internal/daemon/delegate.go	(*Daemon).validateHarnessModelEffort	reaches pluginRegistry.driver (internal/daemon/plugin_driver.go)
 internal/daemon/delegate.go	delegationAgentName	names "codex"
 internal/daemon/delegation_preferences.go	(*Daemon).delegationHarnesses	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
 internal/daemon/delegation_preferences.go	(*Daemon).delegationHarnesses	reaches field Agent (internal/daemon/plugin_driver.go)
@@ -246,9 +240,6 @@ internal/daemon/delegation_preferences.go	(*Daemon).delegationHarnesses	reaches 
 internal/daemon/delegation_preferences.go	(*Daemon).delegationHarnesses	reaches serverLink (internal/daemon/server_link.go)
 internal/daemon/delegation_preferences.go	(*Daemon).ensureDelegationWorkflowSkill	reaches Daemon.workflowSkillsDirs (internal/daemon/plugin_skill_dirs.go)
 internal/daemon/delegation_preferences.go	(*Daemon).installAttnRoles	reaches Daemon.workflowSkillsDirs (internal/daemon/plugin_skill_dirs.go)
-internal/daemon/delegation_preferences.go	(*Daemon).selectsProviders	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
-internal/daemon/delegation_preferences.go	(*Daemon).selectsProviders	reaches pluginRegistry.driver (internal/daemon/plugin_driver.go)
-internal/daemon/delegation_preferences.go	(*Daemon).selectsProviders	reaches serverLink (internal/daemon/server_link.go)
 internal/daemon/garden_advisor.go	executeGardenAdvisor	names "claude"
 internal/daemon/garden_advisor_config.go	(*Daemon).gardenAdvisorConfig	names "claude"
 internal/daemon/garden_advisor_config.go	defaultGardenAdvisorConfig	names "claude"

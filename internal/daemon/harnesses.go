@@ -33,6 +33,13 @@ func (d *Daemon) knowsHarness(id string) bool {
 	return err == nil
 }
 
+func (d *Daemon) factsOrNone(id string) harness.Facts {
+	if h, err := d.harness(id); err == nil {
+		return h.Facts()
+	}
+	return harness.Facts{ID: id}
+}
+
 func (d *Daemon) offered(id string) bool {
 	h, err := d.harness(id)
 	return err == nil && h.Health(d.life.Context()).Offered
@@ -40,6 +47,7 @@ func (d *Daemon) offered(id string) bool {
 
 func builtinFacts(driver agentdriver.Driver) harness.Facts {
 	caps := agentdriver.EffectiveCapabilities(driver)
+	_, declaresServer := agentdriver.DeclaredServer(driver)
 	return harness.Facts{
 		ID:          driver.Name(),
 		DisplayName: driver.DisplayName(),
@@ -52,6 +60,8 @@ func builtinFacts(driver agentdriver.Driver) harness.Facts {
 			ModelPin:           caps.HasModelPin,
 			EffortPin:          caps.HasEffortPin,
 			ContextCap:         caps.HasContextWindowCap,
+			Picker:             true,
+			Provider:           declaresServer,
 		},
 	}
 }

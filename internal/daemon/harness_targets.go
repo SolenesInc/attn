@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -24,9 +23,8 @@ func (d *Daemon) harnessTargets(harness, cwd string) ([]protocol.ExecutionTarget
 	if cwd == "" {
 		return nil, fmt.Errorf("harness_targets needs a cwd")
 	}
-	driver := agentdriver.Get(harness)
 	server := d.serverLinkFor(harness)
-	if server == nil || !(agentdriver.EffectiveCapabilities(driver).HasExecutionTarget || server.hasTargets()) {
+	if server == nil || !server.hasTargets() {
 		return nil, fmt.Errorf("agent %q has no execution targets", harness)
 	}
 	ctx, cancel := context.WithTimeout(d.life.Context(), harnessModelDiscoveryTimeout)

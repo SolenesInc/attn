@@ -169,9 +169,9 @@ func supportsModelDiscovery(driver agentdriver.Driver) bool {
 	return ok
 }
 
-func (d *Daemon) selectsProviders(harness string) bool {
-	_, plugin := d.ensurePluginRegistry().driver(harness)
-	return plugin || d.serverLinkFor(harness) != nil
+func (d *Daemon) selectsProviders(id string) bool {
+	h, err := d.harness(id)
+	return err == nil && h.Facts().Options.Provider
 }
 
 func usesDelegationPreferences(msg *protocol.DelegateMessage) bool {

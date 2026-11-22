@@ -1,6 +1,9 @@
 package harness
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // ID names a harness: a built-in's name, or the agent a plugin registered.
 type ID = string
@@ -28,6 +31,38 @@ type Options struct {
 	ModelPin           bool
 	EffortPin          bool
 	ContextCap         bool
+	Picker             bool
+	Provider           bool
+}
+
+// Request is the launch options a caller asks of a harness.
+type Request struct {
+	InitialPrompt bool
+	Model         bool
+	Effort        bool
+	Yolo          bool
+	AutoApprove   bool
+	ContextCap    bool
+}
+
+// Accept refuses the first option in r that the harness does not take.
+func (f Facts) Accept(r Request) error {
+	for _, option := range []struct {
+		asked, taken bool
+		refusal      string
+	}{
+		{r.InitialPrompt, f.Options.InitialPrompt, "does not support initial prompts"},
+		{r.Model, f.Options.ModelPin, "does not support model pins"},
+		{r.Effort, f.Options.EffortPin, "does not support effort pins"},
+		{r.Yolo, f.Options.Yolo, "does not support yolo launches"},
+		{r.AutoApprove, f.Options.AutoApprove, "does not support automation automatic approval"},
+		{r.ContextCap, f.Options.ContextCap, "takes no context-window cap"},
+	} {
+		if option.asked && !option.taken {
+			return fmt.Errorf("agent %q %s", f.ID, option.refusal)
+		}
+	}
+	return nil
 }
 
 // Installation says whether the harness can run on this machine now.

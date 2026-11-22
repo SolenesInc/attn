@@ -3,7 +3,7 @@ package daemon
 import (
 	"fmt"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/harness"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -39,8 +39,8 @@ func (d *Daemon) setSessionContextWindowCap(sessionID protocol.SessionID, cap in
 			return fmt.Errorf("context window cap must be 0 (no cap) or between %d and %d tokens; got %d", contextWindowCapMin, contextWindowCapMax, cap)
 		}
 	}
-	if !agentdriver.EffectiveCapabilities(agentdriver.Get(normalizeSpawnAgent(session.Agent))).HasContextWindowCap {
-		return fmt.Errorf("agent %q takes no context-window cap", session.Agent)
+	if err := d.factsOrNone(normalizeSpawnAgent(session.Agent)).Accept(harness.Request{ContextCap: true}); err != nil {
+		return err
 	}
 	if protocol.Deref(session.ContextWindowCap) == cap {
 		return nil
