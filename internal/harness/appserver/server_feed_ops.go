@@ -1,4 +1,4 @@
-package daemon
+package appserver
 
 import "encoding/json"
 

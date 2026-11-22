@@ -381,9 +381,9 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		}
 		d.logf("plugin driver registered plugin=%s agent=%s", plugin.name, normalizePluginAgent(params.Agent))
 		d.resolvePluginDriverRoutes(plugin.name, normalizePluginAgent(params.Agent))
-		if l := d.serverLinkFor(normalizePluginAgent(params.Agent)); l != nil && l.b.plugin == plugin.name {
-			l.recoverProcesses(d.life.Context())
-			l.recoverViews(d.life.Context())
+		if l := d.appServer.Link(normalizePluginAgent(params.Agent)); l != nil && l.Plugin() == plugin.name {
+			l.Recover(d.life.Context(), harness.RecoverProcesses)
+			l.Recover(d.life.Context(), harness.RecoverViews)
 		}
 		d.pushMonitorPolicies()
 		d.publishFact(FactPluginDriverRegistered, plugin.name, nil)

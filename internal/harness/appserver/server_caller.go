@@ -1,4 +1,4 @@
-package daemon
+package appserver
 
 import (
 	"encoding/json"
@@ -10,16 +10,12 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-type appServer struct{ d *Daemon }
-
-func (d *Daemon) appServer() appServer { return appServer{d} }
-
-func (c appServer) OwnsCredential(subject string) bool {
-	return c.d.serverConnectionAt(subject) != nil
+func (c *Client) OwnsCredential(subject string) bool {
+	return c.serverConnectionAt(subject) != nil
 }
 
-func (c appServer) Authenticate(subject string, header http.Header) (harness.SessionID, string, bool, error) {
-	p := c.d.serverConnectionAt(subject)
+func (c *Client) Authenticate(subject string, header http.Header) (harness.SessionID, string, bool, error) {
+	p := c.serverConnectionAt(subject)
 	if p == nil {
 		return "", "", false, fmt.Errorf("attn holds no server at %s", subject)
 	}
@@ -38,15 +34,15 @@ func (c appServer) Authenticate(subject string, header http.Header) (harness.Ses
 	return session, p.harnesses() + " conversation " + conversation, false, nil
 }
 
-func (appServer) IdentifyCall(string, json.RawMessage) (harness.SessionID, string, *harness.Refusal) {
+func (*Client) IdentifyCall(string, json.RawMessage) (harness.SessionID, string, *harness.Refusal) {
 	return "", "", &harness.Refusal{Code: "no_session", Message: "the server's calls name their session at authentication"}
 }
 
-func (c appServer) declares(variable string) bool {
+func (c *Client) declares(variable string) bool {
 	if variable == "" {
 		return false
 	}
-	for _, l := range c.d.appServerLinks() {
+	for _, l := range c.Links() {
 		if l.callerConversationEnv() == variable {
 			return true
 		}
@@ -54,24 +50,24 @@ func (c appServer) declares(variable string) bool {
 	return false
 }
 
-func (c appServer) ResolveCaller(caller string) (harness.SessionID, harness.TerminalID, string, bool) {
+func (c *Client) ResolveCaller(caller string) (harness.SessionID, harness.TerminalID, string, bool) {
 	if named, ok := harness.ParseServerCaller(harness.TerminalID(caller)); ok {
 		if named.Scope != "" || !c.declares(named.Variable) {
 			return "", "", "", false
 		}
 		variable, conversation := named.Variable, named.Conversation
 		var owner protocol.SessionID
-		for _, id := range c.d.store.OpenSessionsHolding(conversation) {
-			if l, ok := c.d.linkOf(id).(*serverLink); ok && l.callerConversationEnv() == variable {
+		for _, id := range c.host.Sessions().Holding(conversation) {
+			if l := c.serverHolding(id); l != nil && l.callerConversationEnv() == variable {
 				if owner != "" {
 					return "", "", "", true
 				}
 				owner = id
 			}
 		}
-		return owner, c.d.primaryTerminal(owner), "", true
+		return owner, c.host.Sessions().PrimaryTerminal(owner), "", true
 	}
-	for _, l := range c.d.appServerLinks() {
+	for _, l := range c.Links() {
 		if session, view, ours := l.resolveCaller(protocol.TerminalID(caller)); ours {
 			return session, view, "", true
 		}

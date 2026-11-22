@@ -29,11 +29,7 @@ type linkRuntime interface {
 }
 
 func (d *Daemon) links() []linkRuntime {
-	links := []linkRuntime{d.codexShared()}
-	for _, l := range d.appServerLinks() {
-		links = append(links, l)
-	}
-	return links
+	return []linkRuntime{d.codexShared()}
 }
 
 type sharedConversationLink interface {

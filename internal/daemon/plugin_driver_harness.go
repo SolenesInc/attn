@@ -21,7 +21,7 @@ func init() {
 		all := make([]harness.Harness, 0, len(registered))
 		for _, reg := range registered {
 			h := pluginHarness{d: d, reg: reg}
-			if l := d.serverLinkFor(reg.Agent); l != nil && l.can(appserver.AbilityTargets) {
+			if l := d.appServer.Link(reg.Agent); l != nil && l.Can(appserver.AbilityTargets) {
 				all = append(all, pluginTargetsHarness{pluginHarness: h, link: l})
 				continue
 			}
@@ -38,11 +38,11 @@ type pluginHarness struct {
 
 type pluginTargetsHarness struct {
 	pluginHarness
-	link *serverLink
+	link *appserver.Link
 }
 
 func (h pluginTargetsHarness) Targets(ctx context.Context, cwd string) ([]protocol.ExecutionTarget, error) {
-	return h.link.targets(ctx, cwd)
+	return h.link.Targets(ctx, cwd)
 }
 
 func (h pluginHarness) Facts() harness.Facts {
@@ -67,13 +67,15 @@ func (h pluginHarness) Facts() harness.Facts {
 		Signals:        pluginSignals(declared),
 		Recovery:       h.recovery(),
 		ModelDiscovery: declared["model_discovery"] || declared["server_binding"],
-		Activity:       h.d.serverLinkFor(h.reg.Agent).watchesConversations(),
-		ServerTerminal: h.d.serverTerminalOf(h.reg.Agent),
+		Activity:       h.link().WatchesConversations(),
+		ServerTerminal: serverTerminalOf(h.link()),
 	}
 }
 
+func (h pluginHarness) link() *appserver.Link { return h.d.appServer.Link(h.reg.Agent) }
+
 func (h pluginHarness) recovery() harness.Recovery {
-	if h.d.serverLinkFor(h.reg.Agent) != nil {
+	if h.link() != nil {
 		return harness.ByServer
 	}
 	return harness.ByTerminal
@@ -81,7 +83,7 @@ func (h pluginHarness) recovery() harness.Recovery {
 
 func (h pluginHarness) Launch(_ context.Context, req harness.LaunchRequest) (harness.Command, error) {
 	if len(req.Note) == 0 {
-		return h.d.launchOnServerOrTerminal(req, h.reg.Agent)
+		return h.d.launchOnAppServer(req, h.reg.Agent)
 	}
 	var p AgentPluginLaunch
 	if err := json.Unmarshal(req.Note, &p); err != nil {
@@ -99,17 +101,15 @@ func (d *Daemon) launchPluginDriver(req harness.LaunchRequest, agent harness.ID,
 	p.Params.Executable = configuredLaunchExecutable(&opts)
 	serverBound := reg.Capabilities["server_binding"]
 	p.Params.AgentTools = nil
-	var server *serverLink
+	var server *appserver.Link
 	if serverBound {
-		server = d.serverLinkFor(opts.Agent)
-		p.Params.Executable = server.executable(&opts)
-		if l := d.linkFor(opts.Agent, req.Lifetime); l != nil {
-			if err := d.launchInLink(l, &opts, req); err != nil {
-				return harness.Command{}, err
-			}
+		server = d.appServer.Link(opts.Agent)
+		p.Params.Executable = server.Executable(req)
+		if err := server.Launch(req); err != nil {
+			return harness.Command{}, err
 		}
 		if reg.Capabilities["agent_tools"] {
-			if tools := server.clientAgentTools(); tools != nil {
+			if tools := server.SharedTools(); tools != nil {
 				p.Params.AgentTools = &pluginAgentTools{Name: tools.Name, Description: tools.Description}
 			}
 		}
@@ -131,13 +131,13 @@ func (d *Daemon) launchPluginDriver(req harness.LaunchRequest, agent harness.ID,
 		return harness.Command{}, err
 	}
 	if serverBound {
-		env = append(env, server.homeEnv())
+		env = append(env, server.HomeEnv())
 	}
 	return harness.Command{Argv: append([]string(nil), result.Argv...), Env: env, Dir: strings.TrimSpace(result.CWD)}, nil
 }
 
 func (h pluginHarness) Plan(req harness.LaunchRequest) (harness.Planned, error) {
-	planned := h.d.planOnServer(h.reg.Agent, h.reg.PluginName, req)
+	planned := h.link().Plan(h.reg.PluginName, req)
 	if h.reg.Capabilities["server_binding"] {
 		planned.Conversation = resumedOrTerminal(req)
 	}
@@ -147,12 +147,12 @@ func (h pluginHarness) Plan(req harness.LaunchRequest) (harness.Planned, error) 
 func (pluginHarness) Start(context.Context) error { return nil }
 
 func (h pluginHarness) Recover(ctx context.Context, point harness.RecoverPoint) {
-	h.d.recoverServer(ctx, h.reg.Agent, point)
+	h.link().Recover(ctx, point)
 }
 
 func (pluginHarness) SettingChanged(string) {}
 
-func (h pluginHarness) Released(string) { h.d.releaseServer(h.reg.Agent) }
+func (h pluginHarness) Released(string) { h.link().Release() }
 
 func (pluginHarness) Stop() {}
 
@@ -166,7 +166,7 @@ type pluginConversationStore struct {
 }
 
 func (s pluginConversationStore) Admit(ref harness.ConversationRef) error {
-	return s.d.admitToServer(string(ref.Harness), ref)
+	return s.d.appServer.Link(string(ref.Harness)).Admit(ref)
 }
 
 func (pluginConversationStore) Prepare(context.Context, harness.ConversationRef) (bool, error) {
@@ -175,18 +175,18 @@ func (pluginConversationStore) Prepare(context.Context, harness.ConversationRef)
 
 func (s pluginConversationStore) Check(_ context.Context, refs []harness.ConversationRef) map[harness.ConversationRef]harness.Availability {
 	availability := make(map[harness.ConversationRef]harness.Availability, len(refs))
-	onServer := map[*serverLink][]harness.ConversationRef{}
+	onServer := map[*appserver.Link][]harness.ConversationRef{}
 	var asked []harness.ConversationRef
 	for _, ref := range refs {
 		reg, ok := s.d.ensurePluginRegistry().driver(string(ref.Harness))
-		switch l := s.d.serverLinkFor(reg.Agent); {
+		switch l := s.d.appServer.Link(reg.Agent); {
 		case !ok:
 			availability[ref] = harness.Availability{Reason: fmt.Sprintf("agent %q is not installed here, so its conversation cannot be resumed", ref.Harness)}
 		case !reg.Capabilities["resume"]:
 			availability[ref] = harness.Availability{Reason: fmt.Sprintf("agent %q does not resume conversations, so conversation %s cannot be picked up", ref.Harness, ref.ID)}
 		case ref.DirMissing && reg.Capabilities["resume_availability"]:
 			availability[ref] = harness.Availability{Resumable: true}
-		case l.watchesConversations():
+		case l.WatchesConversations():
 			onServer[l] = append(onServer[l], ref)
 		case !reg.Capabilities["resume_availability"]:
 			availability[ref] = harness.Availability{Resumable: true}
@@ -195,7 +195,7 @@ func (s pluginConversationStore) Check(_ context.Context, refs []harness.Convers
 		}
 	}
 	for l, refs := range onServer {
-		maps.Copy(availability, l.conversationsResumable(refs))
+		maps.Copy(availability, l.ConversationsResumable(refs))
 	}
 	if len(asked) > 0 {
 		maps.Copy(availability, s.d.pluginConversationsResumable(s.plugin, asked))
@@ -218,8 +218,8 @@ func (h pluginHarness) Route(facts harness.SessionFacts) (string, bool) {
 func (pluginHarness) Terminal(harness.TerminalID, harness.TerminalEvent) {}
 
 func (h pluginHarness) End(_ context.Context, e harness.Ending) {
-	if l := h.d.serverLinkFor(h.reg.Agent); l != nil {
-		l.sessionClosed(e.Session, e.Profile, e.Released)
+	if l := h.link(); l != nil {
+		l.SessionClosed(e.Session, e.Profile, e.Released)
 	}
 }
 
@@ -232,14 +232,14 @@ func pluginSignals(declared map[string]bool) harness.Signals {
 }
 
 func (h pluginHarness) Models(ctx context.Context) (harness.Models, error) {
-	if server := h.d.serverLinkFor(h.reg.Agent); server != nil {
-		return server.harnessModels(ctx, false)
+	if server := h.link(); server != nil {
+		return server.Models(ctx, false)
 	}
 	if h.reg.PluginName == "" {
 		return harness.Models{}, fmt.Errorf("harness %q is not available", h.reg.Agent)
 	}
 	if !h.reg.Capabilities["model_discovery"] {
-		return noModelDiscovery, nil
+		return harness.NoModelDiscovery, nil
 	}
 	var reported struct {
 		Models []protocol.HarnessModel `json:"models"`

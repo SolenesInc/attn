@@ -1,15 +1,13 @@
-package daemon
+package appserver
 
 import (
 	"context"
 	"encoding/json"
-
-	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/harness/appserver"
 	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/effectrpc"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
@@ -18,12 +16,12 @@ import (
 
 type serverFeed struct {
 	p            *serverConnection
-	l            *serverLink
+	l            *Link
 	c            *effectrpc.Client
 	session      protocol.SessionID
 	conversation string
 	cancel       context.CancelFunc
-	events       linkEvents
+	events       appServerEvents
 	seen         int64
 	launched     time.Time
 	calls        map[string]serverToolCall
@@ -65,32 +63,32 @@ type serverView struct {
 	Docs    map[string]json.RawMessage `json:"docs"`
 }
 
-func (l *serverLink) watchesConversations() bool {
+func (l *Link) WatchesConversations() bool {
 	if l == nil {
 		return false
 	}
-	return l.can(appserver.AbilityWatch)
+	return l.Can(AbilityWatch)
 }
 
 func (p *serverConnection) openFeeds(c *effectrpc.Client, conversations map[string]bool, live bool) {
 	for id, l := range p.sessions() {
-		conversation := p.d.serverConversation(id)
-		if conversation == "" || !l.watchesConversations() || (conversations != nil && !conversations[conversation]) {
+		conversation := p.c.host.Sessions().Conversation(id)
+		if conversation == "" || !l.WatchesConversations() || (conversations != nil && !conversations[conversation]) {
 			continue
 		}
 		if _, open := p.feeds[id]; open {
 			continue
 		}
-		ctx, cancel := context.WithCancel(p.d.life.Context())
-		stored := p.d.store.ServerFeed(id)
-		f := &serverFeed{p: p, l: l, c: c, session: id, conversation: conversation, cancel: cancel, seen: stored.Entry, launched: p.d.store.SessionLaunchedAt(id), calls: map[string]serverToolCall{}}
+		ctx, cancel := context.WithCancel(p.c.host.Life().Context())
+		stored := p.c.host.Records().Feed(id)
+		f := &serverFeed{p: p, l: l, c: c, session: id, conversation: conversation, cancel: cancel, seen: stored.Entry, launched: p.c.host.Sessions().LaunchedAt(id), calls: map[string]serverToolCall{}}
 		f.baselined = stored.UsageBaseline != "" || stored.Entry > 0
 		_ = json.Unmarshal([]byte(stored.UsageBaseline), &f.baseline)
 		if p.feeds == nil {
 			p.feeds = make(map[protocol.SessionID]*serverFeed)
 		}
 		p.feeds[id] = f
-		if !p.d.life.Go("serverFeed", func() { f.run(ctx, live) }) {
+		if !p.c.host.Life().Go("serverFeed", func() { f.run(ctx, live) }) {
 			cancel()
 			delete(p.feeds, id)
 		}
@@ -124,13 +122,13 @@ func (f *serverFeed) run(ctx context.Context, live bool) {
 		}
 		fromLive := live || !first
 		first = false
-		f.events.run(f.p.d, func() {
+		f.events.run(f.p.c, func() {
 			if ctx.Err() == nil {
 				f.apply(ctx, item, fromLive)
 			}
 		})
 	})
-	f.p.events.run(f.p.d, func() {
+	f.p.events.run(f.p.c, func() {
 		if f.p.feeds[f.session] == f {
 			delete(f.p.feeds, f.session)
 		}
@@ -141,7 +139,7 @@ func (f *serverFeed) run(ctx context.Context, live bool) {
 }
 
 func (f *serverFeed) apply(ctx context.Context, item serverViewItem, live bool) {
-	if f.p.d.sessionMonitor(f.session) == nil {
+	if _, open := f.p.c.host.Sessions().Evidence(f.session); !open {
 		f.cancel()
 		return
 	}
@@ -171,7 +169,7 @@ func (f *serverFeed) apply(ctx context.Context, item serverViewItem, live bool) 
 		if f.sawHistory {
 			f.baseline = f.usageTotals()
 			if encoded, err := json.Marshal(f.baseline); err == nil {
-				f.p.d.store.SaveServerUsageBaseline(f.session, string(encoded))
+				f.p.c.host.Records().SaveUsageBaseline(f.session, string(encoded))
 			}
 		}
 		pausepoint.At(pausepoint.ServerFeedBaselined)
@@ -185,7 +183,7 @@ func (f *serverFeed) apply(ctx context.Context, item serverViewItem, live bool) 
 		f.reportCompactions()
 	}
 	if f.seen != seen {
-		f.p.d.store.SaveServerFeedEntry(f.session, f.seen)
+		f.p.c.host.Records().SaveFeedEntry(f.session, f.seen)
 	}
 }
 
@@ -281,7 +279,7 @@ func (f *serverFeed) applyDocOp(kind string, path []any, args []json.RawMessage)
 }
 
 func (f *serverFeed) catchUp(ctx context.Context, through int64, live bool) {
-	params := map[string]any{"conversation": f.conversation, "from": f.seen + 1, "to": through, "order": "ascending", "limit": sessionTranscriptPageSize}
+	params := map[string]any{"conversation": f.conversation, "from": f.seen + 1, "to": through, "order": "ascending", "limit": pageSize}
 	err := pageEntries(ctx, f.c, params, func(entry transcript.ServerEntry) bool {
 		f.observe(ctx, entry, live)
 		return true
@@ -296,27 +294,26 @@ func (f *serverFeed) observe(ctx context.Context, entry transcript.ServerEntry, 
 		return
 	}
 	f.seen = entry.ID
-	monitor := f.p.d.sessionMonitor(f.session)
-	if monitor == nil {
+	if _, open := f.p.c.host.Sessions().Evidence(f.session); !open {
 		return
 	}
 	if written, dated := entry.Written(); !dated || written.Before(f.launched) {
 		f.sawHistory = true
 		if entry.Kind == serverPrompt && !f.titledFromHistory {
 			f.titledFromHistory = true
-			f.p.d.events().Prompt(harness.FromSession(f.session), time.Now(), harness.Prompt{Text: entry.Text(), History: true, Titles: true})
+			f.p.c.host.Events().Prompt(harness.FromSession(f.session), time.Now(), harness.Prompt{Text: entry.Text(), History: true, Titles: true})
 		}
 		return
 	}
 	switch entry.Kind {
 	case serverPrompt:
-		f.p.d.events().Prompt(harness.FromSession(f.session), time.Now(), harness.Prompt{Text: entry.Text(), Live: live, Titles: !f.titledFromHistory})
+		f.p.c.host.Events().Prompt(harness.FromSession(f.session), time.Now(), harness.Prompt{Text: entry.Text(), Live: live, Titles: !f.titledFromHistory})
 	case "pi.assistant":
 		for _, call := range entry.ToolCalls() {
 			f.calls[call.ID] = serverToolCall{name: call.Name, input: call.Arguments}
 		}
 		if strings.TrimSpace(entry.Text()) != "" {
-			f.p.d.events().Replied(f.session)
+			f.p.c.host.Events().Replied(f.session)
 		}
 	case "pi.tool-result":
 		for _, result := range entry.ToolResults() {
@@ -331,7 +328,7 @@ func (f *serverFeed) observe(ctx context.Context, entry transcript.ServerEntry, 
 			if !known {
 				continue
 			}
-			f.p.d.serverToolFinished(f.session, call.name, call.input, result.Content)
+			f.p.c.serverToolFinished(f.session, call.name, call.input, result.Content)
 		}
 	}
 }
@@ -388,7 +385,7 @@ func (f *serverFeed) reportUsage() {
 		})
 	}
 	if len(observations) > 0 {
-		f.p.d.events().Usage(f.session, f.l.b.agent, observations)
+		f.p.c.host.Events().Usage(f.session, f.l.b.agent, observations)
 	}
 }
 
@@ -397,15 +394,14 @@ func (f *serverFeed) reportCompactions() {
 		Trigger string `json:"trigger"`
 	}
 	remarshal(f.compactions, &compactions)
-	monitor := f.p.d.sessionMonitor(f.session)
-	if active, _ := monitor.Evidence(); active.Compacting == (len(compactions) > 0) {
+	if active, _ := f.p.c.host.Sessions().Evidence(f.session); active.Compacting == (len(compactions) > 0) {
 		return
 	}
 	trigger := ""
 	if len(compactions) > 0 {
 		trigger = compactions[0].Trigger
 	}
-	f.p.d.events().Compacting(harness.FromSession(f.session), len(compactions) > 0, trigger)
+	f.p.c.host.Events().Compacting(harness.FromSession(f.session), len(compactions) > 0, trigger)
 }
 
 func decodeJSON(raw json.RawMessage) any {

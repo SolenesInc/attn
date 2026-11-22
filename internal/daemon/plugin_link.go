@@ -22,8 +22,8 @@ type pluginConversation struct {
 }
 
 func (h pluginHarness) Conversation(facts harness.SessionFacts) harness.Conversation {
-	if l := h.d.serverLinkFor(facts.Harness); l != nil && facts.Lifetime == harness.InServer {
-		return l.conversation(facts)
+	if l := h.d.appServer.Link(facts.Harness); l != nil && facts.Lifetime == harness.InServer {
+		return l.Conversation(facts)
 	}
 	if facts.Run == "" || facts.Route == "terminal" {
 		return typedConversation{refusal: harness.NoCompaction(facts.Harness)}

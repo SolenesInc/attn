@@ -1,4 +1,4 @@
-package daemon
+package appserver
 
 import (
 	"context"
@@ -10,12 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/harness/appserver"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/sessionmonitor"
-	"github.com/victorarias/attn/internal/store"
 )
 
 const (
@@ -23,8 +18,8 @@ const (
 	serverCallLimit  = 5 * time.Second
 )
 
-type serverLink struct {
-	d *Daemon
+type Link struct {
+	c *Client
 	b *serverBinding
 }
 
@@ -43,37 +38,29 @@ type serverEnded struct {
 	Said       string `json:"said"`
 }
 
-func newServerLink(d *Daemon, b *serverBinding) *serverLink { return &serverLink{d: d, b: b} }
+func newLink(c *Client, b *serverBinding) *Link { return &Link{c: c, b: b} }
 
-func (l *serverLink) logf(format string, args ...any) {
-	l.d.logf(l.b.agent+": "+format, args...)
+func (l *Link) logf(format string, args ...any) {
+	l.c.host.Logf(l.b.agent+": "+format, args...)
 }
 
-func (l *serverLink) kind() string { return l.b.kind }
+func (l *Link) serves(agent string) bool { return agent == l.b.agent }
 
-func (l *serverLink) serves(agent string) bool { return agent == l.b.agent }
-
-func (l *serverLink) holds(sessionID protocol.SessionID) bool {
-	agent, lifetime := l.d.store.SessionLifetime(sessionID)
+func (l *Link) holds(sessionID protocol.SessionID) bool {
+	agent, lifetime := l.c.host.Sessions().Lifetime(sessionID)
 	return lifetime == harness.InServer && l.serves(agent)
 }
 
-func (l *serverLink) canRun(req harness.LaunchRequest) bool { return req.Unattended.Executable == "" }
-
-func (l *serverLink) enabledForNewLaunches() bool {
-	if l.b.plugin == "" {
-		return l.d.offered(l.b.agent)
-	}
-	reg, conn := l.d.ensurePluginRegistry().driverConnection(l.b.agent, l.b.plugin)
-	return l.b.declaration.Load() != nil && conn != nil && reg.Capabilities["server_binding"]
+func (l *Link) enabledForNewLaunches() bool {
+	return l.b.declaration.Load() != nil && l.b.enabled != nil && l.b.enabled()
 }
 
-func (l *serverLink) admit(profile, conversation string) error {
-	for _, holder := range l.d.store.OpenSessionsHolding(conversation) {
-		if _, server := l.d.linkOf(holder).(*serverLink); !server {
+func (l *Link) admit(profile, conversation string) error {
+	for _, holder := range l.c.host.Sessions().Holding(conversation) {
+		if l.c.serverHolding(holder) == nil {
 			continue
 		}
-		if session := l.d.store.Get(holder); session != nil {
+		if session := l.c.host.Sessions().Get(holder); session != nil {
 			if session.ProfileID != profile {
 				return fmt.Errorf("conversation %s is open in a session of profile %s; close it there first", conversation, session.ProfileID)
 			}
@@ -85,26 +72,26 @@ func (l *serverLink) admit(profile, conversation string) error {
 	return nil
 }
 
-func (l *serverLink) prepareLaunch(opts *ptybackend.SpawnOptions, profile string) error {
-	if _, err := l.ensureServer(l.d.life.Context(), opts); err != nil {
+func (l *Link) prepareLaunch(req *harness.LaunchRequest) error {
+	if _, err := l.ensureServer(l.c.host.Life().Context(), req); err != nil {
 		return err
 	}
-	return l.d.store.SaveTerminalView(store.TerminalView{TerminalID: string(opts.ID), Link: l.b.kind, ProfileID: profile})
+	return l.c.host.Records().SaveTerminalView(harness.TerminalView{Terminal: req.Terminal, Kind: l.b.kind, Profile: req.Profile})
 }
 
-func (l *serverLink) relaunch(opts *ptybackend.SpawnOptions) error {
-	_, err := l.ensureServer(l.d.life.Context(), opts)
+func (l *Link) relaunch(req *harness.LaunchRequest) error {
+	_, err := l.ensureServer(l.c.host.Life().Context(), req)
 	var refused *serverHandshakeRefusal
 	if errors.As(err, &refused) {
 		return err
 	}
 	if err != nil {
-		l.logf("relaunching terminal %s before its server answers: %v", opts.ID, err)
+		l.logf("relaunching terminal %s before its server answers: %v", req.Terminal, err)
 	}
 	return nil
 }
 
-func (l *serverLink) resolveCaller(t protocol.TerminalID) (protocol.SessionID, harness.TerminalID, bool) {
+func (l *Link) resolveCaller(t protocol.TerminalID) (protocol.SessionID, harness.TerminalID, bool) {
 	conversation, ok := l.b.conversationOf(harness.TerminalID(t))
 	if !ok {
 		return "", "", false
@@ -113,27 +100,27 @@ func (l *serverLink) resolveCaller(t protocol.TerminalID) (protocol.SessionID, h
 	if session == "" {
 		return "", "", true
 	}
-	return session, l.d.primaryTerminal(session), true
+	return session, l.c.host.Sessions().PrimaryTerminal(session), true
 }
 
-func (l *serverLink) serverTerminal(string) harness.TerminalID { return l.b.terminal }
+func (l *Link) ServerTerminal(string) harness.TerminalID { return l.b.terminal }
 
-func (l *serverLink) terminalDropped(t harness.TerminalID) {
-	if err := l.d.store.DeleteTerminalView(string(t)); err != nil {
+func (l *Link) terminalDropped(t harness.TerminalID) {
+	if err := l.c.host.Records().DeleteTerminalView(t); err != nil {
 		l.logf("%v", err)
 	}
 }
 
-func (l *serverLink) recoverViews(ctx context.Context) {
-	views, err := l.d.store.TerminalViews(l.b.kind)
+func (l *Link) recoverViews(ctx context.Context) {
+	views, err := l.c.host.Records().TerminalViews(l.b.kind)
 	if err != nil {
 		l.logf("%v", err)
 		return
 	}
-	live := l.d.liveTerminals(ctx)
+	live := l.c.host.Terminals().Live(ctx)
 	for _, view := range views {
-		if _, running := live[harness.TerminalID(view.TerminalID)]; !running {
-			l.terminalDropped(harness.TerminalID(view.TerminalID))
+		if _, running := live[view.Terminal]; !running {
+			l.terminalDropped(view.Terminal)
 		}
 	}
 }
@@ -148,9 +135,7 @@ type serverProviderModels struct {
 	} `json:"models"`
 }
 
-var noModelDiscovery = harness.Models{Detail: "This harness does not expose model discovery. Add an exact model or use its default."}
-
-func (l *serverLink) harnessModels(ctx context.Context, refresh bool) (harness.Models, error) {
+func (l *Link) Models(ctx context.Context, refresh bool) (harness.Models, error) {
 	models, err := l.models(ctx, refresh)
 	if err != nil {
 		return harness.Models{}, err
@@ -158,14 +143,15 @@ func (l *serverLink) harnessModels(ctx context.Context, refresh bool) (harness.M
 	return harness.Models{List: models, Detail: "Models of the providers the " + l.b.name + " server has."}, nil
 }
 
-func refreshParams(refresh bool) map[string]any {
+// RefreshParams asks the server to reread what it caches instead of answering from its cache.
+func RefreshParams(refresh bool) map[string]any {
 	if refresh {
 		return map[string]any{"refresh": true}
 	}
 	return map[string]any{}
 }
 
-func (l *serverLink) call(ctx context.Context, method string, params, answer any) error {
+func (l *Link) Call(ctx context.Context, method string, params, answer any) error {
 	p, err := l.connection()
 	if err != nil {
 		return err
@@ -178,9 +164,9 @@ func (l *serverLink) call(ctx context.Context, method string, params, answer any
 	return c.Call(ctx, method, params, answer)
 }
 
-func (l *serverLink) models(ctx context.Context, refresh bool) ([]protocol.HarnessModel, error) {
+func (l *Link) models(ctx context.Context, refresh bool) ([]protocol.HarnessModel, error) {
 	var providers []serverProviderModels
-	if err := l.call(ctx, "models/list", refreshParams(refresh), &providers); err != nil {
+	if err := l.Call(ctx, "models/list", RefreshParams(refresh), &providers); err != nil {
 		return nil, err
 	}
 	var models []protocol.HarnessModel
@@ -196,17 +182,17 @@ func (l *serverLink) models(ctx context.Context, refresh bool) ([]protocol.Harne
 	return models, nil
 }
 
-func (l *serverLink) targets(ctx context.Context, cwd string) ([]protocol.ExecutionTarget, error) {
+func (l *Link) Targets(ctx context.Context, cwd string) ([]protocol.ExecutionTarget, error) {
 	targets := []protocol.ExecutionTarget{}
-	if err := l.call(ctx, "targets/list", map[string]any{"cwd": cwd}, &targets); err != nil {
+	if err := l.Call(ctx, "targets/list", map[string]any{"cwd": cwd}, &targets); err != nil {
 		return nil, err
 	}
 	return targets, nil
 }
 
-func (l *serverLink) sessions() []protocol.SessionID {
+func (l *Link) sessions() []protocol.SessionID {
 	var open []protocol.SessionID
-	for _, session := range l.d.store.List("") {
+	for _, session := range l.c.host.Sessions().List() {
 		if l.runsHere(session.ID) {
 			open = append(open, session.ID)
 		}
@@ -214,12 +200,12 @@ func (l *serverLink) sessions() []protocol.SessionID {
 	return open
 }
 
-func (l *serverLink) runsHere(sessionID protocol.SessionID) bool {
-	return l.holds(sessionID) && l.d.sessionHost(sessionID) == ""
+func (l *Link) runsHere(sessionID protocol.SessionID) bool {
+	return l.holds(sessionID) && !l.c.host.Sessions().Remote(sessionID)
 }
 
-func (l *serverLink) holder(conversation string) protocol.SessionID {
-	for _, sessionID := range l.d.store.OpenSessionsHolding(conversation) {
+func (l *Link) holder(conversation string) protocol.SessionID {
+	for _, sessionID := range l.c.host.Sessions().Holding(conversation) {
 		if l.runsHere(sessionID) {
 			return sessionID
 		}
@@ -227,77 +213,66 @@ func (l *serverLink) holder(conversation string) protocol.SessionID {
 	return ""
 }
 
-func (l *serverLink) ensureServer(ctx context.Context, opts *ptybackend.SpawnOptions) (*effectrpc.Client, error) {
+func (l *Link) ensureServer(ctx context.Context, req *harness.LaunchRequest) (*effectrpc.Client, error) {
 	p, err := l.connection()
 	if err != nil {
 		return nil, err
 	}
-	return p.ensure(ctx, l, opts, true)
+	return p.ensure(ctx, l, req, true)
 }
 
-func (l *serverLink) startServer(ctx context.Context, opts *ptybackend.SpawnOptions, terminal harness.TerminalID) error {
-	if _, live := l.d.liveTerminals(ctx)[terminal]; live {
-		if err := l.d.ptyBackend.Remove(ctx, terminal); err != nil && !errors.Is(err, pty.ErrSessionNotFound) && !errors.Is(err, os.ErrNotExist) {
+func (l *Link) startServer(ctx context.Context, req *harness.LaunchRequest, terminal harness.TerminalID) error {
+	if _, live := l.c.host.Terminals().Live(ctx)[terminal]; live {
+		if err := l.c.host.Terminals().Remove(ctx, terminal); err != nil {
 			return fmt.Errorf("clear the exited %s server: %w", l.b.name, err)
 		}
 	}
-	executable := l.executable(opts)
+	executable := l.executable(req)
 	home := l.home()
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return err
 	}
-	loginEnv, err := l.d.launchEnv(ctx)
-	if err != nil {
-		return fmt.Errorf("start the %s server: %w", l.b.name, err)
-	}
 	p := l.b.declaration.Load()
 	args, homeVariable := p.ServeArgs, p.HomeEnv
-	argv, env := append([]string{executable}, args...), append(append([]string(nil), serverEnv...), homeVariable+"="+home)
-	spawn := ptybackend.SpawnOptions{
-		ID: terminal, Agent: string(terminal), Label: l.b.name + " server", CWD: home, Cols: 80, Rows: 24,
-		Executable:    resolvedBinary(executable),
-		AgentArgv:     argv,
-		AgentEnv:      env,
-		LoginShellEnv: loginEnv,
-		DaemonEnv:     l.d.spawnRoutingEnv(),
-	}
-	if err := l.d.startAdapterTerminal(ctx, appServerTerminalOwner, spawn); err != nil {
+	argv, env := append([]string{executable}, args...), []string{"BUN_GC_TIMER_DISABLE=1", homeVariable + "=" + home}
+	spawn := harness.TerminalSpec{ID: terminal, Label: l.b.name + " server", Dir: home, Executable: resolvedBinary(executable), Argv: argv, Env: env}
+	if err := l.c.host.Terminals().Start(ctx, spawn); err != nil {
 		return fmt.Errorf("start the %s server: %w", l.b.name, err)
 	}
 	l.logf("started %s for %s in terminal %s", strings.Join(argv, " "), home, terminal)
 	return nil
 }
 
-func (l *serverLink) tracksCompletions() bool {
+func (l *Link) tracksCompletions() bool {
 	if p := l.b.declaration.Load(); p != nil {
 		return p.Recovery == "numbered-completions"
 	}
 	return false
 }
 
-func (l *serverLink) launchStarted(id protocol.SessionID) {
+func (l *Link) launchStarted(id protocol.SessionID) {
 	p, err := l.connection()
 	if err == nil {
 		p.reconcile(l, []protocol.SessionID{id}, true)
 	}
 }
 
-func (l *serverLink) remembersItsLastRun(sessionID protocol.SessionID) bool {
-	session := l.d.store.Get(sessionID)
+func (l *Link) remembersItsLastRun(sessionID protocol.SessionID) bool {
+	session := l.c.host.Sessions().Get(sessionID)
 	return session != nil && (session.State == protocol.SessionStateIdle || session.State == protocol.SessionStateWaitingInput)
 }
 
-func (l *serverLink) settlesOnServer(sessionID protocol.SessionID) bool {
-	session := l.d.store.Get(sessionID)
+func (l *Link) settlesOnServer(sessionID protocol.SessionID) bool {
+	session := l.c.host.Sessions().Get(sessionID)
 	return session != nil && (session.State == protocol.SessionStateWorking || session.State == protocol.SessionStatePendingApproval)
 }
 
-func (l *serverLink) lastRuns(c *effectrpc.Client) map[string]*serverEnded {
+func (l *Link) lastRuns(c *effectrpc.Client) map[string]*serverEnded {
 	var conversations []struct {
 		ID    string       `json:"id"`
 		Ended *serverEnded `json:"ended"`
 	}
-	ctx, cancel := context.WithTimeout(l.d.life.Context(), serverCallLimit)
+	ctx, cancel := context.WithTimeout(l.c.host.Life().Context(), serverCallLimit)
 	defer cancel()
 	if err := c.Call(ctx, "conversation/list", nil, &conversations); err != nil {
 		l.logf("reading how runs ended while attn was away: %v", err)
@@ -309,33 +284,36 @@ func (l *serverLink) lastRuns(c *effectrpc.Client) map[string]*serverEnded {
 	return ended
 }
 
-func (l *serverLink) unseen(sessionID protocol.SessionID, ended *serverEnded) *serverEnded {
-	if ended == nil || ended.Completion == 0 || ended.Completion > l.d.sessionMonitor(sessionID).ObservedServerCompletion() {
+func (l *Link) unseen(sessionID protocol.SessionID, ended *serverEnded) *serverEnded {
+	if ended == nil || ended.Completion == 0 || ended.Completion > l.observedCompletion(sessionID) {
 		return ended
 	}
 	return nil
 }
 
-func (l *serverLink) observeQuiet(sessionID protocol.SessionID, ended *serverEnded) {
+func (l *Link) observeQuiet(sessionID protocol.SessionID, ended *serverEnded) {
 	if ended != nil {
-		l.observe(sessionID, sessionmonitor.StateSourceServerReport, "idle", ended)
+		l.observe(sessionID, false, "idle", ended)
 		return
 	}
-	l.observe(sessionID, sessionmonitor.StateSourceServerQuiet, "idle", nil)
+	l.observe(sessionID, true, "idle", nil)
 }
 
-func (l *serverLink) observe(sessionID protocol.SessionID, source, status string, ended *serverEnded) {
-	monitor := l.d.sessionMonitor(sessionID)
-	if monitor == nil {
+func (l *Link) observedCompletion(sessionID protocol.SessionID) int64 {
+	evidence, _ := l.c.host.Sessions().Evidence(sessionID)
+	return evidence.ObservedCompletion
+}
+
+func (l *Link) observe(sessionID protocol.SessionID, quiet bool, status string, ended *serverEnded) {
+	evidence, ok := l.c.host.Sessions().Evidence(sessionID)
+	if !ok {
 		return
 	}
-	now := time.Now()
-	l.d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: source, ObservedAt: now}, status)
-	evidence, _ := monitor.Evidence()
-	reporter, inferred := harness.FromSession(sessionID), source == sessionmonitor.StateSourceServerQuiet
+	l.c.host.Sessions().TraceClaim(sessionID, quiet, status, time.Now())
+	reporter := harness.FromSession(sessionID)
 	turn := func(e harness.TurnEvent) {
-		e.Inferred = inferred
-		l.d.events().Turn(reporter, time.Now(), e)
+		e.Inferred = quiet
+		l.c.host.Events().Turn(reporter, time.Now(), e)
 	}
 	switch status {
 	case "working":
@@ -372,42 +350,42 @@ func (l *serverLink) observe(sessionID protocol.SessionID, source, status string
 }
 
 type serverConversation struct {
-	link    *serverLink
+	link    *Link
 	session protocol.SessionID
 }
 
-func (l *serverLink) conversation(facts harness.SessionFacts) harness.Conversation {
+func (l *Link) Conversation(facts harness.SessionFacts) harness.Conversation {
 	return serverConversation{link: l, session: facts.Session}
 }
 
 func (s serverConversation) Deliver(ctx context.Context, in harness.Input) harness.Custody {
-	if in.PendingApproval && !s.link.can(appserver.AbilityQuestionSafe) {
+	if in.PendingApproval && !s.link.Can(AbilityQuestionSafe) {
 		return harness.Custody{Outcome: harness.NotMine}
 	}
 	return s.link.deliver(ctx, s.session, in)
 }
 
 func (s serverConversation) Compact(ctx context.Context, in harness.Input) harness.Custody {
-	if !s.link.can(appserver.AbilityCompact) {
+	if !s.link.Can(AbilityCompact) {
 		return harness.Custody{Outcome: harness.NotMine}
 	}
 	return s.compact(ctx, in)
 }
 
 func (s serverConversation) CanCompact() error {
-	if s.link.can(appserver.AbilityCompact) {
+	if s.link.Can(AbilityCompact) {
 		return nil
 	}
 	return harness.NoCompaction(s.link.b.agent)
 }
 
-func (l *serverLink) deliver(ctx context.Context, session protocol.SessionID, in harness.Input) harness.Custody {
-	conversation := l.d.serverConversation(session)
+func (l *Link) deliver(ctx context.Context, session protocol.SessionID, in harness.Input) harness.Custody {
+	conversation := l.c.host.Sessions().Conversation(session)
 	if conversation == "" {
 		return harness.Custody{Reason: fmt.Sprintf("session %s holds no %s conversation", session, l.b.name)}
 	}
 	params := map[string]any{"conversation": conversation, "requestId": in.ID, "author": l.author(in.Voice), "text": in.Text}
-	if l.can(appserver.AbilitySteer) {
+	if l.Can(AbilitySteer) {
 		params["steer"] = true
 	}
 	c, err := l.ensureServer(ctx, nil)
@@ -427,7 +405,7 @@ type serverAuthorRef struct {
 	Name string `json:"name"`
 }
 
-func (l *serverLink) author(voice harness.Voice) serverAuthorRef {
+func (l *Link) author(voice harness.Voice) serverAuthorRef {
 	name := "attn"
 	if voice == harness.VoiceUser {
 		name = userName()
@@ -435,7 +413,7 @@ func (l *serverLink) author(voice harness.Voice) serverAuthorRef {
 	return serverAuthorRef{ID: name, Name: name}
 }
 
-func (l *serverLink) can(ability appserver.Ability) bool {
+func (l *Link) Can(ability Ability) bool {
 	return l.b.declaration.Load().Can(ability)
 }
 
@@ -446,15 +424,15 @@ func userName() string {
 	return "you"
 }
 
-func (l *serverLink) sessionClosed(sessionID protocol.SessionID, _ string, released string) {
+func (l *Link) SessionClosed(sessionID protocol.SessionID, _ string, released string) {
 	if p, err := l.connection(); err == nil {
-		p.events.run(l.d, func() { p.closeFeed(sessionID) })
+		p.events.run(l.c, func() { p.closeFeed(sessionID) })
 	}
 	declaration := l.b.declaration.Load()
 	if declaration == nil || declaration.OnClose == "leave-running" || released == "" {
 		return
 	}
-	ctx, cancel := context.WithTimeout(l.d.life.Context(), serverCallLimit)
+	ctx, cancel := context.WithTimeout(l.c.host.Life().Context(), serverCallLimit)
 	defer cancel()
 	p, err := l.connection()
 	if err != nil {
@@ -471,30 +449,28 @@ func (l *serverLink) sessionClosed(sessionID protocol.SessionID, _ string, relea
 	}
 }
 
-func (l *serverLink) profileReleased(string) { l.releaseUnlessUsed() }
-
-func (l *serverLink) releaseUnlessUsed() {
+func (l *Link) releaseUnlessUsed() {
 	if p, err := l.connection(); err == nil {
 		p.releaseUnlessUsed()
 	}
 }
 
-func (l *serverLink) terminalExited(t harness.TerminalID) {
+func (l *Link) terminalExited(t harness.TerminalID) {
 	if t != l.b.terminal {
 		l.terminalDropped(t)
 		return
 	}
 	l.logf("the %s server exited", l.b.name)
-	if err := l.d.removePTYSession(t); err != nil {
-		l.d.logf("pty backend remove on exit failed for %s: %v", t, err)
+	if err := l.c.host.Terminals().Remove(l.c.host.Life().Context(), t); err != nil {
+		l.c.host.Logf("pty backend remove on exit failed for %s: %v", t, err)
 	}
 }
 
-func (l *serverLink) recoverProcesses(ctx context.Context) {
+func (l *Link) recoverProcesses(ctx context.Context) {
 	if len(l.sessions()) == 0 {
 		return
 	}
-	l.d.life.Go(l.b.agent+"Reconnect", func() {
+	l.c.host.Life().Go(l.b.agent+"Reconnect", func() {
 		if _, err := l.ensureServer(ctx, nil); err != nil {
 			l.logf("reconnect to the %s server: %v", l.b.name, err)
 			return

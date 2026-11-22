@@ -113,10 +113,11 @@ func (d *Daemon) terminalEvent(t harness.TerminalID, e harness.TerminalEvent) {
 	for _, h := range d.harnesses() {
 		h.Terminal(t, e)
 	}
+	d.appServer.Terminal(t, e)
 }
 
 func (d *Daemon) callerResolvers() []harness.CallerResolver {
-	var resolvers []harness.CallerResolver
+	resolvers := []harness.CallerResolver{d.appServer}
 	for _, h := range d.harnesses() {
 		if r, ok := harness.As[harness.CallerResolver](h); ok {
 			resolvers = append(resolvers, r)

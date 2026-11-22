@@ -40,6 +40,7 @@ import (
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/harness/appserver"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/layouttree"
@@ -220,9 +221,7 @@ type Daemon struct {
 	claudeModState           *claudeMod
 	codexSharedOnce          sync.Once
 	codexSharedState         *codexShared
-	serverLinksMu            sync.Mutex
-	serverLinks              map[string]*serverLink
-	serverConnections        map[string]*serverConnection
+	appServer                *appserver.Client
 	attachmentMu             sync.Mutex
 	inboxMu                  sync.Mutex
 	inboxStates              map[who.Address]*inboxDeliveryState
@@ -535,6 +534,7 @@ func New(socketPath string) *Daemon {
 	d.loginEnv = newLoginEnv(&d.life, d.logf)
 	d.pluginStartEnded = make(chan struct{})
 	d.codeNav = d.newCodeNavigation()
+	d.appServer = appserver.New(d.host(appServerTerminalOwner))
 	return d
 }
 
@@ -673,7 +673,7 @@ func (d *Daemon) Start() error {
 	if err := d.openStore(); err != nil {
 		return err
 	}
-	d.linkBuiltInServers()
+	d.bindBuiltInServers()
 	if err := d.restorePluginServerOwners(); err != nil {
 		return fmt.Errorf("restore server ownership: %w", err)
 	}

@@ -383,6 +383,9 @@ type Health struct {
 	Reason       string
 }
 
+// NoModelDiscovery is the models answer of a harness that cannot list its models.
+var NoModelDiscovery = Models{Detail: "This harness does not expose model discovery. Add an exact model or use its default."}
+
 func NoCompaction(id ID) error {
 	return fmt.Errorf("attn has no way to compact a %s session; close without --compact", id)
 }

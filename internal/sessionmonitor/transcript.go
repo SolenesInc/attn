@@ -23,12 +23,6 @@ const (
 
 const TranscriptPoll stepclock.Name = "transcript-poll"
 
-const (
-	AnnotatableMessageMaxChars = 64 * 1024
-	AnnotatableWindowMessages  = 32
-	AnnotatableWindowMaxChars  = 256 * 1024
-)
-
 type transcriptWatcher struct {
 	monitor       *Monitor
 	agent         protocol.SessionAgent
@@ -59,16 +53,8 @@ func newTranscriptWatcher(monitor *Monitor, agent protocol.SessionAgent, cwd str
 		stopCh:    make(chan struct{}),
 		doneCh:    make(chan struct{}),
 		status:    protocol.SessionMessageWindowStatusDiscovering,
-		window:    NewAnnotatableWindow(),
+		window:    transcript.NewAnnotatableWindow(),
 	}
-}
-
-func NewAnnotatableWindow() *transcript.AssistantWindow {
-	return transcript.NewAssistantWindow(transcript.AssistantWindowLimits{
-		MaxMessages:     AnnotatableWindowMessages,
-		MaxMessageChars: AnnotatableMessageMaxChars,
-		MaxTotalChars:   AnnotatableWindowMaxChars,
-	})
 }
 
 func (w *transcriptWatcher) snapshot() AssistantWindow {
@@ -102,7 +88,7 @@ func (w *transcriptWatcher) resetSource(status protocol.SessionMessageWindowStat
 	w.status = status
 	w.detail = detail
 	w.transcriptPath = path
-	w.window = NewAnnotatableWindow()
+	w.window = transcript.NewAnnotatableWindow()
 	if omittedPrefix {
 		w.window.MarkPrefixOmitted()
 	}

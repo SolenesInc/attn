@@ -1,4 +1,4 @@
-package daemon
+package appserver
 
 import (
 	"context"
@@ -12,119 +12,15 @@ import (
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/statemarker"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-type linkedConversations struct{ d *Daemon }
-
-func (c linkedConversations) watching(ref harness.ConversationRef) *serverLink {
-	if l := c.d.serverLinkFor(string(ref.Harness)); l.watchesConversations() {
-		return l
-	}
-	return nil
-}
-
-func (c linkedConversations) Page(ctx context.Context, ref harness.ConversationRef, cursor string, limit int) (transcript.EventPage, error) {
-	l := c.watching(ref)
-	switch {
-	case l == nil:
-		return fileConversations(c).Page(ctx, ref, cursor, limit)
-	case ref.ID == "":
-		return transcript.EventPage{}, errTranscriptUnavailable
-	}
-	return l.transcriptPage(ctx, ref.ID, cursor, limit)
-}
-
-func (c linkedConversations) LastReply(ctx context.Context, ref harness.ConversationRef, max int) (string, error) {
-	l := c.watching(ref)
-	switch {
-	case l == nil:
-		return fileConversations(c).LastReply(ctx, ref, max)
-	case ref.ID == "":
-		return "", nil
-	}
-	message, err := l.lastReply(ctx, ref.ID)
-	if runes := []rune(message); len(runes) > max {
-		message = string(runes[len(runes)-max:])
-	}
-	return message, err
-}
-
-func (c linkedConversations) Window(ctx context.Context, ref harness.ConversationRef) (harness.AssistantWindow, bool) {
-	l := c.watching(ref)
-	switch {
-	case l == nil:
-		return fileConversations(c).Window(ctx, ref)
-	case ref.ID == "":
-		return harness.AssistantWindow{}, false
-	}
-	return l.assistantWindow(ctx, ref.ID)
-}
-
-func (c linkedConversations) Activity(ctx context.Context, ref harness.ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error) {
-	l := c.watching(ref)
-	switch {
-	case l == nil:
-		return fileConversations(c).Activity(ctx, ref, kind, cursor)
-	case ref.ID == "":
-		return protocol.TranscriptActivityResult{}, nil
-	}
-	return l.activity(ctx, ref.ID, kind, cursor)
-}
-
-func (l *serverLink) entries(ctx context.Context, params map[string]any, each func(transcript.ServerEntry) bool) error {
-	return l.entriesFrom(ctx, true, params, each)
-}
-
-func (l *serverLink) entriesFrom(ctx context.Context, start bool, params map[string]any, each func(transcript.ServerEntry) bool) error {
-	p, err := l.connection()
-	if err != nil {
-		return err
-	}
-	c, release, err := p.borrow(ctx, l, start)
-	if err != nil {
-		return err
-	}
-	defer release()
-	return pageEntries(ctx, c, params, each)
-}
-
-const serverEntriesPerCall = 8
-
-func pageEntries(ctx context.Context, c *effectrpc.Client, params map[string]any, each func(transcript.ServerEntry) bool) error {
-	if limit, ok := params["limit"].(int); !ok || limit > serverEntriesPerCall {
-		params["limit"] = serverEntriesPerCall
-	}
-	for {
-		var page struct {
-			Entries []transcript.ServerEntry `json:"entries"`
-			Next    json.RawMessage          `json:"next"`
-		}
-		callCtx, cancel := context.WithTimeout(ctx, serverCallLimit)
-		err := c.Call(callCtx, "conversation/entries", params, &page)
-		cancel()
-		if err != nil {
-			return err
-		}
-		for _, entry := range page.Entries {
-			if !each(entry) {
-				return nil
-			}
-		}
-		if len(page.Next) == 0 || string(page.Next) == "null" {
-			return nil
-		}
-		params["cursor"] = page.Next
-	}
-}
-
-func (l *serverLink) transcriptPage(ctx context.Context, conversation, cursor string, limit int) (transcript.EventPage, error) {
+func (l *Link) TranscriptPage(ctx context.Context, conversation, cursor string, limit int) (transcript.EventPage, error) {
 	return l.transcriptPageFrom(ctx, true, conversation, cursor, limit)
 }
 
-func (l *serverLink) transcriptPageFrom(ctx context.Context, start bool, conversation, cursor string, limit int) (transcript.EventPage, error) {
+func (l *Link) transcriptPageFrom(ctx context.Context, start bool, conversation, cursor string, limit int) (transcript.EventPage, error) {
 	from, skip, err := transcript.ParseServerCursor(cursor)
 	if err != nil {
 		return transcript.EventPage{}, err
@@ -159,9 +55,9 @@ func (l *serverLink) transcriptPageFrom(ctx context.Context, start bool, convers
 	return page, err
 }
 
-func (l *serverLink) lastReply(ctx context.Context, conversation string) (string, error) {
+func (l *Link) LastReply(ctx context.Context, conversation string) (string, error) {
 	reply := ""
-	err := l.entries(ctx, map[string]any{"conversation": conversation, "order": "descending", "limit": sessionTranscriptPageSize}, func(entry transcript.ServerEntry) bool {
+	err := l.entries(ctx, map[string]any{"conversation": conversation, "order": "descending", "limit": pageSize}, func(entry transcript.ServerEntry) bool {
 		if entry.Kind != "pi.assistant" {
 			return true
 		}
@@ -171,7 +67,7 @@ func (l *serverLink) lastReply(ctx context.Context, conversation string) (string
 	return reply, err
 }
 
-func (l *serverLink) newestEntry(ctx context.Context, conversation string) (transcript.ServerEntry, bool, error) {
+func (l *Link) newestEntry(ctx context.Context, conversation string) (transcript.ServerEntry, bool, error) {
 	var newest transcript.ServerEntry
 	found := false
 	err := l.entriesFrom(ctx, false, map[string]any{"conversation": conversation, "order": "descending", "limit": 1}, func(entry transcript.ServerEntry) bool {
@@ -181,7 +77,7 @@ func (l *serverLink) newestEntry(ctx context.Context, conversation string) (tran
 	return newest, found, err
 }
 
-func (l *serverLink) lastWritten(ctx context.Context, conversation string) (time.Time, bool, error) {
+func (l *Link) lastWritten(ctx context.Context, conversation string) (time.Time, bool, error) {
 	var written time.Time
 	found := false
 	err := l.entriesFrom(ctx, false, map[string]any{"conversation": conversation, "order": "descending", "limit": serverEntriesPerCall}, func(entry transcript.ServerEntry) bool {
@@ -193,7 +89,7 @@ func (l *serverLink) lastWritten(ctx context.Context, conversation string) (time
 	return written, found, err
 }
 
-func (l *serverLink) activity(ctx context.Context, conversation, kind, cursor string) (protocol.TranscriptActivityResult, error) {
+func (l *Link) Activity(ctx context.Context, conversation, kind, cursor string) (protocol.TranscriptActivityResult, error) {
 	var result protocol.TranscriptActivityResult
 	switch kind {
 	case "head":
@@ -234,12 +130,12 @@ func (l *serverLink) activity(ctx context.Context, conversation, kind, cursor st
 	return result, nil
 }
 
-func (l *serverLink) assistantWindow(ctx context.Context, conversation string) (harness.AssistantWindow, bool) {
+func (l *Link) AssistantWindow(ctx context.Context, conversation string) (harness.AssistantWindow, bool) {
 	var newestFirst []transcript.ServerEntry
 	read := 0
 	more := false
-	err := l.entriesFrom(ctx, false, map[string]any{"conversation": conversation, "order": "descending", "limit": sessionTranscriptPageSize}, func(entry transcript.ServerEntry) bool {
-		if read == sessionTranscriptPageSize {
+	err := l.entriesFrom(ctx, false, map[string]any{"conversation": conversation, "order": "descending", "limit": pageSize}, func(entry transcript.ServerEntry) bool {
+		if read == pageSize {
 			more = true
 			return false
 		}
@@ -248,9 +144,9 @@ func (l *serverLink) assistantWindow(ctx context.Context, conversation string) (
 		return true
 	})
 	if err != nil {
-		return sessionmonitor.AssistantWindow{}, false
+		return harness.AssistantWindow{}, false
 	}
-	window := sessionmonitor.NewAnnotatableWindow()
+	window := transcript.NewAnnotatableWindow()
 	if more {
 		window.MarkPrefixOmitted()
 	}
@@ -258,11 +154,11 @@ func (l *serverLink) assistantWindow(ctx context.Context, conversation string) (
 		window.Apply(transcript.ServerEntryEvents(newestFirst[i]))
 	}
 	messages, report := window.Snapshot()
-	return sessionmonitor.AssistantWindow{Status: protocol.SessionMessageWindowStatusReady, Messages: messages, Report: report}, true
+	return harness.AssistantWindow{Status: protocol.SessionMessageWindowStatusReady, Messages: messages, Report: report}, true
 }
 
-func (l *serverLink) conversationsResumable(refs []harness.ConversationRef) map[harness.ConversationRef]harness.Availability {
-	known, running, err := l.conversationIDs(l.d.life.Context())
+func (l *Link) ConversationsResumable(refs []harness.ConversationRef) map[harness.ConversationRef]harness.Availability {
+	known, running, err := l.conversationIDs(l.c.host.Life().Context())
 	availability := make(map[harness.ConversationRef]harness.Availability, len(refs))
 	for _, ref := range refs {
 		switch {
@@ -270,7 +166,7 @@ func (l *serverLink) conversationsResumable(refs []harness.ConversationRef) map[
 			availability[ref] = harness.Availability{Resumable: true}
 		case err != nil:
 			availability[ref] = harness.Availability{CheckFailed: true, Reason: fmt.Sprintf("cannot check conversation %s on %s's server: %v", ref.ID, ref.Harness, err)}
-		case !known[ref.ID] && l.d.store.ServerConversationSeen(ref.ID):
+		case !known[ref.ID] && l.c.host.Records().ConversationSeen(ref.ID):
 			availability[ref] = harness.Availability{Reason: fmt.Sprintf("conversation %s is no longer on %s's server", ref.ID, ref.Harness)}
 		default:
 			availability[ref] = harness.Availability{Resumable: true}
@@ -279,7 +175,7 @@ func (l *serverLink) conversationsResumable(refs []harness.ConversationRef) map[
 	return availability
 }
 
-func (l *serverLink) conversationIDs(ctx context.Context) (known map[string]bool, running bool, err error) {
+func (l *Link) conversationIDs(ctx context.Context) (known map[string]bool, running bool, err error) {
 	p, err := l.connection()
 	if err != nil {
 		return nil, false, err
@@ -304,6 +200,48 @@ func (l *serverLink) conversationIDs(ctx context.Context) (known map[string]bool
 	return known, true, nil
 }
 
-func (c linkedConversations) Version(ref harness.ConversationRef) string {
-	return c.d.serverLinkFor(string(ref.Harness)).serverVersion()
+func (l *Link) entries(ctx context.Context, params map[string]any, each func(transcript.ServerEntry) bool) error {
+	return l.entriesFrom(ctx, true, params, each)
+}
+
+func (l *Link) entriesFrom(ctx context.Context, start bool, params map[string]any, each func(transcript.ServerEntry) bool) error {
+	p, err := l.connection()
+	if err != nil {
+		return err
+	}
+	c, release, err := p.borrow(ctx, l, start)
+	if err != nil {
+		return err
+	}
+	defer release()
+	return pageEntries(ctx, c, params, each)
+}
+
+const serverEntriesPerCall = 8
+
+func pageEntries(ctx context.Context, c *effectrpc.Client, params map[string]any, each func(transcript.ServerEntry) bool) error {
+	if limit, ok := params["limit"].(int); !ok || limit > serverEntriesPerCall {
+		params["limit"] = serverEntriesPerCall
+	}
+	for {
+		var page struct {
+			Entries []transcript.ServerEntry `json:"entries"`
+			Next    json.RawMessage          `json:"next"`
+		}
+		callCtx, cancel := context.WithTimeout(ctx, serverCallLimit)
+		err := c.Call(callCtx, "conversation/entries", params, &page)
+		cancel()
+		if err != nil {
+			return err
+		}
+		for _, entry := range page.Entries {
+			if !each(entry) {
+				return nil
+			}
+		}
+		if len(page.Next) == 0 || string(page.Next) == "null" {
+			return nil
+		}
+		params["cursor"] = page.Next
+	}
 }

@@ -160,6 +160,7 @@ func (d *Daemon) settingChanged(key, value string) {
 	for _, h := range d.harnesses() {
 		h.SettingChanged(key)
 	}
+	d.appServer.SettingChanged(key)
 }
 
 func (d *Daemon) refreshChangedSettings(before map[string]string) {

@@ -87,7 +87,7 @@ func (d *Daemon) uninstallPlugin(client *wsClient, name, action string) {
 		d.sendPluginActionResult(client, action, "", false, "plugin name is required")
 		return
 	}
-	if sessions := d.pluginServerSessions(name); sessions > 0 {
+	if sessions := d.appServer.PluginSessions(name); sessions > 0 {
 		d.sendPluginActionResult(client, action, name, false, fmt.Sprintf("plugin %q owns %d open server session(s)", name, sessions))
 		return
 	}
@@ -108,21 +108,7 @@ func (d *Daemon) uninstallPlugin(client *wsClient, name, action string) {
 		return
 	}
 	d.stopAndUnregisterPlugin(name)
-	var removed []*serverLink
-	d.serverLinksMu.Lock()
-	for agent, l := range d.serverLinks {
-		if l.b.plugin == name {
-			removed = append(removed, l)
-			delete(d.serverLinks, agent)
-		}
-	}
-	d.serverLinksMu.Unlock()
-	for _, l := range removed {
-		if p, err := l.connection(); err == nil {
-			p.releaseUnlessUsed()
-			p.reconcileAgentTools()
-		}
-	}
+	d.appServer.ForgetPlugin(name)
 
 	d.publishFact(FactPluginUninstalled, name, nil)
 	d.sendPluginActionResult(client, action, name, true, "")
@@ -187,7 +173,7 @@ func (d *Daemon) pluginsUpdatedMessage() *protocol.PluginsUpdatedMessage {
 			Connected:    connection != nil,
 			Running:      runtime.Running,
 			HealthStatus: protocol.Ptr(healthStatus),
-			CanUninstall: len(d.store.ListAgentDriverRuns(manifest.Name)) == 0 && d.pluginServerSessions(manifest.Name) == 0,
+			CanUninstall: len(d.store.ListAgentDriverRuns(manifest.Name)) == 0 && d.appServer.PluginSessions(manifest.Name) == 0,
 		}
 		runtimePhase := pluginPhaseStopped
 		if supervised {

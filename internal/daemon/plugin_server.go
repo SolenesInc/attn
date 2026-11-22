@@ -2,10 +2,10 @@ package daemon
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/harness/appserver"
 )
 
 func (d *Daemon) restorePluginServerOwners() error {
@@ -13,17 +13,12 @@ func (d *Daemon) restorePluginServerOwners() error {
 	if err != nil {
 		return err
 	}
-	d.serverLinksMu.Lock()
-	defer d.serverLinksMu.Unlock()
-	if d.serverLinks == nil {
-		d.serverLinks = make(map[string]*serverLink)
-	}
 	for agent, owner := range owners {
 		if reservedPluginAgent(agent) {
 			d.logf("skip plugin server ownership: plugin %q claims reserved agent %q", owner, agent)
 			continue
 		}
-		d.serverLinks[agent] = newServerLink(d, newServerBinding(agent, owner, nil))
+		d.appServer.Restore(d.pluginServerBinding(agent, owner, nil))
 	}
 	return nil
 }
@@ -64,50 +59,32 @@ func (d *Daemon) registerPluginDriver(plugin *pluginConnection, params pluginDri
 	if len(params.SkillDirs) > 0 {
 		d.ensureEnabledWorkflowSkillsIn(d.pluginSkillsDirs(params.SkillDirs))
 	}
-	d.serverLinksMu.Lock()
-	defer d.serverLinksMu.Unlock()
 	if existing, exists := registry.driver(agent); exists && existing.PluginName != plugin.name {
 		return fmt.Errorf("agent %q is already registered by plugin %q", agent, existing.PluginName)
 	}
-	l := d.serverLinks[agent]
-	if l != nil && l.b.plugin != plugin.name {
-		return fmt.Errorf("agent %q belongs to plugin %q", agent, l.b.plugin)
-	}
-	if l != nil && params.Server == nil {
-		return fmt.Errorf("agent %q requires its server binding", agent)
-	}
-	if l != nil && l.b.declaration.Load() != nil && !reflect.DeepEqual(l.b.declaration.Load(), params.Server) {
-		return fmt.Errorf("server binding for %q is already registered; restart the daemon to change it", agent)
-	}
-	if params.Server != nil {
+	claim := func() error {
 		for _, run := range d.store.ListActiveAgentDriverRuns() {
 			if session := d.store.Get(run.SessionID); session != nil && session.Agent == agent && run.PluginName != plugin.name {
 				return fmt.Errorf("agent %q has a run owned by plugin %q", agent, run.PluginName)
 			}
 		}
-		if err := d.store.ClaimPluginServer(agent, plugin.name); err != nil {
-			return err
-		}
-		if l == nil {
-			l = newServerLink(d, newServerBinding(agent, plugin.name, nil))
-			if d.serverLinks == nil {
-				d.serverLinks = make(map[string]*serverLink)
-			}
-			d.serverLinks[agent] = l
-		}
-		l.b.declaration.Store(params.Server)
+		return d.store.ClaimPluginServer(agent, plugin.name)
+	}
+	if err := d.appServer.Bind(d.pluginServerBinding(agent, plugin.name, params.Server), claim); err != nil {
+		return err
 	}
 	return registry.registerDriver(plugin, params)
 }
 
-func (d *Daemon) pluginServerSessions(plugin string) int {
-	count := 0
-	for _, l := range d.appServerLinks() {
-		if l.b.plugin == plugin {
-			count += len(l.sessions())
-		}
+func (d *Daemon) pluginServerBinding(agent, plugin string, declaration *appserver.Declaration) appserver.Binding {
+	return appserver.Binding{
+		Agent: agent, Plugin: plugin, Declaration: declaration,
+		DisplayName: func() string { return d.factsOrNone(agent).DisplayName },
+		Enabled: func() bool {
+			reg, conn := d.ensurePluginRegistry().driverConnection(agent, plugin)
+			return conn != nil && reg.Capabilities["server_binding"]
+		},
 	}
-	return count
 }
 
 func reservedPluginAgent(agent string) bool {

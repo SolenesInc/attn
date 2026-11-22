@@ -35,7 +35,7 @@ command's own behavior belongs to its feature's file, such as
 ### Agents
 
 - The tools: every command in `internal/catalog/content/*.yaml` that offers a tool, named `<family>_<verb>`, served over HTTP at `/mcp` on the daemon's port (`internal/daemon/agent_tools.go`, `internal/mcpserver`). Claude Code and Sigma name them `mcp__attn__<tool>`. Codex names them `attn-core.<tool>` or `attn.<tool>`.
-- Each harness's launch: `internal/agent/claude.go`, `internal/agent/codex.go`, `internal/daemon/codex_shared.go`, `internal/agent/sigma.go`, `internal/daemon/plugin_driver.go` and `internal/daemon/server_connection.go`.
+- Each harness's launch: `internal/agent/claude.go`, `internal/agent/codex.go`, `internal/daemon/codex_shared.go`, `internal/agent/sigma.go`, `internal/daemon/plugin_driver.go` and `internal/harness/appserver/server_connection.go`.
 - Prompts: the server's description and the intent map (`internal/catalog/content/server.yaml`), which the harness shows as the server's instructions. Sigma also gets the map after its launch instructions. Each tool's description holds the command's rules.
 - The CLI stays: each tool's command still runs as `attn <family> <verb>`, and agents started while the setting was off use only the CLI.
 

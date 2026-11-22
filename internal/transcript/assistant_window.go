@@ -11,6 +11,21 @@ type AssistantWindowLimits struct {
 	MaxTotalChars   int
 }
 
+const (
+	annotatableMessageMaxChars = 64 * 1024
+	annotatableWindowMessages  = 32
+	annotatableWindowMaxChars  = 256 * 1024
+)
+
+// NewAnnotatableWindow holds the newest assistant messages a user can annotate.
+func NewAnnotatableWindow() *AssistantWindow {
+	return NewAssistantWindow(AssistantWindowLimits{
+		MaxMessages:     annotatableWindowMessages,
+		MaxMessageChars: annotatableMessageMaxChars,
+		MaxTotalChars:   annotatableWindowMaxChars,
+	})
+}
+
 type AssistantWindowReport struct {
 	DroppedOversize int
 	LargestDropped  int

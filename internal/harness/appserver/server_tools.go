@@ -1,4 +1,4 @@
-package daemon
+package appserver
 
 import (
 	"encoding/json"
@@ -9,8 +9,8 @@ import (
 	"github.com/victorarias/attn/internal/tooldetect"
 )
 
-func (d *Daemon) serverToolFinished(sessionID protocol.SessionID, name string, input json.RawMessage, output string) {
-	session := d.store.Get(sessionID)
+func (c *Client) serverToolFinished(sessionID protocol.SessionID, name string, input json.RawMessage, output string) {
+	session := c.host.Sessions().Get(sessionID)
 	if session == nil {
 		return
 	}
@@ -19,7 +19,7 @@ func (d *Daemon) serverToolFinished(sessionID protocol.SessionID, name string, i
 	if len(use.EditedFiles) == 0 && len(use.PullRequests) == 0 {
 		return
 	}
-	if err := d.events().Tool(sessionID, use); err != nil {
-		d.logf("session %s: recording what its %s call did: %v", sessionID, name, err)
+	if err := c.host.Events().Tool(sessionID, use); err != nil {
+		c.host.Logf("session %s: recording what its %s call did: %v", sessionID, name, err)
 	}
 }

@@ -1,4 +1,4 @@
-package daemon
+package appserver
 
 import (
 	"context"
@@ -13,34 +13,27 @@ type serverCompaction struct {
 	Message string `json:"message"`
 }
 
-func (h sigmaHarness) Conversation(facts harness.SessionFacts) harness.Conversation {
-	if l := h.d.serverLinkFor(facts.Harness); l != nil && facts.Lifetime == harness.InServer {
-		return l.conversation(facts)
-	}
-	return typedConversation{refusal: harness.NoCompaction(h.Facts().ID)}
-}
-
 func (s serverConversation) compact(ctx context.Context, in harness.Input) harness.Custody {
 	l, session := s.link, s.session
-	conversation := l.d.serverConversation(session)
+	conversation := l.c.host.Sessions().Conversation(session)
 	if conversation == "" {
 		return harness.Custody{Reason: fmt.Sprintf("session %s holds no %s conversation", session, l.b.name)}
 	}
-	if monitor := l.d.sessionMonitor(session); monitor == nil || !turnHasEnded(monitor) {
+	if evidence, ok := l.c.host.Sessions().Evidence(session); !ok || !evidence.TurnEnded {
 		return harness.Custody{Reason: fmt.Sprintf("busy: %s conversation %s is running", l.b.name, conversation)}
 	}
 	c, err := l.ensureServer(ctx, nil)
 	if err != nil {
-		l.d.events().Compaction(session, serverCompaction{}.outcome(in.ID, l.displayName(), err))
+		l.c.host.Events().Compaction(session, serverCompaction{}.outcome(in.ID, l.displayName(), err))
 		return harness.Custody{Outcome: harness.Taken, At: time.Now()}
 	}
 	params := map[string]any{"conversation": conversation, "author": l.author(harness.VoiceAttn)}
-	started := l.d.life.Go(l.b.agent+"Compact", func() {
-		callCtx, cancel := context.WithTimeout(l.d.life.Context(), compactOutcomeTripwire)
+	started := l.c.host.Life().Go(l.b.agent+"Compact", func() {
+		callCtx, cancel := context.WithTimeout(l.c.host.Life().Context(), compactTimeout)
 		defer cancel()
 		var compaction serverCompaction
 		err := c.Call(callCtx, "conversation/compact", params, &compaction)
-		l.d.events().Compaction(session, compaction.outcome(in.ID, l.displayName(), err))
+		l.c.host.Events().Compaction(session, compaction.outcome(in.ID, l.displayName(), err))
 	})
 	if !started {
 		return harness.Custody{Reason: "the daemon is stopping"}

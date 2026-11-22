@@ -1,4 +1,4 @@
-package daemon
+package appserver
 
 import (
 	"context"
@@ -9,18 +9,15 @@ import (
 	"sync"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
 type serverConnection struct {
-	d           *Daemon
+	c           *Client
 	socket      string
 	ensureMu    sync.Mutex
 	uses        int
@@ -30,7 +27,7 @@ type serverConnection struct {
 	ready       chan struct{}
 	readyClosed bool
 	terminal    harness.TerminalID
-	events      linkEvents
+	events      appServerEvents
 	busy        map[string]string
 	ended       map[string]serverEnded
 	tools       *serverToolsRegistration
@@ -43,7 +40,7 @@ type serverToolsRegistration struct {
 	live   bool
 }
 
-func (l *serverLink) serverVersion() string {
+func (l *Link) Version() string {
 	if l == nil {
 		return ""
 	}
@@ -56,7 +53,7 @@ func (l *serverLink) serverVersion() string {
 	return p.info.Version
 }
 
-func (l *serverLink) connection() (*serverConnection, error) {
+func (l *Link) connection() (*serverConnection, error) {
 	socket, err := config.CanonicalRuntimePath(l.socketPath())
 	if err != nil {
 		return nil, err
@@ -64,19 +61,16 @@ func (l *serverLink) connection() (*serverConnection, error) {
 	if socket == "" {
 		return nil, &effectrpc.Error{Server: l.b.agent, Method: "initialize", Message: "server binding unavailable until plugin " + l.b.plugin + " registers"}
 	}
-	d := l.d
-	d.serverLinksMu.Lock()
-	defer d.serverLinksMu.Unlock()
-	if p := d.serverConnections[socket]; p != nil {
+	cl := l.c
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	if p := cl.connections[socket]; p != nil {
 		return p, nil
 	}
-	p := &serverConnection{d: d, socket: socket, ended: make(map[string]serverEnded)}
-	if d.serverConnections == nil {
-		d.serverConnections = make(map[string]*serverConnection)
-	}
-	d.serverConnections[socket] = p
-	d.life.Go("appServerStop", func() {
-		<-d.life.Done()
+	p := &serverConnection{c: cl, socket: socket, ended: make(map[string]serverEnded)}
+	cl.connections[socket] = p
+	cl.host.Life().Go("appServerStop", func() {
+		<-cl.host.Life().Context().Done()
 		if c := p.client(); c != nil {
 			c.Close()
 		}
@@ -90,12 +84,12 @@ func (p *serverConnection) client() *effectrpc.Client {
 	return p.control
 }
 
-func (p *serverConnection) peers() []*serverLink {
+func (p *serverConnection) peers() []*Link {
 	p.mu.Lock()
 	info := p.info
 	p.mu.Unlock()
-	var peers []*serverLink
-	for _, l := range p.d.appServerLinks() {
+	var peers []*Link
+	for _, l := range p.c.Links() {
 		socket, err := config.CanonicalRuntimePath(l.socketPath())
 		if err != nil || socket != p.socket {
 			continue
@@ -116,8 +110,8 @@ func (p *serverConnection) harnesses() string {
 	return strings.Join(names, " or ")
 }
 
-func (p *serverConnection) sessions() map[protocol.SessionID]*serverLink {
-	sessions := make(map[protocol.SessionID]*serverLink)
+func (p *serverConnection) sessions() map[protocol.SessionID]*Link {
+	sessions := make(map[protocol.SessionID]*Link)
 	for _, l := range p.peers() {
 		for _, id := range l.sessions() {
 			sessions[id] = l
@@ -135,13 +129,13 @@ func (p *serverConnection) toolsCaller(conversation string) protocol.SessionID {
 	return ""
 }
 
-func (p *serverConnection) ensure(ctx context.Context, l *serverLink, opts *ptybackend.SpawnOptions, start bool) (*effectrpc.Client, error) {
+func (p *serverConnection) ensure(ctx context.Context, l *Link, req *harness.LaunchRequest, start bool) (*effectrpc.Client, error) {
 	p.ensureMu.Lock()
 	defer p.ensureMu.Unlock()
-	return p.ensureLocked(ctx, l, opts, start)
+	return p.ensureLocked(ctx, l, req, start)
 }
 
-func (p *serverConnection) ensureLocked(ctx context.Context, l *serverLink, opts *ptybackend.SpawnOptions, start bool) (*effectrpc.Client, error) {
+func (p *serverConnection) ensureLocked(ctx context.Context, l *Link, req *harness.LaunchRequest, start bool) (*effectrpc.Client, error) {
 	p.mu.Lock()
 	c, info := p.control, p.info
 	p.mu.Unlock()
@@ -160,7 +154,7 @@ func (p *serverConnection) ensureLocked(ctx context.Context, l *serverLink, opts
 		cancel()
 		if err == nil {
 			if !started {
-				l.d.adoptAdapterTerminal(ctx, appServerTerminalOwner, l.b.terminal)
+				l.c.host.Terminals().Adopt(ctx, l.b.terminal)
 			}
 			p.hold(c, info)
 			p.registerAgentToolsLocked(c)
@@ -177,7 +171,7 @@ func (p *serverConnection) ensureLocked(ctx context.Context, l *serverLink, opts
 			}
 			terminal := p.terminal
 			p.mu.Unlock()
-			if err := l.startServer(ctx, opts, terminal); err != nil {
+			if err := l.startServer(ctx, req, terminal); err != nil {
 				return nil, err
 			}
 			started = true
@@ -192,7 +186,7 @@ func (p *serverConnection) ensureLocked(ctx context.Context, l *serverLink, opts
 	}
 }
 
-func (p *serverConnection) borrow(ctx context.Context, l *serverLink, start bool) (*effectrpc.Client, func(), error) {
+func (p *serverConnection) borrow(ctx context.Context, l *Link, start bool) (*effectrpc.Client, func(), error) {
 	p.ensureMu.Lock()
 	c, err := p.ensureLocked(ctx, l, nil, start)
 	if err != nil {
@@ -221,7 +215,7 @@ func (p *serverConnection) releaseLocked() {
 	p.mu.Unlock()
 	if c != nil {
 		c.Close()
-		p.d.logf("let go of app-server at %s; no session uses it", p.socket)
+		p.c.host.Logf("let go of app-server at %s; no session uses it", p.socket)
 	}
 }
 
@@ -231,18 +225,18 @@ func (p *serverConnection) hold(c *effectrpc.Client, info effectrpc.ServerInfo) 
 	p.ready = make(chan struct{})
 	p.readyClosed = false
 	p.mu.Unlock()
-	p.events.run(p.d, p.closeFeeds)
-	if !p.d.life.Go("appServerStatus", func() { p.watch(c) }) {
+	p.events.run(p.c, p.closeFeeds)
+	if !p.c.host.Life().Go("appServerStatus", func() { p.watch(c) }) {
 		c.Close()
 	}
 }
 
-func (p *serverConnection) agentTools() *agentdriver.AgentTools {
-	tools := p.d.agentToolsFor(agentCredential{kind: credentialServer, name: p.socket})
-	if tools == nil || p.callerConversationHeader() == "" {
+func (p *serverConnection) agentTools() *harness.AgentTools {
+	tools, ok := p.c.host.ServerTools(p.socket)
+	if !ok || p.callerConversationHeader() == "" {
 		return nil
 	}
-	return tools
+	return &tools
 }
 
 func (p *serverConnection) callerConversationHeader() string {
@@ -282,7 +276,7 @@ func (p *serverConnection) registerAgentTools(c *effectrpc.Client) {
 	if tools == nil {
 		return
 	}
-	ctx, drop := context.WithCancel(p.d.life.Context())
+	ctx, drop := context.WithCancel(p.c.host.Life().Context())
 	reg := &serverToolsRegistration{client: c, drop: drop}
 	p.mu.Lock()
 	if p.control != c {
@@ -296,8 +290,8 @@ func (p *serverConnection) registerAgentTools(c *effectrpc.Client) {
 	p.tools = reg
 	p.mu.Unlock()
 	answer := make(chan error, 1)
-	params := map[string]any{"name": agentToolsCatalog().Name, "url": tools.URL, "headers": map[string]string{"Authorization": "Bearer " + tools.Credential}}
-	if !p.d.life.Go("serverAgentTools", func() {
+	params := map[string]any{"name": tools.Name, "url": tools.URL, "headers": map[string]string{"Authorization": "Bearer " + tools.Credential}}
+	if !p.c.host.Life().Go("serverAgentTools", func() {
 		acknowledged := false
 		err := c.Stream(ctx, "mcp/register", params, func(json.RawMessage) {
 			p.mu.Lock()
@@ -314,7 +308,7 @@ func (p *serverConnection) registerAgentTools(c *effectrpc.Client) {
 		if !acknowledged {
 			answer <- err
 		} else if ctx.Err() == nil {
-			p.d.logf("the server at %s ended attn's MCP server registration: %v; its agents use the attn CLI until attn connects again", p.socket, err)
+			p.c.host.Logf("the server at %s ended attn's MCP server registration: %v; its agents use the attn CLI until attn connects again", p.socket, err)
 		}
 	}) {
 		drop()
@@ -325,13 +319,13 @@ func (p *serverConnection) registerAgentTools(c *effectrpc.Client) {
 	select {
 	case err := <-answer:
 		if err != nil {
-			p.d.logf("the server at %s refused attn's MCP server (mcp/register): %v; its agents use the attn CLI", p.socket, err)
+			p.c.host.Logf("the server at %s refused attn's MCP server (mcp/register): %v; its agents use the attn CLI", p.socket, err)
 		}
 	case <-wait.Done():
 		if ctx.Err() != nil {
 			return
 		}
-		p.d.logf("the server at %s did not answer mcp/register within %s; its agents get attn's tools once it does", p.socket, serverCallLimit)
+		p.c.host.Logf("the server at %s did not answer mcp/register within %s; its agents get attn's tools once it does", p.socket, serverCallLimit)
 	}
 }
 
@@ -341,22 +335,22 @@ func (p *serverConnection) agentToolsRegistered() bool {
 	return p.tools != nil && p.tools.live && p.tools.client == p.control
 }
 
-func (d *Daemon) reconcileAgentTools() {
-	d.serverLinksMu.Lock()
-	connections := make([]*serverConnection, 0, len(d.serverConnections))
-	for _, p := range d.serverConnections {
+func (c *Client) reconcileAgentTools() {
+	c.mu.Lock()
+	connections := make([]*serverConnection, 0, len(c.connections))
+	for _, p := range c.connections {
 		connections = append(connections, p)
 	}
-	d.serverLinksMu.Unlock()
+	c.mu.Unlock()
 	for _, p := range connections {
 		p.reconcileAgentTools()
 	}
 }
 
-func (d *Daemon) serverConnectionAt(socket string) *serverConnection {
-	d.serverLinksMu.Lock()
-	defer d.serverLinksMu.Unlock()
-	return d.serverConnections[socket]
+func (c *Client) serverConnectionAt(socket string) *serverConnection {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.connections[socket]
 }
 
 func (p *serverConnection) finishSnapshotLocked() {
@@ -367,10 +361,10 @@ func (p *serverConnection) finishSnapshotLocked() {
 }
 
 func (p *serverConnection) watch(c *effectrpc.Client) {
-	err := c.Stream(p.d.life.Context(), "status/watch", p.statusWatchParams(), func(item json.RawMessage) {
+	err := c.Stream(p.c.host.Life().Context(), "status/watch", p.statusWatchParams(), func(item json.RawMessage) {
 		var tree serverTree
 		if json.Unmarshal(item, &tree) == nil {
-			p.events.run(p.d, func() {
+			p.events.run(p.c, func() {
 				if p.client() != c {
 					return
 				}
@@ -393,12 +387,12 @@ func (p *serverConnection) watch(c *effectrpc.Client) {
 		p.finishSnapshotLocked()
 	}
 	p.mu.Unlock()
-	if !current || p.d.stopping() || p.d.life.Context().Err() != nil {
+	if !current || p.c.host.Life().Context().Err() != nil {
 		return
 	}
-	p.d.logf("lost app-server status at %s: %v", p.socket, err)
+	p.c.host.Logf("lost app-server status at %s: %v", p.socket, err)
 	for _, l := range p.sessions() {
-		if _, err := p.ensure(p.d.life.Context(), l, nil, true); err != nil {
+		if _, err := p.ensure(p.c.host.Life().Context(), l, nil, true); err != nil {
 			l.logf("reconnecting: %v", err)
 		}
 		break
@@ -413,8 +407,8 @@ func (p *serverConnection) statusWatchParams() any {
 			continue
 		}
 		numbered = true
-		if conversation := p.d.serverConversation(id); conversation != "" {
-			after[conversation] = p.d.store.SessionRuntimeRecords(id).ServerCompletion
+		if conversation := p.c.host.Sessions().Conversation(id); conversation != "" {
+			after[conversation] = p.c.host.Records().Feed(id).Completion
 		}
 	}
 	if !numbered {
@@ -431,9 +425,9 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 		}
 		var last map[string]*serverEnded
 		for id, l := range p.sessions() {
-			conversation := p.d.serverConversation(id)
+			conversation := p.c.host.Sessions().Conversation(id)
 			if status, ok := p.busy[conversation]; ok {
-				l.observe(id, sessionmonitor.StateSourceServerReport, status, nil)
+				l.observe(id, false, status, nil)
 				continue
 			}
 			if !l.settlesOnServer(id) {
@@ -470,15 +464,15 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 		p.openFeeds(c, map[string]bool{tree.Conversation: true}, true)
 	}
 	for id, l := range p.sessions() {
-		if p.d.serverConversation(id) != tree.Conversation {
+		if p.c.host.Sessions().Conversation(id) != tree.Conversation {
 			continue
 		}
 		ended = l.unseen(id, ended)
-		l.observe(id, sessionmonitor.StateSourceServerReport, tree.Status, ended)
+		l.observe(id, false, tree.Status, ended)
 	}
 }
 
-func (p *serverConnection) reconcile(l *serverLink, ids []protocol.SessionID, launching bool) {
+func (p *serverConnection) reconcile(l *Link, ids []protocol.SessionID, launching bool) {
 	p.mu.Lock()
 	c, ready := p.control, p.ready
 	p.mu.Unlock()
@@ -487,20 +481,20 @@ func (p *serverConnection) reconcile(l *serverLink, ids []protocol.SessionID, la
 	}
 	select {
 	case <-ready:
-	case <-p.d.life.Done():
+	case <-p.c.host.Life().Context().Done():
 		return
 	}
-	p.events.run(p.d, func() {
+	p.events.run(p.c, func() {
 		if p.client() != c {
 			return
 		}
 		var last map[string]*serverEnded
 		conversations := make(map[string]bool, len(ids))
 		for _, id := range ids {
-			conversation := p.d.serverConversation(id)
+			conversation := p.c.host.Sessions().Conversation(id)
 			conversations[conversation] = true
 			if status, busy := p.busy[conversation]; busy {
-				l.observe(id, sessionmonitor.StateSourceServerReport, status, nil)
+				l.observe(id, false, status, nil)
 				continue
 			}
 			if last == nil {
