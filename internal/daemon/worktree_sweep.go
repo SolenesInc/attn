@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/jobs"
@@ -474,9 +473,11 @@ func (d *Daemon) recordWorktreeRemoval(wt *store.Worktree, opts deleteWorktreeOp
 }
 
 func (d *Daemon) seedsForWorktree(machine string, wt *store.Worktree) ([]string, error) {
+	wtPath := machinePath(machine, wt.Path)
+	mainRepo := machinePath(machine, wt.MainRepo)
 	var seeds []string
-	err := d.eachSeedExecutionOn(machine, func(seed garden.Seed, dispatch garden.Execution) {
-		if worktreeOwnsExecution(wt, dispatch) {
+	err := d.eachSeedExecutionOn(machine, false, func(seed garden.Seed, dispatch garden.Execution) {
+		if normalizedWorktreeOwnsExecution(wtPath, mainRepo, wt.Branch, dispatch) {
 			seeds = append(seeds, seed.ID)
 		}
 	})
@@ -506,14 +507,24 @@ func (d *Daemon) seedOwnedWorktrees(ctx context.Context, repo string) (map[strin
 }
 
 func (d *Daemon) worktreeSeedOwnersHere(ctx context.Context, msg protocol.WorktreeSeedOwnersMessage) (protocol.WorktreeSeedOwners, error) {
-	owned := make(map[string]bool)
-	err := d.eachSeedExecutionOn(originMachine(ctx), func(seed garden.Seed, dispatch garden.Execution) {
-		if garden.Closed(seed.Status) {
-			return
+	machine := originMachine(ctx)
+	mainRepo := machinePath(machine, msg.MainRepo)
+	type normalizedCheckout struct {
+		raw, path, branch string
+	}
+	checkouts := make([]normalizedCheckout, len(msg.Worktrees))
+	for i, checkout := range msg.Worktrees {
+		checkouts[i] = normalizedCheckout{
+			raw:    checkout.Path,
+			path:   machinePath(machine, checkout.Path),
+			branch: checkout.Branch,
 		}
-		for _, checkout := range msg.Worktrees {
-			if worktreeOwnsExecution(&store.Worktree{Path: checkout.Path, MainRepo: msg.MainRepo, Branch: checkout.Branch}, dispatch) {
-				owned[checkout.Path] = true
+	}
+	owned := make(map[string]bool)
+	err := d.eachSeedExecutionOn(machine, true, func(_ garden.Seed, dispatch garden.Execution) {
+		for _, checkout := range checkouts {
+			if !owned[checkout.raw] && normalizedWorktreeOwnsExecution(checkout.path, mainRepo, checkout.branch, dispatch) {
+				owned[checkout.raw] = true
 			}
 		}
 	})
@@ -529,67 +540,64 @@ func (d *Daemon) worktreeSeedOwnersHere(ctx context.Context, msg protocol.Worktr
 	return owners, nil
 }
 
-func worktreeOwnsExecution(wt *store.Worktree, dispatch garden.Execution) bool {
-	if canonicalPathAtOrBelow(dispatch.Cwd, wt.Path) {
+func normalizedWorktreeOwnsExecution(wtPath, mainRepo, branch string, dispatch garden.Execution) bool {
+	if normalizedPathAtOrBelow(dispatch.Cwd, wtPath) {
 		return true
 	}
-	return wt.Branch != "" && strings.TrimSpace(dispatch.Branch) == wt.Branch &&
-		dispatch.RepositoryRoot == attngit.CanonicalizePath(wt.MainRepo)
+	return branch != "" && strings.TrimSpace(dispatch.Branch) == branch &&
+		dispatch.RepositoryRoot == mainRepo
 }
 
-func (d *Daemon) eachSeedExecutionOn(machine string, visit func(garden.Seed, garden.Execution)) error {
+func (d *Daemon) eachSeedExecutionOn(machine string, openOnly bool, visit func(garden.Seed, garden.Execution)) error {
+	all, err := d.rememberedGardenSeeds()
+	if err != nil {
+		return fmt.Errorf("reading seeds: %w", err)
+	}
 	dispatches, err := d.dispatchesCollection()
 	if err != nil {
 		return fmt.Errorf("reading seed executions: %w", err)
 	}
-	after := ""
-	for {
-		read, _, err := d.runDocQuery(docstore.Query{
-			Namespace: garden.Namespace, Collection: garden.CollectionSeeds,
-			Limit: docstore.MaxLimit, After: after,
-		})
+	for _, seed := range all.seeds {
+		if openOnly && garden.Closed(seed.Status) {
+			continue
+		}
+		execID := protocol.TrimID(seed.LastExecutionID)
+		if execID == "" {
+			continue
+		}
+		execution, found, err := d.store.GetDocument(*dispatches, string(execID))
 		if err != nil {
-			return fmt.Errorf("reading seeds: %w", err)
+			return fmt.Errorf("reading seed executions: %w", err)
 		}
-		for _, doc := range read.Documents {
-			seed, err := garden.Decode(doc.Body)
-			if err != nil || protocol.TrimID(seed.LastExecutionID) == "" {
-				continue
-			}
-			execution, found, err := d.store.GetDocument(*dispatches, string(seed.LastExecutionID))
-			if err != nil {
-				return fmt.Errorf("reading seed executions: %w", err)
-			}
-			if !found {
-				continue
-			}
-			dispatch, err := garden.DecodeExecution(execution.Body)
-			if err != nil {
-				d.logf("worktree sweep: seed %s has an unreadable execution: %v", seed.ID, err)
-				continue
-			}
-			if ran, known := d.executionMachine(dispatch); known && ran != machine {
-				continue
-			}
-			dispatch.Cwd = attngit.CanonicalizePath(dispatch.Cwd)
-			dispatch.RepositoryRoot = attngit.CanonicalizePath(dispatch.RepositoryRoot)
-			visit(seed, dispatch)
+		if !found {
+			continue
 		}
-		if len(read.Documents) < docstore.MaxLimit {
-			return nil
+		dispatch, err := garden.DecodeExecution(execution.Body)
+		if err != nil {
+			d.logf("worktree sweep: seed %s has an unreadable execution: %v", seed.ID, err)
+			continue
 		}
-		after = read.Documents[len(read.Documents)-1].ID
+		ran, known := d.executionMachine(dispatch)
+		if known && ran != machine {
+			continue
+		}
+		if machine == "" && known {
+			dispatch.Cwd = canonicalLocalPath(dispatch.Cwd)
+			dispatch.RepositoryRoot = canonicalLocalPath(dispatch.RepositoryRoot)
+		} else {
+			dispatch.Cwd = cleanPath(dispatch.Cwd)
+			dispatch.RepositoryRoot = cleanPath(dispatch.RepositoryRoot)
+		}
+		visit(seed, dispatch)
 	}
+	return nil
 }
 
 func (d *Daemon) executionMachine(execution garden.Execution) (machine string, known bool) {
 	if execution.Machine != nil {
 		return *execution.Machine, true
 	}
-	if d.sessionKnownHere(execution.SessionID) {
-		return d.sessionHost(execution.SessionID), true
-	}
-	return "", false
+	return d.sessionMachine(execution.SessionID)
 }
 
 func protocolSweepEntry(entry store.WorktreeSweepLogEntry) protocol.WorktreeSweepEntry {

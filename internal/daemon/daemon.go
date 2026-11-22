@@ -1380,7 +1380,7 @@ func (d *Daemon) recoverRecords(machine machineReport, sessions []protocol.Sessi
 
 	if rules.allowTombstoneCleanup {
 		for _, sessionID := range d.store.SessionTeardownIntentIDs() {
-			host, copied := d.store.SessionHost(sessionID)
+			host, copied, _ := d.store.SessionHost(sessionID)
 			if host != rules.host || copied {
 				continue
 			}

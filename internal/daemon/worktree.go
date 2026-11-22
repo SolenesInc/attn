@@ -364,8 +364,9 @@ func (d *Daemon) finalizeDeletedWorktree(protection worktreeCleanupProtection, w
 }
 
 func (d *Daemon) closeWorktreeSessions(machine, path string) {
+	wanted := machinePath(machine, path)
 	for _, session := range d.store.List("") {
-		if d.sessionHost(session.ID) != machine || !pathAtOrBelow(session.Directory, path) {
+		if d.sessionHost(session.ID) != machine || !normalizedPathAtOrBelow(machinePath(machine, session.Directory), wanted) {
 			continue
 		}
 		d.terminateSession(session.ID, syscall.SIGTERM)

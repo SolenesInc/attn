@@ -417,10 +417,17 @@ func (d *Daemon) liveSessionsByWorktree(repo string) map[string][]string {
 		return byPath
 	}
 	rows := d.store.ListWorktreesByRepo(repo)
+	roots := make([]string, len(rows))
+	for i, row := range rows {
+		roots[i] = canonicalLocalPath(row.Path)
+	}
 	for _, session := range d.store.List("") {
-		directory := d.localDirectory(session)
-		for _, row := range rows {
-			if pathAtOrBelow(directory, row.Path) {
+		directory := canonicalLocalPath(d.localDirectory(session))
+		if directory == "" {
+			continue
+		}
+		for i, row := range rows {
+			if normalizedPathAtOrBelow(directory, roots[i]) {
 				byPath[row.Path] = append(byPath[row.Path], string(session.ID))
 			}
 		}

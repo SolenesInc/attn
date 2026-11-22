@@ -462,20 +462,22 @@ func (s *Store) RequeueOutpostCopy(host string) error {
 	return nil
 }
 
-// SessionHost names the outpost a session runs on, and whether this daemon holds the session as a copy
-// from its home.
-func (s *Store) SessionHost(id protocol.SessionID) (host string, copied bool) {
+// SessionHost names the outpost a session runs on, whether this daemon holds the session as a copy
+// from its home, and whether the session has a record here (open or closed).
+func (s *Store) SessionHost(id protocol.SessionID) (host string, copied, known bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if session, copied := s.openSessionLocked(id); session != nil {
-		return protocol.Deref(session.Host), copied
+		return protocol.Deref(session.Host), copied, true
 	}
 	if s.db == nil {
-		return "", false
+		return "", false, false
 	}
 	var origin string
-	_ = s.db.QueryRow(`SELECT host,copied_from FROM sessions WHERE id = ?`, id).Scan(&host, &origin)
-	return host, origin != ""
+	if err := s.db.QueryRow(`SELECT host,copied_from FROM sessions WHERE id = ?`, id).Scan(&host, &origin); err != nil {
+		return "", false, false
+	}
+	return host, origin != "", true
 }
 
 func transactWritingCopies(ctx context.Context, db *sql.DB, apply func(*sql.Tx) error) error {

@@ -121,13 +121,13 @@ func (r *Router) bridge(msg protocol.Placed) (*bridge.Conn, error) {
 	case protocol.LocatorMachine:
 		host = msg.Locate()
 	case protocol.LocatorSession:
-		id := protocol.SessionID(msg.Locate())
-		home = !d.sessionKnownHere(id)
-		host = d.sessionHost(id)
+		var known bool
+		host, known = d.sessionMachine(protocol.SessionID(msg.Locate()))
+		home = !known
 	case protocol.LocatorTerminal:
-		session := d.terminals().owner(harness.TerminalID(msg.Locate()))
-		home = !d.sessionKnownHere(session)
-		host = d.sessionHost(session)
+		var known bool
+		host, known = d.sessionMachine(d.terminals().owner(harness.TerminalID(msg.Locate())))
+		home = !known
 	}
 	if home {
 		status := d.enrollmentStatus()
@@ -219,19 +219,22 @@ func (d *Daemon) forwardCommand(c command.Caller, name string, args json.RawMess
 	}
 }
 
-func (d *Daemon) sessionKnownHere(id protocol.SessionID) bool {
-	_, copied := d.store.SessionHost(id)
-	return copied || d.store.Get(id) != nil
+func (d *Daemon) sessionMachine(id protocol.SessionID) (host string, known bool) {
+	if id == "" {
+		return "", false
+	}
+	host, copied, known := d.store.SessionHost(id)
+	if !known {
+		return "", false
+	}
+	if copied {
+		return "", true
+	}
+	return host, true
 }
 
 func (d *Daemon) sessionHost(id protocol.SessionID) string {
-	if id == "" {
-		return ""
-	}
-	host, copied := d.store.SessionHost(id)
-	if copied {
-		return ""
-	}
+	host, _ := d.sessionMachine(id)
 	return host
 }
 

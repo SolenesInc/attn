@@ -192,9 +192,11 @@ func (d *Daemon) updateGardenDispatch(
 			return garden.Execution{}, updateErr
 		}
 		next.SessionID = sessionID
-		if next.Machine == nil && d.sessionKnownHere(sessionID) {
-			next.Machine = protocol.Ptr(d.sessionHost(sessionID))
-			changed = true
+		if next.Machine == nil {
+			if machine, known := d.sessionMachine(sessionID); known {
+				next.Machine = protocol.Ptr(machine)
+				changed = true
+			}
 		}
 		if !changed {
 			return current, nil
@@ -334,9 +336,9 @@ func (d *Daemon) ensureGardenExecution(sessionID protocol.SessionID) (garden.Exe
 }
 
 func (d *Daemon) captureGardenExecutionsInDirectory(machine, path string) {
-	wanted := attngit.CanonicalizePath(path)
+	wanted := machinePath(machine, path)
 	for _, session := range d.store.List("") {
-		if d.sessionHost(session.ID) != machine || !pathAtOrBelow(session.Directory, wanted) {
+		if d.sessionHost(session.ID) != machine || !normalizedPathAtOrBelow(machinePath(machine, session.Directory), wanted) {
 			continue
 		}
 		if _, err := d.captureGardenSessionExecution(session); err != nil {
@@ -345,12 +347,30 @@ func (d *Daemon) captureGardenExecutionsInDirectory(machine, path string) {
 	}
 }
 
-func pathAtOrBelow(path, root string) bool {
-	return canonicalPathAtOrBelow(attngit.CanonicalizePath(path), root)
+func cleanPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	return filepath.Clean(path)
 }
 
-func canonicalPathAtOrBelow(path, root string) bool {
-	root = attngit.CanonicalizePath(root)
+func canonicalLocalPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	return attngit.CanonicalizePath(path)
+}
+
+func machinePath(machine, path string) string {
+	if machine != "" {
+		return cleanPath(path)
+	}
+	return canonicalLocalPath(path)
+}
+
+func normalizedPathAtOrBelow(path, root string) bool {
 	if path == "" || root == "" {
 		return false
 	}
@@ -359,14 +379,14 @@ func canonicalPathAtOrBelow(path, root string) bool {
 }
 
 func (d *Daemon) gardenKeepsBranch(machine, repository, branch string) bool {
-	repository = attngit.CanonicalizePath(repository)
+	repository = machinePath(machine, repository)
 	branch = strings.TrimSpace(branch)
 	if repository == "" || branch == "" {
 		return false
 	}
 	keeps := false
-	err := d.eachSeedExecutionOn(machine, func(seed garden.Seed, execution garden.Execution) {
-		if !keeps && !garden.Closed(seed.Status) && strings.TrimSpace(execution.Branch) == branch &&
+	err := d.eachSeedExecutionOn(machine, true, func(_ garden.Seed, execution garden.Execution) {
+		if !keeps && strings.TrimSpace(execution.Branch) == branch &&
 			execution.RepositoryRoot == repository {
 			keeps = true
 		}

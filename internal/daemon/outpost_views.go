@@ -17,7 +17,7 @@ import (
 )
 
 func (d *Daemon) copiedSession(id protocol.SessionID) bool {
-	_, copied := d.store.SessionHost(id)
+	_, copied, _ := d.store.SessionHost(id)
 	return copied || d.store.SessionRuntimeRecords(id).HomeDaemonID != ""
 }
 
