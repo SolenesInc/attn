@@ -1135,7 +1135,31 @@ fn stays_on_the_plot_seed_the_user_went_to_while_the_review_updates() {
 }
 
 fn handover_review(item: GardenReviewItem, seed: Seed) -> World {
-    open_review(item, vec![seed]).0
+    let mut world = open_review(item, vec![seed]).0;
+    let offered = |id: &str, name: &str| attn_protocol::Harness {
+        id: id.into(),
+        name: name.into(),
+        offered: true,
+        installation: "installed".into(),
+        ..attn_protocol::Harness::default()
+    };
+    world.daemon.emit(attn_protocol::HarnessCatalogMessage {
+        harnesses: vec![offered("claude", "Claude Code"), offered("codex", "Codex")],
+        ..attn_protocol::HarnessCatalogMessage::new()
+    });
+    world.settle();
+    world
+}
+
+/// The handover's harnesses, each with whether it is chosen.
+fn harness_choices(world: &World) -> Vec<(String, bool)> {
+    world
+        .screen()
+        .descendants(Target::key("garden.review.handover.agent"))
+        .into_iter()
+        .filter(|n| n.role == "radio-button")
+        .map(|n| (n.name.clone().unwrap_or_default(), n.is("checked")))
+        .collect()
 }
 
 #[test]
@@ -1209,7 +1233,10 @@ fn starts_a_handover_from_the_saved_working_context_or_asks_for_placement_when_i
         field(&world, "handover.branch").as_deref(),
         Some("feature-x")
     );
-    assert_eq!(field(&world, "handover.agent").as_deref(), Some("codex"));
+    assert_eq!(
+        harness_choices(&world),
+        [("Claude Code".into(), false), ("Codex".into(), true)]
+    );
 
     let mut world = handover_review(item(), saved("placement_required"));
     click(&mut world, "Handover");

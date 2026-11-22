@@ -25,6 +25,8 @@ pub(super) struct Sheet<'a> {
     /// The marks people make on the seed's body, in a tile that takes them.
     pub(super) drafts: Option<&'a crate::markdown::Drafts>,
     pub(super) now_ms: i64,
+    /// The harnesses the daemon pushed, which a handover chooses among.
+    pub(super) harnesses: &'a [attn_protocol::Harness],
     pub(super) t: &'a Tokens,
 }
 

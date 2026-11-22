@@ -407,3 +407,65 @@ fn tab_from_the_handover_fields_reaches_cancel_before_handover() {
         Some("garden.handover.send")
     );
 }
+
+#[test]
+fn a_handover_with_no_harness_to_suggest_names_none_and_starts_nothing_until_one_is_chosen() {
+    let unnamed = SeedContinuation {
+        agent: String::new(),
+        ..placed()
+    };
+    let mut world = opened(vec![continued(unnamed)], |r| Some(handed_over(r)));
+    let offered = |id: &str, name: &str| attn_protocol::Harness {
+        id: id.into(),
+        name: name.into(),
+        offered: true,
+        installation: "installed".into(),
+        ..attn_protocol::Harness::default()
+    };
+    world.daemon.emit(attn_protocol::HarnessCatalogMessage {
+        harnesses: vec![
+            offered("claude", "Claude Code"),
+            offered("codex", "Codex"),
+            attn_protocol::Harness {
+                offered: false,
+                ..offered("sigma", "Sigma")
+            },
+        ],
+        ..attn_protocol::HarnessCatalogMessage::new()
+    });
+    world.settle();
+
+    click(&mut world, "Handover");
+    let choices = |world: &World| -> Vec<(String, bool)> {
+        world
+            .screen()
+            .descendants(Target::key("garden.handover.agent"))
+            .into_iter()
+            .filter(|n| n.role == "radio-button")
+            .map(|n| (n.name.clone().unwrap_or_default(), n.is("checked")))
+            .collect()
+    };
+    assert_eq!(
+        choices(&world),
+        [("Claude Code".into(), false), ("Codex".into(), false)]
+    );
+    cmd_enter(&mut world);
+    assert!(world.daemon.sent_of("delegate").is_empty());
+    assert!(
+        world
+            .screen()
+            .find(Target::key("garden.handover.error"))
+            .and_then(|n| n.name)
+            .is_some_and(|said| said.contains("Harness is required."))
+    );
+
+    press(&mut world, "garden.handover.agent.codex");
+    assert_eq!(
+        choices(&world),
+        [("Claude Code".into(), false), ("Codex".into(), true)]
+    );
+    press(&mut world, "garden.handover.send");
+    let sent = world.daemon.sent_of("delegate");
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0]["agent"], "codex");
+}

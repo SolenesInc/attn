@@ -18,6 +18,7 @@ pub(crate) struct Reads<'a> {
     pub(crate) readings: &'a crate::markdown::Readings,
     pub(crate) pictures: &'a crate::markdown::Pictures,
     pub(crate) now_ms: i64,
+    pub(crate) harnesses: &'a [attn_protocol::Harness],
     pub(crate) chief: bool,
     pub(crate) zoom: f32,
     /// The seed tile, by desktop and tile, that offers the way back to Manage crew.
@@ -54,6 +55,7 @@ pub(crate) fn body(
         pictures: reads.pictures,
         drafts,
         now_ms: reads.now_ms,
+        harnesses: reads.harnesses,
         t,
     };
     let here = document.map(|d| &d.seed).or(held.map(|s| s.as_ref()));
