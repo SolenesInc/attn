@@ -49,7 +49,7 @@ func (d *Daemon) channelUp(sessionID protocol.SessionID) bool {
 }
 
 func (d *Daemon) sessionFacts(sessionID protocol.SessionID) harness.SessionFacts {
-	facts := harness.SessionFacts{Session: sessionID, Link: d.store.SessionLink(sessionID), Terminal: d.primaryTerminal(sessionID)}
+	facts := harness.SessionFacts{Session: sessionID, Lifetime: d.lifetime(sessionID), Terminal: d.primaryTerminal(sessionID)}
 	if session := d.store.Get(sessionID); session != nil {
 		facts.Harness, facts.Profile = session.Agent, session.ProfileID
 	}
@@ -76,6 +76,26 @@ func (d *Daemon) agentOf(sessionID protocol.SessionID) harness.ID {
 		return session.Agent
 	}
 	return ""
+}
+
+func (d *Daemon) startHarnesses(ctx context.Context) {
+	for _, h := range d.harnesses() {
+		if err := h.Start(ctx); err != nil {
+			d.logf("%s: %v", h.Facts().ID, err)
+		}
+	}
+}
+
+func (d *Daemon) recoverHarnesses(ctx context.Context, point harness.RecoverPoint) {
+	for _, h := range d.harnesses() {
+		h.Recover(ctx, point)
+	}
+}
+
+func (d *Daemon) stopHarnesses() {
+	for _, h := range d.harnesses() {
+		h.Stop()
+	}
 }
 
 func (d *Daemon) terminalEvent(t harness.TerminalID, e harness.TerminalEvent) {

@@ -587,7 +587,7 @@ func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptyback
 	if err != nil {
 		return nil, err
 	}
-	launch.Profile, launch.Link, launch.Monitor = session.ProfileID, d.store.SessionLink(session.ID), d.monitorLaunch(session.ID)
+	launch.Profile, launch.Lifetime, launch.Monitor = session.ProfileID, d.lifetime(session.ID), d.monitorLaunch(session.ID)
 	launch.InitialPrompt = d.sessionMonitor(session.ID).OwedInitialPrompt()
 	reg, ok := d.ensurePluginRegistry().driver(session.Agent)
 	if !ok {
@@ -607,7 +607,7 @@ func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptyback
 		Yolo:            opts.YoloMode,
 		Model:           opts.Model,
 		Effort:          opts.Effort,
-		ConversationID:  d.linkConversation(session.ID),
+		ConversationID:  d.serverConversation(session.ID),
 		ResumeSessionID: opts.ResumeSessionID,
 		ExecutionTarget: opts.ExecutionTarget,
 

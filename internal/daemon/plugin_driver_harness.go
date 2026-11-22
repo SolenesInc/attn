@@ -41,9 +41,36 @@ func (h pluginHarness) Facts() harness.Facts {
 		SkillDirs: func(lookupEnv func(string) string, homeDir string) ([]string, error) {
 			return resolvePluginSkillsDirs(h.reg.SkillDirs, lookupEnv, homeDir), nil
 		},
-		CacheTTL: crewCacheTTLDefault * time.Second,
-		Signals:  pluginSignals(declared),
+		CacheTTL:       crewCacheTTLDefault * time.Second,
+		Signals:        pluginSignals(declared),
+		Recovery:       h.recovery(),
+		ServerTerminal: h.d.serverTerminalOf(h.reg.Agent),
 	}
+}
+
+func (h pluginHarness) recovery() harness.Recovery {
+	if h.d.serverLinkFor(h.reg.Agent) != nil {
+		return harness.ByServer
+	}
+	return harness.ByTerminal
+}
+
+func (pluginHarness) Start(context.Context) error { return nil }
+
+func (h pluginHarness) Recover(ctx context.Context, point harness.RecoverPoint) {
+	h.d.recoverServer(ctx, h.reg.Agent, point)
+}
+
+func (pluginHarness) SettingChanged(string) {}
+
+func (h pluginHarness) Released(string) { h.d.releaseServer(h.reg.Agent) }
+
+func (pluginHarness) Stop() {}
+
+func (h pluginHarness) Conversations() harness.ConversationStore { return h }
+
+func (h pluginHarness) Admit(ref harness.ConversationRef) error {
+	return h.d.admitToServer(h.reg.Agent, ref)
 }
 
 func (h pluginHarness) RunEnded(e harness.RunEnd) {

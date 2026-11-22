@@ -24,6 +24,8 @@ func (h sigmaHarness) Facts() harness.Facts {
 	facts.SkillDirs = h.driver().(*agentdriver.Sigma).SkillDirs
 	facts.CacheTTL = time.Hour
 	facts.Signals.Heartbeat = 500 * time.Millisecond
+	facts.Recovery = harness.ByServer
+	facts.ServerTerminal = h.d.serverTerminalOf(facts.ID)
 	return facts
 }
 
@@ -45,6 +47,28 @@ func (h sigmaHarness) ResolveCaller(caller string) (harness.SessionID, harness.T
 
 func (h sigmaHarness) Terminal(t harness.TerminalID, e harness.TerminalEvent) {
 	h.d.appServer().terminal(t, e)
+}
+
+func (sigmaHarness) Start(context.Context) error { return nil }
+
+func (h sigmaHarness) Recover(ctx context.Context, point harness.RecoverPoint) {
+	h.d.recoverServer(ctx, h.Facts().ID, point)
+}
+
+func (h sigmaHarness) SettingChanged(key string) {
+	if key == setting.AgentToolsEnabled.Key {
+		h.d.life.Go("reconcileAgentTools", h.d.reconcileAgentTools)
+	}
+}
+
+func (h sigmaHarness) Released(string) { h.d.releaseServer(h.Facts().ID) }
+
+func (sigmaHarness) Stop() {}
+
+func (h sigmaHarness) Conversations() harness.ConversationStore { return h }
+
+func (h sigmaHarness) Admit(ref harness.ConversationRef) error {
+	return h.d.admitToServer(h.Facts().ID, ref)
 }
 
 func (h sigmaHarness) End(_ context.Context, e harness.Ending) {

@@ -436,7 +436,7 @@ func (d *Daemon) reviveSession(sessionID protocol.SessionID, cols, rows int) err
 	if session == nil {
 		return errors.New("session not recoverable")
 	}
-	if _, serverView := d.linkOf(sessionID).(*serverLink); !serverView && session.State != protocol.SessionStateRecoverable {
+	if !d.serverOwns(sessionID) && session.State != protocol.SessionStateRecoverable {
 		return errors.New("session not recoverable")
 	}
 	intent, ok := d.store.LaunchIntent(sessionID)
@@ -451,7 +451,7 @@ func (d *Daemon) reviveRecoverableAgents(host string) {
 	pausepoint.At(pausepoint.RecoverableAgentsReviving)
 	for _, session := range d.store.List("") {
 		if session.State != protocol.SessionStateRecoverable {
-			if _, serverView := d.linkOf(session.ID).(*serverLink); !serverView || d.hidden(session.ID) || d.store.GetSessionExit(session.ID) != nil || d.sessionHasLiveWorker(session.ID) {
+			if !d.serverOwns(session.ID) || d.hidden(session.ID) || d.store.GetSessionExit(session.ID) != nil || d.sessionHasLiveWorker(session.ID) {
 				continue
 			}
 		}

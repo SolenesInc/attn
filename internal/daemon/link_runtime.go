@@ -2,18 +2,15 @@ package daemon
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/sessionmonitor"
-	"github.com/victorarias/attn/internal/store"
 )
 
 type linkRuntime interface {
 	kind() string
+	serves(agent string) bool
 
 	canRun(req *spawnRequest) bool
 	enabledForNewLaunches() bool
@@ -44,15 +41,22 @@ type sharedConversationLink interface {
 	transcriptPath(path string) string
 }
 
-func (d *Daemon) restoreLinkedConversation(kind, profile, conversation string) error {
-	if l, ok := d.linkNamed(kind).(sharedConversationLink); ok {
-		return l.restore(profile, conversation)
+func (d *Daemon) restoreConversation(agent string, lifetime harness.Lifetime, profile, conversation string) error {
+	return d.restoreConversationIn(d.linkFor(agent, lifetime), profile, conversation)
+}
+
+func (d *Daemon) restoreConversationIn(l linkRuntime, profile, conversation string) error {
+	if shared, ok := l.(sharedConversationLink); ok {
+		return shared.restore(profile, conversation)
 	}
 	return nil
 }
 
-func (d *Daemon) linkedTranscriptPath(kind, path string) string {
-	if l, ok := d.linkNamed(kind).(sharedConversationLink); ok {
+func (d *Daemon) linkedTranscriptPath(agent string, lifetime harness.Lifetime, path string) string {
+	if lifetime != harness.InServer {
+		return path
+	}
+	if l, ok := d.linkServing(agent).(sharedConversationLink); ok {
 		return l.transcriptPath(path)
 	}
 	return path
@@ -64,28 +68,35 @@ func (d *Daemon) renameLinkedConversation(sessionID protocol.SessionID, label st
 	}
 }
 
-func (d *Daemon) linkNamed(kind string) linkRuntime {
-	if kind == "" {
+func (d *Daemon) linkOf(sessionID protocol.SessionID) linkRuntime {
+	agent, lifetime := d.store.SessionLifetime(sessionID)
+	if lifetime != harness.InServer {
 		return nil
 	}
+	return d.linkServing(agent)
+}
+
+func (d *Daemon) linkFor(agent string, lifetime harness.Lifetime) linkRuntime {
+	if lifetime != harness.InServer {
+		return nil
+	}
+	return d.linkServing(agent)
+}
+
+func (d *Daemon) linkServing(agent string) linkRuntime {
 	for _, l := range d.links() {
-		if l.kind() == kind {
+		if l.serves(agent) {
 			return l
 		}
 	}
 	return nil
 }
 
-func (d *Daemon) linkOf(sessionID protocol.SessionID) linkRuntime {
-	return d.linkNamed(d.store.SessionLink(sessionID))
-}
-
-func (d *Daemon) terminalCarriesLaunch(sessionID protocol.SessionID) bool {
-	return d.linkOf(sessionID) == nil
-}
-
-func (d *Daemon) conversationShowsInManyTerminals(sessionID protocol.SessionID) bool {
-	return d.linkOf(sessionID) != nil
+func lifetimeOf(l linkRuntime) harness.Lifetime {
+	if l == nil {
+		return harness.InTerminal
+	}
+	return harness.InServer
 }
 
 func (d *Daemon) launchLink(req *spawnRequest) linkRuntime {
@@ -103,13 +114,6 @@ func (d *Daemon) launchLink(req *spawnRequest) linkRuntime {
 	return nil
 }
 
-func linkKind(l linkRuntime) string {
-	if l == nil {
-		return ""
-	}
-	return l.kind()
-}
-
 func (d *Daemon) linkProcess(t harness.TerminalID) bool {
 	for _, l := range d.links() {
 		if l.runsLink(t) {
@@ -118,107 +122,4 @@ func (d *Daemon) linkProcess(t harness.TerminalID) bool {
 	}
 	_, server := d.appServerProcess(d.life.Context(), t)
 	return server
-}
-
-func (d *Daemon) linkConversation(sessionID protocol.SessionID) string {
-	if d.linkOf(sessionID) == nil {
-		return ""
-	}
-	return d.store.GetSessionConversation(sessionID).NativeID
-}
-
-func (d *Daemon) hidden(sessionID protocol.SessionID) bool {
-	if len(d.terminals().Of(harness.SessionID(sessionID))) > 0 {
-		return false
-	}
-	return d.store.Get(sessionID) != nil && d.linkConversation(sessionID) != ""
-}
-
-func (d *Daemon) forgetProgramStatus(sessionID protocol.SessionID) {
-	d.updateEvidence(sessionID, nil, func(e *sessionmonitor.Evidence) {
-		e.Heartbeat = nil
-		e.ClearProgramStatus()
-	})
-}
-
-func (d *Daemon) keepsWhenLeft(sessionID protocol.SessionID) bool {
-	return d.linkConversation(sessionID) != ""
-}
-
-func (d *Daemon) linkRenamed(sessionID protocol.SessionID, label string) {
-	if _, err := Call[struct{}](context.Background(), d.router(), protocol.LinkRenameMessage{Cmd: protocol.CmdLinkRename, SessionID: sessionID, Label: label}); err != nil {
-		d.logf("link rename: session=%s: %v", sessionID, err)
-	}
-}
-
-func (d *Daemon) mirrorLabel(sessionID protocol.SessionID) {
-	if session := d.store.Get(sessionID); session != nil && !store.SessionLabelIsPlaceholder(session.Label, session.Directory, session.ID) {
-		d.linkRenamed(session.ID, session.Label)
-	}
-}
-
-func (d *Daemon) recoverLinkProcesses(ctx context.Context) {
-	for _, l := range d.links() {
-		l.recoverProcesses(ctx)
-	}
-}
-
-func (d *Daemon) recoverLinkViews(ctx context.Context) {
-	for _, l := range d.links() {
-		l.recoverViews(ctx)
-	}
-}
-
-func (d *Daemon) decorateSessionHidden(clone *protocol.Session) {
-	clone.Hidden = nil
-	if d.hidden(clone.ID) {
-		clone.Hidden = protocol.Ptr(true)
-	}
-}
-
-func (d *Daemon) decorateLedgerEntriesHidden(entries []protocol.SessionLedgerEntry) {
-	for i := range entries {
-		d.decorateLedgerEntryHidden(&entries[i])
-	}
-}
-
-func (d *Daemon) decorateLedgerEntryHidden(entry *protocol.SessionLedgerEntry) {
-	if protocol.Deref(entry.ClosedAt) == "" && d.hidden(entry.ID) {
-		entry.Hidden = protocol.Ptr(true)
-	}
-}
-
-func (d *Daemon) linkHolder(profile, conversation string) protocol.SessionID {
-	sessionID := d.store.OpenSessionHolding(profile, conversation)
-	if sessionID == "" || d.linkOf(sessionID) == nil {
-		return ""
-	}
-	return sessionID
-}
-
-func (d *Daemon) spawnShowing(sessionID protocol.SessionID, cols, rows int) (*protocol.SpawnSessionMessage, internalSpawnPolicy, error) {
-	session := d.store.Get(sessionID)
-	intent, ok := d.store.LaunchIntent(sessionID)
-	conversation := d.linkConversation(sessionID)
-	if session == nil || !ok || conversation == "" {
-		return nil, internalSpawnPolicy{}, fmt.Errorf("session %s holds no linked conversation to show", sessionID)
-	}
-	spawn, policy := buildStoredIntentSpawn(session, intent, cols, rows)
-	spawn.ResumeSessionID = protocol.Ptr(conversation)
-	policy.launchPlacement = &launchPlacement{direction: layouttree.DirectionVertical}
-	policy.userStarted = true
-	return spawn, policy, nil
-}
-
-func (d *Daemon) showHidden(sessionID protocol.SessionID) error {
-	spawn, policy, err := d.spawnShowing(sessionID, 80, 24)
-	if err != nil {
-		return err
-	}
-	return d.resumeAsMember(sessionID, func() error {
-		if rejection := d.runSpawnPipeline(spawn, policy); rejection != nil {
-			return fmt.Errorf("show session %s: %w", sessionID, rejection.reason())
-		}
-		return nil
-	})
 }

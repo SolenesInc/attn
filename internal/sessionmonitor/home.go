@@ -44,7 +44,7 @@ type Launch struct {
 	Known                bool
 	Agent                protocol.SessionAgent
 	Profile              string
-	Link                 string
+	Lifetime             harness.Lifetime
 	StartedAt            time.Time
 	Directory            string
 	Branch               attngit.BranchInfo

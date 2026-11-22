@@ -60,16 +60,13 @@ func (d *Daemon) conversationMoved(terminal protocol.TerminalID, m harness.Move)
 		}
 		terminal = view
 	}
-	_, linkedServer := d.linkOf(d.sessionInTerminal(terminal)).(*serverLink)
-	if observation.TranscriptPath == "" && !linkedServer {
+	if observation.TranscriptPath == "" && !d.serverOwns(d.sessionInTerminal(terminal)) {
 		d.logf("agent conversation: ignored pathless observation terminal=%s native=%s", terminal, observation.NativeID)
 		return nil
 	}
 	if session := d.store.Get(d.sessionInTerminal(terminal)); session != nil {
-		if l, server := d.linkOf(session.ID).(*serverLink); server {
-			if err := l.admit(session.ProfileID, observation.NativeID); err != nil {
-				return refused(err)
-			}
+		if err := d.admitConversation(session, observation.NativeID); err != nil {
+			return refused(err)
 		}
 	}
 	if held := d.store.GetSessionConversation(d.sessionInTerminal(terminal)).NativeID; held != "" && held != observation.NativeID {
@@ -96,7 +93,7 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 func (d *Daemon) acceptMonitorConversation(source *sessionmonitor.Monitor, proposed sessionmonitor.Conversation, observation agentConversationObservation) bool {
 	t := proposed.Terminal
 	cur, placed := d.terminals().Showing(t)
-	if current := d.store.Get(cur); !placed || (current != nil && d.linkOf(current.ID) == nil && !conversationIsSession(current.Agent)) {
+	if current := d.store.Get(cur); !placed || (current != nil && d.lifetime(current.ID) != harness.InServer && !conversationIsSession(current.Agent)) {
 		observation.SessionID = d.sessionInTerminal(t)
 		defer d.lockSessionLifecycles(observation.SessionID)()
 		if source != nil {
@@ -126,11 +123,9 @@ func (d *Daemon) acceptMonitorConversation(source *sessionmonitor.Monitor, propo
 		d.logf("agent conversation: dropped %s from terminal %s, which no longer runs session %s", observation.NativeID, t, cur)
 		return false
 	}
-	if l, server := d.linkOf(session.ID).(*serverLink); server {
-		if err := l.admit(session.ProfileID, observation.NativeID); err != nil {
-			d.logf("agent conversation refused: terminal=%s: %v", t, err)
-			return false
-		}
+	if err := d.admitConversation(session, observation.NativeID); err != nil {
+		d.logf("agent conversation refused: terminal=%s: %v", t, err)
+		return false
 	}
 	if d.monitors().runReplaced(session.ID, proposed.Run) {
 		d.logf("agent conversation: dropped %s from terminal %s, reported by run %s that a reload replaced", observation.NativeID, t, proposed.Run)
@@ -260,7 +255,7 @@ func (d *Daemon) replayPendingConversations() {
 			launch.Cost = cost
 		}
 		r := d.monitors()
-		monitor := r.registry.Start(nil, sessionmonitor.Start{Session: id, Terminal: pending[0].Terminal, Conversation: conversation.NativeID, Linked: d.linkNamed(launch.Link) != nil, Launch: func() sessionmonitor.Launch { return launch }, Policy: d.monitorPolicyFrom(d.monitorPolicySources(), shown)})
+		monitor := r.registry.Start(nil, sessionmonitor.Start{Session: id, Terminal: pending[0].Terminal, Conversation: conversation.NativeID, Linked: launch.Lifetime == harness.InServer, Launch: func() sessionmonitor.Launch { return launch }, Policy: d.monitorPolicyFrom(d.monitorPolicySources(), shown)})
 		r.mu.Lock()
 		r.sessions[id] = &monitorBinding{monitor: monitor, applied: monitor.Snapshot(), copied: d.copiedSession(id)}
 		homeOf(monitor).bind(id)

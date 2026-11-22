@@ -25,8 +25,8 @@ type AgentLaunch struct {
 	AwarenessDirs        []string
 	Direct               bool
 	InitialPrompt        string
-	Link                 string
-	PreviousLink         string
+	Lifetime             harness.Lifetime
+	PreviousLifetime     harness.Lifetime
 	Profile              string
 	Plugin               *AgentPluginLaunch
 	Monitor              sessionmonitor.Launch
@@ -50,7 +50,7 @@ type AgentPluginLaunch struct {
 }
 
 func (launch *AgentLaunch) driverRunID() string {
-	if launch == nil || launch.Plugin == nil || launch.Link != "" {
+	if launch == nil || launch.Plugin == nil || launch.Lifetime == harness.InServer {
 		return ""
 	}
 	return launch.Plugin.Params.RunID
@@ -173,7 +173,7 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 	if err := d.prepareAgentLaunch(opts, launch); err != nil {
 		return nil, fmt.Errorf("prepare %s launch: %w", opts.Agent, err)
 	}
-	if l, server := d.linkNamed(launch.Link).(*serverLink); server {
+	if l, server := d.linkFor(opts.Agent, launch.Lifetime).(*serverLink); server {
 		opts.AgentEnv = append(opts.AgentEnv, l.homeEnv())
 	}
 	return nil, nil
@@ -195,7 +195,7 @@ func (d *Daemon) seedAgentMonitor(session *protocol.Session, opts ptybackend.Spa
 		seed = launch.Monitor
 	}
 	monitor := d.startSessionMonitor(session.ID)
-	if _, serverView := d.linkNamed(launch.Link).(*serverLink); serverView && opts.ResumeSessionID != "" {
+	if d.ownedByServer(opts.Agent, launch.Lifetime) && opts.ResumeSessionID != "" {
 		if monitor.Snapshot().State.V.State == protocol.SessionStateRecoverable {
 			monitor.Begin(withSeed(seed, session))
 		}
@@ -225,7 +225,7 @@ func (d *Daemon) agentStarted(sessionID protocol.SessionID, launch *AgentLaunch)
 	if pending, ok := d.consumeQueuedAgentConversation(sessionID); ok {
 		d.observeAgentConversation(pending)
 	}
-	if launch.Link != "" {
+	if launch.Lifetime == harness.InServer {
 		d.terminalEvent(d.primaryTerminal(sessionID), harness.Started{Session: sessionID, Prompted: strings.TrimSpace(launch.InitialPrompt) != ""})
 	}
 }
@@ -239,8 +239,8 @@ func (d *Daemon) commitAgentLaunch(_ context.Context, msg protocol.LaunchCommitt
 			d.terminalEvent(msg.TerminalID, harness.Dropped{})
 		}
 		d.life.Go("releaseLinksAfterLaunchAbort", func() {
-			for _, link := range d.links() {
-				link.profileReleased(msg.ProfileID)
+			for _, h := range d.harnesses() {
+				h.Released(msg.ProfileID)
 			}
 		})
 		d.terminals().unexpect(msg.TerminalID)
@@ -293,7 +293,7 @@ func (d *Daemon) readConversationReadiness(_ context.Context, msg protocol.Conve
 		return protocol.ConversationReadinessResult{}, fmt.Errorf("unknown agent %q", msg.Agent)
 	}
 	if msg.Restore {
-		if err := d.restoreLinkedConversation(msg.Link, msg.Profile, msg.Conversation); err != nil {
+		if err := d.restoreConversation(msg.Agent, harness.Lifetime(msg.Lifetime), msg.Profile, msg.Conversation); err != nil {
 			return protocol.ConversationReadinessResult{}, err
 		}
 	}
@@ -305,7 +305,7 @@ func (d *Daemon) readConversationReadiness(_ context.Context, msg protocol.Conve
 }
 
 func (d *Daemon) placedConversationReadiness(session protocol.SessionID, host, agent, profile, conversation string, restore bool) (protocol.ConversationReadinessResult, error) {
-	return Call[protocol.ConversationReadinessResult](context.Background(), d.router(), protocol.ConversationReadinessMessage{Cmd: protocol.CmdConversationReadiness, Host: host, Agent: agent, Conversation: conversation, Restore: restore, Profile: profile, Link: d.store.SessionLink(session)})
+	return Call[protocol.ConversationReadinessResult](context.Background(), d.router(), protocol.ConversationReadinessMessage{Cmd: protocol.CmdConversationReadiness, Host: host, Agent: agent, Conversation: conversation, Restore: restore, Profile: profile, Lifetime: protocol.ConversationLifetime(d.lifetime(session))})
 }
 
 func (d *Daemon) readAgentCatalog(ctx context.Context, msg protocol.AgentCatalogMessage) (protocol.AgentCatalogResult, error) {
@@ -350,13 +350,13 @@ func (d *Daemon) requireCatalogAgent(host, agent, explicit string, startsSession
 }
 
 func (d *Daemon) prepareLinkedLaunch(opts *ptybackend.SpawnOptions, launch *AgentLaunch, reload bool) error {
-	l := d.linkNamed(launch.Link)
+	l := d.linkFor(opts.Agent, launch.Lifetime)
 	if l != nil {
 		if err := l.admit(launch.Profile, opts.ResumeSessionID); err != nil {
 			return err
 		}
 		if opts.ResumeSessionID != "" {
-			if err := d.restoreLinkedConversation(launch.Link, launch.Profile, opts.ResumeSessionID); err != nil {
+			if err := d.restoreConversationIn(l, launch.Profile, opts.ResumeSessionID); err != nil {
 				return err
 			}
 		}

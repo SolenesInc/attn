@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/victorarias/attn/internal/harness"
 	"slices"
 	"time"
 
@@ -151,13 +152,11 @@ func (d *Daemon) applyCopyCall(ctx context.Context, home string, request []byte)
 }
 
 func (d *Daemon) applyOutpostCopy(ctx context.Context, home string, rows []protocol.CopyRow) error {
-	released := make(map[string]linkRuntime)
+	released := make(map[string]string)
 	for _, row := range rows {
 		if row.Table == protocol.CopyTableSessions && row.Columns == nil {
-			if session := d.store.Get(protocol.SessionID(row.Key)); session != nil {
-				if link := d.linkOf(session.ID); link != nil {
-					released[session.ProfileID] = link
-				}
+			if session := d.store.Get(protocol.SessionID(row.Key)); session != nil && d.lifetime(session.ID) == harness.InServer {
+				released[session.ProfileID] = session.Agent
 			}
 		}
 	}
@@ -176,8 +175,8 @@ func (d *Daemon) applyOutpostCopy(ctx context.Context, home string, rows []proto
 	}
 	d.replayPendingConversations()
 	d.bindMonitorTerminals()
-	for profile, link := range released {
-		d.life.Go("linkReleasedAfterCopy", func() { link.profileReleased(profile) })
+	for profile, agent := range released {
+		d.life.Go("linkReleasedAfterCopy", func() { d.released(agent, profile) })
 	}
 	return nil
 }
@@ -185,12 +184,10 @@ func (d *Daemon) applyOutpostCopy(ctx context.Context, home string, rows []proto
 // dropStaleCopy keeps only the copy from the home this daemon is enrolled to, and closes a bridge from any
 // other home.
 func (d *Daemon) dropStaleCopy() error {
-	released := make(map[string]linkRuntime)
+	released := make(map[string]string)
 	for _, session := range d.store.List("") {
-		if d.copiedSession(session.ID) {
-			if link := d.linkOf(session.ID); link != nil {
-				released[session.ProfileID] = link
-			}
+		if d.copiedSession(session.ID) && d.lifetime(session.ID) == harness.InServer {
+			released[session.ProfileID] = session.Agent
 		}
 	}
 	before := d.settingValues()
@@ -217,8 +214,8 @@ func (d *Daemon) dropStaleCopy() error {
 	d.configurePhoneAccess()
 	d.refreshJobQueueRole()
 	d.pruneRuntimesWithoutSession(d.life.Context())
-	for profile, link := range released {
-		d.life.Go("linkReleasedAfterEnrollment", func() { link.profileReleased(profile) })
+	for profile, agent := range released {
+		d.life.Go("linkReleasedAfterEnrollment", func() { d.released(agent, profile) })
 	}
 	if err := d.dropNotebookSyncFromOtherHome(status.HomeDaemonID); err != nil {
 		return err

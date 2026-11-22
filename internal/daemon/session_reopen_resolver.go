@@ -44,7 +44,7 @@ func (d *Daemon) resolveReopen(
 	_, hasLaunchIntent := d.store.LaunchIntent(entry.ID)
 	inspection, err := Call[protocol.ReopenInspection](ctx, d.router(), protocol.ReopenInspectMessage{
 		Cmd: protocol.CmdReopenInspect, Host: protocol.Deref(entry.Host), Target: verdict.machineTarget(),
-		Link: d.store.SessionLink(entry.ID), HasLaunchIntent: hasLaunchIntent, BranchMerged: d.branchMerged(entry.ID, verdict.Execution.Branch),
+		HasLaunchIntent: hasLaunchIntent, BranchMerged: d.branchMerged(entry.ID, verdict.Execution.Branch),
 	})
 	if err != nil {
 		return sessionReopenVerdict{}, err

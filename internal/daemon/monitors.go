@@ -122,12 +122,9 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 	}
 	terminal := d.primaryTerminal(sessionID)
 	conversation := d.store.GetSessionConversation(sessionID).NativeID
-	link := d.linkOf(sessionID)
-	linked := link != nil
-	if linked {
-		if session := d.store.Get(sessionID); session != nil {
-			terminal = link.serverTerminal(session.ProfileID)
-		}
+	anchor, linked := d.monitorAnchor(sessionID)
+	if anchor != "" {
+		terminal = anchor
 	}
 	if terminal == "" {
 		return nil
@@ -215,7 +212,7 @@ func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Laun
 		Known:              true,
 		Agent:              session.Agent,
 		Profile:            session.ProfileID,
-		Link:               d.store.SessionLink(sessionID),
+		Lifetime:           d.lifetime(sessionID),
 		StartedAt:          d.store.SessionLaunchedAt(sessionID),
 		Directory:          session.Directory,
 		Branch:             branchFromSession(session),
@@ -354,8 +351,8 @@ func (h monitorHost) Conversation(facts harness.SessionFacts) harness.Conversati
 	return h.daemon.conversationFor(facts)
 }
 
-func (h monitorHost) LinkTranscriptPath(link, path string) string {
-	return h.daemon.linkedTranscriptPath(link, path)
+func (h monitorHost) LinkTranscriptPath(agent string, lifetime harness.Lifetime, path string) string {
+	return h.daemon.linkedTranscriptPath(agent, lifetime, path)
 }
 
 func (h monitorHost) NoteKey(terminal harness.TerminalID, at time.Time) {

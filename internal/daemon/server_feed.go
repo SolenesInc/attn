@@ -73,7 +73,7 @@ func (l *serverLink) watchesConversations() bool {
 
 func (p *serverConnection) openFeeds(c *effectrpc.Client, conversations map[string]bool, live bool) {
 	for id, l := range p.sessions() {
-		conversation := p.d.linkConversation(id)
+		conversation := p.d.serverConversation(id)
 		if conversation == "" || !l.watchesConversations() || (conversations != nil && !conversations[conversation]) {
 			continue
 		}

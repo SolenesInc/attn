@@ -174,6 +174,8 @@ func (s *codexServer) client() *codexshared.Client {
 
 func (r *codexShared) kind() string { return codexLinkKind }
 
+func (r *codexShared) serves(agent string) bool { return agent == string(protocol.SessionAgentCodex) }
+
 func (r *codexShared) canRun(req *spawnRequest) bool {
 	return req.agent == string(protocol.SessionAgentCodex) && !req.hasPluginDriver && !req.isShell
 }
@@ -1162,7 +1164,7 @@ func (r *codexShared) recoverProcesses(ctx context.Context) {
 		known[profile.ID] = true
 	}
 	for _, session := range r.d.store.List("") {
-		if !known[session.ProfileID] && r.d.store.SessionLink(session.ID) == codexLinkKind {
+		if !known[session.ProfileID] && r.launchedShared(session.ID) {
 			profiles = append(profiles, profilespkg.Profile{ID: session.ProfileID})
 			known[session.ProfileID] = true
 		}

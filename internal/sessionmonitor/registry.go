@@ -43,7 +43,7 @@ type Host interface {
 	Input(ctx context.Context, terminal harness.TerminalID, data []byte) error
 	PlaceInput(ctx context.Context, terminal harness.TerminalID, data []byte, within time.Duration) error
 	Conversation(harness.SessionFacts) harness.Conversation
-	LinkTranscriptPath(link, path string) string
+	LinkTranscriptPath(agent string, lifetime harness.Lifetime, path string) string
 	NoteKey(terminal harness.TerminalID, at time.Time)
 	LastKey(terminal harness.TerminalID) time.Time
 	EnqueueTitle(m *Monitor, conversation, source string) error
@@ -142,7 +142,7 @@ type Monitor struct {
 	launchGate           *launchGate
 	touchedAt            time.Time
 	views                atomic.Pointer[terminalViews]
-	link                 string
+	lifetime             harness.Lifetime
 	windowRevision       uint64
 }
 
@@ -248,7 +248,7 @@ func (r *Registry) Start(previous *Monitor, start Start) *Monitor {
 	} else {
 		m.policy = start.Policy
 		launch := start.Launch()
-		m.link = launch.Link
+		m.lifetime = launch.Lifetime
 		if m.turn == (TurnStamps{}) || !launch.Turn.SnoozedUntil.IsZero() {
 			m.turn = launch.Turn
 			if m.turn.SnoozedUntil.After(time.Now()) {
@@ -323,7 +323,7 @@ func (m *Monitor) initializeLocked(start Start) {
 	launch := start.Launch()
 	m.agent = launch.Agent
 	m.profile = launch.Profile
-	m.link = launch.Link
+	m.lifetime = launch.Lifetime
 	m.startedAt = launch.StartedAt
 	m.directory = launch.Directory
 	m.branch = launch.Branch

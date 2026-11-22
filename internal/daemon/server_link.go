@@ -51,6 +51,13 @@ func (l *serverLink) logf(format string, args ...any) {
 
 func (l *serverLink) kind() string { return l.b.kind }
 
+func (l *serverLink) serves(agent string) bool { return agent == l.b.agent }
+
+func (l *serverLink) holds(sessionID protocol.SessionID) bool {
+	agent, lifetime := l.d.store.SessionLifetime(sessionID)
+	return lifetime == harness.InServer && l.serves(agent)
+}
+
 func (l *serverLink) canRun(req *spawnRequest) bool {
 	return req.agent == l.b.agent && (!req.hasPluginDriver || l.b.plugin == req.pluginDriver.PluginName) && !req.isShell && l.runsLaunch(req.policy.unattendedLaunch)
 }
@@ -76,7 +83,7 @@ func (l *serverLink) admit(profile, conversation string) error {
 			if session.ProfileID != profile {
 				return fmt.Errorf("conversation %s is open in a session of profile %s; close it there first", conversation, session.ProfileID)
 			}
-			if l.d.store.SessionLink(holder) != l.b.kind {
+			if !l.holds(holder) {
 				return fmt.Errorf("conversation %s is owned by harness %s; close its session before using harness %s", conversation, session.Agent, l.b.agent)
 			}
 		}
@@ -199,7 +206,7 @@ func (l *serverLink) sessions() []protocol.SessionID {
 }
 
 func (l *serverLink) runsHere(sessionID protocol.SessionID) bool {
-	return l.d.store.SessionLink(sessionID) == l.b.kind && l.d.sessionHost(sessionID) == ""
+	return l.holds(sessionID) && l.d.sessionHost(sessionID) == ""
 }
 
 func (l *serverLink) holder(conversation string) protocol.SessionID {
@@ -382,7 +389,7 @@ func (s serverConversation) CanCompact() error {
 }
 
 func (l *serverLink) deliver(ctx context.Context, session protocol.SessionID, in harness.Input) harness.Custody {
-	conversation := l.d.linkConversation(session)
+	conversation := l.d.serverConversation(session)
 	if conversation == "" {
 		return harness.Custody{Reason: fmt.Sprintf("session %s holds no %s conversation", session, l.b.name)}
 	}

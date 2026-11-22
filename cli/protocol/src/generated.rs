@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "9b79c1529c56";
+pub const PROTOCOL_VERSION: &str = "5637139de838";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -163,8 +163,6 @@ pub struct AgentLaunchCloseMessage {
     pub conversation: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub driver: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub link: Option<String>,
     pub phase: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
@@ -2440,6 +2438,7 @@ impl ConnectOutpostInTerminalMessage {
         }
     }
 }
+pub type ConversationLifetime = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ConversationOutcome {
     pub conversation: String,
@@ -2454,7 +2453,7 @@ pub struct ConversationReadinessMessage {
     pub cmd: String,
     pub conversation: String,
     pub host: String,
-    pub link: String,
+    pub lifetime: ConversationLifetime,
     pub profile: String,
     pub restore: bool,
 }
@@ -8359,7 +8358,6 @@ pub struct ReopenInspectMessage {
     pub cmd: String,
     pub has_launch_intent: bool,
     pub host: String,
-    pub link: String,
     pub target: ReopenTarget,
 }
 

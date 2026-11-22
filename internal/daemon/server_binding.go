@@ -52,6 +52,40 @@ func (d *Daemon) linkBuiltInServers() {
 
 var serverEnv = []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT=", "ATTN_CODEX_SHARED_PROFILE=", "CODEX_THREAD_ID=", "BUN_GC_TIMER_DISABLE=1"}
 
+func (d *Daemon) serverTerminalOf(agent string) func(string) harness.TerminalID {
+	l := d.serverLinkFor(agent)
+	if l == nil {
+		return nil
+	}
+	return l.serverTerminal
+}
+
+func (d *Daemon) recoverServer(ctx context.Context, agent string, point harness.RecoverPoint) {
+	l := d.serverLinkFor(agent)
+	if l == nil {
+		return
+	}
+	switch point {
+	case harness.RecoverProcesses:
+		l.recoverProcesses(ctx)
+	case harness.RecoverViews:
+		l.recoverViews(ctx)
+	}
+}
+
+func (d *Daemon) releaseServer(agent string) {
+	if l := d.serverLinkFor(agent); l != nil {
+		l.profileReleased("")
+	}
+}
+
+func (d *Daemon) admitToServer(agent string, ref harness.ConversationRef) error {
+	if l := d.serverLinkFor(agent); l != nil && ref.Lifetime == harness.InServer {
+		return l.admit(ref.Profile, ref.ID)
+	}
+	return nil
+}
+
 func (d *Daemon) serverLinkFor(agent string) *serverLink {
 	d.serverLinksMu.Lock()
 	defer d.serverLinksMu.Unlock()

@@ -43,14 +43,16 @@ func TestEveryHarnessAnswersTheContractWithItsFake(t *testing.T) {
 		{
 			Facts: harness.Facts{ID: "codex", DisplayName: "Codex", Options: terminalOptions, Executable: harness.Executable{Default: "codex", Env: "ATTN_CODEX_EXECUTABLE"}, CacheTTL: 30 * time.Minute, Tiers: map[modeltiers.Tier]string{modeltiers.Light: "gpt-6-luna", modeltiers.Standard: "gpt-5.6-terra", modeltiers.Deep: "gpt-6.1-sol"}, Advisor: harness.ModelChoice{Model: "gpt-5.6-luna", Effort: "xhigh"},
 				Signals: harness.Signals{TurnStarts: harness.TurnStartsReported, ReportsTools: true, Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute, ConfirmsFirstTurn: true}},
-			SkillDirs: []string{home + "/.agents/skills"},
-			Offered:   true,
+			SkillDirs:      []string{home + "/.agents/skills"},
+			ServerTerminal: "codex-server-6c1d6ced",
+			Offered:        true,
 		},
 		{
 			Facts: harness.Facts{ID: "sigma", DisplayName: "Sigma", Options: sigmaOptions, Executable: harness.Executable{Default: "sigma", Env: "ATTN_SIGMA_EXECUTABLE"}, CacheTTL: time.Hour,
-				Signals: harness.Signals{Heartbeat: 500 * time.Millisecond}},
-			SkillDirs: []string{home + "/.sigma/skills", home + "/.claude/skills"},
-			Offered:   true,
+				Signals: harness.Signals{Heartbeat: 500 * time.Millisecond}, Recovery: harness.ByServer},
+			SkillDirs:      []string{home + "/.sigma/skills", home + "/.claude/skills"},
+			ServerTerminal: "sigma-server",
+			Offered:        true,
 		},
 		{
 			Facts: harness.Facts{ID: "house", DisplayName: "House", Options: harness.Options{Resume: true, Yolo: true, InitialPrompt: true, LaunchInstructions: true, ModelPin: true, EffortPin: true, Provider: true}, CacheTTL: time.Hour,

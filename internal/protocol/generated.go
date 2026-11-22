@@ -202,9 +202,6 @@ type AgentLaunchCloseMessage struct {
 	// Driver corresponds to the JSON schema field "driver".
 	Driver *string `json:"driver,omitempty,omitzero"`
 
-	// Link corresponds to the JSON schema field "link".
-	Link *string `json:"link,omitempty,omitzero"`
-
 	// Phase corresponds to the JSON schema field "phase".
 	Phase interface{} `json:"phase"`
 
@@ -2802,6 +2799,11 @@ type ConnectOutpostInTerminalMessage struct {
 	RequestID string `json:"request_id"`
 }
 
+type ConversationLifetime string
+
+const ConversationLifetimeServer ConversationLifetime = "server"
+const ConversationLifetimeTerminal ConversationLifetime = "terminal"
+
 type ConversationOutcome struct {
 	// Conversation corresponds to the JSON schema field "conversation".
 	Conversation string `json:"conversation"`
@@ -2834,8 +2836,8 @@ type ConversationReadinessMessage struct {
 	// Host corresponds to the JSON schema field "host".
 	Host string `json:"host"`
 
-	// Link corresponds to the JSON schema field "link".
-	Link string `json:"link"`
+	// Lifetime corresponds to the JSON schema field "lifetime".
+	Lifetime ConversationLifetime `json:"lifetime"`
 
 	// Profile corresponds to the JSON schema field "profile".
 	Profile string `json:"profile"`
@@ -9146,9 +9148,6 @@ type ReopenInspectMessage struct {
 
 	// Host corresponds to the JSON schema field "host".
 	Host string `json:"host"`
-
-	// Link corresponds to the JSON schema field "link".
-	Link string `json:"link"`
 
 	// Target corresponds to the JSON schema field "target".
 	Target ReopenTarget `json:"target"`

@@ -121,10 +121,8 @@ func (d *Daemon) startTerminal(ctx context.Context, msg protocol.TerminalStartMe
 	pausepoint.At(pausepoint.TerminalCopyApplied)
 	opts.HostName = protocol.Deref(msg.HostName)
 	d.expectTerminal(msg.TerminalID, session.ID)
-	if agent != nil && agent.PreviousLink != agent.Link {
-		if prior := d.linkNamed(agent.PreviousLink); prior != nil {
-			defer d.life.Go("linkReleasedAfterLaunch", func() { prior.profileReleased(agent.Profile) })
-		}
+	if agent != nil && agent.PreviousLifetime == harness.InServer && agent.Lifetime != harness.InServer {
+		defer d.life.Go("linkReleasedAfterLaunch", func() { d.released(opts.Agent, agent.Profile) })
 	}
 	defer func() {
 		if launchErr == nil {

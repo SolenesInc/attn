@@ -22,7 +22,8 @@ import (
 const codexLinkKind = "codex-app-server"
 
 func (r *codexShared) launchedShared(sessionID protocol.SessionID) bool {
-	return r.d.store.SessionLink(sessionID) == codexLinkKind
+	agent, lifetime := r.d.store.SessionLifetime(sessionID)
+	return lifetime == harness.InServer && r.serves(agent)
 }
 
 func (r *codexShared) conversation(sessionID protocol.SessionID) string {
@@ -58,7 +59,7 @@ type codexConversation struct {
 }
 
 func (h codexHarness) Conversation(facts harness.SessionFacts) harness.Conversation {
-	if facts.Link != codexLinkKind {
+	if facts.Lifetime != harness.InServer {
 		return typedConversation{refusal: errors.New("this Codex session started before Codex sessions ran on the shared app server, so attn has no way to compact it. Close without --compact instead")}
 	}
 	return codexConversation{shared: h.d.codexShared(), facts: facts}

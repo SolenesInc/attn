@@ -28,6 +28,7 @@ func (h codexHarness) Facts() harness.Facts {
 	facts.Advisor = harness.ModelChoice{Model: "gpt-5.6-luna", Effort: "xhigh"}
 	facts.Signals.Heartbeat, facts.Signals.ReviewerDwell = 500*time.Millisecond, time.Minute
 	facts.Signals.ConfirmsFirstTurn = true
+	facts.ServerTerminal = codexServerTerminal
 	return facts
 }
 
@@ -45,6 +46,32 @@ func (h codexHarness) Terminal(t harness.TerminalID, e harness.TerminalEvent) {
 	case harness.Restarting:
 		r.retireConnections(t)
 	}
+}
+
+func (codexHarness) Start(context.Context) error { return nil }
+
+func (h codexHarness) Recover(ctx context.Context, point harness.RecoverPoint) {
+	switch point {
+	case harness.RecoverProcesses:
+		h.d.codexShared().recoverProcesses(ctx)
+	case harness.RecoverViews:
+		h.d.codexShared().recoverViews(ctx)
+	}
+}
+
+func (h codexHarness) SettingChanged(key string) { h.d.codexShared().settingChanged(key) }
+
+func (h codexHarness) Released(profile string) { h.d.codexShared().profileReleased(profile) }
+
+func (codexHarness) Stop() {}
+
+func (h codexHarness) Conversations() harness.ConversationStore { return h }
+
+func (h codexHarness) Admit(ref harness.ConversationRef) error {
+	if ref.Lifetime != harness.InServer {
+		return nil
+	}
+	return h.d.codexShared().admit(ref.Profile, ref.ID)
 }
 
 func (h codexHarness) End(_ context.Context, e harness.Ending) {

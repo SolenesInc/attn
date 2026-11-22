@@ -18,7 +18,7 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 	}
 	launch, awareness, initialPrompt := intent.Context, intent.AwarenessDirs, intent.InitialPrompt
 	tools, shared := d.agentTools(terminal), (*agentdriver.SharedAgentTools)(nil)
-	if l, server := d.linkNamed(intent.Link).(*serverLink); server {
+	if l, server := d.linkFor(opts.Agent, intent.Lifetime).(*serverLink); server {
 		tools, shared = nil, l.clientAgentTools()
 	}
 	claudeMod := d.claudeModForLaunch(terminal, driver.Name())

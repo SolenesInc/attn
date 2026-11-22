@@ -23,7 +23,7 @@ type SessionFacts struct {
 	Session  SessionID
 	Harness  ID
 	Profile  string
-	Link     string
+	Lifetime Lifetime
 	Terminal TerminalID
 
 	Conversation, Path string

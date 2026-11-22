@@ -191,7 +191,7 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 }
 
 func (d *Daemon) addsTerminal(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) bool {
-	conversation := d.linkConversation(msg.ID)
+	conversation := d.serverConversation(msg.ID)
 	return !policy.fromLedger && conversation != "" && protocol.Deref(msg.ResumeSessionID) == conversation
 }
 
@@ -400,8 +400,8 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
 	pausepoint.At(pausepoint.SessionLinkSetting)
-	previousLink := d.store.SessionLink(session.ID)
-	if err := d.store.SetSessionLink(session.ID, linkKind(req.link)); err != nil {
+	previousLifetime := d.lifetime(session.ID)
+	if err := d.store.SetSessionLifetime(session.ID, lifetimeOf(req.link)); err != nil {
 		d.logf("spawn: %v", err)
 	}
 	d.persistLaunchedConversation(req, plan)
@@ -416,7 +416,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			}
 			return &spawnOutcome{err: err}
 		}
-		plan.agent.PreviousLink = previousLink
+		plan.agent.PreviousLifetime = previousLifetime
 	}
 	if err := d.startSessionTerminal(session, terminal, plan.spawnOpts, plan.agent); err != nil {
 		plan.rollback(d, msg.ID)
@@ -662,7 +662,7 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 			return placementOutcome{}, &spawnRejection{err: err}
 		}
 	}
-	if holder := d.linkHolder(req.profile.ID, protocol.Deref(msg.ResumeSessionID)); holder != "" && holder != msg.ID {
+	if holder := d.serverHolder(req.profile.ID, protocol.Deref(msg.ResumeSessionID)); holder != "" && holder != msg.ID {
 		return d.showHolderProtected(protection, holder, msg, policy)
 	}
 	releaseSpawnLock := d.acquireSpawnLock(msg.ID)
@@ -718,7 +718,7 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 	if err != nil {
 		return nil, err
 	}
-	launch.InitialPrompt, launch.Link, launch.Profile = req.initialPrompt, linkKind(req.link), req.profile.ID
+	launch.InitialPrompt, launch.Lifetime, launch.Profile = req.initialPrompt, lifetimeOf(req.link), req.profile.ID
 	launch.Monitor, launch.StartedAt = d.monitorLaunch(msg.ID), req.spawnStartedAt
 	launch.InstallWorkflowSkill, launch.RequireWorkflowSkill = req.policy.installWorkflowSkill, req.policy.requireWorkflowSkill
 	launch.AddedTerminal = req.addsTerminal
@@ -739,7 +739,7 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 			Model:           opts.Model,
 			Effort:          opts.Effort,
 			ExecutionTarget: opts.ExecutionTarget,
-			ConversationID:  d.linkConversation(msg.ID),
+			ConversationID:  d.serverConversation(msg.ID),
 			InitialPrompt:   req.initialPrompt,
 			ResumeSessionID: strings.TrimSpace(req.resumeSessionID),
 		}
@@ -752,10 +752,10 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 }
 
 func (d *Daemon) discardSpawnSession(id protocol.SessionID) {
-	session, link := d.store.Get(id), d.linkOf(id)
+	session, lifetime := d.store.Get(id), d.lifetime(id)
 	d.store.Remove(id)
 	d.forgetMonitor(id)
-	if session != nil && link != nil {
-		d.life.Go("linkReleasedAfterSpawnDiscard", func() { link.profileReleased(session.ProfileID) })
+	if session != nil && lifetime == harness.InServer {
+		d.life.Go("linkReleasedAfterSpawnDiscard", func() { d.released(session.Agent, session.ProfileID) })
 	}
 }

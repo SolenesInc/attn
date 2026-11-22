@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -38,6 +39,32 @@ func (h claudeHarness) Reach(_ context.Context, s harness.SessionFacts) harness.
 func (claudeHarness) Terminal(harness.TerminalID, harness.TerminalEvent) {}
 
 func (claudeHarness) End(context.Context, harness.Ending) {}
+
+func (h claudeHarness) Start(context.Context) error {
+	if h.d.noAgentSockets {
+		return nil
+	}
+	if err := h.d.claudeMod().serve(); err != nil {
+		return fmt.Errorf("claude mod: live sessions are typed into: %w", err)
+	}
+	return nil
+}
+
+func (h claudeHarness) Recover(_ context.Context, point harness.RecoverPoint) {
+	if point == harness.RecoverMonitors {
+		h.d.claudeMod().expectModsToReconnect()
+	}
+}
+
+func (claudeHarness) SettingChanged(string) {}
+
+func (claudeHarness) Released(string) {}
+
+func (h claudeHarness) Stop() { h.d.claudeMod().close() }
+
+func (h claudeHarness) Conversations() harness.ConversationStore { return h }
+
+func (claudeHarness) Admit(harness.ConversationRef) error { return nil }
 
 func (h claudeHarness) Health(context.Context) harness.Health {
 	return h.d.executableHealth(h.Facts(), true)

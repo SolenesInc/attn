@@ -19,6 +19,39 @@ type Harness interface {
 	// End runs once after a close commits, for a session whose conversation lives in the harness's server.
 	End(ctx context.Context, e Ending)
 	Terminal(t TerminalID, e TerminalEvent)
+	Start(ctx context.Context) error
+	Recover(ctx context.Context, point RecoverPoint)
+	SettingChanged(key string)
+	// Released: no session of profile uses the harness's server any more, unless one still does.
+	Released(profile string)
+	Stop()
+	Conversations() ConversationStore
+}
+
+// RecoverPoint is a step of the daemon's start at which a harness brings back what it ran before.
+type RecoverPoint uint8
+
+const (
+	// RecoverProcesses: the terminals are back, and sessions are not reconciled yet.
+	RecoverProcesses RecoverPoint = iota
+	// RecoverViews: sessions are reconciled, and their monitors are not started yet.
+	RecoverViews
+	// RecoverMonitors: startup recovery is over.
+	RecoverMonitors
+)
+
+// ConversationStore is where a harness keeps its conversations.
+type ConversationStore interface {
+	// Admit refuses a conversation that another profile or harness holds open.
+	Admit(ref ConversationRef) error
+}
+
+// ConversationRef names one conversation of a session.
+type ConversationRef struct {
+	Session  SessionID
+	Profile  string
+	ID       string
+	Lifetime Lifetime
 }
 
 // Facts are what a harness is, constant for a built-in and fixed by the registration for a plugin.
@@ -33,7 +66,26 @@ type Facts struct {
 	Advisor     ModelChoice
 	CrewModel   string
 	Signals     Signals
+	Recovery    Recovery
+	// ServerTerminal is the terminal a session's monitor is anchored on while its conversation runs in the harness's server. Nil for a harness with no server.
+	ServerTerminal func(profile string) TerminalID
 }
+
+// Lifetime is where a session's conversation runs: in its terminal's process, or in a server that outlives the terminal.
+type Lifetime string
+
+const (
+	InTerminal Lifetime = "terminal"
+	InServer   Lifetime = "server"
+)
+
+// Recovery is who keeps a session whose terminal is lost: attn, from the terminal's last claim, or the harness's server.
+type Recovery uint8
+
+const (
+	ByTerminal Recovery = iota
+	ByServer
+)
 
 // Signals are what a harness tells attn about its turns, and how long its terminal's signals stay fresh.
 type Signals struct {

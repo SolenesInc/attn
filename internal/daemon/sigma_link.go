@@ -14,7 +14,7 @@ type sigmaCompaction struct {
 }
 
 func (h sigmaHarness) Conversation(facts harness.SessionFacts) harness.Conversation {
-	if l, ok := h.d.linkNamed(facts.Link).(*serverLink); ok {
+	if l := h.d.serverLinkFor(facts.Harness); l != nil && facts.Lifetime == harness.InServer {
 		return l.conversation(facts)
 	}
 	return typedConversation{refusal: noCompaction(h.Facts().ID)}
@@ -22,7 +22,7 @@ func (h sigmaHarness) Conversation(facts harness.SessionFacts) harness.Conversat
 
 func (s serverConversation) compactSigma(ctx context.Context, in harness.Input) harness.Custody {
 	l, session := s.link, s.session
-	conversation := l.d.linkConversation(session)
+	conversation := l.d.serverConversation(session)
 	if conversation == "" {
 		return harness.Custody{Reason: fmt.Sprintf("session %s holds no %s conversation", session, l.b.name)}
 	}

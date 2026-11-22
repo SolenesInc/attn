@@ -410,7 +410,7 @@ func (p *serverConnection) statusWatchParams() any {
 			continue
 		}
 		numbered = true
-		if conversation := p.d.linkConversation(id); conversation != "" {
+		if conversation := p.d.serverConversation(id); conversation != "" {
 			after[conversation] = p.d.store.SessionRuntimeRecords(id).ServerCompletion
 		}
 	}
@@ -428,7 +428,7 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 		}
 		var last map[string]*serverEnded
 		for id, l := range p.sessions() {
-			conversation := p.d.linkConversation(id)
+			conversation := p.d.serverConversation(id)
 			if status, ok := p.busy[conversation]; ok {
 				l.observe(id, sessionmonitor.StateSourceServerReport, status, nil)
 				continue
@@ -467,7 +467,7 @@ func (p *serverConnection) apply(c *effectrpc.Client, tree serverTree) {
 		p.openFeeds(c, map[string]bool{tree.Conversation: true}, true)
 	}
 	for id, l := range p.sessions() {
-		if p.d.linkConversation(id) != tree.Conversation {
+		if p.d.serverConversation(id) != tree.Conversation {
 			continue
 		}
 		ended = l.unseen(id, ended)
@@ -497,7 +497,7 @@ func (p *serverConnection) reconcile(l *serverLink, ids []protocol.SessionID, la
 		var last map[string]*serverEnded
 		conversations := make(map[string]bool, len(ids))
 		for _, id := range ids {
-			conversation := p.d.linkConversation(id)
+			conversation := p.d.serverConversation(id)
 			conversations[conversation] = true
 			if status, busy := p.busy[conversation]; busy {
 				l.observe(id, sessionmonitor.StateSourceServerReport, status, nil)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -62,33 +63,33 @@ func (s *Store) TerminalViews(link string) ([]TerminalView, error) {
 	return views, rows.Err()
 }
 
-func (s *Store) SessionLink(id protocol.SessionID) string {
+func (s *Store) SessionLifetime(id protocol.SessionID) (agent string, lifetime harness.Lifetime) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
-		return ""
+		return "", harness.InTerminal
 	}
-	var link string
-	if err := s.db.QueryRow(`SELECT link FROM sessions WHERE id = ?`, id).Scan(&link); err != nil {
-		return ""
+	var stored string
+	if err := s.db.QueryRow(`SELECT agent, lifetime FROM sessions WHERE id = ?`, id).Scan(&agent, &stored); err != nil {
+		return "", harness.InTerminal
 	}
-	return link
+	return agent, harness.Lifetime(stored)
 }
 
-func (s *Store) SetSessionLink(id protocol.SessionID, link string) error {
+func (s *Store) SetSessionLifetime(id protocol.SessionID, lifetime harness.Lifetime) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
 		return nil
 	}
-	if _, err := s.db.Exec(`UPDATE sessions SET link = ? WHERE id = ?`, link, id); err != nil {
-		return fmt.Errorf("route session %s over link %q: %w", id, link, err)
+	if _, err := s.db.Exec(`UPDATE sessions SET lifetime = ? WHERE id = ?`, string(lifetime), id); err != nil {
+		return fmt.Errorf("record session %s's conversation as running in its %s: %w", id, lifetime, err)
 	}
 	return nil
 }
 
 func routeThroughTerminalTx(tx *sql.Tx, terminal protocol.TerminalID, id protocol.SessionID) error {
-	_, err := tx.Exec(`UPDATE sessions SET link = COALESCE((SELECT link FROM terminal_views WHERE terminal_id = ?), '') WHERE id = ?`, terminal, id)
+	_, err := tx.Exec(`UPDATE sessions SET lifetime = CASE WHEN EXISTS (SELECT 1 FROM terminal_views WHERE terminal_id = ?) THEN 'server' ELSE 'terminal' END WHERE id = ?`, terminal, id)
 	return err
 }
 

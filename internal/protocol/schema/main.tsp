@@ -3320,7 +3320,7 @@ model ConversationReadinessMessage {
   conversation: string;
   restore: boolean;
   profile: string;
-  link: string;
+  lifetime: ConversationLifetime;
 }
 model ConversationReadinessResult {
   known: boolean;
@@ -3364,7 +3364,6 @@ model ReopenInspectMessage {
   cmd: "reopen_inspect";
   host: string;
   target: ReopenTarget;
-  link: string;
   has_launch_intent: boolean;
   branch_merged: boolean;
 }
@@ -3430,7 +3429,6 @@ model AgentLaunchCloseMessage {
   driver?: string;
   terminal_id?: TerminalID;
   signal?: string;
-  link?: string;
   profile?: string;
   conversation?: string;
 }
@@ -9098,6 +9096,7 @@ enum SessionPlaceOrigin { Maintenance: "maintenance", UserConversation: "user_co
 enum SessionPlaceStage { Placed: "placed", Deferred: "deferred", Failed: "failed" }
 enum SessionPlaceErrorKind { LaneClosed: "lane_closed", BlockedByApproval: "blocked_by_approval", UserTyping: "user_typing", InitialPrompt: "initial_prompt", SessionStopped: "session_stopped", SessionClosing: "session_closing", HarnessStarting: "harness_starting" }
 enum PullRequestLinkKind { Record: "record", Forget: "forget" }
+enum ConversationLifetime { Terminal: "terminal", Server: "server" }
 enum TranscriptActivityKind { Modified: "modified", Head: "head", Events: "events" }
 enum MonitorReadErrorKind { TranscriptUnavailable: "transcript_unavailable", InvalidCursor: "invalid_cursor", CursorMismatch: "cursor_mismatch", CursorPastEnd: "cursor_past_end", DeltaTooLarge: "delta_too_large" }
 

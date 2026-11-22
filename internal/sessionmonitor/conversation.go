@@ -166,7 +166,7 @@ func (m *Monitor) candidate(proposed Conversation) *Monitor {
 	}
 	now := time.Now()
 	candidate := &Monitor{registry: m.registry, watch: w, epoch: rand.Text(), conversation: proposed.NativeID,
-		conversationInput: proposed, agent: m.agent, profile: m.profile, link: m.link, startedAt: now, directory: m.directory, branch: m.branch,
+		conversationInput: proposed, agent: m.agent, profile: m.profile, lifetime: m.lifetime, startedAt: now, directory: m.directory, branch: m.branch,
 		policy: m.policy, initialized: true, runRecord: m.runRecord,
 		state: StateView{State: protocol.SessionStateIdle, Since: now, Updated: now}}
 	if proposed.Terminal != "" && proposed.NativeID != m.conversationInput.NativeID {
@@ -468,7 +468,7 @@ func (m *Monitor) sessionFactsLocked() harness.SessionFacts {
 		conversation.NativeID = m.conversation
 	}
 	return harness.SessionFacts{
-		Session: m.session, Harness: string(m.agent), Profile: m.profile, Link: m.link, Terminal: m.primaryTerminalLocked(),
+		Session: m.session, Harness: string(m.agent), Profile: m.profile, Lifetime: m.lifetime, Terminal: m.primaryTerminalLocked(),
 		Conversation: conversation.NativeID, Path: conversation.TranscriptPath,
 		Run: m.runRecord.ID, RunOwner: m.runRecord.Owner, Route: m.runRecord.Route,
 	}

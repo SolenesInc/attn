@@ -22,7 +22,7 @@ type pluginConversation struct {
 }
 
 func (h pluginHarness) Conversation(facts harness.SessionFacts) harness.Conversation {
-	if l, ok := h.d.linkNamed(facts.Link).(*serverLink); ok {
+	if l := h.d.serverLinkFor(facts.Harness); l != nil && facts.Lifetime == harness.InServer {
 		return l.conversation(facts)
 	}
 	if facts.Run == "" || facts.Route == "terminal" {

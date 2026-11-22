@@ -20,7 +20,7 @@ func newMachineReopenVerdict(target protocol.ReopenTarget) sessionReopenVerdict 
 
 func (d *Daemon) inspectReopenHere(ctx context.Context, msg protocol.ReopenInspectMessage) (protocol.ReopenInspection, error) {
 	verdict := newMachineReopenVerdict(msg.Target)
-	verdict.Link, verdict.BranchMerged = msg.Link, msg.BranchMerged
+	verdict.BranchMerged = msg.BranchMerged
 	if strings.TrimSpace(msg.Target.Cwd) != "" {
 		checkout, err := d.inspectCheckout(ctx, protocol.CheckoutInspectMessage{Cwd: msg.Target.Cwd})
 		switch {

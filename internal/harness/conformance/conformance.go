@@ -12,11 +12,16 @@ import (
 // Home is the home folder the suite resolves each adapter's skill folders in, with no environment variables set.
 const Home = "/home/conformance"
 
-// Row is what one adapter states while its fake is installed. SkillDirs is what its Facts.SkillDirs answers for Home.
+// Profile is the profile the suite asks each adapter's server terminal for.
+const Profile = "conformance"
+
+// Row is what one adapter states while its fake is installed. SkillDirs is what its Facts.SkillDirs answers for Home,
+// and ServerTerminal what its Facts.ServerTerminal answers for Profile, or "" when it states none.
 type Row struct {
-	Facts     harness.Facts
-	SkillDirs []string
-	Offered   bool
+	Facts          harness.Facts
+	SkillDirs      []string
+	ServerTerminal harness.TerminalID
+	Offered        bool
 }
 
 // Run checks that the registered adapters and the table name the same harnesses, and that each adapter answers its row.
@@ -45,6 +50,14 @@ func Run(t *testing.T, registered []harness.Harness, table []Row) {
 				t.Errorf("the adapter %q puts skills in %q, want %q", facts.ID, dirs, row.SkillDirs)
 			}
 			facts.SkillDirs = nil
+			var anchor harness.TerminalID
+			if facts.ServerTerminal != nil {
+				anchor = facts.ServerTerminal(Profile)
+			}
+			if anchor != row.ServerTerminal {
+				t.Errorf("the adapter %q anchors a server session's monitor on %q, want %q", facts.ID, anchor, row.ServerTerminal)
+			}
+			facts.ServerTerminal = nil
 			if !reflect.DeepEqual(facts, row.Facts) {
 				t.Errorf("the adapter %q states\n  %+v\nwant\n  %+v", facts.ID, facts, row.Facts)
 			}

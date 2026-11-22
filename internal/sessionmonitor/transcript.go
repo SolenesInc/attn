@@ -2,6 +2,7 @@ package sessionmonitor
 
 import (
 	"errors"
+	"github.com/victorarias/attn/internal/harness"
 	"os"
 	"strings"
 	"sync"
@@ -150,7 +151,8 @@ func (w *transcriptWatcher) resolveExactPath() string {
 		if path == "" {
 			continue
 		}
-		path = m.registry.host.LinkTranscriptPath(m.linkKind(), path)
+		agent, lifetime := m.agentLifetime()
+		path = m.registry.host.LinkTranscriptPath(agent, lifetime, path)
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}
@@ -744,8 +746,8 @@ func (m *Monitor) assistantWindowChanged() {
 	m.publish(view)
 }
 
-func (m *Monitor) linkKind() string {
+func (m *Monitor) agentLifetime() (string, harness.Lifetime) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.link
+	return string(m.agent), m.lifetime
 }

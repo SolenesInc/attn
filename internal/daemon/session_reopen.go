@@ -45,7 +45,6 @@ type sessionReopenVerdict struct {
 	ProfileDeleted bool
 	RecreatePath   string
 	Inspection     branchInspection
-	Link           string
 	BranchMerged   bool
 }
 

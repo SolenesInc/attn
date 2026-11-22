@@ -837,11 +837,7 @@ func (d *Daemon) Start() error {
 	if err := <-queueStarted; err != nil {
 		return err
 	}
-	if !d.noAgentSockets {
-		if err := d.claudeMod().serve(); err != nil {
-			d.logf("claude mod: live sessions are typed into: %v", err)
-		}
-	}
+	d.startHarnesses(d.life.Context())
 
 	d.watchRecoveredLaunches()
 	d.life.Go("startupRecovery", func() {
@@ -851,7 +847,7 @@ func (d *Daemon) Start() error {
 			return
 		}
 		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
-		d.claudeMod().expectModsToReconnect()
+		d.recoverHarnesses(context.Background(), harness.RecoverMonitors)
 		d.reconcileOutpostCommandTerminals()
 		if d.stopping() {
 			return
@@ -947,7 +943,7 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.Sessio
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
 			continue
 		}
-		if _, serverView := d.linkOf(session.ID).(*serverLink); serverView {
+		if d.serverOwns(session.ID) {
 			continue
 		}
 		d.releaseExitedCrewBinding(session.ID)
@@ -989,7 +985,7 @@ func (d *Daemon) canReviveSession(session *protocol.Session) bool {
 }
 
 func (d *Daemon) sessionConversationSurvives(session *protocol.Session, intent store.LaunchIntent) bool {
-	if _, serverOwned := d.linkOf(session.ID).(*serverLink); serverOwned && d.linkConversation(session.ID) != "" {
+	if d.serverOwns(session.ID) && d.serverConversation(session.ID) != "" {
 		return true
 	}
 	if session.Agent == protocol.AgentShellValue {
@@ -1035,10 +1031,10 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[protocol.Sess
 		}
 	}
 
-	d.recoverLinkProcesses(context.Background())
+	d.recoverHarnesses(context.Background(), harness.RecoverProcesses)
 	if _, ok := d.ptyBackend.(ptybackend.RecoverableRuntime); ok {
 		d.reconcileStartupWorkerSessions(recoveryReport, recoverErr, previousRunSessions, recoveryStartedAt)
-		d.recoverLinkViews(context.Background())
+		d.recoverHarnesses(context.Background(), harness.RecoverViews)
 		d.restoreTranscriptWatchers()
 		d.replayPendingConversations()
 		d.pruneRuntimesWithoutSession(context.Background())
@@ -1053,7 +1049,7 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[protocol.Sess
 			fmt.Sprintf("Removed %d stale sessions from a previous daemon run because no live PTY was found.", removedSessions),
 		)
 	}
-	d.recoverLinkViews(context.Background())
+	d.recoverHarnesses(context.Background(), harness.RecoverViews)
 	d.pruneRuntimesWithoutSession(context.Background())
 	d.restoreTranscriptWatchers()
 }
@@ -1409,7 +1405,7 @@ func (d *Daemon) recoverMissingSession(sessionID protocol.SessionID, machine mac
 	if session == nil {
 		return
 	}
-	if _, serverView := d.linkOf(sessionID).(*serverLink); serverView {
+	if d.serverOwns(sessionID) {
 		return
 	}
 	if sessionUpdatedAfter(session, rules.startedAt) {
@@ -1658,7 +1654,7 @@ func (d *Daemon) stop() {
 	if d.diagServer != nil {
 		_ = d.diagServer.Close()
 	}
-	d.claudeMod().close()
+	d.stopHarnesses()
 	// Work begun before the stop finishes; later exits and failures are the teardown's, not outcomes.
 	// PTYs shut next so no real exit lands between the drain and the shutdown.
 	d.life.wait(d.logf)
@@ -1820,7 +1816,7 @@ func (d *Daemon) bringBackLostRuntime(sessionID protocol.SessionID, info ptyback
 	if err := d.removePTYSession(info.ID); err != nil {
 		d.logf("pty backend remove on lost runtime failed for %s: %v", info.ID, err)
 	}
-	if _, serverView := d.linkOf(sessionID).(*serverLink); !serverView {
+	if !d.serverOwns(sessionID) {
 		d.applyState(sessionID, sessionmonitor.Change{State: string(protocol.SessionStateRecoverable), Cause: sessionmonitor.RuntimeLost{}})
 	}
 	d.logf("terminal %s lost its runtime; bringing session %s back", info.ID, sessionID)
@@ -2207,14 +2203,12 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 	if !d.life.Go("terminateSessionAsync", terminate) {
 		terminate()
 	}
-	if teardown != nil && teardown.session != nil {
-		if l := d.linkOf(sessionID); l != nil {
-			profile := teardown.session.ProfileID
-			d.life.Go("linkReleasedAfterClose", func() {
-				<-done
-				l.profileReleased(profile)
-			})
-		}
+	if teardown != nil && teardown.session != nil && d.lifetime(sessionID) == harness.InServer {
+		agent, profile := teardown.session.Agent, teardown.session.ProfileID
+		d.life.Go("linkReleasedAfterClose", func() {
+			<-done
+			d.released(agent, profile)
+		})
 	}
 	return done
 }
@@ -2232,7 +2226,7 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 		return err
 	}
 	session := d.store.Get(sessionID)
-	link := d.linkOf(sessionID)
+	inServer := d.lifetime(sessionID) == harness.InServer
 	closure, err := d.closeSessionRecord(sessionID, closed)
 	if err != nil {
 		return err
@@ -2240,7 +2234,7 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 	if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed"}); err != nil {
 		d.logf("machine close: %v", err)
 	}
-	if link != nil && session != nil {
+	if inServer && session != nil {
 		profile, released := session.ProfileID, closure.ReleasedConversation
 		d.life.Go("linkAfterSessionClose", func() {
 			pausepoint.At(pausepoint.SessionCloseReleasing)
@@ -2250,7 +2244,7 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 			if len(d.store.OpenSessionsHolding(released)) > 0 {
 				released = ""
 			}
-			if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "released", Agent: protocol.Ptr(session.Agent), Link: protocol.Ptr(link.kind()), Profile: protocol.Ptr(profile), Conversation: protocol.Ptr(released)}); err != nil {
+			if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "released", Agent: protocol.Ptr(session.Agent), Profile: protocol.Ptr(profile), Conversation: protocol.Ptr(released)}); err != nil {
 				d.logf("machine close release: %v", err)
 			}
 			pausepoint.At(pausepoint.SessionCloseReleased)

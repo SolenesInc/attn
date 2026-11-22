@@ -104,9 +104,6 @@ func (d *Daemon) settingChanged(key, value string) {
 	if key == setting.OutpostsEnabled.Key {
 		d.configureOutposts()
 	}
-	if key == setting.AgentToolsEnabled.Key {
-		d.life.Go("reconcileAgentTools", d.reconcileAgentTools)
-	}
 	if harness, ok := isAgentExecutableSettingKey(key); ok {
 		d.invalidateHarnessModels(harness)
 		d.ensureAvailableAgentSkills()
@@ -160,7 +157,9 @@ func (d *Daemon) settingChanged(key, value string) {
 		d.life.Go("codeNavDefinitionChanged", func() { d.reportTileDocuments(d.tileDocuments.bumpAll()) })
 	}
 	d.publishFact(FactSettingChanged, key, nil)
-	d.codexShared().settingChanged(key)
+	for _, h := range d.harnesses() {
+		h.SettingChanged(key)
+	}
 }
 
 func (d *Daemon) refreshChangedSettings(before map[string]string) {
