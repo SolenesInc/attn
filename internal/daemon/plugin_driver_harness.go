@@ -10,6 +10,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/transcript"
 	"maps"
 )
 
@@ -64,6 +65,7 @@ func (h pluginHarness) Facts() harness.Facts {
 		Signals:        pluginSignals(declared),
 		Recovery:       h.recovery(),
 		ModelDiscovery: declared["model_discovery"] || declared["server_binding"],
+		Activity:       h.d.serverLinkFor(h.reg.Agent).watchesConversations(),
 		ServerTerminal: h.d.serverTerminalOf(h.reg.Agent),
 	}
 }
@@ -257,4 +259,20 @@ func (h pluginHarness) Health(context.Context) harness.Health {
 		installation = harness.Missing
 	}
 	return harness.Health{Installation: installation, Offered: true, Reason: detail}
+}
+
+func (s pluginConversationStore) Page(ctx context.Context, ref harness.ConversationRef, cursor string, limit int) (transcript.EventPage, error) {
+	return linkedConversations{s.d}.Page(ctx, ref, cursor, limit)
+}
+
+func (s pluginConversationStore) LastReply(ctx context.Context, ref harness.ConversationRef, max int) (string, error) {
+	return linkedConversations{s.d}.LastReply(ctx, ref, max)
+}
+
+func (s pluginConversationStore) Window(ctx context.Context, ref harness.ConversationRef) (harness.AssistantWindow, bool) {
+	return linkedConversations{s.d}.Window(ctx, ref)
+}
+
+func (s pluginConversationStore) Activity(ctx context.Context, ref harness.ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error) {
+	return linkedConversations{s.d}.Activity(ctx, ref, kind, cursor)
 }

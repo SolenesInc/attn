@@ -17,12 +17,61 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-func (d *Daemon) serverConversationOf(session *protocol.SessionLedgerEntry) (*serverLink, string) {
-	l := d.serverLinkFor(string(session.Agent))
-	if l == nil || !l.watchesConversations() {
-		return nil, ""
+type linkedConversations struct{ d *Daemon }
+
+func (c linkedConversations) watching(ref harness.ConversationRef) *serverLink {
+	if l := c.d.serverLinkFor(string(ref.Harness)); l.watchesConversations() {
+		return l
 	}
-	return l, d.store.GetSessionConversation(session.ID).NativeID
+	return nil
+}
+
+func (c linkedConversations) Page(ctx context.Context, ref harness.ConversationRef, cursor string, limit int) (transcript.EventPage, error) {
+	l := c.watching(ref)
+	switch {
+	case l == nil:
+		return fileConversations(c).Page(ctx, ref, cursor, limit)
+	case ref.ID == "":
+		return transcript.EventPage{}, errTranscriptUnavailable
+	}
+	return l.transcriptPage(ctx, ref.ID, cursor, limit)
+}
+
+func (c linkedConversations) LastReply(ctx context.Context, ref harness.ConversationRef, max int) (string, error) {
+	l := c.watching(ref)
+	switch {
+	case l == nil:
+		return fileConversations(c).LastReply(ctx, ref, max)
+	case ref.ID == "":
+		return "", nil
+	}
+	message, err := l.lastReply(ctx, ref.ID)
+	if runes := []rune(message); len(runes) > max {
+		message = string(runes[len(runes)-max:])
+	}
+	return message, err
+}
+
+func (c linkedConversations) Window(ctx context.Context, ref harness.ConversationRef) (harness.AssistantWindow, bool) {
+	l := c.watching(ref)
+	switch {
+	case l == nil:
+		return fileConversations(c).Window(ctx, ref)
+	case ref.ID == "":
+		return harness.AssistantWindow{}, false
+	}
+	return l.assistantWindow(ctx, ref.ID)
+}
+
+func (c linkedConversations) Activity(ctx context.Context, ref harness.ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error) {
+	l := c.watching(ref)
+	switch {
+	case l == nil:
+		return fileConversations(c).Activity(ctx, ref, kind, cursor)
+	case ref.ID == "":
+		return protocol.TranscriptActivityResult{}, nil
+	}
+	return l.activity(ctx, ref.ID, kind, cursor)
 }
 
 func (l *serverLink) entries(ctx context.Context, params map[string]any, each func(transcript.ServerEntry) bool) error {
@@ -144,9 +193,9 @@ func (l *serverLink) lastWritten(ctx context.Context, conversation string) (time
 	return written, found, err
 }
 
-func (l *serverLink) activity(ctx context.Context, conversation string, msg protocol.TranscriptActivityMessage) (protocol.TranscriptActivityResult, error) {
+func (l *serverLink) activity(ctx context.Context, conversation, kind, cursor string) (protocol.TranscriptActivityResult, error) {
 	var result protocol.TranscriptActivityResult
-	switch msg.Kind {
+	switch kind {
 	case "head":
 		newest, found, err := l.newestEntry(ctx, conversation)
 		if err != nil || !found {
@@ -163,7 +212,7 @@ func (l *serverLink) activity(ctx context.Context, conversation string, msg prot
 		result.ModifiedAt = protocol.Ptr(written.Format(time.RFC3339Nano))
 	case "events":
 		result.Available = true
-		window, err := activity.ReadPages(protocol.Deref(msg.Cursor), func(cursor string, limit int) (transcript.EventPage, error) {
+		window, err := activity.ReadPages(cursor, func(cursor string, limit int) (transcript.EventPage, error) {
 			return l.transcriptPageFrom(ctx, false, conversation, cursor, limit)
 		})
 		if err != nil {
@@ -180,12 +229,12 @@ func (l *serverLink) activity(ctx context.Context, conversation string, msg prot
 		}
 		result.Window = protocol.Ptr(string(encoded))
 	default:
-		return result, fmt.Errorf("unknown transcript activity read %q", msg.Kind)
+		return result, fmt.Errorf("unknown transcript activity read %q", kind)
 	}
 	return result, nil
 }
 
-func (l *serverLink) assistantWindow(ctx context.Context, conversation string) (sessionmonitor.AssistantWindow, bool) {
+func (l *serverLink) assistantWindow(ctx context.Context, conversation string) (harness.AssistantWindow, bool) {
 	var newestFirst []transcript.ServerEntry
 	read := 0
 	more := false

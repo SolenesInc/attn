@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/activity"
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/jobs"
@@ -173,15 +172,7 @@ func (d *Daemon) sessionGeneratesActivity(session *protocol.Session) bool {
 	if session.ParentSessionID != nil && protocol.TrimID(*session.ParentSessionID) != "" {
 		return false
 	}
-	if d.serverLinkFor(string(session.Agent)).watchesConversations() {
-		return true
-	}
-	driver := agentdriver.Get(session.Agent)
-	if driver == nil {
-		return false
-	}
-	_, isFinder := agentdriver.GetTranscriptFinder(driver)
-	return isFinder
+	return d.harnessOf(session.Agent).Facts().Activity
 }
 
 func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any, error) {

@@ -8,6 +8,8 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/modeltiers"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/transcript"
 )
 
 type codexHarness struct{ d *Daemon }
@@ -29,6 +31,7 @@ func (h codexHarness) Facts() harness.Facts {
 	facts.Signals.Heartbeat, facts.Signals.ReviewerDwell = 500*time.Millisecond, time.Minute
 	facts.Signals.ConfirmsFirstTurn = true
 	facts.ModelDiscovery = true
+	facts.Activity = true
 	facts.ServerTerminal = codexServerTerminal
 	return facts
 }
@@ -118,4 +121,20 @@ func (h codexHarness) End(_ context.Context, e harness.Ending) {
 
 func (h codexHarness) Health(context.Context) harness.Health {
 	return h.d.executableHealth(h.Facts(), true)
+}
+
+func (h codexHarness) Page(ctx context.Context, ref harness.ConversationRef, cursor string, limit int) (transcript.EventPage, error) {
+	return fileConversations(h).Page(ctx, ref, cursor, limit)
+}
+
+func (h codexHarness) LastReply(ctx context.Context, ref harness.ConversationRef, max int) (string, error) {
+	return fileConversations(h).LastReply(ctx, ref, max)
+}
+
+func (h codexHarness) Window(ctx context.Context, ref harness.ConversationRef) (harness.AssistantWindow, bool) {
+	return fileConversations(h).Window(ctx, ref)
+}
+
+func (h codexHarness) Activity(ctx context.Context, ref harness.ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error) {
+	return fileConversations(h).Activity(ctx, ref, kind, cursor)
 }

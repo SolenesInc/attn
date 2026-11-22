@@ -7,6 +7,7 @@ import (
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/transcript"
 	"time"
 
 	"github.com/victorarias/attn/internal/modeltiers"
@@ -152,6 +153,22 @@ type ConversationStore interface {
 	Prepare(ctx context.Context, ref ConversationRef) (ready bool, err error)
 	// Admit refuses a conversation that another profile or harness holds open.
 	Admit(ref ConversationRef) error
+	// Page reads one page of a conversation's events from cursor.
+	Page(ctx context.Context, ref ConversationRef, cursor string, limit int) (transcript.EventPage, error)
+	// LastReply is the conversation's last assistant message, cut to its last max characters.
+	LastReply(ctx context.Context, ref ConversationRef, max int) (string, error)
+	// Window is the conversation's recent assistant messages, and whether it has any to read.
+	Window(ctx context.Context, ref ConversationRef) (AssistantWindow, bool)
+	// Activity answers the activity line's reads: kind is head, modified or events.
+	Activity(ctx context.Context, ref ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error)
+}
+
+// AssistantWindow is a conversation's recent assistant messages.
+type AssistantWindow struct {
+	Status   protocol.SessionMessageWindowStatus
+	Messages []transcript.AssistantMessage
+	Report   transcript.AssistantWindowReport
+	Detail   string
 }
 
 // ConversationRef names one conversation of a session.
@@ -188,6 +205,8 @@ type Facts struct {
 	Recovery    Recovery
 	// ModelDiscovery is whether the harness can list the models it offers.
 	ModelDiscovery bool
+	// Activity is whether attn can read the harness's conversations to write activity lines.
+	Activity bool
 	// ServerTerminal is the terminal a session's monitor is anchored on while its conversation runs in the harness's server. Nil for a harness with no server.
 	ServerTerminal func(profile string) TerminalID
 }

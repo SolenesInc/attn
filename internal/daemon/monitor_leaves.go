@@ -5,10 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
-	"github.com/victorarias/attn/internal/activity"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
@@ -159,53 +158,11 @@ func (d *Daemon) renameLink(_ context.Context, msg protocol.LinkRenameMessage) (
 }
 
 func (d *Daemon) readTranscriptActivity(ctx context.Context, msg protocol.TranscriptActivityMessage) (protocol.TranscriptActivityResult, error) {
-	var result protocol.TranscriptActivityResult
+	ref := harness.ConversationRef{Session: msg.SessionID}
 	if session := d.monitorTranscriptSession(msg.SessionID); session != nil {
-		if l, conversation := d.serverConversationOf(session); l != nil {
-			if conversation == "" {
-				return result, nil
-			}
-			return l.activity(ctx, conversation, msg)
-		}
+		ref = d.ledgerConversation(session)
 	}
-	monitor := d.sessionMonitor(msg.SessionID)
-	path := monitor.ActivityTranscript()
-	if path == "" {
-		return result, nil
-	}
-	result.Available = true
-	switch msg.Kind {
-	case "modified":
-		info, err := os.Stat(path)
-		if err != nil {
-			return result, err
-		}
-		result.ModifiedAt = protocol.Ptr(info.ModTime().Format(time.RFC3339Nano))
-	case "head":
-		head, err := monitor.TranscriptHead()
-		if err != nil {
-			return result, err
-		}
-		result.Head = &head
-	case "events":
-		window, err := monitor.TranscriptEvents(protocol.Deref(msg.Cursor))
-		if err != nil {
-			kind := transcriptReadErrorKind(err)
-			if errors.Is(err, activity.ErrDeltaTooLarge) {
-				kind = "delta_too_large"
-			}
-			result.ErrorKind, result.Error = protocol.Ptr(protocol.MonitorReadErrorKind(kind)), protocol.Ptr(err.Error())
-			return result, nil
-		}
-		encoded, err := json.Marshal(window)
-		if err != nil {
-			return result, err
-		}
-		result.Window = protocol.Ptr(string(encoded))
-	default:
-		return result, fmt.Errorf("unknown transcript activity read %q", msg.Kind)
-	}
-	return result, nil
+	return d.harnessOf(ref.Harness).Conversations().Activity(ctx, ref, string(msg.Kind), protocol.Deref(msg.Cursor))
 }
 
 func (d *Daemon) readMonitorAssistantWindow(ctx context.Context, msg protocol.MonitorAssistantWindowMessage) (protocol.MonitorAssistantWindowResult, error) {
@@ -259,36 +216,18 @@ func (d *Daemon) readMonitorLastAssistant(ctx context.Context, msg protocol.Moni
 	if session == nil {
 		return protocol.MonitorLastAssistantResult{}, fmt.Errorf("session_not_found")
 	}
-	if l, conversation := d.serverConversationOf(session); l != nil {
-		if conversation == "" {
-			return protocol.MonitorLastAssistantResult{}, nil
-		}
-		message, err := l.lastReply(ctx, conversation)
-		if runes := []rune(message); len(runes) > agentPeekMessageMaxChars {
-			message = string(runes[len(runes)-agentPeekMessageMaxChars:])
-		}
-		return protocol.MonitorLastAssistantResult{Text: message}, err
-	}
-	path := d.inspectableTranscriptPath(session.ID, session.Agent)
-	if path == "" {
-		return protocol.MonitorLastAssistantResult{}, nil
-	}
-	message, err := transcript.ExtractLastAssistantMessage(path, agentPeekMessageMaxChars)
+	ref := d.ledgerConversation(session)
+	message, err := d.harnessOf(ref.Harness).Conversations().LastReply(ctx, ref, agentPeekMessageMaxChars)
 	return protocol.MonitorLastAssistantResult{Text: message}, err
 }
 
 func (d *Daemon) transcriptPage(ctx context.Context, session *protocol.SessionLedgerEntry, cursor string) (transcript.EventPage, error) {
-	if l, conversation := d.serverConversationOf(session); l != nil {
-		if conversation == "" {
-			return transcript.EventPage{}, errTranscriptUnavailable
-		}
-		return l.transcriptPage(ctx, conversation, cursor, sessionTranscriptPageSize)
-	}
-	path := d.inspectableTranscriptPath(session.ID, session.Agent)
-	if path == "" {
-		return transcript.EventPage{}, errTranscriptUnavailable
-	}
-	return transcript.ReadEventPage(path, session.Agent, cursor, sessionTranscriptPageSize)
+	ref := d.ledgerConversation(session)
+	return d.harnessOf(ref.Harness).Conversations().Page(ctx, ref, cursor, sessionTranscriptPageSize)
+}
+
+func (d *Daemon) ledgerConversation(session *protocol.SessionLedgerEntry) harness.ConversationRef {
+	return harness.ConversationRef{Harness: session.Agent, Session: session.ID, ID: d.store.GetSessionConversation(session.ID).NativeID}
 }
 
 var errTranscriptUnavailable = errors.New("transcript unavailable")
@@ -305,12 +244,6 @@ func (d *Daemon) monitorTranscriptSession(id protocol.SessionID) *protocol.Sessi
 }
 
 func (d *Daemon) assistantWindow(ctx context.Context, session *protocol.Session) (sessionmonitor.AssistantWindow, bool) {
-	if l := d.serverLinkFor(string(session.Agent)); l.watchesConversations() {
-		conversation := d.store.GetSessionConversation(session.ID).NativeID
-		if conversation == "" {
-			return sessionmonitor.AssistantWindow{}, false
-		}
-		return l.assistantWindow(ctx, conversation)
-	}
-	return d.sessionMonitor(session.ID).AssistantWindow(session.Agent)
+	ref := harness.ConversationRef{Harness: session.Agent, Session: session.ID, ID: d.store.GetSessionConversation(session.ID).NativeID}
+	return d.harnessOf(ref.Harness).Conversations().Window(ctx, ref)
 }

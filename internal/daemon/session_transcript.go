@@ -3,11 +3,16 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/victorarias/attn/internal/activity"
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/command"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/transcript"
@@ -117,4 +122,68 @@ func SessionTranscriptErrorMessage(code string) string {
 	default:
 		return "Session transcript failed"
 	}
+}
+
+type fileConversations struct{ d *Daemon }
+
+func (f fileConversations) Page(_ context.Context, ref harness.ConversationRef, cursor string, limit int) (transcript.EventPage, error) {
+	path := f.d.inspectableTranscriptPath(ref.Session, string(ref.Harness))
+	if path == "" {
+		return transcript.EventPage{}, errTranscriptUnavailable
+	}
+	return transcript.ReadEventPage(path, ref.Harness, cursor, limit)
+}
+
+func (f fileConversations) LastReply(_ context.Context, ref harness.ConversationRef, max int) (string, error) {
+	path := f.d.inspectableTranscriptPath(ref.Session, string(ref.Harness))
+	if path == "" {
+		return "", nil
+	}
+	return transcript.ExtractLastAssistantMessage(path, max)
+}
+
+func (f fileConversations) Window(_ context.Context, ref harness.ConversationRef) (harness.AssistantWindow, bool) {
+	return f.d.sessionMonitor(ref.Session).AssistantWindow(ref.Harness)
+}
+
+func (f fileConversations) Activity(_ context.Context, ref harness.ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error) {
+	var result protocol.TranscriptActivityResult
+	monitor := f.d.sessionMonitor(ref.Session)
+	path := monitor.ActivityTranscript()
+	if path == "" {
+		return result, nil
+	}
+	result.Available = true
+	switch kind {
+	case "modified":
+		info, err := os.Stat(path)
+		if err != nil {
+			return result, err
+		}
+		result.ModifiedAt = protocol.Ptr(info.ModTime().Format(time.RFC3339Nano))
+	case "head":
+		head, err := monitor.TranscriptHead()
+		if err != nil {
+			return result, err
+		}
+		result.Head = &head
+	case "events":
+		window, err := monitor.TranscriptEvents(cursor)
+		if err != nil {
+			kind := transcriptReadErrorKind(err)
+			if errors.Is(err, activity.ErrDeltaTooLarge) {
+				kind = "delta_too_large"
+			}
+			result.ErrorKind, result.Error = protocol.Ptr(protocol.MonitorReadErrorKind(kind)), protocol.Ptr(err.Error())
+			return result, nil
+		}
+		encoded, err := json.Marshal(window)
+		if err != nil {
+			return result, err
+		}
+		result.Window = protocol.Ptr(string(encoded))
+	default:
+		return result, fmt.Errorf("unknown transcript activity read %q", kind)
+	}
+	return result, nil
 }

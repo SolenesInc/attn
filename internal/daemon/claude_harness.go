@@ -9,6 +9,8 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/modeltiers"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/transcript"
 )
 
 type claudeHarness struct{ d *Daemon }
@@ -29,6 +31,7 @@ func (h claudeHarness) Facts() harness.Facts {
 	facts.Advisor = harness.ModelChoice{Model: "sonnet", Effort: "medium"}
 	facts.CrewModel = "fable"
 	facts.ModelDiscovery = true
+	facts.Activity = true
 	facts.Signals.Heartbeat = 1500 * time.Millisecond
 	return facts
 }
@@ -93,4 +96,20 @@ func (h claudeHarness) Prepare(_ context.Context, ref harness.ConversationRef) (
 
 func (h claudeHarness) Health(context.Context) harness.Health {
 	return h.d.executableHealth(h.Facts(), true)
+}
+
+func (h claudeHarness) Page(ctx context.Context, ref harness.ConversationRef, cursor string, limit int) (transcript.EventPage, error) {
+	return fileConversations(h).Page(ctx, ref, cursor, limit)
+}
+
+func (h claudeHarness) LastReply(ctx context.Context, ref harness.ConversationRef, max int) (string, error) {
+	return fileConversations(h).LastReply(ctx, ref, max)
+}
+
+func (h claudeHarness) Window(ctx context.Context, ref harness.ConversationRef) (harness.AssistantWindow, bool) {
+	return fileConversations(h).Window(ctx, ref)
+}
+
+func (h claudeHarness) Activity(ctx context.Context, ref harness.ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error) {
+	return fileConversations(h).Activity(ctx, ref, kind, cursor)
 }

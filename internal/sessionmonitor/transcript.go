@@ -48,12 +48,7 @@ type transcriptWatcher struct {
 	window         *transcript.AssistantWindow
 }
 
-type AssistantWindow struct {
-	Status   protocol.SessionMessageWindowStatus
-	Messages []transcript.AssistantMessage
-	Report   transcript.AssistantWindowReport
-	Detail   string
-}
+type AssistantWindow = harness.AssistantWindow
 
 func newTranscriptWatcher(monitor *Monitor, agent protocol.SessionAgent, cwd string, startedAt time.Time, behavior agentdriver.TranscriptWatcherBehavior) *transcriptWatcher {
 	return &transcriptWatcher{

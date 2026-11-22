@@ -8,9 +8,6 @@ internal/automation/automation.go	StarterDefinition	names "codex"
 internal/automation/automation.go	refuseCodexExecutable	names "codex"
 internal/crew/crew.go	(Member).LaunchAgent	names "claude"
 internal/crew/crew.go	DefaultAgent	names "claude"
-internal/daemon/activity.go	(*Daemon).sessionGeneratesActivity	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
-internal/daemon/activity.go	(*Daemon).sessionGeneratesActivity	reaches serverLink (internal/daemon/server_link.go)
-internal/daemon/activity.go	(*Daemon).sessionGeneratesActivity	reaches serverLink.watchesConversations (internal/daemon/server_feed.go)
 internal/daemon/activity_config.go	activityFallbackModel	names "claude"
 internal/daemon/activity_config.go	activityFallbackModel	names "codex"
 internal/daemon/agent_catalog.go	(*Daemon).agentCatalog	reaches field Agent (internal/daemon/plugin_driver.go)
@@ -80,22 +77,9 @@ internal/daemon/monitor_apply.go	(*monitorHome).apply	reaches claudeMod.placeRet
 internal/daemon/monitor_home_calls.go	(*Daemon).classifierHarness	names "claude"
 internal/daemon/monitor_home_calls.go	classifierFallbackModel	names "claude"
 internal/daemon/monitor_home_calls.go	classifierFallbackModel	names "codex"
-internal/daemon/monitor_leaves.go	(*Daemon).assistantWindow	reaches Daemon.serverLinkFor (internal/daemon/server_binding.go)
-internal/daemon/monitor_leaves.go	(*Daemon).assistantWindow	reaches serverLink (internal/daemon/server_link.go)
-internal/daemon/monitor_leaves.go	(*Daemon).assistantWindow	reaches serverLink.assistantWindow (internal/daemon/server_transcript.go)
-internal/daemon/monitor_leaves.go	(*Daemon).assistantWindow	reaches serverLink.watchesConversations (internal/daemon/server_feed.go)
-internal/daemon/monitor_leaves.go	(*Daemon).readMonitorLastAssistant	reaches Daemon.serverConversationOf (internal/daemon/server_transcript.go)
-internal/daemon/monitor_leaves.go	(*Daemon).readMonitorLastAssistant	reaches serverLink (internal/daemon/server_link.go)
-internal/daemon/monitor_leaves.go	(*Daemon).readMonitorLastAssistant	reaches serverLink.lastReply (internal/daemon/server_transcript.go)
-internal/daemon/monitor_leaves.go	(*Daemon).readTranscriptActivity	reaches Daemon.serverConversationOf (internal/daemon/server_transcript.go)
-internal/daemon/monitor_leaves.go	(*Daemon).readTranscriptActivity	reaches serverLink (internal/daemon/server_link.go)
-internal/daemon/monitor_leaves.go	(*Daemon).readTranscriptActivity	reaches serverLink.activity (internal/daemon/server_transcript.go)
 internal/daemon/monitor_leaves.go	(*Daemon).registerMonitorParts	reaches Daemon.readClaudeModReach (internal/daemon/claude_mod.go)
 internal/daemon/monitor_leaves.go	(*Daemon).registerMonitorParts	reaches Daemon.receiveClaudeModReachReport (internal/daemon/claude_mod.go)
 internal/daemon/monitor_leaves.go	(*Daemon).renameLink	reaches Daemon.renameLinkedConversation (internal/daemon/link_runtime.go)
-internal/daemon/monitor_leaves.go	(*Daemon).transcriptPage	reaches Daemon.serverConversationOf (internal/daemon/server_transcript.go)
-internal/daemon/monitor_leaves.go	(*Daemon).transcriptPage	reaches serverLink (internal/daemon/server_link.go)
-internal/daemon/monitor_leaves.go	(*Daemon).transcriptPage	reaches serverLink.transcriptPage (internal/daemon/server_transcript.go)
 internal/daemon/monitor_reactions.go	(*Daemon).reactMonitorView	reaches Daemon.claudeMod (internal/daemon/claude_mod.go)
 internal/daemon/monitor_reactions.go	(*Daemon).reactMonitorView	reaches claudeMod (internal/daemon/claude_mod.go)
 internal/daemon/monitor_reactions.go	(*Daemon).reactMonitorView	reaches claudeMod.placeReturned (internal/daemon/claude_mod_link.go)

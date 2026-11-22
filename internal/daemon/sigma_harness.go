@@ -8,7 +8,9 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
+	"github.com/victorarias/attn/internal/transcript"
 )
 
 type sigmaHarness struct{ d *Daemon }
@@ -26,6 +28,7 @@ func (h sigmaHarness) Facts() harness.Facts {
 	facts.Signals.Heartbeat = 500 * time.Millisecond
 	facts.Recovery = harness.ByServer
 	facts.ModelDiscovery = true
+	facts.Activity = h.d.serverLinkFor(facts.ID).watchesConversations()
 	facts.ServerTerminal = h.d.serverTerminalOf(facts.ID)
 	return facts
 }
@@ -106,4 +109,20 @@ func (h sigmaHarness) Models(ctx context.Context) (harness.Models, error) {
 
 func (h sigmaHarness) Health(context.Context) harness.Health {
 	return h.d.executableHealth(h.Facts(), h.d.on(setting.SigmaEnabled))
+}
+
+func (h sigmaHarness) Page(ctx context.Context, ref harness.ConversationRef, cursor string, limit int) (transcript.EventPage, error) {
+	return linkedConversations(h).Page(ctx, ref, cursor, limit)
+}
+
+func (h sigmaHarness) LastReply(ctx context.Context, ref harness.ConversationRef, max int) (string, error) {
+	return linkedConversations(h).LastReply(ctx, ref, max)
+}
+
+func (h sigmaHarness) Window(ctx context.Context, ref harness.ConversationRef) (harness.AssistantWindow, bool) {
+	return linkedConversations(h).Window(ctx, ref)
+}
+
+func (h sigmaHarness) Activity(ctx context.Context, ref harness.ConversationRef, kind, cursor string) (protocol.TranscriptActivityResult, error) {
+	return linkedConversations(h).Activity(ctx, ref, kind, cursor)
 }
