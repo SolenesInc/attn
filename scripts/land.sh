@@ -214,6 +214,8 @@ run_checks() {
   touches '^internal/protocol/(schema/|constants\.go)|^internal/(setting|garden|prompts|ask|inbox)/|^cmd/(settingsgen|cligen)/|^internal/catalog/|^cli/|^scripts/generate-rust-protocol\.mjs|^go\.mod$' && targets+=(check-types)
   touches '^internal/protocol/(schema/home_gateway\.tsp|homegateway/)' && targets+=(check-home-gateway-compat)
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
+  touches '^scripts/harnesslint/' && targets+=(lint-harness)
+  touches '^(pty-host|native|cli|mobile)/' && targets+=(lint-harness-apps)
   touches '^app/' && targets+=(check-harness)
   touches '^app/|^sdk/|^cmd/prompt-editor/(web|test)/|^lint/|^\.oxlintrc\.json$' && targets+=(lint-js)
   touches '^native/browser-runtime/|^native/crates/attn-app/src/browser/runtime\.js$' && targets+=(check-browser-runtime)

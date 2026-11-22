@@ -176,6 +176,8 @@ jobs:
           go: 'true'
           node: 'true'
       - run: make test-scripts
+      - name: Harness names in the apps, the CLI and the PTY host
+        run: make lint-harness-apps
 
   # generated.go and generated.ts are compiled from internal/protocol/schema, and
   # nothing was checking that the committed copies match. The other jobs cannot:

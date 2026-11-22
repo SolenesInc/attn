@@ -227,7 +227,7 @@ lint: lint-go lint-js
 
 GO_PACKAGES ?= ./...
 
-.PHONY: compile-go check-go check-js-tools lint-js check-mobile check-harness check-browser-runtime check-native test-native test-native-wire
+.PHONY: compile-go check-go check-js-tools lint-harness lint-harness-apps lint-js check-mobile check-harness check-browser-runtime check-native test-native test-native-wire
 compile-go: $(NATIVE_VT_DEP)
 	go list -test -deps -export $(GO_PACKAGES) >/dev/null
 
@@ -238,6 +238,7 @@ lint-go: $(NATIVE_VT_DEP)
 	go tool staticcheck $(GO_PACKAGES)
 	go run ./scripts/lifetimelint
 	go run ./scripts/testlint
+	go run ./scripts/harnesslint
 	@deps=$$(go list -deps ./cmd/...) || exit 1; \
 	if printf '%s\n' "$$deps" | grep -E '/internal/(testworld|fakeagent)$$'; then \
 		echo "the shipped binaries must not import the test worlds listed above" >&2; exit 1; \
@@ -250,6 +251,12 @@ lint-go: $(NATIVE_VT_DEP)
 	if printf '%s\n' "$$deps" | grep -E '/internal/(daemon|store|garden)(/|$$)'; then \
 		echo "internal/sessionmonitor must not import the home's packages listed above: it reads only its Policy, View and Host" >&2; exit 1; \
 	fi
+
+lint-harness: $(NATIVE_VT_DEP)
+	go run ./scripts/harnesslint
+
+lint-harness-apps:
+	go run ./scripts/harnesslint -apps
 
 lint-js: $(LINT_NODE_MODULES)
 	pnpm --dir lint test

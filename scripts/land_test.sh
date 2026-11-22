@@ -246,23 +246,33 @@ expect_checks 'check-harness lint-js' sync
 mkdir -p native/browser-runtime/src
 printf 'export {};\n' >native/browser-runtime/src/example.ts
 land 'Browser runtime change'
-expect_checks 'land --group native' 'check-browser-runtime check-native NATIVE_CLIPPY=' "landing-tests $selected_units" sync
+expect_checks 'land --group native' 'lint-harness-apps check-browser-runtime check-native NATIVE_CLIPPY=' "landing-tests $selected_units" sync
 
 mkdir -p native/crates/demo/src
 printf '[workspace]\n' >native/Cargo.toml
 printf '[package]\n' >native/crates/demo/Cargo.toml
 printf '\n' >native/crates/demo/src/lib.rs
 land 'Native workspace arrives'
-expect_checks 'land --group native' 'check-native NATIVE_CLIPPY=--workspace' "landing-tests $selected_units" sync
+expect_checks 'land --group native' 'lint-harness-apps check-native NATIVE_CLIPPY=--workspace' "landing-tests $selected_units" sync
 
 printf '\n' >>native/crates/demo/src/lib.rs
 land 'Native crate change'
-expect_checks 'land --group native' 'check-native NATIVE_CLIPPY=-p demo' "landing-tests $selected_units" sync
+expect_checks 'land --group native' 'lint-harness-apps check-native NATIVE_CLIPPY=-p demo' "landing-tests $selected_units" sync
 
 mkdir -p mobile/src
 printf 'export {};\n' >mobile/src/example.ts
 land 'Mobile change'
-expect_checks check-mobile sync
+expect_checks 'lint-harness-apps check-mobile' sync
+
+mkdir -p pty-host/src
+printf '\n' >pty-host/src/example.rs
+land 'PTY host change'
+expect_checks 'land --group pty-host' lint-harness-apps "landing-tests $selected_units" sync
+
+mkdir -p scripts/harnesslint
+printf '\n' >scripts/harnesslint/allow.txt
+land 'Harness lint allowance change'
+expect_checks lint-harness sync
 
 mkdir -p sdk/plugin/src
 printf 'export {};\n' >sdk/plugin/src/example.ts
