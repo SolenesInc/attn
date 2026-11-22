@@ -79,7 +79,7 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (Binaries, er
 	if req.Channel == "release" {
 		err = DownloadRelease(ctx, req.ReleaseSource, req.Build.Version, arch, staged)
 	} else {
-		err = req.build(ctx, arch, filepath.Join(dir, "build.log"), staging, staged)
+		err = req.build(ctx, arch, filepath.Join(dir, strings.TrimPrefix(filepath.Base(staging), ".")+".log"), staging, staged)
 	}
 	if err != nil {
 		return Binaries{}, err

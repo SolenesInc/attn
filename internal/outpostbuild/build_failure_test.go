@@ -26,7 +26,7 @@ func TestFailedSourceBuildSaysItsCauseAndKeepsItsOutput(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			repo, commit := failingRepository(t, string(printed))
+			repo, commit := failingRepository(t, string(printed), "build:\n\t@cat printed.txt\n\t@exit 2\n")
 			req := outpostbuild.Request{
 				Build:      bridge.Build{Version: "0.15.0", SourceFingerprint: "git:" + commit, ProtocolVersion: "p"},
 				Channel:    "source",
@@ -62,7 +62,46 @@ func TestFailedSourceBuildSaysItsCauseAndKeepsItsOutput(t *testing.T) {
 	}
 }
 
-func failingRepository(t *testing.T, printed string) (repo, commit string) {
+func TestEachFailedBuildKeepsItsOwnOutput(t *testing.T) {
+	attempt := filepath.Join(t.TempDir(), "attempt.txt")
+	t.Setenv("ATTEMPT", attempt)
+	repo, commit := failingRepository(t, "", "build:\n\t@cat \"$$ATTEMPT\"\n\t@exit 2\n")
+	req := outpostbuild.Request{
+		Build:      bridge.Build{Version: "0.15.0", SourceFingerprint: "git:" + commit, ProtocolVersion: "p"},
+		Channel:    "source",
+		Repository: repo,
+		Cache:      t.TempDir(),
+		Platform:   "linux/amd64",
+	}
+	fail := func(printed string) string {
+		t.Helper()
+		if err := os.WriteFile(attempt, []byte(printed), 0644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := outpostbuild.Acquire(context.Background(), req, func(string) {})
+		if err == nil {
+			t.Fatal("a build whose make fails acquired binaries")
+		}
+		_, log, ok := strings.Cut(err.Error(), "; full output in ")
+		if !ok {
+			t.Fatalf("the failure names no log: %q", err)
+		}
+		return log
+	}
+
+	first := fail("error: the first outpost's failure\n")
+	fail("error: the second outpost's failure\n")
+
+	kept, err := os.ReadFile(first)
+	if err != nil {
+		t.Fatalf("read the first failure's log: %v", err)
+	}
+	if !strings.HasPrefix(string(kept), "error: the first outpost's failure\n") {
+		t.Errorf("the first failure's log holds %q", kept)
+	}
+}
+
+func failingRepository(t *testing.T, printed, makefile string) (repo, commit string) {
 	t.Helper()
 	tools := t.TempDir()
 	if err := os.WriteFile(filepath.Join(tools, "cargo"), []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
@@ -73,7 +112,6 @@ func failingRepository(t *testing.T, printed string) (repo, commit string) {
 	if err := os.WriteFile(filepath.Join(repo, "printed.txt"), []byte(printed), 0644); err != nil {
 		t.Fatal(err)
 	}
-	makefile := "build:\n\t@cat printed.txt\n\t@exit 2\n"
 	if err := os.WriteFile(filepath.Join(repo, "Makefile"), []byte(makefile), 0644); err != nil {
 		t.Fatal(err)
 	}
