@@ -449,7 +449,7 @@ fn launch_tab(state: &State, member: &CrewMember, t: &Tokens) -> Vec<Block> {
     let unavailable = !follows.is_empty()
         && !crate::settings::listed_harnesses(state)
             .iter()
-            .any(|h| h.id == follows && h.available);
+            .any(|h| h.id == follows && h.available());
     let warning = catalog_error
         .clone()
         .or_else(|| unavailable.then(|| "This harness is unavailable on this daemon.".to_owned()));

@@ -26,6 +26,7 @@ type pluginDriverRegistration struct {
 	PluginName   string
 	Agent        string
 	DisplayName  string
+	Logo         harness.Logo
 	Capabilities map[string]bool
 	SkillDirs    []pluginSkillDir
 }
@@ -36,6 +37,12 @@ type pluginDriverRegisterParams struct {
 	Capabilities map[string]bool                `json:"capabilities,omitempty"`
 	Server       *agentdriver.ServerDeclaration `json:"server,omitempty"`
 	SkillDirs    []pluginSkillDir               `json:"skill_dirs,omitempty"`
+	Logo         *pluginLogo                    `json:"logo,omitempty"`
+}
+
+type pluginLogo struct {
+	View float64 `json:"view"`
+	Body string  `json:"body"`
 }
 
 type pluginDriverRegisterResult struct {
@@ -219,6 +226,12 @@ func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginD
 	if err != nil {
 		return err
 	}
+	var logo harness.Logo
+	if params.Logo != nil {
+		if logo, err = harness.NewLogo(params.Logo.View, params.Logo.Body); err != nil {
+			return fmt.Errorf("driver.register params.logo: %w", err)
+		}
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.plugins[plugin.name] != plugin {
@@ -232,6 +245,7 @@ func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginD
 		Agent:        agent,
 		Capabilities: capabilities,
 		DisplayName:  strings.TrimSpace(params.DisplayName),
+		Logo:         logo,
 		SkillDirs:    params.SkillDirs,
 	}
 	close(r.driverRegistered)

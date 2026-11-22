@@ -1194,13 +1194,61 @@ model HarnessModel {
   shipped_tier?: ModelTier;
 }
 
+enum HarnessInstallation { installed, missing, checking }
+
+// One harness a session can have, offered or not.
 model Harness {
   id: string;
   name: string;
-  available: boolean;
+  offered: boolean;                    // false: the user turned the harness off
+  installation: HarnessInstallation;
+  logo?: string;                       // the logo's content hash, for harness_logo; absent draws the generic mark
+  options: HarnessOptions;
   model_pin: boolean;
   effort_pin: boolean;
   discovery: boolean;
+}
+
+// What a harness can do, as its adapter states it.
+model HarnessOptions {
+  resume: boolean;
+  yolo: boolean;
+  auto_approve: boolean;
+  initial_prompt: boolean;
+  launch_instructions: boolean;
+  model_pin: boolean;
+  effort_pin: boolean;
+  context_cap: boolean;
+  provider: boolean;                   // its model names carry a provider, as provider/model
+  executable_setting: boolean;         // the user can name its program in the <id>_executable setting
+  one_shot: boolean;                   // answers headless tasks and model calls
+  activity: boolean;                   // attn reads its conversations for activity lines
+}
+
+// Every harness of the home, sent after initial_state and again when one changes.
+model HarnessCatalogMessage {
+  event: "harness_catalog";
+  harnesses: Harness[];
+}
+
+model HarnessLogoMessage {
+  cmd: "harness_logo";
+  request_id: string;
+  hash: string;
+}
+
+// An SVG body drawn in currentColor inside a square view box of side view.
+model HarnessLogo {
+  view: float64;
+  body: string;
+}
+
+model HarnessLogoResultMessage {
+  event: "harness_logo_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  logo?: HarnessLogo;
 }
 
 model DelegationPreferencesGetMessage {

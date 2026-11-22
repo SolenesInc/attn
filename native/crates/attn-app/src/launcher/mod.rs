@@ -933,7 +933,7 @@ fn request_catalog(state: &mut State, which: Which, opening: u64, host: String, 
                 let installed = catalog
                     .harnesses
                     .into_iter()
-                    .filter(|h| h.available)
+                    .filter(|h| h.available())
                     .map(|h| h.id)
                     .collect();
                 launcher.catalogs.insert(host, Some(installed));

@@ -562,6 +562,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 	}
 	pausepoint.At(pausepoint.DaemonInitialStateBuilt)
 	d.sendInitialArrangement(client, event)
+	d.sendToClient(client, d.harnessCatalogMessage())
 	if reportsChecking && !d.capturingLoginEnv() {
 		d.publishHarnessAvailability()
 	}
@@ -837,6 +838,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		}
 		request.ProfileID = protocol.Ptr(profile.ID)
 		d.life.Go("handleDelegateWS", func() { d.handleDelegateWS(client, request) })
+	case protocol.CmdHarnessLogo:
+		d.handleHarnessLogo(client, msg.(*protocol.HarnessLogoMessage))
 	case protocol.CmdHarnessModels:
 		d.life.Go("handleHarnessModels", func() { d.handleHarnessModels(client, msg.(*protocol.HarnessModelsMessage)) })
 	case protocol.CmdHarnessTargets:

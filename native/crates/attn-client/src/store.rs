@@ -4,9 +4,10 @@ use std::sync::{Arc, Mutex, Weak};
 use crate::layout::{Leaf, Node};
 use attn_protocol::{
     Ask, AuthorState, CrewMember, DaemonWarning, DesktopTileContentMessage, GardenReview,
-    GitOperation, InitialStateMessage, OutpostInfo, PR, PairedSender, PhonesUpdatedMessage,
-    PluginInfo, PluginIssue, Profile, RepoState, Seed, SenderPairingRequest, SendersUpdatedMessage,
-    Session, SessionLedgerEntry, SharedCodexState, UpdateRun, Vent, Worktree, WorktreeSweepEntry,
+    GitOperation, Harness, InitialStateMessage, OutpostInfo, PR, PairedSender,
+    PhonesUpdatedMessage, PluginInfo, PluginIssue, Profile, RepoState, Seed, SenderPairingRequest,
+    SendersUpdatedMessage, Session, SessionLedgerEntry, SharedCodexState, UpdateRun, Vent,
+    Worktree, WorktreeSweepEntry,
 };
 
 /// A desktop as the daemon sent it, with its layout tree read once on arrival.
@@ -72,6 +73,8 @@ pub struct Facts {
     pub profiles: Arc<Profiles>,
     pub desktops: Arc<Vec<Desktop>>,
     pub settings: Arc<BTreeMap<String, String>>,
+    /// Every harness the home can run a session on, offered or not, as the daemon last sent it.
+    pub harnesses: Arc<Vec<Harness>>,
     /// The machines that host remote sessions, by the id a session's `host` names.
     pub outposts: Arc<Vec<OutpostInfo>>,
     /// The build the home daemon runs, which an outpost on another build is offered.
@@ -406,6 +409,7 @@ impl Slices {
     pub const DELEGATION: Slices = Slices(1 << 20);
     pub const PHONES: Slices = Slices(1 << 21);
     pub const SENDERS: Slices = Slices(1 << 22);
+    pub const HARNESSES: Slices = Slices(1 << 23);
     pub const FILES: Slices = Slices(1 << 24);
     pub const GARDEN_REVIEW: Slices = Slices(1 << 25);
     pub const CREW: Slices = Slices(1 << 26);
@@ -622,6 +626,13 @@ impl Store {
         self.change(|facts| {
             facts.shared_codex = Arc::new(Some(SharedCodex { profile_id, state }));
             Slices::SHARED_CODEX
+        });
+    }
+
+    pub(crate) fn set_harnesses(&self, harnesses: Vec<Harness>) {
+        self.change(|facts| {
+            facts.harnesses = Arc::new(harnesses);
+            Slices::HARNESSES
         });
     }
 

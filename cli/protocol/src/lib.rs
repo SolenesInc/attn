@@ -4,3 +4,11 @@ mod generated;
 pub mod go_values;
 
 pub use generated::*;
+
+impl Harness {
+    /// Whether a launch may try the harness: installed, or still being checked.
+    #[must_use]
+    pub fn available(&self) -> bool {
+        self.installation != "missing"
+    }
+}

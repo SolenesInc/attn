@@ -117,7 +117,7 @@ func TestTheDaemonAnswersWhileTheLoginShellRuns(t *testing.T) {
 	prefs := testworld.Request(app, protocol.DelegationPreferencesGetMessage{Cmd: protocol.CmdDelegationPreferencesGet, RequestID: requestID},
 		protocol.EventDelegationPreferencesResult, func(m protocol.DelegationPreferencesResultMessage) bool { return m.RequestID == requestID })
 	for _, harness := range prefs.Harnesses {
-		if harness.ID == "claude" && !harness.Available {
+		if harness.ID == "claude" && !harness.Available() {
 			t.Fatal("delegation_preferences_get reports a checking harness as not available")
 		}
 	}

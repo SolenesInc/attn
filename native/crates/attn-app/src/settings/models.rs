@@ -307,7 +307,7 @@ fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: 
     let shows_orphans = !harness.discovery
         || found.catalog.is_some()
         || found.error.is_some()
-        || !harness.available;
+        || !harness.available();
     let orphans: Vec<&TierOverride> = entries
         .iter()
         .filter(|e| {
@@ -319,7 +319,7 @@ fn harness_block(state: &State, harness: &Harness, entries: &[TierOverride], t: 
         })
         .collect();
     if !orphans.is_empty() {
-        let title = if found.error.is_some() || !harness.available {
+        let title = if found.error.is_some() || !harness.available() {
             "Saved overrides"
         } else {
             "No longer reported"

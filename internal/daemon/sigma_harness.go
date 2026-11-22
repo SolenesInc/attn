@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +21,9 @@ import (
 
 type sigmaHarness struct{ d *Daemon }
 
+//go:embed sigma_logo.svg
+var sigmaLogo string
+
 func init() {
 	harnessSources = append(harnessSources, func(d *Daemon) []harness.Harness { return []harness.Harness{sigmaHarness{d: d}} })
 }
@@ -28,6 +32,7 @@ func (sigmaHarness) driver() agentdriver.Driver { return agentdriver.MustGet("si
 
 func (h sigmaHarness) Facts() harness.Facts {
 	facts := builtinFacts(h.driver())
+	facts.Logo = harness.Logo{View: 24, Body: sigmaLogo}
 	facts.SkillDirs = h.driver().(*agentdriver.Sigma).SkillDirs
 	facts.CacheTTL = time.Hour
 	facts.Signals.Heartbeat = 500 * time.Millisecond

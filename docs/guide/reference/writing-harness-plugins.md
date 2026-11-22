@@ -121,6 +121,24 @@ own copy: when your driver registers, when roles are added, and before each
 launch of one of its roles. A daemon released before `skillDirs` ignores it
 and keeps refusing those roles.
 
+### Your harness's logo
+
+Attn draws your harness's mark next to its sessions. Give it with `logo`: an
+SVG body drawn in `currentColor`, inside a square view box whose side is
+`view`. Attn colors it with the session's state, so leave colors out.
+
+```ts
+client.driver({
+  id: "my-agent",
+  spawn,
+  logo: { view: 24, body: '<circle cx="12" cy="12" r="9" fill="currentColor"/>' },
+});
+```
+
+Attn refuses the registration when `view` is zero, negative or not a finite
+number, or when `body` is over 64 KiB. Without a logo, attn draws its generic
+mark. A daemon released before logos ignores the field.
+
 ### Give the harness attn's tools
 
 attn serves its tools as an MCP server. With `agentTools: true`, from SDK
@@ -456,7 +474,7 @@ an Attn session or of a native conversation. A capability name Attn does not
 know, or one that needs `message_delivery` without it, is refused.
 
 `skillDirs` is `skill_dirs` on the wire, a list of objects with
-`default_home` and optional `home_env`.
+`default_home` and optional `home_env`. `logo` is `{"view": 24, "body": "…"}`.
 
 A shared-server registration adds `capabilities: {"server_binding": true}` and
 `server` to `driver.register`. Its keys are `protocol`, `executable`, optional

@@ -7,16 +7,17 @@ use attn_protocol::{
     AppPerformanceResultMessage, AsksUpdatedMessage, AttachResultMessage, AuthorsUpdatedMessage,
     ClientHelloMessage, CommandErrorMessage, CrewUpdatedMessage, FsChangedMessage,
     GardenReviewUpdatedMessage, GardenSeedsChangedMessage, GardenSeedsUpdatedMessage,
-    GitHubHostsUpdatedMessage, GitOperationStartedMessage, InitialStateMessage,
-    InstallCodexUpdateResultMessage, KittyImageResultMessage, KittyPlacementsMessage,
-    NotificationListResultMessage, NotificationsUpdatedMessage, OutpostsUpdatedMessage,
-    PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage, ProfileArrangementChangedMessage,
-    ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage, QuickCaptureReadMessage,
-    QuickCaptureUnreadMessage, RateLimitedMessage, ReposUpdatedMessage, RuntimeRespawnedMessage,
-    SessionClosedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
-    SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
-    SettingsUpdatedMessage, SharedCodexChangedMessage, UpdateChangedMessage, VentsUpdatedMessage,
-    WorktreeStateChangedEvent, WorktreeSweptEvent, go_values,
+    GitHubHostsUpdatedMessage, GitOperationStartedMessage, HarnessCatalogMessage,
+    InitialStateMessage, InstallCodexUpdateResultMessage, KittyImageResultMessage,
+    KittyPlacementsMessage, NotificationListResultMessage, NotificationsUpdatedMessage,
+    OutpostsUpdatedMessage, PROTOCOL_VERSION, PRsUpdatedMessage, PluginsUpdatedMessage,
+    ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
+    QuickCaptureReadMessage, QuickCaptureUnreadMessage, RateLimitedMessage, ReposUpdatedMessage,
+    RuntimeRespawnedMessage, SessionClosedMessage, SessionExitedMessage,
+    SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
+    SessionsUpdatedMessage, SettingsUpdatedMessage, SharedCodexChangedMessage,
+    UpdateChangedMessage, VentsUpdatedMessage, WorktreeStateChangedEvent, WorktreeSweptEvent,
+    go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -730,6 +731,11 @@ impl Task {
                     self.store
                         .set_shared_codex(message.profile_id, message.shared_codex);
                 }
+                None
+            }
+            "harness_catalog" => {
+                let message: HarnessCatalogMessage = parse(&header.event, text)?;
+                self.store.set_harnesses(message.harnesses);
                 None
             }
             "outposts_updated" => {

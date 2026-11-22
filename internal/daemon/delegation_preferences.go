@@ -11,7 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/attnskill"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/delegationprefs"
-	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -28,7 +27,7 @@ func (d *Daemon) delegationHarnesses() []protocol.Harness {
 		if !health.Offered {
 			continue
 		}
-		result = append(result, protocol.Harness{ID: facts.ID, Name: facts.DisplayName, Available: health.Installation != harness.Missing, ModelPin: facts.Options.ModelPin, EffortPin: facts.Options.EffortPin, Discovery: facts.ModelDiscovery})
+		result = append(result, harnessRecord(d.life.Context(), h))
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
 	return result
@@ -107,7 +106,7 @@ func (d *Daemon) installAttnRoles(current, next delegationprefs.Config, install 
 	}
 	var harnesses []string
 	for _, harness := range d.delegationHarnesses() {
-		if harness.Available {
+		if harness.Available() {
 			harnesses = append(harnesses, harness.ID)
 		}
 	}

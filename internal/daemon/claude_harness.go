@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -15,6 +16,9 @@ import (
 
 type claudeHarness struct{ d *Daemon }
 
+//go:embed claude_logo.svg
+var claudeLogo string
+
 func init() {
 	harnessSources = append(harnessSources, func(d *Daemon) []harness.Harness { return []harness.Harness{claudeHarness{d: d}} })
 }
@@ -23,6 +27,7 @@ func (claudeHarness) driver() agentdriver.Driver { return agentdriver.MustGet("c
 
 func (h claudeHarness) Facts() harness.Facts {
 	facts := builtinFacts(h.driver())
+	facts.Logo = harness.Logo{View: 1200, Body: claudeLogo}
 	facts.SkillDirs = func(_ func(string) string, homeDir string) ([]string, error) {
 		return []string{filepath.Join(homeDir, ".claude", "skills")}, nil
 	}

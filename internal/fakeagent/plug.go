@@ -311,7 +311,7 @@ func (p *plugDriver) connect() error {
 		return fmt.Errorf("attn refused hello: %v", err)
 	}
 	var registered okResult
-	err = p.daemon.call(context.Background(), "driver.register", map[string]any{
+	registration := map[string]any{
 		"agent":        plugAgentName(),
 		"display_name": os.Getenv("ATTN_FAKE_PLUG_DISPLAY_NAME"),
 		"capabilities": withPlugCapabilityOverrides(map[string]bool{
@@ -322,7 +322,11 @@ func (p *plugDriver) connect() error {
 			"message_delivery":    false,
 		}),
 		"skill_dirs": plugSkillDirs(),
-	}, &registered)
+	}
+	if logo := os.Getenv("ATTN_FAKE_PLUG_LOGO"); logo != "" {
+		registration["logo"] = json.RawMessage(logo)
+	}
+	err = p.daemon.call(context.Background(), "driver.register", registration, &registered)
 	if err != nil || !registered.OK {
 		return fmt.Errorf("attn refused driver.register: %v", err)
 	}

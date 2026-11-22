@@ -49,6 +49,7 @@ func (h pluginHarness) Facts() harness.Facts {
 	return harness.Facts{
 		ID:          h.reg.Agent,
 		DisplayName: h.reg.displayName(),
+		Logo:        h.reg.Logo,
 		Options: harness.Options{
 			Resume:             declared["resume"],
 			Yolo:               declared["yolo"],

@@ -2279,7 +2279,7 @@ fn launcher_serving(state: InitialStateMessage) -> Daemon {
                         .map(|id| Harness {
                             id: (*id).into(),
                             name: (*id).into(),
-                            available: true,
+                            installation: "installed".into(),
                             ..Harness::default()
                         })
                         .collect(),
@@ -2466,7 +2466,12 @@ fn launcher_missing_harness(dark: bool) {
                         .map(|id| Harness {
                             id: (*id).into(),
                             name: (*id).into(),
-                            available: *id == "codex",
+                            installation: if *id == "codex" {
+                                "installed"
+                            } else {
+                                "missing"
+                            }
+                            .into(),
                             ..Harness::default()
                         })
                         .collect(),
@@ -2545,7 +2550,7 @@ fn launcher_outposts(dark: bool, inline: bool, typed: Option<&str>) {
                         .map(|id| Harness {
                             id: (*id).into(),
                             name: (*id).into(),
-                            available: true,
+                            installation: "installed".into(),
                             ..Harness::default()
                         })
                         .collect(),
@@ -2947,10 +2952,11 @@ fn settings_models(dark: bool) {
                 harnesses: Some(vec![Harness {
                     id: "claude".into(),
                     name: "Claude Code".into(),
-                    available: true,
+                    installation: "installed".into(),
                     model_pin: true,
                     effort_pin: true,
                     discovery: true,
+                    ..Harness::default()
                 }]),
                 templates: Some(Vec::new()),
                 expanded_roles: Some(Vec::new()),
@@ -3575,10 +3581,11 @@ fn delegation_preferences(daemon: &Daemon, enabled: bool, failure: Option<&'stat
         let harness = |id: &str, name: &str| Harness {
             id: id.into(),
             name: name.into(),
-            available: true,
+            installation: "installed".into(),
             model_pin: true,
             effort_pin: true,
             discovery: true,
+            ..Harness::default()
         };
         let roles = delegation_roles();
         message(DelegationPreferencesResultMessage {
@@ -3940,10 +3947,11 @@ fn settings_route_picker(dark: bool) {
                     let harness = |id: &str, name: &str| Harness {
                         id: id.into(),
                         name: name.into(),
-                        available: true,
+                        installation: "installed".into(),
                         model_pin: true,
                         effort_pin: true,
                         discovery: true,
+                        ..Harness::default()
                     };
                     message(DelegationPreferencesResultMessage {
                         request_id: r["request_id"].as_str().unwrap_or_default().into(),
@@ -4535,10 +4543,11 @@ fn settings_smallest_pages(dark: bool) {
                 let harness = |id: &str, name: &str| Harness {
                     id: id.into(),
                     name: name.into(),
-                    available: true,
+                    installation: "installed".into(),
                     model_pin: true,
                     effort_pin: true,
                     discovery: true,
+                    ..Harness::default()
                 };
                 message(DelegationPreferencesResultMessage {
                     request_id: r["request_id"].as_str().unwrap_or_default().into(),
@@ -4704,10 +4713,11 @@ fn settings_smallest_pages(dark: bool) {
                 let harness = |id: &str, name: &str| Harness {
                     id: id.into(),
                     name: name.into(),
-                    available: true,
+                    installation: "installed".into(),
                     model_pin: true,
                     effort_pin: true,
                     discovery: true,
+                    ..Harness::default()
                 };
                 message(DelegationPreferencesResultMessage {
                     request_id: r["request_id"].as_str().unwrap_or_default().into(),
@@ -5038,10 +5048,11 @@ fn chief_setup(dark: bool) {
         let harness = |id: &str, name: &str| Harness {
             id: id.into(),
             name: name.into(),
-            available: true,
+            installation: "installed".into(),
             model_pin: true,
             effort_pin: true,
             discovery: true,
+            ..Harness::default()
         };
         message(DelegationPreferencesResultMessage {
             request_id: r["request_id"].as_str().unwrap_or_default().into(),
@@ -6372,10 +6383,11 @@ fn crew_page_with(dark: bool, smallest: bool) -> World {
                         .map(|(id, name)| Harness {
                             id: (*id).into(),
                             name: (*name).into(),
-                            available: true,
+                            installation: "installed".into(),
                             model_pin: true,
                             effort_pin: true,
                             discovery: true,
+                            ..Harness::default()
                         })
                         .collect(),
                 ),

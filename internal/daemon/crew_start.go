@@ -51,7 +51,7 @@ func (d *Daemon) crewAgentAvailable(agent string) bool {
 	agent = strings.TrimSpace(strings.ToLower(agent))
 	for _, harness := range d.delegationHarnesses() {
 		if harness.ID == agent {
-			return harness.Available
+			return harness.Available()
 		}
 	}
 	return false
@@ -573,13 +573,13 @@ func (d *Daemon) validateCrewLaunchSelection(member crew.Member, requireAvailabl
 	if harness == nil {
 		return fmt.Errorf("agent %q is not available; the harness catalog names what this daemon can launch", agent)
 	}
-	if requireAvailable && !harness.Available {
+	if requireAvailable && !harness.Available() {
 		return fmt.Errorf("agent %q is installed but its executable or driver is unavailable", agent)
 	}
 	if err := d.validateHarnessModelEffort(agent, member.Model, member.Effort); err != nil {
 		return err
 	}
-	if member.Model == "" || !harness.Discovery || !harness.Available {
+	if member.Model == "" || !harness.Discovery || !harness.Available() {
 		return nil
 	}
 	catalog, err := d.discoverHarnessModels(context.Background(), agent)

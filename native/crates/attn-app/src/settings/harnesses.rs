@@ -199,8 +199,8 @@ pub(crate) fn listed(state: &State) -> Vec<Harness> {
                     .get(&format!("{}_available", harness.id))
                     .map(String::as_str)
                 {
-                    Some("true") => harness.available = true,
-                    Some("false") => harness.available = false,
+                    Some("true") => harness.installation = "installed".into(),
+                    Some("false") => harness.installation = "missing".into(),
                     _ => {}
                 }
             }
@@ -385,7 +385,7 @@ pub(crate) fn choices(state: &State, agents: &[String]) -> Vec<RouteHarness> {
                     .map(|h| h.name.clone())
                     .filter(|n| !n.is_empty())
                     .unwrap_or_else(|| crate::picker::agents::label(&id)),
-                available: selectable(&availability, &id) && metadata.is_none_or(|h| h.available),
+                available: selectable(&availability, &id) && metadata.is_none_or(|h| h.available()),
                 model_pin: metadata.is_none_or(|h| h.model_pin),
                 effort_pin: metadata.is_none_or(|h| h.effort_pin),
                 discovery: metadata.is_none_or(|h| h.discovery),

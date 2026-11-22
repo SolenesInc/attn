@@ -215,6 +215,8 @@ export type DriverDefinition = DriverHandlers & DriverPromises & {
   /** Stable harness ID: lowercase letters, numbers, hyphens and underscores, starting with a letter or number. */
   id: string;
   displayName?: string;
+  /** The harness's mark: an SVG body drawn in currentColor inside a square view box of side `view`. */
+  logo?: { view: number; body: string };
   server?: ServerBinding;
   /** Where the harness finds user skills. attn installs the skills its Attn roles need there, and refuses those roles without it. */
   skillDirs?: SkillDir[];

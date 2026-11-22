@@ -67,7 +67,7 @@ impl From<&attn_protocol::Harness> for RouteHarness {
         RouteHarness {
             id: h.id.clone(),
             name: h.name.clone(),
-            available: h.available,
+            available: h.available(),
             model_pin: h.model_pin,
             effort_pin: h.effort_pin,
             discovery: h.discovery,

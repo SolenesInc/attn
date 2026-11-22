@@ -143,7 +143,7 @@ fn machine(
                         .map(|id| Harness {
                             id: (*id).into(),
                             name: (*id).into(),
-                            available: true,
+                            installation: "installed".into(),
                             ..Harness::default()
                         })
                         .collect(),
@@ -2287,7 +2287,7 @@ fn smallest_at_largest_text(launcher: bool, opening: Opening, plugins: &[&'stati
                     .map(|id| Harness {
                         id: (*id).into(),
                         name: (*id).into(),
-                        available: true,
+                        installation: "installed".into(),
                         ..Harness::default()
                     })
                     .collect(),

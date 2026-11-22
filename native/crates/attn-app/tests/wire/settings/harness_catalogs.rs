@@ -14,10 +14,11 @@ pub(crate) fn harness(id: &str, name: &str) -> Harness {
     Harness {
         id: id.into(),
         name: name.into(),
-        available: true,
+        installation: "installed".into(),
         model_pin: true,
         effort_pin: true,
         discovery: true,
+        ..Harness::default()
     }
 }
 

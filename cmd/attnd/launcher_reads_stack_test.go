@@ -92,7 +92,7 @@ func TestLauncherReadsRunOnTheNamedOutpost(t *testing.T) {
 		}
 		harnesses := map[string]bool{}
 		for _, h := range r.Catalog.Harnesses {
-			harnesses[h.ID] = h.Available
+			harnesses[h.ID] = h.Available()
 		}
 		return harnesses
 	}

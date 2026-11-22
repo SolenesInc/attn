@@ -5966,9 +5966,6 @@ const GitOperationStatusRunning GitOperationStatus = "running"
 const GitOperationStatusSucceeded GitOperationStatus = "succeeded"
 
 type Harness struct {
-	// Available corresponds to the JSON schema field "available".
-	Available bool `json:"available"`
-
 	// Discovery corresponds to the JSON schema field "discovery".
 	Discovery bool `json:"discovery"`
 
@@ -5978,11 +5975,73 @@ type Harness struct {
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
+	// Installation corresponds to the JSON schema field "installation".
+	Installation HarnessInstallation `json:"installation"`
+
+	// Logo corresponds to the JSON schema field "logo".
+	Logo *string `json:"logo,omitempty,omitzero"`
+
 	// ModelPin corresponds to the JSON schema field "model_pin".
 	ModelPin bool `json:"model_pin"`
 
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
+
+	// Offered corresponds to the JSON schema field "offered".
+	Offered bool `json:"offered"`
+
+	// Options corresponds to the JSON schema field "options".
+	Options HarnessOptions `json:"options"`
+}
+
+type HarnessCatalogMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Harnesses corresponds to the JSON schema field "harnesses".
+	Harnesses []Harness `json:"harnesses"`
+}
+
+type HarnessInstallation string
+
+const HarnessInstallationChecking HarnessInstallation = "checking"
+const HarnessInstallationInstalled HarnessInstallation = "installed"
+const HarnessInstallationMissing HarnessInstallation = "missing"
+
+type HarnessLogo struct {
+	// Body corresponds to the JSON schema field "body".
+	Body string `json:"body"`
+
+	// View corresponds to the JSON schema field "view".
+	View float64 `json:"view"`
+}
+
+type HarnessLogoMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Hash corresponds to the JSON schema field "hash".
+	Hash string `json:"hash"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type HarnessLogoResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Logo corresponds to the JSON schema field "logo".
+	Logo *HarnessLogo `json:"logo,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type HarnessModel struct {
@@ -6058,6 +6117,44 @@ type HarnessModelsResultMessage struct {
 
 	// TierDefaults corresponds to the JSON schema field "tier_defaults".
 	TierDefaults TierDefaults `json:"tier_defaults"`
+}
+
+type HarnessOptions struct {
+	// Activity corresponds to the JSON schema field "activity".
+	Activity bool `json:"activity"`
+
+	// AutoApprove corresponds to the JSON schema field "auto_approve".
+	AutoApprove bool `json:"auto_approve"`
+
+	// ContextCap corresponds to the JSON schema field "context_cap".
+	ContextCap bool `json:"context_cap"`
+
+	// EffortPin corresponds to the JSON schema field "effort_pin".
+	EffortPin bool `json:"effort_pin"`
+
+	// ExecutableSetting corresponds to the JSON schema field "executable_setting".
+	ExecutableSetting bool `json:"executable_setting"`
+
+	// InitialPrompt corresponds to the JSON schema field "initial_prompt".
+	InitialPrompt bool `json:"initial_prompt"`
+
+	// LaunchInstructions corresponds to the JSON schema field "launch_instructions".
+	LaunchInstructions bool `json:"launch_instructions"`
+
+	// ModelPin corresponds to the JSON schema field "model_pin".
+	ModelPin bool `json:"model_pin"`
+
+	// OneShot corresponds to the JSON schema field "one_shot".
+	OneShot bool `json:"one_shot"`
+
+	// Provider corresponds to the JSON schema field "provider".
+	Provider bool `json:"provider"`
+
+	// Resume corresponds to the JSON schema field "resume".
+	Resume bool `json:"resume"`
+
+	// Yolo corresponds to the JSON schema field "yolo".
+	Yolo bool `json:"yolo"`
 }
 
 type HarnessTargetsMessage struct {

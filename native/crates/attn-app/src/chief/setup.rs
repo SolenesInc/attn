@@ -103,7 +103,7 @@ fn chief_harnesses(state: &State) -> Vec<RouteHarness> {
         .listed
         .iter()
         .filter(|h| {
-            h.available
+            h.available()
                 && state
                     .facts
                     .settings

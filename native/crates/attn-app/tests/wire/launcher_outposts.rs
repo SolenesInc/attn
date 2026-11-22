@@ -312,7 +312,12 @@ fn world(setup: Setup) -> World {
                     harnesses: harnesses(&["claude", "codex"])
                         .into_iter()
                         .map(|h| Harness {
-                            available: installed.contains(&h.id.as_str()),
+                            installation: if installed.contains(&h.id.as_str()) {
+                                "installed"
+                            } else {
+                                "missing"
+                            }
+                            .into(),
                             ..h
                         })
                         .collect(),
@@ -370,7 +375,7 @@ fn harnesses(ids: &[&str]) -> Vec<Harness> {
         .map(|id| Harness {
             id: (*id).into(),
             name: (*id).into(),
-            available: true,
+            installation: "installed".into(),
             ..Harness::default()
         })
         .collect()

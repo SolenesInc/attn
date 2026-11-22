@@ -21,7 +21,7 @@ func (d *Daemon) ensureAvailableAgentSkills() {
 func (d *Daemon) ensureEnabledWorkflowSkills() {
 	var harnesses []string
 	for _, harness := range d.delegationHarnesses() {
-		if harness.Available {
+		if harness.Available() {
 			harnesses = append(harnesses, harness.ID)
 		}
 	}

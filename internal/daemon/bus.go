@@ -361,6 +361,10 @@ func buildWireProjections() []projection {
 			apply: func(d *Daemon, _ bus.Event) { d.projectSettingsUpdated("") },
 		},
 		{
+			filter: bus.Filter{FactSettingChanged, FactPluginDriverRegistered, FactPluginDisconnected, FactPluginHealthChanged},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectHarnessCatalog() },
+		},
+		{
 			filter: bus.Filter{FactSettingChanged},
 			apply: func(d *Daemon, ev bus.Event) {
 				d.projectSettingsUpdated(ev.Subject)
@@ -573,23 +577,24 @@ func (d *Daemon) queueSnapshot(key string, push func(), replacePending bool) {
 }
 
 const (
-	snapshotSessions    = "sessions_updated"
-	snapshotGarden      = "garden_seeds_updated"
-	snapshotAsks        = "asks_updated"
-	snapshotVents       = "vents_updated"
-	snapshotSharedCodex = "shared_codex_changed"
-	snapshotPhones      = "phones_updated"
-	snapshotSenders     = "senders_updated"
-	snapshotCrew        = "crew_updated"
-	snapshotPRs         = "prs_updated"
-	snapshotRepos       = "repos_updated"
-	snapshotAuthors     = "authors_updated"
-	snapshotGHHosts     = "github_hosts_updated"
-	snapshotPlugins     = "plugins_updated"
-	snapshotSettings    = "settings_updated"
-	snapshotNotifs      = "notifications_updated"
-	snapshotAutomations = "automations_changed"
-	snapshotTasks       = "tasks_changed"
+	snapshotSessions       = "sessions_updated"
+	snapshotGarden         = "garden_seeds_updated"
+	snapshotAsks           = "asks_updated"
+	snapshotVents          = "vents_updated"
+	snapshotSharedCodex    = "shared_codex_changed"
+	snapshotPhones         = "phones_updated"
+	snapshotSenders        = "senders_updated"
+	snapshotCrew           = "crew_updated"
+	snapshotPRs            = "prs_updated"
+	snapshotRepos          = "repos_updated"
+	snapshotAuthors        = "authors_updated"
+	snapshotGHHosts        = "github_hosts_updated"
+	snapshotPlugins        = "plugins_updated"
+	snapshotSettings       = "settings_updated"
+	snapshotHarnessCatalog = "harness_catalog"
+	snapshotNotifs         = "notifications_updated"
+	snapshotAutomations    = "automations_changed"
+	snapshotTasks          = "tasks_changed"
 )
 
 func wireEqual(a, b any) bool {

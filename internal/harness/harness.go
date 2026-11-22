@@ -220,6 +220,7 @@ type Availability struct {
 type Facts struct {
 	ID          ID
 	DisplayName string
+	Logo        Logo
 	Options     Options
 	Executable  Executable
 	SkillDirs   func(lookupEnv func(string) string, homeDir string) ([]string, error)

@@ -53,10 +53,11 @@ fn codex() -> Harness {
     Harness {
         id: "codex".into(),
         name: "Codex".into(),
-        available: true,
+        installation: "installed".into(),
         model_pin: true,
         effort_pin: true,
         discovery: true,
+        ..Harness::default()
     }
 }
 

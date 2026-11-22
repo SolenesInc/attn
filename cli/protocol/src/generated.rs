@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "4bb35280e651";
+pub const PROTOCOL_VERSION: &str = "6b56d4606512";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -5369,12 +5369,74 @@ impl GitOperationStartedMessage {
 pub type GitOperationStatus = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Harness {
-    pub available: bool,
     pub discovery: bool,
     pub effort_pin: bool,
     pub id: String,
+    pub installation: HarnessInstallation,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logo: Option<String>,
     pub model_pin: bool,
     pub name: String,
+    pub offered: bool,
+    pub options: HarnessOptions,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HarnessCatalogMessage {
+    pub event: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub harnesses: Vec<Harness>,
+}
+
+impl HarnessCatalogMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "harness_catalog".to_string(),
+            ..Self::default()
+        }
+    }
+}
+pub type HarnessInstallation = String;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HarnessLogo {
+    pub body: String,
+    pub view: f64,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HarnessLogoMessage {
+    pub cmd: String,
+    pub hash: String,
+    pub request_id: String,
+}
+
+impl HarnessLogoMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "harness_logo".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HarnessLogoResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logo: Option<HarnessLogo>,
+    pub request_id: String,
+    pub success: bool,
+}
+
+impl HarnessLogoResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "harness_logo_result".to_string(),
+            ..Self::default()
+        }
+    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HarnessModel {
@@ -5433,6 +5495,21 @@ impl HarnessModelsResultMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HarnessOptions {
+    pub activity: bool,
+    pub auto_approve: bool,
+    pub context_cap: bool,
+    pub effort_pin: bool,
+    pub executable_setting: bool,
+    pub initial_prompt: bool,
+    pub launch_instructions: bool,
+    pub model_pin: bool,
+    pub one_shot: bool,
+    pub provider: bool,
+    pub resume: bool,
+    pub yolo: bool,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HarnessTargetsMessage {

@@ -79,7 +79,7 @@ fn catalog(harnesses: &[&str]) -> Value {
                 .map(|id| Harness {
                     id: (*id).into(),
                     name: (*id).into(),
-                    available: true,
+                    installation: "installed".into(),
                     ..Harness::default()
                 })
                 .collect(),
