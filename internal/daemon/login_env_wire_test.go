@@ -582,6 +582,7 @@ if [ "$3" = 'env -0' ]; then
     exit 7
   fi
   export ATTN_TEST_LOGIN_ONLY=present PATH='%s':$PATH
+  exec env -0
 fi
 exec /bin/sh "$@"
 `, shell.captures, shell.gate, shell.gate, shell.captures, failures, failures, filepath.Join(w.Dir, ".local", "bin"))
