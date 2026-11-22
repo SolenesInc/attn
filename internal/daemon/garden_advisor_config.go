@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/victorarias/attn/internal/headless"
@@ -43,7 +44,7 @@ func (d *Daemon) parseGardenAdvisorConfig(raw string) (gardenAdvisorConfig, erro
 		return gardenAdvisorConfig{}, errors.New("garden advisor requires an agent")
 	}
 
-	if _, err := d.oneShot(config.Agent); err != nil {
+	if !slices.Contains(d.modelCallHarnesses(), config.Agent) {
 		return gardenAdvisorConfig{}, fmt.Errorf("garden advisor agent is not supported: %s", config.Agent)
 	}
 	return config, nil

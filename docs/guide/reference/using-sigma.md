@@ -119,6 +119,22 @@ its subagents, so the files and pull requests their tools make, and what they
 spend, do not reach the session. Sigma has no tool that sends you a file, so a Sigma agent sends no
 files to a tile.
 
+## Background model calls
+
+Sigma answers the model calls Attn makes in the background, as Claude Code and
+Codex do. Sigma titles its own sessions and judges how their turns end. In
+Settings, you can also choose Sigma for the activity line, the Garden advisor
+and dictation, and `attn model call` takes `"harness": "sigma"`. So a machine
+with Sigma alone needs neither Claude Code nor Codex. Each call is one prompt
+that Sigma answers on its server with no tools, and Sigma keeps nothing of it:
+no conversation and no usage. Attn starts the server for a call if none runs.
+While Sigma is off in **Settings → Experimental**, Attn offers it for none of
+these choices, and its open sessions are still titled and judged by Sigma.
+
+Unless you choose a model, a call uses the first light model that the Sigma
+server lists, such as `claude/haiku` or `openai/gpt-6-luna`. When Attn
+cannot read the server's list, the call uses `openai/gpt-6-luna`.
+
 ## Messages
 
 Annotations, messages from other agents and inbox notifications reach the

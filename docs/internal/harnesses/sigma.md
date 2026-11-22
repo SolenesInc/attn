@@ -37,6 +37,20 @@ measurement uses that one.
   `approval/resolve` answers an approval; what a steer does while a call waits
   on an approval is not probed (`packages/protocol/src/index.ts`,
   `packages/sigma/src/server.ts`).
+- `ephemeral/run {prompt, system?, schema?, provider?, model?, effort?, maxTurns?}`
+  answers one prompt with no tools and commits nothing: no conversation in
+  `conversation/list`, no entry, no usage (measured on 43ebbba: after a title,
+  a stop verdict and a dictation on `claude/haiku`, `conversation/list` held
+  only the session's conversation and `usage/get` only its spend). It answers
+  `{text, output?, provider, model, turns, usage}`, where `usage` holds
+  `input`, `output` and `cost.total`, and `output` is the value that matches
+  `schema`. A failure is a `Cause` whose `message` is the reason, tagged
+  `EphemeralFailed` (the provider failed, or the answer is not JSON or does not
+  match the schema), `UnknownProvider`, `UnknownEffort` or `ReadOnlyServer`.
+  These shapes were probed on 43ebbba with the `script` provider. Without
+  `provider`, the home's default provider answers
+  (`packages/sigma/src/ephemeral.ts`). Runs at once each answer their own
+  prompt (`ephemeral-concurrent` in `packages/sigma/test`).
 - `conversation/compact {conversation, author, instructions?}` answers once the
   compaction has ended, with `outcome` `compacted`, `nothing_to_compact`,
   `failed` (with a `message`) or `stopped`. Behind a run in flight it waits for

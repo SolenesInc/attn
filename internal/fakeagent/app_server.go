@@ -50,6 +50,7 @@ type appServerFlavor struct {
 	completions  bool
 	steers       bool
 	compacts     bool
+	ephemeral    bool
 	callerHeader string
 }
 
@@ -58,7 +59,7 @@ var appServerFlavors = map[Harness]appServerFlavor{
 		harness: Sigma, role: "sigma-server", homeVariable: "SIGMA_HOME", homeDir: "sg", rootVariable: "SIGMA_ROOT_CONVERSATION",
 		socket: func(home string) string { return filepath.Join(home, "sigma.sock") },
 		hello:  map[string]any{"version": "fake", "protocol": 2},
-		steers: true, compacts: true, callerHeader: "Sigma-Root-Conversation",
+		steers: true, compacts: true, ephemeral: true, callerHeader: "Sigma-Root-Conversation",
 	},
 	SampleServer: {
 		harness: SampleServer, role: "sample-server-server", homeVariable: "SAMPLE_SERVER_HOME", homeDir: "ss", rootVariable: "SAMPLE_SERVER_ROOT_CONVERSATION",
@@ -247,6 +248,7 @@ type appServerConn struct {
 
 type appServer struct {
 	flavor      appServerFlavor
+	cfg         config
 	control     *rpcPeer
 	listener    net.Listener
 	mu          sync.Mutex
@@ -267,13 +269,14 @@ type appServer struct {
 	watchers    []*serverWatcher
 	refuseMCP   string
 	answers     int
+	ephemeral   map[ephemeralKey]*rpcPeer
 }
 
 func runAppServer(cfg config, flavor appServerFlavor) int {
 	if root := os.Getenv("ATTN_TEST_SERVER_CALLER_ENV"); root != "" {
 		flavor.rootVariable = root
 	}
-	s := &appServer{flavor: flavor, conns: map[*appServerConn]bool{}, convs: map[string]*ServerConversation{}, submissions: map[string]chan ServerSubmission{}, interrupts: map[string]chan struct{}{}, mcp: map[string]mcpRegistration{}}
+	s := &appServer{flavor: flavor, cfg: cfg, ephemeral: map[ephemeralKey]*rpcPeer{}, conns: map[*appServerConn]bool{}, convs: map[string]*ServerConversation{}, submissions: map[string]chan ServerSubmission{}, interrupts: map[string]chan struct{}{}, mcp: map[string]mcpRegistration{}}
 	control, err := dialControl(cfg, s.handleKit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fake %s serve: %v\n", flavor.harness, err)
@@ -364,11 +367,16 @@ func (s *appServer) serveConn(c *appServerConn) {
 					RequestID uint64 `json:"requestId"`
 				}
 				if json.Unmarshal(f.Params, &interrupted) == nil {
+					s.interruptEphemeral(c, interrupted.RequestID)
 					s.mu.Lock()
 					s.unwatchLocked(c, &interrupted.RequestID)
 					s.mu.Unlock()
 				}
 			}
+			continue
+		}
+		if f.Method == "ephemeral/run" && s.flavor.ephemeral {
+			go s.runEphemeral(c, *f.ID, f.Params)
 			continue
 		}
 		result, failure := s.handle(c, *f.ID, f.Method, f.Params)

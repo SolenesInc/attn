@@ -70,7 +70,7 @@ func parseModelCallTier(raw string) (modeltiers.Tier, error) {
 func (d *Daemon) modelCallHarnesses() []string {
 	var names []string
 	for _, h := range d.harnesses() {
-		if _, ok := harness.As[harness.OneShot](h); ok {
+		if _, ok := harness.As[harness.OneShot](h); ok && h.Health(d.life.Context()).Offered {
 			names = append(names, h.Facts().ID)
 		}
 	}
@@ -98,9 +98,13 @@ func (d *Daemon) modelCallHarness(named string) (string, harness.OneShot, error)
 	if name == "" {
 		name = d.modelCallDefaultHarness()
 	}
+	answering := d.modelCallHarnesses()
+	if !slices.Contains(answering, name) {
+		return "", nil, d.modelCallHarnessRefusal(named, name, answering)
+	}
 	oneShot, err := d.oneShot(name)
 	if err != nil {
-		return "", nil, d.modelCallHarnessRefusal(named, name, d.modelCallHarnesses())
+		return "", nil, err
 	}
 	return name, oneShot, nil
 }

@@ -36,8 +36,9 @@ The request:
   input     the text the model answers. Required, not empty. Codex takes at
             most 1,048,576 characters
   limit_ms  how long to wait for the answer, in milliseconds. Required
-  harness   optional: claude or codex. Default: the model_calls.agent setting,
-            or the harness for new sessions when that is empty
+  harness   optional: claude, codex, or sigma while it is on. Default: the
+            model_calls.agent setting, or the harness for new sessions when
+            that is empty
   tier      optional: light, standard or deep, resolved through the model
             tiers the user keeps for the harness
   model     optional: a model id. Name a tier or a model, not both. Default:

@@ -51,10 +51,12 @@ func TestEveryHarnessAnswersTheContractWithItsFake(t *testing.T) {
 		},
 		{
 			Facts: harness.Facts{ID: "sigma", DisplayName: "Sigma", Options: sigmaOptions, Executable: harness.Executable{Default: "sigma", Env: "ATTN_SIGMA_EXECUTABLE"}, CacheTTL: time.Hour,
+				Tiers: map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "openai/gpt-6-luna", Effort: "low"}, modeltiers.Standard: {Model: "openai/gpt-5.6-terra"}, modeltiers.Deep: {Model: "openai/gpt-6.1-sol"}}, Advisor: harness.ModelChoice{Model: "openai/gpt-5.6-luna", Effort: "xhigh"},
 				Signals: harness.Signals{Heartbeat: 500 * time.Millisecond}, Recovery: harness.ByServer, ModelDiscovery: true, Activity: true},
 			SkillDirs:      []string{home + "/.sigma/skills", home + "/.claude/skills"},
 			ServerTerminal: "sigma-server",
 			Offered:        true,
+			OneShot:        true,
 		},
 		{
 			Facts: harness.Facts{ID: "house", DisplayName: "House", Options: harness.Options{Resume: true, Yolo: true, InitialPrompt: true, LaunchInstructions: true, ModelPin: true, EffortPin: true, Provider: true}, CacheTTL: time.Hour,

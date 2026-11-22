@@ -64,10 +64,9 @@ func (s *Sigma) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	if opts.YoloMode || opts.AutoApprove {
 		args = append(args, "--auto")
 	}
-	if model := strings.TrimSpace(opts.Model); model != "" {
-		if provider, name, split := strings.Cut(model, "/"); split {
+	if provider, model := SigmaModel(opts.Model); model != "" {
+		if provider != "" {
 			args = append(args, "--provider", provider)
-			model = name
 		}
 		args = append(args, "--model", model)
 	}
@@ -86,6 +85,14 @@ func (s *Sigma) BuildCommand(opts SpawnOpts) *exec.Cmd {
 		args = append(args, "--", opts.InitialPrompt)
 	}
 	return exec.Command(opts.Executable, args...)
+}
+
+func SigmaModel(named string) (provider, model string) {
+	model = strings.TrimSpace(named)
+	if provider, name, split := strings.Cut(model, "/"); split {
+		return provider, name
+	}
+	return "", model
 }
 
 func sigmaConversation(opts SpawnOpts) string {

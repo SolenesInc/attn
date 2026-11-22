@@ -3,11 +3,15 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/transcript"
@@ -28,6 +32,8 @@ func (h sigmaHarness) Facts() harness.Facts {
 	facts.Signals.Heartbeat = 500 * time.Millisecond
 	facts.Recovery = harness.ByServer
 	facts.ModelDiscovery = true
+	facts.Tiers = map[modeltiers.Tier]harness.ModelChoice{modeltiers.Light: {Model: "openai/gpt-6-luna", Effort: "low"}, modeltiers.Standard: {Model: "openai/gpt-5.6-terra"}, modeltiers.Deep: {Model: "openai/gpt-6.1-sol"}}
+	facts.Advisor = harness.ModelChoice{Model: "openai/gpt-5.6-luna", Effort: "xhigh"}
 	facts.Activity = h.d.serverLinkFor(facts.ID).watchesConversations()
 	facts.ServerTerminal = h.d.serverTerminalOf(facts.ID)
 	return facts
@@ -137,4 +143,60 @@ func (h sigmaHarness) Locate(ref harness.ConversationRef) string {
 
 func (h sigmaHarness) IDFromPath(path string) string {
 	return agentdriver.ResumeSessionIDFromTranscriptPath(h.driver(), path)
+}
+
+type sigmaEphemeralRun struct {
+	Prompt   string          `json:"prompt"`
+	System   string          `json:"system,omitempty"`
+	Schema   json.RawMessage `json:"schema,omitempty"`
+	Provider string          `json:"provider,omitempty"`
+	Model    string          `json:"model,omitempty"`
+	Effort   string          `json:"effort,omitempty"`
+	MaxTurns int             `json:"maxTurns,omitempty"`
+}
+
+type sigmaEphemeralAnswer struct {
+	Text   string          `json:"text"`
+	Output json.RawMessage `json:"output"`
+	Turns  int             `json:"turns"`
+	Usage  struct {
+		Input  int `json:"input"`
+		Output int `json:"output"`
+		Cost   struct {
+			Total float64 `json:"total"`
+		} `json:"cost"`
+	} `json:"usage"`
+}
+
+func (h sigmaHarness) Run(ctx context.Context, req harness.OneShotRequest) (harness.OneShotResult, error) {
+	run := sigmaEphemeralRun{Prompt: req.Input, System: req.System, Schema: req.Schema, Effort: req.Effort, MaxTurns: req.Bound.MaxTurns}
+	run.Provider, run.Model = agentdriver.SigmaModel(req.Model)
+	link := h.d.serverLinkFor(h.driver().Name())
+	connection, err := link.connection()
+	if err != nil {
+		return harness.OneShotResult{}, err
+	}
+	client, release, err := connection.borrow(ctx, link, true)
+	if err != nil {
+		return harness.OneShotResult{}, err
+	}
+	defer release()
+	var answer sigmaEphemeralAnswer
+	if err := client.Call(ctx, "ephemeral/run", run, &answer); err != nil {
+		return sigmaEphemeralFailure(err)
+	}
+	return harness.OneShotResult{
+		Text:       answer.Text,
+		Structured: answer.Output,
+		Usage:      harness.OneShotUsage{In: answer.Usage.Input, Out: answer.Usage.Output, CostUSD: answer.Usage.Cost.Total, Turns: answer.Turns},
+	}, nil
+}
+
+func sigmaEphemeralFailure(err error) (harness.OneShotResult, error) {
+	var refused *effectrpc.Error
+	if !errors.As(err, &refused) {
+		return harness.OneShotResult{}, err
+	}
+	diagnostics := agentdriver.ClassifyHeadlessFailure(refused.Message)
+	return harness.OneShotResult{Diagnostics: diagnostics, FailureOutput: refused.Message}, fmt.Errorf("%s: %s", diagnostics, refused.Message)
 }

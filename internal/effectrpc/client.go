@@ -120,9 +120,7 @@ func (c *Client) send(ctx context.Context, method string, params any, items func
 	case <-c.done:
 		return nil, fmt.Errorf("the connection to %s closed", c.server)
 	case <-ctx.Done():
-		if items != nil {
-			_ = c.write(request{JSONRPC: "2.0", Method: interruptMethod, Params: map[string]uint64{"requestId": id}})
-		}
+		_ = c.write(request{JSONRPC: "2.0", Method: interruptMethod, Params: map[string]uint64{"requestId": id}})
 		return nil, ctx.Err()
 	}
 }

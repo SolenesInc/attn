@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -38,12 +39,10 @@ type activityConfig struct {
 	fallback string
 }
 
-var errActivityAgentUnset = errors.New("session activity has no agent selected: choose claude or codex")
-
 func (d *Daemon) parseActivityConfig(raw string) (activityConfig, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return activityConfig{}, errActivityAgentUnset
+		return activityConfig{}, d.activityAgentUnset()
 	}
 
 	var config activityConfig
@@ -60,7 +59,7 @@ func (d *Daemon) parseActivityConfig(raw string) (activityConfig, error) {
 	config.Model = strings.TrimSpace(config.Model)
 	config.Effort = strings.TrimSpace(strings.ToLower(config.Effort))
 	if config.Agent == "" {
-		return activityConfig{}, errActivityAgentUnset
+		return activityConfig{}, d.activityAgentUnset()
 	}
 
 	config.fallback = d.lightFallback(config.Agent, activityFallbackModel(config.Agent))
@@ -74,10 +73,14 @@ func (d *Daemon) parseActivityConfig(raw string) (activityConfig, error) {
 	if !d.knowsHarness(config.Agent) {
 		return activityConfig{}, fmt.Errorf("session activity agent is not installed: %s", config.Agent)
 	}
-	if _, err := d.oneShot(config.Agent); err != nil {
-		return activityConfig{}, err
+	if !slices.Contains(d.modelCallHarnesses(), config.Agent) {
+		return activityConfig{}, fmt.Errorf("session activity agent %s does not answer model calls: choose %s", config.Agent, strings.Join(d.modelCallHarnesses(), " or "))
 	}
 	return config, nil
+}
+
+func (d *Daemon) activityAgentUnset() error {
+	return fmt.Errorf("session activity has no agent selected: choose %s", strings.Join(d.modelCallHarnesses(), " or "))
 }
 
 func activityFallbackModel(agent string) string {
