@@ -1624,7 +1624,7 @@ func (d *upgradeDaemon) setSharedSetting(enabled bool) {
 
 func (d *upgradeDaemon) spawn(id, agent, executable string, options ...func(map[string]any)) {
 	d.t.Helper()
-	spawn := map[string]any{"cmd": "spawn_session", "id": id, "cwd": d.root, "agent": agent, agent + "_executable": executable, "cols": 80, "rows": 24}
+	spawn := map[string]any{"cmd": "spawn_session", "id": id, "cwd": d.root, "agent": agent, "executable": executable, "cols": 80, "rows": 24}
 	for _, option := range options {
 		option(spawn)
 	}

@@ -176,10 +176,13 @@ try {
   });
 
   await runner.step('forget_asks_first_and_cancel_keeps_the_copy', async () => {
+    const catalog = observer.waitForMessage((event) => event.event === 'harness_catalog' && event, 'the harness catalog');
+    observer.send({ cmd: 'get_settings' });
+    const agentName = (await catalog).harnesses.find((h) => h.id === pinned.agent)?.name;
     await choose(pinned);
     await driver.pressKey('2');
     const confirm = await nameOf('ledger.inspector.confirm');
-    runner.assert(confirm.includes('Delete attn’s copy of Pinned parser') && confirm.includes('Claude’s own files are not touched'), 'the confirmation names the copy and what stays', { confirm });
+    runner.assert(confirm.includes('Delete attn’s copy of Pinned parser') && confirm.includes(`${agentName}’s own files are not touched`), 'the confirmation names the copy and what stays', { confirm, agentName });
     await driver.screenshot(path.join(runner.runDir, 'confirmation.png'));
     await driver.pressKey('Enter');
     await driver.waitFor({ key: 'ledger.inspector.confirm' }, { gone: true });
