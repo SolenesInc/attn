@@ -15,11 +15,13 @@ use super::nav::Note;
 use crate::State;
 
 /// What the key line needs to show the servers: the agents that may be setting one up, the
-/// settings that say whether setup is offered, and the wall clock.
+/// settings that say whether setup is offered, the harnesses that may set one up, and the wall
+/// clock.
 #[derive(Clone, Copy)]
 pub(crate) struct Servers<'a> {
     pub(crate) sessions: &'a [Session],
     pub(crate) settings: &'a std::collections::BTreeMap<String, String>,
+    pub(crate) harnesses: &'a [attn_protocol::Harness],
     pub(crate) now_ms: i64,
 }
 
@@ -43,13 +45,6 @@ fn offer_setting(bundle: &ReviewBundle, host: Option<&str>) -> String {
         host.unwrap_or("local"),
         bundle.repository
     )
-}
-
-fn picked_harness(settings: &std::collections::BTreeMap<String, String>) -> Option<String> {
-    settings
-        .get("new_session_agent")
-        .map(|a| a.trim().to_lowercase())
-        .filter(|a| !a.is_empty() && a != "shell")
 }
 
 fn offered(bundle: &ReviewBundle, host: Option<&str>, servers: Servers) -> bool {
@@ -189,7 +184,7 @@ pub(crate) fn states(
             let toggle: fn(&mut State, &str, &mut Tx) = |s, tile, tx| {
                 toggle_offer(s, tile, tx);
             };
-            let set_up = match picked_harness(servers.settings) {
+            let set_up = match crate::harness_menu::last_pick(servers.settings, servers.harnesses) {
                 Some(agent) => format!("set up with {}", crate::picker::agents::label(&agent)),
                 None => "set up".to_owned(),
             };
@@ -243,20 +238,42 @@ fn say(state: &mut State, tile: &str, note: Note) {
     }
 }
 
-/// Starts an agent that sets up the first language with no working server. False when no
-/// language needs one.
+/// Starts an agent with the harness the user last picked that sets up the first language with
+/// no working server, or asks which harness when there is no last pick. False when no language
+/// needs one.
 pub(crate) fn start(state: &mut State, tile: &str, tx: &mut Tx) -> bool {
-    let Some((bundle, host, desktop)) = bundle_of(state, tile) else {
+    let Some((bundle, _, _)) = bundle_of(state, tile) else {
         return false;
     };
-    let Some(n) = to_set_up(bundle, &state.facts.sessions).cloned() else {
+    if to_set_up(bundle, &state.facts.sessions).is_none() {
         return false;
+    }
+    match crate::harness_menu::last_pick(&state.facts.settings, &state.facts.harnesses) {
+        Some(agent) => set_up(state, tile, agent, tx),
+        None => crate::harness_menu::open(
+            state,
+            crate::harness_menu::Start::CodeNavSetup {
+                tile: tile.to_owned(),
+            },
+            format!("{}.setup.start", super::prefix(tile)),
+            tx,
+        ),
+    }
+    true
+}
+
+/// Starts an agent of harness `agent` that sets up the first language with no working server.
+pub(crate) fn set_up(state: &mut State, tile: &str, agent: String, tx: &mut Tx) {
+    let Some((bundle, host, desktop)) = bundle_of(state, tile) else {
+        return;
+    };
+    let Some(n) = to_set_up(bundle, &state.facts.sessions).cloned() else {
+        return;
     };
     let document = super::source_of_tile(state, tile)
         .map(|(_, d)| d)
         .unwrap_or_default();
     let repository = bundle.repository.clone();
-    let agent = picked_harness(&state.facts.settings);
     say(
         state,
         tile,
@@ -276,7 +293,7 @@ pub(crate) fn start(state: &mut State, tile: &str, tx: &mut Tx) -> bool {
             file: n.file,
             state: n.state,
             detail: n.detail,
-            agent,
+            agent: Some(agent),
             request_id: Some(id),
             ..CodeNavSetupMessage::new()
         },
@@ -302,7 +319,6 @@ pub(crate) fn start(state: &mut State, tile: &str, tx: &mut Tx) -> bool {
         },
         tx,
     );
-    true
 }
 
 /// Stops offering setup in the review's repository, or offers it again. False when every
@@ -318,6 +334,7 @@ pub(crate) fn toggle_offer(state: &mut State, tile: &str, _: &mut Tx) -> bool {
     let servers = Servers {
         sessions: &state.facts.sessions,
         settings: &state.facts.settings,
+        harnesses: &state.facts.harnesses,
         now_ms: 0,
     };
     let was = offered(bundle, host.as_deref(), servers);

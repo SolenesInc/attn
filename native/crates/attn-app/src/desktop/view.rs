@@ -1023,6 +1023,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                     crate::review::setup::Servers {
                         sessions: &cx.facts.sessions,
                         settings: &cx.facts.settings,
+                        harnesses: &cx.facts.harnesses,
                         now_ms: cx.now_ms,
                     },
                 ),

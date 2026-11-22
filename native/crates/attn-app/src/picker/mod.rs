@@ -27,7 +27,7 @@ pub(crate) use view::{
 /// How long typing settles before the picker browses the typed folder.
 const BROWSE_DELAY: f64 = 0.15;
 const MAX_RECENTS: usize = 10;
-const SAVED_AGENT: &str = "new_session_agent";
+pub(crate) const SAVED_AGENT: &str = "new_session_agent";
 const SAVED_YOLO: &str = "new_session_yolo_local";
 const PROJECTS: &str = "projects_directory";
 const LAUNCHER_2: &str = "new_session_launcher_enabled";

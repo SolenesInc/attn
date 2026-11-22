@@ -6,7 +6,7 @@ use attn_protocol::{
 use rune::Tx;
 
 use super::repo::{Setup, Step};
-use super::{Agents, Direction, PROJECTS, SAVED_AGENT, Spawn, TERMINAL, spawn};
+use super::{Direction, PROJECTS, Spawn, spawn};
 use crate::State;
 
 /// Where a pull request's agent starts: a worktree of the pull request's branch in the user's
@@ -21,10 +21,10 @@ struct Checkout {
     subject: String,
 }
 
-/// Starts the user's agent in a new worktree of `pr`'s branch: the daemon fetches the branch
+/// Starts `agent` in a new worktree of `pr`'s branch: the daemon fetches the branch
 /// name when it is not known yet, clones or fetches the repository, makes the worktree, then the
 /// agent starts in it on the current desktop. The corner prompt says how far it got.
-pub(crate) fn open_in_worktree(state: &mut State, pr: &PR, tx: &mut Tx) {
+pub(crate) fn open_in_worktree(state: &mut State, pr: &PR, agent: String, tx: &mut Tx) {
     let failed = |setup: &Setup| setup.failed.is_some();
     if state
         .window
@@ -38,21 +38,12 @@ pub(crate) fn open_in_worktree(state: &mut State, pr: &PR, tx: &mut Tx) {
             .notify("A worktree session is already being created.".into(), tx);
         return;
     }
-    let settings = &state.facts.settings;
-    let preferred = settings
-        .get(SAVED_AGENT)
-        .map(String::as_str)
-        .filter(|a| *a != TERMINAL)
-        .unwrap_or_default();
-    let agent = Agents::from_settings(settings).resolve(preferred);
-    if agent.is_empty() {
-        state.window.notify(
-            "Choose a harness in a new session first: this starts the one you last picked.".into(),
-            tx,
-        );
-        return;
-    }
-    let Some(projects) = settings.get(PROJECTS).map(|dir| dir.trim_end_matches('/')) else {
+    let Some(projects) = state
+        .facts
+        .settings
+        .get(PROJECTS)
+        .map(|dir| dir.trim_end_matches('/'))
+    else {
         return;
     };
     let name = pr.repo.rsplit('/').next().unwrap_or(&pr.repo);
