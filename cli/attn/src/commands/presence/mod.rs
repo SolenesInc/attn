@@ -5,6 +5,7 @@ use super::{Run, Stop, print_json, print_stdout};
 use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
 use attn_protocol::PresenceResult;
+use attn_protocol::go_values::SERVER_CALLER_PREFIX;
 use serde_json::Value as Json;
 
 struct Presence;
@@ -72,7 +73,7 @@ impl Family for Presence {
             eprintln!("attn: resolve current session: {message}");
             return Err(Stop(1));
         }
-        if env("ATTN_INSIDE_APP") != "1" && !terminal.starts_with("server-env:") {
+        if env("ATTN_INSIDE_APP") != "1" && !terminal.starts_with(SERVER_CALLER_PREFIX) {
             if parsed.json {
                 print_json(NOT_IN_A_SESSION);
             } else if !session_id && !seed_ids {

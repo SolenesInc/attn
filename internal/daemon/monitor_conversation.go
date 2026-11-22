@@ -122,8 +122,8 @@ func (d *Daemon) bindMonitorCandidate(source, candidate *sessionmonitor.Monitor,
 
 func (d *Daemon) monitorInTerminal(terminal harness.TerminalID, session protocol.SessionID) *sessionmonitor.Monitor {
 	r := d.monitors().registry
-	if profile, native, shared := harness.ParseCodexThreadTerminal(terminal); shared {
-		if monitor := r.Conversation(profile, native); monitor != nil {
+	if c, named := harness.ParseServerCaller(terminal); named && c.Scope != "" {
+		if monitor := r.Conversation(c.Scope, c.Conversation); monitor != nil {
 			return monitor
 		}
 		if _, view, _, _ := d.resolveCaller(terminal); view != "" {

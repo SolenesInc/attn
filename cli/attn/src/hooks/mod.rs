@@ -6,8 +6,8 @@ pub mod input;
 use crate::client::{Client, SendError, read_json_value};
 use crate::instance::Paths;
 use attn_protocol::go_values::{
-    CODEX_SHARED_PROFILE_ENV, CODEX_THREAD_PREFIX, STATE_IDLE, STATE_LAUNCHING,
-    STATE_PENDING_APPROVAL, STATE_SCHEDULED, STATE_UNKNOWN, STATE_WAITING_INPUT, STATE_WORKING,
+    SERVER_CALLER_PREFIX, STATE_IDLE, STATE_LAUNCHING, STATE_PENDING_APPROVAL, STATE_SCHEDULED,
+    STATE_UNKNOWN, STATE_WAITING_INPUT, STATE_WORKING,
 };
 use attn_protocol::{
     FilesEditedMessage, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage,
@@ -69,6 +69,14 @@ pub trait HookHarness: Sync {
     fn used_by_subagent(&self, _input: &HookInput<'_>) -> bool {
         false
     }
+
+    fn caller(
+        &self,
+        _getenv: &dyn Fn(&str) -> String,
+        _input: Option<&HookInput<'_>>,
+    ) -> Option<String> {
+        None
+    }
 }
 
 const HARNESSES: &[&dyn HookHarness] = &[&claude::Claude, &codex::Codex];
@@ -89,9 +97,8 @@ pub fn terminal_from_env(getenv: &dyn Fn(&str) -> String) -> String {
     if !terminal.is_empty() {
         return terminal;
     }
-    let profile = getenv(CODEX_SHARED_PROFILE_ENV);
-    if !profile.is_empty() {
-        return codex_thread_terminal(&profile, &getenv("CODEX_THREAD_ID"));
+    if let Some(caller) = first(|h| h.caller(getenv, None)) {
+        return caller;
     }
     let legacy = getenv("ATTN_SESSION_ID");
     if !legacy.is_empty() {
@@ -110,7 +117,7 @@ pub fn server_caller_from_env() -> Result<String, String> {
             && !value.is_empty()
         {
             names.push(name.to_string());
-            caller = format!("server-env:{name}:{}", value.to_string_lossy());
+            caller = server_caller(&name, "", &value.to_string_lossy());
         }
     }
     if names.len() > 1 {
@@ -123,12 +130,11 @@ pub fn server_caller_from_env() -> Result<String, String> {
     Ok(caller)
 }
 
-fn codex_thread_terminal(profile: &str, thread: &str) -> String {
-    let thread = thread.trim();
-    if thread.is_empty() {
-        return String::new();
+pub fn server_caller(variable: &str, scope: &str, conversation: &str) -> String {
+    if scope.is_empty() {
+        return format!("{SERVER_CALLER_PREFIX}{variable}:{conversation}");
     }
-    format!("{CODEX_THREAD_PREFIX}{profile}:{thread}")
+    format!("{SERVER_CALLER_PREFIX}{variable}@{scope}:{conversation}")
 }
 
 fn say(line: &str) {
@@ -204,11 +210,7 @@ impl Hook<'_> {
         if !(self.getenv)("ATTN_TERMINAL_ID").is_empty() {
             return id;
         }
-        let profile = (self.getenv)(CODEX_SHARED_PROFILE_ENV);
-        if profile.is_empty() {
-            return id;
-        }
-        codex_thread_terminal(&profile, &text(input.field("session_id")))
+        first(|h| h.caller(self.getenv, Some(input))).unwrap_or(id)
     }
 
     fn client(&mut self, caller: &str) -> Client<'_> {

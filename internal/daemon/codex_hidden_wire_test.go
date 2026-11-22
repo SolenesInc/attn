@@ -987,7 +987,7 @@ func TestACommandFromAClosedSharedCodexSubagentReadsItsThreadNoMoreThanOneCaller
 	server := w.CodexServer()
 	child := server.SpawnSubagent(codex.ConversationID)
 	profile := app.SelectedProfile()
-	terminal := protocol.TerminalID(harness.CodexThreadTerminal(profile, child))
+	terminal := protocol.TerminalID(harness.ServerCaller{Variable: harness.CodexThreadEnv, Scope: profile, Conversation: child}.Terminal())
 	server.CloseThread(child)
 	typeInto(app, shownTerminal, "/rename Closed child processed\r")
 	codex.Prompted()
@@ -1019,7 +1019,7 @@ func TestAClosedSharedCodexSubagentStopsResolvingItsParentEvenAfterALateHook(t *
 	parent, codex, shownTerminal := sharedCodexWaiting(t, w, app)
 	server := w.CodexServer()
 	child := server.SpawnSubagent(codex.ConversationID)
-	terminal := protocol.TerminalID(harness.CodexThreadTerminal(app.SelectedProfile(), child))
+	terminal := protocol.TerminalID(harness.ServerCaller{Variable: harness.CodexThreadEnv, Scope: app.SelectedProfile(), Conversation: child}.Terminal())
 	if caller, err := cli.CallerSession(terminal); err != nil || string(caller) != parent {
 		t.Fatalf("loaded subagent caller = %s, %v; want %s", caller, err, parent)
 	}

@@ -1,5 +1,7 @@
-use super::HookHarness;
 use super::detect::Tools;
+use super::input::{HookInput, text};
+use super::{HookHarness, server_caller};
+use attn_protocol::go_values::{CODEX_SHARED_PROFILE_ENV, CODEX_THREAD_ENV};
 
 pub struct Codex;
 
@@ -16,5 +18,25 @@ static TOOLS: Tools = Tools {
 impl HookHarness for Codex {
     fn tools(&self) -> &'static Tools {
         &TOOLS
+    }
+
+    fn caller(
+        &self,
+        getenv: &dyn Fn(&str) -> String,
+        input: Option<&HookInput<'_>>,
+    ) -> Option<String> {
+        let profile = getenv(CODEX_SHARED_PROFILE_ENV);
+        if profile.is_empty() {
+            return None;
+        }
+        let thread = input.map_or_else(
+            || getenv(CODEX_THREAD_ENV),
+            |input| text(input.field("session_id")),
+        );
+        let thread = thread.trim();
+        if thread.is_empty() {
+            return Some(String::new());
+        }
+        Some(server_caller(CODEX_THREAD_ENV, &profile, thread))
     }
 }

@@ -1297,9 +1297,9 @@ func (r *codexShared) resolveParent(profile, conversation string) string {
 	return parent
 }
 
-func (r *codexShared) resolveCaller(t protocol.TerminalID) (protocol.SessionID, harness.TerminalID, bool) {
-	profile, conversation, ok := harness.ParseCodexThreadTerminal(t)
-	if !ok {
+func (r *codexShared) resolveCaller(c harness.ServerCaller) (protocol.SessionID, harness.TerminalID, bool) {
+	profile, conversation := c.Scope, strings.TrimSpace(c.Conversation)
+	if conversation == "" {
 		return "", "", false
 	}
 	view, _ := r.terminalShowing(profile, conversation)

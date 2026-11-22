@@ -42,9 +42,24 @@ func (appServer) IdentifyCall(string, json.RawMessage) (harness.SessionID, strin
 	return "", "", &harness.Refusal{Code: "no_session", Message: "the server's calls name their session at authentication"}
 }
 
+func (c appServer) declares(variable string) bool {
+	if variable == "" {
+		return false
+	}
+	for _, l := range c.d.appServerLinks() {
+		if l.callerConversationEnv() == variable {
+			return true
+		}
+	}
+	return false
+}
+
 func (c appServer) ResolveCaller(caller string) (harness.SessionID, harness.TerminalID, string, bool) {
-	if raw, neutral := strings.CutPrefix(caller, "server-env:"); neutral {
-		variable, conversation, _ := strings.Cut(raw, ":")
+	if named, ok := harness.ParseServerCaller(harness.TerminalID(caller)); ok {
+		if named.Scope != "" || !c.declares(named.Variable) {
+			return "", "", "", false
+		}
+		variable, conversation := named.Variable, named.Conversation
 		var owner protocol.SessionID
 		for _, id := range c.d.store.OpenSessionsHolding(conversation) {
 			if l, ok := c.d.linkOf(id).(*serverLink); ok && l.callerConversationEnv() == variable {

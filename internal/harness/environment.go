@@ -9,25 +9,31 @@ import (
 
 const CodexSharedProfileEnv = "ATTN_CODEX_SHARED_PROFILE"
 
-const CodexThreadPrefix = "codex:"
+const CodexThreadEnv = "CODEX_THREAD_ID"
 
-func CodexThreadTerminal(profile, thread string) TerminalID {
-	if thread = strings.TrimSpace(thread); thread == "" {
-		return ""
+const ServerCallerPrefix = "server-env:"
+
+type ServerCaller struct{ Variable, Scope, Conversation string }
+
+func (c ServerCaller) Terminal() TerminalID {
+	variable := c.Variable
+	if c.Scope != "" {
+		variable += "@" + c.Scope
 	}
-	return TerminalID(CodexThreadPrefix + profile + ":" + thread)
+	return TerminalID(ServerCallerPrefix + variable + ":" + c.Conversation)
 }
 
-func ParseCodexThreadTerminal(t TerminalID) (profile, thread string, ok bool) {
-	rest, ok := strings.CutPrefix(strings.TrimSpace(string(t)), CodexThreadPrefix)
+func ParseServerCaller(t TerminalID) (ServerCaller, bool) {
+	rest, ok := strings.CutPrefix(strings.TrimSpace(string(t)), ServerCallerPrefix)
 	if !ok {
-		return "", "", false
+		return ServerCaller{}, false
 	}
-	i := strings.LastIndex(rest, ":")
-	if i < 0 || rest[i+1:] == "" {
-		return "", "", false
+	named, conversation, ok := strings.Cut(rest, ":")
+	if !ok {
+		return ServerCaller{}, false
 	}
-	return rest[:i], rest[i+1:], true
+	variable, scope, _ := strings.Cut(named, "@")
+	return ServerCaller{Variable: variable, Scope: scope, Conversation: conversation}, true
 }
 
 // TerminalFromEnv reads the terminal identity, including the spelling used by older launches.
@@ -41,7 +47,11 @@ func ResolveTerminalFromEnv() (TerminalID, error) {
 		return TerminalID(id), nil
 	}
 	if profile := os.Getenv(CodexSharedProfileEnv); profile != "" {
-		return CodexThreadTerminal(profile, os.Getenv("CODEX_THREAD_ID")), nil
+		thread := strings.TrimSpace(os.Getenv(CodexThreadEnv))
+		if thread == "" {
+			return "", nil
+		}
+		return ServerCaller{Variable: CodexThreadEnv, Scope: profile, Conversation: thread}.Terminal(), nil
 	}
 	if id := os.Getenv("ATTN_SESSION_ID"); id != "" {
 		return TerminalID(id), nil
@@ -52,7 +62,7 @@ func ResolveTerminalFromEnv() (TerminalID, error) {
 		name, conversation, ok := strings.Cut(entry, "=")
 		if ok && conversation != "" && len(name) > len("_ROOT_CONVERSATION") && strings.HasSuffix(name, "_ROOT_CONVERSATION") {
 			names = append(names, name)
-			caller = TerminalID("server-env:" + name + ":" + conversation)
+			caller = ServerCaller{Variable: name, Conversation: conversation}.Terminal()
 		}
 	}
 	if len(names) > 1 {
