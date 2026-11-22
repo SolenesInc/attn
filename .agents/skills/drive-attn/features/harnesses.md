@@ -77,7 +77,7 @@ Preconditions:
 
 - **Durability across restarts**: installed plugins start again with the daemon, and the daemon hands a reconnecting driver its own runs. A run keeps its input route even when its plugin is absent. Older runs wait for their owning driver to register before choosing a route. Harness settings are kept.
 - **Linux**: plugins run where the daemon runs.
-- **Outposts**: a harness's executable is a machine setting, so each outpost decides its own. The rest of the harness settings come from the home.
+- **Outposts**: a harness's executable is a machine setting, so each outpost decides its own. The rest of the harness settings come from the home. A plugin agent launches on an outpost only under the plugin the home planned it with; when another plugin registers that agent there, the launch is refused with the plugin that does.
 - **Profiles**: harness settings and plugins apply across all profiles on the daemon.
 - **Performance and idle cost**: a plugin whose socket stalls does not stall the daemon. One shared Codex app-server uses less memory than a Codex per terminal ([shared-codex.md](shared-codex.md)).
 - **Harnesses**: Claude Code reports through hooks and its terminal title. Codex reports through hooks, or through its app-server under shared Codex. A plugin harness reports through its plugin's driver. YOLO and the chief toggle each show only for the harnesses that support them.
@@ -87,7 +87,7 @@ Preconditions:
 ## Tests
 
 - Wire: `native/crates/attn-app/tests/wire/settings/agents.rs`, `native/crates/attn-app/tests/wire/settings/models.rs`, `native/crates/attn-app/tests/wire/settings/plugins.rs`, `native/crates/attn-app/tests/wire/picker.rs`, `internal/daemon/plugin_server_wire_test.go`, `internal/daemon/plugin_wire_test.go`, `internal/daemon/plugins_wire_test.go`, `internal/daemon/plugins_install_wire_test.go`, `internal/daemon/plugin_driver_*wire_test.go`, `internal/daemon/plugin_run_input_wire_test.go`, `internal/daemon/plugin_restart_wire_test.go`, `internal/daemon/plugin_stop_owner_wire_test.go`, `internal/daemon/plugin_stalled_socket_wire_test.go`, `internal/daemon/plugin_launch_instructions_wire_test.go`, `internal/daemon/harness_models_plugin_wire_test.go`, `internal/daemon/agent_catalog_wire_test.go`, `internal/daemon/app_server_wire_test.go`, `internal/daemon/plugin_server_recovery_wire_test.go`.
-- Stack: `cmd/attnd/plugin_server_stack_test.go`, `scripts/verify-plugin-server.sh`, `cmd/attnd/plugin_author_stack_test.go`, `cmd/attnd/plugin_stack_test.go`, `cmd/attnd/plugin_restart_stack_test.go`, `internal/daemon/plugin_driver_teardown_stack_test.go`, `internal/daemon/plugin_launch_conversation_stack_test.go`, `internal/daemon/plugin_run_input_stack_test.go`, `scripts/verify-plugin-run-input.sh`.
+- Stack: `cmd/attnd/plugin_server_stack_test.go`, `cmd/attnd/plugin_outpost_stack_test.go`, `scripts/verify-plugin-server.sh`, `cmd/attnd/plugin_author_stack_test.go`, `cmd/attnd/plugin_stack_test.go`, `cmd/attnd/plugin_restart_stack_test.go`, `internal/daemon/plugin_driver_teardown_stack_test.go`, `internal/daemon/plugin_launch_conversation_stack_test.go`, `internal/daemon/plugin_run_input_stack_test.go`, `scripts/verify-plugin-run-input.sh`.
 - Scenario: `native-agent-settings`.
 - Kernel: `sdk/plugin/test/*.test.ts` (run by `TestThePluginSDKPassesItsOwnTests`), `internal/plugins/*_test.go`, `internal/pty/harness_signals_test.go`.
 

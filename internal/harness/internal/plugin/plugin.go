@@ -106,6 +106,7 @@ func (h Harness) Facts() harness.Facts {
 		Recovery:       h.recovery(),
 		ModelDiscovery: declared["model_discovery"] || declared["server_binding"],
 		Activity:       h.link().WatchesConversations(),
+		Owner:          h.reg.Plugin,
 	}
 	if l := h.link(); l != nil {
 		facts.ServerTerminal = l.ServerTerminal
@@ -145,6 +146,9 @@ func (h Harness) Launch(_ context.Context, req harness.LaunchRequest) (harness.C
 	reg, ok := h.src.plugins.Driver(h.reg.Agent)
 	if !ok {
 		return harness.Command{}, fmt.Errorf("agent %q is not available on this machine", h.reg.Agent)
+	}
+	if reg.Plugin != req.Owner {
+		return harness.Command{}, fmt.Errorf("agent %q here is provided by plugin %q, not %q", reg.Agent, reg.Plugin, req.Owner)
 	}
 	params := spawnParams{
 		Executable:      explicitExecutable(req),

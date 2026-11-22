@@ -61,6 +61,8 @@ type LaunchRequest struct {
 	Direct        bool
 	// Lifecycle names this run of the terminal, minted before the launch.
 	Lifecycle string
+	// Owner is the Facts.Owner the home planned the launch with.
+	Owner string
 }
 
 // Reason is why a terminal launches the harness.
@@ -244,6 +246,8 @@ type Facts struct {
 	ServerTerminal func(profile string) TerminalID
 	// ReservesServer is whether a plugin agent whose server would be named kind collides with this harness's own servers. Nil reserves none.
 	ReservesServer func(kind string) bool
+	// Owner is the plugin that registered the agent, or "" for a built-in harness.
+	Owner string
 }
 
 // Lifetime is where a session's conversation runs: in its terminal's process, or in a server that outlives the terminal.

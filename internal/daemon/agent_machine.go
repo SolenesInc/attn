@@ -27,6 +27,7 @@ type AgentLaunch struct {
 	Lifetime             harness.Lifetime
 	PreviousLifetime     harness.Lifetime
 	Profile              string
+	Owner                string
 	Monitor              sessionmonitor.Launch
 	InstallWorkflowSkill bool
 	RequireWorkflowSkill bool
@@ -60,7 +61,7 @@ func (d *Daemon) agentLaunchContext(sessionID protocol.SessionID, agent string) 
 	if err != nil {
 		return nil, err
 	}
-	return &AgentLaunch{Context: launch, AwarenessDirs: awareness, Direct: d.on(setting.DirectAgentLaunchEnabled)}, nil
+	return &AgentLaunch{Context: launch, AwarenessDirs: awareness, Direct: d.on(setting.DirectAgentLaunchEnabled), Owner: d.factsOrNone(agent).Owner}, nil
 }
 
 func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptybackend.SpawnOptions, launch *AgentLaunch, reload bool) error {
@@ -100,7 +101,7 @@ func launchRequestOf(sessionID protocol.SessionID, opts ptybackend.SpawnOptions,
 		},
 		Executable: opts.Executable, Unattended: opts.UnattendedLaunch,
 		Guidance: launch.Context, AwarenessDirs: launch.AwarenessDirs, Trust: launch.RepositoryTrust, Direct: launch.Direct,
-		Lifecycle: opts.LifecycleID,
+		Lifecycle: opts.LifecycleID, Owner: launch.Owner,
 	}
 	switch {
 	case reload:

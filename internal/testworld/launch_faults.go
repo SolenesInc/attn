@@ -23,6 +23,11 @@ func (w *World) RefusePlugLaunches(reason string) (allow func()) {
 	return w.kit.RefusePlugLaunches(reason)
 }
 
+func (w *World) NamePlugPlugin(name string) {
+	w.T.Helper()
+	w.kit.NamePlugPlugin(name)
+}
+
 func (w *World) AskFolderTrustAtNextBoot() {
 	w.kit.AskFolderTrustAtNextBoot()
 }

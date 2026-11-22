@@ -2,6 +2,7 @@ package fakeagent
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,6 +72,15 @@ func plugLaunchRefusal() string {
 		return ""
 	}
 	return string(reason)
+}
+
+func (k *Kit) NamePlugPlugin(name string) {
+	k.t.Helper()
+	path := filepath.Join(filepath.Dir(k.cfg.Bin), "plugins", plugPluginName, "attn-plugin.toml")
+	manifest := strings.Replace(plugManifest, fmt.Sprintf("name = %q", plugPluginName), fmt.Sprintf("name = %q", name), 1)
+	if err := os.WriteFile(path, []byte(manifest), 0o644); err != nil {
+		k.t.Fatal(err)
+	}
 }
 
 func (k *Kit) RefusePlugLaunches(reason string) (allow func()) {

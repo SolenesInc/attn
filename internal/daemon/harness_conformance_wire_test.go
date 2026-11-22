@@ -59,7 +59,7 @@ func TestEveryHarnessAnswersTheContractWithItsFake(t *testing.T) {
 		},
 		{
 			Facts: harness.Facts{ID: "house", DisplayName: "House", Options: harness.Options{Resume: true, Yolo: true, InitialPrompt: true, LaunchInstructions: true, ModelPin: true, EffortPin: true, Provider: true}, CacheTTL: time.Hour,
-				Signals: harness.Signals{StateAuthority: harness.StateByHarness, ReportsTools: true, Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute, StopsReadable: true, StopsClassified: true}},
+				Signals: harness.Signals{StateAuthority: harness.StateByHarness, ReportsTools: true, Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute, StopsReadable: true, StopsClassified: true}, Owner: "attn-plug"},
 			SkillDirs: []string{home + "/.house/skills"},
 			Offered:   true,
 		},
