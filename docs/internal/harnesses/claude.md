@@ -199,7 +199,7 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
   only, not the main repository. Trust on a parent folder covers a plain folder
   below it, but not a Git repository or worktree below it. Answering the
   question inside a worktree writes `projects[<main repository>].hasTrustDialogAccepted`.
-  `claudeHasTrust` in `internal/daemon/claude_trust.go` copies this rule, so
+  `claudeHasTrust` in `internal/harness/internal/claude/trust.go` copies this rule, so
   recheck it when Claude changes trust handling.
 - An interactive paste can be stored as `\n\n<pasted_content id="hhhh">\n`,
   the pasted text, and `\n</pasted_content id="hhhh">\n`, with the same four

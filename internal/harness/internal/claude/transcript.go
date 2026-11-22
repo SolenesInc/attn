@@ -1,4 +1,4 @@
-package daemon
+package claude
 
 import (
 	"encoding/base64"

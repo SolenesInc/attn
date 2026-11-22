@@ -13,6 +13,8 @@ import (
 
 const daemonDir = "internal/daemon"
 
+const adapterDirs = "internal/harness/internal/*"
+
 func main() {
 	violations, err := lifetimeViolations()
 	if err != nil {
@@ -33,6 +35,11 @@ func lifetimeViolations() ([]string, error) {
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("no Go files in %s; run from the repository root", daemonDir)
 	}
+	adapters, err := filepath.Glob(filepath.Join(adapterDirs, "*.go"))
+	if err != nil {
+		return nil, err
+	}
+	paths = append(paths, adapters...)
 	fset := token.NewFileSet()
 	var violations []string
 	for _, path := range paths {

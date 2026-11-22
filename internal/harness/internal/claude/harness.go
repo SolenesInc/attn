@@ -1,4 +1,4 @@
-package daemon
+package claude
 
 import (
 	"context"
@@ -20,14 +20,11 @@ type claudeHarness struct {
 	mod  *claudeMod
 }
 
-//go:embed claude_logo.svg
+//go:embed logo.svg
 var claudeLogo string
 
-func init() {
-	harnessSources = append(harnessSources, func(_ *Daemon, host harness.Host) []harness.Harness {
-		return []harness.Harness{newClaudeHarness(host)}
-	})
-}
+// New is the Claude Code harness, reaching attn through host.
+func New(host harness.Host) harness.Harness { return newClaudeHarness(host) }
 
 func newClaudeHarness(host harness.Host) claudeHarness {
 	return claudeHarness{host: host, mod: newClaudeMod(host)}

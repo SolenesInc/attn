@@ -1,4 +1,4 @@
-package daemon
+package claude
 
 import (
 	"io/fs"
