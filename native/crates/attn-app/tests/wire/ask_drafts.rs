@@ -349,6 +349,58 @@ fn a_refused_save_says_the_draft_was_not_saved_and_the_next_edit_saves_it_again(
 }
 
 #[test]
+fn the_not_saved_message_stays_through_a_save_with_no_reply_until_the_daemon_takes_one() {
+    let mut world = launched(vec![launch()]);
+    world.daemon.on("ask_draft_save", |r| {
+        message(AskDraftSaveResultMessage {
+            request_id: r["request_id"].as_str().unwrap().into(),
+            ask_id: r["ask_id"].as_str().unwrap().into(),
+            success: false,
+            error: Some("disk full".into()),
+            ..AskDraftSaveResultMessage::new()
+        })
+    });
+    open_sheet(&mut world);
+    type_into(&mut world, NOTE, "Ask me before Friday");
+    world.advance(Duration::from_millis(400));
+    let not_saved = |world: &World| {
+        world
+            .screen()
+            .find(Target::key("asks.draft-error"))
+            .map(|e| e.name.clone())
+    };
+    assert_eq!(
+        not_saved(&world),
+        Some(Some("Your draft was not saved: disk full".into()))
+    );
+
+    world.daemon.on("ask_draft_save", |_| Vec::<Value>::new());
+    type_into(&mut world, NOTE, " today");
+    world.advance(Duration::from_millis(400));
+    assert_eq!(saves(&world).len(), 2);
+    assert_eq!(
+        not_saved(&world),
+        Some(Some("Your draft was not saved: disk full".into())),
+        "the message went when a save was sent, before the daemon took it"
+    );
+
+    world.reconnect();
+    world.advance(Duration::from_millis(400));
+    assert_eq!(saves(&world).len(), 3, "the unanswered save went again");
+    assert!(
+        not_saved(&world).is_some(),
+        "the message went when a save got no reply"
+    );
+
+    let kept = Kept::default();
+    keeping(&world, &kept);
+    world.reconnect();
+    world.advance(Duration::from_millis(400));
+    assert!(kept.lock().unwrap().is_some(), "the daemon took the save");
+    assert_eq!(not_saved(&world), None);
+}
+
+#[test]
 fn a_save_refused_because_the_ask_was_answered_meanwhile_says_nothing() {
     let mut world = launched(vec![launch()]);
     world.daemon.on("ask_draft_save", |r| {

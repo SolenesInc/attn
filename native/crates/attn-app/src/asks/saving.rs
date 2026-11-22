@@ -16,19 +16,18 @@ use crate::State;
 /// clear an ordinary gap between keystrokes, 100 to 250 ms.
 const PAUSE: f64 = 0.4;
 
-/// What the daemon holds of a draft as far as this window knows: what it was last sent, or
-/// nothing known once a save never reached it, which the next poll saves again, or what a refused
-/// save held, which waits for the next edit.
+/// What the daemon holds of a draft as far as this window knows: what it was last sent, which a
+/// refused save leaves waiting for the next edit, or nothing known once a save never reached it,
+/// which the next poll saves again.
 #[derive(Debug, PartialEq)]
 pub(super) enum Held {
     Sent(Value),
     Unknown,
-    Refused { form: Value, why: String },
 }
 
 impl Held {
     fn settled(&self, form: &Value) -> bool {
-        matches!(self, Held::Sent(sent) | Held::Refused { form: sent, .. } if sent == form)
+        matches!(self, Held::Sent(sent) if sent == form)
     }
 }
 
@@ -133,15 +132,15 @@ pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) {
 /// Saves the draft for ask `id` at the next generation. A daemon that took a later generation
 /// from elsewhere refuses it; this window's draft is the one being written, so it saves again past
 /// that generation. A save the daemon never answered leaves what it holds unknown, and one it
-/// refused leaves the reason for the sheet to show, unless the ask left meanwhile; the next edit
-/// saves again.
+/// refused leaves the reason for the sheet to show until a save is taken, unless the ask left
+/// meanwhile; the next edit saves again.
 fn save(state: &mut State, id: &str, tx: &mut Tx) {
     let Some(draft) = state.window.asks.drafts.get_mut(id) else {
         return;
     };
     draft.generation += 1;
     let form = draft.form();
-    draft.saved = Held::Sent(form.clone());
+    draft.saved = Held::Sent(form);
     draft.pending = None;
     let message = AskDraftSaveMessage {
         ask_id: id.to_owned(),
@@ -172,13 +171,11 @@ fn save(state: &mut State, id: &str, tx: &mut Tx) {
                         .iter()
                         .any(|a| a.id == id && a.reply.is_none());
                     if open {
-                        draft.saved = Held::Refused {
-                            form,
-                            why: r.error.unwrap_or_else(|| "the daemon refused it".into()),
-                        };
+                        draft.refusal =
+                            Some(r.error.unwrap_or_else(|| "the daemon refused it".into()));
                     }
                 }
-                Some(_) => {}
+                Some(_) => draft.refusal = None,
             }
         },
         tx,
@@ -186,12 +183,9 @@ fn save(state: &mut State, id: &str, tx: &mut Tx) {
 }
 
 impl Draft {
-    /// Why the daemon refused the last save, until a save is taken.
+    /// Why the daemon refused a save, until it takes one.
     pub(super) fn refusal(&self) -> Option<&str> {
-        match &self.saved {
-            Held::Refused { why, .. } => Some(why),
-            _ => None,
-        }
+        self.refusal.as_deref()
     }
 
     /// The draft as the daemon keeps it: every answer with something written, the note and the

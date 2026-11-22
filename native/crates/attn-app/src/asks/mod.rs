@@ -73,6 +73,9 @@ pub(crate) struct Draft {
     pub sends_after_upload: bool,
     generation: i64,
     saved: saving::Held,
+    /// Why the daemon refused a save, until it takes one: a pending save or a missing reply
+    /// leaves it.
+    refusal: Option<String>,
     /// What was written, and when it is saved unless it changes before then.
     pending: Option<(serde_json::Value, f64)>,
 }
