@@ -102,7 +102,12 @@ impl WireFeeder {
                         wire.extend_from_slice(&bytes);
                     }
                     Segment::Kitty(bytes) => {
-                        let apc = inline_named_file(&bytes).unwrap_or(bytes);
+                        let apc = self
+                            .terminal
+                            .kitty_images_enabled()
+                            .then(|| inline_named_file(&bytes))
+                            .flatten()
+                            .unwrap_or(bytes);
                         self.write_apc(&apc, &mut wire);
                     }
                 }
@@ -314,6 +319,15 @@ fn read_named_image_file(encoded_path: &[u8], offset: u64, size: u64) -> Result<
     if !regular {
         return Err(format!("{} is not a regular file", resolved.display()));
     }
+    let opened =
+        opened_file_path(&file).map_err(|error| format!("{}: {error}", resolved.display()))?;
+    if under_system_directory(&opened) {
+        return Err(format!(
+            "{} opened {}, which is under /proc, /sys or /dev",
+            resolved.display(),
+            opened.display()
+        ));
+    }
     file.seek(SeekFrom::Start(offset))
         .map_err(|error| error.to_string())?;
     let limit = if size == 0 {
@@ -339,6 +353,25 @@ fn read_named_image_file(encoded_path: &[u8], offset: u64, size: u64) -> Result<
         ));
     }
     Ok(data)
+}
+
+#[cfg(target_os = "linux")]
+fn opened_file_path(file: &File) -> std::io::Result<std::path::PathBuf> {
+    use std::os::fd::AsRawFd;
+    std::fs::read_link(format!("/proc/self/fd/{}", file.as_raw_fd()))
+}
+
+#[cfg(target_os = "macos")]
+fn opened_file_path(file: &File) -> std::io::Result<std::path::PathBuf> {
+    use std::os::fd::AsRawFd;
+    use std::os::unix::ffi::OsStringExt;
+    let mut path = vec![0_u8; libc::PATH_MAX as usize];
+    if unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETPATH, path.as_mut_ptr()) } == -1 {
+        return Err(std::io::Error::last_os_error());
+    }
+    let len = path.iter().position(|&b| b == 0).unwrap_or(path.len());
+    path.truncate(len);
+    Ok(std::path::PathBuf::from(std::ffi::OsString::from_vec(path)))
 }
 
 fn under_system_directory(path: &std::path::Path) -> bool {

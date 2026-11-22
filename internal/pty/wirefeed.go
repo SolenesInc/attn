@@ -263,7 +263,7 @@ func (f *wireFeeder) inlineNamedFile(apc []byte) []byte {
 			direct = append(append(direct, ','), pair...)
 		}
 	}
-	if medium != 'f' {
+	if medium != 'f' || f.kittyLimit == 0 {
 		return apc
 	}
 	data, err := readNamedImageFile(payload, offset, size)
@@ -310,6 +310,13 @@ func readNamedImageFile(encodedPath []byte, offset, size int64) ([]byte, error) 
 	}
 	if !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("%s is not a regular file", resolved)
+	}
+	opened, err := openedFilePath(file)
+	if err != nil {
+		return nil, err
+	}
+	if underSystemDirectory(opened) {
+		return nil, fmt.Errorf("%s opened %s, which is under /proc, /sys or /dev", resolved, opened)
 	}
 	limit := size
 	if limit == 0 {

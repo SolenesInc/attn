@@ -284,6 +284,7 @@ impl Drop for TrackedRef {
 
 pub struct Terminal {
     raw: NonNull<c_void>,
+    kitty_bytes: u64,
 }
 
 // libghostty-vt terminals are only touched while their Session model mutex is held.
@@ -298,7 +299,7 @@ impl Terminal {
             .unwrap_or(DEFAULT_KITTY_BYTES);
         let raw = unsafe { attn_ghostty_new(cols, rows, DEFAULT_SCROLLBACK_BYTES, kitty_bytes) };
         NonNull::new(raw)
-            .map(|raw| Self { raw })
+            .map(|raw| Self { raw, kitty_bytes })
             .ok_or_else(|| format!("libghostty-vt could not create a {cols}x{rows} terminal"))
     }
 
@@ -312,8 +313,15 @@ impl Terminal {
             )
         };
         NonNull::new(raw)
-            .map(|raw| Self { raw })
+            .map(|raw| Self {
+                raw,
+                kitty_bytes: DEFAULT_KITTY_BYTES,
+            })
             .ok_or_else(|| "libghostty-vt could not restore the snapshot".to_owned())
+    }
+
+    pub fn kitty_images_enabled(&self) -> bool {
+        self.kitty_bytes > 0
     }
 
     pub fn write(&mut self, data: &[u8]) {
